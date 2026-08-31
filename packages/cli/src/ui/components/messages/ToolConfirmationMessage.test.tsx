@@ -18,6 +18,20 @@ import {
 } from '../../../test-utils/render.js';
 import { act } from 'react';
 
+function maximumConsecutiveBlankLines(lines: readonly string[]): number {
+  let consecutiveBlanks = 0;
+  let maximumBlanks = 0;
+  for (const line of lines) {
+    if (line.trim() === '') {
+      consecutiveBlanks += 1;
+      maximumBlanks = Math.max(maximumBlanks, consecutiveBlanks);
+    } else {
+      consecutiveBlanks = 0;
+    }
+  }
+  return maximumBlanks;
+}
+
 describe('ToolConfirmationMessage', () => {
   const mockConfig = {
     isTrustedFolder: () => true,
@@ -353,20 +367,7 @@ describe('ToolConfirmationMessage', () => {
       expect(backgroundIndex).toBe(tipIndex + 1);
 
       // No double blank lines anywhere in the rendered output.
-      let consecutiveBlanks = 0;
-      let maxConsecutiveBlanks = 0;
-      for (const line of lines) {
-        if (line.trim() === '') {
-          consecutiveBlanks += 1;
-          maxConsecutiveBlanks = Math.max(
-            maxConsecutiveBlanks,
-            consecutiveBlanks,
-          );
-        } else {
-          consecutiveBlanks = 0;
-        }
-      }
-      expect(maxConsecutiveBlanks).toBeLessThanOrEqual(1);
+      expect(maximumConsecutiveBlankLines(lines)).toBeLessThanOrEqual(1);
     });
 
     it('renders a background-only note with a single leading blank line (G2b)', () => {
@@ -405,20 +406,7 @@ describe('ToolConfirmationMessage', () => {
       expect(lines[backgroundIndex - 1]).toBe('');
 
       // No double blank lines anywhere.
-      let consecutiveBlanks = 0;
-      let maxConsecutiveBlanks = 0;
-      for (const line of lines) {
-        if (line.trim() === '') {
-          consecutiveBlanks += 1;
-          maxConsecutiveBlanks = Math.max(
-            maxConsecutiveBlanks,
-            consecutiveBlanks,
-          );
-        } else {
-          consecutiveBlanks = 0;
-        }
-      }
-      expect(maxConsecutiveBlanks).toBeLessThanOrEqual(1);
+      expect(maximumConsecutiveBlankLines(lines)).toBeLessThanOrEqual(1);
     });
   });
 

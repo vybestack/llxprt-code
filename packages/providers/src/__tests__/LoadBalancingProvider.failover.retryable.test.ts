@@ -78,6 +78,60 @@ function makeOptions(): GenerateChatOptions {
   };
 }
 
+async function* generateMixedRateLimitAndBadRequest(
+  attempt: number,
+): AsyncGenerator<IContent> {
+  if (attempt === 1) throw statusError('rate limited', 429);
+  yield* [];
+  throw statusError('bad request', 400);
+}
+
+async function* generateMixedRateLimitAndUnauthorized(
+  attempt: number,
+): AsyncGenerator<IContent> {
+  if (attempt === 1) throw statusError('rate limited', 429);
+  yield* [];
+  throw statusError('unauthorized', 401);
+}
+
+async function* generateMixedNetworkAndBadRequest(
+  attempt: number,
+): AsyncGenerator<IContent> {
+  if (attempt === 1) throw new Error('socket hang up');
+  yield* [];
+  throw statusError('bad request', 400);
+}
+
+async function* generateMixedThreeBackendFailures(
+  attempt: number,
+): AsyncGenerator<IContent> {
+  if (attempt === 1) throw new Error('Connection error');
+  if (attempt === 2) throw new Error('undefined is not a function');
+  yield* [];
+  throw statusError('502 Bad Gateway', 502);
+}
+
+async function* generateRateLimitThenSuccess(
+  attempt: number,
+): AsyncGenerator<IContent> {
+  if (attempt === 1) throw statusError('rate limited', 429);
+  yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+}
+
+async function* generateMidstreamRateLimit(
+  attempt: number,
+): AsyncGenerator<IContent> {
+  if (attempt === 1) {
+    yield {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'partial' }],
+    };
+    throw statusError('rate limited', 429);
+  }
+  yield* [];
+  throw statusError('second backend should not be reached', 500);
+}
+
 function makeFailoverConfig(profileName: string): LoadBalancingProviderConfig {
   return {
     profileName,
@@ -251,17 +305,10 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
   });
 
   it('classifies a mixed (429 + 400) aggregate as RETRYABLE (issue #2712)', async () => {
-    const { error, counter } = await captureFailoverError(function* (
-      attempt: number,
-    ): AsyncGenerator<IContent> {
-      if (attempt === 1) {
-        // One backend fails transiently (429).
-        throw statusError('rate limited', 429);
-      }
-      // Two backends fail permanently (400).
-      throw statusError('bad request', 400);
-      yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
-    }, 'glm-mixed');
+    const { error, counter } = await captureFailoverError(
+      generateMixedRateLimitAndBadRequest,
+      'glm-mixed',
+    );
 
     // Only ONE backend failed transiently; the other two failed permanently
     // (400). Because the load balancer re-attempts the rotation, the single
@@ -273,17 +320,10 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
   });
 
   it('classifies a mixed (429 + 401 auth) aggregate as RETRYABLE (issue #2712)', async () => {
-    const { error, counter } = await captureFailoverError(function* (
-      attempt: number,
-    ): AsyncGenerator<IContent> {
-      if (attempt === 1) {
-        // One backend fails transiently (429).
-        throw statusError('rate limited', 429);
-      }
-      // Two backends fail with auth errors (401), which are non-transient.
-      throw statusError('unauthorized', 401);
-      yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
-    }, 'glm-mixed-auth');
+    const { error, counter } = await captureFailoverError(
+      generateMixedRateLimitAndUnauthorized,
+      'glm-mixed-auth',
+    );
 
     // Only ONE backend failed transiently; the other two are auth/config
     // errors (non-transient). Because the load balancer re-attempts the
@@ -360,17 +400,10 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
    * marker (PRIORITY 0 in core's isRetryableError), not from message scanning.
    */
   it('classifies a mixed (network-transient + 400) aggregate as RETRYABLE (issue #2712) despite the transient phrase leaking into the message', async () => {
-    const { error, counter } = await captureFailoverError(function* (
-      attempt: number,
-    ): AsyncGenerator<IContent> {
-      if (attempt === 1) {
-        // A network-transient failure whose message trips the phrase heuristic.
-        throw new Error('socket hang up');
-      }
-      // Two backends fail permanently (400).
-      throw statusError('bad request', 400);
-      yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
-    }, 'glm-mixed-network-transient');
+    const { error, counter } = await captureFailoverError(
+      generateMixedNetworkAndBadRequest,
+      'glm-mixed-network-transient',
+    );
 
     // The flattened aggregate message really does contain the transient phrase.
     expect(error.message).toContain('socket hang up');
@@ -428,21 +461,10 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
    *   attempt 3 (ollamaglm51):  502 Bad Gateway   (5xx, transient)
    */
   it('classifies a mixed aggregate (transient + status-less non-transient) as RETRYABLE (issue #2712)', async () => {
-    const { error, counter } = await captureFailoverError(function* (
-      attempt: number,
-    ): AsyncGenerator<IContent> {
-      if (attempt === 1) {
-        // zai: network-transient connection error (matches TRANSIENT_ERROR_PHRASES).
-        throw new Error('Connection error');
-      }
-      if (attempt === 2) {
-        // makoraglm51: backend-originated status-less error, NOT transient.
-        throw new Error('undefined is not a function');
-      }
-      // ollamaglm51: 502 Bad Gateway (5xx, transient).
-      throw statusError('502 Bad Gateway', 502);
-      yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
-    }, 'glm');
+    const { error, counter } = await captureFailoverError(
+      generateMixedThreeBackendFailures,
+      'glm',
+    );
 
     // Sanity: the non-transient failure in isolation is indeed non-transient.
     expect(isRetryableError(new Error('undefined is not a function'))).toBe(
@@ -495,14 +517,9 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
   );
 
   it('advances to next backend when retryCount=1 and a 429 exhausts per-backend retries', async () => {
-    const { provider, counter } = makeFakeProvider(function* (
-      attempt: number,
-    ): AsyncGenerator<IContent> {
-      if (attempt === 1) {
-        throw statusError('rate limited', 429);
-      }
-      yield { type: 'text' as const, content: 'ok' } as unknown as IContent;
-    });
+    const { provider, counter } = makeFakeProvider(
+      generateRateLimitThenSuccess,
+    );
     providerManager.registerProvider(provider);
 
     const lb = new LoadBalancingProvider(
@@ -533,21 +550,7 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
    * error is the one re-thrown — not any 429 from any backend.
    */
   it('re-throws the raw backend error (not an aggregate) when a 429 occurs mid-stream after chunks were yielded', async () => {
-    const { provider, counter } = makeFakeProvider(function* (
-      attempt: number,
-    ): AsyncGenerator<IContent> {
-      if (attempt === 1) {
-        yield {
-          type: 'text' as const,
-          content: 'partial',
-        } as unknown as IContent;
-        throw statusError('rate limited', 429);
-      }
-      // A second backend must never be reached; use a distinct error so the
-      // 429 assertion can only pass via the FIRST backend's error.
-      throw statusError('second backend should not be reached', 500);
-      yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
-    });
+    const { provider, counter } = makeFakeProvider(generateMidstreamRateLimit);
     providerManager.registerProvider(provider);
 
     const lb = new LoadBalancingProvider(

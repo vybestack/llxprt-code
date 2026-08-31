@@ -40,194 +40,207 @@ import {
 } from '../useAgentEventStream.js';
 import { createFakeAgent } from './helpers/createFakeAgent.js';
 
-beforeEach(() => {
-  __setMonotonicClockForTesting(null);
-});
-
-afterEach(() => {
-  __setMonotonicClockForTesting(null);
-});
-
-function makeCountingClock(): {
-  clock: () => number;
-  calls: () => number;
-} {
-  let calls = 0;
-  let t = 0;
-  return {
-    clock: () => {
-      calls += 1;
-      t += 1;
-      return t;
-    },
-    calls: () => calls,
-  };
-}
-
-function renderStreamHook(
-  agent: Agent,
-  onAgentEventObserved?: (
-    event: AgentEvent,
-    signal: AbortSignal,
-    handlerMs: number,
-  ) => void,
-): {
-  result: {
-    current: {
-      runStream: UseAgentEventStreamReturn['runStream'];
-    };
-  };
-  unmount: () => void;
-  processAgentEventRef: React.MutableRefObject<AgentEventRouter | null>;
-} {
-  const processAgentEventRef: React.MutableRefObject<AgentEventRouter | null> =
-    { current: null };
-  const { result, unmount } = renderHook(() =>
-    useAgentEventStream({
-      agent,
-      addItem: vi.fn(),
-      processAgentEventRef,
-      flushPendingHistoryItem: vi.fn(),
-      clearPendingHistoryItem: vi.fn(),
-      performMemoryRefresh: vi.fn().mockResolvedValue(undefined),
-      onAgentEventObserved,
-    }),
-  );
-  return { result, unmount, processAgentEventRef };
-}
-
-describe('useAgentEventStream default-off event dispatch (P07)', () => {
-  it('absent observer performs NO monotonic-clock calls per event', async () => {
-    const events: AgentEvent[] = [
-      { type: 'text', text: 'a' },
-      { type: 'text', text: 'b' },
-      { type: 'text', text: 'c' },
-      { type: 'done', reason: 'stop' },
-    ];
-    const agent = createFakeAgent(events);
-    const { clock, calls } = makeCountingClock();
-    __setMonotonicClockForTesting(clock);
-
-    const routed: AgentEvent[] = [];
-    const { result, unmount, processAgentEventRef } = renderStreamHook(agent);
-    processAgentEventRef.current = (event: AgentEvent) => routed.push(event);
-
-    const controller = new AbortController();
-    await act(async () => {
-      await result.current.runStream(
-        'hi' as string | ContentBlock[] | IContent,
-        controller.signal,
-        'prompt-defaultoff',
-      );
-    });
-
-    // Events were still routed (proving the loop ran).
-    expect(routed).toHaveLength(4);
-    // NO timing work happened because no observer was supplied.
-    expect(calls()).toBe(0);
-    unmount();
+describe('useAgentEventStream default-off P07 test lifecycle', () => {
+  beforeEach(() => {
+    __setMonotonicClockForTesting(null);
   });
 
-  it('absent observer still continues after an ordinary handler error', async () => {
-    const events: AgentEvent[] = [
-      { type: 'text', text: 'before-error' },
-      { type: 'text', text: 'throws' },
-      { type: 'text', text: 'after-error' },
-      { type: 'done', reason: 'stop' },
-    ];
-    const agent = createFakeAgent(events);
-    const { clock, calls } = makeCountingClock();
-    __setMonotonicClockForTesting(clock);
-
-    const routed: string[] = [];
-    const { result, unmount, processAgentEventRef } = renderStreamHook(agent);
-    processAgentEventRef.current = (event: AgentEvent) => {
-      if (event.type === 'text' && event.text === 'throws') {
-        throw new Error('ordinary handler error');
-      }
-      routed.push(event.type === 'text' ? event.text : event.type);
-    };
-
-    const controller = new AbortController();
-    await act(async () => {
-      await result.current.runStream(
-        'hi' as string | ContentBlock[] | IContent,
-        controller.signal,
-        'prompt-handler-error',
-      );
-    });
-
-    // The bad event was swallowed; subsequent events still arrived.
-    expect(routed).toEqual(['before-error', 'after-error', 'done']);
-    // Still no timing work with an absent observer.
-    expect(calls()).toBe(0);
-    unmount();
+  afterEach(() => {
+    __setMonotonicClockForTesting(null);
   });
 
-  it('present observer measures dispatch and is invoked (clock IS used)', async () => {
-    const events: AgentEvent[] = [
-      { type: 'text', text: 'x' },
-      { type: 'done', reason: 'stop' },
-    ];
-    const agent = createFakeAgent(events);
-    const { clock, calls } = makeCountingClock();
-    __setMonotonicClockForTesting(clock);
-
-    const observed: Array<{ event: string; handlerMs: number }> = [];
-    const { result, unmount, processAgentEventRef } = renderStreamHook(
-      agent,
-      (event, _signal, handlerMs) => {
-        observed.push({ event: event.type, handlerMs });
+  function makeCountingClock(): {
+    clock: () => number;
+    calls: () => number;
+  } {
+    let calls = 0;
+    let t = 0;
+    return {
+      clock: () => {
+        calls += 1;
+        t += 1;
+        return t;
       },
+      calls: () => calls,
+    };
+  }
+
+  function renderStreamHook(
+    agent: Agent,
+    onAgentEventObserved?: (
+      event: AgentEvent,
+      signal: AbortSignal,
+      handlerMs: number,
+    ) => void,
+  ): {
+    result: {
+      current: {
+        runStream: UseAgentEventStreamReturn['runStream'];
+      };
+    };
+    unmount: () => void;
+    processAgentEventRef: React.MutableRefObject<AgentEventRouter | null>;
+  } {
+    const processAgentEventRef: React.MutableRefObject<AgentEventRouter | null> =
+      { current: null };
+    const { result, unmount } = renderHook(() =>
+      useAgentEventStream({
+        agent,
+        addItem: vi.fn(),
+        processAgentEventRef,
+        flushPendingHistoryItem: vi.fn(),
+        clearPendingHistoryItem: vi.fn(),
+        performMemoryRefresh: vi.fn().mockResolvedValue(undefined),
+        onAgentEventObserved,
+      }),
     );
-    processAgentEventRef.current = () => {};
+    return { result, unmount, processAgentEventRef };
+  }
 
-    const controller = new AbortController();
-    await act(async () => {
-      await result.current.runStream(
-        'hi' as string | ContentBlock[] | IContent,
-        controller.signal,
-        'prompt-observer-present',
-      );
-    });
+  describe('useAgentEventStream default-off event dispatch (P07)', () => {
+    it('absent observer performs NO monotonic-clock calls per event', async () => {
+      const events: AgentEvent[] = [
+        { type: 'text', text: 'a' },
+        { type: 'text', text: 'b' },
+        { type: 'text', text: 'c' },
+        { type: 'done', reason: 'stop' },
+      ];
+      const agent = createFakeAgent(events);
+      const { clock, calls } = makeCountingClock();
+      __setMonotonicClockForTesting(clock);
 
-    // The observer fired once per event, AFTER the timing measurement.
-    expect(observed).toHaveLength(2);
-    expect(observed.map((o) => o.event)).toEqual(['text', 'done']);
-    // Two clock calls per observed event (start + end).
-    expect(calls()).toBe(4);
-    // handlerMs is the synchronous dispatch delta (positive because the
-    // counting clock advances by 1 each call).
-    expect(observed[0].handlerMs).toBeGreaterThan(0);
-    unmount();
-  });
+      const routed: AgentEvent[] = [];
+      const { result, unmount, processAgentEventRef } = renderStreamHook(agent);
+      processAgentEventRef.current = (event: AgentEvent) => routed.push(event);
 
-  it('present observer that throws rejects the stream (fail-fast)', async () => {
-    const events: AgentEvent[] = [
-      { type: 'text', text: 'first' },
-      { type: 'text', text: 'second' },
-      { type: 'done', reason: 'stop' },
-    ];
-    const agent = createFakeAgent(events);
-
-    const { result, unmount, processAgentEventRef } = renderStreamHook(
-      agent,
-      () => {
-        throw new Error('perf observer internal error');
-      },
-    );
-    processAgentEventRef.current = () => {};
-
-    const controller = new AbortController();
-    await act(async () => {
-      await expect(
-        result.current.runStream(
+      const controller = new AbortController();
+      await act(async () => {
+        await result.current.runStream(
           'hi' as string | ContentBlock[] | IContent,
           controller.signal,
-          'prompt-observer-throw',
-        ),
-      ).rejects.toThrow('perf observer internal error');
+          'prompt-defaultoff',
+        );
+      });
+
+      // Events were still routed (proving the loop ran).
+      expect(routed).toHaveLength(4);
+      // NO timing work happened because no observer was supplied.
+      expect(calls()).toBe(0);
+      unmount();
     });
-    unmount();
+
+    const observeAbsentObserverAfterOrdinaryHandlerError = async (): Promise<{
+      readonly routed: readonly string[];
+      readonly clockCalls: number;
+      readonly unmount: () => void;
+    }> => {
+      const events: AgentEvent[] = [
+        { type: 'text', text: 'before-error' },
+        { type: 'text', text: 'throws' },
+        { type: 'text', text: 'after-error' },
+        { type: 'done', reason: 'stop' },
+      ];
+      const agent = createFakeAgent(events);
+      const { clock, calls } = makeCountingClock();
+      __setMonotonicClockForTesting(clock);
+
+      const routed: string[] = [];
+      const { result, unmount, processAgentEventRef } = renderStreamHook(agent);
+      processAgentEventRef.current = (event: AgentEvent) => {
+        if (event.type === 'text' && event.text === 'throws') {
+          throw new Error('ordinary handler error');
+        }
+        routed.push(event.type === 'text' ? event.text : event.type);
+      };
+
+      const controller = new AbortController();
+      await act(async () => {
+        await result.current.runStream(
+          'hi' as string | ContentBlock[] | IContent,
+          controller.signal,
+          'prompt-handler-error',
+        );
+      });
+
+      return { routed, clockCalls: calls(), unmount };
+    };
+
+    it('absent observer still continues after an ordinary handler error', async () => {
+      const { routed, clockCalls, unmount } =
+        await observeAbsentObserverAfterOrdinaryHandlerError();
+
+      // The bad event was swallowed; subsequent events still arrived.
+      expect(routed).toStrictEqual(['before-error', 'after-error', 'done']);
+      // Still no timing work with an absent observer.
+      expect(clockCalls).toBe(0);
+      unmount();
+    });
+
+    it('present observer measures dispatch and is invoked (clock IS used)', async () => {
+      const events: AgentEvent[] = [
+        { type: 'text', text: 'x' },
+        { type: 'done', reason: 'stop' },
+      ];
+      const agent = createFakeAgent(events);
+      const { clock, calls } = makeCountingClock();
+      __setMonotonicClockForTesting(clock);
+
+      const observed: Array<{ event: string; handlerMs: number }> = [];
+      const { result, unmount, processAgentEventRef } = renderStreamHook(
+        agent,
+        (event, _signal, handlerMs) => {
+          observed.push({ event: event.type, handlerMs });
+        },
+      );
+      processAgentEventRef.current = () => {};
+
+      const controller = new AbortController();
+      await act(async () => {
+        await result.current.runStream(
+          'hi' as string | ContentBlock[] | IContent,
+          controller.signal,
+          'prompt-observer-present',
+        );
+      });
+
+      // The observer fired once per event, AFTER the timing measurement.
+      expect(observed).toHaveLength(2);
+      expect(observed.map((o) => o.event)).toStrictEqual(['text', 'done']);
+      // Two clock calls per observed event (start + end).
+      expect(calls()).toBe(4);
+      // handlerMs is the synchronous dispatch delta (positive because the
+      // counting clock advances by 1 each call).
+      expect(observed[0].handlerMs).toBeGreaterThan(0);
+      unmount();
+    });
+
+    it('present observer that throws rejects the stream (fail-fast)', async () => {
+      const events: AgentEvent[] = [
+        { type: 'text', text: 'first' },
+        { type: 'text', text: 'second' },
+        { type: 'done', reason: 'stop' },
+      ];
+      const agent = createFakeAgent(events);
+
+      const { result, unmount, processAgentEventRef } = renderStreamHook(
+        agent,
+        () => {
+          throw new Error('perf observer internal error');
+        },
+      );
+      processAgentEventRef.current = () => {};
+
+      const controller = new AbortController();
+      await act(async () => {
+        await expect(
+          result.current.runStream(
+            'hi' as string | ContentBlock[] | IContent,
+            controller.signal,
+            'prompt-observer-throw',
+          ),
+        ).rejects.toThrow('perf observer internal error');
+      });
+      unmount();
+    });
   });
 });

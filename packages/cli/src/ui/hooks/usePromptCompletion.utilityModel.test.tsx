@@ -56,11 +56,11 @@ function makeRuntime(utilityModel: string | undefined): {
   return { runtime, generateContent };
 }
 
-afterEach(() => {
-  vi.useRealTimers();
-});
-
 describe('usePromptCompletion utilityModel gating (issue #2627)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('constructs no request when no utilityModel is configured', async () => {
     vi.useFakeTimers();
     const { runtime, generateContent } = makeRuntime(undefined);

@@ -47,6 +47,37 @@ void vi.mock('../runtimeSettings.js', () => ({
 
 const { applyProfileWithGuards } = await import('../profileApplication.js');
 
+async function resolveNamedApiKey(name: string): Promise<string | null> {
+  if (name === 'chutes') return 'resolved-chutes-api-key';
+  if (name === 'openrouter') return 'resolved-openrouter-api-key';
+  return null;
+}
+
+async function loadNamedAuthProfile(profileName: string): Promise<Profile> {
+  if (profileName === 'zai') {
+    return {
+      version: 1,
+      provider: 'Chutes.ai',
+      model: 'model-zai',
+      modelParams: {},
+      ephemeralSettings: {
+        'auth-key-name': 'chutes',
+        'base-url': 'https://chutes.ai/v1',
+      },
+    };
+  }
+  return {
+    version: 1,
+    provider: 'OpenRouter',
+    model: 'model-glm51',
+    modelParams: {},
+    ephemeralSettings: {
+      'auth-key-name': 'openrouter',
+      'base-url': 'https://openrouter.ai/v1',
+    },
+  };
+}
+
 describe('auth-key-name resolution in sub-profiles (issue #1970)', () => {
   beforeEach(() => {
     resetLbProfileApplicationStubs();
@@ -57,40 +88,11 @@ describe('auth-key-name resolution in sub-profiles (issue #1970)', () => {
   });
 
   it('resolves auth-key-name from secure storage into sub-profile authToken', async () => {
-    keyStorageStub.getKey.mockImplementation(async (name: string) => {
-      if (name === 'chutes') return 'resolved-chutes-api-key';
-      if (name === 'openrouter') return 'resolved-openrouter-api-key';
-      return null;
-    });
+    keyStorageStub.getKey.mockImplementation(resolveNamedApiKey);
 
     const lbProfile = makeLbProfile(['zai', 'ollamaglm51']);
 
-    const mockLoadProfile = vi.fn(
-      async (profileName: string): Promise<Profile> => {
-        if (profileName === 'zai') {
-          return {
-            version: 1,
-            provider: 'Chutes.ai',
-            model: 'model-zai',
-            modelParams: {},
-            ephemeralSettings: {
-              'auth-key-name': 'chutes',
-              'base-url': 'https://chutes.ai/v1',
-            },
-          };
-        }
-        return {
-          version: 1,
-          provider: 'OpenRouter',
-          model: 'model-glm51',
-          modelParams: {},
-          ephemeralSettings: {
-            'auth-key-name': 'openrouter',
-            'base-url': 'https://openrouter.ai/v1',
-          },
-        };
-      },
-    );
+    const mockLoadProfile = vi.fn(loadNamedAuthProfile);
     profileManagerStub.loadProfile = mockLoadProfile;
 
     const { getLBProvider } = wrapRegisterProviderToCaptureLB();

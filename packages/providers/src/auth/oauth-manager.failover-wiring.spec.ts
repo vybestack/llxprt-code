@@ -17,6 +17,14 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
 
+function isMissingConfigBucketWarning(message: string): boolean {
+  return (
+    message.includes('[issue1029]') &&
+    message.includes('buckets') &&
+    message.includes('no Config available')
+  );
+}
+
 describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
   let oauthManager: OAuthManager;
   let mockConfig: Config;
@@ -208,14 +216,7 @@ describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
       warnSpy.mock.calls,
       ([message]) => String(message),
     );
-    expect(
-      warningMessages.some(
-        (message) =>
-          message.includes('[issue1029]') &&
-          message.includes('buckets') &&
-          message.includes('no Config available'),
-      ),
-    ).toBe(true);
+    expect(warningMessages.some(isMissingConfigBucketWarning)).toBe(true);
 
     warnSpy.mockRestore();
   });

@@ -711,9 +711,8 @@ describe('statFileSizeGate fails fast on unexpected stat errors (item M)', () =>
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it.skipIf(!supportsEaccesFixture)(
-    'throws (does not return null) for a stat EACCES failure',
-    async () => {
+  describe.skipIf(!supportsEaccesFixture)('EACCES stat failures', () => {
+    it('throws (does not return null) for a stat EACCES failure', async () => {
       // Deny traversal into the directory -> stat of the child fails EACCES.
       chmodSync(lockedDir, 0o000);
       // A masked-as-missing return would be `null`; fail-fast must throw so the
@@ -722,8 +721,8 @@ describe('statFileSizeGate fails fast on unexpected stat errors (item M)', () =>
       await expect(
         statFileSizeGate(join(lockedDir, 'inner.txt')),
       ).rejects.toThrow(/EACCES|permission/i);
-    },
-  );
+    });
+  });
 });
 
 /**

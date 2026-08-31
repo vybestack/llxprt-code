@@ -394,64 +394,16 @@ describe('AgentClient (client.ts)', () => {
     });
 
     it('should not trigger thinking-only continuation after InvalidStream when flag is false', async () => {
-      vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
-        false,
-      );
-
-      const forwardedRequests: ContentBlock[][] = [];
-      mockTurnRunFn.mockReset();
-      mockTurnRunFn.mockImplementation((req: AgentMessageInput) => {
-        forwardedRequests.push(req as ContentBlock[]);
-        return (async function* () {
-          yield {
-            type: AgentEventType.Thought,
-            value: {
-              subject: 'Planning',
-              description: 'I will do something',
-            },
-          };
-          yield { type: AgentEventType.InvalidStream };
-        })();
-      });
-
-      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
-
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
-        getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
-        getContextLimit: vi.fn().mockReturnValue(1000000),
-      };
-      client['chat'] = mockChat as ChatSession;
-
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
-
-      todoStoreReadMock.mockResolvedValue([]);
-
-      const stream = client.sendMessageStream(
-        [{ type: 'text', text: 'Do something' }],
-        new AbortController().signal,
-        'prompt-thinking-invalid-stream-no-continue',
-      );
-      const events = await fromAsync(stream);
-
+      const { events, continuationRequestPresent, forwardedRequestCount } =
+        await observeNotTriggerThinkingOnlyContinuationAfterInvalidStreamWhenFlagIsFalse();
       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
-      expect(forwardedRequests).toHaveLength(1);
-      expect(
-        forwardedRequests[0]?.some(
-          (part) =>
-            typeof part === 'object' &&
-            'text' in part &&
-            typeof part.text === 'string' &&
-            part.text.includes(
-              'Continue and take the next concrete action now',
-            ),
-        ),
-      ).toBe(false);
+      expect({
+        continuationRequestPresent,
+        forwardedRequestCount,
+      }).toStrictEqual({
+        continuationRequestPresent: false,
+        forwardedRequestCount: 1,
+      });
       expect(events).toStrictEqual([
         {
           type: AgentEventType.ModelInfo,
@@ -472,6 +424,70 @@ describe('AgentClient (client.ts)', () => {
         { type: AgentEventType.InvalidStream },
       ]);
     });
+
+    const observeNotTriggerThinkingOnlyContinuationAfterInvalidStreamWhenFlagIsFalse =
+      async () => {
+        vi.spyOn(
+          client['config'],
+          'getContinueOnFailedApiCall',
+        ).mockReturnValue(false);
+
+        const forwardedRequests: ContentBlock[][] = [];
+        mockTurnRunFn.mockReset();
+        mockTurnRunFn.mockImplementation((req: AgentMessageInput) => {
+          forwardedRequests.push(req as ContentBlock[]);
+          return (async function* () {
+            yield {
+              type: AgentEventType.Thought,
+              value: {
+                subject: 'Planning',
+                description: 'I will do something',
+              },
+            };
+            yield { type: AgentEventType.InvalidStream };
+          })();
+        });
+
+        vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+
+        const mockChat: Partial<ChatSession> = {
+          addHistory: vi.fn(),
+          getHistory: vi.fn().mockReturnValue([]),
+          getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+          getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
+          getContextLimit: vi.fn().mockReturnValue(1000000),
+        };
+        client['chat'] = mockChat as ChatSession;
+
+        const mockGenerator: Partial<ContentGenerator> = {
+          countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+        };
+        client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+        todoStoreReadMock.mockResolvedValue([]);
+
+        const stream = client.sendMessageStream(
+          [{ type: 'text', text: 'Do something' }],
+          new AbortController().signal,
+          'prompt-thinking-invalid-stream-no-continue',
+        );
+        const events = await fromAsync(stream);
+
+        const continuationRequestPresent = forwardedRequests[0]?.some(
+          (part) =>
+            typeof part === 'object' &&
+            'text' in part &&
+            typeof part.text === 'string' &&
+            part.text.includes(
+              'Continue and take the next concrete action now',
+            ),
+        );
+        return {
+          events,
+          continuationRequestPresent,
+          forwardedRequestCount: forwardedRequests.length,
+        };
+      };
 
     it('should stop recursing after one retry when InvalidStream events are repeatedly received', async () => {
       vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(

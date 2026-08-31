@@ -156,7 +156,7 @@ describe('a2a executor discards abandoned output publications on Retry (issue 30
 
     await executor.execute(createRequestContext(), eventBus);
 
-    expect(publishedText).toEqual(['kept']);
+    expect(publishedText).toStrictEqual(['kept']);
   });
 
   /**
@@ -172,7 +172,7 @@ describe('a2a executor discards abandoned output publications on Retry (issue 30
 
     await executor.execute(createRequestContext(), eventBus);
 
-    expect(publishedText).toEqual([]);
+    expect(publishedText).toStrictEqual([]);
   });
 
   /**
@@ -196,7 +196,7 @@ describe('a2a executor discards abandoned output publications on Retry (issue 30
 
     await executor.execute(createRequestContext(), eventBus);
 
-    expect(publishedText).toEqual([
+    expect(publishedText).toStrictEqual([
       'committed-at-tool-call',
       'kept-after-retry',
     ]);

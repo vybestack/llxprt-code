@@ -65,9 +65,12 @@ describe('shell-parser', () => {
     // #3309: with the grammar absent the PowerShell parse surface must fail
     // closed (returning its documented unavailable results) rather than throwing,
     // and a real re-initialization must restore availability.
+    // Restores availability for the suites that run after this one. The
+    // assertion that re-initialization works lives in the test below, which
+    // makes the same check; asserting it again here only means a teardown
+    // failure would be reported against the wrong test.
     afterAll(async () => {
       await initializeParser();
-      expect(isParserAvailable('powershell')).toBe(true);
     });
 
     it('fails closed after resetParser and recovers after initializeParser', async () => {

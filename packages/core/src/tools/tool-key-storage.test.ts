@@ -31,6 +31,8 @@ import {
   SecureStoreError,
 } from '../storage/secure-store.js';
 
+const bunIt = it;
+
 /**
  * Runs `operation` expecting rejection and returns the rejection reason, so
  * callers assert on the error CODE (via isRuntimeReplacedError) rather than
@@ -416,13 +418,9 @@ describe('ToolKeyStorage', () => {
       expect((parsed as { v: number }).v).toBe(2);
     });
 
-    /**
-     * @plan PLAN-20260206-TOOLKEY.P04
-     * @requirement REQ-001.2
-     */
-    it.skipIf(process.platform === 'win32')(
-      'tightens permissions to 0o600 when overwriting a pre-existing loose-mode .key file',
-      async () => {
+    {
+      const it = process.platform === 'win32' ? bunIt.skip : bunIt;
+      it('tightens permissions to 0o600 when overwriting a pre-existing loose-mode .key file', async () => {
         // Simulate a key file left behind with group/world-readable
         // permissions. writeFile's `mode` only applies when the file is
         // created, so an overwrite must explicitly chmod to avoid leaving a
@@ -440,8 +438,8 @@ describe('ToolKeyStorage', () => {
 
         const stat = await fs.stat(filePath);
         expect(stat.mode & 0o777).toBe(0o600);
-      },
-    );
+      });
+    }
 
     /**
      * @plan PLAN-20260206-TOOLKEY.P04

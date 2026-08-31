@@ -18,6 +18,84 @@ import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../GenerateChatOptions.js';
 
+async function* generateInitialStickyResponse(
+  options: GenerateChatOptions,
+  callLog: string[],
+): AsyncGenerator<IContent> {
+  const model = options.resolved?.model ?? '';
+  callLog.push(model);
+  if (model === 'model-a') throw new Error('backend-a error');
+  if (model === 'model-b') throw new Error('backend-b error');
+  yield { type: 'text' as const, content: 'success' };
+}
+
+async function* generateWraparoundStickyResponse(
+  options: GenerateChatOptions,
+  callLog: string[],
+): AsyncGenerator<IContent> {
+  const model = options.resolved?.model ?? '';
+  callLog.push(model);
+  if (model === 'model-c') {
+    const error = new Error('Rate limited') as Error & { status: number };
+    error.status = 429;
+    throw error;
+  }
+  if (model === 'model-a') {
+    yield { type: 'text' as const, content: 'success from a' };
+  }
+  if (model === 'model-b') throw new Error('backend-b error');
+}
+
+async function* generatePhaseResetResponse(
+  options: GenerateChatOptions,
+  phase: 'first' | 'second',
+  callLog: string[],
+): AsyncGenerator<IContent> {
+  const model = options.resolved?.model ?? '';
+  callLog.push(model);
+  if (phase === 'first') {
+    if (model === 'model-a') throw new Error('backend-a error');
+    if (model === 'model-b') throw new Error('backend-b error');
+    yield { type: 'text' as const, content: 'success from c' };
+  } else {
+    throw new Error('all backends failed');
+  }
+}
+
+async function* generateFullRotationFailure(
+  options: GenerateChatOptions,
+  callLog: string[],
+): AsyncGenerator<IContent> {
+  const model = options.resolved?.model ?? 'unknown';
+  callLog.push(model);
+  const chunks: IContent[] = [];
+  yield* chunks;
+  throw new Error(`backend failed for ${model}`);
+}
+
+async function* generateMultiRequestStickyResponse(
+  options: GenerateChatOptions,
+  phase: 1 | 2 | 3,
+  callLog: string[],
+): AsyncGenerator<IContent> {
+  const model = options.resolved?.model ?? '';
+  callLog.push(`phase${phase}:${model}`);
+  if (phase === 1) {
+    if (model === 'zai-model') throw new Error('zai error');
+    if (model === 'makora-model') throw new Error('makora error');
+    yield { type: 'text' as const, content: 'ollama success' };
+  } else if (phase === 2) {
+    if (model === 'ollama-model') {
+      const error = new Error('Rate limited') as Error & { status: number };
+      error.status = 429;
+      throw error;
+    }
+    yield { type: 'text' as const, content: 'zai success' };
+  } else {
+    yield { type: 'text' as const, content: 'zai success again' };
+  }
+}
+
 describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
   let settingsService: SettingsService;
   let config: Config;
@@ -34,19 +112,8 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
 
     const mockProvider: IProvider = {
       name: 'test-provider',
-      async *generateChatCompletion(
-        options: GenerateChatOptions,
-      ): AsyncGenerator<IContent> {
-        const model = options.resolved?.model ?? '';
-        callLog.push(model);
-        if (model === 'model-a') {
-          throw new Error('backend-a error');
-        }
-        if (model === 'model-b') {
-          throw new Error('backend-b error');
-        }
-        yield { type: 'text' as const, content: 'success' };
-      },
+      generateChatCompletion: (options: GenerateChatOptions) =>
+        generateInitialStickyResponse(options, callLog),
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
     };
@@ -96,25 +163,8 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
     expect(provider.getCurrentFailoverIndex()).toBe(2);
 
     callLog.length = 0;
-    mockProvider.generateChatCompletion = async function* (
-      options: GenerateChatOptions,
-    ): AsyncGenerator<IContent> {
-      const model = options.resolved?.model ?? '';
-      callLog.push(model);
-      if (model === 'model-c') {
-        const error = new Error('Rate limited') as Error & {
-          status: number;
-        };
-        error.status = 429;
-        throw error;
-      }
-      if (model === 'model-a') {
-        yield { type: 'text' as const, content: 'success from a' };
-      }
-      if (model === 'model-b') {
-        throw new Error('backend-b error');
-      }
-    };
+    mockProvider.generateChatCompletion = (options: GenerateChatOptions) =>
+      generateWraparoundStickyResponse(options, callLog);
 
     const results: IContent[] = [];
     for await (const chunk of provider.generateChatCompletion(options)) {
@@ -135,23 +185,8 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
 
     const mockProvider: IProvider = {
       name: 'test-provider',
-      async *generateChatCompletion(
-        options: GenerateChatOptions,
-      ): AsyncGenerator<IContent> {
-        const model = options.resolved?.model ?? '';
-        callLog.push(model);
-        if (phase === 'first') {
-          if (model === 'model-a') {
-            throw new Error('backend-a error');
-          }
-          if (model === 'model-b') {
-            throw new Error('backend-b error');
-          }
-          yield { type: 'text' as const, content: 'success from c' };
-        } else {
-          throw new Error('all backends failed');
-        }
-      },
+      generateChatCompletion: (options: GenerateChatOptions) =>
+        generatePhaseResetResponse(options, phase, callLog),
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
     };
@@ -220,15 +255,8 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
 
     const mockProvider: IProvider = {
       name: 'test-provider',
-      async *generateChatCompletion(
-        options: GenerateChatOptions,
-      ): AsyncGenerator<IContent> {
-        const model = options.resolved?.model ?? 'unknown';
-        callLog.push(model);
-        const chunks: IContent[] = [];
-        yield* chunks;
-        throw new Error(`backend failed for ${model}`);
-      },
+      generateChatCompletion: (options: GenerateChatOptions) =>
+        generateFullRotationFailure(options, callLog),
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
     };
@@ -291,33 +319,8 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
 
     const mockProvider: IProvider = {
       name: 'test-provider',
-      async *generateChatCompletion(
-        options: GenerateChatOptions,
-      ): AsyncGenerator<IContent> {
-        const model = options.resolved?.model ?? '';
-        callLog.push(`phase${phase}:${model}`);
-
-        if (phase === 1) {
-          if (model === 'zai-model') {
-            throw new Error('zai error');
-          }
-          if (model === 'makora-model') {
-            throw new Error('makora error');
-          }
-          yield { type: 'text' as const, content: 'ollama success' };
-        } else if (phase === 2) {
-          if (model === 'ollama-model') {
-            const error = new Error('Rate limited') as Error & {
-              status: number;
-            };
-            error.status = 429;
-            throw error;
-          }
-          yield { type: 'text' as const, content: 'zai success' };
-        } else {
-          yield { type: 'text' as const, content: 'zai success again' };
-        }
-      },
+      generateChatCompletion: (options: GenerateChatOptions) =>
+        generateMultiRequestStickyResponse(options, phase, callLog),
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
     };

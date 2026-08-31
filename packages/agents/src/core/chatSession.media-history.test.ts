@@ -166,7 +166,7 @@ describe('ChatSession media history boundaries', () => {
     const local = stored[0]?.blocks[0];
     if (local.type !== 'media') throw new Error('Expected local media block');
     expect(local.encoding).toBe('reference');
-    expect(stored[0]?.blocks[1]).toEqual(input[0]?.blocks[1]);
+    expect(stored[0]?.blocks[1]).toStrictEqual(input[0]?.blocks[1]);
   });
 
   it('awaits session-scoped provider-file deletion before history cleanup completes', async () => {
@@ -265,7 +265,7 @@ describe('ChatSession media history boundaries', () => {
       /provider file cleanup incomplete/i,
     );
 
-    expect(chat.getHistory()[0]?.blocks).toEqual([
+    expect(chat.getHistory()[0]?.blocks).toStrictEqual([
       { type: 'text', text: 'retained' },
     ]);
   });
@@ -280,7 +280,7 @@ describe('ChatSession media history boundaries', () => {
       Promise.resolve(chat.setHistory(mediaHistory('not-base64'))),
     ).rejects.toThrow(/media admission failed/i);
 
-    expect(chat.getHistory()[0]?.blocks).toEqual([
+    expect(chat.getHistory()[0]?.blocks).toStrictEqual([
       { type: 'text', text: 'retained' },
     ]);
   });
@@ -420,7 +420,7 @@ describe('ChatSession media history boundaries', () => {
     await fixture.recording.flush();
 
     const firstRequestBlocks = fixture.requests[0]?.[0]?.blocks;
-    expect(firstRequestBlocks).toEqual([
+    expect(firstRequestBlocks).toStrictEqual([
       {
         type: 'media',
         mimeType: 'image/png',
@@ -428,7 +428,9 @@ describe('ChatSession media history boundaries', () => {
         data: 'https://example.test/image.png',
       },
     ]);
-    expect(fixture.chat.getHistory()[0]?.blocks).toEqual(firstRequestBlocks);
+    expect(fixture.chat.getHistory()[0]?.blocks).toStrictEqual(
+      firstRequestBlocks,
+    );
     await fixture.recording.dispose();
   });
 
@@ -443,8 +445,12 @@ describe('ChatSession media history boundaries', () => {
     await fixture.chat.sendMessage({ message: 'next' }, 'purge-off');
     await fixture.recording.flush();
 
-    expect(fixture.requests[0]?.slice(0, before.length)).toEqual([...before]);
-    expect(fixture.chat.getHistory()[0]?.blocks).toEqual(before[0]?.blocks);
+    expect(fixture.requests[0]?.slice(0, before.length)).toStrictEqual([
+      ...before,
+    ]);
+    expect(fixture.chat.getHistory()[0]?.blocks).toStrictEqual(
+      before[0]?.blocks,
+    );
     expect(fixture.recording.getFilePath()).toBeNull();
     await fixture.recording.dispose();
   });
@@ -467,14 +473,14 @@ describe('ChatSession media history boundaries', () => {
       fixture.requests[0]?.[0]?.blocks.map((block) =>
         block.type === 'media' ? block.encoding : block.type,
       ),
-    ).toEqual(['reference', 'url']);
+    ).toStrictEqual(['reference', 'url']);
     expect(
       fixture.chat
         .getHistory()[0]
         ?.blocks.map((block) =>
           block.type === 'media' ? block.encoding : block.type,
         ),
-    ).toEqual(['reference', 'url']);
+    ).toStrictEqual(['reference', 'url']);
     await fixture.recording.dispose();
   });
 
@@ -496,14 +502,14 @@ describe('ChatSession media history boundaries', () => {
       fixture.requests[0]?.[0]?.blocks.map((block) =>
         block.type === 'media' ? block.encoding : block.type,
       ),
-    ).toEqual(['url']);
+    ).toStrictEqual(['url']);
     expect(
       fixture.chat
         .getHistory()[0]
         ?.blocks.map((block) =>
           block.type === 'media' ? block.encoding : block.type,
         ),
-    ).toEqual(['url']);
+    ).toStrictEqual(['url']);
     await fixture.recording.dispose();
   });
 
@@ -528,7 +534,7 @@ describe('ChatSession media history boundaries', () => {
       fixture.requests[0]?.[0]?.blocks.map((block) =>
         block.type === 'media' ? block.encoding : block.type,
       ),
-    ).toEqual(['reference', 'url']);
+    ).toStrictEqual(['reference', 'url']);
     await fixture.recording.dispose();
   });
 
@@ -549,7 +555,7 @@ describe('ChatSession media history boundaries', () => {
         ?.blocks.map((block) =>
           block.type === 'media' ? block.encoding : block.type,
         ),
-    ).toEqual(['reference', 'url']);
+    ).toStrictEqual(['reference', 'url']);
     await fixture.recording.dispose();
   });
 
@@ -564,7 +570,7 @@ describe('ChatSession media history boundaries', () => {
 
     await fixture.chat.sendMessage({ message: 'next' }, 'purge-cache-write');
 
-    expect(fixture.chat.getHistory()[0]?.blocks).toEqual([
+    expect(fixture.chat.getHistory()[0]?.blocks).toStrictEqual([
       { type: 'text', text: 'stable prefix' },
       {
         type: 'media',
@@ -595,7 +601,7 @@ describe('ChatSession media history boundaries', () => {
         ?.blocks.map((block) =>
           block.type === 'media' ? block.encoding : block.type,
         ),
-    ).toEqual(['reference', 'url']);
+    ).toStrictEqual(['reference', 'url']);
     await fixture.recording.dispose();
   });
 
@@ -613,7 +619,7 @@ describe('ChatSession media history boundaries', () => {
       fixture.chat.sendMessage({ message: 'next' }, 'turn-commit-failure'),
     ).rejects.toThrow('turn history commit failed');
 
-    expect(mediaHistoryShape(fixture.chat.getHistory())).toEqual([
+    expect(mediaHistoryShape(fixture.chat.getHistory())).toStrictEqual([
       'reference',
       'url',
     ]);
@@ -643,7 +649,7 @@ describe('ChatSession media history boundaries', () => {
       'stream turn history commit failed',
     );
 
-    expect(mediaHistoryShape(fixture.chat.getHistory())).toEqual([
+    expect(mediaHistoryShape(fixture.chat.getHistory())).toStrictEqual([
       'reference',
       'url',
     ]);
@@ -664,7 +670,7 @@ describe('ChatSession media history boundaries', () => {
       fixture.chat.sendMessage({ message: 'next' }, 'purge-commit-failure'),
     ).rejects.toThrow('purge persistence failed');
 
-    expect(mediaHistoryShape(fixture.chat.getHistory())).toEqual([
+    expect(mediaHistoryShape(fixture.chat.getHistory())).toStrictEqual([
       'reference',
       'url',
     ]);
@@ -700,9 +706,9 @@ describe('ChatSession media history boundaries', () => {
     releaseFirst();
     await Promise.all([first, second]);
 
-    expect(mediaEncodings(fixture.requests[0] ?? [])).toEqual(['url']);
-    expect(mediaEncodings(fixture.requests[1] ?? [])).toEqual([]);
-    expect(mediaEncodings(fixture.chat.getHistory())).toEqual([]);
+    expect(mediaEncodings(fixture.requests[0] ?? [])).toStrictEqual(['url']);
+    expect(mediaEncodings(fixture.requests[1] ?? [])).toStrictEqual([]);
+    expect(mediaEncodings(fixture.chat.getHistory())).toStrictEqual([]);
     await fixture.recording.dispose();
   });
 });

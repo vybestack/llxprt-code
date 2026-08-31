@@ -132,6 +132,12 @@ describe('ChatSession compression retry behavior @plan PLAN-20260218-COMPRESSION
    * performCompression retries on transient errors
    */
   it('retries a transient error and eventually succeeds', async () => {
+    const { callCount } =
+      await observeRetriesATransientErrorAndEventuallySucceeds();
+    expect(callCount).toBe(3);
+  });
+
+  const observeRetriesATransientErrorAndEventuallySucceeds = async () => {
     const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     let callCount = 0;
@@ -159,8 +165,9 @@ describe('ChatSession compression retry behavior @plan PLAN-20260218-COMPRESSION
     );
 
     await chat.performCompression('test-prompt');
-    expect(callCount).toBe(3);
-  });
+
+    return { callCount };
+  };
 
   /**
    * @requirement REQ-CR-003
@@ -168,35 +175,43 @@ describe('ChatSession compression retry behavior @plan PLAN-20260218-COMPRESSION
    * (which carries no HTTP status) and eventually succeeds.
    */
   it('retries an Anthropic overloaded_error and eventually succeeds', async () => {
-    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
-
-    let callCount = 0;
-    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
-      () => ({
-        name: 'middle-out' as const,
-        requiresLLM: true,
-        trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-        compress: vi.fn().mockImplementation(async () => {
-          callCount++;
-          if (callCount < 3) {
-            throw makeAnthropicOverloadError('overloaded_error');
-          }
-          return {
-            newHistory: [],
-            metadata: {
-              originalMessageCount: 10,
-              compressedMessageCount: 5,
-              strategyUsed: 'middle-out' as const,
-              llmCallMade: true,
-            },
-          };
-        }),
-      }),
-    );
-
-    await chat.performCompression('test-prompt');
+    const { callCount } =
+      await observeRetriesAnAnthropicOverloadedErrorAndEventuallySucceeds();
     expect(callCount).toBe(3);
   });
+
+  const observeRetriesAnAnthropicOverloadedErrorAndEventuallySucceeds =
+    async () => {
+      const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
+
+      let callCount = 0;
+      vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+        () => ({
+          name: 'middle-out' as const,
+          requiresLLM: true,
+          trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+          compress: vi.fn().mockImplementation(async () => {
+            callCount++;
+            if (callCount < 3) {
+              throw makeAnthropicOverloadError('overloaded_error');
+            }
+            return {
+              newHistory: [],
+              metadata: {
+                originalMessageCount: 10,
+                compressedMessageCount: 5,
+                strategyUsed: 'middle-out' as const,
+                llmCallMade: true,
+              },
+            };
+          }),
+        }),
+      );
+
+      await chat.performCompression('test-prompt');
+
+      return { callCount };
+    };
 
   /**
    * @requirement REQ-CR-001
@@ -206,38 +221,46 @@ describe('ChatSession compression retry behavior @plan PLAN-20260218-COMPRESSION
    * and eventually succeeds instead of breaking compression.
    */
   it('retries an SDK-wrapped Anthropic api_error and eventually succeeds', async () => {
-    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
-
-    let callCount = 0;
-    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
-      () => ({
-        name: 'middle-out' as const,
-        requiresLLM: true,
-        trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-        compress: vi.fn().mockImplementation(async () => {
-          callCount++;
-          if (callCount < 3) {
-            throw makeAnthropicSdkWrappedError(
-              'api_error',
-              'Internal server error',
-            );
-          }
-          return {
-            newHistory: [],
-            metadata: {
-              originalMessageCount: 10,
-              compressedMessageCount: 5,
-              strategyUsed: 'middle-out' as const,
-              llmCallMade: true,
-            },
-          };
-        }),
-      }),
-    );
-
-    await chat.performCompression('test-prompt');
+    const { callCount } =
+      await observeRetriesAnSDKWrappedAnthropicApiErrorAndEventuallySucceeds();
     expect(callCount).toBe(3);
   });
+
+  const observeRetriesAnSDKWrappedAnthropicApiErrorAndEventuallySucceeds =
+    async () => {
+      const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
+
+      let callCount = 0;
+      vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+        () => ({
+          name: 'middle-out' as const,
+          requiresLLM: true,
+          trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+          compress: vi.fn().mockImplementation(async () => {
+            callCount++;
+            if (callCount < 3) {
+              throw makeAnthropicSdkWrappedError(
+                'api_error',
+                'Internal server error',
+              );
+            }
+            return {
+              newHistory: [],
+              metadata: {
+                originalMessageCount: 10,
+                compressedMessageCount: 5,
+                strategyUsed: 'middle-out' as const,
+                llmCallMade: true,
+              },
+            };
+          }),
+        }),
+      );
+
+      await chat.performCompression('test-prompt');
+
+      return { callCount };
+    };
 
   /**
    * @requirement REQ-CR-003
@@ -298,47 +321,55 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
    * Falls back to TopDownTruncation when primary strategy fails
    */
   it('uses fallback strategy when primary strategy fails after retries', async () => {
-    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
-
-    let fallbackCalled = false;
-    let primaryCallCount = 0;
-
-    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
-      (name) => {
-        if (name === 'top-down-truncation') {
-          fallbackCalled = true;
-          return {
-            name: 'top-down-truncation' as const,
-            requiresLLM: false,
-            trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-            compress: vi.fn().mockResolvedValue({
-              newHistory: [],
-              metadata: {
-                originalMessageCount: 10,
-                compressedMessageCount: 5,
-                strategyUsed: 'top-down-truncation' as const,
-                llmCallMade: false,
-              },
-            }),
-          };
-        }
-        return {
-          name: 'middle-out' as const,
-          requiresLLM: true,
-          trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-          compress: vi.fn().mockImplementation(async () => {
-            primaryCallCount++;
-            throw makeHttpError(500);
-          }),
-        };
-      },
-    );
-
-    // performCompression internally catches and falls back
-    await chat.performCompression('test-prompt');
+    const { fallbackCalled, primaryCallCount } =
+      await observeUsesFallbackStrategyWhenPrimaryStrategyFailsAfterRetries();
     expect(fallbackCalled).toBe(true);
     expect(primaryCallCount).toBeGreaterThan(0);
   });
+
+  const observeUsesFallbackStrategyWhenPrimaryStrategyFailsAfterRetries =
+    async () => {
+      const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
+
+      let fallbackCalled = false;
+      let primaryCallCount = 0;
+
+      vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+        (name) => {
+          if (name === 'top-down-truncation') {
+            fallbackCalled = true;
+            return {
+              name: 'top-down-truncation' as const,
+              requiresLLM: false,
+              trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+              compress: vi.fn().mockResolvedValue({
+                newHistory: [],
+                metadata: {
+                  originalMessageCount: 10,
+                  compressedMessageCount: 5,
+                  strategyUsed: 'top-down-truncation' as const,
+                  llmCallMade: false,
+                },
+              }),
+            };
+          }
+          return {
+            name: 'middle-out' as const,
+            requiresLLM: true,
+            trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+            compress: vi.fn().mockImplementation(async () => {
+              primaryCallCount++;
+              throw makeHttpError(500);
+            }),
+          };
+        },
+      );
+
+      // performCompression internally catches and falls back
+      await chat.performCompression('test-prompt');
+
+      return { fallbackCalled, primaryCallCount };
+    };
 
   /**
    * @requirement REQ-CR-004

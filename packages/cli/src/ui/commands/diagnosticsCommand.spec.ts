@@ -27,6 +27,21 @@ void vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: runtimeMocks.getRuntimeApiMock,
 }));
 
+async function githubBucketNames(provider: string): Promise<string[]> {
+  return provider === 'github' ? ['default'] : [];
+}
+
+async function githubToken(
+  provider: string,
+  token: ReturnType<typeof createTestToken>,
+): Promise<ReturnType<typeof createTestToken> | null> {
+  return provider === 'github' ? token : null;
+}
+
+async function isGithubProvider(provider: string): Promise<boolean> {
+  return provider === 'github';
+}
+
 describe('diagnosticsCommand OAuth token display', () => {
   let mockContext: CommandContext;
   let mockTokenStore: Map<string, MCPOAuthCredentials>;
@@ -186,11 +201,9 @@ describe('diagnosticsCommand OAuth token display', () => {
       const authenticatedToken = createTestToken(3600); // 1 hour
 
       const mockTokenStore = {
-        listBuckets: vi.fn(async (provider: string) =>
-          provider === 'github' ? ['default'] : [],
-        ),
-        getToken: vi.fn(async (provider: string) =>
-          provider === 'github' ? authenticatedToken : null,
+        listBuckets: vi.fn(githubBucketNames),
+        getToken: vi.fn((provider: string) =>
+          githubToken(provider, authenticatedToken),
         ),
         saveToken: vi.fn(),
         removeToken: vi.fn(),
@@ -200,11 +213,9 @@ describe('diagnosticsCommand OAuth token display', () => {
 
       const mockOAuthManager = {
         getSupportedProviders: vi.fn(() => ['github', 'gitlab']),
-        isAuthenticated: vi.fn(
-          async (provider: string) => provider === 'github',
-        ),
-        peekStoredToken: vi.fn(async (provider: string) =>
-          provider === 'github' ? authenticatedToken : null,
+        isAuthenticated: vi.fn(isGithubProvider),
+        peekStoredToken: vi.fn((provider: string) =>
+          githubToken(provider, authenticatedToken),
         ),
         getTokenStore: vi.fn(() => mockTokenStore),
         getSessionBucket: vi.fn(() => undefined),

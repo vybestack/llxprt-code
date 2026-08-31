@@ -26,6 +26,10 @@ function makeJob(overrides: Partial<ShellJob> = {}): ShellJob {
   };
 }
 
+function outputTailSection(notification: string): string {
+  return notification.split('output_tail')[1] ?? '';
+}
+
 describe('formatShellJobCompletionNotification', () => {
   it('formats a completed job with id, command, and exit code', () => {
     const job = makeJob({ state: 'completed', exitCode: 0 });
@@ -85,7 +89,7 @@ describe('formatShellJobCompletionNotification', () => {
       truncated: true,
     });
     // The tail should NOT contain all 100 lines — it must be capped.
-    const outputSection = text.split('output_tail')[1] ?? '';
+    const outputSection = outputTailSection(text);
     const lineCount = outputSection.split('\n').length;
     expect(lineCount).toBeLessThanOrEqual(SHELL_NOTIF_TAIL_MAX_LINES + 2);
     expect(text).toContain('truncated');

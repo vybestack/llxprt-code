@@ -22,6 +22,7 @@ import { IdeContextNotificationSchema } from './ide-schemas.js';
 import * as path from 'node:path';
 import * as http from 'node:http';
 import { fileURLToPath } from 'node:url';
+import type { Express, NextFunction, Request, Response } from 'express';
 
 const companionFile = fileURLToPath(import.meta.url);
 // companionFile: packages/vscode-ide-companion/src/<this file>
@@ -48,6 +49,148 @@ function restoreTestEnvironment(): void {
     }
   }
   originalEnvironment.clear();
+}
+
+type DeliverInitialContext = (
+  sessionId: string,
+  delivery: unknown,
+  options: { authoritative: boolean },
+) => Promise<boolean>;
+
+function observeGetStreamDelivery(
+  deliver: DeliverInitialContext,
+  resolve: () => void,
+  reject: (reason: Error) => void,
+): DeliverInitialContext {
+  return async (sessionId, delivery, options) => {
+    try {
+      const delivered = await deliver(sessionId, delivery, options);
+      if (!options.authoritative) {
+        if (delivered) {
+          resolve();
+        } else {
+          reject(
+            new Error(
+              'Non-authoritative deliverInitialContext returned false: the GET SSE stream never carried initial context',
+            ),
+          );
+        }
+      }
+      return delivered;
+    } catch (error) {
+      if (!options.authoritative) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+      throw error;
+    }
+  };
+}
+
+function captureUntrustedContext(
+  next: IdeContext | undefined,
+  unsubscribe: () => void,
+  resolve: (context: IdeContext) => void,
+): void {
+  if (next?.workspaceState?.isTrusted === false) {
+    unsubscribe();
+    resolve(next);
+  }
+}
+
+async function rebindReleasedPort(
+  port: number,
+  trackedServers: http.Server[],
+): Promise<http.Server> {
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    const candidate = http.createServer();
+    const result = await new Promise<'listening' | NodeJS.ErrnoException>(
+      (resolve) => {
+        candidate.once('listening', () => resolve('listening'));
+        candidate.once('error', (error: NodeJS.ErrnoException) =>
+          resolve(error),
+        );
+        candidate.listen(port, '127.0.0.1');
+      },
+    );
+    if (result === 'listening') {
+      trackedServers.push(candidate);
+      return candidate;
+    }
+    await new Promise<void>((resolve) => candidate.close(() => resolve()));
+    if (result.code !== 'EADDRINUSE') {
+      throw result;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Port ${port} was not released by ideServer.stop() within 5000ms`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+function configureBareMcpApp(
+  app: Express,
+  server: McpServer,
+  authToken: string,
+  randomUUID: () => string,
+): Map<string, StreamableHTTPServerTransport> {
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader || authHeader !== `Bearer ${authToken}`) {
+      res.status(401).send('Unauthorized');
+      return;
+    }
+    next();
+  });
+
+  const transports = new Map<string, StreamableHTTPServerTransport>();
+  app.post('/mcp', (req: Request, res: Response) => {
+    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    const existing = sessionId ? transports.get(sessionId) : undefined;
+    if (existing) {
+      existing.handleRequest(req, res, req.body).catch(() => {
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'error' });
+        }
+      });
+      return;
+    }
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: randomUUID,
+      onsessioninitialized: (id) => {
+        transports.set(id, transport);
+      },
+    });
+    void server.connect(transport).catch(() => undefined);
+    transport.handleRequest(req, res, req.body).catch(() => {
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'error' });
+      }
+    });
+  });
+  return transports;
+}
+
+function serverPort(server: http.Server): number {
+  const address = server.address();
+  return typeof address === 'object' && address ? address.port : 0;
+}
+
+function waitForContextReceipt(received: () => boolean): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const timeout = setTimeout(() => resolve(false), 5000);
+    const check = (): void => {
+      if (received()) {
+        clearTimeout(timeout);
+        resolve(true);
+      } else {
+        setTimeout(check, 100);
+      }
+    };
+    setTimeout(check, 100);
+  });
 }
 
 await vi.mock('vscode', () => {
@@ -375,44 +518,11 @@ describe('IdeClient with the VS Code companion server', () => {
         getStreamResolve = resolve;
         getStreamReject = reject;
       });
-      serverHolder.deliverInitialContext = async (
-        sessionId: string,
-        delivery: unknown,
-        options: { authoritative: boolean },
-      ) => {
-        try {
-          const delivered = await realDeliverInitialContext(
-            sessionId,
-            delivery,
-            options,
-          );
-          if (!options.authoritative) {
-            // Only a SUCCESSFUL non-authoritative delivery proves the initial
-            // context actually traversed the standalone GET stream. A false
-            // result means the transport was missing or the send failed, so the
-            // stream is not usable and proceeding would be a false positive.
-            if (delivered) {
-              getStreamResolve();
-            } else {
-              getStreamReject(
-                new Error(
-                  'Non-authoritative deliverInitialContext returned false: the GET SSE stream never carried initial context',
-                ),
-              );
-            }
-          }
-          return delivered;
-        } catch (error) {
-          // Never leave the gate pending on a rejection, or the wait below would
-          // hang until the suite timeout and mask the real error.
-          if (!options.authoritative) {
-            getStreamReject(
-              error instanceof Error ? error : new Error(String(error)),
-            );
-          }
-          throw error;
-        }
-      };
+      serverHolder.deliverInitialContext = observeGetStreamDelivery(
+        realDeliverInitialContext,
+        getStreamResolve,
+        getStreamReject,
+      );
 
       try {
         await ideClient.connect();
@@ -452,12 +562,7 @@ describe('IdeClient with the VS Code companion server', () => {
 
       const secondUpdate = new Promise<IdeContext>((resolve) => {
         const unsubscribe = ideContext.subscribeToIdeContext((next) => {
-          // Ignore any initial-context notification still in flight; only the
-          // post-broadcast state carries isTrusted === false.
-          if (next?.workspaceState?.isTrusted === false) {
-            unsubscribe();
-            resolve(next);
-          }
+          captureUntrustedContext(next, unsubscribe, resolve);
         });
       });
       stack.ideServer.broadcastIdeContextUpdate();
@@ -542,37 +647,7 @@ describe('IdeClient with the VS Code companion server', () => {
     // Retry boundedly because the OS may take a few ms to release the
     // socket after server.close() resolves (EADDRINUSE during that window
     // is a transient OS condition, not a test failure).
-    const rebindDeadline = Date.now() + 5000;
-    let boundServer: http.Server | undefined;
-    for (;;) {
-      const candidate = http.createServer();
-      const rebindResult = await new Promise<
-        'listening' | NodeJS.ErrnoException
-      >((resolve) => {
-        candidate.once('listening', () => resolve('listening'));
-        candidate.once('error', (error: NodeJS.ErrnoException) =>
-          resolve(error),
-        );
-        candidate.listen(port, '127.0.0.1');
-      });
-      if (rebindResult === 'listening') {
-        boundServer = candidate;
-        externalHttpServers.push(boundServer);
-        break;
-      }
-      // EADDRINUSE is transient during OS port release; retry within the
-      // deadline. Any other error is a real failure.
-      await new Promise<void>((resolve) => candidate.close(() => resolve()));
-      if (rebindResult.code !== 'EADDRINUSE') {
-        throw rebindResult;
-      }
-      if (Date.now() >= rebindDeadline) {
-        throw new Error(
-          `Port ${port} was not released by ideServer.stop() within 5000ms`,
-        );
-      }
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
+    const boundServer = await rebindReleasedPort(port, externalHttpServers);
     // Deterministic closure/cleanup of the rebind probe.
     await new Promise<void>((resolve) => boundServer.close(() => resolve()));
     externalHttpServers.splice(externalHttpServers.indexOf(boundServer), 1);
@@ -608,53 +683,19 @@ describe('IdeClient with the VS Code companion server', () => {
 
     const app = express();
     app.use(express.json({ limit: '10mb' }));
-    app.use((req, res, next) => {
-      const authHeader = req.headers['authorization'];
-      if (!authHeader || authHeader !== `Bearer ${authToken}`) {
-        res.status(401).send('Unauthorized');
-        return;
-      }
-      next();
-    });
-
-    const bareTransports = new Map<string, StreamableHTTPServerTransport>();
-    app.post('/mcp', (req, res) => {
-      const sessionId = req.headers['mcp-session-id'] as string | undefined;
-      const existing = sessionId ? bareTransports.get(sessionId) : undefined;
-      if (existing) {
-        existing.handleRequest(req, res, req.body).catch(() => {
-          if (!res.headersSent) {
-            res.status(500).json({ error: 'error' });
-          }
-        });
-        return;
-      }
-      const transport: StreamableHTTPServerTransport =
-        new StreamableHTTPServerTransport({
-          sessionIdGenerator: () => randomUUID(),
-          onsessioninitialized: (id) => {
-            bareTransports.set(id, transport);
-          },
-        });
-      void bareMcpServer.connect(transport).catch(() => {
-        // Best-effort: a bare server connect failure must not produce an
-        // unhandled rejection that fails the test process.
-      });
-      transport.handleRequest(req, res, req.body).catch(() => {
-        if (!res.headersSent) {
-          res.status(500).json({ error: 'error' });
-        }
-      });
-    });
+    const bareTransports = configureBareMcpApp(
+      app,
+      bareMcpServer,
+      authToken,
+      randomUUID,
+    );
 
     const bareServer = http.createServer(app);
     await new Promise<void>((resolve) =>
       bareServer.listen(0, '127.0.0.1', resolve),
     );
     externalHttpServers.push(bareServer);
-    const bareAddress = bareServer.address();
-    const barePort =
-      typeof bareAddress === 'object' && bareAddress ? bareAddress.port : 0;
+    const barePort = serverPort(bareServer);
 
     // Make IdeClient connect to the bare server via env (no port file).
     setTestEnvironment('LLXPRT_CODE_IDE_SERVER_PORT', String(barePort));
@@ -732,18 +773,7 @@ describe('IdeClient with the VS Code companion server', () => {
 
     // The client opens a GET stream automatically after initialized. The
     // server should push initial context on it within a bounded time.
-    const result = await new Promise<boolean>((resolve) => {
-      const timeout = setTimeout(() => resolve(false), 5000);
-      const check = () => {
-        if (receivedContext) {
-          clearTimeout(timeout);
-          resolve(true);
-        } else {
-          setTimeout(check, 100);
-        }
-      };
-      setTimeout(check, 100);
-    });
+    const result = await waitForContextReceipt(() => receivedContext);
 
     // Close explicitly here (idempotent in the SDK); afterEach will also
     // attempt a best-effort close.

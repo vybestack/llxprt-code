@@ -242,7 +242,7 @@ describe('StreamProcessor.processStreamResponse — stream state release (#2852)
       })(),
     ]);
 
-    expect(Object.fromEntries(admittedTurnByText)).toEqual({
+    expect(Object.fromEntries(admittedTurnByText)).toStrictEqual({
       'left-first': 'turn-left',
       'left-last': 'turn-left',
       'right-first': 'turn-right',

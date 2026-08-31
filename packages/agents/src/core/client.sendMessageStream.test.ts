@@ -633,6 +633,12 @@ describe('Agent Client (client.ts)', () => {
     });
 
     it('should return the turn instance after the stream is complete', async () => {
+      const { finalResult } =
+        await observeReturnTheTurnInstanceAfterTheStreamIsComplete();
+      expect(finalResult).toBeInstanceOf(Turn);
+    });
+
+    const observeReturnTheTurnInstanceAfterTheStreamIsComplete = async () => {
       // Arrange
       const mockStream = (async function* () {
         yield { type: 'content', value: 'Hello' };
@@ -674,8 +680,9 @@ describe('Agent Client (client.ts)', () => {
       }
 
       // Assert
-      expect(finalResult).toBeInstanceOf(Turn);
-    });
+
+      return { finalResult };
+    };
 
     it('should yield MaxSessionTurns and stop when session turn limit is reached', async () => {
       // Arrange

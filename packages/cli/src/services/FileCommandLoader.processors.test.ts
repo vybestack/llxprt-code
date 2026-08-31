@@ -7,7 +7,16 @@
 import * as glob from 'glob';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { FileCommandLoader } from './FileCommandLoader.js';
-import { vi, type Mock } from 'bun:test';
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 
 const realMockFsModule = { ...(await import('./__testhelpers__/mockFs.js')) };
 const realGlobModule = { ...(await import('glob')) };
@@ -338,7 +347,7 @@ describe('FileCommandLoader (processors)', () => {
   });
 
   describe('@-file Processor Integration', () => {
-    it('correctly processes a command with @{file}', async () => {
+    async function verifyCorrectlyProcessesACommandWithFile() {
       getFsMock().mock({
         'at-file.toml':
           'prompt = "Context from file: @{./test.txt}"\ndescription = "@-file test"',
@@ -372,9 +381,13 @@ describe('FileCommandLoader (processors)', () => {
 
       const loader = new FileCommandLoader(null as unknown as Config);
       const commands = await loader.loadCommands(signal);
-      const command = commands.find((c) => c.name === 'at-file');
-      expect(command).toBeDefined();
+      return commands.find((c) => c.name === 'at-file');
+    }
 
+    it('correctly processes a command with @{file}', async () => {
+      const command = await verifyCorrectlyProcessesACommandWithFile();
+
+      expect(command).toBeDefined();
       const result = await command!.action?.(
         createMockCommandContext({
           invocation: {

@@ -15,6 +15,7 @@
  * for the profile row. Rows cover the AC1-AC4 matrix from the issue plan.
  */
 
+import { assertInstanceOf } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import { loadSandboxConfig } from './sandboxConfig.js';
@@ -65,9 +66,11 @@ async function expectFatalSandbox(
   try {
     await loadSandboxConfig(settings, argv);
   } catch (error) {
-    if (!(error instanceof FatalSandboxError)) {
-      throw new Error(`expected FatalSandboxError, got: ${String(error)}`);
-    }
+    assertInstanceOf(
+      error,
+      FatalSandboxError,
+      `expected FatalSandboxError, got: ${String(error)}`,
+    );
     return error;
   }
   throw new Error('expected loadSandboxConfig to throw');

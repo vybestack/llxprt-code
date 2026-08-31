@@ -151,6 +151,19 @@ describe('TokenUsageLogger — schema versioning (issue #3130 slice 1)', () => {
   });
 
   it('writes only fields the documented schema declares', async () => {
+    const { toolCalls, unexpectedRecordKeys } =
+      await observeWritesOnlyFieldsTheDocumentedSchemaDeclares();
+    expect(unexpectedRecordKeys).toStrictEqual([]);
+    expect(Array.isArray(toolCalls)).toBe(true);
+    expect(Object.keys(toolCalls[0]).sort()).toStrictEqual([
+      'call_id',
+      'result_tokens',
+      'tool_name',
+      'was_truncated',
+    ]);
+  });
+
+  const observeWritesOnlyFieldsTheDocumentedSchemaDeclares = async () => {
     // A key-allowlist rather than a denylist: a denylist passes whenever a
     // future field leaks content under a name nobody thought to forbid.
     const logger = new TokenUsageLogger(true, logFile);
@@ -200,22 +213,18 @@ describe('TokenUsageLogger — schema versioning (issue #3130 slice 1)', () => {
     const allowed = new Set(
       Object.keys(SerializedTokenUsageTurnRecordSchema.shape),
     );
-    for (const key of Object.keys(record)) {
-      expect(allowed.has(key)).toBe(true);
-    }
+    const unexpectedRecordKeys = Object.keys(record).filter(
+      (key) => !allowed.has(key),
+    );
 
     // And the tool attribution entries carry counts and identifiers only.
     const toolCalls = record.tool_calls;
-    expect(Array.isArray(toolCalls)).toBe(true);
+
     if (!Array.isArray(toolCalls))
       throw new Error('expected tool_calls to be an array');
-    expect(Object.keys(toolCalls[0]).sort()).toEqual([
-      'call_id',
-      'result_tokens',
-      'tool_name',
-      'was_truncated',
-    ]);
-  });
+
+    return { toolCalls, unexpectedRecordKeys };
+  };
 });
 
 describe('TokenUsageLogger — attachTurnContext', () => {
@@ -679,28 +688,38 @@ describe('TokenUsageLogger — recordLifecycleEvent', () => {
   });
 
   it('recordLifecycleEvent records round-trip through parseTokenUsageLogRecord', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
-    const event: TokenUsageLifecycleEvent = {
-      type: 'provider_switch',
-      sessionId: 'sess-1',
-      turnId: 'turn-1',
-      fromProvider: 'openai',
-      toProvider: 'anthropic',
-      fromModel: 'gpt-4',
-      toModel: 'claude-3',
-    };
-    await logger.recordLifecycleEvent(event);
-
-    const raw = fs.readFileSync(logFile, 'utf-8').trim();
-    const parsed = parseTokenUsageLogRecord(JSON.parse(raw));
+    const { parsed } =
+      await observeRecordLifecycleEventRecordsRoundTripThroughParseTokenUsageLogRecord();
     expect(parsed).not.toBeNull();
-    if (parsed === null) throw new Error('expected a parseable record');
     expect(parsed.record_type).toBe('provider_switch');
-    if (parsed.record_type !== 'provider_switch')
-      throw new Error('expected a provider_switch record');
     expect(parsed.from_provider).toBe('openai');
     expect(parsed.to_provider).toBe('anthropic');
   });
+
+  const observeRecordLifecycleEventRecordsRoundTripThroughParseTokenUsageLogRecord =
+    async () => {
+      const logger = new TokenUsageLogger(true, logFile);
+      const event: TokenUsageLifecycleEvent = {
+        type: 'provider_switch',
+        sessionId: 'sess-1',
+        turnId: 'turn-1',
+        fromProvider: 'openai',
+        toProvider: 'anthropic',
+        fromModel: 'gpt-4',
+        toModel: 'claude-3',
+      };
+      await logger.recordLifecycleEvent(event);
+
+      const raw = fs.readFileSync(logFile, 'utf-8').trim();
+      const parsed = parseTokenUsageLogRecord(JSON.parse(raw));
+
+      if (parsed === null) throw new Error('expected a parseable record');
+
+      if (parsed.record_type !== 'provider_switch')
+        throw new Error('expected a provider_switch record');
+
+      return { parsed };
+    };
 
   it('I/O errors on lifecycle records do not crash (fail-open)', async () => {
     const badPath = path.join(os.tmpdir(), 'invalid\0dir', 'usage.jsonl');

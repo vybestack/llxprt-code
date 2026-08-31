@@ -418,11 +418,9 @@ describe('InputPrompt', () => {
         });
         expect(onEscapePromptChange).toHaveBeenCalledWith(true);
 
-        expect(onEscapePromptChange.mock.calls.map((call) => call[0])).toEqual([
-          true,
-          false,
-          true,
-        ]);
+        expect(
+          onEscapePromptChange.mock.calls.map((call) => call[0]),
+        ).toStrictEqual([true, false, true]);
         // The buffer surviving is the strongest proof the reset happened: had
         // 'a' not reset, this final press would have been the second of the
         // armed pair and would have cleared the buffer.

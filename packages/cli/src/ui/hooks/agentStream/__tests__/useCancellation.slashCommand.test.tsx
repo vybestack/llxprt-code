@@ -101,7 +101,7 @@ describe('useCancellation — slash-command cancellation on ESC', () => {
     harness.pressEscape();
 
     expect(controller.signal.aborted).toBe(true);
-    expect(cancellationNotices(harness.addedItems)).toEqual([
+    expect(cancellationNotices(harness.addedItems)).toStrictEqual([
       SLASH_COMMAND_CANCELLED,
     ]);
     // Cancelling a slash command must not also cancel the (idle) turn.
@@ -117,7 +117,7 @@ describe('useCancellation — slash-command cancellation on ESC', () => {
     harness.pressEscape();
     harness.pressEscape();
 
-    expect(cancellationNotices(harness.addedItems)).toEqual([
+    expect(cancellationNotices(harness.addedItems)).toStrictEqual([
       SLASH_COMMAND_CANCELLED,
     ]);
   });
@@ -127,7 +127,7 @@ describe('useCancellation — slash-command cancellation on ESC', () => {
 
     harness.pressEscape();
 
-    expect(harness.addedItems).toEqual([]);
+    expect(harness.addedItems).toStrictEqual([]);
     expect(harness.setTurnCancelled).not.toHaveBeenCalled();
     expect(harness.turnAbortController.signal.aborted).toBe(false);
   });

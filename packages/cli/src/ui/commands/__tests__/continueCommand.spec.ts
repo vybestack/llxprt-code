@@ -7,6 +7,7 @@
  * @plan PLAN-20260214-SESSIONBROWSER.P19
  */
 
+import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach } from 'bun:test';
 import * as fc from 'fast-check';
 import { randomUUID } from 'node:crypto';
@@ -557,9 +558,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
           await readFile(join(packageDirectory, 'session.jsonl'), 'utf8'),
         ).toContain('active recording boundary');
         const integrationPath = integrationRecording.getFilePath();
-        if (integrationPath === null) {
-          throw new Error('Expected integration recording path');
-        }
+        assertNotNull(integrationPath, 'Expected integration recording path');
         expect(await readFile(integrationPath, 'utf8')).toContain(
           'integration boundary',
         );
@@ -661,7 +660,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       });
       await recording.flush();
       const recordingPath = recording.getFilePath();
-      if (recordingPath === null) throw new Error('Expected recording path');
+      assertNotNull(recordingPath, 'Expected recording path');
       const packageDirectory = join(root, 'package');
       await exportSessionMediaPackage(
         recordingPath,
@@ -696,9 +695,10 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         );
 
         assertType(result, isPerformResumeAction);
-        if (result.sessionPackage === undefined) {
-          throw new Error('Expected a validated session package');
-        }
+        assertDefined(
+          result.sessionPackage,
+          'Expected a validated session package',
+        );
         expect(result.sessionPackage.recordingBytes.byteLength).toBeGreaterThan(
           0,
         );
@@ -707,7 +707,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
             destinationChats,
             'portable-project',
           ),
-        ).toEqual([]);
+        ).toStrictEqual([]);
         expect(await destinationStore.getStoredByteLength()).toBe(0);
       } finally {
         await rm(root, { recursive: true, force: true });
@@ -736,7 +736,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       });
       await recording.flush();
       const recordingPath = recording.getFilePath();
-      if (recordingPath === null) throw new Error('Expected recording path');
+      assertNotNull(recordingPath, 'Expected recording path');
       const packageDirectory = join(root, 'package');
       await exportSessionMediaPackage(
         recordingPath,
@@ -782,7 +782,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
             destinationChats,
             'portable-project',
           ),
-        ).toEqual([]);
+        ).toStrictEqual([]);
         expect(await destinationStore.getStoredByteLength()).toBe(0);
       } finally {
         await rm(root, { recursive: true, force: true });

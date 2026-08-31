@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  assertDefined,
+  assertNotNull,
+} from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
@@ -164,7 +168,7 @@ async function createPackage(
   });
   await recording.flush();
   const recordingPath = recording.getFilePath();
-  if (recordingPath === null) throw new Error('Expected source recording');
+  assertNotNull(recordingPath, 'Expected source recording');
   const directory = join(root, `package-${randomUUID()}`);
   await exportSessionMediaPackage(
     recordingPath,
@@ -300,14 +304,14 @@ describe('continue package perform_resume integration', () => {
         getProjectHash(config.getProjectRoot()),
       );
 
-      expect(result).toEqual({ type: 'handled' });
+      expect(result).toStrictEqual({ type: 'handled' });
       expect(sessions).toHaveLength(1);
       expect(config.getSessionId()).toBe(sessions[0]?.sessionId);
       expect(state.recording?.getSessionId()).toBe(config.getSessionId());
       expect(historyText(history.getAll())).toContain(
         'history restored through perform_resume',
       );
-      expect(messages).toEqual([]);
+      expect(messages).toStrictEqual([]);
     } finally {
       await disposeActiveState(state);
       await config.dispose();
@@ -345,9 +349,10 @@ describe('continue package perform_resume integration', () => {
     const importedOnlyReference = sessionPackage.references.find(
       (_reference, index) => index === 1,
     );
-    if (importedOnlyReference === undefined) {
-      throw new Error('Expected imported-only package reference');
-    }
+    assertDefined(
+      importedOnlyReference,
+      'Expected imported-only package reference',
+    );
     const state: ActiveRecordingState = {
       recording: null,
       integration: null,
@@ -379,7 +384,7 @@ describe('continue package perform_resume integration', () => {
         throw error;
       });
 
-      expect(chatEntries).toEqual([]);
+      expect(chatEntries).toStrictEqual([]);
       expect(config.getSessionId()).toBe(originalSessionId);
       expect(historyText(history.getAll())).toContain(
         'original active history',
@@ -390,9 +395,9 @@ describe('continue package perform_resume integration', () => {
       expect(await destinationStore.getStoredByteLength()).toBe(
         deduplicatedBytes.byteLength,
       );
-      expect(await destinationStore.readVerified(preExistingReference)).toEqual(
-        deduplicatedBytes,
-      );
+      expect(
+        await destinationStore.readVerified(preExistingReference),
+      ).toStrictEqual(deduplicatedBytes);
       await expect(
         destinationStore.readVerified(importedOnlyReference),
       ).rejects.toThrow(importedOnlyReference.contentId);

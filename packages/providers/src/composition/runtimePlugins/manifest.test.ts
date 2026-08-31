@@ -141,7 +141,7 @@ describe('parseRuntimePluginManifest', () => {
     expect(() => {
       (nestedProviderConfig as { deep: boolean }).deep = false;
     }).toThrow(TypeError);
-    expect(staticModels.map((model) => model.id)).toEqual(['model-a']);
+    expect(staticModels.map((model) => model.id)).toStrictEqual(['model-a']);
   });
 
   it('rejects apiVersion 2 as an incompatible plugin naming observed and supported versions and the specifier', () => {

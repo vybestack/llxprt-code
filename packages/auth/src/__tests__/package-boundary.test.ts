@@ -122,6 +122,58 @@ function readJson<T>(filePath: string): T {
   return JSON.parse(content) as T;
 }
 
+function packageScripts(pkg: PackageJson): Readonly<Record<string, string>> {
+  return pkg.scripts ?? {};
+}
+
+function packageDependencies(
+  pkg: PackageJson,
+): Readonly<Record<string, string>> {
+  return pkg.dependencies ?? {};
+}
+
+function packageDevDependencies(
+  pkg: PackageJson,
+): Readonly<Record<string, string>> {
+  return pkg.devDependencies ?? {};
+}
+
+function packageFiles(pkg: PackageJson): readonly string[] {
+  return pkg.files ?? [];
+}
+
+function forbiddenCompatibilityFiles(
+  files: readonly string[],
+): readonly string[] {
+  const violations: string[] = [];
+  for (const filePath of files) {
+    const basename = path.basename(filePath, '.ts');
+    const nameWithoutTestSuffix = basename
+      .replace(/\.test$/, '')
+      .replace(/\.spec$/, '');
+    if (
+      FORBIDDEN_SUFFIXES.some((suffix) =>
+        nameWithoutTestSuffix.endsWith(suffix),
+      )
+    ) {
+      violations.push(path.relative(AUTH_DIR, filePath));
+    }
+  }
+  return violations;
+}
+
+function workspacePaths(rootPkg: {
+  readonly workspaces?: string[];
+}): readonly string[] {
+  return rootPkg.workspaces ?? [];
+}
+
+function compilerPaths(tsconfig: {
+  readonly compilerOptions?: { readonly paths?: Record<string, string[]> };
+}): Readonly<Record<string, readonly string[]>> {
+  return tsconfig.compilerOptions?.paths ?? {};
+}
+
 // ─────────────────────────────────────────────────────────────────
 // Package metadata constraints
 // ─────────────────────────────────────────────────────────────────
@@ -181,7 +233,7 @@ describe('Auth package metadata constraints', () => {
    */
   it('auth package.json has build, test, typecheck scripts', () => {
     const pkg = readJson<PackageJson>(path.join(AUTH_DIR, 'package.json'));
-    const scripts = pkg.scripts ?? {};
+    const scripts = packageScripts(pkg);
     expect(scripts['build']).toBeDefined();
     expect(scripts['test']).toBeDefined();
     expect(scripts['typecheck']).toBeDefined();
@@ -193,7 +245,7 @@ describe('Auth package metadata constraints', () => {
    */
   it('auth package.json has NO @vybestack/* in dependencies', () => {
     const pkg = readJson<PackageJson>(path.join(AUTH_DIR, 'package.json'));
-    const deps = pkg.dependencies ?? {};
+    const deps = packageDependencies(pkg);
     for (const depName of Object.keys(deps)) {
       expect(depName).not.toMatch(/^@vybestack\//);
     }
@@ -205,7 +257,7 @@ describe('Auth package metadata constraints', () => {
    */
   it('auth package.json has NO @vybestack/* in devDependencies', () => {
     const pkg = readJson<PackageJson>(path.join(AUTH_DIR, 'package.json'));
-    const devDeps = pkg.devDependencies ?? {};
+    const devDeps = packageDevDependencies(pkg);
     for (const depName of Object.keys(devDeps)) {
       expect(depName).not.toMatch(/^@vybestack\//);
     }
@@ -217,7 +269,7 @@ describe('Auth package metadata constraints', () => {
    */
   it('auth package.json files field ships dist plus TypeScript source without tests', () => {
     const pkg = readJson<PackageJson>(path.join(AUTH_DIR, 'package.json'));
-    const files = pkg.files ?? [];
+    const files = packageFiles(pkg);
     // The no-compile Bun run path needs the TS source shipped alongside dist.
     expect(files).toContain('dist');
     expect(files).toContain('index.ts');
@@ -287,10 +339,7 @@ describe('Auth package dependency isolation', () => {
       }
     }
 
-    expect(
-      violations,
-      `Forbidden imports found in auth production code:\n${violations.join('\n')}`,
-    ).toStrictEqual([]);
+    expect(violations).toStrictEqual([]);
   });
 
   /**
@@ -312,10 +361,7 @@ describe('Auth package dependency isolation', () => {
       );
     }
 
-    expect(
-      violations,
-      `Forbidden relative-path escapes in auth production code:\n${violations.join('\n')}`,
-    ).toStrictEqual([]);
+    expect(violations).toStrictEqual([]);
   });
 });
 
@@ -333,27 +379,9 @@ describe('Auth package anti-shim guards', () => {
    */
   it('no .ts files have forbidden compatibility suffixes', () => {
     const allFiles = collectTsFiles(AUTH_DIR, false);
-    const violations: string[] = [];
+    const violations = forbiddenCompatibilityFiles(allFiles);
 
-    for (const filePath of allFiles) {
-      const basename = path.basename(filePath, '.ts');
-      const nameWithoutTestSuffix = basename
-        .replace(/\.test$/, '')
-        .replace(/\.spec$/, '');
-
-      if (
-        FORBIDDEN_SUFFIXES.some((suffix) =>
-          nameWithoutTestSuffix.endsWith(suffix),
-        )
-      ) {
-        violations.push(path.relative(AUTH_DIR, filePath));
-      }
-    }
-
-    expect(
-      violations,
-      `Files with forbidden compatibility suffixes:\n${violations.join('\n')}`,
-    ).toStrictEqual([]);
+    expect(violations).toStrictEqual([]);
   });
 });
 
@@ -374,7 +402,7 @@ describe('Auth workspace DAG constraints', () => {
     const rootPkg = readJson<{ workspaces?: string[] }>(
       path.join(ROOT_DIR, 'package.json'),
     );
-    const workspaces = rootPkg.workspaces ?? [];
+    const workspaces = workspacePaths(rootPkg);
     const authIndex = workspaces.indexOf('packages/auth');
     const coreIndex = workspaces.indexOf('packages/core');
 
@@ -391,7 +419,7 @@ describe('Auth workspace DAG constraints', () => {
    */
   it('core package has @vybestack/llxprt-code-auth as dependency', () => {
     const corePkg = readJson<PackageJson>(path.join(CORE_DIR, 'package.json'));
-    const deps = corePkg.dependencies ?? {};
+    const deps = packageDependencies(corePkg);
     expect(deps['@vybestack/llxprt-code-auth']).toBeDefined();
   });
 
@@ -407,7 +435,7 @@ describe('Auth workspace DAG constraints', () => {
     const tsconfig = readJson<{
       compilerOptions?: { paths?: Record<string, string[]> };
     }>(tsconfigPath);
-    const paths = tsconfig.compilerOptions?.paths ?? {};
+    const paths = compilerPaths(tsconfig);
     expect(paths['@vybestack/llxprt-code-auth']).toBeDefined();
   });
 
@@ -419,7 +447,7 @@ describe('Auth workspace DAG constraints', () => {
    */
   it('auth does not depend on core package', () => {
     const authPkg = readJson<PackageJson>(path.join(AUTH_DIR, 'package.json'));
-    const deps = authPkg.dependencies ?? {};
+    const deps = packageDependencies(authPkg);
     expect(deps['@vybestack/llxprt-code-core']).toBeUndefined();
   });
 });

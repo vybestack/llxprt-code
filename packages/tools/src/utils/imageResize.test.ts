@@ -12,6 +12,10 @@ import {
   type ImageResizePolicy,
 } from './imageResize.js';
 
+function numberOrOne(value: number | undefined): number {
+  return value ?? 1;
+}
+
 async function createImage(
   width: number,
   height: number,
@@ -118,7 +122,7 @@ describe('resizeImageIfNeeded', () => {
     const dimensions = await getDisplayedDimensions(resized);
     const metadata = await sharp(resized).metadata();
 
-    expect(dimensions).toEqual({ width: 154, height: 77 });
+    expect(dimensions).toStrictEqual({ width: 154, height: 77 });
     expect(metadata.format).toBe('jpeg');
   });
 
@@ -142,7 +146,7 @@ describe('resizeImageIfNeeded', () => {
       { maxLongEdge: 80 },
     );
 
-    expect(await getDisplayedDimensions(resized)).toEqual({
+    expect(await getDisplayedDimensions(resized)).toStrictEqual({
       width: 40,
       height: 80,
     });
@@ -163,7 +167,7 @@ describe('resizeImageIfNeeded', () => {
 
       expect(metadata.format).toBe(format);
       expect(metadata.pages).toBe(2);
-      expect(await getDisplayedDimensions(resized)).toEqual({
+      expect(await getDisplayedDimensions(resized)).toStrictEqual({
         width: 60,
         height: 40,
       });
@@ -183,7 +187,7 @@ describe('resizeImageIfNeeded', () => {
     const dimensions = await getDisplayedDimensions(resized);
 
     expect(
-      (metadata.pages ?? 1) * dimensions.width * dimensions.height,
+      numberOrOne(metadata.pages) * dimensions.width * dimensions.height,
     ).toBeLessThanOrEqual(10_000);
     expect(metadata.pages).toBe(2);
   });
@@ -237,7 +241,11 @@ describe('resolveImageResizePolicy', () => {
         'image-resize.maxLongEdge': 2048,
         'image-resize.maxPixels': 1_572_864,
       }),
-    ).toEqual({ maxLongEdge: 2048, maxPixels: 1_572_864 });
+    ).toStrictEqual({
+      maxLongEdge: 2048,
+      maxShortEdge: undefined,
+      maxPixels: 1_572_864,
+    });
   });
 
   it('preserves legacy behavior when limits are absent or disabled', () => {

@@ -158,6 +158,12 @@ async function readJsonDump(
   return JSON.parse(content) as Record<string, unknown>;
 }
 
+function responseHeaders(response: {
+  readonly body?: { readonly headers?: Record<string, string> };
+}): Record<string, string> {
+  return response.body?.headers ?? {};
+}
+
 /**
  * Drains the stream and returns the error it threw. A completed stream is a
  * contract violation for every test in this file (all drive a non-2xx reply),
@@ -252,7 +258,7 @@ describe('OpenAI Responses error-response dump @issue:3140', () => {
     // Redaction: credential-bearing values must not leak, but the header
     // names must survive and diagnostic headers must be readable — capturing
     // Retry-After is a core reason the dump exists.
-    const dumpedHeaders = responseBody.body?.headers ?? {};
+    const dumpedHeaders = responseHeaders(responseBody);
     expect(dumpedHeaders['set-cookie']).toBe('[REDACTED]');
     expect(dumpedHeaders['authorization']).toBe('[REDACTED]');
     expect(JSON.stringify(dumpedHeaders)).not.toContain('secret');

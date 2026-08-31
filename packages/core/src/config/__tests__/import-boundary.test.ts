@@ -35,6 +35,21 @@ const providerRegistryPath = join(
   'provider-registry.ts',
 );
 
+function isValueImportFromTools(line: string): boolean {
+  return (
+    line.includes("@vybestack/llxprt-code-tools'") &&
+    line.trim().startsWith('import') &&
+    !line.trim().startsWith('import type')
+  );
+}
+
+function isTypeImportFromTools(line: string): boolean {
+  return (
+    line.includes("@vybestack/llxprt-code-tools'") &&
+    line.trim().startsWith('import type')
+  );
+}
+
 describe('import boundary guards @issue:2417', () => {
   describe('config.ts', () => {
     const source = readFileSync(configTsPath, 'utf-8');
@@ -43,12 +58,7 @@ describe('import boundary guards @issue:2417', () => {
       // Match import statements that are NOT type-only and import from
       // @vybestack/llxprt-code-tools (but NOT deep paths like .../tools/activate-skill.js)
       const lines = source.split('\n');
-      const valueImportLines = lines.filter(
-        (line) =>
-          line.includes("@vybestack/llxprt-code-tools'") &&
-          line.trim().startsWith('import') &&
-          !line.trim().startsWith('import type'),
-      );
+      const valueImportLines = lines.filter(isValueImportFromTools);
 
       expect(valueImportLines).toHaveLength(0);
     });
@@ -70,11 +80,7 @@ describe('import boundary guards @issue:2417', () => {
     it('allows type-only imports from @vybestack/llxprt-code-tools', () => {
       // type-only imports are fine — they are elided at runtime.
       const lines = source.split('\n');
-      const typeImportLines = lines.filter(
-        (line) =>
-          line.includes("@vybestack/llxprt-code-tools'") &&
-          line.trim().startsWith('import type'),
-      );
+      const typeImportLines = lines.filter(isTypeImportFromTools);
 
       // There should be at least one (ToolRegistry)
       expect(typeImportLines.length).toBeGreaterThan(0);

@@ -141,6 +141,14 @@ function inputItems(body: Record<string, unknown>): ResponsesInputItem[] {
   return input as ResponsesInputItem[];
 }
 
+function functionCallOutputs(
+  items: ResponsesInputItem[],
+): ResponsesInputItem[] {
+  return items.filter(
+    (item) => 'type' in item && item.type === 'function_call_output',
+  );
+}
+
 function extractContent(content: unknown): string {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
@@ -315,8 +323,11 @@ describe('OpenAIResponsesProvider stateful conversations @issue:207', () => {
     expect(body['previous_response_id']).toBeUndefined();
     expect(body['store']).not.toBe(true);
     const items = inputItems(body);
-    expect(userMessages(items)).toEqual(['first question', 'second question']);
-    expect(assistantMessages(items)).toEqual(['first answer']);
+    expect(userMessages(items)).toStrictEqual([
+      'first question',
+      'second question',
+    ]);
+    expect(assistantMessages(items)).toStrictEqual(['first answer']);
   });
 
   it('stores the first response when stateful mode has no stored parent yet', async () => {
@@ -461,12 +472,7 @@ describe('OpenAIResponsesProvider stateful conversations @issue:207', () => {
 
     expect(body['previous_response_id']).toBe('resp_tool');
     const items = inputItems(body);
-    const outputs: unknown[] = [];
-    for (const i of items) {
-      if ('type' in i && i.type === 'function_call_output') {
-        outputs.push(i);
-      }
-    }
+    const outputs = functionCallOutputs(items);
     expect(outputs).toHaveLength(1);
     const output = outputs[0] as { call_id: string; output: string };
     expect(output.call_id).toBe('call_wx');
@@ -508,12 +514,7 @@ describe('OpenAIResponsesProvider stateful conversations @issue:207', () => {
 
     expect(body['previous_response_id']).toBeUndefined();
     const items = inputItems(body);
-    const outputs: unknown[] = [];
-    for (const i of items) {
-      if ('type' in i && i.type === 'function_call_output') {
-        outputs.push(i);
-      }
-    }
+    const outputs = functionCallOutputs(items);
     expect(outputs).toHaveLength(0);
     expect(userMessages(items)).toContain('question');
   });

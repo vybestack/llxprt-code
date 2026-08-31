@@ -40,6 +40,16 @@ void vi.mock('node:os', () => ({
   platform: vi.fn(() => 'linux'),
 }));
 
+function hasNamedCustomTheme(
+  themes: ReadonlyArray<{
+    readonly name: string;
+    readonly isCustom?: boolean;
+  }>,
+  name: string,
+): boolean {
+  return themes.some((theme) => theme.name === name && theme.isCustom === true);
+}
+
 const validCustomTheme: CustomTheme = {
   type: 'custom',
   name: 'MyCustomTheme',
@@ -106,12 +116,7 @@ describe('ThemeManager', () => {
   it('should list available themes including custom themes', () => {
     themeManager.loadCustomThemes({ MyCustomTheme: validCustomTheme });
     const available = themeManager.getAvailableThemes();
-    expect(
-      available.some(
-        (t: { name: string; isCustom?: boolean }) =>
-          t.name === 'MyCustomTheme' && t.isCustom === true,
-      ),
-    ).toBe(true);
+    expect(hasNamedCustomTheme(available, 'MyCustomTheme')).toBe(true);
   });
 
   it('should get a theme by name', () => {

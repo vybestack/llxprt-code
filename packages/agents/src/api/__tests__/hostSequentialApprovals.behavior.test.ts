@@ -165,7 +165,7 @@ describe('host sequential approvals over a paused stream', () => {
       const distinctConfirmationCalls = new Set(
         all.filter(isConfirmation).map((e) => e.confirmation.toolCallId),
       );
-      expect([...distinctConfirmationCalls].sort()).toEqual([
+      expect([...distinctConfirmationCalls].sort()).toStrictEqual([
         'call-w1',
         'call-w2',
       ]);

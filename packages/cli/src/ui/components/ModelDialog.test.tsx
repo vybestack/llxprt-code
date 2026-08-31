@@ -91,13 +91,13 @@ function renderModelsDialog(
   return { ...result, onSelect, onClose };
 }
 
-beforeEach(() => {
-  runtimeHolder.listProviders = () => [];
-  runtimeHolder.listAvailableModels = () => Promise.resolve([]);
-  memoizedRuntimeApi = undefined;
-});
-
 describe('ModelsDialog', () => {
+  beforeEach(() => {
+    runtimeHolder.listProviders = () => [];
+    runtimeHolder.listAvailableModels = () => Promise.resolve([]);
+    memoizedRuntimeApi = undefined;
+  });
+
   it('shows a loading frame while models are in flight and lists them after they resolve', async () => {
     // showAllProviders: true => computedInitialFilter is null, so all providers are fetched.
     const models = [

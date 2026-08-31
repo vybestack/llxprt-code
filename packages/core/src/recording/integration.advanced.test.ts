@@ -142,6 +142,13 @@ function makeConfig(
 }
 
 /**
+ * Alternating human/ai speaker for index-based content generation.
+ */
+function alternatingSpeaker(i: number): 'human' | 'ai' {
+  return i % 2 === 0 ? 'human' : 'ai';
+}
+
+/**
  * Create a real session file, flush, dispose, and return file path + session ID.
  */
 async function createAndRecordSession(
@@ -376,15 +383,11 @@ describe('integration: full session recording lifecycle', () => {
       );
 
       for (let i = 0; i < preCount; i++) {
-        svc.recordContent(
-          makeContent(`pre-${i}`, i % 2 === 0 ? 'human' : 'ai'),
-        );
+        svc.recordContent(makeContent(`pre-${i}`, alternatingSpeaker(i)));
       }
       svc.recordCompressed(makeContent('compressed-summary', 'ai'), preCount);
       for (let i = 0; i < postCount; i++) {
-        svc.recordContent(
-          makeContent(`post-${i}`, i % 2 === 0 ? 'human' : 'ai'),
-        );
+        svc.recordContent(makeContent(`post-${i}`, alternatingSpeaker(i)));
       }
       await svc.flush();
       const fp = svc.getFilePath()!;
@@ -486,9 +489,7 @@ describe('integration: full session recording lifecycle', () => {
         makeConfig(chatsDir, { sessionId: sid }),
       );
       for (let i = 0; i < totalItems; i++) {
-        svc.recordContent(
-          makeContent(`item-${i}`, i % 2 === 0 ? 'human' : 'ai'),
-        );
+        svc.recordContent(makeContent(`item-${i}`, alternatingSpeaker(i)));
       }
       svc.recordRewind(rewindCount);
       await svc.flush();
@@ -513,7 +514,7 @@ describe('integration: full session recording lifecycle', () => {
     'P2: (property) record N + resume + record M → replay has N+M items',
     async (initialCount, additionalCount) => {
       const contents = Array.from({ length: initialCount }, (_, i) =>
-        makeContent(`init-${i}`, i % 2 === 0 ? 'human' : 'ai'),
+        makeContent(`init-${i}`, alternatingSpeaker(i)),
       );
       const { filePath, sessionId } = await createAndRecordSession(chatsDir, {
         contents,
@@ -527,9 +528,7 @@ describe('integration: full session recording lifecycle', () => {
       );
       svc2.initializeForResume(filePath, replay1.lastSeq);
       for (let i = 0; i < additionalCount; i++) {
-        svc2.recordContent(
-          makeContent(`add-${i}`, i % 2 === 0 ? 'human' : 'ai'),
-        );
+        svc2.recordContent(makeContent(`add-${i}`, alternatingSpeaker(i)));
       }
       await svc2.flush();
       void svc2.dispose();
@@ -911,7 +910,7 @@ describe('integration: full session recording lifecycle', () => {
   it('addendum: truncated last line is silently discarded', async () => {
     const { filePath } = await createAndRecordSession(chatsDir, {
       contents: Array.from({ length: 10 }, (_, i) =>
-        makeContent(`msg-${i}`, i % 2 === 0 ? 'human' : 'ai'),
+        makeContent(`msg-${i}`, alternatingSpeaker(i)),
       ),
     });
 

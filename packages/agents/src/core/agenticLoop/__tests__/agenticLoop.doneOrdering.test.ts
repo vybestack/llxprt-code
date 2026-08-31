@@ -47,71 +47,91 @@ describe('AgenticLoop done ordering through mapLoopStream (issue #3087)', () => 
   });
 
   it('emits exactly one done AFTER every tool event for a normal tool call then a clean finish', async () => {
-    const getInfoTool = new MockTool({
-      name: 'get_info',
-      execute: async () => ({
-        llmContent: 'info result',
-        returnDisplay: 'info result',
-      }),
-    });
-
-    const toolRegistry = createToolRegistryForTest([getInfoTool]);
-    const messageBus = new MessageBus(createAskPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAskPolicyEngine(),
-      interactive: true,
-      approvalMode: ApprovalMode.YOLO,
-    });
-
-    // Turn 1: model requests get_info, then finishes the iteration.
-    // Turn 2: model just finishes (clean completion).
-    const { client } = createScriptedAgentClient([
-      [toolCallRequestEvent('get_info', 'info-1', {}), finishedEvent()],
-      [finishedEvent()],
-    ]);
-
-    const loop = new AgenticLoop({
-      agentClient: client,
-      config,
-      messageBus,
-      interactiveMode: true,
-    });
-
-    const agentEvents: AgentEvent[] = [];
-    for await (const ev of mapLoopStream(
-      loop.run(
-        [{ type: 'text', text: 'get info' }],
-        new AbortController().signal,
-      ),
-    )) {
-      agentEvents.push(ev);
-    }
-
-    // Exactly one done event.
-    const doneEvents = agentEvents.filter((e) => e.type === 'done');
+    const {
+      doneEvents,
+      doneIndex,
+      agentEvents,
+      toolEventIndices,
+      lateToolEventIndices,
+    } = await observeEmitsExactlyOneDoneAFTEREveryToolEventForANormalTool();
+    expect(lateToolEventIndices).toStrictEqual([]);
     expect(doneEvents).toHaveLength(1);
-
-    // The single done is the LAST event in the stream.
-    const doneIndex = agentEvents.indexOf(doneEvents[0]);
     expect(doneIndex).toBe(agentEvents.length - 1);
-
-    // Every tool-call, tool-status, and tool-result index is strictly less
-    // than the done index.
-    const toolEventIndices = agentEvents
-      .map((e, i) =>
-        e.type === 'tool-call' ||
-        e.type === 'tool-status' ||
-        e.type === 'tool-result'
-          ? i
-          : -1,
-      )
-      .filter((i) => i >= 0);
-
     expect(toolEventIndices.length).toBeGreaterThan(0);
-    for (const idx of toolEventIndices) {
-      expect(idx).toBeLessThan(doneIndex);
-    }
   });
+
+  const observeEmitsExactlyOneDoneAFTEREveryToolEventForANormalTool =
+    async () => {
+      const getInfoTool = new MockTool({
+        name: 'get_info',
+        execute: async () => ({
+          llmContent: 'info result',
+          returnDisplay: 'info result',
+        }),
+      });
+
+      const toolRegistry = createToolRegistryForTest([getInfoTool]);
+      const messageBus = new MessageBus(createAskPolicyEngine(), false);
+      const config = createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAskPolicyEngine(),
+        interactive: true,
+        approvalMode: ApprovalMode.YOLO,
+      });
+
+      // Turn 1: model requests get_info, then finishes the iteration.
+      // Turn 2: model just finishes (clean completion).
+      const { client } = createScriptedAgentClient([
+        [toolCallRequestEvent('get_info', 'info-1', {}), finishedEvent()],
+        [finishedEvent()],
+      ]);
+
+      const loop = new AgenticLoop({
+        agentClient: client,
+        config,
+        messageBus,
+        interactiveMode: true,
+      });
+
+      const agentEvents: AgentEvent[] = [];
+      for await (const ev of mapLoopStream(
+        loop.run(
+          [{ type: 'text', text: 'get info' }],
+          new AbortController().signal,
+        ),
+      )) {
+        agentEvents.push(ev);
+      }
+
+      // Exactly one done event.
+      const doneEvents = agentEvents.filter((e) => e.type === 'done');
+
+      // The single done is the LAST event in the stream.
+      const doneIndex = agentEvents.indexOf(doneEvents[0]);
+
+      // Every tool-call, tool-status, and tool-result index is strictly less
+      // than the done index.
+      const toolEventIndices = agentEvents
+        .map((e, i) =>
+          e.type === 'tool-call' ||
+          e.type === 'tool-status' ||
+          e.type === 'tool-result'
+            ? i
+            : -1,
+        )
+        .filter((i) => i >= 0);
+
+      const lateToolEventIndices = toolEventIndices.filter(
+        (index) => index >= doneIndex,
+      );
+
+      return {
+        doneEvents,
+        doneIndex,
+        agentEvents,
+        toolEventIndices,
+        lateToolEventIndices,
+      };
+    };
 });

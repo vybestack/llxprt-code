@@ -8,6 +8,7 @@
  * @plan PLAN-20250214-CREDPROXY.P04
  */
 
+import { assertDefined, errorMessage } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as net from 'node:net';
 import * as os from 'node:os';
@@ -54,9 +55,7 @@ function destroyServerSockets(srv: net.Server): void {
 }
 
 function initialized<T>(value: T | undefined, resourceName: string): T {
-  if (value === undefined) {
-    throw new Error(`${resourceName} was not initialized`);
-  }
+  assertDefined(value, `${resourceName} was not initialized`);
   return value;
 }
 
@@ -102,7 +101,7 @@ async function deadlineRace<T>(
   const result = await Promise.race([
     promise.then(
       () => 'resolved',
-      (err: unknown) => (err instanceof Error ? err.message : String(err)),
+      (err: unknown) => errorMessage(err),
     ),
     new Promise<string>((resolve) => {
       timer = setTimeout(

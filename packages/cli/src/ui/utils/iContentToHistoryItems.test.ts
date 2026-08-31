@@ -491,17 +491,17 @@ describe('filterHistoryItems', () => {
       [{ type: 'gemini', text: 'Done \u2705' }],
       autoFilter,
     );
-    expect(output).toEqual([{ type: 'gemini', text: 'Done [OK]' }]);
+    expect(output).toStrictEqual([{ type: 'gemini', text: 'Done [OK]' }]);
   });
 
   it('passes user text through untouched', () => {
     const item: HistoryItemWithoutId = { type: 'user', text: 'nice \u{1F44D}' };
-    expect(filterHistoryItems([item], autoFilter)).toEqual([item]);
+    expect(filterHistoryItems([item], autoFilter)).toStrictEqual([item]);
   });
 
   it('passes items without text through untouched', () => {
     const item: HistoryItemWithoutId = { type: 'tool_group', tools: [] };
-    expect(filterHistoryItems([item], autoFilter)).toEqual([item]);
+    expect(filterHistoryItems([item], autoFilter)).toStrictEqual([item]);
   });
 
   it('replaces blocked model text with error and feedback items', () => {
@@ -510,7 +510,9 @@ describe('filterHistoryItems', () => {
       [{ type: 'gemini', text: 'Done \u2705' }],
       errorFilter,
     );
-    expect(output).toEqual([{ type: 'error', text: EMOJI_BLOCKED_ERROR_TEXT }]);
+    expect(output).toStrictEqual([
+      { type: 'error', text: EMOJI_BLOCKED_ERROR_TEXT },
+    ]);
   });
 
   it('appends warn-mode feedback after the filtered item', () => {
@@ -519,7 +521,7 @@ describe('filterHistoryItems', () => {
       [{ type: 'gemini', text: 'Done \u2705' }],
       warnFilter,
     );
-    expect(output).toEqual([
+    expect(output).toStrictEqual([
       { type: 'gemini', text: 'Done [OK]' },
       {
         type: 'info',
@@ -543,7 +545,7 @@ describe('filterHistoryItems', () => {
       ],
       errorFilter,
     );
-    expect(output).toEqual([
+    expect(output).toStrictEqual([
       {
         type: 'gemini',
         text: 'no emoji',
@@ -561,7 +563,7 @@ describe('filterHistoryItems', () => {
       ],
       autoFilter,
     );
-    expect(autoOutput).toEqual([
+    expect(autoOutput).toStrictEqual([
       {
         type: 'gemini',
         text: 'ok',

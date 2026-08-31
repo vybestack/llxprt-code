@@ -104,6 +104,105 @@ function sseResponse(event: unknown): Response {
   return new Response(`data: ${JSON.stringify(event)}\n\n`, { status: 200 });
 }
 
+function throttledThenOk(call: number): Response {
+  if (call === 0) {
+    return errorResponse(429, {
+      error: { code: 'rate_limit_exceeded', message: 'Too many requests' },
+    });
+  }
+  return okResponse();
+}
+
+function retryAfterThenOk(call: number): Response {
+  if (call === 0) {
+    return errorResponse(
+      429,
+      { error: { code: 'rate_limit_exceeded', message: 'slow down' } },
+      { 'Retry-After': '1' },
+    );
+  }
+  return okResponse();
+}
+
+function bareRateLimitThenOk(call: number): Response {
+  if (call === 0) {
+    return errorResponse(429, {
+      error: { message: 'Too many requests' },
+    });
+  }
+  return okResponse();
+}
+
+function serverErrorThenOk(call: number): Response {
+  if (call === 0) {
+    return errorResponse(500, { error: { message: 'Internal error' } });
+  }
+  return okResponse();
+}
+
+function networkFailureThenOk(call: number): Promise<Response> {
+  if (call === 0) {
+    return Promise.reject(new TypeError('fetch failed'));
+  }
+  return Promise.resolve(okResponse());
+}
+
+function invalidRequestSseThenHttp(call: number): Response {
+  if (call === 0) {
+    return sseResponse({
+      type: 'error',
+      code: 'invalid_prompt',
+      message: 'The input field is invalid.',
+      param: 'input',
+    });
+  }
+  return errorResponse(400, {
+    error: {
+      message: 'The input field is invalid.',
+      type: 'invalid_request_error',
+      code: 'invalid_prompt',
+      param: 'input',
+    },
+  });
+}
+
+function prematureEofThenOk(call: number): Response {
+  if (call === 0) {
+    return new Response(
+      'data: {"type":"response.created","response":{"id":"resp_partial","status":"in_progress"}}\n\n',
+      { status: 200 },
+    );
+  }
+  return okResponse();
+}
+
+function failedServerResponseThenOk(call: number): Response {
+  if (call === 0) {
+    return sseResponse({
+      type: 'response.failed',
+      response: {
+        id: 'resp_server',
+        object: 'response',
+        model: 'gpt-5',
+        status: 'failed',
+        error: {
+          message: 'Internal server error',
+          type: 'server_error',
+        },
+      },
+    });
+  }
+  return okResponse();
+}
+
+function containsOkText(messages: readonly IContent[]): boolean {
+  return messages.some((message) =>
+    message.blocks.some(
+      (block) => block.type === 'text' && block.text === 'ok',
+    ),
+  );
+}
+
 function buildNormalizedOptions(
   overrides: {
     ephemerals?: Record<string, unknown>;
@@ -267,13 +366,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
   });
 
   it('AC2: throttling 429 is retried and then succeeds', async () => {
-    fetchMock = installFetch((call) => {
-      if (call === 0)
-        return errorResponse(429, {
-          error: { code: 'rate_limit_exceeded', message: 'Too many requests' },
-        });
-      return okResponse();
-    });
+    fetchMock = installFetch(throttledThenOk);
     const options = buildNormalizedOptions({
       ephemerals: { retries: 3, retrywait: 0 },
     });
@@ -288,15 +381,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
 
   it('AC2: Retry-After header is honored — wait tracks the header, not retrywait', async () => {
     const retrywait = 4000;
-    fetchMock = installFetch((call) => {
-      if (call === 0)
-        return errorResponse(
-          429,
-          { error: { code: 'rate_limit_exceeded', message: 'slow down' } },
-          { 'Retry-After': '1' },
-        );
-      return okResponse();
-    });
+    fetchMock = installFetch(retryAfterThenOk);
     const options = buildNormalizedOptions({
       ephemerals: { retries: 2, retrywait },
     });
@@ -315,13 +400,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
   }, 15000);
 
   it('boundary: a bare 429 with no body code is still retried', async () => {
-    fetchMock = installFetch((call) => {
-      if (call === 0)
-        return errorResponse(429, {
-          error: { message: 'Too many requests' },
-        });
-      return okResponse();
-    });
+    fetchMock = installFetch(bareRateLimitThenOk);
     const options = buildNormalizedOptions({
       ephemerals: { retries: 3, retrywait: 0 },
     });
@@ -334,11 +413,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
   });
 
   it('AC6: a 500 server error is still retried', async () => {
-    fetchMock = installFetch((call) => {
-      if (call === 0)
-        return errorResponse(500, { error: { message: 'Internal error' } });
-      return okResponse();
-    });
+    fetchMock = installFetch(serverErrorThenOk);
     const options = buildNormalizedOptions({
       ephemerals: { retries: 3, retrywait: 0 },
     });
@@ -351,21 +426,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
   });
 
   it('AC6: a network-transient TypeError is still retried', async () => {
-    const original = globalThis.fetch;
-    const calls = { count: 0 };
-    globalThis.fetch = (() => {
-      calls.count += 1;
-      if (calls.count === 1)
-        return Promise.reject(new TypeError('fetch failed'));
-      return Promise.resolve(okResponse());
-    }) as typeof fetch;
-    fetchMock = {
-      calls,
-      timestamps: [],
-      restore: () => {
-        globalThis.fetch = original;
-      },
-    };
+    fetchMock = installFetch(networkFailureThenOk);
 
     const options = buildNormalizedOptions({
       ephemerals: { retries: 3, retrywait: 0 },
@@ -557,23 +618,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
   });
 
   it('AC-5: equivalent HTTP and SSE invalid-request failures are equally non-retryable', async () => {
-    fetchMock = installFetch((call) =>
-      call === 0
-        ? sseResponse({
-            type: 'error',
-            code: 'invalid_prompt',
-            message: 'The input field is invalid.',
-            param: 'input',
-          })
-        : errorResponse(400, {
-            error: {
-              message: 'The input field is invalid.',
-              type: 'invalid_request_error',
-              code: 'invalid_prompt',
-              param: 'input',
-            },
-          }),
-    );
+    fetchMock = installFetch(invalidRequestSseThenHttp);
     const options = buildNormalizedOptions({
       ephemerals: { retries: 6, retrywait: 0 },
     });
@@ -600,14 +645,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
   });
 
   it('AC-5 control: genuine premature EOF remains retryable and succeeds on the next fetch', async () => {
-    fetchMock = installFetch((call) =>
-      call === 0
-        ? new Response(
-            'data: {"type":"response.created","response":{"id":"resp_partial","status":"in_progress"}}\n\n',
-            { status: 200 },
-          )
-        : okResponse(),
-    );
+    fetchMock = installFetch(prematureEofThenOk);
     const options = buildNormalizedOptions({
       ephemerals: { retries: 3, retrywait: 0 },
     });
@@ -617,33 +655,11 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
 
     expect(error).toBeUndefined();
     expect(fetchMock.calls.count).toBe(2);
-    expect(
-      messages.some((message) =>
-        message.blocks.some(
-          (block) => block.type === 'text' && block.text === 'ok',
-        ),
-      ),
-    ).toBe(true);
+    expect(containsOkText(messages)).toBe(true);
   });
 
   it('AC-5 control: response.failed server_error remains retryable and succeeds on the next fetch', async () => {
-    fetchMock = installFetch((call) =>
-      call === 0
-        ? sseResponse({
-            type: 'response.failed',
-            response: {
-              id: 'resp_server',
-              object: 'response',
-              model: 'gpt-5',
-              status: 'failed',
-              error: {
-                message: 'Internal server error',
-                type: 'server_error',
-              },
-            },
-          })
-        : okResponse(),
-    );
+    fetchMock = installFetch(failedServerResponseThenOk);
     const options = buildNormalizedOptions({
       ephemerals: { retries: 3, retrywait: 0 },
     });

@@ -148,7 +148,7 @@ describe('MediaBlock', () => {
     expect([
       ContentValidation.hasContent(malformedDimensions),
       ContentValidation.hasContent(malformedTransformation),
-    ]).toEqual([false, false]);
+    ]).toStrictEqual([false, false]);
   });
 
   it('recognizes a complete content reference without inline data or a source path', () => {

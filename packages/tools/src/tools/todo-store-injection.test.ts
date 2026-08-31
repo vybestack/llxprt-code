@@ -85,7 +85,7 @@ describe('TodoStore — explicit data-dir authority (no global resolver)', () =>
     expect(readBack[0]?.id).toBe('t1');
     expect(readBack[0]?.content).toBe('Write tests');
     expect(readBack[0]?.status).toBe('in_progress');
-    expect(readBack[0]?.subtasks).toEqual([
+    expect(readBack[0]?.subtasks).toStrictEqual([
       { id: 's1', content: 'red' },
       { id: 's2', content: 'green' },
     ]);
@@ -185,38 +185,36 @@ describe('TodoStore — XOR union and dynamic resolver', () => {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   });
 
-  it('dataDirResolver is re-evaluated on each operation (dynamic path change)', async () => {
-    // A resolver that switches from dirA to dirB after the first write proves
-    // the resolver is re-evaluated per operation, not fixed at construction.
-    // The second write's readFileData + writeFileData both resolve to dirB,
-    // so the file lands in dirB — not dirA (the construction-time dir).
-    const dirA = path.join(tempRoot, 'dyn-a');
-    const dirB = path.join(tempRoot, 'dyn-b');
-    let useB = false;
-    const store = new TodoStore('sess-dyn', {
-      dataDirResolver: () => (useB ? dirB : dirA),
-    });
+  const observeDataDirResolverIsReEvaluatedOnEachOperationDynamicPathChangeAt188 =
+    async () => {
+      const dirA = path.join(tempRoot, 'dyn-a');
+      const dirB = path.join(tempRoot, 'dyn-b');
+      const selectedDirectory = { value: dirA };
+      const store = new TodoStore('sess-dyn', {
+        dataDirResolver: () => selectedDirectory.value,
+      });
+      await store.writeTodos([
+        { id: 'd1', content: 'first', status: 'pending', subtasks: [] },
+      ]);
+      const selectDirectoryB = (): void => {
+        selectedDirectory.value = dirB;
+      };
+      return { dirA, dirB, selectDirectoryB, store };
+    };
 
-    // First write goes to dirA (construction + first resolve).
-    await store.writeTodos([
-      { id: 'd1', content: 'first', status: 'pending', subtasks: [] },
-    ]);
+  it('dataDirResolver is re-evaluated on each operation (dynamic path change)', async () => {
+    const { dirA, dirB, selectDirectoryB, store } =
+      await observeDataDirResolverIsReEvaluatedOnEachOperationDynamicPathChangeAt188();
     expect(fs.existsSync(path.join(dirA, 'todos', 'todo-sess-dyn.json'))).toBe(
       true,
     );
-
-    // Flip the resolver to dirB. The second write must land in dirB, proving
-    // the resolver is re-evaluated on the operation (not cached at
-    // construction).
-    useB = true;
+    selectDirectoryB();
     await store.writeTodos([
       { id: 'd2', content: 'second', status: 'pending', subtasks: [] },
     ]);
     expect(fs.existsSync(path.join(dirB, 'todos', 'todo-sess-dyn.json'))).toBe(
       true,
     );
-
-    // Reading back resolves to dirB and returns the second write's content.
     const readBack = await store.readTodos();
     expect(readBack).toHaveLength(1);
     expect(readBack[0]?.id).toBe('d2');
@@ -277,7 +275,7 @@ describe('TodoStore — missing file returns empty state', () => {
     });
 
     const todos = await store.readTodos();
-    expect(todos).toEqual([]);
+    expect(todos).toStrictEqual([]);
   });
 
   it('returns a non-paused state when no persisted file exists', async () => {

@@ -109,6 +109,19 @@ function findViolatingLines(
   return violations;
 }
 
+function isTypeScriptTestFile(filePath: string): boolean {
+  return filePath.endsWith('.test.ts') || filePath.endsWith('.spec.ts');
+}
+
+function coreAuthExportSubpaths(
+  pkg: Record<string, unknown>,
+): readonly string[] {
+  const exports = (pkg.exports ?? {}) as Record<string, unknown>;
+  return Object.keys(exports).filter(
+    (key) => key.startsWith('./auth/') || key === './auth',
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────
 // Auth production: no forbidden imports
 // ─────────────────────────────────────────────────────────────────
@@ -127,10 +140,7 @@ describe('P16: Auth production has no forbidden core/cli/providers imports', () 
       }
     }
 
-    expect(
-      violations,
-      `Forbidden imports in auth production:\n${violations.join('\n')}`,
-    ).toStrictEqual([]);
+    expect(violations).toStrictEqual([]);
   });
 
   it('auth production code has no relative-path escapes', () => {
@@ -146,10 +156,7 @@ describe('P16: Auth production has no forbidden core/cli/providers imports', () 
       );
     }
 
-    expect(
-      violations,
-      `Forbidden relative-path escapes in auth production:\n${violations.join('\n')}`,
-    ).toStrictEqual([]);
+    expect(violations).toStrictEqual([]);
   });
 });
 
@@ -170,10 +177,7 @@ describe('P16: Auth tests have no forbidden core/providers imports', () => {
       violations.push(...findViolatingLines(filePath, coreSubPattern, relPath));
     }
 
-    expect(
-      violations,
-      `Forbidden core imports in auth tests:\n${violations.join('\n')}`,
-    ).toStrictEqual([]);
+    expect(violations).toStrictEqual([]);
   });
 
   it('auth test code has zero @vybestack/llxprt-code-providers imports', () => {
@@ -194,10 +198,7 @@ describe('P16: Auth tests have no forbidden core/providers imports', () => {
       );
     }
 
-    expect(
-      violations,
-      `Forbidden providers imports in auth tests:\n${violations.join('\n')}`,
-    ).toStrictEqual([]);
+    expect(violations).toStrictEqual([]);
   });
 });
 
@@ -220,10 +221,7 @@ describe('P16: Consumer packages have no old core/auth imports', () => {
       }
     }
 
-    expect(
-      violations,
-      `Forbidden core/auth imports in core production:\n${violations.join('\n')}`,
-    ).toStrictEqual([]);
+    expect(violations).toStrictEqual([]);
   });
 
   it('providers production source has zero imports from core/auth subpath', () => {
@@ -240,10 +238,7 @@ describe('P16: Consumer packages have no old core/auth imports', () => {
       }
     }
 
-    expect(
-      violations,
-      `Forbidden core/auth imports in providers production:\n${violations.join('\n')}`,
-    ).toStrictEqual([]);
+    expect(violations).toStrictEqual([]);
   });
 
   it('CLI source has zero imports from core/auth subpath', () => {
@@ -258,16 +253,13 @@ describe('P16: Consumer packages have no old core/auth imports', () => {
       }
     }
 
-    expect(
-      violations,
-      `Forbidden core/auth imports in CLI source:\n${violations.join('\n')}`,
-    ).toStrictEqual([]);
+    expect(violations).toStrictEqual([]);
   });
 
   it('CLI test files have zero imports from core/auth subpath', () => {
     const cliSrcDir = path.join(CLI_DIR, 'src');
     const cliTestFiles = collectTsFiles(cliSrcDir, false).filter(
-      (f) => f.endsWith('.test.ts') || f.endsWith('.spec.ts'),
+      isTypeScriptTestFile,
     );
 
     const violations: string[] = [];
@@ -278,10 +270,7 @@ describe('P16: Consumer packages have no old core/auth imports', () => {
       }
     }
 
-    expect(
-      violations,
-      `Forbidden core/auth imports in CLI tests:\n${violations.join('\n')}`,
-    ).toStrictEqual([]);
+    expect(violations).toStrictEqual([]);
   });
 });
 
@@ -296,13 +285,7 @@ describe('P16: Core package.json has no auth subpath exports', () => {
       string,
       unknown
     >;
-    const exports = (pkg.exports ?? {}) as Record<string, unknown>;
-    const authSubpaths = Object.keys(exports).filter(
-      (key) => key.startsWith('./auth/') || key === './auth',
-    );
-    expect(
-      authSubpaths,
-      `core package.json must not have auth subpath exports: ${authSubpaths.join(', ')}`,
-    ).toStrictEqual([]);
+    const authSubpaths = coreAuthExportSubpaths(pkg);
+    expect(authSubpaths).toStrictEqual([]);
   });
 });

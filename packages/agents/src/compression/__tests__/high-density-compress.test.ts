@@ -24,247 +24,20 @@ import type {
   ToolCallBlock,
   ToolResponseBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type {
-  CompressionContext,
-  StrategyCompressionResult,
-} from '@vybestack/llxprt-code-core/core/compression/types.js';
-import { HighDensityStrategy } from '../HighDensityStrategy.js';
-
-// ---------------------------------------------------------------------------
-// Test helpers — construct real IContent objects
-// ---------------------------------------------------------------------------
-
-let callIdCounter = 0;
-
-function nextCallId(): string {
-  return `call-${++callIdCounter}`;
-}
-
-function resetCallIds(): void {
-  callIdCounter = 0;
-}
-
-function makeHumanMessage(text: string, timestamp?: number): IContent {
-  return {
-    speaker: 'human',
-    blocks: [{ type: 'text', text }],
-    metadata: { timestamp: timestamp ?? Date.now() },
-  };
-}
-
-function makeAiText(text: string, timestamp?: number): IContent {
-  return {
-    speaker: 'ai',
-    blocks: [{ type: 'text', text }],
-    metadata: { timestamp: timestamp ?? Date.now() },
-  };
-}
-
-function makeAiToolCall(
-  toolName: string,
-  parameters: unknown,
-  callId?: string,
-): { entry: IContent; callId: string } {
-  const id = callId ?? nextCallId();
-  return {
-    entry: {
-      speaker: 'ai',
-      blocks: [
-        {
-          type: 'tool_call',
-          id,
-          name: toolName,
-          parameters,
-        } as ToolCallBlock,
-      ],
-      metadata: { timestamp: Date.now() },
-    },
-    callId: id,
-  };
-}
-
-function makeToolResponse(
-  callId: string,
-  toolName: string,
-  result: unknown,
-  error?: string,
-): IContent {
-  return {
-    speaker: 'tool',
-    blocks: [
-      {
-        type: 'tool_response',
-        callId,
-        toolName,
-        result,
-        ...(error !== undefined ? { error } : {}),
-      } as ToolResponseBlock,
-    ],
-    metadata: { timestamp: Date.now() },
-  };
-}
-
-/**
- * Simple word-count token estimator for tests.
- * Counts words across all text-like content in an IContent array.
- */
-function wordCountEstimateTokens(
-  contents: readonly IContent[],
-): Promise<number> {
-  let total = 0;
-  for (const entry of contents) {
-    for (const block of entry.blocks) {
-      if (block.type === 'text') {
-        total += block.text.split(/\s+/).filter(Boolean).length;
-      } else if (block.type === 'tool_response') {
-        const resultStr =
-          typeof block.result === 'string'
-            ? block.result
-            : JSON.stringify(block.result);
-        total += resultStr.split(/\s+/).filter(Boolean).length;
-      } else if (block.type === 'tool_call') {
-        const paramStr = JSON.stringify(block.parameters);
-        total += paramStr.split(/\s+/).filter(Boolean).length;
-        total += block.name.length;
-      }
-    }
-  }
-  return Promise.resolve(total);
-}
-
-// ---------------------------------------------------------------------------
-// CompressionContext builder
-// ---------------------------------------------------------------------------
-
-function buildCompressContext(
-  overrides?: Partial<{
-    history: IContent[];
-    preserveThreshold: number;
-    compressionThreshold: number;
-    contextLimit: number;
-    estimateTokens: (contents: readonly IContent[]) => Promise<number>;
-    currentTokenCount: number;
-  }>,
-): CompressionContext {
-  const history = overrides?.history ?? [];
-  const preserveThreshold = overrides?.preserveThreshold ?? 0.3;
-  const compressionThreshold = overrides?.compressionThreshold ?? 0.85;
-  const contextLimit = overrides?.contextLimit ?? 128000;
-
-  return {
-    history,
-    runtimeContext: {
-      state: {
-        runtimeId: 'test',
-        provider: 'test',
-        model: 'test',
-        sessionId: 'test',
-        updatedAt: Date.now(),
-      },
-      ephemerals: {
-        compressionThreshold: () => compressionThreshold,
-        contextLimit: () => contextLimit,
-        preserveThreshold: () => preserveThreshold,
-        topPreserveThreshold: () => 0.1,
-        compressionProfile: () => undefined,
-        compressionStrategy: () => 'high-density',
-        toolFormatOverride: () => undefined,
-        densityCompressHeadroom: () => 0.6,
-        reasoning: {
-          enabled: () => false,
-          includeInContext: () => false,
-          includeInResponse: () => false,
-          format: () => 'native' as const,
-          stripFromContext: () => 'none' as const,
-          effort: () => undefined,
-          maxTokens: () => undefined,
-          adaptiveThinking: () => undefined,
-        },
-      },
-    } as unknown as CompressionContext['runtimeContext'],
-    runtimeState: {
-      runtimeId: 'test',
-      provider: 'test',
-      model: 'test',
-      sessionId: 'test',
-      updatedAt: Date.now(),
-    } as unknown as CompressionContext['runtimeState'],
-    estimateTokens: overrides?.estimateTokens ?? wordCountEstimateTokens,
-    currentTokenCount: overrides?.currentTokenCount ?? 100000,
-    logger: {
-      debug: () => {},
-      info: () => {},
-      warn: () => {},
-      error: () => {},
-      log: () => {},
-    } as unknown as CompressionContext['logger'],
-    resolveProvider: () => {
-      throw new Error('resolveProvider must not be called — no LLM allowed');
-      return { provider: undefined as never, runtime: undefined as never };
-    },
-    promptResolver: {
-      resolveFile: () => ({ found: false, path: null, source: null }),
-    } as unknown as CompressionContext['promptResolver'],
-    promptBaseDir: '/tmp/test',
-    promptContext: { provider: 'test', model: 'test' },
-    promptId: 'test',
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Build a realistic mixed history
-// ---------------------------------------------------------------------------
-
-function buildMixedHistory(entryCount: number): IContent[] {
-  resetCallIds();
-  const history: IContent[] = [];
-  for (let i = 0; i < entryCount; i++) {
-    const phase = i % 4;
-    if (phase === 0) {
-      history.push(makeHumanMessage(`User question ${i}`));
-    } else if (phase === 1) {
-      const { entry, callId } = makeAiToolCall('read_file', {
-        file_path: `/workspace/src/file${i}.ts`,
-      });
-      history.push(entry);
-      // tool response follows immediately
-      const lines = Array.from(
-        { length: 50 },
-        (_, j) => `line ${j + 1}: content of file${i}.ts`,
-      ).join('\n');
-      history.push(makeToolResponse(callId, 'read_file', lines));
-      i++; // consumed an extra slot
-    } else if (phase === 2) {
-      history.push(makeAiText(`Here is my analysis of the code at step ${i}.`));
-    } else {
-      const { entry, callId } = makeAiToolCall('run_shell_command', {
-        command: `echo "test output ${i}"`,
-      });
-      history.push(entry);
-      history.push(
-        makeToolResponse(
-          callId,
-          'run_shell_command',
-          `test output ${i}\nmore output`,
-        ),
-      );
-      i++; // consumed an extra slot
-    }
-  }
-  return history;
-}
-
-// ---------------------------------------------------------------------------
-// Strategy instance
-// ---------------------------------------------------------------------------
-
-function createStrategy(): HighDensityStrategy {
-  return new HighDensityStrategy();
-}
-
-function resultHistory(result: StrategyCompressionResult): IContent[] {
-  return result.kind === 'applied' ? result.newHistory : [];
-}
+import type { StrategyCompressionResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import {
+  buildCompressContext,
+  buildMixedHistory,
+  createStrategy,
+  makeAiText,
+  makeAiToolCall,
+  makeHumanMessage,
+  makeToolResponse,
+  nextCallId,
+  resetCallIds,
+  resultHistory,
+  wordCountEstimateTokens,
+} from './high-density-compress-helpers.test.js';
 
 function collectToolResponses(
   result: StrategyCompressionResult,
@@ -521,6 +294,12 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
      * @requirement REQ-HD-008.3
      */
     it('summary includes tool name and success/error status', async () => {
+      const { result, summaryObservation1 } = await observeSummary();
+      expect(result.kind).toBe('applied');
+      expect(summaryObservation1).toBe(true);
+    });
+
+    const observeSummary = async () => {
       resetCallIds();
       const strategy = createStrategy();
 
@@ -553,7 +332,6 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
       });
 
       const result = await strategy.compress(ctx);
-      expect(result.kind).toBe('applied');
 
       // Check that summaries reference tool names
       const toolEntries = resultHistory(result).filter(
@@ -573,8 +351,13 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
         s.includes('read_file'),
       );
       const hasSummaryWithGrep = summaries.some((s) => s.includes('grep'));
-      expect(hasSummaryWithReadFile || hasSummaryWithGrep).toBe(true);
-    });
+
+      const summaryObservation1 = hasSummaryWithReadFile || hasSummaryWithGrep;
+      return {
+        result,
+        summaryObservation1,
+      };
+    };
 
     /**
      * @plan PLAN-20260211-HIGHDENSITY.P13
@@ -651,6 +434,14 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
      * @requirement REQ-HD-008.4
      */
     it('human messages are preserved intact', async () => {
+      const { result, humanEntries, originalHumans, missingHumanTexts } =
+        await observeHumans();
+      expect(result.kind).toBe('applied');
+      expect(humanEntries.length).toBe(originalHumans.length);
+      expect(missingHumanTexts).toStrictEqual([]);
+    });
+
+    const observeHumans = async () => {
       resetCallIds();
       const strategy = createStrategy();
 
@@ -673,30 +464,50 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
       });
 
       const result = await strategy.compress(ctx);
-      expect(result.kind).toBe('applied');
 
       const humanEntries = resultHistory(result).filter(
         (e) => e.speaker === 'human',
       );
       // All original human messages should appear in the result
       const originalHumans = history.filter((e) => e.speaker === 'human');
-      expect(humanEntries.length).toBe(originalHumans.length);
-      for (const oh of originalHumans) {
-        const found = humanEntries.some(
-          (h) =>
-            h.blocks[0].type === 'text' &&
-            oh.blocks[0].type === 'text' &&
-            h.blocks[0].text === oh.blocks[0].text,
+
+      const missingHumanTexts = originalHumans
+        .filter(
+          (original) =>
+            !humanEntries.some(
+              (entry) =>
+                entry.blocks[0].type === 'text' &&
+                original.blocks[0].type === 'text' &&
+                entry.blocks[0].text === original.blocks[0].text,
+            ),
+        )
+        .flatMap((entry) =>
+          entry.blocks[0].type === 'text' ? [entry.blocks[0].text] : [],
         );
-        expect(found).toBe(true);
-      }
-    });
+
+      return { result, humanEntries, originalHumans, missingHumanTexts };
+    };
 
     /**
      * @plan PLAN-20260211-HIGHDENSITY.P13
      * @requirement REQ-HD-008.4
      */
     it('AI text blocks and tool_call blocks are preserved intact', async () => {
+      const {
+        result,
+        missingAiTextBlocks,
+        unnamedToolCalls,
+        unidentifiedToolCalls,
+        parameterlessToolCalls,
+      } = await observeAiContent();
+      expect(result.kind).toBe('applied');
+      expect(missingAiTextBlocks).toStrictEqual([]);
+      expect(unnamedToolCalls).toStrictEqual([]);
+      expect(unidentifiedToolCalls).toStrictEqual([]);
+      expect(parameterlessToolCalls).toStrictEqual([]);
+    });
+
+    const observeAiContent = async () => {
       resetCallIds();
       const strategy = createStrategy();
 
@@ -716,31 +527,41 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
       });
 
       const result = await strategy.compress(ctx);
-      expect(result.kind).toBe('applied');
 
       // AI text entries should be unchanged
       const aiTextEntries = resultHistory(result).filter(
         (e) => e.speaker === 'ai' && e.blocks.some((b) => b.type === 'text'),
       );
-      for (const ae of aiTextEntries) {
-        const textBlock = ae.blocks.find((b) => b.type === 'text');
-        expect(textBlock).toBeDefined();
-      }
+      const missingAiTextBlocks = aiTextEntries.filter(
+        (entry) => !entry.blocks.some((block) => block.type === 'text'),
+      );
 
       // AI tool_call blocks should be unchanged
-      const aiToolCallEntries = resultHistory(result).filter(
-        (e) =>
-          e.speaker === 'ai' && e.blocks.some((b) => b.type === 'tool_call'),
+      const toolCallBlocks = resultHistory(result).flatMap((entry) =>
+        entry.speaker === 'ai'
+          ? entry.blocks.filter(
+              (block): block is ToolCallBlock => block.type === 'tool_call',
+            )
+          : [],
       );
-      for (const ate of aiToolCallEntries) {
-        const tcBlock = ate.blocks.find(
-          (b) => b.type === 'tool_call',
-        ) as ToolCallBlock;
-        expect(tcBlock.name).toBeDefined();
-        expect(tcBlock.id).toBeDefined();
-        expect(tcBlock.parameters).toBeDefined();
-      }
-    });
+      const unnamedToolCalls = toolCallBlocks.filter(
+        (block) => !Object.hasOwn(block, 'name'),
+      );
+      const unidentifiedToolCalls = toolCallBlocks.filter(
+        (block) => !Object.hasOwn(block, 'id'),
+      );
+      const parameterlessToolCalls = toolCallBlocks.filter(
+        (block) => block.parameters === undefined,
+      );
+
+      return {
+        result,
+        missingAiTextBlocks,
+        unnamedToolCalls,
+        unidentifiedToolCalls,
+        parameterlessToolCalls,
+      };
+    };
   });
 
   // -------------------------------------------------------------------------
@@ -969,26 +790,76 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
     }
 
     it('newHistory length ≤ original length', async () => {
-      await runProperty((history, result) => {
-        const out = result.kind === 'applied' ? resultHistory(result) : history;
-        expect(out.length).toBeLessThanOrEqual(history.length);
-      });
+      await fc.assert(outputLengthProperty, { numRuns: 30 });
+      expect(
+        outputLengthObservations.filter(
+          ({ outputLength, originalLength }) => outputLength > originalLength,
+        ),
+      ).toStrictEqual([]);
     });
 
+    const outputLengthObservations: Array<{
+      outputLength: number;
+      originalLength: number;
+    }> = [];
+    const outputLengthProperty = fc.asyncProperty(
+      arbHistory,
+      async (history) => {
+        resetCallIds();
+        const result = await createStrategy().compress(
+          buildCompressContext({ history }),
+        );
+        const out = result.kind === 'applied' ? resultHistory(result) : history;
+        outputLengthObservations.push({
+          outputLength: out.length,
+          originalLength: history.length,
+        });
+        return out.length <= history.length;
+      },
+    );
+
     it('all human messages are preserved in newHistory', async () => {
-      await runProperty(
-        (history, result) => {
-          const out =
-            result.kind === 'applied' ? resultHistory(result) : history;
-          expect(out.filter((e) => e.speaker === 'human').length).toBe(
-            history.filter((e) => e.speaker === 'human').length,
-          );
-        },
-        { preserveThreshold: 0.5, contextLimit: 999999 },
+      await fc.assert(humanMessagePreservationProperty, { numRuns: 30 });
+      expect(
+        humanMessageObservations.map(({ actualCount }) => actualCount),
+      ).toStrictEqual(
+        humanMessageObservations.map(({ expectedCount }) => expectedCount),
       );
     });
 
+    const humanMessageObservations: Array<{
+      actualCount: number;
+      expectedCount: number;
+    }> = [];
+    const humanMessagePreservationProperty = fc.asyncProperty(
+      arbHistory,
+      async (history) => {
+        resetCallIds();
+        const result = await createStrategy().compress(
+          buildCompressContext({
+            history,
+            preserveThreshold: 0.5,
+            contextLimit: 999999,
+          }),
+        );
+        const out = result.kind === 'applied' ? resultHistory(result) : history;
+        const actualCount = out.filter(
+          (entry) => entry.speaker === 'human',
+        ).length;
+        const expectedCount = history.filter(
+          (entry) => entry.speaker === 'human',
+        ).length;
+        humanMessageObservations.push({ actualCount, expectedCount });
+        return actualCount === expectedCount;
+      },
+    );
+
     it('all AI entries in the preserved tail appear unchanged', async () => {
+      const { asserted } = await observeAiTail();
+      expect(asserted).toBe(true);
+    });
+
+    const observeAiTail = async () => {
       let asserted = false;
       await runProperty(
         (history, result) => {
@@ -1003,8 +874,9 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
         },
         { preserveThreshold: 0.3, contextLimit: 999999 },
       );
-      expect(asserted).toBe(true);
-    });
+
+      return { asserted };
+    };
 
     it('metadata.llmCallMade is always false (property)', async () => {
       await runProperty((_history, result) => {
@@ -1019,15 +891,53 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
     });
 
     it('metadata counts are consistent with input', async () => {
-      await runProperty((history, result) => {
-        const out = result.kind === 'applied' ? resultHistory(result) : history;
-        expect(result.metadata.originalMessageCount).toBe(history.length);
-        expect(result.metadata.compressedMessageCount).toBeLessThanOrEqual(
-          result.metadata.originalMessageCount,
-        );
-        expect(result.metadata.compressedMessageCount).toBe(out.length);
-      });
+      await fc.assert(metadataCountProperty, { numRuns: 30 });
+      expect(
+        metadataCountObservations.map(({ originalCount }) => originalCount),
+      ).toStrictEqual(
+        metadataCountObservations.map(({ historyLength }) => historyLength),
+      );
+      expect(
+        metadataCountObservations.filter(
+          ({ compressedCount, originalCount }) =>
+            compressedCount > originalCount,
+        ),
+      ).toStrictEqual([]);
+      expect(
+        metadataCountObservations.map(({ compressedCount }) => compressedCount),
+      ).toStrictEqual(
+        metadataCountObservations.map(({ outputLength }) => outputLength),
+      );
     });
+
+    const metadataCountObservations: Array<{
+      originalCount: number;
+      historyLength: number;
+      compressedCount: number;
+      outputLength: number;
+    }> = [];
+    const metadataCountProperty = fc.asyncProperty(
+      arbHistory,
+      async (history) => {
+        resetCallIds();
+        const result = await createStrategy().compress(
+          buildCompressContext({ history }),
+        );
+        const out = result.kind === 'applied' ? resultHistory(result) : history;
+        metadataCountObservations.push({
+          originalCount: result.metadata.originalMessageCount,
+          historyLength: history.length,
+          compressedCount: result.metadata.compressedMessageCount,
+          outputLength: out.length,
+        });
+        return (
+          result.metadata.originalMessageCount === history.length &&
+          result.metadata.compressedMessageCount <=
+            result.metadata.originalMessageCount &&
+          result.metadata.compressedMessageCount === out.length
+        );
+      },
+    );
 
     it('tool response results outside tail are strings (summarized)', async () => {
       let asserted = false;

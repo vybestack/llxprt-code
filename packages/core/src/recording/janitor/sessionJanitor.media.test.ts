@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   mkdir,
@@ -144,10 +145,10 @@ describe('SessionJanitor media reclamation', () => {
     });
 
     expect(firstCleanup.failed).toBe(0);
-    expect(await readFile(objectPath(store, kept.contentId))).toEqual(
+    expect(await readFile(objectPath(store, kept.contentId))).toStrictEqual(
       Buffer.from([1, 2, 3, 4]),
     );
-    expect(await readFile(objectPath(store, reserved.contentId))).toEqual(
+    expect(await readFile(objectPath(store, reserved.contentId))).toStrictEqual(
       Buffer.from([9, 10, 11, 12]),
     );
     await expect(
@@ -159,7 +160,7 @@ describe('SessionJanitor media reclamation', () => {
 
     await store.release(reserved.contentId, 'in-flight-request');
     const recordingPath = recording.getFilePath();
-    if (recordingPath === null) throw new Error('Expected recording path');
+    assertNotNull(recordingPath, 'Expected recording path');
     await unlink(recordingPath);
     await utimes(objectPath(store, kept.contentId), staleDate, staleDate);
     await utimes(objectPath(store, reserved.contentId), staleDate, staleDate);
@@ -221,7 +222,10 @@ describe('SessionJanitor media reclamation', () => {
         activeHistory: malformedActiveHistory,
       });
 
-      expect({ scanned: cleanup.scanned, failed: cleanup.failed }).toEqual({
+      expect({
+        scanned: cleanup.scanned,
+        failed: cleanup.failed,
+      }).toStrictEqual({
         scanned: 1,
         failed: 1,
       });

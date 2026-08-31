@@ -61,8 +61,8 @@ describe('attachMediaPurgeCacheControl', () => {
 
     const prepared = attachMediaPurgeCacheControl(messages, '5m', logger);
 
-    expect(prepared).toEqual({ boundaryId, preparation: 'added' });
-    expect(cacheLocations(messages)).toEqual(['0:0']);
+    expect(prepared).toStrictEqual({ boundaryId, preparation: 'added' });
+    expect(cacheLocations(messages)).toStrictEqual(['0:0']);
   });
 
   it('reuses an existing breakpoint only at the exact tagged boundary', () => {
@@ -83,8 +83,8 @@ describe('attachMediaPurgeCacheControl', () => {
 
     const prepared = attachMediaPurgeCacheControl(messages, '5m', logger);
 
-    expect(prepared).toEqual({ boundaryId, preparation: 'reused' });
-    expect(cacheLocations(messages)).toEqual(['0:0']);
+    expect(prepared).toStrictEqual({ boundaryId, preparation: 'reused' });
+    expect(cacheLocations(messages)).toStrictEqual(['0:0']);
   });
 
   it('does not infer a boundary when the request has no exact tag', () => {
@@ -98,7 +98,7 @@ describe('attachMediaPurgeCacheControl', () => {
     const prepared = attachMediaPurgeCacheControl(messages, '5m', logger);
 
     expect(prepared).toBeUndefined();
-    expect(cacheLocations(messages)).toEqual([]);
+    expect(cacheLocations(messages)).toStrictEqual([]);
   });
 
   it('rejects a tagged location that is not the exact pre-image boundary', () => {
@@ -118,7 +118,7 @@ describe('attachMediaPurgeCacheControl', () => {
     const prepared = attachMediaPurgeCacheControl(messages, '5m', logger);
 
     expect(prepared).toBeUndefined();
-    expect(cacheLocations(messages)).toEqual([]);
+    expect(cacheLocations(messages)).toStrictEqual([]);
   });
 
   it('does not consume a fourth message breakpoint when the exact boundary needs a new one', () => {
@@ -142,6 +142,6 @@ describe('attachMediaPurgeCacheControl', () => {
     const prepared = attachMediaPurgeCacheControl(messages, '5m', logger);
 
     expect(prepared).toBeUndefined();
-    expect(cacheLocations(messages)).toEqual(['0:0', '1:0', '2:0']);
+    expect(cacheLocations(messages)).toStrictEqual(['0:0', '1:0', '2:0']);
   });
 });

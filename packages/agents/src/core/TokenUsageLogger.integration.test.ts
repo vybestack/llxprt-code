@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -396,9 +397,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     const allHistory = historyService.getAll();
     const sentTurn = allHistory.find((c) => c.speaker === 'human');
     expect(sentTurn).toBeDefined();
-    if (sentTurn === undefined)
-      throw new Error('expected a human turn in history');
-    // usage record -> conversation turn
+    assertDefined(sentTurn, 'expected a human turn in history'); // usage record -> conversation turn
     expect(record.turn_id).not.toBeNull();
     expect(record.turn_id).toBe(sentTurn.metadata?.turnId);
     // conversation turn -> usage record
@@ -738,7 +737,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
 
     const abandoned = records.find((r) => r.attempt_outcome === 'abandoned');
     expect(abandoned).toBeDefined();
-    if (abandoned === undefined) throw new Error('no abandoned record');
+    assertDefined(abandoned, 'no abandoned record');
     expect(abandoned.attempt_index).toBe(0);
     expect(typeof abandoned.ttft_ms).toBe('number');
     expect(abandoned.ttft_ms).toBeGreaterThanOrEqual(0);
@@ -751,7 +750,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
 
     const success = records.find((r) => r.attempt_outcome !== 'abandoned');
     expect(success).toBeDefined();
-    if (success === undefined) throw new Error('no success record');
+    assertDefined(success, 'no success record');
     expect(success.attempt_index).toBe(1);
     expect(typeof success.ttft_ms).toBe('number');
     expect(success.ttft_ms).toBeGreaterThanOrEqual(0);

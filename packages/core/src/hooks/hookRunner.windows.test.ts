@@ -31,31 +31,35 @@ async function execute(command: string) {
   );
 }
 
-describe.skipIf(process.platform !== 'win32')(
-  'HookRunner PowerShell exit propagation',
-  () => {
-    it('preserves a final native command exit code 2 under PowerShell', async () => {
-      const result = await execute("cmd /c 'exit 2'");
-      expect(result.exitCode).toBe(2);
-      expect(result.success).toBe(false);
-    });
+describe('HookRunner', () => {
+  describe.skipIf(process.platform !== 'win32')(
+    'PowerShell exit propagation',
+    () => {
+      it('preserves a final native command exit code 2 under PowerShell', async () => {
+        const result = await execute("cmd /c 'exit 2'");
+        expect(result.exitCode).toBe(2);
+        expect(result.success).toBe(false);
+      });
 
-    it('maps a final PowerShell failure to exit code 1', async () => {
-      const result = await execute("Write-Error 'hook failed'");
-      expect(result.exitCode).toBe(1);
-      expect(result.success).toBe(false);
-    });
+      it('maps a final PowerShell failure to exit code 1', async () => {
+        const result = await execute("Write-Error 'hook failed'");
+        expect(result.exitCode).toBe(1);
+        expect(result.success).toBe(false);
+      });
 
-    it('ignores a stale native failure after PowerShell succeeds', async () => {
-      const result = await execute("cmd /c 'exit 2'; Write-Output 'recovered'");
-      expect(result.exitCode).toBe(0);
-      expect(result.success).toBe(true);
-    });
+      it('ignores a stale native failure after PowerShell succeeds', async () => {
+        const result = await execute(
+          "cmd /c 'exit 2'; Write-Output 'recovered'",
+        );
+        expect(result.exitCode).toBe(0);
+        expect(result.success).toBe(true);
+      });
 
-    it('reports a successful native command under PowerShell', async () => {
-      const result = await execute("cmd /c 'exit 0'");
-      expect(result.exitCode).toBe(0);
-      expect(result.success).toBe(true);
-    });
-  },
-);
+      it('reports a successful native command under PowerShell', async () => {
+        const result = await execute("cmd /c 'exit 0'");
+        expect(result.exitCode).toBe(0);
+        expect(result.success).toBe(true);
+      });
+    },
+  );
+});

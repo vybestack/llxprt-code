@@ -26,6 +26,46 @@ import {
 } from './OpenAIClientFactory.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 
+function getMaxOutputTokens(key: string): number | undefined {
+  return key === 'maxOutputTokens' ? 2000 : undefined;
+}
+
+function getInvalidMaxOutputTokens(key: string): number | undefined {
+  return key === 'maxOutputTokens' ? -1 : undefined;
+}
+
+function getCallId(key: string): string | undefined {
+  return key === 'call-id' ? 'call-789' : undefined;
+}
+
+function getCustomInvocationHeaders(
+  key: string,
+): { 'X-Invocation': string } | undefined {
+  return key === 'custom-headers' ? { 'X-Invocation': 'inv-value' } : undefined;
+}
+
+function getOverridingInvocationHeaders(
+  key: string,
+): { 'X-Shared': string } | undefined {
+  return key === 'custom-headers'
+    ? { 'X-Shared': 'invocation-value' }
+    : undefined;
+}
+
+function getCustomUserAgent(key: string): string | undefined {
+  return key === 'user-agent' ? 'CustomAgent/2.0' : undefined;
+}
+
+function getPaddedUserAgent(key: string): string | undefined {
+  return key === 'user-agent' ? '  TrimmedAgent/1.0  ' : undefined;
+}
+
+function restoreOpenAIBaseUrl(savedBaseUrl: string | undefined): void {
+  if (savedBaseUrl !== undefined) {
+    process.env.OPENAI_BASE_URL = savedBaseUrl;
+  }
+}
+
 describe('OpenAIClientFactory', () => {
   describe('createHttpAgents', () => {
     it('returns undefined when no socket settings configured', () => {
@@ -101,9 +141,7 @@ describe('OpenAIClientFactory', () => {
     it('translates maxOutputTokens to max_tokens', () => {
       const options = {
         invocation: { modelParams: {} },
-        settings: {
-          get: (key: string) => (key === 'maxOutputTokens' ? 2000 : undefined),
-        },
+        settings: { get: getMaxOutputTokens },
       } as unknown as NormalizedGenerateChatOptions;
 
       const result = extractModelParamsFromOptions(options);
@@ -114,9 +152,7 @@ describe('OpenAIClientFactory', () => {
     it('does not override existing max_tokens', () => {
       const options = {
         invocation: { modelParams: { max_tokens: 1000 } },
-        settings: {
-          get: (key: string) => (key === 'maxOutputTokens' ? 2000 : undefined),
-        },
+        settings: { get: getMaxOutputTokens },
       } as unknown as NormalizedGenerateChatOptions;
 
       const result = extractModelParamsFromOptions(options);
@@ -139,9 +175,7 @@ describe('OpenAIClientFactory', () => {
     it('ignores invalid maxOutputTokens values', () => {
       const options = {
         invocation: { modelParams: {} },
-        settings: {
-          get: (key: string) => (key === 'maxOutputTokens' ? -1 : undefined),
-        },
+        settings: { get: getInvalidMaxOutputTokens },
       } as unknown as NormalizedGenerateChatOptions;
 
       const result = extractModelParamsFromOptions(options);
@@ -176,9 +210,7 @@ describe('OpenAIClientFactory', () => {
       const options = {
         runtime: {},
         metadata: {},
-        settings: {
-          get: (key: string) => (key === 'call-id' ? 'call-789' : undefined),
-        },
+        settings: { get: getCallId },
       } as unknown as NormalizedGenerateChatOptions;
 
       const result = resolveRuntimeKey(options);
@@ -254,9 +286,7 @@ describe('OpenAIClientFactory', () => {
         expect(client).toBeDefined();
         expect(client.baseURL).toBe('https://api.openai.com/v1');
       } finally {
-        if (savedBaseURL !== undefined) {
-          process.env.OPENAI_BASE_URL = savedBaseURL;
-        }
+        restoreOpenAIBaseUrl(savedBaseURL);
       }
     });
 
@@ -296,10 +326,7 @@ describe('OpenAIClientFactory', () => {
     it('merges base and invocation headers', () => {
       const options = {
         invocation: {
-          getEphemeral: (key: string) =>
-            key === 'custom-headers'
-              ? { 'X-Invocation': 'inv-value' }
-              : undefined,
+          getEphemeral: getCustomInvocationHeaders,
         },
       } as unknown as NormalizedGenerateChatOptions;
 
@@ -314,8 +341,7 @@ describe('OpenAIClientFactory', () => {
     it('applies User-Agent from ephemeral', () => {
       const options = {
         invocation: {
-          getEphemeral: (key: string) =>
-            key === 'user-agent' ? 'CustomAgent/2.0' : undefined,
+          getEphemeral: getCustomUserAgent,
         },
       } as unknown as NormalizedGenerateChatOptions;
 
@@ -327,10 +353,7 @@ describe('OpenAIClientFactory', () => {
     it('invocation headers override base headers', () => {
       const options = {
         invocation: {
-          getEphemeral: (key: string) =>
-            key === 'custom-headers'
-              ? { 'X-Shared': 'invocation-value' }
-              : undefined,
+          getEphemeral: getOverridingInvocationHeaders,
         },
       } as unknown as NormalizedGenerateChatOptions;
 
@@ -356,8 +379,7 @@ describe('OpenAIClientFactory', () => {
     it('trims whitespace from user-agent', () => {
       const options = {
         invocation: {
-          getEphemeral: (key: string) =>
-            key === 'user-agent' ? '  TrimmedAgent/1.0  ' : undefined,
+          getEphemeral: getPaddedUserAgent,
         },
       } as unknown as NormalizedGenerateChatOptions;
 

@@ -123,6 +123,20 @@ function thinkingConfig(
   return value === undefined ? undefined : readRecord(value);
 }
 
+function optionalEffortMap(
+  effortMap: Readonly<Record<string, null>> | undefined,
+): Readonly<Record<string, unknown>> {
+  return effortMap === undefined ? {} : { 'reasoning.effortMap': effortMap };
+}
+
+function suppressedEffortFormat(effortWireFormat: string): string {
+  return effortWireFormat === 'none' ? 'none' : 'gemini';
+}
+
+function isReasoningConfigKey(key: string): boolean {
+  return key.toLowerCase().includes('reasoning') || key === 'thinkingConfig';
+}
+
 describe('Gemini issue 3255 reasoning request translation', () => {
   it('retains Gemini 3 generic effort mapping under auto selectors', () => {
     const config = buildConfig({
@@ -204,19 +218,17 @@ describe('Gemini issue 3255 reasoning request translation', () => {
           'reasoning.enabled': true,
           'reasoning.effort': 'high',
           'reasoning.effortWireFormat': effortWireFormat,
-          ...(effortMap === undefined
-            ? {}
-            : { 'reasoning.effortMap': effortMap }),
+          ...optionalEffortMap(effortMap),
         },
       });
 
       expect(result.logger.warnings).toStrictEqual([
         {
-          message: `Gemini omitted configured reasoning.effort for model gemini-3-flash-preview using format '${effortWireFormat === 'none' ? 'none' : 'gemini'}' because ${reason}`,
+          message: `Gemini omitted configured reasoning.effort for model gemini-3-flash-preview using format '${suppressedEffortFormat(effortWireFormat)}' because ${reason}`,
           metadata: {
             provider: 'gemini',
             model: 'gemini-3-flash-preview',
-            format: effortWireFormat === 'none' ? 'none' : 'gemini',
+            format: suppressedEffortFormat(effortWireFormat),
             genericSetting: 'reasoning.effort',
             reason,
           },
@@ -811,10 +823,7 @@ describe('Gemini issue 3255 reasoning request translation', () => {
         'reasoning.enabledWireFormat': 'gemini',
       },
     });
-    const reasoningKeys = Object.keys(config).filter(
-      (key) =>
-        key.toLowerCase().includes('reasoning') || key === 'thinkingConfig',
-    );
+    const reasoningKeys = Object.keys(config).filter(isReasoningConfigKey);
 
     expect(reasoningKeys).toStrictEqual(['thinkingConfig']);
   });

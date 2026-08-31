@@ -89,7 +89,7 @@ describe('HistoryService.estimateTokensForContents — image token evidence', ()
     }
     // Guard the fixture: a dimensionless payload would silently collapse both
     // providers onto their unknown-dimension constants.
-    expect(parseImageDimensionsFromBase64(media.data)).toEqual({
+    expect(parseImageDimensionsFromBase64(media.data)).toStrictEqual({
       width: 1092,
       height: 1092,
     });

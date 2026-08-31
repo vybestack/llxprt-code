@@ -27,6 +27,45 @@ describe('bfsFileSearch', () => {
     return fullPath;
   }
 
+  async function createPerformanceTree() {
+    for (let i = 0; i < 50; i++) {
+      await createEmptyDir(`dir${i}`);
+      await createEmptyDir(`dir${i}`, 'subdir1');
+      await createEmptyDir(`dir${i}`, 'subdir2');
+      await createEmptyDir(`dir${i}`, 'subdir1', 'deep');
+      if (i < 10) {
+        // Add target files in some directories
+        await createTestFile('content', `dir${i}`, 'GEMINI.md');
+        await createTestFile('content', `dir${i}`, 'subdir1', 'GEMINI.md');
+      }
+    }
+  }
+
+  function applyFirstSeenResult(
+    sortedResult: string[],
+    firstResultSorted: string[] | undefined,
+    foundSoFar: number,
+  ): { firstResultSorted: string[]; foundFiles: number } {
+    if (firstResultSorted === undefined) {
+      return {
+        firstResultSorted: sortedResult,
+        foundFiles: sortedResult.length,
+      };
+    }
+    return { firstResultSorted, foundFiles: foundSoFar };
+  }
+
+  function consistencyThresholdForEnvironment(): number {
+    return process.env.CI ? 3.0 : 2.5;
+  }
+
+  function effectiveConsistencyRatioFor(
+    consistencyIsMeasurable: boolean,
+    consistencyRatio: number,
+  ): number {
+    return consistencyIsMeasurable ? consistencyRatio : 0;
+  }
+
   beforeEach(async () => {
     testRootDir = await fsPromises.mkdtemp(
       path.join(os.tmpdir(), 'bfs-file-search-test-'),
@@ -121,6 +160,7 @@ describe('bfsFileSearch', () => {
   it('should find files up to one level deep when maxDepth is 1', async () => {
     const rootFile = await createTestFile('content', 'target.txt');
     const level1File = await createTestFile('content', 'a', 'target.txt');
+
     await createTestFile('content', 'a', 'b', 'target.txt');
 
     const result = await bfsFileSearch(testRootDir, {
@@ -269,17 +309,7 @@ describe('bfsFileSearch', () => {
     process.stdout.write('\n🚀 Testing Parallel BFS Performance...');
 
     // Create 50 directories with multiple levels for faster test execution
-    for (let i = 0; i < 50; i++) {
-      await createEmptyDir(`dir${i}`);
-      await createEmptyDir(`dir${i}`, 'subdir1');
-      await createEmptyDir(`dir${i}`, 'subdir2');
-      await createEmptyDir(`dir${i}`, 'subdir1', 'deep');
-      if (i < 10) {
-        // Add target files in some directories
-        await createTestFile('content', `dir${i}`, 'GEMINI.md');
-        await createTestFile('content', `dir${i}`, 'subdir1', 'GEMINI.md');
-      }
-    }
+    await createPerformanceTree();
 
     // Run multiple iterations to ensure consistency
     const iterations = 3;
@@ -299,10 +329,13 @@ describe('bfsFileSearch', () => {
 
       // Verify consistency: all iterations should find the exact same files
       const sortedResult = result.sort();
-      if (firstResultSorted === undefined) {
-        foundFiles = result.length;
-        firstResultSorted = sortedResult;
-      }
+      const applied = applyFirstSeenResult(
+        sortedResult,
+        firstResultSorted,
+        foundFiles,
+      );
+      foundFiles = applied.foundFiles;
+      firstResultSorted = applied.firstResultSorted;
       // Verify consistency across all iterations
       expect(sortedResult).toStrictEqual(firstResultSorted);
 
@@ -343,11 +376,12 @@ describe('bfsFileSearch', () => {
     // (0/0=NaN). A zero-average run is inherently performant, so skip the
     // consistency check in that case. When the average is measurable,
     // verify the variance is within the threshold.
-    const maxConsistencyRatio = process.env.CI ? 3.0 : 2.5;
+    const maxConsistencyRatio = consistencyThresholdForEnvironment();
     const consistencyIsMeasurable = avgDuration > 0.01;
-    const effectiveConsistencyRatio = consistencyIsMeasurable
-      ? consistencyRatio
-      : 0;
+    const effectiveConsistencyRatio = effectiveConsistencyRatioFor(
+      consistencyIsMeasurable,
+      consistencyRatio,
+    );
     expect(effectiveConsistencyRatio).toBeLessThan(maxConsistencyRatio);
 
     process.stdout.write(

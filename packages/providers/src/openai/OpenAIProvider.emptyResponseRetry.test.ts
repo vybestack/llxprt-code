@@ -1,3 +1,4 @@
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
@@ -287,9 +288,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
 
     // Verify the continuation request structure (CodeRabbit review #764)
     const secondRequestBody = requestBodies.at(1);
-    if (secondRequestBody === undefined) {
-      throw new Error('Expected a continuation request');
-    }
+    assertDefined(secondRequestBody, 'Expected a continuation request');
     const continuationMessages = readMessages(secondRequestBody);
 
     // Should have assistant message with tool_calls
@@ -297,9 +296,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
       (message) =>
         message['role'] === 'assistant' && Array.isArray(message['tool_calls']),
     );
-    if (assistantMsg === undefined) {
-      throw new Error('Expected an assistant continuation message');
-    }
+    assertDefined(assistantMsg, 'Expected an assistant continuation message');
     const assistantToolCalls = readToolCalls(assistantMsg);
     expect(assistantToolCalls).toHaveLength(1);
 
@@ -506,23 +503,20 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     expect(callCount).toBe(2);
 
     const secondRequestBody = requestBodies.at(1);
-    if (secondRequestBody === undefined) {
-      throw new Error('Expected a continuation request');
-    }
+    assertDefined(secondRequestBody, 'Expected a continuation request');
     const continuationMessages = readMessages(secondRequestBody);
     const continuationAssistant = continuationMessages.find(
       (message) =>
         message['role'] === 'assistant' && Array.isArray(message['tool_calls']),
     );
-    if (continuationAssistant === undefined) {
-      throw new Error('Expected an assistant continuation message');
-    }
+    assertDefined(
+      continuationAssistant,
+      'Expected an assistant continuation message',
+    );
     const continuationTool = continuationMessages.find(
       (message) => message['role'] === 'tool',
     );
-    if (continuationTool === undefined) {
-      throw new Error('Expected a tool continuation message');
-    }
+    assertDefined(continuationTool, 'Expected a tool continuation message');
 
     const assistantToolCallId = readToolCalls(continuationAssistant)[0]?.['id'];
     expect(assistantToolCallId).toBe('call_provider_999');
@@ -661,9 +655,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     expect(callCount).toBe(2);
 
     const secondRequestBody = requestBodies.at(1);
-    if (secondRequestBody === undefined) {
-      throw new Error('Expected a continuation request');
-    }
+    assertDefined(secondRequestBody, 'Expected a continuation request');
     const toolMessage = readMessages(secondRequestBody).find(
       (message) => message['role'] === 'tool',
     );

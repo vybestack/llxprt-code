@@ -125,11 +125,13 @@ describe('mergeMcpServers', () => {
     // The precedence invariant: a same-key extension server is skipped in
     // favor of the settings-declared one.
     expect(merged['settings-server']).toBe(settingsServer);
-    expect(merged['settings-server'].args).toEqual(['settings-server.js']);
+    expect(merged['settings-server'].args).toStrictEqual([
+      'settings-server.js',
+    ]);
   });
 
   it('returns an empty map when neither settings nor extensions declare MCP servers', () => {
     const merged = mergeMcpServers({}, []);
-    expect(merged).toEqual({});
+    expect(merged).toStrictEqual({});
   });
 });

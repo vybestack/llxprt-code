@@ -371,7 +371,9 @@ describe('AuthFlowOrchestrator signal threading', () => {
     gate.release.resolve();
 
     await expect(authentication).rejects.toBe(cancellation);
-    expect(await gatedStore.getToken('recording', 'work')).toEqual(priorToken);
+    expect(await gatedStore.getToken('recording', 'work')).toStrictEqual(
+      priorToken,
+    );
     expect(registry.isOAuthEnabled('recording')).toBe(false);
   });
 

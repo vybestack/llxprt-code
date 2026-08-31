@@ -867,54 +867,16 @@ describe('AgentClient (client.ts)', () => {
       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
     });
     it('should not trigger thinking-only continuation after InvalidStream when flag is false', async () => {
-      vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
-        false,
-      );
-
-      const forwardedRequests: ContentBlock[][] = [];
-      mockTurnRunFn.mockReset();
-      mockTurnRunFn.mockImplementation((req: AgentMessageInput) => {
-        forwardedRequests.push(req as ContentBlock[]);
-        return (async function* () {
-          yield {
-            type: AgentEventType.Thought,
-            value: {
-              subject: 'Planning',
-              description: 'I will do something',
-            },
-          };
-          yield { type: AgentEventType.InvalidStream };
-        })();
-      });
-
-      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
-
-      installMockChat(0);
-
-      installCountTokensGenerator();
-
-      todoStoreReadMock.mockResolvedValue([]);
-
-      const stream = client.sendMessageStream(
-        [{ type: 'text', text: 'Do something' }],
-        new AbortController().signal,
-        'prompt-thinking-invalid-stream-no-continue',
-      );
-      const events = await fromAsync(stream);
-
+      const { events, continuationRequestPresent, forwardedRequestCount } =
+        await observeNotTriggerThinkingOnlyContinuationAfterInvalidStreamWhenFlagIsFalse();
       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
-      expect(forwardedRequests).toHaveLength(1);
-      expect(
-        forwardedRequests[0]?.some(
-          (part) =>
-            typeof part === 'object' &&
-            'text' in part &&
-            typeof part.text === 'string' &&
-            part.text.includes(
-              'Continue and take the next concrete action now',
-            ),
-        ),
-      ).toBe(false);
+      expect({
+        continuationRequestPresent,
+        forwardedRequestCount,
+      }).toStrictEqual({
+        continuationRequestPresent: false,
+        forwardedRequestCount: 1,
+      });
       expect(events).toStrictEqual([
         {
           type: AgentEventType.ModelInfo,
@@ -935,6 +897,60 @@ describe('AgentClient (client.ts)', () => {
         { type: AgentEventType.InvalidStream },
       ]);
     });
+
+    const observeNotTriggerThinkingOnlyContinuationAfterInvalidStreamWhenFlagIsFalse =
+      async () => {
+        vi.spyOn(
+          client['config'],
+          'getContinueOnFailedApiCall',
+        ).mockReturnValue(false);
+
+        const forwardedRequests: ContentBlock[][] = [];
+        mockTurnRunFn.mockReset();
+        mockTurnRunFn.mockImplementation((req: AgentMessageInput) => {
+          forwardedRequests.push(req as ContentBlock[]);
+          return (async function* () {
+            yield {
+              type: AgentEventType.Thought,
+              value: {
+                subject: 'Planning',
+                description: 'I will do something',
+              },
+            };
+            yield { type: AgentEventType.InvalidStream };
+          })();
+        });
+
+        vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+
+        installMockChat(0);
+
+        installCountTokensGenerator();
+
+        todoStoreReadMock.mockResolvedValue([]);
+
+        const stream = client.sendMessageStream(
+          [{ type: 'text', text: 'Do something' }],
+          new AbortController().signal,
+          'prompt-thinking-invalid-stream-no-continue',
+        );
+        const events = await fromAsync(stream);
+
+        const continuationRequestPresent = forwardedRequests[0]?.some(
+          (part) =>
+            typeof part === 'object' &&
+            'text' in part &&
+            typeof part.text === 'string' &&
+            part.text.includes(
+              'Continue and take the next concrete action now',
+            ),
+        );
+        return {
+          events,
+          continuationRequestPresent,
+          forwardedRequestCount: forwardedRequests.length,
+        };
+      };
 
     it('should stop recursing after one retry when InvalidStream events are repeatedly received', async () => {
       vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(

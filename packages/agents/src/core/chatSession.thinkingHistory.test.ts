@@ -239,6 +239,15 @@ describe('Issue #1150: Thinking blocks in history', () => {
      * to the first output content as ThinkingBlocks.
      */
     it('thoughtBlocks should be extracted from modelResponseParts', () => {
+      const { thoughtBlocks } =
+        observeThoughtBlocksBeExtractedFromModelResponseParts();
+      expect(thoughtBlocks.length).toBe(1);
+      expect(thoughtBlocks[0].thought).toBe('Deep analysis...');
+      expect(thoughtBlocks[0].signature).toBe('sig_deep');
+      expect(thoughtBlocks[0].sourceField).toBe('thinking');
+    });
+
+    const observeThoughtBlocksBeExtractedFromModelResponseParts = () => {
       const modelOutput: LegacyContent[] = [
         {
           role: 'model',
@@ -276,11 +285,9 @@ describe('Issue #1150: Thinking blocks in history', () => {
         .filter((block) => block.thought.length > 0);
 
       // CRITICAL: thoughtBlocks must contain the thinking
-      expect(thoughtBlocks.length).toBe(1);
-      expect(thoughtBlocks[0].thought).toBe('Deep analysis...');
-      expect(thoughtBlocks[0].signature).toBe('sig_deep');
-      expect(thoughtBlocks[0].sourceField).toBe('thinking');
-    });
+
+      return { thoughtBlocks };
+    };
 
     /**
      * When attaching thoughtBlocks to IContent, thinking must be FIRST
@@ -332,131 +339,139 @@ describe('Issue #1150: Thinking blocks in history', () => {
      * in history has thinking as the first block.
      */
     it('final IContent in history must have thinking block first when tool_call present', () => {
-      // Step 1: AnthropicProvider yields IContent with thinking
-      const thinkingIContent: IContent = {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'thinking',
-            thought: 'Let me analyze this carefully...',
-            sourceField: 'thinking',
-            signature: 'EqoBCkYIAxgCIkAKHgoSdGhpbmtpbmdfY29udGVudA==',
-          } as ThinkingBlock,
-        ],
-      };
-
-      // Step 3: Convert to Content (simulating convertIContentToResponse)
-      const thinkingContent: LegacyContent = {
-        role: 'model',
-        parts: [
-          {
-            thought: true,
-            text: (thinkingIContent.blocks[0] as ThinkingBlock).thought,
-            thoughtSignature: (thinkingIContent.blocks[0] as ThinkingBlock)
-              .signature,
-            llxprtSourceField: (thinkingIContent.blocks[0] as ThinkingBlock)
-              .sourceField,
-          } as LegacyPart,
-        ],
-      };
-
-      const toolCallContent: LegacyContent = {
-        role: 'model',
-        parts: [
-          { text: 'I will help you.' },
-          {
-            functionCall: {
-              id: 'toolu_test',
-              name: 'read_file',
-              args: { path: '/tmp/test.txt' },
-            },
-          },
-        ],
-      };
-
-      // Step 4: Accumulate in processStreamResponse
-      const modelResponseParts: LegacyPart[] = [];
-      modelResponseParts.push(...thinkingContent.parts);
-      modelResponseParts.push(...toolCallContent.parts);
-
-      // Step 5: Consolidate parts (simulating consolidatedParts logic)
-      const consolidatedParts = [...modelResponseParts];
-
-      // Step 6: Create modelOutput
-      const modelOutput: LegacyContent[] = [
-        { role: 'model', parts: consolidatedParts },
-      ];
-
-      // Step 7: Extract thoughtBlocks (simulating recordHistory)
-      const thoughtBlocks: ThinkingBlock[] = modelOutput
-        .flatMap((content) => content.parts)
-        .filter(isThoughtPart)
-        .map(
-          (part): ThinkingBlock => ({
-            type: 'thinking',
-            thought: part.text.trim(),
-            sourceField: part.llxprtSourceField ?? 'thought',
-            signature: part.thoughtSignature,
-          }),
-        )
-        .filter((block) => block.thought.length > 0);
-
-      // Step 8: Create output IContent (simulating toIContent + attachment)
-      const nonThoughtParts = consolidatedParts.filter(
-        (part) => !isThoughtPart(part),
-      );
-      const outputIContent: IContent = {
-        speaker: 'ai',
-        blocks: nonThoughtParts.map((part) => {
-          if (part.text) {
-            return { type: 'text' as const, text: part.text };
-          } else if (part.functionCall) {
-            return {
-              type: 'tool_call' as const,
-              id: part.functionCall.id ?? '',
-              name: part.functionCall.name,
-              parameters: part.functionCall.args ?? {},
-            } as ToolCallBlock;
-          }
-          return { type: 'text' as const, text: '' };
-        }),
-      };
-
-      outputIContent.blocks = [
-        ...(thoughtBlocks.length > 0 ? thoughtBlocks : []),
-        ...outputIContent.blocks,
-      ];
-
-      // CRITICAL ASSERTIONS
-      // 1. thoughtBlocks were extracted
+      const { thoughtBlocks, outputIContent, thinkingBlock, hasToolCall } =
+        observeFinalIContentInHistoryMustHaveThinkingBlockFirstWhenToolCall();
       expect(thoughtBlocks.length).toBe(1);
       expect(thoughtBlocks[0].signature).toBe(
         'EqoBCkYIAxgCIkAKHgoSdGhpbmtpbmdfY29udGVudA==',
       );
-
-      // 2. First block is thinking
       expect(outputIContent.blocks[0].type).toBe('thinking');
-
-      // 3. Thinking has correct content
-      const thinkingBlock = outputIContent.blocks[0] as ThinkingBlock;
       expect(thinkingBlock.thought).toBe('Let me analyze this carefully...');
       expect(thinkingBlock.signature).toBe(
         'EqoBCkYIAxgCIkAKHgoSdGhpbmtpbmdfY29udGVudA==',
       );
       expect(thinkingBlock.sourceField).toBe('thinking');
-
-      // 4. Tool call is also present
-      const hasToolCall = outputIContent.blocks.some(
-        (b) => b.type === 'tool_call',
-      );
       expect(hasToolCall).toBe(true);
-
-      // 5. Block order is correct: thinking, text, tool_call
       expect(outputIContent.blocks.map((b) => b.type)).toStrictEqual([
         'thinking',
         'text',
         'tool_call',
       ]);
     });
+
+    const observeFinalIContentInHistoryMustHaveThinkingBlockFirstWhenToolCall =
+      () => {
+        // Step 1: AnthropicProvider yields IContent with thinking
+        const thinkingIContent: IContent = {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'Let me analyze this carefully...',
+              sourceField: 'thinking',
+              signature: 'EqoBCkYIAxgCIkAKHgoSdGhpbmtpbmdfY29udGVudA==',
+            } as ThinkingBlock,
+          ],
+        };
+
+        // Step 3: Convert to Content (simulating convertIContentToResponse)
+        const thinkingContent: LegacyContent = {
+          role: 'model',
+          parts: [
+            {
+              thought: true,
+              text: (thinkingIContent.blocks[0] as ThinkingBlock).thought,
+              thoughtSignature: (thinkingIContent.blocks[0] as ThinkingBlock)
+                .signature,
+              llxprtSourceField: (thinkingIContent.blocks[0] as ThinkingBlock)
+                .sourceField,
+            } as LegacyPart,
+          ],
+        };
+
+        const toolCallContent: LegacyContent = {
+          role: 'model',
+          parts: [
+            { text: 'I will help you.' },
+            {
+              functionCall: {
+                id: 'toolu_test',
+                name: 'read_file',
+                args: { path: '/tmp/test.txt' },
+              },
+            },
+          ],
+        };
+
+        // Step 4: Accumulate in processStreamResponse
+        const modelResponseParts: LegacyPart[] = [];
+        modelResponseParts.push(...thinkingContent.parts);
+        modelResponseParts.push(...toolCallContent.parts);
+
+        // Step 5: Consolidate parts (simulating consolidatedParts logic)
+        const consolidatedParts = [...modelResponseParts];
+
+        // Step 6: Create modelOutput
+        const modelOutput: LegacyContent[] = [
+          { role: 'model', parts: consolidatedParts },
+        ];
+
+        // Step 7: Extract thoughtBlocks (simulating recordHistory)
+        const thoughtBlocks: ThinkingBlock[] = modelOutput
+          .flatMap((content) => content.parts)
+          .filter(isThoughtPart)
+          .map(
+            (part): ThinkingBlock => ({
+              type: 'thinking',
+              thought: part.text.trim(),
+              sourceField: part.llxprtSourceField ?? 'thought',
+              signature: part.thoughtSignature,
+            }),
+          )
+          .filter((block) => block.thought.length > 0);
+
+        // Step 8: Create output IContent (simulating toIContent + attachment)
+        const nonThoughtParts = consolidatedParts.filter(
+          (part) => !isThoughtPart(part),
+        );
+        const outputIContent: IContent = {
+          speaker: 'ai',
+          blocks: nonThoughtParts.map((part) => {
+            if (part.text) {
+              return { type: 'text' as const, text: part.text };
+            } else if (part.functionCall) {
+              return {
+                type: 'tool_call' as const,
+                id: part.functionCall.id ?? '',
+                name: part.functionCall.name,
+                parameters: part.functionCall.args ?? {},
+              } as ToolCallBlock;
+            }
+            return { type: 'text' as const, text: '' };
+          }),
+        };
+
+        outputIContent.blocks = [
+          ...(thoughtBlocks.length > 0 ? thoughtBlocks : []),
+          ...outputIContent.blocks,
+        ];
+
+        // CRITICAL ASSERTIONS
+        // 1. thoughtBlocks were extracted
+
+        // 2. First block is thinking
+
+        // 3. Thinking has correct content
+        const thinkingBlock = outputIContent.blocks[0] as ThinkingBlock;
+
+        // 4. Tool call is also present
+        const hasToolCall = outputIContent.blocks.some(
+          (b) => b.type === 'tool_call',
+        );
+
+        // 5. Block order is correct: thinking, text, tool_call
+
+        return { thoughtBlocks, outputIContent, thinkingBlock, hasToolCall };
+      };
   });
 });

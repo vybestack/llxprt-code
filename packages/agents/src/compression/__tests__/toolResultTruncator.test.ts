@@ -311,40 +311,48 @@ describe('rankToolResponses', () => {
   });
 
   it('ranks by model-dependent tokenization when estimator varies by model', async () => {
-    // Two tool responses: "aaa" and "bbbbb".
-    // Under model-A tokenization, "aaa" is fattest.
-    // Under model-B tokenization, "bbbbb" is fattest.
-    // This proves the ranking is driven by the async estimator, not a
-    // static heuristic.
-    const history: IContent[] = [
-      makeToolResponseEntry('call-a', 'tool', 'aaa'),
-      makeToolResponseEntry('call-b', 'tool', 'bbbbb'),
-    ];
-
-    const modelARanked = await rankToolResponses(history, async (block) => {
-      if (block.type !== 'tool_response') {
-        return 0;
-      }
-      const text = String(block.result);
-      if (text === 'aaa') {
-        return 1000;
-      }
-      return 10;
-    });
+    const { modelARanked, modelBRanked } =
+      await observeRanksByModelDependentTokenizationWhenEstimatorVariesByModel();
     expect(modelARanked[0].block.callId).toBe('call-a');
-
-    const modelBRanked = await rankToolResponses(history, async (block) => {
-      if (block.type !== 'tool_response') {
-        return 0;
-      }
-      const text = String(block.result);
-      if (text === 'bbbbb') {
-        return 2000;
-      }
-      return 20;
-    });
     expect(modelBRanked[0].block.callId).toBe('call-b');
   });
+
+  const observeRanksByModelDependentTokenizationWhenEstimatorVariesByModel =
+    async () => {
+      // Two tool responses: "aaa" and "bbbbb".
+      // Under model-A tokenization, "aaa" is fattest.
+      // Under model-B tokenization, "bbbbb" is fattest.
+      // This proves the ranking is driven by the async estimator, not a
+      // static heuristic.
+      const history: IContent[] = [
+        makeToolResponseEntry('call-a', 'tool', 'aaa'),
+        makeToolResponseEntry('call-b', 'tool', 'bbbbb'),
+      ];
+
+      const modelARanked = await rankToolResponses(history, async (block) => {
+        if (block.type !== 'tool_response') {
+          return 0;
+        }
+        const text = String(block.result);
+        if (text === 'aaa') {
+          return 1000;
+        }
+        return 10;
+      });
+
+      const modelBRanked = await rankToolResponses(history, async (block) => {
+        if (block.type !== 'tool_response') {
+          return 0;
+        }
+        const text = String(block.result);
+        if (text === 'bbbbb') {
+          return 2000;
+        }
+        return 20;
+      });
+
+      return { modelARanked, modelBRanked };
+    };
 });
 
 describe('truncateLargestToolResponses', () => {
@@ -519,55 +527,64 @@ describe('truncateLargestToolResponses', () => {
   });
 
   it('uses model-dependent tokenization to select the fattest candidate first', async () => {
-    historyService.add(makeToolResponseEntry('call-a', 'tool', 'aaa'));
-    historyService.add(makeToolResponseEntry('call-b', 'tool', 'bbbbb'));
-    await historyService.waitForTokenUpdates();
-
-    // Under this model's tokenization, "aaa" is the fattest candidate.
-    // The truncator should stub call-a first. After that, "bbbbb" is
-    // still present but the limit is generous enough to stop.
-    const result = await truncateLargestToolResponses(
-      buildTruncatorDeps(historyService, {
-        estimateBlockTokensAsync: async (block) => {
-          if (block.type !== 'tool_response') {
-            return 1;
-          }
-          const text = String(block.result);
-          if (text === 'aaa') {
-            return 5000;
-          }
-          return 10;
-        },
-        computeProjected: () => {
-          const raw = historyService.getRawHistory();
-          const toolResponses = raw
-            .flatMap((e) => e.blocks)
-            .filter((b): b is ToolResponseBlock => b.type === 'tool_response');
-          let total = 0;
-          for (const block of toolResponses) {
-            const text = String(block.result);
-            total += text === 'aaa' ? 5000 : 10;
-          }
-          return total;
-        },
-      }),
-      50,
-    );
-
+    const { result, stubbedCallIds } =
+      await observeUsesModelDependentTokenizationToSelectTheFattestCandidateFirst();
     expect(result.success).toBe(true);
     expect(result.replacedCount).toBe(1);
-
-    const raw = historyService.getRawHistory();
-    const stubbedCallIds = raw
-      .flatMap((e) => e.blocks)
-      .filter(
-        (b): b is ToolResponseBlock =>
-          b.type === 'tool_response' && isAlreadyStubbed(b),
-      )
-      .map((b) => b.callId);
     expect(stubbedCallIds).toContain('call-a');
     expect(stubbedCallIds).not.toContain('call-b');
   });
+
+  const observeUsesModelDependentTokenizationToSelectTheFattestCandidateFirst =
+    async () => {
+      historyService.add(makeToolResponseEntry('call-a', 'tool', 'aaa'));
+      historyService.add(makeToolResponseEntry('call-b', 'tool', 'bbbbb'));
+      await historyService.waitForTokenUpdates();
+
+      // Under this model's tokenization, "aaa" is the fattest candidate.
+      // The truncator should stub call-a first. After that, "bbbbb" is
+      // still present but the limit is generous enough to stop.
+      const result = await truncateLargestToolResponses(
+        buildTruncatorDeps(historyService, {
+          estimateBlockTokensAsync: async (block) => {
+            if (block.type !== 'tool_response') {
+              return 1;
+            }
+            const text = String(block.result);
+            if (text === 'aaa') {
+              return 5000;
+            }
+            return 10;
+          },
+          computeProjected: () => {
+            const raw = historyService.getRawHistory();
+            const toolResponses = raw
+              .flatMap((e) => e.blocks)
+              .filter(
+                (b): b is ToolResponseBlock => b.type === 'tool_response',
+              );
+            let total = 0;
+            for (const block of toolResponses) {
+              const text = String(block.result);
+              total += text === 'aaa' ? 5000 : 10;
+            }
+            return total;
+          },
+        }),
+        50,
+      );
+
+      const raw = historyService.getRawHistory();
+      const stubbedCallIds = raw
+        .flatMap((e) => e.blocks)
+        .filter(
+          (b): b is ToolResponseBlock =>
+            b.type === 'tool_response' && isAlreadyStubbed(b),
+        )
+        .map((b) => b.callId);
+
+      return { result, stubbedCallIds };
+    };
 });
 
 describe('truncateOversizedToolResponsesUnified — pending + history (issue #1321)', () => {
@@ -800,87 +817,105 @@ describe('truncateOversizedToolResponsesUnified — pending + history (issue #13
   });
 
   it('aborts safely when history is concurrently cleared during async estimates', async () => {
-    historyService.add(
-      makeToolResponseEntry('call-hist', 'tool', 'x'.repeat(4000)),
-    );
-    await historyService.waitForTokenUpdates();
-
-    let estimateCallCount = 0;
-    const deps = {
-      historyService,
-      logger: noopLogger,
-      pendingContents: [] as IContent[],
-      estimateBlockTokensAsync: async (block: ContentBlock) => {
-        estimateCallCount++;
-        // On the first block estimate, simulate a concurrent clear.
-        if (estimateCallCount === 1) {
-          historyService.clear();
-        }
-        return estimateBlockByLength(block);
-      },
-      computeProjected: async () => {
-        let total = 0;
-        for (const entry of historyService.getRawHistory()) {
-          for (const block of entry.blocks) {
-            total += estimateBlockByLength(block);
-          }
-        }
-        return total;
-      },
-      resetBaseline: () => {},
-      getRuntimeModel: () => 'test-model',
-    };
-
-    const result = await truncateOversizedToolResponsesUnified(deps, 50);
-
-    // Should not throw, should not corrupt history, and should return
-    // a safe result (success false since it aborted before truncating).
+    const { result } =
+      await observeAbortsSafelyWhenHistoryIsConcurrentlyClearedDuringAsyncEstimates();
     expect(result.success).toBe(false);
     expect(result.replacedCount).toBe(0);
-    // History was cleared concurrently — our guard prevented operating
-    // on stale indices.
     expect(historyService.getRawHistory().length).toBe(0);
   });
 
-  it('aborts safely when history is concurrently added to during async estimates', async () => {
-    historyService.add(
-      makeToolResponseEntry('call-hist', 'tool', 'x'.repeat(4000)),
-    );
-    await historyService.waitForTokenUpdates();
+  const observeAbortsSafelyWhenHistoryIsConcurrentlyClearedDuringAsyncEstimates =
+    async () => {
+      historyService.add(
+        makeToolResponseEntry('call-hist', 'tool', 'x'.repeat(4000)),
+      );
+      await historyService.waitForTokenUpdates();
 
-    let estimateCallCount = 0;
-    const deps = {
-      historyService,
-      logger: noopLogger,
-      pendingContents: [] as IContent[],
-      estimateBlockTokensAsync: async (block: ContentBlock) => {
-        estimateCallCount++;
-        // On the first estimate, simulate a concurrent add.
-        if (estimateCallCount === 1) {
-          historyService.add(makeTextEntry('human', 'concurrent add'));
-        }
-        return estimateBlockByLength(block);
-      },
-      computeProjected: async () => {
-        let total = 0;
-        for (const entry of historyService.getRawHistory()) {
-          for (const block of entry.blocks) {
-            total += estimateBlockByLength(block);
+      let estimateCallCount = 0;
+      const deps = {
+        historyService,
+        logger: noopLogger,
+        pendingContents: [] as IContent[],
+        estimateBlockTokensAsync: async (block: ContentBlock) => {
+          estimateCallCount++;
+          // On the first block estimate, simulate a concurrent clear.
+          if (estimateCallCount === 1) {
+            historyService.clear();
           }
-        }
-        return total;
-      },
-      resetBaseline: () => {},
-      getRuntimeModel: () => 'test-model',
+          return estimateBlockByLength(block);
+        },
+        computeProjected: async () => {
+          let total = 0;
+          for (const entry of historyService.getRawHistory()) {
+            for (const block of entry.blocks) {
+              total += estimateBlockByLength(block);
+            }
+          }
+          return total;
+        },
+        resetBaseline: () => {},
+        getRuntimeModel: () => 'test-model',
+      };
+
+      const result = await truncateOversizedToolResponsesUnified(deps, 50);
+
+      // Should not throw, should not corrupt history, and should return
+      // a safe result (success false since it aborted before truncating).
+
+      // History was cleared concurrently — our guard prevented operating
+      // on stale indices.
+
+      return { result };
     };
 
-    const result = await truncateOversizedToolResponsesUnified(deps, 50);
-
-    // Should not throw, should not corrupt history by replacing at
-    // stale indices.
+  it('aborts safely when history is concurrently added to during async estimates', async () => {
+    const { result } =
+      await observeAbortsSafelyWhenHistoryIsConcurrentlyAddedToDuringAsyncEstimates();
     expect(result.success).toBe(false);
     expect(result.replacedCount).toBe(0);
-    // The concurrent add should be visible.
     expect(historyService.getRawHistory().length).toBe(2);
   });
+
+  const observeAbortsSafelyWhenHistoryIsConcurrentlyAddedToDuringAsyncEstimates =
+    async () => {
+      historyService.add(
+        makeToolResponseEntry('call-hist', 'tool', 'x'.repeat(4000)),
+      );
+      await historyService.waitForTokenUpdates();
+
+      let estimateCallCount = 0;
+      const deps = {
+        historyService,
+        logger: noopLogger,
+        pendingContents: [] as IContent[],
+        estimateBlockTokensAsync: async (block: ContentBlock) => {
+          estimateCallCount++;
+          // On the first estimate, simulate a concurrent add.
+          if (estimateCallCount === 1) {
+            historyService.add(makeTextEntry('human', 'concurrent add'));
+          }
+          return estimateBlockByLength(block);
+        },
+        computeProjected: async () => {
+          let total = 0;
+          for (const entry of historyService.getRawHistory()) {
+            for (const block of entry.blocks) {
+              total += estimateBlockByLength(block);
+            }
+          }
+          return total;
+        },
+        resetBaseline: () => {},
+        getRuntimeModel: () => 'test-model',
+      };
+
+      const result = await truncateOversizedToolResponsesUnified(deps, 50);
+
+      // Should not throw, should not corrupt history by replacing at
+      // stale indices.
+
+      // The concurrent add should be visible.
+
+      return { result };
+    };
 });

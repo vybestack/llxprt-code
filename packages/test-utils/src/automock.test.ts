@@ -15,6 +15,12 @@
 import { describe, expect, it } from 'bun:test';
 import { automock } from './automock.js';
 
+function defaultExportKeys(mocked: {
+  readonly default?: Readonly<Record<string, unknown>>;
+}): readonly string[] {
+  return Object.keys(mocked.default ?? {});
+}
+
 describe('automock', () => {
   it('replaces a function export with a recording mock', () => {
     const mocked = automock({ greet: (name: string) => `hello ${name}` }) as {
@@ -22,14 +28,19 @@ describe('automock', () => {
     };
 
     expect(mocked.greet('world')).toBeUndefined();
-    expect(mocked.greet.mock.calls).toEqual([['world']]);
+    expect(mocked.greet.mock.calls).toStrictEqual([['world']]);
   });
 
   it('keeps every own export, so a partial namespace cannot silently appear', () => {
     const mocked = automock({ a: () => 1, b: () => 2, c: 3 });
 
     // `default` is synthesised for CommonJS interop, covered separately.
-    expect(Object.keys(mocked).sort()).toEqual(['a', 'b', 'c', 'default']);
+    expect(Object.keys(mocked).sort()).toStrictEqual([
+      'a',
+      'b',
+      'c',
+      'default',
+    ]);
   });
 
   it('mocks a class so instances expose mocked prototype methods', () => {
@@ -66,7 +77,7 @@ describe('automock', () => {
   it('empties arrays rather than preserving their real elements', () => {
     const mocked = automock({ items: [1, 2, 3] }) as { items: unknown[] };
 
-    expect(mocked.items).toEqual([]);
+    expect(mocked.items).toStrictEqual([]);
   });
 
   it('synthesises a default export for CommonJS interop', () => {
@@ -75,7 +86,7 @@ describe('automock', () => {
     };
 
     expect(mocked.default).toBeDefined();
-    expect(Object.keys(mocked.default ?? {})).toContain('helper');
+    expect(defaultExportKeys(mocked)).toContain('helper');
   });
 
   it('mirrors an accessor lazily instead of reading it while building', () => {

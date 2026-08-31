@@ -77,6 +77,13 @@ async function* successChunk(): AsyncGenerator<IContent> {
   yield { type: 'text' as const, content: 'ok' } as unknown as IContent;
 }
 
+function respondAfterTransientRateLimit(
+  invocation: number,
+): AsyncGenerator<IContent> {
+  if (invocation === 1) return throwStatus('rate limited', 429)();
+  return successChunk();
+}
+
 function makeOptions(): GenerateChatOptions {
   return {
     prompt: 'test prompt',
@@ -161,12 +168,10 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
    * the LB at least the same retry behavior as a standalone provider.
    */
   it('retries a transient 429 on the same backend before failing over', async () => {
-    const { provider, counter } = makeFakeProvider((invocation) => {
-      if (invocation === 1) {
-        return throwStatus('rate limited', 429)();
-      }
-      return successChunk();
-    }, 'zai-provider');
+    const { provider, counter } = makeFakeProvider(
+      respondAfterTransientRateLimit,
+      'zai-provider',
+    );
     providerManager.registerProvider(provider);
     // Other backends would fail if reached, but zai succeeds on retry.
     const exhausted1 = makeFakeProvider(
@@ -272,12 +277,10 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
    * are down.
    */
   it('succeeds when zai has a transient 429 and other backends are persistently exhausted', async () => {
-    const zai = makeFakeProvider((invocation) => {
-      if (invocation === 1) {
-        return throwStatus('rate limited', 429)();
-      }
-      return successChunk();
-    }, 'zai-provider');
+    const zai = makeFakeProvider(
+      respondAfterTransientRateLimit,
+      'zai-provider',
+    );
     providerManager.registerProvider(zai.provider);
     const makora = makeFakeProvider(
       () => throwStatus('rate limit exhausted', 429)(),

@@ -75,6 +75,48 @@ describe('integration with IContent', () => {
 // Property-based tests
 // ============================================================================
 
+/**
+ * A double that survives a JSON.stringify/JSON.parse cycle unchanged. -0 collapses
+ * to +0, and Infinity/NaN collapse to null, so all three are excluded.
+ */
+function isJsonLosslessDouble(v: number): boolean {
+  return Number.isFinite(v) && !Object.is(v, -0);
+}
+
+function preservesOrderAndContent(
+  roundTripped: string[],
+  original: string[],
+): boolean {
+  return (
+    roundTripped.length === original.length &&
+    roundTripped.every((t, i) => t === original[i])
+  );
+}
+
+function preservesDimensions(
+  roundTripped: number[][],
+  original: number[][],
+): boolean {
+  return (
+    roundTripped.length === original.length &&
+    roundTripped.every(
+      (vec, i) =>
+        vec.length === original[i].length &&
+        vec.every((v, j) => Object.is(v, original[i][j])),
+    )
+  );
+}
+
+function preservesBlocks(
+  roundTripped: CountTokensRequest,
+  blocks: ContentBlock[],
+): boolean {
+  return (
+    roundTripped.contents.length === 1 &&
+    JSON.stringify(roundTripped.contents[0].blocks) === JSON.stringify(blocks)
+  );
+}
+
 describe('tokensAndEmbeddings property-based', () => {
   it('CountTokensResult totalTokens round-trips through JSON unchanged', () =>
     fc.assert(
@@ -99,10 +141,7 @@ describe('tokensAndEmbeddings property-based', () => {
           const roundTripped: EmbedContentRequest = JSON.parse(
             JSON.stringify(req),
           );
-          return (
-            roundTripped.texts.length === texts.length &&
-            roundTripped.texts.every((t, i) => t === texts[i])
-          );
+          return preservesOrderAndContent(roundTripped.texts, texts);
         },
       ),
     ));
@@ -117,9 +156,7 @@ describe('tokensAndEmbeddings property-based', () => {
             // flag it; filtering it scopes the property to JSON-lossless doubles.
             // Exclude ±Infinity: JSON.stringify(Infinity) → "null". noNaN:true
             // does NOT exclude Infinity, so Number.isFinite is required.
-            fc
-              .double({ noNaN: true })
-              .filter((v) => Number.isFinite(v) && !Object.is(v, -0)),
+            fc.double({ noNaN: true }).filter(isJsonLosslessDouble),
             {
               minLength: 1,
               maxLength: 10,
@@ -132,14 +169,7 @@ describe('tokensAndEmbeddings property-based', () => {
           const roundTripped: EmbedContentResult = JSON.parse(
             JSON.stringify(result),
           );
-          return (
-            roundTripped.embeddings.length === embeddings.length &&
-            roundTripped.embeddings.every(
-              (vec, i) =>
-                vec.length === embeddings[i].length &&
-                vec.every((v, j) => Object.is(v, embeddings[i][j])),
-            )
-          );
+          return preservesDimensions(roundTripped.embeddings, embeddings);
         },
       ),
     ));
@@ -167,11 +197,7 @@ describe('tokensAndEmbeddings property-based', () => {
           const roundTripped: CountTokensRequest = JSON.parse(
             JSON.stringify(req),
           );
-          return (
-            roundTripped.contents.length === 1 &&
-            JSON.stringify(roundTripped.contents[0].blocks) ===
-              JSON.stringify(blocks)
-          );
+          return preservesBlocks(roundTripped, blocks);
         },
       ),
     ));

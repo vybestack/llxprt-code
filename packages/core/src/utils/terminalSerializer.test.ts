@@ -21,6 +21,11 @@ function writeToTerminal(terminal: Terminal, data: string): Promise<void> {
   });
 }
 
+/** True when the line has no cells or its first cell is only whitespace. */
+function isEmptyOrBlank(line: Array<{ text: string }>): boolean {
+  return line.length === 0 || line[0].text.trim() === '';
+}
+
 describe('terminalSerializer', () => {
   describe('serializeTerminalToObject', () => {
     it('should handle an empty terminal', () => {
@@ -32,8 +37,7 @@ describe('terminalSerializer', () => {
       const result = serializeTerminalToObject(terminal);
       expect(result).toHaveLength(24);
       result.forEach((line) => {
-        const isEmpty = line.length === 0;
-        expect(isEmpty || line[0].text.trim() === '').toBe(true);
+        expect(isEmptyOrBlank(line)).toBe(true);
       });
     });
 

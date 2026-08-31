@@ -1,6 +1,18 @@
 import { describe, it, expect } from 'bun:test';
 import { buildResponsesRequest } from './buildResponsesRequest.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+
+function getMessageContent(message: unknown): unknown {
+  if (
+    typeof message !== 'object' ||
+    message === null ||
+    !('content' in message)
+  ) {
+    return undefined;
+  }
+  return message.content;
+}
+
 describe('buildResponsesRequest - undefined message handling', () => {
   it('should filter out undefined messages', () => {
     const messages: Array<IContent | undefined | null> = [
@@ -22,13 +34,9 @@ describe('buildResponsesRequest - undefined message handling', () => {
     const msg0 = request.input?.[0];
     const msg1 = request.input?.[1];
     const msg2 = request.input?.[2];
-    expect(msg0 && 'content' in msg0 ? msg0.content : undefined).toBe('Hello');
-    expect(msg1 && 'content' in msg1 ? msg1.content : undefined).toBe(
-      'Hi there!',
-    );
-    expect(msg2 && 'content' in msg2 ? msg2.content : undefined).toBe(
-      'How are you?',
-    );
+    expect(getMessageContent(msg0)).toBe('Hello');
+    expect(getMessageContent(msg1)).toBe('Hi there!');
+    expect(getMessageContent(msg2)).toBe('How are you?');
   });
 
   it('should handle all undefined messages', () => {

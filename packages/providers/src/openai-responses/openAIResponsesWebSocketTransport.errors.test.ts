@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it } from 'bun:test';
 import {
   createCodexResponsesWebSocketTransport,
@@ -200,9 +201,7 @@ describe('Codex Responses WebSocket transport failures', () => {
 
     const first = await iterator.next();
     expect(first.value).toStrictEqual(textContent('partial'));
-    if (iterator.return === undefined) {
-      throw new Error('Expected cancellable response iterator');
-    }
+    assertDefined(iterator.return, 'Expected cancellable response iterator');
     await iterator.return();
 
     const messages = await drain(

@@ -72,6 +72,10 @@ function setWorkspaceFolders(
   ).workspaceFolders = folders;
 }
 
+function workspacePathDelimiter(): string {
+  return process.platform === 'win32' ? ';' : ':';
+}
+
 describe('IDEServer', () => {
   let mockContext: vscode.ExtensionContext;
   let diffManager: DiffManager;
@@ -181,7 +185,7 @@ describe('IDEServer', () => {
     });
 
     it('should handle multiple workspace folders with delimiter', async () => {
-      const delimiter = process.platform === 'win32' ? ';' : ':';
+      const delimiter = workspacePathDelimiter();
       setWorkspaceFolders([
         { uri: { fsPath: '/foo/bar' } } as unknown as vscode.WorkspaceFolder,
         { uri: { fsPath: '/baz/qux' } } as unknown as vscode.WorkspaceFolder,

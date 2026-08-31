@@ -394,7 +394,9 @@ describe('Git Statistics Tracking', () => {
   });
 
   describe('Error Handling', () => {
-    it('should handle malformed content gracefully', async () => {
+    async function observeMalformedContentResults(): Promise<
+      readonly boolean[]
+    > {
       const config = new Config({
         sessionId: 'test-session',
         targetDir: tempDir,
@@ -413,6 +415,7 @@ describe('Git Statistics Tracking', () => {
         { old: 'content', new: undefined },
       ];
 
+      const validity: boolean[] = [];
       for (const testCase of cases) {
         const stats = await tracker.trackFileEdit(
           'file.ts',
@@ -428,11 +431,19 @@ describe('Git Statistics Tracking', () => {
             Object.prototype.hasOwnProperty.call(stats, 'linesRemoved') &&
             Object.prototype.hasOwnProperty.call(stats, 'filesChanged'));
 
-        expect(isValidStats).toBe(true);
+        validity.push(isValidStats);
+      }
+      return validity;
+    }
+
+    it('should handle malformed content gracefully', async () => {
+      const validity = await observeMalformedContentResults();
+      for (const isValid of validity) {
+        expect(isValid).toBe(true);
       }
     });
 
-    it('should handle invalid file paths', async () => {
+    async function observeInvalidPathResults(): Promise<readonly boolean[]> {
       const config = new Config({
         sessionId: 'test-session',
         targetDir: tempDir,
@@ -451,6 +462,7 @@ describe('Git Statistics Tracking', () => {
         'path with spaces',
       ];
 
+      const validity: boolean[] = [];
       for (const path of invalidPaths) {
         const stats = await tracker.trackFileEdit(path as string, 'old', 'new');
 
@@ -462,7 +474,15 @@ describe('Git Statistics Tracking', () => {
             typeof stats.linesRemoved === 'number' &&
             typeof stats.filesChanged === 'number');
 
-        expect(isValidOrNull).toBe(true);
+        validity.push(isValidOrNull);
+      }
+      return validity;
+    }
+
+    it('should handle invalid file paths', async () => {
+      const validity = await observeInvalidPathResults();
+      for (const isValid of validity) {
+        expect(isValid).toBe(true);
       }
     });
 

@@ -81,6 +81,38 @@ interface Deferred<T> {
   readonly resolve: (value: T) => void;
 }
 
+function createThrowingStatusListener(
+  disconnectingFailure: Error,
+  disconnectedFailure: Error,
+): (serverName: string, status: MCPServerStatus) => void {
+  return (_serverName, status) => {
+    if (status === MCPServerStatus.DISCONNECTING) {
+      throw disconnectingFailure;
+    }
+    if (status === MCPServerStatus.DISCONNECTED) {
+      throw disconnectedFailure;
+    }
+  };
+}
+
+function createRetryingToolRegistry(): {
+  readonly registry: ToolRegistry;
+  readonly artifactPresent: () => boolean;
+} {
+  let artifactPresent = true;
+  let cleanupFailed = false;
+  const registry = {
+    removeMcpToolsByServer: () => {
+      if (!cleanupFailed) {
+        cleanupFailed = true;
+        throw new Error('transient tool cleanup failure');
+      }
+      artifactPresent = false;
+    },
+  } as unknown as ToolRegistry;
+  return { registry, artifactPresent: () => artifactPresent };
+}
+
 function createDeferred<T>(): Deferred<T> {
   let resolvePromise: ((value: T) => void) | undefined;
   const promise = new Promise<T>((resolve) => {
@@ -176,17 +208,10 @@ describe('McpClient disconnect cleanup', () => {
     await client.connect();
     const disconnectingFailure = new Error('disconnecting listener failed');
     const disconnectedFailure = new Error('disconnected listener failed');
-    const throwingStatusListener = (
-      _serverName: string,
-      status: MCPServerStatus,
-    ) => {
-      if (status === MCPServerStatus.DISCONNECTING) {
-        throw disconnectingFailure;
-      }
-      if (status === MCPServerStatus.DISCONNECTED) {
-        throw disconnectedFailure;
-      }
-    };
+    const throwingStatusListener = createThrowingStatusListener(
+      disconnectingFailure,
+      disconnectedFailure,
+    );
     addMCPStatusChangeListener(throwingStatusListener);
 
     let failure: unknown;
@@ -485,17 +510,8 @@ describe('McpClient disconnect cleanup', () => {
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
       {} as SdkClientStdioLib.StdioClientTransport,
     );
-    let toolArtifactPresent = true;
-    let cleanupFailed = false;
-    const toolRegistry = {
-      removeMcpToolsByServer: () => {
-        if (!cleanupFailed) {
-          cleanupFailed = true;
-          throw new Error('transient tool cleanup failure');
-        }
-        toolArtifactPresent = false;
-      },
-    } as unknown as ToolRegistry;
+    const toolCleanup = createRetryingToolRegistry();
+    const toolRegistry = toolCleanup.registry;
     const client = new McpClient(
       'test-server',
       { command: 'test-command' },
@@ -515,10 +531,10 @@ describe('McpClient disconnect cleanup', () => {
     errorHandler(new Error('connection lost'));
     await clientClosed.promise;
     expect(client.getStatus()).toBe('disconnected');
-    expect(toolArtifactPresent).toBe(true);
+    expect(toolCleanup.artifactPresent()).toBe(true);
 
     await client.disconnect();
 
-    expect(toolArtifactPresent).toBe(false);
+    expect(toolCleanup.artifactPresent()).toBe(false);
   });
 });

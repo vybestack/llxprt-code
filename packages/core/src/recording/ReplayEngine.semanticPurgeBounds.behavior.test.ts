@@ -105,7 +105,7 @@ describe('ReplayEngine semantic_media_purge frontier bounds', () => {
     );
 
     expect(result.semanticMediaPurgeFrontier).toBeUndefined();
-    expect(result.history).toEqual([]);
+    expect(result.history).toStrictEqual([]);
     expect(
       result.warnings?.some(
         (warning) =>
@@ -128,7 +128,7 @@ describe('ReplayEngine semantic_media_purge frontier bounds', () => {
     );
 
     expect(result.semanticMediaPurgeFrontier).toBeUndefined();
-    expect(result.history).toEqual([]);
+    expect(result.history).toStrictEqual([]);
     expect(result.warnings?.some((warning) => warning.includes('Line 2'))).toBe(
       true,
     );
@@ -160,7 +160,11 @@ describe('ReplayEngine semantic_media_purge frontier bounds', () => {
         warnedAtLine: result.warnings?.some((warning) =>
           warning.includes('Line 2'),
         ),
-      }).toEqual({ frontier: undefined, history: [], warnedAtLine: true });
+      }).toStrictEqual({
+        frontier: undefined,
+        history: [],
+        warnedAtLine: true,
+      });
     },
   );
 
@@ -173,11 +177,11 @@ describe('ReplayEngine semantic_media_purge frontier bounds', () => {
       }),
     );
 
-    expect(result.semanticMediaPurgeFrontier).toEqual({
+    expect(result.semanticMediaPurgeFrontier).toStrictEqual({
       contentIndex: 0,
       blockIndex: 0,
     });
-    expect(result.history).toEqual([replayContent()]);
+    expect(result.history).toStrictEqual([replayContent()]);
     expect(result.warnings?.some((warning) => warning.includes('Line 2'))).toBe(
       false,
     );
@@ -189,8 +193,8 @@ describe('ReplayEngine semantic_media_purge frontier bounds', () => {
       semanticMediaPurgeLine(2, [], { contentIndex: 0, blockIndex: 0 }),
     );
 
-    expect(result.history).toEqual([]);
-    expect(result.semanticMediaPurgeFrontier).toEqual({
+    expect(result.history).toStrictEqual([]);
+    expect(result.semanticMediaPurgeFrontier).toStrictEqual({
       contentIndex: 0,
       blockIndex: 0,
     });
@@ -228,7 +232,7 @@ describe('ReplayEngine semantic_media_purge frontier bounds', () => {
     const result = await replaySession(filePath, PROJECT_HASH);
     assertReplayOk(result);
 
-    expect(result.history.map((entry) => entry.blocks[0])).toEqual([
+    expect(result.history.map((entry) => entry.blocks[0])).toStrictEqual([
       { type: 'text', text: 'stable' },
       { type: 'text', text: 'after' },
     ]);

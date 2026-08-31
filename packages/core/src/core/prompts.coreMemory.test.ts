@@ -96,14 +96,10 @@ describe('Core (System) Memory', () => {
       (
         fsPromises.readFile as Mock<typeof fsPromises.readFile>
       ).mockImplementation(
-        async (filePath: Parameters<typeof fsPromises.readFile>[0]) => {
-          const pathStr =
-            typeof filePath === 'string' ? filePath : filePath.toString();
-          if (pathStr === globalCorePath) {
-            return 'Always use TypeScript strict mode';
-          }
-          throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
-        },
+        readFileWithGlobalOnly(
+          globalCorePath,
+          'Always use TypeScript strict mode',
+        ),
       );
 
       const result = await loadCoreMemoryContent('/some/project');
@@ -115,17 +111,7 @@ describe('Core (System) Memory', () => {
       (
         fsPromises.readFile as Mock<typeof fsPromises.readFile>
       ).mockImplementation(
-        async (filePath: Parameters<typeof fsPromises.readFile>[0]) => {
-          const pathStr =
-            typeof filePath === 'string' ? filePath : filePath.toString();
-          if (
-            pathStr.includes('.LLXPRT_SYSTEM') &&
-            pathStr.includes(PROJECT_DIR)
-          ) {
-            return 'Use pnpm for this project';
-          }
-          throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
-        },
+        readFileWithProjectOnly('Use pnpm for this project'),
       );
 
       const result = await loadCoreMemoryContent(PROJECT_DIR);
@@ -133,27 +119,10 @@ describe('Core (System) Memory', () => {
     });
 
     it('should concatenate both global and project content', async () => {
-      const globalCorePath = path.join(
-        Storage.getGlobalMemoryDir(),
-        '.LLXPRT_SYSTEM',
-      );
       (
         fsPromises.readFile as Mock<typeof fsPromises.readFile>
       ).mockImplementation(
-        async (filePath: Parameters<typeof fsPromises.readFile>[0]) => {
-          const pathStr =
-            typeof filePath === 'string' ? filePath : filePath.toString();
-          if (pathStr === globalCorePath) {
-            return 'Global directive';
-          }
-          if (
-            pathStr.includes('.LLXPRT_SYSTEM') &&
-            pathStr.includes(PROJECT_DIR)
-          ) {
-            return 'Project directive';
-          }
-          throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
-        },
+        readFileWithGlobalAndProject('Global directive', 'Project directive'),
       );
 
       const result = await loadCoreMemoryContent(PROJECT_DIR);
@@ -168,16 +137,7 @@ describe('Core (System) Memory', () => {
       );
       (
         fsPromises.readFile as Mock<typeof fsPromises.readFile>
-      ).mockImplementation(
-        async (filePath: Parameters<typeof fsPromises.readFile>[0]) => {
-          const pathStr =
-            typeof filePath === 'string' ? filePath : filePath.toString();
-          if (pathStr === globalCorePath) {
-            return '   \n  ';
-          }
-          throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
-        },
-      );
+      ).mockImplementation(readFileWithGlobalOnly(globalCorePath, '   \n  '));
 
       const result = await loadCoreMemoryContent(PROJECT_DIR);
       expect(result).toBe('');
@@ -203,10 +163,9 @@ describe('Core (System) Memory', () => {
 
   describe('model.allMemoriesAreCore', () => {
     it('should merge user memory into core memory when enabled', async () => {
-      mockSettingsService.get.mockImplementation((key: string) => {
-        if (key === 'model.allMemoriesAreCore') return true;
-        return undefined;
-      });
+      mockSettingsService.get.mockImplementation((key: string) =>
+        allMemoriesAreCoreSetting(key),
+      );
 
       const prompt = await getCoreSystemPromptAsync({
         ...baseOptions,
@@ -219,3 +178,61 @@ describe('Core (System) Memory', () => {
     });
   });
 });
+
+function readFileWithGlobalOnly(
+  globalCorePath: string,
+  content: string,
+): (filePath: Parameters<typeof fsPromises.readFile>[0]) => Promise<string> {
+  return async (filePath: Parameters<typeof fsPromises.readFile>[0]) => {
+    const pathStr =
+      typeof filePath === 'string' ? filePath : filePath.toString();
+    if (pathStr === globalCorePath) {
+      return content;
+    }
+    throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+  };
+}
+
+function readFileWithProjectOnly(
+  content: string,
+): (filePath: Parameters<typeof fsPromises.readFile>[0]) => Promise<string> {
+  return async (filePath: Parameters<typeof fsPromises.readFile>[0]) => {
+    const pathStr =
+      typeof filePath === 'string' ? filePath : filePath.toString();
+    if (
+      pathStr.includes('.LLXPRT_SYSTEM') === true &&
+      pathStr.includes(PROJECT_DIR) === true
+    ) {
+      return content;
+    }
+    throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+  };
+}
+
+function readFileWithGlobalAndProject(
+  globalContent: string,
+  projectContent: string,
+): (filePath: Parameters<typeof fsPromises.readFile>[0]) => Promise<string> {
+  return async (filePath: Parameters<typeof fsPromises.readFile>[0]) => {
+    const pathStr =
+      typeof filePath === 'string' ? filePath : filePath.toString();
+    if (pathStr === globalCorePathFor(globalContent)) {
+      return globalContent;
+    }
+    if (
+      pathStr.includes('.LLXPRT_SYSTEM') === true &&
+      pathStr.includes(PROJECT_DIR) === true
+    ) {
+      return projectContent;
+    }
+    throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+  };
+}
+
+function globalCorePathFor(_globalContent: string): string {
+  return path.join(Storage.getGlobalMemoryDir(), '.LLXPRT_SYSTEM');
+}
+
+function allMemoriesAreCoreSetting(key: string): boolean | undefined {
+  return key === 'model.allMemoriesAreCore' ? true : undefined;
+}

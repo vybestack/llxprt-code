@@ -142,7 +142,7 @@ describe('performResume validation and property tests @plan:PLAN-20260214-SESSIO
     /**
      * Test 22a: Warnings from resumeSession are propagated (REQ-RS-012)
      */
-    it('propagates warnings from resume (REQ-RS-012)', async () => {
+    async function verifyPropagatesWarningsFromResumeREQRS012() {
       const targetId = 'session-with-corruption';
       await createSessionWithCorruptLine(chatsDir, targetId);
 
@@ -151,16 +151,25 @@ describe('performResume validation and property tests @plan:PLAN-20260214-SESSIO
       });
 
       const result = await performResume(targetId, context);
+      const hasParseWarning = result.ok
+        ? result.warnings.some(
+            (warning) => warning.includes('parse') || warning.includes('JSON'),
+          )
+        : false;
 
-      expect(result.ok).toBe(true);
-      assertResumeOk(result);
-      expect(result.warnings.length).toBeGreaterThan(0);
-      const hasParseWarning = result.warnings.some(
-        (w) => w.includes('parse') || w.includes('JSON'),
-      );
-      expect(hasParseWarning).toBe(true);
+      return { result, hasParseWarning, context };
+    }
 
-      const newLock = context.recordingCallbacks.getCurrentLockHandle();
+    it('propagates warnings from resume (REQ-RS-012)', async () => {
+      const behaviorResult = await verifyPropagatesWarningsFromResumeREQRS012();
+
+      expect(behaviorResult.result.ok).toBe(true);
+      assertResumeOk(behaviorResult.result);
+      expect(behaviorResult.result.warnings.length).toBeGreaterThan(0);
+      expect(behaviorResult.hasParseWarning).toBe(true);
+
+      const newLock =
+        behaviorResult.context.recordingCallbacks.getCurrentLockHandle();
       collectLock(lockHandles, newLock);
     });
 
@@ -182,7 +191,7 @@ describe('performResume validation and property tests @plan:PLAN-20260214-SESSIO
 
       expect(result.ok).toBe(true);
       assertResumeOk(result);
-      expect(result.warnings.length).toBe(0);
+      expect(result.warnings).toHaveLength(0);
 
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
       collectLock(lockHandles, newLock);
@@ -409,7 +418,7 @@ describe('performResume validation and property tests @plan:PLAN-20260214-SESSIO
 
               assertResumeOk(result);
               expect(Array.isArray(result.history)).toBe(true);
-              expect(result.history.length).toBe(contents.length);
+              expect(result.history).toHaveLength(contents.length);
               expect(result.metadata).toBeDefined();
               expect(result.metadata.sessionId).toBe(sessionId);
               expect(Array.isArray(result.warnings)).toBe(true);

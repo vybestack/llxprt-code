@@ -383,67 +383,83 @@ describe('Agent Client (client.ts)', () => {
           previousActiveFile,
           currentActiveFile,
           shouldSendContext,
-        }) => {
-          // Setup previous context (via ideContextTracker internal state)
-          client['ideContextTracker']['lastSentIdeContext'] = {
-            workspaceState: {
-              openFiles: [
-                {
-                  path: previousActiveFile.path,
-                  cursor: previousActiveFile.cursor,
-                  selectedText: previousActiveFile.selectedText,
-                  isActive: true,
-                  timestamp: Date.now() - 1000,
-                },
-              ],
-            },
-          };
-
-          // Setup current context
-          (
-            ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
-          ).mockReturnValue({
-            workspaceState: {
-              openFiles: [
-                { ...currentActiveFile, isActive: true, timestamp: Date.now() },
-              ],
-            },
+        }: (typeof testCases)[number]) => {
+          const contextDeltaResult =
+            await observeSendsEditorContextDeltaWhenStateChanges({
+              previousActiveFile,
+              currentActiveFile,
+              shouldSendContext,
+            });
+          expect(contextDeltaResult).toStrictEqual({
+            requiredDeltaWasSent: true,
+            unchangedStateOmittedEditorContext: true,
           });
-
-          const stream = client.sendMessageStream(
-            [{ text: 'Hi' }],
-            new AbortController().signal,
-            'prompt-id-delta',
-          );
-          for await (const _ of stream) {
-            // consume stream
-          }
-
-          const mockChat = client['chat'] as unknown as {
-            addHistory: (typeof vi)['fn'];
-          };
-
-          const addHistoryCalls = (
-            mockChat.addHistory as Mock<typeof mockChat.addHistory>
-          ).mock.calls;
-
-          // Check for the appropriate context based on shouldSendContext flag
-          const summaryCall = addHistoryCalls.find((call) =>
-            JSON.stringify(call[0]).includes('summary of changes'),
-          );
-          const editorContextCall = addHistoryCalls.find((call) =>
-            JSON.stringify(call[0]).includes('editor context'),
-          );
-
-          // Assert expectations based on the test case
-          expect(shouldSendContext !== true || summaryCall !== undefined).toBe(
-            true,
-          );
-          expect(
-            shouldSendContext === true || editorContextCall === undefined,
-          ).toBe(true);
         },
       );
+
+      const observeSendsEditorContextDeltaWhenStateChanges = async ({
+        previousActiveFile,
+        currentActiveFile,
+        shouldSendContext,
+      }: (typeof testCases)[number]) => {
+        // Setup previous context (via ideContextTracker internal state)
+        client['ideContextTracker']['lastSentIdeContext'] = {
+          workspaceState: {
+            openFiles: [
+              {
+                path: previousActiveFile.path,
+                cursor: previousActiveFile.cursor,
+                selectedText: previousActiveFile.selectedText,
+                isActive: true,
+                timestamp: Date.now() - 1000,
+              },
+            ],
+          },
+        };
+
+        // Setup current context
+        (
+          ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
+        ).mockReturnValue({
+          workspaceState: {
+            openFiles: [
+              { ...currentActiveFile, isActive: true, timestamp: Date.now() },
+            ],
+          },
+        });
+
+        const stream = client.sendMessageStream(
+          [{ text: 'Hi' }],
+          new AbortController().signal,
+          'prompt-id-delta',
+        );
+        for await (const _ of stream) {
+          // consume stream
+        }
+
+        const mockChat = client['chat'] as unknown as {
+          addHistory: (typeof vi)['fn'];
+        };
+
+        const addHistoryCalls = (
+          mockChat.addHistory as Mock<typeof mockChat.addHistory>
+        ).mock.calls;
+
+        // Check for the appropriate context based on shouldSendContext flag
+        const summaryCall = addHistoryCalls.find((call) =>
+          JSON.stringify(call[0]).includes('summary of changes'),
+        );
+        const editorContextCall = addHistoryCalls.find((call) =>
+          JSON.stringify(call[0]).includes('editor context'),
+        );
+
+        return {
+          requiredDeltaWasSent:
+            shouldSendContext !== true || summaryCall !== undefined,
+          unchangedStateOmittedEditorContext:
+            shouldSendContext === true || editorContextCall === undefined,
+        };
+      };
 
       it('sends full context when history is cleared, even if editor state is unchanged', async () => {
         const activeFile = {

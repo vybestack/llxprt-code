@@ -31,10 +31,6 @@ import { createRuntimeBundle } from './subagentOrchestrator-test-helpers.js';
 // handle.activate() uses a persistent enterWith that leaks the AsyncLocalStorage
 // store across tests; reset between every test so each launch starts from a
 // clean runtime identity.
-afterEach(() => {
-  runtimeModule.resetRuntimeScopeForTesting();
-  runtimeModule.resetCliRuntimeRegistryForTesting();
-});
 
 const subagentConfig: SubagentConfig = {
   name: 'helper',
@@ -101,6 +97,11 @@ async function launchSubagent(
 }
 
 describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () => {
+  afterEach(() => {
+    runtimeModule.resetRuntimeScopeForTesting();
+    runtimeModule.resetCliRuntimeRegistryForTesting();
+  });
+
   it('inherits the foreground on mode in the isolated settings service', async () => {
     const foreground = new SettingsService();
     foreground.setSessionScoped('dumpcontext', 'on');

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it } from 'bun:test';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
@@ -171,9 +172,10 @@ describe('handleLargePaste', () => {
     const secondPlaceholder = placeholders.find(
       (placeholder) => placeholder !== firstPlaceholder,
     );
-    if (secondPlaceholder === undefined) {
-      throw new Error('Expected a distinct second large-paste placeholder');
-    }
+    assertDefined(
+      secondPlaceholder,
+      'Expected a distinct second large-paste placeholder',
+    );
     expect(secondPlaceholder).not.toBe(firstPlaceholder);
     expect(result.current.text).toBe(
       textBefore + firstPlaceholder + secondPlaceholder + textAfter,

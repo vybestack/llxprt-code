@@ -27,6 +27,10 @@ import {
 import { GITHUB_OP_SPECS, type GithubParamKind } from './github-ops.js';
 
 /** Records the operations dispatched to the broker. */
+function textOrEmpty(value: string | null | undefined): string {
+  return value ?? '';
+}
+
 function stubClient(
   result: Record<string, unknown> = { ok: true },
 ): GitHubBrokerClient & { calls: Array<[string, Record<string, unknown>]> } {
@@ -83,6 +87,12 @@ function validParamsFor(op: string): Record<string, unknown> {
   return params;
 }
 
+function githubReadParams(operation: string): Record<string, unknown> {
+  if (operation.startsWith('search.')) return { query: 'sandbox' };
+  if (operation.endsWith('.list')) return { limit: 5 };
+  return { number: 1 };
+}
+
 describe('github tool', () => {
   describe('operation validation', () => {
     /**
@@ -122,7 +132,6 @@ describe('github tool', () => {
       for (const op of SUPPORTED_OPS) {
         expect(
           tool.validateToolParams({ op, ...validParamsFor(op) }),
-          `${op} must validate`,
         ).toBeNull();
       }
     });
@@ -139,10 +148,9 @@ describe('github tool', () => {
     it('validParamsFor returns exactly each op catalog required set', () => {
       for (const op of SUPPORTED_OPS) {
         const required = GITHUB_OP_SPECS[op].required;
-        expect(
-          Object.keys(validParamsFor(op)).sort(),
-          `${op} fixture must equal its required set`,
-        ).toStrictEqual([...required].sort());
+        expect(Object.keys(validParamsFor(op)).sort()).toStrictEqual(
+          [...required].sort(),
+        );
       }
     });
   });
@@ -162,7 +170,7 @@ describe('github tool', () => {
         const confirmation = await invocation.shouldConfirmExecute(
           new AbortController().signal,
         );
-        expect(confirmation, `${op} must prompt`).not.toBe(false);
+        expect(confirmation).not.toBe(false);
       }
     });
 
@@ -172,6 +180,7 @@ describe('github tool', () => {
      * @plan PLAN-20260731-GHBROKER.P15
      * @requirement REQ-012
      */
+
     it('never prompts for a read operation', async () => {
       const tool = new GithubTool(stubClient());
       const reads = SUPPORTED_OPS.filter((op) => !MUTATING_OPS.has(op));
@@ -179,17 +188,12 @@ describe('github tool', () => {
       // Use parameters each op actually takes. Passing `number` to
       // issue.list or search.issues exercised a shape those ops never
       // receive, so the assertion held for the wrong reason.
-      const paramsFor = (op: string): Record<string, unknown> => {
-        if (op.startsWith('search.')) return { query: 'sandbox' };
-        if (op.endsWith('.list')) return { limit: 5 };
-        return { number: 1 };
-      };
       for (const op of reads) {
-        const invocation = tool.build({ op, ...paramsFor(op) });
+        const invocation = tool.build({ op, ...githubReadParams(op) });
         const confirmation = await invocation.shouldConfirmExecute(
           new AbortController().signal,
         );
-        expect(confirmation, `${op} must not prompt`).toBe(false);
+        expect(confirmation).toBe(false);
       }
     });
 
@@ -202,7 +206,7 @@ describe('github tool', () => {
      */
     it('lists every mutating operation among the supported operations', () => {
       for (const op of MUTATING_OPS) {
-        expect(SUPPORTED_OPS, `${op} missing from SUPPORTED_OPS`).toContain(op);
+        expect(SUPPORTED_OPS).toContain(op);
       }
     });
 
@@ -216,27 +220,32 @@ describe('github tool', () => {
      * @plan PLAN-20260731-GHBROKER.P19
      * @requirement REQ-012
      */
+
+    const observeClassifiesEverySupportedOperationAsReadOrMutatingAt217 =
+      () => {
+        const KNOWN_READ_OPS = [
+          'issue.view',
+          'issue.list',
+          'pr.view',
+          'pr.list',
+          'pr.diff',
+          'pr.checks',
+          'pr.reviews',
+          'search.issues',
+          'search.prs',
+          'run.list',
+          'label.list',
+        ];
+        const unclassified = SUPPORTED_OPS.filter(
+          (op) => !MUTATING_OPS.has(op) && !KNOWN_READ_OPS.includes(op),
+        );
+        return { unclassified };
+      };
+
     it('classifies every supported operation as read or mutating', () => {
-      const KNOWN_READ_OPS = [
-        'issue.view',
-        'issue.list',
-        'pr.view',
-        'pr.list',
-        'pr.diff',
-        'pr.checks',
-        'pr.reviews',
-        'search.issues',
-        'search.prs',
-        'run.list',
-        'label.list',
-      ];
-      const unclassified = SUPPORTED_OPS.filter(
-        (op) => !MUTATING_OPS.has(op) && !KNOWN_READ_OPS.includes(op),
-      );
-      expect(
-        unclassified,
-        'operations must be added to MUTATING_OPS or to the known-read list; anything else silently skips confirmation',
-      ).toStrictEqual([]);
+      const { unclassified } =
+        observeClassifiesEverySupportedOperationAsReadOrMutatingAt217();
+      expect(unclassified).toStrictEqual([]);
     });
   });
 
@@ -309,6 +318,7 @@ describe('github tool', () => {
      * @plan PLAN-20260731-GHBROKER.P15
      * @requirement REQ-013
      */
+
     it('prefixes a failure with the github context and guards an empty message', async () => {
       const empty: GitHubBrokerClient = {
         async runOperation() {
@@ -321,7 +331,7 @@ describe('github tool', () => {
         .execute(new AbortController().signal);
       expect(result.returnDisplay).not.toBe('');
       expect(result.returnDisplay).toContain('GitHub operation failed');
-      expect(result.error?.message ?? '').not.toBe('');
+      expect(textOrEmpty(result.error?.message)).not.toBe('');
       expect(result.error?.message).toContain('Unknown error');
     });
   });
@@ -382,7 +392,8 @@ describe('github tool', () => {
      * @plan PLAN-20260731-GHBROKER.P14
      * @requirement REQ-011
      */
-    it('reports progress as soon as a watch starts', async () => {
+
+    const observeReportsProgressAsSoonAsAWatchStartsAt382 = async () => {
       const updates: string[] = [];
       const tool = new GithubTool(stubClient(watchResult));
       await tool
@@ -390,6 +401,12 @@ describe('github tool', () => {
         .execute(new AbortController().signal, (u) => {
           if (u.mode === 'append') updates.push(u.data);
         });
+      return { updates };
+    };
+
+    it('reports progress as soon as a watch starts', async () => {
+      const { updates } =
+        await observeReportsProgressAsSoonAsAWatchStartsAt382();
       expect(updates.length).toBeGreaterThan(0);
       expect(updates[0]).toContain('Waiting for checks on #1');
     });
@@ -398,7 +415,8 @@ describe('github tool', () => {
      * @plan PLAN-20260731-GHBROKER.P14
      * @requirement REQ-011
      */
-    it('emits no progress for a non-watch operation', async () => {
+
+    const observeEmitsNoProgressForANonWatchOperationAt399 = async () => {
       const updates: string[] = [];
       const tool = new GithubTool(stubClient({ number: 1 }));
       await tool
@@ -406,6 +424,12 @@ describe('github tool', () => {
         .execute(new AbortController().signal, (u) => {
           if (u.mode === 'append') updates.push(u.data);
         });
+      return { updates };
+    };
+
+    it('emits no progress for a non-watch operation', async () => {
+      const { updates } =
+        await observeEmitsNoProgressForANonWatchOperationAt399();
       expect(updates).toStrictEqual([]);
     });
 
@@ -453,12 +477,9 @@ describe('github tool', () => {
     it('contains a per-op reference line for every op naming its required params', () => {
       const tool = new GithubTool(stubClient());
       for (const op of SUPPORTED_OPS) {
-        expect(tool.description, `${op} must be documented`).toContain(op);
+        expect(tool.description).toContain(op);
         for (const required of GITHUB_OP_SPECS[op].required) {
-          expect(
-            tool.description,
-            `${op} must name required ${required}`,
-          ).toContain(required);
+          expect(tool.description).toContain(required);
         }
       }
     });
@@ -482,10 +503,7 @@ describe('github tool', () => {
       const declared = Object.keys(schema.properties);
       for (const op of SUPPORTED_OPS) {
         for (const param of Object.keys(GITHUB_OP_SPECS[op].params)) {
-          expect(
-            declared,
-            `${op} param ${param} must be in schema properties`,
-          ).toContain(param);
+          expect(declared).toContain(param);
         }
       }
     });
@@ -499,16 +517,14 @@ describe('github tool', () => {
      * @plan PLAN-20260731-GHBROKER.P15
      * @requirement REQ-008
      */
+
     it('gives every declared parameter a non-empty description', () => {
       const tool = new GithubTool(stubClient());
       const schema = tool.parameterSchema as {
         properties: Record<string, { description?: string }>;
       };
-      for (const [name, prop] of Object.entries(schema.properties)) {
-        expect(
-          prop.description ?? '',
-          `${name} must document what it is and which ops accept it`,
-        ).not.toBe('');
+      for (const [, prop] of Object.entries(schema.properties)) {
+        expect(textOrEmpty(prop.description)).not.toBe('');
       }
     });
 
@@ -593,8 +609,8 @@ describe('github tool', () => {
         'removeAssignee',
       ]) {
         const prop = schema.properties[name];
-        expect(prop.type, `${name} must be type array`).toBe('array');
-        expect(prop.items?.type, `${name} items must be string`).toBe('string');
+        expect(prop.type).toBe('array');
+        expect(prop.items?.type).toBe('string');
       }
     });
 
@@ -611,11 +627,8 @@ describe('github tool', () => {
       const schema = tool.parameterSchema as {
         properties: Record<string, { type?: unknown }>;
       };
-      for (const [name, prop] of Object.entries(schema.properties)) {
-        expect(
-          Array.isArray(prop.type),
-          `${name} must not use an array type`,
-        ).toBe(false);
+      for (const [, prop] of Object.entries(schema.properties)) {
+        expect(Array.isArray(prop.type)).toBe(false);
       }
     });
 

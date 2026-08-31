@@ -70,14 +70,23 @@ const EXPECTED_MUTATING = [
   'label.create',
 ] as const;
 
+function isUnexpectedMutatingOperation(
+  operation: (typeof GITHUB_SUPPORTED_OPS)[number],
+  expectedMutating: readonly string[],
+): boolean {
+  return (
+    GITHUB_MUTATING_OPS.has(operation) && !expectedMutating.includes(operation)
+  );
+}
+
 describe('github operation catalog', () => {
   /**
    * @plan PLAN-20260731-GHBROKER.P15
    * @requirement REQ-009
    */
   it('every op declares repo (cross-repo is universal)', () => {
-    for (const [op, spec] of Object.entries(GITHUB_OP_SPECS)) {
-      expect(spec.params, `${op} must accept repo`).toHaveProperty('repo');
+    for (const [, spec] of Object.entries(GITHUB_OP_SPECS)) {
+      expect(spec.params).toHaveProperty('repo');
     }
   });
 
@@ -94,13 +103,14 @@ describe('github operation catalog', () => {
    * @plan PLAN-20260731-GHBROKER.P15
    * @requirement REQ-012
    */
+
   it('GITHUB_MUTATING_OPS is exactly the ten write ops and no read', () => {
     expect([...GITHUB_MUTATING_OPS].sort()).toStrictEqual(
       [...EXPECTED_MUTATING].sort(),
     );
     const expectedMutating: string[] = [...EXPECTED_MUTATING];
-    const unexpectedMutating = GITHUB_SUPPORTED_OPS.filter(
-      (op) => GITHUB_MUTATING_OPS.has(op) && !expectedMutating.includes(op),
+    const unexpectedMutating = GITHUB_SUPPORTED_OPS.filter((operation) =>
+      isUnexpectedMutatingOperation(operation, expectedMutating),
     );
     expect(unexpectedMutating).toStrictEqual([]);
   });
@@ -113,12 +123,9 @@ describe('github operation catalog', () => {
    * @requirement REQ-002
    */
   it('every required entry is a key of that op params', () => {
-    for (const [op, spec] of Object.entries(GITHUB_OP_SPECS)) {
+    for (const [, spec] of Object.entries(GITHUB_OP_SPECS)) {
       for (const required of spec.required) {
-        expect(
-          spec.params,
-          `${op}: required "${required}" is not in params`,
-        ).toHaveProperty(required);
+        expect(spec.params).toHaveProperty(required);
       }
     }
   });
@@ -179,11 +186,9 @@ describe('github operation catalog', () => {
   it('describeGithubOp contains the op name and every required param', () => {
     for (const op of GITHUB_SUPPORTED_OPS) {
       const line = describeGithubOp(op);
-      expect(line, `${op} line must name the op`).toContain(op);
+      expect(line).toContain(op);
       for (const required of GITHUB_OP_SPECS[op].required) {
-        expect(line, `${op} line must name required ${required}`).toContain(
-          required,
-        );
+        expect(line).toContain(required);
       }
     }
   });
@@ -200,7 +205,7 @@ describe('github operation catalog', () => {
       const line = describeGithubOpParams(op);
       expect(line).toContain('accepts');
       for (const param of Object.keys(GITHUB_OP_SPECS[op].params)) {
-        expect(line, `${op} accepts line must name ${param}`).toContain(param);
+        expect(line).toContain(param);
       }
     }
   });

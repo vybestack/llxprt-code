@@ -12,6 +12,10 @@ import {
   MemoryTokenStore,
 } from './BucketFailoverHandlerImpl.test-helpers.js';
 
+function resolveForegroundAuthBucket(bucket: string | undefined): string {
+  return bucket ?? 'default';
+}
+
 describe('BucketFailoverHandlerImpl #46', () => {
   it('coalesces concurrent pass-3 foreground reauth for the same bucket', async () => {
     // Arrange
@@ -36,7 +40,7 @@ describe('BucketFailoverHandlerImpl #46', () => {
         await tokenStore.saveToken(
           'anthropic',
           makeToken('pass3-token'),
-          bucket ?? 'default',
+          resolveForegroundAuthBucket(bucket),
         );
       }),
       authenticateMultipleBuckets: vi.fn(async () => undefined),

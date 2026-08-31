@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it } from 'bun:test';
 import {
   ProviderFileLifecycle,
@@ -706,9 +707,10 @@ describe('provider Files lifecycle', () => {
       scope: 'workspace',
       scopeId: 'workspace:test',
     });
-    if (finishFirstDeletion === undefined) {
-      throw new Error('expected first capacity deletion to start');
-    }
+    assertDefined(
+      finishFirstDeletion,
+      'expected first capacity deletion to start',
+    );
     finishFirstDeletion();
     const retainedReplacement = await replacement;
 

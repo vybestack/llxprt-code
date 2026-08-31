@@ -130,7 +130,7 @@ describe('HistoryService issue #3165 adjacency and metadata', () => {
       expect({
         blockTypes: curated[1].blocks.map((block) => block.type),
         metadata: curated[1].metadata,
-      }).toEqual({
+      }).toStrictEqual({
         blockTypes: ['tool_response', 'media'],
         metadata: {
           synthetic: true,
@@ -193,7 +193,7 @@ describe('HistoryService issue #3165 adjacency and metadata', () => {
       expect({
         blockTypes: curated[1].blocks.map((block) => block.type),
         metadata: curated[1].metadata,
-      }).toEqual({
+      }).toStrictEqual({
         blockTypes: ['tool_response', 'tool_response', 'media', 'media'],
         metadata: {
           synthetic: true,
@@ -249,7 +249,7 @@ describe('HistoryService issue #3165 adjacency and metadata', () => {
         metadataId: curated[1].metadata?.id,
         synthetic: curated[1].metadata?.synthetic,
         reason: curated[1].metadata?.reason,
-      }).toEqual({
+      }).toStrictEqual({
         result: 'selected adjacent result',
         metadataId: 'shared-adjacent-content',
         synthetic: undefined,
@@ -292,7 +292,7 @@ describe('HistoryService issue #3165 adjacency and metadata', () => {
         expect(
           curated.some((content) => content.metadata?.cacheAnchor === true),
         ).toBe(false);
-        expect(curated[2].metadata).toEqual({
+        expect(curated[2].metadata).toStrictEqual({
           synthetic: true,
           reason: 'reordered_tool_responses',
         });
@@ -393,7 +393,7 @@ describe('HistoryService issue #3165 adjacency and metadata', () => {
         error: 'Tool call interrupted or cancelled',
         isComplete: true,
       });
-      expect(syntheticResponse.metadata).toEqual({
+      expect(syntheticResponse.metadata).toStrictEqual({
         synthetic: true,
         reason: 'orphaned_tool_call',
       });
@@ -477,7 +477,7 @@ describe('HistoryService issue #3165 adjacency and metadata', () => {
       const curated = service.getCuratedForProvider();
 
       expect(curated[1].blocks).toHaveLength(2);
-      expect(curated[1].metadata).toEqual({
+      expect(curated[1].metadata).toStrictEqual({
         synthetic: true,
         reason: 'reordered_tool_responses',
       });
@@ -527,7 +527,7 @@ describe('HistoryService issue #3165 adjacency and metadata', () => {
       );
 
       expect(response?.result).toBe('selected remote result');
-      expect(curated[1].metadata).toEqual({
+      expect(curated[1].metadata).toStrictEqual({
         synthetic: true,
         reason: 'reordered_tool_responses',
       });
@@ -611,7 +611,7 @@ describe('HistoryService issue #3165 adjacency and metadata', () => {
       const curated = service.getCuratedForProvider();
 
       expect(curated[1].blocks).toHaveLength(1);
-      expect(curated[1].metadata).toEqual({
+      expect(curated[1].metadata).toStrictEqual({
         synthetic: true,
         reason: 'reordered_tool_responses',
       });

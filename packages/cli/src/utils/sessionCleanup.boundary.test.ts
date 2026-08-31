@@ -222,33 +222,35 @@ describe('cleanupExpiredSessions — config resolution vs external fs (finding D
     ).rejects.toThrow(/Invalid sessionRetention/);
   });
 
-  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
-    'preserves the resolved configured limit when the temp root is externally inaccessible',
-    async () => {
-      // An unreadable global temp root is an external filesystem condition that
-      // is best-effort: cleanup cannot proceed, but the resolved configured
-      // limit must still be reported (never zeroed out) so diagnostics stay
-      // coherent (finding D).
-      const restricted = path.join(tempDir, 'restricted');
-      await fs.mkdir(restricted, { recursive: true });
-      await fs.chmod(restricted, 0o000);
-      try {
-        const config = createMinimalConfig('current-cli-session');
-        const settings = {
-          sessionRetention: { maxTotalSizeMB: 16 },
-        } as unknown as Settings;
+  describe.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'with enforceable inaccessible temp-root permissions',
+    () => {
+      it('preserves the resolved configured limit when the temp root is externally inaccessible', async () => {
+        // An unreadable global temp root is an external filesystem condition that
+        // is best-effort: cleanup cannot proceed, but the resolved configured
+        // limit must still be reported (never zeroed out) so diagnostics stay
+        // coherent (finding D).
+        const restricted = path.join(tempDir, 'restricted');
+        await fs.mkdir(restricted, { recursive: true });
+        await fs.chmod(restricted, 0o000);
+        try {
+          const config = createMinimalConfig('current-cli-session');
+          const settings = {
+            sessionRetention: { maxTotalSizeMB: 16 },
+          } as unknown as Settings;
 
-        const result = await cleanupExpiredSessions(
-          config as unknown as Config,
-          settings,
-          restricted,
-        );
+          const result = await cleanupExpiredSessions(
+            config as unknown as Config,
+            settings,
+            restricted,
+          );
 
-        expect(result.configuredByteLimit).toBe(16 * 1024 * 1024);
-        expect(result.janitorWonLease).toBe(false);
-      } finally {
-        await fs.chmod(restricted, 0o700).catch(() => {});
-      }
+          expect(result.configuredByteLimit).toBe(16 * 1024 * 1024);
+          expect(result.janitorWonLease).toBe(false);
+        } finally {
+          await fs.chmod(restricted, 0o700).catch(() => {});
+        }
+      });
     },
   );
 });

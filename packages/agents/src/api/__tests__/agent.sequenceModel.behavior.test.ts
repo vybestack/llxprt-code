@@ -198,34 +198,64 @@ describe('getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P1
   });
 
   it('PROP consumer fallback: (agent.getCurrentSequenceModel() ?? agent.getModel()) equals the client reported sequence model when present, else equals agent.getModel() @requirement:REQ-003 @scenario:property-consumer-fallback @given:a random model string and an agent whose client reports it @when:a consumer computes seq ?? agent.getModel() @then:the result equals the reported model; and when the client reports null the result equals agent.getModel()', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+    const { fallbackProperty, observations, cleanup } =
+      await observeConsumerFallbacks();
     try {
-      const fallbackModel = built.config.getModel();
-      await fc.assert(
-        fc.asyncProperty(fc.string({ minLength: 1 }), async (s) => {
-          // Present case: seq ?? model === seq.
-          const presentClient = makeSeqClient(s);
-          const presentDeps = assembleDeps(built, () => presentClient);
-          const presentAgent: Agent = buildAgent(presentDeps);
-          const presentFallback = presentAgent.getCurrentSequenceModel();
-          expect(presentFallback ?? presentAgent.getModel()).toBe(s);
-
-          // Absent case: seq ?? model === agent.getModel().
-          const absentClient = makeSeqClient(null);
-          const absentDeps = assembleDeps(built, () => absentClient);
-          const absentAgent: Agent = buildAgent(absentDeps);
-          const absentFallback = absentAgent.getCurrentSequenceModel();
-          expect(absentFallback ?? absentAgent.getModel()).toBe(
-            absentAgent.getModel(),
-          );
-          // The absent agent's getModel mirrors the Config model.
-          expect(absentAgent.getModel()).toBe(fallbackModel);
-        }),
-      );
+      await fc.assert(fallbackProperty);
     } finally {
-      await built.cleanup();
+      await cleanup();
     }
+    expect(
+      observations.map(({ presentResult }) => presentResult),
+    ).toStrictEqual(observations.map(({ reportedModel }) => reportedModel));
+    expect(observations.map(({ absentResult }) => absentResult)).toStrictEqual(
+      observations.map(({ absentModel }) => absentModel),
+    );
+    expect(observations.map(({ absentModel }) => absentModel)).toStrictEqual(
+      observations.map(({ fallbackModel }) => fallbackModel),
+    );
   });
+
+  const observeConsumerFallbacks = async () => {
+    const built = await buildCliStyleConfig('plain-text.jsonl');
+    const fallbackModel = built.config.getModel();
+    const observations: Array<{
+      reportedModel: string;
+      presentResult: string;
+      absentResult: string;
+      absentModel: string;
+      fallbackModel: string;
+    }> = [];
+    const fallbackProperty = fc.asyncProperty(
+      fc.string({ minLength: 1 }),
+      (reportedModel) => {
+        const presentAgent: Agent = buildAgent(
+          assembleDeps(built, () => makeSeqClient(reportedModel)),
+        );
+        const absentAgent: Agent = buildAgent(
+          assembleDeps(built, () => makeSeqClient(null)),
+        );
+        const presentResult =
+          presentAgent.getCurrentSequenceModel() ?? presentAgent.getModel();
+        const absentResult =
+          absentAgent.getCurrentSequenceModel() ?? absentAgent.getModel();
+        const absentModel = absentAgent.getModel();
+        observations.push({
+          reportedModel,
+          presentResult,
+          absentResult,
+          absentModel,
+          fallbackModel,
+        });
+        return Promise.resolve(
+          presentResult === reportedModel &&
+            absentResult === absentModel &&
+            absentModel === fallbackModel,
+        );
+      },
+    );
+    return { fallbackProperty, observations, cleanup: built.cleanup };
+  };
 
   // ─── Genuine null contract via the REAL path (distinct from T9b's injected
   // seam): proves the real fake-provider client reports null sequence model

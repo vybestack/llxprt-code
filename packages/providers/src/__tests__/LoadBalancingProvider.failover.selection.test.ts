@@ -16,6 +16,55 @@ import {
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
+async function* generateSecondBackendResponse(
+  recordCall: () => number,
+): AsyncGenerator<IContent> {
+  if (recordCall() === 1) throw new Error('first backend error');
+  yield { type: 'text' as const, content: 'response from second' };
+}
+
+async function* generateThirdBackendResponse(
+  recordCall: () => number,
+): AsyncGenerator<IContent> {
+  const callCount = recordCall();
+  if (callCount === 1) throw new Error('first backend error');
+  if (callCount === 2) throw new Error('second backend error');
+  yield { type: 'text' as const, content: 'response from third' };
+}
+
+async function* generateModelSpecificResponse(
+  options: GenerateChatOptions,
+  markFirstCalled: () => void,
+  markSecondCalled: () => void,
+): AsyncGenerator<IContent> {
+  const modelId = options.resolved?.model ?? '';
+  if (modelId === 'model1') {
+    markFirstCalled();
+    yield { type: 'text' as const, content: 'first success' };
+  } else if (modelId === 'model2') {
+    markSecondCalled();
+    yield { type: 'text' as const, content: 'second success' };
+  }
+}
+
+async function* generateCorrectFailoverResponse(
+  recordCall: () => number,
+): AsyncGenerator<IContent> {
+  if (recordCall() === 1) throw new Error('first failed');
+  yield { type: 'text' as const, content: 'correct response' };
+}
+
+async function* generateAuthIsolationResponse(
+  options: GenerateChatOptions,
+  recordCall: () => number,
+  capturedAuthTokens: Array<string | undefined>,
+): AsyncGenerator<IContent> {
+  const callCount = recordCall();
+  capturedAuthTokens.push(options.resolved?.authToken);
+  if (callCount === 1) throw new Error('first backend error');
+  yield { type: 'text' as const, content: 'success from second' };
+}
+
 describe('LoadBalancingProvider - Failover Strategy', () => {
   let settingsService: SettingsService;
   let config: Config;
@@ -173,13 +222,8 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const mockProvider: IProvider = {
         name: 'test-provider',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          callCount++;
-          if (callCount === 1) {
-            throw new Error('first backend error');
-          }
-          yield { type: 'text' as const, content: 'response from second' };
-        },
+        generateChatCompletion: () =>
+          generateSecondBackendResponse(() => ++callCount),
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
       };
@@ -230,16 +274,8 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const mockProvider: IProvider = {
         name: 'test-provider',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          callCount++;
-          if (callCount === 1) {
-            throw new Error('first backend error');
-          }
-          if (callCount === 2) {
-            throw new Error('second backend error');
-          }
-          yield { type: 'text' as const, content: 'response from third' };
-        },
+        generateChatCompletion: () =>
+          generateThirdBackendResponse(() => ++callCount),
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
       };
@@ -346,18 +382,16 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const mockProvider: IProvider = {
         name: 'test-provider',
-        async *generateChatCompletion(
-          options: GenerateChatOptions,
-        ): AsyncGenerator<IContent> {
-          const modelId = options.resolved?.model ?? '';
-          if (modelId === 'model1') {
-            firstCalled = true;
-            yield { type: 'text' as const, content: 'first success' };
-          } else if (modelId === 'model2') {
-            secondCalled = true;
-            yield { type: 'text' as const, content: 'second success' };
-          }
-        },
+        generateChatCompletion: (options: GenerateChatOptions) =>
+          generateModelSpecificResponse(
+            options,
+            () => {
+              firstCalled = true;
+            },
+            () => {
+              secondCalled = true;
+            },
+          ),
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
       };
@@ -405,13 +439,8 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const mockProvider: IProvider = {
         name: 'test-provider',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          callCount++;
-          if (callCount === 1) {
-            throw new Error('first failed');
-          }
-          yield { type: 'text' as const, content: 'correct response' };
-        },
+        generateChatCompletion: () =>
+          generateCorrectFailoverResponse(() => ++callCount),
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
       };
@@ -652,16 +681,12 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const mockProvider = {
         name: 'test-provider',
-        async *generateChatCompletion(
-          options: GenerateChatOptions,
-        ): AsyncGenerator<IContent> {
-          callCount++;
-          capturedAuthTokens.push(options.resolved?.authToken);
-          if (callCount === 1) {
-            throw new Error('first backend error');
-          }
-          yield { type: 'text' as const, content: 'success from second' };
-        },
+        generateChatCompletion: (options: GenerateChatOptions) =>
+          generateAuthIsolationResponse(
+            options,
+            () => ++callCount,
+            capturedAuthTokens,
+          ),
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
       };

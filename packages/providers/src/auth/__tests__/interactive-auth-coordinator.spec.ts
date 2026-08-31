@@ -134,7 +134,7 @@ describe('InteractiveAuthCoordinator', () => {
       'No interactive host is available to run codex/work authentication. Run `/auth codex` from the interactive host session.',
     );
     expect(host.calls).toHaveLength(0);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toEqual([]);
+    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
   });
 
   /**
@@ -157,11 +157,11 @@ describe('InteractiveAuthCoordinator', () => {
 
     expect(host.calls).toHaveLength(1);
     const call = getCall(host);
-    expect(call.challenge).toEqual(createChallenge('request-a'));
+    expect(call.challenge).toStrictEqual(createChallenge('request-a'));
     expect(
       Object.prototype.hasOwnProperty.call(call.challenge, 'credentials'),
     ).toBe(false);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toEqual([
+    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([
       {
         provider: 'codex',
         bucket: 'work',
@@ -172,11 +172,11 @@ describe('InteractiveAuthCoordinator', () => {
 
     call.completion.resolve();
 
-    await expect(Promise.all([first, second])).resolves.toEqual([
+    await expect(Promise.all([first, second])).resolves.toStrictEqual([
       { kind: 'succeeded', correlationId: 'request-a' },
       { kind: 'succeeded', correlationId: 'request-b' },
     ]);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toEqual([]);
+    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
   });
 
   /**
@@ -201,11 +201,11 @@ describe('InteractiveAuthCoordinator', () => {
 
     expect(cancelledCount).toBe(1);
     expect(cancelledCall.signal.aborted).toBe(true);
-    await expect(Promise.all([first, second])).resolves.toEqual([
+    await expect(Promise.all([first, second])).resolves.toStrictEqual([
       { kind: 'cancelled', correlationId: 'cancel-a' },
       { kind: 'cancelled', correlationId: 'cancel-b' },
     ]);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toEqual([]);
+    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
 
     cancelledCall.completion.reject(new Error('late host rejection'));
     await flushMicrotasks();
@@ -216,7 +216,7 @@ describe('InteractiveAuthCoordinator', () => {
     await flushMicrotasks();
     expect(host.calls).toHaveLength(2);
     getCall(host, 1).completion.resolve();
-    await expect(retry).resolves.toEqual({
+    await expect(retry).resolves.toStrictEqual({
       kind: 'succeeded',
       correlationId: 'retry-after-cancel',
     });
@@ -237,7 +237,7 @@ describe('InteractiveAuthCoordinator', () => {
     getCall(host).completion.resolve();
     interactiveAuthCoordinator.cancelActiveSessions();
 
-    await expect(cancelled).resolves.toEqual({
+    await expect(cancelled).resolves.toStrictEqual({
       kind: 'cancelled',
       correlationId: 'race-cancel-first',
     });
@@ -247,7 +247,7 @@ describe('InteractiveAuthCoordinator', () => {
     );
     await flushMicrotasks();
     getCall(host, 1).completion.resolve();
-    await expect(succeeded).resolves.toEqual({
+    await expect(succeeded).resolves.toStrictEqual({
       kind: 'succeeded',
       correlationId: 'race-success-first',
     });
@@ -269,16 +269,16 @@ describe('InteractiveAuthCoordinator', () => {
     await flushMicrotasks();
     const call = getCall(host);
 
-    await expect(outcome).resolves.toEqual({
+    await expect(outcome).resolves.toStrictEqual({
       kind: 'timed_out',
       correlationId: 'timeout-request',
     });
     expect(call.signal.aborted).toBe(true);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toEqual([]);
+    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
 
     call.completion.reject(new Error('late timeout rejection'));
     await new Promise<void>((resolve) => setTimeout(resolve, 30));
-    expect(interactiveAuthCoordinator.getActiveSessions()).toEqual([]);
+    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
   });
 
   /**
@@ -301,7 +301,7 @@ describe('InteractiveAuthCoordinator', () => {
     call.completion.reject(failure);
 
     const outcomes = await Promise.all([first, second]);
-    expect(outcomes).toEqual([
+    expect(outcomes).toStrictEqual([
       { kind: 'failed', correlationId: 'failure-a', error: failure },
       { kind: 'failed', correlationId: 'failure-b', error: failure },
     ]);
@@ -310,7 +310,7 @@ describe('InteractiveAuthCoordinator', () => {
 
     call.completion.resolve();
     await flushMicrotasks();
-    expect(interactiveAuthCoordinator.getActiveSessions()).toEqual([]);
+    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
   });
 
   /**
@@ -329,7 +329,7 @@ describe('InteractiveAuthCoordinator', () => {
       new DOMException('Host auth was aborted', 'AbortError'),
     );
 
-    await expect(outcome).resolves.toEqual({
+    await expect(outcome).resolves.toStrictEqual({
       kind: 'cancelled',
       correlationId: 'host-abort',
     });
@@ -355,12 +355,12 @@ describe('InteractiveAuthCoordinator', () => {
 
     firstController.abort(new DOMException('Task stopped', 'AbortError'));
 
-    await expect(first).resolves.toEqual({
+    await expect(first).resolves.toStrictEqual({
       kind: 'cancelled',
       correlationId: 'detached-a',
     });
     expect(call.signal.aborted).toBe(false);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toEqual([
+    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([
       {
         provider: 'codex',
         bucket: 'work',
@@ -371,7 +371,7 @@ describe('InteractiveAuthCoordinator', () => {
     await expectPending(second);
 
     call.completion.resolve();
-    await expect(second).resolves.toEqual({
+    await expect(second).resolves.toStrictEqual({
       kind: 'succeeded',
       correlationId: 'remaining-b',
     });
@@ -394,15 +394,15 @@ describe('InteractiveAuthCoordinator', () => {
 
     requesterController.abort(new DOMException('Task stopped', 'AbortError'));
 
-    await expect(outcome).resolves.toEqual({
+    await expect(outcome).resolves.toStrictEqual({
       kind: 'cancelled',
       correlationId: 'only-waiter',
     });
     expect(call.signal.aborted).toBe(true);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toEqual([]);
+    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
 
     await new Promise<void>((resolve) => setTimeout(resolve, 35));
-    expect(interactiveAuthCoordinator.getActiveSessions()).toEqual([]);
+    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
   });
 
   /**
@@ -427,13 +427,13 @@ describe('InteractiveAuthCoordinator', () => {
       interactiveAuthCoordinator.dispose(),
     ]);
 
-    await expect(outcome).resolves.toEqual({
+    await expect(outcome).resolves.toStrictEqual({
       kind: 'cancelled',
       correlationId: 'dispose-request',
     });
     expect(settlementCount).toBe(1);
     expect(call.signal.aborted).toBe(true);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toEqual([]);
+    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
   });
 
   /**
@@ -451,7 +451,7 @@ describe('InteractiveAuthCoordinator', () => {
         return result;
       });
 
-    await expect(outcome).resolves.toEqual({
+    await expect(outcome).resolves.toStrictEqual({
       kind: 'timed_out',
       correlationId: 'timeout-cancel-race',
     });
@@ -481,7 +481,7 @@ describe('InteractiveAuthCoordinator', () => {
     getCall(host).completion.resolve();
     await disposal;
 
-    await expect(outcome).resolves.toEqual({
+    await expect(outcome).resolves.toStrictEqual({
       kind: 'cancelled',
       correlationId: 'dispose-success-race',
     });
@@ -511,7 +511,7 @@ describe('InteractiveAuthCoordinator', () => {
     requesterController.abort(new DOMException('Task stopped', 'AbortError'));
     getCall(host).completion.resolve();
 
-    await expect(outcome).resolves.toEqual({
+    await expect(outcome).resolves.toStrictEqual({
       kind: 'cancelled',
       correlationId: 'detach-settle-race',
     });
@@ -549,7 +549,7 @@ describe('InteractiveAuthCoordinator', () => {
     getCall(host).completion.resolve();
     await Promise.all([first, second]);
 
-    expect(events).toEqual([
+    expect(events).toStrictEqual([
       { type: 'waiting', waiterCount: 1 },
       { type: 'waiting', waiterCount: 2 },
       { type: 'settled', waiterCount: 2, kind: 'succeeded' },
@@ -587,7 +587,7 @@ describe('InteractiveAuthCoordinator', () => {
     expect(host.calls).toHaveLength(2);
     await expectPending(second);
     getCall(host, 1).completion.resolve();
-    await expect(second).resolves.toEqual({
+    await expect(second).resolves.toStrictEqual({
       kind: 'succeeded',
       correlationId: 'second-session',
     });
@@ -625,7 +625,7 @@ describe('InteractiveAuthCoordinator', () => {
     cancelledCompletion.resolve();
     await cancelled;
     await flushMicrotasks();
-    expect(persistedCorrelations).toEqual([]);
+    expect(persistedCorrelations).toStrictEqual([]);
 
     const succeeded = interactiveAuthCoordinator.requestAuth(
       createChallenge('persist-after-success'),
@@ -638,11 +638,11 @@ describe('InteractiveAuthCoordinator', () => {
       throw new Error('Expected successful host completion');
     }
     successfulCompletion.resolve();
-    await expect(succeeded).resolves.toEqual({
+    await expect(succeeded).resolves.toStrictEqual({
       kind: 'succeeded',
       correlationId: 'persist-after-success',
     });
-    expect(persistedCorrelations).toEqual(['persist-after-success']);
+    expect(persistedCorrelations).toStrictEqual(['persist-after-success']);
   });
 
   /**
@@ -675,16 +675,16 @@ describe('InteractiveAuthCoordinator', () => {
       createChallenge('reentrant-2'),
     );
 
-    await expect(first).resolves.toEqual({
+    await expect(first).resolves.toStrictEqual({
       kind: 'cancelled',
       correlationId: 'reentrant-1',
     });
-    await expect(second).resolves.toEqual({
+    await expect(second).resolves.toStrictEqual({
       kind: 'cancelled',
       correlationId: 'reentrant-2',
     });
     expect(host.calls).toHaveLength(2);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toEqual([]);
+    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
 
     cancelOnWaiting = false;
     const retry = interactiveAuthCoordinator.requestAuth(
@@ -693,7 +693,7 @@ describe('InteractiveAuthCoordinator', () => {
     await flushMicrotasks();
     expect(interactiveAuthCoordinator.getActiveSessions()).toHaveLength(1);
     getCall(host, 2).completion.resolve();
-    await expect(retry).resolves.toEqual({
+    await expect(retry).resolves.toStrictEqual({
       kind: 'succeeded',
       correlationId: 'reentrant-retry',
     });
@@ -702,7 +702,7 @@ describe('InteractiveAuthCoordinator', () => {
     const waitingEvents = events.filter((event) => event.type === 'waiting');
     const settledEvents = events.filter((event) => event.type === 'settled');
     expect(waitingEvents).toHaveLength(3);
-    expect(settledEvents.map((event) => event.kind)).toEqual([
+    expect(settledEvents.map((event) => event.kind)).toStrictEqual([
       'cancelled',
       'cancelled',
       'succeeded',

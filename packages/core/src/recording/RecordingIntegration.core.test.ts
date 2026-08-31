@@ -29,6 +29,7 @@
  * These tests are expected to fail against the Phase 12 stub implementation.
  */
 
+import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -586,9 +587,7 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
       expect(lateRecords).toHaveLength(1);
 
       const filePath = recordingService.getFilePath();
-      if (filePath === null) {
-        throw new Error('Expected a session file after recorded events');
-      }
+      assertNotNull(filePath, 'Expected a session file after recorded events');
       const result = await replaySession(filePath, PROJECT_HASH);
       assertReplayOk(result);
       expect(result.history).toHaveLength(2);

@@ -326,8 +326,29 @@ describe('REQ-005 auth detail — masked OAuth metadata (P11 RED)', () => {
 
   // ─── Property: expiry gating behind authenticated ─────────────────────────
   it('PROP expiry-gating: detailedStatus only carries a defined expiry when authenticated is true (REQ-005.1)', async () => {
-    await fc.assert(
-      fc.asyncProperty(fc.boolean(), async (seedToken) => {
+    const { property, observations } =
+      await observePROPExpiryGatingDetailedStatusOnlyCarriesADefinedExpiryWhenAuthenticatedIs();
+    await fc.assert(property);
+    expect(
+      observations.every(
+        ({ expiryDefined, authenticated }) => expiryDefined === authenticated,
+      ),
+    ).toBe(true);
+    expect(
+      observations.every(
+        ({ authenticated, seedToken }) => authenticated === seedToken,
+      ),
+    ).toBe(true);
+  });
+
+  const observePROPExpiryGatingDetailedStatusOnlyCarriesADefinedExpiryWhenAuthenticatedIs =
+    async () => {
+      const observations: Array<{
+        readonly expiryDefined: boolean;
+        readonly authenticated: boolean;
+        readonly seedToken: boolean;
+      }> = [];
+      const property = fc.asyncProperty(fc.boolean(), async (seedToken) => {
         const { mgr, store } = await makeManager();
         if (seedToken) {
           await store.saveToken(PROVIDER, {
@@ -341,13 +362,17 @@ describe('REQ-005 auth detail — masked OAuth metadata (P11 RED)', () => {
         const control = makeControl(mgr);
 
         const detail = await control.detailedStatus(PROVIDER);
-
-        // Gating invariant, asserted without branching: expiry is defined
-        // exactly when authenticated is true (a seeded non-expired token).
-        expect(detail.expiry !== undefined).toBe(detail.authenticated);
-        // And authenticated tracks whether a token was seeded.
-        expect(detail.authenticated).toBe(seedToken);
-      }),
-    );
-  });
+        const observation = {
+          expiryDefined: detail.expiry !== undefined,
+          authenticated: detail.authenticated,
+          seedToken,
+        };
+        observations.push(observation);
+        return (
+          observation.expiryDefined === observation.authenticated &&
+          observation.authenticated === observation.seedToken
+        );
+      });
+      return { property, observations };
+    };
 });

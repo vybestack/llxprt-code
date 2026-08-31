@@ -24,6 +24,19 @@ import { createOpenAIRawPostTestAdapter } from '../../test-utils/rawPostTestAdap
 // Mock OpenAI client at the instance level
 const mockChatCompletionsCreate = vi.fn();
 
+function isAssistantMessageWithToolCalls(message: unknown): message is {
+  role: 'assistant';
+  tool_calls: unknown[];
+  reasoning_content?: string;
+} {
+  if (typeof message !== 'object' || message === null) return false;
+  if (!('role' in message) || message.role !== 'assistant') return false;
+  if (!('tool_calls' in message) || !Array.isArray(message.tool_calls)) {
+    return false;
+  }
+  return message.tool_calls.length > 0;
+}
+
 void vi.mock('openai', () => ({
   default: class MockOpenAI {
     chat = {
@@ -322,10 +335,7 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
         config: runtimeConfig,
       } as unknown as NormalizedGenerateChatOptions);
 
-      const assistantMsg = messages.find(
-        (m: { role: string; tool_calls?: unknown[] }) =>
-          m.role === 'assistant' && m.tool_calls && m.tool_calls.length > 0,
-      );
+      const assistantMsg = messages.find(isAssistantMessageWithToolCalls);
 
       expect(assistantMsg).toBeDefined();
       expect(assistantMsg!.reasoning_content).toBe(

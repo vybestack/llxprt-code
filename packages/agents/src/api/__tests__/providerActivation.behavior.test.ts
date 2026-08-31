@@ -12,6 +12,7 @@
  * assertions exercise a REAL CLI-style Config wired to the FakeProvider.
  */
 
+import { blockTextOrEmpty } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect } from 'bun:test';
 import {
   executeProviderActivation,
@@ -147,7 +148,7 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
       const chunks: string[] = [];
       for await (const chunk of active!.generateChatCompletion([])) {
         const text = chunk.blocks
-          .map((block) => (block.type === 'text' ? block.text : ''))
+          .map((block) => (blockTextOrEmpty(block)))
           .join('');
         chunks.push(text);
       }

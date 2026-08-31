@@ -28,6 +28,10 @@ function collectThinkingBlocks(messages: IContent[]): ThinkingBlock[] {
     .filter((block): block is ThinkingBlock => block.type === 'thinking');
 }
 
+function getLastThought(thoughts: readonly string[]): string {
+  return thoughts[thoughts.length - 1] ?? '';
+}
+
 describe('parseResponsesStream - Reasoning/Thinking Support', () => {
   it('should parse reasoning-only stream with delta and done events', async () => {
     const chunks = [
@@ -46,7 +50,7 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
     const thoughts = collectThinkingBlocks(messages).map(
       (block) => block.thought,
     );
-    const lastThought = thoughts[thoughts.length - 1] ?? '';
+    const lastThought = getLastThought(thoughts);
     expect(lastThought).toBe(
       'Let me think about this... The user wants to know...',
     );
@@ -131,7 +135,7 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
     const thoughts = collectThinkingBlocks(messages).map(
       (block) => block.thought,
     );
-    const lastThought = thoughts[thoughts.length - 1] ?? '';
+    const lastThought = getLastThought(thoughts);
     expect(lastThought).toBe('First chunk next');
   });
 

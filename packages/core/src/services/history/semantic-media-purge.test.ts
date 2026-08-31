@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  assertDefined,
+  assertInstanceOf,
+} from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import { annotateCompressionSpan } from './historyChronology.js';
@@ -67,9 +71,11 @@ function createHistory(): HistoryService {
 }
 
 function requireAggregateError(error: unknown): AggregateError {
-  if (!(error instanceof AggregateError)) {
-    throw new Error(`Expected AggregateError, received ${String(error)}`);
-  }
+  assertInstanceOf(
+    error,
+    AggregateError,
+    `Expected AggregateError, received ${String(error)}`,
+  );
   return error;
 }
 
@@ -81,7 +87,7 @@ function expectOriginalHistory(history: HistoryService): void {
       responsesStored: entry.metadata?.responsesStored === true,
       blocks: entry.blocks,
     })),
-  ).toEqual([
+  ).toStrictEqual([
     {
       speaker: 'human',
       id: 'before',
@@ -134,7 +140,7 @@ describe('SemanticMediaPurgeCoordinator', () => {
     const transaction = coordinator.begin({ mode: 'remove' });
 
     expectOriginalHistory(history);
-    expect(transaction?.candidateHistory[2]?.blocks).toEqual([
+    expect(transaction?.candidateHistory[2]?.blocks).toStrictEqual([
       { type: 'text', text: 'inspect' },
       secondImage,
     ]);
@@ -142,7 +148,10 @@ describe('SemanticMediaPurgeCoordinator', () => {
     expect(Object.isFrozen(transaction?.candidateHistory[2]?.blocks)).toBe(
       true,
     );
-    expect(coordinator.frontier).toEqual({ contentIndex: 0, blockIndex: 0 });
+    expect(coordinator.frontier).toStrictEqual({
+      contentIndex: 0,
+      blockIndex: 0,
+    });
   });
 
   it('commits a structured summary and preserves stored parents before the changed image', async () => {
@@ -155,9 +164,7 @@ describe('SemanticMediaPurgeCoordinator', () => {
       mode: 'summary',
       summaryText: 'Screenshot showed a green build.',
     });
-    if (transaction === undefined) {
-      throw new Error('Expected a purge transaction');
-    }
+    assertDefined(transaction, 'Expected a purge transaction');
 
     const committed = await coordinator.commit(transaction, success);
     const result = history.getAll();
@@ -165,12 +172,12 @@ describe('SemanticMediaPurgeCoordinator', () => {
     expect(committed).toBe(true);
     expect(result[1]?.metadata?.responsesStored).toBe(true);
     expect(result[3]?.metadata?.responsesStored).toBeUndefined();
-    expect(result[2]?.blocks).toEqual([
+    expect(result[2]?.blocks).toStrictEqual([
       { type: 'text', text: 'inspect' },
       { type: 'text', text: 'Screenshot showed a green build.' },
       secondImage,
     ]);
-    expect(coordinator.frontier).toEqual({
+    expect(coordinator.frontier).toStrictEqual({
       contentIndex: 2,
       blockIndex: 2,
       contentId: 'images',
@@ -186,24 +193,20 @@ describe('SemanticMediaPurgeCoordinator', () => {
       explicitCacheWriteRequired: false,
     });
     const first = coordinator.begin({ mode: 'remove' });
-    if (first === undefined) {
-      throw new Error('Expected the first purge transaction');
-    }
+    assertDefined(first, 'Expected the first purge transaction');
     await coordinator.commit(first, {
       status: 'success',
       cachePrefixWritten: false,
     });
 
     const second = coordinator.begin({ mode: 'remove' });
-    if (second === undefined) {
-      throw new Error('Expected the second purge transaction');
-    }
+    assertDefined(second, 'Expected the second purge transaction');
     await coordinator.commit(second, {
       status: 'success',
       cachePrefixWritten: false,
     });
 
-    expect(history.getAll()[2]?.blocks).toEqual([
+    expect(history.getAll()[2]?.blocks).toStrictEqual([
       { type: 'text', text: 'inspect' },
     ]);
     expect(coordinator.begin({ mode: 'remove' })).toBeUndefined();
@@ -216,9 +219,7 @@ describe('SemanticMediaPurgeCoordinator', () => {
       explicitCacheWriteRequired: false,
     });
     const first = coordinator.begin({ mode: 'remove' });
-    if (first === undefined) {
-      throw new Error('Expected the first purge transaction');
-    }
+    assertDefined(first, 'Expected the first purge transaction');
     await coordinator.commit(first, success);
     const afterFirstPurge = history.getAll();
     const compressed = annotateCompressionSpan(afterFirstPurge, [
@@ -317,13 +318,14 @@ describe('SemanticMediaPurgeCoordinator', () => {
     });
 
     const transaction = coordinator.begin({ mode: 'summary' });
-    if (transaction === undefined) {
-      throw new Error('Expected the captioned image to produce a transaction');
-    }
+    assertDefined(
+      transaction,
+      'Expected the captioned image to produce a transaction',
+    );
     await coordinator.commit(transaction, success);
 
-    expect(history.getAll()[0]?.blocks).toEqual([uncaptionedImage]);
-    expect(history.getAll()[1]?.blocks).toEqual([
+    expect(history.getAll()[0]?.blocks).toStrictEqual([uncaptionedImage]);
+    expect(history.getAll()[1]?.blocks).toStrictEqual([
       { type: 'text', text: 'A green build result.' },
     ]);
   });
@@ -342,15 +344,13 @@ describe('SemanticMediaPurgeCoordinator', () => {
       explicitCacheWriteRequired: false,
     });
     const transaction = coordinator.begin({ mode: 'remove' });
-    if (transaction === undefined) {
-      throw new Error('Expected a purge transaction');
-    }
+    assertDefined(transaction, 'Expected a purge transaction');
 
     await coordinator.commit(transaction, success);
 
     expect(
       history.getAll().map((entry) => entry.metadata?.responsesStored),
-    ).toEqual([true, true]);
+    ).toStrictEqual([true, true]);
   });
 
   it('leaves history and frontier unchanged for errors, cancellation, retry handoff, and missing cache proof', async () => {
@@ -368,15 +368,16 @@ describe('SemanticMediaPurgeCoordinator', () => {
         explicitCacheWriteRequired: true,
       });
       const transaction = coordinator.begin({ mode: 'remove' });
-      if (transaction === undefined) {
-        throw new Error('Expected a purge transaction');
-      }
+      assertDefined(transaction, 'Expected a purge transaction');
 
       const committed = await coordinator.commit(transaction, outcome);
 
       expect(committed).toBe(false);
       expectOriginalHistory(history);
-      expect(coordinator.frontier).toEqual({ contentIndex: 0, blockIndex: 0 });
+      expect(coordinator.frontier).toStrictEqual({
+        contentIndex: 0,
+        blockIndex: 0,
+      });
     }
   });
 
@@ -387,8 +388,7 @@ describe('SemanticMediaPurgeCoordinator', () => {
       explicitCacheWriteRequired: false,
     });
     const first = coordinator.begin({ mode: 'remove' });
-    if (first === undefined)
-      throw new Error('Expected first purge transaction');
+    assertDefined(first, 'Expected first purge transaction');
     await coordinator.commit(first, success);
 
     await history.replaceAll([
@@ -417,9 +417,7 @@ describe('SemanticMediaPurgeCoordinator', () => {
       explicitCacheWriteRequired: false,
     });
     const transaction = coordinator.begin({ mode: 'remove' });
-    if (transaction === undefined) {
-      throw new Error('Expected a purge transaction');
-    }
+    assertDefined(transaction, 'Expected a purge transaction');
     history.add(content('human', 'newer', [{ type: 'text', text: 'newer' }]));
 
     await expect(coordinator.commit(transaction, success)).rejects.toThrow(
@@ -438,9 +436,7 @@ describe('SemanticMediaPurgeCoordinator', () => {
       explicitCacheWriteRequired: false,
     });
     const transaction = coordinator.begin({ mode: 'remove' });
-    if (transaction === undefined) {
-      throw new Error('Expected a purge transaction');
-    }
+    assertDefined(transaction, 'Expected a purge transaction');
     await coordinator.commit(transaction, success);
     history.add(content('human', 'newer', [{ type: 'text', text: 'newer' }]));
 
@@ -452,7 +448,7 @@ describe('SemanticMediaPurgeCoordinator', () => {
     expect(currentHistory[currentHistory.length - 1]?.metadata?.id).toBe(
       'newer',
     );
-    expect(coordinator.frontier).toEqual(transaction.nextFrontier);
+    expect(coordinator.frontier).toStrictEqual(transaction.nextFrontier);
   });
 
   it('does not overwrite a synchronous add made while durable purge persistence is pending', async () => {
@@ -474,9 +470,7 @@ describe('SemanticMediaPurgeCoordinator', () => {
       },
     });
     const transaction = coordinator.begin({ mode: 'remove' });
-    if (transaction === undefined) {
-      throw new Error('Expected a purge transaction');
-    }
+    assertDefined(transaction, 'Expected a purge transaction');
     const newer = content('human', 'newer-during-persist', [
       { type: 'text', text: 'newer' },
     ]);
@@ -507,21 +501,19 @@ describe('SemanticMediaPurgeCoordinator', () => {
       },
     });
     const transaction = coordinator.begin({ mode: 'remove' });
-    if (transaction === undefined)
-      throw new Error('Expected purge transaction');
-
+    assertDefined(transaction, 'Expected purge transaction');
     const committed = await coordinator.commit(transaction, success);
 
     expect(committed).toBe(true);
     expect(durableHistory).toBe(transaction.candidateHistory);
-    expect(durableFrontier).toEqual(coordinator.frontier);
+    expect(durableFrontier).toStrictEqual(coordinator.frontier);
     const resumedHistory = new HistoryService();
     resumedHistory.addAll(history.getAll());
     const resumed = new SemanticMediaPurgeCoordinator(resumedHistory, {
       enabled: true,
       explicitCacheWriteRequired: false,
     });
-    expect(resumed.frontier).toEqual(coordinator.frontier);
+    expect(resumed.frontier).toStrictEqual(coordinator.frontier);
   });
 
   it('rolls back when durable session state cannot be written', async () => {
@@ -532,14 +524,15 @@ describe('SemanticMediaPurgeCoordinator', () => {
       persist: () => Promise.reject(new Error('recording unavailable')),
     });
     const transaction = coordinator.begin({ mode: 'remove' });
-    if (transaction === undefined)
-      throw new Error('Expected purge transaction');
-
+    assertDefined(transaction, 'Expected purge transaction');
     await expect(coordinator.commit(transaction, success)).rejects.toThrow(
       'recording unavailable',
     );
     expectOriginalHistory(history);
-    expect(coordinator.frontier).toEqual({ contentIndex: 0, blockIndex: 0 });
+    expect(coordinator.frontier).toStrictEqual({
+      contentIndex: 0,
+      blockIndex: 0,
+    });
   });
 
   it('compensates durable state when live history replacement fails', async () => {
@@ -560,8 +553,7 @@ describe('SemanticMediaPurgeCoordinator', () => {
       },
     });
     const transaction = coordinator.begin({ mode: 'remove' });
-    if (transaction === undefined)
-      throw new Error('Expected purge transaction');
+    assertDefined(transaction, 'Expected purge transaction');
     history.on('tokensUpdated', () => {
       throw new Error('listener failure');
     });
@@ -574,8 +566,14 @@ describe('SemanticMediaPurgeCoordinator', () => {
     expect(persisted).toHaveLength(2);
     expect(persisted[0]?.history).toBe(transaction.candidateHistory);
     expect(persisted[1]?.history).toBe(transaction.baseHistory);
-    expect(persisted[1]?.frontier).toEqual({ contentIndex: 0, blockIndex: 0 });
-    expect(coordinator.frontier).toEqual({ contentIndex: 0, blockIndex: 0 });
+    expect(persisted[1]?.frontier).toStrictEqual({
+      contentIndex: 0,
+      blockIndex: 0,
+    });
+    expect(coordinator.frontier).toStrictEqual({
+      contentIndex: 0,
+      blockIndex: 0,
+    });
   });
 
   it('compensates durable state when committed purge rollback cannot replace live history', async () => {
@@ -590,8 +588,7 @@ describe('SemanticMediaPurgeCoordinator', () => {
       },
     });
     const transaction = coordinator.begin({ mode: 'remove' });
-    if (transaction === undefined)
-      throw new Error('Expected purge transaction');
+    assertDefined(transaction, 'Expected purge transaction');
     await coordinator.commit(transaction, success);
     history.on('tokensUpdated', () => {
       throw new Error('rollback listener failure');
@@ -605,7 +602,7 @@ describe('SemanticMediaPurgeCoordinator', () => {
     expect(persisted).toHaveLength(3);
     expect(persisted[1]).toBe(transaction.baseHistory);
     expect(persisted[2]).toBe(transaction.candidateHistory);
-    expect(coordinator.frontier).toEqual(transaction.nextFrontier);
+    expect(coordinator.frontier).toStrictEqual(transaction.nextFrontier);
   });
 
   it('reports both live replacement and durable compensation failures', async () => {
@@ -622,8 +619,7 @@ describe('SemanticMediaPurgeCoordinator', () => {
       },
     });
     const transaction = coordinator.begin({ mode: 'remove' });
-    if (transaction === undefined)
-      throw new Error('Expected purge transaction');
+    assertDefined(transaction, 'Expected purge transaction');
     history.on('tokensUpdated', () => {
       throw new Error('listener failure');
     });
@@ -636,8 +632,14 @@ describe('SemanticMediaPurgeCoordinator', () => {
     const aggregateError = requireAggregateError(rejection);
     expect(
       aggregateError.errors.map((cause: unknown) => String(cause)),
-    ).toEqual(['Error: listener failure', 'Error: compensation unavailable']);
+    ).toStrictEqual([
+      'Error: listener failure',
+      'Error: compensation unavailable',
+    ]);
     expectOriginalHistory(history);
-    expect(coordinator.frontier).toEqual({ contentIndex: 0, blockIndex: 0 });
+    expect(coordinator.frontier).toStrictEqual({
+      contentIndex: 0,
+      blockIndex: 0,
+    });
   });
 });

@@ -490,45 +490,56 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       sourceField: 'thought',
     });
   });
+  const observePendingThinkingBlocksBeforeContentArrives =
+    async (): Promise<string> => {
+      const resolvers: Array<() => void> = [];
+      mockSendMessageStream.mockReturnValue(
+        (async function* () {
+          yield {
+            type: ServerEventType.Thought,
+            value: {
+              subject: 'Streaming thought',
+              description: 'before content',
+            },
+          };
+          await new Promise<void>((resolve) => {
+            resolvers.push(resolve);
+          });
+          yield {
+            type: ServerEventType.Content,
+            value: 'Now content',
+          };
+          yield {
+            type: ServerEventType.Finished,
+            value: { reason: 'STOP' },
+          };
+        })(),
+      );
+
+      const { result } = renderTestHook();
+
+      act(() => {
+        void result.current.submitQuery('test query');
+      });
+
+      let thinkingText = '';
+      await waitFor(() => {
+        const pending = result.current.pendingHistoryItems;
+        thinkingText = pending
+          .flatMap((item) => item.thinkingBlocks ?? [])
+          .map((block) => block.thought)
+          .join('');
+        if (!thinkingText.includes('Streaming thought')) {
+          throw new Error('Pending thinking block has not arrived');
+        }
+      });
+      return thinkingText;
+    };
+
   it('should expose pending thinking blocks before content arrives', async () => {
-    const resolvers: Array<() => void> = [];
-    mockSendMessageStream.mockReturnValue(
-      (async function* () {
-        yield {
-          type: ServerEventType.Thought,
-          value: {
-            subject: 'Streaming thought',
-            description: 'before content',
-          },
-        };
-        await new Promise<void>((resolve) => {
-          resolvers.push(resolve);
-        });
-        yield {
-          type: ServerEventType.Content,
-          value: 'Now content',
-        };
-        yield {
-          type: ServerEventType.Finished,
-          value: { reason: 'STOP' },
-        };
-      })(),
-    );
-
-    const { result } = renderTestHook();
-
-    act(() => {
-      void result.current.submitQuery('test query');
-    });
-
-    await waitFor(() => {
-      const pending = result.current.pendingHistoryItems;
-      const thinkingText = pending
-        .flatMap((item) => item.thinkingBlocks ?? [])
-        .map((block) => block.thought)
-        .join('');
-      expect(thinkingText).toContain('Streaming thought');
-    });
+    const thinkingText =
+      await observePendingThinkingBlocksBeforeContentArrives();
+    expect(thinkingText).toContain('Streaming thought');
   });
   it('should accumulate multiple Thought events into multiple blocks', async () => {
     mockSendMessageStream.mockReturnValue(

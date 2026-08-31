@@ -50,7 +50,7 @@ describe('session scanner finite work bounds', () => {
       candidates: result.candidates.length,
       errors: result.scanErrorCount,
       skipped: result.scanSkippedCount,
-    }).toEqual({ candidates: 2, errors: 0, skipped: 1 });
+    }).toStrictEqual({ candidates: 2, errors: 0, skipped: 1 });
   });
 
   it('stops at the aggregate byte cap and reports the configured skip without an error', async () => {
@@ -73,7 +73,7 @@ describe('session scanner finite work bounds', () => {
       candidates: result.candidates.length,
       skipped: result.scanSkippedCount,
       errors: result.scanErrorCount,
-    }).toEqual({ candidates: 1, skipped: 1, errors: 0 });
+    }).toStrictEqual({ candidates: 1, skipped: 1, errors: 0 });
   });
 
   it('stops after the configured project cap without traversing extra projects', async () => {
@@ -98,7 +98,7 @@ describe('session scanner finite work bounds', () => {
       chatsDirectories: result.chatsDirs.length,
       skipped: result.scanSkippedCount,
       errors: result.scanErrorCount,
-    }).toEqual({
+    }).toStrictEqual({
       candidates: 2,
       chatsDirectories: 2,
       skipped: 1,

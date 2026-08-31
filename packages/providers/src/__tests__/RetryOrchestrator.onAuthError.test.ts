@@ -29,6 +29,31 @@ function createAuthError(
   return error;
 }
 
+async function waitForRefreshAbort(
+  signal: AbortSignal | undefined,
+  onSettled: () => void,
+): Promise<void> {
+  await new Promise<void>((_resolve, reject) => {
+    const onAbort = () => {
+      onSettled();
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted === true) onAbort();
+  });
+}
+
+async function advanceAuthBucket(
+  buckets: readonly string[],
+  bucketIndex: number,
+  updateState: (nextIndex: number, nextBucket: string) => void,
+): Promise<boolean> {
+  const nextIndex = bucketIndex + 1;
+  if (nextIndex >= buckets.length) return false;
+  updateState(nextIndex, buckets[nextIndex]);
+  return true;
+}
+
 // Helper to consume stream
 async function consumeStream(
   stream: AsyncIterableIterator<IContent>,
@@ -338,14 +363,7 @@ describe('RetryOrchestrator onAuthError handler', () => {
       getOnAuthErrorHandler: () => ({
         handleAuthError: async ({ signal }) => {
           refreshStarted();
-          await new Promise<void>((_resolve, reject) => {
-            const onAbort = () => {
-              refreshSettled();
-              reject(new DOMException('Aborted', 'AbortError'));
-            };
-            signal?.addEventListener('abort', onAbort, { once: true });
-            if (signal?.aborted === true) onAbort();
-          });
+          await waitForRefreshAbort(signal, refreshSettled);
         },
       }),
     } as GenerateChatOptions['config'];
@@ -393,12 +411,11 @@ describe('RetryOrchestrator onAuthError handler', () => {
     const failoverHandler = {
       getBuckets: () => buckets,
       getCurrentBucket: () => currentBucket,
-      tryFailover: async () => {
-        bucketIndex++;
-        if (bucketIndex >= buckets.length) return false;
-        currentBucket = buckets[bucketIndex];
-        return true;
-      },
+      tryFailover: () =>
+        advanceAuthBucket(buckets, bucketIndex, (nextIndex, nextBucket) => {
+          bucketIndex = nextIndex;
+          currentBucket = nextBucket;
+        }),
       isEnabled: () => true,
     };
 

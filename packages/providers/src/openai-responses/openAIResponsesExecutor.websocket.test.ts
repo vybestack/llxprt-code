@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
+import {
+  restoreGlobals,
+  setGlobal,
+  assertInstanceOf,
+} from '@vybestack/llxprt-code-test-utils';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
@@ -217,9 +221,7 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
     );
 
     const error = await iterator.next().catch((reason: unknown) => reason);
-    if (!(error instanceof AggregateError)) {
-      throw new Error('expected an AggregateError');
-    }
+    assertInstanceOf(error, AggregateError, 'expected an AggregateError');
 
     expect(error.errors).toStrictEqual([primary, cleanup]);
   });
@@ -321,9 +323,11 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
         ),
       ).catch((reason: unknown) => reason);
 
-      if (!(error instanceof AggregateError)) {
-        throw new Error('expected HTTP transport and disposal AggregateError');
-      }
+      assertInstanceOf(
+        error,
+        AggregateError,
+        'expected HTTP transport and disposal AggregateError',
+      );
       expect(error.errors).toStrictEqual([transportError, disposalError]);
     } finally {
       ReadableStreamDefaultReader.prototype.cancel = originalCancel;
@@ -485,7 +489,7 @@ describe('executeOpenAIResponsesRequest WebSocket reconnect keeps the conversati
     const userTexts = userTextsOf(sent['input']);
     // Exact equality, not toContain: an empty array would satisfy both a
     // toContain-absent and a not.toContain assertion, hiding a total failure.
-    expect(userTexts).toEqual(['second question']);
+    expect(userTexts).toStrictEqual(['second question']);
 
     transport.close();
   });

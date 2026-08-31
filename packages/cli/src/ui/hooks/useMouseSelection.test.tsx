@@ -160,12 +160,12 @@ function dragAcrossText(
   stdin.write(sgrSequence(0, endCol, 1, 'm'));
 }
 
-afterEach(() => {
-  unmountActiveHarnesses();
-  vi.clearAllMocks();
-});
-
 describe('useMouseSelection', () => {
+  afterEach(() => {
+    unmountActiveHarnesses();
+    vi.clearAllMocks();
+  });
+
   it('copies the characters spanned by a press, move, and release drag (AC6.9)', () => {
     const harness = renderSelectionHarness();
 

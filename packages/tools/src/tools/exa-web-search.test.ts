@@ -12,6 +12,7 @@
  * origin to a real local server; the server observes and produces all network data.
  */
 
+import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import type http from 'node:http';
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { ExaWebSearchTool } from './exa-web-search.js';
@@ -74,9 +75,7 @@ function trackConnection(
   state: ConnectionState,
 ): Promise<void> {
   const socket = res.socket;
-  if (socket === null) {
-    throw new Error('Expected a response socket');
-  }
+  assertNotNull(socket, 'Expected a response socket');
   return new Promise((resolve) => {
     socket.once('close', () => {
       state.canceled = !state.completed;
@@ -206,7 +205,7 @@ describe('ExaWebSearchTool', () => {
     const url = new URL(`${EXA_ORIGIN}${observedUrl}`);
     expect(url.pathname).toBe('/mcp');
     expect(url.search).toBe('');
-    expect(captured.body).toEqual({
+    expect(captured.body).toStrictEqual({
       jsonrpc: '2.0',
       id: 1,
       method: 'tools/call',

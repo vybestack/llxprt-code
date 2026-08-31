@@ -86,7 +86,7 @@ describe('#2373 config boundary guard', () => {
     ).toBe(false);
   });
 
-  it('removes obsolete bridge comments from CLI production source', () => {
+  function findProductionFilesWithObsoleteBridgeComments(): readonly string[] {
     const offenders: string[] = [];
     // Catches "temporary migration bridge", "Migration bridge", "Config bridge",
     // "migration bridge", and similar bridge-wording that signals a temporary
@@ -99,10 +99,17 @@ describe('#2373 config boundary guard', () => {
         offenders.push(relative(CLI_ROOT, file));
       }
     }
-    expect(offenders).toStrictEqual([]);
+
+    return offenders;
+  }
+
+  it('removes obsolete bridge comments from CLI production source', () => {
+    const filesWithObsoleteBridgeComments =
+      findProductionFilesWithObsoleteBridgeComments();
+    expect(filesWithObsoleteBridgeComments).toStrictEqual([]);
   });
 
-  it('keeps UI production source off the core Config class', () => {
+  function findUIProductionFilesUsingCoreConfig(): readonly string[] {
     const offenders: string[] = [];
     const forbidden = [
       ...CORE_CONFIG_IMPORT_PATTERNS,
@@ -117,7 +124,13 @@ describe('#2373 config boundary guard', () => {
         offenders.push(relative(CLI_ROOT, file));
       }
     }
-    expect(offenders).toStrictEqual([]);
+
+    return offenders;
+  }
+
+  it('keeps UI production source off the core Config class', () => {
+    const filesUsingCoreConfig = findUIProductionFilesUsingCoreConfig();
+    expect(filesUsingCoreConfig).toStrictEqual([]);
   });
 
   it('keeps CliUiRuntime as a UI-owned structural source, not a core Config alias', () => {
@@ -217,7 +230,7 @@ describe('#2373 config boundary guard', () => {
     expect(command).not.toMatch(/asRuntimeConfig/);
   });
 
-  it('keeps agent stream modules on StreamRuntime rather than CliUiRuntime', () => {
+  function findAgentStreamModulesUsingCliUiRuntime(): readonly string[] {
     const offenders: string[] = [];
     for (const file of UI_FILES.filter((candidate) =>
       relative(UI_ROOT, candidate).startsWith(join('hooks', 'agentStream')),
@@ -228,7 +241,13 @@ describe('#2373 config boundary guard', () => {
         offenders.push(relative(CLI_ROOT, file));
       }
     }
-    expect(offenders).toStrictEqual([]);
+
+    return offenders;
+  }
+
+  it('keeps agent stream modules on StreamRuntime rather than CliUiRuntime', () => {
+    const modulesUsingCliUiRuntime = findAgentStreamModulesUsingCliUiRuntime();
+    expect(modulesUsingCliUiRuntime).toStrictEqual([]);
   });
 
   it('does not pass raw Config as slashCommandRuntime at the composition root', () => {

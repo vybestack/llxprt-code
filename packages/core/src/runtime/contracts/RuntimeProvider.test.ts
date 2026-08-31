@@ -231,10 +231,7 @@ describe('RuntimeProviderManager contract', () => {
       setActiveProvider(_name: string): void {},
       setRuntimeContext(): void {},
       getAvailableModels(providerName?: string): Promise<RuntimeModel[]> {
-        if (!providerName || providerName === 'openai') {
-          return Promise.resolve(models);
-        }
-        return Promise.resolve([]);
+        return availableModelsOrEmpty(providerName, models);
       },
       getProviderNames(): string[] {
         return ['openai', 'anthropic'];
@@ -276,3 +273,13 @@ describe('RuntimeProviderManager contract', () => {
     expect(manager.getActiveProviderName()).toBeUndefined();
   });
 });
+
+function availableModelsOrEmpty(
+  providerName: string | undefined,
+  models: RuntimeModel[],
+): Promise<RuntimeModel[]> {
+  if (!providerName || providerName === 'openai') {
+    return Promise.resolve(models);
+  }
+  return Promise.resolve([]);
+}

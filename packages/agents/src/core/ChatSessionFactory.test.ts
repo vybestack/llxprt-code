@@ -112,9 +112,14 @@ import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentG
 import { withChatSessionFactoryMediaFixture } from './chatSessionFactoryMediaTestHelper.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
 
-function makeConfig(overrides: Partial<Config> = {}): Config {
+function makeConfig(
+  overrides: Partial<Config> = {},
+  ephemeralSettings: Readonly<Record<string, unknown>> = {},
+): Config {
   return {
-    getEphemeralSetting: vi.fn().mockReturnValue(undefined),
+    getEphemeralSetting: vi
+      .fn()
+      .mockImplementation((key: string) => ephemeralSettings[key]),
     isJitContextEnabled: vi.fn().mockReturnValue(false),
     getGlobalMemory: vi.fn().mockReturnValue(undefined),
     getUserMemory: vi.fn().mockReturnValue('user memory text'),
@@ -178,62 +183,44 @@ function createTestChatSession(
 }
 
 describe('buildSettingsSnapshot', () => {
+  const observeSettings = (settings: Readonly<Record<string, unknown>>) =>
+    buildSettingsSnapshot(makeConfig({}, settings));
+
   it('assembles compression settings from config ephemerals', () => {
-    const config = makeConfig({
-      getEphemeralSetting: vi.fn().mockImplementation((key: string) => {
-        if (key === 'compression-threshold') return 0.9;
-        if (key === 'compression-preserve-threshold') return 0.3;
-        if (key === 'context-limit') return 50000;
-        return undefined;
-      }),
+    const snapshot = observeSettings({
+      'compression-threshold': 0.9,
+      'compression-preserve-threshold': 0.3,
+      'context-limit': 50000,
     });
-
-    const snapshot = buildSettingsSnapshot(config);
-
     expect(snapshot.compressionThreshold).toBe(0.9);
     expect(snapshot.preserveThreshold).toBe(0.3);
     expect(snapshot.contextLimit).toBe(50000);
   });
 
   it('uses defaults when ephemerals are not set', () => {
-    const config = makeConfig();
-
-    const snapshot = buildSettingsSnapshot(config);
-
+    const snapshot = buildSettingsSnapshot(makeConfig());
     expect(snapshot.compressionThreshold).toBe(0.85);
     expect(snapshot.preserveThreshold).toBe(0.2);
     expect(snapshot.contextLimit).toBeUndefined();
   });
 
   it('falls back to defaults when thresholds are NaN or Infinity', () => {
-    const config = makeConfig({
-      getEphemeralSetting: vi.fn().mockImplementation((key: string) => {
-        if (key === 'compression-threshold') return NaN;
-        if (key === 'compression-preserve-threshold') return Infinity;
-        if (key === 'context-limit') return -Infinity;
-        return undefined;
-      }),
+    const snapshot = observeSettings({
+      'compression-threshold': NaN,
+      'compression-preserve-threshold': Infinity,
+      'context-limit': -Infinity,
     });
-
-    const snapshot = buildSettingsSnapshot(config);
-
     expect(snapshot.compressionThreshold).toBe(0.85);
     expect(snapshot.preserveThreshold).toBe(0.2);
     expect(snapshot.contextLimit).toBeUndefined();
   });
 
   it('includes reasoning settings from ephemerals', () => {
-    const config = makeConfig({
-      getEphemeralSetting: vi.fn().mockImplementation((key: string) => {
-        if (key === 'reasoning.enabled') return true;
-        if (key === 'reasoning.effort') return 'max';
-        if (key === 'reasoning.maxTokens') return 8192;
-        return undefined;
-      }),
+    const snapshot = observeSettings({
+      'reasoning.enabled': true,
+      'reasoning.effort': 'max',
+      'reasoning.maxTokens': 8192,
     });
-
-    const snapshot = buildSettingsSnapshot(config);
-
     expect(snapshot['reasoning.enabled']).toBe(true);
     expect(snapshot['reasoning.effort']).toBe('max');
     expect(snapshot['reasoning.maxTokens']).toBe(8192);
@@ -466,6 +453,18 @@ describe('createChatSession', () => {
   });
 
   it('does not fold extraHistory into a non-empty reused HistoryService', async () => {
+    const { historyState, clearStoredHistoryService } =
+      await observeReusedHistory();
+    expect(historyState).toStrictEqual({
+      wasInitiallyNonEmpty: true,
+      isEmptyAfterReuse: false,
+      historyLength: 1,
+      retainedLiveTurn: true,
+    });
+    expect(clearStoredHistoryService).toHaveBeenCalledTimes(1);
+  });
+
+  const observeReusedHistory = async () => {
     // A mid-session provider switch stores the live (non-empty) HistoryService;
     // setupHistoryService must reuse it as-is and NOT also load extraHistory,
     // or the conversation would be duplicated. This pins the isEmpty()
@@ -480,7 +479,7 @@ describe('createChatSession', () => {
       },
       'model-x',
     );
-    expect(storedHistoryService.isEmpty()).toBe(false);
+    const wasInitiallyNonEmpty = !storedHistoryService.isEmpty();
 
     const config = makeConfig();
     const runtimeState = makeRuntimeState();
@@ -509,18 +508,40 @@ describe('createChatSession', () => {
     // The stored service keeps exactly its one live turn; extraHistory was
     // ignored, not appended.
     const after = storedHistoryService.getAll();
-    expect(after.length).toBe(1);
-    expect(
-      after[0].blocks.some(
-        (b) => b.type === 'text' && b.text === 'live turn before switch',
-      ),
-    ).toBe(true);
+
     // Reusing the stored service must still hand ownership to the chat session
     // (the stored reference is cleared on the client so it cannot be reused).
-    expect(clearStoredHistoryService).toHaveBeenCalledTimes(1);
-  });
+
+    const retainedLiveTurn = after[0].blocks.some(
+      (b) => b.type === 'text' && b.text === 'live turn before switch',
+    );
+    return {
+      clearStoredHistoryService,
+      historyState: {
+        wasInitiallyNonEmpty,
+        isEmptyAfterReuse: storedHistoryService.isEmpty(),
+        historyLength: after.length,
+        retainedLiveTurn,
+      },
+    };
+  };
 
   it('passes profile context-limit into the rebuilt runtime settings', async () => {
+    await configureProfileContextLimit();
+    expect(
+      loadAgentRuntime as Mock<typeof loadAgentRuntime>,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profile: expect.objectContaining({
+          settings: expect.objectContaining({
+            contextLimit: 200000,
+          }),
+        }),
+      }),
+    );
+  });
+
+  const configureProfileContextLimit = async () => {
     const config = makeConfig({
       getEphemeralSetting: vi.fn().mockImplementation((key: string) => {
         if (key === 'context-limit') return 200000;
@@ -543,19 +564,7 @@ describe('createChatSession', () => {
       todoContinuationService,
       toolRegistry: undefined,
     });
-
-    expect(
-      loadAgentRuntime as Mock<typeof loadAgentRuntime>,
-    ).toHaveBeenCalledWith(
-      expect.objectContaining({
-        profile: expect.objectContaining({
-          settings: expect.objectContaining({
-            contextLimit: 200000,
-          }),
-        }),
-      }),
-    );
-  });
+  };
 
   it('creates a new HistoryService when none is stored', async () => {
     const config = makeConfig();
@@ -619,7 +628,7 @@ describe('createChatSession', () => {
       toolRegistry: undefined,
     });
 
-    expect(recordedHistory).toEqual([
+    expect(recordedHistory).toStrictEqual([
       {
         ...extraHistory[0],
         metadata: { turnId: 'turn-1' },

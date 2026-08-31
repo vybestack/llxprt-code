@@ -13,6 +13,11 @@ import { resolve } from 'path';
 describe('Config Regression Guards', () => {
   describe('ChatSession', () => {
     it('should only import Config as a type (not for runtime use)', () => {
+      const { isValid } = observeOnlyImportConfigAsATypeNotForRuntimeUse();
+      expect(isValid).toBe(true);
+    });
+
+    const observeOnlyImportConfigAsATypeNotForRuntimeUse = () => {
       const filePath = resolve(__dirname, '../chatSession.ts');
       const content = readFileSync(filePath, 'utf-8');
 
@@ -39,8 +44,9 @@ describe('Config Regression Guards', () => {
       const isValid =
         !hasConfigImport ||
         (hasTypeOnlyConfigImport && !hasNonTypeConfigImport);
-      expect(isValid).toBe(true);
-    });
+
+      return { isValid };
+    };
 
     it('should not use Config static methods for provider/model/auth', () => {
       const filePath = resolve(__dirname, '../chatSession.ts');

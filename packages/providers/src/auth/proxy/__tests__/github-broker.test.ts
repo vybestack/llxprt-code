@@ -68,20 +68,20 @@ const isWindows = process.platform === 'win32';
 // Set RUN_GH_NETWORK_TESTS=1 to enable tests that hit the live GitHub API.
 const RUN_NETWORK_TESTS = process.env.RUN_GH_NETWORK_TESTS === '1';
 
-/**
- * Asserts the structural shape of a shaped comment object. Extracted so the
- * T1 network test can validate comment structure without placing `expect`
- * calls inside an `if` block (vitest/no-conditional-expect).
- *
- * @plan PLAN-20260731-GHBROKER.P08
- * @requirement REQ-013
- * @pseudocode 003-github-broker.md lines 101-103
- */
-function assertCommentShape(comment: Record<string, unknown>): void {
-  expect(typeof comment.author).toBe('string');
-  expect(typeof comment.createdAt).toBe('string');
-  expect(typeof comment.body).toBe('string');
+function requireUnknownArray(value: unknown): asserts value is unknown[] {
+  if (!Array.isArray(value)) {
+    throw new Error('Expected an array');
+  }
 }
+
+function requireRecord(
+  value: unknown,
+): asserts value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) {
+    throw new Error('Expected an object');
+  }
+}
+
 const skipNetwork = !RUN_NETWORK_TESTS || isWindows;
 
 // ─── In-Memory Test Doubles (infrastructure boundary) ────────────────────────
@@ -256,20 +256,19 @@ describe('GitHub broker (P08)', () => {
     }
   });
 
-  // ─── T1: issue.view returns the shaped contract ───────────────────────────
+  describe.skipIf(skipNetwork)('live GitHub behavior', () => {
+    // ─── T1: issue.view returns the shaped contract ─────────────────────────
 
-  /**
-   * issue.view against real public issue #135 in vybestack/llxprt-code
-   * returns the shaped contract: number, title, state, author, labels[],
-   * body, and comments[] when comments:true.
-   *
-   * @plan PLAN-20260731-GHBROKER.P08
-   * @requirement REQ-004, REQ-013
-   * @pseudocode 003-github-broker.md lines T1, 101-103
-   */
-  it.skipIf(skipNetwork)(
-    'T1: issue.view returns the shaped contract (real gh)',
-    async () => {
+    /**
+     * issue.view against real public issue #135 in vybestack/llxprt-code
+     * returns the shaped contract: number, title, state, author, labels[],
+     * body, and comments[] when comments:true.
+     *
+     * @plan PLAN-20260731-GHBROKER.P08
+     * @requirement REQ-004, REQ-013
+     * @pseudocode 003-github-broker.md lines T1, 101-103
+     */
+    it('T1: issue.view returns the shaped contract (real gh)', async () => {
       const opts = serverOptionsWithBroker(tokenStore, keyStorage);
       server = new CredentialProxyServer(opts);
       client = await startAndConnect(server);
@@ -291,29 +290,26 @@ describe('GitHub broker (P08)', () => {
       expect(Array.isArray(data.labels)).toBe(true);
       expect(typeof data.body).toBe('string');
       expect(Array.isArray(data.comments)).toBe(true);
-      // Verify comment shape using a helper to avoid conditional expects
-      const comments = data.comments as unknown[];
-      comments
-        .slice(0, 1)
-        .forEach((c) => assertCommentShape(c as Record<string, unknown>));
-    },
-    30000,
-  );
+      requireUnknownArray(data.comments);
+      const firstComment = data.comments[0];
+      requireRecord(firstComment);
+      expect(typeof firstComment.author).toBe('string');
+      expect(typeof firstComment.createdAt).toBe('string');
+      expect(typeof firstComment.body).toBe('string');
+    }, 30000);
 
-  // ─── T2: issue.view with repo targets another repository ──────────────────
+    // ─── T2: issue.view with repo targets another repository ──────────────────
 
-  /**
-   * issue.view with repo param targeting a different repository retrieves
-   * that repo's issue. We verify the repo flag is passed through and the
-   * response comes from the specified repo.
-   *
-   * @plan PLAN-20260731-GHBROKER.P08
-   * @requirement REQ-009
-   * @pseudocode 003-github-broker.md lines T2, 52-55
-   */
-  it.skipIf(skipNetwork)(
-    'T2: issue.view with repo targets another repository (real gh)',
-    async () => {
+    /**
+     * issue.view with repo param targeting a different repository retrieves
+     * that repo's issue. We verify the repo flag is passed through and the
+     * response comes from the specified repo.
+     *
+     * @plan PLAN-20260731-GHBROKER.P08
+     * @requirement REQ-009
+     * @pseudocode 003-github-broker.md lines T2, 52-55
+     */
+    it('T2: issue.view with repo targets another repository (real gh)', async () => {
       const opts = serverOptionsWithBroker(tokenStore, keyStorage);
       server = new CredentialProxyServer(opts);
       client = await startAndConnect(server);
@@ -329,9 +325,8 @@ describe('GitHub broker (P08)', () => {
       expect(result.ok).toBe(true);
       const data = result.data as Record<string, unknown>;
       expect(data.number).toBe(1);
-    },
-    30000,
-  );
+    }, 30000);
+  });
 
   // ─── T3: parameter beginning with '-' is rejected INVALID_PARAM ───────────
 
@@ -526,19 +521,18 @@ describe('GitHub broker (P08)', () => {
     );
   });
 
-  // ─── T13: gh missing from PATH → HOST_GH_UNAVAILABLE ──────────────────────
+  describe.skipIf(isWindows)('non-Windows transport behavior', () => {
+    // ─── T13: gh missing from PATH → HOST_GH_UNAVAILABLE ────────────────────
 
-  /**
-   * When gh is absent (ENOENT), the broker returns HOST_GH_UNAVAILABLE.
-   * This is tested by using a PATH with no gh.
-   *
-   * @plan PLAN-20260731-GHBROKER.P08
-   * @requirement REQ-004
-   * @pseudocode 003-github-broker.md lines T13, 88
-   */
-  it.skipIf(isWindows)(
-    'T13: gh missing from PATH → HOST_GH_UNAVAILABLE',
-    async () => {
+    /**
+     * When gh is absent (ENOENT), the broker returns HOST_GH_UNAVAILABLE.
+     * This is tested by using a PATH with no gh.
+     *
+     * @plan PLAN-20260731-GHBROKER.P08
+     * @requirement REQ-004
+     * @pseudocode 003-github-broker.md lines T13, 88
+     */
+    it('T13: gh missing from PATH → HOST_GH_UNAVAILABLE', async () => {
       const opts = serverOptionsWithBroker(tokenStore, keyStorage);
       server = new CredentialProxyServer(opts);
       client = await startAndConnect(server);
@@ -577,24 +571,20 @@ describe('GitHub broker (P08)', () => {
       }
       expect(result.ok).toBe(false);
       expect(result.code).toBe('HOST_GH_UNAVAILABLE');
-    },
-    30000,
-  );
+    }, 30000);
 
-  // ─── T14: capability-token auth still required ────────────────────────────
+    // ─── T14: capability-token auth still required ────────────────────────────
 
-  /**
-   * Capability-token authentication is still required to reach any github op.
-   * Requests reach handlers only after the handshake gate, so an
-   * unauthenticated connection must be rejected identically to today.
-   *
-   * @plan PLAN-20260731-GHBROKER.P08
-   * @requirement REQ-015
-   * @pseudocode 003-github-broker.md lines T14
-   */
-  it.skipIf(isWindows)(
-    'T14: capability-token auth required for github op',
-    async () => {
+    /**
+     * Capability-token authentication is still required to reach any github op.
+     * Requests reach handlers only after the handshake gate, so an
+     * unauthenticated connection must be rejected identically to today.
+     *
+     * @plan PLAN-20260731-GHBROKER.P08
+     * @requirement REQ-015
+     * @pseudocode 003-github-broker.md lines T14
+     */
+    it('T14: capability-token auth required for github op', async () => {
       const opts = serverOptionsWithBroker(tokenStore, keyStorage, {
         capabilityToken: CAPABILITY_TOKEN,
       });
@@ -667,8 +657,8 @@ describe('GitHub broker (P08)', () => {
       expect(githubResult.ok).toBe(false);
       expect(githubResult.code).toBe('UNKNOWN_OP');
       authedClient.close();
-    },
-  );
+    });
+  });
 });
 
 // ─── Pure-function unit tests (no server needed) ─────────────────────────────

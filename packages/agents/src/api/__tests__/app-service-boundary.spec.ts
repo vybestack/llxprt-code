@@ -89,15 +89,19 @@ describe('Runtime-vs-app-service boundary (T23/T24) @plan:PLAN-20260617-COREAPI.
   });
 
   it('durable app-service subpaths are importable with their named export (T23) @plan:PLAN-20260617-COREAPI.P09 @requirement:REQ-021', async () => {
+    const exportTypes = await observeDurableAppServiceExportTypes();
+    expect(exportTypes.every((exportType) => exportType === 'function')).toBe(
+      true,
+    );
     expect(SUBPATH_ENTRIES.length).toBeGreaterThan(0);
+  });
+
+  const observeDurableAppServiceExportTypes = async () => {
     const mod: Record<string, unknown> = await import(
       '@vybestack/llxprt-code-agents/app-service.js'
     );
-    for (const entry of SUBPATH_ENTRIES) {
-      const exported = mod[entry.exportName ?? ''];
-      expect(typeof exported).toBe('function');
-    }
-  });
+    return SUBPATH_ENTRIES.map((entry) => typeof mod[entry.exportName ?? '']);
+  };
 
   it('every completion entry is classified with no orphan (T24) @plan:PLAN-20260617-COREAPI.P09 @requirement:REQ-021', () => {
     expect(COMPLETION_ENTRIES.length).toBeGreaterThan(0);

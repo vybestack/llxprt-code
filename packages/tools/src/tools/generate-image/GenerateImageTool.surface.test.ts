@@ -12,6 +12,21 @@ import type {
   ImageOperationRunnerResult,
 } from './GenerateImageTool.js';
 
+function objectKeys(value: object | undefined): string[] {
+  return Object.keys(value ?? {});
+}
+
+function hasInlineData(
+  value: unknown,
+): value is { inlineData: { mimeType?: string } } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'inlineData' in value &&
+    value.inlineData !== undefined
+  );
+}
+
 const VALID_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
@@ -85,12 +100,12 @@ describe('GenerateImageTool surface {prompt, output_path, input_paths?}', () => 
       properties?: Record<string, unknown>;
       required?: string[];
     };
-    expect(Object.keys(schema.properties ?? {}).sort()).toEqual([
+    expect(objectKeys(schema.properties).sort()).toStrictEqual([
       'input_paths',
       'output_path',
       'prompt',
     ]);
-    expect(schema.required?.sort()).toEqual(['output_path', 'prompt']);
+    expect(schema.required?.sort()).toStrictEqual(['output_path', 'prompt']);
   });
 
   it('does NOT expose a model parameter', () => {
@@ -126,7 +141,7 @@ describe('GenerateImageTool surface {prompt, output_path, input_paths?}', () => 
       .execute(new AbortController().signal);
 
     expect(result.error).toBeUndefined();
-    expect(runImageCalls[0]?.input_paths).toEqual(['input.png']);
+    expect(runImageCalls[0]?.input_paths).toStrictEqual(['input.png']);
   });
 
   it('rejects more than five input_paths at build() time', () => {
@@ -170,14 +185,8 @@ describe('GenerateImageTool surface {prompt, output_path, input_paths?}', () => 
     const parts = result.llmContent as unknown[];
     const textPart = parts.find((p): p is string => typeof p === 'string');
     expect(textPart).toContain('/workspace/sub/cat.png');
-    const inlinePart = parts.find(
-      (p): p is { inlineData?: { mimeType?: string } } =>
-        typeof p === 'object' &&
-        p !== null &&
-        'inlineData' in p &&
-        p.inlineData !== undefined,
-    );
-    expect(inlinePart?.inlineData?.mimeType).toBe('image/png');
+    const inlinePart = parts.find(hasInlineData);
+    expect(inlinePart?.inlineData.mimeType).toBe('image/png');
   });
 
   it('never forwards a model field to the runner', async () => {

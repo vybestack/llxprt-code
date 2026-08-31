@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import {
@@ -310,7 +311,7 @@ describe('session media package bounded validation', () => {
       });
       await recording.flush();
       const recordingPath = recording.getFilePath();
-      if (recordingPath === null) throw new Error('Expected recording path');
+      assertNotNull(recordingPath, 'Expected recording path');
       for (let index = 0; index < 257; index += 1) {
         await writeFile(
           join(chatsDirectory, `persisted-session-${index}.json`),
@@ -353,7 +354,7 @@ describe('session media package bounded validation', () => {
       });
       await recording.flush();
       const recordingPath = recording.getFilePath();
-      if (recordingPath === null) throw new Error('Expected recording path');
+      assertNotNull(recordingPath, 'Expected recording path');
       const oversizedPath = join(
         chatsDirectory,
         'persisted-session-oversized.json',
@@ -422,8 +423,7 @@ describe('session media package bounded validation', () => {
       recording.recordContent(history(reference)[0]);
       await recording.flush();
       const recordingPath = recording.getFilePath();
-      if (recordingPath === null) throw new Error('Expected recording path');
-
+      assertNotNull(recordingPath, 'Expected recording path');
       await exportSessionMediaPackage(
         recordingPath,
         PROJECT_HASH,

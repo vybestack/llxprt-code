@@ -10,6 +10,15 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+async function collectReplayText(provider: FakeProvider): Promise<string> {
+  const textChunks: string[] = [];
+  for await (const chunk of provider.generateChatCompletion([])) {
+    const text = chunk.blocks.find((block) => block.type === 'text');
+    if (text && 'text' in text) textChunks.push(text.text);
+  }
+  return textChunks.join('');
+}
+
 describe('FakeProvider', () => {
   let tempDir: string;
 
@@ -41,20 +50,11 @@ describe('FakeProvider', () => {
 
     const provider = new FakeProvider(filePath);
 
-    const firstTurn: string[] = [];
-    for await (const chunk of provider.generateChatCompletion([])) {
-      const text = chunk.blocks.find((b) => b.type === 'text');
-      if (text && 'text' in text) firstTurn.push(text.text);
-    }
+    const firstTurn = await collectReplayText(provider);
+    const secondTurn = await collectReplayText(provider);
 
-    const secondTurn: string[] = [];
-    for await (const chunk of provider.generateChatCompletion([])) {
-      const text = chunk.blocks.find((b) => b.type === 'text');
-      if (text && 'text' in text) secondTurn.push(text.text);
-    }
-
-    expect(firstTurn.join('')).toBe('hello world');
-    expect(secondTurn.join('')).toBe('bye');
+    expect(firstTurn).toBe('hello world');
+    expect(secondTurn).toBe('bye');
   });
 
   it('substitutes {{CWD}} placeholders recursively', async () => {

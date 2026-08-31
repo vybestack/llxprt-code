@@ -16,6 +16,8 @@ import {
   type ImageResult,
 } from './ImageGenerationService.js';
 
+const bunIt = it;
+
 /**
  * Runs `operation` expecting rejection and returns the rejection reason.
  * Fails closed by throwing if the operation fulfills, so tests cannot pass
@@ -574,9 +576,9 @@ describe('persistBase64ImageResult', () => {
   });
 
   describe('symlink/reparse-point escape prevention', () => {
-    it.skipIf(!SYMLINKS_SUPPORTED)(
-      'rejects persistence when the output directory is a symlink/junction to outside the workspace and leaves the target empty',
-      async () => {
+    {
+      const it = !SYMLINKS_SUPPORTED ? bunIt.skip : bunIt;
+      it('rejects persistence when the output directory is a symlink/junction to outside the workspace and leaves the target empty', async () => {
         // Outside temp directory that the symlink would point at.
         const outsideDir = await fs.promises.realpath(
           await fs.promises.mkdtemp(
@@ -601,8 +603,8 @@ describe('persistBase64ImageResult', () => {
         } finally {
           await fs.promises.rm(outsideDir, { recursive: true, force: true });
         }
-      },
-    );
+      });
+    }
   });
 
   describe('cleanup-in-catch error masking', () => {

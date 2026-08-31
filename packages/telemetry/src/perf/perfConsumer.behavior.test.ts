@@ -91,6 +91,49 @@ async function writeJsonl(
   );
 }
 
+async function collectOperationSourceFiles(dir: string): Promise<string[]> {
+  const sourceFiles: string[] = [];
+  for await (const entry of streamPerfDirectory(dir)) {
+    if (
+      entry.entry.kind === 'ok' &&
+      entry.entry.record.record_type === 'operation'
+    ) {
+      sourceFiles.push(entry.sourceFile);
+    }
+  }
+  return sourceFiles;
+}
+
+async function yieldsOkEntry(dir: string): Promise<boolean> {
+  for await (const entry of streamPerfDirectory(dir)) {
+    if (entry.entry.kind === 'ok') {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function collectOperationIdsWhileEvicting(
+  dir: string,
+  fileToEvict: string,
+): Promise<{ readonly ids: readonly string[]; readonly evicted: boolean }> {
+  const ids: string[] = [];
+  let evicted = false;
+  for await (const entry of streamPerfDirectory(dir)) {
+    if (
+      entry.entry.kind === 'ok' &&
+      entry.entry.record.record_type === 'operation'
+    ) {
+      ids.push(entry.entry.record.operation_id);
+    }
+    if (!evicted) {
+      await fs.rm(join(dir, fileToEvict), { force: true });
+      evicted = true;
+    }
+  }
+  return { ids, evicted };
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -149,18 +192,10 @@ describe('PerfConsumer (P11, AC-9)', () => {
       JSON.stringify(makeOperation({ operation_id: 'from-a' })),
     ]);
 
-    const order: string[] = [];
-    for await (const entry of streamPerfDirectory(dir)) {
-      if (
-        entry.entry.kind === 'ok' &&
-        entry.entry.record.record_type === 'operation'
-      ) {
-        order.push(entry.sourceFile);
-      }
-    }
+    const order = await collectOperationSourceFiles(dir);
 
     // Sorted: aaaa before zzzz
-    expect(order).toEqual([
+    expect(order).toStrictEqual([
       'perf-20260101-aaaa.jsonl',
       'perf-20260101-zzzz.jsonl',
     ]);
@@ -285,13 +320,7 @@ describe('PerfConsumer (P11, AC-9)', () => {
       JSON.stringify(makeOperation({ operation_id: 's2' })),
     ]);
 
-    let firstYield = false;
-    for await (const entry of streamPerfDirectory(dir)) {
-      if (entry.entry.kind === 'ok') {
-        firstYield = true;
-        break; // prove we can break early (lazy iteration)
-      }
-    }
+    const firstYield = await yieldsOkEntry(dir);
 
     expect(firstYield).toBe(true);
   });
@@ -304,23 +333,10 @@ describe('PerfConsumer (P11, AC-9)', () => {
     await writeJsonl(dir, fileA, [JSON.stringify(opA)]);
     await writeJsonl(dir, fileB, [JSON.stringify(opB)]);
 
-    const ids: string[] = [];
-    let evictedB = false;
-    for await (const entry of streamPerfDirectory(dir)) {
-      if (
-        entry.entry.kind === 'ok' &&
-        entry.entry.record.record_type === 'operation'
-      ) {
-        ids.push(entry.entry.record.operation_id);
-      }
-      if (!evictedB) {
-        await fs.rm(join(dir, fileB), { force: true });
-        evictedB = true;
-      }
-    }
+    const result = await collectOperationIdsWhileEvicting(dir, fileB);
 
-    expect(evictedB).toBe(true);
-    expect(ids).toEqual(['op-a']);
+    expect(result.evicted).toBe(true);
+    expect(result.ids).toStrictEqual(['op-a']);
   });
 
   it('tolerates ENOENT when a statted file is deleted before stream open', async () => {

@@ -84,7 +84,7 @@ describe('discoverRuntimePluginPackages', () => {
           files: { ...pkg('plain-package', false) },
         }),
       ),
-    ).toEqual([]);
+    ).toStrictEqual([]);
   });
 
   it('finds a package that declares the marker regardless of its name', () => {
@@ -97,7 +97,7 @@ describe('discoverRuntimePluginPackages', () => {
           files: { ...pkg('kookoo', true) },
         }),
       ),
-    ).toEqual(['kookoo']);
+    ).toStrictEqual(['kookoo']);
   });
 
   it('finds scoped packages', () => {
@@ -111,7 +111,7 @@ describe('discoverRuntimePluginPackages', () => {
           files: { ...pkg('@acme/provider', true) },
         }),
       ),
-    ).toEqual(['@acme/provider']);
+    ).toStrictEqual(['@acme/provider']);
   });
 
   it('returns discovered packages in deterministic alphabetical order', () => {
@@ -127,7 +127,7 @@ describe('discoverRuntimePluginPackages', () => {
       }),
     );
 
-    expect(discovered).toEqual(['alpha-provider', 'zeta-provider']);
+    expect(discovered).toStrictEqual(['alpha-provider', 'zeta-provider']);
   });
 
   it('ignores dot directories such as .bin', () => {
@@ -138,7 +138,7 @@ describe('discoverRuntimePluginPackages', () => {
           files: { ...pkg('real-provider', true) },
         }),
       ),
-    ).toEqual(['real-provider']);
+    ).toStrictEqual(['real-provider']);
   });
 
   it('ignores a package whose marker is present but not true', () => {
@@ -154,7 +154,7 @@ describe('discoverRuntimePluginPackages', () => {
           },
         }),
       ),
-    ).toEqual([]);
+    ).toStrictEqual([]);
   });
 
   it('ignores a neighbouring package with an unparseable manifest', () => {
@@ -170,7 +170,7 @@ describe('discoverRuntimePluginPackages', () => {
           },
         }),
       ),
-    ).toEqual(['good-provider']);
+    ).toStrictEqual(['good-provider']);
   });
 
   it('ignores a directory with no package.json', () => {
@@ -178,6 +178,6 @@ describe('discoverRuntimePluginPackages', () => {
       discoverRuntimePluginPackages(
         deps({ dirs: { [NODE_MODULES]: ['stray-dir'] }, files: {} }),
       ),
-    ).toEqual([]);
+    ).toStrictEqual([]);
   });
 });

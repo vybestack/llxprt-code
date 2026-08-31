@@ -29,6 +29,10 @@ const testProviders = [
   'another-moderately-long-provider-name',
 ];
 
+function isProviderSelectionLine(line: string): boolean {
+  return line.includes('○') || line.includes('●');
+}
+
 describe('ProviderDialog Responsive Behavior', () => {
   let mockUseTerminalSize: Mock<typeof useTerminalSize>;
   const mockOnSelect = vi.fn();
@@ -147,9 +151,7 @@ describe('ProviderDialog Responsive Behavior', () => {
 
       // Should show reasonable number of columns (2-3 for standard width)
       const lines = output!.split('\n');
-      const providerLines = lines.filter(
-        (line) => line.includes('○') || line.includes('●'),
-      );
+      const providerLines = lines.filter(isProviderSelectionLine);
       expect(providerLines.length).toBeGreaterThan(1); // Multiple rows
     });
   });
@@ -206,9 +208,7 @@ describe('ProviderDialog Responsive Behavior', () => {
 
       // Should show multiple columns efficiently using wide width
       const lines = output!.split('\n');
-      const contentLines = lines.filter(
-        (line) => line.includes('○') || line.includes('●'),
-      );
+      const contentLines = lines.filter(isProviderSelectionLine);
       expect(contentLines.length).toBeLessThanOrEqual(3); // Should pack efficiently in wide layout
 
       // Should show all providers

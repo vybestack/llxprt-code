@@ -94,6 +94,40 @@ function assistantText(
     .map((b) => b.text as string);
 }
 
+type ConvertedMessage = ReturnType<typeof convertToAnthropicMessages>[number];
+
+function isAssistantWithToolUse(message: ConvertedMessage): boolean {
+  return (
+    message.role === 'assistant' &&
+    Array.isArray(message.content) &&
+    message.content.some(
+      (block) => (block as { type?: string }).type === 'tool_use',
+    )
+  );
+}
+
+function messageHasToolUse(message: ConvertedMessage): boolean {
+  if (!Array.isArray(message.content)) {
+    return false;
+  }
+  return message.content.some(
+    (block) => (block as { type?: string }).type === 'tool_use',
+  );
+}
+
+function blockContainsValue(
+  block: { readonly [key: string]: unknown },
+  value: string,
+): boolean {
+  return block['signature'] === value || block['data'] === value;
+}
+
+function isReasoningContentText(block: AssistantContentBlock): boolean {
+  return (
+    block.type === 'text' && block.text === 'reasoning content from elsewhere'
+  );
+}
+
 describe('convertToAnthropicMessages - cross-model thinking strip (issue #2335)', () => {
   it('replays thinking unchanged on SAME-model turn', () => {
     const contents: IContent[] = [
@@ -178,12 +212,7 @@ describe('convertToAnthropicMessages - cross-model thinking strip (issue #2335)'
     });
 
     // Find the assistant message with tool_use.
-    const assistantWithTool = messages.find(
-      (m) =>
-        m.role === 'assistant' &&
-        Array.isArray(m.content) &&
-        m.content.some((b) => (b as { type?: string }).type === 'tool_use'),
-    );
+    const assistantWithTool = messages.find(isAssistantWithToolUse);
     expect(assistantWithTool).toBeDefined();
 
     const blocks = assistantWithTool!.content as Array<{
@@ -270,22 +299,14 @@ describe('convertToAnthropicMessages - cross-model thinking strip (issue #2335)'
     expect(blocks.some((b) => b.type === 'thinking')).toBe(false);
     expect(blocks.some((b) => b.type === 'redacted_thinking')).toBe(false);
     // No block anywhere carries the cross-model signature.
-    expect(
-      blocks.some(
-        (b) =>
-          (b as { signature?: unknown }).signature === 'sig-A' ||
-          (b as { data?: unknown }).data === 'sig-A',
-      ),
-    ).toBe(false);
+    expect(blocks.some((block) => blockContainsValue(block, 'sig-A'))).toBe(
+      false,
+    );
 
     // The trailing assistant message still contains the tool_use with the same
     // id (post-normalization prefix) and name.
-    const trailingAssistant = findAssistantMessages(messages).find((m) =>
-      (Array.isArray(m.content)
-        ? (m.content as Array<{ type?: string }>)
-        : []
-      ).some((b) => b.type === 'tool_use'),
-    );
+    const trailingAssistant =
+      findAssistantMessages(messages).find(messageHasToolUse);
     expect(trailingAssistant).toBeDefined();
     const toolUse = (
       trailingAssistant!.content as Array<{
@@ -403,13 +424,9 @@ describe('convertToAnthropicMessages - cross-model thinking strip (issue #2335)'
     const blocks = flatAssistantBlocks(messages);
     expect(blocks.some((b) => b.type === 'thinking')).toBe(false);
     expect(blocks.some((b) => b.type === 'redacted_thinking')).toBe(false);
-    expect(
-      blocks.some(
-        (b) =>
-          (b as { data?: unknown }).data === 'sig-A' ||
-          (b as { signature?: unknown }).signature === 'sig-A',
-      ),
-    ).toBe(false);
+    expect(blocks.some((block) => blockContainsValue(block, 'sig-A'))).toBe(
+      false,
+    );
   });
 
   it('keeps a non-thinking sourceField thinking block as text on a cross-model turn', () => {
@@ -440,12 +457,7 @@ describe('convertToAnthropicMessages - cross-model thinking strip (issue #2335)'
     expect(blocks.some((b) => b.type === 'thinking')).toBe(false);
     expect(blocks.some((b) => b.type === 'redacted_thinking')).toBe(false);
     // The reasoning_content is kept as text.
-    expect(
-      blocks.some(
-        (b) =>
-          b.type === 'text' && b.text === 'reasoning content from elsewhere',
-      ),
-    ).toBe(true);
+    expect(blocks.some(isReasoningContentText)).toBe(true);
   });
 });
 
@@ -506,13 +518,9 @@ describe('convertToAnthropicMessages - cross-endpoint thinking strip (issue #146
     expect(blocks.some((b) => b.type === 'thinking')).toBe(false);
     expect(blocks.some((b) => b.type === 'redacted_thinking')).toBe(false);
     // Signature must not leak.
-    expect(
-      blocks.some(
-        (b) =>
-          (b as { signature?: unknown }).signature === 'zai-sig' ||
-          (b as { data?: unknown }).data === 'zai-sig',
-      ),
-    ).toBe(false);
+    expect(blocks.some((block) => blockContainsValue(block, 'zai-sig'))).toBe(
+      false,
+    );
     // Text is preserved.
     expect(assistantText(messages)).toContain('response text');
   });
@@ -646,13 +654,9 @@ describe('convertToAnthropicMessages - cross-endpoint thinking strip (issue #146
     const blocks = flatAssistantBlocks(messages);
     expect(blocks.some((b) => b.type === 'thinking')).toBe(false);
     expect(blocks.some((b) => b.type === 'redacted_thinking')).toBe(false);
-    expect(
-      blocks.some(
-        (b) =>
-          (b as { signature?: unknown }).signature === 'zai-sig' ||
-          (b as { data?: unknown }).data === 'zai-sig',
-      ),
-    ).toBe(false);
+    expect(blocks.some((block) => blockContainsValue(block, 'zai-sig'))).toBe(
+      false,
+    );
   });
 
   it('treats trailing-slash URL variants as the same endpoint (normalization)', () => {

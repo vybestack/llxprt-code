@@ -58,6 +58,25 @@ import {
   metadataOf,
 } from '../codexStateful.test-helpers.js';
 
+interface FunctionItem {
+  readonly type?: string;
+  readonly call_id?: string;
+}
+
+function isTrimmedToolOutput(item: FunctionItem): boolean {
+  return (
+    item.type === 'function_call_output' && item.call_id === 'call_trimmed'
+  );
+}
+
+function isTrimmedToolCall(item: FunctionItem): boolean {
+  return item.type === 'function_call' && item.call_id === 'call_trimmed';
+}
+
+function isCompletionContent(content: IContent): boolean {
+  return content.metadata !== undefined && content.blocks.length === 0;
+}
+
 describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request invariants and end-to-end chaining @issue:3134', () => {
   beforeEach(() => {
     setActiveProviderRuntimeContext(
@@ -392,17 +411,10 @@ describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request
           type?: string;
           call_id?: string;
         }>;
-        const hasToolOutput = input.some(
-          (item) =>
-            item.type === 'function_call_output' &&
-            item.call_id === 'call_trimmed',
-        );
+        const hasToolOutput = input.some(isTrimmedToolOutput);
         expect(hasToolOutput).toBe(true);
         // The function_call itself should NOT be in the trimmed input.
-        const hasToolCall = input.some(
-          (item) =>
-            item.type === 'function_call' && item.call_id === 'call_trimmed',
-        );
+        const hasToolCall = input.some(isTrimmedToolCall);
         expect(hasToolCall).toBe(false);
       } finally {
         transport.close();
@@ -443,9 +455,7 @@ describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request
         );
 
         // Find the completion metadata IContent (blocks: [], has metadata.id).
-        const completion = turn1Output.find(
-          (c) => c.metadata !== undefined && c.blocks.length === 0,
-        );
+        const completion = turn1Output.find(isCompletionContent);
         expect(completion).toBeDefined();
         const completionId = completion!.metadata!.id;
         expect(completionId).toBe('response');

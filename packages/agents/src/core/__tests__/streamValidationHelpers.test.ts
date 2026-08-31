@@ -57,40 +57,58 @@ describe('validateStreamCompletion — canonical error classification', () => {
   });
 
   it('does NOT throw MALFORMED_FUNCTION_CALL when rawStopReason is UNEXPECTED_TOOL_CALL', () => {
-    // UNEXPECTED_TOOL_CALL also canonicalizes to 'error' but is NOT malformed.
-    // The function should NOT throw MALFORMED_FUNCTION_CALL.
-    let threw: InvalidStreamError | undefined;
-    try {
-      validateStreamCompletion(
-        makeLogger(),
-        makeUserInput(),
-        makeOutcomeWithText(),
-        'error',
-        'some text',
-        'UNEXPECTED_TOOL_CALL',
-      );
-    } catch (e) {
-      if (e instanceof InvalidStreamError) threw = e;
-    }
-    expect(threw?.type).not.toBe('MALFORMED_FUNCTION_CALL');
+    const { typeObservation } =
+      observeDoesNOTThrowMALFORMEDFUNCTIONCALLWhenRawStopReasonIsUNEXPECTEDTOOLCALL();
+    expect(typeObservation).not.toBe('MALFORMED_FUNCTION_CALL');
   });
 
+  const observeDoesNOTThrowMALFORMEDFUNCTIONCALLWhenRawStopReasonIsUNEXPECTEDTOOLCALL =
+    () => {
+      // UNEXPECTED_TOOL_CALL also canonicalizes to 'error' but is NOT malformed.
+      // The function should NOT throw MALFORMED_FUNCTION_CALL.
+      let threw: InvalidStreamError | undefined;
+      try {
+        validateStreamCompletion(
+          makeLogger(),
+          makeUserInput(),
+          makeOutcomeWithText(),
+          'error',
+          'some text',
+          'UNEXPECTED_TOOL_CALL',
+        );
+      } catch (e) {
+        if (e instanceof InvalidStreamError) threw = e;
+      }
+
+      const typeObservation = threw?.type;
+      return { typeObservation };
+    };
+
   it('does NOT throw MALFORMED_FUNCTION_CALL for an unknown error reason', () => {
-    let threw: InvalidStreamError | undefined;
-    try {
-      validateStreamCompletion(
-        makeLogger(),
-        makeUserInput(),
-        makeOutcomeWithText(),
-        'error',
-        'some text',
-        'SOME_NEW_ERROR_REASON',
-      );
-    } catch (e) {
-      if (e instanceof InvalidStreamError) threw = e;
-    }
-    expect(threw?.type).not.toBe('MALFORMED_FUNCTION_CALL');
+    const { typeObservation } =
+      observeDoesNOTThrowMALFORMEDFUNCTIONCALLForAnUnknownErrorReason();
+    expect(typeObservation).not.toBe('MALFORMED_FUNCTION_CALL');
   });
+
+  const observeDoesNOTThrowMALFORMEDFUNCTIONCALLForAnUnknownErrorReason =
+    () => {
+      let threw: InvalidStreamError | undefined;
+      try {
+        validateStreamCompletion(
+          makeLogger(),
+          makeUserInput(),
+          makeOutcomeWithText(),
+          'error',
+          'some text',
+          'SOME_NEW_ERROR_REASON',
+        );
+      } catch (e) {
+        if (e instanceof InvalidStreamError) threw = e;
+      }
+
+      const typeObservation = threw?.type;
+      return { typeObservation };
+    };
 
   it('throws MALFORMED_FUNCTION_CALL when rawStopReason is undefined but finishReason is error (backward compat)', () => {
     // When rawStopReason is not available, the canonical 'error' should still

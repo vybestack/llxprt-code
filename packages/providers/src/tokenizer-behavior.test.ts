@@ -32,6 +32,13 @@ import {
 } from '@vybestack/llxprt-code-providers';
 import type { RuntimeTokenizer } from '@vybestack/llxprt-code-core';
 
+function countWhitespaceSeparatedTokens(content: unknown): number {
+  if (typeof content === 'string') {
+    return content.split(/\s+/).filter(Boolean).length;
+  }
+  return 0;
+}
+
 /**
  * @plan:PLAN-20260603-ISSUE1584.P10
  * @requirement:REQ-TEST-001
@@ -257,12 +264,7 @@ describe('Tokenizer structural compatibility with RuntimeTokenizer', () => {
    */
   it('fake RuntimeTokenizer can be used for HistoryService-style consumption', () => {
     const fakeTokenizer: RuntimeTokenizer = {
-      countTokens: (content: unknown): number => {
-        if (typeof content === 'string') {
-          return content.split(/\s+/).filter(Boolean).length;
-        }
-        return 0;
-      },
+      countTokens: countWhitespaceSeparatedTokens,
     };
 
     function totalTokensForHistory(

@@ -96,12 +96,15 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
 
       expect(result.history).toHaveLength(3);
       expect(result.warnings.length).toBeGreaterThanOrEqual(1);
-      expect(
-        result.warnings.some(
-          (w) => w.includes('non-monotonic') || w.includes('seq'),
-        ),
-      ).toBe(true);
+      expect(result.warnings.some(isSeqWarning)).toBe(true);
     });
+
+    /**
+     * True for warnings describing a non-monotonic/se quence problem.
+     */
+    function isSeqWarning(w: string): boolean {
+      return w.includes('non-monotonic') || w.includes('seq');
+    }
   });
 
   // -------------------------------------------------------------------------

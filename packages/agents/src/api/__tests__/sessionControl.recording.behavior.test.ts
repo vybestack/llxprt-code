@@ -79,10 +79,10 @@ function historyEmitter(agent: Agent): EventEmitter {
  * disposes the agent and removes both the working dir and its derived storage
  * temp dir. Guarantees no stray recording artifacts survive.
  */
-async function withIsolatedAgent(
+async function withIsolatedAgent<T>(
   fixture: string,
-  fn: (agent: Agent) => Promise<void>,
-): Promise<void> {
+  fn: (agent: Agent) => Promise<T>,
+): Promise<T> {
   const workingDir = mkdtempSync(join(tmpdir(), 'llxprt-rec-spec-'));
   // The temp dirs must be removed on EVERY exit path, including a buildAgent
   // rejection (which would otherwise leak the just-created workingDir), a
@@ -95,7 +95,7 @@ async function withIsolatedAgent(
   try {
     const { agent, cleanup } = await buildAgent(fixture, { workingDir });
     try {
-      await fn(agent);
+      return await fn(agent);
     } finally {
       await cleanup();
     }
@@ -107,30 +107,37 @@ async function withIsolatedAgent(
 
 describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010', () => {
   it('appends a turn that happens AFTER setRecording(true) to the JSONL file (continuous, not a one-shot snapshot) @requirement:REQ-010', async () => {
-    await withIsolatedAgent('multi-turn-text.jsonl', async (agent) => {
-      // Turn 1 happens BEFORE recording is enabled.
-      await drain(agent.stream('first-user-utterance'));
-
-      // Enable recording: snapshots the current history (turn 1) and subscribes
-      // a RecordingIntegration to the reused HistoryService.
-      await agent.session.setRecording({ enabled: true });
-      const path = agent.session.getRecording().path ?? '';
-      expect(path.length).toBeGreaterThan(0);
-
-      // Turn 2 happens AFTER recording is enabled. Its user + assistant content
-      // reaches the JSONL file ONLY via the subscribed integration — a one-shot
-      // snapshot taken at enable time could not contain it.
-      await drain(agent.stream('second-user-sentinel-epsilon'));
-
-      // Disable to flush + dispose the service so all queued writes land.
-      await agent.session.setRecording({ enabled: false });
-
-      const raw = readFileSync(path, 'utf8');
-      // The SECOND turn's user prompt and assistant reply are both present.
-      expect(raw).toContain('second-user-sentinel-epsilon');
-      expect(raw).toContain('turn two reply');
-    });
+    const { path, raw } =
+      await observeAppendsATurnThatHappensAFTERSetRecordingTrueToTheJSONLFile();
+    expect(path.length).toBeGreaterThan(0);
+    expect(raw).toContain('second-user-sentinel-epsilon');
+    expect(raw).toContain('turn two reply');
   });
+
+  const observeAppendsATurnThatHappensAFTERSetRecordingTrueToTheJSONLFile =
+    async () =>
+      withIsolatedAgent('multi-turn-text.jsonl', async (agent) => {
+        // Turn 1 happens BEFORE recording is enabled.
+        await drain(agent.stream('first-user-utterance'));
+
+        // Enable recording: snapshots the current history (turn 1) and subscribes
+        // a RecordingIntegration to the reused HistoryService.
+        await agent.session.setRecording({ enabled: true });
+        const path = agent.session.getRecording().path ?? '';
+
+        // Turn 2 happens AFTER recording is enabled. Its user + assistant content
+        // reaches the JSONL file ONLY via the subscribed integration — a one-shot
+        // snapshot taken at enable time could not contain it.
+        await drain(agent.stream('second-user-sentinel-epsilon'));
+
+        // Disable to flush + dispose the service so all queued writes land.
+        await agent.session.setRecording({ enabled: false });
+
+        const raw = readFileSync(path, 'utf8');
+        // The SECOND turn's user prompt and assistant reply are both present.
+
+        return { path, raw };
+      });
 
   it('resume() returns the reconstructed IContent[] history @requirement:REQ-010', async () => {
     await withIsolatedAgent('plain-text.jsonl', async (agent) => {
@@ -163,7 +170,15 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
   });
 
   it('post-resume turns append to the resumed JSONL file @requirement:REQ-010', async () => {
-    await withIsolatedAgent('plain-text.jsonl', async (agent) => {
+    const { path, raw } =
+      await observePostResumeTurnsAppendToTheResumedJSONLFile();
+    expect(path.length).toBeGreaterThan(0);
+    expect(raw).toContain('post-resume-sentinel-gamma');
+    expect(raw).toContain('a plain text reply');
+  });
+
+  const observePostResumeTurnsAppendToTheResumedJSONLFile = async () =>
+    withIsolatedAgent('plain-text.jsonl', async (agent) => {
       // Record + release a session so it can be resumed.
       await agent.setHistory([textMessage('user', 'pre-resume base turn')]);
       await agent.session.setRecording({ enabled: true });
@@ -173,7 +188,6 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
       // integration so post-resume turns keep appending to the SAME file.
       await agent.session.resume('latest');
       const path = agent.session.getRecording().path ?? '';
-      expect(path.length).toBeGreaterThan(0);
 
       // A post-resume turn appends to the resumed file.
       await drain(agent.stream('post-resume-sentinel-gamma'));
@@ -182,69 +196,81 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
       await agent.session.setRecording({ enabled: false });
 
       const raw = readFileSync(path, 'utf8');
-      expect(raw).toContain('post-resume-sentinel-gamma');
-      expect(raw).toContain('a plain text reply');
+
+      return { path, raw };
     });
-  });
 
   it('records COMPLETED TOOL CALLS (call + response) into the session JSONL for later replay (issue #1605 verification) @requirement:REQ-010', async () => {
-    await withIsolatedAgent('tool-call-then-answer.jsonl', async (agent) => {
-      // Recording is enabled BEFORE the tool turn, so the tool call and its
-      // response reach the JSONL only via the live RecordingIntegration
-      // subscription — proving the Agent API runtime records completed tool
-      // calls into session history (the #1605 acceptance bar the Zed
-      // loadSession replay depends on). The file materializes on first content
-      // (the session is unprompted at enable time), so the path is read AFTER
-      // the turn.
-      await agent.session.setRecording({ enabled: true });
-
-      const responder = respondToFirstConfirmation(
-        agent,
-        ToolConfirmationOutcome.ProceedOnce,
-      );
-      try {
-        await drain(agent.stream('run the tool'));
-      } finally {
-        responder.unsubscribe();
-      }
-
-      const path = agent.session.getRecording().path ?? '';
-      expect(path.length).toBeGreaterThan(0);
-
-      // Disable to flush + dispose so all queued writes land.
-      await agent.session.setRecording({ enabled: false });
-
-      const raw = readFileSync(path, 'utf8');
-      // The recorded transcript carries the tool CALL block for read_file …
-      expect(raw).toContain('"tool_call"');
-      expect(raw).toContain('read_file');
-      // … its RESPONSE block …
-      expect(raw).toContain('"tool_response"');
-      // … and the post-tool assistant text, i.e. the full completed exchange.
-      expect(raw).toContain('after the tool ran');
-
-      // The recorded call and response PAIR: the response's callId equals the
-      // recorded call's id (the runtime normalizes ids in history, so the
-      // fixture's raw id is not asserted — the pairing invariant is what the
-      // #1604 replay's tool_call/tool_call_update matching depends on).
-      const blocks = raw
-        .split('\n')
-        .filter((line) => line.trim().length > 0)
-        .map((line) => JSON.parse(line) as Record<string, unknown>)
-        .flatMap((entry) => {
-          const payload = entry['payload'] as
-            | { content?: { blocks?: ReadonlyArray<Record<string, unknown>> } }
-            | undefined;
-          return payload?.content?.blocks ?? [];
-        });
-      const callBlock = blocks.find((b) => b['type'] === 'tool_call');
-      const responseBlock = blocks.find((b) => b['type'] === 'tool_response');
-      expect(callBlock).toBeDefined();
-      expect(responseBlock).toBeDefined();
-      expect(typeof callBlock?.['id']).toBe('string');
-      expect(responseBlock?.['callId']).toBe(callBlock?.['id']);
-    });
+    const { path, raw, callBlock, responseBlock } =
+      await observeRecordsCOMPLETEDTOOLCALLSCallResponseIntoTheSessionJSONLForLater();
+    expect(path.length).toBeGreaterThan(0);
+    expect(raw).toContain('"tool_call"');
+    expect(raw).toContain('read_file');
+    expect(raw).toContain('"tool_response"');
+    expect(raw).toContain('after the tool ran');
+    expect(callBlock).toBeDefined();
+    expect(responseBlock).toBeDefined();
+    expect(typeof callBlock?.['id']).toBe('string');
+    expect(responseBlock?.['callId']).toBe(callBlock?.['id']);
   });
+
+  const observeRecordsCOMPLETEDTOOLCALLSCallResponseIntoTheSessionJSONLForLater =
+    async () =>
+      withIsolatedAgent('tool-call-then-answer.jsonl', async (agent) => {
+        // Recording is enabled BEFORE the tool turn, so the tool call and its
+        // response reach the JSONL only via the live RecordingIntegration
+        // subscription — proving the Agent API runtime records completed tool
+        // calls into session history (the #1605 acceptance bar the Zed
+        // loadSession replay depends on). The file materializes on first content
+        // (the session is unprompted at enable time), so the path is read AFTER
+        // the turn.
+        await agent.session.setRecording({ enabled: true });
+
+        const responder = respondToFirstConfirmation(
+          agent,
+          ToolConfirmationOutcome.ProceedOnce,
+        );
+        try {
+          await drain(agent.stream('run the tool'));
+        } finally {
+          responder.unsubscribe();
+        }
+
+        const path = agent.session.getRecording().path ?? '';
+
+        // Disable to flush + dispose so all queued writes land.
+        await agent.session.setRecording({ enabled: false });
+
+        const raw = readFileSync(path, 'utf8');
+        // The recorded transcript carries the tool CALL block for read_file …
+
+        // … its RESPONSE block …
+
+        // … and the post-tool assistant text, i.e. the full completed exchange.
+
+        // The recorded call and response PAIR: the response's callId equals the
+        // recorded call's id (the runtime normalizes ids in history, so the
+        // fixture's raw id is not asserted — the pairing invariant is what the
+        // #1604 replay's tool_call/tool_call_update matching depends on).
+        const blocks = raw
+          .split('\n')
+          .filter((line) => line.trim().length > 0)
+          .map((line) => JSON.parse(line) as Record<string, unknown>)
+          .flatMap((entry) => {
+            const payload = entry['payload'] as
+              | {
+                  content?: {
+                    blocks?: ReadonlyArray<Record<string, unknown>>;
+                  };
+                }
+              | undefined;
+            return payload?.content?.blocks ?? [];
+          });
+        const callBlock = blocks.find((b) => b['type'] === 'tool_call');
+        const responseBlock = blocks.find((b) => b['type'] === 'tool_response');
+
+        return { path, raw, callBlock, responseBlock };
+      });
 
   it('teardown unsubscribes the RecordingIntegration from the HistoryService (no leaked listener) @requirement:REQ-010', async () => {
     await withIsolatedAgent('plain-text.jsonl', async (agent) => {

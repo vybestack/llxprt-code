@@ -262,7 +262,7 @@ describe('Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P
       const image = readInlineImage(result);
       const metadata = await sharp(image.data).metadata();
 
-      expect(metadata.autoOrient).toEqual({ width: 120, height: 60 });
+      expect(metadata.autoOrient).toStrictEqual({ width: 120, height: 60 });
       expect(image.mimeType).toBe('image/png');
       expect(image.displayName).toBe('oversized.png');
     });
@@ -284,7 +284,7 @@ describe('Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P
         file_path: filePath,
       });
 
-      expect(readInlineImage(result).data).toEqual(original);
+      expect(readInlineImage(result).data).toStrictEqual(original);
     });
 
     it('exposes and honors skip_image_resize for a single image read', async () => {
@@ -309,7 +309,7 @@ describe('Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P
         skip_image_resize: true,
       });
 
-      expect(readInlineImage(result).data).toEqual(original);
+      expect(readInlineImage(result).data).toStrictEqual(original);
     });
 
     it('preserves exact image bytes when no resize policy is configured', async () => {
@@ -324,7 +324,7 @@ describe('Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P
         { file_path: filePath },
       );
 
-      expect(readInlineImage(result).data).toEqual(original);
+      expect(readInlineImage(result).data).toStrictEqual(original);
     });
 
     it('returns a clear error for malformed image resize settings', async () => {

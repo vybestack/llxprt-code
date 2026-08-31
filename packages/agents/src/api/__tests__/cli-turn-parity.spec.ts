@@ -240,6 +240,14 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
   }, 60000);
 
   it('T11 boundary scan: the parity spec files import ONLY the public root (no ./internals.js in Path A, no deep /src/ anywhere) (REQ-INT-004)', () => {
+    const { deepImport, internalImports, rootImports } =
+      observeParitySpecImportBoundaries();
+    expect(deepImport).toBeUndefined();
+    expect(internalImports).toStrictEqual([]);
+    expect(rootImports.length).toBeGreaterThan(0);
+  }, 30000);
+
+  function observeParitySpecImportBoundaries() {
     const here = dirname(fileURLToPath(import.meta.url));
     const specs = [
       join(here, 'cli-turn-parity.spec.ts'),
@@ -259,26 +267,25 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
 
     // REQ-INT-004 (a): NO deep core/src or providers/src imports.
     const deepImport = allSpecifiers.find(
-      (s) => s.includes('core/src/') || s.includes('providers/src/'),
+      (specifier) =>
+        specifier.includes('core/src/') || specifier.includes('providers/src/'),
     );
-    expect(deepImport).toBeUndefined();
 
     // REQ-INT-004 (b): every @vybestack/llxprt-code-agents import is the root
     // or a documented non-internals subpath. ./internals.js is FORBIDDEN as a
     // Path-A import; the reference AgenticLoop import comes from the root.
-    const agentsImports = allSpecifiers.filter((s) =>
-      s.startsWith('@vybestack/llxprt-code-agents'),
+    const agentsImports = allSpecifiers.filter((specifier) =>
+      specifier.startsWith('@vybestack/llxprt-code-agents'),
     );
-    for (const spec of agentsImports) {
-      // Root or documented subpath ONLY (never internals).
-      expect(spec.endsWith('/internals.js')).toBe(false);
-    }
+    const internalImports = agentsImports.filter((specifier) =>
+      specifier.endsWith('/internals.js'),
+    );
 
     // REQ-INT-004 (c): there IS at least one agents root import (the surface
     // under test is exercised through the curated public root).
     const rootImports = agentsImports.filter(
-      (s) => s === '@vybestack/llxprt-code-agents',
+      (specifier) => specifier === '@vybestack/llxprt-code-agents',
     );
-    expect(rootImports.length).toBeGreaterThan(0);
-  }, 30000);
+    return { deepImport, internalImports, rootImports };
+  }
 });

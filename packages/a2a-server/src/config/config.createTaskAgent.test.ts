@@ -150,183 +150,187 @@ function makeExtensionWithMcp(name: string): LlxprtExtension {
   };
 }
 
-describe('createTaskAgent (#3221): Agent built via public API, no runtime assembly', () => {
-  // Snapshot once at module scope: afterEach RESTORES the pre-suite values
-  // instead of unconditionally deleting them, so a runWithEnv restore (or a
-  // sibling test file in this bun process) cannot have its auth env wiped by
-  // this file's teardown.
-  const SAVED_AUTH_ENV = Object.fromEntries(
-    ENV_KEYS_TO_RESTORE.map((k) => [k, process.env[k]]),
-  );
-  afterEach(() => {
-    for (const [k, v] of Object.entries(SAVED_AUTH_ENV)) {
-      if (v === undefined) delete process.env[k];
-      else process.env[k] = v;
+describe('config', () => {
+  describe('createTaskAgent (#3221): Agent built via public API, no runtime assembly', () => {
+    // Snapshot once at module scope: afterEach RESTORES the pre-suite values
+    // instead of unconditionally deleting them, so a runWithEnv restore (or a
+    // sibling test file in this bun process) cannot have its auth env wiped by
+    // this file's teardown.
+    const SAVED_AUTH_ENV = Object.fromEntries(
+      ENV_KEYS_TO_RESTORE.map((k) => [k, process.env[k]]),
+    );
+    afterEach(() => {
+      for (const [k, v] of Object.entries(SAVED_AUTH_ENV)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    });
+
+    it('no env signals -> provider-neutral agent, working FakeProvider stream turn, clean disposal', async () => {
+      await runWithEnv(activateFakeProvider, async () => {
+        const agent = await buildAgent({}, []);
+        try {
+          // Provider-neutral start: the sentinel must not leak as a real
+          // provider, and no auth interaction has occurred.
+          expect(agent.getProvider()).toBe('unconfigured');
+          const status = agent.getProviderStatus();
+          expect(status.provider).toBe('');
+          expect(status.authStatus).toBe('unauthenticated');
+
+          // A full FakeProvider turn streams through the public facade.
+          const types = await drainTypes(agent);
+          expect(types).toContain('text');
+          expect(types).toContain('done');
+        } finally {
+          await disposeAgent(agent);
+        }
+      });
+    }, 30_000);
+
+    it('GEMINI_API_KEY set -> provider stays neutral (legacy refreshAuth parity), stream works', async () => {
+      await runWithEnv(
+        () => {
+          activateFakeProvider();
+          process.env.GEMINI_API_KEY = 'test-key';
+        },
+        async () => {
+          const agent = await buildAgent({}, []);
+          try {
+            // Legacy behavior: the env key primed auth state but never
+            // activated a provider; the agent stays neutral and functional.
+            expect(agent.getProvider()).toBe('unconfigured');
+            expect(agent.getProviderStatus().provider).toBe('');
+            const types = await drainTypes(agent);
+            expect(types).toContain('done');
+          } finally {
+            await disposeAgent(agent);
+          }
+        },
+      );
+    }, 30_000);
+
+    it('LLXPRT_DEFAULT_PROVIDER=gemini -> provider selected, auth not assumed, stream works', async () => {
+      await runWithEnv(
+        () => {
+          activateFakeProvider();
+          process.env.LLXPRT_DEFAULT_PROVIDER = 'gemini';
+        },
+        async () => {
+          const agent = await buildAgent({}, []);
+          try {
+            expect(agent.getProvider()).toBe('gemini');
+            // No credentials in the environment: auth must not be reported
+            // authenticated (the legacy oauth attempt failed soft).
+            expect(agent.getProviderStatus().authStatus).toBe(
+              'unauthenticated',
+            );
+            const types = await drainTypes(agent);
+            expect(types).toContain('done');
+          } finally {
+            await disposeAgent(agent);
+          }
+        },
+      );
+    }, 30_000);
+
+    it('LLXPRT_YOLO_MODE=true -> approval mode is YOLO on the facade', async () => {
+      await runWithEnv(
+        () => {
+          activateFakeProvider();
+          process.env.LLXPRT_YOLO_MODE = 'true';
+        },
+        async () => {
+          const agent = await buildAgent({}, []);
+          try {
+            expect(agent.getApprovalMode()).toBe(ApprovalMode.YOLO);
+          } finally {
+            await disposeAgent(agent);
+          }
+        },
+      );
+    }, 30_000);
+
+    it('mcpServers from settings and extensions are visible via the public mcp surface', async () => {
+      await runWithEnv(activateFakeProvider, async () => {
+        const agent = await buildAgent(
+          {
+            folderTrust: true,
+            mcpServers: { 'cfg-server': { command: 'node', args: ['a.js'] } },
+          },
+          [makeExtensionWithMcp('ext')],
+        );
+        try {
+          // MCP discovery runs in the background during agent creation
+          // (#2325); poll the public status until it settles.
+          const deadline = Date.now() + 10_000;
+          let names: string[] = [];
+          for (;;) {
+            const status = agent.mcp.status();
+            names = status.servers.map((s) => s.name);
+            const settled =
+              names.includes('cfg-server') && names.includes('ext-server');
+            if (settled || Date.now() > deadline) break;
+            await new Promise((r) => setTimeout(r, 100));
+          }
+          expect(names).toContain('cfg-server');
+          expect(names).toContain('ext-server');
+        } finally {
+          await disposeAgent(agent);
+        }
+      });
+    }, 30_000);
+
+    it('sessionId is observable -> agent runtime id equals the taskId', async () => {
+      await runWithEnv(activateFakeProvider, async () => {
+        const agent = await buildAgent({}, [], 'task-agent-session-42');
+        try {
+          expect(agent.getRuntimeId()).toBe('task-agent-session-42');
+        } finally {
+          await disposeAgent(agent);
+        }
+      });
+    }, 30_000);
+
+    it('per-task isolation: two agents coexist and dispose independently', async () => {
+      await runWithEnv(activateFakeProvider, async () => {
+        const first = await buildAgent({}, [], 'isolation-a');
+        const second = await buildAgent({}, [], 'isolation-b');
+        try {
+          expect(first.getRuntimeId()).not.toBe(second.getRuntimeId());
+          const [a, b] = await Promise.all([
+            drainTypes(first),
+            drainTypes(second),
+          ]);
+          expect(a).toContain('done');
+          expect(b).toContain('done');
+        } finally {
+          await disposeAgent(second);
+          await disposeAgent(first);
+        }
+      });
+    }, 30_000);
+  });
+
+  // Lifecycle cleanup runs even when individual tests fail mid-suite; the
+  // process 'exit' hook stays as a belt-and-braces fallback for abnormal exits.
+  afterAll(() => {
+    try {
+      rmSync(WORKSPACE, { recursive: true, force: true });
+    } catch {
+      /* best-effort cleanup */
     }
   });
 
-  it('no env signals -> provider-neutral agent, working FakeProvider stream turn, clean disposal', async () => {
-    await runWithEnv(activateFakeProvider, async () => {
-      const agent = await buildAgent({}, []);
-      try {
-        // Provider-neutral start: the sentinel must not leak as a real
-        // provider, and no auth interaction has occurred.
-        expect(agent.getProvider()).toBe('unconfigured');
-        const status = agent.getProviderStatus();
-        expect(status.provider).toBe('');
-        expect(status.authStatus).toBe('unauthenticated');
-
-        // A full FakeProvider turn streams through the public facade.
-        const types = await drainTypes(agent);
-        expect(types).toContain('text');
-        expect(types).toContain('done');
-      } finally {
-        await disposeAgent(agent);
-      }
-    });
-  }, 30_000);
-
-  it('GEMINI_API_KEY set -> provider stays neutral (legacy refreshAuth parity), stream works', async () => {
-    await runWithEnv(
-      () => {
-        activateFakeProvider();
-        process.env.GEMINI_API_KEY = 'test-key';
-      },
-      async () => {
-        const agent = await buildAgent({}, []);
-        try {
-          // Legacy behavior: the env key primed auth state but never
-          // activated a provider; the agent stays neutral and functional.
-          expect(agent.getProvider()).toBe('unconfigured');
-          expect(agent.getProviderStatus().provider).toBe('');
-          const types = await drainTypes(agent);
-          expect(types).toContain('done');
-        } finally {
-          await disposeAgent(agent);
-        }
-      },
-    );
-  }, 30_000);
-
-  it('LLXPRT_DEFAULT_PROVIDER=gemini -> provider selected, auth not assumed, stream works', async () => {
-    await runWithEnv(
-      () => {
-        activateFakeProvider();
-        process.env.LLXPRT_DEFAULT_PROVIDER = 'gemini';
-      },
-      async () => {
-        const agent = await buildAgent({}, []);
-        try {
-          expect(agent.getProvider()).toBe('gemini');
-          // No credentials in the environment: auth must not be reported
-          // authenticated (the legacy oauth attempt failed soft).
-          expect(agent.getProviderStatus().authStatus).toBe('unauthenticated');
-          const types = await drainTypes(agent);
-          expect(types).toContain('done');
-        } finally {
-          await disposeAgent(agent);
-        }
-      },
-    );
-  }, 30_000);
-
-  it('LLXPRT_YOLO_MODE=true -> approval mode is YOLO on the facade', async () => {
-    await runWithEnv(
-      () => {
-        activateFakeProvider();
-        process.env.LLXPRT_YOLO_MODE = 'true';
-      },
-      async () => {
-        const agent = await buildAgent({}, []);
-        try {
-          expect(agent.getApprovalMode()).toBe(ApprovalMode.YOLO);
-        } finally {
-          await disposeAgent(agent);
-        }
-      },
-    );
-  }, 30_000);
-
-  it('mcpServers from settings and extensions are visible via the public mcp surface', async () => {
-    await runWithEnv(activateFakeProvider, async () => {
-      const agent = await buildAgent(
-        {
-          folderTrust: true,
-          mcpServers: { 'cfg-server': { command: 'node', args: ['a.js'] } },
-        },
-        [makeExtensionWithMcp('ext')],
+  process.on('exit', () => {
+    try {
+      rmSync(WORKSPACE, { recursive: true, force: true });
+    } catch (err) {
+      // Best-effort, but observable: an orphaned workspace with a locked
+      // file is worth seeing in CI output.
+      process.stderr.write(
+        `config.createTaskAgent.test.ts: workspace cleanup failed: ${String(err)}
+  `,
       );
-      try {
-        // MCP discovery runs in the background during agent creation
-        // (#2325); poll the public status until it settles.
-        const deadline = Date.now() + 10_000;
-        let names: string[] = [];
-        for (;;) {
-          const status = agent.mcp.status();
-          names = status.servers.map((s) => s.name);
-          const settled =
-            names.includes('cfg-server') && names.includes('ext-server');
-          if (settled || Date.now() > deadline) break;
-          await new Promise((r) => setTimeout(r, 100));
-        }
-        expect(names).toContain('cfg-server');
-        expect(names).toContain('ext-server');
-      } finally {
-        await disposeAgent(agent);
-      }
-    });
-  }, 30_000);
-
-  it('sessionId is observable -> agent runtime id equals the taskId', async () => {
-    await runWithEnv(activateFakeProvider, async () => {
-      const agent = await buildAgent({}, [], 'task-agent-session-42');
-      try {
-        expect(agent.getRuntimeId()).toBe('task-agent-session-42');
-      } finally {
-        await disposeAgent(agent);
-      }
-    });
-  }, 30_000);
-
-  it('per-task isolation: two agents coexist and dispose independently', async () => {
-    await runWithEnv(activateFakeProvider, async () => {
-      const first = await buildAgent({}, [], 'isolation-a');
-      const second = await buildAgent({}, [], 'isolation-b');
-      try {
-        expect(first.getRuntimeId()).not.toBe(second.getRuntimeId());
-        const [a, b] = await Promise.all([
-          drainTypes(first),
-          drainTypes(second),
-        ]);
-        expect(a).toContain('done');
-        expect(b).toContain('done');
-      } finally {
-        await disposeAgent(second);
-        await disposeAgent(first);
-      }
-    });
-  }, 30_000);
-});
-
-// Lifecycle cleanup runs even when individual tests fail mid-suite; the
-// process 'exit' hook stays as a belt-and-braces fallback for abnormal exits.
-afterAll(() => {
-  try {
-    rmSync(WORKSPACE, { recursive: true, force: true });
-  } catch {
-    /* best-effort cleanup */
-  }
-});
-
-process.on('exit', () => {
-  try {
-    rmSync(WORKSPACE, { recursive: true, force: true });
-  } catch (err) {
-    // Best-effort, but observable: an orphaned workspace with a locked
-    // file is worth seeing in CI output.
-    process.stderr.write(
-      `config.createTaskAgent.test.ts: workspace cleanup failed: ${String(err)}
-`,
-    );
-  }
+    }
+  });
 });

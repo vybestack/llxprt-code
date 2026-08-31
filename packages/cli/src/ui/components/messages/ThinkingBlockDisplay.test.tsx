@@ -19,6 +19,25 @@ import { Colors } from '../../colors.js';
 
 import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
 
+function getRelativeLuminance(hex: string): number {
+  const cleanHex = hex.replace(/^#/, '');
+
+  if (!/^[0-9A-Fa-f]{6}$/.test(cleanHex)) {
+    throw new Error(`Invalid hex color: ${hex}`);
+  }
+
+  const red = parseInt(cleanHex.slice(0, 2), 16) / 255;
+  const green = parseInt(cleanHex.slice(2, 4), 16) / 255;
+  const blue = parseInt(cleanHex.slice(4, 6), 16) / 255;
+
+  const gamma = (component: number): number =>
+    component <= 0.03928
+      ? component / 12.92
+      : Math.pow((component + 0.055) / 1.055, 2.4);
+
+  return 0.2126 * gamma(red) + 0.7152 * gamma(green) + 0.0722 * gamma(blue);
+}
+
 describe('ThinkingBlockDisplay', () => {
   const sampleThinkingBlock: ThinkingBlock = {
     type: 'thinking',
@@ -201,29 +220,6 @@ describe('REQ-ISSUE-829: DimComment color usage', () => {
    * @then DimComment should be visually dimmer
    */
   it('should have DimComment darker than Comment', () => {
-    // Helper to calculate relative luminance from hex color
-    const getRelativeLuminance = (hex: string): number => {
-      // Remove # if present
-      const cleanHex = hex.replace(/^#/, '');
-
-      // Only handle 6-character hex colors
-      if (!/^[0-9A-Fa-f]{6}$/.test(cleanHex)) {
-        throw new Error(`Invalid hex color: ${hex}`);
-      }
-
-      // Parse RGB components
-      const r = parseInt(cleanHex.slice(0, 2), 16) / 255;
-      const g = parseInt(cleanHex.slice(2, 4), 16) / 255;
-      const b = parseInt(cleanHex.slice(4, 6), 16) / 255;
-
-      // Apply gamma correction
-      const gamma = (c: number) =>
-        c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-
-      // Calculate relative luminance (WCAG formula)
-      return 0.2126 * gamma(r) + 0.7152 * gamma(g) + 0.0722 * gamma(b);
-    };
-
     // Basic check that both colors exist and are different
     expect(Colors.DimComment).not.toBe(Colors.Comment);
 

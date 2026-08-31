@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertInstanceOf, errorMessage } from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it } from 'bun:test';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -105,8 +106,8 @@ describe('preparePromptEnvelopeAfterEnforcement', () => {
       fallbackEstimate: (contents) => Promise.resolve(contents.length),
     });
 
-    expect(candidateEstimates).toEqual([1, 2]);
-    expect(projectedContents).toEqual([selectedCandidate]);
+    expect(candidateEstimates).toStrictEqual([1, 2]);
+    expect(projectedContents).toStrictEqual([selectedCandidate]);
     expect(result.contents).toBe(selectedCandidate);
     expect(result.prepared.options.contents).toBe(selectedCandidate);
   });
@@ -145,7 +146,7 @@ describe('preparePromptEnvelopeAfterEnforcement', () => {
     }).catch((reason: unknown) => reason);
 
     expect(error).toBeInstanceOf(Error);
-    expect(cleanupEvents).toEqual(['released']);
+    expect(cleanupEvents).toStrictEqual(['released']);
   });
 
   it('does not prepare or send when enforcement rejects', async () => {
@@ -286,12 +287,12 @@ describe('preparePromptEnvelopeAfterEnforcement', () => {
     });
 
     expect(result).toBe('sent');
-    expect(observedAttempts).toEqual([
+    expect(observedAttempts).toStrictEqual([
       { attemptIndex: 0, transportToken: transportTokens[0] },
       { attemptIndex: 1, transportToken: transportTokens[1] },
     ]);
     expect(transportTokens[1]).not.toBe(transportTokens[0]);
-    expect(releasedTokens).toEqual([transportTokens[0]]);
+    expect(releasedTokens).toStrictEqual([transportTokens[0]]);
   }, 10_000);
 
   it('releases every unsent projection and aggregates cleanup failures', async () => {
@@ -338,14 +339,16 @@ describe('preparePromptEnvelopeAfterEnforcement', () => {
       .catch((error: unknown) => error);
 
     expect(thrown).toBeInstanceOf(AggregateError);
-    if (!(thrown instanceof AggregateError)) {
-      throw new Error('Expected aggregate cleanup failure');
-    }
+    assertInstanceOf(
+      thrown,
+      AggregateError,
+      'Expected aggregate cleanup failure',
+    );
     expect(
       thrown.errors.map((error) =>
-        error instanceof Error ? error.message : String(error),
+        errorMessage(error),
       ),
-    ).toEqual(['first cleanup failed', 'second cleanup failed']);
+    ).toStrictEqual(['first cleanup failed', 'second cleanup failed']);
   });
 
   it('prepares a fresh projection after releasing the prior projection for the same contents', async () => {
@@ -390,7 +393,10 @@ describe('preparePromptEnvelopeAfterEnforcement', () => {
     await preparer.releaseUnused();
     const second = await preparer.prepare(contents);
 
-    expect(projectionStates).toEqual([{ released: true }, { released: false }]);
+    expect(projectionStates).toStrictEqual([
+      { released: true },
+      { released: false },
+    ]);
     expect(second.options.promptEnvelopeTransportToken).not.toBe(
       first.options.promptEnvelopeTransportToken,
     );

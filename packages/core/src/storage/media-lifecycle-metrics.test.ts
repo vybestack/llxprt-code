@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  assertDefined,
+  assertNotNull,
+} from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -44,7 +48,7 @@ function inlineImage(data: string): IContent {
   };
 }
 function requireAvailableMetric(value: number | null): number {
-  if (value === null) throw new Error('Expected OS peak footprint measurement');
+  assertNotNull(value, 'Expected OS peak footprint measurement');
   return value;
 }
 
@@ -158,9 +162,7 @@ describe('MediaLifecycleMetrics', () => {
     const admittedHistory = history
       .getRawHistory()
       .find((content) => content.blocks.length > 0);
-    if (admittedHistory === undefined) {
-      throw new Error('Expected admitted media history');
-    }
+    assertDefined(admittedHistory, 'Expected admitted media history');
     recording.recordContent(admittedHistory);
     const persistence = new SessionPersistenceService(
       new Storage(directory),

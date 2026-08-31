@@ -98,72 +98,74 @@ function readReport(): string[] {
   return parsed;
 }
 
-describe.skipIf(SKIP_SUITE)(
-  'P03 REQ-002: agents root API-surface guard (declaration-aware)',
-  () => {
-    it('preflight: expected-root-surface.json snapshot is readable at its path', () => {
-      expect(existsSync(SNAPSHOT_PATH)).toBe(true);
-      const snapshot = loadExpectedSurface(SNAPSHOT_PATH);
-      expect(snapshot.size).toBeGreaterThan(0);
-    });
+describe('Agent public surface guard', () => {
+  describe.skipIf(SKIP_SUITE)(
+    'P03 REQ-002: agents root API-surface guard (declaration-aware)',
+    () => {
+      it('preflight: expected-root-surface.json snapshot is readable at its path', () => {
+        expect(existsSync(SNAPSHOT_PATH)).toBe(true);
+        const snapshot = loadExpectedSurface(SNAPSHOT_PATH);
+        expect(snapshot.size).toBeGreaterThan(0);
+      });
 
-    it('reads the JSON surface report emitted by lint:agents-api-surface', () => {
-      const report = readReport();
-      expect(report).toContain('Agent');
-    });
+      it('reads the JSON surface report emitted by lint:agents-api-surface', () => {
+        const report = readReport();
+        expect(report).toContain('Agent');
+      });
 
-    it('deny enforcement: denied internal names are absent after depollution (P05)', () => {
-      const report = readReport();
-      const exported = new Set(report);
-      // Sanity: the deny list must include the three internal symbols this
-      // guard enforces. If the constant is accidentally narrowed (e.g. one
-      // name dropped), the iterate loop below would pass vacuously.
-      expect(DENIED_INTERNAL_NAMES.has('AgentClient')).toBe(true);
-      expect(DENIED_INTERNAL_NAMES.has('CoreToolScheduler')).toBe(true);
-      expect(DENIED_INTERNAL_NAMES.has('AgenticLoop')).toBe(true);
-      for (const denied of DENIED_INTERNAL_NAMES) {
-        expect(exported.has(denied)).toBe(false);
-      }
-    });
+      it('deny enforcement: denied internal names are absent after depollution (P05)', () => {
+        const report = readReport();
+        const exported = new Set(report);
+        // Sanity: the deny list must include the three internal symbols this
+        // guard enforces. If the constant is accidentally narrowed (e.g. one
+        // name dropped), the iterate loop below would pass vacuously.
+        expect(DENIED_INTERNAL_NAMES.has('AgentClient')).toBe(true);
+        expect(DENIED_INTERNAL_NAMES.has('CoreToolScheduler')).toBe(true);
+        expect(DENIED_INTERNAL_NAMES.has('AgenticLoop')).toBe(true);
+        for (const denied of DENIED_INTERNAL_NAMES) {
+          expect(exported.has(denied)).toBe(false);
+        }
+      });
 
-    it('snapshot comparison: current report matches the expected-root-surface snapshot', () => {
-      const report = readReport();
-      const exported = new Set(report);
-      const expected: Set<string> = loadExpectedSurface(SNAPSHOT_PATH);
-      const added = [...exported].filter((name) => !expected.has(name));
-      const removed = [...expected].filter((name) => !exported.has(name));
-      expect(added).toStrictEqual([]);
-      expect(removed).toStrictEqual([]);
-    });
+      it('snapshot comparison: current report matches the expected-root-surface snapshot', () => {
+        const report = readReport();
+        const exported = new Set(report);
+        const expected: Set<string> = loadExpectedSurface(SNAPSHOT_PATH);
+        const added = [...exported].filter((name) => !expected.has(name));
+        const removed = [...expected].filter((name) => !exported.has(name));
+        expect(added).toStrictEqual([]);
+        expect(removed).toStrictEqual([]);
+      });
 
-    it('report includes AgenticLoopMessage (type-only re-export captured by the parser)', () => {
-      const report = readReport();
-      const exported = new Set(report);
-      expect(exported.has('AgenticLoopMessage')).toBe(true);
-    });
+      it('report includes AgenticLoopMessage (type-only re-export captured by the parser)', () => {
+        const report = readReport();
+        const exported = new Set(report);
+        expect(exported.has('AgenticLoopMessage')).toBe(true);
+      });
 
-    it('report reflects recursive export-star resolution from emitted declarations', () => {
-      const report = readReport();
-      const exportedNames = new Set(report);
-      expect(exportedNames.has('Agent')).toBe(true);
-      expect(exportedNames.size).toBeGreaterThan(50);
-    });
+      it('report reflects recursive export-star resolution from emitted declarations', () => {
+        const report = readReport();
+        const exportedNames = new Set(report);
+        expect(exportedNames.has('Agent')).toBe(true);
+        expect(exportedNames.size).toBeGreaterThan(50);
+      });
 
-    it('named-export alias proof: parseExportedNames records the EXPORTED alias name for `export { X as Y }` (local and re-exported)', () => {
-      const fixtureIndex = join(
-        __dirname,
-        'fixtures',
-        'alias-surface',
-        'index.d.ts',
-      );
-      expect(existsSync(fixtureIndex)).toBe(true);
-      const names = parseExportedNames(fixtureIndex);
-      expect(names.has('PublicAlias')).toBe(true);
-      expect(names.has('PublicType')).toBe(true);
-      expect(names.has('AlsoPublic')).toBe(true);
-      expect(names.has('InternalType')).toBe(true);
-      expect(names.has('Hidden')).toBe(false);
-      expect(names.has('Value')).toBe(false);
-    });
-  },
-);
+      it('named-export alias proof: parseExportedNames records the EXPORTED alias name for `export { X as Y }` (local and re-exported)', () => {
+        const fixtureIndex = join(
+          __dirname,
+          'fixtures',
+          'alias-surface',
+          'index.d.ts',
+        );
+        expect(existsSync(fixtureIndex)).toBe(true);
+        const names = parseExportedNames(fixtureIndex);
+        expect(names.has('PublicAlias')).toBe(true);
+        expect(names.has('PublicType')).toBe(true);
+        expect(names.has('AlsoPublic')).toBe(true);
+        expect(names.has('InternalType')).toBe(true);
+        expect(names.has('Hidden')).toBe(false);
+        expect(names.has('Value')).toBe(false);
+      });
+    },
+  );
+});

@@ -61,15 +61,15 @@ function captureError(operation: () => unknown): Error {
 
 describe('buildProviderContributionRegistry', () => {
   it('exposes exactly the built-in provider ids when no plugins are loaded', () => {
-    expect(buildProviderContributionRegistry([]).listProviderIds()).toEqual(
-      BUILTIN_PROVIDER_IDS,
-    );
+    expect(
+      buildProviderContributionRegistry([]).listProviderIds(),
+    ).toStrictEqual(BUILTIN_PROVIDER_IDS);
   });
 
   it('builds a built-ins-only registry from createBuiltinProviderContributionRegistry', () => {
     expect(
       createBuiltinProviderContributionRegistry().listProviderIds(),
-    ).toEqual(BUILTIN_PROVIDER_IDS);
+    ).toStrictEqual(BUILTIN_PROVIDER_IDS);
   });
 
   it('lists built-in ids first, then plugin providers in plugin order', () => {
@@ -81,7 +81,7 @@ describe('buildProviderContributionRegistry', () => {
       ]),
     ]);
 
-    expect(registry.listProviderIds()).toEqual([
+    expect(registry.listProviderIds()).toStrictEqual([
       ...BUILTIN_PROVIDER_IDS,
       'first-provider',
       'second-provider',
@@ -98,7 +98,7 @@ describe('buildProviderContributionRegistry', () => {
     ]);
 
     expect(registry.getProviderFactory('custom-provider')).toBe(factory);
-    expect(registry.getProviderOrigin('custom-provider')).toEqual({
+    expect(registry.getProviderOrigin('custom-provider')).toStrictEqual({
       kind: 'plugin',
       pluginId: 'plugin-a',
       specifier: 'pkg',
@@ -112,9 +112,11 @@ describe('buildProviderContributionRegistry', () => {
 
     const builtinFactory = registry.getProviderFactory('GEMINI');
     expect(builtinFactory).toBeTypeOf('function');
-    expect(registry.getProviderOrigin('GEMINI')).toEqual({ kind: 'builtin' });
+    expect(registry.getProviderOrigin('GEMINI')).toStrictEqual({
+      kind: 'builtin',
+    });
     expect(registry.getProviderFactory('turbo')).toBeTypeOf('function');
-    expect(registry.getProviderOrigin('TURBO')).toEqual({
+    expect(registry.getProviderOrigin('TURBO')).toStrictEqual({
       kind: 'plugin',
       pluginId: 'plugin-a',
       specifier: 'pkg',
@@ -239,7 +241,7 @@ describe('buildProviderContributionRegistry', () => {
 
     expect(
       registry.getContributedAliases().map((alias) => alias.alias),
-    ).toEqual(['alias-first', 'alias-second']);
+    ).toStrictEqual(['alias-first', 'alias-second']);
   });
 
   it('returns an immutable registry whose returned arrays are frozen copies', () => {
@@ -270,13 +272,13 @@ describe('buildProviderContributionRegistry', () => {
     expect(() => {
       (origin as { pluginId: string }).pluginId = 'hijacked';
     }).toThrow(TypeError);
-    expect(registry.getProviderOrigin('provider-a')).toEqual({
+    expect(registry.getProviderOrigin('provider-a')).toStrictEqual({
       kind: 'plugin',
       pluginId: 'plugin-a',
       specifier: 'pkg',
     });
 
-    expect(registry.listProviderIds()).toEqual([
+    expect(registry.listProviderIds()).toStrictEqual([
       ...BUILTIN_PROVIDER_IDS,
       'provider-a',
     ]);

@@ -10,7 +10,10 @@
  * avoid file-level max-lines disable).
  */
 
-import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import {
+  advanceTimersByTimeAsync,
+  assertDefined,
+} from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { ChatSession } from './chatSession.js';
 
@@ -249,9 +252,10 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
             }
             if (transports === 1) {
               firstTransportSignal = options.invocation?.signal;
-              if (firstTransportSignal === undefined) {
-                throw new Error('transport did not receive an abort signal');
-              }
+              assertDefined(
+                firstTransportSignal,
+                'transport did not receive an abort signal',
+              );
               return createNoncooperativeStream(() => {
                 pendingReads++;
               });

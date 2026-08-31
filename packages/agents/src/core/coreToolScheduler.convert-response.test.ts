@@ -260,6 +260,11 @@ describe('convertToFunctionResponse', () => {
 
   // Type-level sanity checks (no runtime execution) to keep block-shape imports honest.
   it('returns ContentBlock[] typed values', () => {
+    const { result } = observeReturnsContentBlockTypedValues();
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  const observeReturnsContentBlockTypedValues = () => {
     const result = convertToFunctionResponse(toolName, callId, 'x');
     // Exercise the discriminated union without assertions at runtime.
     for (const block of result) {
@@ -271,6 +276,7 @@ describe('convertToFunctionResponse', () => {
         void _m;
       }
     }
-    expect(result.length).toBeGreaterThan(0);
-  });
+
+    return { result };
+  };
 });

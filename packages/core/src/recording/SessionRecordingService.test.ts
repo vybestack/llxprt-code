@@ -68,6 +68,95 @@ function makeContent(
   };
 }
 
+function applySequenceEvent(
+  svc: SessionRecordingService,
+  eventType:
+    | 'content'
+    | 'rewind'
+    | 'provider_switch'
+    | 'session_event'
+    | 'directories_changed',
+): void {
+  switch (eventType) {
+    case 'content':
+      svc.recordContent(makeContent('test'));
+      break;
+    case 'session_event':
+      svc.recordSessionEvent('info', 'test event');
+      break;
+    case 'provider_switch':
+      svc.recordProviderSwitch('test-provider', 'test-model');
+      break;
+    case 'directories_changed':
+      svc.recordDirectoriesChanged(['/test']);
+      break;
+    case 'rewind':
+      svc.recordRewind(1);
+      break;
+    default:
+      throw new Error('Unsupported sequence event');
+  }
+}
+
+function applyEnvelopeEvent(
+  svc: SessionRecordingService,
+  eventType:
+    | 'content'
+    | 'compressed'
+    | 'rewind'
+    | 'provider_switch'
+    | 'session_event'
+    | 'directories_changed',
+): void {
+  switch (eventType) {
+    case 'content':
+      svc.recordContent(makeContent('test'));
+      break;
+    case 'compressed':
+      svc.recordCompressed(
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'summary' }],
+        },
+        5,
+      );
+      break;
+    case 'rewind':
+      svc.recordRewind(2);
+      break;
+    case 'provider_switch':
+      svc.recordProviderSwitch('test', 'model');
+      break;
+    case 'session_event':
+      svc.recordSessionEvent('info', 'test');
+      break;
+    case 'directories_changed':
+      svc.recordDirectoriesChanged(['/dir']);
+      break;
+    default:
+      throw new Error('Unsupported envelope event');
+  }
+}
+
+function applyMetadataEvent(
+  svc: SessionRecordingService,
+  eventType: 'provider_switch' | 'directories_changed' | 'session_event',
+): void {
+  switch (eventType) {
+    case 'provider_switch':
+      svc.recordProviderSwitch('test', 'model');
+      break;
+    case 'directories_changed':
+      svc.recordDirectoriesChanged(['/dir']);
+      break;
+    case 'session_event':
+      svc.recordSessionEvent('info', 'event');
+      break;
+    default:
+      throw new Error('Unsupported metadata event');
+  }
+}
+
 /**
  * Read a JSONL file and parse each line into a SessionRecordLine.
  */
@@ -928,25 +1017,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
               svc.recordContent(makeContent('trigger'));
 
               for (const eventType of eventTypes) {
-                switch (eventType) {
-                  case 'content':
-                    svc.recordContent(makeContent('test'));
-                    break;
-                  case 'session_event':
-                    svc.recordSessionEvent('info', 'test event');
-                    break;
-                  case 'provider_switch':
-                    svc.recordProviderSwitch('test-provider', 'test-model');
-                    break;
-                  case 'directories_changed':
-                    svc.recordDirectoriesChanged(['/test']);
-                    break;
-                  case 'rewind':
-                    svc.recordRewind(1);
-                    break;
-                  default:
-                    break;
-                }
+                applySequenceEvent(svc, eventType);
               }
 
               await svc.flush();
@@ -1103,34 +1174,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
               svc.recordContent(makeContent('trigger'));
 
               // Then enqueue the specific event type
-              switch (eventType) {
-                case 'content':
-                  svc.recordContent(makeContent('test'));
-                  break;
-                case 'compressed':
-                  svc.recordCompressed(
-                    {
-                      speaker: 'ai',
-                      blocks: [{ type: 'text', text: 'summary' }],
-                    },
-                    5,
-                  );
-                  break;
-                case 'rewind':
-                  svc.recordRewind(2);
-                  break;
-                case 'provider_switch':
-                  svc.recordProviderSwitch('test', 'model');
-                  break;
-                case 'session_event':
-                  svc.recordSessionEvent('info', 'test');
-                  break;
-                case 'directories_changed':
-                  svc.recordDirectoriesChanged(['/dir']);
-                  break;
-                default:
-                  break;
-              }
+              applyEnvelopeEvent(svc, eventType);
 
               await svc.flush();
               const events = await readJsonlFile(svc.getFilePath()!);
@@ -1175,19 +1219,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
 
               // Enqueue metadata events before any content
               for (const eventType of metadataTypes) {
-                switch (eventType) {
-                  case 'provider_switch':
-                    svc.recordProviderSwitch('test', 'model');
-                    break;
-                  case 'directories_changed':
-                    svc.recordDirectoriesChanged(['/dir']);
-                    break;
-                  case 'session_event':
-                    svc.recordSessionEvent('info', 'event');
-                    break;
-                  default:
-                    break;
-                }
+                applyMetadataEvent(svc, eventType);
               }
 
               // Content triggers materialization

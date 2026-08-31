@@ -117,37 +117,47 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
   });
 
   it('T8 explicit compress() returns a CompressionResult with a valid status and numeric token fields when compressed @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-011', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    try {
-      // seed enough history for compression to be meaningful
-      await agent.setHistory([
-        textMessage('human', 'a'.repeat(2000)),
-        textMessage('ai', 'b'.repeat(2000)),
-        textMessage('human', 'c'.repeat(2000)),
-      ]);
-
-      // A caller-supplied promptId must be echoed back verbatim on the result
-      // (proves the promptId is threaded through, not regenerated).
-      const result = await agent.compress({ promptId: 'caller-compress-id' });
-      expect(result.promptId).toBe('caller-compress-id');
-
-      // status is one of the documented outcomes (issue #2602 added 'noop')
-      expect(['compressed', 'skipped', 'failed', 'noop']).toContain(
-        result.status,
-      );
-
-      // when compressed, numeric token fields are populated and monotonic.
-      // Evaluate the contract as a single boolean to avoid conditional expects.
-      const orig = result.originalTokenCount;
-      const next = result.newTokenCount;
-      const numericWhenCompressed =
-        result.status !== 'compressed' ||
-        (typeof orig === 'number' && typeof next === 'number' && orig >= next);
-      expect(numericWhenCompressed).toBe(true);
-    } finally {
-      await cleanup();
-    }
+    const { result, numericWhenCompressed } =
+      await observeT8ExplicitCompressReturnsACompressionResultWithAValidStatusAndNumeric();
+    expect(result.promptId).toBe('caller-compress-id');
+    expect(['compressed', 'skipped', 'failed', 'noop']).toContain(
+      result.status,
+    );
+    expect(numericWhenCompressed).toBe(true);
   });
+
+  const observeT8ExplicitCompressReturnsACompressionResultWithAValidStatusAndNumeric =
+    async () => {
+      const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+      try {
+        // seed enough history for compression to be meaningful
+        await agent.setHistory([
+          textMessage('human', 'a'.repeat(2000)),
+          textMessage('ai', 'b'.repeat(2000)),
+          textMessage('human', 'c'.repeat(2000)),
+        ]);
+
+        // A caller-supplied promptId must be echoed back verbatim on the result
+        // (proves the promptId is threaded through, not regenerated).
+        const result = await agent.compress({ promptId: 'caller-compress-id' });
+
+        // status is one of the documented outcomes (issue #2602 added 'noop')
+
+        // when compressed, numeric token fields are populated and monotonic.
+        // Evaluate the contract as a single boolean to avoid conditional expects.
+        const orig = result.originalTokenCount;
+        const next = result.newTokenCount;
+        const numericWhenCompressed =
+          result.status !== 'compressed' ||
+          (typeof orig === 'number' &&
+            typeof next === 'number' &&
+            orig >= next);
+
+        return { result, numericWhenCompressed };
+      } finally {
+        await cleanup();
+      }
+    };
 
   it('T8c compress() without a promptId generates a default compress-prefixed id and the no-op path reports skipped (not failed) under the fake seam @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-011', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
@@ -289,39 +299,47 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
   });
 
   it('T22 chat() AgentResult carries text, toolCalls, finishReason, and optional usage/error for non-interactive output mapping @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-001 @requirement:REQ-003 @requirement:REQ-021', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    try {
-      const result = await agent.chat('produce output');
-
-      // text drives --output-format text
-      expect(typeof result.text).toBe('string');
-      expect(result.text.length).toBeGreaterThan(0);
-
-      // toolCalls is an array (drives --output-format json tool arrays)
-      expect(Array.isArray(result.toolCalls)).toBe(true);
-
-      // finishReason is a valid DoneReason (drives exit/error code mapping)
-      expect(result.finishReason).toBeTruthy();
-      expect(typeof result.finishReason).toBe('string');
-
-      // usage, when present, has the SessionStats numeric shape.
-      // Evaluate as a single boolean so no expect lives inside a conditional.
-      const usageValid =
-        result.usage === undefined ||
-        (typeof result.usage.totalTokens === 'number' &&
-          typeof result.usage.turnCount === 'number');
-      expect(usageValid).toBe(true);
-
-      // error, when present, has a code + message (drives non-zero exit).
-      const errorValid =
-        result.error === undefined ||
-        (typeof result.error.code === 'string' &&
-          typeof result.error.message === 'string');
-      expect(errorValid).toBe(true);
-    } finally {
-      await cleanup();
-    }
+    const { result, usageValid, errorValid } =
+      await observeT22ChatAgentResultCarriesTextToolCallsFinishReasonAndOptionalUsageErrorFor();
+    expect(typeof result.text).toBe('string');
+    expect(result.text.length).toBeGreaterThan(0);
+    expect(Array.isArray(result.toolCalls)).toBe(true);
+    expect(result.finishReason).toBeTruthy();
+    expect(typeof result.finishReason).toBe('string');
+    expect(usageValid).toBe(true);
+    expect(errorValid).toBe(true);
   });
+
+  const observeT22ChatAgentResultCarriesTextToolCallsFinishReasonAndOptionalUsageErrorFor =
+    async () => {
+      const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+      try {
+        const result = await agent.chat('produce output');
+
+        // text drives --output-format text
+
+        // toolCalls is an array (drives --output-format json tool arrays)
+
+        // finishReason is a valid DoneReason (drives exit/error code mapping)
+
+        // usage, when present, has the SessionStats numeric shape.
+        // Evaluate as a single boolean so no expect lives inside a conditional.
+        const usageValid =
+          result.usage === undefined ||
+          (typeof result.usage.totalTokens === 'number' &&
+            typeof result.usage.turnCount === 'number');
+
+        // error, when present, has a code + message (drives non-zero exit).
+        const errorValid =
+          result.error === undefined ||
+          (typeof result.error.code === 'string' &&
+            typeof result.error.message === 'string');
+
+        return { result, usageValid, errorValid };
+      } finally {
+        await cleanup();
+      }
+    };
 
   it('T6r restoreHistory accepts curated IContent items and getHistory surfaces their text @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');

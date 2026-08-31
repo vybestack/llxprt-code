@@ -112,7 +112,7 @@ describe('GlobTool file filtering', () => {
     cleanup();
   });
 
-  it('respects .llxprtignore by default (both flags true)', async () => {
+  const observeRespectsLlxprtignoreByDefaultBothFlagsTrueAt115 = async () => {
     const { host, calls } = createHost(
       tempDir,
       { respectGitIgnore: true, respectLlxprtIgnore: true },
@@ -123,9 +123,13 @@ describe('GlobTool file filtering', () => {
         return paths;
       },
     );
-
     const result = await runGlob(host, { pattern: '**/*.js', path: tempDir });
+    return { calls, result };
+  };
 
+  it('respects .llxprtignore by default (both flags true)', async () => {
+    const { calls, result } =
+      await observeRespectsLlxprtignoreByDefaultBothFlagsTrueAt115();
     expect(calls).toHaveLength(1);
     expect(calls[0].opts.respectGitIgnore).toBe(true);
     expect(calls[0].opts.respectLlxprtIgnore).toBe(true);
@@ -192,47 +196,57 @@ describe('GlobTool file filtering', () => {
     expect(result.llmContent).toContain('skip.js');
   });
 
+  const observeTopLevelRespectGitIgnoreStillWorksForBackwardCompatibilityAt195 =
+    async () => {
+      const { host, calls } = createHost(
+        tempDir,
+        { respectGitIgnore: true, respectLlxprtIgnore: true },
+        (paths, opts) => {
+          if (
+            opts.respectGitIgnore === true ||
+            opts.respectLlxprtIgnore === true
+          ) {
+            return paths.filter((p) => !p.includes('skip.js'));
+          }
+          return paths;
+        },
+      );
+      const result = await runGlob(host, {
+        pattern: '**/*.js',
+        path: tempDir,
+        respect_git_ignore: false,
+      });
+      return { calls, result };
+    };
+
   it('top-level respect_git_ignore still works for backward compatibility', async () => {
-    const { host, calls } = createHost(
-      tempDir,
-      { respectGitIgnore: true, respectLlxprtIgnore: true },
-      (paths, opts) => {
-        if (
-          opts.respectGitIgnore === true ||
-          opts.respectLlxprtIgnore === true
-        ) {
-          return paths.filter((p) => !p.includes('skip.js'));
-        }
-        return paths;
-      },
-    );
-
-    const result = await runGlob(host, {
-      pattern: '**/*.js',
-      path: tempDir,
-      respect_git_ignore: false,
-    });
-
+    const { calls, result } =
+      await observeTopLevelRespectGitIgnoreStillWorksForBackwardCompatibilityAt195();
     expect(calls).toHaveLength(0);
     expect(result.llmContent).toContain('keep.js');
     expect(result.llmContent).toContain('skip.js');
   });
 
+  const observeActuallyFiltersOutLlxprtIgnoredFilesFromResultsAt221 =
+    async () => {
+      const { host } = createHost(
+        tempDir,
+        { respectGitIgnore: true, respectLlxprtIgnore: true },
+        (paths, opts) => {
+          let result = paths;
+          if (opts.respectLlxprtIgnore === true) {
+            result = result.filter((p) => !p.includes('skip.js'));
+          }
+          return result;
+        },
+      );
+      const result = await runGlob(host, { pattern: '**/*.js', path: tempDir });
+      return { result };
+    };
+
   it('actually filters out llxprt-ignored files from results', async () => {
-    const { host } = createHost(
-      tempDir,
-      { respectGitIgnore: true, respectLlxprtIgnore: true },
-      (paths, opts) => {
-        let result = paths;
-        if (opts.respectLlxprtIgnore === true) {
-          result = result.filter((p) => !p.includes('skip.js'));
-        }
-        return result;
-      },
-    );
-
-    const result = await runGlob(host, { pattern: '**/*.js', path: tempDir });
-
+    const { result } =
+      await observeActuallyFiltersOutLlxprtIgnoredFilesFromResultsAt221();
     expect(result.error).toBeUndefined();
     expect(result.llmContent).toContain('keep.js');
     expect(result.llmContent).not.toContain('skip.js');

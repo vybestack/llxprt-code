@@ -89,6 +89,17 @@ function buildEnforcerDeps(
   };
 }
 
+const applyFallbackCompressionResult: PendingContextWindowEnforcerDeps['applyFallbackCompressionResult'] =
+  async (result, applyResult) => {
+    if (result.kind === 'applied') {
+      await applyResult(
+        result.newHistory,
+        result.newHistory[0],
+        result.metadata.topPreserved ?? 0,
+      );
+    }
+  };
+
 describe('PendingContextWindowEnforcer structured overflow on estimator error (issue #1321)', () => {
   let historyService: HistoryService;
 
@@ -124,40 +135,47 @@ describe('PendingContextWindowEnforcer structured overflow on estimator error (i
   });
 
   it('produces a structured context-overflow error when the truncator recalculation throws', async () => {
-    historyService.add(textContent('human', 'hello'));
-    historyService.add(
-      toolResponseContent('call-1', 'read_file', 'x'.repeat(100000)),
-    );
-    await historyService.waitForTokenUpdates();
-
-    // Override computeProjectedTokens so that calls inside the truncator
-    // (computeProjected callback) throw. The truncator catch must produce
-    // a structured overflow error rather than propagating the raw throw.
-    // We make ALL calls succeed until we reach the truncation path, then
-    // throw from there.
-    let callCount = 0;
-    const deps = buildEnforcerDeps(historyService, {
-      completionBudget: 100,
-      marginAdjustedLimit: 100,
-    });
-    const originalCompute = deps.computeProjectedTokens;
-    deps.computeProjectedTokens = (pt, cb) => {
-      callCount++;
-      // After the enforcer reaches the truncation path (many calls have
-      // already happened for initial/compression projections), throw to
-      // simulate a recalculation error inside the truncator.
-      if (callCount > 5) {
-        throw new Error('truncator recalculation failed');
-      }
-      return originalCompute(pt, cb);
-    };
-
-    const enforcer = new PendingContextWindowEnforcer(deps);
-
+    const { enforcer } =
+      await observeProducesAStructuredContextOverflowErrorWhenTheTruncatorRecalculationThrows();
     await expect(enforcer.enforce(0, 'prompt-1')).rejects.toThrow(
       /context limit/i,
     );
   });
+
+  const observeProducesAStructuredContextOverflowErrorWhenTheTruncatorRecalculationThrows =
+    async () => {
+      historyService.add(textContent('human', 'hello'));
+      historyService.add(
+        toolResponseContent('call-1', 'read_file', 'x'.repeat(100000)),
+      );
+      await historyService.waitForTokenUpdates();
+
+      // Override computeProjectedTokens so that calls inside the truncator
+      // (computeProjected callback) throw. The truncator catch must produce
+      // a structured overflow error rather than propagating the raw throw.
+      // We make ALL calls succeed until we reach the truncation path, then
+      // throw from there.
+      let callCount = 0;
+      const deps = buildEnforcerDeps(historyService, {
+        completionBudget: 100,
+        marginAdjustedLimit: 100,
+      });
+      const originalCompute = deps.computeProjectedTokens;
+      deps.computeProjectedTokens = (pt, cb) => {
+        callCount++;
+        // After the enforcer reaches the truncation path (many calls have
+        // already happened for initial/compression projections), throw to
+        // simulate a recalculation error inside the truncator.
+        if (callCount > 5) {
+          throw new Error('truncator recalculation failed');
+        }
+        return originalCompute(pt, cb);
+      };
+
+      const enforcer = new PendingContextWindowEnforcer(deps);
+
+      return { enforcer };
+    };
 
   it('produces a structured overflow when all reduction paths fail including tool truncation', async () => {
     // No tool responses at all — truncation has nothing to work with.
@@ -252,15 +270,7 @@ describe('PendingContextWindowEnforcer structured overflow on estimator error (i
         llmCallMade: false,
       },
     });
-    deps.applyFallbackCompressionResult = async (result, applyResult) => {
-      if (result.kind === 'applied') {
-        await applyResult(
-          result.newHistory,
-          result.newHistory[0],
-          result.metadata.topPreserved ?? 0,
-        );
-      }
-    };
+    deps.applyFallbackCompressionResult = applyFallbackCompressionResult;
     historyService.on('tokensUpdated', () => {
       throw new Error('injected rebuild failure');
     });
@@ -317,15 +327,7 @@ describe('PendingContextWindowEnforcer structured overflow on estimator error (i
         llmCallMade: false,
       },
     });
-    deps.applyFallbackCompressionResult = async (result, applyResult) => {
-      if (result.kind === 'applied') {
-        await applyResult(
-          result.newHistory,
-          result.newHistory[0],
-          result.metadata.topPreserved ?? 0,
-        );
-      }
-    };
+    deps.applyFallbackCompressionResult = applyFallbackCompressionResult;
 
     const enforcer = new PendingContextWindowEnforcer(deps);
 
@@ -364,15 +366,7 @@ describe('PendingContextWindowEnforcer structured overflow on estimator error (i
         llmCallMade: false,
       },
     });
-    noOpDeps.applyFallbackCompressionResult = async (result, applyResult) => {
-      if (result.kind === 'applied') {
-        await applyResult(
-          result.newHistory,
-          result.newHistory[0],
-          result.metadata.topPreserved ?? 0,
-        );
-      }
-    };
+    noOpDeps.applyFallbackCompressionResult = applyFallbackCompressionResult;
 
     await expect(
       new PendingContextWindowEnforcer(noOpDeps).enforce(0, 'noop-fallback'),

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { assertInstanceOf } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { GeminiProvider } from './GeminiProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -612,10 +613,12 @@ describe('GeminiProvider - MediaBlock support', () => {
       error = reason;
     }
 
-    if (!(error instanceof AggregateError)) {
-      throw new Error('Expected generation and release AggregateError');
-    }
-    expect(error.errors).toEqual([
+    assertInstanceOf(
+      error,
+      AggregateError,
+      'Expected generation and release AggregateError',
+    );
+    expect(error.errors).toStrictEqual([
       new Error('stream generation failed'),
       new Error('media release failed'),
     ]);

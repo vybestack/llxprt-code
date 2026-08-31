@@ -195,269 +195,275 @@ function runRealStartupSequence(repoDir: string): StartupProbeResult {
   return JSON.parse(result.stdout.trim()) as StartupProbeResult;
 }
 
-describe('a repo .env cannot set sandbox launcher variables', () => {
-  useRepoSandboxHarness();
+describe('sandboxEnvGuard', () => {
+  describe('a repo .env cannot set sandbox launcher variables', () => {
+    useRepoSandboxHarness();
 
-  it('T1 (AC1, AC4): SANDBOX_FLAGS from a repo .env never carries the ambient API key into the run args', () => {
-    process.env.GEMINI_API_KEY = SENTINEL;
-    writeDotEnv('.env', 'SANDBOX_FLAGS=--env GEMINI_API_KEY=$GEMINI_API_KEY');
-
-    loadEnvironment();
-
-    expect(process.env.SANDBOX_FLAGS).toBeUndefined();
-    expect(runArgs().join(' ')).not.toContain(SENTINEL);
-  });
-
-  it('T2 (AC2): SANDBOX_ENV from a repo .env cannot inject the ambient API key into the container env args', () => {
-    process.env.GEMINI_API_KEY = SENTINEL;
-    writeDotEnv('.env', 'SANDBOX_ENV=STOLEN=$GEMINI_API_KEY');
-
-    loadEnvironment();
-
-    const args: string[] = [];
-    addContainerEnvVars(args, CONFIG, 'test-container', [], '/workspace');
-    expect(args.join(' ')).not.toContain(SENTINEL);
-  });
-
-  it('T3 (AC2): mount variables from a repo .env add no --volume even though the path really exists', () => {
-    const mountDir = path.join(process.cwd(), 'real-mount-dir');
-    fs.mkdirSync(mountDir);
-    writeDotEnv(
-      '.env',
-      `LLXPRT_SANDBOX_MOUNTS=${mountDir}\nSANDBOX_MOUNTS=${mountDir}\n`,
-    );
-
-    loadEnvironment();
-
-    const args: string[] = [];
-    addContainerVolumeMounts(args);
-    expect(args.join(' ')).not.toContain('real-mount-dir');
-  });
-
-  it('T4: a repo .llxprt/.env is repo-controlled too and cannot set SANDBOX_FLAGS', () => {
-    process.env.GEMINI_API_KEY = SENTINEL;
-    writeDotEnv(
-      '.llxprt/.env',
-      'SANDBOX_FLAGS=--env GEMINI_API_KEY=$GEMINI_API_KEY',
-    );
-
-    loadEnvironment();
-
-    expect(process.env.SANDBOX_FLAGS).toBeUndefined();
-    expect(runArgs().join(' ')).not.toContain(SENTINEL);
-  });
-
-  it('T10: a repo .env cannot re-point the config root at itself to smuggle SANDBOX_FLAGS through the second loader', () => {
-    writeDotEnv(
-      '.env',
-      `LLXPRT_CONFIG_HOME=${process.cwd()}\nSANDBOX_FLAGS=--env STOLEN=$GEMINI_API_KEY\n`,
-    );
-
-    const result = runRealStartupSequence(process.cwd());
-
-    expect(result.env.LLXPRT_CONFIG_HOME).toBeNull();
-    expect(result.env.SANDBOX_FLAGS).toBeNull();
-    expect(result.sentinelInArgs).toBe(false);
-  });
-
-  it('T13: SANDBOX_FLAGS the Bun runtime pre-loads from a repo .env never reaches the run args', () => {
-    writeDotEnv('.env', 'SANDBOX_FLAGS=--env GEMINI_API_KEY=$GEMINI_API_KEY');
-
-    const result = runRealStartupSequence(process.cwd());
-
-    expect(result.env.SANDBOX_FLAGS).toBeNull();
-    expect(result.sentinelInArgs).toBe(false);
-  });
-
-  it('T14: a launcher control named only in a repo .env.local is dropped too', () => {
-    writeDotEnv('.env', 'MY_PROJECT_VAR=hello-2958');
-    writeDotEnv('.env.local', 'SANDBOX_FLAGS=--env STOLEN=$GEMINI_API_KEY');
-
-    const result = runRealStartupSequence(process.cwd());
-
-    expect(result.env.SANDBOX_FLAGS).toBeNull();
-    expect(result.sentinelInArgs).toBe(false);
-  });
-
-  it('T17: a launcher control in a repo .env.development is dropped, because Bun defaults the mode when NODE_ENV is unset', () => {
-    writeDotEnv(
-      '.env.development',
-      'SANDBOX_FLAGS=--env STOLEN=$GEMINI_API_KEY',
-    );
-
-    const result = runRealStartupSequence(process.cwd());
-
-    expect(result.env.SANDBOX_FLAGS).toBeNull();
-    expect(result.sentinelInArgs).toBe(false);
-  });
-
-  it('T18: a launcher control in a repo .env.development.local is dropped too', () => {
-    writeDotEnv(
-      '.env.development.local',
-      'SANDBOX_FLAGS=--env STOLEN=$GEMINI_API_KEY',
-    );
-
-    const result = runRealStartupSequence(process.cwd());
-
-    expect(result.env.SANDBOX_FLAGS).toBeNull();
-    expect(result.sentinelInArgs).toBe(false);
-  });
-
-  it('T15: a repo .llxprt/.env does not shadow the runtime scrub of the sibling .env', () => {
-    writeDotEnv('.llxprt/.env', 'MY_PROJECT_VAR=hello-2958');
-    writeDotEnv('.env', 'SANDBOX_FLAGS=--env STOLEN=$GEMINI_API_KEY');
-
-    const result = runRealStartupSequence(process.cwd());
-
-    expect(result.env.SANDBOX_FLAGS).toBeNull();
-    expect(result.sentinelInArgs).toBe(false);
-  });
-
-  it('T16: a repo .env cannot set any of the storage roots that select the config bind mount', () => {
-    writeDotEnv(
-      '.env',
-      [...STORAGE_ROOT_ENV_VARS]
-        .map((rootVar) => `${rootVar}=${process.cwd()}`)
-        .join(NEWLINE),
-    );
-
-    const result = runRealStartupSequence(process.cwd());
-
-    for (const rootVar of STORAGE_ROOT_ENV_VARS) {
-      expect(result.env[rootVar]).toBeNull();
-    }
-  });
-
-  it('T11: a lower-cased launcher key in a repo .env is blocked (Windows env names are case-insensitive)', () => {
-    writeDotEnv('.env', 'sandbox_flags=--cap-add=NET_ADMIN');
-
-    loadEnvironment();
-
-    expect(process.env.SANDBOX_FLAGS).toBeUndefined();
-    expect(process.env['sandbox_flags']).toBeUndefined();
-  });
-
-  for (const launcherVar of LAUNCHER_ENV_VARS) {
-    if (STORAGE_ROOT_ENV_VARS.has(launcherVar)) continue;
-    it(`blocks ${launcherVar} set by a repo .env`, () => {
-      writeDotEnv('.env', `${launcherVar}=repo-supplied-value`);
+    it('T1 (AC1, AC4): SANDBOX_FLAGS from a repo .env never carries the ambient API key into the run args', () => {
+      process.env.GEMINI_API_KEY = SENTINEL;
+      writeDotEnv('.env', 'SANDBOX_FLAGS=--env GEMINI_API_KEY=$GEMINI_API_KEY');
 
       loadEnvironment();
 
-      expect(process.env[launcherVar]).toBeUndefined();
+      expect(process.env.SANDBOX_FLAGS).toBeUndefined();
+      expect(runArgs().join(' ')).not.toContain(SENTINEL);
     });
-  }
 
-  it('T9 (AC5): excludedProjectEnvVars: [] does not switch the guard off', () => {
-    writeDotEnv('.env', 'SANDBOX_FLAGS=--cap-add=NET_ADMIN');
-    const settings: Settings = { excludedProjectEnvVars: [] };
+    it('T2 (AC2): SANDBOX_ENV from a repo .env cannot inject the ambient API key into the container env args', () => {
+      process.env.GEMINI_API_KEY = SENTINEL;
+      writeDotEnv('.env', 'SANDBOX_ENV=STOLEN=$GEMINI_API_KEY');
 
-    loadEnvironmentFromSettings(settings);
+      loadEnvironment();
 
-    expect(process.env.SANDBOX_FLAGS).toBeUndefined();
+      const args: string[] = [];
+      addContainerEnvVars(args, CONFIG, 'test-container', [], '/workspace');
+      expect(args.join(' ')).not.toContain(SENTINEL);
+    });
+
+    it('T3 (AC2): mount variables from a repo .env add no --volume even though the path really exists', () => {
+      const mountDir = path.join(process.cwd(), 'real-mount-dir');
+      fs.mkdirSync(mountDir);
+      writeDotEnv(
+        '.env',
+        `LLXPRT_SANDBOX_MOUNTS=${mountDir}\nSANDBOX_MOUNTS=${mountDir}\n`,
+      );
+
+      loadEnvironment();
+
+      const args: string[] = [];
+      addContainerVolumeMounts(args);
+      expect(args.join(' ')).not.toContain('real-mount-dir');
+    });
+
+    it('T4: a repo .llxprt/.env is repo-controlled too and cannot set SANDBOX_FLAGS', () => {
+      process.env.GEMINI_API_KEY = SENTINEL;
+      writeDotEnv(
+        '.llxprt/.env',
+        'SANDBOX_FLAGS=--env GEMINI_API_KEY=$GEMINI_API_KEY',
+      );
+
+      loadEnvironment();
+
+      expect(process.env.SANDBOX_FLAGS).toBeUndefined();
+      expect(runArgs().join(' ')).not.toContain(SENTINEL);
+    });
+
+    it('T10: a repo .env cannot re-point the config root at itself to smuggle SANDBOX_FLAGS through the second loader', () => {
+      writeDotEnv(
+        '.env',
+        `LLXPRT_CONFIG_HOME=${process.cwd()}\nSANDBOX_FLAGS=--env STOLEN=$GEMINI_API_KEY\n`,
+      );
+
+      const result = runRealStartupSequence(process.cwd());
+
+      expect(result.env.LLXPRT_CONFIG_HOME).toBeNull();
+      expect(result.env.SANDBOX_FLAGS).toBeNull();
+      expect(result.sentinelInArgs).toBe(false);
+    });
+
+    it('T13: SANDBOX_FLAGS the Bun runtime pre-loads from a repo .env never reaches the run args', () => {
+      writeDotEnv('.env', 'SANDBOX_FLAGS=--env GEMINI_API_KEY=$GEMINI_API_KEY');
+
+      const result = runRealStartupSequence(process.cwd());
+
+      expect(result.env.SANDBOX_FLAGS).toBeNull();
+      expect(result.sentinelInArgs).toBe(false);
+    });
+
+    it('T14: a launcher control named only in a repo .env.local is dropped too', () => {
+      writeDotEnv('.env', 'MY_PROJECT_VAR=hello-2958');
+      writeDotEnv('.env.local', 'SANDBOX_FLAGS=--env STOLEN=$GEMINI_API_KEY');
+
+      const result = runRealStartupSequence(process.cwd());
+
+      expect(result.env.SANDBOX_FLAGS).toBeNull();
+      expect(result.sentinelInArgs).toBe(false);
+    });
+
+    it('T17: a launcher control in a repo .env.development is dropped, because Bun defaults the mode when NODE_ENV is unset', () => {
+      writeDotEnv(
+        '.env.development',
+        'SANDBOX_FLAGS=--env STOLEN=$GEMINI_API_KEY',
+      );
+
+      const result = runRealStartupSequence(process.cwd());
+
+      expect(result.env.SANDBOX_FLAGS).toBeNull();
+      expect(result.sentinelInArgs).toBe(false);
+    });
+
+    it('T18: a launcher control in a repo .env.development.local is dropped too', () => {
+      writeDotEnv(
+        '.env.development.local',
+        'SANDBOX_FLAGS=--env STOLEN=$GEMINI_API_KEY',
+      );
+
+      const result = runRealStartupSequence(process.cwd());
+
+      expect(result.env.SANDBOX_FLAGS).toBeNull();
+      expect(result.sentinelInArgs).toBe(false);
+    });
+
+    it('T15: a repo .llxprt/.env does not shadow the runtime scrub of the sibling .env', () => {
+      writeDotEnv('.llxprt/.env', 'MY_PROJECT_VAR=hello-2958');
+      writeDotEnv('.env', 'SANDBOX_FLAGS=--env STOLEN=$GEMINI_API_KEY');
+
+      const result = runRealStartupSequence(process.cwd());
+
+      expect(result.env.SANDBOX_FLAGS).toBeNull();
+      expect(result.sentinelInArgs).toBe(false);
+    });
+
+    it('T16: a repo .env cannot set any of the storage roots that select the config bind mount', () => {
+      writeDotEnv(
+        '.env',
+        [...STORAGE_ROOT_ENV_VARS]
+          .map((rootVar) => `${rootVar}=${process.cwd()}`)
+          .join(NEWLINE),
+      );
+
+      const result = runRealStartupSequence(process.cwd());
+
+      for (const rootVar of STORAGE_ROOT_ENV_VARS) {
+        expect(result.env[rootVar]).toBeNull();
+      }
+    });
+
+    it('T11: a lower-cased launcher key in a repo .env is blocked (Windows env names are case-insensitive)', () => {
+      writeDotEnv('.env', 'sandbox_flags=--cap-add=NET_ADMIN');
+
+      loadEnvironment();
+
+      expect(process.env.SANDBOX_FLAGS).toBeUndefined();
+      expect(process.env['sandbox_flags']).toBeUndefined();
+    });
+
+    for (const launcherVar of LAUNCHER_ENV_VARS) {
+      if (STORAGE_ROOT_ENV_VARS.has(launcherVar)) continue;
+      it(`blocks ${launcherVar} set by a repo .env`, () => {
+        writeDotEnv('.env', `${launcherVar}=repo-supplied-value`);
+
+        loadEnvironment();
+
+        expect(process.env[launcherVar]).toBeUndefined();
+      });
+    }
+
+    it('T9 (AC5): excludedProjectEnvVars: [] does not switch the guard off', () => {
+      writeDotEnv('.env', 'SANDBOX_FLAGS=--cap-add=NET_ADMIN');
+      const settings: Settings = { excludedProjectEnvVars: [] };
+
+      loadEnvironmentFromSettings(settings);
+
+      expect(process.env.SANDBOX_FLAGS).toBeUndefined();
+    });
+
+    it('T7: a repo .env key that is not a launcher control still loads', () => {
+      writeDotEnv('.env', 'MY_PROJECT_VAR=hello-2958');
+
+      loadEnvironment();
+
+      expect(process.env.MY_PROJECT_VAR).toBe('hello-2958');
+    });
   });
 
-  it('T7: a repo .env key that is not a launcher control still loads', () => {
-    writeDotEnv('.env', 'MY_PROJECT_VAR=hello-2958');
+  describe('user-supplied sandbox launcher variables keep working', () => {
+    useRepoSandboxHarness();
 
-    loadEnvironment();
+    it('T5 (AC3): a shell-exported SANDBOX_FLAGS survives and reaches the run args', () => {
+      process.env.SANDBOX_FLAGS = '--cap-add=NET_ADMIN';
+      writeDotEnv('.env', 'MY_PROJECT_VAR=hello-2958');
 
-    expect(process.env.MY_PROJECT_VAR).toBe('hello-2958');
-  });
-});
+      loadEnvironment();
 
-describe('user-supplied sandbox launcher variables keep working', () => {
-  useRepoSandboxHarness();
+      expect(process.env.SANDBOX_FLAGS).toBe('--cap-add=NET_ADMIN');
+      expect(runArgs().join(' ')).toContain('--cap-add=NET_ADMIN');
+    });
 
-  it('T5 (AC3): a shell-exported SANDBOX_FLAGS survives and reaches the run args', () => {
-    process.env.SANDBOX_FLAGS = '--cap-add=NET_ADMIN';
-    writeDotEnv('.env', 'MY_PROJECT_VAR=hello-2958');
+    it('T5b: a repo .env that names SANDBOX_FLAGS drops the control entirely rather than letting the repo pick the value', () => {
+      process.env.SANDBOX_FLAGS = '--cap-add=NET_ADMIN';
+      writeDotEnv('.env', 'SANDBOX_FLAGS=--env GEMINI_API_KEY=$GEMINI_API_KEY');
 
-    loadEnvironment();
+      loadEnvironment();
 
-    expect(process.env.SANDBOX_FLAGS).toBe('--cap-add=NET_ADMIN');
-    expect(runArgs().join(' ')).toContain('--cap-add=NET_ADMIN');
-  });
+      expect(process.env.SANDBOX_FLAGS).toBeUndefined();
+      expect(runArgs().join(' ')).not.toContain('GEMINI_API_KEY');
+    });
 
-  it('T5b: a repo .env that names SANDBOX_FLAGS drops the control entirely rather than letting the repo pick the value', () => {
-    process.env.SANDBOX_FLAGS = '--cap-add=NET_ADMIN';
-    writeDotEnv('.env', 'SANDBOX_FLAGS=--env GEMINI_API_KEY=$GEMINI_API_KEY');
+    it('T12 (AC3): a sandbox profile still supplies SANDBOX_FLAGS and mounts after a hostile repo .env', async () => {
+      const globalConfigDir = makeTempDir('global-');
+      const mountDir = makeTempDir('mount-');
+      process.env.LLXPRT_CONFIG_HOME = globalConfigDir;
+      fs.mkdirSync(path.join(globalConfigDir, 'sandboxes'), {
+        recursive: true,
+      });
+      fs.writeFileSync(
+        path.join(globalConfigDir, 'sandboxes', 'issue2958.json'),
+        JSON.stringify({
+          engine: 'docker',
+          image: 'sandbox:0.11.0',
+          resources: { cpus: 2 },
+          mounts: [{ from: mountDir, to: '/mnt/profile', mode: 'ro' }],
+          env: { SANDBOX_FLAGS: '--cap-add=NET_ADMIN' },
+        }),
+      );
+      writeDotEnv('.env', 'SANDBOX_FLAGS=--env GEMINI_API_KEY=$GEMINI_API_KEY');
 
-    loadEnvironment();
+      loadEnvironment();
+      await loadSandboxConfig(
+        { sandbox: true },
+        { sandboxProfileLoad: 'issue2958', sandboxEngine: 'docker' },
+      );
 
-    expect(process.env.SANDBOX_FLAGS).toBeUndefined();
-    expect(runArgs().join(' ')).not.toContain('GEMINI_API_KEY');
-  });
+      const args = runArgs();
+      addContainerVolumeMounts(args);
+      const joined = args.join(' ');
+      expect(joined).toContain('--cap-add=NET_ADMIN');
+      expect(joined).toContain('/mnt/profile');
+      expect(joined).not.toContain('GEMINI_API_KEY');
+    });
 
-  it('T12 (AC3): a sandbox profile still supplies SANDBOX_FLAGS and mounts after a hostile repo .env', async () => {
-    const globalConfigDir = makeTempDir('global-');
-    const mountDir = makeTempDir('mount-');
-    process.env.LLXPRT_CONFIG_HOME = globalConfigDir;
-    fs.mkdirSync(path.join(globalConfigDir, 'sandboxes'), { recursive: true });
-    fs.writeFileSync(
-      path.join(globalConfigDir, 'sandboxes', 'issue2958.json'),
-      JSON.stringify({
-        engine: 'docker',
-        image: 'sandbox:0.11.0',
-        resources: { cpus: 2 },
-        mounts: [{ from: mountDir, to: '/mnt/profile', mode: 'ro' }],
-        env: { SANDBOX_FLAGS: '--cap-add=NET_ADMIN' },
-      }),
-    );
-    writeDotEnv('.env', 'SANDBOX_FLAGS=--env GEMINI_API_KEY=$GEMINI_API_KEY');
+    it('T8: an env file at the global config root may still set SANDBOX_FLAGS', () => {
+      const globalConfigDir = makeTempDir('global-');
+      process.env.LLXPRT_CONFIG_HOME = globalConfigDir;
+      fs.writeFileSync(
+        path.join(globalConfigDir, '.env'),
+        'SANDBOX_FLAGS=--cap-add=NET_ADMIN',
+      );
 
-    loadEnvironment();
-    await loadSandboxConfig(
-      { sandbox: true },
-      { sandboxProfileLoad: 'issue2958', sandboxEngine: 'docker' },
-    );
+      loadEnvironment();
 
-    const args = runArgs();
-    addContainerVolumeMounts(args);
-    const joined = args.join(' ');
-    expect(joined).toContain('--cap-add=NET_ADMIN');
-    expect(joined).toContain('/mnt/profile');
-    expect(joined).not.toContain('GEMINI_API_KEY');
-  });
-
-  it('T8: an env file at the global config root may still set SANDBOX_FLAGS', () => {
-    const globalConfigDir = makeTempDir('global-');
-    process.env.LLXPRT_CONFIG_HOME = globalConfigDir;
-    fs.writeFileSync(
-      path.join(globalConfigDir, '.env'),
-      'SANDBOX_FLAGS=--cap-add=NET_ADMIN',
-    );
-
-    loadEnvironment();
-
-    expect(process.env.SANDBOX_FLAGS).toBe('--cap-add=NET_ADMIN');
-    expect(runArgs().join(' ')).toContain('--cap-add=NET_ADMIN');
-  });
-});
-
-describe('isUserGlobalEnvFile', () => {
-  useRepoSandboxHarness();
-
-  it('trusts the env file at the global config root but not a sibling directory', () => {
-    const globalConfigDir = path.join(process.cwd(), 'config-root');
-    process.env.LLXPRT_CONFIG_HOME = globalConfigDir;
-
-    expect(isUserGlobalEnvFile(path.join(globalConfigDir, '.env'))).toBe(true);
-    expect(
-      isUserGlobalEnvFile(path.join(`${globalConfigDir}-evil`, '.env')),
-    ).toBe(false);
+      expect(process.env.SANDBOX_FLAGS).toBe('--cap-add=NET_ADMIN');
+      expect(runArgs().join(' ')).toContain('--cap-add=NET_ADMIN');
+    });
   });
 
-  it('does not trust a repository checked out underneath the global config root', () => {
-    const globalConfigDir = path.join(process.cwd(), 'config-root');
-    process.env.LLXPRT_CONFIG_HOME = globalConfigDir;
+  describe('isUserGlobalEnvFile', () => {
+    useRepoSandboxHarness();
 
-    expect(
-      isUserGlobalEnvFile(path.join(globalConfigDir, 'some-repo', '.env')),
-    ).toBe(false);
-  });
+    it('trusts the env file at the global config root but not a sibling directory', () => {
+      const globalConfigDir = path.join(process.cwd(), 'config-root');
+      process.env.LLXPRT_CONFIG_HOME = globalConfigDir;
 
-  it('trusts the env file at the home root', () => {
-    expect(isUserGlobalEnvFile(path.join(os.homedir(), '.env'))).toBe(true);
+      expect(isUserGlobalEnvFile(path.join(globalConfigDir, '.env'))).toBe(
+        true,
+      );
+      expect(
+        isUserGlobalEnvFile(path.join(`${globalConfigDir}-evil`, '.env')),
+      ).toBe(false);
+    });
+
+    it('does not trust a repository checked out underneath the global config root', () => {
+      const globalConfigDir = path.join(process.cwd(), 'config-root');
+      process.env.LLXPRT_CONFIG_HOME = globalConfigDir;
+
+      expect(
+        isUserGlobalEnvFile(path.join(globalConfigDir, 'some-repo', '.env')),
+      ).toBe(false);
+    });
+
+    it('trusts the env file at the home root', () => {
+      expect(isUserGlobalEnvFile(path.join(os.homedir(), '.env'))).toBe(true);
+    });
   });
 });

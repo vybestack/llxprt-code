@@ -60,6 +60,43 @@ function readAllProfiles(): Record<string, string> {
   return result;
 }
 
+function writeGrantSource(content: string): string {
+  return (content.match(/\(allow file-write\*[\s\S]*?\n\)\s*\n/g) ?? []).join(
+    '\n',
+  );
+}
+
+function isLegacyLlxprtGrant(block: string): boolean {
+  return block.includes('HOME_DIR') && block.includes('.llxprt');
+}
+
+function isNotReadGrant(block: string): boolean {
+  return !block.includes('file-read');
+}
+
+function pathEnvironmentValue(value: string | undefined): string {
+  return value ?? '/usr/bin:/bin';
+}
+
+function optionalPathEnvironmentValue(value: string | undefined): string {
+  return value ?? '';
+}
+
+function restoreEnvironmentValue(key: string, value: string | undefined): void {
+  if (value !== undefined) {
+    process.env[key] = value;
+  } else {
+    delete process.env[key];
+  }
+}
+
+function commandFailed(
+  error: Error | undefined,
+  status: number | null,
+): boolean {
+  return error !== undefined || status !== 0;
+}
+
 // ─── Cross-platform source assertions on .sb profiles ─────────────────────
 
 describe('seatbelt .sb profiles: canonical roots and no legacy write grants', () => {
@@ -86,21 +123,16 @@ describe('seatbelt .sb profiles: canonical roots and no legacy write grants', ()
       });
 
       it('does NOT grant writes to HOME_DIR/.llxprt (no active legacy write grant)', () => {
-        const writeGrants = (
-          content.match(/\(allow file-write\*[\s\S]*?\n\)\s*\n/g) ?? []
-        ).join('\n');
+        const writeGrants = writeGrantSource(content);
         expect(writeGrants).not.toContain(
           '(string-append (param "HOME_DIR") "/.llxprt")',
         );
       });
 
       it('every HOME_DIR/.llxprt grant is read-only (no write grants)', () => {
-        const llxprtBlocks = extractGrantBlocks(content).filter(
-          (b) => b.includes('HOME_DIR') && b.includes('.llxprt'),
-        );
-        expect(
-          llxprtBlocks.filter((b) => !b.includes('file-read')),
-        ).toStrictEqual([]);
+        const llxprtBlocks =
+          extractGrantBlocks(content).filter(isLegacyLlxprtGrant);
+        expect(llxprtBlocks.filter(isNotReadGrant)).toStrictEqual([]);
       });
     });
   }
@@ -122,15 +154,13 @@ describe('seatbelt .sb profiles: canonical roots and no legacy write grants', ()
     (subpath (string-append (param "HOME_DIR") "/.llxprt"))
 )
 `;
-    const writeGrants = (
-      mutatedProfile.match(/\(allow file-write\*[\s\S]*?\n\)\s*\n/g) ?? []
-    ).join('\n');
+    const writeGrants = writeGrantSource(mutatedProfile);
     expect(writeGrants).toContain(
       '(string-append (param "HOME_DIR") "/.llxprt")',
     );
     const writeBlocks = extractGrantBlocks(mutatedProfile)
-      .filter((b) => b.includes('HOME_DIR') && b.includes('.llxprt'))
-      .filter((b) => !b.includes('file-read'));
+      .filter(isLegacyLlxprtGrant)
+      .filter(isNotReadGrant);
     expect(writeBlocks.length).toBeGreaterThan(0);
   });
 });
@@ -196,9 +226,8 @@ describe('buildSeatbeltArgs: canonical root resolution', () => {
     },
   );
 
-  it.skipIf(process.platform === 'win32')(
-    'creates missing canonical root directories with mode 0o700',
-    () => {
+  describe.skipIf(process.platform === 'win32')('POSIX behavior', () => {
+    it('creates missing canonical root directories with mode 0o700', () => {
       // Point CONFIG_DIR at a path that does NOT exist yet so
       // resolveRealpathSync must create it. The auto-created directory
       // must have a restrictive mode (0o700), not a permissive default.
@@ -214,60 +243,61 @@ describe('buildSeatbeltArgs: canonical root resolution', () => {
       // mode means the result has no group/other bits. We assert that group
       // and other bits are absent (owner-only access).
       expect(stat.mode & 0o077).toBe(0);
-    },
-  );
+    });
+  });
 });
 
 // ─── Real macOS sandbox-exec behavioral test (gated to macOS) ─────────────
 
-describe.skipIf(!isMacOS)(
-  'real macOS sandbox-exec: canonical roots enforced',
-  () => {
-    let tmpRoot: string;
-    const savedEnv: Record<string, string | undefined> = {};
+describe('real macOS sandbox-exec behavior', () => {
+  describe.skipIf(!isMacOS)(
+    'real macOS sandbox-exec: canonical roots enforced',
+    () => {
+      let tmpRoot: string;
+      const savedEnv: Record<string, string | undefined> = {};
 
-    const ENV_KEYS = [
-      'LLXPRT_CONFIG_HOME',
-      'LLXPRT_DATA_HOME',
-      'LLXPRT_LOG_HOME',
-      'HOME',
-    ] as const;
+      const ENV_KEYS = [
+        'LLXPRT_CONFIG_HOME',
+        'LLXPRT_DATA_HOME',
+        'LLXPRT_LOG_HOME',
+        'HOME',
+      ] as const;
 
-    beforeEach(async () => {
-      for (const key of ENV_KEYS) {
-        savedEnv[key] = process.env[key];
-        delete process.env[key];
-      }
-      tmpRoot = await fs.promises.mkdtemp(
-        path.join(os.tmpdir(), 'seatbelt-real-'),
-      );
-      const configHome = path.join(tmpRoot, 'config');
-      await fs.promises.mkdir(configHome, { recursive: true });
-      process.env['LLXPRT_CONFIG_HOME'] = configHome;
-      process.env['HOME'] = tmpRoot;
-    });
-
-    afterEach(async () => {
-      for (const key of ENV_KEYS) {
-        if (savedEnv[key] === undefined) {
+      beforeEach(async () => {
+        for (const key of ENV_KEYS) {
+          savedEnv[key] = process.env[key];
           delete process.env[key];
-        } else {
-          process.env[key] = savedEnv[key];
         }
-      }
-      await fs.promises.rm(tmpRoot, { recursive: true, force: true });
-    });
+        tmpRoot = await fs.promises.mkdtemp(
+          path.join(os.tmpdir(), 'seatbelt-real-'),
+        );
+        const configHome = path.join(tmpRoot, 'config');
+        await fs.promises.mkdir(configHome, { recursive: true });
+        process.env['LLXPRT_CONFIG_HOME'] = configHome;
+        process.env['HOME'] = tmpRoot;
+      });
 
-    it('sandbox-exec permits write to CONFIG_DIR and denies write to legacy HOME/.llxprt', () => {
-      const configDir = fs.realpathSync(process.env['LLXPRT_CONFIG_HOME']!);
-      const realTmpRoot = fs.realpathSync(tmpRoot);
-      const legacyDir = path.join(realTmpRoot, '.llxprt');
-      fs.mkdirSync(legacyDir, { recursive: true });
+      afterEach(async () => {
+        for (const key of ENV_KEYS) {
+          if (savedEnv[key] === undefined) {
+            delete process.env[key];
+          } else {
+            process.env[key] = savedEnv[key];
+          }
+        }
+        await fs.promises.rm(tmpRoot, { recursive: true, force: true });
+      });
 
-      const profile = path.join(realTmpRoot, 'test.sb');
-      fs.writeFileSync(
-        profile,
-        `(version 1)
+      it('sandbox-exec permits write to CONFIG_DIR and denies write to legacy HOME/.llxprt', () => {
+        const configDir = fs.realpathSync(process.env['LLXPRT_CONFIG_HOME']!);
+        const realTmpRoot = fs.realpathSync(tmpRoot);
+        const legacyDir = path.join(realTmpRoot, '.llxprt');
+        fs.mkdirSync(legacyDir, { recursive: true });
+
+        const profile = path.join(realTmpRoot, 'test.sb');
+        fs.writeFileSync(
+          profile,
+          `(version 1)
 (deny default)
 (allow process-exec)
 (allow process-fork)
@@ -281,53 +311,56 @@ describe.skipIf(!isMacOS)(
     (subpath (string-append (param "HOME_DIR") "/.llxprt"))
 )
 `,
-      );
-
-      function runInSandbox(cmd: string): string {
-        return execFileSync(
-          'sandbox-exec',
-          [
-            '-D',
-            `CONFIG_DIR=${configDir}`,
-            '-D',
-            `HOME_DIR=${realTmpRoot}`,
-            '-f',
-            profile,
-            'sh',
-            '-c',
-            cmd,
-          ],
-          { encoding: 'utf8', stdio: 'pipe' },
         );
-      }
 
-      // Write to CONFIG_DIR should succeed.
-      execFileSync('sandbox-exec', [
-        '-D',
-        `CONFIG_DIR=${configDir}`,
-        '-D',
-        `HOME_DIR=${realTmpRoot}`,
-        '-f',
-        profile,
-        'sh',
-        '-c',
-        `echo test > "${configDir}/write-test.txt"`,
-      ]);
-      expect(fs.existsSync(path.join(configDir, 'write-test.txt'))).toBe(true);
+        function runInSandbox(cmd: string): string {
+          return execFileSync(
+            'sandbox-exec',
+            [
+              '-D',
+              `CONFIG_DIR=${configDir}`,
+              '-D',
+              `HOME_DIR=${realTmpRoot}`,
+              '-f',
+              profile,
+              'sh',
+              '-c',
+              cmd,
+            ],
+            { encoding: 'utf8', stdio: 'pipe' },
+          );
+        }
 
-      // Write to legacy HOME/.llxprt should be DENIED.
-      expect(() =>
-        runInSandbox(`echo test > "${legacyDir}/denied.txt"`),
-      ).toThrow(/denied|operation not permitted|sandbox/i);
-      expect(fs.existsSync(path.join(legacyDir, 'denied.txt'))).toBe(false);
+        // Write to CONFIG_DIR should succeed.
+        execFileSync('sandbox-exec', [
+          '-D',
+          `CONFIG_DIR=${configDir}`,
+          '-D',
+          `HOME_DIR=${realTmpRoot}`,
+          '-f',
+          profile,
+          'sh',
+          '-c',
+          `echo test > "${configDir}/write-test.txt"`,
+        ]);
+        expect(fs.existsSync(path.join(configDir, 'write-test.txt'))).toBe(
+          true,
+        );
 
-      // Read from legacy HOME/.llxprt should SUCCEED (read-only grant).
-      const legacyFile = path.join(legacyDir, 'readme.txt');
-      fs.writeFileSync(legacyFile, 'legacy data');
-      expect(runInSandbox(`cat "${legacyFile}"`).trim()).toBe('legacy data');
-    });
-  },
-);
+        // Write to legacy HOME/.llxprt should be DENIED.
+        expect(() =>
+          runInSandbox(`echo test > "${legacyDir}/denied.txt"`),
+        ).toThrow(/denied|operation not permitted|sandbox/i);
+        expect(fs.existsSync(path.join(legacyDir, 'denied.txt'))).toBe(false);
+
+        // Read from legacy HOME/.llxprt should SUCCEED (read-only grant).
+        const legacyFile = path.join(legacyDir, 'readme.txt');
+        fs.writeFileSync(legacyFile, 'legacy data');
+        expect(runInSandbox(`cat "${legacyFile}"`).trim()).toBe('legacy data');
+      });
+    },
+  );
+});
 
 // ─── AC11: Seatbelt starts no proxy and receives no capability transport (#1954)
 
@@ -375,9 +408,8 @@ describe('AC11: seatbelt spawn env carries no capability transport (#1954)', () 
    * token/fd/socket. Uses a POSIX shell stub sandbox-exec binary on PATH
    * so this works without a real sandbox-exec.
    */
-  it.skipIf(process.platform === 'win32')(
-    'runSeatbeltSandbox: child env lacks LLXPRT_CAPABILITY_* and LLXPRT_CREDENTIAL_SOCKET even when parent env has dirty markers',
-    async () => {
+  describe.skipIf(process.platform === 'win32')('POSIX behavior', () => {
+    it('runSeatbeltSandbox: child env lacks LLXPRT_CAPABILITY_* and LLXPRT_CREDENTIAL_SOCKET even when parent env has dirty markers', async () => {
       const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sb-stub-'));
       const stubPath = path.join(stubDir, 'sandbox-exec');
       const capturedEnvPath = path.join(stubDir, 'child-env');
@@ -394,7 +426,7 @@ describe('AC11: seatbelt spawn env carries no capability transport (#1954)', () 
       process.env.LLXPRT_CREDENTIAL_SOCKET = '/tmp/fake-dirty.sock';
       process.env.SEATBELT_PROFILE = 'permissive-open';
       process.env.SEATBELT_ENV_CAPTURE = capturedEnvPath;
-      process.env.PATH = `${stubDir}:${process.env.PATH ?? ''}`;
+      process.env.PATH = `${stubDir}:${optionalPathEnvironmentValue(process.env.PATH)}`;
       try {
         await runSeatbeltSandbox(
           { command: 'sandbox-exec', image: 'test' } as never,
@@ -407,32 +439,24 @@ describe('AC11: seatbelt spawn env carries no capability transport (#1954)', () 
         expect(childEnvOutput).not.toContain('LLXPRT_CAPABILITY_FD');
         expect(childEnvOutput).not.toContain('LLXPRT_CREDENTIAL_SOCKET');
       } finally {
-        if (savedFd !== undefined) process.env.LLXPRT_CAPABILITY_FD = savedFd;
-        else delete process.env.LLXPRT_CAPABILITY_FD;
-        if (savedTok !== undefined)
-          process.env.LLXPRT_CAPABILITY_TOKEN = savedTok;
-        else delete process.env.LLXPRT_CAPABILITY_TOKEN;
-        if (savedSock !== undefined)
-          process.env.LLXPRT_CREDENTIAL_SOCKET = savedSock;
-        else delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-        if (savedProfile !== undefined)
-          process.env.SEATBELT_PROFILE = savedProfile;
-        else delete process.env.SEATBELT_PROFILE;
+        restoreEnvironmentValue('LLXPRT_CAPABILITY_FD', savedFd);
+        restoreEnvironmentValue('LLXPRT_CAPABILITY_TOKEN', savedTok);
+        restoreEnvironmentValue('LLXPRT_CREDENTIAL_SOCKET', savedSock);
+        restoreEnvironmentValue('SEATBELT_PROFILE', savedProfile);
         process.env.PATH = savedPath;
         delete process.env.SEATBELT_ENV_CAPTURE;
         fs.rmSync(stubDir, { recursive: true, force: true });
       }
-    },
-  );
+    });
+  });
 
-  it.skipIf(!isMacOS)(
-    'real sandbox-exec child inherits no capability transport markers from the post-consumption parent env',
-    () => {
+  describe.skipIf(!isMacOS)('macOS behavior', () => {
+    it('real sandbox-exec child inherits no capability transport markers from the post-consumption parent env', () => {
       expect(fs.existsSync(PERMISSIVE_OPEN_PROFILE)).toBe(true);
 
       const cleanEnv: NodeJS.ProcessEnv = {
         ...process.env,
-        PATH: process.env.PATH ?? '/usr/bin:/bin',
+        PATH: pathEnvironmentValue(process.env.PATH),
       };
       delete cleanEnv.LLXPRT_CAPABILITY_FD;
       delete cleanEnv.LLXPRT_CAPABILITY_TOKEN;
@@ -449,16 +473,13 @@ describe('AC11: seatbelt spawn env carries no capability transport (#1954)', () 
       expect(childEnv).not.toContain('LLXPRT_CAPABILITY_FD');
       expect(childEnv).not.toContain('LLXPRT_CAPABILITY_TOKEN');
       expect(childEnv).not.toContain('LLXPRT_CREDENTIAL_SOCKET');
-    },
-  );
+    });
 
-  it.skipIf(!isMacOS)(
-    'O16: asserts real macOS sandbox-exec spawn success/failure surfaces correctly',
-    () => {
+    it('O16: asserts real macOS sandbox-exec spawn success/failure surfaces correctly', () => {
       expect(fs.existsSync(PERMISSIVE_OPEN_PROFILE)).toBe(true);
       const dirtyEnv: NodeJS.ProcessEnv = {
         ...process.env,
-        PATH: process.env.PATH ?? '/usr/bin:/bin',
+        PATH: pathEnvironmentValue(process.env.PATH),
         LLXPRT_CAPABILITY_TOKEN: 'd'.repeat(64),
         LLXPRT_CAPABILITY_FD: '3',
         LLXPRT_CREDENTIAL_SOCKET: '/tmp/fake.sock',
@@ -477,9 +498,9 @@ describe('AC11: seatbelt spawn env carries no capability transport (#1954)', () 
         '/nonexistent/profile.sb',
         'env',
       ]);
-      expect(fail.error !== undefined || fail.status !== 0).toBe(true);
-    },
-  );
+      expect(commandFailed(fail.error, fail.status)).toBe(true);
+    });
+  });
 });
 
 const ISSUE_1456_ENV_KEYS = [
@@ -676,38 +697,37 @@ describe('#1456 Seatbelt network policy', () => {
     restoreEnvironment(environmentSnapshot);
   });
 
-  it.skipIf(process.platform === 'win32').each([
-    ['off', undefined, 'permissive-closed'],
-    ['on', undefined, 'permissive-open'],
-    ['unexpected', undefined, 'permissive-open'],
-    [undefined, undefined, 'permissive-open'],
-    [undefined, 'off', 'permissive-closed'],
-    ['on', 'off', 'permissive-open'],
-    ['', 'off', 'permissive-open'],
-  ])(
-    'maps primary=%s and legacy=%s to %s',
-    async (primary, legacy, profile) => {
-      const harness = createSeatbeltHarness();
-      try {
-        await executeSeatbeltHarness(harness, {
-          LLXPRT_SANDBOX_NETWORK: primary,
-          SANDBOX_NETWORK: legacy,
-        });
-        assertSelectedProfile(
-          harness,
-          path.join(BUILTIN_PROFILE_DIRECTORY, `sandbox-macos-${profile}.sb`),
-        );
-        expect(fs.existsSync(harness.sandboxMarker)).toBe(true);
-        expect(fs.existsSync(harness.proxyMarker)).toBe(false);
-      } finally {
-        await harness.cleanup();
-      }
-    },
-  );
+  describe.skipIf(process.platform === 'win32')('POSIX behavior', () => {
+    it.each([
+      ['off', undefined, 'permissive-closed'],
+      ['on', undefined, 'permissive-open'],
+      ['unexpected', undefined, 'permissive-open'],
+      [undefined, undefined, 'permissive-open'],
+      [undefined, 'off', 'permissive-closed'],
+      ['on', 'off', 'permissive-open'],
+      ['', 'off', 'permissive-open'],
+    ])(
+      'maps primary=%s and legacy=%s to %s',
+      async (primary, legacy, profile) => {
+        const harness = createSeatbeltHarness();
+        try {
+          await executeSeatbeltHarness(harness, {
+            LLXPRT_SANDBOX_NETWORK: primary,
+            SANDBOX_NETWORK: legacy,
+          });
+          assertSelectedProfile(
+            harness,
+            path.join(BUILTIN_PROFILE_DIRECTORY, `sandbox-macos-${profile}.sb`),
+          );
+          expect(fs.existsSync(harness.sandboxMarker)).toBe(true);
+          expect(fs.existsSync(harness.proxyMarker)).toBe(false);
+        } finally {
+          await harness.cleanup();
+        }
+      },
+    );
 
-  it.skipIf(process.platform === 'win32')(
-    'uses an empty explicit profile as automatic network selection',
-    async () => {
+    it('uses an empty explicit profile as automatic network selection', async () => {
       const harness = createSeatbeltHarness();
       try {
         await executeSeatbeltHarness(harness, {
@@ -725,12 +745,9 @@ describe('#1456 Seatbelt network policy', () => {
       } finally {
         await harness.cleanup();
       }
-    },
-  );
+    });
 
-  it.skipIf(process.platform === 'win32')(
-    'honors a conflicting non-empty explicit profile',
-    async () => {
+    it('honors a conflicting non-empty explicit profile', async () => {
       const harness = createSeatbeltHarness();
       try {
         await executeSeatbeltHarness(harness, {
@@ -748,43 +765,40 @@ describe('#1456 Seatbelt network policy', () => {
       } finally {
         await harness.cleanup();
       }
-    },
-  );
+    });
 
-  it
-    .skipIf(process.platform === 'win32')
-    .each(['custom-policy', 'custom-proxied-policy'])(
-    'loads real custom profile %s from an isolated cwd',
-    async (profile) => {
-      const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'seatbelt-cwd-1456-'));
-      const profileDirectory = path.join(cwd, '.llxprt');
-      const profilePath = path.join(
-        profileDirectory,
-        `sandbox-macos-${profile}.sb`,
-      );
-      fs.mkdirSync(profileDirectory, { recursive: true });
-      fs.writeFileSync(profilePath, '(version 1)\n(deny default)\n');
-      const harness = createSeatbeltHarness(cwd);
-      try {
-        await executeSeatbeltHarness(harness, {
-          SEATBELT_PROFILE: profile,
-          LLXPRT_SANDBOX_NETWORK: 'proxied',
-        });
-        assertSelectedProfile(
-          harness,
-          path.join('.llxprt', `sandbox-macos-${profile}.sb`),
+    it.each(['custom-policy', 'custom-proxied-policy'])(
+      'loads real custom profile %s from an isolated cwd',
+      async (profile) => {
+        const cwd = fs.mkdtempSync(
+          path.join(os.tmpdir(), 'seatbelt-cwd-1456-'),
         );
-        expect(fs.existsSync(harness.proxyMarker)).toBe(false);
-      } finally {
-        await harness.cleanup();
-        fs.rmSync(cwd, { recursive: true, force: true });
-      }
-    },
-  );
+        const profileDirectory = path.join(cwd, '.llxprt');
+        const profilePath = path.join(
+          profileDirectory,
+          `sandbox-macos-${profile}.sb`,
+        );
+        fs.mkdirSync(profileDirectory, { recursive: true });
+        fs.writeFileSync(profilePath, '(version 1)\n(deny default)\n');
+        const harness = createSeatbeltHarness(cwd);
+        try {
+          await executeSeatbeltHarness(harness, {
+            SEATBELT_PROFILE: profile,
+            LLXPRT_SANDBOX_NETWORK: 'proxied',
+          });
+          assertSelectedProfile(
+            harness,
+            path.join('.llxprt', `sandbox-macos-${profile}.sb`),
+          );
+          expect(fs.existsSync(harness.proxyMarker)).toBe(false);
+        } finally {
+          await harness.cleanup();
+          fs.rmSync(cwd, { recursive: true, force: true });
+        }
+      },
+    );
 
-  it.skipIf(process.platform === 'win32')(
-    'allocates both proxy listener and sandbox for valid proxied mode and scrubs child credentials',
-    async () => {
+    it('allocates both proxy listener and sandbox for valid proxied mode and scrubs child credentials', async () => {
       await assertSeatbeltProxyPortAvailable();
       const harness = createSeatbeltHarness();
       try {
@@ -808,51 +822,49 @@ describe('#1456 Seatbelt network policy', () => {
       } finally {
         await harness.cleanup();
       }
-    },
-  );
+    });
 
-  it.skipIf(process.platform === 'win32').each([
-    ['missing', undefined],
-    ['empty', ''],
-    ['whitespace', '   '],
-  ])(
-    'rejects automatic proxied mode with %s command before allocation',
-    async (_label, command) => {
-      const harness = createSeatbeltHarness();
-      try {
-        const result = executeSeatbeltHarness(harness, {
-          LLXPRT_SANDBOX_NETWORK: 'proxied',
-          LLXPRT_SANDBOX_PROXY_COMMAND: command,
-        });
-        await expect(result).rejects.toBeInstanceOf(FatalSandboxError);
-        await expect(result).rejects.toThrowError(PROXIED_PROFILE_ERROR);
-        expect(fs.existsSync(harness.proxyMarker)).toBe(false);
-        expect(fs.existsSync(harness.sandboxMarker)).toBe(false);
-      } finally {
-        await harness.cleanup();
-      }
-    },
-  );
+    it.each([
+      ['missing', undefined],
+      ['empty', ''],
+      ['whitespace', '   '],
+    ])(
+      'rejects automatic proxied mode with %s command before allocation',
+      async (_label, command) => {
+        const harness = createSeatbeltHarness();
+        try {
+          const result = executeSeatbeltHarness(harness, {
+            LLXPRT_SANDBOX_NETWORK: 'proxied',
+            LLXPRT_SANDBOX_PROXY_COMMAND: command,
+          });
+          await expect(result).rejects.toBeInstanceOf(FatalSandboxError);
+          await expect(result).rejects.toThrowError(PROXIED_PROFILE_ERROR);
+          expect(fs.existsSync(harness.proxyMarker)).toBe(false);
+          expect(fs.existsSync(harness.sandboxMarker)).toBe(false);
+        } finally {
+          await harness.cleanup();
+        }
+      },
+    );
 
-  it
-    .skipIf(process.platform === 'win32')
-    .each(['permissive-proxied', 'restrictive-proxied'])(
-    'rejects explicit built-in %s without a proxy command',
-    async (profile) => {
-      const harness = createSeatbeltHarness();
-      try {
-        const result = executeSeatbeltHarness(harness, {
-          SEATBELT_PROFILE: profile,
-        });
-        await expect(result).rejects.toBeInstanceOf(FatalSandboxError);
-        await expect(result).rejects.toThrowError(PROXIED_PROFILE_ERROR);
-        expect(fs.existsSync(harness.proxyMarker)).toBe(false);
-        expect(fs.existsSync(harness.sandboxMarker)).toBe(false);
-      } finally {
-        await harness.cleanup();
-      }
-    },
-  );
+    it.each(['permissive-proxied', 'restrictive-proxied'])(
+      'rejects explicit built-in %s without a proxy command',
+      async (profile) => {
+        const harness = createSeatbeltHarness();
+        try {
+          const result = executeSeatbeltHarness(harness, {
+            SEATBELT_PROFILE: profile,
+          });
+          await expect(result).rejects.toBeInstanceOf(FatalSandboxError);
+          await expect(result).rejects.toThrowError(PROXIED_PROFILE_ERROR);
+          expect(fs.existsSync(harness.proxyMarker)).toBe(false);
+          expect(fs.existsSync(harness.sandboxMarker)).toBe(false);
+        } finally {
+          await harness.cleanup();
+        }
+      },
+    );
+  });
 });
 
 describe('wireSeatbeltProxyCloseHandler', () => {

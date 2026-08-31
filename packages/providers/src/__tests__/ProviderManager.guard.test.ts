@@ -73,6 +73,21 @@ async function collect(
   }
 }
 
+function configuredBaseUrl(key: string, baseUrl: string): string | undefined {
+  return key === 'base-url' ? baseUrl : undefined;
+}
+
+function configuredAuthKey(key: string, authKey: string): string | undefined {
+  return key === 'auth-key' ? authKey : undefined;
+}
+
+function withProviderBaseUrl(
+  current: { baseURL?: string } | undefined,
+  baseURL: string,
+): { baseURL: string } {
+  return { ...(current ?? {}), baseURL };
+}
+
 describe('ProviderManager runtime guard plumbing', () => {
   afterEach(() => {
     clearActiveProviderRuntimeContext();
@@ -319,7 +334,7 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
     const settingsService = new SettingsService();
     const config = createRuntimeConfigStub(settingsService, {
       getEphemeralSetting: (key: string) =>
-        key === 'base-url' ? 'https://config-fallback.example.com' : undefined,
+        configuredBaseUrl(key, 'https://config-fallback.example.com'),
     });
     const manager = new ProviderManager({ settingsService, config });
 
@@ -355,9 +370,10 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
     const config = createRuntimeConfigStub(foregroundSettings, {
       getSettingsService: () => foregroundSettings,
       getEphemeralSetting: (key: string) =>
-        key === 'base-url'
-          ? 'https://leaked-foreground.example.com/openai/v1'
-          : undefined,
+        configuredBaseUrl(
+          key,
+          'https://leaked-foreground.example.com/openai/v1',
+        ),
     });
 
     const manager = new ProviderManager({
@@ -395,7 +411,7 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
     const config = createRuntimeConfigStub(foregroundSettings, {
       getSettingsService: () => foregroundSettings,
       getEphemeralSetting: (key: string) =>
-        key === 'auth-key' ? 'leaked-foreground-key' : undefined,
+        configuredAuthKey(key, 'leaked-foreground-key'),
     });
 
     const manager = new ProviderManager({
@@ -431,7 +447,7 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
 
     const config = createRuntimeConfigStub(settingsService, {
       getEphemeralSetting: (key: string) =>
-        key === 'base-url' ? 'https://openai.example.com/openai/v1' : undefined,
+        configuredBaseUrl(key, 'https://openai.example.com/openai/v1'),
     });
 
     const manager = new ProviderManager({ settingsService, config });
@@ -463,7 +479,7 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
 
     const config = createRuntimeConfigStub(settingsService, {
       getEphemeralSetting: (key: string) =>
-        key === 'auth-key' ? 'leaked-foreground-key' : undefined,
+        configuredAuthKey(key, 'leaked-foreground-key'),
     });
 
     const manager = new ProviderManager({ settingsService, config });
@@ -528,10 +544,10 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
     const providerConfigRef = provider as unknown as {
       baseProviderConfig?: { baseURL?: string };
     };
-    providerConfigRef.baseProviderConfig = {
-      ...(providerConfigRef.baseProviderConfig ?? {}),
-      baseURL: 'https://provider-config.example.com',
-    };
+    providerConfigRef.baseProviderConfig = withProviderBaseUrl(
+      providerConfigRef.baseProviderConfig,
+      'https://provider-config.example.com',
+    );
     manager.registerProvider(provider);
 
     settingsService.set('activeProvider', provider.name);
@@ -673,7 +689,7 @@ describe('ProviderManager.normalizeRuntimeInputs empty/whitespace fallback seman
     const settingsService = new SettingsService();
     const config = createRuntimeConfigStub(settingsService, {
       getEphemeralSetting: (key: string) =>
-        key === 'base-url' ? 'https://config-fallback.example.com' : undefined,
+        configuredBaseUrl(key, 'https://config-fallback.example.com'),
     });
     const manager = new ProviderManager({ settingsService, config });
 
@@ -705,7 +721,7 @@ describe('ProviderManager.normalizeRuntimeInputs empty/whitespace fallback seman
     const settingsService = new SettingsService();
     const config = createRuntimeConfigStub(settingsService, {
       getEphemeralSetting: (key: string) =>
-        key === 'base-url' ? 'https://config-fallback.example.com' : undefined,
+        configuredBaseUrl(key, 'https://config-fallback.example.com'),
     });
     const manager = new ProviderManager({ settingsService, config });
 

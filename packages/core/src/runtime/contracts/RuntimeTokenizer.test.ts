@@ -28,12 +28,7 @@ describe('RuntimeTokenizer contract', () => {
    */
   it('accepts a structural tokenizer object implementing countTokens', () => {
     const deterministicTokenizer: RuntimeTokenizer = {
-      countTokens(content: unknown): number {
-        if (typeof content === 'string') {
-          return content.split(/\s+/).filter(Boolean).length;
-        }
-        return 0;
-      },
+      countTokens: wordCountTokens,
     };
 
     const result = deterministicTokenizer.countTokens('hello world foo');
@@ -46,12 +41,7 @@ describe('RuntimeTokenizer contract', () => {
    */
   it('accepts a structural tokenizer returning a promise from countTokens', async () => {
     const asyncTokenizer: RuntimeTokenizer = {
-      countTokens(content: unknown): number | Promise<number> {
-        if (typeof content === 'string') {
-          return Promise.resolve(content.length);
-        }
-        return 0;
-      },
+      countTokens: charLengthTokens,
     };
 
     const result = asyncTokenizer.countTokens('hello');
@@ -94,9 +84,7 @@ describe('RuntimeTokenizer contract', () => {
     }
 
     const fakeTokenizer: RuntimeTokenizer = {
-      countTokens(content: unknown): number {
-        return typeof content === 'string' ? content.split(' ').length : 0;
-      },
+      countTokens: spaceSplitTokens,
     };
 
     const entries: HistoryEntry[] = [
@@ -119,18 +107,7 @@ describe('RuntimeTokenizerFactory contract', () => {
         providerName: string,
         _model?: string,
       ): RuntimeTokenizer | undefined {
-        if (providerName === 'openai') {
-          return {
-            countTokens: (c: unknown) => (typeof c === 'string' ? c.length : 0),
-          };
-        }
-        if (providerName === 'anthropic') {
-          return {
-            countTokens: (c: unknown) =>
-              typeof c === 'string' ? Math.ceil(c.length / 4) : 0,
-          };
-        }
-        return undefined;
+        return tokenizerForProvider(providerName);
       },
     };
 
@@ -170,13 +147,7 @@ describe('RuntimeTokenizerFactory contract', () => {
         providerName: string,
         model?: string,
       ): RuntimeTokenizer | undefined {
-        if (providerName === 'openai' && model === 'gpt-4') {
-          return { countTokens: () => 42 };
-        }
-        if (providerName === 'openai') {
-          return { countTokens: () => 7 };
-        }
-        return undefined;
+        return tokenizerForOpenAi(model);
       },
     };
 
@@ -187,3 +158,49 @@ describe('RuntimeTokenizerFactory contract', () => {
     expect(defaultTokenizer?.countTokens('any')).toBe(7);
   });
 });
+
+function wordCountTokens(content: unknown): number {
+  if (typeof content === 'string') {
+    return content.split(/\s+/).filter(Boolean).length;
+  }
+  return 0;
+}
+
+function charLengthTokens(content: unknown): number | Promise<number> {
+  if (typeof content === 'string') {
+    return Promise.resolve(content.length);
+  }
+  return 0;
+}
+
+function spaceSplitTokens(content: unknown): number {
+  return typeof content === 'string' ? content.split(' ').length : 0;
+}
+
+function stringLengthTokenCount(content: unknown): number {
+  return typeof content === 'string' ? content.length : 0;
+}
+
+function tokenizerForProvider(
+  providerName: string,
+): RuntimeTokenizer | undefined {
+  if (providerName === 'openai') {
+    return { countTokens: stringLengthTokenCount };
+  }
+  if (providerName === 'anthropic') {
+    return {
+      countTokens: (c: unknown) =>
+        typeof c === 'string' ? Math.ceil(c.length / 4) : 0,
+    };
+  }
+  return undefined;
+}
+
+function tokenizerForOpenAi(
+  model: string | undefined,
+): RuntimeTokenizer | undefined {
+  if (model === 'gpt-4') {
+    return { countTokens: () => 42 };
+  }
+  return { countTokens: () => 7 };
+}

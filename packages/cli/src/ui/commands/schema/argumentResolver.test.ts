@@ -52,6 +52,74 @@ const value = (
   next,
 });
 
+function isModeSuggestion(suggestion: { value: string }): boolean {
+  return suggestion.value === 'manual' || suggestion.value === 'auto';
+}
+
+function processToken(
+  token: string,
+  hasEscapes: boolean,
+  hasQuotes: boolean,
+): string {
+  if (hasEscapes && Math.random() > 0.5) {
+    return token.replace(/'/g, "\\'");
+  }
+  if (hasQuotes && Math.random() > 0.5) {
+    return `"${token}"`;
+  }
+  return token;
+}
+
+function optionsWithPossibleDuplicates(
+  options: string[],
+  includeDuplicates: boolean,
+): string[] {
+  return includeDuplicates ? [...options, ...options.slice(0, 3)] : options;
+}
+
+function suggestionsBelongToOptions(
+  options: readonly string[],
+  suggestionValues: readonly string[],
+): boolean {
+  const hasOptions = options.length > 0;
+  return (
+    (!hasOptions && suggestionValues.length === 0) ||
+    (hasOptions && suggestionValues.every((option) => options.includes(option)))
+  );
+}
+
+function traversalSchema(
+  tokenValue: string,
+  useLiteral: boolean,
+): CommandArgumentSchema {
+  return useLiteral
+    ? [literal(tokenValue, `Literal ${tokenValue}`)]
+    : [
+        value(tokenValue, `Value ${tokenValue}`, [
+          `${tokenValue}1`,
+          `${tokenValue}2`,
+        ]),
+      ];
+}
+
+function processMalformedToken(
+  token: string,
+  hasInvalidChars: boolean,
+): string {
+  if (hasInvalidChars && Math.random() > 0.7) {
+    return token + '\0\x1f\u0000';
+  }
+  return token;
+}
+
+function completerForErrorMode(isAsyncError: boolean): CompleterFn {
+  return isAsyncError
+    ? async () => {
+        throw new Error('Async completer error');
+      }
+    : async () => [{ value: 'success', description: 'Success' }];
+}
+
 describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
   describe('Basic functionality', () => {
     it('handles empty input gracefully @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', async () => {
@@ -531,18 +599,14 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
       expect(result.suggestions).toHaveLength(0);
 
       // Should not suggest mode options since mode was already provided
-      const modeSuggestions = result.suggestions.filter(
-        (s) => s.value === 'manual' || s.value === 'auto',
-      );
+      const modeSuggestions = result.suggestions.filter(isModeSuggestion);
       expect(modeSuggestions).toHaveLength(0);
 
       // Test with another complete path
       const result2 = await handler(mockContext, '', '/subagent create auto ');
       expect(result2.suggestions).toHaveLength(0);
 
-      const autoSuggestions = result2.suggestions.filter(
-        (s) => s.value === 'manual' || s.value === 'auto',
-      );
+      const autoSuggestions = result2.suggestions.filter(isModeSuggestion);
       expect(autoSuggestions).toHaveLength(0);
     });
 
@@ -614,15 +678,9 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
           async (tokens, hasQuotes, hasEscapes) => {
             // Pseudocode reference: Lines 7-8 - tokenize function
 
-            const processedTokens = tokens.map((token) => {
-              if (hasEscapes && Math.random() > 0.5) {
-                return token.replace(/'/g, "\\'");
-              }
-              if (hasQuotes && Math.random() > 0.5) {
-                return `"${token}"`;
-              }
-              return token;
-            });
+            const processedTokens = tokens.map((token) =>
+              processToken(token, hasEscapes, hasQuotes),
+            );
 
             const input = processedTokens.join(' ');
             const originalInput = input;
@@ -663,9 +721,10 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
           async (options, includeDuplicates) => {
             // Pseudocode reference: Lines 12-14 - generateSuggestions function
 
-            const processedOptions = includeDuplicates
-              ? [...options, ...options.slice(0, 3)] // Add some duplicates
-              : options;
+            const processedOptions = optionsWithPossibleDuplicates(
+              options,
+              includeDuplicates,
+            );
 
             const schema: CommandArgumentSchema = [
               value('arg', 'Argument', processedOptions),
@@ -691,11 +750,10 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
             );
 
             // Property 3: All suggestions should be from original options (handle empty case)
-            const hasOptions = options.length > 0;
-            const allSuggestionsValid =
-              (!hasOptions && suggestionValues.length === 0) ||
-              (hasOptions &&
-                suggestionValues.every((value) => options.includes(value)));
+            const allSuggestionsValid = suggestionsBelongToOptions(
+              options,
+              suggestionValues,
+            );
             expect(allSuggestionsValid).toBe(true);
           },
         ),
@@ -752,14 +810,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
             // Pseudocode reference: Lines 9-11 - resolveContext function
 
             // Build a simple schema with one element
-            const schema: CommandArgumentSchema = useLiteral
-              ? [literal(tokenValue, `Literal ${tokenValue}`)]
-              : [
-                  value(tokenValue, `Value ${tokenValue}`, [
-                    `${tokenValue}1`,
-                    `${tokenValue}2`,
-                  ]),
-                ];
+            const schema = traversalSchema(tokenValue, useLiteral);
 
             const handler = createCompletionHandler(schema);
             const originalSchema = JSON.parse(JSON.stringify(schema));
@@ -808,19 +859,11 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
           async (tokens, hasInvalidChars, isAsyncError) => {
             // Pseudocode reference: Lines 15-18 - error handling and fallbacks
 
-            const processedTokens = tokens.map((token) => {
-              if (hasInvalidChars && Math.random() > 0.7) {
-                // Add some potentially problematic characters
-                return token + '\0\x1f\u0000';
-              }
-              return token;
-            });
+            const processedTokens = tokens.map((token) =>
+              processMalformedToken(token, hasInvalidChars),
+            );
 
-            const errorCompleter: CompleterFn = isAsyncError
-              ? async () => {
-                  throw new Error('Async completer error');
-                }
-              : async () => [{ value: 'success', description: 'Success' }];
+            const errorCompleter = completerForErrorMode(isAsyncError);
 
             const schema: CommandArgumentSchema = [
               value('arg1', 'Argument 1', undefined, errorCompleter),

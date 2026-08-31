@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -133,88 +134,124 @@ describe('Turn error report payload (issue 3113)', () => {
 
   // T1: 25 entries -> recentHistory has 8, omittedHistoryCount === 17
   it('T1: bounds recentHistory to 8 entries with correct omittedHistoryCount', async () => {
-    const history: IContent[] = [];
-    for (let i = 0; i < 25; i++) {
-      history.push(makeEntry(i % 2 === 0 ? 'human' : 'ai', `Turn ${i}`));
-    }
-    const turn = createTurn(history, 'T1 distinct error message');
-    const req: ContentBlock[] = [{ text: 'T1 failing request' }];
-
-    await collectEvents(turn, req);
-
-    const files = await listReportFiles();
+    const { files, report, history } =
+      await observeT1BoundsRecentHistoryTo8EntriesWithCorrectOmittedHistoryCount();
     expect(files.length).toBe(1);
-    const report = await readReport(files[0]);
-    if (report.context === undefined) {
-      throw new Error('Expected report context');
-    }
     expect(report.context.recentHistory.length).toBe(8);
     expect(report.context.omittedHistoryCount).toBe(17);
-    expect(report.context.recentHistory).toEqual(
+    expect(report.context.recentHistory).toStrictEqual(
       history.slice(-TURN_REPORT_HISTORY_TAIL),
     );
   });
 
+  const observeT1BoundsRecentHistoryTo8EntriesWithCorrectOmittedHistoryCount =
+    async () => {
+      const history: IContent[] = [];
+      for (let i = 0; i < 25; i++) {
+        history.push(makeEntry(i % 2 === 0 ? 'human' : 'ai', `Turn ${i}`));
+      }
+      const turn = createTurn(history, 'T1 distinct error message');
+      const req: ContentBlock[] = [{ text: 'T1 failing request' }];
+
+      await collectEvents(turn, req);
+
+      const files = await listReportFiles();
+
+      const report = await readReport(files[0]);
+      assertDefined(report.context, 'Expected report context');
+
+      return { files, report, history };
+    };
+
   // T2: request is semantically separate, not part of recentHistory
   it('T2: request is separate from recentHistory and deep-equals the request blocks', async () => {
-    const history: IContent[] = [makeEntry('human', 'T2 prior')];
-    const turn = createTurn(history, 'T2 distinct error message');
-    const req: ContentBlock[] = [{ text: 'T2 failing request' }];
-
-    await collectEvents(turn, req);
-
-    const files = await listReportFiles();
+    const { files, report, req } =
+      await observeT2RequestIsSeparateFromRecentHistoryAndDeepEqualsTheRequestBlocks();
     expect(files.length).toBe(1);
-    const report = await readReport(files[0]);
-    if (report.context === undefined) {
-      throw new Error('Expected report context');
-    }
-    expect(report.context.request).toEqual(req);
+    expect(report.context.request).toStrictEqual(req);
     expect(report.context.recentHistory).not.toContainEqual(req);
   });
 
+  const observeT2RequestIsSeparateFromRecentHistoryAndDeepEqualsTheRequestBlocks =
+    async () => {
+      const history: IContent[] = [makeEntry('human', 'T2 prior')];
+      const turn = createTurn(history, 'T2 distinct error message');
+      const req: ContentBlock[] = [{ text: 'T2 failing request' }];
+
+      await collectEvents(turn, req);
+
+      const files = await listReportFiles();
+
+      const report = await readReport(files[0]);
+      assertDefined(report.context, 'Expected report context');
+
+      return { files, report, req };
+    };
+
   // T3: Empty history -> recentHistory is [], omittedHistoryCount === 0
   it('T3: handles empty history with omittedHistoryCount 0 and empty recentHistory', async () => {
-    const turn = createTurn([], 'T3 distinct error message');
-    const req: ContentBlock[] = [{ text: 'T3 empty history request' }];
-
-    await collectEvents(turn, req);
-
-    const files = await listReportFiles();
+    const { files, report, req } =
+      await observeT3HandlesEmptyHistoryWithOmittedHistoryCount0AndEmptyRecentHistory();
     expect(files.length).toBe(1);
-    const report = await readReport(files[0]);
-    if (report.context === undefined) {
-      throw new Error('Expected report context');
-    }
-    expect(report.context.recentHistory).toEqual([]);
+    expect(report.context.recentHistory).toStrictEqual([]);
     expect(report.context.omittedHistoryCount).toBe(0);
-    expect(report.context.request).toEqual(req);
+    expect(report.context.request).toStrictEqual(req);
   });
+
+  const observeT3HandlesEmptyHistoryWithOmittedHistoryCount0AndEmptyRecentHistory =
+    async () => {
+      const turn = createTurn([], 'T3 distinct error message');
+      const req: ContentBlock[] = [{ text: 'T3 empty history request' }];
+
+      await collectEvents(turn, req);
+
+      const files = await listReportFiles();
+
+      const report = await readReport(files[0]);
+      assertDefined(report.context, 'Expected report context');
+
+      return { files, report, req };
+    };
 
   // T4: 3 entries (shorter than tail) -> all 3, omittedHistoryCount === 0
   it('T4: preserves all entries when history is shorter than the tail', async () => {
-    const history: IContent[] = [
-      makeEntry('human', 'T4 a'),
-      makeEntry('ai', 'T4 b'),
-      makeEntry('human', 'T4 c'),
-    ];
-    const turn = createTurn(history, 'T4 distinct error message');
-    const req: ContentBlock[] = [{ text: 'T4 short history request' }];
-
-    await collectEvents(turn, req);
-
-    const files = await listReportFiles();
+    const { files, report, history } =
+      await observeT4PreservesAllEntriesWhenHistoryIsShorterThanTheTail();
     expect(files.length).toBe(1);
-    const report = await readReport(files[0]);
-    if (report.context === undefined) {
-      throw new Error('Expected report context');
-    }
-    expect(report.context.recentHistory).toEqual(history);
+    expect(report.context.recentHistory).toStrictEqual(history);
     expect(report.context.omittedHistoryCount).toBe(0);
   });
 
+  const observeT4PreservesAllEntriesWhenHistoryIsShorterThanTheTail =
+    async () => {
+      const history: IContent[] = [
+        makeEntry('human', 'T4 a'),
+        makeEntry('ai', 'T4 b'),
+        makeEntry('human', 'T4 c'),
+      ];
+      const turn = createTurn(history, 'T4 distinct error message');
+      const req: ContentBlock[] = [{ text: 'T4 short history request' }];
+
+      await collectEvents(turn, req);
+
+      const files = await listReportFiles();
+
+      const report = await readReport(files[0]);
+      assertDefined(report.context, 'Expected report context');
+
+      return { files, report, history };
+    };
+
   // T5: 200 entries of 20,000 chars -> file <= 131,072 bytes, 8 recentHistory
   it('T5: bounds file size with large history entries', async () => {
+    const { files, stat, report } =
+      await observeT5BoundsFileSizeWithLargeHistoryEntries();
+    expect(files.length).toBe(1);
+    expect(stat.size).toBeLessThanOrEqual(MAX_REPORT_BYTES);
+    expect(report.context.recentHistory.length).toBe(8);
+  });
+
+  const observeT5BoundsFileSizeWithLargeHistoryEntries = async () => {
     const history: IContent[] = [];
     for (let i = 0; i < 200; i++) {
       history.push(makeEntry('ai', 'X'.repeat(20_000)));
@@ -225,15 +262,14 @@ describe('Turn error report payload (issue 3113)', () => {
     await collectEvents(turn, req);
 
     const files = await listReportFiles();
-    expect(files.length).toBe(1);
+
     const stat = await fs.stat(path.join(tmpDir, files[0]));
-    expect(stat.size).toBeLessThanOrEqual(MAX_REPORT_BYTES);
+
     const report = await readReport(files[0]);
-    if (report.context === undefined) {
-      throw new Error('Expected report context');
-    }
-    expect(report.context.recentHistory.length).toBe(8);
-  });
+    assertDefined(report.context, 'Expected report context');
+
+    return { files, stat, report };
+  };
 
   // T6: Report text contains no newlines (compact JSON)
   it('T6: writes compact JSON with no newlines', async () => {
@@ -260,7 +296,7 @@ describe('Turn error report payload (issue 3113)', () => {
     const req: ContentBlock[] = [{ text: 'T7 event check' }];
 
     const events = await collectEvents(turn, req);
-    expect(events).toEqual([
+    expect(events).toStrictEqual([
       {
         type: AgentEventType.Error,
         value: { error: { message: 'T7 distinct error message' } },
@@ -324,10 +360,8 @@ describe('Turn error report payload (issue 3113)', () => {
     const files = await listReportFiles();
     expect(files.length).toBe(1);
     const report = await readReport(files[0]);
-    if (report.context === undefined) {
-      throw new Error('Expected report context');
-    }
-    expect(report.context.baseUrl).toEqual('https://ollama.example/v1/');
+    assertDefined(report.context, 'Expected report context');
+    expect(report.context.baseUrl).toStrictEqual('https://ollama.example/v1/');
   });
 
   /**
@@ -349,9 +383,7 @@ describe('Turn error report payload (issue 3113)', () => {
     const files = await listReportFiles();
     expect(files.length).toBe(1);
     const report = await readReport(files[0]);
-    if (report.context === undefined) {
-      throw new Error('Expected report context');
-    }
+    assertDefined(report.context, 'Expected report context');
     expect('baseUrl' in report.context).toBe(false);
   });
 
@@ -369,7 +401,7 @@ describe('Turn error report payload (issue 3113)', () => {
 
     const events = await collectEvents(turn, req);
 
-    expect(events).toEqual([
+    expect(events).toStrictEqual([
       {
         type: AgentEventType.Error,
         value: { error: { message: 'E4 unchanged event error' } },

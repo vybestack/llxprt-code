@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'bun:test';
 import { buildResponsesRequest } from './buildResponsesRequest.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+
+function getFunctionCallOutput(input: readonly unknown[] | undefined): string {
+  const item = input?.[0];
+  if (typeof item !== 'object' || item === null || !('output' in item))
+    return '';
+  return typeof item.output === 'string' ? item.output : '';
+}
+
 describe('buildResponsesRequest - tool_calls stripping', () => {
   it('should strip tool_calls from messages when building request', () => {
     const messages: IContent[] = [
@@ -116,7 +124,7 @@ Failed to edit file
 Diff: ...`,
     });
 
-    const output = (request.input?.[0] as { output?: string }).output ?? '';
+    const output = getFunctionCallOutput(request.input);
     expect(output).toContain(`output:
 Failed to edit file`);
     expect(output).not.toContain(`output:

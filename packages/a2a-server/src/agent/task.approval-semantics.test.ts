@@ -131,30 +131,30 @@ async function driveToApprovalBoundary(task: Task): Promise<{
   return recorded;
 }
 
-afterEach(() => {
-  // Full env restore: reinstate keys deleted mid-test, drop keys added
-  // mid-test, and reset any mutated values (setTargetDir/buildAgent may
-  // touch all three classes via chdir-relative settings loading).
-  for (const key of Object.keys(process.env)) {
-    if (SAVED_ENV[key] === undefined) {
-      delete process.env[key];
-    } else if (process.env[key] !== SAVED_ENV[key]) {
-      process.env[key] = SAVED_ENV[key];
-    }
-  }
-  for (const key of Object.keys(SAVED_ENV)) {
-    if (process.env[key] === undefined && SAVED_ENV[key] !== undefined) {
-      process.env[key] = SAVED_ENV[key];
-    }
-  }
-  // buildAgent chdir'd into WORKSPACE; restore before any later file (bun
-  // runs all test files in one process) resolves paths against it.
-  if (process.cwd() !== SAVED_CWD) {
-    process.chdir(SAVED_CWD);
-  }
-});
-
 describe('Task approval-boundary semantics (#3221)', () => {
+  afterEach(() => {
+    // Full env restore: reinstate keys deleted mid-test, drop keys added
+    // mid-test, and reset any mutated values (setTargetDir/buildAgent may
+    // touch all three classes via chdir-relative settings loading).
+    for (const key of Object.keys(process.env)) {
+      if (SAVED_ENV[key] === undefined) {
+        delete process.env[key];
+      } else if (process.env[key] !== SAVED_ENV[key]) {
+        process.env[key] = SAVED_ENV[key];
+      }
+    }
+    for (const key of Object.keys(SAVED_ENV)) {
+      if (process.env[key] === undefined && SAVED_ENV[key] !== undefined) {
+        process.env[key] = SAVED_ENV[key];
+      }
+    }
+    // buildAgent chdir'd into WORKSPACE; restore before any later file (bun
+    // runs all test files in one process) resolves paths against it.
+    if (process.cwd() !== SAVED_CWD) {
+      process.chdir(SAVED_CWD);
+    }
+  });
+
   it('rejects a message mixing a pending confirmation with new content before consuming the confirmation', async () => {
     const agent = await buildAgent();
     try {
@@ -233,7 +233,7 @@ describe('Task approval-boundary semantics (#3221)', () => {
       )) {
         types.push(event.type);
       }
-      expect(types).toEqual([]);
+      expect(types).toStrictEqual([]);
     } finally {
       await agent.dispose();
     }

@@ -12,6 +12,8 @@ import type { FileSystemStructure } from '@vybestack/llxprt-code-test-utils';
 import { createTmpDir, cleanupTmpDir } from '@vybestack/llxprt-code-test-utils';
 import { extractPathToken, getPathSuggestions } from './shellPathCompletion.js';
 
+const bunIt = it;
+
 describe('extractPathToken', () => {
   it('should extract a tilde-slash path token', () => {
     const result = extractPathToken('ls ~/Docu', 9);
@@ -300,9 +302,9 @@ describe('getPathSuggestions', () => {
     ]);
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'should handle permission errors gracefully',
-    async () => {
+  {
+    const it = process.platform === 'win32' ? bunIt.skip : bunIt;
+    it('should handle permission errors gracefully', async () => {
       const restrictedDir = path.join(testRootDir, 'restricted');
       await fs.mkdir(restrictedDir);
       await fs.writeFile(path.join(restrictedDir, 'secret.txt'), '');
@@ -313,8 +315,8 @@ describe('getPathSuggestions', () => {
       } finally {
         await fs.chmod(restrictedDir, 0o755);
       }
-    },
-  );
+    });
+  }
 
   describe('shell special character escaping', () => {
     let spacesDir: string;

@@ -36,6 +36,12 @@ import type {
 } from '@vybestack/llxprt-code-telemetry/perf/index.js';
 import type { PerfOperationRecord } from '@vybestack/llxprt-code-telemetry/perf/perfRecords.js';
 
+function selfHealthOrNull(
+  selfHealth: Partial<ReportSelfHealth> | undefined,
+): Partial<ReportSelfHealth> | null {
+  return selfHealth ?? null;
+}
+
 function makeOperation(
   overrides: Partial<PerfOperationRecord> = {},
 ): PerfOperationRecord {
@@ -206,7 +212,7 @@ describe('Finding C — production /perf report wiring', () => {
     const c = captured!;
     expect(c.dir).toBe(perfDir);
     expect(c.baseline).toBe('0.10.0');
-    expect(c.selfHealth).toEqual({
+    expect(c.selfHealth).toStrictEqual({
       lastWriteErrorCode: null,
       evictionCount: 0,
     });
@@ -369,7 +375,7 @@ describe('Finding C — production /perf report wiring', () => {
         selfHealth?: Partial<ReportSelfHealth>,
       ): Promise<ReportResult> => {
         reportWasCalled = true;
-        capturedSelfHealth = selfHealth ?? null;
+        capturedSelfHealth = selfHealthOrNull(selfHealth);
         return emptyReportResult();
       },
       delete: async () => {

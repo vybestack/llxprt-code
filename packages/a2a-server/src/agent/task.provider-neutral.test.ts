@@ -47,23 +47,23 @@ async function disposeAgent(agent: Agent): Promise<void> {
   await agent.dispose();
 }
 
-afterEach(() => {
-  // Two-way restore: drop anything this file added, then reinstate anything
-  // it removed or changed, so later files in the same process see the env
-  // exactly as this file found it.
-  for (const key of Object.keys(process.env)) {
-    if (SAVED_ENV[key] === undefined) {
-      delete process.env[key];
-    } else {
+describe('Task: provider-neutral default (not gemini)', () => {
+  afterEach(() => {
+    // Two-way restore: drop anything this file added, then reinstate anything
+    // it removed or changed, so later files in the same process see the env
+    // exactly as this file found it.
+    for (const key of Object.keys(process.env)) {
+      if (SAVED_ENV[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = SAVED_ENV[key];
+      }
+    }
+    for (const key of Object.keys(SAVED_ENV)) {
       process.env[key] = SAVED_ENV[key];
     }
-  }
-  for (const key of Object.keys(SAVED_ENV)) {
-    process.env[key] = SAVED_ENV[key];
-  }
-});
+  });
 
-describe('Task: provider-neutral default (not gemini)', () => {
   // CI runs with provider env set (LLXPRT_AUTH_TYPE=provider,
   // OPENAI_API_KEY, ...); these tests pin the DEFAULT, so the
   // provider-selecting vars must be absent for the duration.

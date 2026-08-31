@@ -78,6 +78,20 @@ function makeChatCompletionResponse(): Response {
   });
 }
 
+/**
+ * Reads a request body from fetch init, or undefined when there is none.
+ * Hoisted so the null/undefined check lives here instead of being repeated
+ * inside every test's fetch stub (#3129).
+ */
+async function readRequestBody(
+  init?: RequestInit,
+): Promise<string | undefined> {
+  const body = init?.body;
+  return body === undefined || body === null
+    ? undefined
+    : await new Response(body).text();
+}
+
 describe('OpenAIProvider transport routing @issue:2483', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
 
@@ -270,9 +284,7 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
     let capturedBody: string | undefined;
     mockFetch.mockImplementation(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
-        if (init?.body !== undefined && init.body !== null) {
-          capturedBody = await new Response(init.body).text();
-        }
+        capturedBody = (await readRequestBody(init)) ?? capturedBody;
         return makeSseResponse();
       },
     );
@@ -315,9 +327,7 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
     let capturedBody: string | undefined;
     mockFetch.mockImplementation(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
-        if (init?.body !== undefined && init.body !== null) {
-          capturedBody = await new Response(init.body).text();
-        }
+        capturedBody = (await readRequestBody(init)) ?? capturedBody;
         return makeSseResponse();
       },
     );
@@ -649,9 +659,7 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
       let capturedBody: string | undefined;
       mockFetch.mockImplementation(
         async (_input: RequestInfo | URL, init?: RequestInit) => {
-          if (init?.body !== undefined && init.body !== null) {
-            capturedBody = await new Response(init.body).text();
-          }
+          capturedBody = (await readRequestBody(init)) ?? capturedBody;
           return makeSseResponse();
         },
       );
@@ -705,9 +713,7 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
       let capturedBody: string | undefined;
       mockFetch.mockImplementation(
         async (_input: RequestInfo | URL, init?: RequestInit) => {
-          if (init?.body !== undefined && init.body !== null) {
-            capturedBody = await new Response(init.body).text();
-          }
+          capturedBody = (await readRequestBody(init)) ?? capturedBody;
           return makeChatCompletionResponse();
         },
       );
@@ -759,9 +765,7 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
       mockFetch.mockImplementation(
         async (input: RequestInfo | URL, init?: RequestInit) => {
           capturedUrl = String(input);
-          if (init?.body !== undefined && init.body !== null) {
-            capturedBody = await new Response(init.body).text();
-          }
+          capturedBody = (await readRequestBody(init)) ?? capturedBody;
           return makeSseResponse();
         },
       );

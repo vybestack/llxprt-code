@@ -157,14 +157,7 @@ describe('MissingRuntimeProviderError', () => {
    * @requirement:REQ-TEST-001
    */
   it('can be caught and identified by instanceof', () => {
-    function throwIfNoProvider(providerKey: string | undefined): void {
-      if (!providerKey) {
-        throw new MissingRuntimeProviderError({
-          providerKey: 'unknown',
-          missingFields: ['providerKey'],
-        });
-      }
-    }
+    const throwIfNoProvider = throwIfMissingProvider;
 
     expect(() => throwIfNoProvider(undefined)).toThrow(
       MissingRuntimeProviderError,
@@ -197,3 +190,12 @@ describe('MissingRuntimeProviderError', () => {
     expect(Array.isArray(fields)).toBe(true);
   });
 });
+
+function throwIfMissingProvider(providerKey: string | undefined): void {
+  if (!providerKey) {
+    throw new MissingRuntimeProviderError({
+      providerKey: 'unknown',
+      missingFields: ['providerKey'],
+    });
+  }
+}

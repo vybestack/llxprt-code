@@ -72,6 +72,10 @@ import { testRegex } from '../../test-utils/regex.js';
 
 const mockUseResponsive = useResponsive as Mock<typeof useResponsive>;
 
+function footerFrameOrEmpty(frame: string | undefined): string {
+  return frame ?? '';
+}
+
 describe('Footer', () => {
   const defaultProps = {
     model: 'gpt-4',
@@ -113,7 +117,7 @@ describe('Footer', () => {
       const { lastFrame } = render(<Footer {...defaultProps} />);
 
       // Branch should appear before path in the display
-      const textContent = lastFrame() ?? '';
+      const textContent = footerFrameOrEmpty(lastFrame());
 
       // Should contain branch name
       expect(textContent).toContain('20250808-gmerge');
@@ -207,7 +211,7 @@ describe('Footer', () => {
       const { lastFrame } = render(
         <Footer {...defaultProps} branchName={longBranchName} />,
       );
-      const textContent = lastFrame() ?? '';
+      const textContent = footerFrameOrEmpty(lastFrame());
 
       // The untruncated branch name is 63 chars; truncated narrow layout must
       // render strictly fewer characters of it and include the truncation
@@ -283,7 +287,7 @@ describe('Footer', () => {
         const { lastFrame } = render(
           <Footer {...defaultProps} branchName={longBranchName} />,
         );
-        const textContent = lastFrame() ?? '';
+        const textContent = footerFrameOrEmpty(lastFrame());
 
         expect(textContent).not.toContain(longBranchName);
         expect(textContent).toMatch(testRegex('feature\\/.+\\.\\.\\..+', ''));
@@ -296,7 +300,7 @@ describe('Footer', () => {
       const { lastFrame } = render(
         <Footer {...defaultProps} branchName={longBranchName} />,
       );
-      const textContent = lastFrame() ?? '';
+      const textContent = footerFrameOrEmpty(lastFrame());
 
       // WIDE breakpoint has enough room so truncateMiddle must not fire.
       //
@@ -329,7 +333,7 @@ describe('Footer', () => {
         <Footer {...defaultProps} />,
       );
 
-      let textContent = narrowLastFrame() ?? '';
+      let textContent = footerFrameOrEmpty(narrowLastFrame());
 
       // Narrow should show compact memory and context
       expect(textContent).toContain('Heap:');
@@ -346,7 +350,7 @@ describe('Footer', () => {
 
       const { lastFrame: wideLastFrame } = render(<Footer {...defaultProps} />);
 
-      textContent = wideLastFrame() ?? '';
+      textContent = footerFrameOrEmpty(wideLastFrame());
 
       // Wide should show full heap info (External, ArrayBuffers)
       expect(textContent).toContain('External:');
@@ -364,7 +368,7 @@ describe('Footer', () => {
       });
 
       const { lastFrame } = render(<Footer {...defaultProps} />);
-      const textContent = lastFrame() ?? '';
+      const textContent = footerFrameOrEmpty(lastFrame());
 
       // Branch (with modified asterisk) and path must both render, with the
       // branch indicator appearing before the path in reading order so the
@@ -515,7 +519,7 @@ describe('Footer', () => {
 
       const { lastFrame } = render(<Footer {...defaultProps} />);
 
-      const textContent = lastFrame() ?? '';
+      const textContent = footerFrameOrEmpty(lastFrame());
 
       expect(textContent).toContain('8.0GB');
       expect(textContent).not.toContain('4.8GB');
@@ -539,7 +543,7 @@ describe('Footer', () => {
 
       const { lastFrame } = render(<Footer {...defaultProps} />);
 
-      const textContent = lastFrame() ?? '';
+      const textContent = footerFrameOrEmpty(lastFrame());
       expect(textContent).toContain('Heap: 0.1G');
       expect(textContent).not.toContain('0.1G/');
       expect(textContent).toContain('RSS:');
@@ -557,7 +561,7 @@ describe('Footer', () => {
 
       const { lastFrame } = render(<Footer {...defaultProps} />);
 
-      const textContent = lastFrame() ?? '';
+      const textContent = footerFrameOrEmpty(lastFrame());
       expect(textContent).toContain('Heap: 0.1GB');
       expect(textContent).not.toContain('0.1GB/');
       expect(textContent).toContain('RSS:');
@@ -575,7 +579,7 @@ describe('Footer', () => {
 
       const { lastFrame } = render(<Footer {...defaultProps} />);
 
-      const textContent = lastFrame() ?? '';
+      const textContent = footerFrameOrEmpty(lastFrame());
       expect(textContent).toContain('Heap: 0.1GB');
       expect(textContent).not.toContain('0.1GB/');
       expect(textContent).toContain('External:');
@@ -596,7 +600,7 @@ describe('Footer', () => {
 
       const { lastFrame } = render(<Footer {...defaultProps} />);
 
-      const textContent = lastFrame() ?? '';
+      const textContent = footerFrameOrEmpty(lastFrame());
       expect(textContent).not.toContain('8.0GB');
     });
   });
@@ -622,7 +626,7 @@ describe('Footer', () => {
 
       const { lastFrame } = render(<Footer {...defaultProps} />);
 
-      let textContent = lastFrame() ?? '';
+      let textContent = footerFrameOrEmpty(lastFrame());
       expect(textContent).toContain('0.1GB/4.0GB');
 
       mockHeapStatistics.heap_size_limit = 8 * 1024 ** 3;
@@ -631,7 +635,7 @@ describe('Footer', () => {
         await advanceTimersByTimeAsync(2000);
       });
 
-      textContent = lastFrame() ?? '';
+      textContent = footerFrameOrEmpty(lastFrame());
       expect(textContent).toContain('0.1GB/8.0GB');
       expect(textContent).not.toContain('4.0GB');
     });
@@ -657,7 +661,7 @@ describe('Footer', () => {
 
       const { lastFrame } = render(<Footer {...defaultProps} />);
 
-      let textContent = lastFrame() ?? '';
+      let textContent = footerFrameOrEmpty(lastFrame());
       expect(textContent).toContain('Heap: 0.1GB');
       expect(textContent).toContain('RSS: 1.0GB');
       expect(textContent).not.toContain('0.1GB/');
@@ -671,7 +675,7 @@ describe('Footer', () => {
         await advanceTimersByTimeAsync(2000);
       });
 
-      textContent = lastFrame() ?? '';
+      textContent = footerFrameOrEmpty(lastFrame());
       expect(textContent).toContain('Heap: 0.3GB');
       expect(textContent).toContain('RSS: 2.0GB');
       expect(textContent).toContain('External: 0.0GB');

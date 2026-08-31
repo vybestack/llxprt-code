@@ -97,7 +97,7 @@ describe('createTextMessage / createDataMessage', () => {
     expect(message.role).toBe('agent');
     expect(message.taskId).toBe('task-1');
     expect(message.contextId).toBe('ctx-1');
-    expect(message.parts).toEqual([{ kind: 'text', text: 'hello' }]);
+    expect(message.parts).toStrictEqual([{ kind: 'text', text: 'hello' }]);
   });
 
   it('builds a data message wrapping the raw payload', () => {
@@ -106,6 +106,6 @@ describe('createTextMessage / createDataMessage', () => {
     expect(message.role).toBe('agent');
     expect(message.taskId).toBe('task-1');
     expect(message.contextId).toBe('ctx-1');
-    expect(message.parts).toEqual([{ kind: 'data', data: { value: 1 } }]);
+    expect(message.parts).toStrictEqual([{ kind: 'data', data: { value: 1 } }]);
   });
 });

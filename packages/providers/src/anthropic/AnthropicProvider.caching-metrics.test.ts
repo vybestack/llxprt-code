@@ -18,6 +18,15 @@ import {
 } from './test-utils/anthropicProviderTestSetup.js';
 import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
 
+function cacheMetrics(content: IContent): {
+  readonly cacheRead: number;
+  readonly hitRate: number;
+} {
+  const cacheRead = content.metadata?.usage?.cache_read_input_tokens ?? 0;
+  const totalInput = content.metadata?.usage?.promptTokens ?? 1;
+  return { cacheRead, hitRate: (cacheRead / totalInput) * 100 };
+}
+
 // Shared mock instance for messages.create - using vi.hoisted so it's
 // available when vi.mock factories run.
 const mockMessagesCreate = vi.fn();
@@ -328,7 +337,7 @@ describe('AnthropicProvider', () => {
 
         expect(
           result.value.metadata?.semanticMediaPurgeCacheWriteEvidence,
-        ).toEqual({ boundaryId, preparation: 'added' });
+        ).toStrictEqual({ boundaryId, preparation: 'added' });
       });
 
       it('does not report a reused breakpoint as proof of the intended cache write', async () => {
@@ -405,9 +414,7 @@ describe('AnthropicProvider', () => {
         const result = await generator.next();
 
         const content = result.value as IContent;
-        const cacheRead = content.metadata?.usage?.cache_read_input_tokens ?? 0;
-        const totalInput = content.metadata?.usage?.promptTokens ?? 1;
-        const hitRate = (cacheRead / totalInput) * 100;
+        const { hitRate } = cacheMetrics(content);
 
         expect(hitRate).toBe(0);
       });
@@ -438,9 +445,7 @@ describe('AnthropicProvider', () => {
         const result = await generator.next();
 
         const content = result.value as IContent;
-        const cacheRead = content.metadata?.usage?.cache_read_input_tokens ?? 0;
-        const totalInput = content.metadata?.usage?.promptTokens ?? 1;
-        const hitRate = (cacheRead / totalInput) * 100;
+        const { cacheRead, hitRate } = cacheMetrics(content);
 
         expect(hitRate).toBeGreaterThan(90);
         expect(cacheRead).toBe(3200);

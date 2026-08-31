@@ -75,6 +75,14 @@ function makeContent(
   return { speaker, blocks: [{ type: 'text', text }] };
 }
 
+/**
+ * Text content of a history block for the given history item; empty string
+ * for non-text blocks (forked history is always text in this suite).
+ */
+function textOf(block: IContent['blocks'][number]): string {
+  return block.type === 'text' ? block.text : '';
+}
+
 function tempDirHelper(): {
   getDir: () => string;
   setup: () => Promise<void>;
@@ -140,9 +148,7 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
       {
         // Child history should be A, B, C (not D, E)
         expect(result.history).toHaveLength(3);
-        const texts = result.history.map((h) =>
-          h.blocks[0].type === 'text' ? h.blocks[0].text : '',
-        );
+        const texts = result.history.map((h) => textOf(h.blocks[0]));
         expect(texts).toStrictEqual(['A', 'B', 'C']);
 
         // Child recording is active and can append F/G

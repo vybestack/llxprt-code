@@ -160,7 +160,7 @@ describe('ActivateSkillTool', () => {
         mockMessageBus,
       );
 
-      expect(enumeratedNames(instance)).toEqual(['alpha', 'beta']);
+      expect(enumeratedNames(instance)).toStrictEqual(['alpha', 'beta']);
       expect(instance.description).toContain("Available: 'alpha', 'beta'");
       expect(instance.build({ name: 'beta' })).toBeDefined();
     });
@@ -177,7 +177,7 @@ describe('ActivateSkillTool', () => {
         mockMessageBus,
       );
 
-      expect(enumeratedNames(after)).toEqual(['alpha', 'gamma']);
+      expect(enumeratedNames(after)).toStrictEqual(['alpha', 'gamma']);
       expect(after.build({ name: 'gamma' })).toBeDefined();
     });
 
@@ -187,7 +187,7 @@ describe('ActivateSkillTool', () => {
         mockMessageBus,
       );
 
-      expect(enumeratedNames(instance)).toEqual([]);
+      expect(enumeratedNames(instance)).toStrictEqual([]);
       expect(instance.description).not.toContain('Available:');
     });
   });

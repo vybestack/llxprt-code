@@ -20,6 +20,19 @@ describe('CoreEventEmitter', () => {
     events = new CoreEventEmitter();
   });
 
+  /** Build a listener that emits the re-entrant message whenever the trigger is seen. */
+  function reentrantEmitterFor(
+    triggerMessage: string,
+    emitReentrant: () => void,
+  ): (payload: UserFeedbackPayload) => void {
+    return (payload: UserFeedbackPayload) => {
+      // When the trigger message is received, immediately emit another event.
+      if (payload.message === triggerMessage) {
+        emitReentrant();
+      }
+    };
+  }
+
   it('should emit feedback immediately when a listener is present', () => {
     const listener = vi.fn();
     events.on(CoreEvent.UserFeedback, listener);
@@ -132,12 +145,11 @@ describe('CoreEventEmitter', () => {
     events.emitFeedback('info', 'Buffered 1');
     events.emitFeedback('info', 'Buffered 2');
 
-    const listener = vi.fn((payload: UserFeedbackPayload) => {
-      // When 'Buffered 1' is received, immediately emit another event.
-      if (payload.message === 'Buffered 1') {
+    const listener = vi.fn(
+      reentrantEmitterFor('Buffered 1', () => {
         events.emitFeedback('warning', 'Re-entrant message');
-      }
-    });
+      }),
+    );
 
     events.on(CoreEvent.UserFeedback, listener);
     events.drainFeedbackBacklog();

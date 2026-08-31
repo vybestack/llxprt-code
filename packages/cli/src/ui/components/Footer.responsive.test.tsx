@@ -54,6 +54,17 @@ function renderFooter(
   return result;
 }
 
+function requireFooterOutput(output: string | undefined): string {
+  if (!output) {
+    throw new Error('Expected output to be defined');
+  }
+  return output;
+}
+
+function modelVisibilityMatchesWidth(width: number, output: string): boolean {
+  return width < 80 || output.includes('gemini-2.5-pro');
+}
+
 describe('Footer Responsive Behavior', () => {
   const defaultProps = {
     model: 'gemini-2.5-pro',
@@ -321,11 +332,7 @@ describe('Footer Responsive Behavior', () => {
       widths.forEach((width) => {
         mockUseTerminalSize.mockReturnValue({ columns: width, rows: 20 });
         const { lastFrame } = renderFooter(defaultProps);
-        const output = lastFrame();
-
-        if (!output) {
-          throw new Error('Expected output to be defined');
-        }
+        const output = requireFooterOutput(lastFrame());
 
         // Should have status info (Heap|RSS|Context) separate from path info
         expect(output).toMatch(testRegex('Heap:', ''));
@@ -335,7 +342,7 @@ describe('Footer Responsive Behavior', () => {
           testRegex('(home|user|projects|project-name)', ''),
         ); // Path (may be truncated)
         // Model only shown at standard+ widths
-        expect(width < 80 || output.includes('gemini-2.5-pro')).toBe(true);
+        expect(modelVisibilityMatchesWidth(width, output)).toBe(true);
       });
     });
 

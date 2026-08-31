@@ -289,6 +289,20 @@ function resetRuntimeSettingsState(): void {
   runtimeSettingsState.oauthManager = null;
 }
 
+function hasNoDisabledTools(value: unknown): boolean {
+  return (
+    value === undefined ||
+    value === null ||
+    (Array.isArray(value) && value.length === 0)
+  );
+}
+
+function normalizeDisabledTools(
+  value: readonly string[] | undefined,
+): readonly string[] {
+  return value ?? [];
+}
+
 describe('defaultDisabledTools', () => {
   const originalIsTTY = process.stdin.isTTY;
 
@@ -361,9 +375,9 @@ describe('defaultDisabledTools', () => {
       'test-session',
       argv,
     );
-    const currentDisabled =
-      (config.getEphemeralSetting('tools.disabled') as string[] | undefined) ??
-      [];
+    const currentDisabled = config.getEphemeralSetting('tools.disabled') as
+      | string[]
+      | undefined;
     expect(currentDisabled).toStrictEqual(
       expect.arrayContaining(['glob', 'read_file']),
     );
@@ -413,11 +427,7 @@ describe('defaultDisabledTools', () => {
     );
     const disabled = config.getEphemeralSetting('tools.disabled');
     // Should be either undefined, null, or empty array
-    expect(
-      disabled === undefined ||
-        disabled === null ||
-        (Array.isArray(disabled) && disabled.length === 0),
-    ).toBe(true);
+    expect(hasNoDisabledTools(disabled)).toBe(true);
   });
 
   it('should not seed tools.disabled when defaultDisabledTools is undefined', async () => {
@@ -438,11 +448,7 @@ describe('defaultDisabledTools', () => {
     );
     const disabled = config.getEphemeralSetting('tools.disabled');
     // Should be either undefined, null, or empty array
-    expect(
-      disabled === undefined ||
-        disabled === null ||
-        (Array.isArray(disabled) && disabled.length === 0),
-    ).toBe(true);
+    expect(hasNoDisabledTools(disabled)).toBe(true);
   });
 
   it('should not affect excludeTools (tool remains discoverable)', async () => {
@@ -493,7 +499,7 @@ describe('defaultDisabledTools', () => {
       | string[]
       | undefined;
     // read_file is in tools.allowed, so it must NOT be added to tools.disabled
-    expect(disabled ?? []).not.toContain('read_file');
+    expect(normalizeDisabledTools(disabled)).not.toContain('read_file');
   });
 });
 

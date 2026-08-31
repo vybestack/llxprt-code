@@ -309,7 +309,7 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
     // Turn 2 must not begin resolving until turn 1's send has been handed
     // off. Interleaved resolution is what lets one turn transmit another
     // turn's prompt.
-    expect(events).toEqual([
+    expect(events).toStrictEqual([
       'resolve:start:1',
       'resolve:end:1',
       'resolve:start:2',
@@ -422,79 +422,110 @@ describe('router re-render port (issue #3157)', () => {
   // --- sendMessage ---
 
   it('sendMessage: carries the assembler port so a router can re-render for its selected model', async () => {
-    const assembler: SystemPromptAssembler = {
-      assemble: async ({ model }) => `[model=${model}]`,
-    };
-    const fx = buildFixture(assembler, 'turn-model');
-
-    await fx.chat.sendMessage({ message: 'first' }, 'p1');
-
-    // The agent seam must carry the caller-supplied assembler port.
-    const port = fx.capturedCalls[0].systemPromptAssembler;
+    const { port, routerRendered, fx } =
+      await observeSendMessageCarriesTheAssemblerPortSoARouterCanReRenderFor();
     expect(port).toBeDefined();
-    if (port === undefined) {
-      throw new Error('expected systemPromptAssembler on provider options');
-    }
-    // A router re-renders for the model IT selected.
-    const routerRendered = await port.assemble({
-      provider: 'stub',
-      model: 'router-picked-model',
-    });
     expect(routerRendered).toBe('[model=router-picked-model]');
-    // The turn assembly still names the turn model (one assembly per turn).
     expect(fx.capturedCalls[0].systemInstruction).toBe('[model=turn-model]');
   });
+
+  const observeSendMessageCarriesTheAssemblerPortSoARouterCanReRenderFor =
+    async () => {
+      const assembler: SystemPromptAssembler = {
+        assemble: async ({ model }) => `[model=${model}]`,
+      };
+      const fx = buildFixture(assembler, 'turn-model');
+
+      await fx.chat.sendMessage({ message: 'first' }, 'p1');
+
+      // The agent seam must carry the caller-supplied assembler port.
+      const port = fx.capturedCalls[0].systemPromptAssembler;
+
+      if (port === undefined) {
+        throw new Error('expected systemPromptAssembler on provider options');
+      }
+      // A router re-renders for the model IT selected.
+      const routerRendered = await port.assemble({
+        provider: 'stub',
+        model: 'router-picked-model',
+      });
+
+      // The turn assembly still names the turn model (one assembly per turn).
+
+      return { port, routerRendered, fx };
+    };
 
   // --- sendMessageStream ---
 
   it('sendMessageStream: carries the assembler port so a router can re-render for its selected model', async () => {
-    const assembler: SystemPromptAssembler = {
-      assemble: async ({ model }) => `[stream model=${model}]`,
-    };
-    const fx = buildFixture(assembler, 'turn-stream-model');
-
-    const stream = await fx.chat.sendMessageStream({ message: 'first' }, 'p1');
-    for await (const _ of stream) {
-      void _;
-    }
-
-    const port = fx.capturedCalls[0].systemPromptAssembler;
+    const { port, routerRendered, fx } =
+      await observeSendMessageStreamCarriesTheAssemblerPortSoARouterCanReRenderFor();
     expect(port).toBeDefined();
-    if (port === undefined) {
-      throw new Error('expected systemPromptAssembler on provider options');
-    }
-    const routerRendered = await port.assemble({
-      provider: 'stub',
-      model: 'router-picked-model',
-    });
     expect(routerRendered).toBe('[stream model=router-picked-model]');
     expect(fx.capturedCalls[0].systemInstruction).toBe(
       '[stream model=turn-stream-model]',
     );
   });
 
+  const observeSendMessageStreamCarriesTheAssemblerPortSoARouterCanReRenderFor =
+    async () => {
+      const assembler: SystemPromptAssembler = {
+        assemble: async ({ model }) => `[stream model=${model}]`,
+      };
+      const fx = buildFixture(assembler, 'turn-stream-model');
+
+      const stream = await fx.chat.sendMessageStream(
+        { message: 'first' },
+        'p1',
+      );
+      for await (const _ of stream) {
+        void _;
+      }
+
+      const port = fx.capturedCalls[0].systemPromptAssembler;
+
+      if (port === undefined) {
+        throw new Error('expected systemPromptAssembler on provider options');
+      }
+      const routerRendered = await port.assemble({
+        provider: 'stub',
+        model: 'router-picked-model',
+      });
+
+      return { port, routerRendered, fx };
+    };
+
   // --- generateDirectMessage ---
 
   it('generateDirectMessage: carries the assembler port so a router can re-render for its selected model', async () => {
-    const assembler: SystemPromptAssembler = {
-      assemble: async ({ model }) => `[direct model=${model}]`,
-    };
-    const fx = buildFixture(assembler, 'turn-direct-model');
-
-    await fx.chat.generateDirectMessage({ message: 'first' }, 'p1');
-
-    const port = fx.capturedCalls[0].systemPromptAssembler;
+    const { port, routerRendered, fx } =
+      await observeGenerateDirectMessageCarriesTheAssemblerPortSoARouterCanReRenderFor();
     expect(port).toBeDefined();
-    if (port === undefined) {
-      throw new Error('expected systemPromptAssembler on provider options');
-    }
-    const routerRendered = await port.assemble({
-      provider: 'stub',
-      model: 'router-picked-model',
-    });
     expect(routerRendered).toBe('[direct model=router-picked-model]');
     expect(fx.capturedCalls[0].systemInstruction).toBe(
       '[direct model=turn-direct-model]',
     );
   });
+
+  const observeGenerateDirectMessageCarriesTheAssemblerPortSoARouterCanReRenderFor =
+    async () => {
+      const assembler: SystemPromptAssembler = {
+        assemble: async ({ model }) => `[direct model=${model}]`,
+      };
+      const fx = buildFixture(assembler, 'turn-direct-model');
+
+      await fx.chat.generateDirectMessage({ message: 'first' }, 'p1');
+
+      const port = fx.capturedCalls[0].systemPromptAssembler;
+
+      if (port === undefined) {
+        throw new Error('expected systemPromptAssembler on provider options');
+      }
+      const routerRendered = await port.assemble({
+        provider: 'stub',
+        model: 'router-picked-model',
+      });
+
+      return { port, routerRendered, fx };
+    };
 });

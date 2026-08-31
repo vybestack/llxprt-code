@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { assertInstanceOf } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -223,7 +224,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
       afterReplace,
       retainedAfterClear: await store.hasReservations(retained.contentId),
       removedAfterClear: await store.hasReservations(removed.contentId),
-    }).toEqual({
+    }).toStrictEqual({
       afterReplace: { retained: true, removed: true },
       retainedAfterClear: false,
       removedAfterClear: false,
@@ -256,7 +257,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
     expect({
       afterClear,
       afterDispose: await store.hasReservations(secondBlock.contentId),
-    }).toEqual({ afterClear: false, afterDispose: false });
+    }).toStrictEqual({ afterClear: false, afterDispose: false });
   });
 
   it('keeps retained references and releases compression-removed references through replaceAll and transformAll', async () => {
@@ -284,7 +285,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
       introduced: await store.hasReservations(introducedBlock.contentId),
     };
 
-    expect({ afterReplace, afterPurge }).toEqual({
+    expect({ afterReplace, afterPurge }).toStrictEqual({
       afterReplace: { retained: true, introduced: true },
       afterPurge: { retained: false, introduced: true },
     });
@@ -318,7 +319,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
       history: service.getAll(),
       removed: await store.hasReservations(removed.contentId),
       retained: await store.hasReservations(retained.contentId),
-    }).toEqual({
+    }).toStrictEqual({
       history: [contents[1]],
       removed: false,
       retained: true,
@@ -375,9 +376,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
     } catch (error: unknown) {
       failure = error;
     }
-    if (!(failure instanceof AggregateError)) {
-      throw new Error('Expected aggregated failure');
-    }
+    assertInstanceOf(failure, AggregateError, 'Expected aggregated failure');
     expect(leafMessages(failure)).toContain('primary batch failure');
     expect(leafMessages(failure)).toContain('induced history release failure');
   });
@@ -416,7 +415,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
     service.clear();
     await service.waitForOwnershipSettlement();
 
-    expect({ before, after: service.getAll() }).toEqual({
+    expect({ before, after: service.getAll() }).toStrictEqual({
       before: ['media', 'media'],
       after: [],
     });
@@ -443,7 +442,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
           .map((block) => block.text),
       )
       .flat();
-    expect(texts).toEqual(['inspect', 'after']);
+    expect(texts).toStrictEqual(['inspect', 'after']);
     expect(
       await store.hasReservations(referenceBlockOf(first[0]).contentId),
     ).toBe(true);

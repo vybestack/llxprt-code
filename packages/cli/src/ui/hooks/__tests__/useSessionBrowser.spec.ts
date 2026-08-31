@@ -172,6 +172,15 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isCheckpointRow(
+  row: ReturnType<typeof useSessionBrowser>['sessions'][number],
+  checkpointId: string,
+): boolean {
+  return (
+    row.target.kind === 'checkpoint' && row.target.checkpointId === checkpointId
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Test Suite
 // ---------------------------------------------------------------------------
@@ -226,7 +235,7 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      expect(result.current.sessions.length).toBe(2);
+      expect(result.current.sessions).toHaveLength(2);
     });
 
     /**
@@ -302,10 +311,8 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         expect(
           result.current.sessions.map((row) => row.target.kind),
         ).toStrictEqual(['session', 'checkpoint']);
-        const checkpointRowIndex = result.current.sessions.findIndex(
-          (row) =>
-            row.target.kind === 'checkpoint' &&
-            row.target.checkpointId === checkpoint.checkpointId,
+        const checkpointRowIndex = result.current.sessions.findIndex((row) =>
+          isCheckpointRow(row, checkpoint.checkpointId),
         );
         expect(checkpointRowIndex).toBeGreaterThanOrEqual(0);
         expect(result.current.sessions[checkpointRowIndex].checkpointName).toBe(
@@ -569,12 +576,12 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       });
 
       const validSet = new Set(validIds);
-      expect(new Set(result.current.sessions.map((s) => s.sessionId))).toEqual(
-        validSet,
-      );
-      expect(new Set(result.current.pageItems.map((s) => s.sessionId))).toEqual(
-        validSet,
-      );
+      expect(
+        new Set(result.current.sessions.map((s) => s.sessionId)),
+      ).toStrictEqual(validSet);
+      expect(
+        new Set(result.current.pageItems.map((s) => s.sessionId)),
+      ).toStrictEqual(validSet);
       expect(result.current.skippedCount).toBe(2);
       const selectedId = (): string =>
         result.current.selectedSession?.sessionId ?? '(none selected)';

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { blockTextOrEmpty } from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it } from 'bun:test';
 import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
 import { HistoryService } from './HistoryService.js';
@@ -21,7 +22,7 @@ import { createUserMessage, type IContent } from './IContent.js';
 
 function textOf(content: IContent): string {
   const block = content.blocks[0];
-  return block.type === 'text' ? block.text : '';
+  return blockTextOrEmpty(block);
 }
 
 function controlledTokenizerFactory(): {

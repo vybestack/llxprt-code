@@ -156,7 +156,7 @@ describe('runtime plugin startup wiring', () => {
   }
 
   it('discovers only the installed package that declares the plugin marker', () => {
-    expect(discoverRuntimePluginPackages(discoveryDeps())).toEqual([
+    expect(discoverRuntimePluginPackages(discoveryDeps())).toStrictEqual([
       PLUGIN_PACKAGE,
     ]);
   });
@@ -167,7 +167,7 @@ describe('runtime plugin startup wiring', () => {
 
     await loadRegistry(discovered, (specifier) => imported.push(specifier));
 
-    expect(imported).toEqual([PLUGIN_PACKAGE]);
+    expect(imported).toStrictEqual([PLUGIN_PACKAGE]);
   });
 
   it('makes a plugin-contributed alias available on the assembled provider manager', async () => {
@@ -183,7 +183,7 @@ describe('runtime plugin startup wiring', () => {
       throw new Error(`expected '${CONTRIBUTED_ALIAS}' to be registered`);
     }
     const models = await provider.getModels();
-    expect(models.map((model) => model.id)).toEqual([
+    expect(models.map((model) => model.id)).toStrictEqual([
       `${PLUGIN_PROVIDER_ID}:${CONTRIBUTED_ALIAS}`,
     ]);
   });
@@ -210,6 +210,6 @@ describe('runtime plugin startup wiring', () => {
 
     expect(first.providerManager.listProviders()).toContain(CONTRIBUTED_ALIAS);
     expect(second.providerManager.listProviders()).toContain(CONTRIBUTED_ALIAS);
-    expect(imported).toEqual([PLUGIN_PACKAGE]);
+    expect(imported).toStrictEqual([PLUGIN_PACKAGE]);
   });
 });

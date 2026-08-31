@@ -49,6 +49,23 @@ import { assertDefined } from '../../../test-utils/assertions.js';
  * - Property ratio: 4 / 13 ≈ 30.77%
  */
 
+function deepPathsFollowSingleMatch(
+  modelparamIndex: number,
+  deepPathIndex: number,
+): boolean {
+  return deepPathIndex === -1 || modelparamIndex < deepPathIndex;
+}
+
+function setCommandLine(prefix: string): string {
+  return prefix ? `/set ${prefix}` : '/set ';
+}
+
+function unsetHint(subkey: string): string {
+  return subkey === 'modelparam'
+    ? 'model parameter name (e.g., temperature, max_tokens)'
+    : 'header name (e.g., Authorization)';
+}
+
 const commandSchema = setCommand.schema;
 
 assertDefined(commandSchema);
@@ -133,7 +150,7 @@ describe('setCommand schema integration', () => {
       );
       // If deep paths exist, they must come after single-level matches
       // deepPathIndex === -1 means no deep paths, which is also valid
-      expect(deepPathIndex === -1 || modelparamIndex < deepPathIndex).toBe(
+      expect(deepPathsFollowSingleMatch(modelparamIndex, deepPathIndex)).toBe(
         true,
       );
 
@@ -295,7 +312,7 @@ describe('setCommand schema integration', () => {
       await fc.assert(
         fc.asyncProperty(fc.string(), async (rawInput) => {
           const prefix = rawInput.trim();
-          const commandLine = prefix ? `/set ${prefix}` : '/set ';
+          const commandLine = setCommandLine(prefix);
           const result = await handler(mockContext, prefix, commandLine);
 
           expect(result).toHaveProperty('suggestions');
@@ -341,10 +358,7 @@ describe('setCommand schema integration', () => {
               `/set unset ${subkey} `,
             );
 
-            const expectedHint =
-              subkey === 'modelparam'
-                ? 'model parameter name (e.g., temperature, max_tokens)'
-                : 'header name (e.g., Authorization)';
+            const expectedHint = unsetHint(subkey);
 
             expect(result.hint).toBe(expectedHint);
             expect(result.position).toBe(2);

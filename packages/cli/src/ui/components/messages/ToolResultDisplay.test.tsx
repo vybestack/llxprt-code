@@ -34,13 +34,17 @@ void vi.mock('../AnsiOutput.js', () => ({
   },
 }));
 
+function trimmedToolResultFrame(frame: string | undefined): string {
+  return frame?.trim() ?? '';
+}
+
 describe('<ToolResultDisplay />', () => {
   it('renders nothing when resultDisplay is undefined', () => {
     const { lastFrame } = renderWithProviders(
       <ToolResultDisplay resultDisplay={undefined} terminalWidth={80} />,
     );
     // Empty or whitespace-only when no display data
-    expect(lastFrame()?.trim() ?? '').toBe('');
+    expect(trimmedToolResultFrame(lastFrame())).toBe('');
   });
 
   it('renders without crashing for plain text', () => {

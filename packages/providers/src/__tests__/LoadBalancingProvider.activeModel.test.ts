@@ -14,6 +14,20 @@ import {
   type LoadBalancingProviderConfig,
 } from '../LoadBalancingProvider.js';
 import { makeMockProvider, drain } from './loadBalancerTestHelpers.js';
+import type { IProvider } from '../IProvider.js';
+
+function resolveActiveModelProvider(
+  name: string,
+  originalGetProvider: (name: string) => IProvider | undefined,
+): IProvider | undefined {
+  if (name === 'gemini') {
+    return makeMockProvider('gemini');
+  }
+  if (name === 'openai') {
+    return makeMockProvider('openai');
+  }
+  return originalGetProvider(name);
+}
 
 describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
   let settingsService: SettingsService;
@@ -109,11 +123,8 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const original = providerManager.getProviderByName.bind(providerManager);
-      providerManager.getProviderByName = (name: string) => {
-        if (name === 'gemini') return makeMockProvider('gemini');
-        if (name === 'openai') return makeMockProvider('openai');
-        return original(name);
-      };
+      providerManager.getProviderByName = (name: string) =>
+        resolveActiveModelProvider(name, original);
 
       try {
         // First request → 'fast' (gemini-flash)

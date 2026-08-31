@@ -33,24 +33,24 @@ function buildConfig(profileNames: string[] = PROFILE_NAMES): Config {
 
 let originalCliVersion: string | undefined;
 
-beforeEach(() => {
-  originalCliVersion = process.env.CLI_VERSION;
-});
-
-afterEach(() => {
-  if (originalCliVersion === undefined) {
-    delete process.env.CLI_VERSION;
-  } else {
-    process.env.CLI_VERSION = originalCliVersion;
-  }
-  __resetVersionCacheForTesting();
-});
-
 describe('initializeZedAgent', () => {
+  beforeEach(() => {
+    originalCliVersion = process.env.CLI_VERSION;
+  });
+
+  afterEach(() => {
+    if (originalCliVersion === undefined) {
+      delete process.env.CLI_VERSION;
+    } else {
+      process.env.CLI_VERSION = originalCliVersion;
+    }
+    __resetVersionCacheForTesting();
+  });
+
   it('identifies itself as llxprt-code over ACP', async () => {
     const response = await initializeZedAgent(buildConfig());
 
-    expect(response.agentInfo).toEqual({
+    expect(response.agentInfo).toStrictEqual({
       name: 'llxprt-code',
       version: expect.any(String),
     });
@@ -87,7 +87,7 @@ describe('initializeZedAgent', () => {
     const response = await initializeZedAgent(buildConfig());
 
     expect(await getCliVersion()).toBe('unknown');
-    expect(response.agentInfo).toEqual({
+    expect(response.agentInfo).toStrictEqual({
       name: 'llxprt-code',
       version: 'unknown',
     });
@@ -97,10 +97,10 @@ describe('initializeZedAgent', () => {
     const response = await initializeZedAgent(buildConfig());
 
     expect(response.protocolVersion).toBe(acp.PROTOCOL_VERSION);
-    expect(response.authMethods).toEqual(
+    expect(response.authMethods).toStrictEqual(
       PROFILE_NAMES.map((name) => ({ id: name, name, description: null })),
     );
-    expect(response.agentCapabilities).toEqual({
+    expect(response.agentCapabilities).toStrictEqual({
       loadSession: true,
       sessionCapabilities: {
         list: {},

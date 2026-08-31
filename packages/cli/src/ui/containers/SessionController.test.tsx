@@ -86,6 +86,12 @@ import type { Config } from '@vybestack/llxprt-code-core';
 // import { AppAction } from '../reducers/appReducer.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
 
+function dispatchAvailability(
+  contextValue: SessionContextType | undefined,
+): string {
+  return contextValue?.appDispatch ? 'Dispatch available' : 'No dispatch';
+}
+
 // Get references to the mocked functions
 const mockHistoryManager = useHistory as Mock<typeof useHistory>;
 
@@ -125,9 +131,9 @@ void vi.mock('../../config/settings.js', () => ({
 }));
 
 void vi.mock('@vybestack/llxprt-code-core', () => {
-  const actual = realLlxprtCodeCoreModule;
+  const coreModule = realLlxprtCodeCoreModule;
   return {
-    ...actual,
+    ...coreModule,
   };
 });
 
@@ -238,7 +244,7 @@ describe('SessionController', () => {
       return React.createElement(
         Text,
         null,
-        contextValue?.appDispatch ? 'Dispatch available' : 'No dispatch',
+        dispatchAvailability(contextValue),
       );
     };
 

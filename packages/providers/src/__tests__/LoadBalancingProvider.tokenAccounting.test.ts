@@ -26,6 +26,22 @@ function createTextContent(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
 }
 
+function compressedProjectionEstimate(options: GenerateChatOptions): number {
+  const containsCompressedText = options.contents.some((content) =>
+    content.blocks.some(
+      (block) => block.type === 'text' && block.text === 'compressed',
+    ),
+  );
+  return containsCompressedText ? 5 : 20;
+}
+
+async function* generateGptFailoverResponse(
+  recordCall: () => number,
+): AsyncGenerator<IContent> {
+  if (recordCall() === 1) throw new Error('429 rate limited');
+  yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+}
+
 function createResolvedSubProfile(
   overrides: Partial<ResolvedSubProfile>,
 ): ResolvedSubProfile {
@@ -484,14 +500,7 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
     const sentTokens: Array<object | undefined> = [];
     const delegate = createProjectedProvider(
       'openai',
-      (options) =>
-        options.contents.some((content) =>
-          content.blocks.some(
-            (block) => block.type === 'text' && block.text === 'compressed',
-          ),
-        )
-          ? 5
-          : 20,
+      compressedProjectionEstimate,
       sentTokens,
     );
     providerManager.setTokenizerFactory(createTokenizerFactory({}));
@@ -821,13 +830,8 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
       let callCount = 0;
       const failingGptProvider: IProvider = {
         name: 'openai',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          callCount++;
-          if (callCount === 1) {
-            throw new Error('429 rate limited');
-          }
-          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
-        },
+        generateChatCompletion: () =>
+          generateGptFailoverResponse(() => ++callCount),
         getModels: async () => [],
         getDefaultModel: () => 'gpt-4.1',
       };

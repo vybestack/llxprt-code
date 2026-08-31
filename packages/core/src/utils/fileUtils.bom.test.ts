@@ -27,6 +27,24 @@ describe('fileUtils - BOM detection and encoding', () => {
     }
   });
 
+  /** Encode every code point as big-endian 16-bit units, expanding astral chars to surrogate pairs. */
+  function encodeUtf16BeBytes(content: string): number[] {
+    const utf16beBytes: number[] = [];
+    for (const char of Array.from(content)) {
+      const code = char.codePointAt(0)!;
+      if (code > 0xffff) {
+        // Surrogate pair for astral characters (for example the earth globe emoji)
+        const surrogate1 = 0xd800 + ((code - 0x10000) >> 10);
+        const surrogate2 = 0xdc00 + ((code - 0x10000) & 0x3ff);
+        utf16beBytes.push((surrogate1 >> 8) & 0xff, surrogate1 & 0xff);
+        utf16beBytes.push((surrogate2 >> 8) & 0xff, surrogate2 & 0xff);
+      } else {
+        utf16beBytes.push((code >> 8) & 0xff, code & 0xff);
+      }
+    }
+    return utf16beBytes;
+  }
+
   describe('detectBOM', () => {
     it('should detect UTF-8 BOM', () => {
       const buf = Buffer.from([0xef, 0xbb, 0xbf, 0x48, 0x65, 0x6c, 0x6c, 0x6f]);
@@ -108,21 +126,7 @@ describe('fileUtils - BOM detection and encoding', () => {
       const content = 'Hello, 世界! 🌍';
       // Manually encode UTF-16 BE: each char as big-endian 16-bit
       const utf16beBom = Buffer.from([0xfe, 0xff]);
-      const chars = Array.from(content);
-      const utf16beBytes: number[] = [];
-
-      for (const char of chars) {
-        const code = char.codePointAt(0)!;
-        if (code > 0xffff) {
-          // Surrogate pair for emoji
-          const surrogate1 = 0xd800 + ((code - 0x10000) >> 10);
-          const surrogate2 = 0xdc00 + ((code - 0x10000) & 0x3ff);
-          utf16beBytes.push((surrogate1 >> 8) & 0xff, surrogate1 & 0xff);
-          utf16beBytes.push((surrogate2 >> 8) & 0xff, surrogate2 & 0xff);
-        } else {
-          utf16beBytes.push((code >> 8) & 0xff, code & 0xff);
-        }
-      }
+      const utf16beBytes = encodeUtf16BeBytes(content);
 
       const utf16beContent = Buffer.from(utf16beBytes);
       const fullBuffer = Buffer.concat([utf16beBom, utf16beContent]);

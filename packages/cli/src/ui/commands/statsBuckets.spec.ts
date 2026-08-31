@@ -83,6 +83,32 @@ function getBucketResultItem(context: CommandContext): {
   return bucketItem;
 }
 
+async function listBucketsWithCodexFailure(
+  provider: string,
+): Promise<string[]> {
+  if (provider === 'codex') {
+    throw new Error('codex store read failure');
+  }
+  return ['default'];
+}
+
+async function getStatsWithCodexFailure(provider: string): Promise<{
+  bucket: string;
+  requestCount: number;
+  percentage: number;
+  lastUsed: number;
+}> {
+  if (provider === 'codex') {
+    throw new Error('codex stats read failure');
+  }
+  return {
+    bucket: 'default',
+    requestCount: 3,
+    percentage: 100,
+    lastUsed: 1700000000000,
+  };
+}
+
 describe('/stats buckets subcommand', () => {
   let mockContext: CommandContext;
 
@@ -222,12 +248,7 @@ describe('/stats buckets subcommand', () => {
 
   it('does not hide buckets from one provider when listing another fails', async () => {
     const tokenStore = {
-      listBuckets: vi.fn(async (provider: string) => {
-        if (provider === 'codex') {
-          throw new Error('codex store read failure');
-        }
-        return ['default'];
-      }),
+      listBuckets: vi.fn(listBucketsWithCodexFailure),
       getBucketStats: vi.fn(async () => ({
         bucket: 'default',
         requestCount: 3,
@@ -254,17 +275,7 @@ describe('/stats buckets subcommand', () => {
   it('does not hide buckets from one provider when getBucketStats throws for another', async () => {
     const tokenStore = {
       listBuckets: vi.fn(async () => ['default']),
-      getBucketStats: vi.fn(async (provider: string) => {
-        if (provider === 'codex') {
-          throw new Error('codex stats read failure');
-        }
-        return {
-          bucket: 'default',
-          requestCount: 3,
-          percentage: 100,
-          lastUsed: 1700000000000,
-        };
-      }),
+      getBucketStats: vi.fn(getStatsWithCodexFailure),
     };
     maybeGetCliOAuthManagerMock.mockReturnValue({
       getSupportedProviders: () => ['codex', 'claudecode'],

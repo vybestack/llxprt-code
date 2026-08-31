@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { render } from 'ink-testing-library';
 import chalk from 'chalk';
 import { describe, it, expect } from 'bun:test';
@@ -20,9 +21,7 @@ const baseProps = {
 
 function frameOf(lastFrame: () => string | undefined): string {
   const frame = lastFrame();
-  if (frame === undefined) {
-    throw new Error('expected a rendered frame');
-  }
+  assertDefined(frame, 'expected a rendered frame');
 
   return frame;
 }

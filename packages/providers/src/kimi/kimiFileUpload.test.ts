@@ -13,6 +13,7 @@
  * See the License for the specific language.
  */
 
+import { assertInstanceOf, errorMessage } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import {
   uploadKimiFiles,
@@ -453,11 +454,13 @@ describe('uploadKimiFiles', () => {
     }).catch((reason: unknown) => reason);
     await cleanup;
 
-    if (!(error instanceof AggregateError)) {
-      throw new Error('Expected registration and deletion AggregateError');
-    }
+    assertInstanceOf(
+      error,
+      AggregateError,
+      'Expected registration and deletion AggregateError',
+    );
     const messages = error.errors.map((failure: unknown) =>
-      failure instanceof Error ? failure.message : String(failure),
+      errorMessage(failure),
     );
     expect(messages).toContain('cleanup registration unavailable');
     expect(

@@ -330,57 +330,66 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
     });
 
     it('should not enter infinite setImmediate loop when currentBatchSize is 0', async () => {
-      // This test verifies the fix prevents the infinite loop described in issue #987
-
-      const tools = new Map([['fast_tool', new FastTool('fast_tool', 0)]]);
-      const config = createConfig(tools);
-
-      const scheduler = new CoreToolScheduler({
-        config,
-        messageBus: getTestRuntimeMessageBus(config),
-        toolRegistry: config.getToolRegistry(),
-        onAllToolCallsComplete,
-        onToolCallsUpdate,
-        getPreferredEditor: () => 'vscode',
-        onEditorClose: vi.fn(),
-      });
-
-      const abortController = new AbortController();
-
-      // Track setImmediate calls
-      const originalSetImmediate = global.setImmediate;
-      let setImmediateCount = 0;
-      global.setImmediate = ((callback: () => void) => {
-        setImmediateCount++;
-        if (setImmediateCount > 100) {
-          throw new Error('Infinite setImmediate loop detected!');
-        }
-        return originalSetImmediate(callback);
-      }) as typeof setImmediate;
-
-      try {
-        await scheduler.schedule(
-          [
-            {
-              callId: 'test-1',
-              name: 'fast_tool',
-              args: {},
-              isClientInitiated: false,
-              prompt_id: 'prompt-1',
-            },
-          ],
-          abortController.signal,
-        );
-
-        // Should complete without entering infinite loop
-        expect(onAllToolCallsComplete).toHaveBeenCalled();
-        // The count should be reasonable, not excessive
-        expect(setImmediateCount).toBeLessThan(50);
-      } finally {
-        global.setImmediate = originalSetImmediate;
-        scheduler.dispose();
-      }
+      const { setImmediateCount } =
+        await observeNotEnterInfiniteSetImmediateLoopWhenCurrentBatchSizeIs0();
+      expect(onAllToolCallsComplete).toHaveBeenCalled();
+      expect(setImmediateCount).toBeLessThan(50);
     });
+
+    const observeNotEnterInfiniteSetImmediateLoopWhenCurrentBatchSizeIs0 =
+      async () => {
+        // This test verifies the fix prevents the infinite loop described in issue #987
+
+        const tools = new Map([['fast_tool', new FastTool('fast_tool', 0)]]);
+        const config = createConfig(tools);
+
+        const scheduler = new CoreToolScheduler({
+          config,
+          messageBus: getTestRuntimeMessageBus(config),
+          toolRegistry: config.getToolRegistry(),
+          onAllToolCallsComplete,
+          onToolCallsUpdate,
+          getPreferredEditor: () => 'vscode',
+          onEditorClose: vi.fn(),
+        });
+
+        const abortController = new AbortController();
+
+        // Track setImmediate calls
+        const originalSetImmediate = global.setImmediate;
+        let setImmediateCount = 0;
+        global.setImmediate = ((callback: () => void) => {
+          setImmediateCount++;
+          if (setImmediateCount > 100) {
+            throw new Error('Infinite setImmediate loop detected!');
+          }
+          return originalSetImmediate(callback);
+        }) as typeof setImmediate;
+
+        try {
+          await scheduler.schedule(
+            [
+              {
+                callId: 'test-1',
+                name: 'fast_tool',
+                args: {},
+                isClientInitiated: false,
+                prompt_id: 'prompt-1',
+              },
+            ],
+            abortController.signal,
+          );
+
+          // Should complete without entering infinite loop
+
+          // The count should be reasonable, not excessive
+
+          return { setImmediateCount };
+        } finally {
+          global.setImmediate = originalSetImmediate;
+          scheduler.dispose();
+        }
+      };
   });
 
   describe('Cancel During Execution', () => {

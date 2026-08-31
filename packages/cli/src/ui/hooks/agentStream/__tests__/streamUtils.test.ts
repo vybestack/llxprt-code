@@ -96,7 +96,9 @@ describe('mergePendingToolGroupsForDisplay', () => {
     expect(result).toHaveLength(2);
   });
 
-  it('deduplicates shell command tool (Shell Command) from scheduler group', () => {
+  const observeShellCommandInstancesAfterMerge = (): ReadonlyArray<{
+    readonly callId: string;
+  }> => {
     const shellCallId = 'shell-1';
     const a: HistoryItemWithoutId = {
       type: 'tool_group',
@@ -113,11 +115,18 @@ describe('mergePendingToolGroupsForDisplay', () => {
     const allTools = result.flatMap(
       (r) => (r as { tools?: Array<{ callId: string }> }).tools ?? [],
     );
-    const shellToolInstances = allTools.filter((t) => t.callId === shellCallId);
+    return allTools.filter((tool) => tool.callId === shellCallId);
+  };
+
+  it('deduplicates shell command tool (Shell Command) from scheduler group', () => {
+    const shellToolInstances = observeShellCommandInstancesAfterMerge();
+
     expect(shellToolInstances).toHaveLength(1);
   });
 
-  it('deduplicates non-shell overlapping tools between pending and scheduler groups', () => {
+  const observeOverlappingReadFileInstancesAfterMerge = (): ReadonlyArray<{
+    readonly callId: string;
+  }> => {
     const overlappingCallId = 'call-overlap';
     const a: HistoryItemWithoutId = {
       type: 'tool_group',
@@ -133,7 +142,12 @@ describe('mergePendingToolGroupsForDisplay', () => {
     const allTools = result.flatMap(
       (r) => (r as { tools?: Array<{ callId: string }> }).tools ?? [],
     );
-    const instances = allTools.filter((t) => t.callId === overlappingCallId);
+    return allTools.filter((tool) => tool.callId === overlappingCallId);
+  };
+
+  it('deduplicates non-shell overlapping tools between pending and scheduler groups', () => {
+    const instances = observeOverlappingReadFileInstancesAfterMerge();
+
     expect(instances).toHaveLength(1);
   });
 });
@@ -610,7 +624,11 @@ describe('handleSubmissionError', () => {
     expect(result).toBe(false);
     expect(mockAddItem).not.toHaveBeenCalled();
   });
-  it('does not add error item for AbortError without code property (backward compatibility)', () => {
+  const observeAbortErrorWithoutCodeHandling = (): {
+    readonly isNodeError: boolean;
+    readonly submissionHandled: boolean;
+    readonly addItem: typeof mockAddItem;
+  } => {
     // Simulate old createAbortError that didn't have code property
     const abortErrWithoutCode = Object.assign(new Error('Aborted'), {
       name: 'AbortError',
@@ -618,17 +636,23 @@ describe('handleSubmissionError', () => {
     // Verify this error would NOT pass isNodeError check (no code property)
     const isNodeError =
       abortErrWithoutCode instanceof Error && 'code' in abortErrWithoutCode;
-    expect(isNodeError).toBe(false);
 
-    const result = handleSubmissionError(
+    const submissionHandled = handleSubmissionError(
       abortErrWithoutCode,
       mockAddItem,
       mockConfig,
       mockOnAuthError,
       Date.now(),
     );
-    expect(result).toBe(false);
-    expect(mockAddItem).not.toHaveBeenCalled();
+    return { isNodeError, submissionHandled, addItem: mockAddItem };
+  };
+
+  it('does not add error item for AbortError without code property (backward compatibility)', () => {
+    const abortHandling = observeAbortErrorWithoutCodeHandling();
+
+    expect(abortHandling.isNodeError).toBe(false);
+    expect(abortHandling.submissionHandled).toBe(false);
+    expect(abortHandling.addItem).not.toHaveBeenCalled();
   });
 });
 

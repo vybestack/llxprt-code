@@ -111,9 +111,8 @@ const isWindows = process.platform === 'win32';
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 
 describe('auth run-bun-tests real child signal propagation', () => {
-  it.skipIf(isWindows)(
-    'carries a real SIGTERM child exit into the result and JUnit failure text',
-    async () => {
+  describe.skipIf(isWindows)(() => {
+    it('carries a real SIGTERM child exit into the result and JUnit failure text', async () => {
       const fixturePath = join(
         testDirectory,
         '../../test-fixtures/self-sigterm.fixture.ts',
@@ -125,6 +124,6 @@ describe('auth run-bun-tests real child signal propagation', () => {
 
       const xml = generateJUnit([result], 1, 1);
       expect(xml).toContain('Killed by signal SIGTERM');
-    },
-  );
+    });
+  });
 });

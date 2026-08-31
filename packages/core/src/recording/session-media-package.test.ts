@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   mkdir,
@@ -88,7 +89,7 @@ describe('internal session media package', () => {
     recording.recordContent(content(reference));
     await recording.flush();
     const sourceRecording = recording.getFilePath();
-    if (sourceRecording === null) throw new Error('Expected recording path');
+    assertNotNull(sourceRecording, 'Expected recording path');
 
     const packageDirectory = join(tempDirectory, 'portable-package');
     await exportSessionMediaPackage(
@@ -123,7 +124,7 @@ describe('internal session media package', () => {
     });
 
     expect(replay.ok).toBe(true);
-    expect(await destinationStore.readVerified(reference)).toEqual(
+    expect(await destinationStore.readVerified(reference)).toStrictEqual(
       new Uint8Array([11, 22, 33, 44]),
     );
   });
@@ -157,7 +158,7 @@ describe('internal session media package', () => {
     recording.recordContent(content(reference));
     await recording.flush();
     const recordingPath = recording.getFilePath();
-    if (recordingPath === null) throw new Error('Expected recording path');
+    assertNotNull(recordingPath, 'Expected recording path');
     const packageDirectory = join(tempDirectory, 'derived-package');
 
     await exportSessionMediaPackage(
@@ -185,8 +186,8 @@ describe('internal session media package', () => {
     expect(packagedObjects).toHaveLength(2);
     expect(
       await destinationStore.readObjectVerified(reference.originalObject),
-    ).toEqual(originalBytes);
-    expect(await destinationStore.readVerified(reference)).toEqual(
+    ).toStrictEqual(originalBytes);
+    expect(await destinationStore.readVerified(reference)).toStrictEqual(
       selectedBytes,
     );
   });
@@ -213,7 +214,7 @@ describe('internal session media package', () => {
     recording.recordContent(content(reference));
     await recording.flush();
     const sourceRecording = recording.getFilePath();
-    if (sourceRecording === null) throw new Error('Expected recording path');
+    assertNotNull(sourceRecording, 'Expected recording path');
     const packageDirectory = join(tempDirectory, 'broken-package');
     await exportSessionMediaPackage(
       sourceRecording,
@@ -276,7 +277,7 @@ describe('internal session media package', () => {
       recording.recordContent(content(reference));
       await recording.flush();
       const recordingPath = recording.getFilePath();
-      if (recordingPath === null) throw new Error('Expected recording path');
+      assertNotNull(recordingPath, 'Expected recording path');
       const packageDirectory = join(tempDirectory, 'release-order-package');
       await exportSessionMediaPackage(
         recordingPath,
@@ -319,7 +320,7 @@ describe('internal session media package', () => {
           throw error;
         },
       );
-      expect(chatEntries).toEqual([]);
+      expect(chatEntries).toStrictEqual([]);
     } finally {
       await recording.dispose();
     }
@@ -350,7 +351,7 @@ describe('internal session media package', () => {
       recording.recordContent(content(reference));
       await recording.flush();
       const recordingPath = recording.getFilePath();
-      if (recordingPath === null) throw new Error('Expected recording path');
+      assertNotNull(recordingPath, 'Expected recording path');
 
       await expect(
         exportSessionMediaPackage(
@@ -389,7 +390,7 @@ describe('internal session media package', () => {
       });
       await recording.flush();
       const recordingPath = recording.getFilePath();
-      if (recordingPath === null) throw new Error('Expected recording path');
+      assertNotNull(recordingPath, 'Expected recording path');
       const emptyDestination = join(tempDirectory, 'existing-empty-package');
       const nonemptyDestination = join(tempDirectory, 'existing-package');
       await mkdir(emptyDestination);
@@ -412,7 +413,7 @@ describe('internal session media package', () => {
           nonemptyDestination,
         ),
       ).rejects.toThrow(/exist|publish/i);
-      expect(await readdir(emptyDestination)).toEqual([]);
+      expect(await readdir(emptyDestination)).toStrictEqual([]);
       expect(
         await readFile(join(nonemptyDestination, 'keep.txt'), 'utf8'),
       ).toBe('keep');
@@ -432,7 +433,7 @@ describe('internal session media package', () => {
           concurrentDestination,
         ),
       ]);
-      expect(outcomes.map((outcome) => outcome.status).sort()).toEqual([
+      expect(outcomes.map((outcome) => outcome.status).sort()).toStrictEqual([
         'fulfilled',
         'rejected',
       ]);
@@ -474,7 +475,7 @@ describe('internal session media package', () => {
     recording.recordContent(content(newReference));
     await recording.flush();
     const recordingPath = recording.getFilePath();
-    if (recordingPath === null) throw new Error('Expected recording path');
+    assertNotNull(recordingPath, 'Expected recording path');
     const packageDirectory = join(tempDirectory, 'transaction-package');
     await exportSessionMediaPackage(
       recordingPath,
@@ -511,9 +512,9 @@ describe('internal session media package', () => {
     expect(await destinationStore.getStoredByteLength()).toBe(
       deduplicatedBytes.byteLength,
     );
-    expect(await destinationStore.readVerified(deduplicatedReference)).toEqual(
-      deduplicatedBytes,
-    );
+    expect(
+      await destinationStore.readVerified(deduplicatedReference),
+    ).toStrictEqual(deduplicatedBytes);
     await expect(destinationStore.readVerified(newReference)).rejects.toThrow(
       newReference.contentId,
     );
@@ -530,7 +531,7 @@ describe('internal session media package', () => {
         throw error;
       },
     );
-    expect(chatEntries).toEqual([]);
+    expect(chatEntries).toStrictEqual([]);
   });
 
   it('packages media from rewound recording events and sibling persisted session state', async () => {
@@ -563,7 +564,7 @@ describe('internal session media package', () => {
     recording.recordRewind(1);
     await recording.flush();
     const recordingPath = recording.getFilePath();
-    if (recordingPath === null) throw new Error('Expected recording path');
+    assertNotNull(recordingPath, 'Expected recording path');
     await writeFile(
       join(sourceRoot, 'chats', 'persisted-session-extra.json'),
       JSON.stringify({
@@ -618,7 +619,7 @@ describe('internal session media package', () => {
     recording.recordContent(content(reference));
     await recording.flush();
     const recordingPath = recording.getFilePath();
-    if (recordingPath === null) throw new Error('Expected recording path');
+    assertNotNull(recordingPath, 'Expected recording path');
     const packageDirectory = join(tempDirectory, 'version-package');
     await exportSessionMediaPackage(
       recordingPath,
@@ -675,7 +676,7 @@ describe('internal session media package', () => {
     recording.recordContent(content(reference));
     await recording.flush();
     const recordingPath = recording.getFilePath();
-    if (recordingPath === null) throw new Error('Expected recording path');
+    assertNotNull(recordingPath, 'Expected recording path');
     const packageDirectory = join(tempDirectory, 'rollback-package');
     await exportSessionMediaPackage(
       recordingPath,

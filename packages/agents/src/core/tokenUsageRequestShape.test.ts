@@ -292,7 +292,7 @@ describe('tokenUsageRequestShape — tool attribution (AC-5)', () => {
 
     expect(result.toolCalls).toHaveLength(2);
     const names = result.toolCalls.map((tc) => tc.toolName).sort();
-    expect(names).toEqual(['tool_a', 'tool_b']);
+    expect(names).toStrictEqual(['tool_a', 'tool_b']);
   });
 });
 

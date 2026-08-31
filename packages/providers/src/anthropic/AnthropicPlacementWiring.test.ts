@@ -140,6 +140,13 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function requireSdkRequest(value: unknown): Record<string, unknown> {
+  if (!isObject(value)) {
+    throw new Error('Expected an SDK request payload');
+  }
+  return value;
+}
+
 function lastItem<T>(items: readonly T[]): T | undefined {
   return items[items.length - 1];
 }
@@ -294,7 +301,7 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
       provide: () => Promise.resolve(API_KEY),
     };
     const runtime = await captureWirePayload(runtimeProvider);
-    expect(runtime).toEqual(direct);
+    expect(runtime).toStrictEqual(direct);
   });
 
   it('produces byte-identical SDK payloads for a direct OAuth string and a runtime provider resolving to the same token', async () => {
@@ -303,7 +310,7 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
       provide: () => Promise.resolve(OAUTH_TOKEN),
     };
     const runtime = await captureWirePayload(runtimeProvider);
-    expect(runtime).toEqual(direct);
+    expect(runtime).toStrictEqual(direct);
   });
 
   // -------------------------------------------------------------------------
@@ -317,10 +324,9 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
     )) {
       void _chunk;
     }
-    const request = lastItem(FakeAnthropicClass.requests)?.request;
-    if (!isObject(request)) {
-      throw new Error('Expected an SDK request payload');
-    }
+    const request = requireSdkRequest(
+      lastItem(FakeAnthropicClass.requests)?.request,
+    );
     // Declaration drove placement: prompt is in the context prefix.
     expect(firstMessageText(request['messages'])).toContain(
       `<system>\n${ASSEMBLED_PROMPT}\n</system>`,
@@ -393,7 +399,7 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
 
     expect(isObject(transportRequest)).toBe(true);
     expect(isObject(baselineRequest)).toBe(true);
-    expect(transportRequest).toEqual(baselineRequest);
+    expect(transportRequest).toStrictEqual(baselineRequest);
   });
 
   it('resolves the OAuth runtime provider once and transports the already-prepared exact request', async () => {
@@ -436,6 +442,6 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
 
     expect(isObject(transportRequest)).toBe(true);
     expect(isObject(baselineRequest)).toBe(true);
-    expect(transportRequest).toEqual(baselineRequest);
+    expect(transportRequest).toStrictEqual(baselineRequest);
   });
 });

@@ -28,6 +28,10 @@ function cleanupGlobalSettings(): void {
   fs.rmSync(settingsPath, { force: true });
 }
 
+function isNamespaceCollection(value: unknown): boolean {
+  return Array.isArray(value) || typeof value === 'object';
+}
+
 describe('ConfigurationManager', () => {
   beforeEach(() => {
     ConfigurationManager.resetForTesting();
@@ -226,10 +230,7 @@ describe('ConfigurationManager', () => {
       const manager = ConfigurationManager.getInstance();
       const config = manager.getEffectiveConfig();
       expect(typeof config.enabled).toBe('boolean');
-      expect(
-        Array.isArray(config.namespaces) ||
-          typeof config.namespaces === 'object',
-      ).toBe(true);
+      expect(isNamespaceCollection(config.namespaces)).toBe(true);
       expect(typeof config.level).toBe('string');
       expect(typeof config.lazyEvaluation).toBe('boolean');
       expect(Array.isArray(config.redactPatterns)).toBe(true);

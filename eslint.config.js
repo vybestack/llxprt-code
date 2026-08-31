@@ -806,23 +806,6 @@ export default tseslint.config(
       // 3 errors, the bun:test import produced 0). eslint-plugin-jest with
       // globalPackage: 'bun:test' restores enforcement.
       //
-      // SEVEN rules are enabled at 'error': they produce 0 violations or had
-      // a small, fixed number of violations that were fixed in the test files.
-      //
-      // FIVE rules remain 'off': eslint-plugin-jest implements them MORE
-      // strictly than @vitest/eslint-plugin did, so enabling them is net-NEW
-      // enforcement rather than preservation of the previous level. The
-      // evidence: on the tree immediately before #2969 (commit a805a219f)
-      // every test still imported 'vitest', the vitest plugin was fully live
-      // at 'error', and `npm run lint` was green at 0 warnings (therefore 0
-      // vitest-plugin violations). Running eslint-plugin-jest with
-      // globalPackage: 'vitest' over the SAME files reported 728 violations in
-      // packages/core alone (~4,183 repo-wide). Burning those down is out of
-      // scope for #2970 and is tracked as #3129. Options are preserved so
-      // re-enabling is a one-word change. Do NOT spread
-      // jest.configs['flat/recommended'].rules — it contains additional rules
-      // vitest never had.
-
       // ── Active rules (0 violations or violations fixed) ──
       'jest/no-identical-title': 'error',
       'jest/valid-describe-callback': 'error',
@@ -852,8 +835,7 @@ export default tseslint.config(
       ],
       'jest/no-conditional-expect': 'error',
 
-      // ── Rules kept at 'off' (jest is strictly stricter than vitest was;
-      //    enabling is net-NEW enforcement; burn-down tracked in #3129) ──
+      // ── Rules kept 'off' (unchanged from vitest config) ──
       'jest/no-commented-out-tests': 'off', // eslint-policy-allow-off: #2970 unchanged from vitest config
       'jest/no-disabled-tests': 'off', // eslint-policy-allow-off: #2970 unchanged from vitest config
       // fast-check's property-based testing exports both `it` and `test`,
@@ -862,7 +844,7 @@ export default tseslint.config(
       // across many test files); `itProp.prop` is the corresponding property
       // variant.
       'jest/no-standalone-expect': [
-        'off', // eslint-policy-allow-off: #2970 jest stricter than vitest; 617 violations tracked in #3129
+        'error',
         {
           additionalTestBlockFunctions: [
             'it',
@@ -871,13 +853,20 @@ export default tseslint.config(
             'it.prop',
             'testProp',
             'test.prop',
+            // Bun's conditional-skip forms. The jest plugin does not know
+            // them, so without these every assertion inside a skipIf test
+            // reads as standalone.
+            'it.skipIf',
+            'it.todoIf',
+            'test.skipIf',
+            'test.todoIf',
           ],
         },
       ],
-      'jest/no-conditional-in-test': 'off', // eslint-policy-allow-off: #2970 jest stricter than vitest; 3059 violations tracked in #3129
-      'jest/prefer-strict-equal': 'off', // eslint-policy-allow-off: #2970 jest stricter than vitest; 199 violations tracked in #3129
-      'jest/require-top-level-describe': 'off', // eslint-policy-allow-off: #2970 jest stricter than vitest; 154 violations tracked in #3129
-      'jest/valid-expect': 'off', // eslint-policy-allow-off: #2970 jest stricter than vitest; 154 violations tracked in #3129
+      'jest/no-conditional-in-test': 'error',
+      'jest/prefer-strict-equal': 'error',
+      'jest/require-top-level-describe': 'error',
+      'jest/valid-expect': 'error',
       // vitest/no-import-node-test → no-restricted-imports banning node:test
       // (issue #2970: same invariant, different mechanism). bun:test is the
       // only supported test module.
@@ -1532,8 +1521,6 @@ export default tseslint.config(
   },
   // Issue #2970: The packages/tools override that previously turned off
   // jest/no-conditional-expect, jest/no-conditional-in-test, and
-  // jest/prefer-strict-equal has been removed. jest/no-conditional-expect is
-  // now enabled globally and all tools violations were fixed in the test
-  // files. The other two rules remain off globally (see the deferred rules
-  // above), making a package-specific override redundant.
+  // jest/prefer-strict-equal has been removed. The rules are enabled in the
+  // package-source test block, so a package-specific override is redundant.
 );

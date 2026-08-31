@@ -41,13 +41,13 @@ import {
 
 let dir: string;
 
-beforeEach(() => {
+function createOperationLifecycleTempDirectory(): void {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'op-lifecycle-'));
-});
+}
 
-afterEach(() => {
+function removeOperationLifecycleTempDirectory(): void {
   fs.rmSync(dir, { recursive: true, force: true });
-});
+}
 
 function fixtureIdentity(
   overrides: Partial<OperationIdentitySnapshot> = {},
@@ -206,6 +206,9 @@ async function drainSink(sink: PerfSink): Promise<void> {
 // ---------------------------------------------------------------------------
 
 describe('OperationLifecycleRegistry — D1 operation_id (AC-3 split rule)', () => {
+  beforeEach(createOperationLifecycleTempDirectory);
+  afterEach(removeOperationLifecycleTempDirectory);
+
   it('derives operation_id from an initial prompt id (no marker)', async () => {
     const { registry, sink } = await startAndCreate();
     const ac = new AbortController();
@@ -269,6 +272,9 @@ describe('OperationLifecycleRegistry — D1 operation_id (AC-3 split rule)', () 
 // ---------------------------------------------------------------------------
 
 describe('OperationLifecycleRegistry — D1 no child arrays', () => {
+  beforeEach(createOperationLifecycleTempDirectory);
+  afterEach(removeOperationLifecycleTempDirectory);
+
   it('produces a record with no prompt_ids/turn_ids fields', async () => {
     const { registry, sink } = await startAndCreate();
     const ac = new AbortController();
@@ -299,35 +305,76 @@ describe('OperationLifecycleRegistry — D1 no child arrays', () => {
 // ---------------------------------------------------------------------------
 
 describe('OperationLifecycleRegistry — seven terminal statuses (AC-4)', () => {
-  const statuses: OperationStatus[] = [
-    'completed',
-    'error',
-    'cancelled_before_send',
-    'cancelled_during_api',
-    'cancelled_during_tool',
-    'cancelled_during_approval',
-    'superseded',
+  beforeEach(createOperationLifecycleTempDirectory);
+  afterEach(removeOperationLifecycleTempDirectory);
+
+  interface TerminalStatusScenario {
+    readonly status: OperationStatus;
+    readonly terminate: (
+      registry: OperationLifecycleRegistry,
+      signal: AbortSignal,
+    ) => Promise<void>;
+  }
+
+  const scenarios: readonly TerminalStatusScenario[] = [
+    {
+      status: 'completed',
+      terminate: (registry, signal) => registry.finalise(signal, 'completed'),
+    },
+    {
+      status: 'error',
+      terminate: (registry, signal) => registry.finalise(signal, 'error'),
+    },
+    {
+      status: 'cancelled_before_send',
+      terminate: (registry, signal) =>
+        registry.finalise(signal, 'cancelled_before_send'),
+    },
+    {
+      status: 'cancelled_during_api',
+      terminate: (registry, signal) =>
+        registry.finalise(signal, 'cancelled_during_api'),
+    },
+    {
+      status: 'cancelled_during_tool',
+      terminate: (registry, signal) =>
+        registry.finalise(signal, 'cancelled_during_tool'),
+    },
+    {
+      status: 'cancelled_during_approval',
+      terminate: (registry, signal) =>
+        registry.finalise(signal, 'cancelled_during_approval'),
+    },
+    {
+      status: 'superseded',
+      terminate: async (registry) => {
+        // Superseded is written by the sweep, not explicit finalise.
+        const nextOperation = new AbortController();
+        registry.begin(nextOperation.signal, 'sess-1#agentic-loop#uuid-2');
+        await registry.finalise(nextOperation.signal, 'completed');
+      },
+    },
   ];
 
-  for (const status of statuses) {
+  const observeRecordsForTerminalStatus = async (
+    scenario: TerminalStatusScenario,
+  ): Promise<readonly PerfOperationRecord[]> => {
+    const { registry, sink } = await startAndCreate();
+    const operation = new AbortController();
+    registry.begin(operation.signal, 'sess-1#agentic-loop#uuid-1');
+
+    await scenario.terminate(registry, operation.signal);
+    await drainSink(sink);
+
+    const records = await readAllRecords();
+    return records.filter((record) => record.status === scenario.status);
+  };
+  for (const scenario of scenarios) {
+    const { status } = scenario;
     it(`writes exactly one record with status "${status}"`, async () => {
-      const { registry, sink } = await startAndCreate();
-      const ac = new AbortController();
-      registry.begin(ac.signal, 'sess-1#agentic-loop#uuid-1');
+      const matchingRecords = await observeRecordsForTerminalStatus(scenario);
 
-      if (status === 'superseded') {
-        // Superseded is written by the sweep, not explicit finalise.
-        const ac2 = new AbortController();
-        registry.begin(ac2.signal, 'sess-1#agentic-loop#uuid-2');
-        await registry.finalise(ac2.signal, 'completed');
-      } else {
-        await registry.finalise(ac.signal, status);
-      }
-      await drainSink(sink);
-
-      const records = await readAllRecords();
-      const matching = records.filter((r) => r.status === status);
-      expect(matching).toHaveLength(1);
+      expect(matchingRecords).toHaveLength(1);
     });
   }
 });
@@ -337,6 +384,9 @@ describe('OperationLifecycleRegistry — seven terminal statuses (AC-4)', () => 
 // ---------------------------------------------------------------------------
 
 describe('OperationLifecycleRegistry — exactly-once duplicate finalise', () => {
+  beforeEach(createOperationLifecycleTempDirectory);
+  afterEach(removeOperationLifecycleTempDirectory);
+
   it('writes exactly one record for a duplicate finalise', async () => {
     const { registry, sink } = await startAndCreate();
     const ac = new AbortController();
@@ -376,7 +426,7 @@ describe('OperationLifecycleRegistry — exactly-once duplicate finalise', () =>
     const records = await readAllRecords();
     expect(records).toHaveLength(2);
     const statuses = records.map((r) => r.status).sort();
-    expect(statuses).toEqual(['completed', 'superseded']);
+    expect(statuses).toStrictEqual(['completed', 'superseded']);
   });
 });
 
@@ -385,6 +435,9 @@ describe('OperationLifecycleRegistry — exactly-once duplicate finalise', () =>
 // ---------------------------------------------------------------------------
 
 describe('OperationLifecycleRegistry — superseded sweep', () => {
+  beforeEach(createOperationLifecycleTempDirectory);
+  afterEach(removeOperationLifecycleTempDirectory);
+
   it('finalises a displaced op as superseded when a new begin occurs', async () => {
     const { registry, sink } = await startAndCreate();
     const ac1 = new AbortController();
@@ -456,6 +509,9 @@ describe('OperationLifecycleRegistry — superseded sweep', () => {
 // ---------------------------------------------------------------------------
 
 describe('OperationLifecycleRegistry — concurrent_instances (D3)', () => {
+  beforeEach(createOperationLifecycleTempDirectory);
+  afterEach(removeOperationLifecycleTempDirectory);
+
   it('includes the own claim in concurrent_instances (minimum 1)', async () => {
     const { registry, sink } = await startAndCreate();
     const ac = new AbortController();
@@ -507,6 +563,9 @@ describe('OperationLifecycleRegistry — concurrent_instances (D3)', () => {
 // ---------------------------------------------------------------------------
 
 describe('OperationLifecycleRegistry — session index monotonic', () => {
+  beforeEach(createOperationLifecycleTempDirectory);
+  afterEach(removeOperationLifecycleTempDirectory);
+
   it('assigns sequential indices starting at 0', async () => {
     const { registry, sink } = await startAndCreate();
     const ac1 = new AbortController();
@@ -531,7 +590,7 @@ describe('OperationLifecycleRegistry — session index monotonic', () => {
     const indices = records
       .map((r) => r.session_operation_index)
       .sort((a, b) => a - b);
-    expect(indices).toEqual([0, 1, 2]);
+    expect(indices).toStrictEqual([0, 1, 2]);
   });
 });
 
@@ -540,6 +599,9 @@ describe('OperationLifecycleRegistry — session index monotonic', () => {
 // ---------------------------------------------------------------------------
 
 describe('OperationLifecycleRegistry — measurement handle', () => {
+  beforeEach(createOperationLifecycleTempDirectory);
+  afterEach(removeOperationLifecycleTempDirectory);
+
   it('exposes a mutable measurement starting at zero', async () => {
     const { registry, sink } = await startAndCreate();
     const ac = new AbortController();
@@ -567,6 +629,9 @@ describe('OperationLifecycleRegistry — measurement handle', () => {
 // ---------------------------------------------------------------------------
 
 describe('OperationLifecycleRegistry — record assembly', () => {
+  beforeEach(createOperationLifecycleTempDirectory);
+  afterEach(removeOperationLifecycleTempDirectory);
+
   it('produces a schema-valid record with correct identity fields', async () => {
     const provider = fixtureProvider({
       session_id: 'my-session',
@@ -661,6 +726,9 @@ describe('OperationLifecycleRegistry — record assembly', () => {
 // ---------------------------------------------------------------------------
 
 describe('OperationLifecycleRegistry — error policy', () => {
+  beforeEach(createOperationLifecycleTempDirectory);
+  afterEach(removeOperationLifecycleTempDirectory);
+
   it('rejects when an internal error occurs (identity provider throws)', async () => {
     const throwingProvider: OperationIdentityProvider = {
       snapshot: (): OperationIdentitySnapshot => {
@@ -711,6 +779,9 @@ describe('OperationLifecycleRegistry — error policy', () => {
 // ---------------------------------------------------------------------------
 
 describe('OperationLifecycleRegistry — each turn has its own operation', () => {
+  beforeEach(createOperationLifecycleTempDirectory);
+  afterEach(removeOperationLifecycleTempDirectory);
+
   it('assigns distinct operation_ids and sequential indices to successive turns', async () => {
     const { registry, sink } = await startAndCreate();
 
@@ -727,7 +798,7 @@ describe('OperationLifecycleRegistry — each turn has its own operation', () =>
     expect(h1.operationId).not.toBe(h2.operationId);
     const records = await readAllRecords();
     expect(records).toHaveLength(2);
-    expect(records.map((r) => r.operation_id).sort()).toEqual([
+    expect(records.map((r) => r.operation_id).sort()).toStrictEqual([
       'sess-1#agentic-loop#turn-1',
       'sess-1#agentic-loop#turn-2',
     ]);
@@ -750,6 +821,9 @@ class InternalErrorFilesystem extends FailingAppendFilesystem {
 }
 
 describe('OperationLifecycleRegistry — drain/queueWrite internal error (P06-D8)', () => {
+  beforeEach(createOperationLifecycleTempDirectory);
+  afterEach(removeOperationLifecycleTempDirectory);
+
   it('drain rejects when a queued write fails with an internal error', async () => {
     const failingFs = new InternalErrorFilesystem();
     const runUuid = crypto.randomUUID();
@@ -857,6 +931,9 @@ describe('OperationLifecycleRegistry — drain/queueWrite internal error (P06-D8
 });
 
 describe('OperationLifecycleRegistry — read-only active-operation snapshot (P12)', () => {
+  beforeEach(createOperationLifecycleTempDirectory);
+  afterEach(removeOperationLifecycleTempDirectory);
+
   it('returns null when no operation is active', () => {
     const { registry } = createRegistry();
     expect(registry.getActiveOperationSnapshot()).toBe(null);

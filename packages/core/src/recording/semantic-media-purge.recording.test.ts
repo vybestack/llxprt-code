@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -66,15 +67,14 @@ describe('semantic purge recording state', () => {
     });
     await recording.flush();
     const path = recording.getFilePath();
-    if (path === null) throw new Error('Expected recording path');
-
+    assertNotNull(path, 'Expected recording path');
     const replay = await replaySession(path, PROJECT_HASH);
     await recording.dispose();
 
     if (!replay.ok) throw new Error(replay.error);
     expect(replay.ok).toBe(true);
-    expect(replay.history).toEqual(purged);
-    expect(replay.semanticMediaPurgeFrontier).toEqual({
+    expect(replay.history).toStrictEqual(purged);
+    expect(replay.semanticMediaPurgeFrontier).toStrictEqual({
       contentIndex: 0,
       blockIndex: 0,
     });
@@ -95,7 +95,7 @@ describe('semantic purge recording state', () => {
     });
     await recording.flush();
     const path = recording.getFilePath();
-    if (path === null) throw new Error('Expected recording path');
+    assertNotNull(path, 'Expected recording path');
     await recording.dispose();
     const lines = (await readFile(path, 'utf8')).trim().split('\n');
     const contentLine: unknown = JSON.parse(lines[1] ?? '{}');

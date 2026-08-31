@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -85,144 +86,152 @@ function useTempWelcomeConfig(): () => string {
   return () => configPath;
 }
 
-describe('getWelcomeConfigPath', () => {
-  const getConfigPath = useTempWelcomeConfig();
+describe('welcomeConfig', () => {
+  describe('getWelcomeConfigPath', () => {
+    const getConfigPath = useTempWelcomeConfig();
 
-  it('returns the environment override verbatim when the override is set', () => {
-    expect(getWelcomeConfigPath()).toBe(getConfigPath());
+    it('returns the environment override verbatim when the override is set', () => {
+      expect(getWelcomeConfigPath()).toBe(getConfigPath());
+    });
+
+    it('falls back to the user settings dir when the override is unset', () => {
+      delete process.env[WELCOME_CONFIG_ENV];
+      resetWelcomeConfigForTesting();
+      expect(getWelcomeConfigPath()).toBe(
+        path.join(USER_SETTINGS_DIR, WELCOME_CONFIG_FILENAME),
+      );
+    });
   });
 
-  it('falls back to the user settings dir when the override is unset', () => {
-    delete process.env[WELCOME_CONFIG_ENV];
-    resetWelcomeConfigForTesting();
-    expect(getWelcomeConfigPath()).toBe(
-      path.join(USER_SETTINGS_DIR, WELCOME_CONFIG_FILENAME),
-    );
-  });
-});
+  describe('loadWelcomeConfig', () => {
+    const getConfigPath = useTempWelcomeConfig();
 
-describe('loadWelcomeConfig', () => {
-  const getConfigPath = useTempWelcomeConfig();
+    it('returns welcomeCompleted false when no file exists on disk', () => {
+      expect(loadWelcomeConfig()).toStrictEqual({ welcomeCompleted: false });
+      expect(isWelcomeCompleted()).toBe(false);
+    });
 
-  it('returns welcomeCompleted false when no file exists on disk', () => {
-    expect(loadWelcomeConfig()).toEqual({ welcomeCompleted: false });
-    expect(isWelcomeCompleted()).toBe(false);
-  });
+    it('reports onboarding complete when the file says welcomeCompleted true', () => {
+      fs.writeFileSync(getConfigPath(), '{"welcomeCompleted": true}', 'utf-8');
+      resetWelcomeConfigForTesting();
+      expect(isWelcomeCompleted()).toBe(true);
+    });
 
-  it('reports onboarding complete when the file says welcomeCompleted true', () => {
-    fs.writeFileSync(getConfigPath(), '{"welcomeCompleted": true}', 'utf-8');
-    resetWelcomeConfigForTesting();
-    expect(isWelcomeCompleted()).toBe(true);
-  });
+    it('falls back to welcomeCompleted false instead of throwing on malformed JSON', () => {
+      fs.writeFileSync(getConfigPath(), '{ not json', 'utf-8');
+      resetWelcomeConfigForTesting();
+      expect(loadWelcomeConfig()).toStrictEqual({ welcomeCompleted: false });
+      expect(isWelcomeCompleted()).toBe(false);
+      // Repeated reads without a cache reset must keep returning the default
+      // rather than re-parsing (or caching) the corrupt file into something else.
+      expect(loadWelcomeConfig()).toStrictEqual({ welcomeCompleted: false });
+      expect(isWelcomeCompleted()).toBe(false);
+    });
 
-  it('falls back to welcomeCompleted false instead of throwing on malformed JSON', () => {
-    fs.writeFileSync(getConfigPath(), '{ not json', 'utf-8');
-    resetWelcomeConfigForTesting();
-    expect(loadWelcomeConfig()).toEqual({ welcomeCompleted: false });
-    expect(isWelcomeCompleted()).toBe(false);
-    // Repeated reads without a cache reset must keep returning the default
-    // rather than re-parsing (or caching) the corrupt file into something else.
-    expect(loadWelcomeConfig()).toEqual({ welcomeCompleted: false });
-    expect(isWelcomeCompleted()).toBe(false);
-  });
-
-  it('recovers once the malformed file is replaced and the cache is reset', () => {
-    fs.writeFileSync(getConfigPath(), '{ not json', 'utf-8');
-    resetWelcomeConfigForTesting();
-    expect(isWelcomeCompleted()).toBe(false);
-    fs.writeFileSync(getConfigPath(), '{"welcomeCompleted": true}', 'utf-8');
-    resetWelcomeConfigForTesting();
-    expect(isWelcomeCompleted()).toBe(true);
-  });
-});
-
-describe('saveWelcomeConfig', () => {
-  const getConfigPath = useTempWelcomeConfig();
-
-  it('creates a missing parent directory and writes the file', () => {
-    const configPath = path.join(
-      getConfigPath(),
-      'nested',
-      'dir',
-      'welcomeConfig.json',
-    );
-    process.env[WELCOME_CONFIG_ENV] = configPath;
-    resetWelcomeConfigForTesting();
-    saveWelcomeConfig({ welcomeCompleted: true });
-    expect(fs.existsSync(configPath)).toBe(true);
-    expect(loadWelcomeConfig()).toEqual({ welcomeCompleted: true });
+    it('recovers once the malformed file is replaced and the cache is reset', () => {
+      fs.writeFileSync(getConfigPath(), '{ not json', 'utf-8');
+      resetWelcomeConfigForTesting();
+      expect(isWelcomeCompleted()).toBe(false);
+      fs.writeFileSync(getConfigPath(), '{"welcomeCompleted": true}', 'utf-8');
+      resetWelcomeConfigForTesting();
+      expect(isWelcomeCompleted()).toBe(true);
+    });
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'writes the file with owner-only permissions',
-    () => {
+  describe('saveWelcomeConfig', () => {
+    const getConfigPath = useTempWelcomeConfig();
+
+    it('creates a missing parent directory and writes the file', () => {
+      const configPath = path.join(
+        getConfigPath(),
+        'nested',
+        'dir',
+        'welcomeConfig.json',
+      );
+      process.env[WELCOME_CONFIG_ENV] = configPath;
+      resetWelcomeConfigForTesting();
       saveWelcomeConfig({ welcomeCompleted: true });
-      const mode = fs.statSync(getConfigPath()).mode & 0o777;
-      expect(mode).toBe(0o600);
-    },
-  );
-
-  it('round-trips the exact JSON that was saved', () => {
-    saveWelcomeConfig({
-      welcomeCompleted: true,
-      skipped: true,
-      completedAt: '2026-01-02T03:04:05.000Z',
+      expect(fs.existsSync(configPath)).toBe(true);
+      expect(loadWelcomeConfig()).toStrictEqual({ welcomeCompleted: true });
     });
-    expect(JSON.parse(fs.readFileSync(getConfigPath(), 'utf-8'))).toEqual({
-      welcomeCompleted: true,
-      skipped: true,
-      completedAt: '2026-01-02T03:04:05.000Z',
+
+    it.skipIf(process.platform === 'win32')(
+      'writes the file with owner-only permissions',
+      () => {
+        saveWelcomeConfig({ welcomeCompleted: true });
+        const mode = fs.statSync(getConfigPath()).mode & 0o777;
+        expect(mode).toBe(0o600);
+      },
+    );
+
+    it('round-trips the exact JSON that was saved', () => {
+      saveWelcomeConfig({
+        welcomeCompleted: true,
+        skipped: true,
+        completedAt: '2026-01-02T03:04:05.000Z',
+      });
+      expect(
+        JSON.parse(fs.readFileSync(getConfigPath(), 'utf-8')),
+      ).toStrictEqual({
+        welcomeCompleted: true,
+        skipped: true,
+        completedAt: '2026-01-02T03:04:05.000Z',
+      });
+    });
+
+    it('does not throw when the config path is unwritable', () => {
+      const configPath = getConfigPath();
+      fs.mkdirSync(configPath);
+      expect(() => saveWelcomeConfig({ welcomeCompleted: true })).not.toThrow();
     });
   });
 
-  it('does not throw when the config path is unwritable', () => {
-    const configPath = getConfigPath();
-    fs.mkdirSync(configPath);
-    expect(() => saveWelcomeConfig({ welcomeCompleted: true })).not.toThrow();
-  });
-});
+  describe('markWelcomeCompleted', () => {
+    const getConfigPath = useTempWelcomeConfig();
 
-describe('markWelcomeCompleted', () => {
-  const getConfigPath = useTempWelcomeConfig();
+    it('persists welcomeCompleted and skipped true with a strict ISO completion time', () => {
+      markWelcomeCompleted(true);
+      const onDisk = readWelcomeConfig(getConfigPath());
+      expect(onDisk.welcomeCompleted).toBe(true);
+      expect(onDisk.skipped).toBe(true);
+      expect(onDisk.completedAt).toBeDefined();
+      assertDefined(
+        onDisk.completedAt,
+        'completedAt must be present for a skipped completion',
+      );
+      expect(new Date(onDisk.completedAt).toISOString()).toBe(
+        onDisk.completedAt,
+      );
+    });
 
-  it('persists welcomeCompleted and skipped true with a strict ISO completion time', () => {
-    markWelcomeCompleted(true);
-    const onDisk = readWelcomeConfig(getConfigPath());
-    expect(onDisk.welcomeCompleted).toBe(true);
-    expect(onDisk.skipped).toBe(true);
-    expect(onDisk.completedAt).toBeDefined();
-    if (onDisk.completedAt === undefined) {
-      throw new Error('completedAt must be present for a skipped completion');
-    }
-    expect(new Date(onDisk.completedAt).toISOString()).toBe(onDisk.completedAt);
-  });
-
-  it('persists skipped false with a strict ISO completion time', () => {
-    markWelcomeCompleted(false);
-    const onDisk = readWelcomeConfig(getConfigPath());
-    expect(onDisk.welcomeCompleted).toBe(true);
-    expect(onDisk.skipped).toBe(false);
-    expect(onDisk.completedAt).toBeDefined();
-    if (onDisk.completedAt === undefined) {
-      throw new Error(
+    it('persists skipped false with a strict ISO completion time', () => {
+      markWelcomeCompleted(false);
+      const onDisk = readWelcomeConfig(getConfigPath());
+      expect(onDisk.welcomeCompleted).toBe(true);
+      expect(onDisk.skipped).toBe(false);
+      expect(onDisk.completedAt).toBeDefined();
+      assertDefined(
+        onDisk.completedAt,
         'completedAt must be present for a non-skipped completion',
       );
-    }
-    expect(new Date(onDisk.completedAt).toISOString()).toBe(onDisk.completedAt);
+      expect(new Date(onDisk.completedAt).toISOString()).toBe(
+        onDisk.completedAt,
+      );
+    });
   });
-});
 
-describe('welcome config caching', () => {
-  const getConfigPath = useTempWelcomeConfig();
+  describe('welcome config caching', () => {
+    const getConfigPath = useTempWelcomeConfig();
 
-  it('returns the cached value until the cache is reset', () => {
-    // The first and second reads assert the same value on purpose: the second
-    // one comes AFTER an out-of-band rewrite, so an unchanged result is the
-    // evidence that the process-lifetime cache is being served.
-    expect(loadWelcomeConfig()).toEqual({ welcomeCompleted: false });
-    fs.writeFileSync(getConfigPath(), '{"welcomeCompleted": true}', 'utf-8');
-    expect(loadWelcomeConfig()).toEqual({ welcomeCompleted: false });
-    resetWelcomeConfigForTesting();
-    expect(loadWelcomeConfig()).toEqual({ welcomeCompleted: true });
+    it('returns the cached value until the cache is reset', () => {
+      // The first and second reads assert the same value on purpose: the second
+      // one comes AFTER an out-of-band rewrite, so an unchanged result is the
+      // evidence that the process-lifetime cache is being served.
+      expect(loadWelcomeConfig()).toStrictEqual({ welcomeCompleted: false });
+      fs.writeFileSync(getConfigPath(), '{"welcomeCompleted": true}', 'utf-8');
+      expect(loadWelcomeConfig()).toStrictEqual({ welcomeCompleted: false });
+      resetWelcomeConfigForTesting();
+      expect(loadWelcomeConfig()).toStrictEqual({ welcomeCompleted: true });
+    });
   });
 });

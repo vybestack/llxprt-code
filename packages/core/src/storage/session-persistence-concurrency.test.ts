@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  assertDefined,
+  assertNotNull,
+} from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import {
@@ -205,9 +209,9 @@ describe('SessionPersistenceService concurrent saves', () => {
     expect(serialized).toContain('generation-three');
     expect(serialized).not.toContain('generation-one');
     expect(serialized).not.toContain('generation-two');
-    expect(directoryEntries.filter((entry) => entry.endsWith('.tmp'))).toEqual(
-      [],
-    );
+    expect(
+      directoryEntries.filter((entry) => entry.endsWith('.tmp')),
+    ).toStrictEqual([]);
     expect(service.getPendingByteCount()).toBe(0);
   });
 
@@ -254,8 +258,7 @@ describe('SessionPersistenceService concurrent saves', () => {
         { id: 1, type: 'tool_group', tools: [() => undefined] },
       ]);
     }).not.toThrow();
-    if (saveResult === undefined) throw new Error('Expected a save promise');
-
+    assertDefined(saveResult, 'Expected a save promise');
     await expect(saveResult).rejects.toBeInstanceOf(Error);
   });
 
@@ -491,7 +494,7 @@ describe('SessionPersistenceService concurrent saves', () => {
     await writePersistedSession(persistence, loadStorage, inlineImageHistory());
 
     const loaded = await persistence.loadMostRecent();
-    if (loaded === null) throw new Error('Expected loaded session');
+    assertNotNull(loaded, 'Expected loaded session');
     const contentId = contentIdFor('AQ==');
 
     expect(await mediaStore.hasReservations(contentId)).toBe(true);
@@ -512,8 +515,7 @@ describe('SessionPersistenceService concurrent saves', () => {
     );
     await writePersistedSession(persistence, loadStorage, inlineImageHistory());
     const loaded = await persistence.loadMostRecent();
-    if (loaded === null) throw new Error('Expected loaded session');
-
+    assertNotNull(loaded, 'Expected loaded session');
     const firstFailure = await loaded.mediaOwnership.release().then(
       (): unknown => undefined,
       (error: unknown): unknown => error,

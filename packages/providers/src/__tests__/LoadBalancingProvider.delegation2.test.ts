@@ -17,6 +17,33 @@ import {
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
+function appendTextChunk(chunk: IContent, chunks: string[]): void {
+  if (chunk.parts?.[0] != null && 'text' in chunk.parts[0]) {
+    chunks.push(chunk.parts[0].text as string);
+  }
+}
+
+function resolveStreamingProvider(
+  name: string,
+  provider1: IProvider,
+  provider2: IProvider,
+  fallback: (providerName: string) => IProvider | undefined,
+): IProvider | undefined {
+  if (name === 'provider1') return provider1;
+  if (name === 'provider2') return provider2;
+  return fallback(name);
+}
+
+function resolveValidOrMissingProvider(
+  name: string,
+  callCount: { count: number },
+  validProvider: IProvider,
+): IProvider | undefined {
+  callCount.count++;
+  if (name === 'invalid-provider') return undefined;
+  return validProvider;
+}
+
 describe('LoadBalancingProvider', () => {
   let settingsService: SettingsService;
   let config: Config;
@@ -66,9 +93,7 @@ describe('LoadBalancingProvider', () => {
 
         const chunks: string[] = [];
         for await (const chunk of iterator) {
-          if (chunk.parts?.[0] != null && 'text' in chunk.parts[0]) {
-            chunks.push(chunk.parts[0].text as string);
-          }
+          appendTextChunk(chunk, chunks);
         }
 
         // Verify all chunks were yielded in order
@@ -170,11 +195,13 @@ describe('LoadBalancingProvider', () => {
 
       const originalGetProvider =
         providerManager.getProviderByName.bind(providerManager);
-      providerManager.getProviderByName = (name: string) => {
-        if (name === 'provider1') return mockProvider1 as IProvider;
-        if (name === 'provider2') return mockProvider2 as IProvider;
-        return originalGetProvider(name);
-      };
+      providerManager.getProviderByName = (name: string) =>
+        resolveStreamingProvider(
+          name,
+          mockProvider1,
+          mockProvider2,
+          originalGetProvider,
+        );
 
       try {
         // First call to provider1
@@ -183,9 +210,7 @@ describe('LoadBalancingProvider', () => {
           contents: [{ role: 'user', parts: [{ text: 'test1' }] }],
         });
         for await (const chunk of iterator1) {
-          if (chunk.parts?.[0] != null && 'text' in chunk.parts[0]) {
-            chunks1.push(chunk.parts[0].text as string);
-          }
+          appendTextChunk(chunk, chunks1);
         }
 
         // Second call to provider2
@@ -194,9 +219,7 @@ describe('LoadBalancingProvider', () => {
           contents: [{ role: 'user', parts: [{ text: 'test2' }] }],
         });
         for await (const chunk of iterator2) {
-          if (chunk.parts?.[0] != null && 'text' in chunk.parts[0]) {
-            chunks2.push(chunk.parts[0].text as string);
-          }
+          appendTextChunk(chunk, chunks2);
         }
 
         // Verify chunks from each provider were propagated correctly
@@ -333,12 +356,8 @@ describe('LoadBalancingProvider', () => {
       const callCount = { count: 0 };
       const originalGetProvider =
         providerManager.getProviderByName.bind(providerManager);
-      providerManager.getProviderByName = (name: string) => {
-        callCount.count++;
-        if (name === 'invalid-provider')
-          return undefined as unknown as IProvider;
-        return mockProvider as IProvider;
-      };
+      providerManager.getProviderByName = (name: string) =>
+        resolveValidOrMissingProvider(name, callCount, mockProvider);
 
       try {
         // First call - should succeed (sub-1)

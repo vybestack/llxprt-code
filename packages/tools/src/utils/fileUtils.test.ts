@@ -364,12 +364,12 @@ describe('processSingleFileContent image resizing', () => {
     );
     const metadata = await sharp(resized).metadata();
 
-    expect(metadata.autoOrient).toEqual({ width: 120, height: 60 });
+    expect(metadata.autoOrient).toStrictEqual({ width: 120, height: 60 });
     expect(result.llmContent.inlineData?.displayName).toBe('large.png');
     expect(
       Buffer.from(result.llmContent.inlineData?.originalData ?? '', 'base64'),
-    ).toEqual(original);
-    expect(result.llmContent.inlineData?.transformation).toEqual({
+    ).toStrictEqual(original);
+    expect(result.llmContent.inlineData?.transformation).toStrictEqual({
       policyId: 'image-resize',
       policyVersion: 1,
       parameters: { maxLongEdge: 120 },
@@ -403,7 +403,7 @@ describe('processSingleFileContent image resizing', () => {
 
     expect(
       Buffer.from(result.llmContent.inlineData?.data ?? '', 'base64'),
-    ).toEqual(original);
+    ).toStrictEqual(original);
     expect(result.llmContent.inlineData?.originalData).toBeUndefined();
     expect(result.llmContent.inlineData?.transformation).toBeUndefined();
   });

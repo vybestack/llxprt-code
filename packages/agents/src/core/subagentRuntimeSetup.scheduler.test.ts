@@ -173,27 +173,35 @@ describe('createToolExecutionConfig — fail-closed empty whitelist (#2069)', ()
 
 describe('createSchedulerConfig — fail-closed empty whitelist (#2069)', () => {
   it('getAllowedTools() returns [] for explicit empty even when foreground returns defaults', () => {
-    const toolExecCtxWithEmpty = {
-      getToolRegistry: () => ({}),
-      getSessionId: () => 'sess-fc',
-      getEphemeralSettings: () => ({ 'tools.allowed': [] }),
-      getEphemeralSetting: (key: string) =>
-        key === 'tools.allowed' ? [] : undefined,
-      getExcludeTools: () => [],
-      getTelemetryLogPromptsEnabled: () => false,
-      getOrCreateScheduler: () => Promise.resolve({}),
-      disposeScheduler: () => {},
-    };
-    const foregroundWithDefaults = makeForegroundWithDefaults([
-      'read_file',
-      'write_file',
-    ]);
-    const config = createSchedulerConfig(
-      toolExecCtxWithEmpty,
-      foregroundWithDefaults,
-    );
+    const { config } =
+      observeGetAllowedToolsReturnsForExplicitEmptyEvenWhenForegroundReturnsDefaults();
     expect(config.getAllowedTools()).toStrictEqual([]);
   });
+
+  const observeGetAllowedToolsReturnsForExplicitEmptyEvenWhenForegroundReturnsDefaults =
+    () => {
+      const toolExecCtxWithEmpty = {
+        getToolRegistry: () => ({}),
+        getSessionId: () => 'sess-fc',
+        getEphemeralSettings: () => ({ 'tools.allowed': [] }),
+        getEphemeralSetting: (key: string) =>
+          key === 'tools.allowed' ? [] : undefined,
+        getExcludeTools: () => [],
+        getTelemetryLogPromptsEnabled: () => false,
+        getOrCreateScheduler: () => Promise.resolve({}),
+        disposeScheduler: () => {},
+      };
+      const foregroundWithDefaults = makeForegroundWithDefaults([
+        'read_file',
+        'write_file',
+      ]);
+      const config = createSchedulerConfig(
+        toolExecCtxWithEmpty,
+        foregroundWithDefaults,
+      );
+
+      return { config };
+    };
 
   it('getAllowedTools() falls back to foreground when ephemerals omit tools.allowed', () => {
     const toolExecCtxNoOverride = {

@@ -41,6 +41,36 @@ function clearEphemeralSettings(): void {
   mockEphemeralSettings.clear();
 }
 
+function resolveBrowserOpen(setting: boolean | undefined): boolean {
+  return setting ?? true;
+}
+
+function nextPromptResponse(responses: boolean[]): boolean {
+  return responses.shift() ?? true;
+}
+
+async function authenticateExceptBucketTwo(
+  authLog: string[],
+  _provider: string,
+  bucket: string,
+): Promise<void> {
+  if (bucket === 'bucket2') {
+    throw new Error('Auth failed for bucket2');
+  }
+  authLog.push(`Authenticated ${bucket}`);
+}
+
+async function recordUnauthenticatedBucket(
+  alreadyAuthenticated: ReadonlySet<string>,
+  recordedBuckets: string[],
+  _provider: string,
+  bucket: string,
+): Promise<void> {
+  if (!alreadyAuthenticated.has(bucket)) {
+    recordedBuckets.push(bucket);
+  }
+}
+
 type StdinSetRawMode = typeof process.stdin.setRawMode;
 type StdinWithOptionalSetRawMode = NodeJS.ReadStream & {
   setRawMode?: StdinSetRawMode;
@@ -185,8 +215,9 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
      * @then Defaults to true (auto-open)
      */
     it('should default auth-browser-open to true', () => {
-      const autoOpenSetting =
-        getEphemeralSetting<boolean>('auth-browser-open') ?? true;
+      const autoOpenSetting = resolveBrowserOpen(
+        getEphemeralSetting<boolean>('auth-browser-open'),
+      );
       expect(autoOpenSetting).toBe(true);
     });
   });
@@ -528,8 +559,9 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
     it('should auto-open browser when auth-browser-open is true', () => {
       setEphemeralSetting('auth-browser-open', true);
 
-      const shouldOpen =
-        getEphemeralSetting<boolean>('auth-browser-open') ?? true;
+      const shouldOpen = resolveBrowserOpen(
+        getEphemeralSetting<boolean>('auth-browser-open'),
+      );
       expect(shouldOpen).toBe(true);
     });
 
@@ -543,8 +575,9 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
     it('should show URL when auth-browser-open is false', () => {
       setEphemeralSetting('auth-browser-open', false);
 
-      const shouldOpen =
-        getEphemeralSetting<boolean>('auth-browser-open') ?? true;
+      const shouldOpen = resolveBrowserOpen(
+        getEphemeralSetting<boolean>('auth-browser-open'),
+      );
       expect(shouldOpen).toBe(false);
     });
 
@@ -708,17 +741,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
      */
     it('should continue to next bucket on authentication error', async () => {
       const errorAuthenticator = new MultiBucketAuthenticator(
-        async (
-          _provider: string,
-          bucket: string,
-          _index: number,
-          _total: number,
-        ) => {
-          if (bucket === 'bucket2') {
-            throw new Error('Auth failed for bucket2');
-          }
-          authLog.push(`Authenticated ${bucket}`);
-        },
+        authenticateExceptBucketTwo.bind(undefined, authLog),
         async () => true,
         async () => {},
         getEphemeralSetting,
@@ -1004,7 +1027,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         async (_provider: string, bucket: string) => {
           authenticatedBuckets.push(bucket);
         },
-        async () => promptResponses.shift() ?? true,
+        async () => nextPromptResponse(promptResponses),
         async () => {},
         getEphemeralSetting,
       );
@@ -1043,16 +1066,18 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
       const alreadyAuthenticated = new Set(['bucket2']);
 
       const partialAuthenticator = new MultiBucketAuthenticator(
-        async (_provider: string, bucket: string) => {
-          if (!alreadyAuthenticated.has(bucket)) {
-            authenticatedBuckets.push(bucket);
-          }
-        },
-        async (_provider: string, bucket: string) => {
-          // Only prompt for buckets that aren't already authenticated
-          if (!alreadyAuthenticated.has(bucket)) {
-            promptedBuckets.push(bucket);
-          }
+        recordUnauthenticatedBucket.bind(
+          undefined,
+          alreadyAuthenticated,
+          authenticatedBuckets,
+        ),
+        async (provider: string, bucket: string) => {
+          await recordUnauthenticatedBucket(
+            alreadyAuthenticated,
+            promptedBuckets,
+            provider,
+            bucket,
+          );
           return true;
         },
         async () => {},

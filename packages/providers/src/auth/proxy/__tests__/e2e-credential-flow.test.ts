@@ -161,6 +161,25 @@ class InMemoryProviderKeyStorage {
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
 
+async function refreshStoredToken(
+  tokenStore: InMemoryTokenStore,
+  provider: string,
+  bucket: string,
+): Promise<void> {
+  const current = await tokenStore.getToken(provider, bucket);
+  if (current) {
+    await tokenStore.saveToken(
+      provider,
+      {
+        ...current,
+        access_token: `renewed-${Date.now()}`,
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      },
+      bucket,
+    );
+  }
+}
+
 interface StartedServer {
   readonly server: CredentialProxyServer;
   readonly socketPath: string;
@@ -317,19 +336,7 @@ describe('E2E Credential Flow (Phase 37)', () => {
         const scheduler = new ProactiveScheduler({
           refreshFn: async (provider: string, bucket: string) => {
             refreshCalled = true;
-            // Simulate refresh by updating token
-            const current = await tokenStore.getToken(provider, bucket);
-            if (current) {
-              await tokenStore.saveToken(
-                provider,
-                {
-                  ...current,
-                  access_token: `renewed-${Date.now()}`,
-                  expiry: Math.floor(Date.now() / 1000) + 3600,
-                },
-                bucket,
-              );
-            }
+            await refreshStoredToken(tokenStore, provider, bucket);
           },
           leadTimeSec,
           maxJitterSec: 0, // No jitter for deterministic testing

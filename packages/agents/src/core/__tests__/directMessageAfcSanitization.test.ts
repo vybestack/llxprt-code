@@ -455,6 +455,11 @@ describe('DirectMessageProcessor AFC sanitization — malformed/orphan', () => {
   });
 
   it('preserves response text when AFC is malformed', async () => {
+    const { text } = await observePreservesResponseTextWhenAFCIsMalformed();
+    expect(text).toContain('visible text survives');
+  });
+
+  const observePreservesResponseTextWhenAFCIsMalformed = async () => {
     const mock = vi.fn(() =>
       makeProviderStream([
         textIContent('visible text survives'),
@@ -487,6 +492,7 @@ describe('DirectMessageProcessor AFC sanitization — malformed/orphan', () => {
       .filter((b) => b.type === 'text')
       .map((b) => b.text ?? '')
       .join('');
-    expect(text).toContain('visible text survives');
-  });
+
+    return { text };
+  };
 });

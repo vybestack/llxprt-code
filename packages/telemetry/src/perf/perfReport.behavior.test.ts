@@ -91,6 +91,10 @@ async function writeJsonl(
   );
 }
 
+function countMatches(text: string, pattern: RegExp): number {
+  return (text.match(pattern) ?? []).length;
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -805,8 +809,8 @@ describe('PerfReport (P11, AC-9, D7)', () => {
     // per-min: all four slopes present. Both per-op and per-min lines carry
     // external/array_buffers, so each appears at least twice in the slopes
     // section (once per axis).
-    const externalCount = (text.match(/external=/g) ?? []).length;
-    const arrayBuffersCount = (text.match(/array_buffers=/g) ?? []).length;
+    const externalCount = countMatches(text, /external=/g);
+    const arrayBuffersCount = countMatches(text, /array_buffers=/g);
     expect(externalCount).toBeGreaterThanOrEqual(2);
     expect(arrayBuffersCount).toBeGreaterThanOrEqual(2);
     expect(text).toContain('per-min:');

@@ -40,20 +40,6 @@ writeFileSync(
   }) + '\n',
 );
 
-afterAll(() => {
-  // The workspace is created at module scope so both fixtures share it;
-  // remove it once the file's tests are done so repeated runs do not
-  // accumulate temp directories.
-  try {
-    rmSync(WORKSPACE, { recursive: true, force: true });
-  } catch (err) {
-    process.stderr.write(
-      `task.test.ts: failed to clean up workspace: ${String(err)}
-`,
-    );
-  }
-});
-
 async function buildAgent(): Promise<Agent> {
   return createTaskAgent({}, [], 'task-facade');
 }
@@ -78,6 +64,20 @@ const SAVED_ENV: Record<string, string | undefined> = {
   ...process.env,
 };
 describe('Task over the Agent facade (#3221)', () => {
+  afterAll(() => {
+    // The workspace is created at module scope so both fixtures share it;
+    // remove it once the file's tests are done so repeated runs do not
+    // accumulate temp directories.
+    try {
+      rmSync(WORKSPACE, { recursive: true, force: true });
+    } catch (err) {
+      process.stderr.write(
+        `task.test.ts: failed to clean up workspace: ${String(err)}
+  `,
+      );
+    }
+  });
+
   afterEach(() => {
     for (const key of Object.keys(process.env)) {
       if (SAVED_ENV[key] === undefined) {

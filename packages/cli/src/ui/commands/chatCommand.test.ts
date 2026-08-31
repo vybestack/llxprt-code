@@ -27,6 +27,10 @@ function content(speaker: 'human' | 'ai', text: string): IContent {
   return { speaker, blocks: [{ type: 'text', text }] };
 }
 
+function recordingPath(recording: SessionRecordingService): string {
+  return recording.getFilePath() ?? '';
+}
+
 describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625', () => {
   let root: string;
   let chatsDir: string;
@@ -122,10 +126,7 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
       messageType: 'info',
     });
 
-    const replay = await replaySession(
-      recording.getFilePath() ?? '',
-      PROJECT_HASH,
-    );
+    const replay = await replaySession(recordingPath(recording), PROJECT_HASH);
     expect(replay).toMatchObject({
       ok: true,
       checkpoints: [
@@ -150,10 +151,7 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
       type: 'message',
       messageType: 'info',
     });
-    const replay = await replaySession(
-      recording.getFilePath() ?? '',
-      PROJECT_HASH,
-    );
+    const replay = await replaySession(recordingPath(recording), PROJECT_HASH);
     expect(replay.ok).toBe(true);
     expect(replay.sessionName).toBe('living-branch');
     expect(replay.metadata).toStrictEqual(
@@ -220,10 +218,7 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
     context.overwriteConfirmed = true;
 
     const result = await command('save').action?.(context, 'dupe');
-    const replay = await replaySession(
-      recording.getFilePath() ?? '',
-      PROJECT_HASH,
-    );
+    const replay = await replaySession(recordingPath(recording), PROJECT_HASH);
 
     expect({
       result,
@@ -307,10 +302,7 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
       ],
       clientHistory: history.slice(0, 2),
     });
-    const replay = await replaySession(
-      recording.getFilePath() ?? '',
-      PROJECT_HASH,
-    );
+    const replay = await replaySession(recordingPath(recording), PROJECT_HASH);
     expect(replay).toMatchObject({
       ok: true,
       history: [content('human', 'A'), content('ai', 'B')],

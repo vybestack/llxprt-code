@@ -6,6 +6,19 @@
 
 import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
 
+function clearUnpreservedSettings(
+  ephemeralSettings: Record<string, unknown>,
+  preserveEphemerals: readonly string[],
+): void {
+  for (const key of Object.keys(ephemeralSettings)) {
+    const shouldPreserve =
+      key === 'activeProvider' || preserveEphemerals.includes(key);
+    if (!shouldPreserve) {
+      delete ephemeralSettings[key];
+    }
+  }
+}
+
 /**
  * Test suite for Issue #974: Provider switching improperly clears context
  *
@@ -57,16 +70,9 @@ describe('Provider Switching Context Preservation (Issue #974)', () => {
     };
 
     // After the fix: DEFAULT_PRESERVE_EPHEMERALS includes 'context-limit'
-    const keysBeforeClearing = Object.keys(ephemeralSettings);
     const preserveEphemerals = ['context-limit', 'max_tokens', 'streaming'];
 
-    for (const key of keysBeforeClearing) {
-      const shouldPreserve =
-        key === 'activeProvider' || preserveEphemerals.includes(key);
-      if (!shouldPreserve) {
-        delete ephemeralSettings[key];
-      }
-    }
+    clearUnpreservedSettings(ephemeralSettings, preserveEphemerals);
 
     // After fix: context-limit should be preserved
     expect(ephemeralSettings['context-limit']).toBe(50000);
@@ -83,17 +89,10 @@ describe('Provider Switching Context Preservation (Issue #974)', () => {
       temperature: 0.7,
     };
 
-    const keysBeforeClearing = Object.keys(ephemeralSettings);
     // Fix: Include context-related settings in preserve list
     const preserveEphemerals = ['context-limit', 'max_tokens', 'streaming'];
 
-    for (const key of keysBeforeClearing) {
-      const shouldPreserve =
-        key === 'activeProvider' || preserveEphemerals.includes(key);
-      if (!shouldPreserve) {
-        delete ephemeralSettings[key];
-      }
-    }
+    clearUnpreservedSettings(ephemeralSettings, preserveEphemerals);
 
     // After fix, these should be preserved
     expect(ephemeralSettings['context-limit']).toBe(50000);

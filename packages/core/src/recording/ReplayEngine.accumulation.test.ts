@@ -9,6 +9,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { replaySession } from './ReplayEngine.js';
+import { SessionRecordingService } from './SessionRecordingService.js';
 import {
   assertReplayOk,
   PROJECT_HASH,
@@ -38,6 +39,26 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
   afterEach(async () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
+
+  /**
+   * Alternating human/ai speaker for index-based content generation.
+   */
+  function alternatingSpeaker(i: number): 'human' | 'ai' {
+    return i % 2 === 0 ? 'human' : 'ai';
+  }
+
+  /**
+   * Record N alternating-speaker messages with the given prefix.
+   */
+  function recordMessages(
+    svc: SessionRecordingService,
+    count: number,
+    prefix: string,
+  ): void {
+    for (let i = 0; i < count; i++) {
+      svc.recordContent(makeContent(`${prefix}${i}`, alternatingSpeaker(i)));
+    }
+  }
 
   // -------------------------------------------------------------------------
   // 1-2: Simple replay with content events
@@ -118,11 +139,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      */
     it('compression resets history to summary + post-compression content', async () => {
       const filePath = await createValidFile(chatsDir, (svc) => {
-        for (let i = 0; i < 5; i++) {
-          svc.recordContent(
-            makeContent(`msg ${i}`, i % 2 === 0 ? 'human' : 'ai'),
-          );
-        }
+        recordMessages(svc, 5, 'msg ');
         svc.recordCompressed(makeContent('Summary of 5 messages', 'ai'), 5);
         svc.recordContent(makeContent('post-compression 1', 'human'));
         svc.recordContent(makeContent('post-compression 2', 'ai'));
@@ -198,11 +215,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      */
     it('rewind removes last N items from accumulated history', async () => {
       const filePath = await createValidFile(chatsDir, (svc) => {
-        for (let i = 0; i < 5; i++) {
-          svc.recordContent(
-            makeContent(`msg ${i}`, i % 2 === 0 ? 'human' : 'ai'),
-          );
-        }
+        recordMessages(svc, 5, 'msg ');
         svc.recordRewind(2);
       });
 

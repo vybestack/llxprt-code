@@ -379,39 +379,78 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P04', () => {
    * @requirement REQ-HD-001.5
    */
   it('DensityResult removals and replacements accept any non-negative integers', () => {
+    const {
+      densityResultRemovalsAndReplacementsAcceptAnyNonNegativeIntegersProperty,
+      observations,
+    } =
+      observeDensityResultRemovalsAndReplacementsAcceptAnyNonNegativeIntegers();
     fc.assert(
-      fc.property(
-        fc.array(fc.nat({ max: 1000 }), { minLength: 0, maxLength: 20 }),
-        fc.nat({ max: 100 }),
-        (removals, replacementCount) => {
-          const replacements = new Map<number, IContent>();
-          for (let i = 0; i < replacementCount && i < 10; i++) {
-            replacements.set(i, {
-              speaker: 'human',
-              blocks: [{ type: 'text', text: `replacement-${i}` }],
-            });
-          }
-
-          const result: DensityResult = {
-            removals,
-            replacements,
-            metadata: {
-              readWritePairsPruned: 0,
-              fileDeduplicationsPruned: 0,
-              recencyPruned: 0,
-            },
-          };
-
-          expect(Array.isArray(result.removals)).toBe(true);
-          expect(result.replacements).toBeInstanceOf(Map);
-          for (const idx of result.removals) {
-            expect(idx).toBeGreaterThanOrEqual(0);
-          }
-        },
-      ),
+      densityResultRemovalsAndReplacementsAcceptAnyNonNegativeIntegersProperty,
       { numRuns: 100 },
     );
+    expect(
+      observations.map(({ removalsAreArray }) => removalsAreArray),
+    ).toStrictEqual(observations.map(() => true));
+    expect(
+      observations.map(({ replacementsAreMap }) => replacementsAreMap),
+    ).toStrictEqual(observations.map(() => true));
+    expect(
+      observations.flatMap(({ negativeIndices }) => negativeIndices),
+    ).toStrictEqual([]);
   });
+
+  const observeDensityResultRemovalsAndReplacementsAcceptAnyNonNegativeIntegers =
+    () => {
+      const observations: Array<{
+        removalsAreArray: boolean;
+        replacementsAreMap: boolean;
+        negativeIndices: number[];
+      }> = [];
+      const densityResultRemovalsAndReplacementsAcceptAnyNonNegativeIntegersProperty =
+        fc.property(
+          fc.array(fc.nat({ max: 1000 }), { minLength: 0, maxLength: 20 }),
+          fc.nat({ max: 100 }),
+          (removals, replacementCount) => {
+            const replacements = new Map<number, IContent>();
+            for (let i = 0; i < replacementCount && i < 10; i++) {
+              replacements.set(i, {
+                speaker: 'human',
+                blocks: [{ type: 'text', text: `replacement-${i}` }],
+              });
+            }
+
+            const result: DensityResult = {
+              removals,
+              replacements,
+              metadata: {
+                readWritePairsPruned: 0,
+                fileDeduplicationsPruned: 0,
+                recencyPruned: 0,
+              },
+            };
+            const removalsAreArray = Array.isArray(result.removals);
+            const replacementsAreMap = result.replacements instanceof Map;
+            const negativeIndices = result.removals.filter(
+              (index) => index < 0,
+            );
+            observations.push({
+              removalsAreArray,
+              replacementsAreMap,
+              negativeIndices,
+            });
+
+            return (
+              removalsAreArray &&
+              replacementsAreMap &&
+              negativeIndices.length === 0
+            );
+          },
+        );
+      return {
+        densityResultRemovalsAndReplacementsAcceptAnyNonNegativeIntegersProperty,
+        observations,
+      };
+    };
 
   /**
    * @requirement REQ-HD-001.8

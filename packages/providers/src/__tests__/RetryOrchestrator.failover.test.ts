@@ -10,6 +10,37 @@ import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IModel } from '../IModel.js';
 
+interface BucketFailoverState {
+  currentBucket: string;
+  bucketIndex: number;
+}
+
+function createBucketFailoverHandler(
+  buckets: readonly string[],
+  state: BucketFailoverState,
+  onAdvance?: (from: string, to: string) => void,
+): {
+  getBuckets: () => readonly string[];
+  getCurrentBucket: () => string;
+  tryFailover: () => Promise<boolean>;
+  isEnabled: () => boolean;
+} {
+  return {
+    getBuckets: () => buckets,
+    getCurrentBucket: () => state.currentBucket,
+    tryFailover: async () => {
+      const nextIndex = state.bucketIndex + 1;
+      if (nextIndex >= buckets.length) return false;
+      const previousBucket = state.currentBucket;
+      state.bucketIndex = nextIndex;
+      state.currentBucket = buckets[nextIndex];
+      onAdvance?.(previousBucket, state.currentBucket);
+      return true;
+    },
+    isEnabled: () => true,
+  };
+}
+
 /**
  * Test helper: Creates a fake provider that behaves according to provided scenarios
  */
@@ -139,9 +170,11 @@ describe('RetryOrchestrator', () => {
   describe('Bucket Failover', () => {
     it('should failover to next bucket on persistent 429', async () => {
       const rateLimitError = createRateLimitError();
-      let currentBucket = 'bucket1';
       const buckets = ['bucket1', 'bucket2', 'bucket3'];
-      let bucketIndex = 0;
+      const bucketState: BucketFailoverState = {
+        currentBucket: 'bucket1',
+        bucketIndex: 0,
+      };
 
       const provider = createTestProvider({
         responses: [
@@ -151,17 +184,7 @@ describe('RetryOrchestrator', () => {
         ],
       });
 
-      const failoverHandler = {
-        getBuckets: () => buckets,
-        getCurrentBucket: () => currentBucket,
-        tryFailover: async () => {
-          bucketIndex++;
-          if (bucketIndex >= buckets.length) return false;
-          currentBucket = buckets[bucketIndex];
-          return true;
-        },
-        isEnabled: () => true,
-      };
+      const failoverHandler = createBucketFailoverHandler(buckets, bucketState);
 
       const orchestrator = new RetryOrchestrator(provider, {
         maxAttempts: 5,
@@ -182,30 +205,22 @@ describe('RetryOrchestrator', () => {
       );
 
       expect(result).toHaveLength(1);
-      expect(currentBucket).toBe('bucket2'); // Should have failed over once
+      expect(bucketState.currentBucket).toBe('bucket2'); // Should have failed over once
     });
 
     it('should failover on 402 payment required', async () => {
       const paymentError = createPaymentRequiredError();
-      let currentBucket = 'bucket1';
       const buckets = ['bucket1', 'bucket2'];
-      let bucketIndex = 0;
+      const bucketState: BucketFailoverState = {
+        currentBucket: 'bucket1',
+        bucketIndex: 0,
+      };
 
       const provider = createTestProvider({
         responses: [{ error: paymentError }, 'success'],
       });
 
-      const failoverHandler = {
-        getBuckets: () => buckets,
-        getCurrentBucket: () => currentBucket,
-        tryFailover: async () => {
-          bucketIndex++;
-          if (bucketIndex >= buckets.length) return false;
-          currentBucket = buckets[bucketIndex];
-          return true;
-        },
-        isEnabled: () => true,
-      };
+      const failoverHandler = createBucketFailoverHandler(buckets, bucketState);
 
       const orchestrator = new RetryOrchestrator(provider, {
         maxAttempts: 3,
@@ -226,7 +241,7 @@ describe('RetryOrchestrator', () => {
       );
 
       expect(result).toHaveLength(1);
-      expect(currentBucket).toBe('bucket2');
+      expect(bucketState.currentBucket).toBe('bucket2');
     });
 
     it('should failover on quota exceeded errors', async () => {
@@ -234,25 +249,17 @@ describe('RetryOrchestrator', () => {
         status?: number;
       };
       quotaError.status = 429;
-      let currentBucket = 'bucket1';
       const buckets = ['bucket1', 'bucket2'];
-      let bucketIndex = 0;
+      const bucketState: BucketFailoverState = {
+        currentBucket: 'bucket1',
+        bucketIndex: 0,
+      };
 
       const provider = createTestProvider({
         responses: [{ error: quotaError }, { error: quotaError }, 'success'],
       });
 
-      const failoverHandler = {
-        getBuckets: () => buckets,
-        getCurrentBucket: () => currentBucket,
-        tryFailover: async () => {
-          bucketIndex++;
-          if (bucketIndex >= buckets.length) return false;
-          currentBucket = buckets[bucketIndex];
-          return true;
-        },
-        isEnabled: () => true,
-      };
+      const failoverHandler = createBucketFailoverHandler(buckets, bucketState);
 
       const orchestrator = new RetryOrchestrator(provider, {
         maxAttempts: 5,
@@ -277,9 +284,11 @@ describe('RetryOrchestrator', () => {
 
     it('should failover on 401/403 after one retry', async () => {
       const authError = createAuthError(401);
-      let currentBucket = 'bucket1';
       const buckets = ['bucket1', 'bucket2'];
-      let bucketIndex = 0;
+      const bucketState: BucketFailoverState = {
+        currentBucket: 'bucket1',
+        bucketIndex: 0,
+      };
 
       const provider = createTestProvider({
         responses: [
@@ -289,17 +298,7 @@ describe('RetryOrchestrator', () => {
         ],
       });
 
-      const failoverHandler = {
-        getBuckets: () => buckets,
-        getCurrentBucket: () => currentBucket,
-        tryFailover: async () => {
-          bucketIndex++;
-          if (bucketIndex >= buckets.length) return false;
-          currentBucket = buckets[bucketIndex];
-          return true;
-        },
-        isEnabled: () => true,
-      };
+      const failoverHandler = createBucketFailoverHandler(buckets, bucketState);
 
       const orchestrator = new RetryOrchestrator(provider, {
         maxAttempts: 5,
@@ -320,16 +319,18 @@ describe('RetryOrchestrator', () => {
       );
 
       expect(result).toHaveLength(1);
-      expect(currentBucket).toBe('bucket2');
+      expect(bucketState.currentBucket).toBe('bucket2');
     });
 
     // issue1123 / SB-06: the sibling "401/403" test only constructs a 401;
     // this real-403 case protects the preserved second-403 bucket-failover
     // after issue #2917 made 403 non-retryable by status.
     it('should failover on a genuine 403 after one retry', async () => {
-      let currentBucket = 'bucket1';
       const buckets = ['bucket1', 'bucket2'];
-      let bucketIndex = 0;
+      const bucketState: BucketFailoverState = {
+        currentBucket: 'bucket1',
+        bucketIndex: 0,
+      };
       const provider = createTestProvider({
         responses: [
           { error: createAuthError(403) },
@@ -337,17 +338,7 @@ describe('RetryOrchestrator', () => {
           'success',
         ],
       });
-      const failoverHandler = {
-        getBuckets: () => buckets,
-        getCurrentBucket: () => currentBucket,
-        tryFailover: async () => {
-          bucketIndex++;
-          if (bucketIndex >= buckets.length) return false;
-          currentBucket = buckets[bucketIndex];
-          return true;
-        },
-        isEnabled: () => true,
-      };
+      const failoverHandler = createBucketFailoverHandler(buckets, bucketState);
       const orchestrator = new RetryOrchestrator(provider, {
         maxAttempts: 5,
         initialDelayMs: 10,
@@ -362,13 +353,15 @@ describe('RetryOrchestrator', () => {
         orchestrator.generateChatCompletion(options),
       );
       expect(result).toHaveLength(1);
-      expect(currentBucket).toBe('bucket2');
+      expect(bucketState.currentBucket).toBe('bucket2');
     });
     it('should reset retry count after successful bucket switch', async () => {
       const rateLimitError = createRateLimitError();
-      let currentBucket = 'bucket1';
       const buckets = ['bucket1', 'bucket2', 'bucket3'];
-      let bucketIndex = 0;
+      const bucketState: BucketFailoverState = {
+        currentBucket: 'bucket1',
+        bucketIndex: 0,
+      };
 
       // First 2 attempts fail, trigger failover, next 2 fail, trigger another failover, then succeed
       const provider = createTestProvider({
@@ -381,17 +374,7 @@ describe('RetryOrchestrator', () => {
         ],
       });
 
-      const failoverHandler = {
-        getBuckets: () => buckets,
-        getCurrentBucket: () => currentBucket,
-        tryFailover: async () => {
-          bucketIndex++;
-          if (bucketIndex >= buckets.length) return false;
-          currentBucket = buckets[bucketIndex];
-          return true;
-        },
-        isEnabled: () => true,
-      };
+      const failoverHandler = createBucketFailoverHandler(buckets, bucketState);
 
       const orchestrator = new RetryOrchestrator(provider, {
         maxAttempts: 10,
@@ -412,14 +395,16 @@ describe('RetryOrchestrator', () => {
       );
 
       expect(result).toHaveLength(1);
-      expect(currentBucket).toBe('bucket3');
+      expect(bucketState.currentBucket).toBe('bucket3');
     });
 
     it('should throw when all buckets exhausted', async () => {
       const rateLimitError = createRateLimitError();
-      let currentBucket = 'bucket1';
       const buckets = ['bucket1', 'bucket2'];
-      let bucketIndex = 0;
+      const bucketState: BucketFailoverState = {
+        currentBucket: 'bucket1',
+        bucketIndex: 0,
+      };
 
       const provider = createTestProvider({
         responses: [
@@ -431,17 +416,7 @@ describe('RetryOrchestrator', () => {
         ],
       });
 
-      const failoverHandler = {
-        getBuckets: () => buckets,
-        getCurrentBucket: () => currentBucket,
-        tryFailover: async () => {
-          bucketIndex++;
-          if (bucketIndex >= buckets.length) return false;
-          currentBucket = buckets[bucketIndex];
-          return true;
-        },
-        isEnabled: () => true,
-      };
+      const failoverHandler = createBucketFailoverHandler(buckets, bucketState);
 
       const orchestrator = new RetryOrchestrator(provider, {
         maxAttempts: 10,
@@ -464,9 +439,11 @@ describe('RetryOrchestrator', () => {
 
     it('should call tokenRefreshCallback before each bucket attempt', async () => {
       const rateLimitError = createRateLimitError();
-      let currentBucket = 'bucket1';
       const buckets = ['bucket1', 'bucket2'];
-      let bucketIndex = 0;
+      const bucketState: BucketFailoverState = {
+        currentBucket: 'bucket1',
+        bucketIndex: 0,
+      };
       const refreshCalls: string[] = [];
 
       const provider = createTestProvider({
@@ -477,18 +454,13 @@ describe('RetryOrchestrator', () => {
         ],
       });
 
-      const failoverHandler = {
-        getBuckets: () => buckets,
-        getCurrentBucket: () => currentBucket,
-        tryFailover: async () => {
-          bucketIndex++;
-          if (bucketIndex >= buckets.length) return false;
-          currentBucket = buckets[bucketIndex];
-          refreshCalls.push(currentBucket);
-          return true;
+      const failoverHandler = createBucketFailoverHandler(
+        buckets,
+        bucketState,
+        (_from, to) => {
+          refreshCalls.push(to);
         },
-        isEnabled: () => true,
-      };
+      );
 
       const orchestrator = new RetryOrchestrator(provider, {
         maxAttempts: 5,
@@ -511,9 +483,11 @@ describe('RetryOrchestrator', () => {
 
     it('should call notificationCallback on bucket switch', async () => {
       const rateLimitError = createRateLimitError();
-      let currentBucket = 'bucket1';
       const buckets = ['bucket1', 'bucket2'];
-      let bucketIndex = 0;
+      const bucketState: BucketFailoverState = {
+        currentBucket: 'bucket1',
+        bucketIndex: 0,
+      };
       const notifications: Array<{ from: string; to: string }> = [];
 
       const provider = createTestProvider({
@@ -524,22 +498,13 @@ describe('RetryOrchestrator', () => {
         ],
       });
 
-      const failoverHandler = {
-        getBuckets: () => buckets,
-        getCurrentBucket: () => {
-          const prev = currentBucket;
-          return prev;
+      const failoverHandler = createBucketFailoverHandler(
+        buckets,
+        bucketState,
+        (from, to) => {
+          notifications.push({ from, to });
         },
-        tryFailover: async () => {
-          const oldBucket = currentBucket;
-          bucketIndex++;
-          if (bucketIndex >= buckets.length) return false;
-          currentBucket = buckets[bucketIndex];
-          notifications.push({ from: oldBucket, to: currentBucket });
-          return true;
-        },
-        isEnabled: () => true,
-      };
+      );
 
       const orchestrator = new RetryOrchestrator(provider, {
         maxAttempts: 5,
@@ -603,25 +568,17 @@ describe('RetryOrchestrator', () => {
 
     it('should find failover handler from options.config when runtime.config is missing', async () => {
       const paymentError = createPaymentRequiredError();
-      let currentBucket = 'bucket1';
       const buckets = ['bucket1', 'bucket2'];
-      let bucketIndex = 0;
+      const bucketState: BucketFailoverState = {
+        currentBucket: 'bucket1',
+        bucketIndex: 0,
+      };
 
       const provider = createTestProvider({
         responses: [{ error: paymentError }, 'success'],
       });
 
-      const failoverHandler = {
-        getBuckets: () => buckets,
-        getCurrentBucket: () => currentBucket,
-        tryFailover: async () => {
-          bucketIndex++;
-          if (bucketIndex >= buckets.length) return false;
-          currentBucket = buckets[bucketIndex];
-          return true;
-        },
-        isEnabled: () => true,
-      };
+      const failoverHandler = createBucketFailoverHandler(buckets, bucketState);
 
       const orchestrator = new RetryOrchestrator(provider, {
         maxAttempts: 3,
@@ -641,14 +598,16 @@ describe('RetryOrchestrator', () => {
       );
 
       expect(result).toHaveLength(1);
-      expect(currentBucket).toBe('bucket2');
+      expect(bucketState.currentBucket).toBe('bucket2');
     });
 
     it('should failover on persistent network/connection errors', async () => {
       const networkError = createNetworkError('ECONNRESET');
-      let currentBucket = 'bucket1';
       const buckets = ['bucket1', 'bucket2'];
-      let bucketIndex = 0;
+      const bucketState: BucketFailoverState = {
+        currentBucket: 'bucket1',
+        bucketIndex: 0,
+      };
 
       const provider = createTestProvider({
         responses: [
@@ -658,17 +617,7 @@ describe('RetryOrchestrator', () => {
         ],
       });
 
-      const failoverHandler = {
-        getBuckets: () => buckets,
-        getCurrentBucket: () => currentBucket,
-        tryFailover: async () => {
-          bucketIndex++;
-          if (bucketIndex >= buckets.length) return false;
-          currentBucket = buckets[bucketIndex];
-          return true;
-        },
-        isEnabled: () => true,
-      };
+      const failoverHandler = createBucketFailoverHandler(buckets, bucketState);
 
       const orchestrator = new RetryOrchestrator(provider, {
         maxAttempts: 5,
@@ -689,7 +638,7 @@ describe('RetryOrchestrator', () => {
       );
 
       expect(result).toHaveLength(1);
-      expect(currentBucket).toBe('bucket2'); // Should have failed over once
+      expect(bucketState.currentBucket).toBe('bucket2'); // Should have failed over once
     });
 
     it('should NOT failover on single network error (retries first)', async () => {

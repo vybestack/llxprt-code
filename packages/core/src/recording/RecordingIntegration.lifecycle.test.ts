@@ -29,6 +29,7 @@
  * These tests are expected to fail against the Phase 12 stub implementation.
  */
 
+import { assertDefined, blockTextOrEmpty } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -69,9 +70,10 @@ class ControlledPersistenceService extends SessionPersistenceService {
     const save = this.controlledSaves.find(
       (_candidate, candidateIndex) => candidateIndex === index,
     );
-    if (save === undefined) {
-      throw new Error(`Persistence generation ${index + 1} was not scheduled`);
-    }
+    assertDefined(
+      save,
+      `Persistence generation ${index + 1} was not scheduled`,
+    );
     return save;
   }
 
@@ -262,9 +264,9 @@ describe('RecordingIntegration lifecycle @plan:PLAN-20260211-SESSIONRECORDING.P1
       expect(
         restored?.history.map((entry) => {
           const block = entry.blocks[0];
-          return block.type === 'text' ? block.text : '';
+          return blockTextOrEmpty(block);
         }),
-      ).toEqual(['first', 'second', 'final']);
+      ).toStrictEqual(['first', 'second', 'final']);
       expect(persistence.getPendingByteCount()).toBe(0);
       await fs.rm(storage.getProjectTempDir(), {
         recursive: true,

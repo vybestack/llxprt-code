@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertInstanceOf } from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it } from 'bun:test';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { finishMediaRequest } from './request-media-resolution.js';
@@ -38,9 +39,7 @@ describe('finishMediaRequest', () => {
       error: primary,
     }).catch((reason: unknown) => reason);
 
-    if (!(error instanceof AggregateError)) {
-      throw new Error('expected an AggregateError');
-    }
+    assertInstanceOf(error, AggregateError, 'expected an AggregateError');
 
     expect(error.errors).toStrictEqual([primary, cleanup]);
   });

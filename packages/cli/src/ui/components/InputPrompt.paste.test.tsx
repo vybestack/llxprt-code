@@ -367,7 +367,7 @@ describe('InputPrompt', () => {
 
         await act(async () => rendered.stdin.write('\r'));
 
-        await waitFor(() => expect(submittedValues).toEqual([expected]));
+        await waitFor(() => expect(submittedValues).toStrictEqual([expected]));
         rendered.unmount();
       },
     );

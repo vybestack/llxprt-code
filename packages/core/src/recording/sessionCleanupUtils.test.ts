@@ -48,6 +48,38 @@ import { SessionLockManager } from './SessionLockManager.js';
 const DEAD_PID = 999999999;
 
 /**
+ * Expected deletion disposition for a lock file holding a live (in-process)
+ * or dead PID.
+ */
+function expectedDispositionForPid(
+  useAlivePid: boolean,
+): 'skip' | 'stale-lock-only' {
+  return useAlivePid ? 'skip' : 'stale-lock-only';
+}
+
+/**
+ * Live PIDs refer to the current process; anything else is a dead PID.
+ */
+function pidForLiveness(useAlivePid: boolean): number {
+  return useAlivePid ? process.pid : DEAD_PID;
+}
+
+/**
+ * Write the first count entries of the given non-session file names into
+ * localChats; nothing is written when count exceeds the available names.
+ */
+function writeNonSessionFiles(
+  localChats: string,
+  names: string[],
+  count: number,
+): void {
+  const limit = Math.min(names.length, count);
+  for (let i = 0; i < limit; i++) {
+    fs.writeFileSync(path.join(localChats, names[i]), 'content');
+  }
+}
+
+/**
  * Write a valid .jsonl session file with a session_start event header.
  * Returns the absolute path to the created file.
  */
@@ -638,13 +670,13 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
           try {
             const id = `pid-test-${Date.now()}`;
             const sessionPath = writeSessionFile(localChats, id);
-            const pid = useAlivePid ? process.pid : DEAD_PID;
+            const pid = pidForLiveness(useAlivePid);
             writeLockFile(sessionPath, pid);
             const entry = makeEntry(sessionPath, id);
 
             const result = await shouldDeleteSession(entry);
 
-            const expected = useAlivePid ? 'skip' : 'stale-lock-only';
+            const expected = expectedDispositionForPid(useAlivePid);
             expect(result).toBe(expected);
           } finally {
             fs.rmSync(localTemp, { recursive: true, force: true });
@@ -680,12 +712,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
               'temp.lock',
               'index.html',
             ];
-            for (let i = 0; i < count && i < nonSessionNames.length; i++) {
-              fs.writeFileSync(
-                path.join(localChats, nonSessionNames[i]),
-                'content',
-              );
-            }
+            writeNonSessionFiles(localChats, nonSessionNames, count);
 
             const entries = await getAllJsonlSessionFiles(localChats);
 

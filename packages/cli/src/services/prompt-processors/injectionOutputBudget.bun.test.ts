@@ -161,6 +161,16 @@ describe('StreamingInjectionBuilder - bounded retained state (issue #3200 findin
     expect(result.match(/injection output truncated/g)).toHaveLength(1);
   });
 
+  function higherRetainedOutputBytes(
+    peakRetainedBytes: number,
+    retainedOutputBytes: number,
+  ): number {
+    if (retainedOutputBytes > peakRetainedBytes) {
+      return retainedOutputBytes;
+    }
+    return peakRetainedBytes;
+  }
+
   it('never retains all command outputs simultaneously (peak retained is bounded)', () => {
     // Feed many large outputs one at a time; after each append the retained
     // state must remain bounded by the budget, proving the full outputs are
@@ -170,9 +180,10 @@ describe('StreamingInjectionBuilder - bounded retained state (issue #3200 findin
     let peakRetained = 0;
     for (let i = 0; i < 30; i++) {
       builder.appendOutput('Q'.repeat(8000), `[${i}]`);
-      if (builder.retainedOutputBytes > peakRetained) {
-        peakRetained = builder.retainedOutputBytes;
-      }
+      peakRetained = higherRetainedOutputBytes(
+        peakRetained,
+        builder.retainedOutputBytes,
+      );
     }
     expect(peakRetained).toBeLessThanOrEqual(budget.bytes);
   });

@@ -61,6 +61,23 @@ function setupExec(onExec: (cmd: string, cb: ExecCb) => void) {
   });
 }
 
+/**
+ * Table-driven fake git. Tests declare what each command returns instead of
+ * writing a dispatching if/else inside the test body: the branching belongs to
+ * the fake, not to the test (#3129). Keys match as command prefixes, longest
+ * first, so a test can override one command without restating the rest.
+ */
+function gitResponses(
+  responses: Readonly<Record<string, string>>,
+  fallback = '',
+): (cmd: string, cb: ExecCb) => void {
+  const keys = Object.keys(responses).sort((a, b) => b.length - a.length);
+  return (cmd, cb) => {
+    const match = keys.find((key) => cmd.startsWith(key));
+    cb(null, match === undefined ? fallback : responses[match], '');
+  };
+}
+
 function watchCapture() {
   const listeners = new Map<string, WatchFileCallback>();
   mockWatchFile.mockImplementation(
@@ -94,12 +111,15 @@ describe('useGitBranchInfo', () => {
   });
 
   it('reports a clean work tree as { branchName, isDirty: false }', async () => {
-    setupExec((cmd, cb) => {
-      if (cmd === 'git status --porcelain') cb(null, '', '');
-      else if (cmd === 'git rev-parse --abbrev-ref HEAD')
-        cb(null, 'main\n', '');
-      else cb(null, 'abc1234\n', '');
-    });
+    setupExec(
+      gitResponses(
+        {
+          'git status --porcelain': '',
+          'git rev-parse --abbrev-ref HEAD': 'main\n',
+        },
+        'abc1234\n',
+      ),
+    );
 
     const { result, rerender } = renderHook(() => useGitBranchInfo(CWD));
 
@@ -113,14 +133,16 @@ describe('useGitBranchInfo', () => {
       expect.anything(),
       expect.any(Function),
     );
-    expect(result.current).toEqual({ branchName: 'main', isDirty: false });
+    expect(result.current).toStrictEqual({
+      branchName: 'main',
+      isDirty: false,
+    });
   });
 
   it('reports a modified work tree as dirty', async () => {
-    setupExec((cmd, cb) => {
-      if (cmd === 'git status --porcelain') cb(null, ' M src/file.ts\n', '');
-      else cb(null, 'main\n', '');
-    });
+    setupExec(
+      gitResponses({ 'git status --porcelain': ' M src/file.ts\n' }, 'main\n'),
+    );
 
     const { result, rerender } = renderHook(() => useGitBranchInfo(CWD));
 
@@ -129,14 +151,11 @@ describe('useGitBranchInfo', () => {
       rerender();
     });
 
-    expect(result.current).toEqual({ branchName: 'main', isDirty: true });
+    expect(result.current).toStrictEqual({ branchName: 'main', isDirty: true });
   });
 
   it('runs every git command with a bounded buffer and timeout', async () => {
-    setupExec((cmd, cb) => {
-      if (cmd === 'git status --porcelain') cb(null, '', '');
-      else cb(null, 'main', '');
-    });
+    setupExec(gitResponses({ 'git status --porcelain': '' }, 'main'));
 
     const { result, rerender } = renderHook(() => useGitBranchInfo(CWD));
 
@@ -145,7 +164,10 @@ describe('useGitBranchInfo', () => {
       rerender();
     });
 
-    expect(result.current).toEqual({ branchName: 'main', isDirty: false });
+    expect(result.current).toStrictEqual({
+      branchName: 'main',
+      isDirty: false,
+    });
     const statusCall = mockExec.mock.calls.find(
       (call: unknown[]) => call[0] === 'git status --porcelain',
     );
@@ -169,16 +191,22 @@ describe('useGitBranchInfo', () => {
       rerender();
     });
 
-    expect(result.current).toEqual({ branchName: undefined, isDirty: false });
+    expect(result.current).toStrictEqual({
+      branchName: undefined,
+      isDirty: false,
+    });
   });
 
   it('reports a clean detached HEAD as a short hash without a star', async () => {
-    setupExec((cmd, cb) => {
-      if (cmd === 'git status --porcelain') cb(null, '', '');
-      else if (cmd === 'git rev-parse --abbrev-ref HEAD')
-        cb(null, 'HEAD\n', '');
-      else cb(null, 'a1b2c3d\n', '');
-    });
+    setupExec(
+      gitResponses(
+        {
+          'git status --porcelain': '',
+          'git rev-parse --abbrev-ref HEAD': 'HEAD\n',
+        },
+        'a1b2c3d\n',
+      ),
+    );
 
     const { result, rerender } = renderHook(() => useGitBranchInfo(CWD));
 
@@ -187,17 +215,23 @@ describe('useGitBranchInfo', () => {
       rerender();
     });
 
-    expect(result.current).toEqual({ branchName: 'a1b2c3d', isDirty: false });
+    expect(result.current).toStrictEqual({
+      branchName: 'a1b2c3d',
+      isDirty: false,
+    });
   });
 
   it('registers a watcher on both .git/logs/HEAD and .git/index', async () => {
     const capture = watchCapture();
-    setupExec((cmd, cb) => {
-      if (cmd === 'git status --porcelain') cb(null, '', '');
-      else if (cmd === 'git rev-parse --abbrev-ref HEAD')
-        cb(null, 'main\n', '');
-      else cb(null, 'abc1234\n', '');
-    });
+    setupExec(
+      gitResponses(
+        {
+          'git status --porcelain': '',
+          'git rev-parse --abbrev-ref HEAD': 'main\n',
+        },
+        'abc1234\n',
+      ),
+    );
 
     const { result, rerender } = renderHook(() => useGitBranchInfo(CWD));
 
@@ -252,11 +286,15 @@ describe('useGitBranchInfo', () => {
 
   it('refetches when a second watcher event fires after the debounce', async () => {
     const capture = watchCapture();
-    setupExec((cmd, cb) => {
-      if (cmd === 'git rev-parse --abbrev-ref HEAD') cb(null, 'main\n', '');
-      else if (cmd === 'git status --porcelain') cb(null, ' M f\n', '');
-      else cb(null, 'x\n', '');
-    });
+    setupExec(
+      gitResponses(
+        {
+          'git rev-parse --abbrev-ref HEAD': 'main\n',
+          'git status --porcelain': ' M f\n',
+        },
+        'x\n',
+      ),
+    );
 
     const { result, rerender } = renderHook(() => useGitBranchInfo(CWD));
 
@@ -464,7 +502,7 @@ describe('useGitBranchInfo', () => {
       statusCbs[1](null, ' M f', '');
     });
 
-    expect(result.current).toEqual({ branchName: 'main', isDirty: true });
+    expect(result.current).toStrictEqual({ branchName: 'main', isDirty: true });
   });
 
   it('keeps the branch when only the status command fails', async () => {
@@ -482,7 +520,10 @@ describe('useGitBranchInfo', () => {
       rerender();
     });
 
-    expect(result.current).toEqual({ branchName: 'main', isDirty: false });
+    expect(result.current).toStrictEqual({
+      branchName: 'main',
+      isDirty: false,
+    });
   });
 
   it('shows no branch when only the branch command fails', async () => {
@@ -604,7 +645,10 @@ describe('useGitBranchInfo', () => {
       rerender();
     });
 
-    expect(result.current).toEqual({ branchName: 'a1b2c3d', isDirty: false });
+    expect(result.current).toStrictEqual({
+      branchName: 'a1b2c3d',
+      isDirty: false,
+    });
   });
 
   it('ignores a stale fetch completion so it cannot clear a newer fetch', async () => {
@@ -657,6 +701,6 @@ describe('useGitBranchInfo', () => {
       await Promise.resolve();
     });
 
-    expect(result.current).toEqual({ branchName: 'new', isDirty: true });
+    expect(result.current).toStrictEqual({ branchName: 'new', isDirty: true });
   });
 });

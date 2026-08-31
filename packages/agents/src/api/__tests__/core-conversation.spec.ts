@@ -79,41 +79,50 @@ describe('Core conversation @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-001
   });
 
   it('T9 abort mid-stream yields exactly one done{aborted} and no events after it @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-003', async () => {
-    const { agent, cleanup } = await buildAgent('thinking-text.jsonl');
-    try {
-      const controller = new AbortController();
-      const collected: AgentEvent[] = [];
-      // Deterministic mid-stream abort: on the FIRST non-'done' event, abort
-      // exactly once, then keep collecting. This guarantees the abort lands
-      // mid-stream so the terminal done.reason is stably 'aborted' (no timer
-      // race).
-      let aborted = false;
-      for await (const event of agent.stream('go', {
-        signal: controller.signal,
-      })) {
-        collected.push(event);
-        if (!aborted && event.type !== 'done') {
-          aborted = true;
-          controller.abort();
-        }
-      }
-
-      const events = collected;
-      const done = events.filter(isDoneEvent);
-
-      // exactly one done
-      expect(done).toHaveLength(1);
-      expect(done[0].reason).toBe('aborted');
-
-      // done is the LAST event — nothing after it
-      const types = typesOf(events);
-      expect(types[types.length - 1]).toBe('done');
-      const doneIdx = types.lastIndexOf('done');
-      expect(doneIdx).toBe(types.length - 1);
-    } finally {
-      await cleanup();
-    }
+    const { done, types, doneIdx } =
+      await observeT9AbortMidStreamYieldsExactlyOneDoneAbortedAndNoEvents();
+    expect(done).toHaveLength(1);
+    expect(done[0].reason).toBe('aborted');
+    expect(types[types.length - 1]).toBe('done');
+    expect(doneIdx).toBe(types.length - 1);
   });
+
+  const observeT9AbortMidStreamYieldsExactlyOneDoneAbortedAndNoEvents =
+    async () => {
+      const { agent, cleanup } = await buildAgent('thinking-text.jsonl');
+      try {
+        const controller = new AbortController();
+        const collected: AgentEvent[] = [];
+        // Deterministic mid-stream abort: on the FIRST non-'done' event, abort
+        // exactly once, then keep collecting. This guarantees the abort lands
+        // mid-stream so the terminal done.reason is stably 'aborted' (no timer
+        // race).
+        let aborted = false;
+        for await (const event of agent.stream('go', {
+          signal: controller.signal,
+        })) {
+          collected.push(event);
+          if (!aborted && event.type !== 'done') {
+            aborted = true;
+            controller.abort();
+          }
+        }
+
+        const events = collected;
+        const done = events.filter(isDoneEvent);
+
+        // exactly one done
+
+        // done is the LAST event — nothing after it
+        const types = typesOf(events);
+
+        const doneIdx = types.lastIndexOf('done');
+
+        return { done, types, doneIdx };
+      } finally {
+        await cleanup();
+      }
+    };
 
   it('T10 generate() returns a string without mutating history or running a tool loop @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-012', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');

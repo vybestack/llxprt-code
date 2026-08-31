@@ -173,9 +173,8 @@ describe('process run capture', () => {
     });
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'captures a timed-out run that exits gracefully after SIGTERM',
-    async () => {
+  describe.skipIf(process.platform === 'win32')(() => {
+    it('captures a timed-out run that exits gracefully after SIGTERM', async () => {
       let capture: RunCapture | undefined;
       const run = spawnRunWithTimeout(
         bunContext(
@@ -206,13 +205,11 @@ describe('process run capture', () => {
         exitCode: 0,
         timedOut: true,
       });
-    },
-    15_000,
-  );
+    }, 15_000);
+  });
 
-  it.skipIf(process.platform === 'win32')(
-    'captures shutdown output and force-kills a run that ignores SIGTERM',
-    async () => {
+  describe.skipIf(process.platform === 'win32')(() => {
+    it('captures shutdown output and force-kills a run that ignores SIGTERM', async () => {
       let capture: RunCapture | undefined;
       const run = spawnRunWithTimeout(
         bunContext(
@@ -242,9 +239,8 @@ describe('process run capture', () => {
         exitCode: null,
         timedOut: true,
       });
-    },
-    15_000,
-  );
+    }, 15_000);
+  });
 
   it('preserves process and capture failures together', async () => {
     const processErrorPattern = /code 3/;
@@ -452,9 +448,8 @@ describe('process-run quota guard integration', () => {
     expect(getQuotaGuardTrip()).toBeNull();
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'reports the signal name (not "code null") when the child is signal-killed',
-    async () => {
+  describe.skipIf(process.platform === 'win32')(() => {
+    it('reports the signal name (not "code null") when the child is signal-killed', async () => {
       const dir = activateGuard();
       const ctx: RunContext = {
         command: process.execPath,
@@ -475,8 +470,8 @@ describe('process-run quota guard integration', () => {
       expect(error.message).toContain('terminated by signal SIGTERM');
       expect(error.message).not.toContain('code null');
       expect(getQuotaGuardTrip()).toBeNull();
-    },
-  );
+    });
+  });
 
   it('does not trip the guard when the run uses fake responses', async () => {
     const dir = activateGuard();

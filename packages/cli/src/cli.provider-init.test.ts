@@ -220,7 +220,7 @@ describe('cli main provider initialization', () => {
     }
   });
 
-  it('initializes content generator config before interactive provider usage', async () => {
+  async function verifyInitializesContentGeneratorConfigBeforeInteractiveProviderUsage() {
     const freshSessionId = randomUUID();
     const providerManager = {
       getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
@@ -308,12 +308,23 @@ describe('cli main provider initialization', () => {
       // Ignore exits or other throws.
     }
 
-    expect(preflightAgentActivationMock).toHaveBeenCalledTimes(1);
-    exitSpy.mockRestore();
-    consoleErrorSpy.mockRestore();
+    return {
+      preflightAgentActivation: preflightAgentActivationMock,
+      exitSpy,
+      consoleErrorSpy,
+    };
+  }
+
+  it('initializes content generator config before interactive provider usage', async () => {
+    const behaviorResult =
+      await verifyInitializesContentGeneratorConfigBeforeInteractiveProviderUsage();
+
+    expect(behaviorResult.preflightAgentActivation).toHaveBeenCalledTimes(1);
+    behaviorResult.exitSpy.mockRestore();
+    behaviorResult.consoleErrorSpy.mockRestore();
   });
 
-  it('falls back to a fresh session and does not adopt corrupted session ID when restoreHistory fails during --continue flow (issue #1873)', async () => {
+  async function observeFailedContinueRestoreFallbackIssue1873() {
     const freshSessionId = randomUUID();
     const providerManager = {
       getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
@@ -421,36 +432,55 @@ describe('cli main provider initialization', () => {
     // Issue #1873: main() must NOT throw — it should fall back to a fresh
     // session. If the try/catch didn't handle the restore error, main()
     // would throw 'restore failed on purpose'.
-    expect(await cli.main()).toBeUndefined();
+    const mainResult = await cli.main();
 
+    return {
+      mainResult,
+      resumeSessionMock,
+      restoreHistory,
+      adoptSessionId,
+      recordingDisposeSpy,
+      lockReleaseSpy,
+      resetChat,
+      exitSpy,
+      consoleWarnSpy,
+      consoleErrorSpy,
+    };
+  }
+
+  it('falls back to a fresh session and does not adopt corrupted session ID when restoreHistory fails during --continue flow (issue #1873)', async () => {
+    const behaviorResult =
+      await observeFailedContinueRestoreFallbackIssue1873();
+
+    expect(behaviorResult.mainResult).toBeUndefined();
     // resumeSession was called to load the session
-    expect(resumeSessionMock).toHaveBeenCalledTimes(1);
+    expect(behaviorResult.resumeSessionMock).toHaveBeenCalledTimes(1);
     // restoreHistory was attempted with the resumed content
-    expect(restoreHistory).toHaveBeenCalledTimes(1);
+    expect(behaviorResult.restoreHistory).toHaveBeenCalledTimes(1);
 
     // Issue #1873 ACC-1: The corrupted session's ID must NOT be adopted.
     // Previously adoptSessionId was called BEFORE restoreHistory, leaving
     // the agent in a half-restored state (adopted session ID but history
     // never restored) that hangs when the user sends a prompt.
-    expect(adoptSessionId).not.toHaveBeenCalled();
+    expect(behaviorResult.adoptSessionId).not.toHaveBeenCalled();
 
     // Issue #1873 ACC-3: Resources from the failed resume must be released
     // so the corrupted session file is unlocked and the recording closed.
-    expect(recordingDisposeSpy).toHaveBeenCalled();
-    expect(lockReleaseSpy).toHaveBeenCalled();
+    expect(behaviorResult.recordingDisposeSpy).toHaveBeenCalled();
+    expect(behaviorResult.lockReleaseSpy).toHaveBeenCalled();
 
     // Issue #1873: restoreHistory is not atomic — it may partially populate
     // the AgentClient before throwing. resetChat ensures no half-restored
     // items persist into the fresh session.
-    expect(resetChat).toHaveBeenCalledTimes(1);
+    expect(behaviorResult.resetChat).toHaveBeenCalledTimes(1);
 
-    resumeSessionMock.mockReset();
-    exitSpy.mockRestore();
-    consoleWarnSpy.mockRestore();
-    consoleErrorSpy.mockRestore();
+    behaviorResult.resumeSessionMock.mockReset();
+    behaviorResult.exitSpy.mockRestore();
+    behaviorResult.consoleWarnSpy.mockRestore();
+    behaviorResult.consoleErrorSpy.mockRestore();
   });
 
-  it('adopts the resumed session ID and does not release resources when restoreHistory succeeds during --continue flow (issue #1873)', async () => {
+  async function observeSuccessfulContinueRestoreIssue1873() {
     const freshSessionId = randomUUID();
     const providerManager = {
       getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
@@ -553,25 +583,45 @@ describe('cli main provider initialization', () => {
       .spyOn(console, 'error')
       .mockImplementation(() => {});
 
-    expect(await cli.main()).toBeUndefined();
+    const mainResult = await cli.main();
 
-    expect(resumeSessionMock).toHaveBeenCalledTimes(1);
-    expect(restoreHistory).toHaveBeenCalledTimes(1);
+    return {
+      mainResult,
+      resumeSessionMock,
+      restoreHistory,
+      adoptSessionId,
+      resetChat,
+      recordingDisposeSpy,
+      lockReleaseSpy,
+      exitSpy,
+      consoleWarnSpy,
+      consoleErrorSpy,
+    };
+  }
+
+  it('adopts the resumed session ID and does not release resources when restoreHistory succeeds during --continue flow (issue #1873)', async () => {
+    const behaviorResult = await observeSuccessfulContinueRestoreIssue1873();
+
+    expect(behaviorResult.mainResult).toBeUndefined();
+    expect(behaviorResult.resumeSessionMock).toHaveBeenCalledTimes(1);
+    expect(behaviorResult.restoreHistory).toHaveBeenCalledTimes(1);
 
     // On success, the resumed session ID IS adopted (correct behavior).
-    expect(adoptSessionId).toHaveBeenCalledWith('resumed-session');
+    expect(behaviorResult.adoptSessionId).toHaveBeenCalledWith(
+      'resumed-session',
+    );
 
     // On success, resetChat is NOT called — the restored history is kept.
-    expect(resetChat).not.toHaveBeenCalled();
+    expect(behaviorResult.resetChat).not.toHaveBeenCalled();
 
     // On success, the resumed recording and lock are NOT disposed during
     // startup — they are held for the session lifecycle.
-    expect(recordingDisposeSpy).not.toHaveBeenCalled();
-    expect(lockReleaseSpy).not.toHaveBeenCalled();
+    expect(behaviorResult.recordingDisposeSpy).not.toHaveBeenCalled();
+    expect(behaviorResult.lockReleaseSpy).not.toHaveBeenCalled();
 
-    resumeSessionMock.mockReset();
-    exitSpy.mockRestore();
-    consoleWarnSpy.mockRestore();
-    consoleErrorSpy.mockRestore();
+    behaviorResult.resumeSessionMock.mockReset();
+    behaviorResult.exitSpy.mockRestore();
+    behaviorResult.consoleWarnSpy.mockRestore();
+    behaviorResult.consoleErrorSpy.mockRestore();
   });
 });

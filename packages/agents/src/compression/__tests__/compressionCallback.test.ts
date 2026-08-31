@@ -118,24 +118,8 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
   });
 
   it('clears compression callback when provider setter rejects attachment', async () => {
-    const runtimeContext = buildRuntimeContext(historyService, {
-      contextLimit: 131134,
-      compressionThreshold: 0.85,
-    });
-
-    historyService.add(makeUserMessage('test'));
-    const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
-    const setCompressionCallback = vi.fn((cb: CompressionCallback | null) => {
-      if (cb !== null) {
-        throw new Error('attach failed');
-      }
-    });
-    const providerWithThrowingSetter = {
-      name: 'load-balancer',
-      generateChatCompletion: vi.fn(),
-      setCompressionCallback,
-    };
-
+    const { chat, providerWithThrowingSetter, setCompressionCallback } =
+      await observeClearsCompressionCallbackWhenProviderSetterRejectsAttachment();
     await expect(
       chat['compressionHandler'].enforceProviderContents(
         {
@@ -146,13 +130,40 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
         providerWithThrowingSetter as unknown as IProvider,
       ),
     ).rejects.toThrow('attach failed');
-
     expect(setCompressionCallback).toHaveBeenNthCalledWith(
       1,
       expect.any(Function),
     );
     expect(setCompressionCallback).toHaveBeenNthCalledWith(2, null);
   });
+
+  const observeClearsCompressionCallbackWhenProviderSetterRejectsAttachment =
+    async () => {
+      const runtimeContext = buildRuntimeContext(historyService, {
+        contextLimit: 131134,
+        compressionThreshold: 0.85,
+      });
+
+      historyService.add(makeUserMessage('test'));
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
+      const setCompressionCallback = vi.fn((cb: CompressionCallback | null) => {
+        if (cb !== null) {
+          throw new Error('attach failed');
+        }
+      });
+      const providerWithThrowingSetter = {
+        name: 'load-balancer',
+        generateChatCompletion: vi.fn(),
+        setCompressionCallback,
+      };
+
+      return { chat, providerWithThrowingSetter, setCompressionCallback };
+    };
 
   it('does not throw when provider lacks setCompressionCallback method', async () => {
     const runtimeContext = buildRuntimeContext(historyService, {
@@ -206,124 +217,161 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
   });
 
   it('attached callback runs compression machinery and returns history contents', async () => {
-    const runtimeContext = buildRuntimeContext(historyService, {
-      contextLimit: 200000,
-      compressionThreshold: 0.1,
-      compressionStrategy: 'top-down-truncation',
-    });
-
-    for (let i = 0; i < 20; i++) {
-      historyService.add(makeUserMessage(`Message ${i} `.repeat(50)));
-    }
-
-    const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
-
-    let capturedCallback: CompressionCallback | null = null;
-    const providerWithCallback = {
-      name: 'load-balancer',
-      generateChatCompletion: vi.fn(),
-      setCompressionCallback: vi.fn((cb: CompressionCallback | null) => {
-        if (cb !== null) {
-          capturedCallback = cb;
-        }
-      }),
-    };
-
-    await chat['compressionHandler'].enforceProviderContents(
-      {
-        contents: historyService.getCuratedForProvider(),
-        pendingContents: [],
-      },
-      'test-prompt',
-      providerWithCallback as unknown as IProvider,
-    );
-
-    const callback = expectCapturedCallback(capturedCallback);
-    const currentContents = historyService.getCuratedForProvider();
-    const result = await callback(currentContents);
-
+    const {
+      result,
+      currentContents,
+      emptyResult,
+      attachedCallbackRunsCompressionMachineryAndReturnsHistoryContentsObservation1,
+    } =
+      await observeAttachedCallbackRunsCompressionMachineryAndReturnsHistoryContents();
     expect(Array.isArray(result)).toBe(true);
     expect(result.length).toBeLessThanOrEqual(currentContents.length);
     expect(
-      result.every(
-        (content) =>
-          typeof content.speaker === 'string' && Array.isArray(content.blocks),
-      ),
+      attachedCallbackRunsCompressionMachineryAndReturnsHistoryContentsObservation1,
     ).toBe(true);
-
-    const emptyResult = await callback([]);
     expect(emptyResult).toStrictEqual([]);
   });
 
-  it('preserves pending request contents when callback recomposes compressed history', async () => {
-    const runtimeContext = buildRuntimeContext(historyService, {
-      contextLimit: 200000,
-      compressionThreshold: 0.1,
-      compressionStrategy: 'top-down-truncation',
-    });
+  const observeAttachedCallbackRunsCompressionMachineryAndReturnsHistoryContents =
+    async () => {
+      const runtimeContext = buildRuntimeContext(historyService, {
+        contextLimit: 200000,
+        compressionThreshold: 0.1,
+        compressionStrategy: 'top-down-truncation',
+      });
 
-    historyService.add(makeUserMessage('old history '.repeat(50)));
-    historyService.add({
-      speaker: 'ai',
-      blocks: [
-        {
-          type: 'tool_call',
-          id: 'call-1',
-          name: 'lookup',
-          parameters: { query: 'history' },
-        },
-        { type: 'text', text: 'old response text after call' },
-      ],
-    });
-    historyService.add({
-      speaker: 'tool',
-      blocks: [
-        {
-          type: 'tool_response',
-          callId: 'call-1',
-          toolName: 'lookup',
-          result: { value: 'history-result' },
-        },
-      ],
-    });
-    const pending = makeUserMessage('latest user request after tool result');
-    const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
-    // This test exercises the callback recompose path after successful
-    // compression, not compression semantics, so mock COMPRESSED.
-    vi.spyOn(
-      chat['compressionHandler'],
-      'performCompression',
-    ).mockResolvedValue(PerformCompressionResult.COMPRESSED);
+      for (let i = 0; i < 20; i++) {
+        historyService.add(makeUserMessage(`Message ${i} `.repeat(50)));
+      }
 
-    let capturedCallback: CompressionCallback | null = null;
-    const providerWithCallback = {
-      name: 'load-balancer',
-      generateChatCompletion: vi.fn(),
-      setCompressionCallback: vi.fn((cb: CompressionCallback | null) => {
-        if (cb !== null) {
-          capturedCallback = cb;
-        }
-      }),
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
+
+      let capturedCallback: CompressionCallback | null = null;
+      const providerWithCallback = {
+        name: 'load-balancer',
+        generateChatCompletion: vi.fn(),
+        setCompressionCallback: vi.fn((cb: CompressionCallback | null) => {
+          if (cb !== null) {
+            capturedCallback = cb;
+          }
+        }),
+      };
+
+      await chat['compressionHandler'].enforceProviderContents(
+        {
+          contents: historyService.getCuratedForProvider(),
+          pendingContents: [],
+        },
+        'test-prompt',
+        providerWithCallback as unknown as IProvider,
+      );
+
+      const callback = expectCapturedCallback(capturedCallback);
+      const currentContents = historyService.getCuratedForProvider();
+      const result = await callback(currentContents);
+
+      const emptyResult = await callback([]);
+
+      const attachedCallbackRunsCompressionMachineryAndReturnsHistoryContentsObservation1 =
+        result.every(
+          (content) =>
+            typeof content.speaker === 'string' &&
+            Array.isArray(content.blocks),
+        );
+      return {
+        result,
+        currentContents,
+        emptyResult,
+        attachedCallbackRunsCompressionMachineryAndReturnsHistoryContentsObservation1,
+      };
     };
 
-    await chat['compressionHandler'].enforceProviderContents(
-      {
-        contents: historyService.getCuratedForProvider([pending]),
-        pendingContents: [pending],
-      },
-      'test-prompt',
-      providerWithCallback as unknown as IProvider,
-    );
-
-    const callback = expectCapturedCallback(capturedCallback);
-    const providerReadyContents = historyService.getCuratedForProvider([
-      pending,
-    ]);
-    const result = await callback(providerReadyContents);
-
+  it('preserves pending request contents when callback recomposes compressed history', async () => {
+    const { result, pending } =
+      await observePreservesPendingRequestContentsWhenCallbackRecomposesCompressedHistory();
     expect(result).toContainEqual(pending);
     expect(result.at(-1)).toStrictEqual(pending);
   });
+
+  const observePreservesPendingRequestContentsWhenCallbackRecomposesCompressedHistory =
+    async () => {
+      const runtimeContext = buildRuntimeContext(historyService, {
+        contextLimit: 200000,
+        compressionThreshold: 0.1,
+        compressionStrategy: 'top-down-truncation',
+      });
+
+      historyService.add(makeUserMessage('old history '.repeat(50)));
+      historyService.add({
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'call-1',
+            name: 'lookup',
+            parameters: { query: 'history' },
+          },
+          { type: 'text', text: 'old response text after call' },
+        ],
+      });
+      historyService.add({
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'call-1',
+            toolName: 'lookup',
+            result: { value: 'history-result' },
+          },
+        ],
+      });
+      const pending = makeUserMessage('latest user request after tool result');
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
+      // This test exercises the callback recompose path after successful
+      // compression, not compression semantics, so mock COMPRESSED.
+      vi.spyOn(
+        chat['compressionHandler'],
+        'performCompression',
+      ).mockResolvedValue(PerformCompressionResult.COMPRESSED);
+
+      let capturedCallback: CompressionCallback | null = null;
+      const providerWithCallback = {
+        name: 'load-balancer',
+        generateChatCompletion: vi.fn(),
+        setCompressionCallback: vi.fn((cb: CompressionCallback | null) => {
+          if (cb !== null) {
+            capturedCallback = cb;
+          }
+        }),
+      };
+
+      await chat['compressionHandler'].enforceProviderContents(
+        {
+          contents: historyService.getCuratedForProvider([pending]),
+          pendingContents: [pending],
+        },
+        'test-prompt',
+        providerWithCallback as unknown as IProvider,
+      );
+
+      const callback = expectCapturedCallback(capturedCallback);
+      const providerReadyContents = historyService.getCuratedForProvider([
+        pending,
+      ]);
+      const result = await callback(providerReadyContents);
+
+      return { result, pending };
+    };
 
   it('compresses provider payloads that remain above the compression threshold after density optimization', async () => {
     const runtimeContext = buildRuntimeContext(historyService, {
@@ -354,74 +402,87 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
   });
 
   it('preserves a pending matching tool response without duplicating history', async () => {
-    const runtimeContext = buildRuntimeContext(historyService, {
-      contextLimit: 200000,
-      compressionThreshold: 0.1,
-      compressionStrategy: 'top-down-truncation',
-    });
-
-    historyService.add(makeUserMessage('old history '.repeat(50)));
-    historyService.add({
-      speaker: 'ai',
-      blocks: [
-        {
-          type: 'tool_call',
-          id: 'pending-call',
-          name: 'lookup',
-          parameters: { query: 'current' },
-        },
-      ],
-    });
-
-    const pendingToolResult: IContent = {
-      speaker: 'tool',
-      blocks: [
-        {
-          type: 'tool_response',
-          callId: 'pending-call',
-          toolName: 'lookup',
-          result: { value: 'large tool response '.repeat(50) },
-        },
-      ],
-    };
-    const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
-    // This test exercises the callback recompose path after successful
-    // compression, not compression semantics, so mock COMPRESSED.
-    vi.spyOn(
-      chat['compressionHandler'],
-      'performCompression',
-    ).mockResolvedValue(PerformCompressionResult.COMPRESSED);
-
-    let capturedCallback: CompressionCallback | null = null;
-    const providerWithCallback = {
-      name: 'load-balancer',
-      generateChatCompletion: vi.fn(),
-      setCompressionCallback: vi.fn((cb: CompressionCallback | null) => {
-        if (cb !== null) {
-          capturedCallback = cb;
-        }
-      }),
-    };
-
-    await chat['compressionHandler'].enforceProviderContents(
-      {
-        contents: historyService.getCuratedForProvider([pendingToolResult]),
-        pendingContents: [pendingToolResult],
-      },
-      'test-prompt',
-      providerWithCallback as unknown as IProvider,
-    );
-
-    const callback = expectCapturedCallback(capturedCallback);
-    const providerReadyContents = historyService.getCuratedForProvider([
-      pendingToolResult,
-    ]);
-    const result = await callback(providerReadyContents);
-
+    const { result } =
+      await observePreservesAPendingMatchingToolResponseWithoutDuplicatingHistory();
     expect(countToolCalls(result, 'pending-call')).toBe(1);
     expect(countToolResponses(result, 'pending-call')).toBe(1);
-    assertToolResponseResult(result, 'pending-call', {
-      value: 'large tool response '.repeat(50),
-    });
   });
+
+  const observePreservesAPendingMatchingToolResponseWithoutDuplicatingHistory =
+    async () => {
+      const runtimeContext = buildRuntimeContext(historyService, {
+        contextLimit: 200000,
+        compressionThreshold: 0.1,
+        compressionStrategy: 'top-down-truncation',
+      });
+
+      historyService.add(makeUserMessage('old history '.repeat(50)));
+      historyService.add({
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'pending-call',
+            name: 'lookup',
+            parameters: { query: 'current' },
+          },
+        ],
+      });
+
+      const pendingToolResult: IContent = {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'pending-call',
+            toolName: 'lookup',
+            result: { value: 'large tool response '.repeat(50) },
+          },
+        ],
+      };
+      const chat = new ChatSession(
+        runtimeContext,
+        mockContentGenerator,
+        {},
+        [],
+      );
+      // This test exercises the callback recompose path after successful
+      // compression, not compression semantics, so mock COMPRESSED.
+      vi.spyOn(
+        chat['compressionHandler'],
+        'performCompression',
+      ).mockResolvedValue(PerformCompressionResult.COMPRESSED);
+
+      let capturedCallback: CompressionCallback | null = null;
+      const providerWithCallback = {
+        name: 'load-balancer',
+        generateChatCompletion: vi.fn(),
+        setCompressionCallback: vi.fn((cb: CompressionCallback | null) => {
+          if (cb !== null) {
+            capturedCallback = cb;
+          }
+        }),
+      };
+
+      await chat['compressionHandler'].enforceProviderContents(
+        {
+          contents: historyService.getCuratedForProvider([pendingToolResult]),
+          pendingContents: [pendingToolResult],
+        },
+        'test-prompt',
+        providerWithCallback as unknown as IProvider,
+      );
+
+      const callback = expectCapturedCallback(capturedCallback);
+      const providerReadyContents = historyService.getCuratedForProvider([
+        pendingToolResult,
+      ]);
+      const result = await callback(providerReadyContents);
+
+      assertToolResponseResult(result, 'pending-call', {
+        value: 'large tool response '.repeat(50),
+      });
+
+      return { result };
+    };
 });

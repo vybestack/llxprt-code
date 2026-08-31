@@ -13,6 +13,7 @@
  * no direct-value Response stub is used.
  */
 
+import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import type http from 'node:http';
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { DirectWebFetchTool } from './direct-web-fetch.js';
@@ -66,9 +67,7 @@ function trackConnection(
   state: ConnectionState,
 ): Promise<void> {
   const socket = res.socket;
-  if (socket === null) {
-    throw new Error('Expected a response socket');
-  }
+  assertNotNull(socket, 'Expected a response socket');
   return new Promise((resolve) => {
     socket.once('close', () => {
       state.canceled = !state.completed;
@@ -209,7 +208,7 @@ describe('DirectWebFetchTool', () => {
       expect(result.error).toBeUndefined();
     }
 
-    expect(observedRequests).toEqual(
+    expect(observedRequests).toStrictEqual(
       expectedRequests.map(({ format: _format, ...request }) => request),
     );
   });
@@ -402,8 +401,8 @@ describe('DirectWebFetchTool', () => {
     expect(result.error).toBeUndefined();
     expect(result.llmContent).toBe('recovered');
     expect(hits).toBe(3);
-    expect(closedBeforeNextRequest).toEqual([true, true]);
-    expect(rejectedStates).toEqual([
+    expect(closedBeforeNextRequest).toStrictEqual([true, true]);
+    expect(rejectedStates).toStrictEqual([
       { completed: false, canceled: true },
       { completed: false, canceled: true },
     ]);

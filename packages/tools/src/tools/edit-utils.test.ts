@@ -94,7 +94,7 @@ describe('getWorkspaceRootsCompat', () => {
         getDirectories: () => ['/ws1', '/ws2'],
       }),
     });
-    expect(getWorkspaceRootsCompat(host)).toEqual(['/ws1', '/ws2']);
+    expect(getWorkspaceRootsCompat(host)).toStrictEqual(['/ws1', '/ws2']);
   });
 
   it('falls back to getWorkspaceRoots', () => {
@@ -109,7 +109,7 @@ describe('getWorkspaceRootsCompat', () => {
     const host = plainHost({
       getWorkspaceRoots: () => ['/root1', '/root2'],
     });
-    expect(getWorkspaceRootsCompat(host)).toEqual(['/root1', '/root2']);
+    expect(getWorkspaceRootsCompat(host)).toStrictEqual(['/root1', '/root2']);
   });
 
   it('returns empty array when workspace context has no directories', () => {
@@ -117,7 +117,7 @@ describe('getWorkspaceRootsCompat', () => {
     Object.assign(host, {
       getWorkspaceContext: () => ({ getDirectories: () => [] }),
     });
-    expect(getWorkspaceRootsCompat(host)).toEqual([]);
+    expect(getWorkspaceRootsCompat(host)).toStrictEqual([]);
   });
 });
 
@@ -195,7 +195,7 @@ describe('getLegacyLspService', () => {
     const service = getLegacyLspService(host);
     expect(service).toBeDefined();
     // Legacy adapter always returns [] for getDiagnostics
-    expect(service!.getDiagnostics('/test.ts')).toEqual([]);
+    expect(service!.getDiagnostics('/test.ts')).toStrictEqual([]);
   });
 
   it('waitForDiagnostics returns [] when client is not alive', async () => {
@@ -205,7 +205,7 @@ describe('getLegacyLspService', () => {
     const host = lspCapableHost(lspClient);
     const service = getLegacyLspService(host)!;
     const diags = await service.waitForDiagnostics('/test.ts', 1000);
-    expect(diags).toEqual([]);
+    expect(diags).toStrictEqual([]);
   });
 });
 

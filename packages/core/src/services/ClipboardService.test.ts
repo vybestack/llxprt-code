@@ -25,11 +25,122 @@ void vi.mock('child_process', () => {
   };
 });
 
+const originalPlatform = process.platform;
+
 /**
  * @plan PLAN-20250822-GEMINIFALLBACK.P05
  * @requirement REQ-001.1
  * @pseudocode lines 29-37
  */
+
+interface SuccessfulCopyFixture {
+  readonly testUrl: string;
+  readonly mockSpawn: Mock<typeof spawn>;
+  readonly mockChildProcess: ReturnType<typeof spawnCloseChild>;
+  readonly copyResult: Promise<void>;
+}
+
+function startSuccessfulCopy(
+  clipboardService: ClipboardService,
+  platform: NodeJS.Platform,
+): SuccessfulCopyFixture {
+  const testUrl = 'https://example.com/oauth?code=12345';
+  const mockSpawn = spawn as Mock<typeof spawn>;
+  const mockChildProcess = spawnCloseChild();
+  mockSpawn.mockReturnValue(
+    mockChildProcess as unknown as ReturnType<typeof spawn>,
+  );
+  Object.defineProperty(process, 'platform', { value: platform });
+  const copyResult = clipboardService.copyToClipboard(testUrl);
+  return { testUrl, mockSpawn, mockChildProcess, copyResult };
+}
+
+interface ClipboardChildStub {
+  readonly stdin: {
+    readonly write: Mock<(...args: unknown[]) => unknown>;
+    readonly end: Mock<(...args: unknown[]) => unknown>;
+    readonly on: Mock<(...args: unknown[]) => unknown>;
+  };
+  readonly stderr: {
+    readonly on: Mock<(...args: unknown[]) => unknown>;
+  };
+  on(event: string, callback: (...args: unknown[]) => void): ClipboardChildStub;
+}
+
+function spawnCloseChild(): ClipboardChildStub {
+  const child: ClipboardChildStub = {
+    stdin: {
+      write: vi.fn(),
+      end: vi.fn(),
+      on: vi.fn(), // mock stdin.on
+    },
+    stderr: {
+      on: vi.fn(),
+    },
+    on: (event: string, callback: (...args: unknown[]) => void) => {
+      if (event === 'close') {
+        setTimeout(() => callback(0), 1);
+      }
+      return child;
+    },
+  };
+  return child;
+}
+
+function spawnFailChild(): ClipboardChildStub {
+  const child: ClipboardChildStub = {
+    stdin: {
+      write: vi.fn(),
+      end: vi.fn(),
+      on: vi.fn((event: string, callback: (...args: unknown[]) => void) => {
+        if (event === 'error') {
+          setTimeout(() => callback(new Error('spawn ENOENT')), 1);
+        }
+      }),
+    },
+    stderr: {
+      on: vi.fn(),
+    },
+    on: (event: string, callback: (...args: unknown[]) => void) => {
+      if (event === 'close') {
+        setTimeout(() => callback(1), 1); // Non-zero exit code signifies failure
+      }
+      if (event === 'error') {
+        setTimeout(() => callback(new Error('spawn ENOENT')), 1);
+      }
+      return child;
+    },
+  };
+  return child;
+}
+
+function spawnStderrChild(): ClipboardChildStub {
+  const child: ClipboardChildStub = {
+    stdin: {
+      write: vi.fn(),
+      end: vi.fn(),
+      on: vi.fn(),
+    },
+    stderr: {
+      on: vi.fn((event: string, callback: (...args: unknown[]) => void) => {
+        if (event === 'data') {
+          setTimeout(() => callback('Error: pbcopy not found'), 1);
+        }
+      }),
+    },
+    on: (event: string, callback: (...args: unknown[]) => void) => {
+      if (event === 'close') {
+        setTimeout(() => callback(1), 1); // Non-zero exit code signifies failure
+      }
+      if (event === 'error') {
+        setTimeout(() => callback(new Error('spawn pbcopy ENOENT')), 1);
+      }
+      return child;
+    },
+  };
+  return child;
+}
+
 describe('ClipboardService', () => {
   let clipboardService: ClipboardService;
 
@@ -41,7 +152,7 @@ describe('ClipboardService', () => {
   afterEach(() => {
     // Restore platform after each test
     Object.defineProperty(process, 'platform', {
-      value: process.platform,
+      value: originalPlatform,
     });
   });
 
@@ -51,42 +162,14 @@ describe('ClipboardService', () => {
    * @pseudocode lines 29-30
    */
   it('should copy OAuth URL to clipboard cleanly without extra characters', async () => {
-    const testUrl = 'https://example.com/oauth?code=12345';
+    const fixture = startSuccessfulCopy(clipboardService, 'darwin');
 
-    // Mock child_process.spawn for this test
-    const mockSpawn = spawn as Mock<typeof spawn>;
-    const mockChildProcess = {
-      stdin: {
-        write: vi.fn(),
-        end: vi.fn(),
-        on: vi.fn(), // mock stdin.on
-      },
-      stderr: {
-        on: vi.fn(),
-      },
-      on: (event: string, callback: (...args: unknown[]) => void) => {
-        if (event === 'close') {
-          setTimeout(() => callback(0), 1);
-        }
-        return mockChildProcess;
-      },
-    };
-
-    mockSpawn.mockReturnValue(
-      mockChildProcess as unknown as ReturnType<typeof spawn>,
+    await expect(fixture.copyResult).resolves.toBeUndefined();
+    expect(fixture.mockChildProcess.stdin.write).toHaveBeenCalledWith(
+      fixture.testUrl,
     );
-
-    Object.defineProperty(process, 'platform', {
-      value: 'darwin',
-    });
-
-    await expect(
-      clipboardService.copyToClipboard(testUrl),
-    ).resolves.toBeUndefined();
-
-    expect(mockSpawn).toHaveBeenCalledWith('pbcopy', []);
-    expect(mockChildProcess.stdin.write).toHaveBeenCalledWith(testUrl);
-    expect(mockChildProcess.stdin.end).toHaveBeenCalled();
+    expect(fixture.mockChildProcess.stdin.end).toHaveBeenCalled();
+    expect(fixture.mockSpawn).toHaveBeenCalledWith('pbcopy', []);
   });
 
   /**
@@ -95,42 +178,14 @@ describe('ClipboardService', () => {
    * @pseudocode lines 32-34
    */
   it('should detect and use correct clipboard utility for macOS (pbcopy)', async () => {
-    const testUrl = 'https://example.com/oauth?code=12345';
+    const fixture = startSuccessfulCopy(clipboardService, 'darwin');
 
-    // Mock child_process.spawn for this test
-    const mockSpawn = spawn as Mock<typeof spawn>;
-    const mockChildProcess = {
-      stdin: {
-        write: vi.fn(),
-        end: vi.fn(),
-        on: vi.fn(), // mock stdin.on
-      },
-      stderr: {
-        on: vi.fn(),
-      },
-      on: (event: string, callback: (...args: unknown[]) => void) => {
-        if (event === 'close') {
-          setTimeout(() => callback(0), 1);
-        }
-        return mockChildProcess;
-      },
-    };
-
-    mockSpawn.mockReturnValue(
-      mockChildProcess as unknown as ReturnType<typeof spawn>,
+    await expect(fixture.copyResult).resolves.toBeUndefined();
+    expect(fixture.mockSpawn).toHaveBeenCalledWith('pbcopy', []);
+    expect(fixture.mockChildProcess.stdin.write).toHaveBeenCalledWith(
+      fixture.testUrl,
     );
-
-    Object.defineProperty(process, 'platform', {
-      value: 'darwin',
-    });
-
-    await expect(
-      clipboardService.copyToClipboard(testUrl),
-    ).resolves.toBeUndefined();
-
-    expect(mockSpawn).toHaveBeenCalledWith('pbcopy', []);
-    expect(mockChildProcess.stdin.write).toHaveBeenCalledWith(testUrl);
-    expect(mockChildProcess.stdin.end).toHaveBeenCalled();
+    expect(fixture.mockChildProcess.stdin.end).toHaveBeenCalled();
   });
 
   /**
@@ -139,45 +194,17 @@ describe('ClipboardService', () => {
    * @pseudocode lines 32-33
    */
   it('should detect and use correct clipboard utility for Linux X11 (xclip)', async () => {
-    const testUrl = 'https://example.com/oauth?code=12345';
+    const fixture = startSuccessfulCopy(clipboardService, 'linux');
 
-    // Mock child_process.spawn for this test
-    const mockSpawn = spawn as Mock<typeof spawn>;
-    const mockChildProcess = {
-      stdin: {
-        write: vi.fn(),
-        end: vi.fn(),
-        on: vi.fn(), // mock stdin.on
-      },
-      stderr: {
-        on: vi.fn(),
-      },
-      on: (event: string, callback: (...args: unknown[]) => void) => {
-        if (event === 'close') {
-          setTimeout(() => callback(0), 1);
-        }
-        return mockChildProcess;
-      },
-    };
-
-    mockSpawn.mockReturnValue(
-      mockChildProcess as unknown as ReturnType<typeof spawn>,
-    );
-
-    Object.defineProperty(process, 'platform', {
-      value: 'linux',
-    });
-
-    await expect(
-      clipboardService.copyToClipboard(testUrl),
-    ).resolves.toBeUndefined();
-
-    expect(mockSpawn).toHaveBeenCalledWith('xclip', [
+    await expect(fixture.copyResult).resolves.toBeUndefined();
+    expect(fixture.mockSpawn).toHaveBeenCalledWith('xclip', [
       '-selection',
       'clipboard',
     ]);
-    expect(mockChildProcess.stdin.write).toHaveBeenCalledWith(testUrl);
-    expect(mockChildProcess.stdin.end).toHaveBeenCalled();
+    expect(fixture.mockChildProcess.stdin.write).toHaveBeenCalledWith(
+      fixture.testUrl,
+    );
+    expect(fixture.mockChildProcess.stdin.end).toHaveBeenCalled();
   });
 
   /**
@@ -186,45 +213,17 @@ describe('ClipboardService', () => {
    * @pseudocode lines 32-34
    */
   it('should detect and use correct clipboard utility for Linux Wayland (wl-copy)', async () => {
-    const testUrl = 'https://example.com/oauth?code=12345';
+    const fixture = startSuccessfulCopy(clipboardService, 'linux');
 
-    // Mock child_process.spawn for this test
-    const mockSpawn = spawn as Mock<typeof spawn>;
-    const mockChildProcessForXclip = {
-      stdin: {
-        write: vi.fn(),
-        end: vi.fn(),
-        on: vi.fn(), // mock stdin.on
-      },
-      stderr: {
-        on: vi.fn(),
-      },
-      on: (event: string, callback: (...args: unknown[]) => void) => {
-        if (event === 'close') {
-          setTimeout(() => callback(0), 1);
-        }
-        return mockChildProcessForXclip;
-      },
-    };
-
-    mockSpawn.mockReturnValue(
-      mockChildProcessForXclip as unknown as ReturnType<typeof spawn>,
+    await expect(fixture.copyResult).resolves.toBeUndefined();
+    expect(fixture.mockChildProcess.stdin.write).toHaveBeenCalledWith(
+      fixture.testUrl,
     );
-
-    Object.defineProperty(process, 'platform', {
-      value: 'linux',
-    });
-
-    await expect(
-      clipboardService.copyToClipboard(testUrl),
-    ).resolves.toBeUndefined();
-
-    expect(mockSpawn).toHaveBeenCalledWith('xclip', [
+    expect(fixture.mockChildProcess.stdin.end).toHaveBeenCalled();
+    expect(fixture.mockSpawn).toHaveBeenCalledWith('xclip', [
       '-selection',
       'clipboard',
     ]);
-    expect(mockChildProcessForXclip.stdin.write).toHaveBeenCalledWith(testUrl);
-    expect(mockChildProcessForXclip.stdin.end).toHaveBeenCalled();
   });
 
   /**
@@ -233,42 +232,14 @@ describe('ClipboardService', () => {
    * @pseudocode lines 32-34
    */
   it('should detect and use correct clipboard utility for Windows (clip)', async () => {
-    const testUrl = 'https://example.com/oauth?code=12345';
+    const fixture = startSuccessfulCopy(clipboardService, 'win32');
 
-    // Mock child_process.spawn for this test
-    const mockSpawn = spawn as Mock<typeof spawn>;
-    const mockChildProcess = {
-      stdin: {
-        write: vi.fn(),
-        end: vi.fn(),
-        on: vi.fn(), // mock stdin.on
-      },
-      stderr: {
-        on: vi.fn(),
-      },
-      on: (event: string, callback: (...args: unknown[]) => void) => {
-        if (event === 'close') {
-          setTimeout(() => callback(0), 1);
-        }
-        return mockChildProcess;
-      },
-    };
-
-    mockSpawn.mockReturnValue(
-      mockChildProcess as unknown as ReturnType<typeof spawn>,
+    await expect(fixture.copyResult).resolves.toBeUndefined();
+    expect(fixture.mockSpawn).toHaveBeenCalledWith('clip', []);
+    expect(fixture.mockChildProcess.stdin.write).toHaveBeenCalledWith(
+      fixture.testUrl,
     );
-
-    Object.defineProperty(process, 'platform', {
-      value: 'win32',
-    });
-
-    await expect(
-      clipboardService.copyToClipboard(testUrl),
-    ).resolves.toBeUndefined();
-
-    expect(mockSpawn).toHaveBeenCalledWith('clip', []);
-    expect(mockChildProcess.stdin.write).toHaveBeenCalledWith(testUrl);
-    expect(mockChildProcess.stdin.end).toHaveBeenCalled();
+    expect(fixture.mockChildProcess.stdin.end).toHaveBeenCalled();
   });
 
   /**
@@ -281,29 +252,7 @@ describe('ClipboardService', () => {
 
     // Mock child_process.spawn to simulate failure
     const mockSpawn = spawn as Mock<typeof spawn>;
-    const mockChildProcess = {
-      stdin: {
-        write: vi.fn(),
-        end: vi.fn(),
-        on: vi.fn((event: string, callback: (...args: unknown[]) => void) => {
-          if (event === 'error') {
-            setTimeout(() => callback(new Error('spawn ENOENT')), 1);
-          }
-        }),
-      },
-      stderr: {
-        on: vi.fn(),
-      },
-      on: (event: string, callback: (...args: unknown[]) => void) => {
-        if (event === 'close') {
-          setTimeout(() => callback(1), 1); // Non-zero exit code signifies failure
-        }
-        if (event === 'error') {
-          setTimeout(() => callback(new Error('spawn ENOENT')), 1);
-        }
-        return mockChildProcess;
-      },
-    };
+    const mockChildProcess = spawnFailChild();
 
     mockSpawn.mockReturnValue(
       mockChildProcess as unknown as ReturnType<typeof spawn>,
@@ -329,29 +278,7 @@ describe('ClipboardService', () => {
 
     // Mock child_process.spawn to simulate failure with stderr output
     const mockSpawn = spawn as Mock<typeof spawn>;
-    const mockChildProcess = {
-      stdin: {
-        write: vi.fn(),
-        end: vi.fn(),
-        on: vi.fn(),
-      },
-      stderr: {
-        on: vi.fn((event: string, callback: (...args: unknown[]) => void) => {
-          if (event === 'data') {
-            setTimeout(() => callback('Error: pbcopy not found'), 1);
-          }
-        }),
-      },
-      on: (event: string, callback: (...args: unknown[]) => void) => {
-        if (event === 'close') {
-          setTimeout(() => callback(1), 1); // Non-zero exit code signifies failure
-        }
-        if (event === 'error') {
-          setTimeout(() => callback(new Error('spawn pbcopy ENOENT')), 1);
-        }
-        return mockChildProcess;
-      },
-    };
+    const mockChildProcess = spawnStderrChild();
 
     mockSpawn.mockReturnValue(
       mockChildProcess as unknown as ReturnType<typeof spawn>,

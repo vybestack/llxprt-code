@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
@@ -73,8 +74,7 @@ describe('SemanticMediaPurgeSession', () => {
     });
 
     const attempt = await session.begin();
-    if (attempt === undefined) throw new Error('Expected purge attempt');
-
+    assertDefined(attempt, 'Expected purge attempt');
     expect(attempt.requestHistory[0]?.blocks).toHaveLength(2);
     expect(attempt.requestHistory[0]?.blocks[1]?.type).toBe('media');
     expect(attempt.requestHistory).not.toBe(history.getAll());
@@ -82,7 +82,7 @@ describe('SemanticMediaPurgeSession', () => {
     expect(attempt.requestHistory[0]?.blocks[0]).not.toBe(
       history.getAll()[0]?.blocks[0],
     );
-    expect(attempt.candidateHistory[0]?.blocks).toEqual([
+    expect(attempt.candidateHistory[0]?.blocks).toStrictEqual([
       { type: 'text', text: 'inspect' },
     ]);
   });
@@ -124,10 +124,9 @@ describe('SemanticMediaPurgeSession', () => {
     });
 
     const attempt = await session.begin();
-    if (attempt === undefined) throw new Error('Expected purge attempt');
-
+    assertDefined(attempt, 'Expected purge attempt');
     expect(attempt.requestHistory).toBe(attempt.candidateHistory);
-    expect(attempt.requestHistory[0]?.blocks).toEqual([
+    expect(attempt.requestHistory[0]?.blocks).toStrictEqual([
       { type: 'text', text: 'inspect' },
       { type: 'text', text: 'A green build result.' },
     ]);
@@ -146,8 +145,7 @@ describe('SemanticMediaPurgeSession', () => {
       },
     });
     const attempt = await session.begin();
-    if (attempt === undefined) throw new Error('Expected purge attempt');
-
+    assertDefined(attempt, 'Expected purge attempt');
     const committed = await attempt.complete({
       status: 'success',
       usage: usageWithoutCacheWrite,
@@ -156,7 +154,7 @@ describe('SemanticMediaPurgeSession', () => {
 
     expect(committed).toBe(true);
     expect(persisted).toBe(attempt.candidateHistory);
-    expect(history.getAll()[0]?.blocks).toEqual([
+    expect(history.getAll()[0]?.blocks).toStrictEqual([
       { type: 'text', text: 'inspect' },
     ]);
   });
@@ -255,7 +253,7 @@ describe('SemanticMediaPurgeSession', () => {
     });
 
     expect(committed).toBe(true);
-    expect(history.getAll()[0]?.blocks).toEqual([
+    expect(history.getAll()[0]?.blocks).toStrictEqual([
       { type: 'text', text: 'inspect' },
     ]);
   });
@@ -295,7 +293,7 @@ describe('SemanticMediaPurgeSession', () => {
       persist: () => Promise.resolve(),
     });
     const first = await session.begin(false);
-    if (first === undefined) throw new Error('Expected first purge attempt');
+    assertDefined(first, 'Expected first purge attempt');
     expect(
       await first.complete({
         status: 'success',
@@ -325,8 +323,7 @@ describe('SemanticMediaPurgeSession', () => {
       persist: () => Promise.resolve(),
     });
     const first = await session.begin(false);
-    if (first === undefined) throw new Error('Expected first purge attempt');
-
+    assertDefined(first, 'Expected first purge attempt');
     let secondResolved = false;
     const secondPromise = session.begin(false).then((attempt) => {
       secondResolved = true;
@@ -345,7 +342,7 @@ describe('SemanticMediaPurgeSession', () => {
 
     const second = await secondPromise;
     expect(secondResolved).toBe(true);
-    if (second === undefined) throw new Error('Expected second purge attempt');
+    assertDefined(second, 'Expected second purge attempt');
     expect(
       await second.complete({
         status: 'error',
@@ -363,7 +360,7 @@ describe('SemanticMediaPurgeSession', () => {
       persist: () => Promise.resolve(),
     });
     const first = await session.begin(false);
-    if (first === undefined) throw new Error('Expected first purge attempt');
+    assertDefined(first, 'Expected first purge attempt');
     expect(
       await first.complete({
         status: 'success',
@@ -384,7 +381,7 @@ describe('SemanticMediaPurgeSession', () => {
 
     const second = await secondPromise;
     expect(secondResolved).toBe(true);
-    if (second === undefined) throw new Error('Expected second purge attempt');
+    assertDefined(second, 'Expected second purge attempt');
     expect(
       await second.complete({
         status: 'error',
@@ -408,7 +405,7 @@ describe('SemanticMediaPurgeSession', () => {
       },
     });
     const first = await session.begin(false);
-    if (first === undefined) throw new Error('Expected first purge attempt');
+    assertDefined(first, 'Expected first purge attempt');
     expect(
       await first.complete({
         status: 'success',

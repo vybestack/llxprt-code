@@ -25,7 +25,10 @@ import {
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import {
+  estimatePromptEnvelope,
+  type PromptEnvelopeEstimate,
+} from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type {
   RuntimePromptEstimateRequest,
   RuntimeTokenizerFactory,
@@ -100,6 +103,73 @@ function createLengthTokenizerFactory(): RuntimeTokenizerFactory {
       assetRevision: 'fixture',
       projectionRevision: request.projectionRevision,
     }),
+  };
+}
+
+function createRecordingFetch(
+  transportedBodies: string[],
+  authorizationHeaders: string[],
+): typeof fetch {
+  return async (_input, init): Promise<Response> => {
+    const requestBody = init?.body;
+    if (requestBody === undefined || requestBody === null) {
+      throw new Error('Expected Responses transport to send a body');
+    }
+    transportedBodies.push(await new Response(requestBody).text());
+    authorizationHeaders.push(
+      new Headers(init?.headers).get('authorization') ?? '',
+    );
+    const encoder = new TextEncoder();
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
+          ),
+        );
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        controller.close();
+      },
+    });
+    return Promise.resolve(
+      new Response(body, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      }),
+    );
+  };
+}
+
+function requireIncrementalTokens(estimate: PromptEnvelopeEstimate): number {
+  if (estimate.incrementalTokens === undefined) {
+    throw new Error('Expected a stateful incremental estimate');
+  }
+  return estimate.incrementalTokens;
+}
+
+function createStatefulParentMetadata(
+  promptTokens: number | undefined,
+  completionTokens: number | undefined,
+): {
+  readonly id: string;
+  readonly responsesStored: true;
+  readonly usage?: {
+    readonly promptTokens: number;
+    readonly completionTokens: number;
+    readonly totalTokens: number;
+  };
+} {
+  if (promptTokens === undefined || completionTokens === undefined) {
+    return { id: 'resp_1', responsesStored: true };
+  }
+  return {
+    id: 'resp_1',
+    responsesStored: true,
+    usage: {
+      promptTokens,
+      completionTokens,
+      totalTokens: promptTokens + completionTokens,
+    },
   };
 }
 
@@ -197,12 +267,10 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
       fullHistory,
       factory,
     );
-    if (estimate.incrementalTokens === undefined) {
-      throw new Error('Expected a stateful incremental estimate');
-    }
+    const incrementalTokens = requireIncrementalTokens(estimate);
 
     expect(estimate.retainedBaselineTokens).toBe(50_000);
-    expect(estimate.effectiveTokens).toBe(50_000 + estimate.incrementalTokens);
+    expect(estimate.effectiveTokens).toBe(50_000 + incrementalTokens);
     expect(estimate.effectiveTokens).toBeGreaterThan(
       fullHistoryEstimate.effectiveTokens,
     );
@@ -314,19 +382,14 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
       plainProjection,
       factory,
     );
-    if (
-      configuredEstimate.incrementalTokens === undefined ||
-      plainEstimate.incrementalTokens === undefined
-    ) {
-      throw new Error('Expected stateful incremental estimates');
-    }
+    const configuredIncrementalTokens =
+      requireIncrementalTokens(configuredEstimate);
+    const plainIncrementalTokens = requireIncrementalTokens(plainEstimate);
 
-    expect(configuredEstimate.incrementalTokens).toBe(
+    expect(configuredIncrementalTokens).toBe(
       configuredEstimate.transmittedTokens,
     );
-    expect(configuredEstimate.incrementalTokens).toBeGreaterThan(
-      plainEstimate.incrementalTokens,
-    );
+    expect(configuredIncrementalTokens).toBeGreaterThan(plainIncrementalTokens);
   });
 
   it.each([
@@ -346,19 +409,10 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
         {
           speaker: 'ai',
           blocks: [{ type: 'text', text: 'previous a' }],
-          metadata: {
-            id: 'resp_1',
-            responsesStored: true,
-            ...(promptTokens === undefined || completionTokens === undefined
-              ? {}
-              : {
-                  usage: {
-                    promptTokens,
-                    completionTokens,
-                    totalTokens: promptTokens + completionTokens,
-                  },
-                }),
-          },
+          metadata: createStatefulParentMetadata(
+            promptTokens,
+            completionTokens,
+          ),
         },
         {
           speaker: 'human',
@@ -424,29 +478,7 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
     const projection = await provider.projectPromptEnvelope(options);
     const transportedBodies: string[] = [];
     const originalFetch = global.fetch;
-    global.fetch = vi.fn(async (_input, init) => {
-      const requestBody = init?.body;
-      if (requestBody === undefined || requestBody === null) {
-        throw new Error('Expected Responses transport to send a body');
-      }
-      transportedBodies.push(await new Response(requestBody).text());
-      const encoder = new TextEncoder();
-      const body = new ReadableStream({
-        start(controller) {
-          controller.enqueue(
-            encoder.encode(
-              'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
-            ),
-          );
-          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-          controller.close();
-        },
-      });
-      return new Response(body, {
-        status: 200,
-        headers: { 'content-type': 'text/event-stream' },
-      });
-    });
+    global.fetch = vi.fn(createRecordingFetch(transportedBodies, []));
 
     try {
       for await (const _chunk of provider.generateChatCompletion({
@@ -593,32 +625,9 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
     const transportedBodies: string[] = [];
     const authorizationHeaders: string[] = [];
     const originalFetch = global.fetch;
-    global.fetch = vi.fn(async (_input, init) => {
-      const requestBody = init?.body;
-      if (requestBody === undefined || requestBody === null) {
-        throw new Error('Expected Responses transport to send a body');
-      }
-      transportedBodies.push(await new Response(requestBody).text());
-      authorizationHeaders.push(
-        new Headers(init?.headers).get('authorization') ?? '',
-      );
-      const encoder = new TextEncoder();
-      const body = new ReadableStream({
-        start(controller) {
-          controller.enqueue(
-            encoder.encode(
-              'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
-            ),
-          );
-          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-          controller.close();
-        },
-      });
-      return new Response(body, {
-        status: 200,
-        headers: { 'content-type': 'text/event-stream' },
-      });
-    });
+    global.fetch = vi.fn(
+      createRecordingFetch(transportedBodies, authorizationHeaders),
+    );
 
     try {
       for await (const _chunk of provider.generateChatCompletion({

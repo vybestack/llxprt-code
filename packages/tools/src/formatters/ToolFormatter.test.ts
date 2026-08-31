@@ -186,7 +186,7 @@ describe('ToolFormatter four conversion mappings', () => {
         type: 'string',
         enum: [1, 2, 3],
       }) as { enum: unknown[] };
-      expect(schema.enum).toEqual(['1', '2', '3']);
+      expect(schema.enum).toStrictEqual(['1', '2', '3']);
     });
 
     it('converts string minLength/maxLength to numbers', () => {
@@ -319,7 +319,7 @@ describe('ToolFormatter direct format mappings', () => {
         'anthropic',
       );
       expect(blocks[0]?.name).toBe('echo');
-      expect(blocks[0]?.parameters).toEqual({ msg: 'hi' });
+      expect(blocks[0]?.parameters).toStrictEqual({ msg: 'hi' });
     });
 
     it('throws on invalid OpenAI tool call', () => {
@@ -415,7 +415,7 @@ describe('ToolFormatter streaming argument accumulation', () => {
       'openai',
     );
 
-    expect(blocks[0]?.parameters).toEqual({ city: 'SF' });
+    expect(blocks[0]?.parameters).toStrictEqual({ city: 'SF' });
   });
 
   it('leaves no _argumentsString own property on the block during or after accumulation', () => {
@@ -434,7 +434,7 @@ describe('ToolFormatter streaming argument accumulation', () => {
     expect(
       Object.prototype.hasOwnProperty.call(blocks[0], '_argumentsString'),
     ).toBe(false);
-    expect(Object.keys(blocks[0] ?? {}).sort()).toEqual([
+    expect(Object.keys(blocks[0] ?? {}).sort()).toStrictEqual([
       'id',
       'name',
       'parameters',
@@ -448,7 +448,7 @@ describe('ToolFormatter streaming argument accumulation', () => {
     expect(
       Object.prototype.hasOwnProperty.call(blocks[0], '_argumentsString'),
     ).toBe(false);
-    expect(Object.keys(blocks[0] ?? {}).sort()).toEqual([
+    expect(Object.keys(blocks[0] ?? {}).sort()).toStrictEqual([
       'id',
       'name',
       'parameters',
@@ -475,7 +475,7 @@ describe('ToolFormatter streaming argument accumulation', () => {
     );
 
     expect(blocks[0]?.name).toBe('get_weather');
-    expect(blocks[0]?.parameters).toEqual({ city: 'SF' });
+    expect(blocks[0]?.parameters).toStrictEqual({ city: 'SF' });
     expect(
       Object.prototype.hasOwnProperty.call(blocks[0], '_argumentsString'),
     ).toBe(false);
@@ -515,7 +515,7 @@ describe('ToolFormatter streaming argument accumulation', () => {
       'openai',
     );
     expect(blocks).toHaveLength(1);
-    expect(blocks[0]?.parameters).toEqual({ a: 1 });
+    expect(blocks[0]?.parameters).toStrictEqual({ a: 1 });
   });
 
   it('keeps initial parameters untouched when only whitespace chunks arrive', () => {
@@ -580,8 +580,8 @@ describe('ToolFormatter streaming argument accumulation', () => {
       'openai',
     );
 
-    expect(blocks[0]?.parameters).toEqual({ city: 'SF' });
-    expect(blocks[1]?.parameters).toEqual({ temp: 72 });
+    expect(blocks[0]?.parameters).toStrictEqual({ city: 'SF' });
+    expect(blocks[1]?.parameters).toStrictEqual({ temp: 72 });
   });
 
   it('keeps the fully concatenated raw string when arguments never become valid JSON', () => {
@@ -610,7 +610,7 @@ describe('ToolFormatter streaming argument accumulation', () => {
     expect(
       Object.prototype.hasOwnProperty.call(blocks[0], '_argumentsString'),
     ).toBe(false);
-    expect(blocks[0]?.parameters).toEqual('{"a":oops}');
+    expect(blocks[0]?.parameters).toStrictEqual('{"a":oops}');
   });
 
   it('swallows a throw on an incomplete fragment and still completes from the buffer', () => {
@@ -649,7 +649,7 @@ describe('ToolFormatter streaming argument accumulation', () => {
       blocks,
       'openai',
     );
-    expect(blocks[0]?.parameters).toEqual({ a: 1 });
+    expect(blocks[0]?.parameters).toStrictEqual({ a: 1 });
   });
 
   it('repairs a qwen double-escaped payload delivered in a single chunk', () => {
@@ -666,7 +666,7 @@ describe('ToolFormatter streaming argument accumulation', () => {
       'qwen',
     );
 
-    expect(blocks[0]?.parameters).toEqual({ city: 'SF' });
+    expect(blocks[0]?.parameters).toStrictEqual({ city: 'SF' });
   });
 
   it('repairs a qwen double-escaped payload split across chunks', () => {
@@ -689,7 +689,7 @@ describe('ToolFormatter streaming argument accumulation', () => {
       'qwen',
     );
 
-    expect(blocks[0]?.parameters).toEqual({ city: 'SF' });
+    expect(blocks[0]?.parameters).toStrictEqual({ city: 'SF' });
   });
 
   it('keeps buffering across separate ToolFormatter instances for the same block', () => {
@@ -717,6 +717,6 @@ describe('ToolFormatter streaming argument accumulation', () => {
       'openai',
     );
 
-    expect(blocks[0]?.parameters).toEqual({ city: 'SF' });
+    expect(blocks[0]?.parameters).toStrictEqual({ city: 'SF' });
   });
 });

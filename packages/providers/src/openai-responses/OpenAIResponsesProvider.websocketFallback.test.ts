@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertDefined, blockTextOrEmpty } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
@@ -140,7 +141,7 @@ async function runRequest(
   }
   const text = chunks
     .flatMap((c) => c.blocks)
-    .map((b) => (b.type === 'text' ? b.text : ''))
+    .map((b) => (blockTextOrEmpty(b)))
     .join('');
   void fetchCalls;
   return text;
@@ -327,9 +328,7 @@ describe('OpenAIResponsesProvider WebSocket sticky-fallback threshold (issue #30
         // drain
       }
 
-      if (capturedBody === undefined) {
-        throw new Error('HTTP request body was not captured');
-      }
+      assertDefined(capturedBody, 'HTTP request body was not captured');
       // Prove the WebSocket was genuinely attempted and fell back; otherwise a
       // change that skipped the socket entirely would still satisfy the body
       // assertions below.
@@ -341,7 +340,7 @@ describe('OpenAIResponsesProvider WebSocket sticky-fallback threshold (issue #30
 
       // Full history, since the HTTP endpoint cannot resolve the parent.
       const users = userTextsOf(body['input']);
-      expect(users).toEqual(['first question', 'second question']);
+      expect(users).toStrictEqual(['first question', 'second question']);
     });
   });
 });

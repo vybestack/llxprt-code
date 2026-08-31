@@ -12,6 +12,7 @@
  * acquisition path; no fetch is imported and nothing is stubbed.
  */
 
+import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import type http from 'node:http';
 import { describe, it, expect } from 'bun:test';
 import { DirectWebFetchTool } from './direct-web-fetch.js';
@@ -64,9 +65,7 @@ function trackConnection(
   state: ConnectionState,
 ): Promise<void> {
   const socket = res.socket;
-  if (socket === null) {
-    throw new Error('Expected a response socket');
-  }
+  assertNotNull(socket, 'Expected a response socket');
   return new Promise((resolve) => {
     socket.once('close', () => {
       state.canceled = !state.completed;
@@ -143,8 +142,8 @@ describe('DirectWebFetchTool real transport cancellation', () => {
     expect(result.error?.message).toContain('503');
     expect(result.llmContent).not.toContain('partial-error-body');
     expect(hits).toBe(3);
-    expect(closedBeforeNextRequest).toEqual([true, true]);
-    expect(states).toEqual([
+    expect(closedBeforeNextRequest).toStrictEqual([true, true]);
+    expect(states).toStrictEqual([
       { completed: false, canceled: true, writerStopped: true },
       { completed: false, canceled: true, writerStopped: true },
       { completed: false, canceled: true, writerStopped: true },

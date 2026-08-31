@@ -85,6 +85,26 @@ function createDeferred<T>(): Deferred<T> {
   return { promise, resolve };
 }
 
+function removeArtifactsWithServerAFailure(
+  events: string[],
+  serverName: string,
+): void {
+  events.push(`artifacts-${serverName}`);
+  if (serverName === 'server-a') {
+    throw new Error('artifact cleanup failed');
+  }
+}
+
+async function refreshWithOptionalFailure(
+  events: string[],
+  shouldFail: boolean,
+): Promise<void> {
+  if (shouldFail) {
+    events.push('refresh');
+    throw new Error('refresh failed');
+  }
+}
+
 const CLIENT_VERSION = '0.0.1';
 
 /** Builds a manager wired to a fresh tool registry derived from config. */
@@ -250,12 +270,7 @@ describe('McpClientManager trust transitions', () => {
       });
       const toolRegistry = createToolRegistry(config);
       vi.spyOn(toolRegistry, 'removeMcpToolsByServer').mockImplementation(
-        (name) => {
-          events.push(`artifacts-${name}`);
-          if (name === 'server-a') {
-            throw new Error('artifact cleanup failed');
-          }
-        },
+        (name) => removeArtifactsWithServerAFailure(events, name),
       );
       const manager = new McpClientManager(
         CLIENT_VERSION,
@@ -331,12 +346,8 @@ describe('McpClientManager trust transitions', () => {
         .mockReturnValueOnce(clientB);
       let failRefresh = false;
       const config = createMockConfig({
-        refreshMcpContext: async () => {
-          if (failRefresh) {
-            events.push('refresh');
-            throw new Error('refresh failed');
-          }
-        },
+        refreshMcpContext: async () =>
+          refreshWithOptionalFailure(events, failRefresh),
       });
       const manager = createManager(config);
       await manager.startConfiguredMcpServers();
@@ -531,12 +542,7 @@ describe('McpClientManager trust transitions', () => {
       void manager.startConfiguredMcpServers();
       await waitFor(() => expect(clientA.discover).toHaveBeenCalledOnce());
       vi.spyOn(toolRegistry, 'removeMcpToolsByServer').mockImplementation(
-        (name) => {
-          events.push(`artifacts-${name}`);
-          if (name === 'server-a') {
-            throw new Error('artifact cleanup failed');
-          }
-        },
+        (name) => removeArtifactsWithServerAFailure(events, name),
       );
 
       const stop = manager.stop();

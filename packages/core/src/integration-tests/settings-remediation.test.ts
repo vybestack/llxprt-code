@@ -351,8 +351,7 @@ describe('Settings Remediation Integration', () => {
       // Using median over 5 runs provides robustness against occasional outliers
       // (e.g., a single GC pause) while still catching regressions - a true
       // performance bug would cause ALL runs to be slow.
-      const maxElapsedMs = process.env.CI === 'true' ? 50 : 35;
-      expect(medianElapsed).toBeLessThan(maxElapsedMs);
+      expect(medianElapsed).toBeLessThan(medianPerfBoundMs());
 
       // Verify functional correctness of final run
       expect(config.getEphemeralSetting('key999')).toBe(999);
@@ -389,8 +388,7 @@ describe('Settings Remediation Integration', () => {
       }
 
       const elapsed = performance.now() - startTime;
-      const maxElapsedMs = process.env.CI === 'true' ? 50 : 10;
-      expect(elapsed).toBeLessThan(maxElapsedMs);
+      expect(elapsed).toBeLessThan(providerPerfBoundMs());
     });
   });
 
@@ -507,3 +505,11 @@ describe('Settings Remediation Integration', () => {
     });
   });
 });
+
+function medianPerfBoundMs(): number {
+  return process.env.CI === 'true' ? 50 : 35;
+}
+
+function providerPerfBoundMs(): number {
+  return process.env.CI === 'true' ? 50 : 10;
+}

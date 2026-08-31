@@ -13,6 +13,23 @@ import type {
   CompletionResult,
 } from '../schema/types.js';
 
+function nodesOrEmpty(
+  nodes: CommandArgumentSchema | undefined,
+): CommandArgumentSchema {
+  return nodes ?? [];
+}
+
+function lastPartOrEmpty(parts: readonly string[]): string {
+  return parts[parts.length - 1] ?? '';
+}
+
+function isLiteralNodeWithValue(
+  node: CommandArgumentSchema[number],
+  value: string,
+): boolean {
+  return node.kind === 'literal' && node.value === value;
+}
+
 /**
  * Finding 8: schema/autocomplete behavioral tests for the `unlock`
  * subcommand. These exercise the exported schema and user-visible
@@ -50,7 +67,7 @@ describe('authCommand unlock schema completion (Finding 8)', () => {
     // The first token after '/auth' is the provider, followed by the action.
     // We drive the completion handler with the args already consumed.
     const completedArgs = parts.slice(0, -1);
-    const partialArg = parts[parts.length - 1] ?? '';
+    const partialArg = lastPartOrEmpty(parts);
 
     const result: CompletionResult = await handler(
       mockContext,
@@ -70,9 +87,9 @@ describe('authCommand unlock schema completion (Finding 8)', () => {
     // The schema is [provider] → [action...]. Find the provider node.
     const providerNode = schema[0];
     expect(providerNode).toBeDefined();
-    const actions = providerNode.next ?? [];
-    const unlock = actions.find(
-      (a) => a.kind === 'literal' && a.value === 'unlock',
+    const actions = nodesOrEmpty(providerNode.next);
+    const unlock = actions.find((action) =>
+      isLiteralNodeWithValue(action, 'unlock'),
     );
     expect(unlock).toBeDefined();
   });
@@ -93,27 +110,23 @@ describe('authCommand unlock schema completion (Finding 8)', () => {
   });
 
   it('unlock has --force flag in schema', () => {
-    const flags = getUnlockBucketNode().next ?? [];
-    const forceFlag = flags.find(
-      (flag) => flag.kind === 'literal' && flag.value === '--force',
+    const flags = nodesOrEmpty(getUnlockBucketNode().next);
+    const forceFlag = flags.find((flag) =>
+      isLiteralNodeWithValue(flag, '--force'),
     );
     expect(forceFlag).toBeDefined();
   });
 
   it('nests --i-have-stopped-all-processes beneath --force', () => {
-    const flags = getUnlockBucketNode().next ?? [];
-    const standaloneAck = flags.find(
-      (flag) =>
-        flag.kind === 'literal' &&
-        flag.value === '--i-have-stopped-all-processes',
+    const flags = nodesOrEmpty(getUnlockBucketNode().next);
+    const standaloneAck = flags.find((flag) =>
+      isLiteralNodeWithValue(flag, '--i-have-stopped-all-processes'),
     );
-    const forceFlag = flags.find(
-      (flag) => flag.kind === 'literal' && flag.value === '--force',
+    const forceFlag = flags.find((flag) =>
+      isLiteralNodeWithValue(flag, '--force'),
     );
-    const nestedAck = forceFlag?.next?.find(
-      (flag) =>
-        flag.kind === 'literal' &&
-        flag.value === '--i-have-stopped-all-processes',
+    const nestedAck = forceFlag?.next?.find((flag) =>
+      isLiteralNodeWithValue(flag, '--i-have-stopped-all-processes'),
     );
 
     expect(standaloneAck).toBeUndefined();

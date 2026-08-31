@@ -115,6 +115,13 @@ function* successChunk(): AsyncGenerator<IContent> {
   yield { type: 'text' as const, content: 'ok' } as unknown as IContent;
 }
 
+function respondAfterFailedRotation(
+  invocation: number,
+): AsyncGenerator<IContent> {
+  if (invocation <= NUM_BACKENDS) return always429();
+  return successChunk();
+}
+
 /**
  * Because the LB throws lazily on the first pull, the retried `fn` must pull
  * the first chunk itself (mirroring StreamProcessor._consumeFirstChunkAndReturn).
@@ -160,14 +167,7 @@ describe('LoadBalancingProvider retry boundary integration (issue #2450)', () =>
    */
   it('Scenario A: retries a full failed all-429 rotation and succeeds on the next rotation', async () => {
     const behavior: FakeBehavior = {
-      respond(invocation: number): AsyncGenerator<IContent> {
-        // First full rotation (invocations 1..NUM_BACKENDS) all 429, then
-        // succeed.
-        if (invocation <= NUM_BACKENDS) {
-          return always429();
-        }
-        return successChunk();
-      },
+      respond: respondAfterFailedRotation,
     };
     const { provider, counter } = makeFakeProvider(behavior);
     providerManager.registerProvider(provider);

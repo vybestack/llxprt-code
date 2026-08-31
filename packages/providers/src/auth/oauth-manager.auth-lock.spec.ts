@@ -23,6 +23,77 @@ function makeToken(accessToken: string, expiryOffset = 3600): OAuthToken {
   };
 }
 
+function tokenForCrossProcessCall(
+  callCount: number,
+  bucket?: string,
+): OAuthToken | null {
+  // First and second calls are upfront checks for default and claudius.
+  if (callCount === 1 && bucket === 'default') {
+    return null;
+  }
+  if (callCount === 2 && bucket === 'claudius') {
+    return null;
+  }
+  // A different process writes the default token before its re-check.
+  if (callCount === 3 && bucket === 'default') {
+    return makeToken('cross-process-token-default');
+  }
+  if (callCount === 4 && bucket === 'claudius') {
+    return null;
+  }
+  return null;
+}
+
+function tokenForAuthenticatedDefaultBucket(
+  bucket?: string,
+): OAuthToken | null {
+  if (bucket === 'default') {
+    return makeToken('existing-default-token');
+  }
+  return null;
+}
+
+function isProviderEnabled(
+  providers: Readonly<Record<string, boolean>>,
+  provider: string,
+): boolean {
+  return providers[provider] ?? false;
+}
+
+function tokenForMultiBucketCall(
+  callCount: number,
+  bucket?: string,
+): OAuthToken | null {
+  if (callCount <= 3) {
+    return null;
+  }
+  if (callCount === 4 && bucket === 'bucket1') {
+    return null;
+  }
+  if (callCount === 5 && bucket === 'bucket2') {
+    return makeToken('cross-process-bucket2');
+  }
+  if (callCount === 6 && bucket === 'bucket3') {
+    return null;
+  }
+  return null;
+}
+
+function recordAuthenticatedBucket(log: string[], bucket?: string): void {
+  log.push(bucket ?? 'default');
+}
+
+function tokenForRefreshRead(
+  callCount: number,
+  expiredToken: OAuthToken,
+  crossProcessToken: OAuthToken,
+): OAuthToken {
+  if (callCount <= 1) {
+    return expiredToken;
+  }
+  return crossProcessToken;
+}
+
 describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
   beforeEach(() => {
     // Register runtime accessors matching the old mock defaults
@@ -55,24 +126,7 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
         saveToken: vi.fn(),
         getToken: vi.fn(async (provider: string, bucket?: string) => {
           getTokenCallCount++;
-          // Simulate cross-process write:
-          // First call (upfront check for default): returns null (unauthenticated)
-          // Second call (upfront check for claudius): returns null
-          // Third call (onAuthBucket re-check for default): returns valid token (cross-process wrote it!)
-          // Fourth call (onAuthBucket re-check for claudius): returns null
-          if (getTokenCallCount === 1 && bucket === 'default') {
-            return null; // Upfront check: not authenticated yet
-          }
-          if (getTokenCallCount === 2 && bucket === 'claudius') {
-            return null; // Upfront check: not authenticated yet
-          }
-          if (getTokenCallCount === 3 && bucket === 'default') {
-            return makeToken('cross-process-token-default'); // Cross-process wrote it!
-          }
-          if (getTokenCallCount === 4 && bucket === 'claudius') {
-            return null; // Still needs auth
-          }
-          return null;
+          return tokenForCrossProcessCall(getTokenCallCount, bucket);
         }),
         removeToken: vi.fn(),
         listProviders: vi.fn(async () => []),
@@ -136,12 +190,9 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
     it('Test 5.2: should filter out already-authenticated buckets in upfront check', async () => {
       const tokenStore: TokenStore = {
         saveToken: vi.fn(),
-        getToken: vi.fn(async (provider: string, bucket?: string) => {
-          if (bucket === 'default') {
-            return makeToken('existing-default-token'); // Already authenticated
-          }
-          return null; // claudius and vybestack need auth
-        }),
+        getToken: vi.fn(async (provider: string, bucket?: string) =>
+          tokenForAuthenticatedDefaultBucket(bucket),
+        ),
         removeToken: vi.fn(),
         listProviders: vi.fn(async () => []),
         listBuckets: vi.fn(async () => []),
@@ -269,7 +320,7 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
         anthropic: false, // OAuth disabled for anthropic
       };
       const mockSettings = {
-        isOAuthEnabled: (p: string) => providers[p] ?? false,
+        isOAuthEnabled: (p: string) => isProviderEnabled(providers, p),
         getProviderApiKey: () => undefined,
         getProviderKeyfile: () => undefined,
         getProviderBaseUrl: () => undefined,
@@ -422,23 +473,7 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
         saveToken: vi.fn(),
         getToken: vi.fn(async (provider: string, bucket?: string) => {
           getTokenCallCount++;
-          // Upfront check calls: bucket1, bucket2, bucket3 (all return null)
-          if (getTokenCallCount <= 3) {
-            return null;
-          }
-          // TOCTOU re-check for bucket1: still null
-          if (getTokenCallCount === 4 && bucket === 'bucket1') {
-            return null;
-          }
-          // TOCTOU re-check for bucket2: cross-process wrote token!
-          if (getTokenCallCount === 5 && bucket === 'bucket2') {
-            return makeToken('cross-process-bucket2');
-          }
-          // TOCTOU re-check for bucket3: still null
-          if (getTokenCallCount === 6 && bucket === 'bucket3') {
-            return null;
-          }
-          return null;
+          return tokenForMultiBucketCall(getTokenCallCount, bucket);
         }),
         removeToken: vi.fn(),
         listProviders: vi.fn(async () => []),
@@ -463,7 +498,7 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
       const authenticateSpy = vi
         .spyOn(oauthManager, 'authenticate')
         .mockImplementation(async (providerName: string, bucket?: string) => {
-          authenticateCallLog.push(bucket ?? 'default');
+          recordAuthenticatedBucket(authenticateCallLog, bucket);
         });
 
       await oauthManager.authenticateMultipleBuckets('anthropic', [
@@ -680,10 +715,11 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
         saveToken: vi.fn(),
         getToken: vi.fn(async () => {
           getTokenCallCount++;
-          // First call (auth lock path): return expired token
-          // Second call (after refresh-lock timeout): return fresh token from other process
-          if (getTokenCallCount <= 1) return expiredToken;
-          return crossProcessToken;
+          return tokenForRefreshRead(
+            getTokenCallCount,
+            expiredToken,
+            crossProcessToken,
+          );
         }),
         removeToken: vi.fn(),
         listProviders: vi.fn(async () => []),

@@ -96,11 +96,7 @@ describe('Compression and duplicate tool call IDs', () => {
 
     for (const content of allHistory) {
       for (const block of content.blocks) {
-        if (block.type === 'tool_call') {
-          toolCallIds.push(block.id);
-        } else if (block.type === 'tool_response') {
-          toolResponseIds.push(block.callId);
-        }
+        collectBlockId(block, toolCallIds, toolResponseIds);
       }
     }
 
@@ -220,9 +216,7 @@ describe('Compression and duplicate tool call IDs', () => {
 
     for (const content of finalHistory) {
       for (const block of content.blocks) {
-        if (block.type === 'tool_call') {
-          allToolIds.push(block.id);
-        }
+        collectToolCallId(block, allToolIds);
       }
     }
 
@@ -230,3 +224,24 @@ describe('Compression and duplicate tool call IDs', () => {
     expect(allToolIds.length).toBe(uniqueIds.size);
   });
 });
+
+function collectBlockId(
+  block: { type: string; id?: string; callId?: string },
+  toolCallIds: string[],
+  toolResponseIds: string[],
+): void {
+  if (block.type === 'tool_call' && block.id !== undefined) {
+    toolCallIds.push(block.id);
+  } else if (block.type === 'tool_response' && block.callId !== undefined) {
+    toolResponseIds.push(block.callId);
+  }
+}
+
+function collectToolCallId(
+  block: { type: string; id?: string },
+  ids: string[],
+): void {
+  if (block.type === 'tool_call' && block.id !== undefined) {
+    ids.push(block.id);
+  }
+}

@@ -56,10 +56,16 @@ describe('toLosslessTextDelta', () => {
     expect(toLosslessTextDelta('\r\n')).toBe('\n');
   });
 
-  it('does not invent separators at chunk boundaries', () => {
+  const observeDoesNotInventSeparatorsAtChunkBoundariesAt59 = () => {
     const first = toLosslessTextDelta('foo');
     const second = toLosslessTextDelta('bar');
     const accumulated = `${first ?? ''}${second ?? ''}`;
+    return { accumulated };
+  };
+
+  it('does not invent separators at chunk boundaries', () => {
+    const { accumulated } =
+      observeDoesNotInventSeparatorsAtChunkBoundariesAt59();
     expect(accumulated).toBe('foobar');
   });
 
@@ -97,9 +103,16 @@ describe('createStreamNormalizer', () => {
     expect(n.push('\nb')).toBe('\nb');
   });
 
+  const observeDoesNotInventAnExtraNewlineWhenCRIsSplitFromFollowingLFAt100 =
+    () => {
+      const n = createStreamNormalizer();
+      const accumulated = [n.push('a\r') ?? '', n.push('\nb') ?? ''].join('');
+      return { n, accumulated };
+    };
+
   it('does not invent an extra newline when CR is split from following LF', () => {
-    const n = createStreamNormalizer();
-    const accumulated = [n.push('a\r') ?? '', n.push('\nb') ?? ''].join('');
+    const { n, accumulated } =
+      observeDoesNotInventAnExtraNewlineWhenCRIsSplitFromFollowingLFAt100();
     expect(accumulated).toBe('a\nb');
     expect(n.flush()).toBeUndefined();
   });
@@ -128,7 +141,7 @@ describe('createStreamNormalizer', () => {
     expect(n.flush()).toBeUndefined();
   });
 
-  it('accumulates the exact issue sequence losslessly', () => {
+  const observeAccumulatesTheExactIssueSequenceLosslesslyAt131 = () => {
     const n = createStreamNormalizer();
     const parts = [
       'Analyzing the codebase...',
@@ -138,16 +151,29 @@ describe('createStreamNormalizer', () => {
       '1. Missing import',
     ];
     const accumulated = parts.map((p) => n.push(p) ?? '').join('');
+    return { accumulated };
+  };
+
+  it('accumulates the exact issue sequence losslessly', () => {
+    const { accumulated } =
+      observeAccumulatesTheExactIssueSequenceLosslesslyAt131();
     expect(accumulated).toBe(
       'Analyzing the codebase...\nFound 3 issues:\n1. Missing import',
     );
   });
 
+  const observeDoesNotInventSeparatorsAtWordTokenFragmentBoundariesAt146 =
+    () => {
+      const n = createStreamNormalizer();
+      const accumulated = ('Hello World'.match(/(\w+|\s)/g) ?? [])
+        .map((t) => n.push(t) ?? '')
+        .join('');
+      return { accumulated };
+    };
+
   it('does not invent separators at word-token fragment boundaries', () => {
-    const n = createStreamNormalizer();
-    const accumulated = ('Hello World'.match(/(\w+|\s)/g) ?? [])
-      .map((t) => n.push(t) ?? '')
-      .join('');
+    const { accumulated } =
+      observeDoesNotInventSeparatorsAtWordTokenFragmentBoundariesAt146();
     expect(accumulated).toBe('Hello World');
   });
 
@@ -204,9 +230,18 @@ describe('createStreamNormalizer', () => {
     expect(n.flush()).toBeUndefined();
   });
 
+  const observeFullStreamAccumulationAcrossTheIssueSequenceProducesNoDoubleNewlineAt207 =
+    () => {
+      const n = createStreamNormalizer();
+      const accumulated = ['a\r', '', '\nb']
+        .map((p) => n.push(p) ?? '')
+        .join('');
+      return { accumulated };
+    };
+
   it('full-stream accumulation across the issue sequence produces no double newline', () => {
-    const n = createStreamNormalizer();
-    const accumulated = ['a\r', '', '\nb'].map((p) => n.push(p) ?? '').join('');
+    const { accumulated } =
+      observeFullStreamAccumulationAcrossTheIssueSequenceProducesNoDoubleNewlineAt207();
     expect(accumulated).toBe('a\nb');
   });
 

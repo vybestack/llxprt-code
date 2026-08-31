@@ -77,6 +77,13 @@ function expectDiscriminatedResumeResult(
   expect(result.error.length).toBeGreaterThan(0);
 }
 
+async function releaseCurrentLock(
+  context: ReturnType<typeof makeResumeContext>,
+): Promise<void> {
+  const newLock = context.recordingCallbacks.getCurrentLockHandle();
+  if (newLock) await newLock.release();
+}
+
 describe('Property-based tests #3', () => {
   let state: SessionBrowserTestState;
 
@@ -112,9 +119,7 @@ describe('Property-based tests #3', () => {
 
           try {
             expectDiscriminatedResumeResult(result);
-
-            const newLock = context.recordingCallbacks.getCurrentLockHandle();
-            if (newLock) await newLock.release();
+            await releaseCurrentLock(context);
           } finally {
             await fs.rm(localTempDir, { recursive: true, force: true });
           }

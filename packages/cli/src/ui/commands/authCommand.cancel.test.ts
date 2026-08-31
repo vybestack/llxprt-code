@@ -73,17 +73,17 @@ describe('/auth cancel', () => {
 
     const result = await executeCancel();
 
-    await expect(waiter).resolves.toEqual({
+    await expect(waiter).resolves.toStrictEqual({
       kind: 'cancelled',
       correlationId: 'cancel-command-correlation',
     });
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content:
         'Cancelled 1 active authentication session(s). Retry with /auth codex.',
     });
-    expect(interactiveAuthCoordinator.getActiveSessions()).toEqual([]);
+    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
   });
 
   it('lists each cancelled provider once in retry guidance', async () => {
@@ -110,7 +110,7 @@ describe('/auth cancel', () => {
     const result = await executeCancel();
 
     await Promise.all(waiters);
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content:
@@ -121,7 +121,7 @@ describe('/auth cancel', () => {
   it('reports when there are no active authentication sessions', async () => {
     const result = await executeCancel();
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: 'No active authentication sessions.',

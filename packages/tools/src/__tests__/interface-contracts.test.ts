@@ -60,6 +60,14 @@ function assertImplements<T>(_: T): void {
   // Structural type check only — compile-time enforcement
 }
 
+/** Settings stub backed by a table, so the lookup's branching lives here
+ * rather than inside a test body (#3129). */
+function settingsLookup(
+  values: Readonly<Record<string, string>>,
+): (key: string) => string | undefined {
+  return (key) => values[key];
+}
+
 describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04', () => {
   describe('IToolHost contract', () => {
     const createHost = (overrides: Partial<IToolHost> = {}): IToolHost => ({
@@ -98,7 +106,9 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
       assertImplements<IToolHost>(host);
       expect(host.getTargetDir()).toBe('/tmp/workspace');
       expect(typeof host.getTargetDir()).toBe('string');
-      expect(host.getReadManyFilesExclusions()).toEqual(['**/fixtures/**']);
+      expect(host.getReadManyFilesExclusions()).toStrictEqual([
+        '**/fixtures/**',
+      ]);
     });
 
     it('requires getWorkspaceRoots returning string array', () => {
@@ -135,8 +145,8 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
       } satisfies IToolRegistryHost;
       assertImplements<IToolRegistryHost>(registryHost);
 
-      expect(registryHost.getCoreTools()).toEqual(['shell', 'read-file']);
-      expect(registryHost.getExcludeTools()).toEqual(['dangerous-tool']);
+      expect(registryHost.getCoreTools()).toStrictEqual(['shell', 'read-file']);
+      expect(registryHost.getExcludeTools()).toStrictEqual(['dangerous-tool']);
       expect(registryHost.getToolDiscoveryCommand()).toBe('llm-tools discover');
       expect(registryHost.getToolCallCommand()).toBe('llm-tools call');
       expect(registryHost.isToolEnabled('shell')).toBe(true);
@@ -358,7 +368,7 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
           command: 'npm run typecheck',
         }),
       );
-      expect(service.getTask('task-1')).toEqual(
+      expect(service.getTask('task-1')).toStrictEqual(
         expect.objectContaining({ kind: 'subagent' }),
       );
       expect(service.getTaskByPrefix('task-2').task?.id).toBe('task-2');
@@ -392,7 +402,10 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
         filePath: '/tmp/test.ts',
         diff: '',
       });
-      expect(rejected).toEqual({ status: 'rejected', content: undefined });
+      expect(rejected).toStrictEqual({
+        status: 'rejected',
+        content: undefined,
+      });
     });
   });
 
@@ -418,7 +431,7 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
 
       const waited = await service.waitForDiagnostics('/tmp/test.ts', 5000);
       expect(waited).toHaveLength(1);
-      expect(service.getLspConfig()).toEqual({
+      expect(service.getLspConfig()).toStrictEqual({
         includeSeverities: ['error', 'warning'],
         maxDiagnosticsPerFile: 25,
       });
@@ -477,10 +490,10 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
     it('requires getSettingsService, getSetting, setSetting', async () => {
       const service: ISettingsService = {
         getSettingsService: () => ({
-          get: (key: string) => (key === 'theme' ? 'dark' : undefined),
+          get: settingsLookup({ theme: 'dark' }),
           set: () => {},
         }),
-        getSetting: (key: string) => (key === 'theme' ? 'dark' : undefined),
+        getSetting: settingsLookup({ theme: 'dark' }),
         setSetting: async () => {},
       };
       assertImplements<ISettingsService>(service);
@@ -544,7 +557,7 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
 
       const mgr = service.getSkillManager();
       expect(mgr.getSkills?.()).toHaveLength(1);
-      expect(service.listSkills()).toEqual(skills);
+      expect(service.listSkills()).toStrictEqual(skills);
       expect(service.getSkill('pr-creator')?.description).toBe(
         'Creates pull requests',
       );
@@ -574,11 +587,11 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
       expect(parts).toHaveLength(1);
       expect(parts[0]?.text).toBe('search');
       expect(parts[0]?.functionResponse?.name).toBe('search');
-      expect(parts[0]?.functionResponse?.response?.content).toEqual({
+      expect(parts[0]?.functionResponse?.response?.content).toStrictEqual({
         query: 'interface contracts',
       });
       expect(service.isTrustedFolder?.()).toBe(true);
-      expect(await service.callTool([])).toEqual([]);
+      expect(await service.callTool([])).toStrictEqual([]);
     });
   });
 

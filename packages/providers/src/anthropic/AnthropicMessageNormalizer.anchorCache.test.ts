@@ -169,7 +169,7 @@ describe('Anthropic anchor cache breakpoint — message-level (#3070)', () => {
       human('tail'),
     ]);
 
-    expect(cacheControlLocations(messages)).toEqual(['1:1', '2:1']);
+    expect(cacheControlLocations(messages)).toStrictEqual(['1:1', '2:1']);
   });
 
   it('maps a human semantic boundary during the initial media conversion', () => {
@@ -215,13 +215,13 @@ describe('Anthropic anchor cache breakpoint — message-level (#3070)', () => {
 
     const evidence = attachMediaPurgeCacheControl(messages, '5m', noopLogger);
 
-    expect(evidence).toEqual({ boundaryId, preparation: 'added' });
+    expect(evidence).toStrictEqual({ boundaryId, preparation: 'added' });
     expect(mediaReads).toBe(2);
     const content = messages[0]?.content;
     if (!Array.isArray(content) || content[0]?.type !== 'document') {
       throw new Error('Expected the exact PDF provider part');
     }
-    expect(content[0].source).toEqual({
+    expect(content[0].source).toStrictEqual({
       type: 'base64',
       media_type: 'application/pdf',
       data: 'JVBERi0xLjQ=',
@@ -272,8 +272,8 @@ describe('Anthropic anchor cache breakpoint — message-level (#3070)', () => {
 
     const evidence = attachMediaPurgeCacheControl(messages, '5m', noopLogger);
 
-    expect(evidence).toEqual({ boundaryId, preparation: 'added' });
-    expect(cacheControlLocations(messages)).toEqual(['2:1']);
+    expect(evidence).toStrictEqual({ boundaryId, preparation: 'added' });
+    expect(cacheControlLocations(messages)).toStrictEqual(['2:1']);
   });
 
   it('keeps the anchor breakpoint at the same content boundary across two byte-identical heads', () => {
@@ -489,8 +489,8 @@ describe('Anthropic anchor cache breakpoint — message-level (#3070)', () => {
     attachAnchorCacheControl(messages, '5m', noopLogger);
     const evidence = attachMediaPurgeCacheControl(messages, '5m', noopLogger);
 
-    expect(evidence).toEqual({ boundaryId, preparation: 'reused' });
-    expect(cacheControlLocations(messages)).toEqual(['2:0', '2:1']);
+    expect(evidence).toStrictEqual({ boundaryId, preparation: 'reused' });
+    expect(cacheControlLocations(messages)).toStrictEqual(['2:0', '2:1']);
   });
 
   it('honors a curated tool-result entry as the anchor boundary', () => {
@@ -780,8 +780,12 @@ describe('Anthropic anchor cache breakpoint — gating & count via prepareAnthro
     expect(missing.semanticMediaPurgeCacheWriteEvidence).toBeUndefined();
     expect(disabled.semanticMediaPurgeCacheWriteEvidence).toBeUndefined();
     expect(disabled.requestBody).toStrictEqual(missing.requestBody);
-    expect(cacheControlLocations(missing.anthropicMessages)).toEqual(['0:2']);
-    expect(cacheControlLocations(disabled.anthropicMessages)).toEqual(['0:2']);
+    expect(cacheControlLocations(missing.anthropicMessages)).toStrictEqual([
+      '0:2',
+    ]);
+    expect(cacheControlLocations(disabled.anthropicMessages)).toStrictEqual([
+      '0:2',
+    ]);
 
     for (const semanticMediaPurge of ['remove', 'summary'] as const) {
       const enabled = await prepare({
@@ -793,11 +797,11 @@ describe('Anthropic anchor cache breakpoint — gating & count via prepareAnthro
         contents: imageHistory,
       });
 
-      expect(enabled.semanticMediaPurgeCacheWriteEvidence).toEqual({
+      expect(enabled.semanticMediaPurgeCacheWriteEvidence).toStrictEqual({
         boundaryId,
         preparation: 'added',
       });
-      expect(cacheControlLocations(enabled.anthropicMessages)).toEqual([
+      expect(cacheControlLocations(enabled.anthropicMessages)).toStrictEqual([
         '0:0',
         '0:2',
       ]);
@@ -835,11 +839,11 @@ describe('Anthropic anchor cache breakpoint — gating & count via prepareAnthro
       ],
     });
 
-    expect(prepared.semanticMediaPurgeCacheWriteEvidence).toEqual({
+    expect(prepared.semanticMediaPurgeCacheWriteEvidence).toStrictEqual({
       boundaryId,
       preparation: 'reused',
     });
-    expect(cacheControlLocations(prepared.anthropicMessages)).toEqual([
+    expect(cacheControlLocations(prepared.anthropicMessages)).toStrictEqual([
       '0:0',
       '0:2',
     ]);

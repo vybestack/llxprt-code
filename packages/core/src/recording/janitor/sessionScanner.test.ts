@@ -30,6 +30,8 @@ import { scanGlobalSessions, ARCHIVE_DIR_NAME } from './sessionScanner.js';
 import { SessionRecordingService } from '../SessionRecordingService.js';
 import type { SessionRecordingServiceConfig } from '../types.js';
 
+const bunIt = it;
+
 async function makeTempDir(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), 'janitor-scan-'));
 }
@@ -278,9 +280,9 @@ describe('scanGlobalSessions — symlink safety (AC-10)', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'does not follow symlinks to project-hash dirs',
-    async () => {
+  {
+    const it = process.platform === 'win32' ? bunIt.skip : bunIt;
+    it('does not follow symlinks to project-hash dirs', async () => {
       const hash1 = validHash64();
       const realChats = path.join(tempDir, hash1, 'chats');
       await fs.mkdir(realChats, { recursive: true });
@@ -295,11 +297,12 @@ describe('scanGlobalSessions — symlink safety (AC-10)', () => {
       // Should find sessions but not double-count through the symlink.
       const raws = candidates.filter((c) => c.kind === 'raw');
       expect(raws.length).toBe(1);
-    },
-  );
-  it.skipIf(process.platform === 'win32')(
-    'does not follow a symlinked chats directory (AC-10)',
-    async () => {
+    });
+  }
+
+  {
+    const it = process.platform === 'win32' ? bunIt.skip : bunIt;
+    it('does not follow a symlinked chats directory (AC-10)', async () => {
       const hash = validHash64();
       const hashDir = path.join(tempDir, hash);
       await fs.mkdir(hashDir, { recursive: true });
@@ -315,12 +318,12 @@ describe('scanGlobalSessions — symlink safety (AC-10)', () => {
       const { candidates } = await scanGlobalSessions(tempDir);
       // The symlinked chats dir must not be traversed.
       expect(candidates.length).toBe(0);
-    },
-  );
+    });
+  }
 
-  it.skipIf(process.platform === 'win32')(
-    'does not follow a symlinked archive directory (AC-10)',
-    async () => {
+  {
+    const it = process.platform === 'win32' ? bunIt.skip : bunIt;
+    it('does not follow a symlinked archive directory (AC-10)', async () => {
       const hash = validHash64();
       const chatsDir = path.join(tempDir, hash, 'chats');
       await fs.mkdir(chatsDir, { recursive: true });
@@ -340,12 +343,12 @@ describe('scanGlobalSessions — symlink safety (AC-10)', () => {
       // The symlinked archive must not be traversed.
       const archives = candidates.filter((c) => c.kind === 'archive');
       expect(archives.length).toBe(0);
-    },
-  );
+    });
+  }
 
-  it.skipIf(process.platform === 'win32')(
-    'does not follow a symlinked archive file (AC-10)',
-    async () => {
+  {
+    const it = process.platform === 'win32' ? bunIt.skip : bunIt;
+    it('does not follow a symlinked archive file (AC-10)', async () => {
       const hash = validHash64();
       const chatsDir = path.join(tempDir, hash, 'chats');
       const archiveDir = path.join(chatsDir, 'archive');
@@ -361,8 +364,8 @@ describe('scanGlobalSessions — symlink safety (AC-10)', () => {
       const { candidates } = await scanGlobalSessions(tempDir);
       const archives = candidates.filter((c) => c.kind === 'archive');
       expect(archives.length).toBe(0);
-    },
-  );
+    });
+  }
 
   /**
    * OCR finding 38: when the archive entry is a regular file (not a
@@ -388,9 +391,12 @@ describe('scanGlobalSessions — symlink safety (AC-10)', () => {
    * (e.g. EACCES) must be counted in scanErrorCount, not silently treated
    * as "directory doesn't exist".
    */
-  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
-    'counts non-ENOENT archive readdir errors in scanErrorCount (OCR 39)',
-    async () => {
+  {
+    const it =
+      process.platform === 'win32' || process.getuid?.() === 0
+        ? bunIt.skip
+        : bunIt;
+    it('counts non-ENOENT archive readdir errors in scanErrorCount (OCR 39)', async () => {
       const hash = validHash64();
       const chatsDir = path.join(tempDir, hash, 'chats');
       const archiveDir = path.join(chatsDir, ARCHIVE_DIR_NAME);
@@ -410,8 +416,8 @@ describe('scanGlobalSessions — symlink safety (AC-10)', () => {
       } finally {
         await fs.chmod(archiveDir, 0o755);
       }
-    },
-  );
+    });
+  }
 
   /**
    * OCR finding 39: ENOENT races remain benign (not counted as errors).

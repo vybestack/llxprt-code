@@ -99,6 +99,10 @@ describe('fileUtils', () => {
   describe('isWithinRoot', () => {
     const defaultRoot = path.resolve('/project/root');
 
+    function rootFor(root: string | undefined, fallbackRoot: string): string {
+      return root ?? fallbackRoot;
+    }
+
     it.each([
       {
         name: 'a path directly within the root',
@@ -163,7 +167,9 @@ describe('fileUtils', () => {
     ])(
       'should return $expected for $name',
       ({ path: testPath, root, expected }) => {
-        expect(isWithinRoot(testPath, root ?? defaultRoot)).toBe(expected);
+        expect(isWithinRoot(testPath, rootFor(root, defaultRoot))).toBe(
+          expected,
+        );
       },
     );
   });

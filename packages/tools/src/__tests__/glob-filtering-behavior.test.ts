@@ -426,9 +426,8 @@ describe('GlobTool real behavioral filtering', () => {
       }
     });
 
-    it.skipIf(!supportsSymlinks)(
-      'symlink to ignored target is filtered consistently',
-      async () => {
+    describe.skipIf(!supportsSymlinks)('symlink filtering', () => {
+      it('symlink to ignored target is filtered consistently', async () => {
         expect(existsSync(join(tempDir, 'link.txt'))).toBe(true);
 
         const host = createRealHost(tempDir, {
@@ -443,7 +442,7 @@ describe('GlobTool real behavioral filtering', () => {
         expect(files.some((f) => endsWithPath(f, 'target/real.txt'))).toBe(
           false,
         );
-      },
-    );
+      });
+    });
   });
 });

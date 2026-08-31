@@ -18,6 +18,39 @@ import {
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
+async function* generateSignalAwareResponse(
+  options: GenerateChatOptions,
+  captureSignal: (signal: AbortSignal) => void,
+): AsyncGenerator<IContent> {
+  const signal = options.invocation?.signal;
+  if (signal === undefined) {
+    throw new Error('Delegate invocation signal is required');
+  }
+  captureSignal(signal);
+  await new Promise<void>((resolve) => {
+    signal.addEventListener('abort', () => resolve(), { once: true });
+  });
+  yield { role: 'model', parts: [{ text: 'response' }] };
+}
+
+function captureResolvedAuthToken(
+  options: GenerateChatOptions,
+  capturedAuthTokens: string[],
+): void {
+  if (options.resolved?.authToken != null) {
+    capturedAuthTokens.push(options.resolved.authToken);
+  }
+}
+
+function captureResolvedBaseUrl(
+  options: GenerateChatOptions,
+  capturedBaseUrls: string[],
+): void {
+  if (options.resolved?.baseURL != null) {
+    capturedBaseUrls.push(options.resolved.baseURL);
+  }
+}
+
 describe('LoadBalancingProvider', () => {
   let settingsService: SettingsService;
   let config: Config;
@@ -429,18 +462,10 @@ describe('LoadBalancingProvider', () => {
         let capturedSignal: AbortSignal | undefined;
         const delegate: IProvider = {
           name: 'anthropic',
-          async *generateChatCompletion(options: GenerateChatOptions) {
-            capturedSignal = options.invocation?.signal;
-            if (capturedSignal === undefined) {
-              throw new Error('Delegate invocation signal is required');
-            }
-            await new Promise<void>((resolve) => {
-              capturedSignal.addEventListener('abort', () => resolve(), {
-                once: true,
-              });
-            });
-            yield { role: 'model', parts: [{ text: 'response' }] };
-          },
+          generateChatCompletion: (options: GenerateChatOptions) =>
+            generateSignalAwareResponse(options, (signal) => {
+              capturedSignal = signal;
+            }),
           getModels: async () => [],
           getDefaultModel: () => 'claude-test',
         };
@@ -700,9 +725,7 @@ describe('LoadBalancingProvider', () => {
           async *generateChatCompletion(
             options: GenerateChatOptions,
           ): AsyncIterableIterator<IContent> {
-            if (options.resolved?.authToken != null) {
-              capturedAuthTokens.push(options.resolved.authToken);
-            }
+            captureResolvedAuthToken(options, capturedAuthTokens);
             yield { role: 'model', parts: [{ text: 'response' }] };
           },
           getModels: async () => [],
@@ -769,9 +792,7 @@ describe('LoadBalancingProvider', () => {
           async *generateChatCompletion(
             options: GenerateChatOptions,
           ): AsyncIterableIterator<IContent> {
-            if (options.resolved?.baseURL != null) {
-              capturedBaseURLs.push(options.resolved.baseURL);
-            }
+            captureResolvedBaseUrl(options, capturedBaseURLs);
             yield { role: 'model', parts: [{ text: 'response' }] };
           },
           getModels: async () => [],

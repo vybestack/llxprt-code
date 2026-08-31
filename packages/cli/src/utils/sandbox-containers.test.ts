@@ -47,9 +47,9 @@ import { Storage } from '@vybestack/llxprt-code-storage';
 // would hang the first test to reach that path.
 const __actual = { ...(await import('node:child_process')) };
 void vi.mock('node:child_process', () => {
-  const actual: typeof import('node:child_process') = __actual;
+  const childProcessModule: typeof import('node:child_process') = __actual;
   return {
-    ...actual,
+    ...childProcessModule,
     execSync: vi.fn(),
     spawn: vi.fn(),
   };
@@ -89,6 +89,16 @@ function setNetworkEnvironment(
   for (const [key, value] of Object.entries(values)) {
     if (value !== undefined) process.env[key] = value;
   }
+}
+
+function flagOperands(args: readonly string[], flag: string): string[] {
+  const operands: string[] = [];
+  for (let index = 0; index < args.length; index++) {
+    if (args[index] === flag && index + 1 < args.length) {
+      operands.push(args[index + 1]);
+    }
+  }
+  return operands;
 }
 
 function buildArgs(fixturePath: string): string[] {
@@ -313,12 +323,7 @@ describe('#2946 container credential isolation', () => {
 
     // Parse --env flag/value PAIRS: for each --env take the next element as
     // the operand. This rejects an implementation that emits unpaired values.
-    const envPairs: string[] = [];
-    for (let i = 0; i < args.length; i++) {
-      if (args[i] === '--env' && i + 1 < args.length) {
-        envPairs.push(args[i + 1]);
-      }
-    }
+    const envPairs = flagOperands(args, '--env');
     expect(envPairs).toContain('GOOGLE_CLOUD_PROJECT=my-project');
     expect(envPairs).toContain('GOOGLE_CLOUD_LOCATION=us-central1');
     expect(envPairs).toContain('GOOGLE_GENAI_USE_VERTEXAI=true');
@@ -339,12 +344,7 @@ describe('#2946 container credential isolation', () => {
     const args: string[] = [];
     addContainerEnvVars(args, ENV_CONFIG, 'test-container', [], '/workspace');
 
-    const envPairs: string[] = [];
-    for (let i = 0; i < args.length; i++) {
-      if (args[i] === '--env' && i + 1 < args.length) {
-        envPairs.push(args[i + 1]);
-      }
-    }
+    const envPairs = flagOperands(args, '--env');
     expect(envPairs).toContain('GOOGLE_CLOUD_PROJECT=my-project');
     expect(envPairs).toContain('GOOGLE_CLOUD_LOCATION=us-central1');
     expect(envPairs).toContain('GOOGLE_GENAI_USE_VERTEXAI=true');
@@ -373,12 +373,7 @@ describe('#2946 container credential isolation', () => {
     const gcloudPath = path.join(fakeHome, '.config', 'gcloud');
     // Inspect only the operand that follows each --volume flag, so unrelated
     // mounts are permitted while a gcloud mount still fails the test.
-    const volumeOperands: string[] = [];
-    for (let i = 0; i < args.length; i++) {
-      if (args[i] === '--volume' && i + 1 < args.length) {
-        volumeOperands.push(args[i + 1]);
-      }
-    }
+    const volumeOperands = flagOperands(args, '--volume');
     expect(volumeOperands.some((spec) => spec.includes(gcloudPath))).toBe(
       false,
     );
@@ -765,19 +760,21 @@ describe('#3081 canonical config mount + env pinning', () => {
   // /c/Users/... into D:\c\Users\...), so it cannot model the container there.
   // Windows keeps the sibling assertions above, which pin the emitted mount
   // pair and env value directly.
-  it.skipIf(process.platform === 'win32')(
-    'covers the resolved config dir with an emitted --volume destination',
+  describe.skipIf(process.platform === 'win32')(
+    'POSIX config-mount resolution behavior',
     () => {
-      // The original bug: the destination the CLI resolved inside the container
-      // was NOT covered by any --volume mount. Compute the expectation via the
-      // REAL resolver (independent of the argv the function just produced),
-      // then assert the resolver's answer is among the volume destinations.
-      const args = buildArgs(fixturePath);
-      const emitted = envValue(args, 'LLXPRT_CONFIG_HOME');
-      expect(emitted).toBeDefined();
-      process.env.LLXPRT_CONFIG_HOME = emitted;
-      const resolved = Storage.getGlobalConfigDir();
-      expect(volumeDestinations(args)).toContain(resolved);
+      it('covers the resolved config dir with an emitted --volume destination', () => {
+        // The original bug: the destination the CLI resolved inside the container
+        // was NOT covered by any --volume mount. Compute the expectation via the
+        // REAL resolver (independent of the argv the function just produced),
+        // then assert the resolver's answer is among the volume destinations.
+        const args = buildArgs(fixturePath);
+        const emitted = envValue(args, 'LLXPRT_CONFIG_HOME');
+        expect(emitted).toBeDefined();
+        process.env.LLXPRT_CONFIG_HOME = emitted;
+        const resolved = Storage.getGlobalConfigDir();
+        expect(volumeDestinations(args)).toContain(resolved);
+      });
     },
   );
 

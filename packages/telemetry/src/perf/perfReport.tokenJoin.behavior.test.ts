@@ -102,6 +102,16 @@ async function writeJsonl(
   );
 }
 
+async function removeReportDirectories(
+  perfDir: string | undefined,
+  tokenDir: string,
+): Promise<void> {
+  if (perfDir !== undefined) {
+    await fs.rm(perfDir, { recursive: true, force: true });
+  }
+  await fs.rm(tokenDir, { recursive: true, force: true });
+}
+
 function tokenLine(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
     prompt_id: INITIAL_PROMPT_ID,
@@ -162,7 +172,7 @@ describe('buildReport — read-time continuation join (D1, AC-3)', () => {
 
     // Exactly one operation group with one sample.
     const ops = report.groups.flatMap((g) => g.sampleCount);
-    expect(ops).toEqual([1]);
+    expect(ops).toStrictEqual([1]);
 
     const group = report.groups[0];
     // Joined actual_prompt_tokens = 1000 + 2000 + 3000 = 6000 (replaces
@@ -262,7 +272,7 @@ describe('buildReport — read-time continuation join (D1, AC-3)', () => {
     await buildReport(perfDir, undefined, undefined, tokenDir);
 
     const after = await consumeTokenUsageDirectory(tokenDir);
-    expect(after.rows.map((r) => r.promptId)).toEqual(beforeIds);
+    expect(after.rows.map((r) => r.promptId)).toStrictEqual(beforeIds);
     expect(after.counts.turns).toBe(2);
   });
 
@@ -347,7 +357,7 @@ describe('assembleReport — direct join composition (D1)', () => {
 
   it('an empty token-usage directory yields no join (persisted totals retained)', async () => {
     const tokenDir = await makeTempDir('token-empty');
-    let perfDir = '';
+    let perfDir: string | undefined;
     try {
       const op = makeOperation({
         operation_id: 'op-B',
@@ -359,10 +369,7 @@ describe('assembleReport — direct join composition (D1)', () => {
       expect(report.groups[0].p50['context_tokens']).toBe(42);
       expect(report.groups[0].p50['output_tokens']).toBe(7);
     } finally {
-      if (perfDir !== '') {
-        await fs.rm(perfDir, { recursive: true, force: true });
-      }
-      await fs.rm(tokenDir, { recursive: true, force: true });
+      await removeReportDirectories(perfDir, tokenDir);
     }
   });
 

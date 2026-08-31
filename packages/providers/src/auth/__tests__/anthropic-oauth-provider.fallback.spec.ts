@@ -34,6 +34,10 @@ const startLocalOAuthCallbackMock = startLocalOAuthCallback as Mock<
 >;
 const openBrowserArgs: string[] = [];
 
+function isOAuthUrlLog(line: string): boolean {
+  return line.includes('claude.ai') || line.includes('localhost');
+}
+
 /**
  * Tests for improved OAuth fallback behavior (Issue #828)
  *
@@ -151,9 +155,7 @@ describe('AnthropicOAuthProvider fallback behavior', () => {
       await provider.initiateAuth();
 
       // The device code URL should appear in debug log output, not the callback URL
-      const urlLogLines = debugLogs.filter(
-        (line) => line.includes('claude.ai') || line.includes('localhost'),
-      );
+      const urlLogLines = debugLogs.filter(isOAuthUrlLog);
       const hasDeviceCodeUrl = urlLogLines.some((line) =>
         line.includes(DEVICE_CODE_URL),
       );

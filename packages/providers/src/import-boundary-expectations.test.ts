@@ -37,6 +37,31 @@ const _CLI_DIR = path.join(ROOT_DIR, 'packages', 'cli');
 const CORE_SRC_DIR = path.join(CORE_DIR, 'src');
 const CORE_PROVIDERS_DIR = path.join(CORE_SRC_DIR, 'providers');
 
+function dependencyRecord(value: unknown): Record<string, string> {
+  return (value ?? {}) as Record<string, string>;
+}
+
+function referenceRecords(value: unknown): Array<Record<string, string>> {
+  return (value ?? []) as Array<Record<string, string>>;
+}
+
+function workspaceEntries(value: unknown): string[] {
+  return (value ?? []) as string[];
+}
+
+function scriptRecord(value: unknown): Record<string, unknown> {
+  return (value ?? {}) as Record<string, unknown>;
+}
+
+function exportsRuntimeTokenizer(mod: Record<string, unknown>): boolean {
+  return ['OpenAITokenizer', 'AnthropicTokenizer'].some((name) => name in mod);
+}
+
+function hasCompatOrShimBasename(filePath: string): boolean {
+  const basename = path.basename(filePath);
+  return [/compat/i, /shim/i].some((pattern) => pattern.test(basename));
+}
+
 interface JsonCommentStripState {
   output: string;
   index: number;
@@ -224,7 +249,7 @@ describe('Core must not import from providers package', () => {
     const pkg = JSON.parse(
       fs.readFileSync(path.join(CORE_DIR, 'package.json'), 'utf-8'),
     ) as Record<string, unknown>;
-    const deps = (pkg.dependencies ?? {}) as Record<string, string>;
+    const deps = dependencyRecord(pkg.dependencies);
     expect(deps['@vybestack/llxprt-code-providers']).toBeUndefined();
   });
 
@@ -241,9 +266,7 @@ describe('Core must not import from providers package', () => {
     const stripped = stripJsonComments(content);
     try {
       const tsconfig = JSON.parse(stripped) as Record<string, unknown>;
-      const references = (tsconfig.references ?? []) as Array<
-        Record<string, string>
-      >;
+      const references = referenceRecords(tsconfig.references);
       for (const ref of references) {
         expect(ref.path.includes('providers')).toBe(false);
       }
@@ -293,7 +316,7 @@ describe('Providers package dependency direction', () => {
     const pkg = JSON.parse(
       fs.readFileSync(path.join(PROVIDERS_DIR, 'package.json'), 'utf-8'),
     ) as Record<string, unknown>;
-    const deps = (pkg.dependencies ?? {}) as Record<string, string>;
+    const deps = dependencyRecord(pkg.dependencies);
     expect(deps['@vybestack/llxprt-code-core']).toBeDefined();
   });
 });
@@ -317,10 +340,7 @@ describe('Provider files moved to providers package (P11 state)', () => {
       'errors.ts',
     ];
     for (const file of keyFiles) {
-      expect(
-        fs.existsSync(path.join(PROVIDERS_SRC_DIR, file)),
-        `Missing: ${file}`,
-      ).toBe(true);
+      expect(fs.existsSync(path.join(PROVIDERS_SRC_DIR, file))).toBe(true);
     }
   });
 
@@ -331,17 +351,14 @@ describe('Provider files moved to providers package (P11 state)', () => {
   it('key provider implementation files exist in packages/providers/src/', () => {
     expect(
       fs.existsSync(path.join(PROVIDERS_SRC_DIR, 'fake', 'FakeProvider.ts')),
-      'Missing: fake/FakeProvider.ts',
     ).toBe(true);
     expect(
       fs.existsSync(
         path.join(PROVIDERS_SRC_DIR, 'ProviderContentGenerator.ts'),
       ),
-      'Missing: ProviderContentGenerator.ts',
     ).toBe(true);
     expect(
       fs.existsSync(path.join(PROVIDERS_SRC_DIR, 'ProviderManager.ts')),
-      'Missing: ProviderManager.ts',
     ).toBe(true);
   });
 
@@ -357,10 +374,7 @@ describe('Provider files moved to providers package (P11 state)', () => {
     ];
     const tokenizersDir = path.join(PROVIDERS_SRC_DIR, 'tokenizers');
     for (const file of tokenizerFiles) {
-      expect(
-        fs.existsSync(path.join(tokenizersDir, file)),
-        `Missing: tokenizers/${file}`,
-      ).toBe(true);
+      expect(fs.existsSync(path.join(tokenizersDir, file))).toBe(true);
     }
   });
 
@@ -477,9 +491,7 @@ describe('Expected post-P11 import patterns', () => {
   it('providers package exports tokenizer classes (P11 green)', async () => {
     try {
       const mod = await import('@vybestack/llxprt-code-providers');
-      expect('OpenAITokenizer' in mod || 'AnthropicTokenizer' in mod).toBe(
-        true,
-      );
+      expect(exportsRuntimeTokenizer(mod)).toBe(true);
     } catch (error) {
       throw new Error(
         'providers package must export runtime tokenizer classes: ' +
@@ -543,10 +555,7 @@ describe('Filesystem boundary guards', () => {
    */
   it('no compat/shim files in providers package', () => {
     const files = collectTsFiles(path.join(PROVIDERS_DIR, 'src'), true);
-    const violations = files.filter((filePath) => {
-      const basename = path.basename(filePath);
-      return /compat/i.test(basename) || /shim/i.test(basename);
-    });
+    const violations = files.filter(hasCompatOrShimBasename);
     expect(violations).toStrictEqual([]);
   });
 
@@ -560,7 +569,7 @@ describe('Filesystem boundary guards', () => {
     const rootPkg = JSON.parse(
       fs.readFileSync(path.join(ROOT_DIR, 'package.json'), 'utf-8'),
     ) as Record<string, unknown>;
-    const workspaces = (rootPkg.workspaces ?? []) as string[];
+    const workspaces = workspaceEntries(rootPkg.workspaces);
     expect(workspaces).toContain('packages/providers');
   });
 
@@ -574,7 +583,7 @@ describe('Filesystem boundary guards', () => {
     const pkg = JSON.parse(
       fs.readFileSync(path.join(PROVIDERS_DIR, 'package.json'), 'utf-8'),
     ) as Record<string, unknown>;
-    const scripts = (pkg.scripts ?? {}) as Record<string, unknown>;
+    const scripts = scriptRecord(pkg.scripts);
     expect(scripts.build).toBeDefined();
     expect(scripts.test).toBeDefined();
     expect(scripts.typecheck).toBeDefined();

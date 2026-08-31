@@ -354,6 +354,48 @@ describe('buildRuntimeProfileSnapshot', () => {
   });
 });
 
+async function loadProfileWithBalancerMembers(
+  profileName: string,
+): Promise<Profile> {
+  if (profileName === 'glm') {
+    return {
+      version: 1,
+      type: 'loadbalancer',
+      policy: 'failover',
+      profiles: ['zai', 'ollama'],
+      contextLimit: 190000,
+      provider: '',
+      model: '',
+      modelParams: {},
+      ephemeralSettings: {},
+    } satisfies Profile;
+  }
+
+  if (profileName === 'zai') {
+    return {
+      version: 1,
+      provider: 'openai',
+      model: 'glm-4.5',
+      modelParams: { topP: 0.8, temperature: 0.4 },
+      ephemeralSettings: {
+        'context-limit': 200000,
+        'reasoning.enabled': true,
+      },
+    } satisfies Profile;
+  }
+
+  return {
+    version: 1,
+    provider: 'ollama',
+    model: 'glm-4.5-air',
+    modelParams: {},
+    ephemeralSettings: {
+      'context-limit': 190000,
+      'reasoning.enabled': false,
+    },
+  } satisfies Profile;
+}
+
 describe('getProfileByName', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -361,45 +403,7 @@ describe('getProfileByName', () => {
 
   it('adds load balancer member details from referenced profiles', async () => {
     profileManagerLoadProfileMock.mockImplementation(
-      async (profileName: string) => {
-        if (profileName === 'glm') {
-          return {
-            version: 1,
-            type: 'loadbalancer',
-            policy: 'failover',
-            profiles: ['zai', 'ollama'],
-            contextLimit: 190000,
-            provider: '',
-            model: '',
-            modelParams: {},
-            ephemeralSettings: {},
-          } satisfies Profile;
-        }
-
-        if (profileName === 'zai') {
-          return {
-            version: 1,
-            provider: 'openai',
-            model: 'glm-4.5',
-            modelParams: { topP: 0.8, temperature: 0.4 },
-            ephemeralSettings: {
-              'context-limit': 200000,
-              'reasoning.enabled': true,
-            },
-          } satisfies Profile;
-        }
-
-        return {
-          version: 1,
-          provider: 'ollama',
-          model: 'glm-4.5-air',
-          modelParams: {},
-          ephemeralSettings: {
-            'context-limit': 190000,
-            'reasoning.enabled': false,
-          },
-        } satisfies Profile;
-      },
+      loadProfileWithBalancerMembers,
     );
 
     const profile = await getProfileByName('glm');

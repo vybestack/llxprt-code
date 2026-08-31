@@ -156,263 +156,267 @@ function isolateWelcomeConfig(): string {
   return configPath;
 }
 
-beforeEach(() => {
-  originalEnv = process.env.LLXPRT_CODE_WELCOME_CONFIG_PATH;
-  currentRuntime = defaultRuntime;
-});
-
-afterEach(() => {
-  if (originalEnv === undefined) {
-    delete process.env.LLXPRT_CODE_WELCOME_CONFIG_PATH;
-  } else {
-    process.env.LLXPRT_CODE_WELCOME_CONFIG_PATH = originalEnv;
-  }
-  resetWelcomeConfigForTesting();
-  if (tempConfigDir) {
-    fs.rmSync(tempConfigDir, { recursive: true, force: true });
-    tempConfigDir = undefined;
-  }
-});
-
-describe('useWelcomeOnboarding startup suppression', () => {
-  it('shows the welcome dialog when welcome is incomplete and not suppressed after trust', () => {
-    isolateWelcomeConfig();
-    const { result } = renderHook(() =>
-      useWelcomeOnboarding({
-        settings: createMockSettings({}),
-        isFolderTrustComplete: true,
-        agent,
-      }),
-    );
-    expect(result.current.showWelcome).toBe(true);
+describe('useWelcomeOnboarding', () => {
+  beforeEach(() => {
+    originalEnv = process.env.LLXPRT_CODE_WELCOME_CONFIG_PATH;
+    currentRuntime = defaultRuntime;
   });
 
-  it('hides the welcome dialog at startup when an explicit selector suppresses it', () => {
-    isolateWelcomeConfig();
-    const { result } = renderHook(() =>
-      useWelcomeOnboarding({
-        settings: createMockSettings({}),
-        isFolderTrustComplete: true,
-        agent,
-        suppressStartup: true,
-      }),
-    );
-    expect(result.current.showWelcome).toBe(false);
-  });
-
-  it('does not show the dialog before folder trust completes even without suppression', () => {
-    isolateWelcomeConfig();
-    const { result } = renderHook(() =>
-      useWelcomeOnboarding({
-        settings: createMockSettings({}),
-        isFolderTrustComplete: false,
-        agent,
-      }),
-    );
-    expect(result.current.showWelcome).toBe(false);
-  });
-
-  it('keeps the dialog hidden when welcome is already completed', () => {
-    const configPath = isolateWelcomeConfig();
-    fs.writeFileSync(configPath, JSON.stringify({ welcomeCompleted: true }));
-    resetWelcomeConfigForTesting();
-    const { result } = renderHook(() =>
-      useWelcomeOnboarding({
-        settings: createMockSettings({}),
-        isFolderTrustComplete: true,
-        agent,
-      }),
-    );
-    expect(result.current.showWelcome).toBe(false);
-  });
-
-  it('does not persist welcome completion when startup suppression is active', () => {
-    const configPath = isolateWelcomeConfig();
-    const { result } = renderHook(() =>
-      useWelcomeOnboarding({
-        settings: createMockSettings({}),
-        isFolderTrustComplete: true,
-        agent,
-        suppressStartup: true,
-      }),
-    );
-    expect(result.current.showWelcome).toBe(false);
-    expect(fs.existsSync(configPath)).toBe(false);
-    resetWelcomeConfigForTesting();
-    expect(isWelcomeCompleted()).toBe(false);
-  });
-
-  it('reopen via resetAndReopen shows the dialog after a suppressed startup', () => {
-    isolateWelcomeConfig();
-    const { result } = renderHook(() =>
-      useWelcomeOnboarding({
-        settings: createMockSettings({}),
-        isFolderTrustComplete: true,
-        agent,
-        suppressStartup: true,
-      }),
-    );
-    expect(result.current.showWelcome).toBe(false);
-    act(() => {
-      result.current.actions.resetAndReopen();
-    });
-    expect(result.current.showWelcome).toBe(true);
-  });
-});
-
-describe('useWelcomeOnboarding skip and save persistence', () => {
-  it('persists skipped true to the config file when the user skips then dismisses', () => {
-    const configPath = isolateWelcomeConfig();
-    const { result } = renderHook(() =>
-      useWelcomeOnboarding({
-        settings: createMockSettings({}),
-        isFolderTrustComplete: true,
-        agent,
-      }),
-    );
-    act(() => {
-      result.current.actions.skipSetup();
-    });
-    act(() => {
-      result.current.actions.dismiss();
-    });
-    const onDisk = readWelcomeConfig(configPath);
-    expect(result.current.showWelcome).toBe(false);
-    expect(onDisk.welcomeCompleted).toBe(true);
-    expect(onDisk.skipped).toBe(true);
-    resetWelcomeConfigForTesting();
-    expect(isWelcomeCompleted()).toBe(true);
-  });
-
-  it('persists skipped false when dismissing from the completion step', async () => {
-    const configPath = isolateWelcomeConfig();
-    currentRuntime = {
-      ...defaultRuntime,
-      listAvailableModels: async () => [{ id: 'model-id', name: 'model-name' }],
-      setActiveModel: async () => {},
-    };
-    const { result } = renderHook(() =>
-      useWelcomeOnboarding({
-        settings: createMockSettings({}),
-        isFolderTrustComplete: true,
-        agent,
-      }),
-    );
-    act(() => {
-      result.current.actions.startSetup();
-    });
-    act(() => {
-      result.current.actions.selectProvider('provider-id');
-    });
-    act(() => {
-      result.current.actions.selectAuthMethod('api_key');
-    });
-    await act(async () => {
-      await result.current.actions.onAuthComplete();
-    });
-    await act(async () => {
-      await result.current.actions.selectModel('model-id');
-    });
-    expect(result.current.state.step).toBe('completion');
-    act(() => {
-      result.current.actions.dismiss();
-    });
-    const onDisk = readWelcomeConfig(configPath);
-    expect(onDisk.welcomeCompleted).toBe(true);
-    expect(onDisk.skipped).toBe(false);
-  });
-
-  it('saveProfile leaves the new profile saved, defaulted, and loaded', async () => {
-    isolateWelcomeConfig();
-    // A stateful fake profile store rather than a call recorder: defaulting or
-    // loading a profile that was never saved is rejected by the store itself,
-    // so the ordering the hook depends on is enforced by the fake's invariants
-    // and the assertions below are about the resulting state.
-    const store = createFakeProfileStore(['other']);
-    currentRuntime = { ...defaultRuntime, ...store.runtime };
-    const { result } = renderHook(() =>
-      useWelcomeOnboarding({
-        settings: createMockSettings({}),
-        isFolderTrustComplete: true,
-        agent,
-      }),
-    );
-    await act(async () => {
-      await result.current.actions.saveProfile('newprof');
-    });
-    expect(store.savedProfiles()).toContain('newprof');
-    expect(store.defaultProfileName()).toBe('newprof');
-    expect(store.loadedProfiles()).toEqual(['newprof']);
-  });
-
-  it('saveProfile rejects a duplicate name and leaves the store untouched', async () => {
-    isolateWelcomeConfig();
-    const store = createFakeProfileStore(['dupe']);
-    currentRuntime = { ...defaultRuntime, ...store.runtime };
-    const { result } = renderHook(() =>
-      useWelcomeOnboarding({
-        settings: createMockSettings({}),
-        isFolderTrustComplete: true,
-        agent,
-      }),
-    );
-    let caught: unknown;
-    await act(async () => {
-      try {
-        await result.current.actions.saveProfile('dupe');
-      } catch (error) {
-        caught = error;
-      }
-    });
-    if (!(caught instanceof Error)) {
-      throw new TypeError('expected saveProfile to reject with an Error');
+  afterEach(() => {
+    if (originalEnv === undefined) {
+      delete process.env.LLXPRT_CODE_WELCOME_CONFIG_PATH;
+    } else {
+      process.env.LLXPRT_CODE_WELCOME_CONFIG_PATH = originalEnv;
     }
-    expect(caught.message).toContain('dupe');
-    expect(caught.message).toContain('already exists');
-    // The pre-existing profile must not have been overwritten, defaulted, or
-    // loaded: rejecting has to leave the store exactly as it was.
-    expect(store.savedProfiles()).toEqual(['dupe']);
-    expect(store.overwriteAttempts()).toBe(0);
-    expect(store.defaultProfileName()).toBeUndefined();
-    expect(store.loadedProfiles()).toEqual([]);
+    resetWelcomeConfigForTesting();
+    if (tempConfigDir) {
+      fs.rmSync(tempConfigDir, { recursive: true, force: true });
+      tempConfigDir = undefined;
+    }
   });
 
-  it('selectModel advances to completion when the runtime accepts the model', async () => {
-    isolateWelcomeConfig();
-    const { result } = renderHook(() =>
-      useWelcomeOnboarding({
-        settings: createMockSettings({}),
-        isFolderTrustComplete: true,
-        agent,
-      }),
-    );
-    await act(async () => {
-      await result.current.actions.selectModel('model-id');
+  describe('useWelcomeOnboarding startup suppression', () => {
+    it('shows the welcome dialog when welcome is incomplete and not suppressed after trust', () => {
+      isolateWelcomeConfig();
+      const { result } = renderHook(() =>
+        useWelcomeOnboarding({
+          settings: createMockSettings({}),
+          isFolderTrustComplete: true,
+          agent,
+        }),
+      );
+      expect(result.current.showWelcome).toBe(true);
     });
-    expect(result.current.state.step).toBe('completion');
-    expect(result.current.state.selectedModel).toBe('model-id');
+
+    it('hides the welcome dialog at startup when an explicit selector suppresses it', () => {
+      isolateWelcomeConfig();
+      const { result } = renderHook(() =>
+        useWelcomeOnboarding({
+          settings: createMockSettings({}),
+          isFolderTrustComplete: true,
+          agent,
+          suppressStartup: true,
+        }),
+      );
+      expect(result.current.showWelcome).toBe(false);
+    });
+
+    it('does not show the dialog before folder trust completes even without suppression', () => {
+      isolateWelcomeConfig();
+      const { result } = renderHook(() =>
+        useWelcomeOnboarding({
+          settings: createMockSettings({}),
+          isFolderTrustComplete: false,
+          agent,
+        }),
+      );
+      expect(result.current.showWelcome).toBe(false);
+    });
+
+    it('keeps the dialog hidden when welcome is already completed', () => {
+      const configPath = isolateWelcomeConfig();
+      fs.writeFileSync(configPath, JSON.stringify({ welcomeCompleted: true }));
+      resetWelcomeConfigForTesting();
+      const { result } = renderHook(() =>
+        useWelcomeOnboarding({
+          settings: createMockSettings({}),
+          isFolderTrustComplete: true,
+          agent,
+        }),
+      );
+      expect(result.current.showWelcome).toBe(false);
+    });
+
+    it('does not persist welcome completion when startup suppression is active', () => {
+      const configPath = isolateWelcomeConfig();
+      const { result } = renderHook(() =>
+        useWelcomeOnboarding({
+          settings: createMockSettings({}),
+          isFolderTrustComplete: true,
+          agent,
+          suppressStartup: true,
+        }),
+      );
+      expect(result.current.showWelcome).toBe(false);
+      expect(fs.existsSync(configPath)).toBe(false);
+      resetWelcomeConfigForTesting();
+      expect(isWelcomeCompleted()).toBe(false);
+    });
+
+    it('reopen via resetAndReopen shows the dialog after a suppressed startup', () => {
+      isolateWelcomeConfig();
+      const { result } = renderHook(() =>
+        useWelcomeOnboarding({
+          settings: createMockSettings({}),
+          isFolderTrustComplete: true,
+          agent,
+          suppressStartup: true,
+        }),
+      );
+      expect(result.current.showWelcome).toBe(false);
+      act(() => {
+        result.current.actions.resetAndReopen();
+      });
+      expect(result.current.showWelcome).toBe(true);
+    });
   });
 
-  it('selectModel keeps the welcome step and records the error when the runtime rejects', async () => {
-    isolateWelcomeConfig();
-    currentRuntime = {
-      ...defaultRuntime,
-      setActiveModel: async () => {
-        throw new Error('boom');
-      },
-    };
-    const { result } = renderHook(() =>
-      useWelcomeOnboarding({
-        settings: createMockSettings({}),
-        isFolderTrustComplete: true,
-        agent,
-      }),
-    );
-    await act(async () => {
-      await result.current.actions.selectModel('model-id');
+  describe('useWelcomeOnboarding skip and save persistence', () => {
+    it('persists skipped true to the config file when the user skips then dismisses', () => {
+      const configPath = isolateWelcomeConfig();
+      const { result } = renderHook(() =>
+        useWelcomeOnboarding({
+          settings: createMockSettings({}),
+          isFolderTrustComplete: true,
+          agent,
+        }),
+      );
+      act(() => {
+        result.current.actions.skipSetup();
+      });
+      act(() => {
+        result.current.actions.dismiss();
+      });
+      const onDisk = readWelcomeConfig(configPath);
+      expect(result.current.showWelcome).toBe(false);
+      expect(onDisk.welcomeCompleted).toBe(true);
+      expect(onDisk.skipped).toBe(true);
+      resetWelcomeConfigForTesting();
+      expect(isWelcomeCompleted()).toBe(true);
     });
-    expect(result.current.state.step).toBe('welcome');
-    expect(result.current.state.selectedModel).toBeUndefined();
-    expect(result.current.state.error).toContain('boom');
+
+    it('persists skipped false when dismissing from the completion step', async () => {
+      const configPath = isolateWelcomeConfig();
+      currentRuntime = {
+        ...defaultRuntime,
+        listAvailableModels: async () => [
+          { id: 'model-id', name: 'model-name' },
+        ],
+        setActiveModel: async () => {},
+      };
+      const { result } = renderHook(() =>
+        useWelcomeOnboarding({
+          settings: createMockSettings({}),
+          isFolderTrustComplete: true,
+          agent,
+        }),
+      );
+      act(() => {
+        result.current.actions.startSetup();
+      });
+      act(() => {
+        result.current.actions.selectProvider('provider-id');
+      });
+      act(() => {
+        result.current.actions.selectAuthMethod('api_key');
+      });
+      await act(async () => {
+        await result.current.actions.onAuthComplete();
+      });
+      await act(async () => {
+        await result.current.actions.selectModel('model-id');
+      });
+      expect(result.current.state.step).toBe('completion');
+      act(() => {
+        result.current.actions.dismiss();
+      });
+      const onDisk = readWelcomeConfig(configPath);
+      expect(onDisk.welcomeCompleted).toBe(true);
+      expect(onDisk.skipped).toBe(false);
+    });
+
+    it('saveProfile leaves the new profile saved, defaulted, and loaded', async () => {
+      isolateWelcomeConfig();
+      // A stateful fake profile store rather than a call recorder: defaulting or
+      // loading a profile that was never saved is rejected by the store itself,
+      // so the ordering the hook depends on is enforced by the fake's invariants
+      // and the assertions below are about the resulting state.
+      const store = createFakeProfileStore(['other']);
+      currentRuntime = { ...defaultRuntime, ...store.runtime };
+      const { result } = renderHook(() =>
+        useWelcomeOnboarding({
+          settings: createMockSettings({}),
+          isFolderTrustComplete: true,
+          agent,
+        }),
+      );
+      await act(async () => {
+        await result.current.actions.saveProfile('newprof');
+      });
+      expect(store.savedProfiles()).toContain('newprof');
+      expect(store.defaultProfileName()).toBe('newprof');
+      expect(store.loadedProfiles()).toStrictEqual(['newprof']);
+    });
+
+    it('saveProfile rejects a duplicate name and leaves the store untouched', async () => {
+      isolateWelcomeConfig();
+      const store = createFakeProfileStore(['dupe']);
+      currentRuntime = { ...defaultRuntime, ...store.runtime };
+      const { result } = renderHook(() =>
+        useWelcomeOnboarding({
+          settings: createMockSettings({}),
+          isFolderTrustComplete: true,
+          agent,
+        }),
+      );
+      let caught: unknown;
+      await act(async () => {
+        try {
+          await result.current.actions.saveProfile('dupe');
+        } catch (error) {
+          caught = error;
+        }
+      });
+      if (!(caught instanceof Error)) {
+        throw new TypeError('expected saveProfile to reject with an Error');
+      }
+      expect(caught.message).toContain('dupe');
+      expect(caught.message).toContain('already exists');
+      // The pre-existing profile must not have been overwritten, defaulted, or
+      // loaded: rejecting has to leave the store exactly as it was.
+      expect(store.savedProfiles()).toStrictEqual(['dupe']);
+      expect(store.overwriteAttempts()).toBe(0);
+      expect(store.defaultProfileName()).toBeUndefined();
+      expect(store.loadedProfiles()).toStrictEqual([]);
+    });
+
+    it('selectModel advances to completion when the runtime accepts the model', async () => {
+      isolateWelcomeConfig();
+      const { result } = renderHook(() =>
+        useWelcomeOnboarding({
+          settings: createMockSettings({}),
+          isFolderTrustComplete: true,
+          agent,
+        }),
+      );
+      await act(async () => {
+        await result.current.actions.selectModel('model-id');
+      });
+      expect(result.current.state.step).toBe('completion');
+      expect(result.current.state.selectedModel).toBe('model-id');
+    });
+
+    it('selectModel keeps the welcome step and records the error when the runtime rejects', async () => {
+      isolateWelcomeConfig();
+      currentRuntime = {
+        ...defaultRuntime,
+        setActiveModel: async () => {
+          throw new Error('boom');
+        },
+      };
+      const { result } = renderHook(() =>
+        useWelcomeOnboarding({
+          settings: createMockSettings({}),
+          isFolderTrustComplete: true,
+          agent,
+        }),
+      );
+      await act(async () => {
+        await result.current.actions.selectModel('model-id');
+      });
+      expect(result.current.state.step).toBe('welcome');
+      expect(result.current.state.selectedModel).toBeUndefined();
+      expect(result.current.state.error).toContain('boom');
+    });
   });
 });

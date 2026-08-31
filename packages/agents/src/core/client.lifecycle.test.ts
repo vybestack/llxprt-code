@@ -9,7 +9,7 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { automock } from '@vybestack/llxprt-code-test-utils';
+import { automock, assertDefined } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -302,7 +302,7 @@ describe('AgentClient (client.ts)', () => {
         },
       ];
 
-      expect(retainedHistory).toEqual(expectedHistory);
+      expect(retainedHistory).toStrictEqual(expectedHistory);
     });
 
     it('should not strip thought signatures when stripThoughts is false', async () => {
@@ -344,7 +344,7 @@ describe('AgentClient (client.ts)', () => {
 
       await client.setHistory(historyWithThoughts, { stripThoughts: false });
 
-      expect(retainedHistory).toEqual(historyWithThoughts);
+      expect(retainedHistory).toStrictEqual(historyWithThoughts);
     });
 
     it('returns history from a stored history service after profile invalidation', async () => {
@@ -404,7 +404,7 @@ describe('AgentClient (client.ts)', () => {
       await client.setHistory(history);
 
       // Assert
-      expect(retainedHistory).toEqual(history);
+      expect(retainedHistory).toStrictEqual(history);
       expect(client['_previousHistory']).toStrictEqual(history);
       expect(client['ideContextTracker']['forceFullIdeContext']).toBe(true);
     });
@@ -439,7 +439,7 @@ describe('AgentClient (client.ts)', () => {
       await client.setHistory(history);
 
       // Assert
-      expect(retainedHistory).toEqual(history);
+      expect(retainedHistory).toStrictEqual(history);
       expect(client['ideContextTracker']['forceFullIdeContext']).toBe(true);
     });
   });
@@ -456,7 +456,7 @@ describe('AgentClient (client.ts)', () => {
         });
         client['config'].getLocalMediaStore = () => store;
         const initializedChat = client['chat'];
-        if (initializedChat === undefined) throw new Error('Expected chat');
+        assertDefined(initializedChat, 'Expected chat');
         const historyService = new HistoryService();
         historyService.replaceBatch = async () => {
           throw new Error('history add failed');

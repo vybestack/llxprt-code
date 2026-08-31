@@ -125,7 +125,7 @@ describe('media admission seam afcHistory normalization', () => {
       'turn-stream',
     );
 
-    expect(admitted.afcHistory).toEqual([textHistory]);
+    expect(admitted.afcHistory).toStrictEqual([textHistory]);
   });
 
   it('drops streaming afcHistory when every entry has zero blocks', async () => {
@@ -150,10 +150,10 @@ describe('media admission seam afcHistory normalization', () => {
       'turn-out',
     );
 
-    expect(admitted.afcHistory).toEqual([
+    expect(admitted.afcHistory).toStrictEqual([
       { speaker: 'ai', blocks: [{ type: 'text', text: 'kept' }] },
     ]);
-    expect(admitted.response.afcHistory).toEqual(admitted.afcHistory);
+    expect(admitted.response.afcHistory).toStrictEqual(admitted.afcHistory);
   });
 
   it('omits both non-streaming afcHistory representations when every entry is empty', async () => {

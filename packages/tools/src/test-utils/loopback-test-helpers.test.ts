@@ -101,7 +101,7 @@ describe('loopback test helpers', () => {
     );
 
     expect(await response.text()).toBe('routed');
-    expect(await observed.promise).toEqual({
+    expect(await observed.promise).toStrictEqual({
       body: 'request-body',
       header: 'preserved',
       method: 'POST',

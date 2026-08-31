@@ -410,67 +410,8 @@ describe('Turn - provider-liveness two-phase watchdog (issue #2607)', () => {
   });
 
   it('parent abort during a post-liveness wait yields UserCancelled, not a timeout', async () => {
-    vi.useRealTimers();
-    process.env.LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS = '50';
-    const { turn } = buildTurn(undefined, 60_000);
-
-    const abortController = new AbortController();
-    mockSendMessageStream.mockImplementation(
-      (params: {
-        config?: {
-          abortSignal?: AbortSignal;
-          onStreamLiveness?: (event: {
-            sourceEvent: string;
-            sseObserved: boolean;
-          }) => void;
-        };
-      }) => {
-        const providerSignal = params.config?.abortSignal;
-        const listener = params.config?.onStreamLiveness;
-        if (!(providerSignal instanceof AbortSignal)) {
-          throw new Error('Test setup error: missing abortSignal');
-        }
-        const stream = (async function* () {
-          await new Promise((resolve) => setTimeout(resolve, 5));
-          listener?.({ sourceEvent: 'response.created', sseObserved: true });
-          // Now block until the provider signal aborts.
-          await new Promise<void>((_resolve, reject) => {
-            if (providerSignal.aborted) {
-              reject(new Error('aborted'));
-              return;
-            }
-            providerSignal.addEventListener(
-              'abort',
-              () => reject(new Error('aborted')),
-              { once: true },
-            );
-          });
-          yield {
-            type: StreamEventType.CHUNK,
-            value: mockChunk({ text: 'never' }),
-          };
-        })();
-        return Promise.resolve(stream);
-      },
-    );
-
-    const events: ServerAgentStreamEvent[] = [];
-    const runPromise = (async () => {
-      for await (const event of turn.run(
-        [{ text: 'Hi' }] as unknown as Part[],
-        abortController.signal,
-      )) {
-        events.push(event);
-      }
-    })();
-
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    abortController.abort();
-
-    const guard = failsafe(2000);
-    await Promise.race([runPromise, guard.promise]);
-    guard.cancel();
-
+    const { events } =
+      await observeParentAbortDuringAPostLivenessWaitYieldsUserCancelledNotATimeout();
     expect(
       events.find((e) => e.type === AgentEventType.UserCancelled),
     ).toBeDefined();
@@ -478,6 +419,72 @@ describe('Turn - provider-liveness two-phase watchdog (issue #2607)', () => {
       events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
     ).toBeUndefined();
   });
+
+  const observeParentAbortDuringAPostLivenessWaitYieldsUserCancelledNotATimeout =
+    async () => {
+      vi.useRealTimers();
+      process.env.LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS = '50';
+      const { turn } = buildTurn(undefined, 60_000);
+
+      const abortController = new AbortController();
+      mockSendMessageStream.mockImplementation(
+        (params: {
+          config?: {
+            abortSignal?: AbortSignal;
+            onStreamLiveness?: (event: {
+              sourceEvent: string;
+              sseObserved: boolean;
+            }) => void;
+          };
+        }) => {
+          const providerSignal = params.config?.abortSignal;
+          const listener = params.config?.onStreamLiveness;
+          if (!(providerSignal instanceof AbortSignal)) {
+            throw new Error('Test setup error: missing abortSignal');
+          }
+          const stream = (async function* () {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            listener?.({ sourceEvent: 'response.created', sseObserved: true });
+            // Now block until the provider signal aborts.
+            await new Promise<void>((_resolve, reject) => {
+              if (providerSignal.aborted) {
+                reject(new Error('aborted'));
+                return;
+              }
+              providerSignal.addEventListener(
+                'abort',
+                () => reject(new Error('aborted')),
+                { once: true },
+              );
+            });
+            yield {
+              type: StreamEventType.CHUNK,
+              value: mockChunk({ text: 'never' }),
+            };
+          })();
+          return Promise.resolve(stream);
+        },
+      );
+
+      const events: ServerAgentStreamEvent[] = [];
+      const runPromise = (async () => {
+        for await (const event of turn.run(
+          [{ text: 'Hi' }] as unknown as Part[],
+          abortController.signal,
+        )) {
+          events.push(event);
+        }
+      })();
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      abortController.abort();
+
+      const guard = failsafe(2000);
+      await Promise.race([runPromise, guard.promise]);
+      guard.cancel();
+
+      return { events };
+    };
 
   it('a completed first turn does not leak its watchdog into a second turn (fresh timer per turn)', async () => {
     // The tool-continuation lifecycle invariant: each Turn.run arms a fresh

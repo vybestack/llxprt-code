@@ -3,6 +3,39 @@ import http from 'node:http';
 import net from 'node:net';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';
 
+function closeServer(server: net.Server): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+interface AbortRegistrationState {
+  count: number;
+  readonly controller: AbortController;
+  readonly reason: DOMException;
+  readonly originalAddEventListener: AbortSignal['addEventListener'];
+}
+
+function createAbortRegistrationRace(
+  state: AbortRegistrationState,
+): AbortSignal['addEventListener'] {
+  return (type, listener, options): void => {
+    if (type === 'abort') {
+      state.count += 1;
+      if (state.count === 2) {
+        state.controller.abort(state.reason);
+      }
+    }
+    state.originalAddEventListener(type, listener, options);
+  };
+}
+
 const findAvailablePort = async (): Promise<number> =>
   new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -133,9 +166,7 @@ describe('startLocalOAuthCallback', () => {
       replacement.once('error', reject);
       replacement.listen(port, '127.0.0.1', resolve);
     });
-    await new Promise<void>((resolve, reject) => {
-      replacement.close((error) => (error ? reject(error) : resolve()));
-    });
+    await closeServer(replacement);
   });
 
   it('closes and preserves the abort reason when abort wins listener registration', async () => {
@@ -143,18 +174,14 @@ describe('startLocalOAuthCallback', () => {
     const controller = new AbortController();
     const abortReason = new DOMException('startup cancelled', 'AbortError');
     const signal = controller.signal;
-    const originalAddEventListener = signal.addEventListener.bind(signal);
-    let abortRegistrationCount = 0;
+    const registrationState: AbortRegistrationState = {
+      count: 0,
+      controller,
+      reason: abortReason,
+      originalAddEventListener: signal.addEventListener.bind(signal),
+    };
     vi.spyOn(signal, 'addEventListener').mockImplementation(
-      (type, listener, options) => {
-        if (type === 'abort') {
-          abortRegistrationCount += 1;
-          if (abortRegistrationCount === 2) {
-            controller.abort(abortReason);
-          }
-        }
-        originalAddEventListener(type, listener, options);
-      },
+      createAbortRegistrationRace(registrationState),
     );
 
     const startup = startLocalOAuthCallback({
@@ -170,9 +197,7 @@ describe('startLocalOAuthCallback', () => {
       replacement.once('error', reject);
       replacement.listen(port, '127.0.0.1', resolve);
     });
-    await new Promise<void>((resolve, reject) => {
-      replacement.close((error) => (error ? reject(error) : resolve()));
-    });
+    await closeServer(replacement);
   });
 
   it('rejects when callback does not arrive within timeout', async () => {

@@ -60,11 +60,11 @@ describe('InteractiveAuthCoordinator OAuth UI events', () => {
     });
     hostCompletion.resolve();
 
-    await expect(outcome).resolves.toEqual({
+    await expect(outcome).resolves.toStrictEqual({
       kind: 'succeeded',
       correlationId: 'ui-event-correlation',
     });
-    expect(events).toEqual([
+    expect(events).toStrictEqual([
       {
         type: 'oauth_waiting',
         provider: 'codex',
@@ -120,7 +120,7 @@ describe('InteractiveAuthCoordinator OAuth UI events', () => {
           requesterRuntimeKind: event.requesterRuntimeKind,
           kind: event.kind,
         })),
-    ).toEqual([
+    ).toStrictEqual([
       {
         correlationId: 'coalesced-first',
         requesterRuntimeKind: 'subagent',
@@ -172,7 +172,7 @@ describe('InteractiveAuthCoordinator OAuth UI events', () => {
           correlationId: event.correlationId,
           kind: event.kind,
         })),
-    ).toEqual([
+    ).toStrictEqual([
       { correlationId: 'detached-original', kind: 'cancelled' },
       { correlationId: 'remaining-joiner', kind: 'succeeded' },
     ]);
@@ -192,7 +192,7 @@ describe('InteractiveAuthCoordinator OAuth UI events', () => {
       correlationId: 'throwing-ui-correlation',
     });
 
-    await expect(outcome).resolves.toEqual({
+    await expect(outcome).resolves.toStrictEqual({
       kind: 'succeeded',
       correlationId: 'throwing-ui-correlation',
     });

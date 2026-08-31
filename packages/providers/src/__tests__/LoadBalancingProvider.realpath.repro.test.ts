@@ -34,8 +34,10 @@ function hasGetStats(value: unknown): value is HasStats {
   );
 }
 
-function assertHasStats(value: unknown): asserts value is HasStats {
-  expect(hasGetStats(value)).toBe(true);
+function requireStatsProvider(value: unknown): asserts value is HasStats {
+  if (!hasGetStats(value)) {
+    throw new Error('Expected the wrapped provider to expose getStats()');
+  }
 }
 
 function makeMockProvider(name: string): IProvider {
@@ -47,6 +49,13 @@ function makeMockProvider(name: string): IProvider {
     getModels: async () => [],
     getDefaultModel: () => 'model',
   } as unknown as IProvider;
+}
+
+function resolveRealPathDelegate(
+  name: string,
+  fallback: (providerName: string) => IProvider | undefined,
+): IProvider | undefined {
+  return name === 'gemini' ? makeMockProvider('gemini') : fallback(name);
 }
 
 describe('LB stats through the REAL registerProvider wrapping chain', () => {
@@ -77,7 +86,8 @@ describe('LB stats through the REAL registerProvider wrapping chain', () => {
     const resolved = providerManager.getProviderByName('load-balancer');
     expect(resolved).toBeDefined();
     // The wrapper exposes getStats through the chain (asserts + narrows type).
-    assertHasStats(resolved);
+    expect(hasGetStats(resolved)).toBe(true);
+    requireStatsProvider(resolved);
 
     // Static identity survives the wrapper chain...
     expect(resolved.getStats().profileName).toBe('glm');
@@ -87,7 +97,7 @@ describe('LB stats through the REAL registerProvider wrapping chain', () => {
     // the footer/diagnostics call (not a stale snapshot).
     const original = providerManager.getProviderByName.bind(providerManager);
     providerManager.getProviderByName = (name: string) =>
-      name === 'gemini' ? makeMockProvider('gemini') : original(name);
+      resolveRealPathDelegate(name, original);
 
     try {
       for await (const _chunk of raw.generateChatCompletion({

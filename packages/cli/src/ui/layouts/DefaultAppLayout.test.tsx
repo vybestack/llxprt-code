@@ -373,7 +373,7 @@ describe('DefaultAppLayout', () => {
 
     hasActiveDialog(uiState);
 
-    expect([...readKeys].sort()).toEqual([...ACTIVE_DIALOG_FLAGS].sort());
+    expect([...readKeys].sort()).toStrictEqual([...ACTIVE_DIALOG_FLAGS].sort());
   });
 
   it.each(ACTIVE_DIALOG_FLAGS.map((flag) => [flag] as const))(

@@ -29,6 +29,10 @@
  * These tests are expected to fail against the Phase 12 stub implementation.
  */
 
+import {
+  assertDefined,
+  assertNotNull,
+} from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fc from 'fast-check';
 import * as fs from 'node:fs/promises';
@@ -215,18 +219,18 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
       await integration.flushAtTurnBoundary();
 
       const filePath = recordingService.getFilePath();
-      if (filePath === null) throw new Error('Expected recording path');
+      assertNotNull(filePath, 'Expected recording path');
       const replay = await replaySession(filePath, PROJECT_HASH, {
         mediaStore,
       });
       assertReplayOk(replay);
       const content = replay.history.find((_entry, index) => index === 0);
       const block = content?.blocks.find((_entry, index) => index === 0);
-      if (block === undefined) throw new Error('Expected replayed media block');
+      assertDefined(block, 'Expected replayed media block');
       if (block.type !== 'media') throw new Error('Expected replayed media');
 
       expect(block.encoding).toBe('base64');
-      expect(block).toEqual({
+      expect(block).toStrictEqual({
         type: 'media',
         encoding: 'base64',
         mimeType: 'image/png; charset=utf-8',
@@ -253,7 +257,7 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
       await integration.flushAtTurnBoundary();
 
       const filePath = recordingService.getFilePath();
-      if (filePath === null) throw new Error('Expected recording path');
+      assertNotNull(filePath, 'Expected recording path');
       const replay = await replaySession(filePath, PROJECT_HASH, {
         mediaStore,
       });
@@ -275,7 +279,7 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
       const replayedBytes = await mediaStore.readVerified(replayedBlock);
 
       expect(replayedBlock.contentId).toBe(reference.contentId);
-      expect(replayedBytes).toEqual(expectedBytes);
+      expect(replayedBytes).toStrictEqual(expectedBytes);
       expect(await mediaStore.hasReservations(reference.contentId)).toBe(false);
     });
 
@@ -362,8 +366,9 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
         PROJECT_HASH,
       );
       assertReplayOk(replay);
-      const lastSeq = events[events.length - 1]?.seq ?? 0;
-      expect(replay.lastSeq).toBe(lastSeq);
+      // At least one content event was recorded, so the last event's seq is
+      // the expected final seq.
+      expect(replay.lastSeq).toBe(events[events.length - 1].seq);
     });
   });
 

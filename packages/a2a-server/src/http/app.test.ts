@@ -432,7 +432,7 @@ describe('E2E Tests', () => {
     expect(statuses).toContain('executing');
     expect(statuses).toContain('success');
     const texts = contentEvents(resumeEvents, 'text-content').map(textOf);
-    expect(texts).toEqual(['Tool executed successfully.']);
+    expect(texts).toStrictEqual(['Tool executed successfully.']);
     assertUniqueFinalEventIsLast(resumeEvents);
   });
 
@@ -493,9 +493,9 @@ describe('E2E Tests', () => {
       .filter((data) => data.status === 'success')
       .map((data) => data.id)
       .sort();
-    expect(successIds).toEqual(['e2e-call-1', 'e2e-call-2']);
+    expect(successIds).toStrictEqual(['e2e-call-1', 'e2e-call-2']);
     const texts = contentEvents(resumeTwo, 'text-content').map(textOf);
-    expect(texts).toEqual(['Tool executed successfully.']);
+    expect(texts).toStrictEqual(['Tool executed successfully.']);
   });
   it('should auto-execute tool calls when the message requests autoExecute', async () => {
     process.env.LLXPRT_FAKE_RESPONSES = join(workspace, 'tool-await.jsonl');
@@ -514,7 +514,7 @@ describe('E2E Tests', () => {
     expect(statuses).not.toContain('awaiting-approval');
     expect(statuses).toContain('success');
     const texts = contentEvents(events, 'text-content').map(textOf);
-    expect(texts).toEqual(['Tool executed successfully.']);
+    expect(texts).toStrictEqual(['Tool executed successfully.']);
   });
 
   it('should bypass tool approval in YOLO mode', async () => {
@@ -537,7 +537,7 @@ describe('E2E Tests', () => {
       expect(toolData.map((d) => d.status)).not.toContain('awaiting-approval');
       expect(toolData.map((d) => d.status)).toContain('success');
       const texts = contentEvents(events, 'text-content').map(textOf);
-      expect(texts).toEqual(['Tool executed successfully.']);
+      expect(texts).toStrictEqual(['Tool executed successfully.']);
     } finally {
       delete process.env.LLXPRT_YOLO_MODE;
     }

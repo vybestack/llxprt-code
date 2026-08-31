@@ -28,12 +28,28 @@ describe('reportError', () => {
     vi.spyOn(Date.prototype, 'toISOString').mockReturnValue(MOCK_TIMESTAMP);
   });
 
+  /** Returns a JSON.stringify implementation that throws on its first invocation. */
+  function stringifyThatThrowsFirst(
+    originalStringify: typeof JSON.stringify,
+    throwError: Error,
+  ): typeof JSON.stringify {
+    let callCount = 0;
+    return (value, replacer, space) => {
+      callCount++;
+      if (callCount === 1) {
+        // First call is for the full report content
+        throw throwError;
+      }
+      // Subsequent calls (for minimal report) should succeed
+      return originalStringify(value, replacer, space);
+    };
+  }
   /** Assert that a stderr write call included the given substring. */
   function expectStderrContaining(fragment: string): void {
     const matched = stderrWriteSpy.mock.calls.some(
       (call) => typeof call[0] === 'string' && call[0].includes(fragment),
     );
-    expect(matched, `Expected stderr to contain "${fragment}"`).toBe(true);
+    expect(matched).toBe(true);
   }
 
   afterEach(async () => {
@@ -141,16 +157,9 @@ describe('reportError', () => {
 
     // Simulate JSON.stringify throwing an error for the full report
     const originalJsonStringify = JSON.stringify;
-    let callCount = 0;
-    vi.spyOn(JSON, 'stringify').mockImplementation((value, replacer, space) => {
-      callCount++;
-      if (callCount === 1) {
-        // First call is for the full report content
-        throw stringifyError;
-      }
-      // Subsequent calls (for minimal report) should succeed
-      return originalJsonStringify(value, replacer, space);
-    });
+    vi.spyOn(JSON, 'stringify').mockImplementation(
+      stringifyThatThrowsFirst(originalJsonStringify, stringifyError),
+    );
 
     await reportError(error, baseMessage, context, type, testDir);
 

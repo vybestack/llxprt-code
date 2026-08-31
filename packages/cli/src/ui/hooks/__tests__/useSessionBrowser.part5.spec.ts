@@ -200,11 +200,15 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
      * WHEN: User presses Enter
      * THEN: onSelect is called with selected session
      */
-    it('Enter initiates resume', async () => {
+    const observeEnterResume = async (): Promise<{
+      readonly isLoading: boolean;
+      readonly resumedTarget: ContinueTarget | null;
+    }> => {
       const sessionId = 'resume-session';
       await createTestSession(chatsDir, { sessionId });
 
       let resumedTarget: ContinueTarget | null = null;
+      const getResumedTarget = (): ContinueTarget | null => resumedTarget;
       const props = makeHookProps(chatsDir, {
         onSelect: async (target) => {
           resumedTarget = target;
@@ -230,22 +234,33 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       const { result } = renderHook(() => useSessionBrowser(props));
 
       await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
+        if (result.current.isLoading) {
+          throw new Error('Expected the session browser to finish loading');
+        }
       });
 
       result.current.handleKeypress('\r', makeKey('return'));
 
       await waitFor(() => {
-        expect(resumedTarget).not.toBeNull();
+        if (getResumedTarget() === null) {
+          throw new Error('Expected Enter to select the session');
+        }
       });
 
-      // resumedTarget is assigned inside an async onSelect callback, so TS
-      // narrows it back to null here; widen to the declared union and assert the
-      // expected against ContinueTarget.
-      expect(resumedTarget as ContinueTarget | null).toStrictEqual({
+      return {
+        isLoading: result.current.isLoading,
+        resumedTarget: getResumedTarget(),
+      };
+    };
+
+    it('Enter initiates resume', async () => {
+      const resume = await observeEnterResume();
+      expect(resume.isLoading).toBe(false);
+      expect(resume.resumedTarget).not.toBeNull();
+      expect(resume.resumedTarget).toStrictEqual({
         kind: 'session',
-        session: expect.objectContaining({ sessionId }),
-      } as unknown as ContinueTarget);
+        session: expect.objectContaining({ sessionId: 'resume-session' }),
+      });
     });
 
     /**

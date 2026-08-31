@@ -114,7 +114,7 @@ describe('settings registry — owner / propagation metadata (#2642)', () => {
     const expected = SETTINGS_REGISTRY.filter((s) => s.persistToProfile).map(
       (s) => s.key,
     );
-    expect(getProfilePersistableKeys().sort()).toEqual(expected.sort());
+    expect(getProfilePersistableKeys().sort()).toStrictEqual(expected.sort());
   });
 
   it('persistence follows the per-spec flag, not a blanket owner rule', () => {

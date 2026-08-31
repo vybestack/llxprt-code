@@ -15,11 +15,87 @@ import {
   ANTHROPIC_STOP_MAP,
   CANONICAL_FINISH_REASONS,
   type CanonicalFinishReason,
+  type FinishInfo,
 } from './finishReasons.js';
 
 const ALL_CANONICAL = CANONICAL_FINISH_REASONS;
 
 const CANONICAL_STRINGS: readonly string[] = ALL_CANONICAL;
+
+/**
+ * True when a mapping preserves the raw stop reason and produced one of the canonical
+ * finish reasons.
+ */
+function preservesRawWithCanonical(result: FinishInfo, raw: string): boolean {
+  return (
+    result.rawStopReason === raw && ALL_CANONICAL.includes(result.finishReason)
+  );
+}
+
+function isCanonicalForValue(value: unknown): boolean {
+  return typeof value === 'string' && CANONICAL_STRINGS.includes(value);
+}
+
+function sameMappingResult(r1: FinishInfo, r2: FinishInfo): boolean {
+  return (
+    r1.finishReason === r2.finishReason && r1.rawStopReason === r2.rawStopReason
+  );
+}
+
+function mappedToExpected(
+  result: FinishInfo,
+  raw: string,
+  expected: CanonicalFinishReason,
+): boolean {
+  return result.finishReason === expected && result.rawStopReason === raw;
+}
+
+/**
+ * True when every provider mapper yields a canonical finish reason for the given raw
+ * string. Guards the single-character boundary against crashes.
+ */
+function allMappersCanonicalFor(raw: string): boolean {
+  return (
+    ALL_CANONICAL.includes(mapGeminiFinishReason(raw).finishReason) &&
+    ALL_CANONICAL.includes(mapOpenAIFinishReason(raw).finishReason) &&
+    ALL_CANONICAL.includes(mapAnthropicStopReason(raw).finishReason)
+  );
+}
+
+/**
+ * Describes every shared raw key across the provider maps for which the maps disagree
+ * on the canonical target. If a future map addition introduces a conflicting shared key,
+ * the fix-list is non-empty and the invoking test fails loudly.
+ */
+function conflictingSharedKeyDescriptions(
+  tables: ReadonlyArray<
+    [string, Readonly<Record<string, CanonicalFinishReason>>]
+  >,
+): string[] {
+  const tablePairs = tables.flatMap(([nameA, mapA], i) =>
+    tables
+      .slice(i + 1)
+      .map(([nameB, mapB]): [string, typeof mapA, string, typeof mapB] => [
+        nameA,
+        mapA,
+        nameB,
+        mapB,
+      ]),
+  );
+
+  return tablePairs.flatMap(([nameA, mapA, nameB, mapB]) =>
+    Object.keys(mapA)
+      .filter(
+        (key) =>
+          Object.prototype.hasOwnProperty.call(mapB, key) &&
+          mapA[key] !== mapB[key],
+      )
+      .map(
+        (key) =>
+          `${nameA}[${key}]=${mapA[key]} vs ${nameB}[${key}]=${mapB[key]}`,
+      ),
+  );
+}
 
 describe('mapGeminiFinishReason', () => {
   it('maps STOP to stop', () => {
@@ -311,36 +387,15 @@ describe('mapping tables export', () => {
   // a conflicting shared key, order would silently start to matter for
   // unattributed stop reasons — fail loudly here instead.
   it('provider maps never disagree on a shared raw key (tryAllMappers order-independence)', () => {
-    const tables: ReadonlyArray<[string, Readonly<Record<string, string>>]> = [
+    const tables: ReadonlyArray<
+      [string, Readonly<Record<string, CanonicalFinishReason>>]
+    > = [
       ['OPENAI_FINISH_MAP', OPENAI_FINISH_MAP],
       ['ANTHROPIC_STOP_MAP', ANTHROPIC_STOP_MAP],
       ['GEMINI_FINISH_MAP', GEMINI_FINISH_MAP],
     ];
 
-    const tablePairs = tables.flatMap(([nameA, mapA], i) =>
-      tables
-        .slice(i + 1)
-        .map(([nameB, mapB]): [string, typeof mapA, string, typeof mapB] => [
-          nameA,
-          mapA,
-          nameB,
-          mapB,
-        ]),
-    );
-
-    const conflicts = tablePairs.flatMap(([nameA, mapA, nameB, mapB]) =>
-      Object.keys(mapA)
-        .filter(
-          (key) =>
-            Object.prototype.hasOwnProperty.call(mapB, key) &&
-            mapA[key] !== mapB[key],
-        )
-        .map(
-          (key) =>
-            `${nameA}[${key}]=${mapA[key]} vs ${nameB}[${key}]=${mapB[key]}`,
-        ),
-    );
-    expect(conflicts).toStrictEqual([]);
+    expect(conflictingSharedKeyDescriptions(tables)).toStrictEqual([]);
   });
 });
 
@@ -351,35 +406,23 @@ describe('mapping tables export', () => {
 describe('finishReasons property-based', () => {
   it('for any string, mapGeminiFinishReason preserves rawStopReason and yields a canonical reason', () =>
     fc.assert(
-      fc.property(fc.string({ maxLength: 50 }), (raw: string) => {
-        const result = mapGeminiFinishReason(raw);
-        return (
-          result.rawStopReason === raw &&
-          ALL_CANONICAL.includes(result.finishReason)
-        );
-      }),
+      fc.property(fc.string({ maxLength: 50 }), (raw: string) =>
+        preservesRawWithCanonical(mapGeminiFinishReason(raw), raw),
+      ),
     ));
 
   it('for any string, mapOpenAIFinishReason preserves rawStopReason and yields a canonical reason', () =>
     fc.assert(
-      fc.property(fc.string({ maxLength: 50 }), (raw: string) => {
-        const result = mapOpenAIFinishReason(raw);
-        return (
-          result.rawStopReason === raw &&
-          ALL_CANONICAL.includes(result.finishReason)
-        );
-      }),
+      fc.property(fc.string({ maxLength: 50 }), (raw: string) =>
+        preservesRawWithCanonical(mapOpenAIFinishReason(raw), raw),
+      ),
     ));
 
   it('for any string, mapAnthropicStopReason preserves rawStopReason and yields a canonical reason', () =>
     fc.assert(
-      fc.property(fc.string({ maxLength: 50 }), (raw: string) => {
-        const result = mapAnthropicStopReason(raw);
-        return (
-          result.rawStopReason === raw &&
-          ALL_CANONICAL.includes(result.finishReason)
-        );
-      }),
+      fc.property(fc.string({ maxLength: 50 }), (raw: string) =>
+        preservesRawWithCanonical(mapAnthropicStopReason(raw), raw),
+      ),
     ));
 
   it('isCanonicalFinishReason is true iff value is in the union set', () =>
@@ -392,12 +435,8 @@ describe('finishReasons property-based', () => {
           fc.boolean(),
           fc.constant(null),
         ),
-        (value: unknown) => {
-          const result = isCanonicalFinishReason(value);
-          const expected =
-            typeof value === 'string' && CANONICAL_STRINGS.includes(value);
-          return result === expected;
-        },
+        (value: unknown) =>
+          isCanonicalFinishReason(value) === isCanonicalForValue(value),
       ),
     ));
 
@@ -415,48 +454,40 @@ describe('finishReasons property-based', () => {
       fc.property(fc.string({ maxLength: 30 }), (raw) => {
         const r1 = mapGeminiFinishReason(raw);
         const r2 = mapGeminiFinishReason(raw);
-        return (
-          r1.finishReason === r2.finishReason &&
-          r1.rawStopReason === r2.rawStopReason
-        );
+        return sameMappingResult(r1, r2);
       }),
     ));
 
   it('mapOpenAIFinishReason is pure: same input always yields same output', () =>
     fc.assert(
-      fc.property(fc.string({ maxLength: 30 }), (raw) => {
-        const r1 = mapOpenAIFinishReason(raw);
-        const r2 = mapOpenAIFinishReason(raw);
-        return (
-          r1.finishReason === r2.finishReason &&
-          r1.rawStopReason === r2.rawStopReason
-        );
-      }),
+      fc.property(fc.string({ maxLength: 30 }), (raw) =>
+        sameMappingResult(
+          mapOpenAIFinishReason(raw),
+          mapOpenAIFinishReason(raw),
+        ),
+      ),
     ));
 
   it('mapAnthropicStopReason is pure: same input always yields same output', () =>
     fc.assert(
-      fc.property(fc.string({ maxLength: 30 }), (raw) => {
-        const r1 = mapAnthropicStopReason(raw);
-        const r2 = mapAnthropicStopReason(raw);
-        return (
-          r1.finishReason === r2.finishReason &&
-          r1.rawStopReason === r2.rawStopReason
-        );
-      }),
+      fc.property(fc.string({ maxLength: 30 }), (raw) =>
+        sameMappingResult(
+          mapAnthropicStopReason(raw),
+          mapAnthropicStopReason(raw),
+        ),
+      ),
     ));
 
   it('every known Gemini FinishReason maps to a canonical value via GEMINI_FINISH_MAP', () =>
     fc.assert(
       fc.property(
         fc.constantFrom(...Object.keys(GEMINI_FINISH_MAP)),
-        (raw: string) => {
-          const result = mapGeminiFinishReason(raw);
-          const expected = GEMINI_FINISH_MAP[raw];
-          return (
-            result.finishReason === expected && result.rawStopReason === raw
-          );
-        },
+        (raw: string) =>
+          mappedToExpected(
+            mapGeminiFinishReason(raw),
+            raw,
+            GEMINI_FINISH_MAP[raw],
+          ),
       ),
     ));
 
@@ -464,13 +495,12 @@ describe('finishReasons property-based', () => {
     fc.assert(
       fc.property(
         fc.constantFrom(...Object.keys(OPENAI_FINISH_MAP)),
-        (raw: string) => {
-          const result = mapOpenAIFinishReason(raw);
-          const expected = OPENAI_FINISH_MAP[raw];
-          return (
-            result.finishReason === expected && result.rawStopReason === raw
-          );
-        },
+        (raw: string) =>
+          mappedToExpected(
+            mapOpenAIFinishReason(raw),
+            raw,
+            OPENAI_FINISH_MAP[raw],
+          ),
       ),
     ));
 
@@ -478,24 +508,19 @@ describe('finishReasons property-based', () => {
     fc.assert(
       fc.property(
         fc.constantFrom(...Object.keys(ANTHROPIC_STOP_MAP)),
-        (raw: string) => {
-          const result = mapAnthropicStopReason(raw);
-          const expected = ANTHROPIC_STOP_MAP[raw];
-          return (
-            result.finishReason === expected && result.rawStopReason === raw
-          );
-        },
+        (raw: string) =>
+          mappedToExpected(
+            mapAnthropicStopReason(raw),
+            raw,
+            ANTHROPIC_STOP_MAP[raw],
+          ),
       ),
     ));
 
   it('single-char strings never crash any mapper and always return canonical', () =>
     fc.assert(
-      fc.property(
-        fc.string({ maxLength: 1 }),
-        (raw: string) =>
-          ALL_CANONICAL.includes(mapGeminiFinishReason(raw).finishReason) &&
-          ALL_CANONICAL.includes(mapOpenAIFinishReason(raw).finishReason) &&
-          ALL_CANONICAL.includes(mapAnthropicStopReason(raw).finishReason),
+      fc.property(fc.string({ maxLength: 1 }), (raw: string) =>
+        allMappersCanonicalFor(raw),
       ),
     ));
 });

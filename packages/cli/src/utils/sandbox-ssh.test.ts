@@ -28,6 +28,43 @@ import {
   createTcpToUdsBridge,
 } from './sandbox.js';
 
+const PODMAN_CONNECTION_LIST = Buffer.from(
+  JSON.stringify([
+    {
+      Name: 'default',
+      URI: 'ssh://core@localhost:12345/run/podman/podman.sock',
+      Identity: '/Users/test/.ssh/key',
+      Default: true,
+    },
+  ]),
+);
+
+function returnConnectionListWithUnavailablePort(
+  command: string,
+): NonSharedBuffer | string {
+  if (command.includes('connection list')) return PODMAN_CONNECTION_LIST;
+  if (command.includes('ss -tln')) throw new Error('port not found');
+  return Buffer.from('');
+}
+
+function readWithMissingOsRelease(
+  realReadFileSync: typeof fs.readFileSync,
+  requestedPath: fs.PathOrFileDescriptor,
+): NonSharedBuffer | string {
+  if (requestedPath === '/etc/os-release') throw new Error('not found');
+  return realReadFileSync(requestedPath);
+}
+
+function readWithUbuntuOsRelease(
+  realReadFileSync: typeof fs.readFileSync,
+  requestedPath: fs.PathOrFileDescriptor,
+): NonSharedBuffer | string {
+  if (requestedPath === '/etc/os-release') {
+    return 'ID=ubuntu' + String.fromCharCode(10) + 'VERSION_ID="22.04"';
+  }
+  return realReadFileSync(requestedPath);
+}
+
 describe('setupSshAgentDockerMacOS', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -418,26 +455,7 @@ describe('setupSshAgentPodmanMacOS', () => {
       child_process.execSync as unknown as Mock<
         (command: string) => NonSharedBuffer | string
       >
-    ).mockImplementation((cmd: string) => {
-      const cmdStr = String(cmd);
-      if (cmdStr.includes('connection list')) {
-        return Buffer.from(
-          JSON.stringify([
-            {
-              Name: 'default',
-              URI: 'ssh://core@localhost:12345/run/podman/podman.sock',
-              Identity: '/Users/test/.ssh/key',
-              Default: true,
-            },
-          ]),
-        );
-      }
-      // ss -tln always fails: port never appears
-      if (cmdStr.includes('ss -tln')) {
-        throw new Error('port not found');
-      }
-      return Buffer.from('');
-    });
+    ).mockImplementation(returnConnectionListWithUnavailablePort);
     mockTunnelProcess();
 
     // Use a very short poll timeout so test runs quickly
@@ -480,26 +498,7 @@ describe('setupSshAgentPodmanMacOS', () => {
       child_process.execSync as unknown as Mock<
         (command: string) => NonSharedBuffer | string
       >
-    ).mockImplementation((cmd: string) => {
-      const cmdStr = String(cmd);
-      if (cmdStr.includes('connection list')) {
-        return Buffer.from(
-          JSON.stringify([
-            {
-              Name: 'default',
-              URI: 'ssh://core@localhost:12345/run/podman/podman.sock',
-              Identity: '/Users/test/.ssh/key',
-              Default: true,
-            },
-          ]),
-        );
-      }
-      // ss -tln always fails
-      if (cmdStr.includes('ss -tln')) {
-        throw new Error('port not found');
-      }
-      return Buffer.from('');
-    });
+    ).mockImplementation(returnConnectionListWithUnavailablePort);
     const fakeProc = mockTunnelProcess();
 
     await expect(
@@ -622,25 +621,7 @@ describe('setupCredentialProxyPodmanMacOS', () => {
       child_process.execSync as unknown as Mock<
         (command: string) => NonSharedBuffer | string
       >
-    ).mockImplementation((cmd: string) => {
-      const cmdStr = String(cmd);
-      if (cmdStr.includes('connection list')) {
-        return Buffer.from(
-          JSON.stringify([
-            {
-              Name: 'default',
-              URI: 'ssh://core@localhost:12345/run/podman/podman.sock',
-              Identity: '/Users/test/.ssh/key',
-              Default: true,
-            },
-          ]),
-        );
-      }
-      if (cmdStr.includes('ss -tln')) {
-        throw new Error('port not found');
-      }
-      return Buffer.from('');
-    });
+    ).mockImplementation(returnConnectionListWithUnavailablePort);
 
     const fakeProc = mockTunnelProcess();
 
@@ -898,12 +879,9 @@ describe('setupSshAgentDockerLinux', () => {
       vi.spyOn(fs, 'readFileSync') as unknown as Mock<
         (path: fs.PathOrFileDescriptor) => NonSharedBuffer | string
       >
-    ).mockImplementation((p) => {
-      if (p === '/etc/os-release') {
-        throw new Error('not found');
-      }
-      return realReadFileSync(p);
-    });
+    ).mockImplementation((requestedPath) =>
+      readWithMissingOsRelease(realReadFileSync, requestedPath),
+    );
     vi.spyOn(os, 'platform').mockReturnValue('linux');
     const args: string[] = [];
     const result = await setupSshAgentDockerLinux(args, '/tmp/auth.sock');
@@ -925,12 +903,9 @@ describe('setupSshAgentDockerLinux', () => {
       vi.spyOn(fs, 'readFileSync') as unknown as Mock<
         (path: fs.PathOrFileDescriptor) => NonSharedBuffer | string
       >
-    ).mockImplementation((p) => {
-      if (p === '/etc/os-release') {
-        return 'ID=ubuntu' + String.fromCharCode(10) + 'VERSION_ID="22.04"';
-      }
-      return realReadFileSync(p);
-    });
+    ).mockImplementation((requestedPath) =>
+      readWithUbuntuOsRelease(realReadFileSync, requestedPath),
+    );
     vi.spyOn(os, 'platform').mockReturnValue('linux');
     // shouldUseCurrentUserInSandbox logs an INFO message via debugLogger.log on Debian/Ubuntu
     const logSpy = vi

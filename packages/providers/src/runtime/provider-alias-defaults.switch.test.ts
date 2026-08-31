@@ -19,6 +19,17 @@ const { aliasEntries } = {
   aliasEntries: [] as Array<Record<string, unknown>>,
 };
 
+interface AliasEntryWithConfig {
+  config?: { ephemeralSettings?: Record<string, unknown> };
+}
+
+function ensureAliasConfig(entry: AliasEntryWithConfig): {
+  ephemeralSettings?: Record<string, unknown>;
+} {
+  entry.config ??= {};
+  return entry.config;
+}
+
 const {
   StubSettingsService: StubSettingsServiceClass,
   StubConfig: StubConfigClass,
@@ -396,8 +407,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     const entry = aliasEntries[0] as {
       config?: { ephemeralSettings?: Record<string, unknown> };
     };
-    entry.config = entry.config ?? {};
-    entry.config.ephemeralSettings = {
+    ensureAliasConfig(entry).ephemeralSettings = {
       'api-key': 'should-not-apply',
       max_tokens: 50000,
     };
@@ -432,8 +442,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     const entry = aliasEntries[0] as {
       config?: { ephemeralSettings?: Record<string, unknown> };
     };
-    entry.config = entry.config ?? {};
-    entry.config.ephemeralSettings = {
+    ensureAliasConfig(entry).ephemeralSettings = {
       'context-limit': [200000],
       max_tokens: 50000,
     };

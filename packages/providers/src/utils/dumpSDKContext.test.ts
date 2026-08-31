@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
@@ -244,9 +245,7 @@ describe('dumpSDKContext metadata @issue:3159', () => {
     expect(created).toHaveLength(2);
 
     const requestName = created.find((file) => file.endsWith('-request.json'));
-    if (requestName === undefined) {
-      throw new Error('expected the failure request dump');
-    }
+    assertDefined(requestName, 'expected the failure request dump');
     const dump = parseDumpedRequest(
       await fs.readFile(path.join(dumpDir, requestName), 'utf-8'),
     );

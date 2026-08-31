@@ -59,6 +59,20 @@ const hookRegistryModule = await import('./hookRegistry.js');
 const HookRegistry = hookRegistryModule.HookRegistry;
 const ConfigSource = hookRegistryModule.ConfigSource;
 
+function isInvalidEventWarning(payload: unknown): boolean {
+  if (
+    typeof payload !== 'object' ||
+    payload === null ||
+    !('chunk' in payload)
+  ) {
+    return false;
+  }
+
+  return (
+    typeof payload.chunk === 'string' && payload.chunk.includes('InvalidEvent')
+  );
+}
+
 describe('HookRegistry', () => {
   let hookRegistry: HookRegistry;
   let mockConfig: Config;
@@ -629,10 +643,7 @@ describe('HookRegistry', () => {
 
       // Should have emitted exactly one invalid-event warning for InvalidEvent
       const invalidEventWarnings = emitSpy.mock.calls.filter(
-        ([, payload]) =>
-          'chunk' in payload &&
-          typeof (payload as { chunk: string }).chunk === 'string' &&
-          (payload as { chunk: string }).chunk.includes('InvalidEvent'),
+        ([, payload]) => isInvalidEventWarning(payload) === true,
       );
       expect(invalidEventWarnings).toHaveLength(1);
       expect(emitSpy).toHaveBeenCalledWith(CoreEvent.Output, {

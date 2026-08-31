@@ -69,20 +69,6 @@ interface MountedProvider {
 
 const cleanups: Array<() => void> = [];
 
-afterEach(() => {
-  const errors: unknown[] = [];
-  while (cleanups.length > 0) {
-    try {
-      cleanups.pop()?.();
-    } catch (error) {
-      errors.push(error);
-    }
-  }
-  if (errors.length > 0) {
-    throw new AggregateError(errors, 'TodoProvider test cleanup failed');
-  }
-});
-
 function todosDir(): string {
   return path.join(Storage.getGlobalDataDir(), 'todos');
 }
@@ -245,7 +231,7 @@ async function seedDiskAndMount(
   await act(async () => {
     await settleRefresh(mounted.result.current.refreshTodos);
   });
-  expect(mounted.result.current.todos).toEqual(seed);
+  expect(mounted.result.current.todos).toStrictEqual(seed);
   return mounted;
 }
 
@@ -259,7 +245,7 @@ async function seedObserveRun(
   const mounted = await seedDiskAndMount(sessionId, seed);
   const events = observeTodoChannel();
   const errors = await runSubcommand(mounted.result.current, name, args);
-  expect(errors).toEqual([]);
+  expect(errors).toStrictEqual([]);
   return events;
 }
 
@@ -272,7 +258,61 @@ function todo(
   return subtasks ? { id, content, status, subtasks } : { id, content, status };
 }
 
+interface TodoWriteInterceptionState {
+  outerCapture: { store: TodoStore; todos: Todo[] } | null;
+  writeTodosCalls: number;
+  readonly outerWriteHeld: Promise<void>;
+}
+
+function createInterceptedTodoWriter(
+  state: TodoWriteInterceptionState,
+  realWriteTodos: typeof TodoStore.prototype.writeTodos,
+): typeof TodoStore.prototype.writeTodos {
+  return function (this: TodoStore, todos: Todo[]): Promise<void> {
+    state.writeTodosCalls++;
+    if (state.outerCapture === null) {
+      state.outerCapture = { store: this, todos };
+      return state.outerWriteHeld;
+    }
+    return realWriteTodos.call(this, todos);
+  };
+}
+
+function createNestedExternalPublisher(event: TodoUpdateEvent): () => void {
+  let published = false;
+  return () => {
+    if (published) return;
+    published = true;
+    todoEvents.emitTodoUpdated(event);
+  };
+}
+
+function createNestedProviderPublisher(
+  updateTodos: (todos: Todo[]) => void,
+  nested: Todo[],
+): () => void {
+  let published = false;
+  return () => {
+    if (published) return;
+    published = true;
+    updateTodos(nested);
+  };
+}
+
 describe('TodoProvider observation (issue #3052)', () => {
+  afterEach(() => {
+    const errors: unknown[] = [];
+    while (cleanups.length > 0) {
+      try {
+        cleanups.pop()?.();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length > 0) {
+      throw new AggregateError(errors, 'TodoProvider test cleanup failed');
+    }
+  });
   describe('/todo clear on a non-empty list', () => {
     it('publishes an empty replacement, clears provider state, and clears disk', async () => {
       const sessionId = 'obs-clear';
@@ -284,13 +324,13 @@ describe('TodoProvider observation (issue #3052)', () => {
       const events = observeTodoChannel();
 
       const errors = await runSubcommand(mounted.result.current, 'clear', '');
-      expect(errors).toEqual([]);
+      expect(errors).toStrictEqual([]);
 
       expect(events).toHaveLength(1);
-      expect(events[0].todos).toEqual([]);
-      expect(mounted.result.current.todos).toEqual([]);
+      expect(events[0].todos).toStrictEqual([]);
+      expect(mounted.result.current.todos).toStrictEqual([]);
       await waitFor(() => {
-        expect(readDiskTodos(sessionId)).toEqual([]);
+        expect(readDiskTodos(sessionId)).toStrictEqual([]);
       });
     });
   });
@@ -304,7 +344,7 @@ describe('TodoProvider observation (issue #3052)', () => {
         '1',
       );
       expect(events).toHaveLength(1);
-      expect(events[0].todos).toEqual([
+      expect(events[0].todos).toStrictEqual([
         { id: 's1', content: 'Task one', status: 'in_progress' },
       ]);
     });
@@ -317,7 +357,7 @@ describe('TodoProvider observation (issue #3052)', () => {
         '1',
       );
       expect(events).toHaveLength(1);
-      expect(events[0].todos).toEqual([
+      expect(events[0].todos).toStrictEqual([
         { id: 'u1', content: 'Task one', status: 'pending' },
       ]);
     });
@@ -359,7 +399,7 @@ describe('TodoProvider observation (issue #3052)', () => {
         '2',
       );
       expect(events).toHaveLength(1);
-      expect(events[0].todos).toEqual([todo('r1', 'Keep')]);
+      expect(events[0].todos).toStrictEqual([todo('r1', 'Keep')]);
     });
 
     it('/todo remove 1.2 drops the subtask and publishes', async () => {
@@ -388,7 +428,7 @@ describe('TodoProvider observation (issue #3052)', () => {
         'all',
       );
       expect(events).toHaveLength(1);
-      expect(events[0].todos).toEqual([]);
+      expect(events[0].todos).toStrictEqual([]);
     });
 
     it('/todo remove 2-4 drops the range and publishes', async () => {
@@ -405,7 +445,7 @@ describe('TodoProvider observation (issue #3052)', () => {
         '2-4',
       );
       expect(events).toHaveLength(1);
-      expect(events[0].todos).toEqual([
+      expect(events[0].todos).toStrictEqual([
         todo('rr1', 'One'),
         todo('rr5', 'Five'),
       ]);
@@ -419,7 +459,7 @@ describe('TodoProvider observation (issue #3052)', () => {
         '1',
       );
       expect(events).toHaveLength(1);
-      expect(events[0].todos).toEqual([
+      expect(events[0].todos).toStrictEqual([
         { id: 'z1', content: 'In flight', status: 'pending' },
       ]);
     });
@@ -438,7 +478,7 @@ describe('TodoProvider observation (issue #3052)', () => {
         '2-4',
       );
       expect(events).toHaveLength(1);
-      expect(events[0].todos).toEqual([
+      expect(events[0].todos).toStrictEqual([
         todo('ur1', 'One'),
         todo('ur2', 'Two'),
         todo('ur3', 'Three'),
@@ -455,7 +495,10 @@ describe('TodoProvider observation (issue #3052)', () => {
         'all',
       );
       expect(events).toHaveLength(1);
-      expect(events[0].todos).toEqual([todo('ua1', 'One'), todo('ua2', 'Two')]);
+      expect(events[0].todos).toStrictEqual([
+        todo('ua1', 'One'),
+        todo('ua2', 'Two'),
+      ]);
     });
 
     it('/todo load publishes the loaded session', async () => {
@@ -478,11 +521,11 @@ describe('TodoProvider observation (issue #3052)', () => {
       ]);
       const events = observeTodoChannel();
       const errors = await runSubcommand(mounted.result.current, 'load', '1');
-      expect(errors).toEqual([]);
+      expect(errors).toStrictEqual([]);
 
       expect(events).toHaveLength(1);
-      expect(events[0].todos).toEqual(archived);
-      expect(mounted.result.current.todos).toEqual(archived);
+      expect(events[0].todos).toStrictEqual(archived);
+      expect(mounted.result.current.todos).toStrictEqual(archived);
     });
   });
 
@@ -526,7 +569,7 @@ describe('TodoProvider observation (issue #3052)', () => {
       // updateTodos applies local state exactly once (one committed render)
       // and publishes exactly once. The origin's own echo is suppressed by the
       // per-provider flag, so no second setTodos fires.
-      expect(mounted.result.all.length).toBe(rendersBefore + 1);
+      expect(mounted.result.all).toHaveLength(rendersBefore + 1);
       expect(events).toHaveLength(1);
       expect(events[0].todos).toHaveLength(2);
     });
@@ -550,7 +593,7 @@ describe('TodoProvider observation (issue #3052)', () => {
           timestamp: new Date(),
         });
       });
-      expect(mounted.result.current.todos).toEqual(external);
+      expect(mounted.result.current.todos).toStrictEqual(external);
     });
 
     it('ignores an emit for a different session', async () => {
@@ -567,7 +610,7 @@ describe('TodoProvider observation (issue #3052)', () => {
           timestamp: new Date(),
         });
       });
-      expect(mounted.result.current.todos).toEqual(before);
+      expect(mounted.result.current.todos).toStrictEqual(before);
     });
 
     it('ignores an emit for a different agent in the same session', async () => {
@@ -587,7 +630,7 @@ describe('TodoProvider observation (issue #3052)', () => {
           timestamp: new Date(),
         });
       });
-      expect(mounted.result.current.todos).toEqual(before);
+      expect(mounted.result.current.todos).toStrictEqual(before);
     });
   });
 
@@ -606,8 +649,8 @@ describe('TodoProvider observation (issue #3052)', () => {
       });
 
       expect(events).toHaveLength(1);
-      expect(events[0].todos).toEqual([]);
-      expect(mounted.result.current.todos).toEqual([]);
+      expect(events[0].todos).toStrictEqual([]);
+      expect(mounted.result.current.todos).toStrictEqual([]);
     });
   });
 
@@ -681,8 +724,8 @@ describe('TodoProvider observation (issue #3052)', () => {
         await settleRefresh(origin.result.current.refreshTodos);
         await settleRefresh(peer.result.current.refreshTodos);
       });
-      expect(origin.result.current.todos).toEqual(seed);
-      expect(peer.result.current.todos).toEqual(seed);
+      expect(origin.result.current.todos).toStrictEqual(seed);
+      expect(peer.result.current.todos).toStrictEqual(seed);
 
       const events = observeTodoChannel();
       const published: Todo[] = [todo('p1', 'From origin', 'in_progress')];
@@ -693,10 +736,10 @@ describe('TodoProvider observation (issue #3052)', () => {
       // The origin skips its exact publication object; the peer's listener still
       // applies the replacement exactly once, and the observer receives exactly
       // one publication.
-      expect(origin.result.current.todos).toEqual(published);
-      expect(peer.result.current.todos).toEqual(published);
+      expect(origin.result.current.todos).toStrictEqual(published);
+      expect(peer.result.current.todos).toStrictEqual(published);
       expect(events).toHaveLength(1);
-      expect(events[0].todos).toEqual(published);
+      expect(events[0].todos).toStrictEqual(published);
     });
 
     it('a provider-originated publication does not suppress a later external event', async () => {
@@ -721,7 +764,7 @@ describe('TodoProvider observation (issue #3052)', () => {
           timestamp: new Date(),
         });
       });
-      expect(mounted.result.current.todos).toEqual(external);
+      expect(mounted.result.current.todos).toStrictEqual(external);
     });
 
     it('does not mistake a synchronously nested external event for the origin publication', async () => {
@@ -733,17 +776,12 @@ describe('TodoProvider observation (issue #3052)', () => {
         agentId,
       );
       const nested: Todo[] = [todo('n-external', 'Nested external')];
-      let nestedPublished = false;
-      const publishNested = (): void => {
-        if (nestedPublished) return;
-        nestedPublished = true;
-        todoEvents.emitTodoUpdated({
-          sessionId,
-          agentId,
-          todos: nested,
-          timestamp: new Date(),
-        });
-      };
+      const publishNested = createNestedExternalPublisher({
+        sessionId,
+        agentId,
+        todos: nested,
+        timestamp: new Date(),
+      });
       todoEvents.prependListener(TodoEvent.TODO_UPDATED, publishNested);
       cleanups.push(() =>
         todoEvents.removeListener(TodoEvent.TODO_UPDATED, publishNested),
@@ -753,7 +791,7 @@ describe('TodoProvider observation (issue #3052)', () => {
         mounted.result.current.updateTodos([todo('n-origin', 'Origin')]);
       });
 
-      expect(mounted.result.current.todos).toEqual(nested);
+      expect(mounted.result.current.todos).toStrictEqual(nested);
     });
 
     it('preserves a synchronously nested provider update as the final list', async () => {
@@ -771,34 +809,28 @@ describe('TodoProvider observation (issue #3052)', () => {
       // observation seam stay real; only the storage write is intercepted, and
       // the real captured write is invoked on release (no mock theater).
       const realWriteTodos = TodoStore.prototype.writeTodos;
-      let outerCapture: { store: TodoStore; todos: Todo[] } | null = null;
-      let writeTodosCalls = 0;
       let releaseOuterWrite: () => void = () => {};
       const outerWriteHeld = new Promise<void>((resolve) => {
         releaseOuterWrite = resolve;
       });
-      TodoStore.prototype.writeTodos = function (
-        this: TodoStore,
-        todos: Todo[],
-      ): Promise<void> {
-        writeTodosCalls++;
-        if (outerCapture === null) {
-          outerCapture = { store: this, todos };
-          return outerWriteHeld;
-        }
-        return realWriteTodos.call(this, todos);
+      const writeInterception: TodoWriteInterceptionState = {
+        outerCapture: null,
+        writeTodosCalls: 0,
+        outerWriteHeld,
       };
+      TodoStore.prototype.writeTodos = createInterceptedTodoWriter(
+        writeInterception,
+        realWriteTodos,
+      );
       cleanups.push(() => {
         TodoStore.prototype.writeTodos = realWriteTodos;
       });
 
       const nested: Todo[] = [todo('np-nested', 'Nested provider update')];
-      let nestedPublished = false;
-      const publishNested = (): void => {
-        if (nestedPublished) return;
-        nestedPublished = true;
-        mounted.result.current.updateTodos(nested);
-      };
+      const publishNested = createNestedProviderPublisher(
+        mounted.result.current.updateTodos,
+        nested,
+      );
       todoEvents.prependListener(TodoEvent.TODO_UPDATED, publishNested);
       cleanups.push(() =>
         todoEvents.removeListener(TodoEvent.TODO_UPDATED, publishNested),
@@ -808,26 +840,26 @@ describe('TodoProvider observation (issue #3052)', () => {
         mounted.result.current.updateTodos([todo('np-origin', 'Origin')]);
       });
 
-      expect(mounted.result.current.todos).toEqual(nested);
+      expect(mounted.result.current.todos).toStrictEqual(nested);
 
       // The nested write is chained behind the held outer write, so it has not
       // started: only the outer write was invoked, and disk still carries the
       // seed. This proves the nested write is queued, not racing.
-      expect(writeTodosCalls).toBe(1);
-      expect(readDiskTodos(sessionId, agentId)).toEqual([
+      expect(writeInterception.writeTodosCalls).toBe(1);
+      expect(readDiskTodos(sessionId, agentId)).toStrictEqual([
         todo('np-seed', 'Seed'),
       ]);
 
       // Release: invoke the real captured outer write (persisting Origin), then
       // unblock the chain so the queued nested write runs and wins on disk.
-      const capture = unwrapOuterCapture(outerCapture);
+      const capture = unwrapOuterCapture(writeInterception.outerCapture);
       await realWriteTodos.call(capture.store, capture.todos);
-      expect(readDiskTodos(sessionId, agentId)).toEqual([
+      expect(readDiskTodos(sessionId, agentId)).toStrictEqual([
         todo('np-origin', 'Origin'),
       ]);
       releaseOuterWrite();
       await waitFor(() => {
-        expect(readDiskTodos(sessionId, agentId)).toEqual(nested);
+        expect(readDiskTodos(sessionId, agentId)).toStrictEqual(nested);
       });
     });
   });

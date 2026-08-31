@@ -299,17 +299,13 @@ describe('BaseSelectionList', () => {
       );
 
       // Function to simulate the activeIndex changing over time
-      const updateActiveIndex = async (newIndex: number) => {
+      const updateActiveIndex = (newIndex: number): void => {
         (useSelectionList as Mock<typeof useSelectionList>).mockReturnValue({
           activeIndex: newIndex,
           setActiveIndex: vi.fn(),
         });
 
         rerender(<BaseSelectionList {...componentProps} />);
-
-        await waitFor(() => {
-          expect(lastFrame()).toBeTruthy();
-        });
       };
 
       return { updateActiveIndex, lastFrame };
@@ -329,7 +325,7 @@ describe('BaseSelectionList', () => {
 
       // Move to index 3 (Item 4). Should trigger scroll.
       // New visible window should be Items 2, 3, 4 (scroll offset 1).
-      await updateActiveIndex(3);
+      updateActiveIndex(3);
 
       await waitFor(() => {
         const output = lastFrame();
@@ -343,7 +339,7 @@ describe('BaseSelectionList', () => {
     it('should scroll up when activeIndex moves before the visible window', async () => {
       const { updateActiveIndex, lastFrame } = renderScrollableList(0);
 
-      await updateActiveIndex(4);
+      updateActiveIndex(4);
 
       await waitFor(() => {
         const output = lastFrame();
@@ -354,7 +350,7 @@ describe('BaseSelectionList', () => {
 
       // Now test scrolling up: move to index 1 (Item 2)
       // This should trigger scroll up to show items 2, 3, 4
-      await updateActiveIndex(1);
+      updateActiveIndex(1);
 
       await waitFor(() => {
         const output = lastFrame();
@@ -385,17 +381,17 @@ describe('BaseSelectionList', () => {
       expect(lastFrame()).toContain('Item 3');
 
       // Scroll down gradually
-      await updateActiveIndex(2); // Still within window
+      updateActiveIndex(2); // Still within window
       expect(lastFrame()).toContain('Item 1');
 
-      await updateActiveIndex(3); // Should trigger scroll
+      updateActiveIndex(3); // Should trigger scroll
       await waitFor(() => {
         const output = lastFrame();
         expect(output).toContain('Item 2');
         expect(output).toContain('Item 4');
         expect(output).not.toContain('Item 1');
       });
-      await updateActiveIndex(5); // Scroll further
+      updateActiveIndex(5); // Scroll further
       await waitFor(() => {
         const output = lastFrame();
         expect(output).toContain('Item 4');

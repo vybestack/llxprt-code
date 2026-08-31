@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import {
+  advanceTimersByTimeAsync,
+  assertDefined,
+} from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { ServerAgentStreamEvent } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
@@ -337,9 +340,7 @@ describe('Turn run - abort and idle timeout', () => {
           config?: { abortSignal?: AbortSignal };
         };
         const providerSignal = config.config?.abortSignal;
-        if (providerSignal === undefined) {
-          throw new Error('Provider abort signal is required');
-        }
+        assertDefined(providerSignal, 'Provider abort signal is required');
         abortSignals.push(providerSignal);
         return (async function* () {
           yield {

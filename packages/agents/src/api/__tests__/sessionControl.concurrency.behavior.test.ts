@@ -28,6 +28,7 @@
  *     later content events reach the recording file.
  */
 
+import { assertNotNull, errorMessage } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect } from 'bun:test';
 import {
   mkdirSync,
@@ -435,7 +436,7 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
       mkdirSync(join(persistenceChats, '..'), { recursive: true });
       writeFileSync(persistenceChats, 'not a directory');
       const historyService = client.contract.getHistoryService();
-      if (historyService === null) throw new Error('Expected history service');
+      assertNotNull(historyService, 'Expected history service');
       historyService.add(humanText('pending persistence generation'));
 
       try {
@@ -492,7 +493,7 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
       expect(thrown).toBeInstanceOf(AggregateError);
       expect(
         (thrown as AggregateError).errors.map((error) =>
-          error instanceof Error ? error.message : String(error),
+          errorMessage(error),
         ),
       ).toStrictEqual(['clear failed', 'resubscribe failed']);
       await control.dispose();

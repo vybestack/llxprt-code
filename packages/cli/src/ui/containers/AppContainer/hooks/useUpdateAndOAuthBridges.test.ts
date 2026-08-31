@@ -138,7 +138,7 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
       }
     });
 
-    expect(items).toEqual([
+    expect(items).toStrictEqual([
       {
         type: 'info',
         text: 'Waiting for codex/work authentication (requested by subagent)…',
@@ -164,7 +164,7 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
       correlationId: 'host-binding-correlation',
     });
 
-    expect(outcome).toEqual({
+    expect(outcome).toStrictEqual({
       kind: 'succeeded',
       correlationId: 'host-binding-correlation',
     });
@@ -268,11 +268,11 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
         }),
     );
 
-    expect(outcome).toEqual({
+    expect(outcome).toStrictEqual({
       kind: 'succeeded',
       correlationId: 'host-scope-correlation',
     });
-    expect(observedRuntimeKinds).toEqual(['cli-interactive']);
+    expect(observedRuntimeKinds).toStrictEqual(['cli-interactive']);
     renderResult.unmount();
   });
 
@@ -305,13 +305,13 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
 
     renderResult.unmount();
 
-    await expect(waiter).resolves.toEqual({
+    await expect(waiter).resolves.toStrictEqual({
       kind: 'cancelled',
       correlationId: 'host-cleanup-correlation',
     });
     expect(sessionSignal?.aborted).toBe(true);
     expect(interactiveAuthCoordinator.hasHost()).toBe(false);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toEqual([]);
+    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
   });
 
   it('survives bridge identity churn across re-renders and still cancels on unmount', async () => {
@@ -399,11 +399,11 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
 
     renderResult.unmount();
 
-    await expect(waiter).resolves.toEqual({
+    await expect(waiter).resolves.toStrictEqual({
       kind: 'cancelled',
       correlationId: 'rerender-churn-correlation',
     });
     expect(interactiveAuthCoordinator.hasHost()).toBe(false);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toEqual([]);
+    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
   });
 });

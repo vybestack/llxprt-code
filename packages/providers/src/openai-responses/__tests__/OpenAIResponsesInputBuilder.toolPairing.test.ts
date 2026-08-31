@@ -59,6 +59,23 @@ function callId(item: unknown): string {
   return (item as { call_id?: string }).call_id ?? '';
 }
 
+function isAssistantStringMessage(item: unknown): boolean {
+  return (
+    typeof item === 'object' &&
+    item !== null &&
+    (item as { role?: string }).role === 'assistant' &&
+    typeof (item as { content?: unknown }).content === 'string'
+  );
+}
+
+function isReasoningItem(item: unknown): boolean {
+  return (
+    typeof item === 'object' &&
+    item !== null &&
+    (item as { type?: string }).type === 'reasoning'
+  );
+}
+
 function build(...contents: IContent[]): unknown[] {
   return buildOpenAIResponsesInput(contents, buildContext()) as unknown[];
 }
@@ -188,13 +205,7 @@ describe('OpenAIResponsesInputBuilder tool pairing @issue:2137', () => {
     ) as unknown[];
 
     // Assistant text is preserved
-    const assistantMessages = input.filter(
-      (i) =>
-        typeof i === 'object' &&
-        i !== null &&
-        (i as { role?: string }).role === 'assistant' &&
-        typeof (i as { content?: unknown }).content === 'string',
-    );
+    const assistantMessages = input.filter(isAssistantStringMessage);
     expect(assistantMessages).toHaveLength(1);
     expect((assistantMessages[0] as { content: string }).content).toBe(
       'Let me check that.',
@@ -349,22 +360,11 @@ describe('OpenAIResponsesInputBuilder tool pairing @issue:2137', () => {
     ) as unknown[];
 
     // No reasoning item emitted because there's no encryptedContent.
-    const reasoning = input.filter(
-      (i) =>
-        typeof i === 'object' &&
-        i !== null &&
-        (i as { type?: string }).type === 'reasoning',
-    );
+    const reasoning = input.filter(isReasoningItem);
     expect(reasoning).toHaveLength(0);
 
     // Text is preserved.
-    const assistantMessages = input.filter(
-      (i) =>
-        typeof i === 'object' &&
-        i !== null &&
-        (i as { role?: string }).role === 'assistant' &&
-        typeof (i as { content?: unknown }).content === 'string',
-    );
+    const assistantMessages = input.filter(isAssistantStringMessage);
     expect(assistantMessages).toHaveLength(1);
     expect((assistantMessages[0] as { content: string }).content).toBe(
       'Here is my answer.',

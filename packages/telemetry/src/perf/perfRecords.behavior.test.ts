@@ -113,6 +113,26 @@ function memorySampleRecord(
   };
 }
 
+function requireSuccessfulParse<T>(
+  result:
+    | { readonly success: true; readonly data: T }
+    | { readonly success: false },
+): T {
+  if (!result.success) {
+    throw new Error('expected parse success');
+  }
+  return result.data;
+}
+
+function requireParsedRecord(
+  record: ReturnType<typeof parsePerfRecord>,
+): NonNullable<ReturnType<typeof parsePerfRecord>> {
+  if (record === null) {
+    throw new Error('expected a parsed record');
+  }
+  return record;
+}
+
 // ---------------------------------------------------------------------------
 // Schema version + record-type constants
 // ---------------------------------------------------------------------------
@@ -156,8 +176,8 @@ describe('PerfOperationRecordSchema (AC-1 schema half)', () => {
     });
     const result = PerfOperationRecordSchema.safeParse(source);
     expect(result.success).toBe(true);
-    if (!result.success) throw new Error('expected parse success');
-    expect(result.data).toMatchObject({
+    const data = requireSuccessfulParse(result);
+    expect(data).toMatchObject({
       record_type: 'operation',
       schema_version: 1,
       status: 'cancelled_during_tool',
@@ -175,11 +195,11 @@ describe('PerfOperationRecordSchema (AC-1 schema half)', () => {
   it('omits memory fields when they are absent (not zero-filled)', () => {
     const result = PerfOperationRecordSchema.safeParse(operationRecord());
     expect(result.success).toBe(true);
-    if (!result.success) throw new Error('expected parse success');
-    expect('rss_bytes' in result.data).toBe(false);
-    expect('heap_used_bytes' in result.data).toBe(false);
-    expect('external_bytes' in result.data).toBe(false);
-    expect('array_buffers_bytes' in result.data).toBe(false);
+    const data = requireSuccessfulParse(result);
+    expect('rss_bytes' in data).toBe(false);
+    expect('heap_used_bytes' in data).toBe(false);
+    expect('external_bytes' in data).toBe(false);
+    expect('array_buffers_bytes' in data).toBe(false);
   });
 
   it('strips unknown fields (a field addition is not a version bump — §2)', () => {
@@ -187,9 +207,9 @@ describe('PerfOperationRecordSchema (AC-1 schema half)', () => {
       operationRecord({ future_metric_ms: 42, another_new_field: 'x' }),
     );
     expect(result.success).toBe(true);
-    if (!result.success) throw new Error('expected parse success');
-    expect('future_metric_ms' in result.data).toBe(false);
-    expect('another_new_field' in result.data).toBe(false);
+    const data = requireSuccessfulParse(result);
+    expect('future_metric_ms' in data).toBe(false);
+    expect('another_new_field' in data).toBe(false);
   });
 
   it('rejects an empty operation_id at the schema boundary', () => {
@@ -231,7 +251,7 @@ describe('PerfOperationRecordSchema (AC-1 schema half)', () => {
 
 describe('terminal statuses (AC-4)', () => {
   it('declares exactly the seven terminal values including superseded', () => {
-    expect(PERF_TERMINAL_STATUSES).toEqual([
+    expect(PERF_TERMINAL_STATUSES).toStrictEqual([
       'completed',
       'error',
       'cancelled_before_send',
@@ -274,11 +294,11 @@ describe('D1 — no child-id arrays on the perf record', () => {
       }),
     );
     expect(parsed).not.toBeNull();
-    if (parsed === null) throw new Error('expected a parsed record');
-    expect('prompt_ids' in parsed).toBe(false);
-    expect('turn_ids' in parsed).toBe(false);
-    expect('prompt_ids_total' in parsed).toBe(false);
-    expect('turn_ids_total' in parsed).toBe(false);
+    const record = requireParsedRecord(parsed);
+    expect('prompt_ids' in record).toBe(false);
+    expect('turn_ids' in record).toBe(false);
+    expect('prompt_ids_total' in record).toBe(false);
+    expect('turn_ids_total' in record).toBe(false);
   });
 });
 
@@ -300,8 +320,8 @@ describe('PerfMemorySampleRecordSchema (§7.2)', () => {
       }),
     );
     expect(result.success).toBe(true);
-    if (!result.success) throw new Error('expected parse success');
-    expect(result.data).toMatchObject({
+    const data = requireSuccessfulParse(result);
+    expect(data).toMatchObject({
       record_type: 'memory_sample',
       schema_version: 1,
       ms_since_last_operation: 120000,
@@ -428,16 +448,16 @@ describe('joinKeyFromPromptId (AC-3 read-time join, D1)', () => {
 
 describe('parsePerfRecord (AC-9 partial)', () => {
   it('returns a parsed operation record for valid input', () => {
-    const parsed = parsePerfRecord(operationRecord());
-    expect(parsed).not.toBeNull();
-    if (parsed === null) throw new Error('expected a record');
+    const result = parsePerfRecord(operationRecord());
+    expect(result).not.toBeNull();
+    const parsed = requireParsedRecord(result);
     expect(parsed.record_type).toBe('operation');
   });
 
   it('returns a parsed memory_sample record for valid input', () => {
-    const parsed = parsePerfRecord(memorySampleRecord());
-    expect(parsed).not.toBeNull();
-    if (parsed === null) throw new Error('expected a record');
+    const result = parsePerfRecord(memorySampleRecord());
+    expect(result).not.toBeNull();
+    const parsed = requireParsedRecord(result);
     expect(parsed.record_type).toBe('memory_sample');
   });
 

@@ -70,7 +70,7 @@ describe('atCompletionUtils', () => {
       expect(
         filteredNames.filter((name) => name.startsWith('.')),
       ).toStrictEqual([]);
-      expect(filteredNames).toEqual(
+      expect(filteredNames).toStrictEqual(
         expect.arrayContaining(['hidden-ish.txt', 'visible.txt']),
       );
     });
@@ -112,7 +112,7 @@ describe('atCompletionUtils', () => {
           label.split('/').some((segment) => segment.startsWith('.')),
         ),
       ).toStrictEqual([]);
-      expect(suggestionLabels).toEqual(
+      expect(suggestionLabels).toStrictEqual(
         expect.arrayContaining([
           'hidden-ish.txt',
           'nested/',

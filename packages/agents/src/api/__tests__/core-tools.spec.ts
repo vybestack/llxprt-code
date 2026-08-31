@@ -287,61 +287,90 @@ describe('Core tools @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-006 @requi
   });
 
   it('T21 multi-tool: all tool-calls precede the continuation text, exactly one done, per-call call→result ordering preserved @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-007', async () => {
-    const { agent, cleanup } = await buildAgent('multi-tool-then-answer.jsonl');
-    try {
-      const responder = respondToFirstConfirmation(
-        agent,
-        ToolConfirmationOutcome.ProceedOnce,
+    const {
+      callEvents,
+      textIdx,
+      lastCallIdx,
+      done,
+      types,
+      resultEvents,
+      validDeltas,
+      callIds,
+    } =
+      await observeT21MultiToolAllToolCallsPrecedeTheContinuationTextExactlyOne();
+    expect(callEvents.length).toBeGreaterThanOrEqual(2);
+    expect(textIdx).toBeGreaterThan(lastCallIdx);
+    expect(done).toHaveLength(1);
+    expect(types[types.length - 1]).toBe('done');
+    expect(resultEvents.length).toBeGreaterThanOrEqual(callEvents.length);
+    expect(validDeltas.every((d) => d > 0)).toBe(true);
+    expect(validDeltas.length).toBe(resultEvents.length);
+    expect(new Set(callIds).size).toBe(callIds.length);
+  });
+
+  const observeT21MultiToolAllToolCallsPrecedeTheContinuationTextExactlyOne =
+    async () => {
+      const { agent, cleanup } = await buildAgent(
+        'multi-tool-then-answer.jsonl',
       );
       try {
-        const events = await drain(agent.stream('run both tools'));
-        const types = typesOf(events);
-
-        const callEvents = events.filter(isToolCallEvent);
-        expect(callEvents.length).toBeGreaterThanOrEqual(2);
-
-        // every tool-call event precedes the final text continuation
-        const lastCallIdx = Math.max(
-          ...callEvents.map((c) => events.indexOf(c)),
+        const responder = respondToFirstConfirmation(
+          agent,
+          ToolConfirmationOutcome.ProceedOnce,
         );
-        const textIdx = types.indexOf('text');
-        expect(textIdx).toBeGreaterThan(lastCallIdx);
+        try {
+          const events = await drain(agent.stream('run both tools'));
+          const types = typesOf(events);
 
-        // exactly one terminal done
-        const done = events.filter(isDoneEvent);
-        expect(done).toHaveLength(1);
-        expect(types[types.length - 1]).toBe('done');
+          const callEvents = events.filter(isToolCallEvent);
 
-        // per-call ordering: each call's tool-result comes after its tool-call
-        const resultEvents = events.filter(isToolResultEvent);
-        expect(resultEvents.length).toBeGreaterThanOrEqual(callEvents.length);
-        // every result that exists must come after its call (no overlap).
-        // Compute the deltas in a single pass, then assert unconditionally.
-        const validDeltas = callEvents
-          .map((call) => {
-            const callIdx = events.indexOf(call);
-            const resultForCall = resultEvents.find(
-              (r) => r.result.id === call.call.id,
-            );
-            return resultForCall !== undefined
-              ? events.indexOf(resultForCall) - callIdx
-              : Number.POSITIVE_INFINITY;
-          })
-          .filter((d) => Number.isFinite(d));
-        // all computed deltas are strictly positive
-        expect(validDeltas.every((d) => d > 0)).toBe(true);
-        expect(validDeltas.length).toBe(resultEvents.length);
+          // every tool-call event precedes the final text continuation
+          const lastCallIdx = Math.max(
+            ...callEvents.map((c) => events.indexOf(c)),
+          );
+          const textIdx = types.indexOf('text');
 
-        // no overlap: tool-call indices are strictly increasing before results
-        const callIds = callEvents.map((c) => c.call.id);
-        expect(new Set(callIds).size).toBe(callIds.length);
+          // exactly one terminal done
+          const done = events.filter(isDoneEvent);
+
+          // per-call ordering: each call's tool-result comes after its tool-call
+          const resultEvents = events.filter(isToolResultEvent);
+
+          // every result that exists must come after its call (no overlap).
+          // Compute the deltas in a single pass, then assert unconditionally.
+          const validDeltas = callEvents
+            .map((call) => {
+              const callIdx = events.indexOf(call);
+              const resultForCall = resultEvents.find(
+                (r) => r.result.id === call.call.id,
+              );
+              return resultForCall !== undefined
+                ? events.indexOf(resultForCall) - callIdx
+                : Number.POSITIVE_INFINITY;
+            })
+            .filter((d) => Number.isFinite(d));
+          // all computed deltas are strictly positive
+
+          // no overlap: tool-call indices are strictly increasing before results
+          const callIds = callEvents.map((c) => c.call.id);
+
+          return {
+            callEvents,
+            textIdx,
+            lastCallIdx,
+            done,
+            types,
+            resultEvents,
+            validDeltas,
+            callIds,
+          };
+        } finally {
+          responder.unsubscribe();
+        }
       } finally {
-        responder.unsubscribe();
+        await cleanup();
       }
-    } finally {
-      await cleanup();
-    }
-  });
+    };
 
   // ─── Property-based: tool-arg projection stability ───────────────────────
 

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { blockTextOrEmpty } from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it } from 'bun:test';
 import {
   createCodexResponsesWebSocketTransport,
@@ -99,7 +100,7 @@ describe('Codex Responses WebSocket stream idle timeout', () => {
     );
     const text = messages
       .flatMap((message) => message.blocks)
-      .map((block) => (block.type === 'text' ? block.text : ''))
+      .map((block) => (blockTextOrEmpty(block)))
       .join('');
 
     expect(text).toBe('tickticktick');

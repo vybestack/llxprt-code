@@ -247,7 +247,7 @@ describe('CoreToolScheduler approval outcomes', () => {
       await confirmCall(awaiting, ToolConfirmationOutcome.ProceedOnce);
 
       await waitForCallStatus(onToolCallsUpdate, 'call-once', 'success');
-      expect(executed).toEqual(['proceedOnceTool']);
+      expect(executed).toStrictEqual(['proceedOnceTool']);
       const completedCalls = onAllToolCallsComplete.mock.calls;
       const completed = completedCalls[
         completedCalls.length - 1
@@ -294,7 +294,7 @@ describe('CoreToolScheduler approval outcomes', () => {
       expect(cancelledReason(cancelled)).toContain(
         'User did not allow tool call',
       );
-      expect(executed).toEqual([]);
+      expect(executed).toStrictEqual([]);
     });
 
     it('an aborted signal while awaiting resolves to cancelled, never error', async () => {
@@ -334,7 +334,7 @@ describe('CoreToolScheduler approval outcomes', () => {
         'cancelled',
       );
       expect(cancelled.status).toBe('cancelled');
-      expect(executed).toEqual([]);
+      expect(executed).toStrictEqual([]);
       const abortStatuses = onToolCallsUpdate.mock.calls
         .map((args) => args[0])
         .flatMap((calls) =>
@@ -382,7 +382,7 @@ describe('CoreToolScheduler approval outcomes', () => {
         }),
       );
       expect(confirmationRequestCount(messageBus)).toBe(0);
-      expect(executed).toEqual([]);
+      expect(executed).toStrictEqual([]);
     });
 
     it('user denial contrasts with policy denial: prompt first, cancelled, no errorType', async () => {
@@ -485,13 +485,13 @@ describe('CoreToolScheduler approval outcomes', () => {
       expect(
         latest.find((call) => call.request.callId === 'call-b')?.status,
       ).toBe('awaiting_approval');
-      expect(executed).toEqual([]);
+      expect(executed).toStrictEqual([]);
 
       await confirmCall(awaitingB, ToolConfirmationOutcome.Cancel);
       await waitForCallStatus(onToolCallsUpdate, 'call-b', 'cancelled');
       await waitForCallStatus(onToolCallsUpdate, 'call-a', 'success');
       await flushAsyncWork();
-      expect(executed).toEqual(['sharedTool']);
+      expect(executed).toStrictEqual(['sharedTool']);
     });
 
     it('ProceedAlways cascades to the compatible pending call without a second prompt', async () => {
@@ -536,7 +536,7 @@ describe('CoreToolScheduler approval outcomes', () => {
 
       await waitForCallStatus(onToolCallsUpdate, 'call-a', 'success');
       await waitForCallStatus(onToolCallsUpdate, 'call-b', 'success');
-      expect(executed).toEqual(['sharedTool', 'sharedTool']);
+      expect(executed).toStrictEqual(['sharedTool', 'sharedTool']);
       expect(confirmationRequestCount(messageBus)).toBe(requestsBeforeCascade);
     });
 
@@ -603,14 +603,14 @@ describe('CoreToolScheduler approval outcomes', () => {
         latest.find((call) => call.request.callId === 'call-c')?.status,
       ).toBe('awaiting_approval');
       expect(confirmationRequestCount(messageBus)).toBe(requestsBeforeCascade);
-      expect(executed).toEqual([]);
+      expect(executed).toStrictEqual([]);
 
       await confirmCall(awaitingC, ToolConfirmationOutcome.Cancel);
       await waitForCallStatus(onToolCallsUpdate, 'call-c', 'cancelled');
       await waitForCallStatus(onToolCallsUpdate, 'call-a', 'success');
       await waitForCallStatus(onToolCallsUpdate, 'call-b', 'success');
       await flushAsyncWork();
-      expect(executed).toEqual(['sharedTool', 'sharedTool']);
+      expect(executed).toStrictEqual(['sharedTool', 'sharedTool']);
     });
   });
 
@@ -727,7 +727,7 @@ describe('CoreToolScheduler approval outcomes', () => {
         recordedStatuses(onToolCallsUpdate, 'call-sibling'),
         'awaiting_approval',
       );
-      expect(executed).toEqual([]);
+      expect(executed).toStrictEqual([]);
 
       responseHandler?.({
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
@@ -737,7 +737,7 @@ describe('CoreToolScheduler approval outcomes', () => {
 
       await waitForCallStatus(onToolCallsUpdate, 'call-bus', 'success');
       await waitForCallStatus(onToolCallsUpdate, 'call-sibling', 'success');
-      expect(executed).toEqual(['busTool', 'busSibling']);
+      expect(executed).toStrictEqual(['busTool', 'busSibling']);
     });
 
     it('a bus response with an unknown correlationId leaves the call awaiting', async () => {
@@ -778,7 +778,7 @@ describe('CoreToolScheduler approval outcomes', () => {
         recordedStatuses(onToolCallsUpdate, 'call-unknown'),
         'awaiting_approval',
       );
-      expect(executed).toEqual([]);
+      expect(executed).toStrictEqual([]);
     });
   });
 });

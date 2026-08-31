@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
@@ -81,7 +82,7 @@ describe('useTerminalSize', () => {
     const hook = renderHook(() => useTerminalSize());
     unmount = hook.unmount;
 
-    expect(hook.result.current).toEqual({ columns: 132, rows: 41 });
+    expect(hook.result.current).toStrictEqual({ columns: 132, rows: 41 });
   });
 
   it('falls back to process stdout for missing or zero Ink dimensions', () => {
@@ -93,7 +94,7 @@ describe('useTerminalSize', () => {
     const hook = renderHook(() => useTerminalSize());
     unmount = hook.unmount;
 
-    expect(hook.result.current).toEqual({ columns: 101, rows: 37 });
+    expect(hook.result.current).toStrictEqual({ columns: 101, rows: 37 });
   });
 
   it('uses standard terminal defaults when neither stream reports a size', () => {
@@ -105,7 +106,7 @@ describe('useTerminalSize', () => {
     const hook = renderHook(() => useTerminalSize());
     unmount = hook.unmount;
 
-    expect(hook.result.current).toEqual({ columns: 80, rows: 24 });
+    expect(hook.result.current).toStrictEqual({ columns: 80, rows: 24 });
   });
 
   it('debounces resize events and publishes the latest measured size', () => {
@@ -122,7 +123,7 @@ describe('useTerminalSize', () => {
       inkStdout.emit('resize');
       vi.advanceTimersByTime(149);
     });
-    expect(hook.result.current).toEqual({ columns: 80, rows: 24 });
+    expect(hook.result.current).toStrictEqual({ columns: 80, rows: 24 });
 
     setDimension(inkStdout, 'columns', 120);
     setDimension(inkStdout, 'rows', 40);
@@ -130,12 +131,12 @@ describe('useTerminalSize', () => {
       inkStdout.emit('resize');
       vi.advanceTimersByTime(149);
     });
-    expect(hook.result.current).toEqual({ columns: 80, rows: 24 });
+    expect(hook.result.current).toStrictEqual({ columns: 80, rows: 24 });
 
     act(() => {
       vi.advanceTimersByTime(1);
     });
-    expect(hook.result.current).toEqual({ columns: 120, rows: 40 });
+    expect(hook.result.current).toStrictEqual({ columns: 120, rows: 40 });
   });
 
   it('removes its resize listener and cancels pending measurement on unmount', () => {
@@ -149,9 +150,10 @@ describe('useTerminalSize', () => {
     const resizeListener = inkStdout
       .listeners('resize')
       .find((listener) => !priorResizeListeners.has(listener));
-    if (resizeListener === undefined) {
-      throw new Error('Expected useTerminalSize to register a resize listener');
-    }
+    assertDefined(
+      resizeListener,
+      'Expected useTerminalSize to register a resize listener',
+    );
 
     setDimension(inkStdout, 'columns', 140);
     setDimension(inkStdout, 'rows', 50);
@@ -168,6 +170,6 @@ describe('useTerminalSize', () => {
       inkStdout.emit('resize');
       vi.advanceTimersByTime(150);
     });
-    expect(hook.result.current).toEqual({ columns: 80, rows: 24 });
+    expect(hook.result.current).toStrictEqual({ columns: 80, rows: 24 });
   });
 });

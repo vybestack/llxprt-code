@@ -105,6 +105,28 @@ describe('CoreToolScheduler policy decisions', () => {
   });
 
   it('should publish confirmation requests when policy asks the user', async () => {
+    const {
+      waitingCall,
+      mockMessageBus,
+      correlationId,
+      busHandler,
+      completionCallCount,
+      completedStatus,
+    } = await observePublishConfirmationRequestsWhenPolicyAsksTheUser();
+    expect(completionCallCount).toBeGreaterThan(0);
+    expect(completedStatus).toBe('success');
+    expect(waitingCall.status).toBe('awaiting_approval');
+    expect(waitingCall.confirmationDetails.correlationId).toBeDefined();
+    expect(mockMessageBus.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageBusType.TOOL_CONFIRMATION_REQUEST,
+        correlationId,
+      }),
+    );
+    expect(busHandler).toBeDefined();
+  });
+
+  const observePublishConfirmationRequestsWhenPolicyAsksTheUser = async () => {
     const mockTool = new MockTool();
     mockTool.shouldConfirm = true;
     const declarativeTool = mockTool;
@@ -181,19 +203,10 @@ describe('CoreToolScheduler policy decisions', () => {
 
     const latestUpdate = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
     const waitingCall = latestUpdate[0] as WaitingToolCall;
-    expect(waitingCall.status).toBe('awaiting_approval');
-    expect(waitingCall.confirmationDetails.correlationId).toBeDefined();
+
     const correlationId = waitingCall.confirmationDetails
       .correlationId as string;
 
-    expect(mockMessageBus.publish).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: MessageBusType.TOOL_CONFIRMATION_REQUEST,
-        correlationId,
-      }),
-    );
-
-    expect(busHandler).toBeDefined();
     busHandler?.({
       type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
       correlationId,
@@ -201,11 +214,24 @@ describe('CoreToolScheduler policy decisions', () => {
     });
 
     await waitFor(() => {
-      expect(onAllToolCallsComplete).toHaveBeenCalled();
-      const completedCallsAsk = onAllToolCallsComplete.mock.calls.at(
-        -1,
-      )?.[0] as ToolCall[];
-      expect(completedCallsAsk[0]?.status).toBe('success');
+      const completedCalls = onAllToolCallsComplete.mock.calls.at(-1)?.[0] as
+        | ToolCall[]
+        | undefined;
+      if (completedCalls?.[0]?.status !== 'success') {
+        throw new Error('Waiting for the tool call to succeed');
+      }
     });
-  });
+    const completionCallCount = onAllToolCallsComplete.mock.calls.length;
+    const completedStatus =
+      onAllToolCallsComplete.mock.calls.at(-1)?.[0]?.[0]?.status;
+
+    return {
+      waitingCall,
+      mockMessageBus,
+      correlationId,
+      busHandler,
+      completionCallCount,
+      completedStatus,
+    };
+  };
 });

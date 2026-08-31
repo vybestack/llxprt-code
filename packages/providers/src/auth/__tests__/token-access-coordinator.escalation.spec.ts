@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertInstanceOf } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { BucketStats } from '@vybestack/llxprt-code-auth';
 import { OAuthBucketManager } from '../OAuthBucketManager.js';
@@ -287,7 +288,7 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
     expect(Object.prototype.hasOwnProperty.call(challenge, 'credentials')).toBe(
       false,
     );
-    expect(harness.events).toEqual(['host-challenge', 'request-start']);
+    expect(harness.events).toStrictEqual(['host-challenge', 'request-start']);
   });
 
   it('marks escalation after expired credential refresh failure as reauthentication', async () => {
@@ -324,7 +325,7 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
 
     await expect(auth).rejects.toBeInstanceOf(InteractiveAuthUnavailableError);
     expect(harness.facade.authenticateCallCount).toBe(0);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toEqual([]);
+    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
   });
 
   it('surfaces host cancellation as a typed host-directed error', async () => {
@@ -339,9 +340,11 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
     await expect(auth).rejects.toBeInstanceOf(InteractiveAuthCancelledError);
     const error = await auth.catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(InteractiveAuthCancelledError);
-    if (!(error instanceof Error)) {
-      throw new Error('Expected authentication cancellation error');
-    }
+    assertInstanceOf(
+      error,
+      Error,
+      'Expected authentication cancellation error',
+    );
     expect(error.message).toContain('cancelled at the host');
     expect(error.message).not.toContain('auth dialog will open');
     expect(error.message).not.toContain('authenticate in this context');
@@ -360,9 +363,11 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
       .catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(InteractiveAuthError);
-    if (!(error instanceof InteractiveAuthError)) {
-      throw new Error('Expected typed interactive authentication error');
-    }
+    assertInstanceOf(
+      error,
+      InteractiveAuthError,
+      'Expected typed interactive authentication error',
+    );
     expect(error.outcomeKind).toBe('failed');
     expect(error.message).toContain('Host authorization code was rejected');
     expect(error.message).toContain('failed at the host');
@@ -388,9 +393,11 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
       .catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(InteractiveAuthError);
-    if (!(error instanceof InteractiveAuthError)) {
-      throw new Error('Expected typed interactive authentication error');
-    }
+    assertInstanceOf(
+      error,
+      InteractiveAuthError,
+      'Expected typed interactive authentication error',
+    );
     expect(error.outcomeKind).toBe('timed_out');
     expect(error.message).toContain('expired at the host');
     expect(harness.facade.authenticateCallCount).toBe(0);
@@ -427,6 +434,6 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
 
     expect(token).toBe('legacy-direct-token');
     expect(harness.facade.authenticateCallCount).toBe(1);
-    expect(harness.events).toEqual(['local-auth']);
+    expect(harness.events).toStrictEqual(['local-auth']);
   });
 });

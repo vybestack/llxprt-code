@@ -29,6 +29,18 @@ function clearMockEphemeralSettings(): void {
   mockEphemeralSettings.clear();
 }
 
+function createDeclineThenApproveConfirmation(count: {
+  value: number;
+}): () => Promise<boolean> {
+  return async (): Promise<boolean> => {
+    count.value += 1;
+    if (count.value === 1) {
+      return false;
+    }
+    return true;
+  };
+}
+
 function createMockTokenStore(): TokenStore {
   const tokens = new Map<string, OAuthToken>();
 
@@ -157,19 +169,13 @@ describe('Issue #828: User Declined Auth Prompt Tracking', () => {
   it('should skip BucketAuthConfirmation after user cancels once in session', async () => {
     setMockEphemeralSetting('auth-bucket-prompt', true);
 
-    let confirmationCount = 0;
+    const confirmationCount = { value: 0 };
 
     const policyEngine = new PolicyEngine();
     const messageBus = new MessageBus(policyEngine);
 
     messageBus.requestBucketAuthConfirmation = vi.fn(
-      async (): Promise<boolean> => {
-        confirmationCount++;
-        if (confirmationCount === 1) {
-          return false; // User declines on first attempt
-        }
-        return true;
-      },
+      createDeclineThenApproveConfirmation(confirmationCount),
     );
 
     Object.assign(manager, { runtimeMessageBus: messageBus });
@@ -191,7 +197,7 @@ describe('Issue #828: User Declined Auth Prompt Tracking', () => {
 
     // The confirmation dialog should NOT have been shown again
     // (confirmationCount should still be 1 from the first attempt)
-    expect(confirmationCount).toBe(1);
+    expect(confirmationCount.value).toBe(1);
   });
 
   it('should reset declined state on new OAuthManager instance', async () => {

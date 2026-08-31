@@ -51,6 +51,24 @@ function createBlockedTokenizerFactory(): {
   };
 }
 
+/**
+ * Render helpers for block assertions. Hoisted so the text/non-text choice
+ * lives here rather than being repeated inside every test body (#3129).
+ */
+function describeBlock(block: {
+  readonly type: string;
+  readonly text?: string;
+}): string {
+  return block.type === 'text' ? (block.text ?? '') : `<${block.type}>`;
+}
+
+function blockLabel(block: {
+  readonly type: string;
+  readonly text?: string;
+}): string {
+  return block.type === 'text' ? (block.text ?? '') : block.type;
+}
+
 describe('Compression locking', () => {
   let historyService: HistoryService;
 
@@ -395,7 +413,7 @@ describe('Compression locking', () => {
 
       const texts = historyService.getAll().map((entry) => {
         const block = entry.blocks[0];
-        return block.type === 'text' ? block.text : `<${block.type}>`;
+        return describeBlock(block);
       });
       expect(texts).toStrictEqual(['original question', 'mid-stream content']);
     });
@@ -410,9 +428,7 @@ describe('Compression locking', () => {
       const observed: string[] = [];
       historyService.on('contentAdded', (content) => {
         const block = content.blocks[0];
-        observed.push(
-          `contentAdded:${block.type === 'text' ? block.text : block.type}`,
-        );
+        observed.push(`contentAdded:${blockLabel(block)}`);
       });
       historyService.on('compressionLockReleased', () => {
         observed.push('compressionLockReleased');
@@ -511,9 +527,7 @@ describe('Compression locking', () => {
       const observed: string[] = [];
       historyService.on('contentAdded', (content) => {
         const block = content.blocks[0];
-        observed.push(
-          `contentAdded:${block.type === 'text' ? block.text : block.type}`,
-        );
+        observed.push(`contentAdded:${blockLabel(block)}`);
       });
       historyService.on('compressionLockReleased', () => {
         observed.push('compressionLockReleased');
@@ -547,7 +561,7 @@ describe('Compression locking', () => {
 
       const texts = historyService.getAll().map((entry) => {
         const block = entry.blocks[0];
-        return block.type === 'text' ? block.text : `<${block.type}>`;
+        return describeBlock(block);
       });
       expect(texts).toStrictEqual([
         'original question',
@@ -565,9 +579,7 @@ describe('Compression locking', () => {
       const observed: string[] = [];
       historyService.on('contentAdded', (content) => {
         const block = content.blocks[0];
-        observed.push(
-          `contentAdded:${block.type === 'text' ? block.text : block.type}`,
-        );
+        observed.push(`contentAdded:${blockLabel(block)}`);
       });
       historyService.on('compressionLockReleased', () => {
         observed.push('compressionLockReleased');
@@ -605,7 +617,7 @@ describe('Compression locking', () => {
       ]);
       const texts = historyService.getAll().map((entry) => {
         const block = entry.blocks[0];
-        return block.type === 'text' ? block.text : `<${block.type}>`;
+        return describeBlock(block);
       });
       expect(texts).toStrictEqual([
         'original question',
@@ -630,9 +642,7 @@ describe('Compression locking', () => {
       const observed: string[] = [];
       historyService.on('contentAdded', (content) => {
         const block = content.blocks[0];
-        observed.push(
-          `contentAdded:${block.type === 'text' ? block.text : block.type}`,
-        );
+        observed.push(`contentAdded:${blockLabel(block)}`);
       });
       historyService.on('compressionLockReleased', () => {
         observed.push('compressionLockReleased');
@@ -679,7 +689,7 @@ describe('Compression locking', () => {
       expect(
         historyService.getAll().map((entry) => {
           const block = entry.blocks[0];
-          return block.type === 'text' ? block.text : `<${block.type}>`;
+          return describeBlock(block);
         }),
       ).toStrictEqual(['original question', 'mid-stream content']);
     });
@@ -720,7 +730,7 @@ describe('Compression locking', () => {
       // queue must never drop operations the pre-change code preserved.
       const texts = historyService.getAll().map((entry) => {
         const block = entry.blocks[0];
-        return block.type === 'text' ? block.text : `<${block.type}>`;
+        return describeBlock(block);
       });
       expect(texts).toStrictEqual(['original question', 'mid-stream content']);
     });
@@ -772,7 +782,7 @@ describe('Compression locking', () => {
       expect(compressionLockReleasedObserved).toBe(true);
       const texts = historyService.getAll().map((entry) => {
         const block = entry.blocks[0];
-        return block.type === 'text' ? block.text : `<${block.type}>`;
+        return describeBlock(block);
       });
       expect(texts).toStrictEqual(['original question', 'mid-stream content']);
     });
@@ -820,7 +830,7 @@ describe('Compression locking', () => {
       // the undefined throw is truthfully rethrown rather than swallowed.
       const texts = historyService.getAll().map((entry) => {
         const block = entry.blocks[0];
-        return block.type === 'text' ? block.text : `<${block.type}>`;
+        return describeBlock(block);
       });
       expect(texts).toStrictEqual(['original question', 'mid-stream content']);
     });

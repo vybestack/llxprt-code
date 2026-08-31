@@ -86,6 +86,13 @@ describe('MiddleOutStrategy core', () => {
 
   describe('tool-call boundary respect', () => {
     it('does not orphan tool responses at the top split boundary', async () => {
+      const { firstBottom, orphanedTopToolCallIds } =
+        await observeDoesNotOrphanToolResponsesAtTheTopSplitBoundary();
+      expect(orphanedTopToolCallIds).toStrictEqual([]);
+      expect(firstBottom.speaker).not.toBe('tool');
+    });
+
+    const observeDoesNotOrphanToolResponsesAtTheTopSplitBoundary = async () => {
       const history: IContent[] = [
         humanMsg('msg 0'),
         aiTextMsg('msg 1'),
@@ -128,25 +135,29 @@ describe('MiddleOutStrategy core', () => {
         lastTop.speaker === 'ai'
           ? lastTop.blocks.filter((b) => b.type === 'tool_call')
           : [];
-      for (const call of lastTopToolCalls) {
-        const callId = (call as { id: string }).id;
-        const hasResponse = topMessages.some(
-          (msg) =>
-            msg.speaker === 'tool' &&
-            msg.blocks.some(
-              (b) =>
-                b.type === 'tool_response' &&
-                'callId' in b &&
-                b.callId === callId,
-            ),
+      const orphanedTopToolCallIds = lastTopToolCalls
+        .map((call) => (call as { id: string }).id)
+        .filter(
+          (callId) =>
+            Boolean(
+              topMessages.some(
+                (msg) =>
+                  msg.speaker === 'tool' &&
+                  msg.blocks.some(
+                    (block) =>
+                      block.type === 'tool_response' &&
+                      'callId' in block &&
+                      block.callId === callId,
+                  ),
+              ),
+            ) === false,
         );
-        expect(hasResponse).toBe(true);
-      }
 
       // Bottom messages should not start with an orphaned tool response
       const firstBottom = bottomMessages[0];
-      expect(firstBottom.speaker).not.toBe('tool');
-    });
+
+      return { firstBottom, orphanedTopToolCallIds };
+    };
   });
 
   // -----------------------------------------------------------------------
@@ -190,39 +201,50 @@ describe('MiddleOutStrategy core', () => {
 
   describe('profile resolution', () => {
     it('uses the profile-specific provider when compressionProfile is set', async () => {
-      const profileSummary = 'Summary from profile provider';
-      const defaultSummary = 'Summary from default provider';
-
-      const profileProvider = createFakeProvider(
-        'profile-provider',
-        profileSummary,
-      );
-      const defaultProvider = createFakeProvider(
-        'default-provider',
-        defaultSummary,
-      );
-
-      const history = generateHistory(20);
-      const strategy = new MiddleOutStrategy();
-
-      const ctxWithProfile = buildContext({
-        history,
-        compressionProfile: 'compression-profile',
-        resolveProvider: (profileName?: string) => {
-          if (profileName === 'compression-profile') {
-            return { provider: profileProvider, runtime: testProviderRuntime };
-          }
-          return { provider: defaultProvider, runtime: testProviderRuntime };
-        },
-      });
-      const profileResult = await strategy.compress(ctxWithProfile);
-      const topCount = profileResult.metadata.topPreserved!;
-      const summaryMsg = profileResult.newHistory[topCount];
+      const { summaryMsg, profileSummary } =
+        await observeUsesTheProfileSpecificProviderWhenCompressionProfileIsSet();
       expect(summaryMsg.blocks[0]).toMatchObject({
         type: 'text',
         text: expect.stringContaining(profileSummary),
       });
     });
+
+    const observeUsesTheProfileSpecificProviderWhenCompressionProfileIsSet =
+      async () => {
+        const profileSummary = 'Summary from profile provider';
+        const defaultSummary = 'Summary from default provider';
+
+        const profileProvider = createFakeProvider(
+          'profile-provider',
+          profileSummary,
+        );
+        const defaultProvider = createFakeProvider(
+          'default-provider',
+          defaultSummary,
+        );
+
+        const history = generateHistory(20);
+        const strategy = new MiddleOutStrategy();
+
+        const ctxWithProfile = buildContext({
+          history,
+          compressionProfile: 'compression-profile',
+          resolveProvider: (profileName?: string) => {
+            if (profileName === 'compression-profile') {
+              return {
+                provider: profileProvider,
+                runtime: testProviderRuntime,
+              };
+            }
+            return { provider: defaultProvider, runtime: testProviderRuntime };
+          },
+        });
+        const profileResult = await strategy.compress(ctxWithProfile);
+        const topCount = profileResult.metadata.topPreserved!;
+        const summaryMsg = profileResult.newHistory[topCount];
+
+        return { summaryMsg, profileSummary };
+      };
   });
 
   // -----------------------------------------------------------------------

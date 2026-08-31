@@ -11,6 +11,8 @@ import { debugLogger } from './debugLogger.js';
 import * as path from 'path';
 import { WorkspaceContext } from './workspaceContext.js';
 
+const bunIt = it;
+
 describe('WorkspaceContext with real filesystem', () => {
   let tempDir: string;
   let cwd: string;
@@ -84,9 +86,9 @@ describe('WorkspaceContext with real filesystem', () => {
       expect(directories).toHaveLength(2);
     });
 
-    it.skipIf(os.platform() === 'win32')(
-      'should handle symbolic links correctly',
-      () => {
+    {
+      const it = os.platform() === 'win32' ? bunIt.skip : bunIt;
+      it('should handle symbolic links correctly', () => {
         const realDir = path.join(tempDir, 'real');
         fs.mkdirSync(realDir, { recursive: true });
         const symlinkDir = path.join(tempDir, 'symlink-to-real');
@@ -97,8 +99,8 @@ describe('WorkspaceContext with real filesystem', () => {
         const directories = workspaceContext.getDirectories();
 
         expect(directories).toStrictEqual([cwd, realDir]);
-      },
-    );
+      });
+    }
   });
 
   describe('path validation', () => {

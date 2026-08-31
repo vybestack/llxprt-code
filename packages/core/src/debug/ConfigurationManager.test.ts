@@ -226,10 +226,7 @@ describe('ConfigurationManager', () => {
       const manager = ConfigurationManager.getInstance();
       const config = manager.getEffectiveConfig();
       expect(typeof config.enabled).toBe('boolean');
-      expect(
-        Array.isArray(config.namespaces) ||
-          typeof config.namespaces === 'object',
-      ).toBe(true);
+      expect(isNamespacesContainerOrArray(config.namespaces)).toBe(true);
       expect(typeof config.level).toBe('string');
       expect(typeof config.lazyEvaluation).toBe('boolean');
       expect(Array.isArray(config.redactPatterns)).toBe(true);
@@ -374,3 +371,7 @@ describe('ConfigurationManager', () => {
     });
   });
 });
+
+function isNamespacesContainerOrArray(namespaces: unknown): boolean {
+  return Array.isArray(namespaces) || typeof namespaces === 'object';
+}

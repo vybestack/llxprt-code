@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it } from 'bun:test';
 import { DebugLogger } from '../../debug/index.js';
 import type { IContent, MediaBlock, MediaReferenceBlock } from './IContent.js';
@@ -204,14 +205,15 @@ describe('media-aware history cloning', () => {
       error: 'partial failure',
       isComplete: false,
     });
-    expect(clonedCall.providerMetadata).toEqual({
+    expect(clonedCall.providerMetadata).toStrictEqual({
       detail: 'high',
       nested: { flag: true },
     });
     expect(clonedResponse.providerMetadata?.['raw']).toBeInstanceOf(Date);
-    if (clonedCall.providerMetadata === undefined) {
-      throw new Error('Expected cloned tool call provider metadata');
-    }
+    assertDefined(
+      clonedCall.providerMetadata,
+      'Expected cloned tool call provider metadata',
+    );
     Reflect.set(clonedCall.providerMetadata, 'detail', 'low');
     expect(callMetadata.detail).toBe('high');
   });

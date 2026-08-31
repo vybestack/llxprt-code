@@ -216,7 +216,7 @@ describe('ReadManyFilesTool real behavioral filtering', () => {
     });
     const metadata = await sharp(findInlineImage(result)).metadata();
 
-    expect(metadata.autoOrient).toEqual({ width: 120, height: 60 });
+    expect(metadata.autoOrient).toStrictEqual({ width: 120, height: 60 });
   });
 
   it('preserves image bytes when no resize limit is configured', async () => {
@@ -241,7 +241,7 @@ describe('ReadManyFilesTool real behavioral filtering', () => {
       paths: ['legacy.png'],
     });
 
-    expect(findInlineImage(result)).toEqual(original);
+    expect(findInlineImage(result)).toStrictEqual(original);
   });
 
   it('resizes an explicitly requested noisy image before enforcing returned-byte limits', async () => {

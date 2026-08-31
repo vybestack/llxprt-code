@@ -17,6 +17,13 @@ import {
 
 const PROVIDER = 'anthropic';
 
+function findAnthropicProvider(
+  provider: ReturnType<typeof createTestProvider>,
+  name: string,
+): ReturnType<typeof createTestProvider> | undefined {
+  return name === PROVIDER ? provider : undefined;
+}
+
 describe('Error and edge case behavioral scenarios', () => {
   let tokenStore: MemoryTokenStore;
 
@@ -81,7 +88,7 @@ describe('Error and edge case behavioral scenarios', () => {
 
       proactiveManager = new ProactiveRenewalManager(
         proactiveTokenStore,
-        (name: string) => (name === PROVIDER ? provider : undefined),
+        findAnthropicProvider.bind(undefined, provider),
         () => true,
       );
 

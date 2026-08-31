@@ -41,7 +41,7 @@ describe('MCP host services', () => {
     const failure = new Error('failure');
     emitHostFeedback('error', 'three arguments', failure);
 
-    expect(calls).toEqual([
+    expect(calls).toStrictEqual([
       {
         severity: 'info',
         message: 'two arguments',
@@ -67,7 +67,7 @@ describe('MCP host services', () => {
 
     await openHostBrowser('https://example.test/oauth');
 
-    expect(openedUrls).toEqual(['https://example.test/oauth']);
+    expect(openedUrls).toStrictEqual(['https://example.test/oauth']);
   });
 
   it('does not let a failing feedback sink interrupt MCP work', () => {

@@ -73,6 +73,14 @@ function makeContent(
   return { speaker, blocks: [{ type: 'text', text }] };
 }
 
+/**
+ * Text content of a history block; empty string for non-text blocks (history
+ * in this suite is always text content).
+ */
+function textOf(block: IContent['blocks'][number]): string {
+  return block.type === 'text' ? block.text : '';
+}
+
 function tempDirHelper(): {
   getDir: () => string;
   setup: () => Promise<void>;
@@ -126,9 +134,7 @@ describe('durable history mutation @plan:2026-07-28-issue-2625', () => {
       requireReplaySuccess(replay);
       {
         expect(replay.history).toHaveLength(2);
-        const texts = replay.history.map((h) =>
-          h.blocks[0].type === 'text' ? h.blocks[0].text : '',
-        );
+        const texts = replay.history.map((h) => textOf(h.blocks[0]));
         expect(texts).toStrictEqual(['A', 'B']);
       }
     });
@@ -224,9 +230,7 @@ describe('durable history mutation @plan:2026-07-28-issue-2625', () => {
       requireReplaySuccess(replay);
       {
         expect(replay.history).toHaveLength(3);
-        const texts = replay.history.map((h) =>
-          h.blocks[0].type === 'text' ? h.blocks[0].text : '',
-        );
+        const texts = replay.history.map((h) => textOf(h.blocks[0]));
         expect(texts).toStrictEqual(['Q1', 'A1', 'tool-result-1']);
       }
     });

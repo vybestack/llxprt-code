@@ -40,6 +40,17 @@ import { registerMcpHostServices } from '../host/hostServices.js';
 // Exercises the real host seam instead of mocking a module (#3305).
 registerMcpHostServices({ openBrowser: mockOpenBrowserSecurely });
 
+function runOAuthTimeoutImmediately(
+  callback: () => void,
+  delay: number | undefined,
+  originalSetTimeout: typeof setTimeout,
+): ReturnType<typeof setTimeout> {
+  if (delay === 5 * 60 * 1000) {
+    callback();
+  }
+  return originalSetTimeout(callback, 0);
+}
+
 describe('MCPOAuthProvider', () => {
   let saveTokenSpy: ReturnType<typeof vi.spyOn>;
 
@@ -607,13 +618,9 @@ describe('MCPOAuthProvider', () => {
 
       // Mock setTimeout to trigger timeout immediately
       const originalSetTimeout = global.setTimeout;
-      global.setTimeout = vi.fn((callback, delay) => {
-        if (delay === 5 * 60 * 1000) {
-          // 5 minute timeout
-          callback();
-        }
-        return originalSetTimeout(callback, 0);
-      }) as unknown as typeof setTimeout;
+      global.setTimeout = vi.fn((callback, delay) =>
+        runOAuthTimeoutImmediately(callback, delay, originalSetTimeout),
+      ) as unknown as typeof setTimeout;
 
       await expect(
         MCPOAuthProvider.authenticate('test-server', mockConfig),

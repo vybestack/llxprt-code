@@ -43,6 +43,15 @@ class ImageCapabilityHolder {
   }
 }
 
+function completeImageOperation(signal: AbortSignal): {
+  absoluteOutputPath: string;
+} {
+  if (signal.aborted) {
+    throw new Error('The operation was aborted.');
+  }
+  return { absoluteOutputPath: '/workspace/out.png' };
+}
+
 function makeMockContext(overrides?: {
   runImageOperation?: (req: {
     prompt: string;
@@ -214,10 +223,7 @@ describe('imageCommand', () => {
           capturedSignal = req.signal;
           // Hold until the invocation is cancelled so the abort lands mid-run.
           await gate;
-          if (req.signal.aborted) {
-            throw new Error('The operation was aborted.');
-          }
-          return { absoluteOutputPath: '/workspace/out.png' };
+          return completeImageOperation(req.signal);
         },
       );
     const invocation = new AbortController();
@@ -257,7 +263,9 @@ describe('imageCommand', () => {
 
     await imageCommand.action?.(ctx, 'out.png "draw a cat"');
 
-    expect((ctx.ui.addItem as ReturnType<typeof vi.fn>).mock.calls).toEqual([]);
+    expect(
+      (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock.calls,
+    ).toStrictEqual([]);
   });
 
   it('reports nothing when the runner wins a race with the cancellation', async () => {
@@ -283,7 +291,9 @@ describe('imageCommand', () => {
     releaseRunner();
     await pending;
 
-    expect((ctx.ui.addItem as ReturnType<typeof vi.fn>).mock.calls).toEqual([]);
+    expect(
+      (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock.calls,
+    ).toStrictEqual([]);
   });
 
   it('no longer reacts to a process SIGINT, only to the framework signal', async () => {

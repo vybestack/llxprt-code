@@ -29,6 +29,7 @@
  * provider-side rules that the strip depends on.
  */
 
+import { blockTextOrEmpty } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -286,7 +287,7 @@ describe('OpenAIResponsesProvider Codex resumed chain @issue:3160', () => {
 
       const resumedAnswer = resumedMessages
         .flatMap((message) => message.blocks)
-        .map((block) => (block.type === 'text' ? block.text : ''))
+        .map((block) => (blockTextOrEmpty(block)))
         .join('');
       const turn2Contents: IContent[] = [
         ...resumedContents,

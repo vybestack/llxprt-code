@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  assertDefined,
+  assertInstanceOf,
+} from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -190,572 +194,581 @@ class ReclamationReadHarness extends LocalMediaStorePersistence {
   }
 }
 
-describe('LocalMediaStore verified reads', () => {
-  const tempDirectory = useTempDirectory();
+describe('local-media-store-verification', () => {
+  describe('LocalMediaStore verified reads', () => {
+    const tempDirectory = useTempDirectory();
 
-  it('distinguishes a missing object and carries content identity and operation', async () => {
-    const store = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 3,
-    });
-    const reference = await store.admit(admitInput(bytes(1, 2, 3)));
-    await rm(await storedObjectPath(tempDirectory(), reference));
+    it('distinguishes a missing object and carries content identity and operation', async () => {
+      const store = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 3,
+      });
+      const reference = await store.admit(admitInput(bytes(1, 2, 3)));
+      await rm(await storedObjectPath(tempDirectory(), reference));
 
-    const error = await capturedError(store.readVerified(reference));
+      const error = await capturedError(store.readVerified(reference));
 
-    expect(error).toBeInstanceOf(MediaObjectMissingError);
-    expect(error).toBeInstanceOf(MediaStoreError);
-    if (!(error instanceof MediaStoreError)) {
-      throw new Error('Expected MediaStoreError');
-    }
-    expect(error.contentId).toBe(reference.contentId);
-    expect(error.operation).toBe('read verified');
-  });
-
-  it('distinguishes corrupt length from a hash mismatch', async () => {
-    const store = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 3,
-    });
-    const reference = await store.admit(admitInput(bytes(1, 2, 3)));
-    await writeFile(
-      await storedObjectPath(tempDirectory(), reference),
-      bytes(9),
-    );
-
-    const error = await capturedError(store.readVerified(reference));
-
-    expect(error).toBeInstanceOf(MediaObjectCorruptError);
-    expect(error.message).toContain(reference.contentId);
-  });
-
-  it('distinguishes same-length hash-mismatched bytes', async () => {
-    const store = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 3,
-    });
-    const reference = await store.admit(admitInput(bytes(1, 2, 3)));
-    await writeFile(
-      await storedObjectPath(tempDirectory(), reference),
-      bytes(3, 2, 1),
-    );
-
-    const error = await capturedError(store.readVerified(reference));
-
-    expect(error).toBeInstanceOf(MediaObjectHashMismatchError);
-    expect(error.message).toContain(reference.contentId);
-  });
-
-  it('rejects a non-file object as corrupt', async () => {
-    const store = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 3,
-    });
-    const reference = await store.admit(admitInput(bytes(1, 2, 3)));
-    const path = await storedObjectPath(tempDirectory(), reference);
-    await rm(path);
-    await Bun.write(join(path, 'nested'), 'not an object file');
-
-    const error = await capturedError(store.readVerified(reference));
-
-    expect(error).toBeInstanceOf(MediaObjectCorruptError);
-  });
-
-  it('reports malformed runtime references through the media-store error contract', async () => {
-    const store = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 3,
-    });
-    const invocation: unknown = Reflect.apply(store.readVerified, store, [
-      undefined,
-    ]);
-    if (!(invocation instanceof Promise)) {
-      throw new Error('Expected readVerified to return a promise');
-    }
-
-    const error = await capturedError(invocation);
-
-    expect(error).toBeInstanceOf(MediaObjectCorruptError);
-  });
-
-  it('attributes object-directory read failures to reclamation', async () => {
-    await mkdir(join(tempDirectory(), 'objects'), { recursive: true });
-    await writeFile(
-      join(tempDirectory(), 'objects', 'sha256'),
-      'not a directory',
-    );
-    const harness = new ReclamationReadHarness({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 3,
+      expect(error).toBeInstanceOf(MediaObjectMissingError);
+      expect(error).toBeInstanceOf(MediaStoreError);
+      assertInstanceOf(error, MediaStoreError, 'Expected MediaStoreError');
+      expect(error.contentId).toBe(reference.contentId);
+      expect(error.operation).toBe('read verified');
     });
 
-    const error = await capturedError(harness.scanObjectDirectory());
-
-    expect(error).toBeInstanceOf(MediaStoreError);
-    if (!(error instanceof MediaStoreError)) {
-      throw new Error('Expected MediaStoreError');
-    }
-    expect(error.operation).toBe('reclaim media');
-  });
-});
-
-describe('LocalMediaStore ownership reservations', () => {
-  const tempDirectory = useTempDirectory();
-
-  it('reserves and releases explicit owners without changing spool usage', async () => {
-    const store = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 3,
-    });
-    const reference = await store.admit(admitInput(bytes(1, 2, 3)));
-
-    await store.reserve(reference, 'in-flight:request-1');
-    const reserved = await store.hasReservations(reference.contentId);
-    await store.release(reference.contentId, 'in-flight:request-1');
-
-    expect(reserved).toBe(true);
-    expect(await store.hasReservations(reference.contentId)).toBe(false);
-    expect(await store.getStoredByteLength()).toBe(3);
-  });
-
-  it('fails reservation of missing content with identity and operation context', async () => {
-    const store = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 3,
-    });
-    const contentId = `sha256:${createHash('sha256').update('missing').digest('hex')}`;
-    const missingReference: MediaReferenceBlock = {
-      type: 'media',
-      encoding: 'reference',
-      mimeType: 'image/png',
-      contentId,
-      originalContentId: contentId,
-      selectedContentId: contentId,
-      originalObject: {
-        contentId,
-        mimeType: 'image/png',
-        byteLength: 1,
-        normalizedBase64Length: 4,
-      },
-      selectedObject: {
-        contentId,
-        mimeType: 'image/png',
-        byteLength: 1,
-        normalizedBase64Length: 4,
-      },
-      transformation: {
-        policyId: 'identity',
-        policyVersion: 1,
-        parameters: {},
-      },
-      byteLength: 1,
-      normalizedBase64Length: 4,
-      semanticMetadata: {},
-    };
-
-    const error = await capturedError(
-      store.reserve(missingReference, 'persisted:session-1'),
-    );
-
-    expect(error).toBeInstanceOf(MediaObjectMissingError);
-    if (!(error instanceof MediaStoreError)) {
-      throw new Error('Expected MediaStoreError');
-    }
-    expect(error.contentId).toBe(contentId);
-    expect(error.operation).toBe('reserve reference');
-  });
-
-  it('uses owner identity rather than exposing it as a path segment', async () => {
-    const store = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 3,
-    });
-    const reference = await store.admit(admitInput(bytes(1, 2, 3)));
-    const ownerId = '../../outside';
-
-    await store.reserve(reference, ownerId);
-
-    expect(
-      (await allFiles(tempDirectory())).some((path) => path.includes(ownerId)),
-    ).toBe(false);
-    await expect(
-      access(join(tempDirectory(), '..', 'outside'), constants.F_OK),
-    ).rejects.toThrow('ENOENT');
-  });
-
-  it('recovers stale ownership after a reserving process exits', async () => {
-    const child = await runChild(
-      childCommand('reserve-crash', tempDirectory(), 3, '61,62,63'),
-    );
-    if (child.exitCode !== 0) throw new Error(child.stderr);
-    const reference = parseChildReference(child.stdout);
-    const store = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 3,
-      reservationLeaseMs: 30,
-    });
-    const instancePath = (await allFiles(tempDirectory())).find((path) =>
-      path.includes(join('instances')),
-    );
-    if (instancePath === undefined)
-      throw new Error('Expected an instance lease');
-    const epoch = new Date(0);
-    await utimes(instancePath, epoch, epoch);
-
-    const result = await store.reclaimUnreferenced(new Set(), Date.now());
-
-    expect(result.objectsRemoved).toBe(1);
-    await expect(
-      stat(
-        join(
-          store.rootDirectory,
-          'objects',
-          'sha256',
-          reference.contentId.slice('sha256:'.length),
-        ),
-      ),
-    ).rejects.toMatchObject({ code: 'ENOENT' });
-  });
-
-  it('does not reclaim a live blob owned by another process', async () => {
-    const readyPath = join(tempDirectory(), 'child-ready.json');
-    const child = Bun.spawn(
-      childCommand('reserve-live', tempDirectory(), 3, '71,72,73', readyPath),
-      { stdout: 'pipe', stderr: 'pipe' },
-    );
-    try {
-      await Promise.race([
-        waitForPath(readyPath, tempDirectory()),
-        child.exited.then(async () => {
-          if (!(await Bun.file(readyPath).exists())) {
-            throw new Error(await new Response(child.stderr).text());
-          }
-        }),
-      ]);
-      const reference = parseChildReference(await readFile(readyPath, 'utf8'));
-      const instanceDirectory = join(tempDirectory(), 'instances');
-      const instancePath = (await allFiles(tempDirectory())).find((path) =>
-        path.includes(join('instances')),
+    it('distinguishes corrupt length from a hash mismatch', async () => {
+      const store = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 3,
+      });
+      const reference = await store.admit(admitInput(bytes(1, 2, 3)));
+      await writeFile(
+        await storedObjectPath(tempDirectory(), reference),
+        bytes(9),
       );
-      if (instancePath === undefined)
-        throw new Error('Expected an instance lease');
-      const epoch = new Date(0);
-      await utimes(instancePath, epoch, epoch);
-      await waitForMtimeAfterEpoch(instancePath, instanceDirectory);
+
+      const error = await capturedError(store.readVerified(reference));
+
+      expect(error).toBeInstanceOf(MediaObjectCorruptError);
+      expect(error.message).toContain(reference.contentId);
+    });
+
+    it('distinguishes same-length hash-mismatched bytes', async () => {
+      const store = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 3,
+      });
+      const reference = await store.admit(admitInput(bytes(1, 2, 3)));
+      await writeFile(
+        await storedObjectPath(tempDirectory(), reference),
+        bytes(3, 2, 1),
+      );
+
+      const error = await capturedError(store.readVerified(reference));
+
+      expect(error).toBeInstanceOf(MediaObjectHashMismatchError);
+      expect(error.message).toContain(reference.contentId);
+    });
+
+    it('rejects a non-file object as corrupt', async () => {
+      const store = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 3,
+      });
+      const reference = await store.admit(admitInput(bytes(1, 2, 3)));
+      const path = await storedObjectPath(tempDirectory(), reference);
+      await rm(path);
+      await Bun.write(join(path, 'nested'), 'not an object file');
+
+      const error = await capturedError(store.readVerified(reference));
+
+      expect(error).toBeInstanceOf(MediaObjectCorruptError);
+    });
+
+    it('reports malformed runtime references through the media-store error contract', async () => {
+      const store = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 3,
+      });
+      const invocation: unknown = Reflect.apply(store.readVerified, store, [
+        undefined,
+      ]);
+      assertInstanceOf(
+        invocation,
+        Promise,
+        'Expected readVerified to return a promise',
+      );
+
+      const error = await capturedError(invocation);
+
+      expect(error).toBeInstanceOf(MediaObjectCorruptError);
+    });
+
+    it('attributes object-directory read failures to reclamation', async () => {
+      await mkdir(join(tempDirectory(), 'objects'), { recursive: true });
+      await writeFile(
+        join(tempDirectory(), 'objects', 'sha256'),
+        'not a directory',
+      );
+      const harness = new ReclamationReadHarness({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 3,
+      });
+
+      const error = await capturedError(harness.scanObjectDirectory());
+
+      expect(error).toBeInstanceOf(MediaStoreError);
+      assertInstanceOf(error, MediaStoreError, 'Expected MediaStoreError');
+      expect(error.operation).toBe('reclaim media');
+    });
+  });
+
+  describe('LocalMediaStore ownership reservations', () => {
+    const tempDirectory = useTempDirectory();
+
+    it('reserves and releases explicit owners without changing spool usage', async () => {
+      const store = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 3,
+      });
+      const reference = await store.admit(admitInput(bytes(1, 2, 3)));
+
+      await store.reserve(reference, 'in-flight:request-1');
+      const reserved = await store.hasReservations(reference.contentId);
+      await store.release(reference.contentId, 'in-flight:request-1');
+
+      expect(reserved).toBe(true);
+      expect(await store.hasReservations(reference.contentId)).toBe(false);
+      expect(await store.getStoredByteLength()).toBe(3);
+    });
+
+    it('fails reservation of missing content with identity and operation context', async () => {
+      const store = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 3,
+      });
+      const contentId = `sha256:${createHash('sha256').update('missing').digest('hex')}`;
+      const missingReference: MediaReferenceBlock = {
+        type: 'media',
+        encoding: 'reference',
+        mimeType: 'image/png',
+        contentId,
+        originalContentId: contentId,
+        selectedContentId: contentId,
+        originalObject: {
+          contentId,
+          mimeType: 'image/png',
+          byteLength: 1,
+          normalizedBase64Length: 4,
+        },
+        selectedObject: {
+          contentId,
+          mimeType: 'image/png',
+          byteLength: 1,
+          normalizedBase64Length: 4,
+        },
+        transformation: {
+          policyId: 'identity',
+          policyVersion: 1,
+          parameters: {},
+        },
+        byteLength: 1,
+        normalizedBase64Length: 4,
+        semanticMetadata: {},
+      };
+
+      const error = await capturedError(
+        store.reserve(missingReference, 'persisted:session-1'),
+      );
+
+      expect(error).toBeInstanceOf(MediaObjectMissingError);
+      assertInstanceOf(error, MediaStoreError, 'Expected MediaStoreError');
+      expect(error.contentId).toBe(contentId);
+      expect(error.operation).toBe('reserve reference');
+    });
+
+    it('uses owner identity rather than exposing it as a path segment', async () => {
+      const store = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 3,
+      });
+      const reference = await store.admit(admitInput(bytes(1, 2, 3)));
+      const ownerId = '../../outside';
+
+      await store.reserve(reference, ownerId);
+
+      expect(
+        (await allFiles(tempDirectory())).some((path) =>
+          path.includes(ownerId),
+        ),
+      ).toBe(false);
+      await expect(
+        access(join(tempDirectory(), '..', 'outside'), constants.F_OK),
+      ).rejects.toThrow('ENOENT');
+    });
+
+    it('recovers stale ownership after a reserving process exits', async () => {
+      const child = await runChild(
+        childCommand('reserve-crash', tempDirectory(), 3, '61,62,63'),
+      );
+      if (child.exitCode !== 0) throw new Error(child.stderr);
+      const reference = parseChildReference(child.stdout);
       const store = new LocalMediaStore({
         rootDirectory: tempDirectory(),
         quotaBytes: 3,
         reservationLeaseMs: 30,
       });
-
-      const whileLive = await store.reclaimUnreferenced(new Set(), Date.now());
-      child.kill('SIGKILL');
-      await child.exited;
+      const instancePath = (await allFiles(tempDirectory())).find((path) =>
+        path.includes(join('instances')),
+      );
+      assertDefined(instancePath, 'Expected an instance lease');
+      const epoch = new Date(0);
       await utimes(instancePath, epoch, epoch);
-      const afterCrash = await store.reclaimUnreferenced(new Set(), Date.now());
 
-      expect(whileLive.objectsRemoved).toBe(0);
-      expect(afterCrash.objectsRemoved).toBe(1);
-      await expect(store.readVerified(reference)).rejects.toBeInstanceOf(
+      const result = await store.reclaimUnreferenced(new Set(), Date.now());
+
+      expect(result.objectsRemoved).toBe(1);
+      await expect(
+        stat(
+          join(
+            store.rootDirectory,
+            'objects',
+            'sha256',
+            reference.contentId.slice('sha256:'.length),
+          ),
+        ),
+      ).rejects.toMatchObject({ code: 'ENOENT' });
+    });
+
+    it('does not reclaim a live blob owned by another process', async () => {
+      const readyPath = join(tempDirectory(), 'child-ready.json');
+      const child = Bun.spawn(
+        childCommand('reserve-live', tempDirectory(), 3, '71,72,73', readyPath),
+        { stdout: 'pipe', stderr: 'pipe' },
+      );
+      try {
+        await Promise.race([
+          waitForPath(readyPath, tempDirectory()),
+          child.exited.then(async () => {
+            if (!(await Bun.file(readyPath).exists())) {
+              throw new Error(await new Response(child.stderr).text());
+            }
+          }),
+        ]);
+        const reference = parseChildReference(
+          await readFile(readyPath, 'utf8'),
+        );
+        const instanceDirectory = join(tempDirectory(), 'instances');
+        const instancePath = (await allFiles(tempDirectory())).find((path) =>
+          path.includes(join('instances')),
+        );
+        assertDefined(instancePath, 'Expected an instance lease');
+        const epoch = new Date(0);
+        await utimes(instancePath, epoch, epoch);
+        await waitForMtimeAfterEpoch(instancePath, instanceDirectory);
+        const store = new LocalMediaStore({
+          rootDirectory: tempDirectory(),
+          quotaBytes: 3,
+          reservationLeaseMs: 30,
+        });
+
+        const whileLive = await store.reclaimUnreferenced(
+          new Set(),
+          Date.now(),
+        );
+        child.kill('SIGKILL');
+        await child.exited;
+        await utimes(instancePath, epoch, epoch);
+        const afterCrash = await store.reclaimUnreferenced(
+          new Set(),
+          Date.now(),
+        );
+
+        expect(whileLive.objectsRemoved).toBe(0);
+        expect(afterCrash.objectsRemoved).toBe(1);
+        await expect(store.readVerified(reference)).rejects.toBeInstanceOf(
+          MediaObjectMissingError,
+        );
+      } finally {
+        if (child.exitCode === null) child.kill('SIGKILL');
+        await child.exited;
+      }
+    });
+
+    it('treats repeated reservation and release by one owner as idempotent', async () => {
+      const store = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 3,
+      });
+      const reference = await store.admit(admitInput(bytes(1, 2, 3)));
+
+      await store.reserve(reference, 'request:stable-owner');
+      await store.reserve(reference, 'request:stable-owner');
+      await store.release(reference.contentId, 'request:stable-owner');
+      await store.release(reference.contentId, 'request:stable-owner');
+
+      expect(await store.hasReservations(reference.contentId)).toBe(false);
+    });
+
+    it('atomically replaces reservation records with restrictive permissions', async () => {
+      let replacementStarted = (): void => undefined;
+      const started = new Promise<void>((resolve) => {
+        replacementStarted = resolve;
+      });
+      let allowReplacement = (): void => undefined;
+      const allowed = new Promise<void>((resolve) => {
+        allowReplacement = resolve;
+      });
+      let blockReplacement = false;
+      const store = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 3,
+        fileOperations: {
+          link,
+          rename: async (sourcePath, destinationPath) => {
+            if (blockReplacement) {
+              replacementStarted();
+              await allowed;
+            }
+            await rename(sourcePath, destinationPath);
+          },
+        },
+      });
+      const reference = await store.admit(admitInput(bytes(1, 2, 3)));
+      await store.reserve(reference, 'request:atomic-replacement');
+      const reservationPath = (await allFiles(tempDirectory())).find((path) =>
+        path.includes(join('references', 'sha256')),
+      );
+      assertDefined(reservationPath, 'Expected a durable reservation record');
+      const existing: unknown = JSON.parse(
+        await readFile(reservationPath, 'utf8'),
+      );
+      if (typeof existing !== 'object' || existing === null) {
+        throw new Error('Expected a reservation object');
+      }
+      Reflect.set(existing, 'expiresAt', 0);
+      Reflect.set(existing, 'instanceId', 'expired-instance');
+      await writeFile(reservationPath, JSON.stringify(existing));
+      blockReplacement = true;
+
+      const replacement = store.reserve(
+        reference,
+        'request:atomic-replacement',
+      );
+      await started;
+      let visibleDuringReplacement: string;
+      try {
+        visibleDuringReplacement = await readFile(reservationPath, 'utf8');
+      } finally {
+        allowReplacement();
+      }
+      await replacement;
+
+      expect(visibleDuringReplacement).toBe(JSON.stringify(existing));
+      const reservationMode = (await stat(reservationPath)).mode & 0o777;
+      expect(process.platform === 'win32' || reservationMode === 0o600).toBe(
+        true,
+      );
+    });
+
+    it('fails conservatively for a malformed present instance lease and later reclaims a valid stale lease', async () => {
+      const store = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 3,
+        reservationLeaseMs: 30_000,
+      });
+      const reference = await store.admit(admitInput(bytes(1, 2, 3)));
+      await store.reserve(reference, 'request:malformed-live-lease');
+      const files = await allFiles(tempDirectory());
+      const reservationPath = files.find((path) =>
+        path.includes(join('references', 'sha256')),
+      );
+      assertDefined(reservationPath, 'Expected a reservation record');
+      await store.close();
+      const externalInstanceId = 'external-live-instance';
+      const instancePath = join(
+        tempDirectory(),
+        'instances',
+        externalInstanceId,
+      );
+      const reservation: unknown = JSON.parse(
+        await readFile(reservationPath, 'utf8'),
+      );
+      if (typeof reservation !== 'object' || reservation === null) {
+        throw new Error('Expected a reservation object');
+      }
+      Reflect.set(reservation, 'expiresAt', 0);
+      Reflect.set(reservation, 'instanceId', externalInstanceId);
+      await writeFile(reservationPath, JSON.stringify(reservation));
+      await writeFile(instancePath, '{');
+      const scanner = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 3,
+        reservationLeaseMs: 30,
+      });
+
+      await expect(
+        scanner.hasReservations(reference.contentId),
+      ).rejects.toThrow(/owner lease/i);
+      expect(await Bun.file(reservationPath).exists()).toBe(true);
+
+      await writeFile(
+        instancePath,
+        JSON.stringify({
+          version: 1,
+          instanceId: externalInstanceId,
+          token: 'external-token',
+          createdAt: 0,
+        }),
+      );
+      const epoch = new Date(0);
+      await utimes(instancePath, epoch, epoch);
+      expect(await scanner.hasReservations(reference.contentId)).toBe(false);
+      expect(await Bun.file(reservationPath).exists()).toBe(false);
+    });
+
+    it('rejects owner identities containing control characters', async () => {
+      const store = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 3,
+      });
+      const reference = await store.admit(admitInput(bytes(1, 2, 3)));
+
+      await expect(
+        store.reserve(reference, 'request\u0000owner'),
+      ).rejects.toThrow(/owner id/i);
+
+      expect(await store.hasReservations(reference.contentId)).toBe(false);
+    });
+
+    it('expires a dead instance reservation even when its pid has been reused', async () => {
+      const store = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 3,
+        reservationLeaseMs: 30,
+      });
+      const reference = await store.admit(admitInput(bytes(1, 2, 3)));
+      await store.reserve(reference, 'request:expired-instance');
+      const reservationPath = (await allFiles(tempDirectory())).find((path) =>
+        path.includes(join('references', 'sha256')),
+      );
+      assertDefined(reservationPath, 'Expected a durable reservation record');
+      const record: unknown = JSON.parse(
+        await readFile(reservationPath, 'utf8'),
+      );
+      if (typeof record !== 'object' || record === null) {
+        throw new Error('Expected a reservation object');
+      }
+      Reflect.set(record, 'instanceId', 'dead-instance');
+      Reflect.set(record, 'pid', process.pid);
+      Reflect.set(record, 'expiresAt', 0);
+      await writeFile(reservationPath, JSON.stringify(record));
+
+      const result = await store.reclaimUnreferenced(new Set(), Date.now());
+
+      expect(result.objectsRemoved).toBe(1);
+    });
+
+    it('removes a torn reservation instead of wedging reclamation', async () => {
+      const store = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 3,
+      });
+      const reference = await store.admit(admitInput(bytes(1, 2, 3)));
+      await store.reserve(reference, 'request:torn-record');
+      const reservationPath = (await allFiles(tempDirectory())).find((path) =>
+        path.includes(join('references', 'sha256')),
+      );
+      assertDefined(reservationPath, 'Expected a durable reservation record');
+      await writeFile(reservationPath, '{');
+
+      const result = await store.reclaimUnreferenced(new Set(), Date.now());
+
+      expect(result.objectsRemoved).toBe(1);
+      expect(await store.hasReservations(reference.contentId)).toBe(false);
+    });
+
+    it('allows verified reads and admission during a slow multi-object reclamation scan', async () => {
+      const initialStore = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 12,
+      });
+      const first = await initialStore.admit(admitInput(bytes(1, 2, 3)));
+      await initialStore.admit(admitInput(bytes(4, 5, 6)));
+      await initialStore.admit(admitInput(bytes(7, 8, 9)));
+      const objectPaths = (await allFiles(tempDirectory())).filter((path) =>
+        path.includes(join('objects', 'sha256')),
+      );
+      const creationTimes = await Promise.all(
+        objectPaths.map(async (path) => (await stat(path)).ctimeMs),
+      );
+      const latestCreationTime = Math.max(...creationTimes);
+      while (Date.now() <= latestCreationTime) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+      let releaseScan = (): void => undefined;
+      const scanRelease = new Promise<void>((resolve) => {
+        releaseScan = resolve;
+      });
+      let markScanBlocked = (): void => undefined;
+      const scanBlocked = new Promise<void>((resolve) => {
+        markScanBlocked = resolve;
+      });
+      let inspected = 0;
+      const scanner = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 12,
+        fileOperations: {
+          link,
+          inspectReclamationCandidate: async () => {
+            inspected += 1;
+            if (inspected === 2) {
+              markScanBlocked();
+              await scanRelease;
+            }
+          },
+        },
+      });
+      const contender = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 12,
+      });
+      const reclamation = scanner.reclaimUnreferenced(new Set(), Date.now());
+      await scanBlocked;
+
+      const concurrentWork = Promise.all([
+        contender.readVerified(first),
+        contender.admit(admitInput(bytes(10, 11, 12))),
+      ]);
+      try {
+        await concurrentWork;
+      } finally {
+        releaseScan();
+      }
+      const [verified, admitted] = await concurrentWork;
+      const result = await reclamation;
+
+      expect(verified).toStrictEqual(bytes(1, 2, 3));
+      expect(await contender.readVerified(admitted)).toStrictEqual(
+        bytes(10, 11, 12),
+      );
+      expect(result.objectsRemoved).toBe(3);
+    });
+
+    it('isolates malformed reservation entries while preserving a valid live reservation', async () => {
+      const store = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 6,
+      });
+      const reclaimable = await store.admit(admitInput(bytes(1, 2, 3)));
+      const live = await store.admit(admitInput(bytes(4, 5, 6)));
+      await store.reserve(live, 'request:live-corruption-control');
+      const reservationDirectory = join(
+        tempDirectory(),
+        'references',
+        'sha256',
+        reclaimable.contentId.slice('sha256:'.length),
+      );
+      await mkdir(reservationDirectory, { recursive: true });
+      const digestName = (label: string): string =>
+        createHash('sha256').update(label).digest('hex');
+      await Promise.all([
+        writeFile(join(reservationDirectory, 'malformed-name'), '{}'),
+        mkdir(join(reservationDirectory, digestName('non-file-entry'))),
+        writeFile(join(reservationDirectory, digestName('invalid-json')), '{'),
+        writeFile(
+          join(reservationDirectory, digestName('schema-invalid')),
+          JSON.stringify({ version: 1 }),
+        ),
+      ]);
+
+      const result = await store.reclaimUnreferenced(new Set(), Date.now());
+
+      expect(result.objectsRemoved).toBe(1);
+      await expect(store.readVerified(reclaimable)).rejects.toBeInstanceOf(
         MediaObjectMissingError,
       );
-    } finally {
-      if (child.exitCode === null) child.kill('SIGKILL');
-      await child.exited;
-    }
-  });
-
-  it('treats repeated reservation and release by one owner as idempotent', async () => {
-    const store = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 3,
+      expect(await store.readVerified(live)).toStrictEqual(bytes(4, 5, 6));
+      expect(await store.hasReservations(live.contentId)).toBe(true);
     });
-    const reference = await store.admit(admitInput(bytes(1, 2, 3)));
-
-    await store.reserve(reference, 'request:stable-owner');
-    await store.reserve(reference, 'request:stable-owner');
-    await store.release(reference.contentId, 'request:stable-owner');
-    await store.release(reference.contentId, 'request:stable-owner');
-
-    expect(await store.hasReservations(reference.contentId)).toBe(false);
-  });
-
-  it('atomically replaces reservation records with restrictive permissions', async () => {
-    let replacementStarted = (): void => undefined;
-    const started = new Promise<void>((resolve) => {
-      replacementStarted = resolve;
-    });
-    let allowReplacement = (): void => undefined;
-    const allowed = new Promise<void>((resolve) => {
-      allowReplacement = resolve;
-    });
-    let blockReplacement = false;
-    const store = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 3,
-      fileOperations: {
-        link,
-        rename: async (sourcePath, destinationPath) => {
-          if (blockReplacement) {
-            replacementStarted();
-            await allowed;
-          }
-          await rename(sourcePath, destinationPath);
-        },
-      },
-    });
-    const reference = await store.admit(admitInput(bytes(1, 2, 3)));
-    await store.reserve(reference, 'request:atomic-replacement');
-    const reservationPath = (await allFiles(tempDirectory())).find((path) =>
-      path.includes(join('references', 'sha256')),
-    );
-    if (reservationPath === undefined) {
-      throw new Error('Expected a durable reservation record');
-    }
-    const existing: unknown = JSON.parse(
-      await readFile(reservationPath, 'utf8'),
-    );
-    if (typeof existing !== 'object' || existing === null) {
-      throw new Error('Expected a reservation object');
-    }
-    Reflect.set(existing, 'expiresAt', 0);
-    Reflect.set(existing, 'instanceId', 'expired-instance');
-    await writeFile(reservationPath, JSON.stringify(existing));
-    blockReplacement = true;
-
-    const replacement = store.reserve(reference, 'request:atomic-replacement');
-    await started;
-    let visibleDuringReplacement: string;
-    try {
-      visibleDuringReplacement = await readFile(reservationPath, 'utf8');
-    } finally {
-      allowReplacement();
-    }
-    await replacement;
-
-    expect(visibleDuringReplacement).toBe(JSON.stringify(existing));
-    const reservationMode = (await stat(reservationPath)).mode & 0o777;
-    expect(process.platform === 'win32' || reservationMode === 0o600).toBe(
-      true,
-    );
-  });
-
-  it('fails conservatively for a malformed present instance lease and later reclaims a valid stale lease', async () => {
-    const store = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 3,
-      reservationLeaseMs: 30_000,
-    });
-    const reference = await store.admit(admitInput(bytes(1, 2, 3)));
-    await store.reserve(reference, 'request:malformed-live-lease');
-    const files = await allFiles(tempDirectory());
-    const reservationPath = files.find((path) =>
-      path.includes(join('references', 'sha256')),
-    );
-    if (reservationPath === undefined) {
-      throw new Error('Expected a reservation record');
-    }
-    await store.close();
-    const externalInstanceId = 'external-live-instance';
-    const instancePath = join(tempDirectory(), 'instances', externalInstanceId);
-    const reservation: unknown = JSON.parse(
-      await readFile(reservationPath, 'utf8'),
-    );
-    if (typeof reservation !== 'object' || reservation === null) {
-      throw new Error('Expected a reservation object');
-    }
-    Reflect.set(reservation, 'expiresAt', 0);
-    Reflect.set(reservation, 'instanceId', externalInstanceId);
-    await writeFile(reservationPath, JSON.stringify(reservation));
-    await writeFile(instancePath, '{');
-    const scanner = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 3,
-      reservationLeaseMs: 30,
-    });
-
-    await expect(scanner.hasReservations(reference.contentId)).rejects.toThrow(
-      /owner lease/i,
-    );
-    expect(await Bun.file(reservationPath).exists()).toBe(true);
-
-    await writeFile(
-      instancePath,
-      JSON.stringify({
-        version: 1,
-        instanceId: externalInstanceId,
-        token: 'external-token',
-        createdAt: 0,
-      }),
-    );
-    const epoch = new Date(0);
-    await utimes(instancePath, epoch, epoch);
-    expect(await scanner.hasReservations(reference.contentId)).toBe(false);
-    expect(await Bun.file(reservationPath).exists()).toBe(false);
-  });
-
-  it('rejects owner identities containing control characters', async () => {
-    const store = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 3,
-    });
-    const reference = await store.admit(admitInput(bytes(1, 2, 3)));
-
-    await expect(
-      store.reserve(reference, 'request\u0000owner'),
-    ).rejects.toThrow(/owner id/i);
-
-    expect(await store.hasReservations(reference.contentId)).toBe(false);
-  });
-
-  it('expires a dead instance reservation even when its pid has been reused', async () => {
-    const store = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 3,
-      reservationLeaseMs: 30,
-    });
-    const reference = await store.admit(admitInput(bytes(1, 2, 3)));
-    await store.reserve(reference, 'request:expired-instance');
-    const reservationPath = (await allFiles(tempDirectory())).find((path) =>
-      path.includes(join('references', 'sha256')),
-    );
-    if (reservationPath === undefined) {
-      throw new Error('Expected a durable reservation record');
-    }
-    const record: unknown = JSON.parse(await readFile(reservationPath, 'utf8'));
-    if (typeof record !== 'object' || record === null) {
-      throw new Error('Expected a reservation object');
-    }
-    Reflect.set(record, 'instanceId', 'dead-instance');
-    Reflect.set(record, 'pid', process.pid);
-    Reflect.set(record, 'expiresAt', 0);
-    await writeFile(reservationPath, JSON.stringify(record));
-
-    const result = await store.reclaimUnreferenced(new Set(), Date.now());
-
-    expect(result.objectsRemoved).toBe(1);
-  });
-
-  it('removes a torn reservation instead of wedging reclamation', async () => {
-    const store = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 3,
-    });
-    const reference = await store.admit(admitInput(bytes(1, 2, 3)));
-    await store.reserve(reference, 'request:torn-record');
-    const reservationPath = (await allFiles(tempDirectory())).find((path) =>
-      path.includes(join('references', 'sha256')),
-    );
-    if (reservationPath === undefined) {
-      throw new Error('Expected a durable reservation record');
-    }
-    await writeFile(reservationPath, '{');
-
-    const result = await store.reclaimUnreferenced(new Set(), Date.now());
-
-    expect(result.objectsRemoved).toBe(1);
-    expect(await store.hasReservations(reference.contentId)).toBe(false);
-  });
-
-  it('allows verified reads and admission during a slow multi-object reclamation scan', async () => {
-    const initialStore = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 12,
-    });
-    const first = await initialStore.admit(admitInput(bytes(1, 2, 3)));
-    await initialStore.admit(admitInput(bytes(4, 5, 6)));
-    await initialStore.admit(admitInput(bytes(7, 8, 9)));
-    const objectPaths = (await allFiles(tempDirectory())).filter((path) =>
-      path.includes(join('objects', 'sha256')),
-    );
-    const creationTimes = await Promise.all(
-      objectPaths.map(async (path) => (await stat(path)).ctimeMs),
-    );
-    const latestCreationTime = Math.max(...creationTimes);
-    while (Date.now() <= latestCreationTime) {
-      await new Promise<void>((resolve) => setImmediate(resolve));
-    }
-    let releaseScan = (): void => undefined;
-    const scanRelease = new Promise<void>((resolve) => {
-      releaseScan = resolve;
-    });
-    let markScanBlocked = (): void => undefined;
-    const scanBlocked = new Promise<void>((resolve) => {
-      markScanBlocked = resolve;
-    });
-    let inspected = 0;
-    const scanner = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 12,
-      fileOperations: {
-        link,
-        inspectReclamationCandidate: async () => {
-          inspected += 1;
-          if (inspected === 2) {
-            markScanBlocked();
-            await scanRelease;
-          }
-        },
-      },
-    });
-    const contender = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 12,
-    });
-    const reclamation = scanner.reclaimUnreferenced(new Set(), Date.now());
-    await scanBlocked;
-
-    const concurrentWork = Promise.all([
-      contender.readVerified(first),
-      contender.admit(admitInput(bytes(10, 11, 12))),
-    ]);
-    try {
-      await concurrentWork;
-    } finally {
-      releaseScan();
-    }
-    const [verified, admitted] = await concurrentWork;
-    const result = await reclamation;
-
-    expect(verified).toEqual(bytes(1, 2, 3));
-    expect(await contender.readVerified(admitted)).toEqual(bytes(10, 11, 12));
-    expect(result.objectsRemoved).toBe(3);
-  });
-
-  it('isolates malformed reservation entries while preserving a valid live reservation', async () => {
-    const store = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 6,
-    });
-    const reclaimable = await store.admit(admitInput(bytes(1, 2, 3)));
-    const live = await store.admit(admitInput(bytes(4, 5, 6)));
-    await store.reserve(live, 'request:live-corruption-control');
-    const reservationDirectory = join(
-      tempDirectory(),
-      'references',
-      'sha256',
-      reclaimable.contentId.slice('sha256:'.length),
-    );
-    await mkdir(reservationDirectory, { recursive: true });
-    const digestName = (label: string): string =>
-      createHash('sha256').update(label).digest('hex');
-    await Promise.all([
-      writeFile(join(reservationDirectory, 'malformed-name'), '{}'),
-      mkdir(join(reservationDirectory, digestName('non-file-entry'))),
-      writeFile(join(reservationDirectory, digestName('invalid-json')), '{'),
-      writeFile(
-        join(reservationDirectory, digestName('schema-invalid')),
-        JSON.stringify({ version: 1 }),
-      ),
-    ]);
-
-    const result = await store.reclaimUnreferenced(new Set(), Date.now());
-
-    expect(result.objectsRemoved).toBe(1);
-    await expect(store.readVerified(reclaimable)).rejects.toBeInstanceOf(
-      MediaObjectMissingError,
-    );
-    expect(await store.readVerified(live)).toEqual(bytes(4, 5, 6));
-    expect(await store.hasReservations(live.contentId)).toBe(true);
   });
 });

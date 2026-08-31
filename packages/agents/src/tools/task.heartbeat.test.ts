@@ -189,6 +189,17 @@ describe('TaskHeartbeat unit', () => {
   });
 
   it('survives a throwing updateOutput and keeps ticking', () => {
+    const {
+      updateCountAfterFirstTick,
+      updateCountAfterThrow,
+      finalUpdateCount,
+    } = observeSurvivesAThrowingUpdateOutputAndKeepsTicking();
+    expect(updateCountAfterFirstTick).toBe(1);
+    expect(updateCountAfterThrow).toBe(2);
+    expect(finalUpdateCount).toBe(3);
+  });
+
+  const observeSurvivesAThrowingUpdateOutputAndKeepsTicking = () => {
     const updates: LiveOutputUpdate[] = [];
     let callCount = 0;
     const hb = startTaskHeartbeat((u) => {
@@ -200,15 +211,24 @@ describe('TaskHeartbeat unit', () => {
     }, 100);
 
     vi.advanceTimersByTime(100);
-    expect(updates).toHaveLength(1);
+    const updateCountAfterFirstTick = updates.length;
+
     // Second tick throws; the heartbeat must reschedule anyway.
     vi.advanceTimersByTime(100);
-    expect(updates).toHaveLength(2);
+    const updateCountAfterThrow = updates.length;
+
     // Third tick proves the timer chain survived the exception.
     vi.advanceTimersByTime(100);
-    expect(updates).toHaveLength(3);
+    const finalUpdateCount = updates.length;
+
     hb.stop();
-  });
+
+    return {
+      updateCountAfterFirstTick,
+      updateCountAfterThrow,
+      finalUpdateCount,
+    };
+  };
 
   it('returns a no-op handle when interval is Infinity', () => {
     const updates: LiveOutputUpdate[] = [];
@@ -222,37 +242,69 @@ describe('TaskHeartbeat unit', () => {
   });
 
   it('honors a synchronous stop() invoked during the updateOutput callback', () => {
-    const updates: LiveOutputUpdate[] = [];
-    const hb = startTaskHeartbeat((u) => {
-      updates.push(u);
-      if (updates.length === 1) {
-        hb.stop();
-      }
-    }, 100);
-
-    vi.advanceTimersByTime(100);
-    expect(updates).toHaveLength(1);
-    vi.advanceTimersByTime(1000);
-    expect(updates).toHaveLength(1);
+    const { updateCountAfterStop, finalUpdateCount } =
+      observeHonorsASynchronousStopInvokedDuringTheUpdateOutputCallback();
+    expect(updateCountAfterStop).toBe(1);
+    expect(finalUpdateCount).toBe(1);
   });
+
+  const observeHonorsASynchronousStopInvokedDuringTheUpdateOutputCallback =
+    () => {
+      const updates: LiveOutputUpdate[] = [];
+      const hb = startTaskHeartbeat((u) => {
+        updates.push(u);
+        if (updates.length === 1) {
+          hb.stop();
+        }
+      }, 100);
+
+      vi.advanceTimersByTime(100);
+      const updateCountAfterStop = updates.length;
+
+      vi.advanceTimersByTime(1000);
+      const finalUpdateCount = updates.length;
+
+      return { updateCountAfterStop, finalUpdateCount };
+    };
 
   it('honors a synchronous reset() invoked during the updateOutput callback', () => {
-    const updates: LiveOutputUpdate[] = [];
-    const hb = startTaskHeartbeat((u) => {
-      updates.push(u);
-      if (updates.length === 1) {
-        hb.reset();
-      }
-    }, 100);
-
-    vi.advanceTimersByTime(100);
-    expect(updates).toHaveLength(1);
-    vi.advanceTimersByTime(99);
-    expect(updates).toHaveLength(1);
-    vi.advanceTimersByTime(1);
-    expect(updates).toHaveLength(2);
-    hb.stop();
+    const {
+      updateCountAfterReset,
+      updateCountBeforeInterval,
+      finalUpdateCount,
+    } = observeHonorsASynchronousResetInvokedDuringTheUpdateOutputCallback();
+    expect(updateCountAfterReset).toBe(1);
+    expect(updateCountBeforeInterval).toBe(1);
+    expect(finalUpdateCount).toBe(2);
   });
+
+  const observeHonorsASynchronousResetInvokedDuringTheUpdateOutputCallback =
+    () => {
+      const updates: LiveOutputUpdate[] = [];
+      const hb = startTaskHeartbeat((u) => {
+        updates.push(u);
+        if (updates.length === 1) {
+          hb.reset();
+        }
+      }, 100);
+
+      vi.advanceTimersByTime(100);
+      const updateCountAfterReset = updates.length;
+
+      vi.advanceTimersByTime(99);
+      const updateCountBeforeInterval = updates.length;
+
+      vi.advanceTimersByTime(1);
+      const finalUpdateCount = updates.length;
+
+      hb.stop();
+
+      return {
+        updateCountAfterReset,
+        updateCountBeforeInterval,
+        finalUpdateCount,
+      };
+    };
 });
 
 describe('TaskTool heartbeat integration', () => {
@@ -455,42 +507,8 @@ describe('TaskTool heartbeat integration', () => {
   });
 
   it('does not pollute append content: heartbeat status events are never append data', async () => {
-    const { scope, resolve } = createPendingScope();
-    const tool = buildTool(scope);
-    const captured = {
-      appends: [] as string[],
-      statuses: 0,
-    };
-    let xmlCloseSeen = false;
-
-    const invocation = tool.build({
-      subagent_name: 'helper',
-      goal_prompt: 'do work',
-    });
-    const resultPromise = invocation.execute(
-      new AbortController().signal,
-      (u) => {
-        if (u.mode === 'append') {
-          captured.appends.push(u.data);
-          if (u.data.includes('</subagent')) {
-            xmlCloseSeen = true;
-          }
-        } else if (u.mode === 'status') {
-          captured.statuses += 1;
-        }
-      },
-    );
-
-    await advanceTimersByTimeAsync(0);
-    // Inject a real content message and let several heartbeats fire.
-    scope.onMessage?.('real content\n');
-    await advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS * 3);
-    resolve();
-    await resultPromise;
-
-    // The concatenated content must contain only opening tag, the real
-    // message, and the closing tag — never any heartbeat text.
-    const joined = captured.appends.join('');
+    const { joined, xmlCloseSeen, captured } =
+      await observeDoesNotPolluteAppendContentHeartbeatStatusEventsAreNeverAppendData();
     expect(joined).toContain('<subagent name="helper"');
     expect(joined).toContain('real content');
     expect(joined).toContain('</subagent name="helper"');
@@ -498,6 +516,48 @@ describe('TaskTool heartbeat integration', () => {
     expect(joined).not.toMatch(/liveness|status/i);
     expect(captured.statuses).toBeGreaterThanOrEqual(2);
   });
+
+  const observeDoesNotPolluteAppendContentHeartbeatStatusEventsAreNeverAppendData =
+    async () => {
+      const { scope, resolve } = createPendingScope();
+      const tool = buildTool(scope);
+      const captured = {
+        appends: [] as string[],
+        statuses: 0,
+      };
+      let xmlCloseSeen = false;
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'do work',
+      });
+      const resultPromise = invocation.execute(
+        new AbortController().signal,
+        (u) => {
+          if (u.mode === 'append') {
+            captured.appends.push(u.data);
+            if (u.data.includes('</subagent')) {
+              xmlCloseSeen = true;
+            }
+          } else if (u.mode === 'status') {
+            captured.statuses += 1;
+          }
+        },
+      );
+
+      await advanceTimersByTimeAsync(0);
+      // Inject a real content message and let several heartbeats fire.
+      scope.onMessage?.('real content\n');
+      await advanceTimersByTimeAsync(DEFAULT_HEARTBEAT_INTERVAL_MS * 3);
+      resolve();
+      await resultPromise;
+
+      // The concatenated content must contain only opening tag, the real
+      // message, and the closing tag — never any heartbeat text.
+      const joined = captured.appends.join('');
+
+      return { joined, xmlCloseSeen, captured };
+    };
 
   it('non-interactive path also receives heartbeats', async () => {
     const { scope, resolve } = createPendingScope('non-interactive');

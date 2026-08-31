@@ -137,7 +137,7 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
             config: built.config,
             sessionId: runtimeId,
           });
-          return asWithRuntimeId(agent).getRuntimeId() === runtimeId;
+          expect(asWithRuntimeId(agent).getRuntimeId()).toBe(runtimeId);
         } finally {
           await agent?.dispose();
           await built.cleanup();
@@ -157,7 +157,7 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
             sessionId: runtimeId,
           });
           const callerManager = built.config.getProviderManager();
-          return captureProviderManager(agent) === callerManager;
+          expect(captureProviderManager(agent)).toBe(callerManager);
         } finally {
           await agent?.dispose();
           await built.cleanup();

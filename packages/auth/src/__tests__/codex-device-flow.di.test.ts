@@ -75,6 +75,32 @@ function createRedirectingFetch(serverPort: number): typeof fetch {
   };
 }
 
+function hasBuildAuthorizationUrlDebugEntry(
+  logger: ReturnType<typeof createCollectingLogger>,
+): boolean {
+  return logger.entries.some(
+    (entry) =>
+      entry.level === 'debug' &&
+      String(entry.args).includes('buildAuthorizationUrl'),
+  );
+}
+
+function createHungDeviceCodeFetch(): typeof fetch {
+  return vi.fn(
+    (_input, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        const fallback = setTimeout(
+          () => reject(new Error('mock fetch fallback timeout')),
+          2_000,
+        );
+        init?.signal?.addEventListener('abort', () => {
+          clearTimeout(fallback);
+          reject(init.signal?.reason ?? new Error('aborted'));
+        });
+      }),
+  );
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('CodexDeviceFlow DI behavioral tests', () => {
@@ -112,10 +138,7 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
 
     // Verify logger was used (behavioral, not call count)
     expect(logger.entries.length).toBeGreaterThan(0);
-    const hasDebugEntry = logger.entries.some(
-      (e) =>
-        e.level === 'debug' && String(e.args).includes('buildAuthorizationUrl'),
-    );
+    const hasDebugEntry = hasBuildAuthorizationUrlDebugEntry(logger);
     expect(hasDebugEntry).toBe(true);
   });
 
@@ -169,19 +192,7 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
 
   it('aborts a live-hung device-code network request at the configured deadline', async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = vi.fn(
-      (_input, init) =>
-        new Promise<Response>((_resolve, reject) => {
-          const fallback = setTimeout(
-            () => reject(new Error('mock fetch fallback timeout')),
-            2_000,
-          );
-          init?.signal?.addEventListener('abort', () => {
-            clearTimeout(fallback);
-            reject(init.signal?.reason ?? new Error('aborted'));
-          });
-        }),
-    );
+    globalThis.fetch = createHungDeviceCodeFetch();
 
     try {
       const flow = new CodexDeviceFlow({

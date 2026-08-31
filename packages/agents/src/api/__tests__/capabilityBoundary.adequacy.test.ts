@@ -422,14 +422,23 @@ describe('P21 capability-boundary adequacy (REQ-INT-005) @plan:PLAN-20260622-COR
   });
 
   it('PROP driver-allow-list: for any import specifier in the P20 driver, it is on the public-consumer allow-list and not an agents subpath @plan:PLAN-20260622-COREAPIGAP.P21 @requirement:REQ-INT-005', () => {
+    const { pROPDriverAllowListForAnyImportSpecifierInTheP20DriverProperty } =
+      observePROPDriverAllowListForAnyImportSpecifierInTheP20Driver();
+    fc.assert(pROPDriverAllowListForAnyImportSpecifierInTheP20DriverProperty);
+  });
+
+  const observePROPDriverAllowListForAnyImportSpecifierInTheP20Driver = () => {
     const specs = readSpecifiers(DRIVER_SPEC_ABS);
-    fc.assert(
+
+    const pROPDriverAllowListForAnyImportSpecifierInTheP20DriverProperty =
       fc.property(fc.constantFrom(...specs), (spec: string) => {
         if (spec.startsWith(AGENTS_SUBPATH_PREFIX)) {
           return false;
         }
         return isDriverAllowed(spec);
-      }),
-    );
-  });
+      });
+    return {
+      pROPDriverAllowListForAnyImportSpecifierInTheP20DriverProperty,
+    };
+  };
 });

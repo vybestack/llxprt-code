@@ -11,6 +11,18 @@ import {
   makeToken,
 } from './BucketFailoverHandlerImpl.test-helpers.js';
 
+type BucketFixture = ReturnType<typeof createBucketFailoverFixture>;
+
+function createBucketBAuthentication(
+  tokenStore: BucketFixture['tokenStore'],
+): (provider: string, bucket?: string) => Promise<void> {
+  return async (_provider: string, bucket?: string): Promise<void> => {
+    if (bucket === 'bucket-b') {
+      await tokenStore.saveToken('anthropic', makeToken('reauth-b'), bucket);
+    }
+  };
+}
+
 describe('BucketFailoverHandlerImpl #36', () => {
   /**
    * @requirement REQ-1598-FR03
@@ -32,11 +44,7 @@ describe('BucketFailoverHandlerImpl #36', () => {
       oauthManager,
     );
 
-    const authenticateSpy = vi.fn(async (provider: string, bucket?: string) => {
-      if (bucket === 'bucket-b') {
-        await tokenStore.saveToken('anthropic', makeToken('reauth-b'), bucket);
-      }
-    });
+    const authenticateSpy = vi.fn(createBucketBAuthentication(tokenStore));
     oauthManager.authenticate = authenticateSpy;
 
     // Act: Trigger failover with 429 status (quota-exhausted for bucket-a)

@@ -68,6 +68,12 @@ void vi.mock('../hooks/useKittyKeyboardProtocol.js', () =>
   automock(realUseKittyKeyboardProtocolModule),
 );
 
+function suggestionsForVisibility(
+  showSuggestions: boolean,
+): Array<{ label: string; value: string }> {
+  return showSuggestions ? [{ label: 'suggestion', value: 'suggestion' }] : [];
+}
+
 const mockSlashCommands: SlashCommand[] = [
   {
     name: 'clear',
@@ -719,9 +725,7 @@ describe('InputPrompt', () => {
       mockedUseCommandCompletion.mockReturnValue({
         ...mockCommandCompletion,
         showSuggestions,
-        suggestions: showSuggestions
-          ? [{ label: 'suggestion', value: 'suggestion' }]
-          : [],
+        suggestions: suggestionsForVisibility(showSuggestions),
       });
 
       const { unmount } = renderWithProviders(<InputPrompt {...props} />);

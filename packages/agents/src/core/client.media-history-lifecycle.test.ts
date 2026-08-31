@@ -8,7 +8,12 @@
  * AgentClient local-media ownership tests across deferred and active history.
  */
 
-import { automock } from '@vybestack/llxprt-code-test-utils';
+import {
+  automock,
+  assertDefined,
+  assertInstanceOf,
+  errorMessage,
+} from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { AgentClient } from './client.js';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -248,10 +253,6 @@ class FailOnceReleaseStore extends LocalMediaStore {
   }
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 function leafErrorMessages(error: unknown): readonly string[] {
   return error instanceof AggregateError
     ? error.errors.flatMap(leafErrorMessages)
@@ -313,9 +314,7 @@ describe('AgentClient (client.ts)', () => {
 
   function configureRealChatStartup(store: LocalMediaStore): ChatSession {
     const initializedChat = client['chat'];
-    if (initializedChat === undefined) {
-      throw new Error('Expected initialized test chat');
-    }
+    assertDefined(initializedChat, 'Expected initialized test chat');
     const provider: IProvider = {
       name: 'client-media-provider',
       getDefaultModel: () => 'test-model',
@@ -354,7 +353,7 @@ describe('AgentClient (client.ts)', () => {
         ),
         url: client['_previousHistory']?.[0]?.blocks[1],
         reserved: await store.hasReservations(local.contentId),
-      }).toEqual({
+      }).toStrictEqual({
         encoding: 'reference',
         retainedRawData: false,
         url: history[0]?.blocks[1],
@@ -375,7 +374,7 @@ describe('AgentClient (client.ts)', () => {
           PNG_BASE64,
         ),
         reserved: await store.hasReservations(reference.contentId),
-      }).toEqual({ retainedRawData: false, reserved: true });
+      }).toStrictEqual({ retainedRawData: false, reserved: true });
     });
 
     it('leaves no retained snapshot when quota rejects deferred admission', async () => {
@@ -389,7 +388,7 @@ describe('AgentClient (client.ts)', () => {
       expect({
         previousHistory: client['_previousHistory'],
         storedBytes: await store.getStoredByteLength(),
-      }).toEqual({ previousHistory: undefined, storedBytes: 0 });
+      }).toStrictEqual({ previousHistory: undefined, storedBytes: 0 });
     });
 
     it('releases deferred media ownership when stored history is replaced or deleted', async () => {
@@ -412,7 +411,7 @@ describe('AgentClient (client.ts)', () => {
       expect({
         afterReplacement,
         afterDeletion: await store.hasReservations(second.contentId),
-      }).toEqual({
+      }).toStrictEqual({
         afterReplacement: { first: false, second: true },
         afterDeletion: false,
       });
@@ -434,7 +433,7 @@ describe('AgentClient (client.ts)', () => {
         reserved: await store.hasReservations(reference.contentId),
         objectsRemoved: reclaimed.objectsRemoved,
         storedBytes: await store.getStoredByteLength(),
-      }).toEqual({
+      }).toStrictEqual({
         reserved: false,
         objectsRemoved: 1,
         storedBytes: 0,
@@ -447,9 +446,7 @@ describe('AgentClient (client.ts)', () => {
       client['chat'] = undefined;
       await client.storeHistoryForLaterUse(inlineMediaHistory());
       const deferredHistory = client['_previousHistory'];
-      if (deferredHistory === undefined) {
-        throw new Error('Expected deferred history');
-      }
+      assertDefined(deferredHistory, 'Expected deferred history');
       const reference = deferredReference();
       client['chat'] = initializedChat;
 
@@ -464,7 +461,7 @@ describe('AgentClient (client.ts)', () => {
         reservedAfterChatCleanup: await store.hasReservations(
           reference.contentId,
         ),
-      }).toEqual({
+      }).toStrictEqual({
         encoding: 'reference',
         reservedByChat: true,
         reservedAfterChatCleanup: false,
@@ -477,9 +474,7 @@ describe('AgentClient (client.ts)', () => {
       client['chat'] = undefined;
       await client.storeHistoryForLaterUse(inlineMediaHistory());
       const deferredHistory = client['_previousHistory'];
-      if (deferredHistory === undefined) {
-        throw new Error('Expected deferred history');
-      }
+      assertDefined(deferredHistory, 'Expected deferred history');
       const reference = deferredReference();
       client['chat'] = initializedChat;
       client['config'].getModel = () => '';
@@ -504,9 +499,7 @@ describe('AgentClient (client.ts)', () => {
       client['chat'] = undefined;
       await client.storeHistoryForLaterUse(inlineMediaHistory());
       const deferredHistory = client['_previousHistory'];
-      if (deferredHistory === undefined) {
-        throw new Error('Expected deferred history');
-      }
+      assertDefined(deferredHistory, 'Expected deferred history');
       const reference = deferredReference();
       client['chat'] = initializedChat;
       client['config'].getModel = () => '';
@@ -517,15 +510,17 @@ describe('AgentClient (client.ts)', () => {
       } catch (error: unknown) {
         failure = error;
       }
-      if (!(failure instanceof AggregateError)) {
-        throw new Error('Expected aggregate setup and cleanup failure');
-      }
+      assertInstanceOf(
+        failure,
+        AggregateError,
+        'Expected aggregate setup and cleanup failure',
+      );
       const messages = failure.errors.flatMap(leafErrorMessages);
 
       expect({
         messages,
         reservedBeforeRetry: await store.hasReservations(reference.contentId),
-      }).toEqual({
+      }).toStrictEqual({
         messages: [
           expect.stringContaining('Failed to initialize chat'),
           'induced history release failure',
@@ -558,7 +553,7 @@ describe('AgentClient (client.ts)', () => {
         retainedRawData: JSON.stringify(snapshot).includes(PNG_BASE64),
         url: snapshot[0]?.blocks[1],
         reserved: await store.hasReservations(local.contentId),
-      }).toEqual({
+      }).toStrictEqual({
         snapshotMatchesChat: true,
         retainedRawData: false,
         url: history[0]?.blocks[1],
@@ -573,7 +568,7 @@ describe('AgentClient (client.ts)', () => {
       expect({
         reserved: await store.hasReservations(local.contentId),
         objectsRemoved: reclaimed.objectsRemoved,
-      }).toEqual({ reserved: false, objectsRemoved: 1 });
+      }).toStrictEqual({ reserved: false, objectsRemoved: 1 });
     });
 
     it('transfers initialized media into deferred ownership during reinitialization', async () => {
@@ -602,7 +597,7 @@ describe('AgentClient (client.ts)', () => {
           PNG_BASE64,
         ),
         reserved: await store.hasReservations(deferredBlock.contentId),
-      }).toEqual({
+      }).toStrictEqual({
         sameContent: true,
         retainedRawData: false,
         reserved: true,
@@ -640,7 +635,7 @@ describe('AgentClient (client.ts)', () => {
       expect({
         afterReplacement,
         afterDeletion: await store.hasReservations(secondBlock.contentId),
-      }).toEqual({
+      }).toStrictEqual({
         afterReplacement: { first: false, second: true },
         afterDeletion: false,
       });
@@ -672,7 +667,10 @@ describe('AgentClient (client.ts)', () => {
       expect({
         reservedAfterFailure,
         reservedAfterRetry: await store.hasReservations(block.contentId),
-      }).toEqual({ reservedAfterFailure: true, reservedAfterRetry: false });
+      }).toStrictEqual({
+        reservedAfterFailure: true,
+        reservedAfterRetry: false,
+      });
     });
   });
 });

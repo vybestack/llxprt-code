@@ -33,9 +33,7 @@ describe('Profile Application - preserveEphemerals (Issue #1049)', () => {
     ];
 
     for (const key of timeoutKeys) {
-      expect(content, `${key} should be in preserveEphemerals array`).toContain(
-        `'${key}'`,
-      );
+      expect(content).toContain(`'${key}'`);
     }
   });
 });

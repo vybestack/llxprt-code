@@ -180,11 +180,43 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
   ): block is { type: 'tool_use'; id: string; name: string; input: unknown } =>
     block.type === 'tool_use';
 
+  const isAssistantMessageWithToolUse = (message: AnthropicMessage): boolean =>
+    message.role === 'assistant' &&
+    Array.isArray(message.content) &&
+    message.content.some(isToolUseBlock);
+
+  function* assistantToolUseThinkingResults(
+    messages: AnthropicMessage[],
+  ): Generator<boolean> {
+    for (const message of messages) {
+      if (!Array.isArray(message.content)) {
+        continue;
+      }
+      const hasToolUse = message.content.some(isToolUseBlock);
+      yield hasToolUse ? isThinkingBlock(message.content[0]) : true;
+    }
+  }
+
+  const toolUseMessageIndices = (request: AnthropicRequestBody): number[] => {
+    const indices: number[] = [];
+    for (let index = 0; index < request.messages.length; index++) {
+      if (isAssistantMessageWithToolUse(request.messages[index])) {
+        indices.push(index);
+      }
+    }
+    return indices;
+  };
+
+  const isNonAnthropicThoughtText = (block: AnthropicContentBlock): boolean =>
+    block.type === 'text' &&
+    (block as { text: string }).text.includes('Gemini thought process');
+
   describe('Critical Shape Requirement: Assistant messages with tool_use must start with thinking', () => {
     /**
      * When history has a VALID thinking block with signature, and tool_use,
      * the thinking block should appear first in the assistant message.
      */
+
     it('assistant message with tool_use must have thinking/redacted_thinking as first block when thinking exists', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Response' }],
@@ -245,10 +277,7 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
 
       // Find the assistant message that has tool_use
       const assistantWithToolUse = request.messages.find(
-        (m) =>
-          m.role === 'assistant' &&
-          Array.isArray(m.content) &&
-          m.content.some(isToolUseBlock),
+        isAssistantMessageWithToolUse,
       );
 
       expect(assistantWithToolUse).toBeDefined();
@@ -263,6 +292,7 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
      * Test the scenario where thinking arrives as separate IContent during streaming
      * and needs to be merged into the tool_use message
      */
+
     it('should merge separate thinking IContent into subsequent tool_use message', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Response' }],
@@ -327,20 +357,20 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
       // The thinking-only message and tool_use-only message should be merged
       // Find assistant message with tool_use
       const assistantWithToolUse = request.messages.find(
-        (m) =>
-          m.role === 'assistant' &&
-          Array.isArray(m.content) &&
-          m.content.some(isToolUseBlock),
+        isAssistantMessageWithToolUse,
       );
 
       expect(assistantWithToolUse).toBeDefined();
       const content = assistantWithToolUse!.content as AnthropicContentBlock[];
 
       // Must have thinking first, then tool_use
-      expect(
-        isThinkingBlock(content[0]),
-        `Expected merged message to have thinking first, but got "${content[0]?.type}"`,
-      ).toBe(true);
+      expect({
+        observation: `Expected merged message to have thinking first, but got "${content[0]?.type}"`,
+        firstBlockIsThinking: isThinkingBlock(content[0]),
+      }).toStrictEqual({
+        observation: `Expected merged message to have thinking first, but got "${content[0]?.type}"`,
+        firstBlockIsThinking: true,
+      });
 
       // Should contain tool_use
       expect(content.some(isToolUseBlock)).toBe(true);
@@ -355,6 +385,7 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
      * After an assistant message with tool_use, the next user message must
      * contain tool_result, not another tool_use.
      */
+
     it('user message after tool_use must contain tool_result, not tool_use', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Response' }],
@@ -410,10 +441,7 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
 
       // Find the index of assistant message with tool_use
       const toolUseIndex = request.messages.findIndex(
-        (m) =>
-          m.role === 'assistant' &&
-          Array.isArray(m.content) &&
-          m.content.some(isToolUseBlock),
+        isAssistantMessageWithToolUse,
       );
 
       expect(toolUseIndex).toBeGreaterThan(-1);
@@ -447,6 +475,7 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
      * - Tool responds
      * - User asks follow-up
      */
+
     it('should maintain correct shape across multiple tool call turns', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Final response' }],
@@ -595,31 +624,16 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
       // Validate EVERY assistant message with tool_use has thinking first
       const assistantMessages = getAssistantMessages(request);
 
-      for (let i = 0; i < assistantMessages.length; i++) {
-        const msg = assistantMessages[i];
-        if (!Array.isArray(msg.content)) continue;
-
-        const hasToolUse = msg.content.some(isToolUseBlock);
+      const thinkingResults =
+        assistantToolUseThinkingResults(assistantMessages);
+      for (const firstBlockIsThinking of thinkingResults) {
         // Assistant messages with tool_use must have thinking first
-        const firstBlockIsThinking = hasToolUse
-          ? isThinkingBlock(msg.content[0])
-          : true;
         expect(firstBlockIsThinking).toBe(true);
       }
 
       // Validate tool_result follows each tool_use
       // Collect indices of assistant messages with tool_use
-      const toolUseIndices: number[] = [];
-      for (let i = 0; i < request.messages.length; i++) {
-        const msg = request.messages[i];
-        if (
-          msg.role === 'assistant' &&
-          Array.isArray(msg.content) &&
-          msg.content.some(isToolUseBlock)
-        ) {
-          toolUseIndices.push(i);
-        }
-      }
+      const toolUseIndices = toolUseMessageIndices(request);
 
       // Verify each one has tool_result in next message
       for (const idx of toolUseIndices) {
@@ -640,6 +654,7 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
      * a fake one. The message should have text first (not thinking).
      * This is valid for messages that were created before thinking was enabled.
      */
+
     it('should NOT have thinking when history has text + tool_call without valid thinking', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Response' }],
@@ -694,10 +709,7 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
         .calls[0][0] as AnthropicRequestBody;
 
       const assistantWithToolUse = request.messages.find(
-        (m) =>
-          m.role === 'assistant' &&
-          Array.isArray(m.content) &&
-          m.content.some(isToolUseBlock),
+        isAssistantMessageWithToolUse,
       );
 
       expect(assistantWithToolUse).toBeDefined();
@@ -830,6 +842,7 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
      * We CANNOT synthesize fake redacted_thinking - Anthropic validates cryptographically.
      * The message should just have tool_use without thinking.
      */
+
     it('should NOT synthesize fake redacted_thinking when no thinking exists', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Response' }],
@@ -880,10 +893,7 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
         .calls[0][0] as AnthropicRequestBody;
 
       const assistantWithToolUse = request.messages.find(
-        (m) =>
-          m.role === 'assistant' &&
-          Array.isArray(m.content) &&
-          m.content.some(isToolUseBlock),
+        isAssistantMessageWithToolUse,
       );
 
       expect(assistantWithToolUse).toBeDefined();
@@ -899,6 +909,7 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
      * Test that thinking blocks from Gemini (sourceField: 'thought') are
      * handled differently from Anthropic thinking (sourceField: 'thinking')
      */
+
     it('should only send sourceField=thinking blocks as thinking to Anthropic', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Response' }],
@@ -961,10 +972,7 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
         .calls[0][0] as AnthropicRequestBody;
 
       const assistantWithToolUse = request.messages.find(
-        (m) =>
-          m.role === 'assistant' &&
-          Array.isArray(m.content) &&
-          m.content.some(isToolUseBlock),
+        isAssistantMessageWithToolUse,
       );
 
       expect(assistantWithToolUse).toBeDefined();
@@ -972,21 +980,25 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
 
       // Count thinking blocks - should only have 1 (from sourceField: 'thinking' with signature)
       const thinkingCount = content.filter(isThinkingBlock).length;
-      expect(
+      expect({
+        observation:
+          'Should only include thinking blocks with sourceField=thinking, not sourceField=thought',
         thinkingCount,
-        'Should only include thinking blocks with sourceField=thinking, not sourceField=thought',
-      ).toBe(1);
+      }).toStrictEqual({
+        observation:
+          'Should only include thinking blocks with sourceField=thinking, not sourceField=thought',
+        thinkingCount: 1,
+      });
 
       // The Gemini-style thought (sourceField: 'thought') should be preserved as text, not dropped
-      const textBlocks = content.filter(
-        (b) =>
-          b.type === 'text' &&
-          (b as { text: string }).text.includes('Gemini thought process'),
-      );
-      expect(
-        textBlocks.length,
-        'Non-Anthropic thinking should be preserved as text',
-      ).toBe(1);
+      const textBlocks = content.filter(isNonAnthropicThoughtText);
+      expect({
+        observation: 'Non-Anthropic thinking should be preserved as text',
+        textBlockCount: textBlocks.length,
+      }).toStrictEqual({
+        observation: 'Non-Anthropic thinking should be preserved as text',
+        textBlockCount: 1,
+      });
     });
   });
 });

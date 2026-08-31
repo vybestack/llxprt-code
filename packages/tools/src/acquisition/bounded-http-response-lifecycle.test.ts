@@ -323,7 +323,7 @@ describe('acquireBoundedHttpBody: native fetch response lifecycle', () => {
     expect(tracker.invocations).toBe(1);
     expect(abortTracker.abortListenerCount).toBe(0);
     expectReaderLockReleased(body);
-    expect(getState()).toEqual({ completed: false, canceled: true });
+    expect(getState()).toStrictEqual({ completed: false, canceled: true });
   });
 
   it('settles with HttpBodyTooLargeError for observed overflow and cleans up once', async () => {
@@ -350,7 +350,7 @@ describe('acquireBoundedHttpBody: native fetch response lifecycle', () => {
     expect(tracker.invocations).toBe(1);
     expect(abortTracker.abortListenerCount).toBe(0);
     expectReaderLockReleased(body);
-    expect(getState()).toEqual({ completed: false, canceled: true });
+    expect(getState()).toStrictEqual({ completed: false, canceled: true });
   });
 
   it('settles with HttpBodyTooLargeError for declared overflow and cancels once', async () => {
@@ -373,7 +373,7 @@ describe('acquireBoundedHttpBody: native fetch response lifecycle', () => {
     await Promise.all([getWriterDone(), getSocketClosed()]);
 
     expect(tracker.invocations).toBe(1);
-    expect(getState()).toEqual({ completed: false, canceled: true });
+    expect(getState()).toStrictEqual({ completed: false, canceled: true });
   });
 
   it('keeps abort authoritative when buffered overflow races cancellation', async () => {

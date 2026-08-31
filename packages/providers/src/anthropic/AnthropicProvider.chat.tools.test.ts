@@ -7,6 +7,7 @@
  * Split from AnthropicProvider.test.ts for max-lines compliance.
  */
 
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -202,9 +203,10 @@ describe('AnthropicProvider tool payload handling', () => {
       const toolUseBlock = (
         assistantMessage?.content as AnthropicContentBlock[]
       ).find((block) => block.type === 'tool_use');
-      if (toolUseBlock === undefined) {
-        throw new Error('expected a tool_use block in the assistant message');
-      }
+      assertDefined(
+        toolUseBlock,
+        'expected a tool_use block in the assistant message',
+      );
 
       expect(toolUseBlock.id).toMatch(/^toolu_[a-zA-Z0-9_-]+$/);
     });
@@ -333,9 +335,10 @@ describe('AnthropicProvider tool payload handling', () => {
       const toolResultBlock = (
         toolResultMessage.content as AnthropicContentBlock[]
       ).find((block) => block.type === 'tool_result');
-      if (toolResultBlock === undefined) {
-        throw new Error('expected a tool_result block in the tool message');
-      }
+      assertDefined(
+        toolResultBlock,
+        'expected a tool_result block in the tool message',
+      );
 
       expect(toolResultBlock.tool_use_id).toMatch(/^toolu_[a-zA-Z0-9_-]+$/);
     });

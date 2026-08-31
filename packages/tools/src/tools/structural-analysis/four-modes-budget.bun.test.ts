@@ -24,6 +24,10 @@ import {
 } from '../structural-analysis.js';
 import type { ToolResult } from '../tools.js';
 
+function numberOrZero(value: number | undefined): number {
+  return value ?? 0;
+}
+
 function createBudgetToolHost(targetDir: string, maxItems: number): IToolHost {
   return {
     getTargetDir: () => targetDir,
@@ -511,7 +515,8 @@ describe('structural_analysis parse omissions mark inexact (issue #3202)', () =>
     expect(payload.mode).toBe('definitions');
     expect(payload.oversizedFiles!).toBeGreaterThanOrEqual(1);
     const totalOmissions =
-      (payload.oversizedFiles ?? 0) + (payload.unparseableFiles ?? 0);
+      numberOrZero(payload.oversizedFiles) +
+      numberOrZero(payload.unparseableFiles);
     expect(totalOmissions).toBeGreaterThanOrEqual(1);
     expect(payload.countInexact).toBe(true);
   });

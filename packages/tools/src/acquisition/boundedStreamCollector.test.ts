@@ -11,6 +11,12 @@ import {
   ACQUISITION_HARD_MAX_BYTES,
 } from './index.js';
 
+function positiveFiniteBudgets(
+  cases: ReadonlyArray<readonly [number, number | undefined]>,
+): ReadonlyArray<readonly [number, number | undefined]> {
+  return cases.filter(([bytes]) => bytes > 0 && Number.isFinite(bytes));
+}
+
 describe('ByteBudget', () => {
   it('creates a valid budget from a positive number', () => {
     const budget = createByteBudget(1024 * 1024);
@@ -96,11 +102,7 @@ describe('ByteBudget - absolute hard-max invariants (issue #3200 finding 10)', (
       [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER],
       [Number.MAX_SAFE_INTEGER, 1],
     ];
-    for (const [bytes, hardMax] of cases) {
-      // createByteBudget throws on nonpositive bytes; only test positive bytes.
-      if (bytes <= 0 || !Number.isFinite(bytes)) {
-        continue;
-      }
+    for (const [bytes, hardMax] of positiveFiniteBudgets(cases)) {
       const budget = createByteBudget(bytes, hardMax);
       expect(budget.bytes).toBeGreaterThanOrEqual(1024);
       expect(budget.bytes).toBeLessThanOrEqual(ACQUISITION_HARD_MAX_BYTES);

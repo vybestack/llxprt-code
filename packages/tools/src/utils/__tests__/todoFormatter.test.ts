@@ -99,7 +99,7 @@ describe('formatTodoListForDisplay (tools)', () => {
       const renderedCalls = result
         .split('\n')
         .filter((line) => /^ {2}↳ tool_\d+\(n: \d+\)$/.test(line));
-      expect(renderedCalls).toEqual([
+      expect(renderedCalls).toStrictEqual([
         '  ↳ tool_3(n: 3)',
         '  ↳ tool_4(n: 4)',
         '  ↳ tool_5(n: 5)',

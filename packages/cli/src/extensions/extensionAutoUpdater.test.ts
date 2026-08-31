@@ -106,7 +106,7 @@ describe('ExtensionAutoUpdater', () => {
     );
   });
 
-  it('queues updates for restart mode and installs on the next run', async () => {
+  function createRestartQueueScenario() {
     const extension = createExtension('queue');
     const loader = vi.fn(async () => [extension]);
     let callCount = 0;
@@ -133,17 +133,26 @@ describe('ExtensionAutoUpdater', () => {
       now: () => 2000,
     });
 
-    await updater.checkNow();
-    expect(updateExecutor).not.toHaveBeenCalled();
-    let snapshot = store.snapshot() as Record<
+    return { updater, updateExecutor, store };
+  }
+
+  it('queues updates for restart mode and installs on the next run', async () => {
+    const scenario = createRestartQueueScenario();
+
+    await scenario.updater.checkNow();
+    expect(scenario.updateExecutor).not.toHaveBeenCalled();
+    let snapshot = scenario.store.snapshot() as Record<
       string,
       { pendingInstall: boolean }
     >;
     expect(snapshot['queue'].pendingInstall).toBe(true);
 
-    await updater.checkNow();
-    expect(updateExecutor).toHaveBeenCalledTimes(1);
-    snapshot = store.snapshot() as Record<string, { pendingInstall: boolean }>;
+    await scenario.updater.checkNow();
+    expect(scenario.updateExecutor).toHaveBeenCalledTimes(1);
+    snapshot = scenario.store.snapshot() as Record<
+      string,
+      { pendingInstall: boolean }
+    >;
     expect(snapshot['queue'].pendingInstall).toBe(false);
   });
 

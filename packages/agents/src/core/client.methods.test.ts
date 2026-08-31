@@ -746,6 +746,16 @@ sub memory
     });
 
     it('should not change models when consecutive 429 errors occur', async () => {
+      const { generatedErrorMessage, configInstance, retryErrorMessages } =
+        await observeNotChangeModelsWhenConsecutive429ErrorsOccur();
+      expect(generatedErrorMessage).toContain('Rate limited');
+      expect(retryErrorMessages[0]).toContain('Rate limited');
+      expect(retryErrorMessages[1]).toContain('Rate limited');
+      expect(configInstance.setModel).not.toHaveBeenCalled();
+      expect(configInstance.setFallbackMode).not.toHaveBeenCalled();
+    });
+
+    const observeNotChangeModelsWhenConsecutive429ErrorsOccur = async () => {
       const error429 = new Error('Rate limited') as Error & { status?: number };
       error429.status = 429;
 
@@ -754,9 +764,15 @@ sub memory
       const retrySpy = retryWithBackoff as Mock<typeof retryWithBackoff>;
       const originalImpl = retrySpy.getMockImplementation();
 
+      const retryErrors: unknown[] = [];
       retrySpy.mockImplementation(async (apiCall) => {
-        await expect(apiCall()).rejects.toThrow('Rate limited');
-        await expect(apiCall()).rejects.toThrow('Rate limited');
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          try {
+            await apiCall();
+          } catch (error: unknown) {
+            retryErrors.push(error);
+          }
+        }
         throw error429;
       });
 
@@ -766,20 +782,30 @@ sub memory
       const schema = { type: 'string' };
       const abortSignal = new AbortController().signal;
 
-      await expect(
-        client.generateJson(contents, schema, abortSignal, 'test-model'),
-      ).rejects.toThrow('Rate limited');
-
       const configInstance = client['config'] as unknown as {
         setModel: ReturnType<typeof vi.fn>;
         setFallbackMode: ReturnType<typeof vi.fn>;
       };
 
-      expect(configInstance.setModel).not.toHaveBeenCalled();
-      expect(configInstance.setFallbackMode).not.toHaveBeenCalled();
+      let generatedError: unknown;
+      try {
+        await client.generateJson(contents, schema, abortSignal, 'test-model');
+      } catch (error: unknown) {
+        generatedError = error;
+      } finally {
+        retrySpy.mockImplementation(originalImpl ?? ((apiCall) => apiCall()));
+      }
 
-      retrySpy.mockImplementation(originalImpl ?? ((apiCall) => apiCall()));
-    });
+      const generatedErrorMessage =
+        generatedError instanceof Error
+          ? generatedError.message
+          : String(generatedError);
+      const retryErrorMessages = retryErrors.map((error) =>
+        error instanceof Error ? error.message : String(error),
+      );
+
+      return { generatedErrorMessage, configInstance, retryErrorMessages };
+    };
   });
 
   // resetChat test deleted - new behavior preserves context between provider switches

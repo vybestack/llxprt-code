@@ -202,108 +202,126 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
 
   describe('interactiveMode affects tool behavior branching', () => {
     it('should allow ContextAwareTool to branch on interactiveMode when set to false', async () => {
-      let executionMode: 'interactive' | 'non-interactive' | undefined;
-
-      const contextAwareTool = new ContextAwareMockTool('branching-tool');
-      contextAwareTool.executeFn.mockImplementation(() => {
-        executionMode =
-          contextAwareTool.context?.interactiveMode === true
-            ? 'interactive'
-            : 'non-interactive';
-        return Promise.resolve({
-          llmContent: 'Branched execution',
-          returnDisplay: 'Branched execution',
-        });
-      });
-
-      const toolRegistry = createMockToolRegistry(contextAwareTool);
-      const config = createMockConfig(toolRegistry);
-
-      let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
-        null;
-      const completionPromise = new Promise<CompletedToolCall[]>((resolve) => {
-        completionResolver = resolve;
-      });
-
-      const scheduler = new CoreToolScheduler({
-        config,
-        messageBus: getTestRuntimeMessageBus(config),
-        toolRegistry: config.getToolRegistry(),
-        toolContextInteractiveMode: false,
-        onAllToolCallsComplete: async (calls) => {
-          completionResolver?.(calls);
-        },
-        getPreferredEditor: () => undefined,
-        onEditorClose: () => {},
-      });
-
-      const request = {
-        callId: 'branching-call',
-        name: 'branching-tool',
-        args: {},
-        isClientInitiated: false,
-        prompt_id: 'test-prompt',
-      };
-
-      await scheduler.schedule([request], abortController.signal);
-      await completionPromise;
-
+      const { executionMode } =
+        await observeAllowContextAwareToolToBranchOnInteractiveModeWhenSetToFalse();
       expect(executionMode).toBe('non-interactive');
-
-      scheduler.dispose();
     });
+
+    const observeAllowContextAwareToolToBranchOnInteractiveModeWhenSetToFalse =
+      async () => {
+        let executionMode: 'interactive' | 'non-interactive' | undefined;
+
+        const contextAwareTool = new ContextAwareMockTool('branching-tool');
+        contextAwareTool.executeFn.mockImplementation(() => {
+          executionMode =
+            contextAwareTool.context?.interactiveMode === true
+              ? 'interactive'
+              : 'non-interactive';
+          return Promise.resolve({
+            llmContent: 'Branched execution',
+            returnDisplay: 'Branched execution',
+          });
+        });
+
+        const toolRegistry = createMockToolRegistry(contextAwareTool);
+        const config = createMockConfig(toolRegistry);
+
+        let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
+          null;
+        const completionPromise = new Promise<CompletedToolCall[]>(
+          (resolve) => {
+            completionResolver = resolve;
+          },
+        );
+
+        const scheduler = new CoreToolScheduler({
+          config,
+          messageBus: getTestRuntimeMessageBus(config),
+          toolRegistry: config.getToolRegistry(),
+          toolContextInteractiveMode: false,
+          onAllToolCallsComplete: async (calls) => {
+            completionResolver?.(calls);
+          },
+          getPreferredEditor: () => undefined,
+          onEditorClose: () => {},
+        });
+
+        const request = {
+          callId: 'branching-call',
+          name: 'branching-tool',
+          args: {},
+          isClientInitiated: false,
+          prompt_id: 'test-prompt',
+        };
+
+        await scheduler.schedule([request], abortController.signal);
+        await completionPromise;
+
+        scheduler.dispose();
+
+        return { executionMode };
+      };
 
     it('should allow ContextAwareTool to branch on interactiveMode when set to true', async () => {
-      let executionMode: 'interactive' | 'non-interactive' | undefined;
-
-      const contextAwareTool = new ContextAwareMockTool('branching-tool');
-      contextAwareTool.executeFn.mockImplementation(() => {
-        executionMode =
-          contextAwareTool.context?.interactiveMode === true
-            ? 'interactive'
-            : 'non-interactive';
-        return Promise.resolve({
-          llmContent: 'Branched execution',
-          returnDisplay: 'Branched execution',
-        });
-      });
-
-      const toolRegistry = createMockToolRegistry(contextAwareTool);
-      const config = createMockConfig(toolRegistry);
-
-      let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
-        null;
-      const completionPromise = new Promise<CompletedToolCall[]>((resolve) => {
-        completionResolver = resolve;
-      });
-
-      const scheduler = new CoreToolScheduler({
-        config,
-        messageBus: getTestRuntimeMessageBus(config),
-        toolRegistry: config.getToolRegistry(),
-        toolContextInteractiveMode: true,
-        onAllToolCallsComplete: async (calls) => {
-          completionResolver?.(calls);
-        },
-        getPreferredEditor: () => undefined,
-        onEditorClose: () => {},
-      });
-
-      const request = {
-        callId: 'branching-call-interactive',
-        name: 'branching-tool',
-        args: {},
-        isClientInitiated: false,
-        prompt_id: 'test-prompt',
-      };
-
-      await scheduler.schedule([request], abortController.signal);
-      await completionPromise;
-
+      const { executionMode } =
+        await observeAllowContextAwareToolToBranchOnInteractiveModeWhenSetToTrue();
       expect(executionMode).toBe('interactive');
-
-      scheduler.dispose();
     });
+
+    const observeAllowContextAwareToolToBranchOnInteractiveModeWhenSetToTrue =
+      async () => {
+        let executionMode: 'interactive' | 'non-interactive' | undefined;
+
+        const contextAwareTool = new ContextAwareMockTool('branching-tool');
+        contextAwareTool.executeFn.mockImplementation(() => {
+          executionMode =
+            contextAwareTool.context?.interactiveMode === true
+              ? 'interactive'
+              : 'non-interactive';
+          return Promise.resolve({
+            llmContent: 'Branched execution',
+            returnDisplay: 'Branched execution',
+          });
+        });
+
+        const toolRegistry = createMockToolRegistry(contextAwareTool);
+        const config = createMockConfig(toolRegistry);
+
+        let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
+          null;
+        const completionPromise = new Promise<CompletedToolCall[]>(
+          (resolve) => {
+            completionResolver = resolve;
+          },
+        );
+
+        const scheduler = new CoreToolScheduler({
+          config,
+          messageBus: getTestRuntimeMessageBus(config),
+          toolRegistry: config.getToolRegistry(),
+          toolContextInteractiveMode: true,
+          onAllToolCallsComplete: async (calls) => {
+            completionResolver?.(calls);
+          },
+          getPreferredEditor: () => undefined,
+          onEditorClose: () => {},
+        });
+
+        const request = {
+          callId: 'branching-call-interactive',
+          name: 'branching-tool',
+          args: {},
+          isClientInitiated: false,
+          prompt_id: 'test-prompt',
+        };
+
+        await scheduler.schedule([request], abortController.signal);
+        await completionPromise;
+
+        scheduler.dispose();
+
+        return { executionMode };
+      };
   });
 
   describe('context injection at multiple code paths', () => {
@@ -355,6 +373,13 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
 
   describe('multiple tool calls with same interactiveMode setting', () => {
     it('should apply interactiveMode: false to all tools in a batch', async () => {
+      const { capturedContexts, interactiveContextIndices } =
+        await observeApplyInteractiveModeFalseToAllToolsInABatch();
+      expect(interactiveContextIndices).toStrictEqual([]);
+      expect(capturedContexts.length).toBeGreaterThanOrEqual(3);
+    });
+
+    const observeApplyInteractiveModeFalseToAllToolsInABatch = async () => {
       const capturedContexts: ToolContext[] = [];
 
       const contextAwareTool = new ContextAwareMockTool('context-tool');
@@ -416,13 +441,15 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
       await scheduler.schedule(requests, abortController.signal);
       await completionPromise;
 
-      expect(capturedContexts.length).toBeGreaterThanOrEqual(3);
-      for (const ctx of capturedContexts) {
-        expect(ctx.interactiveMode).toBe(false);
-      }
+      const interactiveContextIndices = capturedContexts
+        .map((context, index) => ({ context, index }))
+        .filter(({ context }) => context.interactiveMode === true)
+        .map(({ index }) => index);
 
       scheduler.dispose();
-    });
+
+      return { capturedContexts, interactiveContextIndices };
+    };
   });
 });
 

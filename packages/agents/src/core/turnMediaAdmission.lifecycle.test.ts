@@ -304,7 +304,7 @@ async function assertReleasedToBaseline(
     protectedContentIds,
     Date.now(),
   );
-  expect({ owners, reclaimed: reclamation.objectsRemoved }).toEqual({
+  expect({ owners, reclaimed: reclamation.objectsRemoved }).toStrictEqual({
     owners: baselineOwners,
     reclaimed: expectedReclaimedObjects,
   });
@@ -352,7 +352,7 @@ describe('turn media admission terminal lifecycle', () => {
     }
 
     expect(failure).toBeInstanceOf(AggregateError);
-    expect(errorMessages(failure)).toEqual(
+    expect(errorMessages(failure)).toStrictEqual(
       expect.arrayContaining([
         'provider rejected turn',
         'induced media cleanup failure',
@@ -378,7 +378,7 @@ describe('turn media admission terminal lifecycle', () => {
 
     expect(failure).toBeInstanceOf(AggregateError);
     expect(errorMessages(failure)).toContain('induced media cleanup failure');
-    expect(fixture.chat.getHistoryService().getAll()).toEqual([]);
+    expect(fixture.chat.getHistoryService().getAll()).toStrictEqual([]);
     expect(await reservationOwnerCount(fixture.rootDirectory)).toBe(0);
   });
   it('awaits admitted user-media release when a non-streaming turn is aborted', async () => {
@@ -437,7 +437,7 @@ describe('turn media admission terminal lifecycle', () => {
     expect({
       owners: await reservationOwnerCount(fixture.rootDirectory),
       references: references.length,
-    }).toEqual({ owners: 2, references: 2 });
+    }).toStrictEqual({ owners: 2, references: 2 });
   });
   it('releases admitted user and output media when a stream consumer cancels', async () => {
     const fixture = await createFixture(directory, 'success');
@@ -455,7 +455,7 @@ describe('turn media admission terminal lifecycle', () => {
       new Set(),
       Date.now(),
     );
-    expect({ owners, reclaimed: reclamation.objectsRemoved }).toEqual({
+    expect({ owners, reclaimed: reclamation.objectsRemoved }).toStrictEqual({
       owners: baselineOwners,
       reclaimed: 2,
     });
@@ -493,7 +493,7 @@ describe('turn media admission terminal lifecycle', () => {
     expect({
       owners: await reservationOwnerCount(fixture.rootDirectory),
       reclaimed: reclamation.objectsRemoved,
-    }).toEqual({ owners: 0, reclaimed: 1 });
+    }).toStrictEqual({ owners: 0, reclaimed: 1 });
   });
   it('releases admitted user and output media when a provider stream fails', async () => {
     const fixture = await createFixture(directory, 'stream-failure');
@@ -516,7 +516,7 @@ describe('turn media admission terminal lifecycle', () => {
       new Set(),
       Date.now(),
     );
-    expect({ owners, reclaimed: reclamation.objectsRemoved }).toEqual({
+    expect({ owners, reclaimed: reclamation.objectsRemoved }).toStrictEqual({
       owners: baselineOwners,
       reclaimed: 2,
     });
@@ -570,7 +570,7 @@ describe('turn media admission terminal lifecycle', () => {
       owners,
       reclaimed: reclamation.objectsRemoved,
       historyEntries: fixture.chat.getHistory().length,
-    }).toEqual({
+    }).toStrictEqual({
       owners: baselineOwners,
       reclaimed: 2,
       historyEntries: 0,
@@ -603,7 +603,7 @@ describe('turn media admission terminal lifecycle', () => {
       owners: await reservationOwnerCount(fixture.rootDirectory),
       reclaimed: reclamation.objectsRemoved,
       historyEntries: fixture.chat.getHistory().length,
-    }).toEqual({ owners: 0, reclaimed: 2, historyEntries: 0 });
+    }).toStrictEqual({ owners: 0, reclaimed: 2, historyEntries: 0 });
   });
 
   it('transfers non-streaming user and output admissions once history commits', async () => {
@@ -628,7 +628,7 @@ describe('turn media admission terminal lifecycle', () => {
       references: references.length,
       resolvedBytes: resolved.map((bytes) => bytes.byteLength),
       reclaimed: reclamation.objectsRemoved,
-    }).toEqual({
+    }).toStrictEqual({
       owners: 2,
       references: 2,
       resolvedBytes: [68, 287],
@@ -660,7 +660,7 @@ describe('turn media admission terminal lifecycle', () => {
       references: references.length,
       resolvedBytes: resolved.map((bytes) => bytes.byteLength),
       reclaimed: reclamation.objectsRemoved,
-    }).toEqual({
+    }).toStrictEqual({
       owners: 2,
       references: 2,
       resolvedBytes: [68, 287],

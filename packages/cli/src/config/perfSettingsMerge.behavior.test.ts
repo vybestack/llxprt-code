@@ -44,7 +44,7 @@ describe('telemetry.perf — real mergeSettings behavior', () => {
         emptySettings(),
         true,
       );
-      expect(merged.telemetry.perf).toEqual({ enabled: true });
+      expect(merged.telemetry.perf).toStrictEqual({ enabled: true });
     });
   });
 
@@ -67,7 +67,7 @@ describe('telemetry.perf — real mergeSettings behavior', () => {
         true,
       );
       // Shallow merge: workspace.perf replaces user.perf entirely
-      expect(merged.telemetry.perf).toEqual({ memory: true });
+      expect(merged.telemetry.perf).toStrictEqual({ memory: true });
     });
   });
 
@@ -106,7 +106,10 @@ describe('telemetry.perf — real mergeSettings behavior', () => {
         true,
       );
       expect(merged.telemetry.enabled).toBe(true);
-      expect(merged.telemetry.perf).toEqual({ enabled: true, memory: true });
+      expect(merged.telemetry.perf).toStrictEqual({
+        enabled: true,
+        memory: true,
+      });
     });
   });
 
@@ -141,7 +144,10 @@ describe('telemetry.perf — real mergeSettings behavior', () => {
         workspace,
         true,
       );
-      expect(merged.telemetry.perf).toEqual({ enabled: true, memory: true });
+      expect(merged.telemetry.perf).toStrictEqual({
+        enabled: true,
+        memory: true,
+      });
     });
   });
 
@@ -160,7 +166,10 @@ describe('telemetry.perf — real mergeSettings behavior', () => {
         emptySettings(),
         true,
       );
-      expect(merged.telemetry.perf).toEqual({ enabled: false, memory: false });
+      expect(merged.telemetry.perf).toStrictEqual({
+        enabled: false,
+        memory: false,
+      });
     });
   });
 });

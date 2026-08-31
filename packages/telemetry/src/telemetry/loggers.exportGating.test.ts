@@ -40,17 +40,19 @@ const mockLogger = {
   emit: vi.fn(),
 };
 
-beforeEach(() => {
-  vi.restoreAllMocks();
-  vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(true);
-  vi.spyOn(logs, 'getLogger').mockReturnValue(mockLogger as unknown as Logger);
-  vi.spyOn(uiTelemetry.uiTelemetryService, 'addEvent').mockImplementation(
-    () => undefined,
-  );
-  mockLogger.emit.mockClear();
-});
-
 describe('api_request / api_response export gating (REQ-3315.1..3)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(true);
+    vi.spyOn(logs, 'getLogger').mockReturnValue(
+      mockLogger as unknown as Logger,
+    );
+    vi.spyOn(uiTelemetry.uiTelemetryService, 'addEvent').mockImplementation(
+      () => undefined,
+    );
+    mockLogger.emit.mockClear();
+  });
+
   it('default config emits *_chars, never request_text/response_text', () => {
     const config = makeConfig();
     const req = new ApiRequestEvent(

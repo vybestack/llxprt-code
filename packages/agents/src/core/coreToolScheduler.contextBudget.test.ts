@@ -37,6 +37,19 @@ function createMockMessageBus() {
   };
 }
 
+function getToolResponseOutput(part: unknown): string | undefined {
+  if (typeof part !== 'object' || part === null) return undefined;
+  if (!('type' in part) || part.type !== 'tool_response') return undefined;
+  if (!('result' in part)) return undefined;
+
+  const result: unknown = part.result;
+  if (typeof result !== 'object' || result === null) return undefined;
+  if (!('output' in result) || typeof result.output !== 'string') {
+    return undefined;
+  }
+  return result.output;
+}
+
 // Helper function to create a mock PolicyEngine
 function createMockPolicyEngine() {
   return {
@@ -292,6 +305,22 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
   });
 
   it('should truncate tool output when it exceeds per-tool budget', async () => {
+    const {
+      calls,
+      completionCallCount,
+      callsWithoutOutput,
+      oversizedOutputCallIds,
+      untruncatedOutputCallIds,
+    } = await observeTruncateToolOutputWhenItExceedsPerToolBudget();
+    expect(completionCallCount).toBeGreaterThan(0);
+    expect(callsWithoutOutput).toStrictEqual([]);
+    expect(oversizedOutputCallIds).toStrictEqual([]);
+    expect(untruncatedOutputCallIds).toStrictEqual([]);
+    expect(calls).toHaveLength(4);
+    expect(calls.every((c) => c.status === 'success')).toBe(true);
+  });
+
+  const observeTruncateToolOutputWhenItExceedsPerToolBudget = async () => {
     // tool-output-max-tokens = 10k → 4 tools each get 10k/4 = 2.5k tokens
     // effective limit after escape buffer = 2.5k × 0.8 = 2k tokens
     // Each tool produces 30k chars of English text ≈ 7.5k tokens → must be truncated
@@ -352,37 +381,51 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
     );
 
     await waitFor(() => {
-      expect(onAllToolCallsComplete).toHaveBeenCalled();
+      if (onAllToolCallsComplete.mock.calls.length === 0) {
+        throw new Error('Waiting for all tool calls to complete');
+      }
     });
 
     const calls = onAllToolCallsComplete.mock
       .calls[0][0] as CompletedToolCall[];
-    expect(calls).toHaveLength(4);
-    expect(calls.every((c) => c.status === 'success')).toBe(true);
-
-    // Verify each tool's output was truncated to fit within per-tool budget
-    for (const call of calls) {
-      if (call.status !== 'success') continue;
-      const responseParts = call.response.responseParts;
-
-      const frPart = responseParts.find(
-        (p) =>
-          typeof p === 'object' &&
-          'type' in p &&
-          p.type === 'tool_response' &&
-          p.result != null,
-      );
-      expect(frPart).toBeDefined();
-      const output = (frPart as { result: { output: string } }).result.output;
-
-      // Original was 30k chars. With per-tool budget of 2.5k tokens (2k effective),
-      // the output must be significantly smaller.
-      expect(output.length).toBeLessThan(largeOutputSize);
-      expect(output).toContain('[Output truncated due to token limit]');
-    }
+    const completionCallCount = onAllToolCallsComplete.mock.calls.length;
+    const successfulOutputs = calls.flatMap((call) => {
+      if (call.status !== 'success') return [];
+      const output = call.response.responseParts
+        .map((part: unknown) => getToolResponseOutput(part))
+        .find((value) => value !== undefined);
+      if (output === undefined) return [];
+      return [{ callId: call.request.callId, output }];
+    });
+    const callsWithoutOutput = calls
+      .filter(
+        (call) =>
+          call.status === 'success' &&
+          !successfulOutputs.some(
+            (observation) => observation.callId === call.request.callId,
+          ),
+      )
+      .map((call) => call.request.callId);
+    const oversizedOutputCallIds = successfulOutputs
+      .filter((observation) => observation.output.length >= largeOutputSize)
+      .map((observation) => observation.callId);
+    const untruncatedOutputCallIds = successfulOutputs
+      .filter(
+        (observation) =>
+          !observation.output.includes('[Output truncated due to token limit]'),
+      )
+      .map((observation) => observation.callId);
 
     scheduler.dispose();
-  });
+
+    return {
+      calls,
+      completionCallCount,
+      callsWithoutOutput,
+      oversizedOutputCallIds,
+      untruncatedOutputCallIds,
+    };
+  };
 
   it('should divide custom tool-output-max-tokens across batch', async () => {
     // User sets tool-output-max-tokens=100k → 10 tools each get 10k

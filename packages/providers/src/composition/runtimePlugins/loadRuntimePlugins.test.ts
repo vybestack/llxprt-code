@@ -64,7 +64,7 @@ describe('loadRuntimePlugins', () => {
   it('returns a registry with exactly the built-in provider ids for an empty specifier list', async () => {
     const registry = await loadRuntimePlugins([], stubImports({}));
 
-    expect(registry.listProviderIds()).toEqual(BUILTIN_PROVIDER_IDS);
+    expect(registry.listProviderIds()).toStrictEqual(BUILTIN_PROVIDER_IDS);
   });
 
   it('resolves one valid plugin and preserves the factory identity', async () => {
@@ -79,7 +79,7 @@ describe('loadRuntimePlugins', () => {
     );
 
     expect(registry.getProviderFactory('my-provider')).toBe(factory);
-    expect(registry.getProviderOrigin('my-provider')).toEqual({
+    expect(registry.getProviderOrigin('my-provider')).toStrictEqual({
       kind: 'plugin',
       pluginId: 'my-plugin',
       specifier: 'my-plugin',
@@ -103,9 +103,9 @@ describe('loadRuntimePlugins', () => {
     });
 
     // Exact sequence: configured order, each specifier imported exactly once.
-    expect(callOrder).toEqual(['first-pkg', 'second-pkg']);
+    expect(callOrder).toStrictEqual(['first-pkg', 'second-pkg']);
 
-    expect(registry.listProviderIds()).toEqual([
+    expect(registry.listProviderIds()).toStrictEqual([
       ...BUILTIN_PROVIDER_IDS,
       'provider-first-pkg',
       'provider-second-pkg',
@@ -322,7 +322,7 @@ describe('loadRuntimePlugins', () => {
     expect(error.message).toContain('shared-provider');
     // Importing a package executes its module body, so a configuration that is
     // already known to be invalid must not run any more plugin code.
-    expect(callOrder).toEqual(['first-pkg', 'second-pkg']);
+    expect(callOrder).toStrictEqual(['first-pkg', 'second-pkg']);
   });
 
   it('returns an immutable registry exposing contributed aliases in plugin order', async () => {
@@ -347,6 +347,6 @@ describe('loadRuntimePlugins', () => {
     expect(Object.isFrozen(registry)).toBe(true);
     expect(
       registry.getContributedAliases().map((alias) => alias.alias),
-    ).toEqual(['alias-first-pkg', 'alias-second-pkg']);
+    ).toStrictEqual(['alias-first-pkg', 'alias-second-pkg']);
   });
 });

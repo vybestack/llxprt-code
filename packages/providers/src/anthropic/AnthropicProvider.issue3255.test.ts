@@ -124,6 +124,36 @@ function reasoningFields(
   return result;
 }
 
+interface AliasRequestFixture {
+  readonly model: string;
+  readonly baseURL: string;
+  readonly modelBehavior: Readonly<Record<string, unknown>>;
+}
+
+function builtInZaiRequestFixture(): AliasRequestFixture {
+  const aliasEntry = loadProviderAliasEntries().find(
+    (candidate) => candidate.source === 'builtin' && candidate.alias === 'zai',
+  );
+  if (aliasEntry === undefined) {
+    throw new Error('Builtin zai alias entry not found');
+  }
+  const model = aliasEntry.config.defaultModel;
+  if (typeof model !== 'string' || model === '') {
+    throw new Error('Builtin zai alias entry must declare a default model');
+  }
+  const baseURL = aliasEntry.config['base-url'];
+  if (typeof baseURL !== 'string') {
+    throw new Error('Builtin zai alias entry must declare a base URL');
+  }
+  return {
+    model,
+    baseURL,
+    modelBehavior: {
+      ...aliasEntry.config.ephemeralSettings,
+      ...computeModelDefaults(model, aliasEntry.config.modelDefaults ?? []),
+    },
+  };
+}
 describe('Anthropic reasoning wire translation (issue #3255)', () => {
   it('emits adaptive Opus 5 thinking and native effort without a budget', async () => {
     const { body } = await prepare({
@@ -739,33 +769,11 @@ describe('Anthropic reasoning wire translation (issue #3255)', () => {
   });
 
   it('sends the built-in zai alias default model through the final request without a fabricated budget', async () => {
-    const aliasEntry = loadProviderAliasEntries().find(
-      (candidate) =>
-        candidate.source === 'builtin' && candidate.alias === 'zai',
-    );
-    if (!aliasEntry) {
-      throw new Error('Builtin zai alias entry not found');
-    }
-    const model = aliasEntry.config.defaultModel;
-    if (typeof model !== 'string' || model === '') {
-      throw new Error('Builtin zai alias entry must declare a default model');
-    }
-    const baseUrl = aliasEntry.config['base-url'];
-    if (typeof baseUrl !== 'string') {
-      throw new Error('Builtin zai alias entry must declare a base URL');
-    }
-    const modelBehavior: Record<string, unknown> = {
-      ...aliasEntry.config.ephemeralSettings,
-      ...computeModelDefaults(model, aliasEntry.config.modelDefaults ?? []),
-    };
+    const fixture = builtInZaiRequestFixture();
 
-    const { body } = await prepare({
-      model,
-      baseURL: baseUrl,
-      modelBehavior,
-    });
+    const { body } = await prepare(fixture);
 
-    expect(model).toBe('glm-5.3');
+    expect(fixture.model).toBe('glm-5.3');
     expect(reasoningFields(body)).toStrictEqual({
       thinking: { type: 'enabled' },
       output_config: { effort: 'high' },

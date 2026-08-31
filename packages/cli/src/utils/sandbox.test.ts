@@ -24,6 +24,29 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function isReadOnlyMountFor(value: string, pathFragment: string): boolean {
+  return value.includes(pathFragment) && value.includes(':ro');
+}
+
+function isReadOnlyMountEnding(value: string, pathFragment: string): boolean {
+  return value.includes(pathFragment) && value.endsWith(':ro');
+}
+
+function matchesPath(candidate: fs.PathLike, pathToMatch: string): boolean {
+  return String(candidate) === pathToMatch;
+}
+
+function matchesAnyPath(
+  candidate: fs.PathLike,
+  pathOptions: readonly string[],
+): boolean {
+  return pathOptions.includes(String(candidate));
+}
+
+function isVolumeOperand(args: readonly string[], index: number): boolean {
+  return index > 0 && args[index - 1] === '--volume';
+}
+
 describe('getPassthroughEnvVars', () => {
   let mockEnv: NodeJS.ProcessEnv;
 
@@ -367,51 +390,45 @@ describe('mountGitConfigFiles', () => {
 
   it('adds --volume for ~/.gitconfig when file exists (R3.1)', () => {
     const gitConfig = path.join(hostHome, '.gitconfig');
-    existsSyncSpy.mockImplementation(
-      (p: fs.PathLike) => String(p) === gitConfig,
+    existsSyncSpy.mockImplementation((candidate) =>
+      matchesPath(candidate, gitConfig),
     );
     const args: string[] = [];
     mountGitConfigFiles(args, hostHome, containerHome);
     expect(args).toContain('--volume');
-    const volumeArg = args.find(
-      (a) => a.includes('.gitconfig') && a.includes(':ro'),
-    );
+    const volumeArg = args.find((arg) => isReadOnlyMountFor(arg, '.gitconfig'));
     expect(volumeArg).toBeDefined();
     expect(volumeArg).toContain(gitConfig);
   });
 
   it('adds --volume for ~/.config/git/config when file exists (R3.2)', () => {
-    existsSyncSpy.mockImplementation(
-      (p: fs.PathLike) =>
-        String(p) === path.join(hostHome, '.config', 'git', 'config'),
+    existsSyncSpy.mockImplementation((candidate) =>
+      matchesPath(candidate, path.join(hostHome, '.config', 'git', 'config')),
     );
     const args: string[] = [];
     mountGitConfigFiles(args, hostHome, containerHome);
-    const volumeArg = args.find(
-      (a) =>
-        a.includes(path.posix.join('.config', 'git', 'config')) &&
-        a.includes(':ro'),
+    const volumeArg = args.find((arg) =>
+      isReadOnlyMountFor(arg, path.posix.join('.config', 'git', 'config')),
     );
     expect(volumeArg).toBeDefined();
   });
 
   it('adds --volume for ~/.gitignore_global when file exists (R3.3)', () => {
-    existsSyncSpy.mockImplementation(
-      (p: fs.PathLike) =>
-        String(p) === path.join(hostHome, '.gitignore_global'),
+    existsSyncSpy.mockImplementation((candidate) =>
+      matchesPath(candidate, path.join(hostHome, '.gitignore_global')),
     );
     const args: string[] = [];
     mountGitConfigFiles(args, hostHome, containerHome);
-    const volumeArg = args.find(
-      (a) => a.includes('.gitignore_global') && a.includes(':ro'),
+    const volumeArg = args.find((arg) =>
+      isReadOnlyMountFor(arg, '.gitignore_global'),
     );
     expect(volumeArg).toBeDefined();
   });
 
   it('mounts at both host and container home paths when they differ (R3.4)', () => {
     const gitConfig = path.join(hostHome, '.gitconfig');
-    existsSyncSpy.mockImplementation(
-      (p: fs.PathLike) => String(p) === gitConfig,
+    existsSyncSpy.mockImplementation((candidate) =>
+      matchesPath(candidate, gitConfig),
     );
     const args: string[] = [];
     mountGitConfigFiles(args, hostHome, containerHome);
@@ -425,21 +442,21 @@ describe('mountGitConfigFiles', () => {
 
   it('does not duplicate mount when host and container home are identical (R3.4)', () => {
     const gitConfig = path.join(hostHome, '.gitconfig');
-    existsSyncSpy.mockImplementation(
-      (p: fs.PathLike) => String(p) === gitConfig,
+    existsSyncSpy.mockImplementation((candidate) =>
+      matchesPath(candidate, gitConfig),
     );
     const args: string[] = [];
     mountGitConfigFiles(args, hostHome, hostHome);
-    const volumeArgs = args.filter(
-      (a) => a.includes('.gitconfig') && a.includes(':ro'),
+    const volumeArgs = args.filter((arg) =>
+      isReadOnlyMountFor(arg, '.gitconfig'),
     );
     expect(volumeArgs).toHaveLength(1);
   });
 
   it('produces exact forward-slash container-side target paths (R3.8)', () => {
     const gitConfig = path.join(hostHome, '.gitconfig');
-    existsSyncSpy.mockImplementation(
-      (p: fs.PathLike) => String(p) === gitConfig,
+    existsSyncSpy.mockImplementation((candidate) =>
+      matchesPath(candidate, gitConfig),
     );
     const args: string[] = [];
     mountGitConfigFiles(args, hostHome, containerHome);
@@ -449,34 +466,33 @@ describe('mountGitConfigFiles', () => {
 
   it('normalizes a host-shaped container home before constructing its target (R3.9)', () => {
     const gitConfig = path.join(hostHome, '.gitconfig');
-    existsSyncSpy.mockImplementation(
-      (p: fs.PathLike) => String(p) === gitConfig,
+    existsSyncSpy.mockImplementation((candidate) =>
+      matchesPath(candidate, gitConfig),
     );
     const args: string[] = [];
     mountGitConfigFiles(args, hostHome, hostHome);
 
     const expectedTarget = `${getContainerPath(gitConfig)}:ro`;
-    const volumeArgs = args.filter(
-      (a) => a.includes('.gitconfig') && a.endsWith(':ro'),
+    const volumeArgs = args.filter((arg) =>
+      isReadOnlyMountEnding(arg, '.gitconfig'),
     );
     expect(volumeArgs).toHaveLength(1);
     expect(volumeArgs[0]).toBe(`${gitConfig}:${expectedTarget}`);
   });
 
   it('all mounts use :ro mode (R3.5)', () => {
-    existsSyncSpy.mockImplementation((p: fs.PathLike) => {
-      const s = String(p);
-      return (
-        s === path.join(hostHome, '.gitconfig') ||
-        s === path.join(hostHome, '.config', 'git', 'config') ||
-        s === path.join(hostHome, '.gitignore_global') ||
-        s === path.join(hostHome, '.ssh', 'known_hosts')
-      );
-    });
+    existsSyncSpy.mockImplementation((candidate) =>
+      matchesAnyPath(candidate, [
+        path.join(hostHome, '.gitconfig'),
+        path.join(hostHome, '.config', 'git', 'config'),
+        path.join(hostHome, '.gitignore_global'),
+        path.join(hostHome, '.ssh', 'known_hosts'),
+      ]),
+    );
     const args: string[] = [];
     mountGitConfigFiles(args, hostHome, containerHome);
-    const volumeArgs = args.filter(
-      (_, i) => i > 0 && args[i - 1] === '--volume',
+    const volumeArgs = args.filter((_value, index) =>
+      isVolumeOperand(args, index),
     );
     for (const v of volumeArgs) {
       expect(v).toMatch(/:ro$/);
@@ -491,13 +507,12 @@ describe('mountGitConfigFiles', () => {
   });
 
   it('mounts only files that exist, skips missing ones (R3.6)', () => {
-    existsSyncSpy.mockImplementation((p: fs.PathLike) => {
-      const s = String(p);
-      return (
-        s === path.join(hostHome, '.gitconfig') ||
-        s === path.join(hostHome, '.gitignore_global')
-      );
-    });
+    existsSyncSpy.mockImplementation((candidate) =>
+      matchesAnyPath(candidate, [
+        path.join(hostHome, '.gitconfig'),
+        path.join(hostHome, '.gitignore_global'),
+      ]),
+    );
     const args: string[] = [];
     mountGitConfigFiles(args, hostHome, containerHome);
     // Two files exist, each gets host + container path (4 mounts)

@@ -14,6 +14,7 @@
  * resumed session starts a fresh chain instead of sending a dead parent.
  */
 
+import { blockTextOrEmpty } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -33,7 +34,7 @@ const CODEX_PROVIDER_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 
 function textOf(content: IContent): string {
   const block = content.blocks[0];
-  return block.type === 'text' ? block.text : '';
+  return blockTextOrEmpty(block);
 }
 
 describe('ReplayEngine stateful-chain stripping @issue:3160', () => {

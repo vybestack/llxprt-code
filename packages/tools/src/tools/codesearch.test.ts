@@ -13,6 +13,7 @@
  * network data.
  */
 
+import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import type http from 'node:http';
 import { describe, it, expect, beforeEach } from 'bun:test';
 import {
@@ -79,9 +80,7 @@ function trackConnection(
   state: ConnectionState,
 ): Promise<void> {
   const socket = res.socket;
-  if (socket === null) {
-    throw new Error('Expected a response socket');
-  }
+  assertNotNull(socket, 'Expected a response socket');
   return new Promise((resolve) => {
     socket.once('close', () => {
       state.canceled = !state.completed;
@@ -221,7 +220,7 @@ describe('CodeSearchTool', () => {
     expect(url.searchParams.size).toBe(1);
     expect(url.searchParams.get('tools')).toBe('get_code_context_exa');
     expect(url.searchParams.has('exaApiKey')).toBe(false);
-    expect(captured.body).toEqual({
+    expect(captured.body).toStrictEqual({
       jsonrpc: '2.0',
       id: 1,
       method: 'tools/call',
@@ -230,7 +229,7 @@ describe('CodeSearchTool', () => {
         arguments: { query: 'react hooks', tokensNum: 5000 },
       },
     });
-    expect(captured.listenerCounts).toEqual({
+    expect(captured.listenerCounts).toStrictEqual({
       data: 0,
       end: 0,
       error: 0,

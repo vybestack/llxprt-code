@@ -68,7 +68,7 @@ describe('cleanupAgents host-injected exit cleanup', () => {
       logger,
     );
 
-    expect(disposed.sort()).toEqual(['first', 'second']);
+    expect(disposed.sort()).toStrictEqual(['first', 'second']);
   });
 
   it('invokes the callback exactly once, after agent disposal', async () => {
@@ -83,7 +83,7 @@ describe('cleanupAgents host-injected exit cleanup', () => {
       sequence.push('cleanup');
     });
 
-    expect(sequence).toEqual(['dispose', 'cleanup']);
+    expect(sequence).toStrictEqual(['dispose', 'cleanup']);
   });
 
   it('still runs the callback exactly once when an agent fails to dispose', async () => {

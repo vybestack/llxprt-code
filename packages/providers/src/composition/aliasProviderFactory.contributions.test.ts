@@ -15,6 +15,7 @@
  * factories are all real.
  */
 
+import { assertInstanceOf } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '../ProviderManager.js';
@@ -203,7 +204,7 @@ describe('registerAliasProviders registry dispatch', () => {
     expect(manager.listProviders()).toContain('builtin-alias');
     const provider = registeredProvider(manager, 'builtin-alias');
     expect(provider.name).toBe('builtin-alias');
-    expect(await modelIds(provider)).toEqual(['builtin-model']);
+    expect(await modelIds(provider)).toStrictEqual(['builtin-model']);
   });
 
   it('creates an alias whose baseProvider is contributed by a plugin using the plugin factory', async () => {
@@ -224,7 +225,7 @@ describe('registerAliasProviders registry dispatch', () => {
 
     const provider = registeredProvider(manager, 'plugin-alias');
     expect(provider.name).toBe('plugin-alias');
-    expect(await modelIds(provider)).toEqual([
+    expect(await modelIds(provider)).toStrictEqual([
       'plugin-pkg-provider:plugin-alias',
     ]);
   });
@@ -245,9 +246,11 @@ describe('registerAliasProviders registry dispatch', () => {
       thrown = error;
     }
 
-    if (!(thrown instanceof Error)) {
-      throw new Error('expected registerAliasProviders to throw an Error');
-    }
+    assertInstanceOf(
+      thrown,
+      Error,
+      'expected registerAliasProviders to throw an Error',
+    );
     expect(thrown.message).toContain('ghost-alias');
     expect(thrown.message).toContain('no-such-provider');
     expect(thrown.message).toContain('openai');
@@ -267,7 +270,7 @@ describe('registerAliasProviders registry dispatch', () => {
 
     const provider = registeredProvider(manager, 'contributed-alias');
     expect(provider.name).toBe('contributed-alias');
-    expect(await modelIds(provider)).toEqual([
+    expect(await modelIds(provider)).toStrictEqual([
       'plugin-pkg-provider:contributed-alias',
     ]);
   });
@@ -311,7 +314,7 @@ describe('registerAliasProviders registry dispatch', () => {
 
     const provider = registeredProvider(manager, 'shared-name');
     // The contributed alias would have produced 'plugin-pkg-provider:shared-name'.
-    expect(await modelIds(provider)).toEqual(['file-model']);
+    expect(await modelIds(provider)).toStrictEqual(['file-model']);
     expect(
       manager.listProviders().filter((name) => name === 'shared-name'),
     ).toHaveLength(1);
@@ -382,7 +385,7 @@ describe('registerAliasProviders registry dispatch', () => {
 
     const provider = registeredProvider(manager, 'kimi');
     // The plugin's factory would have produced 'plugin-pkg-provider:kimi'.
-    expect(await modelIds(provider)).toEqual(['builtin-file-model']);
+    expect(await modelIds(provider)).toStrictEqual(['builtin-file-model']);
   });
 
   it('registers nothing when a later alias is unresolvable, leaving the manager untouched', async () => {
@@ -481,13 +484,13 @@ describe('refreshAliasProviders registry reuse', () => {
 
     expect(
       await modelIds(registeredProvider(manager, 'refresh-alias')),
-    ).toEqual(['refresh-alias-gen1']);
+    ).toStrictEqual(['refresh-alias-gen1']);
 
     refreshAliasProviders();
 
     expect(
       await modelIds(registeredProvider(manager, 'refresh-alias')),
-    ).toEqual(['refresh-alias-gen2']);
+    ).toStrictEqual(['refresh-alias-gen2']);
   });
 });
 
@@ -522,9 +525,11 @@ describe('built-in alias factory parity', () => {
       thrown = error;
     }
 
-    if (!(thrown instanceof Error)) {
-      throw new Error('expected createOpenAIAliasProvider to throw');
-    }
+    assertInstanceOf(
+      thrown,
+      Error,
+      'expected createOpenAIAliasProvider to throw',
+    );
     expect(thrown.message).toContain('no-base-url');
     expect(thrown.message).toContain('base-url');
     expect(thrown.message).toContain('/config/providers/no-base-url.config');
@@ -533,7 +538,7 @@ describe('built-in alias factory parity', () => {
   it('exposes exactly the built-in provider ids', () => {
     expect(
       createBuiltinProviderContributionRegistry().listProviderIds(),
-    ).toEqual([
+    ).toStrictEqual([
       'openai',
       'openai-responses',
       'openaivercel',

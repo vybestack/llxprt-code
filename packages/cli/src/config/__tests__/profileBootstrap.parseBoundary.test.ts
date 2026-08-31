@@ -12,6 +12,7 @@
  * profileBootstrap module can be imported; the parser and ProfileManager are real.
  */
 
+import { errorMessage } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -67,7 +68,7 @@ describe('parseInlineProfile — same content as the on-disk parse boundary (#26
       // console.* because the repo bans console statements.
       process.emitWarning(
         `parseBoundary test: failed to remove ${tempDir}: ${
-          error instanceof Error ? error.message : String(error)
+          errorMessage(error)
         }`,
       );
     }

@@ -246,7 +246,12 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
      * WHEN: User searches for 'hello'
      * THEN: Only matching sessions appear in filteredSessions
      */
-    it('search filters by preview text', async () => {
+    const observePreviewTextSearch = async (): Promise<{
+      readonly isLoading: boolean;
+      readonly sessionCount: number;
+      readonly hasLoadedPreview: boolean;
+      readonly filteredSessionIds: readonly string[];
+    }> => {
       await createTestSession(chatsDir, {
         sessionId: 'match-session',
         contents: [makeContent('hello world')],
@@ -260,17 +265,20 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       const { result } = renderHook(() => useSessionBrowser(props));
 
       await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-        expect(result.current.sessions.length).toBe(2);
+        if (result.current.isLoading || result.current.sessions.length !== 2) {
+          throw new Error('Expected both sessions to finish loading');
+        }
       });
 
-      // Wait for previews to load
       await waitFor(() => {
         const hasPreview = result.current.sessions.some(
-          (s) =>
-            s.previewState === 'loaded' && s.firstUserMessage !== undefined,
+          (session) =>
+            session.previewState === 'loaded' &&
+            session.firstUserMessage !== undefined,
         );
-        expect(hasPreview).toBe(true);
+        if (!hasPreview) {
+          throw new Error('Expected a session preview to finish loading');
+        }
       });
 
       result.current.handleKeypress('h', makeKey('h'));
@@ -279,9 +287,26 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       result.current.handleKeypress('l', makeKey('l'));
       result.current.handleKeypress('o', makeKey('o'));
 
-      const matchIds = result.current.filteredSessions.map((s) => s.sessionId);
-      expect(matchIds).toContain('match-session');
-      // nomatch-session should be filtered out (unless previews include it)
+      return {
+        isLoading: result.current.isLoading,
+        sessionCount: result.current.sessions.length,
+        hasLoadedPreview: result.current.sessions.some(
+          (session) =>
+            session.previewState === 'loaded' &&
+            session.firstUserMessage !== undefined,
+        ),
+        filteredSessionIds: result.current.filteredSessions.map(
+          (session) => session.sessionId,
+        ),
+      };
+    };
+
+    it('search filters by preview text', async () => {
+      const search = await observePreviewTextSearch();
+      expect(search.isLoading).toBe(false);
+      expect(search.sessionCount).toBe(2);
+      expect(search.hasLoadedPreview).toBe(true);
+      expect(search.filteredSessionIds).toContain('match-session');
     });
 
     /**
@@ -483,7 +508,7 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         result.current.handleKeypress(char, makeKey(char));
       }
 
-      expect(result.current.filteredSessions.length).toBe(2);
+      expect(result.current.filteredSessions).toHaveLength(2);
     });
 
     /**
@@ -508,7 +533,7 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       }
 
       expect(result.current.searchTerm).toBe('xyznonexistent');
-      expect(result.current.filteredSessions.length).toBe(0);
+      expect(result.current.filteredSessions).toHaveLength(0);
     });
 
     /**

@@ -54,6 +54,17 @@ interface AnthropicMessage {
   content: string | AnthropicContentBlock[];
 }
 
+function isUserMessageWithToolResult(message: AnthropicMessage): boolean {
+  return (
+    message.role === 'user' &&
+    Array.isArray(message.content) &&
+    message.content.some((block) => block.type === 'tool_result')
+  );
+}
+
+function isUnsupportedTextBlock(block: AnthropicContentBlock): boolean {
+  return block.type === 'text' && block.text.includes('Unsupported');
+}
 void vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
   ToolFormatter: vi.fn().mockImplementation(() => ({
     toProviderFormat: vi.fn(() => []),
@@ -278,12 +289,7 @@ describe('AnthropicProvider MediaBlock support', () => {
     const request = mockMessagesCreate.mock.calls[0][0];
     const anthropicMessages = request.messages as AnthropicMessage[];
 
-    const toolResultMsg = anthropicMessages.find(
-      (msg) =>
-        msg.role === 'user' &&
-        Array.isArray(msg.content) &&
-        msg.content.some((b) => b.type === 'tool_result'),
-    );
+    const toolResultMsg = anthropicMessages.find(isUserMessageWithToolResult);
     expect(toolResultMsg).toBeDefined();
 
     const toolResultBlock = (
@@ -455,12 +461,7 @@ describe('AnthropicProvider MediaBlock support', () => {
     const request = mockMessagesCreate.mock.calls[0][0];
     const anthropicMessages = request.messages as AnthropicMessage[];
 
-    const toolResultMsg = anthropicMessages.find(
-      (msg) =>
-        msg.role === 'user' &&
-        Array.isArray(msg.content) &&
-        msg.content.some((b) => b.type === 'tool_result'),
-    );
+    const toolResultMsg = anthropicMessages.find(isUserMessageWithToolResult);
     expect(toolResultMsg).toBeDefined();
 
     const toolResultBlock = (
@@ -620,12 +621,7 @@ describe('AnthropicProvider MediaBlock support', () => {
     const request = mockMessagesCreate.mock.calls[0][0];
     const anthropicMessages = request.messages as AnthropicMessage[];
 
-    const toolResultMsg = anthropicMessages.find(
-      (msg) =>
-        msg.role === 'user' &&
-        Array.isArray(msg.content) &&
-        msg.content.some((b) => b.type === 'tool_result'),
-    );
+    const toolResultMsg = anthropicMessages.find(isUserMessageWithToolResult);
     expect(toolResultMsg).toBeDefined();
 
     const toolResultBlock = (
@@ -683,9 +679,10 @@ describe('AnthropicProvider MediaBlock support', () => {
     expect(Array.isArray(userMsg!.content)).toBe(true);
 
     const contentArray = userMsg!.content as AnthropicContentBlock[];
-    const placeholder = contentArray.find(
-      (b) => b.type === 'text' && b.text.includes('Unsupported'),
-    ) as { type: 'text'; text: string };
+    const placeholder = contentArray.find(isUnsupportedTextBlock) as {
+      type: 'text';
+      text: string;
+    };
     expect(placeholder).toBeDefined();
     expect(placeholder.text).toContain('audio/mpeg');
     expect(placeholder.text).toContain('song.mp3');

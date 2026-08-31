@@ -133,7 +133,7 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
       const iterator = provider.generateChatCompletion(options);
       await collectResults(iterator);
 
-      expect(capturedRoles).toEqual(['user']);
+      expect(capturedRoles).toStrictEqual(['user']);
     });
 
     it('should convert AI messages correctly', async () => {
@@ -183,7 +183,7 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
       const iterator = provider.generateChatCompletion(options);
       await collectResults(iterator);
 
-      expect(capturedRoles).toEqual(['user', 'assistant', 'user']);
+      expect(capturedRoles).toStrictEqual(['user', 'assistant', 'user']);
     });
 
     it('should handle tool response messages', async () => {
@@ -247,7 +247,7 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
       const iterator = provider.generateChatCompletion(options);
       await collectResults(iterator);
 
-      expect(capturedRoles).toEqual(['user', 'assistant', 'tool']);
+      expect(capturedRoles).toStrictEqual(['user', 'assistant', 'tool']);
     });
   });
 

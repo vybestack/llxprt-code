@@ -88,6 +88,24 @@ function createProviderWithRuntimeSettings(): GeminiProvider {
   return provider;
 }
 
+function readPreferredGeminiApiKey(key: string): string | undefined {
+  if (key === 'GEMINI_API_KEY') {
+    return 'settings-key';
+  }
+  return undefined;
+}
+
+function resolvePreferredGeminiApiKey(
+  settingsService: SettingsService,
+): string | undefined {
+  const apiKey =
+    settingsService.get('GEMINI_API_KEY') ?? process.env.GEMINI_API_KEY;
+  if (typeof apiKey !== 'string' && apiKey !== undefined) {
+    throw new Error('expected GEMINI_API_KEY to be a string');
+  }
+  return apiKey;
+}
+
 describe('GeminiProvider Authentication', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -306,18 +324,11 @@ describe('GeminiProvider Authentication', () => {
 
   it('should respect auth precedence (SettingsService over env var)', async () => {
     process.env.GEMINI_API_KEY = 'env-key';
-    mockSettingsService.get.mockImplementation((key: string) => {
-      if (key === 'GEMINI_API_KEY') {
-        return 'settings-key';
-      }
-      return undefined;
-    });
+    mockSettingsService.get.mockImplementation(readPreferredGeminiApiKey);
     const mockAuthResolver = {
       resolveAuthentication: vi.fn(
         ({ settingsService }: { settingsService: SettingsService }) =>
-          Promise.resolve(
-            settingsService.get('GEMINI_API_KEY') ?? process.env.GEMINI_API_KEY,
-          ),
+          Promise.resolve(resolvePreferredGeminiApiKey(settingsService)),
       ),
     };
 

@@ -23,6 +23,7 @@
  * turn-2 history is fed verbatim from turn-1's ACTUAL yielded IContents.
  */
 
+import { assertDefined, blockTextOrEmpty } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   clearActiveProviderRuntimeContext,
@@ -129,7 +130,7 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
 
         const text = messages
           .flatMap((m) => m.blocks)
-          .map((b) => (b.type === 'text' ? b.text : ''))
+          .map((b) => (blockTextOrEmpty(b)))
           .join('');
         expect(text).toContain('recovered text');
       } finally {
@@ -308,7 +309,7 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
         expect(sent['previous_response_id']).toBe('resp_match');
         // Exact equality: an empty array would satisfy a toContain/
         // not.toContain pair, hiding a total trimming failure.
-        expect(userTextsOf(sent['input'])).toEqual(['q2']);
+        expect(userTextsOf(sent['input'])).toStrictEqual(['q2']);
       } finally {
         transport.close();
       }
@@ -350,7 +351,7 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
         expect(sent['previous_response_id']).toBe('resp_unstamped');
         // Exact equality: an empty array would satisfy a toContain/
         // not.toContain pair, hiding a total trimming failure.
-        expect(userTextsOf(sent['input'])).toEqual(['q2']);
+        expect(userTextsOf(sent['input'])).toStrictEqual(['q2']);
       } finally {
         transport.close();
       }
@@ -477,13 +478,11 @@ describe('Codex statefulness is WebSocket-bound @issue:3134', () => {
           }),
         ),
       );
-      if (capturedBody === undefined) {
-        throw new Error('HTTP request body was not captured');
-      }
+      assertDefined(capturedBody, 'HTTP request body was not captured');
       const body = JSON.parse(capturedBody) as Record<string, unknown>;
       expect(body['store']).toBe(false);
       expect(body['previous_response_id']).toBeUndefined();
-      expect(userTextsOf(body['input'])).toEqual(['q1', 'q2']);
+      expect(userTextsOf(body['input'])).toStrictEqual(['q1', 'q2']);
     } finally {
       (globalThis as { fetch: unknown }).fetch = originalFetch;
     }

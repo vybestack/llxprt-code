@@ -71,6 +71,26 @@ function createTestServer(
   return server;
 }
 
+function serveToken(socket: net.Socket): void {
+  const decoder = new FrameDecoder();
+  socket.on('data', (chunk) => {
+    const frames = decoder.feed(chunk);
+    for (const msg of frames) {
+      if (msg.op === 'handshake') {
+        socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+      } else {
+        socket.write(
+          encodeFrame({
+            ok: true,
+            id: msg.id,
+            data: makeToken(),
+          }),
+        );
+      }
+    }
+  });
+}
+
 function listenAsync(server: net.Server, socketPath: string): Promise<void> {
   return new Promise<void>((resolve) => server.listen(socketPath, resolve));
 }
@@ -660,24 +680,7 @@ describe('ProxyTokenStore', () => {
 
     server = net.createServer((socket) => {
       connectionCount++;
-      const decoder = new FrameDecoder();
-      socket.on('data', (chunk) => {
-        const frames = decoder.feed(chunk);
-        for (const frame of frames) {
-          const msg = frame;
-          if (msg.op === 'handshake') {
-            socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
-          } else {
-            socket.write(
-              encodeFrame({
-                ok: true,
-                id: msg.id,
-                data: makeToken(),
-              }),
-            );
-          }
-        }
-      });
+      serveToken(socket);
     });
     await listenAsync(server, socketPath);
 

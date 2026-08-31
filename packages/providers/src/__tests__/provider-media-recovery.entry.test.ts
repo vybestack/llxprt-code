@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { chmod, mkdtemp, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -221,140 +222,141 @@ async function drain(
   }
 }
 
-describe('stateless provider media recovery entry points', () => {
-  const tempDirectory = useTempDirectory();
+describe('provider-media-recovery', () => {
+  describe('stateless provider media recovery entry points', () => {
+    const tempDirectory = useTempDirectory();
 
-  for (const providerCase of PROVIDERS) {
-    it(`${providerCase.kind} sends full logical history with the exact recorded selected variants after provider or policy changes`, async () => {
-      const store = new LocalMediaStore({
-        rootDirectory: tempDirectory(),
-        quotaBytes: 1024,
-      });
-      const first = await admitted(store, new Uint8Array([1, 2, 3]), 1);
-      const second = await admitted(store, new Uint8Array([9, 8, 7, 6]), 2);
-      const resolver = new RequestMediaResolver(store);
-      let body = '';
-      globalThis.fetch = async (_input, init): Promise<Response> => {
-        body = await requestBodyText(init?.body);
-        return successfulResponse(providerCase.kind);
-      };
-      const provider = providerFor(providerCase);
-
-      await drain(
-        provider,
-        callOptions(
-          providerCase,
-          provider,
-          history([first, second]),
-          resolver,
-          first.normalizedBase64Length + second.normalizedBase64Length,
-        ),
-      );
-
-      expect(body).toContain(Buffer.from([1, 2, 3]).toString('base64'));
-      expect(body).toContain(Buffer.from([9, 8, 7, 6]).toString('base64'));
-      expect(resolver.accounting()).toEqual({
-        activeRequestCount: 0,
-        reservedContentCount: 0,
-        materializedNormalizedBytes: 0,
-        storeReadCount: 2,
-      });
-    });
-
-    for (const failure of FAILURES) {
-      it(`${providerCase.kind} fails ${failure} referenced media before network submission`, async () => {
+    for (const providerCase of PROVIDERS) {
+      it(`${providerCase.kind} sends full logical history with the exact recorded selected variants after provider or policy changes`, async () => {
         const store = new LocalMediaStore({
           rootDirectory: tempDirectory(),
           quotaBytes: 1024,
         });
-        const reference = await admitted(
-          store,
-          new Uint8Array([1, 2, 3, 4]),
-          1,
-        );
-        if (failure !== 'over-budget') {
-          await damageReference(failure, store, reference);
-        }
+        const first = await admitted(store, new Uint8Array([1, 2, 3]), 1);
+        const second = await admitted(store, new Uint8Array([9, 8, 7, 6]), 2);
         const resolver = new RequestMediaResolver(store);
-        let networkSubmissionCount = 0;
-        globalThis.fetch = async (): Promise<Response> => {
-          networkSubmissionCount += 1;
+        let body = '';
+        globalThis.fetch = async (_input, init): Promise<Response> => {
+          body = await requestBodyText(init?.body);
           return successfulResponse(providerCase.kind);
         };
         const provider = providerFor(providerCase);
-        const budget =
-          failure === 'over-budget'
-            ? reference.normalizedBase64Length - 1
-            : reference.normalizedBase64Length;
 
-        const error = await drain(
+        await drain(
           provider,
           callOptions(
             providerCase,
             provider,
-            history([reference]),
+            history([first, second]),
             resolver,
-            budget,
+            first.normalizedBase64Length + second.normalizedBase64Length,
           ),
-        ).catch((reason: unknown) => reason);
+        );
 
-        expect(error).toBeInstanceOf(Error);
-        expect(String(error)).toContain('turn-media-0');
-        expect(networkSubmissionCount).toBe(0);
-        expect(resolver.accounting().activeRequestCount).toBe(0);
-        expect(await store.hasReservations(reference.contentId)).toBe(false);
+        expect(body).toContain(Buffer.from([1, 2, 3]).toString('base64'));
+        expect(body).toContain(Buffer.from([9, 8, 7, 6]).toString('base64'));
+        expect(resolver.accounting()).toStrictEqual({
+          activeRequestCount: 0,
+          reservedContentCount: 0,
+          materializedNormalizedBytes: 0,
+          storeReadCount: 2,
+        });
       });
+
+      for (const failure of FAILURES) {
+        it(`${providerCase.kind} fails ${failure} referenced media before network submission`, async () => {
+          const store = new LocalMediaStore({
+            rootDirectory: tempDirectory(),
+            quotaBytes: 1024,
+          });
+          const reference = await admitted(
+            store,
+            new Uint8Array([1, 2, 3, 4]),
+            1,
+          );
+          if (failure !== 'over-budget') {
+            await damageReference(failure, store, reference);
+          }
+          const resolver = new RequestMediaResolver(store);
+          let networkSubmissionCount = 0;
+          globalThis.fetch = async (): Promise<Response> => {
+            networkSubmissionCount += 1;
+            return successfulResponse(providerCase.kind);
+          };
+          const provider = providerFor(providerCase);
+          const budget =
+            failure === 'over-budget'
+              ? reference.normalizedBase64Length - 1
+              : reference.normalizedBase64Length;
+
+          const error = await drain(
+            provider,
+            callOptions(
+              providerCase,
+              provider,
+              history([reference]),
+              resolver,
+              budget,
+            ),
+          ).catch((reason: unknown) => reason);
+
+          expect(error).toBeInstanceOf(Error);
+          expect(String(error)).toContain('turn-media-0');
+          expect(networkSubmissionCount).toBe(0);
+          expect(resolver.accounting().activeRequestCount).toBe(0);
+          expect(await store.hasReservations(reference.contentId)).toBe(false);
+        });
+      }
     }
-  }
 
-  it('releases Chat media reservations when an in-flight request is cancelled', async () => {
-    const providerCase = PROVIDERS.find((entry) => entry.kind === 'chat');
-    if (providerCase === undefined)
-      throw new Error('Chat provider case is missing');
-    const store = new LocalMediaStore({
-      rootDirectory: tempDirectory(),
-      quotaBytes: 1024,
-    });
-    const reference = await admitted(store, new Uint8Array([5, 6, 7]), 1);
-    const resolver = new RequestMediaResolver(store);
-    const controller = new AbortController();
-    let announceStarted = (): void => {
-      throw new Error('Request start was not wired');
-    };
-    const started = new Promise<void>((resolve) => {
-      announceStarted = resolve;
-    });
-    let rejectRequest = (_error: Error): void => {
-      throw new Error('Request rejection was not wired');
-    };
-    globalThis.fetch = async (): Promise<Response> => {
-      announceStarted();
-      return new Promise<Response>((_resolve, reject) => {
-        rejectRequest = reject;
+    it('releases Chat media reservations when an in-flight request is cancelled', async () => {
+      const providerCase = PROVIDERS.find((entry) => entry.kind === 'chat');
+      assertDefined(providerCase, 'Chat provider case is missing');
+      const store = new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes: 1024,
       });
-    };
-    const provider = providerFor(providerCase);
-    const work = drain(
-      provider,
-      callOptions(
-        providerCase,
+      const reference = await admitted(store, new Uint8Array([5, 6, 7]), 1);
+      const resolver = new RequestMediaResolver(store);
+      const controller = new AbortController();
+      let announceStarted = (): void => {
+        throw new Error('Request start was not wired');
+      };
+      const started = new Promise<void>((resolve) => {
+        announceStarted = resolve;
+      });
+      let rejectRequest = (_error: Error): void => {
+        throw new Error('Request rejection was not wired');
+      };
+      globalThis.fetch = async (): Promise<Response> => {
+        announceStarted();
+        return new Promise<Response>((_resolve, reject) => {
+          rejectRequest = reject;
+        });
+      };
+      const provider = providerFor(providerCase);
+      const work = drain(
         provider,
-        history([reference]),
-        resolver,
-        reference.normalizedBase64Length,
-        controller.signal,
-      ),
-    );
+        callOptions(
+          providerCase,
+          provider,
+          history([reference]),
+          resolver,
+          reference.normalizedBase64Length,
+          controller.signal,
+        ),
+      );
 
-    await started;
-    expect(await store.hasReservations(reference.contentId)).toBe(true);
-    const cancellation = new Error('cancelled by test');
-    controller.abort(cancellation);
-    rejectRequest(cancellation);
-    const error = await work.catch((reason: unknown) => reason);
+      await started;
+      expect(await store.hasReservations(reference.contentId)).toBe(true);
+      const cancellation = new Error('cancelled by test');
+      controller.abort(cancellation);
+      rejectRequest(cancellation);
+      const error = await work.catch((reason: unknown) => reason);
 
-    expect(error).toBeInstanceOf(Error);
-    expect(await store.hasReservations(reference.contentId)).toBe(false);
-    expect(resolver.accounting().activeRequestCount).toBe(0);
+      expect(error).toBeInstanceOf(Error);
+      expect(await store.hasReservations(reference.contentId)).toBe(false);
+      expect(resolver.accounting().activeRequestCount).toBe(0);
+    });
   });
 });

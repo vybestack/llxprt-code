@@ -91,6 +91,17 @@ function memorySampleRecord(
   };
 }
 
+function requireSuccessfulParse<T>(
+  result:
+    | { readonly success: true; readonly data: T }
+    | { readonly success: false },
+): T {
+  if (!result.success) {
+    throw new Error('expected parse success');
+  }
+  return result.data;
+}
+
 // ---------------------------------------------------------------------------
 // ts — ISO 8601 timestamp
 // ---------------------------------------------------------------------------
@@ -495,9 +506,9 @@ describe('schema boundary — unknown-field tolerance preserved', () => {
       operationRecord({ future_metric_ms: 42, unknown_col: 'x' }),
     );
     expect(result.success).toBe(true);
-    if (!result.success) throw new Error('expected success');
-    expect('future_metric_ms' in result.data).toBe(false);
-    expect('unknown_col' in result.data).toBe(false);
+    const data = requireSuccessfulParse(result);
+    expect('future_metric_ms' in data).toBe(false);
+    expect('unknown_col' in data).toBe(false);
   });
 
   it('strips unknown fields on memory sample records', () => {
@@ -505,7 +516,7 @@ describe('schema boundary — unknown-field tolerance preserved', () => {
       memorySampleRecord({ extra_field: true }),
     );
     expect(result.success).toBe(true);
-    if (!result.success) throw new Error('expected success');
-    expect('extra_field' in result.data).toBe(false);
+    const data = requireSuccessfulParse(result);
+    expect('extra_field' in data).toBe(false);
   });
 });
