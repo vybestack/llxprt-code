@@ -830,16 +830,20 @@ export class AuthPrecedenceResolver {
     trace.configuredSource = true;
     trace.remediation = remediation;
     const storage = this.providerKeyStorage;
+    if (!storage) {
+      const storageRemediation =
+        'Pass providerKeyStorage to AuthPrecedenceResolver or use createAuthPrecedenceResolver() from core.';
+      const cause = new Error(
+        'Provider key storage is required to resolve named auth keys. ' +
+          storageRemediation,
+      );
+      this.recordFailure(trace, cause, storageRemediation);
+      return null;
+    }
     const proxyRequest =
       this.isCredentialProxyMode() &&
       storage instanceof ProxyProviderKeyStorage;
     try {
-      if (!storage) {
-        throw new Error(
-          'Provider key storage is required to resolve named auth keys. ' +
-            'Pass providerKeyStorage to AuthPrecedenceResolver or use createAuthPrecedenceResolver() from core.',
-        );
-      }
       const key = this.normalizeAuthValue(await storage.getKey(trimmedName));
       if (proxyRequest) {
         trace.proxyContacted = true;

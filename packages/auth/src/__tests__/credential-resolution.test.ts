@@ -346,6 +346,63 @@ describe('Credential resolution diagnostics', () => {
     expect(failure.message).toContain('/key save configured-key-reference');
   });
 
+  it('distinguishes missing storage wiring remediation from absent named-key remediation', async () => {
+    const settings = createSettingsService({
+      'auth-key-name': 'configured-key-reference',
+      currentProfile: 'sandbox-profile',
+    });
+    const missingStorageResolver = new AuthPrecedenceResolver(
+      { providerId: 'test-provider' },
+      {
+        settingsService: settings,
+        getActiveRuntimeContext: () =>
+          createRuntimeContext('runtime-missing-storage', settings),
+      },
+    );
+    const absentKeyResolver = new AuthPrecedenceResolver(
+      { providerId: 'test-provider' },
+      {
+        settingsService: settings,
+        providerKeyStorage: createEmptyKeyStorage(),
+        getActiveRuntimeContext: () =>
+          createRuntimeContext('runtime-absent-key', settings),
+      },
+    );
+
+    const [missingStorageResult, absentKeyResult] = await Promise.all([
+      missingStorageResolver.resolveAuthenticationResult(),
+      absentKeyResolver.resolveAuthenticationResult(),
+    ]);
+
+    const missingStorageFailure = expectSafeFailure(
+      missingStorageResult,
+      'credential-source-failed',
+      [CREDENTIAL_SECRET, CAPABILITY_SECRET, KEY_MATERIAL_SECRET],
+    );
+    const absentKeyFailure = expectSafeFailure(
+      absentKeyResult,
+      'credential-not-found',
+      [CREDENTIAL_SECRET, CAPABILITY_SECRET, KEY_MATERIAL_SECRET],
+    );
+    expect(missingStorageFailure.remediation).toBe(
+      'Pass providerKeyStorage to AuthPrecedenceResolver or use createAuthPrecedenceResolver() from core.',
+    );
+    expect(missingStorageFailure.remediation).not.toContain('/key save');
+    expect(absentKeyFailure.remediation).toBe(
+      "Named key 'configured-key-reference' not found. Save it with /key save configured-key-reference <api-key> before retrying.",
+    );
+    expect(missingStorageFailure.remediation).not.toBe(
+      absentKeyFailure.remediation,
+    );
+    expect(missingStorageFailure.cause).toBeInstanceOf(Error);
+    if (!(missingStorageFailure.cause instanceof Error)) {
+      throw new Error('Expected missing storage failure to preserve its cause');
+    }
+    expect(missingStorageFailure.cause.message).toBe(
+      'Provider key storage is required to resolve named auth keys. Pass providerKeyStorage to AuthPrecedenceResolver or use createAuthPrecedenceResolver() from core.',
+    );
+  });
+
   it('classifies a real proxy NOT_FOUND response as credential-not-found and records proxy contact', async () => {
     const harness = await startProxy('not-found');
     harnesses.push(harness);
