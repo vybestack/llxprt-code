@@ -18,7 +18,7 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { Readable } from 'node:stream';
+import { PassThrough } from 'node:stream';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import { runContainerSandbox } from './sandbox-exec.js';
 
@@ -37,14 +37,15 @@ void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
   stopProxy: vi.fn(async () => {}),
 }));
 
-// Explicit factory mock: only execSync and spawn are stubbed, the two calls
-// these tests must not actually perform (see sandbox-containers.test.ts for
+// Explicit factory mock: execFile, execSync, and spawn are stubbed so these
+// tests do not invoke the container engine (see sandbox-containers.test.ts for
 // the full rationale; `exec` stays real so promisify(exec) keeps settling).
 const __actual = { ...(await import('node:child_process')) };
 void vi.mock('node:child_process', () => {
   const actual: typeof import('node:child_process') = __actual;
   return {
     ...actual,
+    execFile: vi.fn(),
     execSync: vi.fn(),
     spawn: vi.fn(),
   };
@@ -77,42 +78,68 @@ describe('#3450 private dependency storage lifecycle on a failed launch', () => 
   let originalCwd = '';
   let isolatedCacheDir = '';
 
-  /**
-   * The image-presence probe spawns `docker images -q <image>`; spawn is
-   * mocked in this file, so satisfy it with a process that reports one image
-   * id and closes cleanly, letting preparation continue past the image check.
-   */
+  function completedEngineProcess(stdout: string): childProcess.ChildProcess {
+    const proc = new EventEmitter() as unknown as childProcess.ChildProcess;
+    const stdoutStream = new PassThrough();
+    const stderrStream = new PassThrough();
+    proc.stdout = stdoutStream;
+    proc.stderr = stderrStream;
+    queueMicrotask(() => {
+      stdoutStream.end(stdout === '' ? undefined : Buffer.from(stdout));
+      stderrStream.end();
+      queueMicrotask(() => {
+        proc.emit('close', 0);
+      });
+    });
+    return proc;
+  }
+
+  /** Lets startup orphan recovery run against an empty managed-container list. */
+  function satisfyOrphanRecoveryProbe(): void {
+    const execFileMock = childProcess.execFile as unknown as Mock<
+      typeof childProcess.execFile
+    >;
+    execFileMock.mockImplementation(((
+      _command: string,
+      _args: readonly string[],
+      _options: childProcess.ExecFileOptionsWithStringEncoding,
+      callback: (
+        error: childProcess.ExecFileException | null,
+        stdout: string,
+        stderr: string,
+      ) => void,
+    ) => {
+      const proc = completedEngineProcess('');
+      queueMicrotask(() => {
+        callback(null, '', '');
+      });
+      return proc;
+    }) as unknown as typeof childProcess.execFile);
+  }
+
+  /** Lets preparation continue past the selected-image presence check. */
   function satisfyImagePresenceProbe(): void {
     const spawnMock = childProcess.spawn as unknown as Mock<
       typeof childProcess.spawn
     >;
-    spawnMock.mockImplementation((() => {
-      const proc = new EventEmitter() as unknown as childProcess.ChildProcess;
-      proc.stdout = Readable.from([Buffer.from('image-id\n')]);
-      queueMicrotask(() => {
-        proc.emit('close', 0);
-      });
-      return proc;
-    }) as unknown as typeof childProcess.spawn);
+    spawnMock.mockImplementation(((_command: string, args: string[]) =>
+      completedEngineProcess(
+        args[0] === 'images' ? 'image-id\n' : '',
+      )) as unknown as typeof childProcess.spawn);
   }
 
   /**
-   * Keeps the probe alive but makes every later engine invocation fail
-   * synchronously, the way a real engine binary that vanished between the
-   * image check and the launch would.
+   * Keeps the image probe alive but makes every later engine invocation fail
+   * synchronously, matching a real engine binary that vanished between the
+   * image check and the launch.
    */
   function satisfyProbeThenFailLaunch(): void {
     const spawnMock = childProcess.spawn as unknown as Mock<
       typeof childProcess.spawn
     >;
-    spawnMock.mockImplementation(((command: string, args: string[]) => {
+    spawnMock.mockImplementation(((_command: string, args: string[]) => {
       if (args[0] === 'images') {
-        const proc = new EventEmitter() as unknown as childProcess.ChildProcess;
-        proc.stdout = Readable.from([Buffer.from('image-id\n')]);
-        queueMicrotask(() => {
-          proc.emit('close', 0);
-        });
-        return proc;
+        return completedEngineProcess('image-id\n');
       }
       throw new Error('engine launch failed');
     }) as unknown as typeof childProcess.spawn);
@@ -140,7 +167,6 @@ describe('#3450 private dependency storage lifecycle on a failed launch', () => 
     (
       childProcess.execSync as Mock<typeof childProcess.execSync>
     ).mockReturnValue(Buffer.from('image-id\\n'));
-    satisfyImagePresenceProbe();
     // The preparation-failure point must sit AFTER private storage creation:
     // on macOS with networking off, the credential bridge requirement aborts
     // the launch during prepareContainerSandbox.
@@ -151,6 +177,8 @@ describe('#3450 private dependency storage lifecycle on a failed launch', () => 
     delete process.env.SANDBOX_SET_UID_GID;
     delete process.env.LLXPRT_DEBUG_PORT;
     delete process.env.NODE_ENV;
+    satisfyOrphanRecoveryProbe();
+    satisfyImagePresenceProbe();
   });
 
   afterEach(() => {

@@ -627,7 +627,6 @@ async function executeContainerSandbox(
       (c) => {
         credentialProxyBridgeCleanup = c;
       },
-      dependencyStorageCleanup,
     );
 
     const exitCode = await new Promise<number>((resolve) => {
@@ -641,6 +640,13 @@ async function executeContainerSandbox(
         resolve(ec);
       });
     });
+
+    // Run storage cleanup after every close listener and its queued I/O have
+    // completed. Docker Desktop can expose the nested bind destination until
+    // teardown finishes; cleanup inside `close` can inspect that still-mounted
+    // destination and leave the engine-created empty mountpoint behind.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    dependencyStorageCleanup?.();
 
     return { exitCode, portForwardingResult, credentialProxyBridgeCleanup };
   } catch (err) {

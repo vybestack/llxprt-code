@@ -856,3 +856,88 @@ which passed 5/5 immediately in isolation and is tracked as #3478; `npm run
 lint`, `npm run typecheck`, `npm run format`, and `npm run build` all passed;
 the six-file #3450 focused suite passed 131/131 after formatting; and the
 stepfun-37 smoke passed with a haiku returned.
+
+## Post-main integration record (merge `87c59d89b`)
+
+Current main added managed-container orphan recovery before image preparation
+and ownership labels to the main container. Two integration effects required
+separate dispositions.
+
+First, the existing lifecycle harness did not provide the new orphan-recovery
+engine boundary with a complete child process. Its isolated RED retained the
+reviewed #3450 assertions: 1 pass and 2 failures, with the credential-bridge and
+dependency-preflight cases receiving `undefined is not an object (evaluating
+'pullProcess.stderr.on')` instead of their expected user-visible errors. The
+test-only fixture now returns an empty managed-container list through `execFile`
+and complete stdout/stderr process streams through `spawn`.
+
+Second, the exact real-Docker suite exposed a production cleanup-ordering race:
+5 pass, 2 fail, and 11 skip. Both image-global agent sessions completed their
+install, build, and test commands with status 0, removed their private
+`sandbox-node-modules-*` run roots, and left no managed container, but the
+originally absent protected destination survived. The retained fixture showed
+that path was an empty directory, mode 0755, owned by the host user (uid 501,
+gid 20), with no files or symlinks. Session stderr contained no cleanup warning.
+
+The lifecycle ordering explained that evidence. `wireCleanupHandlers` registered
+dependency cleanup directly on the Docker client's `close` event. Docker
+Desktop's managed-container teardown can still expose the nested bind target
+through the parent workspace bind while those close callbacks run. The safety
+check then observes a still-mounted destination and leaves it alone; after
+teardown, Docker exposes the empty engine-created host mountpoint. Daemon event
+evidence showed `create`, `start`, `die`, and `destroy` for each labeled
+container, with no container remaining afterward. A 10 ms filesystem trace
+showed the absent destination appearing only after the private run root was
+created and disappearing when cleanup ran after teardown.
+
+The bounded production correction keeps process exit and signal ownership in
+`registerStorageLifecycle`, removes only the premature child-close callback,
+and invokes the same idempotent cleanup after the awaited close has completed
+and queued close-event I/O has advanced one event-loop turn. This is lifecycle
+ordering, not a timed retry: there is no sleep, polling loop, retry count, or
+weakened assertion. `--rm`, ownership labels, and startup orphan recovery remain
+enabled.
+
+Behavioral evidence is under `tmp/issue3450-post-main-regression/`:
+
+- exact Docker RED: 5 pass / 2 fail / 11 skip
+  (`docker-red-keep.log`, repeated by `docker-red-repeat.log`);
+- post-close but pre-I/O-turn intermediate run: 6 pass / 1 fail / 11 skip
+  (`docker-green-1.log`), confirming that callback order alone did not fully
+  sequence Docker Desktop teardown;
+- final exact Docker GREEN: five consecutive complete runs at 7 pass / 0 fail /
+  11 skip (`docker-green-yield-1.log` through
+  `docker-green-yield-5.log`);
+- final real Podman: 7 pass / 0 fail / 11 skip (`podman-green.log`);
+- exact six-file #3450 focused suite: 131 pass / 0 fail
+  (`focused-six-green.log`).
+
+| Finding | Class | Disposition |
+| --- | --- | --- |
+| Lifecycle harness did not model current main's pre-launch orphan recovery and complete process streams | In-scope-Fix | Extend only the infrastructure fixture and retain the user-visible #3450 assertions. |
+| Dependency cleanup ran inside the Docker child `close` callback while Docker Desktop could still expose the nested bind destination | Blocker-Fix | Sequence the existing idempotent cleanup after awaited close and queued close-event I/O; strict absence is green without retries. |
+| Empty 0755 host-owned protected directory with no private run root or managed container | Blocker-Fix | This is filesystem evidence for the cleanup-ordering regression, not dependency leakage or a live orphan. The production ordering fix removes it. |
+| Bypass orphan recovery, remove ownership labels, or relax the credential-bridge, dependency-preflight, or strict-absence assertions | Reject | Current main's orphan behavior and all reviewed #3450 assertions remain intact. |
+| `sandbox-orphan-reaping.bun.test.ts` full-suite-only fixture failure | Defer (#3479) | It passed immediately in isolation; address its suite interaction separately. |
+| Glob workspaces, stale storage reaping, broader launch cleanup, persistent caches, and custom mount collisions | Defer (#3468/#3469/#3470/#3475) | No new subsystem or behavior was added. |
+
+The correction changes only internal cleanup ordering in
+`sandbox-containers.ts` and `sandbox-exec.ts`, plus the already-required harness
+fixture and this record. It adds no dependency, setting, workflow, public
+abstraction, warning suppression, chmod, retry loop, or deferred behavior.
+
+Final verification on the resulting tree:
+
+- exact six-file focused suite: 131 pass / 0 fail
+  (`focused-six-final.log`);
+- exact real Docker suite: 7 pass / 0 fail / 11 skip (`docker-final.log`),
+  after the five consecutive GREEN stress runs above;
+- real Podman suite: 7 pass / 0 fail / 11 skip (`podman-green.log`);
+- #3449 orphan-reaping suite: 23 pass / 0 fail
+  (`orphan-reaping-green.log`);
+- targeted ESLint: exit 0 (`targeted-eslint-final.log`);
+- targeted Prettier check: exit 0 (`targeted-prettier-final.log`);
+- repository typecheck: exit 0 (`typecheck-green.log`);
+- test audit: 2,756 files scanned with zero scanner errors and no finding on
+  `sandbox-launch-lifecycle.test.ts` (`test-audit-final/`);
+- `git diff --check`: exit 0.
