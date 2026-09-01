@@ -56,12 +56,16 @@ import {
 } from './sandbox-env.js';
 import { SETTINGS_DIRECTORY_NAME } from '../config/settings.js';
 
+function removeSessionTmpdir(sessionTmpdir: string): void {
+  fs.rmSync(sessionTmpdir, { recursive: true, force: true });
+}
+
 /** Validates image and builds initial container run args. */
 async function prepareContainerImageAndArgs(config: SandboxConfig): Promise<{
   image: string;
   workdir: string;
   containerWorkdir: string;
-  resolvedTmpdir: string;
+  sessionTmpdir: string;
   args: string[];
   dependencyStorageCleanup: () => void;
 }> {
@@ -98,31 +102,39 @@ async function prepareContainerImageAndArgs(config: SandboxConfig): Promise<{
   }
 
   const resolvedTmpdir = fs.realpathSync(os.tmpdir());
-  const args = buildContainerRunArgs(
-    config,
-    image,
-    workdir,
-    containerWorkdir,
-    resolvedTmpdir,
+  const sessionTmpdir = fs.mkdtempSync(
+    path.join(resolvedTmpdir, 'llxprt-sandbox-'),
   );
-  addContainerVolumeMounts(args);
-  // #3450: replace the workspace's node_modules destinations with fresh
-  // per-run private binds, appended after the shared workspace bind so the
-  // nested mounts win. The host-side contamination preflight runs inside
-  // this call BEFORE any storage is created.
-  const dependencyStorageCleanup = addPrivateDependencyMounts(
-    config,
-    args,
-    workdir,
-  );
-  return {
-    image,
-    workdir,
-    containerWorkdir,
-    resolvedTmpdir,
-    args,
-    dependencyStorageCleanup,
-  };
+  try {
+    const args = buildContainerRunArgs(
+      config,
+      image,
+      workdir,
+      containerWorkdir,
+      sessionTmpdir,
+    );
+    addContainerVolumeMounts(args);
+    // #3450: replace the workspace's node_modules destinations with fresh
+    // per-run private binds, appended after the shared workspace bind so the
+    // nested mounts win. The host-side contamination preflight runs inside
+    // this call BEFORE any storage is created.
+    const dependencyStorageCleanup = addPrivateDependencyMounts(
+      config,
+      args,
+      workdir,
+    );
+    return {
+      image,
+      workdir,
+      containerWorkdir,
+      sessionTmpdir,
+      args,
+      dependencyStorageCleanup,
+    };
+  } catch (error) {
+    runBestEffortSyncCleanup(() => removeSessionTmpdir(sessionTmpdir));
+    throw error;
+  }
 }
 
 /** Sets up SSH forwarding, port forwarding, networking, and env vars. */
@@ -163,6 +175,67 @@ async function prepareContainerNetworkAndEnv(
   };
 }
 
+type ContainerNetworkAndEnv = Awaited<
+  ReturnType<typeof prepareContainerNetworkAndEnv>
+>;
+
+interface ContainerEntrypointSetup {
+  readonly args: string[];
+  readonly workdir: string;
+  readonly cliArgs: string[];
+  readonly podmanMacOSPortsForwarded: Set<string>;
+  readonly entrypointPrefixes: string[];
+  readonly credentialProxyBridgeCleanup: (() => void) | undefined;
+  readonly dependencyStorageCleanup: (() => void) | undefined;
+}
+
+async function prepareContainerEntrypoint({
+  args,
+  workdir,
+  cliArgs,
+  podmanMacOSPortsForwarded,
+  entrypointPrefixes,
+  credentialProxyBridgeCleanup,
+  dependencyStorageCleanup,
+}: ContainerEntrypointSetup): Promise<{
+  finalEntrypoint: string[];
+  userFlag: string;
+}> {
+  try {
+    const finalEntrypoint = entrypoint(
+      workdir,
+      cliArgs,
+      podmanMacOSPortsForwarded.size > 0
+        ? podmanMacOSPortsForwarded
+        : undefined,
+      entrypointPrefixes,
+    );
+    const userFlag = await setupContainerUser(args, finalEntrypoint);
+    return { finalEntrypoint, userFlag };
+  } catch (error) {
+    runBestEffortSyncCleanup(credentialProxyBridgeCleanup);
+    runBestEffortSyncCleanup(dependencyStorageCleanup);
+    throw error;
+  }
+}
+
+async function rethrowCredentialProxySetupError(
+  error: unknown,
+  credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined,
+): Promise<never> {
+  runBestEffortSyncCleanup(credentialProxyBridgeResult?.cleanup);
+  try {
+    await stopProxy();
+  } catch {
+    // best-effort cleanup; the original error is the one we want to throw
+  }
+  if (error instanceof FatalSandboxError) throw error;
+  // @plan:PLAN-20250214-CREDPROXY.P34 R25.1a: Proxy creation failure aborts before spawning container
+  throw new FatalSandboxError(
+    `Failed to start credential proxy: ${error instanceof Error ? error.message : String(error)}`,
+  );
+}
+
 /** Runs the Docker/Podman sandbox path — image build, arg assembly, and proxy setup. */
 async function prepareContainerSandbox(
   config: SandboxConfig,
@@ -172,123 +245,106 @@ async function prepareContainerSandbox(
 ): Promise<ContainerSandboxPrepared> {
   validateContainerSandboxEnv();
 
-  const { image, workdir, resolvedTmpdir, args, dependencyStorageCleanup } =
+  const { image, workdir, sessionTmpdir, args, dependencyStorageCleanup } =
     await prepareContainerImageAndArgs(config);
 
-  // #3450: the private dependency storage exists from here on; every later
-  // preparation step must release it again when it aborts the launch.
+  // #3450: the private dependency storage exists from here on; every abort
+  // path below releases it, and the per-session tmpdir (#3440) alongside it.
+  const reservedTunnelPorts = new Set<number>();
+  let networkAndEnv: ContainerNetworkAndEnv;
   try {
-    const reservedTunnelPorts = new Set<number>();
     const isPodmanMacOS =
       config.command === 'podman' && os.platform() === 'darwin';
-    const {
-      sshResult,
-      podmanMacOSPortsForwarded,
-      proxyCommand,
-      portForwardingResult,
-    } = await prepareContainerNetworkAndEnv(
+    networkAndEnv = await prepareContainerNetworkAndEnv(
       config,
       args,
       workdir,
       isPodmanMacOS,
       reservedTunnelPorts,
     );
-
     const containerName = assignContainerName(args, config, image);
     addContainerEnvVars(args, config, containerName, nodeArgs, workdir);
+  } catch (error) {
+    runBestEffortSyncCleanup(() => removeSessionTmpdir(sessionTmpdir));
+    runBestEffortSyncCleanup(dependencyStorageCleanup);
+    throw error;
+  }
+  const {
+    sshResult,
+    podmanMacOSPortsForwarded,
+    proxyCommand,
+    portForwardingResult,
+  } = networkAndEnv;
 
-    // Gather entrypoint prefixes (ssh-agent bridge, credential proxy bridge)
-    // before building the entrypoint so they compose INTO the trusted script
-    // AFTER the capability capture stanza (F1).
-    const entrypointPrefixes: string[] = [];
+  // Compose bridge prefixes after the trusted capability capture stanza (F1).
+  const entrypointPrefixes: string[] = [];
+  let credentialProxySetup: Awaited<ReturnType<typeof setupCredentialProxy>>;
+  try {
     if (sshResult.entrypointPrefix !== undefined) {
       entrypointPrefixes.push(sshResult.entrypointPrefix);
     }
-
-    const { credentialProxyBridgeResult, credentialProxyBridgeCleanup } =
-      await prepareCredentialProxyBridge(
-        args,
-        config,
-        resolvedTmpdir,
-        reservedTunnelPorts,
-        entrypointPrefixes,
-      );
-
-    // Build the entrypoint with all prefixes composed into the trusted script
-    // body after the capability capture stanza. setupContainerUser then wraps
-    // the complete script for the current-user su path.
-    const finalEntrypoint = entrypoint(
-      workdir,
-      cliArgs,
-      podmanMacOSPortsForwarded.size > 0
-        ? podmanMacOSPortsForwarded
-        : undefined,
+    credentialProxySetup = await startCredentialProxyGuarded(
+      args,
+      config,
+      sessionTmpdir,
+      reservedTunnelPorts,
       entrypointPrefixes,
     );
-
-    const userFlag = await setupContainerUser(args, finalEntrypoint);
-
-    return {
-      args,
-      finalEntrypoint,
-      proxyCommand,
-      userFlag,
-      image,
-      workdir,
-      portForwardingResult,
-      credentialProxyBridgeResult,
-      credentialProxyBridgeCleanup,
-      dependencyStorageCleanup,
-      reservedTunnelPorts,
-      sshResult,
-    };
-  } catch (err) {
+  } catch (error) {
+    runBestEffortSyncCleanup(() => removeSessionTmpdir(sessionTmpdir));
     runBestEffortSyncCleanup(dependencyStorageCleanup);
-    throw err;
+    throw error;
   }
+
+  // #3450: entrypoint/user-setup aborts release the private dependency
+  // storage inside prepareContainerEntrypoint's failure path.
+  const { finalEntrypoint, userFlag } = await prepareContainerEntrypoint({
+    args,
+    workdir,
+    cliArgs,
+    podmanMacOSPortsForwarded,
+    entrypointPrefixes,
+    credentialProxyBridgeCleanup:
+      credentialProxySetup.credentialProxyBridgeCleanup,
+    dependencyStorageCleanup,
+  });
+
+  return {
+    args,
+    finalEntrypoint,
+    proxyCommand,
+    userFlag,
+    image,
+    workdir,
+    portForwardingResult,
+    ...credentialProxySetup,
+    dependencyStorageCleanup,
+    reservedTunnelPorts,
+    sshResult,
+  };
 }
 
-/**
- * Sets up the credential proxy bridge, converting setup failures into a
- * FatalSandboxError after stopping the credential proxy. `setupCredentialProxy`
- * owns its own partial cleanup; nothing bridge-shaped can outlive a throw
- * here, so the only cleanup this path owes is stopping the proxy itself.
- */
-async function prepareCredentialProxyBridge(
+async function startCredentialProxyGuarded(
   args: string[],
   config: SandboxConfig,
-  resolvedTmpdir: string,
+  sessionTmpdir: string,
   reservedTunnelPorts: Set<number>,
   entrypointPrefixes: string[],
-): Promise<{
-  credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
-  credentialProxyBridgeCleanup: (() => void) | undefined;
-}> {
+): Promise<Awaited<ReturnType<typeof setupCredentialProxy>>> {
+  let credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
   try {
     const cpResult = await setupCredentialProxy(
       args,
       config,
-      resolvedTmpdir,
+      sessionTmpdir,
       reservedTunnelPorts,
       entrypointPrefixes,
     );
-    return {
-      credentialProxyBridgeResult: cpResult.credentialProxyBridgeResult,
-      credentialProxyBridgeCleanup: cpResult.credentialProxyBridgeCleanup,
-    };
-  } catch (err) {
-    try {
-      await stopProxy();
-    } catch {
-      // best-effort cleanup; the original error is the one we want to throw
-    }
-    if (err instanceof FatalSandboxError) {
-      throw err;
-    }
-    // @plan:PLAN-20250214-CREDPROXY.P34 R25.1a: Proxy creation failure aborts before spawning container
-    throw new FatalSandboxError(
-      `Failed to start credential proxy: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    credentialProxyBridgeResult = cpResult.credentialProxyBridgeResult;
+    const credentialProxyBridgeCleanup = cpResult.credentialProxyBridgeCleanup;
+    return { credentialProxyBridgeResult, credentialProxyBridgeCleanup };
+  } catch (error) {
+    return rethrowCredentialProxySetupError(error, credentialProxyBridgeResult);
   }
 }
 

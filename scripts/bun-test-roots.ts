@@ -17,6 +17,7 @@
 
 import { readdirSync, realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { smokeTestFileTimeoutMs } from './lib/bun-smoke-harness.ts';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -216,6 +217,14 @@ export const BUN_TEST_ROOTS: readonly BunTestRoot[] = [
     ],
     timeoutOverrides: [
       { pattern: /issue-2603-release-install\.test\.ts$/, timeout: 300_000 },
+      // Derived from the same #3447 env knobs and formula as TEST_TIMEOUT_MS;
+      // processTimeoutFor's 2× kill budget therefore stays above the test's
+      // timeout for every knob combination. Invalid retry values intentionally
+      // throw at module load so the error names LLXPRT_BUN_SMOKE_TIMEOUT_RETRIES.
+      {
+        pattern: /nightly-bun-native-smoke\.test\.ts$/,
+        timeout: smokeTestFileTimeoutMs(),
+      },
     ],
   },
   {

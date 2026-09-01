@@ -64,6 +64,20 @@ function isProxyResponseFrame(
   return true;
 }
 
+const PROXY_CONNECT_FAILURE_PATTERN =
+  /connect (?:ECONNREFUSED|ENOENT|EACCES|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT|EPERM|ENOTDIR)/i;
+
+export class ProxyRequestError extends Error {
+  readonly proxyContacted: boolean;
+
+  constructor(cause: unknown, proxyContacted: boolean) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    super(message, { cause });
+    this.name = 'ProxyRequestError';
+    this.proxyContacted = proxyContacted;
+  }
+}
+
 interface PendingRequest {
   resolve: (value: ProxyResponse) => void;
   reject: (reason: Error) => void;
@@ -140,7 +154,7 @@ export class ProxySocketClient {
   }
 
   async ensureConnected(): Promise<void> {
-    if (this.socket !== null && this.handshakeComplete) {
+    if (this.isConnected()) {
       this.resetIdleTimer();
       return;
     }
@@ -157,7 +171,27 @@ export class ProxySocketClient {
   }
 
   private isConnected(): boolean {
-    return this.socket !== null && this.handshakeComplete;
+    const socket = this.socket;
+    if (socket === null) return false;
+
+    const connectionWasEstablished =
+      this.handshakeComplete && !socket.destroyed;
+    return connectionWasEstablished && !socket.readableEnded && socket.writable;
+  }
+
+  /**
+   * A queued peer FIN is not reflected in the socket's synchronous state until
+   * the poll phase runs. Yield exactly once, and only for connection reuse, so
+   * an already-queued close is observed before a request is written.
+   */
+  private async confirmReusableConnection(socket: net.Socket): Promise<void> {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    if (this.socket !== socket || !this.isConnected()) {
+      throw new ProxyRequestError(
+        new Error('Credential proxy connection lost. Restart the session.'),
+        false,
+      );
+    }
   }
 
   /**
@@ -174,12 +208,31 @@ export class ProxySocketClient {
     payload: Record<string, unknown>,
     options?: RequestOptions,
   ): Promise<ProxyResponse> {
-    if (!this.isConnected()) {
-      await this.ensureConnected();
-    } else {
-      this.resetIdleTimer();
+    let connectionWasEstablished = false;
+    let proxyContacted = false;
+    try {
+      const reusableSocket = this.socket;
+      if (reusableSocket !== null && this.isConnected()) {
+        connectionWasEstablished = true;
+        await this.confirmReusableConnection(reusableSocket);
+        proxyContacted = true;
+        this.resetIdleTimer();
+      } else {
+        await this.ensureConnected();
+        proxyContacted = true;
+      }
+      return await this.sendRequest(op, payload, options);
+    } catch (cause) {
+      if (cause instanceof ProxyRequestError) throw cause;
+      const message = cause instanceof Error ? cause.message : String(cause);
+      const connectionAttemptReachedProxy =
+        !connectionWasEstablished &&
+        !PROXY_CONNECT_FAILURE_PATTERN.test(message);
+      throw new ProxyRequestError(
+        cause,
+        proxyContacted || connectionAttemptReachedProxy,
+      );
     }
-    return this.sendRequest(op, payload, options);
   }
 
   /**

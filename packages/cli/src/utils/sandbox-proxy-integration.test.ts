@@ -65,11 +65,18 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
     });
 
     it('calls createAndStartProxy before container spawn', () => {
-      const setupProxyIndex = sandboxSource.indexOf(
-        'async function setupCredentialProxy',
+      const startProxyHelperIndex = sandboxSource.indexOf(
+        'async function startCredentialProxyForSandbox',
       );
       const createProxyIndex = sandboxSource.indexOf(
         'await createAndStartProxy',
+        startProxyHelperIndex,
+      );
+      const setupProxyIndex = sandboxSource.indexOf(
+        'async function setupCredentialProxy',
+      );
+      const startProxyHelperCallIndex = sandboxSource.indexOf(
+        'await startCredentialProxyForSandbox',
         setupProxyIndex,
       );
       const prepareContainerIndex = sandboxSource.indexOf(
@@ -91,11 +98,12 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
         executeContainerIndex,
       );
 
-      expect(createProxyIndex).toBeGreaterThan(setupProxyIndex);
+      expect(createProxyIndex).toBeGreaterThan(startProxyHelperIndex);
+      expect(startProxyHelperCallIndex).toBeGreaterThan(setupProxyIndex);
       expect(setupProxyCallIndex).toBeGreaterThan(prepareContainerIndex);
       expect(pushImageIndex).toBeGreaterThan(executeContainerIndex);
       expect(spawnInDocker).toBeGreaterThan(pushImageIndex);
-      expect(setupProxyCallIndex).toBeLessThan(pushImageIndex);
+      expect(createProxyIndex).toBeLessThan(pushImageIndex);
     });
   });
 
@@ -141,14 +149,17 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
       );
     });
 
-    it('passes resolvedTmpdir to volume mount', () => {
+    it('narrows the tmpdir mount to a per-session directory', () => {
+      expect(sandboxSource).toMatch(
+        /fs\.mkdtempSync\(\s*path\.join\(resolvedTmpdir,\s*'llxprt-sandbox-',?\s*\)/,
+      );
       expect(sandboxSource).toContain(
-        '`${resolvedTmpdir}:${getContainerPath(resolvedTmpdir)}`',
+        '`${sessionTmpdir}:${getContainerPath(sessionTmpdir)}`',
       );
     });
 
-    it('passes resolvedTmpdir to createAndStartProxy', () => {
-      expect(sandboxSource).toContain('socketPath: resolvedTmpdir');
+    it('passes sessionTmpdir to createAndStartProxy', () => {
+      expect(sandboxSource).toContain('socketPath: sessionTmpdir');
     });
   });
 

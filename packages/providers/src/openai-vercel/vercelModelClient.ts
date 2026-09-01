@@ -19,11 +19,11 @@ import type { JSONSchema7, LanguageModel, Tool } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { isLocalEndpoint } from '../utils/localEndpoint.js';
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
-import { AuthenticationError } from './errors.js';
+import { createCredentialResolutionError } from '../utils/credentialResolutionError.js';
 import { createDeveloperRoleToSystemFetch } from './vercelDeveloperRoleFetch.js';
 import { createReasoningCaptureFetch } from './vercelReasoningCapture.js';
 import type { CaptureBuffer } from './vercelReasoningCapture.js';
@@ -172,19 +172,34 @@ export async function createOpenAIClient(
   options: NormalizedGenerateChatOptions,
   clientConfig: ProviderClientConfig,
   customFetch?: typeof fetch,
+  logger: Pick<DebugLogger, 'debug'> = new DebugLogger(
+    'llxprt:provider:openaivercel',
+  ),
 ): Promise<ReturnType<typeof createOpenAI>> {
-  const authToken =
-    (await resolveRuntimeAuthToken(options.resolved.authToken)) ?? '';
   const baseURL = options.resolved.baseURL ?? clientConfig.baseURL;
   const shouldForceSystemRole = isQwenBaseURL(baseURL);
-
   const authExempt =
     clientConfig.requiresAuth === false || isLocalEndpoint(baseURL);
-  if (!authToken && !authExempt) {
-    throw new AuthenticationError(
-      `Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003).`,
+  let authToken = '';
+  try {
+    authToken =
+      (await resolveRuntimeAuthToken(options.resolved.authToken)) ?? '';
+  } catch (cause) {
+    const failure = createCredentialResolutionError(
+      options,
       clientConfig.providerName,
+      { kind: 'credential-source-failed', cause },
     );
+    if (!authExempt) {
+      throw failure;
+    }
+    logger.debug(
+      () =>
+        `Continuing without credentials for auth-exempt endpoint after authentication resolution failed: ${failure.message}`,
+    );
+  }
+  if (!authToken && !authExempt) {
+    throw createCredentialResolutionError(options, clientConfig.providerName);
   }
 
   const headers = clientConfig.customHeaders;
@@ -229,6 +244,7 @@ export async function createConfiguredModel(
     options,
     clientConfig,
     customFetch,
+    logger,
   );
   const modelId = options.resolved.model || defaultModel;
   const baseModel: LanguageModel =
