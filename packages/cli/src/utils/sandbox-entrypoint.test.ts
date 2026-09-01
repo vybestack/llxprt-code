@@ -27,6 +27,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync, type ChildProcess } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { entrypoint } from './sandbox-entrypoint.js';
 import {
@@ -87,13 +88,45 @@ function resolveRealConfigDir(): string {
   return resolved;
 }
 
+function snapshotDirectoryEntries(
+  directory: string,
+  relativeDirectory = '',
+): string[] {
+  const snapshot: string[] = [];
+  const entries = fs
+    .readdirSync(directory, { withFileTypes: true })
+    .sort((left, right) => left.name.localeCompare(right.name));
+
+  for (const entry of entries) {
+    const relativePath = path.join(relativeDirectory, entry.name);
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      snapshot.push(`directory:${relativePath}`);
+      snapshot.push(...snapshotDirectoryEntries(entryPath, relativePath));
+    } else if (entry.isFile()) {
+      const hash = createHash('sha256')
+        .update(fs.readFileSync(entryPath))
+        .digest('hex');
+      snapshot.push(`file:${relativePath}:${hash}`);
+    } else if (entry.isSymbolicLink()) {
+      snapshot.push(
+        `symbolic-link:${relativePath}:${fs.readlinkSync(entryPath)}`,
+      );
+    } else {
+      snapshot.push(`other:${relativePath}`);
+    }
+  }
+
+  return snapshot;
+}
+
 function snapshotDirectory(directory: string): DirectorySnapshot {
   if (!fs.existsSync(directory)) {
     return { exists: false, entries: [] };
   }
   return {
     exists: true,
-    entries: fs.readdirSync(directory).sort(),
+    entries: snapshotDirectoryEntries(directory),
   };
 }
 
