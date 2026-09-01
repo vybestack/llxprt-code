@@ -684,3 +684,51 @@ remains.
 | Change the unused `execSync` mock buffer newline | Reject | This is a test-only realism cleanup unrelated to the tested spawn-based image probe. It is neither an original finding nor a regression. |
 
 Both local OCR rounds are exhausted.
+
+## CodeRabbit remediation (PR #3471)
+
+CodeRabbit's review of PR #3471 left two actionable inline threads on
+`integration-tests/sandboxNodeModulesIsolation.real.test.ts`, one pre-merge
+docstring-coverage warning, and one merge-conflict suggestion. Each finding
+was verified against current source before triage; no claim was accepted
+unverified. Every log for this pass lives under
+`tmp/issue3450/coderabbit-remediation/`. No production code changed.
+
+### Finding triage and dispositions
+
+| Finding | Class | Disposition |
+| --- | --- | --- |
+| CR1: the live-source race timeout timer is never cleared, so a `close` win leaves a pending 180 s `SESSION_TIMEOUT_MS` timer that keeps the event loop alive after the test | In-scope-Fix | Verified in source: the `timedOut` executor discarded the `setTimeout` handle and the `finally` cleared only `writeHostEdit`, so every normal (child-closes-first) outcome leaked the timer. Fixed by declaring `raceTimer: ReturnType<typeof setTimeout> \| undefined`, assigning it inside the executor, and clearing it in the existing `finally` block, so every outcome (close win, timeout win, error, synchronous throw) clears both timers. Test-harness code only; no implementation-detail test added solely to test a test. |
+| CR2: `describeEngine` probes `imageGlobalCliBoots` at collection time even when `ENGINES` excludes the engine, which can invoke an unintended registry image pull | In-scope-Fix | Verified in source: the probe ran `engine run --rm <image> sh -c 'timeout 60 llxprt --version'` unconditionally, while `detectEngines` excludes an engine exactly when the image is absent locally (or another runtime is selected) — so a usable daemon with a missing image pulls from ghcr.io and blocks collection for up to 90 s per excluded engine. Fixed by short-circuiting: `ENGINES.includes(engine) && imageGlobalCliBoots(engine, IMAGE)`; the skip outcome for excluded engines is unchanged (still skips), now without the container side effect. |
+| Docstring coverage 38.55% vs the 80% external threshold (83 functions across 8 files) | Reject | Adding comments to satisfy an external percentage is not accepted behavior and conflicts with this repository's sparse-comment rule (comments explain non-obvious why, never satisfy metrics). No docstrings were added. |
+| CodeRabbit "Resolve merge conflicts in branch `issue3450`" suggestion | Reject precondition not met — conflict is real; resolution is outside this remediation's scope | The Reject condition (origin/main an ancestor of the branch AND GitHub mergeability successful) fails both legs: `git merge-base --is-ancestor origin/main HEAD` exits nonzero (origin/main advanced `393a0080f` → `c1e0d1de1`, adding #3460 and #3461), and `gh pr view 3471` reports `mergeable: CONFLICTING`, `mergeStateStatus: DIRTY`, with both-side changes in `packages/cli/src/utils/sandbox-containers.ts` and `packages/cli/src/utils/sandbox-exec.ts`. Resolving requires merging origin/main into production files and a commit/push, which this remediation is explicitly barred from (no commit, no push, two-file scope). The conflict must be resolved at the PR merge step after this remediation lands. |
+
+### Remediation verification
+
+The harness fixes were exercised by re-running the suites they gate rather
+than by new implementation-detail tests. All logs are under
+`tmp/issue3450/coderabbit-remediation/`.
+
+- Issue-focused six-file Bun suite: 131 pass / 0 fail
+  (`focused-unit.log`); identical 131/131 after `npm run format`
+  (`post-format-focused.log`; format left the diff byte-identical).
+- Real Docker, docker selected: 7 pass / 0 fail / 11 skip, image-global
+  agent suites engaged (`integration-docker.log`); the 11 skips are the
+  podman suites, which now skip without the CR2-fixed collection-time
+  podman probe. Same 7/0 after format
+  (`post-format-integration-docker.log`).
+- Real Podman, podman selected: 7 pass / 0 fail / 11 skip, image-global
+  agent suites engaged (`integration-podman.log`; docker suites skip
+  without a docker probe). Same 7/0 after format
+  (`post-format-integration-podman.log`).
+- `npm run test`: exit 0, zero failures across all result lines
+  (`verify-npm-test.log`).
+- `npm run lint`: exit 0 (`verify-lint.log`).
+- `npm run typecheck`: exit 0 (`verify-typecheck.log`).
+- `npm run format`: exit 0, change set unchanged (`verify-format.log`).
+- `npm run build`: exit 0 (`verify-build.log`).
+- Smoke `bun scripts/start.ts --profile-load stepfun-37 "write me a haiku
+  and nothing else"`: exit 0, haiku returned (`verify-smoke.log`).
+
+Both pre-remediation engine baselines (7 pass / 0 fail per engine, agent
+suites engaged) are preserved exactly. No commit or push was made.

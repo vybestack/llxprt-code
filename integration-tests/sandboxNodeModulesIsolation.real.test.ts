@@ -841,6 +841,7 @@ function describeEngine(engine: string): void {
           }, 750);
           let closeStatus: number | null = null;
           let closeError: string | null = null;
+          let raceTimer: ReturnType<typeof setTimeout> | undefined;
           try {
             const closed = new Promise<void>((resolve) => {
               child.on('close', (code) => {
@@ -852,12 +853,13 @@ function describeEngine(engine: string): void {
                 resolve();
               });
             });
-            const timedOut = new Promise<void>((resolve) =>
-              setTimeout(resolve, SESSION_TIMEOUT_MS),
-            );
+            const timedOut = new Promise<void>((resolve) => {
+              raceTimer = setTimeout(resolve, SESSION_TIMEOUT_MS);
+            });
             await Promise.race([closed, timedOut]);
           } finally {
             clearTimeout(writeHostEdit);
+            clearTimeout(raceTimer);
             cleanup();
           }
           expect(closeError).toBeNull();
@@ -1085,7 +1087,11 @@ function describeEngine(engine: string): void {
   // tree and is missing modules), which is outside #3450's scope. Skipping
   // here reports that environment honestly instead of faking an agent
   // session; a locally built image runs the suite.
-  const imageGlobalBoots = imageGlobalCliBoots(engine, IMAGE);
+  // Probe only a selected engine: `engine run --rm <image>` on a usable
+  // daemon pulls the image from the registry when it is absent locally,
+  // which an excluded engine must never trigger at collection time.
+  const imageGlobalBoots =
+    ENGINES.includes(engine) && imageGlobalCliBoots(engine, IMAGE);
   describe.skipIf(!ENGINES.includes(engine) || !imageGlobalBoots)(
     `Sandbox node_modules isolation (real ${engine}) image-global agent #3450`,
     () => {
