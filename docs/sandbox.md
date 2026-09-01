@@ -285,6 +285,53 @@ profile configuration:
 Everything else on your host (`~/.ssh` private keys, `~/.aws`, other projects)
 is not accessible from inside the container unless you explicitly mount it.
 
+#### Project `node_modules` are private per run (container mode)
+
+The workspace bind keeps your project read-write with one exception: the
+project's `node_modules` directories do not cross the host/container platform
+boundary. At launch, LLxprt Code creates fresh, empty, host-backed directories
+under its cache root and mounts one over each of:
+
+- `<workspace>/node_modules`; and
+- `node_modules` beneath each nested Node package root declared in the root
+  `package.json` `workspaces` list (literal list entries only; glob entries
+  are not expanded, and the root `node_modules` is protected even without a
+  manifest).
+
+Each private directory is writable by the user the container already runs as,
+even when that user's UID differs from the host owner of the cache-resident
+directories. This isolation applies to normal installed-mode sessions; a
+`NODE_ENV=development` source-entrypoint session keeps using the shared
+workspace bind unchanged.
+
+Inside a sandboxed session this means:
+
+- The agent starts from the image-global `llxprt` install, so no host install
+  is required before the agent can run the project's installer itself.
+- Installer, build, and test output goes to the private per-run storage, never
+  to your host `node_modules`. Host-installed dependencies are hidden while the
+  container runs, and container-installed dependencies are discarded with the
+  session; a later session starts with fresh, empty storage.
+- Source outside `node_modules` stays shared: edits made inside the sandbox are
+  immediately visible on the host, and host edits are visible inside.
+
+The per-run storage lives under the LLxprt cache root and is removed when the
+session exits, is interrupted, or fails to launch; a protected path that was
+absent before the session is absent again afterward (an empty mountpoint the
+container engine materializes is removed; a nonempty directory is never
+removed). If removing the storage fails, a warning naming the operation and
+path is printed. Before creating the private mounts, a read-only preflight
+scans the existing host `node_modules` trees (the whole protected trees, so
+nothing is missed) for recognized wrong-platform binaries and stops the launch
+with repair guidance when it finds one (see
+[Troubleshooting](#troubleshooting)). Each file it inspects is read only far
+enough to classify its header. The preflight covers `.node` native addons and
+entries reached through protected `.bin` directories (regular executables
+directly in `.bin` and symlinked `.node` files, whose contained targets are
+read but never executed, included) and recognizes ELF, Mach-O (including
+universal/fat binaries), and PE headers, including PE files whose header
+offset lies deeper in the file than the first probe.
+
 Seatbelt restricts **writes** to an allow-list of paths (project directory, temp
 directory, and canonical config/data/cache/log roots). It grants broader read
 access, including a read-only grant for the legacy global directory that startup
@@ -951,6 +998,20 @@ profile.
 **"macOS credential bridge requires container networking"** — you combined
 `network: off` with Docker or Podman on macOS. The credential bridge needs
 networking there. Use `network: on`, switch to Seatbelt, or run on Linux.
+
+**"Sandbox dependency preflight failed"** — the host `node_modules` of your
+project contains a file the preflight recognized as a binary built for another
+platform (ELF, Mach-O — including universal/fat binaries — or PE where the
+format does not match your host), or a `node_modules/.bin` symlink pointing at
+the image-global bun location (`/usr/local/bun/bin/...`, such as `bun` or
+`bunx`) while no such path exists on your host. Because the sandbox replaces
+those trees with fresh private per-run mounts anyway, the launch stops before
+the container starts rather than failing later inside it. Remove the affected
+project-local `node_modules` directory named in the message, reinstall on the
+host, and retry. Files the preflight cannot positively identify (scripts,
+unknown or truncated bytes, matching-host binaries, `prebuilds/` trees for
+other platforms), and `.bin` links to absolute paths outside the image-global
+bun location, do not trigger this error.
 
 ### Podman macOS: OOM-killed with exit code 137
 

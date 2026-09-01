@@ -40,6 +40,7 @@ import {
 } from './sandbox-containers.js';
 import { stopProxy } from '@vybestack/llxprt-code-providers/auth.js';
 import { entrypoint } from './sandbox-entrypoint.js';
+import { addPrivateDependencyMounts } from './sandbox-node-modules.js';
 import { ensureSandboxImageIsPresent } from './sandbox-image.js';
 import {
   setupSshAgentForwarding,
@@ -62,6 +63,7 @@ async function prepareContainerImageAndArgs(config: SandboxConfig): Promise<{
   containerWorkdir: string;
   resolvedTmpdir: string;
   args: string[];
+  dependencyStorageCleanup: () => void;
 }> {
   // @plan:PLAN-20250214-CREDPROXY.P34 R3.4: Use realpath to resolve symlinks
   debugLogger.error(`hopping into sandbox (command: ${config.command}) ...`);
@@ -104,7 +106,23 @@ async function prepareContainerImageAndArgs(config: SandboxConfig): Promise<{
     resolvedTmpdir,
   );
   addContainerVolumeMounts(args);
-  return { image, workdir, containerWorkdir, resolvedTmpdir, args };
+  // #3450: replace the workspace's node_modules destinations with fresh
+  // per-run private binds, appended after the shared workspace bind so the
+  // nested mounts win. The host-side contamination preflight runs inside
+  // this call BEFORE any storage is created.
+  const dependencyStorageCleanup = addPrivateDependencyMounts(
+    config,
+    args,
+    workdir,
+  );
+  return {
+    image,
+    workdir,
+    containerWorkdir,
+    resolvedTmpdir,
+    args,
+    dependencyStorageCleanup,
+  };
 }
 
 /** Sets up SSH forwarding, port forwarding, networking, and env vars. */
@@ -153,39 +171,99 @@ async function prepareContainerSandbox(
   cliArgs: string[],
 ): Promise<ContainerSandboxPrepared> {
   validateContainerSandboxEnv();
-  let credentialProxyBridgeCleanup: (() => void) | undefined;
 
-  const { image, workdir, resolvedTmpdir, args } =
+  const { image, workdir, resolvedTmpdir, args, dependencyStorageCleanup } =
     await prepareContainerImageAndArgs(config);
 
-  const reservedTunnelPorts = new Set<number>();
-  const isPodmanMacOS =
-    config.command === 'podman' && os.platform() === 'darwin';
-  const {
-    sshResult,
-    podmanMacOSPortsForwarded,
-    proxyCommand,
-    portForwardingResult,
-  } = await prepareContainerNetworkAndEnv(
-    config,
-    args,
-    workdir,
-    isPodmanMacOS,
-    reservedTunnelPorts,
-  );
+  // #3450: the private dependency storage exists from here on; every later
+  // preparation step must release it again when it aborts the launch.
+  try {
+    const reservedTunnelPorts = new Set<number>();
+    const isPodmanMacOS =
+      config.command === 'podman' && os.platform() === 'darwin';
+    const {
+      sshResult,
+      podmanMacOSPortsForwarded,
+      proxyCommand,
+      portForwardingResult,
+    } = await prepareContainerNetworkAndEnv(
+      config,
+      args,
+      workdir,
+      isPodmanMacOS,
+      reservedTunnelPorts,
+    );
 
-  const containerName = assignContainerName(args, config, image);
-  addContainerEnvVars(args, config, containerName, nodeArgs, workdir);
+    const containerName = assignContainerName(args, config, image);
+    addContainerEnvVars(args, config, containerName, nodeArgs, workdir);
 
-  // Gather entrypoint prefixes (ssh-agent bridge, credential proxy bridge)
-  // before building the entrypoint so they compose INTO the trusted script
-  // AFTER the capability capture stanza (F1).
-  const entrypointPrefixes: string[] = [];
-  if (sshResult.entrypointPrefix !== undefined) {
-    entrypointPrefixes.push(sshResult.entrypointPrefix);
+    // Gather entrypoint prefixes (ssh-agent bridge, credential proxy bridge)
+    // before building the entrypoint so they compose INTO the trusted script
+    // AFTER the capability capture stanza (F1).
+    const entrypointPrefixes: string[] = [];
+    if (sshResult.entrypointPrefix !== undefined) {
+      entrypointPrefixes.push(sshResult.entrypointPrefix);
+    }
+
+    const { credentialProxyBridgeResult, credentialProxyBridgeCleanup } =
+      await prepareCredentialProxyBridge(
+        args,
+        config,
+        resolvedTmpdir,
+        reservedTunnelPorts,
+        entrypointPrefixes,
+      );
+
+    // Build the entrypoint with all prefixes composed into the trusted script
+    // body after the capability capture stanza. setupContainerUser then wraps
+    // the complete script for the current-user su path.
+    const finalEntrypoint = entrypoint(
+      workdir,
+      cliArgs,
+      podmanMacOSPortsForwarded.size > 0
+        ? podmanMacOSPortsForwarded
+        : undefined,
+      entrypointPrefixes,
+    );
+
+    const userFlag = await setupContainerUser(args, finalEntrypoint);
+
+    return {
+      args,
+      finalEntrypoint,
+      proxyCommand,
+      userFlag,
+      image,
+      workdir,
+      portForwardingResult,
+      credentialProxyBridgeResult,
+      credentialProxyBridgeCleanup,
+      dependencyStorageCleanup,
+      reservedTunnelPorts,
+      sshResult,
+    };
+  } catch (err) {
+    runBestEffortSyncCleanup(dependencyStorageCleanup);
+    throw err;
   }
+}
 
-  let credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
+/**
+ * Sets up the credential proxy bridge, converting setup failures into a
+ * FatalSandboxError after stopping the credential proxy. `setupCredentialProxy`
+ * owns its own partial cleanup; nothing bridge-shaped can outlive a throw
+ * here, so the only cleanup this path owes is stopping the proxy itself.
+ */
+async function prepareCredentialProxyBridge(
+  args: string[],
+  config: SandboxConfig,
+  resolvedTmpdir: string,
+  reservedTunnelPorts: Set<number>,
+  entrypointPrefixes: string[],
+): Promise<{
+  credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
+  credentialProxyBridgeCleanup: (() => void) | undefined;
+}> {
   try {
     const cpResult = await setupCredentialProxy(
       args,
@@ -194,10 +272,11 @@ async function prepareContainerSandbox(
       reservedTunnelPorts,
       entrypointPrefixes,
     );
-    credentialProxyBridgeResult = cpResult.credentialProxyBridgeResult;
-    credentialProxyBridgeCleanup = cpResult.credentialProxyBridgeCleanup;
+    return {
+      credentialProxyBridgeResult: cpResult.credentialProxyBridgeResult,
+      credentialProxyBridgeCleanup: cpResult.credentialProxyBridgeCleanup,
+    };
   } catch (err) {
-    runBestEffortSyncCleanup(credentialProxyBridgeResult?.cleanup);
     try {
       await stopProxy();
     } catch {
@@ -211,32 +290,6 @@ async function prepareContainerSandbox(
       `Failed to start credential proxy: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
-
-  // Build the entrypoint with all prefixes composed into the trusted script
-  // body after the capability capture stanza. setupContainerUser then wraps
-  // the complete script for the current-user su path.
-  const finalEntrypoint = entrypoint(
-    workdir,
-    cliArgs,
-    podmanMacOSPortsForwarded.size > 0 ? podmanMacOSPortsForwarded : undefined,
-    entrypointPrefixes,
-  );
-
-  const userFlag = await setupContainerUser(args, finalEntrypoint);
-
-  return {
-    args,
-    finalEntrypoint,
-    proxyCommand,
-    userFlag,
-    image,
-    workdir,
-    portForwardingResult,
-    credentialProxyBridgeResult,
-    credentialProxyBridgeCleanup,
-    reservedTunnelPorts,
-    sshResult,
-  };
 }
 
 /** Spawns container and proxy, wires cleanup, and waits for exit. */
@@ -258,6 +311,7 @@ async function executeContainerSandbox(
     workdir,
     portForwardingResult,
     sshResult,
+    dependencyStorageCleanup,
   } = prepared;
   let credentialProxyBridgeCleanup = prepared.credentialProxyBridgeCleanup;
 
@@ -266,51 +320,59 @@ async function executeContainerSandbox(
   args.push(image);
   args.push(...finalEntrypoint);
 
-  const proxyContainerProcess =
-    proxyCommand !== undefined
-      ? await startProxyContainer(
-          config,
-          proxyCommand,
-          userFlag,
-          image,
-          workdir,
-        )
-      : undefined;
+  // #3450: from here through process exit, a sidecar or main-launch
+  // failure must release the per-run private dependency storage again.
+  try {
+    const proxyContainerProcess =
+      proxyCommand !== undefined
+        ? await startProxyContainer(
+            config,
+            proxyCommand,
+            userFlag,
+            image,
+            workdir,
+          )
+        : undefined;
 
-  const { stdinWasPaused, stdinHadRawMode } = handleStdinForSandbox();
-  const sandboxProcess = spawn(config.command, args, { stdio: 'inherit' });
-  wireProxyContainerCloseHandler(proxyContainerProcess, sandboxProcess);
-  restoreStdinAfterSandbox(
-    sandboxProcess,
-    stdinWasPaused,
-    stdinHadRawMode,
-    cliConfig,
-  );
+    const { stdinWasPaused, stdinHadRawMode } = handleStdinForSandbox();
+    const sandboxProcess = spawn(config.command, args, { stdio: 'inherit' });
+    wireProxyContainerCloseHandler(proxyContainerProcess, sandboxProcess);
+    restoreStdinAfterSandbox(
+      sandboxProcess,
+      stdinWasPaused,
+      stdinHadRawMode,
+      cliConfig,
+    );
 
-  wireCleanupHandlers(
-    sandboxProcess,
-    cliConfig,
-    sshResult,
-    portForwardingResult,
-    credentialProxyBridgeCleanup,
-    (c) => {
-      credentialProxyBridgeCleanup = c;
-    },
-  );
+    wireCleanupHandlers(
+      sandboxProcess,
+      cliConfig,
+      sshResult,
+      portForwardingResult,
+      credentialProxyBridgeCleanup,
+      (c) => {
+        credentialProxyBridgeCleanup = c;
+      },
+      dependencyStorageCleanup,
+    );
 
-  const exitCode = await new Promise<number>((resolve) => {
-    sandboxProcess.on('close', (code, signal) => {
-      const ec = normalizeExitCode(code, signal);
-      if (ec !== 0) {
-        debugLogger.log(
-          `Sandbox process exited with code: ${code}, signal: ${signal}`,
-        );
-      }
-      resolve(ec);
+    const exitCode = await new Promise<number>((resolve) => {
+      sandboxProcess.on('close', (code, signal) => {
+        const ec = normalizeExitCode(code, signal);
+        if (ec !== 0) {
+          debugLogger.log(
+            `Sandbox process exited with code: ${code}, signal: ${signal}`,
+          );
+        }
+        resolve(ec);
+      });
     });
-  });
 
-  return { exitCode, portForwardingResult, credentialProxyBridgeCleanup };
+    return { exitCode, portForwardingResult, credentialProxyBridgeCleanup };
+  } catch (err) {
+    runBestEffortSyncCleanup(dependencyStorageCleanup);
+    throw err;
+  }
 }
 
 /** Runs the Docker/Podman sandbox path. */

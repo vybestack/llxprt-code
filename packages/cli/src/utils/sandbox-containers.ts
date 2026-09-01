@@ -65,6 +65,7 @@ export interface ContainerSandboxPrepared {
   portForwardingResult: PortForwardingResult | undefined;
   credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
   credentialProxyBridgeCleanup: (() => void) | undefined;
+  dependencyStorageCleanup: (() => void) | undefined;
   reservedTunnelPorts: Set<number>;
   sshResult: SshAgentResult;
 }
@@ -770,6 +771,7 @@ export function wireCleanupHandlers(
   portForwardingResult: PortForwardingResult | undefined,
   credentialProxyBridgeCleanup: (() => void) | undefined,
   setCredentialProxyBridgeCleanup: (c: (() => void) | undefined) => void,
+  dependencyStorageCleanup: (() => void) | undefined = undefined,
 ): void {
   sandboxProcess.on('error', (err) => {
     debugLogger.error('Sandbox process error:', err);
@@ -828,6 +830,16 @@ export function wireCleanupHandlers(
   process.on('SIGINT', stopCredentialProxy);
   process.on('SIGTERM', stopCredentialProxy);
   sandboxProcess.on('close', stopCredentialProxy);
+
+  // #3450: the per-run private dependency storage subtree must not outlive
+  // the session. Its lifecycle (process exit/SIGINT/SIGTERM registration,
+  // idempotency, and restoring default signal termination) is owned by
+  // registerStorageLifecycle in sandbox-node-modules.ts. The sandbox
+  // child's close is the one trigger that owner cannot see, so it is wired
+  // here against the same idempotent cleanup (#3450 OCR F7/F9).
+  if (dependencyStorageCleanup !== undefined) {
+    sandboxProcess.on('close', dependencyStorageCleanup);
+  }
 }
 
 /** Handles stdin pause/raw-mode before spawning, and restores after. */
