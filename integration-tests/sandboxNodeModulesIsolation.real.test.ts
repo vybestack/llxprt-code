@@ -195,6 +195,12 @@ function buildFixture(home: string): FixtureWorkspace {
   const repoRoot = join(home, 'repo');
   const storageRoot = join(home, 'storage');
 
+  // The direct production-argv sessions intentionally run as image or
+  // mismatched UIDs, so the shared source bind must model a writable workspace
+  // rather than inheriting the host test runner's owner-only write permission.
+  mkdirSync(repoRoot, { mode: 0o777 });
+  chmodSync(repoRoot, 0o777);
+
   writeJsonFile(join(repoRoot, 'package.json'), {
     name: 'issue3450-fixture',
     private: true,
@@ -533,12 +539,6 @@ function runSandboxedWorkflow(
       stderr += String(result.error);
     }
   } finally {
-    if (stderr !== '') {
-      writeTextFile(
-        join(fixture.storageRoot, 'last-workflow-stderr.log'),
-        stderr,
-      );
-    }
     cleanup();
   }
   return { status, stdout, stderr, runRootsBeforeCleanup: runRoots };
@@ -618,6 +618,9 @@ function runAgentSession(
   const childEnv: NodeJS.ProcessEnv = {
     PATH: process.env.PATH,
     HOME: process.env.HOME,
+    // Keep this dependency-isolation fixture on the image-default user across
+    // host OSes; the engine suites separately retain an explicit mismatched UID.
+    SANDBOX_SET_UID_GID: 'false',
     NO_BROWSER: 'true',
     LLXPRT_NO_BROWSER_AUTH: 'true',
     CI: 'true',

@@ -756,3 +756,103 @@ needed to diagnose the Linux failures without changing sandbox behavior.
 | Increase external docstring coverage | Reject | The coverage warning does not identify missing behavior and does not justify metric-driven comments. |
 
 No public abstraction, dependency, workflow, or setting was added.
+
+## Linux Docker fixture-permission remediation (PR #3471)
+
+Linux Docker CI run 33519702384, job 99895692052, supplied the behavioral RED
+that the prior diagnostics pass was intended to capture. Each of three native
+Bun attempts reported six failing #3450 launches. The four production-argv
+launches reached their first shared-source write and failed with
+`mkdir: cannot create directory 'results': Permission denied`. The two
+image-global agent launches stopped earlier at `realpathSync('/home/runner')`
+because the fixture forwarded the runner's real HOME while mounting its
+workspace and isolated storage under `/tmp`. The raw Linux storage probe passed
+on every attempt: mode 0755 denied uid 54321 and mode 0777 allowed it.
+
+The initial `mkdtemp` hypothesis was directionally useful but not exact.
+`mkdtempSync` creates the fixture ancestor at mode 0700, but the shared workspace
+bind source is its `repo` child, not that ancestor. `writeTextFile` created the
+bound `repo` directory without an explicit mode, so Node applied mode 0777
+masked by the runner's umask. The observed denial establishes that the result
+lacked write permission for an unrelated uid. The Docker image runs as uid 1000
+(`USER node`), the fixture is owned by the GitHub runner uid, and the direct
+harness does not call `setupContainerUser`. The explicit uid 54321 case is also
+deliberately different from the fixture owner. Both users could read the fixture
+but could not create shared source output at its root.
+
+This is a **Blocker-Fix** harness defect. Production preserves the user's
+workspace bind and its permissions; changing production to chmod a user's
+repository would violate that behavior. The test constructed a host-owned
+workspace and then selected unrelated container users without granting the
+writable shared-workspace semantics required by AC-3. The agent harness also
+allowed Linux host auto-detection to select the current-user setup path even
+though its isolated `/tmp` fixture did not provide that user's normal home path
+inside the container.
+
+The smallest test-only correction is:
+
+1. Create the bound fixture repository at mode 0777 and apply an explicit chmod
+   so host umask cannot remove the intended cross-UID write bits.
+2. Set `SANDBOX_SET_UID_GID=false` only for the image-global fixture child so
+   Docker and Podman use the same image-default user on every host OS. The
+   separate production-argv test still launches uid 54321 and runs the full
+   root-plus-nested install/build/test workflow, so mismatched-UID dependency
+   coverage is unchanged.
+
+### RED/GREEN evidence
+
+- RED: `tmp/issue3450/ci-docker-remediation/linux-docker-round2-failed.log`
+  records the three failed CI attempts, including captured status/stdout/stderr,
+  four shared-workspace permission failures, two fixture-HOME failures, and the
+  passing raw Linux uid/mode probe.
+- GREEN: focused #3450 Bun suites pass 131/131
+  (`tmp/issue3450/linux-fixture-remediation/focused.log`).
+- GREEN: the final real Docker suite passes 7/7, including image-global startup,
+  shared-source writes, host-tree immutability, per-run freshness, strict absent
+  paths, and the explicit uid 54321 workflow
+  (`real-docker-final.log` in the same directory).
+- GREEN: the final real Podman suite passes 7/7 with the same behavioral
+  assertions (`real-podman-final.log`).
+
+No production file, deferred #3468/#3469/#3470/#3475 behavior, dependency,
+setting, workflow, or public abstraction changed. Native Linux Docker rerun
+remains the only unresolved platform-specific confirmation; the parent
+verification cycle will supply it.
+
+## PR OCR second and final round (PR #3471)
+
+| Thread | Class | Disposition and evidence |
+| --- | --- | --- |
+| `PRRT_kwDOPB5qbc6eJ7fV`: diagnostic write precedes `runSandboxedWorkflow` cleanup | In-scope-Fix | Removed `last-workflow-stderr.log`. Repository search found no reader, launch stderr is returned in `WorkflowSession` and included in assertion failures, and `cleanup()` is now the only operation in `finally`, so a diagnostic write cannot bypass it. |
+| `PRRT_kwDOPB5qbc6eJ7jD`: unmock module factories in `afterEach` | Reject | The module-level auth and child-process factories are file fixtures required by later tests. Unmocking them after the first test would invalidate subsequent tests, while Bun worker isolation prevents cross-file leakage. No change. |
+| `PRRT_kwDOPB5qbc6eJ7mP`: unmock module factories in `afterEach` | Reject | The module-level child-process factory is a file fixture required by later tests. Unmocking it after the first test would invalidate the imported module graph for subsequent tests. Bun runs test files in isolated workers, so the factory does not leak into other files. No change. |
+| `PRRT_kwDOPB5qbc6eJ7pv`: signal test did not prove storage existed before self-signal | In-scope-Fix | The child now requires exactly one `sandbox-node-modules-*` run root, writes and flushes a `PRIVATE-STORAGE-READY:1` marker, and only then signals itself. The parent reads the exact marker while retaining the post-signal zero-root, no-continuation, null-status, and actual-signal assertions. |
+| `PRRT_kwDOPB5qbc6eJ7sc`: signal child inherited `NODE_ENV` | In-scope-Fix | The child environment now sets `NODE_ENV=production`, so an invoking development environment cannot select the production helper's development no-op path. |
+
+This was the final OCR round. No further review was requested or run. The
+changes remain test and plan only; production source, dependencies, workflows,
+settings, public abstractions, and deferred issues are unchanged.
+
+### Focused verification
+
+All logs are under `tmp/issue3450/final-ocr-remediation/`.
+
+- Targeted Prettier completed with both TypeScript files unchanged; `git diff
+  --check` passed.
+- Targeted ESLint passed with zero warnings.
+- Signal lifecycle suite: 4 pass / 0 fail, including SIGINT and SIGTERM; the
+  two signal cases also pass when the invoking process has
+  `NODE_ENV=development`, proving the child override engages storage.
+- Six-file #3450 suite: 131 pass / 0 fail.
+- Real Docker suite: 7 pass / 0 fail / 11 Podman-selected skips.
+- Real Podman suite: 7 pass / 0 fail / 11 Docker-selected skips.
+- Test audit: no findings on either touched test file.
+
+The final pre-merge verification cycle then ran to completion: the full
+`npm run test` retry passed with exit 0 and zero failures
+(`npm-test-final2.log`); the earlier full attempt failed only
+`ToolResultDisplay.retention.behavior.test.tsx` at its process RSS threshold,
+which passed 5/5 immediately in isolation and is tracked as #3478; `npm run
+lint`, `npm run typecheck`, `npm run format`, and `npm run build` all passed;
+the six-file #3450 focused suite passed 131/131 after formatting; and the
+stepfun-37 smoke passed with a haiku returned.

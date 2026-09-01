@@ -105,15 +105,25 @@ describe('#3450 private dependency storage lifecycle', () => {
         cacheDir,
         `issue3450-signal-self-${signal}.ts`,
       );
+      const storageReadyMarker = path.join(
+        cacheDir,
+        `issue3450-storage-ready-${signal}.txt`,
+      );
       const helperModule = path.join(
         import.meta.dirname,
         'sandbox-node-modules.ts',
       );
       const script = [
+        'import fs from "node:fs";',
         `import { addPrivateDependencyMounts } from ${JSON.stringify(helperModule)};`,
         `const workdir = ${JSON.stringify(workdir)};`,
+        `const cacheDir = ${JSON.stringify(cacheDir)};`,
+        `const storageReadyMarker = ${JSON.stringify(storageReadyMarker)};`,
         'const args: string[] = [];',
         'addPrivateDependencyMounts({ command: "docker", image: "test" }, args, workdir);',
+        `const runRoots = fs.readdirSync(cacheDir).filter((entry) => entry.startsWith(${JSON.stringify(RUN_ROOT_PREFIX)}));`,
+        'if (runRoots.length !== 1) throw new Error(`Expected exactly one private run root, found ${runRoots.length}`);',
+        'fs.writeFileSync(storageReadyMarker, "PRIVATE-STORAGE-READY:1\\n", { flush: true });',
         `process.kill(process.pid, ${JSON.stringify(signal)});`,
         // Only reachable when the cleanup handler wrongly swallows the
         // signal instead of restoring the default termination.
@@ -121,10 +131,13 @@ describe('#3450 private dependency storage lifecycle', () => {
       ].join('\n');
       fs.writeFileSync(scriptPath, script);
       const result = spawnSync(process.execPath, [scriptPath], {
-        env: process.env,
+        env: { ...process.env, NODE_ENV: 'production' },
         encoding: 'utf8',
         timeout: 30_000,
       });
+      expect(fs.readFileSync(storageReadyMarker, 'utf8')).toBe(
+        'PRIVATE-STORAGE-READY:1\n',
+      );
       expect(result.status).toBeNull();
       expect(result.signal).toBe(signal);
       expect(result.stdout).not.toContain('CONTINUED-AFTER-SIGNAL');
