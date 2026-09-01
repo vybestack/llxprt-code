@@ -44,6 +44,7 @@ void vi.mock('openai', () => ({
 /** Wire delta shape including the vLLM/DeepSeek reasoning stream field. */
 type WireDelta = OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta & {
   reasoning_content?: string;
+  custom_thoughts?: string;
 };
 
 type WireFinishReason =
@@ -300,6 +301,25 @@ describe('issue #3473: continuation raw-delta timing through the lifecycle notif
     // double-stamp would surface as 5.
     expect(rawDeltaCount()).toBe(4);
     expect(collectText(results)).toBe('Answer.');
+    expectToolCallBlocks(results);
+  });
+
+  it('CT-5: custom reasoning.fieldName continuation deltas fire the notifier exactly once per delta', async () => {
+    settingsService.set('reasoning.fieldName', 'custom_thoughts');
+    const { observer, rawDeltaCount } = makeCountingObserver();
+
+    const results = await runWithContinuation(observer, [
+      makeChunk({ custom_thoughts: 'plan the call' }, null),
+      makeChunk({ custom_thoughts: ' then answer' }, null),
+    ]);
+
+    // 1 primary fragment + 2 custom-field reasoning deltas. When the
+    // configured field name is not propagated into continuation
+    // classification, reasoning-only deltas look non-token-bearing and the
+    // count drops to 1, freezing last_token_ms at the primary fragment.
+    expect(rawDeltaCount()).toBe(3);
+    // Visible output unchanged: reasoning deltas yield nothing.
+    expect(collectText(results)).toBe('');
     expectToolCallBlocks(results);
   });
 });

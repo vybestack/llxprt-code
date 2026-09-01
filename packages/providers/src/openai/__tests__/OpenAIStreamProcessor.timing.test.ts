@@ -540,4 +540,49 @@ describe('issue #3473: OpenAI stream timing at raw token-bearing deltas', () => 
     const blocksBearing = results.filter((r) => r.blocks.length > 0);
     expect(blocksBearing).toHaveLength(1);
   });
+
+  // DT-3: a raw choice carrying several token-bearing fields (reasoning
+  // plus content, content plus tool-call fragments, reasoning carrying an
+  // embedded Kimi tool-call section) is ONE raw delta and must stamp the
+  // raw-timing signal exactly once, matching the per-delta rule the
+  // continuation path already enforces.
+  it('DT-3: a choice with multiple token-bearing fields fires the notifier exactly once', async () => {
+    const kimiSectionReasoning =
+      'Consider<|tool_calls_section_begin|><|tool_call_begin|>get_weather<|tool_call_argument_begin|>{}<|tool_call_end|><|tool_calls_section_end|>';
+    const chunks = [
+      makeChunk({ reasoning_content: 'why', content: 'Answer.' }, null),
+      makeChunk(
+        {
+          content: 'Running',
+          tool_calls: [
+            {
+              index: 0,
+              id: 'call_0',
+              type: 'function',
+              function: { name: 'get_weather', arguments: '{"city":"S' },
+            },
+          ],
+        },
+        null,
+      ),
+      makeChunk({ reasoning_content: kimiSectionReasoning }, null),
+      makeFinishChunk(60),
+    ];
+
+    let fires = 0;
+    const results = await collectResults(
+      createProviderStream(chunks, 5, 'openai', {
+        onRawTokenDelta: () => {
+          fires++;
+        },
+      }),
+    );
+
+    // Three token-bearing choices, one signal each. Pre-remediation each
+    // choice fired once per payload kind (6 total).
+    expect(fires).toBe(3);
+
+    // Visible output is unchanged: each content delta still yields its text.
+    expect(collectText(results)).toBe('Answer.Running');
+  });
 });

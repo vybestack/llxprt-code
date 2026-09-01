@@ -66,6 +66,7 @@ import {
   buildToolCallsForHistory,
   emitFinishOnlyMetadata,
   emitUsageOnlyMetadata,
+  createPerChoiceNotifier,
 } from './OpenAIStreamProcessorState.js';
 import { appendBufferedText } from './openaiTextBuffer.js';
 
@@ -76,13 +77,37 @@ export interface StreamProcessorDeps {
   getBaseURL: () => string | undefined;
   reasoningFieldName?: string;
   /**
-   * Raw token-delta timing signal (issue #3473). Invoked at each raw
-   * token-bearing delta (reasoning, buffered or immediate content,
-   * tool-call fragment). Optional: without it, attempt timing falls back
-   * to visible-chunk stamping.
+   * Raw token-delta timing signal (issue #3473). Invoked exactly once per
+   * raw token-bearing choice/delta (reasoning, buffered or immediate
+   * content, tool-call fragment), even when a single choice carries
+   * several token-bearing fields. Optional: without it, attempt timing
+   * falls back to visible-chunk stamping.
    */
   onRawTokenDelta?: () => void;
 }
+
+/**
+ * Continuation request issued after tool-calls-without-text (issue #584):
+ * the same attempt decodes the continuation stream, so its raw deltas
+ * take the resolved notifier and the configured reasoning field name.
+ */
+type RequestContinuationFn = (
+  toolCalls: Array<{
+    id: string;
+    type: 'function';
+    function: { name: string; arguments: string };
+  }>,
+  messagesWithSystem: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+  requestBody: OpenAI.Chat.ChatCompletionCreateParams,
+  client: OpenAI,
+  abortSignal: AbortSignal | undefined,
+  model: string,
+  logger: DebugLogger,
+  mergedHeaders: Record<string, string> | undefined,
+  toolFormat: ToolFormat,
+  reasoningFieldName?: string,
+  onRawTokenDelta?: () => void,
+) => AsyncGenerator<IContent, void, unknown>;
 
 /**
  * Parse buffer text for tool calls and thinking, returning extracted data.
@@ -254,6 +279,7 @@ function processReasoningDelta(
   choice: OpenAI.Chat.Completions.ChatCompletionChunk.Choice,
   state: StreamingState,
   deps: StreamProcessorDeps,
+  notify: () => void,
 ): void {
   const { thinking: reasoningBlock, toolCalls: reasoningToolCalls } =
     parseStreamingReasoningDelta(
@@ -264,7 +290,7 @@ function processReasoningDelta(
   if (reasoningBlock) {
     state.accumulatedReasoningContent += reasoningBlock.thought;
     state.reasoningSourceField = reasoningBlock.sourceField;
-    deps.onRawTokenDelta?.();
+    notify();
   }
   if (reasoningToolCalls.length > 0) {
     const stats = deps.toolCallPipeline.getStats();
@@ -277,7 +303,7 @@ function processReasoningDelta(
       });
       baseIndex++;
     }
-    deps.onRawTokenDelta?.();
+    notify();
   }
 }
 
@@ -288,13 +314,14 @@ async function* handleTextDelta(
   detectedFormat: string,
   model: string,
   deps: StreamProcessorDeps,
+  notify: () => void,
 ): AsyncGenerator<IContent, void, unknown> {
   state.accumulatedText += deltaContent;
 
   if (shouldBufferText) {
     // Buffered text yields no visible chunk until a natural breakpoint
     // flushes; signal the raw delta arrival (issue #3473 AC-4).
-    deps.onRawTokenDelta?.();
+    notify();
 
     deps.logger.debug(
       () => `[Streaming] Chunk content for ${detectedFormat} format:`,
@@ -357,7 +384,7 @@ async function* handleTextDelta(
     // visible chunk are the same token, so signal the raw arrival too
     // (issue #3473: raw timing stays authoritative even for streams that
     // mix buffered and immediate text).
-    deps.onRawTokenDelta?.();
+    notify();
     yield {
       speaker: 'ai',
       blocks: [
@@ -378,6 +405,7 @@ async function* handleTextDelta(
 function processDeltaToolCalls(
   choice: OpenAI.Chat.Completions.ChatCompletionChunk.Choice,
   deps: StreamProcessorDeps,
+  notify: () => void,
 ): void {
   let addedFragments = false;
   // Cast to allow for runtime undefined delta (external API boundary)
@@ -423,7 +451,7 @@ function processDeltaToolCalls(
   }
 
   if (addedFragments) {
-    deps.onRawTokenDelta?.();
+    notify();
   }
 }
 
@@ -460,7 +488,11 @@ async function* processStreamingChunk(
   const choice = chunkChoices?.[0];
   if (choice === undefined) return;
 
-  processReasoningDelta(choice, state, deps);
+  // One raw-timing signal per raw choice regardless of how many
+  // token-bearing fields the choice carries (issue #3473).
+  const notifyRawDelta = createPerChoiceNotifier(deps.onRawTokenDelta);
+
+  processReasoningDelta(choice, state, deps, notifyRawDelta);
 
   // Check for finish_reason
   if (choice.finish_reason) {
@@ -503,10 +535,11 @@ async function* processStreamingChunk(
       detectedFormat,
       model,
       deps,
+      notifyRawDelta,
     );
   }
 
-  processDeltaToolCalls(choice, deps);
+  processDeltaToolCalls(choice, deps, notifyRawDelta);
 }
 
 /**
@@ -719,22 +752,7 @@ async function* handleToolCallsWithoutText(
   mergedHeaders: Record<string, string> | undefined,
   detectedFormat: string,
   deps: StreamProcessorDeps,
-  requestContinuation: (
-    toolCalls: Array<{
-      id: string;
-      type: 'function';
-      function: { name: string; arguments: string };
-    }>,
-    messagesWithSystem: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-    requestBody: OpenAI.Chat.ChatCompletionCreateParams,
-    client: OpenAI,
-    abortSignal: AbortSignal | undefined,
-    model: string,
-    logger: DebugLogger,
-    mergedHeaders: Record<string, string> | undefined,
-    toolFormat: ToolFormat,
-    onRawTokenDelta?: () => void,
-  ) => AsyncGenerator<IContent, void, unknown>,
+  requestContinuation: RequestContinuationFn,
 ): AsyncGenerator<IContent, void, unknown> {
   const pipelineResult = state.cachedPipelineResult;
   const hasCachedPipelineResult = pipelineResult != null;
@@ -784,6 +802,7 @@ async function* handleToolCallsWithoutText(
     deps.logger,
     mergedHeaders,
     detectedFormat as ToolFormat,
+    deps.reasoningFieldName,
     deps.onRawTokenDelta,
   );
 }
@@ -875,22 +894,7 @@ export async function* processStreamingResponse(
   mergedHeaders: Record<string, string> | undefined,
   baseURL: string | undefined,
   deps: StreamProcessorDeps,
-  requestContinuation: (
-    toolCalls: Array<{
-      id: string;
-      type: 'function';
-      function: { name: string; arguments: string };
-    }>,
-    messagesWithSystem: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-    requestBody: OpenAI.Chat.ChatCompletionCreateParams,
-    client: OpenAI,
-    abortSignal: AbortSignal | undefined,
-    model: string,
-    logger: DebugLogger,
-    mergedHeaders: Record<string, string> | undefined,
-    toolFormat: ToolFormat,
-    onRawTokenDelta?: () => void,
-  ) => AsyncGenerator<IContent, void, unknown>,
+  requestContinuation: RequestContinuationFn,
 ): AsyncGenerator<IContent, void, unknown> {
   const state = createStreamingState();
   const shouldBufferText = detectedFormat === 'qwen';

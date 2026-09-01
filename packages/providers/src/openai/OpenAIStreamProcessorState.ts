@@ -77,6 +77,24 @@ export function endsWithSentence(text: string): boolean {
 }
 
 /**
+ * Wrap the raw-timing hook so it fires at most once per raw choice
+ * (issue #3473): a choice carrying several token-bearing fields (e.g.
+ * reasoning_content plus content) is one raw delta and must stamp once,
+ * matching the per-delta rule the continuation path enforces.
+ */
+export function createPerChoiceNotifier(
+  hook: (() => void) | undefined,
+): () => void {
+  let fired = false;
+  return () => {
+    if (!fired) {
+      fired = true;
+      hook?.();
+    }
+  };
+}
+
+/**
  * Check if the text buffer has reached a natural break point for flushing.
  */
 export function hasNaturalBreakPoint(

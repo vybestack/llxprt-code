@@ -914,6 +914,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     logger: DebugLogger,
     mergedHeaders: Record<string, string> | undefined,
     toolFormat: ToolFormat,
+    reasoningFieldName?: string,
     onRawTokenDelta?: () => void,
   ): AsyncGenerator<IContent, void, unknown> {
     const continuationMessages = buildContinuationMessages(
@@ -952,6 +953,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         const { sanitizedText, isTokenBearing } = classifyContinuationDelta(
           chunk,
           logger,
+          reasoningFieldName,
         );
         if (isTokenBearing) {
           onRawTokenDelta?.();
@@ -998,10 +1000,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
  * only payload that changes visible output) and whether the delta is
  * token-bearing (content, reasoning_content/reasoning, or tool-call
  * fragments), which fires the attempt's raw-timing signal exactly once.
+ * The configured reasoning.fieldName must be honored here just as it is
+ * in the primary stream, or custom-field reasoning deltas look
+ * non-token-bearing and stop stamping raw timing.
  */
 function classifyContinuationDelta(
   chunk: OpenAI.Chat.Completions.ChatCompletionChunk,
   logger: DebugLogger,
+  reasoningFieldName?: string,
 ): { sanitizedText: string; isTokenBearing: boolean } {
   const sanitizedText = extractSanitizedChunkText(chunk);
   const chunkChoices = (
@@ -1011,7 +1017,7 @@ function classifyContinuationDelta(
   ).choices;
   const delta = chunkChoices?.[0]?.delta;
   const { thinking, toolCalls: reasoningToolCalls } =
-    parseStreamingReasoningDelta(delta, logger);
+    parseStreamingReasoningDelta(delta, logger, reasoningFieldName);
   const hasDeltaToolCalls =
     delta?.tool_calls !== undefined && delta.tool_calls.length > 0;
   const isTokenBearing =
