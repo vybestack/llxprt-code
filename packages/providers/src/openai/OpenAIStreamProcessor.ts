@@ -75,6 +75,13 @@ export interface StreamProcessorDeps {
   logger: DebugLogger;
   getBaseURL: () => string | undefined;
   reasoningFieldName?: string;
+  /**
+   * Raw token-delta timing signal (issue #3473). Invoked at each raw
+   * token-bearing delta (reasoning, buffered or immediate content,
+   * tool-call fragment). Optional: without it, attempt timing falls back
+   * to visible-chunk stamping.
+   */
+  onRawTokenDelta?: () => void;
 }
 
 /**
@@ -239,6 +246,9 @@ async function* flushTextBuffer(
 
 /**
  * Process reasoning and tool-call fragments from a choice delta.
+ * Raw token-bearing reasoning deltas and reasoning tool-call fragments
+ * fire the raw-timing signal so attempt timing reflects the raw delta
+ * arrival, not the later terminal emission (issue #3473 AC-4).
  */
 function processReasoningDelta(
   choice: OpenAI.Chat.Completions.ChatCompletionChunk.Choice,
@@ -254,6 +264,7 @@ function processReasoningDelta(
   if (reasoningBlock) {
     state.accumulatedReasoningContent += reasoningBlock.thought;
     state.reasoningSourceField = reasoningBlock.sourceField;
+    deps.onRawTokenDelta?.();
   }
   if (reasoningToolCalls.length > 0) {
     const stats = deps.toolCallPipeline.getStats();
@@ -266,6 +277,7 @@ function processReasoningDelta(
       });
       baseIndex++;
     }
+    deps.onRawTokenDelta?.();
   }
 }
 
@@ -280,6 +292,10 @@ async function* handleTextDelta(
   state.accumulatedText += deltaContent;
 
   if (shouldBufferText) {
+    // Buffered text yields no visible chunk until a natural breakpoint
+    // flushes; signal the raw delta arrival (issue #3473 AC-4).
+    deps.onRawTokenDelta?.();
+
     deps.logger.debug(
       () => `[Streaming] Chunk content for ${detectedFormat} format:`,
       {
@@ -337,7 +353,11 @@ async function* handleTextDelta(
       );
     }
   } else {
-    // Emit immediately for non-buffered providers
+    // Emit immediately for non-buffered providers; the raw delta and the
+    // visible chunk are the same token, so signal the raw arrival too
+    // (issue #3473: raw timing stays authoritative even for streams that
+    // mix buffered and immediate text).
+    deps.onRawTokenDelta?.();
     yield {
       speaker: 'ai',
       blocks: [
@@ -352,11 +372,14 @@ async function* handleTextDelta(
 
 /**
  * Feed tool-call fragments from a choice delta into the pipeline.
+ * Fragments surface only in the terminal chunk, so each fragment-bearing
+ * delta fires the raw-timing signal (issue #3473 AC-4).
  */
 function processDeltaToolCalls(
   choice: OpenAI.Chat.Completions.ChatCompletionChunk.Choice,
   deps: StreamProcessorDeps,
 ): void {
+  let addedFragments = false;
   // Cast to allow for runtime undefined delta (external API boundary)
   const delta = choice.delta as
     | OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta
@@ -372,6 +395,7 @@ function processDeltaToolCalls(
         name: deltaToolCall.function?.name,
         args: deltaToolCall.function?.arguments,
       });
+      addedFragments = true;
     }
   }
 
@@ -394,7 +418,12 @@ function processDeltaToolCalls(
         name: toolCall.function?.name,
         args: toolCall.function?.arguments,
       });
+      addedFragments = true;
     });
+  }
+
+  if (addedFragments) {
+    deps.onRawTokenDelta?.();
   }
 }
 
@@ -704,6 +733,7 @@ async function* handleToolCallsWithoutText(
     logger: DebugLogger,
     mergedHeaders: Record<string, string> | undefined,
     toolFormat: ToolFormat,
+    onRawTokenDelta?: () => void,
   ) => AsyncGenerator<IContent, void, unknown>,
 ): AsyncGenerator<IContent, void, unknown> {
   const pipelineResult = state.cachedPipelineResult;
@@ -754,6 +784,7 @@ async function* handleToolCallsWithoutText(
     deps.logger,
     mergedHeaders,
     detectedFormat as ToolFormat,
+    deps.onRawTokenDelta,
   );
 }
 
@@ -858,6 +889,7 @@ export async function* processStreamingResponse(
     logger: DebugLogger,
     mergedHeaders: Record<string, string> | undefined,
     toolFormat: ToolFormat,
+    onRawTokenDelta?: () => void,
   ) => AsyncGenerator<IContent, void, unknown>,
 ): AsyncGenerator<IContent, void, unknown> {
   const state = createStreamingState();

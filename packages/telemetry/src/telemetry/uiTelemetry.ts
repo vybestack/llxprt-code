@@ -61,7 +61,7 @@ export interface ModelMetrics {
 export interface SessionTimingMetrics {
   /** Complete session TPM: 60 * Σ(P+O) / ΣD */
   completeTokensPerMinute: number;
-  /** Output generation TPS: Σ(O-1)/ΣG * 1000 */
+  /** Output generation TPS: Σ(O-1)/ΣG * 1000 where G = lastTokenMs − TTFT > 0 */
   outputGenerationTps: number;
   /** Effective input TPS: ΣP/ΣTTFT * 1000 */
   effectiveInputTps: number;
