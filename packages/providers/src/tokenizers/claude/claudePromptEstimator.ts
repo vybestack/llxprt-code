@@ -161,14 +161,25 @@ export async function estimateClaude5Prompt(
   }
 }
 
+function acceptsModelIdentity(
+  spec: Claude5FamilySpec,
+  canonicalModel: string,
+): boolean {
+  return (
+    spec.matches(canonicalModel) ||
+    (spec.matchesPointRelease?.(canonicalModel) ?? false)
+  );
+}
+
 /**
  * Per-entry token counter for incremental history accounting.
  *
  * Uses the same calibration as the pre-send estimate but in its marginal form,
  * because a history entry carries content, not the per-request framing the
- * intercept models. Returns undefined for anything this family has not
- * measured, so unclaimed models keep their existing counter rather than
- * receiving coefficients fitted elsewhere.
+ * intercept models. Point releases are counted with their family's marginal
+ * calibration, matching how their envelope is estimated. Returns undefined
+ * for anything this family has not measured, so unclaimed models keep their
+ * existing counter rather than receiving coefficients fitted elsewhere.
  */
 export function createClaudeRuntimeTokenizer(
   activeProvider: string,
@@ -177,7 +188,7 @@ export function createClaudeRuntimeTokenizer(
   const spec = CLAUDE_5_FAMILY_SPECS.find(
     (candidate) =>
       candidate.claim.test(canonicalModel) &&
-      candidate.matches(canonicalModel) &&
+      acceptsModelIdentity(candidate, canonicalModel) &&
       candidate.appliesToProvider(activeProvider),
   );
   const calibration = spec?.calibration;
@@ -216,9 +227,9 @@ function toRegistration(
     family: spec.family,
     claim: spec.claim,
     matches: spec.matches,
+    matchesPointRelease: spec.matchesPointRelease,
     protocols: spec.protocols,
     appliesToProvider: spec.appliesToProvider,
-    identityErrorHint: spec.identityErrorHint,
     estimate: (request: RuntimePromptEstimateRequest) =>
       estimateClaude5Prompt(request, spec),
   });

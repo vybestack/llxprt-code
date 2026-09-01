@@ -14,6 +14,8 @@ import {
 import {
   CLAUDE_FABLE_5_CLAIM,
   CLAUDE_OPUS_5_CLAIM,
+  isClaudeFable5PointReleaseModel,
+  isClaudeOpus5PointReleaseModel,
   isSanctionedClaudeFable5Model,
   isSanctionedClaudeOpus5Model,
 } from './claudeModelIdentity.js';
@@ -140,9 +142,14 @@ export interface Claude5FamilySpec {
   readonly canonicalModelFamily: string;
   readonly claim: RegExp;
   readonly matches: (model: string) => boolean;
+  /**
+   * Point releases of the family line (e.g. `claude-fable-5-1`) inherit the
+   * family calibration with an explicit warning until a dedicated
+   * calibration exists.
+   */
+  readonly matchesPointRelease?: (model: string) => boolean;
   readonly protocols: ReadonlySet<PromptEnvelopeProtocol>;
   readonly appliesToProvider: (activeProvider: string) => boolean;
-  readonly identityErrorHint: string;
   /** Absent when the model has no activatable calibration. */
   readonly calibration: ClaudeCalibration | undefined;
   /** Present exactly when `calibration` is absent. */
@@ -156,10 +163,9 @@ export const CLAUDE_5_FAMILY_SPECS: readonly Claude5FamilySpec[] =
       canonicalModelFamily: 'claude-opus-5',
       claim: CLAUDE_OPUS_5_CLAIM,
       matches: isSanctionedClaudeOpus5Model,
+      matchesPointRelease: isClaudeOpus5PointReleaseModel,
       protocols: CLAUDE_5_ANTHROPIC_PROTOCOLS,
       appliesToProvider: isClaude5CalibratedProvider,
-      identityErrorHint:
-        'use claude-opus-5, claude-opus-5-latest, or a claude-opus-5-YYYYMMDD snapshot with a real calendar date',
       calibration: CLAUDE_OPUS_5_CALIBRATION,
       withheldReason: undefined,
     }),
@@ -168,10 +174,9 @@ export const CLAUDE_5_FAMILY_SPECS: readonly Claude5FamilySpec[] =
       canonicalModelFamily: 'claude-fable-5',
       claim: CLAUDE_FABLE_5_CLAIM,
       matches: isSanctionedClaudeFable5Model,
+      matchesPointRelease: isClaudeFable5PointReleaseModel,
       protocols: CLAUDE_5_ANTHROPIC_PROTOCOLS,
       appliesToProvider: isClaude5CalibratedProvider,
-      identityErrorHint:
-        'use claude-fable-5, claude-fable-5-latest, or a claude-fable-5-YYYYMMDD snapshot with a real calendar date',
       calibration: CLAUDE_FABLE_5_CALIBRATION,
       withheldReason: undefined,
     }),
