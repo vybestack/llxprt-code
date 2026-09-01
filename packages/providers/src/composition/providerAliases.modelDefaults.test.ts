@@ -739,10 +739,7 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
   it.each(['openai', 'openai-responses', 'openai-vercel', 'codex'])(
     '%s applies image limits to every gpt- family model',
     (alias) => {
-      const entries = loadProviderAliasEntries();
-      const entry = entries.find(
-        (e) => e.alias === alias && e.source === 'builtin',
-      );
+      const entry = findBuiltinAliasEntry(alias);
       expect(entry).toBeDefined();
       const rules = configuredModelDefaultRules(entry);
       expect(computeMatchedDefaults('gpt-future-vision', rules)).toMatchObject({
@@ -759,17 +756,19 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
   // variants, must all land on the 2000px rule.
   const GPT_52_PLUS_MODELS = [
     ...[2, 3, 4, 5, 6, 10].map((minor) => `gpt-5.${minor}`),
-    'gpt-5.6-sol', 'gpt-5.10-sol', 'gpt-5.6-luna',
-    'gpt-5.2-20260101', 'gpt-6', 'gpt-6.1', 'gpt-10',
+    'gpt-5.6-sol',
+    'gpt-5.10-sol',
+    'gpt-5.6-luna',
+    'gpt-5.2-20260101',
+    'gpt-6',
+    'gpt-6.1',
+    'gpt-10',
   ];
 
   it.each(['openai', 'openai-responses', 'openai-vercel', 'codex'])(
     '%s applies 2000px image resize to GPT-5.2+ models @issue:3477',
     (alias) => {
-      const entries = loadProviderAliasEntries();
-      const entry = entries.find(
-        (e) => e.alias === alias && e.source === 'builtin',
-      );
+      const entry = findBuiltinAliasEntry(alias);
       expect(entry).toBeDefined();
       const rules = configuredModelDefaultRules(entry);
       for (const model of GPT_52_PLUS_MODELS) {
@@ -786,10 +785,7 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
   it.each(['openai', 'openai-responses', 'openai-vercel', 'codex'])(
     '%s keeps 2048px image resize for pre-5.2 GPT models @issue:3477',
     (alias) => {
-      const entries = loadProviderAliasEntries();
-      const entry = entries.find(
-        (e) => e.alias === alias && e.source === 'builtin',
-      );
+      const entry = findBuiltinAliasEntry(alias);
       expect(entry).toBeDefined();
       const rules = configuredModelDefaultRules(entry);
       for (const model of ['gpt-5.0', 'gpt-5.1', 'gpt-4o', 'gpt-4.1']) {
