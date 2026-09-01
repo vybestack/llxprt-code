@@ -40,6 +40,7 @@ import {
   setupCredentialProxyDockerMacOS,
   SSH_TUNNEL_POLL_TIMEOUT_MS,
 } from './sandbox-ssh.js';
+import { addSandboxOwnershipLabels } from './sandbox-owner-labels.js';
 import { setupCredentialProxyPodmanMacOS } from './sandbox-podman.js';
 import {
   createAndStartProxy,
@@ -479,6 +480,7 @@ export function assignContainerName(
   while (existingNames.has(containerName)) {
     containerName = `${imageName}-${process.pid}-${++suffix}`;
   }
+  addSandboxOwnershipLabels(args);
   args.push('--name', containerName, '--hostname', containerName);
   return containerName;
 }

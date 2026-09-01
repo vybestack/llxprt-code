@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { execFileSync, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -236,6 +236,223 @@ async function rethrowCredentialProxySetupError(
   );
 }
 
+const SANDBOX_MANAGED_LABEL = 'com.vybestack.llxprt.sandbox-managed=true';
+const SANDBOX_OWNER_LABEL = 'com.vybestack.llxprt.sandbox-owner';
+const PROCESS_START_TOLERANCE_MS = 2_000;
+const PS_WEEKDAYS: readonly string[] = [
+  'Sun',
+  'Mon',
+  'Tue',
+  'Wed',
+  'Thu',
+  'Fri',
+  'Sat',
+];
+const PS_MONTHS: readonly string[] = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+const PS_LSTART_PATTERN =
+  /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ( [1-9]|[12]\d|3[01]) ([01]\d|2[0-3]):([0-5]\d):([0-5]\d) (\d{4})$/;
+
+interface SandboxOwnerMetadata {
+  readonly version: 1;
+  readonly hostname: string;
+  readonly pid: number;
+  readonly startTimeMs: number;
+  readonly startTimeSource: 'observed' | 'estimated';
+}
+
+function execFileOutput(
+  command: string,
+  args: readonly string[],
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      command,
+      args,
+      { encoding: 'utf8', timeout: 5_000, killSignal: 'SIGKILL' },
+      (error, stdout) => {
+        if (error !== null) {
+          reject(error);
+          return;
+        }
+        resolve(stdout);
+      },
+    );
+  });
+}
+
+function isUnknownRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isSandboxOwnerMetadata(value: unknown): value is SandboxOwnerMetadata {
+  if (!isUnknownRecord(value) || value.version !== 1) {
+    return false;
+  }
+  if (typeof value.hostname !== 'string' || value.hostname.length === 0) {
+    return false;
+  }
+  if (
+    typeof value.pid !== 'number' ||
+    !Number.isInteger(value.pid) ||
+    value.pid <= 0
+  ) {
+    return false;
+  }
+  if (
+    typeof value.startTimeMs !== 'number' ||
+    !Number.isFinite(value.startTimeMs) ||
+    value.startTimeMs <= 0
+  ) {
+    return false;
+  }
+  return (
+    value.startTimeSource === 'observed' ||
+    value.startTimeSource === 'estimated'
+  );
+}
+
+function parseSandboxOwner(payload: string): SandboxOwnerMetadata | undefined {
+  try {
+    const parsed: unknown = JSON.parse(payload);
+    return isSandboxOwnerMetadata(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseManagedContainerRow(
+  row: string,
+): readonly [string, SandboxOwnerMetadata] | undefined {
+  const separator = row.indexOf('	');
+  if (separator <= 0) return undefined;
+  const containerId = row.slice(0, separator);
+  const owner = parseSandboxOwner(row.slice(separator + 1));
+  return owner === undefined ? undefined : [containerId, owner];
+}
+
+function parseProcessStartTime(output: string): number | undefined {
+  const match = PS_LSTART_PATTERN.exec(output);
+  if (match === null) return undefined;
+  const [
+    ,
+    weekday,
+    month,
+    dayText,
+    hourText,
+    minuteText,
+    secondText,
+    yearText,
+  ] = match;
+  const monthIndex = PS_MONTHS.indexOf(month);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+  const year = Number(yearText);
+  const startTimeMs = Date.UTC(year, monthIndex, day, hour, minute, second);
+  const parsed = new Date(startTimeMs);
+  if (parsed.getUTCFullYear() !== year) return undefined;
+  if (parsed.getUTCMonth() !== monthIndex) return undefined;
+  if (parsed.getUTCDate() !== day) return undefined;
+  if (PS_WEEKDAYS[parsed.getUTCDay()] !== weekday) return undefined;
+  return startTimeMs;
+}
+
+function readProcessStartTime(pid: number): number | undefined {
+  try {
+    const output = execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], {
+      encoding: 'utf8',
+      timeout: 250,
+      env: { ...process.env, LC_ALL: 'C', LANG: 'C', TZ: 'UTC' },
+    }).trim();
+    return parseProcessStartTime(output);
+  } catch {
+    return undefined;
+  }
+}
+
+function sandboxOwnerIsDead(owner: SandboxOwnerMetadata): boolean {
+  try {
+    if (owner.hostname !== os.hostname()) return false;
+  } catch {
+    return false;
+  }
+  try {
+    process.kill(owner.pid, 0);
+  } catch (error) {
+    return isNodeError(error) && error.code === 'ESRCH';
+  }
+  if (owner.startTimeSource !== 'observed') return false;
+  const currentStartTimeMs = readProcessStartTime(owner.pid);
+  return (
+    currentStartTimeMs !== undefined &&
+    Math.abs(currentStartTimeMs - owner.startTimeMs) >
+      PROCESS_START_TOLERANCE_MS
+  );
+}
+
+function listManagedSandboxContainers(config: SandboxConfig): Promise<string> {
+  return execFileOutput(config.command, [
+    'ps',
+    '--filter',
+    `label=${SANDBOX_MANAGED_LABEL}`,
+    '--format',
+    `{{.ID}}	{{.Label "${SANDBOX_OWNER_LABEL}"}}`,
+  ]);
+}
+
+async function reapManagedSandboxContainer(
+  config: SandboxConfig,
+  row: string,
+): Promise<void> {
+  const container = parseManagedContainerRow(row);
+  if (container === undefined) return;
+  const [containerId, owner] = container;
+  if (!sandboxOwnerIsDead(owner)) return;
+  try {
+    await execFileOutput(config.command, ['rm', '-f', containerId]);
+  } catch (error) {
+    debugLogger.warn(
+      `Could not reap orphaned ${config.command} sandbox ${containerId}: ${getErrorMessage(error)}`,
+    );
+  }
+}
+
+async function reapOrphanedSandboxContainers(
+  config: SandboxConfig,
+): Promise<void> {
+  if (config.command !== 'docker' && config.command !== 'podman') return;
+  let output: string;
+  try {
+    output = await listManagedSandboxContainers(config);
+  } catch (error) {
+    debugLogger.warn(
+      `Could not list managed ${config.command} sandboxes for orphan recovery: ${getErrorMessage(error)}`,
+    );
+    return;
+  }
+  const rows = output
+    .split('\n')
+    .map((row) => (row.endsWith('\r') ? row.slice(0, -1) : row))
+    .filter((row) => row.length > 0);
+  for (const row of rows) {
+    await reapManagedSandboxContainer(config, row);
+  }
+}
+
 /** Runs the Docker/Podman sandbox path — image build, arg assembly, and proxy setup. */
 async function prepareContainerSandbox(
   config: SandboxConfig,
@@ -244,6 +461,7 @@ async function prepareContainerSandbox(
   cliArgs: string[],
 ): Promise<ContainerSandboxPrepared> {
   validateContainerSandboxEnv();
+  await reapOrphanedSandboxContainers(config);
 
   const { image, workdir, sessionTmpdir, args, dependencyStorageCleanup } =
     await prepareContainerImageAndArgs(config);
