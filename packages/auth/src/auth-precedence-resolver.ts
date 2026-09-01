@@ -89,9 +89,9 @@ function isAuthOnlyEnabled(value: unknown): boolean {
 }
 
 const PROXY_TRANSPORT_ERROR_PATTERN =
-  /Credential proxy (?:connection lost|partial frame timeout)|Handshake (?:failed|timed out)|Request timed out|Malformed handshake response|connect (?:ECONNREFUSED|ENOENT|EACCES)|ECONNRESET|EPIPE|socket hang up|Connection closing/i;
+  /Credential proxy (?:connection lost|partial frame timeout)|Handshake (?:failed|timed out)|Request timed out|Malformed handshake response|connect (?:ECONNREFUSED|ENOENT|EACCES|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT|EPERM|ENOTDIR)|ECONNRESET|EPIPE|socket hang up|Connection closing/i;
 const PROXY_NOT_REACHED_ERROR_PATTERN =
-  /connect (?:ECONNREFUSED|ENOENT|EACCES)/i;
+  /connect (?:ECONNREFUSED|ENOENT|EACCES|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT|EPERM|ENOTDIR)/i;
 
 export class AuthPrecedenceResolver {
   private static readonly NO_OP_LOGGER: IDebugLogger = {

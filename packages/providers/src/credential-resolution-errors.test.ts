@@ -241,6 +241,37 @@ describe('Provider credential-resolution error surface', () => {
     expect(error.diagnostics).toEqual(resolverFailure.diagnostics);
   });
 
+  it('preserves the resolver failure when a caller explicitly provides an undefined cause', () => {
+    const settings = createSettings('openai');
+    const resolverCause = new Error('resolver transport failure');
+    const resolverFailure = new CredentialResolutionError(
+      'proxy-unavailable',
+      {
+        provider: 'openai',
+        profile: PROFILE,
+        runtimeId: RUNTIME_ID,
+        attemptedMechanisms: ['oauth'],
+        proxyMode: true,
+        proxyContacted: false,
+      },
+      { cause: resolverCause },
+    );
+    const options = createNormalizedOptions(
+      'openai',
+      settings,
+      resolverFailure,
+    );
+
+    const error = createCredentialResolutionError(options, 'openai', {
+      kind: 'credential-source-failed',
+      cause: undefined,
+    });
+
+    expect(error).toBe(resolverFailure);
+    expect(error.kind).toBe('proxy-unavailable');
+    expect(error.cause).toBe(resolverCause);
+  });
+
   it('marks fresh failure trace fields unknown instead of asserting no proxy attempt', () => {
     const settings = createSettings('openai');
     const options = createNormalizedOptions('openai', settings);

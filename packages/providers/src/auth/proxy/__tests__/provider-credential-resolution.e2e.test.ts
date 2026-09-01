@@ -256,19 +256,34 @@ describe('Provider credential resolution through a sandbox proxy', () => {
   });
 
   afterEach(async () => {
-    clearActiveProviderRuntimeContext();
-    resetFactorySingletons();
-    runtimeScopedStates.clear();
-    for (const proxy of proxies.splice(0)) {
-      await proxy.server.stop();
+    const cleanupErrors: unknown[] = [];
+    try {
+      clearActiveProviderRuntimeContext();
+      resetFactorySingletons();
+      runtimeScopedStates.clear();
+      for (const proxy of proxies.splice(0)) {
+        try {
+          await proxy.server.stop();
+        } catch (error) {
+          cleanupErrors.push(error);
+        }
+      }
+      if (temporaryDirectory !== undefined) {
+        try {
+          await fs.rm(temporaryDirectory, { recursive: true, force: true });
+        } catch (error) {
+          cleanupErrors.push(error);
+        }
+      }
+    } finally {
+      if (originalSocket === undefined) {
+        delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+      } else {
+        process.env.LLXPRT_CREDENTIAL_SOCKET = originalSocket;
+      }
     }
-    if (temporaryDirectory !== undefined) {
-      await fs.rm(temporaryDirectory, { recursive: true, force: true });
-    }
-    if (originalSocket === undefined) {
-      delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-    } else {
-      process.env.LLXPRT_CREDENTIAL_SOCKET = originalSocket;
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError(cleanupErrors, 'Proxy test cleanup failed');
     }
   });
 

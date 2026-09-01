@@ -14,7 +14,6 @@
 
 import * as net from 'node:net';
 import * as crypto from 'node:crypto';
-import { MessageChannel } from 'node:worker_threads';
 import { encodeFrame, FrameDecoder } from './framing.js';
 
 export const REQUEST_TIMEOUT_MS = 30000;
@@ -65,7 +64,8 @@ function isProxyResponseFrame(
   return true;
 }
 
-const PROXY_CONNECT_FAILURE_PATTERN = /connect (?:ECONNREFUSED|ENOENT|EACCES)/i;
+const PROXY_CONNECT_FAILURE_PATTERN =
+  /connect (?:ECONNREFUSED|ENOENT|EACCES|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT|EPERM|ENOTDIR)/i;
 
 export class ProxyRequestError extends Error {
   readonly proxyContacted: boolean;
@@ -88,7 +88,6 @@ export class ProxySocketClient {
   private readonly socketPath: string;
   private readonly capabilityToken: string | undefined;
   private socket: net.Socket | null = null;
-  private connectionEpoch = 0;
   private decoder: FrameDecoder = new FrameDecoder({
     onPartialFrameTimeout: () => this.handlePartialFrameTimeout(),
   });
@@ -180,18 +179,19 @@ export class ProxySocketClient {
     return connectionWasEstablished && !socket.readableEnded && socket.writable;
   }
 
-  private async hasUsableConnection(): Promise<boolean> {
-    if (!this.isConnected()) return false;
-    await new Promise<void>((resolve) => {
-      const { port1, port2 } = new MessageChannel();
-      port1.once('message', () => {
-        port1.close();
-        port2.close();
-        resolve();
-      });
-      port2.postMessage(undefined);
-    });
-    return this.isConnected();
+  /**
+   * A queued peer FIN is not reflected in the socket's synchronous state until
+   * the poll phase runs. Yield exactly once, and only for connection reuse, so
+   * an already-queued close is observed before a request is written.
+   */
+  private async confirmReusableConnection(socket: net.Socket): Promise<void> {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    if (this.socket !== socket || !this.isConnected()) {
+      throw new ProxyRequestError(
+        new Error('Credential proxy connection lost. Restart the session.'),
+        false,
+      );
+    }
   }
 
   /**
@@ -208,23 +208,18 @@ export class ProxySocketClient {
     payload: Record<string, unknown>,
     options?: RequestOptions,
   ): Promise<ProxyResponse> {
-    const connectionEpoch = this.connectionEpoch;
     let connectionWasEstablished = false;
     let proxyContacted = false;
     try {
-      connectionWasEstablished = await this.hasUsableConnection();
-      if (connectionEpoch !== this.connectionEpoch) {
-        throw new ProxyRequestError(
-          new Error('Credential proxy connection lost. Restart the session.'),
-          false,
-        );
-      }
-      proxyContacted = connectionWasEstablished;
-      if (!connectionWasEstablished) {
+      const reusableSocket = this.socket;
+      if (reusableSocket !== null && this.isConnected()) {
+        connectionWasEstablished = true;
+        await this.confirmReusableConnection(reusableSocket);
+        proxyContacted = true;
+        this.resetIdleTimer();
+      } else {
         await this.ensureConnected();
         proxyContacted = true;
-      } else {
-        this.resetIdleTimer();
       }
       return await this.sendRequest(op, payload, options);
     } catch (cause) {
@@ -348,7 +343,6 @@ export class ProxySocketClient {
   }
 
   gracefulClose(): void {
-    this.connectionEpoch += 1;
     this.handshakeComplete = false;
     // Reject any pending requests
     for (const [, pending] of this.pendingRequests) {
@@ -552,7 +546,6 @@ export class ProxySocketClient {
   }
 
   private destroy(message: string): void {
-    this.connectionEpoch += 1;
     this.cancelIdleTimer();
 
     for (const [, pending] of this.pendingRequests) {

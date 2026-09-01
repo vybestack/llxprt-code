@@ -82,13 +82,16 @@ export class CredentialResolutionError extends Error {
     diagnostics: CredentialResolutionDiagnostics,
     options: CredentialResolutionErrorOptions = {},
   ) {
+    const trimmedRemediation = options.remediation?.trim();
+    const remediation =
+      trimmedRemediation === '' ? undefined : trimmedRemediation;
     super(
-      buildMessage(kind, diagnostics, options.remediation),
+      buildMessage(kind, diagnostics, remediation),
       options.cause === undefined ? undefined : { cause: options.cause },
     );
     this.name = 'CredentialResolutionError';
     this.kind = kind;
-    this.remediation = options.remediation;
+    this.remediation = remediation;
     const attemptedMechanisms: CredentialMechanismAttempts =
       diagnostics.attemptedMechanisms === 'unknown'
         ? 'unknown'

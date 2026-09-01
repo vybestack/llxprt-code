@@ -38,10 +38,7 @@ export function createCredentialResolutionError(
 ): CredentialResolutionError {
   if (options.resolved.authFailure !== undefined) {
     const failure = options.resolved.authFailure;
-    const hasLiveCause = Object.prototype.hasOwnProperty.call(
-      fallback,
-      'cause',
-    );
+    const hasLiveCause = fallback.cause !== undefined;
     if (!hasLiveCause && fallback.remediation === undefined) return failure;
     const remediation = fallback.remediation ?? failure.remediation;
     const cause = hasLiveCause ? fallback.cause : failure.cause;

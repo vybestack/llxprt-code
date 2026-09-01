@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as net from 'node:net';
 import * as os from 'node:os';
@@ -16,6 +16,7 @@ import {
   ProxySocketClient,
   ProxyTokenStore,
   runtimeScopedStates,
+  type CredentialResolutionDiagnostics,
   type CredentialResolutionErrorKind,
   type CredentialResolutionResult,
   type IProviderKeyStorage,
@@ -136,13 +137,18 @@ async function startProxy(behavior: ProxyBehavior): Promise<ProxyHarness> {
       }
     });
   });
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(socketPath, () => {
-      server.removeListener('error', reject);
-      resolve();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(socketPath, () => {
+        server.removeListener('error', reject);
+        resolve();
+      });
     });
-  });
+  } catch (error) {
+    await fs.rm(directory, { recursive: true, force: true });
+    throw error;
+  }
   return {
     socketPath,
     requestCount: () => requestCount,
@@ -217,6 +223,7 @@ describe('Credential resolution diagnostics', () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     for (const client of clients.splice(0)) client.close();
     for (const harness of harnesses.splice(0)) await harness.close();
     runtimeScopedStates.clear();
@@ -271,6 +278,35 @@ describe('Credential resolution diagnostics', () => {
       proxyContacted: false,
     });
     expect(failure.message).toContain('profile=no-profile');
+  });
+
+  it('trims remediation text and omits whitespace-only remediation', () => {
+    const diagnostics: CredentialResolutionDiagnostics = {
+      provider: 'test-provider',
+      profile: 'sandbox-profile',
+      runtimeId: 'runtime-remediation',
+      attemptedMechanisms: ['oauth'],
+      proxyMode: false,
+      proxyContacted: false,
+    };
+
+    const whitespaceOnly = new CredentialResolutionError(
+      'credential-source-failed',
+      diagnostics,
+      { remediation: ' \n\t ' },
+    );
+    const padded = new CredentialResolutionError(
+      'credential-source-failed',
+      diagnostics,
+      { remediation: '  Retry credential setup.  ' },
+    );
+
+    expect(whitespaceOnly.remediation).toBeUndefined();
+    expect(whitespaceOnly.message).toStartWith('Credential resolution failed:');
+    expect(padded.remediation).toBe('Retry credential setup.');
+    expect(padded.message).toStartWith(
+      'Retry credential setup. Credential resolution failed:',
+    );
   });
 
   it('classifies an absent named key as credential-not-found without leaking credential material', async () => {
@@ -374,6 +410,45 @@ describe('Credential resolution diagnostics', () => {
     expect(failure.diagnostics.proxyMode).toBe(true);
     expect(failure.diagnostics.proxyContacted).toBe(false);
     expect(failure.cause).toBeInstanceOf(Error);
+  });
+
+  it('reports broader connect failures before proxy contact', async () => {
+    const socket = new net.Socket();
+    vi.spyOn(net, 'createConnection').mockImplementation(() => {
+      queueMicrotask(() => {
+        socket.emit(
+          'error',
+          new Error('connect EHOSTUNREACH credential-proxy.sock'),
+        );
+      });
+      return socket;
+    });
+    const socketPath = 'credential-proxy.sock';
+    process.env[CREDENTIAL_SOCKET_ENV] = socketPath;
+    const client = new ProxySocketClient(socketPath, CAPABILITY_SECRET);
+    clients.push(client);
+    const settings = createSettingsService({
+      'auth-key-name': 'proxy-key-reference',
+      currentProfile: 'sandbox-profile',
+    });
+    const resolver = new AuthPrecedenceResolver(
+      { providerId: 'test-provider' },
+      {
+        settingsService: settings,
+        providerKeyStorage: new ProxyProviderKeyStorage(client),
+        getActiveRuntimeContext: () =>
+          createRuntimeContext('runtime-proxy-unreachable', settings),
+      },
+    );
+
+    const result = await resolver.resolveAuthenticationResult();
+
+    const failure = expectSafeFailure(result, 'proxy-unavailable', [
+      CREDENTIAL_SECRET,
+      CAPABILITY_SECRET,
+      KEY_MATERIAL_SECRET,
+    ]);
+    expect(failure.diagnostics.proxyContacted).toBe(false);
   });
 
   it('classifies a non-transport named-key exception as credential-source-failed and preserves its cause', async () => {
