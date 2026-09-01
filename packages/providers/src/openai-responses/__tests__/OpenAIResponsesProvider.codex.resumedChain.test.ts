@@ -287,7 +287,7 @@ describe('OpenAIResponsesProvider Codex resumed chain @issue:3160', () => {
 
       const resumedAnswer = resumedMessages
         .flatMap((message) => message.blocks)
-        .map((block) => (blockTextOrEmpty(block)))
+        .map((block) => blockTextOrEmpty(block))
         .join('');
       const turn2Contents: IContent[] = [
         ...resumedContents,

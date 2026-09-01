@@ -148,7 +148,7 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
       const chunks: string[] = [];
       for await (const chunk of active!.generateChatCompletion([])) {
         const text = chunk.blocks
-          .map((block) => (blockTextOrEmpty(block)))
+          .map((block) => blockTextOrEmpty(block))
           .join('');
         chunks.push(text);
       }

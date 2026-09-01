@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { assertInstanceOf, errorMessage } from '@vybestack/llxprt-code-test-utils';
+import {
+  assertInstanceOf,
+  errorMessage,
+} from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it } from 'bun:test';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -344,11 +347,10 @@ describe('preparePromptEnvelopeAfterEnforcement', () => {
       AggregateError,
       'Expected aggregate cleanup failure',
     );
-    expect(
-      thrown.errors.map((error) =>
-        errorMessage(error),
-      ),
-    ).toStrictEqual(['first cleanup failed', 'second cleanup failed']);
+    expect(thrown.errors.map((error) => errorMessage(error))).toStrictEqual([
+      'first cleanup failed',
+      'second cleanup failed',
+    ]);
   });
 
   it('prepares a fresh projection after releasing the prior projection for the same contents', async () => {
