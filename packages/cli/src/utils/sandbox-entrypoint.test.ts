@@ -13,17 +13,23 @@
  * @plan project-plans/issue-1954-sandbox-hardening.md (AC1-AC3, AC5, F1, F7, F10)
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync, type ChildProcess } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { entrypoint } from './sandbox-entrypoint.js';
-import {
-  createHostOnlyCapabilityEnvFile,
-  type HostOnlyCapabilityResult,
-} from './sandbox-capability.js';
 import {
   setupCredentialProxy,
   wireCleanupHandlers,
@@ -46,8 +52,99 @@ void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
 }));
 
 const VALID_TOKEN = 'a'.repeat(64);
-const NODE = process.execPath;
 const BASH_CAP_REF = '${' + 'LLXPRT_CAPABILITY_TOKEN-}';
+const realHome = os.homedir();
+let realHomeCapabilityArtifacts = new Set<string>();
+let realConfigDir = '';
+let realConfigSnapshot: DirectorySnapshot | undefined;
+
+interface DirectorySnapshot {
+  readonly exists: boolean;
+  readonly entries: readonly string[];
+}
+
+function legacyCapabilityArtifacts(home: string): string[] {
+  return fs
+    .readdirSync(home)
+    .filter((entry) => entry.startsWith('.llxprt-code-cap-'))
+    .sort();
+}
+
+function resolveRealConfigDir(): string {
+  const probe = spawnSync(
+    process.execPath,
+    [
+      '-e',
+      "import { Storage } from '@vybestack/llxprt-code-storage'; process.stdout.write(Storage.getGlobalConfigDir());",
+    ],
+    { encoding: 'utf8' },
+  );
+  const resolved = probe.stdout.trim();
+  if (probe.status !== 0 || resolved === '') {
+    throw new Error(
+      `Could not resolve the real CLI config directory: ${probe.stderr.trim()}`,
+    );
+  }
+  return resolved;
+}
+
+function snapshotDirectoryEntries(
+  directory: string,
+  relativeDirectory = '',
+): string[] {
+  const snapshot: string[] = [];
+  const entries = fs
+    .readdirSync(directory, { withFileTypes: true })
+    .sort((left, right) => left.name.localeCompare(right.name));
+
+  for (const entry of entries) {
+    const relativePath = path.join(relativeDirectory, entry.name);
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      snapshot.push(`directory:${relativePath}`);
+      snapshot.push(...snapshotDirectoryEntries(entryPath, relativePath));
+    } else if (entry.isFile()) {
+      const hash = createHash('sha256')
+        .update(fs.readFileSync(entryPath))
+        .digest('hex');
+      snapshot.push(`file:${relativePath}:${hash}`);
+    } else if (entry.isSymbolicLink()) {
+      snapshot.push(
+        `symbolic-link:${relativePath}:${fs.readlinkSync(entryPath)}`,
+      );
+    } else {
+      snapshot.push(`other:${relativePath}`);
+    }
+  }
+
+  return snapshot;
+}
+
+function snapshotDirectory(directory: string): DirectorySnapshot {
+  if (!fs.existsSync(directory)) {
+    return { exists: false, entries: [] };
+  }
+  return {
+    exists: true,
+    entries: snapshotDirectoryEntries(directory),
+  };
+}
+
+beforeAll(() => {
+  realHomeCapabilityArtifacts = new Set(legacyCapabilityArtifacts(realHome));
+  realConfigDir = resolveRealConfigDir();
+  realConfigSnapshot = snapshotDirectory(realConfigDir);
+});
+
+afterAll(() => {
+  const newRealHomeArtifacts = legacyCapabilityArtifacts(realHome).filter(
+    (entry) => !realHomeCapabilityArtifacts.has(entry),
+  );
+  expect(newRealHomeArtifacts).toStrictEqual([]);
+  if (realConfigDir !== '' && realConfigSnapshot !== undefined) {
+    expect(snapshotDirectory(realConfigDir)).toStrictEqual(realConfigSnapshot);
+  }
+});
 
 function useTempDir(
   registerBefore: (fn: () => void) => void,
@@ -59,6 +156,28 @@ function useTempDir(
   });
   registerAfter(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
   return () => tmpDir;
+}
+
+const realOsTmpdir: () => string = os.tmpdir;
+
+/**
+ * Overrides os.tmpdir for the code under test. Bun exposes os.tmpdir as an
+ * accessor property, which vi.spyOn cannot wrap, and once TMPDIR is deleted
+ * after being set, os.tmpdir keeps returning the stale value for the rest of
+ * the process. Redefining the property avoids both pitfalls.
+ */
+function overrideOsTmpdir(value: string): void {
+  Object.defineProperty(os, 'tmpdir', {
+    value: () => value,
+    configurable: true,
+  });
+}
+
+function restoreOsTmpdir(): void {
+  Object.defineProperty(os, 'tmpdir', {
+    value: realOsTmpdir,
+    configurable: true,
+  });
 }
 
 function runCmd(
@@ -142,115 +261,6 @@ function writeInnerScript(tmpDir: string, script: string): string {
   fs.chmodSync(p, 0o700);
   return p;
 }
-
-describe('sandbox-entrypoint: host-only capability env-file (AC1, F4)', () => {
-  const getTmpDir = useTempDir(beforeEach, afterEach);
-  let origToken: string | undefined;
-  let origSocket: string | undefined;
-  let origHome: string | undefined;
-  let origUserProfile: string | undefined;
-
-  beforeEach(() => {
-    origToken = process.env.LLXPRT_CAPABILITY_TOKEN;
-    origSocket = process.env.LLXPRT_CREDENTIAL_SOCKET;
-    origHome = process.env.HOME;
-    origUserProfile = process.env.USERPROFILE;
-    process.env.LLXPRT_CAPABILITY_TOKEN = VALID_TOKEN;
-  });
-
-  afterEach(() => {
-    if (origToken !== undefined)
-      process.env.LLXPRT_CAPABILITY_TOKEN = origToken;
-    else delete process.env.LLXPRT_CAPABILITY_TOKEN;
-    if (origSocket !== undefined)
-      process.env.LLXPRT_CREDENTIAL_SOCKET = origSocket;
-    else delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-    // #10: restore HOME correctly when it was originally undefined.
-    if (origHome !== undefined) process.env.HOME = origHome;
-    else delete process.env.HOME;
-    if (origUserProfile !== undefined)
-      process.env.USERPROFILE = origUserProfile;
-    else delete process.env.USERPROFILE;
-  });
-
-  it.skipIf(process.platform === 'win32')(
-    'writes in a host-only dir under host HOME (outside mounts) with mode 0700 dir / 0600 file; raw token not in argv',
-    () => {
-      const result = createHostOnlyCapabilityEnvFile(
-        VALID_TOKEN,
-      ) as HostOnlyCapabilityResult;
-      const hostDir = path.dirname(result.envFilePath);
-      expect(hostDir.startsWith(os.homedir())).toBe(true);
-      expect(result.envFilePath.startsWith(getTmpDir())).toBe(false);
-      expect(fs.statSync(hostDir).mode & 0o777).toBe(0o700);
-      expect(fs.statSync(result.envFilePath).mode & 0o777).toBe(0o600);
-      expect(fs.readFileSync(result.envFilePath, 'utf8')).toContain(
-        VALID_TOKEN,
-      );
-      for (const arg of result.args) expect(arg).not.toContain(VALID_TOKEN);
-      expect(result.args[result.args.indexOf('--env-file') + 1]).toBe(
-        result.envFilePath,
-      );
-    },
-  );
-
-  it('returns undefined when no capability token (tokenless path)', () => {
-    expect(createHostOnlyCapabilityEnvFile(undefined)).toBeUndefined();
-  });
-
-  it.skipIf(process.platform === 'win32')(
-    'cleanup removes file+dir and is idempotent',
-    () => {
-      const result = createHostOnlyCapabilityEnvFile(
-        VALID_TOKEN,
-      ) as HostOnlyCapabilityResult;
-      expect(fs.existsSync(result.envFilePath)).toBe(true);
-      result.cleanup();
-      expect(fs.existsSync(result.envFilePath)).toBe(false);
-      expect(fs.existsSync(path.dirname(result.envFilePath))).toBe(false);
-      expect(() => result.cleanup()).not.toThrow();
-    },
-  );
-
-  it.skipIf(process.platform === 'win32')(
-    'a concurrent attacker cannot discover the host-only file via the mounted temp dir',
-    () => {
-      const result = createHostOnlyCapabilityEnvFile(
-        VALID_TOKEN,
-      ) as HostOnlyCapabilityResult;
-      const mount = getTmpDir();
-      const probe = spawnSync(
-        NODE,
-        [
-          '-e',
-          `
-      const fs=require('node:fs'); let found=false;
-      try{for(const e of fs.readdirSync(${JSON.stringify(mount)}))if(e.includes('capability')||e.includes('env'))found=true;}catch{}
-      process.stdout.write(JSON.stringify({found}));
-    `,
-        ],
-        { encoding: 'utf8' },
-      );
-      void result;
-      expect(JSON.parse(probe.stdout.trim()).found).toBe(false);
-    },
-  );
-
-  it('fail-fast: directory-creation failure surfaces', () => {
-    const blockedHome = path.join(getTmpDir(), 'not-a-directory');
-    fs.writeFileSync(blockedHome, 'file blocks child directory creation');
-    process.env.HOME = blockedHome;
-    process.env.USERPROFILE = blockedHome;
-    // The code under test resolves the home directory with os.homedir(), which
-    // honours process.env.HOME on Node but not on Bun. Spy on it directly so
-    // the redirection works regardless of runtime.
-    vi.spyOn(os, 'homedir').mockReturnValue(blockedHome);
-
-    expect(() => createHostOnlyCapabilityEnvFile(VALID_TOKEN)).toThrow(
-      /host-only directory/i,
-    );
-  });
-});
 
 describe('sandbox-entrypoint: trusted entrypoint security (AC2, AC3, F1, F7, F10)', () => {
   const getTmpDir = useTempDir(beforeEach, afterEach);
@@ -496,48 +506,59 @@ describe('sandbox-entrypoint: trusted entrypoint security (AC2, AC3, F1, F7, F10
  */
 describe('setupCredentialProxy: fail-fast when socket path is undefined (AC12)', () => {
   const getTmpDir = useTempDir(beforeEach, afterEach);
+  let environmentSnapshot: NodeJS.ProcessEnv;
+  let runtimeRoot = '';
+  let isolatedHome = '';
+  let sessionTmpdir = '';
 
   beforeEach(() => {
+    environmentSnapshot = { ...process.env };
+    runtimeRoot = path.join(getTmpDir(), 'runtime');
+    isolatedHome = path.join(getTmpDir(), 'home');
+    sessionTmpdir = path.join(getTmpDir(), 'session');
+    fs.mkdirSync(runtimeRoot);
+    fs.mkdirSync(isolatedHome);
+    fs.mkdirSync(sessionTmpdir);
+    delete process.env.XDG_RUNTIME_DIR;
     vi.resetAllMocks();
+    overrideOsTmpdir(runtimeRoot);
+    vi.spyOn(os, 'homedir').mockReturnValue(isolatedHome);
     authMocks.createAndStartProxy.mockResolvedValue({ stop: vi.fn() });
+    authMocks.getProxySocketPath.mockReturnValue(undefined);
     authMocks.stopProxy.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
+    process.env = environmentSnapshot;
+    restoreOsTmpdir();
     vi.restoreAllMocks();
   });
 
-  /** Shared invocation with the production signature. */
   function callSetupCredentialProxy(): Promise<unknown> {
     return setupCredentialProxy(
       [],
       { command: 'docker', image: 'test' },
-      getTmpDir(),
+      sessionTmpdir,
       new Set<number>(),
       [],
     );
   }
 
-  beforeEach(() => {
-    authMocks.getProxySocketPath.mockReturnValue(undefined);
-  });
-
   it('throws FatalSandboxError when getProxySocketPath returns undefined after createAndStartProxy succeeds', () =>
     expect(callSetupCredentialProxy()).rejects.toThrow(/socket path/i));
 
-  it('attempts stopProxy when socket path is undefined', async () => {
+  it('attempts stopProxy and removes the session directory when socket path is undefined', async () => {
     try {
       await callSetupCredentialProxy();
     } catch {
       /* expected */
     }
     expect(authMocks.stopProxy).toHaveBeenCalledTimes(1);
+    expect(fs.existsSync(sessionTmpdir)).toBe(false);
   });
 
   it('surfaces both invariant and stopProxy failures via AggregateError when socket path is undefined and stopProxy rejects', async () => {
     authMocks.stopProxy.mockRejectedValue(new Error('stopProxy failed'));
-    // Captured explicitly rather than with rejects.toSatisfy, which hands the
-    // pending promise to the predicate instead of the rejection value.
     let caught: unknown;
     try {
       await callSetupCredentialProxy();
@@ -545,11 +566,17 @@ describe('setupCredentialProxy: fail-fast when socket path is undefined (AC12)',
       caught = error;
     }
     expect(caught).toBeInstanceOf(AggregateError);
-    const messages = (caught as AggregateError).errors.map((e) =>
-      e instanceof Error ? e.message : String(e),
+    if (!(caught instanceof AggregateError)) {
+      throw new Error('Expected AggregateError');
+    }
+    const messages = caught.errors.map((error) =>
+      error instanceof Error ? error.message : String(error),
     );
-    expect(messages.some((m) => /socket path/i.test(m))).toBe(true);
-    expect(messages.some((m) => /stopProxy failed/i.test(m))).toBe(true);
+    expect(messages.some((message) => /socket path/i.test(message))).toBe(true);
+    expect(messages.some((message) => /stopProxy failed/i.test(message))).toBe(
+      true,
+    );
+    expect(fs.existsSync(sessionTmpdir)).toBe(false);
   });
 
   it('does not silently return unprotected sandbox (args unchanged)', async () => {
@@ -558,15 +585,37 @@ describe('setupCredentialProxy: fail-fast when socket path is undefined (AC12)',
       setupCredentialProxy(
         args,
         { command: 'docker', image: 'test' },
-        getTmpDir(),
+        sessionTmpdir,
         new Set<number>(),
         [],
       ),
     ).rejects.toThrow(/socket path/i);
-    expect(args.some((a) => a.includes('LLXPRT_CREDENTIAL_SOCKET'))).toBe(
+    expect(args.some((arg) => arg.includes('LLXPRT_CREDENTIAL_SOCKET'))).toBe(
       false,
     );
-    expect(args.some((a) => a.includes('--env-file'))).toBe(false);
+    expect(args.some((arg) => arg.includes('--env-file'))).toBe(false);
+    expect(fs.existsSync(sessionTmpdir)).toBe(false);
+  });
+
+  it('removes the session directory when capability env-file setup fails', async () => {
+    authMocks.getProxySocketPath.mockReturnValue(
+      path.join(sessionTmpdir, 'credential-proxy.sock'),
+    );
+    authMocks.getProxyCapabilityToken.mockReturnValue(VALID_TOKEN);
+    vi.spyOn(fs, 'openSync').mockImplementation(() => {
+      throw new Error('simulated env-file write failure');
+    });
+
+    await expect(callSetupCredentialProxy()).rejects.toThrow(
+      /env-file write failure/i,
+    );
+    expect(authMocks.stopProxy).toHaveBeenCalledTimes(1);
+    expect(fs.existsSync(sessionTmpdir)).toBe(false);
+    expect(
+      fs
+        .readdirSync(runtimeRoot)
+        .filter((entry) => entry.startsWith('llxprt-code-cap-')),
+    ).toStrictEqual([]);
   });
 });
 
@@ -681,69 +730,5 @@ describe('wireCleanupHandlers: stopProxy rejection is observable (AC12)', () => 
     // Stored cleanup cleared.
     expect(setStored).toHaveBeenCalledWith(undefined);
     expect(stored).toBeUndefined();
-  });
-});
-
-describe('createHostOnlyDir: cleans up directory on setup failure (AC10)', () => {
-  const getTmpDir = useTempDir(beforeEach, afterEach);
-  let origHome: string | undefined;
-
-  beforeEach(() => {
-    origHome = process.env.HOME;
-    process.env.HOME = getTmpDir();
-    vi.spyOn(os, 'homedir').mockReturnValue(getTmpDir());
-  });
-
-  afterEach(() => {
-    if (origHome !== undefined) process.env.HOME = origHome;
-    else delete process.env.HOME;
-  });
-
-  it('removes the created directory when open/fchmod/close fails after mkdir', () => {
-    const realOpenSync = fs.openSync;
-    let openCallCount = 0;
-    const openSpy = vi.spyOn(fs, 'openSync').mockImplementation((...args) => {
-      openCallCount++;
-      if (openCallCount === 1) throw new Error('simulated open failure');
-      return realOpenSync(...(args as [fs.PathLike, fs.Mode]));
-    });
-    try {
-      expect(() => createHostOnlyCapabilityEnvFile(VALID_TOKEN)).toThrow(
-        /host-only directory/i,
-      );
-      expect(
-        fs
-          .readdirSync(getTmpDir())
-          .filter((e) => e.startsWith('.llxprt-code-cap-')),
-      ).toHaveLength(0);
-    } finally {
-      openSpy.mockRestore();
-    }
-  });
-
-  it('aggregates primary and cleanup failures when both fail', () => {
-    const openSpy = vi.spyOn(fs, 'openSync').mockImplementation(() => {
-      throw new Error('simulated open failure');
-    });
-    const rmdirSpy = vi.spyOn(fs, 'rmdirSync').mockImplementation(() => {
-      throw new Error('simulated rmdir failure');
-    });
-    try {
-      let thrown: unknown;
-      try {
-        createHostOnlyCapabilityEnvFile(VALID_TOKEN);
-      } catch (err) {
-        thrown = err;
-      }
-      expect(thrown).toBeInstanceOf(AggregateError);
-      const messages = (thrown as AggregateError).errors.map((e) =>
-        e instanceof Error ? e.message : String(e),
-      );
-      expect(messages.some((m) => /open failure/i.test(m))).toBe(true);
-      expect(messages.some((m) => /rmdir failure/i.test(m))).toBe(true);
-    } finally {
-      openSpy.mockRestore();
-      rmdirSpy.mockRestore();
-    }
   });
 });
