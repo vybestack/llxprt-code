@@ -15,11 +15,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import {
   createHostOnlyCapabilityEnvFile,
   reclaimOrphanCapabilityDirs,
   type HostOnlyCapabilityResult,
 } from './sandbox-capability.js';
+import { containerMountSources } from './sandbox-containers.js';
 
 const VALID_TOKEN = 'a'.repeat(64);
 
@@ -97,7 +99,7 @@ describe('host-only capability env-file (AC1, F4)', () => {
     'writes under the runtime root outside HOME and the session mount with mode 0700 dir / 0600 file; raw token not in argv',
     () => {
       const result = requireCapabilityResult(
-        createHostOnlyCapabilityEnvFile(VALID_TOKEN),
+        createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
       );
       const hostDir = path.dirname(result.envFilePath);
 
@@ -127,7 +129,7 @@ describe('host-only capability env-file (AC1, F4)', () => {
     vi.spyOn(os, 'platform').mockReturnValue('linux');
 
     const result = requireCapabilityResult(
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN),
+      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
     );
     try {
       expect(path.dirname(path.dirname(result.envFilePath))).toBe(
@@ -142,7 +144,7 @@ describe('host-only capability env-file (AC1, F4)', () => {
     vi.spyOn(os, 'platform').mockReturnValue('linux');
 
     const result = requireCapabilityResult(
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN),
+      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
     );
     try {
       expect(path.dirname(path.dirname(result.envFilePath))).toBe(runtimeRoot);
@@ -156,7 +158,7 @@ describe('host-only capability env-file (AC1, F4)', () => {
     vi.spyOn(os, 'platform').mockReturnValue('linux');
 
     const result = requireCapabilityResult(
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN),
+      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
     );
     try {
       expect(path.dirname(path.dirname(result.envFilePath))).toBe(runtimeRoot);
@@ -171,7 +173,7 @@ describe('host-only capability env-file (AC1, F4)', () => {
     vi.spyOn(os, 'platform').mockReturnValue('win32');
 
     const result = requireCapabilityResult(
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN),
+      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
     );
     try {
       expect(path.dirname(path.dirname(result.envFilePath))).toBe(
@@ -186,7 +188,7 @@ describe('host-only capability env-file (AC1, F4)', () => {
     vi.spyOn(os, 'platform').mockReturnValue('darwin');
 
     const result = requireCapabilityResult(
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN),
+      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
     );
     try {
       expect(path.dirname(path.dirname(result.envFilePath))).toBe(runtimeRoot);
@@ -196,14 +198,14 @@ describe('host-only capability env-file (AC1, F4)', () => {
   });
 
   it('returns undefined when no capability token (tokenless path)', () => {
-    expect(createHostOnlyCapabilityEnvFile(undefined)).toBeUndefined();
+    expect(createHostOnlyCapabilityEnvFile(undefined, [])).toBeUndefined();
   });
 
   it.skipIf(process.platform === 'win32')(
     'cleanup removes file+dir and is idempotent',
     () => {
       const result = requireCapabilityResult(
-        createHostOnlyCapabilityEnvFile(VALID_TOKEN),
+        createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
       );
       expect(fs.existsSync(result.envFilePath)).toBe(true);
       result.cleanup();
@@ -215,7 +217,7 @@ describe('host-only capability env-file (AC1, F4)', () => {
 
   it('a concurrent attacker cannot discover the host-only file via the narrowed session mount', () => {
     const result = requireCapabilityResult(
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN),
+      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
     );
     const hostDir = path.dirname(result.envFilePath);
 
@@ -247,6 +249,94 @@ describe('host-only capability env-file (AC1, F4)', () => {
         .readdirSync(mountedRuntimeRoot)
         .filter((entry) => entry.startsWith('llxprt-code-cap-')),
     ).toStrictEqual([]);
+  });
+
+  it('does not reclaim stale capability directories before rejecting a colliding mount', () => {
+    const mountedWorkdir = path.join(getTmpDir(), 'workdir');
+    const mountedRuntimeRoot = path.join(mountedWorkdir, 'runtime');
+    const staleCapabilityDir = path.join(
+      mountedRuntimeRoot,
+      'llxprt-code-cap-stale',
+    );
+    fs.mkdirSync(staleCapabilityDir, { recursive: true });
+    const twoDaysAgo = new Date(Date.now() - 2 * 86_400_000);
+    fs.utimesSync(staleCapabilityDir, twoDaysAgo, twoDaysAgo);
+    process.env.XDG_RUNTIME_DIR = mountedRuntimeRoot;
+    vi.spyOn(os, 'platform').mockReturnValue('linux');
+
+    expect(() =>
+      createHostOnlyCapabilityEnvFile(VALID_TOKEN, [mountedWorkdir]),
+    ).toThrow(FatalSandboxError);
+    expect(fs.existsSync(staleCapabilityDir)).toBe(true);
+  });
+
+  it.each([
+    [
+      '--mount with a separate bind specification',
+      (root: string) => [
+        '--mount',
+        `type=bind,src="${root}",dst=/container-runtime`,
+      ],
+    ],
+    [
+      '--mount= with the source alias',
+      (root: string) => [
+        `--mount=type=bind,source=${root},dst=/container-runtime`,
+      ],
+    ],
+  ])('rejects a colliding %s', (_label, buildArgs) => {
+    process.env.XDG_RUNTIME_DIR = runtimeRoot;
+    vi.spyOn(os, 'platform').mockReturnValue('linux');
+    const mountSources = containerMountSources(buildArgs(runtimeRoot));
+
+    expect(() =>
+      createHostOnlyCapabilityEnvFile(VALID_TOKEN, mountSources),
+    ).toThrow(FatalSandboxError);
+  });
+
+  it('allows a named-volume --mount because it has no host source path', () => {
+    process.env.XDG_RUNTIME_DIR = runtimeRoot;
+    vi.spyOn(os, 'platform').mockReturnValue('linux');
+    const mountSources = containerMountSources([
+      '--mount',
+      'type=volume,src=runtime-data,dst=/container-runtime',
+    ]);
+
+    const result = requireCapabilityResult(
+      createHostOnlyCapabilityEnvFile(VALID_TOKEN, mountSources),
+    );
+    try {
+      expect(mountSources).toStrictEqual([]);
+      expect(fs.existsSync(result.envFilePath)).toBe(true);
+    } finally {
+      result.cleanup();
+    }
+  });
+
+  it.each([
+    ['a mount without a type', ['--mount', 'src=/host,dst=/container']],
+    [
+      'an unrecognized mount type',
+      ['--mount=type=cluster,src=/host,dst=/container'],
+    ],
+    ['a bind mount without a source', ['--mount', 'type=bind,dst=/container']],
+  ])('fails closed for %s', (_label, args) => {
+    expect(() => containerMountSources(args)).toThrow(
+      /cannot be verified against the capability runtime root/i,
+    );
+  });
+
+  it.each([
+    ['plain Windows drive', 'C:\\work:/container', 'C:\\work'],
+    [
+      'Windows extended-length path',
+      '\\\\?\\C:\\work:/container',
+      '\\\\?\\C:\\work',
+    ],
+    ['Windows device path', '\\\\.\\C:\\work:/container', '\\\\.\\C:\\work'],
+    ['bracketed IPv6', '[::1]:/container', '[::1]'],
+  ])('extracts the complete %s volume source', (_label, spec, expected) => {
+    expect(containerMountSources(['--volume', spec])).toStrictEqual([expected]);
   });
 
   it('fails before creating a capability directory when the runtime root symlinks into a mounted tree', () => {
@@ -307,7 +397,7 @@ describe('host-only capability env-file (AC1, F4)', () => {
     fs.utimesSync(staleLegacyDir, twoDaysAgo, twoDaysAgo);
 
     const result = requireCapabilityResult(
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN),
+      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
     );
     try {
       expect(fs.existsSync(staleRuntimeDir)).toBe(false);
@@ -345,6 +435,19 @@ describe('host-only capability env-file (AC1, F4)', () => {
     expect(fs.existsSync(symlinkTarget)).toBe(true);
   });
 
+  it('reports an actionable fatal error when the runtime root cannot be resolved', () => {
+    const missingRuntimeRoot = path.join(getTmpDir(), 'missing-runtime-root');
+    process.env.XDG_RUNTIME_DIR = missingRuntimeRoot;
+    vi.spyOn(os, 'platform').mockReturnValue('linux');
+
+    expect(() => createHostOnlyCapabilityEnvFile(VALID_TOKEN, [])).toThrow(
+      FatalSandboxError,
+    );
+    expect(() => createHostOnlyCapabilityEnvFile(VALID_TOKEN, [])).toThrow(
+      /XDG_RUNTIME_DIR|LOCALAPPDATA|tmpdir permissions/i,
+    );
+  });
+
   it('fail-fast: runtime-root directory-creation failure surfaces', () => {
     const blockedRuntimeRoot = path.join(getTmpDir(), 'not-a-directory');
     fs.writeFileSync(
@@ -355,7 +458,7 @@ describe('host-only capability env-file (AC1, F4)', () => {
     vi.spyOn(os, 'platform').mockReturnValue('linux');
     overrideOsTmpdir(blockedRuntimeRoot);
 
-    expect(() => createHostOnlyCapabilityEnvFile(VALID_TOKEN)).toThrow(
+    expect(() => createHostOnlyCapabilityEnvFile(VALID_TOKEN, [])).toThrow(
       /host-only directory/i,
     );
   });
@@ -389,7 +492,7 @@ describe('createHostOnlyDir: cleans up directory on setup failure (AC10)', () =>
       throw new Error('simulated mkdtemp failure');
     });
 
-    expect(() => createHostOnlyCapabilityEnvFile(VALID_TOKEN)).toThrow(
+    expect(() => createHostOnlyCapabilityEnvFile(VALID_TOKEN, [])).toThrow(
       /host-only directory.*mkdtemp failure/i,
     );
     expect(
@@ -409,7 +512,7 @@ describe('createHostOnlyDir: cleans up directory on setup failure (AC10)', () =>
 
     let thrown: unknown;
     try {
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN);
+      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []);
     } catch (error) {
       thrown = error;
     }

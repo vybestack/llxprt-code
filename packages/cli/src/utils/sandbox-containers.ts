@@ -19,6 +19,7 @@ import type {
   SshAgentResult,
 } from './sandbox-ssh.js';
 import {
+  containerMountSources,
   createHostOnlyCapabilityEnvFile,
   runCapabilityCleanupStep,
 } from './sandbox-capability.js';
@@ -47,6 +48,8 @@ import {
   getProxyCapabilityToken,
 } from '@vybestack/llxprt-code-providers/auth.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
+
+export { containerMountSources };
 
 const execAsync = promisify(exec);
 
@@ -616,26 +619,6 @@ function assertSupportedCredentialNetwork(config: SandboxConfig): void {
       'macOS credential bridge requires container networking; enable networking or use Linux for network-off sandboxing.',
     );
   }
-}
-
-function volumeSource(spec: string): string {
-  const sourceStart = /^[A-Za-z]:[\\/]/.test(spec) ? 2 : 0;
-  const sourceEnd = spec.indexOf(':', sourceStart);
-  return sourceEnd === -1 ? spec : spec.slice(0, sourceEnd);
-}
-
-function containerMountSources(args: readonly string[]): string[] {
-  const sources: string[] = [];
-  for (let index = 0; index < args.length; index++) {
-    const arg = args[index];
-    if (arg === '--volume' || arg === '-v') {
-      sources.push(volumeSource(args[index + 1]));
-      index++;
-    } else if (arg.startsWith('--volume=')) {
-      sources.push(volumeSource(arg.slice('--volume='.length)));
-    }
-  }
-  return sources;
 }
 
 async function startCredentialProxyForSandbox(

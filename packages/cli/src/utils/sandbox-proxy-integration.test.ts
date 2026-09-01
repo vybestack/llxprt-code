@@ -103,7 +103,7 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
       expect(setupProxyCallIndex).toBeGreaterThan(prepareContainerIndex);
       expect(pushImageIndex).toBeGreaterThan(executeContainerIndex);
       expect(spawnInDocker).toBeGreaterThan(pushImageIndex);
-      expect(setupProxyCallIndex).toBeLessThan(pushImageIndex);
+      expect(createProxyIndex).toBeLessThan(pushImageIndex);
     });
   });
 

@@ -55,6 +55,10 @@ import {
 } from './sandbox-env.js';
 import { SETTINGS_DIRECTORY_NAME } from '../config/settings.js';
 
+function removeSessionTmpdir(sessionTmpdir: string): void {
+  fs.rmSync(sessionTmpdir, { recursive: true, force: true });
+}
+
 /** Validates image and builds initial container run args. */
 async function prepareContainerImageAndArgs(config: SandboxConfig): Promise<{
   image: string;
@@ -110,7 +114,7 @@ async function prepareContainerImageAndArgs(config: SandboxConfig): Promise<{
     addContainerVolumeMounts(args);
     return { image, workdir, containerWorkdir, sessionTmpdir, args };
   } catch (error) {
-    fs.rmSync(sessionTmpdir, { recursive: true, force: true });
+    runBestEffortSyncCleanup(() => removeSessionTmpdir(sessionTmpdir));
     throw error;
   }
 }
@@ -157,6 +161,43 @@ type ContainerNetworkAndEnv = Awaited<
   ReturnType<typeof prepareContainerNetworkAndEnv>
 >;
 
+interface ContainerEntrypointSetup {
+  readonly args: string[];
+  readonly workdir: string;
+  readonly cliArgs: string[];
+  readonly podmanMacOSPortsForwarded: Set<string>;
+  readonly entrypointPrefixes: string[];
+  readonly credentialProxyBridgeCleanup: (() => void) | undefined;
+}
+
+async function prepareContainerEntrypoint({
+  args,
+  workdir,
+  cliArgs,
+  podmanMacOSPortsForwarded,
+  entrypointPrefixes,
+  credentialProxyBridgeCleanup,
+}: ContainerEntrypointSetup): Promise<{
+  finalEntrypoint: string[];
+  userFlag: string;
+}> {
+  try {
+    const finalEntrypoint = entrypoint(
+      workdir,
+      cliArgs,
+      podmanMacOSPortsForwarded.size > 0
+        ? podmanMacOSPortsForwarded
+        : undefined,
+      entrypointPrefixes,
+    );
+    const userFlag = await setupContainerUser(args, finalEntrypoint);
+    return { finalEntrypoint, userFlag };
+  } catch (error) {
+    runBestEffortSyncCleanup(credentialProxyBridgeCleanup);
+    throw error;
+  }
+}
+
 async function rethrowCredentialProxySetupError(
   error: unknown,
   credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined,
@@ -201,7 +242,7 @@ async function prepareContainerSandbox(
     const containerName = assignContainerName(args, config, image);
     addContainerEnvVars(args, config, containerName, nodeArgs, workdir);
   } catch (error) {
-    fs.rmSync(sessionTmpdir, { recursive: true, force: true });
+    runBestEffortSyncCleanup(() => removeSessionTmpdir(sessionTmpdir));
     throw error;
   }
   const {
@@ -226,21 +267,19 @@ async function prepareContainerSandbox(
       entrypointPrefixes,
     );
   } catch (error) {
-    fs.rmSync(sessionTmpdir, { recursive: true, force: true });
+    runBestEffortSyncCleanup(() => removeSessionTmpdir(sessionTmpdir));
     throw error;
   }
 
-  // Build the entrypoint with all prefixes composed into the trusted script
-  // body after the capability capture stanza. setupContainerUser then wraps
-  // the complete script for the current-user su path.
-  const finalEntrypoint = entrypoint(
+  const { finalEntrypoint, userFlag } = await prepareContainerEntrypoint({
+    args,
     workdir,
     cliArgs,
-    podmanMacOSPortsForwarded.size > 0 ? podmanMacOSPortsForwarded : undefined,
+    podmanMacOSPortsForwarded,
     entrypointPrefixes,
-  );
-
-  const userFlag = await setupContainerUser(args, finalEntrypoint);
+    credentialProxyBridgeCleanup:
+      credentialProxySetup.credentialProxyBridgeCleanup,
+  });
 
   return {
     args,

@@ -86,8 +86,8 @@ capability dir is ever created in the real home or real config.
 - No changes outside `packages/cli/src/utils/` sandbox files, their tests, and
   this plan.
 - No new env-var knobs, no new public modules; `reclaimOrphanCapabilityDirs`
-  is exported from `sandbox-capability.ts` for testability, that is the only
-  new export.
+  and `containerMountSources` are exported for direct reclamation and mount
+  parser coverage.
 - No seatbelt-path changes (it never creates capability env files).
 - No CI workflow changes; the in-suite guard satisfies AC4 because it runs in
   CI.
@@ -133,3 +133,6 @@ NO_ASSERT findings).
   older than 24 hours may have its already-consumed capability env directory
   reclaimed; this is harmless because Docker and Podman consume the env file
   when the container starts.
+- `assignContainerName` and `addContainerEnvVars` can leak pre-existing network
+  resources on failure; Podman forwarding self-registers exit handlers.
+- `containerMountSources` is exported only for direct F1/F2 parser coverage.

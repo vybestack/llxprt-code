@@ -121,6 +121,89 @@ function isErrorCode(error: unknown, code: string): boolean {
   );
 }
 
+function volumeSource(spec: string): string {
+  if (spec.startsWith('[')) {
+    const bracketEnd = spec.indexOf(']');
+    if (bracketEnd !== -1 && spec[bracketEnd + 1] === ':') {
+      return spec.slice(0, bracketEnd + 1);
+    }
+  }
+  let sourceStart = 0;
+  if (/^\\\\[?.]\\[A-Za-z]:[\\/]/.test(spec)) {
+    sourceStart = 6;
+  } else if (/^[A-Za-z]:[\\/]/.test(spec)) {
+    sourceStart = 2;
+  }
+  const sourceEnd = spec.indexOf(':', sourceStart);
+  return sourceEnd === -1 ? spec : spec.slice(0, sourceEnd);
+}
+
+const HOSTLESS_MOUNT_TYPES = new Set(['volume', 'tmpfs', 'image']);
+
+function mountOption(spec: string, optionName: string): string | undefined {
+  for (const option of spec.split(',')) {
+    const equalsIndex = option.indexOf('=');
+    if (equalsIndex === -1) continue;
+    if (option.slice(0, equalsIndex).trim() === optionName) {
+      return option.slice(equalsIndex + 1).trim();
+    }
+  }
+  return undefined;
+}
+
+function unquoteMountSource(value: string): string | undefined {
+  const startsQuoted = value.startsWith('"');
+  const endsQuoted = value.endsWith('"');
+  if (startsQuoted !== endsQuoted) return undefined;
+  const source = startsQuoted ? value.slice(1, -1) : value;
+  return source === '' ? undefined : source;
+}
+
+function addMountSource(
+  sources: string[],
+  argument: string,
+  spec: string | undefined,
+): void {
+  const type = spec === undefined ? undefined : mountOption(spec, 'type');
+  if (type !== undefined && HOSTLESS_MOUNT_TYPES.has(type)) return;
+  if (type === 'bind' && spec !== undefined) {
+    const sourceValue = mountOption(spec, 'src') ?? mountOption(spec, 'source');
+    const source =
+      sourceValue === undefined ? undefined : unquoteMountSource(sourceValue);
+    if (source !== undefined) {
+      sources.push(source);
+      return;
+    }
+  }
+  throw new FatalSandboxError(
+    `Sandbox mount argument '${argument}' cannot be verified against the capability runtime root.`,
+  );
+}
+
+export function containerMountSources(args: readonly string[]): string[] {
+  const sources: string[] = [];
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    if (arg === '--volume' || arg === '-v') {
+      sources.push(volumeSource(args[index + 1]));
+      index++;
+    } else if (arg.startsWith('--volume=')) {
+      sources.push(volumeSource(arg.slice('--volume='.length)));
+    } else if (arg === '--mount') {
+      const spec = args.at(index + 1);
+      addMountSource(
+        sources,
+        spec === undefined ? arg : `${arg} ${spec}`,
+        spec,
+      );
+      index++;
+    } else if (arg.startsWith('--mount=')) {
+      addMountSource(sources, arg, arg.slice('--mount='.length));
+    }
+  }
+  return sources;
+}
+
 function isPathInside(parent: string, candidate: string): boolean {
   const relative = path.relative(parent, candidate);
   return (
@@ -147,8 +230,18 @@ function assertCapabilityOutsideMounts(
   runtimeRoot: string,
   mountSources: readonly string[],
 ): void {
+  let canonicalRuntimeRoot: string;
+  try {
+    canonicalRuntimeRoot = fs.realpathSync(runtimeRoot);
+  } catch (error) {
+    if (isErrorCode(error, 'ENOENT')) {
+      throw new FatalSandboxError(
+        `Capability runtime root '${runtimeRoot}' could not be created or resolved. Check XDG_RUNTIME_DIR, LOCALAPPDATA, or system tmpdir permissions.`,
+      );
+    }
+    throw error;
+  }
   if (mountSources.length === 0) return;
-  const canonicalRuntimeRoot = fs.realpathSync(runtimeRoot);
   const candidatePath = path.join(canonicalRuntimeRoot, CAPABILITY_DIR_PREFIX);
   for (const mountSource of mountSources) {
     let canonicalMountSource: string;
@@ -167,9 +260,9 @@ function assertCapabilityOutsideMounts(
 }
 
 function createHostOnlyDir(mountSources: readonly string[]): string {
-  reclaimOrphanCapabilityDirs();
   const runtimeRoot = resolveCapabilityRuntimeRoot();
   assertCapabilityOutsideMounts(runtimeRoot, mountSources);
+  reclaimOrphanCapabilityDirs();
   try {
     return fs.mkdtempSync(path.join(runtimeRoot, CAPABILITY_DIR_PREFIX));
   } catch (err) {
@@ -222,7 +315,7 @@ function removePath(remove: () => void): void {
 
 export function createHostOnlyCapabilityEnvFile(
   capabilityToken: string | undefined,
-  mountSources: readonly string[] = [],
+  mountSources: readonly string[],
 ): HostOnlyCapabilityResult | undefined {
   if (capabilityToken === undefined) return undefined;
   if (/[\r\n=]/.test(capabilityToken)) {

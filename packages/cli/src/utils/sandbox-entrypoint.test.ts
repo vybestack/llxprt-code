@@ -55,7 +55,7 @@ const BASH_CAP_REF = '${' + 'LLXPRT_CAPABILITY_TOKEN-}';
 const realHome = os.homedir();
 let realHomeCapabilityArtifacts = new Set<string>();
 let realConfigDir = '';
-let realConfigSnapshot: DirectorySnapshot;
+let realConfigSnapshot: DirectorySnapshot | undefined;
 
 interface DirectorySnapshot {
   readonly exists: boolean;
@@ -108,7 +108,9 @@ afterAll(() => {
     (entry) => !realHomeCapabilityArtifacts.has(entry),
   );
   expect(newRealHomeArtifacts).toStrictEqual([]);
-  expect(snapshotDirectory(realConfigDir)).toStrictEqual(realConfigSnapshot);
+  if (realConfigDir !== '' && realConfigSnapshot !== undefined) {
+    expect(snapshotDirectory(realConfigDir)).toStrictEqual(realConfigSnapshot);
+  }
 });
 
 function useTempDir(
@@ -574,6 +576,7 @@ describe('setupCredentialProxy: fail-fast when socket path is undefined (AC12)',
     await expect(callSetupCredentialProxy()).rejects.toThrow(
       /env-file write failure/i,
     );
+    expect(authMocks.stopProxy).toHaveBeenCalledTimes(1);
     expect(fs.existsSync(sessionTmpdir)).toBe(false);
     expect(
       fs
