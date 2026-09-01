@@ -85,6 +85,7 @@ describe('host-only capability env-file (AC1, F4)', () => {
     sessionMount = fs.mkdtempSync(path.join(runtimeRoot, 'llxprt-sandbox-'));
     process.env.LLXPRT_CAPABILITY_TOKEN = VALID_TOKEN;
     delete process.env.XDG_RUNTIME_DIR;
+    process.env.LOCALAPPDATA = path.join(getTmpDir(), 'local-app-data');
     overrideOsTmpdir(runtimeRoot);
     vi.spyOn(os, 'homedir').mockReturnValue(isolatedHome);
   });
@@ -385,6 +386,7 @@ describe('host-only capability env-file (AC1, F4)', () => {
   });
 
   it('reclaims stale runtime and legacy HOME directories while preserving fresh directories', () => {
+    vi.spyOn(os, 'platform').mockReturnValue('darwin');
     const staleRuntimeDir = path.join(runtimeRoot, 'llxprt-code-cap-stale');
     const freshRuntimeDir = path.join(runtimeRoot, 'llxprt-code-cap-live');
     const staleLegacyDir = path.join(isolatedHome, '.llxprt-code-cap-123-abc');
@@ -410,6 +412,7 @@ describe('host-only capability env-file (AC1, F4)', () => {
   });
 
   it('reclaims directories at a custom age threshold without following symlinks', () => {
+    vi.spyOn(os, 'platform').mockReturnValue('darwin');
     const staleRuntimeDir = path.join(
       runtimeRoot,
       'llxprt-code-cap-custom-stale',
@@ -462,6 +465,135 @@ describe('host-only capability env-file (AC1, F4)', () => {
       /host-only directory/i,
     );
   });
+
+  it('reclaims stale Windows LOCALAPPDATA dirs and legacy HOME dirs while preserving fresh ones', () => {
+    const winRuntimeRoot = path.join(
+      process.env.LOCALAPPDATA ?? '',
+      'llxprt-code',
+    );
+    fs.mkdirSync(winRuntimeRoot, { recursive: true });
+    const staleWinDir = path.join(winRuntimeRoot, 'llxprt-code-cap-stale');
+    const freshWinDir = path.join(winRuntimeRoot, 'llxprt-code-cap-live');
+    const staleLegacyDir = path.join(isolatedHome, '.llxprt-code-cap-123-abc');
+    fs.mkdirSync(staleWinDir);
+    fs.mkdirSync(freshWinDir);
+    fs.mkdirSync(staleLegacyDir);
+    const twoDaysAgo = new Date(Date.now() - 2 * 86_400_000);
+    fs.utimesSync(staleWinDir, twoDaysAgo, twoDaysAgo);
+    fs.utimesSync(staleLegacyDir, twoDaysAgo, twoDaysAgo);
+    vi.spyOn(os, 'platform').mockReturnValue('win32');
+
+    const result = requireCapabilityResult(
+      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
+    );
+    try {
+      expect(fs.existsSync(staleWinDir)).toBe(false);
+      expect(fs.existsSync(staleLegacyDir)).toBe(false);
+      expect(fs.existsSync(freshWinDir)).toBe(true);
+      expect(fs.existsSync(path.dirname(result.envFilePath))).toBe(true);
+    } finally {
+      result.cleanup();
+    }
+  });
+
+  it.each([
+    [
+      'absent',
+      (): void => {
+        delete process.env.LOCALAPPDATA;
+      },
+    ],
+    [
+      'blank',
+      (): void => {
+        process.env.LOCALAPPDATA = '   ';
+      },
+    ],
+  ])(
+    'reclaims stale Windows dirs under os.tmpdir when LOCALAPPDATA is %s',
+    (_label: string, mutate: () => void) => {
+      mutate();
+      vi.spyOn(os, 'platform').mockReturnValue('win32');
+      const staleFallbackDir = path.join(
+        runtimeRoot,
+        'llxprt-code-cap-fallback-stale',
+      );
+      const freshFallbackDir = path.join(
+        runtimeRoot,
+        'llxprt-code-cap-fallback-fresh',
+      );
+      fs.mkdirSync(staleFallbackDir);
+      fs.mkdirSync(freshFallbackDir);
+      const twoDaysAgo = new Date(Date.now() - 2 * 86_400_000);
+      fs.utimesSync(staleFallbackDir, twoDaysAgo, twoDaysAgo);
+
+      reclaimOrphanCapabilityDirs();
+
+      expect(fs.existsSync(staleFallbackDir)).toBe(false);
+      expect(fs.existsSync(freshFallbackDir)).toBe(true);
+    },
+  );
+
+  it('reclaims stale dirs under Linux tmpdir fallback when XDG_RUNTIME_DIR is absent', () => {
+    vi.spyOn(os, 'platform').mockReturnValue('linux');
+    const staleFallback = path.join(
+      runtimeRoot,
+      'llxprt-code-cap-linux-fallback-stale',
+    );
+    const freshFallback = path.join(
+      runtimeRoot,
+      'llxprt-code-cap-linux-fallback-fresh',
+    );
+    fs.mkdirSync(staleFallback);
+    fs.mkdirSync(freshFallback);
+    const twoDaysAgo = new Date(Date.now() - 2 * 86_400_000);
+    fs.utimesSync(staleFallback, twoDaysAgo, twoDaysAgo);
+
+    reclaimOrphanCapabilityDirs();
+
+    expect(fs.existsSync(staleFallback)).toBe(false);
+    expect(fs.existsSync(freshFallback)).toBe(true);
+  });
+
+  it('reclaims both exact-prefix and legacy-prefix dirs when runtime root equals homedir', () => {
+    vi.spyOn(os, 'platform').mockReturnValue('linux');
+    const sharedRoot = path.join(getTmpDir(), 'shared-root');
+    fs.mkdirSync(sharedRoot);
+    const staleExact = path.join(sharedRoot, 'llxprt-code-cap-shared-stale');
+    const staleLegacy = path.join(sharedRoot, '.llxprt-code-cap-legacy-stale');
+    const freshExact = path.join(sharedRoot, 'llxprt-code-cap-shared-fresh');
+    fs.mkdirSync(staleExact);
+    fs.mkdirSync(staleLegacy);
+    fs.mkdirSync(freshExact);
+    const twoDaysAgo = new Date(Date.now() - 2 * 86_400_000);
+    fs.utimesSync(staleExact, twoDaysAgo, twoDaysAgo);
+    fs.utimesSync(staleLegacy, twoDaysAgo, twoDaysAgo);
+    process.env.XDG_RUNTIME_DIR = sharedRoot;
+    vi.spyOn(os, 'homedir').mockReturnValue(sharedRoot);
+
+    reclaimOrphanCapabilityDirs();
+
+    expect(fs.existsSync(staleExact)).toBe(false);
+    expect(fs.existsSync(staleLegacy)).toBe(false);
+    expect(fs.existsSync(freshExact)).toBe(true);
+  });
+
+  it('skips non-directory entries and prefix-mismatch entries during reclamation', () => {
+    vi.spyOn(os, 'platform').mockReturnValue('linux');
+    process.env.XDG_RUNTIME_DIR = runtimeRoot;
+    const regularFile = path.join(runtimeRoot, 'llxprt-code-cap-notadir');
+    const mismatchDir = path.join(runtimeRoot, 'llxprt-other-cap-stale');
+    fs.writeFileSync(regularFile, 'not a directory');
+    fs.mkdirSync(mismatchDir);
+    const twoDaysAgo = new Date(Date.now() - 2 * 86_400_000);
+    fs.utimesSync(regularFile, twoDaysAgo, twoDaysAgo);
+    fs.utimesSync(mismatchDir, twoDaysAgo, twoDaysAgo);
+
+    reclaimOrphanCapabilityDirs(1);
+
+    expect(fs.existsSync(regularFile)).toBe(true);
+    expect(fs.existsSync(mismatchDir)).toBe(true);
+  });
 });
 
 describe('createHostOnlyDir: cleans up directory on setup failure (AC10)', () => {
@@ -477,6 +609,7 @@ describe('createHostOnlyDir: cleans up directory on setup failure (AC10)', () =>
     fs.mkdirSync(runtimeRoot);
     fs.mkdirSync(isolatedHome);
     delete process.env.XDG_RUNTIME_DIR;
+    process.env.LOCALAPPDATA = path.join(getTmpDir(), 'local-app-data');
     overrideOsTmpdir(runtimeRoot);
     vi.spyOn(os, 'homedir').mockReturnValue(isolatedHome);
   });

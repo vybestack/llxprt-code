@@ -23,8 +23,19 @@
  * Exit code is 0 if all files pass, 1 if any file fails.
  */
 
+import { Buffer } from 'node:buffer';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { readdirSync, statSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  mkdtempSync,
+  openSync,
+  readdirSync,
+  readSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import {
   DEFAULT_PER_FILE_TIMEOUT_MS,
@@ -106,7 +117,10 @@ export interface TestResult {
   passed: boolean;
   exitCode: number | null;
   timedOut: boolean;
-  timeoutMs: number;
+  // Null when the timeout originated inside a single test: that budget
+  // belongs to the individual test (it may override Bun's per-test timeout),
+  // so no file-level number applies.
+  timeoutMs: number | null;
   reapFailed: boolean;
   reapError: string | null;
 }
@@ -115,10 +129,129 @@ export interface RunTestFileOptions {
   readonly timeoutMs?: number;
   readonly reapTimeoutMs?: number;
   readonly taskkillTimeoutMs?: number;
+  readonly cleanupAttempts?: number;
+  readonly cleanupRetryDelayMs?: number;
+  readonly removeAttemptDir?: (attemptDir: string) => void;
+  readonly reapTimedOutChild?: (
+    child: ChildProcess,
+    childClosed: Promise<void>,
+  ) => Promise<void>;
 }
 
 const REAP_TIMEOUT_MS = 10_000;
 const TASKKILL_TIMEOUT_MS = 10_000;
+
+// Windows can transiently refuse removal of a directory whose report file
+// was just closed (AV scanners, search indexers, reporter teardown still
+// holding handles), reporting EBUSY/EPERM/EACCES/ENOTEMPTY. Removal gets a
+// bounded number of retries for exactly those errors; anything else
+// propagates immediately.
+const RETRYABLE_CLEANUP_ERROR_CODES: ReadonlySet<string> = new Set([
+  'EBUSY',
+  'EPERM',
+  'EACCES',
+  'ENOTEMPTY',
+]);
+const DEFAULT_CLEANUP_ATTEMPTS = 3;
+const DEFAULT_CLEANUP_RETRY_DELAY_MS = 100;
+
+function isRetryableCleanupError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    'code' in error &&
+    typeof error.code === 'string' &&
+    RETRYABLE_CLEANUP_ERROR_CODES.has(error.code)
+  );
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function cleanupAttemptDir(
+  attemptDir: string,
+  options: RunTestFileOptions,
+): Promise<void> {
+  const remove =
+    options.removeAttemptDir ??
+    ((dir: string) => {
+      rmSync(dir, { recursive: true, force: true });
+    });
+  const attempts = options.cleanupAttempts ?? DEFAULT_CLEANUP_ATTEMPTS;
+  const retryDelayMs =
+    options.cleanupRetryDelayMs ?? DEFAULT_CLEANUP_RETRY_DELAY_MS;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      remove(attemptDir);
+      return;
+    } catch (error) {
+      if (!isRetryableCleanupError(error)) throw error;
+      lastError = error;
+      if (attempt < attempts) {
+        await delay(retryDelayMs);
+      }
+    }
+  }
+  const lastDetail =
+    lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(`removal failed after ${attempts} attempts: ${lastDetail}`, {
+    cause: lastError,
+  });
+}
+
+function cleanupFailureMessage(
+  file: string,
+  attemptDir: string,
+  error: unknown,
+): string {
+  const detail = error instanceof Error ? error.message : String(error);
+  return `attempt cleanup failed for ${file}: could not remove ${attemptDir}: ${detail}`;
+}
+
+const BUN_JUNIT_TIMEOUT_MARKER = '<failure type="TimeoutError"';
+export const JUNIT_SCAN_CHUNK_BYTES = 64 * 1024;
+const JUNIT_SCAN_OVERLAP_CHARS = BUN_JUNIT_TIMEOUT_MARKER.length - 1;
+
+function isNoSuchFileError(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'ENOENT';
+}
+
+export function junitReportContainsPerTestTimeout(reportPath: string): boolean {
+  const chunk = Buffer.alloc(JUNIT_SCAN_CHUNK_BYTES);
+  let overlap = '';
+  let descriptor: number | undefined;
+  try {
+    descriptor = openSync(reportPath, 'r');
+    for (;;) {
+      const bytesRead = readSync(
+        descriptor,
+        chunk,
+        0,
+        JUNIT_SCAN_CHUNK_BYTES,
+        null,
+      );
+      if (bytesRead === 0) return false;
+      // A chunk edge can split a multi-byte UTF-8 sequence; continuation
+      // bytes never decode to ASCII, so the split can neither fabricate nor
+      // destroy the ASCII marker.
+      const text = overlap + chunk.toString('utf8', 0, bytesRead);
+      if (text.includes(BUN_JUNIT_TIMEOUT_MARKER)) return true;
+      overlap =
+        text.length > JUNIT_SCAN_OVERLAP_CHARS
+          ? text.slice(-JUNIT_SCAN_OVERLAP_CHARS)
+          : text;
+    }
+  } catch (error) {
+    // An absent report is the killed-before-writing case, not a read failure.
+    if (isNoSuchFileError(error)) return false;
+    throw error;
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+}
 
 function withTimeout<T>(
   promise: Promise<T>,
@@ -265,6 +398,7 @@ export async function runTestFileWithTimeoutRetry<
   T extends {
     readonly passed: boolean;
     readonly timedOut: boolean;
+    readonly timeoutMs: number | null;
     readonly reapFailed: boolean;
     readonly reapError?: string | null;
   },
@@ -283,7 +417,9 @@ export async function runTestFileWithTimeoutRetry<
   // this guards against (issue #3439) kills the child on one attempt and
   // behaves normally on the next; a first-attempt reap failure is frequently
   // just taskkill losing a race with an already-dying tree.
-  logRetry(`RETRY (2/2): ${file} after per-file timeout`);
+  const timeoutOrigin =
+    firstAttempt.timeoutMs === null ? 'per-test' : 'per-file';
+  logRetry(`RETRY (2/2): ${file} after ${timeoutOrigin} timeout`);
   const secondAttempt = await runAttempt();
 
   // First attempt failed to reap but the retry reaped cleanly: the suspect
@@ -310,6 +446,39 @@ export function runTestFile(
   return new Promise((resolve) => {
     let resolved = false;
     let spawnError: Error | null = null;
+    const attemptDir = mkdtempSync(join(tmpdir(), 'llxprt-runner-junit-'));
+    const reportPath = join(attemptDir, 'junit.xml');
+
+    // Settlement always goes through cleanup, so a removal failure can
+    // never strand this promise: the cleanup outcome is folded into the
+    // result and surfaced through main()'s fail-fast path instead of
+    // throwing out of an ignored callback.
+    const settleAfterCleanup = (
+      classified: Omit<TestResult, 'reapFailed' | 'reapError'>,
+      reapFailed: boolean,
+      reapError: string | null,
+    ): void => {
+      void cleanupAttemptDir(attemptDir, options).then(
+        () => {
+          resolve({ ...classified, reapFailed, reapError });
+        },
+        (cleanupError: unknown) => {
+          const cleanupDetail = cleanupFailureMessage(
+            file,
+            attemptDir,
+            cleanupError,
+          );
+          resolve({
+            ...classified,
+            reapFailed: true,
+            reapError:
+              reapError === null
+                ? cleanupDetail
+                : `${reapError}; ${cleanupDetail}`,
+          });
+        },
+      );
+    };
     const child = spawn(
       process.execPath,
       [
@@ -318,11 +487,13 @@ export function runTestFile(
         String(PER_TEST_TIMEOUT_MS),
         '--preload',
         PRELOAD,
+        '--reporter=junit',
+        `--reporter-outfile=${reportPath}`,
         file,
       ],
       {
         cwd: WORKSPACE_ROOT,
-        stdio: 'inherit',
+        stdio: ['ignore', 'inherit', 'inherit'],
         env: process.env,
         // POSIX: put the test child in its own process group so a timeout
         // can kill the entire per-test process tree by negative PID.
@@ -332,38 +503,33 @@ export function runTestFile(
       },
     );
     const childClosed = observeChildClose(child);
+    // Test seam mirroring removeAttemptDir: replaces the timed-out-child
+    // reap so a test can force its failure deterministically instead of
+    // racing SIGKILL-to-close latency against a millisecond budget.
+    const reapTimedOutChild =
+      options.reapTimedOutChild ??
+      ((childToReap: ChildProcess, closed: Promise<void>) =>
+        killChildTreeAndWait(childToReap, closed, options));
 
     const timer = setTimeout(() => {
       if (resolved) return;
       resolved = true;
-      const reaping = killChildTreeAndWait(child, childClosed, options);
-      void reaping.then(
-        () => {
-          resolve({
-            file,
-            passed: false,
-            exitCode: null,
-            timedOut: true,
-            timeoutMs,
-            reapFailed: false,
-            reapError: null,
-          });
-        },
+      const classified: Omit<TestResult, 'reapFailed' | 'reapError'> = {
+        file,
+        passed: false,
+        exitCode: null,
+        timedOut: true,
+        timeoutMs,
+      };
+      void reapTimedOutChild(child, childClosed).then(
+        () => settleAfterCleanup(classified, false, null),
         (error: unknown) => {
-          const reapError =
+          const reapErrorMessage =
             error instanceof Error ? error.message : String(error);
           console.error(
-            `Failed to reap timed-out test process for ${file}: ${reapError}`,
+            `Failed to reap timed-out test process for ${file}: ${reapErrorMessage}`,
           );
-          resolve({
-            file,
-            passed: false,
-            exitCode: null,
-            timedOut: true,
-            timeoutMs,
-            reapFailed: true,
-            reapError,
-          });
+          settleAfterCleanup(classified, true, reapErrorMessage);
         },
       );
     }, timeoutMs);
@@ -379,15 +545,29 @@ export function runTestFile(
       if (spawnError !== null) {
         console.error(`Error spawning test for ${file}: ${spawnError.message}`);
       }
-      resolve({
-        file,
-        passed: spawnError === null && code === 0,
-        exitCode: spawnError === null ? code : -1,
-        timedOut: false,
-        timeoutMs,
-        reapFailed: false,
-        reapError: null,
-      });
+      let classified: Omit<TestResult, 'reapFailed' | 'reapError'> | undefined;
+      try {
+        const perTestTimeout =
+          spawnError === null &&
+          code !== 0 &&
+          junitReportContainsPerTestTimeout(reportPath);
+        classified = {
+          file,
+          passed: spawnError === null && code === 0,
+          exitCode: spawnError === null ? code : -1,
+          timedOut: perTestTimeout,
+          timeoutMs: perTestTimeout ? null : timeoutMs,
+        };
+      } finally {
+        if (classified !== undefined) {
+          settleAfterCleanup(classified, false, null);
+        } else {
+          // Report-scan errors stay fail-fast: they are infrastructure
+          // failures, not test outcomes. Cleanup is still attempted before
+          // the error propagates out of this handler.
+          void cleanupAttemptDir(attemptDir, options);
+        }
+      }
     });
   });
 }
@@ -398,6 +578,12 @@ function escapeXml(value: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function timeoutExceededLabel(result: TestResult): string {
+  return result.timeoutMs === null
+    ? 'per-test timeout'
+    : `${result.timeoutMs / 1000}s`;
 }
 
 function buildFailureXml(result: TestResult): string {
@@ -411,7 +597,13 @@ function buildFailureXml(result: TestResult): string {
     return `<failure message="${message}">TIMEOUT+REAP_FAILED</failure>`;
   }
   if (result.timedOut) {
-    return `<failure message="Timed out after ${result.timeoutMs / 1000}s">TIMEOUT</failure>`;
+    // A per-test timeout has no file-level number to cite: the test that
+    // timed out may have overridden Bun's per-test budget.
+    const message =
+      result.timeoutMs === null
+        ? 'Timed out: per-test timeout'
+        : `Timed out after ${result.timeoutMs / 1000}s`;
+    return `<failure message="${message}">TIMEOUT</failure>`;
   }
   return `<failure message="Exit code ${result.exitCode ?? -1}">FAILED</failure>`;
 }
@@ -465,17 +657,23 @@ async function main(): Promise<void> {
     );
     results.push(...batchResults);
 
-    // Fail fast: only an unrecovered reap failure aborts the run. A reap
-    // failure on the first attempt that the retry outlived (reapFailed=false
-    // on the returned result) means the suspect tree is gone and the file is
-    // already marked failed; subsequent files are safe to run. A reap failure
-    // on the final attempt means the old process tree may still be alive and
-    // holding resources (log handles, ports) that would corrupt subsequent
-    // results.
+    // Fail fast: only an unrecovered reap or attempt-cleanup failure aborts
+    // the run. A failure on the first attempt that the retry outlived
+    // (reapFailed=false on the returned result) means the suspect tree is
+    // gone and the file is already marked failed; subsequent files are safe
+    // to run. A failure on the final attempt means the old process tree may
+    // still be alive and holding resources (log handles, ports) that would
+    // corrupt subsequent results.
     if (batchResults.some((r) => r.reapFailed)) {
+      for (const result of batchResults) {
+        if (result.reapFailed && result.reapError !== null) {
+          console.error(`  ${result.file}: ${result.reapError}`);
+        }
+      }
       console.error(
-        'FATAL: failed to reap a timed-out test process tree; aborting to ' +
-          'avoid running subsequent files against leaked resources.',
+        'FATAL: failed to reap a timed-out test process tree or clean up ' +
+          'its attempt directory; aborting to avoid running subsequent files ' +
+          'against leaked resources.',
       );
       writeFileSync(JUNIT_PATH, generateJUnit(results));
       process.exit(1);
@@ -488,7 +686,7 @@ async function main(): Promise<void> {
   for (const result of failed) {
     if (result.timedOut) {
       console.error(
-        `TIMEOUT: ${result.file} (exceeded ${result.timeoutMs / 1000}s)` +
+        `TIMEOUT: ${result.file} (exceeded ${timeoutExceededLabel(result)})` +
           (result.reapFailed
             ? ' [REAP FAILED]'
             : result.reapError
