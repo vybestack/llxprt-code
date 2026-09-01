@@ -102,8 +102,10 @@ export type OpenaiImageTokenGeneration = 'patch' | 'legacy' | 'unknown';
 /**
  * Classify a model name for OpenAI image token estimation.
  *
- * - 'patch': GPT-5.2 through gpt-5.6 (including named variants like
- *   gpt-5.6-sol/terra/luna) and any gpt-6+.
+ * - 'patch': GPT-5.2 and newer, including any later minor (gpt-5.6,
+ *   gpt-5.10), named variants like gpt-5.6-sol/terra/luna, and every
+ *   GPT-6+ model (gpt-6, gpt-10). The major/minor version is parsed
+ *   numerically so multi-digit versions classify correctly.
  * - 'legacy': gpt-4o, gpt-4.1, gpt-5.0, gpt-5.1, and o-series models
  *   (o1, o3, o4-mini).
  * - 'unknown': model is provided but does not match either category.
@@ -122,11 +124,16 @@ export function classifyOpenaiModel(
 function classifyNormalizedOpenaiModel(
   normalized: string,
 ): OpenaiImageTokenGeneration {
-  // gpt-6+ always uses patch formula
-  if (/^gpt-[6-9]/.test(normalized)) return 'patch';
-  // gpt-5.x where x >= 2 uses patch formula
-  const patchMatch = /^gpt-5\.(\d+)/.exec(normalized);
-  if (patchMatch && parseInt(patchMatch[1], 10) >= 2) return 'patch';
+  // Patch when major > 5 (gpt-6, gpt-10, ...) or major == 5 with a minor
+  // of at least 2 (gpt-5.2, gpt-5.10). Parsed numerically because regex
+  // digit ranges cannot express ">= 2" or ">= 6" for multi-digit versions.
+  const version = /^gpt-(\d+)(?:\.(\d+))?/.exec(normalized);
+  if (version !== null) {
+    const major = parseInt(version[1], 10);
+    // The optional minor group participates only when the match has 3 parts.
+    const minor = version.length > 2 ? parseInt(version[2], 10) : 0;
+    if (major > 5 || (major === 5 && minor >= 2)) return 'patch';
+  }
   // Known legacy models
   if (isLegacyOpenaiModel(normalized)) return 'legacy';
   return 'unknown';

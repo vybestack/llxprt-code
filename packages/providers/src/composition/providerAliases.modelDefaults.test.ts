@@ -755,13 +755,12 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
     },
   );
 
+  // Multi-digit minors (gpt-5.10) and majors (gpt-10), plus named/dated
+  // variants, must all land on the 2000px rule.
   const GPT_52_PLUS_MODELS = [
-    ...[2, 3, 4, 5, 6].map((minor) => `gpt-5.${minor}`),
-    'gpt-5.6-sol',
-    'gpt-5.6-terra',
-    'gpt-5.6-luna',
-    'gpt-6',
-    'gpt-6.1',
+    ...[2, 3, 4, 5, 6, 10].map((minor) => `gpt-5.${minor}`),
+    'gpt-5.6-sol', 'gpt-5.10-sol', 'gpt-5.6-luna',
+    'gpt-5.2-20260101', 'gpt-6', 'gpt-6.1', 'gpt-10',
   ];
 
   it.each(['openai', 'openai-responses', 'openai-vercel', 'codex'])(

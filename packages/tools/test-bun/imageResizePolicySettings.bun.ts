@@ -11,6 +11,7 @@ import {
   resizeImageIfNeeded,
 } from '../src/utils/imageResize.js';
 import { resolveImageDimensionBudget } from '../src/utils/imageDimensionBudget.js';
+import { readSettingFlatOrNested } from '../src/utils/flatOrNestedSetting.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 /**
@@ -95,6 +96,75 @@ describe('resolveImageResizePolicy settings shapes', () => {
     expect(resolveImageDimensionBudget(service.getAllGlobalSettings())).toEqual(
       { maxDimension: 1568, maxPixels: undefined },
     );
+  });
+});
+
+/**
+ * The settings reader must only see own properties. `in`-based lookups let
+ * inherited values (and `__proto__` segments walking into Object.prototype)
+ * supply limits the user never configured.
+ */
+describe('resolveImageResizePolicy ignores prototype-chain values', () => {
+  it('does not pick up a flat value that exists only on the prototype', () => {
+    const settings: Record<string, unknown> = {};
+    Object.setPrototypeOf(settings, { 'image-resize.maxLongEdge': 2000 });
+    expect(resolveImageResizePolicy(settings)).toBeUndefined();
+  });
+
+  it('does not pick up a nested value that exists only on the prototype', () => {
+    const nested: Record<string, unknown> = {};
+    Object.setPrototypeOf(nested, { maxLongEdge: 2000 });
+    expect(resolveImageResizePolicy({ 'image-resize': nested })).toBeUndefined();
+  });
+
+  it('an own __proto__ data property is not traversed as a key segment', () => {
+    // JSON producers store __proto__ as an own data property; the reader must
+    // not follow it as a route toward Object.prototype.
+    const nested: Record<string, unknown> = {};
+    Object.defineProperty(nested, '__proto__', {
+      value: { maxLongEdge: 2000 },
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+    expect(
+      readSettingFlatOrNested(
+        { 'image-resize': nested },
+        'image-resize.__proto__.maxLongEdge',
+      ),
+    ).toBeUndefined();
+  });
+
+  it('treats null and non-object intermediates as missing, as before', () => {
+    expect(resolveImageResizePolicy({ 'image-resize': null })).toBeUndefined();
+    expect(resolveImageResizePolicy({ 'image-resize': 42 })).toBeUndefined();
+    expect(
+      resolveImageResizePolicy({ 'image-resize': 'not-an-object' }),
+    ).toBeUndefined();
+  });
+});
+
+describe('readSettingFlatOrNested prototype traversal', () => {
+  it('never traverses __proto__, constructor, or prototype key segments', () => {
+    // With `in`, each of these resolves into Object.prototype (the toString
+    // function, the Object constructor).
+    expect(
+      readSettingFlatOrNested({ a: {} }, 'a.__proto__.toString'),
+    ).toBeUndefined();
+    expect(readSettingFlatOrNested({ a: {} }, 'a.constructor')).toBeUndefined();
+    expect(
+      readSettingFlatOrNested({ a: {} }, 'a.constructor.prototype.toString'),
+    ).toBeUndefined();
+  });
+
+  it('still reads own flat and nested values', () => {
+    expect(readSettingFlatOrNested({ 'a.b': 1 }, 'a.b')).toBe(1);
+    expect(readSettingFlatOrNested({ a: { b: { c: 2 } } }, 'a.b.c')).toBe(2);
+  });
+
+  it('still treats null and non-object intermediates as missing', () => {
+    expect(readSettingFlatOrNested({ a: null }, 'a.b')).toBeUndefined();
+    expect(readSettingFlatOrNested({ a: 'str' }, 'a.b.c')).toBeUndefined();
   });
 });
 

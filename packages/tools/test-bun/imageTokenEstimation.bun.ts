@@ -11,6 +11,7 @@ import {
   estimateImageTokens,
   estimateNonTextPartTokens,
   isGpt52OrNewer,
+  classifyOpenaiModel,
 } from '../src/utils/imageTokenEstimation.js';
 
 function buildPngBase64(width: number, height: number): string {
@@ -386,6 +387,36 @@ describe('isGpt52OrNewer: model matching', () => {
   });
 });
 
+describe('classifyOpenaiModel: numeric version parsing', () => {
+  it.each(['gpt-5.2', 'gpt-5.6', 'gpt-5.10', 'gpt-6', 'gpt-6.1', 'gpt-10'])(
+    'classifies %s as patch',
+    (model) => {
+      expect(classifyOpenaiModel(model)).toBe('patch');
+    },
+  );
+
+  it('classifies named variants with multi-digit minors as patch', () => {
+    expect(classifyOpenaiModel('gpt-5.10-sol')).toBe('patch');
+    expect(classifyOpenaiModel('gpt-5.6-sol')).toBe('patch');
+  });
+
+  it.each(['gpt-5.1', 'gpt-5.0', 'gpt-4o', 'gpt-4.1'])(
+    'classifies %s as legacy',
+    (model) => {
+      expect(classifyOpenaiModel(model)).toBe('legacy');
+    },
+  );
+
+  it('classifies gpt-5.1-sol as legacy (named variant of an old minor)', () => {
+    expect(classifyOpenaiModel('gpt-5.1-sol')).toBe('legacy');
+  });
+
+  it('matches multi-digit versions in isGpt52OrNewer', () => {
+    expect(isGpt52OrNewer('gpt-5.10')).toBe(true);
+    expect(isGpt52OrNewer('gpt-10')).toBe(true);
+  });
+});
+
 describe('estimateImageTokens: GPT-5.2+ patch formula', () => {
   it('1920x1080 for gpt-5.2 -> ceil(1.2 x 60 x 34) = 2448 -> capped at 1844', () => {
     expect(
@@ -436,6 +467,37 @@ describe('estimateImageTokens: GPT-5.2+ patch formula', () => {
       }),
     ).toBe(960);
   });
+});
+
+describe('estimateImageTokens: multi-digit GPT versions use patch formula', () => {
+  it.each(['gpt-5.10', 'gpt-10', 'gpt-5.10-sol'])(
+    '%s 1920x1080 -> capped at 1844',
+    (model) => {
+      expect(
+        estimateImageTokens({
+          provider: 'openai',
+          model,
+          dimensions: { width: 1920, height: 1080 },
+        }),
+      ).toBe(1844);
+    },
+  );
+
+  it.each(['gpt-5.1', 'gpt-4o'])(
+    '%s stays on the legacy formula (1105-class)',
+    (model) => {
+      // Unknown dimensions take the legacy worst case, not the patch one.
+      expect(estimateImageTokens({ provider: 'openai', model })).toBe(1105);
+      // The documented legacy high-detail reference value still holds.
+      expect(
+        estimateImageTokens({
+          provider: 'openai',
+          model,
+          dimensions: { width: 2048, height: 4096 },
+        }),
+      ).toBe(1105);
+    },
+  );
 });
 
 describe('estimateImageTokens: legacy formula still used for non-GPT-5.2+', () => {
