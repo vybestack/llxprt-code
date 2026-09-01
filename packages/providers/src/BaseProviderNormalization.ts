@@ -5,6 +5,7 @@
  */
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
@@ -48,6 +49,7 @@ interface NormalizationDependencies {
   defaultConfig?: Config;
   maybeTools?: ProviderToolset;
   authToken: ResolvedAuthToken;
+  authFailure?: CredentialResolutionError;
   resolvedModel: string;
   resolvedBaseURL?: string;
   providerSettings: ProviderSettings;
@@ -183,6 +185,10 @@ function createResolvedOptions(
     model: providedOptions.resolved?.model ?? deps.resolvedModel,
     baseURL: providedOptions.resolved?.baseURL ?? deps.resolvedBaseURL,
     authToken: providedOptions.resolved?.authToken ?? deps.authToken,
+    ...(providedOptions.resolved?.authToken === undefined &&
+    deps.authFailure !== undefined
+      ? { authFailure: deps.authFailure }
+      : {}),
     telemetry: providedOptions.resolved?.telemetry,
     temperature:
       providedOptions.resolved?.temperature ??

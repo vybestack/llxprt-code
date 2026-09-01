@@ -44,6 +44,7 @@ import { ToolCallPipeline } from './ToolCallPipeline.js';
 
 import { isLocalEndpoint } from '../utils/localEndpoint.js';
 import { type DumpMode } from '../utils/dumpContext.js';
+import { createCredentialResolutionError } from '../utils/credentialResolutionError.js';
 
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
@@ -110,7 +111,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   private readonly toolCallPipeline = new ToolCallPipeline();
   private readonly preparedPromptEnvelopes = new OpenAIPromptEnvelopeStore();
 
-  private getLogger(): DebugLogger {
+  protected getLogger(): DebugLogger {
     return new DebugLogger('llxprt:provider:openai');
   }
 
@@ -215,18 +216,30 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   protected async getClient(
     options: NormalizedGenerateChatOptions,
   ): Promise<OpenAI> {
-    const authToken =
-      (await resolveRuntimeAuthToken(options.resolved.authToken)) ?? '';
     const baseURL = options.resolved.baseURL ?? this.baseProviderConfig.baseURL;
-
     const requiresAuth = options.settings.getProviderSettings(this.name)[
       'requires-auth'
     ];
     const authExempt = requiresAuth === false || isLocalEndpoint(baseURL);
-    if (!authToken && !authExempt) {
-      throw new Error(
-        `ProviderCacheError("Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003).")`,
+    let authToken = '';
+    try {
+      authToken =
+        (await resolveRuntimeAuthToken(options.resolved.authToken)) ?? '';
+    } catch (cause) {
+      const failure = createCredentialResolutionError(options, this.name, {
+        kind: 'credential-source-failed',
+        cause,
+      });
+      if (!authExempt) {
+        throw failure;
+      }
+      this.getLogger().debug(
+        () =>
+          `Continuing without credentials for auth-exempt endpoint after authentication resolution failed: ${failure.message}`,
       );
+    }
+    if (!authToken && !authExempt) {
+      throw createCredentialResolutionError(options, this.name);
     }
 
     const agentSettings = resolveAgentSettings(

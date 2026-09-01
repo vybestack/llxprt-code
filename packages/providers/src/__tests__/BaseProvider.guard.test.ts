@@ -61,11 +61,15 @@ describe('BaseProvider runtime guard', () => {
       provider as unknown as {
         authResolver: {
           resolveAuthentication: (input: unknown) => Promise<string>;
+          resolveAuthenticationResult: (
+            input: unknown,
+          ) => Promise<{ token: string }>;
           setSettingsService: (settings: SettingsService | undefined) => void;
         };
       }
     ).authResolver = {
       resolveAuthentication: vi.fn().mockResolvedValue(''),
+      resolveAuthenticationResult: vi.fn().mockResolvedValue({ token: '' }),
       setSettingsService: vi.fn(),
     };
 
@@ -100,11 +104,17 @@ describe('BaseProvider runtime guard', () => {
       provider as unknown as {
         authResolver: {
           resolveAuthentication: (input: unknown) => Promise<string>;
+          resolveAuthenticationResult: (
+            input: unknown,
+          ) => Promise<{ token: string }>;
           setSettingsService: (settings: SettingsService | undefined) => void;
         };
       }
     ).authResolver = {
       resolveAuthentication: vi.fn().mockResolvedValue('token'),
+      resolveAuthenticationResult: vi
+        .fn()
+        .mockResolvedValue({ token: 'token' }),
       setSettingsService: vi.fn(),
     };
 

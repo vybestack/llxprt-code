@@ -21,6 +21,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import {
   type AuthPrecedenceConfig,
+  type CredentialResolutionError,
   type OAuthManager,
   type IProviderKeyStorage,
 } from '@vybestack/llxprt-code-auth';
@@ -87,6 +88,7 @@ export interface NormalizedGenerateChatOptions extends GenerateChatOptions {
     model: string;
     baseURL?: string;
     authToken: ResolvedAuthToken;
+    authFailure?: CredentialResolutionError;
     telemetry?: ProviderTelemetryContext; // @plan PLAN-20251023-STATELESS-HARDENING.P08: Telemetry service
     temperature?: number;
     maxTokens?: number;
@@ -791,6 +793,7 @@ export abstract class BaseProvider implements IProvider {
           setSettingsProviderRuntimeContext(previousContext ?? null);
         }
         normalized.resolved.authToken = '';
+        delete normalized.resolved.authFailure;
         this.authResolver.setSettingsService(this.defaultSettingsService);
       }
     }.call(this);
@@ -823,14 +826,27 @@ export abstract class BaseProvider implements IProvider {
         | ProviderSettings
         | undefined) ?? ({} as ProviderSettings);
     const resolvedBaseURL = this.computeBaseURL(settings);
-    const resolvedAuth = resolveAuthentication
-      ? ((await this.authResolver.resolveAuthentication({
-          settingsService: settings,
-          includeOAuth: this.isOAuthEligible(
-            providedOptions.resolved?.baseURL ?? resolvedBaseURL,
-          ),
-        })) ?? '')
-      : (providedOptions.resolved?.authToken ?? '');
+    let resolvedAuth: ResolvedAuthToken;
+    let authFailure: CredentialResolutionError | undefined;
+    const runtimeId =
+      providedOptions.runtime?.runtimeId ??
+      providedOptions.invocation?.runtimeId ??
+      peekActiveProviderRuntimeContext()?.runtimeId;
+    if (resolveAuthentication) {
+      const authResult = await this.authResolver.resolveAuthenticationResult({
+        settingsService: settings,
+        includeOAuth: this.isOAuthEligible(
+          providedOptions.resolved?.baseURL ?? resolvedBaseURL,
+        ),
+        ...(runtimeId === undefined ? {} : { runtimeId }),
+      });
+      resolvedAuth = authResult.token ?? '';
+      if (authResult.token === null) {
+        authFailure = authResult.failure;
+      }
+    } else {
+      resolvedAuth = providedOptions.resolved?.authToken ?? '';
+    }
 
     return normalizeProviderGenerateChatOptions(this, providedOptions, {
       providerName: this.name,
@@ -838,6 +854,7 @@ export abstract class BaseProvider implements IProvider {
       defaultConfig: this.defaultConfig,
       maybeTools,
       authToken: resolvedAuth,
+      ...(authFailure === undefined ? {} : { authFailure }),
       resolvedModel: this.computeModel(settings),
       resolvedBaseURL,
       providerSettings,

@@ -30,7 +30,10 @@ import {
   AnthropicProvider,
   isAnthropicOAuthBaseURL,
 } from './AnthropicProvider.js';
-import type { OAuthManager } from '@vybestack/llxprt-code-auth';
+import {
+  CredentialResolutionError,
+  type OAuthManager,
+} from '@vybestack/llxprt-code-auth';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import {
@@ -594,6 +597,7 @@ describe('Issue #2411: base-URL-aware OAuth eligibility for Anthropic', () => {
       const generator = result.provider.generateChatCompletion(callOptions);
       const thrownError = await captureGeneratorError(generator);
 
+      expect(thrownError).toBeInstanceOf(CredentialResolutionError);
       expect(thrownError.message).toContain('/auth claudecode');
       expect(thrownError.message.toLowerCase()).not.toContain('/key');
     });
@@ -627,6 +631,7 @@ describe('Issue #2411: base-URL-aware OAuth eligibility for Anthropic', () => {
       const generator = result.provider.generateChatCompletion(callOptions);
       const thrownError = await captureGeneratorError(generator);
 
+      expect(thrownError).toBeInstanceOf(CredentialResolutionError);
       expect(thrownError.message).not.toContain('/auth claudecode');
       expect(thrownError.message).toContain('/key');
       expect(thrownError.message.toLowerCase()).toContain('api key');
