@@ -474,6 +474,10 @@ function privateRunRoots(cacheDir: string): string[] {
 interface WorkflowSession {
   /** Exit status of the container command (null on timeout/signal). */
   readonly status: number | null;
+  /** Captured container stdout for actionable CI launch failures. */
+  readonly stdout: string;
+  /** Captured container stderr, including spawn errors when present. */
+  readonly stderr: string;
   /** Private per-run storage roots that existed BEFORE cleanup ran. */
   readonly runRootsBeforeCleanup: readonly string[];
 }
@@ -507,6 +511,7 @@ function runSandboxedWorkflow(
   const cleanup = addPrivateDependencyMounts(config, args, fixture.repoRoot);
   const runRoots = privateRunRoots(join(fixture.storageRoot, 'cache'));
   let status: number | null = null;
+  let stdout = '';
   let stderr = '';
   try {
     const result = spawnSync(
@@ -521,6 +526,7 @@ function runSandboxedWorkflow(
       },
     );
     status = result.status;
+    stdout = result.stdout ?? '';
     stderr = result.stderr ?? '';
     if (result.error !== undefined) {
       status = null;
@@ -535,7 +541,7 @@ function runSandboxedWorkflow(
     }
     cleanup();
   }
-  return { status, runRootsBeforeCleanup: runRoots };
+  return { status, stdout, stderr, runRootsBeforeCleanup: runRoots };
 }
 
 const RUN_ONE_SCRIPT = [
@@ -579,12 +585,25 @@ function assertAbsentProtectedPathStrictlyGone(absentDir: string): void {
   expect(existsSync(absentDir)).toBe(false);
 }
 
-// --- gated image-global agent launcher ---------------------------------------
-
-interface SessionResult {
+interface LaunchResult {
   readonly status: number | null;
+  readonly stdout: string;
   readonly stderr: string;
 }
+
+function expectLaunchSucceeded(result: LaunchResult): void {
+  if (result.status !== 0) {
+    throw new Error(
+      `Sandbox launch exited with status ${String(result.status)}.\n` +
+        `--- stdout ---\n${result.stdout}\n` +
+        `--- stderr ---\n${result.stderr}`,
+    );
+  }
+}
+
+// --- gated image-global agent launcher ---------------------------------------
+
+type SessionResult = LaunchResult;
 
 function runAgentSession(
   engine: string,
@@ -654,7 +673,10 @@ ${result.stderr ?? ''}
   );
   return {
     status: result.status,
-    stderr: (result.stderr ?? '') + (result.stdout ?? ''),
+    stdout: result.stdout ?? '',
+    stderr:
+      (result.stderr ?? '') +
+      (result.error === undefined ? '' : String(result.error)),
   };
 }
 
@@ -668,7 +690,7 @@ function describeEngine(engine: string): void {
       let home: string;
       let beforeSnapshots: ReadonlyMap<string, TreeEntry>[];
       let beforeAbsent: ReadonlyMap<string, TreeEntry> | undefined;
-      let savedStorageEnv: NodeJS.ProcessEnv;
+      let savedStorageEnv: NodeJS.ProcessEnv | undefined;
 
       beforeAll(() => {
         home = mkdtempSync(join(tmpdir(), `issue3450-${engine}-`));
@@ -693,11 +715,13 @@ function describeEngine(engine: string): void {
       });
 
       afterAll(() => {
-        for (const [key, value] of Object.entries(savedStorageEnv)) {
-          if (value === undefined) {
-            delete process.env[key];
-          } else {
-            process.env[key] = value;
+        if (savedStorageEnv !== undefined) {
+          for (const [key, value] of Object.entries(savedStorageEnv)) {
+            if (value === undefined) {
+              delete process.env[key];
+            } else {
+              process.env[key] = value;
+            }
           }
         }
         if (home !== undefined && home !== '') {
@@ -710,7 +734,7 @@ function describeEngine(engine: string): void {
         'one sandbox session installs, builds, and tests against private dependencies',
         () => {
           const session = runSandboxedWorkflow(engine, fixture, RUN_ONE_SCRIPT);
-          expect(session.status).toBe(0);
+          expectLaunchSucceeded(session);
 
           // The image-global llxprt and /usr/local/bun stayed available (not
           // over-mounted by the private dependency binds).
@@ -773,7 +797,7 @@ function describeEngine(engine: string): void {
         'a second run starts with fresh private dependency storage',
         () => {
           const session = runSandboxedWorkflow(engine, fixture, RUN_TWO_SCRIPT);
-          expect(session.status).toBe(0);
+          expectLaunchSucceeded(session);
 
           expectResultFile(fixture, 'second-run-fresh.txt');
           expectNoBadResultFiles(fixture);
@@ -829,9 +853,17 @@ function describeEngine(engine: string): void {
             [...args, IMAGE, 'sh', '-c', innerScript],
             {
               cwd: fixture.repoRoot,
-              stdio: 'ignore',
+              stdio: ['ignore', 'pipe', 'pipe'],
             },
           );
+          let stdout = '';
+          let stderr = '';
+          child.stdout.on('data', (chunk: Buffer) => {
+            stdout += chunk.toString();
+          });
+          child.stderr.on('data', (chunk: Buffer) => {
+            stderr += chunk.toString();
+          });
           const hostEditPath = join(fixture.repoRoot, 'host-live-edit.txt');
           const writeHostEdit = setTimeout(() => {
             writeFileSync(
@@ -862,8 +894,13 @@ function describeEngine(engine: string): void {
             clearTimeout(raceTimer);
             cleanup();
           }
-          expect(closeError).toBeNull();
-          expect(closeStatus).toBe(0);
+          expectLaunchSucceeded({
+            status: closeError === null ? closeStatus : null,
+            stdout,
+            stderr:
+              stderr +
+              (closeError === null ? '' : `\nspawn error: ${closeError}`),
+          });
           expect(
             readFileSync(
               join(fixture.repoRoot, 'results', 'host-edit-seen.txt'),
@@ -910,6 +947,8 @@ function describeEngine(engine: string): void {
           // match the host owner of the cache-resident private directories.
           args.push('--user', '54321:54321');
           let status: number | null = null;
+          let stdout = '';
+          let stderr = '';
           try {
             const result = spawnSync(
               engine,
@@ -929,16 +968,14 @@ function describeEngine(engine: string): void {
               },
             );
             status = result.status;
-            if (status !== 0) {
-              writeTextFile(
-                join(fixture.storageRoot, 'uid-mismatch-stderr.log'),
-                result.stderr ?? '',
-              );
-            }
+            stdout = result.stdout ?? '';
+            stderr =
+              (result.stderr ?? '') +
+              (result.error === undefined ? '' : String(result.error));
           } finally {
             cleanup();
           }
-          expect(status).toBe(0);
+          expectLaunchSucceeded({ status, stdout, stderr });
           expectResultFile(fixture, 'install-ok.txt');
           expectResultFile(fixture, 'nested-install-ok.txt');
           expectResultFile(fixture, 'build-ok.txt');
@@ -1099,7 +1136,7 @@ function describeEngine(engine: string): void {
       let home: string;
       let beforeSnapshots: ReadonlyMap<string, TreeEntry>[];
       let beforeAbsent: ReadonlyMap<string, TreeEntry> | undefined;
-      let savedStorageEnv: NodeJS.ProcessEnv;
+      let savedStorageEnv: NodeJS.ProcessEnv | undefined;
 
       beforeAll(() => {
         home = mkdtempSync(join(tmpdir(), `issue3450-${engine}-agent-`));
@@ -1121,11 +1158,13 @@ function describeEngine(engine: string): void {
       });
 
       afterAll(() => {
-        for (const [key, value] of Object.entries(savedStorageEnv)) {
-          if (value === undefined) {
-            delete process.env[key];
-          } else {
-            process.env[key] = value;
+        if (savedStorageEnv !== undefined) {
+          for (const [key, value] of Object.entries(savedStorageEnv)) {
+            if (value === undefined) {
+              delete process.env[key];
+            } else {
+              process.env[key] = value;
+            }
           }
         }
         if (home !== undefined && home !== '') {
@@ -1142,7 +1181,7 @@ function describeEngine(engine: string): void {
             fixture,
             fixture.responsesRun1,
           );
-          expect(session.status).toBe(0);
+          expectLaunchSucceeded(session);
 
           expectResultFile(fixture, 'image-global-ok.txt');
           expectResultFile(fixture, 'install-ok.txt');
@@ -1175,7 +1214,7 @@ function describeEngine(engine: string): void {
             fixture,
             fixture.responsesRun2,
           );
-          expect(session.status).toBe(0);
+          expectLaunchSucceeded(session);
 
           expectResultFile(fixture, 'second-run-fresh.txt');
           expectNoBadResultFiles(fixture);

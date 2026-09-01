@@ -732,3 +732,27 @@ than by new implementation-detail tests. All logs are under
 
 Both pre-remediation engine baselines (7 pass / 0 fail per engine, agent
 suites engaged) are preserved exactly. No commit or push was made.
+
+## PR-CI diagnostics remediation (PR #3471)
+
+Linux Docker CI run 33505381047, job 99848206646, reported six container
+launches that exited nonzero without preserving their stdout or stderr. The raw
+UID/mode semantics test passed in the same job. Nested-bind ordering was
+investigated and disproven as the cause, so no speculative production change,
+`mkdir`, or mount logic was added.
+
+Capturing status, stdout, and stderr for those six native Linux launches is an
+**In-scope-Fix**. The change is diagnostics-only and supplies the evidence
+needed to diagnose the Linux failures without changing sandbox behavior.
+
+### PR OCR triage
+
+| Suggestion | Class | Disposition |
+| --- | --- | --- |
+| Remove or change `runRootsBeforeCleanup` | Reject | The assertion behaviorally proves private storage exists during the session and is removed afterward. |
+| Guard teardown when `savedStorageEnv` was not assigned | In-scope-Fix | Both engine suites now skip environment restoration when setup failed before the snapshot, preserving the setup exception while still removing any temporary home that was created. |
+| Replace `existsSync` plus `realpathSync` and add ELOOP/EACCES handling | Defer | Malformed or cyclic workspace realpath hardening was already explicitly deferred. The proposed fallback would weaken containment. |
+| Make `dependencyStorageCleanup` required | Reject | Already classified in the second local OCR: no-storage callers are valid and the proposed type change does not address accepted behavior. |
+| Increase external docstring coverage | Reject | The coverage warning does not identify missing behavior and does not justify metric-driven comments. |
+
+No public abstraction, dependency, workflow, or setting was added.
