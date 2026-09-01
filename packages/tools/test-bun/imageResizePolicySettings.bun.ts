@@ -68,6 +68,15 @@ describe('resolveImageResizePolicy settings shapes', () => {
     ).toBeUndefined();
   });
 
+  it('reports invalid limit values even when resizing is disabled', () => {
+    const service = new SettingsService();
+    service.set('image-resize.enabled', false);
+    service.set('image-resize.maxLongEdge', -5);
+    expect(() =>
+      resolveImageResizePolicy(service.getAllGlobalSettings()),
+    ).toThrow('image-resize.maxLongEdge');
+  });
+
   it('rejects invalid nested values the same as flat ones', () => {
     const service = new SettingsService();
     service.set('image-resize.maxLongEdge', -5);
@@ -114,7 +123,9 @@ describe('resolveImageResizePolicy ignores prototype-chain values', () => {
   it('does not pick up a nested value that exists only on the prototype', () => {
     const nested: Record<string, unknown> = {};
     Object.setPrototypeOf(nested, { maxLongEdge: 2000 });
-    expect(resolveImageResizePolicy({ 'image-resize': nested })).toBeUndefined();
+    expect(
+      resolveImageResizePolicy({ 'image-resize': nested }),
+    ).toBeUndefined();
   });
 
   it('an own __proto__ data property is not traversed as a key segment', () => {

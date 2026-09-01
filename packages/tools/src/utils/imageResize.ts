@@ -176,14 +176,14 @@ export function resolveImageResizePolicy(
       'Invalid image resize settings: image-resize.enabled must be a boolean',
     );
   }
-  if (enabled === false) {
-    return undefined;
-  }
   const policy: ImageResizePolicy = {
     maxLongEdge: readPositiveInteger(settings, 'image-resize.maxLongEdge'),
     maxShortEdge: readPositiveInteger(settings, 'image-resize.maxShortEdge'),
     maxPixels: readPositiveInteger(settings, 'image-resize.maxPixels'),
   };
+  if (enabled === false) {
+    return undefined;
+  }
   if (!hasLimits(policy)) {
     if (enabled === true) {
       throw new Error(

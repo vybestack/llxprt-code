@@ -130,8 +130,9 @@ function classifyNormalizedOpenaiModel(
   const version = /^gpt-(\d+)(?:\.(\d+))?/.exec(normalized);
   if (version !== null) {
     const major = parseInt(version[1], 10);
-    // The optional minor group participates only when the match has 3 parts.
-    const minor = version.length > 2 ? parseInt(version[2], 10) : 0;
+    // The optional minor capture is undefined when the group did not
+    // participate, so test for that directly.
+    const minor = version[2] !== undefined ? parseInt(version[2], 10) : 0;
     if (major > 5 || (major === 5 && minor >= 2)) return 'patch';
   }
   // Known legacy models
