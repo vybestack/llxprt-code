@@ -287,29 +287,17 @@ describe('Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P
       expect(readInlineImage(result).data).toStrictEqual(original);
     });
 
-    it('exposes and honors skip_image_resize for a single image read', async () => {
-      const { filePath, original } = await createPngFixture(
-        tempDir,
-        'original.png',
-        { r: 30, g: 60, b: 90 },
-      );
-      const tool = new ReadFileTool(
-        _createFakeFileHost(tempDir, {
-          'image-resize.maxLongEdge': 120,
-        }),
-      );
-
-      expect(tool.schema.parametersJsonSchema).toMatchObject({
-        properties: {
-          skip_image_resize: { type: 'boolean' },
-        },
-      });
-      const result = await executeToolForBehavioralAssertion(tool, {
-        file_path: filePath,
-        skip_image_resize: true,
-      });
-
-      expect(readInlineImage(result).data).toStrictEqual(original);
+    it('does not expose skip_image_resize in the model-facing schema', () => {
+      const tool = new ReadFileTool(_createFakeFileHost(tempDir));
+      const schema = tool.schema.parametersJsonSchema;
+      if (
+        typeof schema !== 'object' ||
+        schema === null ||
+        !('properties' in schema)
+      ) {
+        throw new Error('read_file schema must declare a properties object');
+      }
+      expect(schema.properties).not.toHaveProperty('skip_image_resize');
     });
 
     it('preserves exact image bytes when no resize policy is configured', async () => {

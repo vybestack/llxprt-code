@@ -739,7 +739,10 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
   it.each(['openai', 'openai-responses', 'openai-vercel', 'codex'])(
     '%s applies image limits to every gpt- family model',
     (alias) => {
-      const entry = findBuiltinAliasEntry(alias);
+      const entries = loadProviderAliasEntries();
+      const entry = entries.find(
+        (e) => e.alias === alias && e.source === 'builtin',
+      );
       expect(entry).toBeDefined();
       const rules = configuredModelDefaultRules(entry);
       expect(computeMatchedDefaults('gpt-future-vision', rules)).toMatchObject({
@@ -747,7 +750,55 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
         'image-resize.maxShortEdge': 2048,
         'image-resize.maxPixels': 1_572_864,
       });
+      // o4-mini is not a gpt- model so it does not match ^gpt-
       expectNoImageResizeDefaults(computeMatchedDefaults('o4-mini', rules));
+    },
+  );
+
+  const GPT_52_PLUS_MODELS = [
+    ...[2, 3, 4, 5, 6].map((minor) => `gpt-5.${minor}`),
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
+    'gpt-6',
+    'gpt-6.1',
+  ];
+
+  it.each(['openai', 'openai-responses', 'openai-vercel', 'codex'])(
+    '%s applies 2000px image resize to GPT-5.2+ models @issue:3477',
+    (alias) => {
+      const entries = loadProviderAliasEntries();
+      const entry = entries.find(
+        (e) => e.alias === alias && e.source === 'builtin',
+      );
+      expect(entry).toBeDefined();
+      const rules = configuredModelDefaultRules(entry);
+      for (const model of GPT_52_PLUS_MODELS) {
+        const defaults = computeMatchedDefaults(model, rules);
+        expect(defaults['image-resize.maxLongEdge']).toBe(2000);
+        expect(defaults['image-resize.maxShortEdge']).toBe(2000);
+        // maxPixels comes from the broad ^gpt- rule and survives the
+        // 2000px override via stacked-rule merge.
+        expect(defaults['image-resize.maxPixels']).toBe(1_572_864);
+      }
+    },
+  );
+
+  it.each(['openai', 'openai-responses', 'openai-vercel', 'codex'])(
+    '%s keeps 2048px image resize for pre-5.2 GPT models @issue:3477',
+    (alias) => {
+      const entries = loadProviderAliasEntries();
+      const entry = entries.find(
+        (e) => e.alias === alias && e.source === 'builtin',
+      );
+      expect(entry).toBeDefined();
+      const rules = configuredModelDefaultRules(entry);
+      for (const model of ['gpt-5.0', 'gpt-5.1', 'gpt-4o', 'gpt-4.1']) {
+        const defaults = computeMatchedDefaults(model, rules);
+        expect(defaults['image-resize.maxLongEdge']).toBe(2048);
+        expect(defaults['image-resize.maxShortEdge']).toBe(2048);
+        expect(defaults['image-resize.maxPixels']).toBe(1_572_864);
+      }
     },
   );
   it('user anthropic.config with different modelDefaults shadows the builtin', async () => {

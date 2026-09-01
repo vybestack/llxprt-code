@@ -10,6 +10,7 @@ import {
   resolveImageTokenProviderFamily,
   estimateImageTokens,
   estimateNonTextPartTokens,
+  isGpt52OrNewer,
 } from '../src/utils/imageTokenEstimation.js';
 
 function buildPngBase64(width: number, height: number): string {
@@ -334,5 +335,208 @@ describe('estimateNonTextPartTokens', () => {
     expect(
       estimateNonTextPartTokens('image/png', buildPngBase64(1024, 1024)),
     ).toBe(DEFAULT_IMAGE_TOKEN_ESTIMATE);
+  });
+});
+
+describe('isGpt52OrNewer: model matching', () => {
+  it.each(['gpt-5.2', 'gpt-5.3', 'gpt-5.4', 'gpt-5.5', 'gpt-5.6'])(
+    'matches %s as GPT-5.2+',
+    (model) => {
+      expect(isGpt52OrNewer(model)).toBe(true);
+    },
+  );
+
+  it.each(['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+    'matches named variant %s as GPT-5.2+',
+    (model) => {
+      expect(isGpt52OrNewer(model)).toBe(true);
+    },
+  );
+
+  it('matches gpt-6+ models', () => {
+    expect(isGpt52OrNewer('gpt-6')).toBe(true);
+    expect(isGpt52OrNewer('gpt-7')).toBe(true);
+    expect(isGpt52OrNewer('gpt-6.1')).toBe(true);
+  });
+
+  it.each(['gpt-4o', 'gpt-4.1', 'gpt-5.0', 'gpt-5.1'])(
+    'does NOT match %s',
+    (model) => {
+      expect(isGpt52OrNewer(model)).toBe(false);
+    },
+  );
+
+  it.each(['o1', 'o3', 'o4-mini'])('does NOT match o-series %s', (model) => {
+    expect(isGpt52OrNewer(model)).toBe(false);
+  });
+
+  it('does not match undefined or empty model', () => {
+    expect(isGpt52OrNewer(undefined)).toBe(false);
+    expect(isGpt52OrNewer('')).toBe(false);
+  });
+
+  it('matches unknown non-empty model as GPT-5.2+ (conservative-high)', () => {
+    expect(isGpt52OrNewer('gpt-future-unknown')).toBe(true);
+    expect(isGpt52OrNewer('some-custom-model')).toBe(true);
+  });
+
+  it('is case-insensitive', () => {
+    expect(isGpt52OrNewer('GPT-5.2')).toBe(true);
+    expect(isGpt52OrNewer('Gpt-5.6-Sol')).toBe(true);
+  });
+});
+
+describe('estimateImageTokens: GPT-5.2+ patch formula', () => {
+  it('1920x1080 for gpt-5.2 -> ceil(1.2 x 60 x 34) = 2448 -> capped at 1844', () => {
+    expect(
+      estimateImageTokens({
+        provider: 'openai',
+        model: 'gpt-5.2',
+        dimensions: { width: 1920, height: 1080 },
+      }),
+    ).toBe(1844);
+  });
+
+  it('1000x800 for gpt-5.2 -> ceil(1.2 x 32 x 25) = 960', () => {
+    expect(
+      estimateImageTokens({
+        provider: 'openai',
+        model: 'gpt-5.2',
+        dimensions: { width: 1000, height: 800 },
+      }),
+    ).toBe(960);
+  });
+
+  it('4000x2500 for gpt-5.6 -> capped at 1844', () => {
+    expect(
+      estimateImageTokens({
+        provider: 'openai',
+        model: 'gpt-5.6',
+        dimensions: { width: 4000, height: 2500 },
+      }),
+    ).toBe(1844);
+  });
+
+  it('gpt-5.6-sol uses patch formula (codex provider)', () => {
+    expect(
+      estimateImageTokens({
+        provider: 'codex',
+        model: 'gpt-5.6-sol',
+        dimensions: { width: 1000, height: 800 },
+      }),
+    ).toBe(960);
+  });
+
+  it('gpt-6 uses patch formula', () => {
+    expect(
+      estimateImageTokens({
+        provider: 'openai',
+        model: 'gpt-6',
+        dimensions: { width: 1000, height: 800 },
+      }),
+    ).toBe(960);
+  });
+});
+
+describe('estimateImageTokens: legacy formula still used for non-GPT-5.2+', () => {
+  it('gpt-4o 1024x1024 -> 765 (tile formula)', () => {
+    expect(
+      estimateImageTokens({
+        provider: 'openai',
+        model: 'gpt-4o',
+        dimensions: { width: 1024, height: 1024 },
+      }),
+    ).toBe(765);
+  });
+
+  it('o4-mini 1024x1024 -> 765 (tile formula)', () => {
+    expect(
+      estimateImageTokens({
+        provider: 'openai',
+        model: 'o4-mini',
+        dimensions: { width: 1024, height: 1024 },
+      }),
+    ).toBe(765);
+  });
+
+  it('gpt-5.1 not matched -> uses legacy tile formula', () => {
+    expect(
+      estimateImageTokens({
+        provider: 'openai',
+        model: 'gpt-5.1',
+        dimensions: { width: 1024, height: 1024 },
+      }),
+    ).toBe(765);
+  });
+
+  it('gpt-5.0 not matched -> uses legacy tile formula', () => {
+    expect(
+      estimateImageTokens({
+        provider: 'openai',
+        model: 'gpt-5.0',
+        dimensions: { width: 1024, height: 1024 },
+      }),
+    ).toBe(765);
+  });
+});
+
+describe('estimateImageTokens: unknown dimensions with model awareness', () => {
+  it('unknown dims with gpt-5.2 -> 1844 (patch path)', () => {
+    expect(estimateImageTokens({ provider: 'openai', model: 'gpt-5.2' })).toBe(
+      1844,
+    );
+  });
+
+  it('unknown dims with gpt-4o -> 1105 (legacy path)', () => {
+    expect(estimateImageTokens({ provider: 'openai', model: 'gpt-4o' })).toBe(
+      1105,
+    );
+  });
+
+  it('unknown dims with no model -> 1105 (legacy path, conservative)', () => {
+    expect(estimateImageTokens({ provider: 'openai' })).toBe(1105);
+  });
+
+  it('unknown dims with unknown openai model -> 1844 (patch, conservative-high)', () => {
+    expect(
+      estimateImageTokens({
+        provider: 'openai',
+        model: 'gpt-future-unknown',
+      }),
+    ).toBe(1844);
+  });
+});
+
+describe('estimateNonTextPartTokens: model threading', () => {
+  it('threads model for GPT-5.2+ patch formula', () => {
+    expect(
+      estimateNonTextPartTokens(
+        'image/png',
+        buildPngBase64(1000, 800),
+        'openai',
+        'gpt-5.2',
+      ),
+    ).toBe(960);
+  });
+
+  it('threads model for legacy gpt-4o', () => {
+    expect(
+      estimateNonTextPartTokens(
+        'image/png',
+        buildPngBase64(1024, 1024),
+        'openai',
+        'gpt-4o',
+      ),
+    ).toBe(765);
+  });
+
+  it('uses legacy path when model is omitted', () => {
+    expect(
+      estimateNonTextPartTokens(
+        'image/png',
+        buildPngBase64(1024, 1024),
+        'openai',
+      ),
+    ).toBe(765);
   });
 });

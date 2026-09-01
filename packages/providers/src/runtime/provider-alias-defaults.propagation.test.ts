@@ -170,6 +170,7 @@ const providers: Record<string, StubProviderInstance> = {
   gemini: new StubProvider('gemini'),
   claudecode: new StubProvider('claudecode'),
   openrouter: new StubProvider('openrouter'),
+  codex: new StubProvider('codex'),
 };
 
 let activeProviderName = 'openai';
@@ -347,6 +348,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
 
     providers.claudecode.defaultModel = 'claude-opus-4-6';
     providers.openrouter.defaultModel = 'gpt-4o';
+    providers.codex.defaultModel = 'gpt-5.6-sol';
   });
 
   afterEach(() => {
@@ -550,6 +552,48 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
 
       disableOAuth();
+    });
+    describe('Codex alias image-resize defaults propagation @issue:3477', () => {
+      it('gpt-5.6-sol under codex alias gets image-resize.maxLongEdge 2000', async () => {
+        aliasEntries.push({
+          alias: 'codex',
+          source: 'builtin',
+          filePath: '/fake/codex.config',
+          config: {
+            baseProvider: 'openai-responses',
+            'base-url': 'https://chatgpt.com/backend-api/codex',
+            defaultModel: 'gpt-5.6-sol',
+            ephemeralSettings: {
+              'context-limit': 262144,
+              'prompt-caching': '24h',
+              'reasoning.effort': 'medium',
+            },
+            modelDefaults: [
+              {
+                pattern: '^gpt-',
+                ephemeralSettings: {
+                  'image-resize.maxLongEdge': 2048,
+                  'image-resize.maxShortEdge': 2048,
+                  'image-resize.maxPixels': 1572864,
+                },
+              },
+              {
+                pattern: '^gpt-5[.][2-9]',
+                ephemeralSettings: {
+                  'image-resize.maxLongEdge': 2000,
+                  'image-resize.maxShortEdge': 2000,
+                },
+              },
+            ],
+          },
+        });
+
+        await switchActiveProvider('codex');
+
+        const ephemeral = stubConfig.getEphemeralSettings();
+        expect(ephemeral['image-resize.maxLongEdge']).toBe(2000);
+        expect(ephemeral['image-resize.maxShortEdge']).toBe(2000);
+      });
     });
   });
 });
