@@ -214,7 +214,7 @@ describe('GitService checkpoint semantics (#3464)', () => {
     delete process.env.GIT_CONFIG_GLOBAL;
     delete process.env.GIT_CONFIG_SYSTEM;
     // Containers cannot derive an identity from passwd/hostname the way the
-    // macOS host git does; user.useConfigOnly reproduces that exactly — the
+    // macOS host git does; user.useConfigOnly reproduces that exactly, so
     // commit must take its identity from the shadow .gitconfig alone.
     process.env.GIT_CONFIG_COUNT = '1';
     process.env.GIT_CONFIG_KEY_0 = 'user.useConfigOnly';

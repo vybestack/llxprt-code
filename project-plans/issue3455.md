@@ -119,7 +119,7 @@ private dependency isolation under both engines.
 GREEN run (after implementation, log `tmp/verify3455/green-focused.log`):
 
 ```text
-142 pass / 0 fail — 437 expect() calls across 7 files:
+142 pass / 0 fail (437 expect() calls across 7 files):
   sandbox-source-development.test.ts (new, 15 tests)
   sandbox-node-modules.test.ts       (21 tests, incl. corrected fixture)
   sandbox-entrypoint.test.ts         (18 tests, unchanged behavior)

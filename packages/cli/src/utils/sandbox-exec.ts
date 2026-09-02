@@ -450,7 +450,7 @@ async function executeContainerSandbox(
   args.push(image);
   args.push(...finalEntrypoint);
 
-  // #3469: a sidecar or main-launch failure here is still covered — every
+  // #3469: a sidecar or main-launch failure here is still covered; every
   // resource stays owned by the launch lifecycle until the process/close
   // handlers take over below.
   const proxyContainerProcess =

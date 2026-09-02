@@ -103,8 +103,8 @@ describe('#3450 private dependency storage lifecycle', () => {
     (signal) => {
       // A real child process runs the checked-in signal fixture against the
       // same fake engine state and signals itself while the storage exists.
-      // The fixture receives only data — the signal as argv and the
-      // workspace and marker paths as validated environment variables — so
+      // The fixture receives only data (the signal as argv and the
+      // workspace and marker paths as validated environment variables), so
       // no source code is constructed at runtime.
       // Registering a cleanup listener replaces the signal's default
       // termination, so the lifecycle must both release the volumes AND

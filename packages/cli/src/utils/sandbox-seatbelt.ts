@@ -225,13 +225,13 @@ export function buildSeatbeltArgs(
 }
 
 /**
- * Resolves the canonical real path for a seatbelt root directory, creating
+ * Resolves the real path for a seatbelt root directory, creating
  * it first if it does not exist (so fresh installs work). Uses mode 0o700
- * so auto-created canonical roots — including DATA_DIR which can hold
- * OAuth fallback files — are not world-readable. Canonicalization failure
+ * so auto-created roots (including DATA_DIR, which can hold
+ * OAuth fallback files) are not world-readable. Resolution failure
  * is a classified sandbox error naming the path and root role; there is no
  * lexical fallback, because the .sb profile must grant access to the exact
- * canonical root.
+ * resolved root.
  */
 function resolveSeatbeltRootDir(dirPath: string, role: string): string {
   if (!fs.existsSync(dirPath)) {

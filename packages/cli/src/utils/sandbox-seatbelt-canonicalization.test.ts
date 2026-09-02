@@ -75,7 +75,7 @@ describe('#3475 seatbelt path canonicalization', () => {
     expect(thrown.message).toContain('resolve a sandbox include directory');
   });
 
-  it('fails fast instead of using a lexical path when a canonical Storage root is a symlink cycle', () => {
+  it('fails fast instead of using a lexical path when a real Storage root is a symlink cycle', () => {
     const cyclic = path.join(tmpRoot, 'cyclic-config');
     fs.symlinkSync(cyclic, cyclic);
     process.env.LLXPRT_CONFIG_HOME = cyclic;

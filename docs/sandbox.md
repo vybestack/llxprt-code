@@ -1074,9 +1074,9 @@ profile.
 `network: off` with Docker or Podman on macOS. The credential bridge needs
 networking there. Use `network: on`, switch to Seatbelt, or run on Linux.
 
-**"Sandbox dependency preflight failed"** — the host `node_modules` of your
+**"Sandbox dependency preflight failed"**: the host `node_modules` of your
 project contains a file the preflight recognized as a binary built for another
-platform (ELF, Mach-O — including universal/fat binaries — or PE where the
+platform (ELF, Mach-O, including universal/fat binaries, or PE where the
 format does not match your host), or a `node_modules/.bin` symlink pointing at
 the image-global bun location (`/usr/local/bun/bin/...`, such as `bun` or
 `bunx`) while no such path exists on your host. Because the sandbox replaces

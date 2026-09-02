@@ -11,7 +11,7 @@
  *
  * The engine suites drive the PRODUCTION argument-generation path
  * (`buildContainerRunArgs` + `attachPersistentCheckpointStore` from
- * packages/cli — the attach genuinely creates the engine volume and runs the
+ * packages/cli; the attach genuinely creates the engine volume and runs the
  * hardened init container) and launch REAL Docker/Podman containers whose
  * shell prologue is the EXACT production entrypoint text (`XDG_HOME_PIN_STANZA`
  * + `buildCheckpointEntrypointScript`). Inside the containers, the scripts
@@ -26,7 +26,7 @@
  *      fresh attach + fresh container) → history still readable → new
  *      snapshot → restore of the run-one commit reverts the workspace.
  *   2. arbitrary selected uid 54321 reads prior objects, commits, and
- *      restores — cross-uid sharing proof on the same store.
+ *      restores, proving cross-uid sharing on the same store.
  *   3. #3450 coexistence: dependency volumes are released by their run
  *      lifecycle while the checkpoint store and its history stay intact.
  *   4. version skew (gated on the image containing #3464's in-container
@@ -173,8 +173,9 @@ function imageGlobalCliBoots(engine: string, image: string): boolean {
 /**
  * Probes whether the image's in-container CLI contains #3464's
  * persistence fail-fast (the marker-filename contract compiled into the
- * bundle). The registry image predating this tree skips the version-skew
- * suite honestly; a locally built image (`npm run build:sandbox`) runs it.
+ * bundle). The registry image predating this tree reports its state plainly
+ * and skips the version-skew suite; a locally built image
+ * (`npm run build:sandbox`) runs it.
  */
 function imageHasCheckpointFailFast(engine: string, image: string): boolean {
   try {
@@ -1052,7 +1053,7 @@ function describeEngine(engine: string): void {
   // Version skew: the in-container CLI (image built from a tree with #3464)
   // must refuse to present checkpointing when the launcher did not
   // provision the persistent store. Gated on the image actually containing
-  // the fail-fast; the pre-#3464 registry image honestly skips.
+  // the fail-fast; the pre-#3464 registry image skips this gate.
   const imageHasFailFast =
     ENGINES.includes(engine) && imageHasCheckpointFailFast(engine, IMAGE);
   describe.skipIf(!ENGINES.includes(engine) || !imageHasFailFast)(
@@ -1074,7 +1075,7 @@ function describeEngine(engine: string): void {
             const workdir = realpathSync(fixture.repoRoot);
             const containerWorkdir = getContainerPath(workdir);
             // The OLD launcher shape: run args and mounts, but NO checkpoint
-            // store attach and NO checkpoint entrypoint stanza — a host from
+            // store attach and NO checkpoint entrypoint stanza, so a host from
             // before #3464 starting an image from after it.
             const args = buildContainerRunArgs(
               config,
@@ -1132,7 +1133,7 @@ function describeEngine(engine: string): void {
   // with --checkpointing; the host launcher provisions the store. Engages
   // only when the image's global CLI can boot standalone AND contains this
   // tree's checkpoint persistence code (a pre-#3464 image's GitService
-  // cannot initialize inside a container at all — see the version-skew
+  // cannot initialize inside a container at all; see the version-skew
   // gate), so a locally built image (`npm run build:sandbox`) is required.
   const imageGlobalBoots =
     ENGINES.includes(engine) &&
@@ -1162,7 +1163,7 @@ function describeEngine(engine: string): void {
           process.env.LLXPRT_CACHE_HOME = join(fixture.storageRoot, 'cache');
           process.env.LLXPRT_LOG_HOME = join(fixture.storageRoot, 'log');
           try {
-            // Session one: the image CLI boots with checkpointing enabled —
+            // Session one: the image CLI boots with checkpointing enabled;
             // its GitService must find the store marker through the full
             // production path and create the shadow repo inside the store.
             const first = runAgentSession(engine, fixture);

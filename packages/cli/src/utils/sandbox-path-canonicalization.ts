@@ -8,8 +8,8 @@
  * Fail-fast path canonicalization for sandbox launch preparation (#3475).
  *
  * Every sandbox path that must be resolved to its real filesystem identity
- * before launch — the workspace root, the running executable, tmpdir,
- * seatbelt target/include directories, and mount sources — goes through
+ * before launch (the workspace root, the running executable, tmpdir,
+ * seatbelt target/include directories, and mount sources) goes through
  * this module. A path that another process removes or replaces between its
  * discovery and `realpath` resolution, a symlink cycle, or a malformed path
  * fails as a `FatalSandboxError` naming the affected path and the sandbox
@@ -18,7 +18,7 @@
  *
  * There is deliberately no lexical fallback: a path that cannot be resolved
  * against the real filesystem would weaken every containment check built on
- * the canonical result.
+ * the resolved real-path result.
  */
 
 import fs from 'node:fs';
@@ -54,11 +54,12 @@ export function hasFilesystemErrorCode(error: unknown, code: string): boolean {
 }
 
 /**
- * Canonicalizes a path that must already exist. Any filesystem failure —
- * concurrent removal or replacement, a symlink cycle, a malformed path — is
- * converted into a `FatalSandboxError` naming `targetPath` and the sandbox
- * `operation` being performed. The underlying error is recorded as the
- * thrown error's `cause` for errno inspection by callers.
+ * Resolves a path that must already exist to its real filesystem identity.
+ * Any filesystem failure (concurrent removal or replacement, a symlink
+ * cycle, a malformed path) is converted into a `FatalSandboxError` naming
+ * `targetPath` and the sandbox `operation` being performed. The underlying
+ * error is recorded as the thrown error's `cause` for errno inspection by
+ * callers.
  */
 export function canonicalizeExistingPath(
   targetPath: string,
@@ -79,9 +80,9 @@ export function canonicalizeExistingPath(
  * occupy, following symlinks that already exist while keeping support for
  * missing contained destinations.
  *
- * A path that discovery saw exist but whose canonical resolution then fails
+ * A path that discovery saw exist but whose real-path resolution then fails
  * (concurrent removal or replacement) is a fatal sandbox preparation error
- * naming that path — never a lexical fallback.
+ * naming that path, never a lexical fallback.
  */
 export function canonicalizeNearestExistingPath(
   candidate: string,
@@ -114,7 +115,7 @@ function sandboxCanonicalizationError(
 ): FatalSandboxError {
   const detail = cause instanceof Error ? cause.message : String(cause);
   const error = new FatalSandboxError(
-    `Failed to ${operation}: canonical path resolution of '${targetPath}' ` +
+    `Failed to ${operation}: real path resolution of '${targetPath}' ` +
       `failed (${detail}). Another process may have removed or replaced the ` +
       `path while the sandbox was preparing, or the path may be malformed or ` +
       `a symlink cycle. Verify the path and retry.`,

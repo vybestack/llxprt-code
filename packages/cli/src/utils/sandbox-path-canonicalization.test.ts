@@ -19,7 +19,7 @@ import {
 /**
  * Builds a bounded filesystem seam that reproduces the #3475 race
  * deterministically: `vanishedPath` still answers "exists" at discovery,
- * but canonical resolution fails exactly as it would after a concurrent
+ * but real-path resolution fails exactly as it would after a concurrent
  * removal (`ENOENT`) or replacement with a symlink cycle (`ELOOP`).
  * Every other path delegates to the real filesystem.
  */
@@ -47,7 +47,7 @@ function makeTempDir(): string {
 }
 
 describe('#3475 canonicalizeExistingPath', () => {
-  it('resolves a real path through symlinks to its canonical target', () => {
+  it('resolves a real path through symlinks to its real target', () => {
     const root = makeTempDir();
     try {
       const realDir = path.join(root, 'real');

@@ -14,7 +14,7 @@ import { debugLogger } from '@vybestack/llxprt-code-telemetry';
  * The registry has exactly two terminal transitions:
  *
  * - a failed preparation/launch drains every owned resource through
- *   `releaseForFailedLaunch()` — the single failure path — releasing each
+ *   `releaseForFailedLaunch()`, the single failure path, releasing each
  *   resource exactly once in the stage order below; or
  * - a successful launch calls `transferToProcessHandlers()` once the normal
  *   process/close handlers are wired, explicitly moving ownership to them.

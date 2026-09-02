@@ -1,4 +1,4 @@
-# Issue #3464 — Sandbox checkpoint history is discarded with the container
+# Issue #3464: Sandbox checkpoint history is discarded with the container
 
 Status: complete (all suites green; see Verification below)
 
@@ -8,8 +8,8 @@ Checkpointing writes its shadow Git repository under
 `storage.getHistoryDir()` = `LLXPRT_DATA_HOME/history/<sha256(project root)>`.
 In a container sandbox the entrypoint pins `LLXPRT_DATA_HOME` to the
 container's ephemeral `$HOME`, and the sandbox runs `--rm`, so checkpoint
-history — and the `/restore` metadata JSONs under
-`storage.getProjectTempCheckpointsDir()` in the ephemeral `LLXPRT_LOG_HOME` —
+history, and the `/restore` metadata JSONs under
+`storage.getProjectTempCheckpointsDir()` in the ephemeral `LLXPRT_LOG_HOME`,
 are destroyed when the container exits. Later `/restore` operations cannot
 recover anything.
 
@@ -17,10 +17,10 @@ Second defect: the shadow repository relies on work-tree `.gitignore` files
 only. Repository-local exclude rules (`.git/info/exclude`) of the user's
 project are never represented, so files the user excluded are silently
 committed into checkpoint snapshots (and the copied root `.gitignore` at the
-history root is inert — git never reads it there).
+history root is inert, as git never reads it there).
 
 Third defect (found while building the real-engine evidence): even ignoring
-persistence, `GitService.initialize()` FAILED outright inside containers —
+persistence, `GitService.initialize()` FAILED outright inside containers:
 `Failed to initialize checkpointing: Author identity unknown`. The
 init-time simple-git instance (repo init + initial commit) ran without the
 shadow `HOME` pinning, so the `.gitconfig` written into the history dir was
@@ -44,7 +44,7 @@ Task-level additions:
 
 - Persistence must survive restarting Docker or rootless Podman (engine-owned
   storage does; tests prove survival across independent engine invocations and
-  container exits — see "Engine restart coverage" below).
+  container exits; see "Engine restart coverage" below).
 - Coexist with #3450 engine-owned per-run dependency volumes and #3470
   stale-run cleanup.
 - Mark persistent checkpoint resources distinctly so crash recovery cannot
@@ -59,7 +59,7 @@ Task-level additions:
 One engine-owned named volume per (engine, project):
 
 - Name: `sandbox-checkpoints-<projectKey>` where
-  `projectKey = Storage.getProjectHistoryKey(getContainerPath(workdir))` —
+  `projectKey = Storage.getProjectHistoryKey(getContainerPath(workdir))`,
   the exact sha256 the in-container CLI computes for its history dir (path
   parity on non-Windows; `getContainerPath` translation on Windows hosts).
   Deterministic name ⇒ the same volume is reused by every run of the project,
@@ -71,9 +71,9 @@ One engine-owned named volume per (engine, project):
   - explicitly NOT `sandbox-dependency-run` and NOT `sandbox-owner`
     (per-run/process-scoped semantics must never attach to persistent state).
 - Volume layout inside:
-  - `history/<projectKey>/` — the shadow Git repository
-  - `checkpoints/` — the `/restore` checkpoint metadata JSONs
-  - `history/<projectKey>/.llxprt-checkpoint-store` — marker file proving a
+  - `history/<projectKey>/`: the shadow Git repository
+  - `checkpoints/`: the `/restore` checkpoint metadata JSONs
+  - `history/<projectKey>/.llxprt-checkpoint-store`: marker file proving a
     persistent store backs this exact project key.
 - Mounted into the main container at the neutral path
   `/var/lib/llxprt-sandbox/checkpoints` (never inside the workspace bind or
@@ -83,14 +83,14 @@ One engine-owned named volume per (engine, project):
 
 Why a volume and not a host bind: #3450 proved the host cannot unlink content
 a foreign container uid wrote (POSIX ownership), while the engine can always
-delete its own volumes — arbitrary selected UIDs therefore never cause
+delete its own volumes, so arbitrary selected UIDs never cause
 host-owned cleanup failures, and the store cannot leak into the project
 repository.
 
 ### Entry point wiring (follows the real container `$HOME`)
 
 `#3081` pins data/cache/log homes from the image's real `$HOME` inside the
-entrypoint — a host-side mount destination cannot predict that home for
+entrypoint, and a host-side mount destination cannot predict that home for
 custom images. The store is therefore linked into place by a trusted
 entrypoint stanza (composed after the XDG pin, before bridges/exec):
 
@@ -100,9 +100,9 @@ entrypoint stanza (composed after the XDG pin, before bridges/exec):
 - `mkdir -p "$LLXPRT_DATA_HOME"` and
   `mkdir -p "$LLXPRT_LOG_HOME/tmp/$LLXPRT_SANDBOX_PROJECT_KEY"`;
 - `ln -sfn "$LLXPRT_SANDBOX_CHECKPOINT_STORE/history"
-  "$LLXPRT_DATA_HOME/history"` — the shadow repo lands in the volume;
+  "$LLXPRT_DATA_HOME/history"`, so the shadow repo lands in the volume;
 - `ln -sfn "$LLXPRT_SANDBOX_CHECKPOINT_STORE/checkpoints"
-  "$LLXPRT_LOG_HOME/tmp/$LLXPRT_SANDBOX_PROJECT_KEY/checkpoints"` — the
+  "$LLXPRT_LOG_HOME/tmp/$LLXPRT_SANDBOX_PROJECT_KEY/checkpoints"`, so the
   `/restore` metadata JSONs land in the volume.
 
 The stanza is added only when checkpointing is enabled, so sessions without
@@ -115,7 +115,7 @@ single `--cap-add=FOWNER` carve-out, `no-new-privileges`, `--network none`,
 `--pull=never`, `--rm`, `--init`), mirroring the #3450 dependency init, runs
 before the main container. FOWNER is required and sufficient: the
 normalization chmods store entries owned by the PREVIOUS session's selected
-uid, and chmod on non-owned files needs exactly that capability — without it
+uid, and chmod on non-owned files needs exactly that capability; without it
 the second launch dies with "changing permissions of .../.git/objects:
 Operation not permitted" (proven on Docker).
 
@@ -137,7 +137,7 @@ idmapped to the container user (the #3450 finding), so the normalization
 holds on both engines. Because a fresh uid must also be able to operate on a
 repo whose files a previous uid wrote, the shadow `.gitconfig` gains
 `[safe] directory = *` (that config file is only ever used for the shadow
-repository — `HOME`/`XDG_CONFIG_HOME` are pinned to the history dir).
+repository, and `HOME`/`XDG_CONFIG_HOME` are pinned to the history dir).
 
 ### Fail before reliance
 
@@ -157,7 +157,7 @@ repository — `HOME`/`XDG_CONFIG_HOME` are pinned to the history dir).
 
 - #3450: dependency volumes mount at `<workdir>/node_modules` (inside the
   workspace bind); the checkpoint store mounts at the neutral `/var/lib/...`
-  path — disjoint destinations, independent init containers, and the
+  path: disjoint destinations, independent init containers, and the
   checkpoint store is not registered with any `DependencyVolumeLifecycle`, so
   `release()` and the process-exit/SIGINT/SIGTERM cleanup paths never touch
   it. Behavioral test: a session with BOTH features leaves dependency
@@ -187,19 +187,19 @@ sandbox session reuses (not recreates) the shadow repository in the store.
 
 Files:
 
-- `packages/storage/src/config/storage.ts` — `static getProjectHistoryKey()`
+- `packages/storage/src/config/storage.ts`: `static getProjectHistoryKey()`
   (single source of the history-path hash; used by the CLI planner).
-- `packages/core/src/services/gitService.ts` — container-sandbox marker
+- `packages/core/src/services/gitService.ts`: container-sandbox marker
   fail-fast; `.git/info/exclude` synchronization into the shadow repo (at
   setup and before every snapshot); `[safe] directory = *` in the shadow
   gitconfig; exported marker filename constant (the CLI/core contract).
-- `packages/cli/src/utils/sandbox-checkpoint-storage.ts` — NEW: plan,
+- `packages/cli/src/utils/sandbox-checkpoint-storage.ts` (NEW): plan,
   volume-create/init argv builders, attach, entrypoint stanza builder.
-- `packages/cli/src/utils/sandbox-entrypoint.ts` — optional stanza parameter.
-- `packages/cli/src/utils/sandbox-containers.ts` — reserve the two env keys.
-- `packages/cli/src/utils/sandbox-exec.ts` — plan + attach wiring, stanza
+- `packages/cli/src/utils/sandbox-entrypoint.ts`: optional stanza parameter.
+- `packages/cli/src/utils/sandbox-containers.ts`: reserve the two env keys.
+- `packages/cli/src/utils/sandbox-exec.ts`: plan + attach wiring, stanza
   pass-through.
-- `packages/cli/test-utils/fake-dependency-engine.ts` — record `--env` on
+- `packages/cli/test-utils/fake-dependency-engine.ts`: record `--env` on
   `run` containers (additive; needed because the checkpoint attach passes
   `--env` flags).
 - Tests: `packages/core/src/services/gitServiceCheckpoints.test.ts` (NEW,
@@ -219,7 +219,7 @@ implementation itself.
 | --- | --- |
 | Engine-owned volume, not host bind | arbitrary UIDs never create host-unremovable files (#3450 F-series evidence); store stays outside repo and container home |
 | Deterministic per-project name | persistence across runs/daemon restarts; per-run names would re-create the discard bug |
-| Neutral mount path + entrypoint symlinks | follows the image's real `$HOME` (#3081 custom-image safety); no credential boundary crossing (#2946 — only `history/` and `checkpoints/` cross, never the data root with OAuth creds) |
+| Neutral mount path + entrypoint symlinks | follows the image's real `$HOME` (#3081 custom-image safety); no credential boundary crossing (#2946: only `history/` and `checkpoints/` cross, never the data root with OAuth creds) |
 | Marker file + GitService check | fail-fast inside the container for version skew/misconfiguration rather than an ineffective feature |
 | Init chmod normalization each launch | cross-uid write/read sharing of a growing store must be deterministic; engine-mediated, never host-mediated || No lifecycle registration | the store must survive crashes and cleanup by design; #3470 contract documented here |
 | Metadata JSONs persisted too | `/restore` after restart needs the commit hashes; without them AC1 is untestable in the real flow |
@@ -254,7 +254,7 @@ implementation itself.
      container + fresh init) → history still readable, new commit, restore of
      the run-1 commit reverts workspace content;
    - arbitrary-uid run (`--user 54321:54321`): reads run-1 objects, commits,
-     and restores — cross-uid sharing proof;
+     and restores, proving cross-uid sharing;
    - #3450 coexistence: dependency volumes released, checkpoint volume intact
      with restorable history;
    - gated image-global CLI suites: `--checkpointing` agent session boots

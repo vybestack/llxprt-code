@@ -29,29 +29,29 @@ its release at the acquisition boundary with:
 
 Two terminal transitions, exactly one of which always runs:
 
-- **Failure** — `releaseForFailedLaunch()`, called from a single `catch` in
+- **Failure**: `releaseForFailedLaunch()`, called from a single `catch` in
   `runContainerSandbox`. Releases every owned resource in stage order, each
   exactly once, and writes any secondary release failure to stderr
   (`Warning: failed to release …`) without replacing the original error.
-- **Success** — `transferToProcessHandlers()`, called from
+- **Success**: `transferToProcessHandlers()`, called from
   `executeContainerSandbox` after `wireCleanupHandlers` installs the normal
   process/sandbox-close wiring. Ownership explicitly moves to those handlers;
   the registry is spent and `own()` after that is a programming error.
 
 ### Release stages (order is the container-before-volume guarantee)
 
-1. `main-container` — the spawned engine container (killed on a failed launch;
+1. `main-container`: the spawned engine container (killed on a failed launch;
    `--rm` cleans the engine record).
-2. `proxy-sidecar` — `docker/podman rm -f llxprt-code-sandbox-proxy` through an
+2. `proxy-sidecar`: `docker/podman rm -f llxprt-code-sandbox-proxy` through an
    idempotent stop closure that detaches its own `exit`/`SIGINT`/`SIGTERM`
    listeners when it fires.
-3. `credential-proxy` — bridge cleanup first (bridge tunnel/server, host-only
+3. `credential-proxy`: bridge cleanup first (bridge tunnel/server, host-only
    capability env file, session tmpdir via the composed cleanup), then the
    credential proxy server stop, matching today's ordering.
-4. `tunnel` — SSH agent forwarding cleanup, then port-forward tunnel cleanup.
-5. `session-tmpdir` — removes the per-session tmpdir for paths where the
+4. `tunnel`: SSH agent forwarding cleanup, then port-forward tunnel cleanup.
+5. `session-tmpdir`: removes the per-session tmpdir for paths where the
    credential proxy never ran.
-6. `dependency-volume` — `DependencyVolumeLifecycle.release()` (itself removes
+6. `dependency-volume`: `DependencyVolumeLifecycle.release()` (itself removes
    dependency containers before volumes, then restores absent mountpoints).
 
 Within a stage, releases run in acquisition order.
@@ -76,7 +76,7 @@ idempotent cleanups it receives.
 All state-based; no mock call-count assertions; each test owns isolated
 processes/sockets/dirs (fake engine state resets per test via the harness).
 
-Registry contract (`sandbox-lifecycle.test.ts`) — real resources only:
+Registry contract (`sandbox-lifecycle.test.ts`), real resources only:
 
 - stage ordering observable through the release manifest (`releasedResources()`),
   including container-before-volume;
@@ -87,7 +87,7 @@ Registry contract (`sandbox-lifecycle.test.ts`) — real resources only:
 - `own()` after drain fails fast;
 - `transferToProcessHandlers()` spends the registry without releasing.
 
-Launch boundaries (`sandbox-launch-release.test.ts`) — production
+Launch boundaries (`sandbox-launch-release.test.ts`), production
 `runContainerSandbox` path, fake engine for real container semantics, real
 child processes as tunnels, real sockets/listeners:
 
@@ -110,7 +110,7 @@ child processes as tunnels, real sockets/listeners:
    covering plain success/failure launches.
 
 Fake engine gains additive support: `network inspect|create|connect`, `-p/-v/
---env` value flags on `run`, and `sh -lc` scripts — needed so the sidecar path
+--env` value flags on `run`, and `sh -lc` scripts, needed so the sidecar path
 runs against real engine semantics.
 
 ## Out of scope
@@ -118,4 +118,4 @@ runs against real engine semantics.
 - Generalizing the dependency-storage cleanup from #3450 (bounded there by
   design); the registry wraps its lifecycle, it does not change it.
 - Seatbelt path (acquires none of these resources).
-- Normal-path sidecar teardown timing (process-exit today) — preserved as-is.
+- Normal-path sidecar teardown timing (process-exit today), preserved as-is.

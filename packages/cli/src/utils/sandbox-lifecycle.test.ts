@@ -15,7 +15,7 @@ import { createTcpToUdsBridge } from './sandbox-ssh.js';
 /**
  * Contract tests for the #3469 launch ownership registry. Every resource is
  * real (child processes, TCP servers, temp directories); "exactly once" is
- * proven with a stateful resource whose second release throws — if the
+ * proven with a stateful resource whose second release throws; if the
  * registry double-released, the warning would surface on stderr.
  */
 

@@ -244,9 +244,9 @@ interface TreeEntry {
 
 /**
  * Snapshots the whole fixture repository except the deliberately shared
- * `results/` directory. Anything the sandbox wrote anywhere else — a
+ * `results/` directory. Anything the sandbox wrote anywhere else (a
  * recreated venv, a `.llxprt/sandbox.venv`, a materialized mountpoint that
- * outlived the run — changes the snapshot and fails the assertion.
+ * outlived the run) changes the snapshot and fails the assertion.
  */
 function snapshotRepo(repoRoot: string): ReadonlyMap<string, TreeEntry> {
   const snapshot = new Map<string, TreeEntry>();

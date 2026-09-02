@@ -127,7 +127,7 @@ function buildCheckpointVolumeCreateArgs(
  * Every launch re-runs it. Unlike /tmp, the shared directories are NOT
  * sticky: git must rename lockfiles over entries a previous uid created
  * (`.git/index`, refs, `COMMIT_EDITMSG`), and the sticky bit denies exactly
- * that rename to any uid but the entry's owner — proven on Docker where a
+ * that rename to any uid but the entry's owner, as proven on Docker where a
  * sticky store made a second-uid commit fail with "Unable to write new index
  * file" / "could not open COMMIT_EDITMSG". Only this project's sandbox
  * containers can mount the volume, so /tmp-style anti-deletion protection is
@@ -231,7 +231,7 @@ function storeVolumeExists(
  * first run of a project) and appends the mount, env, and label flags for
  * the main container. Throws FatalSandboxError before the main container
  * is spawned when the engine cannot provide persistence. The store volume
- * is never deleted on any path — a failed attach may still hold valid
+ * is never deleted on any path; a failed attach may still hold valid
  * checkpoint history.
  */
 export function attachPersistentCheckpointStore(
@@ -294,8 +294,8 @@ export function attachPersistentCheckpointStore(
 
 /**
  * Entrypoint stanza (runs after the XDG home pin): verifies the persistent
- * store is actually mounted for this project — a missing mount must abort
- * the sandbox before the CLI presents checkpointing as available — then
+ * store is actually mounted for this project (a missing mount must abort
+ * the sandbox before the CLI presents checkpointing as available), then
  * links the pinned history and checkpoint metadata directories into the
  * store, following the container's real `$HOME` in both default and
  * current-user (`su -p`) modes. Inert when the host did not provision the

@@ -32,7 +32,7 @@ import { runContainerSandbox } from './sandbox-exec.js';
  *
  * The host credential proxy is faked with real on-disk state (a marker file
  * that exists exactly while the proxy runs) because it binds real sockets
- * and reads the real keyring — an external I/O boundary. Everything else is
+ * and reads the real keyring, an external I/O boundary. Everything else is
  * real: tunnels are real `sleep` child processes, forwarded ports are real
  * TCP listeners, containers and volumes run against the executable fake
  * engine through PATH, and the session tmpdir is a real directory.
@@ -484,7 +484,7 @@ describe('#3469 launch resource release', () => {
       });
 
       // The sidecar really started: its container was recorded before the
-      // launch failure, then removed again (AC2) — before the volumes.
+      // launch failure, then removed again (AC2), before the volumes.
       const invocations = engine.invocations();
       const sidecarRun = invocations.findIndex(
         (argv) =>

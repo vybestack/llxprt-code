@@ -24,8 +24,8 @@
  * bounded: each candidate gets one fixed-size header probe plus at most
  * one positioned follow-up read.
  *
- * The source-development path (#3455) — a positively identified llxprt-code
- * source checkout under NODE_ENV=development — is excluded: it keeps the
+ * The source-development path (#3455), a positively identified llxprt-code
+ * source checkout under NODE_ENV=development, is excluded: it keeps the
  * legacy single workspace bind, because bootstrapping the source CLI needs
  * the repository's own dependencies. The same shared predicate selects the
  * source entrypoint command, so an arbitrary repository with ambient

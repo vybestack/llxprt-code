@@ -11,14 +11,14 @@ canonicalizations call `fs.realpathSync` (or `fs.existsSync` followed by
 or turns into a symlink cycle between discovery and resolution escapes as an
 unclassified filesystem error (`ENOENT`, `ELOOP`, `EINVAL`, or a raw
 `TypeError`), and the seatbelt Storage-root resolver answers the same failures
-with a lexical `path.resolve` fallback that hands non-canonical paths to the
+with a lexical `path.resolve` fallback that hands unresolved lexical paths to the
 seatbelt profile.
 
 This issue converts every audited sandbox canonicalization site to one small
 fail-fast helper that:
 
 1. canonicalizes with `realpath` exactly as before (containment semantics are
-   unchanged — no lexical fallback is introduced anywhere);
+   unchanged; no lexical fallback is introduced anywhere);
 2. converts concurrent removal/replacement, symlink cycles, and malformed
    paths into `FatalSandboxError` messages naming the affected path and the
    sandbox operation being performed; and
@@ -27,8 +27,8 @@ fail-fast helper that:
    tests.
 
 The nearest-existing-ancestor resolver keeps its accepted #3450 behavior: the
-nearest existing ancestor is canonicalized and the not-yet-existing tail is
-appended lexically onto the *canonical* ancestor, preserving support for
+nearest existing ancestor is resolved to its real path and the not-yet-existing tail is
+appended lexically onto that real-path ancestor, preserving support for
 missing contained destinations without weakening containment.
 
 Out of scope: glob workspace expansion (#3468), `NODE_ENV=development`
@@ -52,8 +52,8 @@ related container/seatbelt launch path:
 | `sandbox-seatbelt.ts` `HOME_DIR` (`realpathSync(os.homedir())`) | workspace-adjacent home root | raw throw | classified + `resolve the sandbox home directory` |
 | `sandbox-seatbelt.ts` `targetDir` (`realpathSync(getTargetDir())`) | workspace | raw throw | classified + `resolve the sandbox target directory` |
 | `sandbox-seatbelt.ts` include directories (`realpathSync(dir)`) | include-directory | raw throw | classified + `resolve a sandbox include directory` |
-| `sandbox-seatbelt.ts` `resolveRealpathSync` (Storage config/data/cache/log roots) | canonical root params | lexical `path.resolve` fallback after failed create | create-if-missing (0o700) is preserved; canonicalization failure is classified naming path + root role; no lexical fallback |
-| `sandbox-containers.ts` `addCustomMounts` (`existsSync(from)`) | mount-source | missing path classified; raced removal/replacement/cycle falls through to an engine-side error | single fail-fast canonical validation; absent, raced, cyclic, or malformed sources are classified naming path + mount environment variable |
+| `sandbox-seatbelt.ts` `resolveRealpathSync` (Storage config/data/cache/log roots) | real-path root params | lexical `path.resolve` fallback after failed create | create-if-missing (0o700) is preserved; resolution failure is classified naming path + root role; no lexical fallback |
+| `sandbox-containers.ts` `addCustomMounts` (`existsSync(from)`) | mount-source | missing path classified; raced removal/replacement/cycle falls through to an engine-side error | single fail-fast real-path validation; absent, raced, cyclic, or malformed sources are classified naming path + mount environment variable |
 | `sandbox-capability.ts` `assertCapabilityOutsideMounts` runtime root | mount-source-adjacent runtime root | `ENOENT` classified, every other failure raw | `ENOENT` keeps its specific actionable message; other failures classified naming path + operation |
 | `sandbox-capability.ts` `assertCapabilityOutsideMounts` mount sources | mount-source | `ENOENT` skipped (a removed source can no longer collide), other failures raw | same intentional `ENOENT` skip, other failures classified naming path + operation |
 
@@ -68,7 +68,7 @@ Sites audited and deliberately unchanged:
   the already-canonicalized tmpdir in the same flow.
 - `sandbox-containers.ts` workspace bind (`--volume ${workdir}:...`): the
   lexical workdir is passed to the engine by design (engines resolve the
-  source themselves); its canonical containment is established in the planner
+  source themselves); its real-path containment is established in the planner
   via the workspace-root site above.
 - `sandbox-node-modules.ts` `assertDestinationChainIsDirectories`: per-segment
   `statSync` walk whose missing-component return is the accepted
@@ -88,7 +88,7 @@ canonicalizeExistingPath(targetPath, operation, filesystem?)
 canonicalizeNearestExistingPath(candidate, operation, filesystem?)
     Walk up until existsSync(current); canonicalize that ancestor with
     canonicalizeExistingPath; append the collected tail. A path discovered
-    to exist whose canonical resolution then fails is fatal — never a
+    to exist whose real-path resolution then fails is fatal, never a
     lexical fallback.
 
 SandboxPathFilesystem  bounded seam: existsSync + realpathSync only.
@@ -98,7 +98,7 @@ hasFilesystemErrorCode(error, code)  errno check across error and its cause.
 Error message shape (names the sandbox operation, the path, and the
 filesystem failure):
 
-`Failed to <operation>: canonical path resolution of '<path>' failed
+`Failed to <operation>: real path resolution of '<path>' failed
 (<cause>). Another process may have removed or replaced the path while the
 sandbox was preparing, or the path may be malformed or a symlink cycle.
 Verify the path and retry.`
@@ -128,7 +128,7 @@ GREEN:
    accepted behaviors (missing destinations, contained symlinks, escape
    rejection) unchanged.
 7. Deterministic race coverage through the seam: discovery sees the path,
-   resolution throws `ENOENT`/`ELOOP` — at the helper level for both
+   resolution throws `ENOENT`/`ELOOP`, at the helper level for both
    functions and through `resolveProtectedNodeModulesDestinations` for the
    workspace-root and protected-destination operations. Real-filesystem
    equivalents (cycles, malformed NUL paths, absent sources) cover the
@@ -154,17 +154,17 @@ missing-behavior failure, not an accident):
 
 GREEN (after the helper and site rewiring):
 
-- `tmp/issue3475/green/planner-cycle.log` — 23/23.
-- `tmp/issue3475/green/mount-source.log` — 44/44.
-- `tmp/issue3475/green/seatbelt-cycle.log` — 49/49 at the time (two #3475
+- `tmp/issue3475/green/planner-cycle.log`: 23/23.
+- `tmp/issue3475/green/mount-source.log`: 44/44.
+- `tmp/issue3475/green/seatbelt-cycle.log`: 49/49 at the time (two #3475
   cases later extracted, see below).
-- `tmp/issue3475/green/helper-seam.log` — 10/10 helper-level deterministic
+- `tmp/issue3475/green/helper-seam.log`: 10/10 helper-level deterministic
   race, cycle, malformed-path, and cause-exposure tests.
-- `tmp/issue3475/green/planner-seam-races.log` — 26/26 including three
+- `tmp/issue3475/green/planner-seam-races.log`: 26/26 including three
   seam-injected races through `resolveProtectedNodeModulesDestinations`
   (workspace root removed; root `node_modules` removed; declared root
   replaced by a cycle between discovery and resolution).
-- `tmp/issue3475/green/final-consolidated.log` — all touched suites after
+- `tmp/issue3475/green/final-consolidated.log`: all touched suites after
   formatting: 261 tests, 0 failures across 13 files.
 
 The seatbelt #3475 cases were extracted into
@@ -182,12 +182,12 @@ contained-symlink deduplication behave exactly as before.
 
 - Focused suites: see GREEN above; `tmp/issue3475/verify/related-suites.log`.
 - CLI typecheck: `tmp/issue3475/verify/typecheck-cli.log` (clean; workspace
-  `dist` outputs built first — the initial TS6305 errors were pre-existing
+  `dist` outputs built first; the initial TS6305 errors were pre-existing
   worktree state, unrelated to this change).
 - Targeted ESLint on every touched file: clean.
 - Full repo lint: `tmp/issue3475/verify/lint-full.log`.
 - Test-audit scan: `tmp/scan-main` (HEAD baseline via stash round-trip) vs
-  `tmp/scan-branch`; `findings.tsv` byte-identical — no new false-green
+  `tmp/scan-branch`; `findings.tsv` byte-identical, so no new false-green
   findings on touched test files.
 - Prettier: every touched file formatted.
 
@@ -196,7 +196,7 @@ contained-symlink deduplication behave exactly as before.
 Re-verified from the resumed worktree (`tmp/issue3475/resume/`):
 
 - Every touched and related suite, each in its own bun invocation
-  (`final-isolated.log`): 236 pass / 0 fail across 11 files —
+  (`final-isolated.log`): 236 pass / 0 fail across 11 files:
   path-canonicalization 10, seatbelt-canonicalization 3, node-modules 26,
   containers 44, proxy-integration 26, capability 29, seatbelt 47,
   node-modules-preflight 32, node-modules-lifecycle 5,

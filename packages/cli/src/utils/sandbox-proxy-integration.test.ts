@@ -143,7 +143,7 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
 
   describe('R3.4: macOS Realpath for Socket', () => {
     it('canonicalizes tmpdir fail-fast before the volume mount', () => {
-      // The tmpdir mount resolves the canonical root; since #3475 the
+      // The tmpdir mount resolves the real root; since #3475 the
       // resolution is the shared fail-fast helper, so a tmpdir removed or
       // replaced concurrently fails as a classified sandbox error.
       expect(sandboxSource).toContain(

@@ -1,4 +1,4 @@
-# Issue #3462 — Sandbox Python venv state is written inside the project `.llxprt` directory
+# Issue #3462: Sandbox Python venv state is written inside the project `.llxprt` directory
 
 ## Problem
 
@@ -91,17 +91,17 @@ the #3450 dependency plan:
 Unit (bun:test, fake engine via `useFakeEngine`, workspace fixtures under
 `os.tmpdir()`):
 
-1. `sandbox-containers.test.ts` — VIRTUAL_ENV block:
+1. `sandbox-containers.test.ts` (VIRTUAL_ENV block):
    - an in-workspace `VIRTUAL_ENV` no longer creates
      `<workdir>/.llxprt/sandbox.venv` and no longer emits a `--volume` host
      bind for it; it still emits `--env VIRTUAL_ENV=<getContainerPath(venv)>`;
    - an out-of-workspace or unset/empty `VIRTUAL_ENV` emits neither mount nor
      env.
-2. `sandbox-node-modules.test.ts` / a new `sandbox-venv.test.ts` — planning:
+2. `sandbox-node-modules.test.ts` / a new `sandbox-venv.test.ts` (planning):
    - the plan includes the venv destination when `VIRTUAL_ENV` is in-workspace;
    - two distinct worktree roots produce distinct venv destinations (the
      destination derives from each worktree's own path, so per-worktree
-     engine volumes cannot collide — AC2);
+     engine volumes cannot collide, AC2);
    - dev mode and out-of-workspace `VIRTUAL_ENV` are excluded;
    - the engine volume for the venv destination is created, labeled, mounted
      after the workspace bind at `getContainerPath(virtualEnv)`, and released
@@ -110,7 +110,7 @@ Unit (bun:test, fake engine via `useFakeEngine`, workspace fixtures under
    following `sandboxNodeModulesIsolation.real.test.ts` gating):
    - inside the container, `VIRTUAL_ENV` points at the mounted destination,
      `python3 -m venv "$VIRTUAL_ENV"` (and a pip-less smoke use of the venv
-     python) succeeds with a non-root selected UID — the mount is writable
+     python) succeeds with a non-root selected UID, so the mount is writable
      (AC3, arbitrary UIDs);
    - the host venv tree is byte-for-byte unchanged after the run, and
      `<workdir>/.llxprt` contains no `sandbox.venv` (AC4, AC5);
@@ -122,31 +122,31 @@ All logs referenced below live in `tmp/issue3462/` in this worktree.
 
 ### RED (pre-fix production code, post-fix tests)
 
-- `docker-red.log` — the real-engine suite against the stashed (pre-fix)
+- `docker-red.log`: the real-engine suite against the stashed (pre-fix)
   production code: all three docker tests fail with
   `Expected length: 2, Received length: 1` (no second, venv, volume in the
   plan) plus the missing `VIRTUAL_ENV` mount destination.
-- `unit-red.log` — the focused unit suites against the stashed production
+- `unit-red.log`: the focused unit suites against the stashed production
   code: 7 fail / 50 pass; every failure is a #3462 venv test or the #3462
   `addContainerEnvVars` test.
 
 ### GREEN (final code)
 
-- `unit-green.log` — focused suites (97 pass / 0 fail):
+- `unit-green.log`: focused suites (97 pass / 0 fail):
   `sandbox-venv.test.ts`, `sandbox-containers.test.ts`,
   `sandbox-node-modules.test.ts`, `sandbox-dependency-volumes.test.ts`,
   `sandbox-node-modules-lifecycle.test.ts`, `sandbox-launch-lifecycle.test.ts`.
-- `docker-green-final.log` — real Docker: 3 pass / 0 fail
+- `docker-green-final.log`: real Docker, 3 pass / 0 fail
   (default session, uid 54321:54321 session, absent-destination session).
-- `podman-green-final.log` — real rootless Podman: 3 pass / 0 fail.
-- `3450-regression-docker.log` and `3450-regression-podman.log` — the #3450
+- `podman-green-final.log`: real rootless Podman, 3 pass / 0 fail.
+- `3450-regression-docker.log` and `3450-regression-podman.log`: the #3450
   real-engine suites still pass with the venv destination added to the plan:
   6 pass / 0 fail each.
 
 ### Quality/audit
 
-- `bunx eslint` on all touched files: 0 errors (two initial findings — a
-  `jest/no-conditional-expect` in the abort-path test and an unused import —
+- `bunx eslint` on all touched files: 0 errors (two initial findings, a
+  `jest/no-conditional-expect` in the abort-path test and an unused import,
   fixed; the abort test now uses the repo's `capturedError` pattern).
 - `bunx prettier --write` / `--check` on all touched files: clean.
 - `tsc --noEmit` in `packages/cli` (after building sibling workspaces):

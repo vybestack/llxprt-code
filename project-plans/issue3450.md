@@ -428,16 +428,16 @@ defect is tracked separately as issue #3456 and is outside #3450.
 
 ### Verification cycle (final tree)
 
-- `npm run lint` — exit 0 (`verify-lint.log`)
-- `npm run typecheck` — exit 0 (`verify-typecheck2.log`)
-- `npm run format` — exit 0, change set unchanged (`verify-format.log`)
-- `npm run build` — exit 0 (`verify-build.log`)
-- `npm run test` — exit 0 (`verify-npm-test2.log`, zero failures; a first
+- `npm run lint`: exit 0 (`verify-lint.log`)
+- `npm run typecheck`: exit 0 (`verify-typecheck2.log`)
+- `npm run format`: exit 0, change set unchanged (`verify-format.log`)
+- `npm run build`: exit 0 (`verify-build.log`)
+- `npm run test`: exit 0 (`verify-npm-test2.log`, zero failures; a first
   pass in `verify-npm-test.log` ran concurrently with `npm run build` and
   recorded environment-induced failures from `dist/` being rewritten mid-run,
   including the since-fixed `sandbox-proxy-integration` source-order finding
   below; the clean sequential re-run is authoritative)
-- Smoke: `bun scripts/start.ts --profile-load stepfun-37 "write me a haiku and nothing else"` — exit 0, haiku
+- Smoke: `bun scripts/start.ts --profile-load stepfun-37 "write me a haiku and nothing else"`: exit 0, haiku
   returned (`verify-smoke.log`)
 - Test audit (`scripts/test-audit/scan.ts`): touched files carry no
   MOCK_MIRROR findings; one SELF_CONFIRMING flag on the before/after snapshot
@@ -479,7 +479,7 @@ behavior was removed. No finding broadened the feature.
 | Finding | Class | Disposition |
 | --- | --- | --- |
 | F1: private bind children mode 0755 may be unwritable under a container UID that differs from the host owner | Blocker-Fix | Each private dependency directory is created `0777` (`mkdir mode` + explicit `chmod`, umask-proof); the random mkdtemp run parent keeps `0700`. Real-engine proof below. |
-| F2: preflight missed regular executables directly in `.bin`, symlinked `.node` files, real universal/fat Mach-O headers, and PE headers whose validated e_lfanew lies beyond the initial buffer | Blocker-Fix | Regular files in `.bin` are header-checked; symlinked `*.node` entries are followed to contained targets (read-only, never executed); a big-endian fat magic (`0xcafebabe`/`0xcafebabf`) with an `nfat_arch` sanity bound (1..128) is recognized only when the complete declared architecture table (`8 + 20·n` fat_arch / `8 + 32·n` fat_arch_64 bytes) is readable — see the final F2 correction below; a validated `pe-continuation` triggers one positioned read for the `PE\0\0` signature (offset bound 0x40..2^24). |
+| F2: preflight missed regular executables directly in `.bin`, symlinked `.node` files, real universal/fat Mach-O headers, and PE headers whose validated e_lfanew lies beyond the initial buffer | Blocker-Fix | Regular files in `.bin` are header-checked; symlinked `*.node` entries are followed to contained targets (read-only, never executed); a big-endian fat magic (`0xcafebabe`/`0xcafebabf`) with an `nfat_arch` sanity bound (1..128) is recognized only when the complete declared architecture table (`8 + 20·n` fat_arch / `8 + 32·n` fat_arch_64 bytes) is readable; see the final F2 correction below; a validated `pe-continuation` triggers one positioned read for the `PE\0\0` signature (offset bound 0x40..2^24). |
 | F3: generic missing `/usr/bin`, `/bin`, `/usr/local/bin` targets were falsely described as LLxprt image-only | In-scope-Fix | Dangling absolute `.bin` links now fail only for the validated image-global prefix `/usr/local/bun/bin/` (the Dockerfile's `BUN_INSTALL` location, covering `bun`/`bunx`); unknown absolute targets never fail. |
 | F4: lexical containment let existing manifest roots or executable-link targets escape through symlinks | In-scope-Fix | Destinations resolve through `realpath` of the nearest existing ancestor (missing contained tails stay supported); both lexical and real-tree escapes fail before launch; existing destinations deduplicate by filesystem identity; contained destinations re-anchor onto the launch workspace path; `.bin`/`.node` symlink targets are inspected only when their resolved nearest-existing identity stays inside the real workspace. |
 | F5: an absent protected host path could remain as an engine-created empty mountpoint after exit (supersedes the prior "Reject (no change)" triage row above) | Blocker-Fix | Originally absent destinations are recorded at preparation; every handled cleanup path removes the per-run subtree and then removes those destinations only while they are empty directories (`rmdir`, never recursive, nonempty/symlink untouched). Real Docker and Podman suites now require strict absence. |
@@ -494,7 +494,7 @@ behavior was removed. No finding broadened the feature.
 | --- | --- | --- |
 | F1–F9 unit behavior (one rewrite) | `unit-red1.log`: exactly 20 failures mapping 1:1 to the finding list | `unit-green3.log` → 52/52 (final `unit-final3.log`, 110 assertions) |
 | F6 launch-failure window | `containers-red2.log`: rejects with `engine launch failed` but leaks `sandbox-node-modules-d5nh93` (try/catch temporarily reverted) | `containers-green1.log` 44/44 incl. the new launch-failure and preflight-before-engine tests |
-| F5 strict absence on real Docker | `integration-docker-red1.log`: 5 failures — the engine-created empty mountpoint at `packages/absent/node_modules` survives (mountpoint removal temporarily neutered) | `integration-docker-green2.log`: 7 pass / 0 fail |
+| F5 strict absence on real Docker | `integration-docker-red1.log`: 5 failures; the engine-created empty mountpoint at `packages/absent/node_modules` survives (mountpoint removal temporarily neutered) | `integration-docker-green2.log`: 7 pass / 0 fail |
 | F5 strict absence on real Podman | (same production change; suite rerun clean) | `integration-podman-green1.log`: 7 pass / 0 fail |
 | Test audit | First scan flagged 4 findings on the touched unit file (1 DUP_ASSERT, 3 SELF_CONFIRMING on listener-count baselines) | `test-audit3/findings.tsv`: 0 findings on all touched files |
 
@@ -532,7 +532,7 @@ Final full-cycle rerun after the lint fixes: `npm run typecheck` exit 0
 `npm run format` exit 0 with no change-set delta (`verify-format2.log`),
 `npm run lint` exit 0 (`verify-lint4.log`; an earlier 136-error full-tree
 run, `verify-lint2.log`, had measured type-aware rules against the pre-build
-`dist/` type state — after the rebuild those untouched-file errors resolve,
+`dist/` type state; after the rebuild those untouched-file errors resolve,
 and a canary file confirms rule enforcement is live), `npm run test` exit 0
 zero failures (`verify-npm-test3.log`), and the stepfun-37 smoke haiku
 (`verify-smoke2.log`).
@@ -579,7 +579,7 @@ Correction, strictly within the existing preflight behavior:
   probe, and the byte-swapped CIGAM byte orders.
 
 RED/GREEN and verification evidence is preserved under
-`tmp/issue3450/final-f2/`: `red-preflight.log` (25 pass / 4 fail — exactly
+`tmp/issue3450/final-f2/`: `red-preflight.log` (25 pass / 4 fail, exactly
 the four truncated-header/CIGAM no-error cases fail against the prior
 classifier), `green-preflight2.log` (32/32 after the fix and an
 audit-driven reorganization of the new cases into `it.each` form),
@@ -699,9 +699,9 @@ unverified. Every log for this pass lives under
 | Finding | Class | Disposition |
 | --- | --- | --- |
 | CR1: the live-source race timeout timer is never cleared, so a `close` win leaves a pending 180 s `SESSION_TIMEOUT_MS` timer that keeps the event loop alive after the test | In-scope-Fix | Verified in source: the `timedOut` executor discarded the `setTimeout` handle and the `finally` cleared only `writeHostEdit`, so every normal (child-closes-first) outcome leaked the timer. Fixed by declaring `raceTimer: ReturnType<typeof setTimeout> \| undefined`, assigning it inside the executor, and clearing it in the existing `finally` block, so every outcome (close win, timeout win, error, synchronous throw) clears both timers. Test-harness code only; no implementation-detail test added solely to test a test. |
-| CR2: `describeEngine` probes `imageGlobalCliBoots` at collection time even when `ENGINES` excludes the engine, which can invoke an unintended registry image pull | In-scope-Fix | Verified in source: the probe ran `engine run --rm <image> sh -c 'timeout 60 llxprt --version'` unconditionally, while `detectEngines` excludes an engine exactly when the image is absent locally (or another runtime is selected) — so a usable daemon with a missing image pulls from ghcr.io and blocks collection for up to 90 s per excluded engine. Fixed by short-circuiting: `ENGINES.includes(engine) && imageGlobalCliBoots(engine, IMAGE)`; the skip outcome for excluded engines is unchanged (still skips), now without the container side effect. |
+| CR2: `describeEngine` probes `imageGlobalCliBoots` at collection time even when `ENGINES` excludes the engine, which can invoke an unintended registry image pull | In-scope-Fix | Verified in source: the probe ran `engine run --rm <image> sh -c 'timeout 60 llxprt --version'` unconditionally, while `detectEngines` excludes an engine exactly when the image is absent locally (or another runtime is selected), so a usable daemon with a missing image pulls from ghcr.io and blocks collection for up to 90 s per excluded engine. Fixed by short-circuiting: `ENGINES.includes(engine) && imageGlobalCliBoots(engine, IMAGE)`; the skip outcome for excluded engines is unchanged (still skips), now without the container side effect. |
 | Docstring coverage 38.55% vs the 80% external threshold (83 functions across 8 files) | Reject | Adding comments to satisfy an external percentage is not accepted behavior and conflicts with this repository's sparse-comment rule (comments explain non-obvious why, never satisfy metrics). No docstrings were added. |
-| CodeRabbit "Resolve merge conflicts in branch `issue3450`" suggestion | Reject precondition not met — conflict is real; resolution is outside this remediation's scope | The Reject condition (origin/main an ancestor of the branch AND GitHub mergeability successful) fails both legs: `git merge-base --is-ancestor origin/main HEAD` exits nonzero (origin/main advanced `393a0080f` → `c1e0d1de1`, adding #3460 and #3461), and `gh pr view 3471` reports `mergeable: CONFLICTING`, `mergeStateStatus: DIRTY`, with both-side changes in `packages/cli/src/utils/sandbox-containers.ts` and `packages/cli/src/utils/sandbox-exec.ts`. Resolving requires merging origin/main into production files and a commit/push, which this remediation is explicitly barred from (no commit, no push, two-file scope). The conflict must be resolved at the PR merge step after this remediation lands. |
+| CodeRabbit "Resolve merge conflicts in branch `issue3450`" suggestion | Reject precondition not met: conflict is real; resolution is outside this remediation's scope | The Reject condition (origin/main an ancestor of the branch AND GitHub mergeability successful) fails both legs: `git merge-base --is-ancestor origin/main HEAD` exits nonzero (origin/main advanced `393a0080f` → `c1e0d1de1`, adding #3460 and #3461), and `gh pr view 3471` reports `mergeable: CONFLICTING`, `mergeStateStatus: DIRTY`, with both-side changes in `packages/cli/src/utils/sandbox-containers.ts` and `packages/cli/src/utils/sandbox-exec.ts`. Resolving requires merging origin/main into production files and a commit/push, which this remediation is explicitly barred from (no commit, no push, two-file scope). The conflict must be resolved at the PR merge step after this remediation lands. |
 
 ### Remediation verification
 
@@ -1136,3 +1136,20 @@ interruption remains issue #3470. This completion does not list old run labels,
 apply age policy, or remove resources from another lifecycle. Active and
 handled-failure cleanup only removes resources recorded by the current
 lifecycle, with containers removed before their volumes.
+## Final integrated disposition
+
+The phase sections above are preserved unchanged as historical record. The
+later issue-specific plans and their integrated commits on this branch
+supersede the phase-local deferral language and complete the deferred work
+alongside #3450:
+
+- [#3455](issue3455.md) - NODE_ENV=development sandbox source-path exclusion
+- [#3456](issue3456.md) - sandbox image dependency verification
+- [#3462](issue3462.md) - Python venv state outside `.llxprt`
+- [#3463](issue3463.md) - container multi-root workspaces
+- [#3464](issue3464.md) - persistent checkpoint history
+- [#3468](issue3468.md) - glob-declared workspace dependency isolation
+- [#3469](issue-3469-sandbox-launch-resource-lifecycle.md) - launch resource lifecycle ownership
+- [#3470](issue3470.md) - reclaim abandoned dependency volumes
+- [#3475](issue3475.md) - fail-fast real-path resolution
+- [#3479](issue3479.md) - stable orphan-reaping fixture compilation

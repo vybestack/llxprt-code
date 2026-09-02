@@ -65,7 +65,7 @@ describe('#3475 mount-source canonicalization', () => {
     expect(thrown.message).toContain('ELOOP');
   });
 
-  it('still mounts an existing source after canonical validation', () => {
+  it('still mounts an existing source after real-path validation', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'issue3475-mount-'));
     tempDirs.push(root);
     process.env.LLXPRT_SANDBOX_MOUNTS = `${root}:/target:rw`;

@@ -1446,7 +1446,7 @@ function describeEngine(engine: string): void {
   // engages only when the image's global CLI can actually boot; the
   // registry-published 0.11.0 image cannot (its global install predates this
   // tree and is missing modules), which is outside #3450's scope. Skipping
-  // here reports that environment honestly instead of faking an agent
+  // here reports that environment as it actually is instead of faking an agent
   // session; a locally built image runs the suite.
   // Probe only a selected engine: `engine run --rm <image>` on a usable
   // daemon pulls the image from the registry when it is absent locally,

@@ -67,7 +67,7 @@ function writeUint32BE(bytes: Uint8Array, offset: number, value: number): void {
 /**
  * Complete big-endian 32-bit universal binary header: the 0xCAFEBABE magic,
  * the declared architecture count, and every declared 20-byte fat_arch
- * record (cputype, cpusubtype, offset, size, align — all big-endian).
+ * record (cputype, cpusubtype, offset, size, align, all big-endian).
  */
 function machOFatBytes(architectureCount = 2): Uint8Array {
   const bytes = new Uint8Array(8 + architectureCount * 20);
@@ -87,7 +87,7 @@ function machOFatBytes(architectureCount = 2): Uint8Array {
 /**
  * Complete big-endian 64-bit universal binary header: the 0xCAFEBABF magic
  * and every declared 32-byte fat_arch_64 record (cputype, cpusubtype,
- * 64-bit offset, 64-bit size, align, reserved — all big-endian).
+ * 64-bit offset, 64-bit size, align, reserved, all big-endian).
  */
 function machOFat64Bytes(architectureCount = 2): Uint8Array {
   const bytes = new Uint8Array(8 + architectureCount * 32);

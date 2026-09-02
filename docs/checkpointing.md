@@ -121,6 +121,6 @@ A container sandbox runs `--rm`, so the container's filesystem is destroyed when
 Two properties follow from this design:
 
 - The store lives outside the project repository and outside the ephemeral container home, and only your project's sandbox containers can mount it.
-- If persistence cannot be provided — the engine cannot create or initialize the volume, or an older launcher starts an image that expects the store — the session fails before checkpointing is presented as available, rather than writing checkpoints that die with the container.
+- If persistence cannot be provided (the engine cannot create or initialize the volume, or an older launcher starts an image that expects the store), the session fails before checkpointing is presented as available, rather than writing checkpoints that die with the container.
 
 The volume is never removed by session cleanup or crash recovery; it is your project's accumulated checkpoint history. Remove it manually with `docker volume rm` / `podman volume rm` when you no longer want it.
