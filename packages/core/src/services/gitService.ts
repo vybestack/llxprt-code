@@ -13,6 +13,24 @@ import { ensureDir } from '../utils/paths.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '../utils/debugLogger.js';
 
+/**
+ * Marker file proving a persistent checkpoint store (a sandbox-owned volume
+ * mounted by the CLI sandbox launcher) backs this exact history directory.
+ * The sandbox init container writes it; GitService only reads it (#3464).
+ */
+export const CHECKPOINT_STORE_MARKER_FILENAME = '.llxprt-checkpoint-store';
+
+/**
+ * `SANDBOX` is set for every sandbox mode; container sandboxes set it to the
+ * container name while the seatbelt sandbox uses the fixed 'sandbox-exec'
+ * value (whose checkpoint history already lives in the persistent host data
+ * dir and needs no store).
+ */
+function isContainerSandboxEnv(): boolean {
+  const sandbox = process.env['SANDBOX'];
+  return sandbox !== undefined && sandbox !== '' && sandbox !== 'sandbox-exec';
+}
+
 export class GitService {
   private projectRoot: string;
   private storage: Storage;
@@ -34,11 +52,36 @@ export class GitService {
         'Checkpointing is enabled, but Git is not installed. Please install Git or disable checkpointing to continue.',
       );
     }
+    await this.assertPersistentCheckpointStore();
     try {
       await this.setupShadowGitRepository();
     } catch (error) {
       throw new Error(
         `Failed to initialize checkpointing: ${error instanceof Error ? error.message : 'Unknown error'}. Please check that Git is working properly or disable checkpointing.`,
+      );
+    }
+  }
+
+  /**
+   * A container sandbox pins the data home inside its ephemeral $HOME, so
+   * checkpoint history written there dies with the `--rm` container. When a
+   * persistent checkpoint store backs this history directory, the sandbox
+   * launcher has placed the marker file inside it; without the marker, fail
+   * before relying on checkpoints that could never be restored (#3464).
+   */
+  private async assertPersistentCheckpointStore(): Promise<void> {
+    if (!isContainerSandboxEnv()) {
+      return;
+    }
+    const markerPath = path.join(
+      this.getHistoryDir(),
+      CHECKPOINT_STORE_MARKER_FILENAME,
+    );
+    try {
+      await fs.access(markerPath);
+    } catch {
+      throw new Error(
+        `Checkpointing is enabled inside a container sandbox, but the checkpoint history directory '${this.getHistoryDir()}' is not backed by a persistent checkpoint store, so checkpoints would be lost when the container exits. Start the sandbox from an LLxprt version that provisions persistent checkpoint storage, or disable checkpointing.`,
       );
     }
   }
@@ -67,11 +110,24 @@ export class GitService {
 
     // We don't want to inherit the user's name, email, or gpg signing
     // preferences for the shadow repository, so we create a dedicated gitconfig.
+    // `safe.directory = *` is scoped to this config (HOME and XDG_CONFIG_HOME
+    // are pinned to the history dir for every shadow git invocation): it lets
+    // a later sandbox run under a different selected uid keep using a
+    // persistent store whose objects a previous uid wrote (#3464).
     const gitConfigContent =
-      '[user]\n  name = llxprt-code\n  email = llxprt-code-bot@users.noreply.github.com\n[commit]\n  gpgsign = false\n';
+      '[user]\n  name = llxprt-code\n  email = llxprt-code-bot@users.noreply.github.com\n[commit]\n  gpgsign = false\n[safe]\n  directory = *\n';
     await fs.writeFile(gitConfigPath, gitConfigContent);
 
-    const repo = simpleGit(repoDir);
+    // The init-time instance reads config from the shadow dir itself (same
+    // HOME/XDG pinning as every snapshot/restore invocation): a container
+    // sandbox has no user gitconfig to derive an identity from, so the
+    // initial commit must take its author from the .gitconfig just written
+    // above or every first run inside a sandbox dies with "Author identity
+    // unknown" (#3464).
+    const repo = simpleGit(repoDir).env({
+      HOME: repoDir,
+      XDG_CONFIG_HOME: repoDir,
+    });
     let isRepoDefined = false;
     try {
       isRepoDefined = await repo.checkIsRepo(CheckRepoActions.IS_REPO_ROOT);
@@ -104,6 +160,35 @@ export class GitService {
     }
 
     await fs.writeFile(shadowGitIgnorePath, userGitIgnoreContent);
+    await this.syncProjectExcludeRules();
+  }
+
+  /**
+   * Mirrors the project's repository-local exclude rules into the shadow
+   * repository. Git honors the work tree's root and nested `.gitignore`
+   * files automatically, but `$GIT_DIR/info/exclude` belongs to the shadow
+   * repository, so the project's exclude rules would otherwise never apply
+   * to snapshots. Synced at setup and before every snapshot so edits during
+   * a session are honored (#3464).
+   */
+  private async syncProjectExcludeRules(): Promise<void> {
+    const projectExcludePath = path.join(
+      this.projectRoot,
+      '.git',
+      'info',
+      'exclude',
+    );
+    let excludeContent = '';
+    try {
+      excludeContent = await fs.readFile(projectExcludePath, 'utf-8');
+    } catch (error) {
+      if (isNodeError(error) && error.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+    const shadowInfoDir = path.join(this.getHistoryDir(), '.git', 'info');
+    await fs.mkdir(shadowInfoDir, { recursive: true });
+    await fs.writeFile(path.join(shadowInfoDir, 'exclude'), excludeContent);
   }
 
   private get shadowGitRepository(): SimpleGit {
@@ -124,6 +209,7 @@ export class GitService {
 
   async createFileSnapshot(message: string): Promise<string> {
     try {
+      await this.syncProjectExcludeRules();
       const repo = this.shadowGitRepository;
       await repo.add('.');
       const commitResult = await repo.commit(message, {

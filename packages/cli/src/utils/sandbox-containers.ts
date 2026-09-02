@@ -23,7 +23,6 @@ import {
   createHostOnlyCapabilityEnvFile,
   runCapabilityCleanupStep,
 } from './sandbox-capability.js';
-import { SETTINGS_DIRECTORY_NAME } from '../config/settings.js';
 import {
   getContainerPath,
   mountGitConfigFiles,
@@ -40,6 +39,7 @@ import {
   setupCredentialProxyDockerMacOS,
   SSH_TUNNEL_POLL_TIMEOUT_MS,
 } from './sandbox-ssh.js';
+import { canonicalizeExistingPath } from './sandbox-path-canonicalization.js';
 import { addSandboxOwnershipLabels } from './sandbox-owner-labels.js';
 import { setupCredentialProxyPodmanMacOS } from './sandbox-podman.js';
 import {
@@ -49,6 +49,8 @@ import {
   getProxyCapabilityToken,
 } from '@vybestack/llxprt-code-providers/auth.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
+import type { DependencyVolumeLifecycle } from './sandbox-node-modules.js';
+import type { SandboxLaunchLifecycle } from './sandbox-lifecycle.js';
 
 export { containerMountSources };
 
@@ -65,10 +67,12 @@ export interface ContainerSandboxPrepared {
   proxyCommand: string | undefined;
   userFlag: string;
   image: string;
+  containerName: string;
   workdir: string;
   portForwardingResult: PortForwardingResult | undefined;
   credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
   credentialProxyBridgeCleanup: (() => void) | undefined;
+  dependencyVolumeLifecycle: DependencyVolumeLifecycle;
   reservedTunnelPorts: Set<number>;
   sshResult: SshAgentResult;
 }
@@ -268,11 +272,14 @@ function addCustomMounts(
           `Path '${from}' listed in ${mountsEnvName} must be absolute`,
         );
       }
-      if (!fs.existsSync(from)) {
-        throw new FatalSandboxError(
-          `Missing mount path '${from}' listed in ${mountsEnvName}`,
-        );
-      }
+      // Fail fast when the source cannot be resolved against the real
+      // filesystem: absent at validation, removed or replaced between
+      // discovery and resolution, cyclic, or malformed sources all surface
+      // as the same classified preparation error naming the path (#3475).
+      canonicalizeExistingPath(
+        from,
+        `validate the mount source listed in ${mountsEnvName}`,
+      );
       debugLogger.error(`${mountsEnvName}: ${from} -> ${to} (${opts})`);
       args.push('--volume', mount);
     }
@@ -295,6 +302,11 @@ const RESERVED_SANDBOX_ENV_KEYS = new Set([
   'LLXPRT_DATA_HOME',
   'LLXPRT_CACHE_HOME',
   'LLXPRT_LOG_HOME',
+  // #3464: the checkpoint store mount identity is pinned by the launcher; a
+  // SANDBOX_ENV override could detach the entrypoint links (or point the
+  // marker gate) at attacker-chosen paths inside the container.
+  'LLXPRT_SANDBOX_PROJECT_KEY',
+  'LLXPRT_SANDBOX_CHECKPOINT_STORE',
 ]);
 
 function parseSandboxEnvVars(): string[] {
@@ -374,19 +386,15 @@ export function addContainerEnvVars(
   args.push('--env', 'GIT_DISCOVERY_ACROSS_FILESYSTEM=1');
 
   const virtualEnv = process.env.VIRTUAL_ENV;
+  // #3462: an in-workspace venv is backed by a per-run engine-owned volume
+  // planned together with the private dependency storage in
+  // planPrivateDependencyMounts; only the in-container destination is pinned
+  // here and no host directory is created or bound for it.
   if (
     virtualEnv !== undefined &&
     virtualEnv.length > 0 &&
     virtualEnv.toLowerCase().startsWith(workdir.toLowerCase())
   ) {
-    const sandboxVenvPath = path.resolve(
-      SETTINGS_DIRECTORY_NAME,
-      'sandbox.venv',
-    );
-    if (!fs.existsSync(sandboxVenvPath)) {
-      fs.mkdirSync(sandboxVenvPath, { recursive: true });
-    }
-    args.push('--volume', `${sandboxVenvPath}:${getContainerPath(virtualEnv)}`);
     args.push('--env', `VIRTUAL_ENV=${getContainerPath(virtualEnv)}`);
   }
 
@@ -494,6 +502,16 @@ export function assignContainerName(
  */
 const CURRENT_USER_CAPABILITIES = ['CHOWN', 'SETUID', 'SETGID'] as const;
 
+/**
+ * Single-quotes a value for the container entrypoint shell: every embedded
+ * quote becomes '\'' (close quote, escaped quote, reopen), the standard
+ * safe-representation for sh. The same escaping is applied to the wrapped
+ * inner script below, so quoted values nest correctly.
+ */
+function shQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
 /** Configures user/UID for the container and modifies entrypoint if needed. */
 export async function setupContainerUser(
   args: string[],
@@ -518,9 +536,16 @@ export async function setupContainerUser(
     // Use the shared container-home resolution so the HOME pinned here and the
     // LLXPRT_*_HOME roots set by buildContainerRunArgs agree (#3081).
     const homeDir = resolveSandboxContainerHome();
+    // `useradd -d` never creates the home dir, and the fresh container does
+    // not have the host user's home path; without it the su'd user cannot
+    // create $HOME/.local/... (the parent is root-owned), so the root setup
+    // must create the selected home before the drop. The path comes from the
+    // host, so it is single-quoted for the shell whatever it contains.
+    const quotedHome = shQuote(homeDir);
     const setupUserCommands = [
       `groupadd -f -g ${gid} ${username}`,
-      `id -u ${username} &>/dev/null || useradd -o -u ${uid} -g ${gid} -d ${homeDir} -s /bin/bash ${username}`,
+      `id -u ${username} &>/dev/null || useradd -o -u ${uid} -g ${gid} -d ${quotedHome} -s /bin/bash ${username}`,
+      `mkdir -p ${quotedHome} && chown ${uid}:${gid} ${quotedHome}`,
     ].join(' && ');
 
     // Current-user path (AC3): root captures token, opens fd 3, runs setup
@@ -736,6 +761,7 @@ export async function startProxyContainer(
   userFlag: string,
   image: string,
   workdir: string,
+  lifecycle?: SandboxLaunchLifecycle,
 ): Promise<ProxyContainerHandle> {
   const proxyContainerArgs = [
     'run',
@@ -763,13 +789,30 @@ export async function startProxyContainer(
     detached: true,
   });
   const proxyContainerCommand = `${config.command} ${proxyContainerArgs.join(' ')}`;
+  // #3469: the stop is idempotent and detaches its own process handlers, so
+  // whichever path fires first (failed-launch release or process exit) owns
+  // the removal and the other becomes a no-op.
+  let proxyContainerStopped = false;
   const stopProxyContainer = () => {
+    if (proxyContainerStopped) return;
+    proxyContainerStopped = true;
+    process.off('exit', stopProxyContainer);
+    process.off('SIGINT', stopProxyContainer);
+    process.off('SIGTERM', stopProxyContainer);
     debugLogger.log('stopping proxy container ...');
     execSync(`${config.command} rm -f ${SANDBOX_PROXY_NAME}`);
   };
   process.on('exit', stopProxyContainer);
   process.on('SIGINT', stopProxyContainer);
   process.on('SIGTERM', stopProxyContainer);
+  // #3469: register ownership before the readiness wait; an internal
+  // readiness failure already self-stops, and the registered release then
+  // no-ops.
+  lifecycle?.own(
+    'proxy-sidecar',
+    'proxy sidecar container',
+    stopProxyContainer,
+  );
   proxyProcess.stderr.on('data', (data) => {
     debugLogger.error(data.toString().trim());
   });

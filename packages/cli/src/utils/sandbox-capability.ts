@@ -8,6 +8,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
+import {
+  canonicalizeExistingPath,
+  hasFilesystemErrorCode,
+} from './sandbox-path-canonicalization.js';
 
 const DEFAULT_ORPHAN_MAX_AGE_MS = 86_400_000;
 const CAPABILITY_DIR_PREFIX = 'llxprt-code-cap-';
@@ -110,15 +114,6 @@ export function reclaimOrphanCapabilityDirs(
       reclaimDirIfStale(root, entry, prefixes, now, maxAgeMs);
     }
   }
-}
-
-function isErrorCode(error: unknown, code: string): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === code
-  );
 }
 
 function volumeSource(spec: string): string {
@@ -232,9 +227,12 @@ function assertCapabilityOutsideMounts(
 ): void {
   let canonicalRuntimeRoot: string;
   try {
-    canonicalRuntimeRoot = fs.realpathSync(runtimeRoot);
+    canonicalRuntimeRoot = canonicalizeExistingPath(
+      runtimeRoot,
+      'resolve the sandbox capability runtime root',
+    );
   } catch (error) {
-    if (isErrorCode(error, 'ENOENT')) {
+    if (hasFilesystemErrorCode(error, 'ENOENT')) {
       throw new FatalSandboxError(
         `Capability runtime root '${runtimeRoot}' could not be created or resolved. Check XDG_RUNTIME_DIR, LOCALAPPDATA, or system tmpdir permissions.`,
       );
@@ -246,9 +244,15 @@ function assertCapabilityOutsideMounts(
   for (const mountSource of mountSources) {
     let canonicalMountSource: string;
     try {
-      canonicalMountSource = fs.realpathSync(mountSource);
+      canonicalMountSource = canonicalizeExistingPath(
+        mountSource,
+        'resolve the sandbox mount source for the capability check',
+      );
     } catch (error) {
-      if (isErrorCode(error, 'ENOENT')) continue;
+      // A source removed between collection and this check can no longer
+      // collide with the runtime root; every other canonicalization
+      // failure is fatal (#3475).
+      if (hasFilesystemErrorCode(error, 'ENOENT')) continue;
       throw error;
     }
     if (isPathInside(canonicalMountSource, candidatePath)) {

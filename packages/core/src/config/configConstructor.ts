@@ -90,6 +90,7 @@ export interface ConfigConstructorTarget {
   fileSystemService: FileSystemService;
   sandbox: SandboxConfig | undefined;
   targetDir: string;
+  configuredIncludeDirectories: readonly string[];
   workspaceContext: WorkspaceContext;
   debugMode: boolean;
   outputFormat: OutputFormat;
@@ -257,6 +258,7 @@ function applyCoreIdentity(
   config.fileSystemService = new StandardFileSystemService();
   config.sandbox = params.sandbox;
   config.targetDir = path.resolve(params.targetDir);
+  config.configuredIncludeDirectories = [...(params.includeDirectories ?? [])];
   config.workspaceContext = new WorkspaceContext(
     config.targetDir,
     params.includeDirectories ?? [],

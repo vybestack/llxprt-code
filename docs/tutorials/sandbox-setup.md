@@ -82,6 +82,28 @@ What happened:
 3. project mounted
 4. command executed from sandboxed context
 
+### Validate a multi-root workspace
+
+Pass each additional workspace root with `--include-directories`:
+
+```bash
+mkdir -p ../shared-source
+llxprt --sandbox --include-directories ../shared-source \
+  "read a file from this project and ../shared-source, then write one result file in each root"
+```
+
+Docker and Podman mount both roots read-write at their host paths. In an
+installed-mode session, each root and its declared nested Node workspaces get
+fresh engine-owned `node_modules` volumes, so installs do not change host
+dependency trees. The volumes are removed when the session ends. Seatbelt keeps
+its existing limit of five additional roots through built-in profile parameters
+and continues to use host dependency trees.
+
+Startup fails before the container engine is contacted when an include path is
+missing, is not a readable, writable, and searchable directory, or contains
+another workspace root. Correct the path named in the error or remove it from
+`--include-directories`.
+
 ## Step 3: load a profile (this implies sandbox mode)
 
 You do not need `--sandbox` when using `--sandbox-profile-load`.

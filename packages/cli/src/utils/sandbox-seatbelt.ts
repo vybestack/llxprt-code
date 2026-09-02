@@ -13,13 +13,17 @@ import { promisify } from 'node:util';
 import { quote } from 'shell-quote';
 import { exec } from 'node:child_process';
 import type { Config, SandboxConfig } from '@vybestack/llxprt-code-core';
-import { FatalSandboxError } from '@vybestack/llxprt-code-core';
+import {
+  FatalSandboxError,
+  getErrorMessage,
+} from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { SETTINGS_DIRECTORY_NAME } from '../config/settings.js';
 import {
   getPassthroughEnvVars,
   isSandboxDebugModeEnabled,
 } from './sandbox-env.js';
+import { canonicalizeExistingPath } from './sandbox-path-canonicalization.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
 
 const execAsync = promisify(exec);
@@ -159,17 +163,20 @@ export function buildSeatbeltArgs(
   // roots instead of the legacy HOME_DIR/.llxprt path. CACHE_DIR resolves
   // through Storage.getGlobalCacheDir() (honoring LLXPRT_CACHE_HOME →
   // LLXPRT_CONFIG_HOME → platform cache), NOT the Darwin per-user cache dir.
-  const configDir = resolveRealpathSync(Storage.getGlobalConfigDir());
-  const dataDir = resolveRealpathSync(Storage.getGlobalDataDir());
-  const cacheDir = resolveRealpathSync(Storage.getGlobalCacheDir());
-  const logDir = resolveRealpathSync(Storage.getGlobalLogDir());
+  const configDir = resolveSeatbeltRootDir(
+    Storage.getGlobalConfigDir(),
+    'config',
+  );
+  const dataDir = resolveSeatbeltRootDir(Storage.getGlobalDataDir(), 'data');
+  const cacheDir = resolveSeatbeltRootDir(Storage.getGlobalCacheDir(), 'cache');
+  const logDir = resolveSeatbeltRootDir(Storage.getGlobalLogDir(), 'log');
   const args = [
     '-D',
-    `TARGET_DIR=${fs.realpathSync(process.cwd())}`,
+    `TARGET_DIR=${canonicalizeExistingPath(process.cwd(), 'resolve the sandbox workspace')}`,
     '-D',
-    `TMP_DIR=${fs.realpathSync(os.tmpdir())}`,
+    `TMP_DIR=${canonicalizeExistingPath(os.tmpdir(), 'resolve the sandbox temporary directory')}`,
     '-D',
-    `HOME_DIR=${fs.realpathSync(os.homedir())}`,
+    `HOME_DIR=${canonicalizeExistingPath(os.homedir(), 'resolve the sandbox home directory')}`,
     '-D',
     `CACHE_DIR=${cacheDir}`,
     '-D',
@@ -181,12 +188,18 @@ export function buildSeatbeltArgs(
   ];
 
   const MAX_INCLUDE_DIRS = 5;
-  const targetDir = fs.realpathSync(cliConfig?.getTargetDir() ?? '');
+  const targetDir = canonicalizeExistingPath(
+    cliConfig?.getTargetDir() ?? '',
+    'resolve the sandbox target directory',
+  );
   const includedDirs: string[] = [];
   if (cliConfig) {
     const workspaceContext = cliConfig.getWorkspaceContext();
     for (const dir of workspaceContext.getDirectories()) {
-      const realDir = fs.realpathSync(dir);
+      const realDir = canonicalizeExistingPath(
+        dir,
+        'resolve a sandbox include directory',
+      );
       if (realDir !== targetDir) {
         includedDirs.push(realDir);
       }
@@ -212,22 +225,30 @@ export function buildSeatbeltArgs(
 }
 
 /**
- * Resolves the canonical real path for a directory, creating it first if it
- * does not exist (so realpathSync does not fail on a fresh install). Uses mode
- * 0o700 so auto-created canonical roots — including DATA_DIR which can hold
- * OAuth fallback files — are not world-readable.
+ * Resolves the real path for a seatbelt root directory, creating
+ * it first if it does not exist (so fresh installs work). Uses mode 0o700
+ * so auto-created roots (including DATA_DIR, which can hold
+ * OAuth fallback files) are not world-readable. Resolution failure
+ * is a classified sandbox error naming the path and root role; there is no
+ * lexical fallback, because the .sb profile must grant access to the exact
+ * resolved root.
  */
-function resolveRealpathSync(dirPath: string): string {
-  try {
-    return fs.realpathSync(dirPath);
-  } catch {
+function resolveSeatbeltRootDir(dirPath: string, role: string): string {
+  if (!fs.existsSync(dirPath)) {
     try {
       fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
-      return fs.realpathSync(dirPath);
-    } catch {
-      return path.resolve(dirPath);
+    } catch (error) {
+      throw new FatalSandboxError(
+        `Failed to resolve the sandbox ${role} directory: creating ` +
+          `'${dirPath}' failed (${getErrorMessage(error)}). Verify the ` +
+          `path and its permissions, then retry.`,
+      );
     }
   }
+  return canonicalizeExistingPath(
+    dirPath,
+    `resolve the sandbox ${role} directory`,
+  );
 }
 
 interface SeatbeltProxySetup {

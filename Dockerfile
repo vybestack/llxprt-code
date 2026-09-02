@@ -2,6 +2,8 @@ FROM docker.io/library/node:24-slim
 
 ARG SANDBOX_NAME="llxprt-code-sandbox"
 ARG CLI_VERSION_ARG
+ARG TARGETPLATFORM
+ARG TARGETARCH
 ENV SANDBOX="$SANDBOX_NAME"
 ENV CLI_VERSION=$CLI_VERSION_ARG
 
@@ -127,6 +129,17 @@ RUN export npm_config_fetch_retries=5 \
       sleep 15; \
     done && \
     npm cache clean --force
+
+# Verify the final filesystem after every global install transaction. The
+# dependency-tree check rejects missing required production packages, while the
+# runtime probe loads the architecture-specific native addons from the same
+# package location used by bundle/llxprt.js.
+RUN printf 'verifying sandbox target_platform=%s target_architecture=%s\n' \
+      "${TARGETPLATFORM:-unknown}" "${TARGETARCH:-unknown}" && \
+    cd "$NPM_CONFIG_PREFIX/lib/node_modules/@vybestack/llxprt-code" && \
+    bun scripts/verify-sandbox-runtime.ts && \
+    npm ls --global --omit=dev --all >/dev/null && \
+    llxprt --version
 
 # default entrypoint when none specified
 CMD ["llxprt"]

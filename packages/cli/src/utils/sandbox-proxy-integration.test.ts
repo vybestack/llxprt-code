@@ -142,10 +142,15 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
   });
 
   describe('R3.4: macOS Realpath for Socket', () => {
-    it('uses fs.realpathSync for tmpdir in volume mount', () => {
-      // Verify the tmpdir mount uses realpath
+    it('canonicalizes tmpdir fail-fast before the volume mount', () => {
+      // The tmpdir mount resolves the real root; since #3475 the
+      // resolution is the shared fail-fast helper, so a tmpdir removed or
+      // replaced concurrently fails as a classified sandbox error.
       expect(sandboxSource).toContain(
-        'const resolvedTmpdir = fs.realpathSync(os.tmpdir())',
+        'const resolvedTmpdir = canonicalizeExistingPath(',
+      );
+      expect(sandboxSource).toContain(
+        "'resolve the sandbox temporary directory'",
       );
     });
 

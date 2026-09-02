@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { execFile, execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -15,13 +15,9 @@ import {
   isNodeError,
 } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import type {
-  PortForwardingResult,
-  CredentialProxyBridgeResult,
-  SshAgentResult,
-} from './sandbox-ssh.js';
+import type { PortForwardingResult, SshAgentResult } from './sandbox-ssh.js';
 import type { ContainerSandboxPrepared } from './sandbox-containers.js';
-import { runBestEffortSyncCleanup } from './cleanup.js';
+import { SandboxLaunchLifecycle } from './sandbox-lifecycle.js';
 import {
   buildContainerRunArgs,
   addContainerVolumeMounts,
@@ -40,6 +36,19 @@ import {
 } from './sandbox-containers.js';
 import { stopProxy } from '@vybestack/llxprt-code-providers/auth.js';
 import { entrypoint } from './sandbox-entrypoint.js';
+import { canonicalizeExistingPath } from './sandbox-path-canonicalization.js';
+import {
+  planCheckpointStorage,
+  attachPersistentCheckpointStore,
+  buildCheckpointEntrypointScript,
+  type CheckpointStoragePlan,
+} from './sandbox-checkpoint-storage.js';
+import {
+  addPrivateDependencyMounts,
+  planPrivateDependencyMounts,
+  type DependencyMountPlan,
+  type DependencyVolumeLifecycle,
+} from './sandbox-node-modules.js';
 import { ensureSandboxImageIsPresent } from './sandbox-image.js';
 import {
   setupSshAgentForwarding,
@@ -53,30 +62,45 @@ import {
   resolveDebugPort,
   sandboxPorts,
 } from './sandbox-env.js';
+import {
+  addContainerWorkspaceMounts,
+  planContainerWorkspaces,
+  type ContainerWorkspacePlan,
+} from './sandbox-workspaces.js';
 import { SETTINGS_DIRECTORY_NAME } from '../config/settings.js';
+import { reapOrphanedSandboxResources } from './sandbox-orphan-recovery.js';
 
 function removeSessionTmpdir(sessionTmpdir: string): void {
   fs.rmSync(sessionTmpdir, { recursive: true, force: true });
 }
 
 /** Validates image and builds initial container run args. */
-async function prepareContainerImageAndArgs(config: SandboxConfig): Promise<{
+async function prepareContainerImageAndArgs(
+  config: SandboxConfig,
+  workspacePlan: ContainerWorkspacePlan,
+  dependencyMountPlan: DependencyMountPlan,
+  lifecycle: SandboxLaunchLifecycle,
+): Promise<{
   image: string;
   workdir: string;
   containerWorkdir: string;
   sessionTmpdir: string;
   args: string[];
+  dependencyVolumeLifecycle: DependencyVolumeLifecycle;
 }> {
   // @plan:PLAN-20250214-CREDPROXY.P34 R3.4: Use realpath to resolve symlinks
   debugLogger.error(`hopping into sandbox (command: ${config.command}) ...`);
-  const gcPath = fs.realpathSync(process.argv[1]);
+  const workdir = workspacePlan.primaryRoot;
+  const gcPath = canonicalizeExistingPath(
+    process.argv[1],
+    'resolve the sandbox executable',
+  );
   const projectSandboxDockerfile = path.join(
     SETTINGS_DIRECTORY_NAME,
     'sandbox.Dockerfile',
   );
   const isCustomProjectSandbox = fs.existsSync(projectSandboxDockerfile);
   const image = config.image;
-  const workdir = path.resolve(process.cwd());
   const containerWorkdir = getContainerPath(workdir);
 
   if (process.env.BUILD_SANDBOX !== undefined) {
@@ -90,33 +114,50 @@ async function prepareContainerImageAndArgs(config: SandboxConfig): Promise<{
   }
 
   if (!(await ensureSandboxImageIsPresent(config.command, image))) {
-    const remedy =
-      image === LOCAL_DEV_SANDBOX_IMAGE_NAME
-        ? 'Try running `npm run build:all` or `npm run build:sandbox` under the gemini-cli repo to build it locally, or check the image name and your network connection.'
-        : 'Please check the image name, your network connection, or visit https://github.com/vybestack/llxprt-code/discussions if the issue persists.';
-    throw new FatalSandboxError(
-      `Sandbox image '${image}' is missing or could not be pulled. ${remedy}`,
-    );
+    failOnMissingSandboxImage(image);
   }
 
-  const resolvedTmpdir = fs.realpathSync(os.tmpdir());
+  const resolvedTmpdir = canonicalizeExistingPath(
+    os.tmpdir(),
+    'resolve the sandbox temporary directory',
+  );
   const sessionTmpdir = fs.mkdtempSync(
     path.join(resolvedTmpdir, 'llxprt-sandbox-'),
   );
-  try {
-    const args = buildContainerRunArgs(
-      config,
-      image,
-      workdir,
-      containerWorkdir,
-      sessionTmpdir,
-    );
-    addContainerVolumeMounts(args);
-    return { image, workdir, containerWorkdir, sessionTmpdir, args };
-  } catch (error) {
-    runBestEffortSyncCleanup(() => removeSessionTmpdir(sessionTmpdir));
-    throw error;
-  }
+  // #3469: from creation on, the per-session tmpdir is owned by the launch
+  // lifecycle and released on every later failure.
+  lifecycle.own('session-tmpdir', 'session tmpdir', () =>
+    removeSessionTmpdir(sessionTmpdir),
+  );
+  const args = buildContainerRunArgs(
+    config,
+    image,
+    workdir,
+    containerWorkdir,
+    sessionTmpdir,
+  );
+  addContainerWorkspaceMounts(args, workspacePlan);
+  addContainerVolumeMounts(args);
+  // #3450/#3463: append fresh engine-owned dependency volumes after every
+  // shared workspace bind so the nested mounts win. Host preflight and
+  // destination planning already completed before any engine operation.
+  const dependencyVolumeLifecycle = addPrivateDependencyMounts(
+    config,
+    args,
+    workspacePlan.roots,
+    dependencyMountPlan,
+  );
+  lifecycle.own('dependency-volume', 'private dependency volumes', () =>
+    dependencyVolumeLifecycle.release(),
+  );
+  return {
+    image,
+    workdir,
+    containerWorkdir,
+    sessionTmpdir,
+    args,
+    dependencyVolumeLifecycle,
+  };
 }
 
 /** Sets up SSH forwarding, port forwarding, networking, and env vars. */
@@ -126,6 +167,7 @@ async function prepareContainerNetworkAndEnv(
   workdir: string,
   isPodmanMacOS: boolean,
   reservedTunnelPorts: Set<number>,
+  lifecycle: SandboxLaunchLifecycle,
 ): Promise<{
   sshResult: SshAgentResult;
   podmanMacOSPortsForwarded: Set<string>;
@@ -138,6 +180,8 @@ async function prepareContainerNetworkAndEnv(
     },
     excludedTunnelPorts: reservedTunnelPorts,
   });
+  // #3469: each live tunnel is owned from the moment it is up.
+  lifecycle.own('tunnel', 'SSH agent forwarding tunnel', sshResult.cleanup);
 
   let portForwardingResult: PortForwardingResult | undefined;
   const podmanMacOSPortsForwarded = await setupPodmanMacosPortForwarding(
@@ -146,6 +190,11 @@ async function prepareContainerNetworkAndEnv(
     (result) => {
       portForwardingResult = result;
     },
+  );
+  lifecycle.own(
+    'tunnel',
+    'port-forwarding tunnels',
+    portForwardingResult?.cleanup,
   );
 
   const proxyCommand = setupContainerNetworking(args, config, isPodmanMacOS);
@@ -157,17 +206,13 @@ async function prepareContainerNetworkAndEnv(
   };
 }
 
-type ContainerNetworkAndEnv = Awaited<
-  ReturnType<typeof prepareContainerNetworkAndEnv>
->;
-
 interface ContainerEntrypointSetup {
   readonly args: string[];
   readonly workdir: string;
   readonly cliArgs: string[];
   readonly podmanMacOSPortsForwarded: Set<string>;
   readonly entrypointPrefixes: string[];
-  readonly credentialProxyBridgeCleanup: (() => void) | undefined;
+  readonly checkpointStoreStanza: string | undefined;
 }
 
 async function prepareContainerEntrypoint({
@@ -176,318 +221,136 @@ async function prepareContainerEntrypoint({
   cliArgs,
   podmanMacOSPortsForwarded,
   entrypointPrefixes,
-  credentialProxyBridgeCleanup,
+  checkpointStoreStanza,
 }: ContainerEntrypointSetup): Promise<{
   finalEntrypoint: string[];
   userFlag: string;
 }> {
-  try {
-    const finalEntrypoint = entrypoint(
-      workdir,
-      cliArgs,
-      podmanMacOSPortsForwarded.size > 0
-        ? podmanMacOSPortsForwarded
-        : undefined,
-      entrypointPrefixes,
-    );
-    const userFlag = await setupContainerUser(args, finalEntrypoint);
-    return { finalEntrypoint, userFlag };
-  } catch (error) {
-    runBestEffortSyncCleanup(credentialProxyBridgeCleanup);
-    throw error;
-  }
-}
-
-async function rethrowCredentialProxySetupError(
-  error: unknown,
-  credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined,
-): Promise<never> {
-  runBestEffortSyncCleanup(credentialProxyBridgeResult?.cleanup);
-  try {
-    await stopProxy();
-  } catch {
-    // best-effort cleanup; the original error is the one we want to throw
-  }
-  if (error instanceof FatalSandboxError) throw error;
-  // @plan:PLAN-20250214-CREDPROXY.P34 R25.1a: Proxy creation failure aborts before spawning container
-  throw new FatalSandboxError(
-    `Failed to start credential proxy: ${error instanceof Error ? error.message : String(error)}`,
+  // #3469: on failure here the launch lifecycle still owns every resource
+  // acquired above; there is nothing entrypoint-local to release.
+  const finalEntrypoint = entrypoint(
+    workdir,
+    cliArgs,
+    podmanMacOSPortsForwarded.size > 0 ? podmanMacOSPortsForwarded : undefined,
+    entrypointPrefixes,
+    checkpointStoreStanza,
   );
+  const userFlag = await setupContainerUser(args, finalEntrypoint);
+  return { finalEntrypoint, userFlag };
 }
 
-const SANDBOX_MANAGED_LABEL = 'com.vybestack.llxprt.sandbox-managed=true';
-const SANDBOX_OWNER_LABEL = 'com.vybestack.llxprt.sandbox-owner';
-const PROCESS_START_TOLERANCE_MS = 2_000;
-const PS_WEEKDAYS: readonly string[] = [
-  'Sun',
-  'Mon',
-  'Tue',
-  'Wed',
-  'Thu',
-  'Fri',
-  'Sat',
-];
-const PS_MONTHS: readonly string[] = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
-const PS_LSTART_PATTERN =
-  /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ( [1-9]|[12]\d|3[01]) ([01]\d|2[0-3]):([0-5]\d):([0-5]\d) (\d{4})$/;
-
-interface SandboxOwnerMetadata {
-  readonly version: 1;
-  readonly hostname: string;
-  readonly pid: number;
-  readonly startTimeMs: number;
-  readonly startTimeSource: 'observed' | 'estimated';
-}
-
-function execFileOutput(
-  command: string,
-  args: readonly string[],
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      command,
-      args,
-      { encoding: 'utf8', timeout: 5_000, killSignal: 'SIGKILL' },
-      (error, stdout) => {
-        if (error !== null) {
-          reject(error);
-          return;
-        }
-        resolve(stdout);
-      },
-    );
-  });
-}
-
-function isUnknownRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function isSandboxOwnerMetadata(value: unknown): value is SandboxOwnerMetadata {
-  if (!isUnknownRecord(value) || value.version !== 1) {
-    return false;
-  }
-  if (typeof value.hostname !== 'string' || value.hostname.length === 0) {
-    return false;
-  }
-  if (
-    typeof value.pid !== 'number' ||
-    !Number.isInteger(value.pid) ||
-    value.pid <= 0
-  ) {
-    return false;
-  }
-  if (
-    typeof value.startTimeMs !== 'number' ||
-    !Number.isFinite(value.startTimeMs) ||
-    value.startTimeMs <= 0
-  ) {
-    return false;
-  }
-  return (
-    value.startTimeSource === 'observed' ||
-    value.startTimeSource === 'estimated'
-  );
-}
-
-function parseSandboxOwner(payload: string): SandboxOwnerMetadata | undefined {
-  try {
-    const parsed: unknown = JSON.parse(payload);
-    return isSandboxOwnerMetadata(parsed) ? parsed : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function parseManagedContainerRow(
-  row: string,
-): readonly [string, SandboxOwnerMetadata] | undefined {
-  const separator = row.indexOf('	');
-  if (separator <= 0) return undefined;
-  const containerId = row.slice(0, separator);
-  const owner = parseSandboxOwner(row.slice(separator + 1));
-  return owner === undefined ? undefined : [containerId, owner];
-}
-
-function parseProcessStartTime(output: string): number | undefined {
-  const match = PS_LSTART_PATTERN.exec(output);
-  if (match === null) return undefined;
-  const [
-    ,
-    weekday,
-    month,
-    dayText,
-    hourText,
-    minuteText,
-    secondText,
-    yearText,
-  ] = match;
-  const monthIndex = PS_MONTHS.indexOf(month);
-  const day = Number(dayText);
-  const hour = Number(hourText);
-  const minute = Number(minuteText);
-  const second = Number(secondText);
-  const year = Number(yearText);
-  const startTimeMs = Date.UTC(year, monthIndex, day, hour, minute, second);
-  const parsed = new Date(startTimeMs);
-  if (parsed.getUTCFullYear() !== year) return undefined;
-  if (parsed.getUTCMonth() !== monthIndex) return undefined;
-  if (parsed.getUTCDate() !== day) return undefined;
-  if (PS_WEEKDAYS[parsed.getUTCDay()] !== weekday) return undefined;
-  return startTimeMs;
-}
-
-function readProcessStartTime(pid: number): number | undefined {
-  try {
-    const output = execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], {
-      encoding: 'utf8',
-      timeout: 250,
-      env: { ...process.env, LC_ALL: 'C', LANG: 'C', TZ: 'UTC' },
-    }).trim();
-    return parseProcessStartTime(output);
-  } catch {
-    return undefined;
-  }
-}
-
-function sandboxOwnerIsDead(owner: SandboxOwnerMetadata): boolean {
-  try {
-    if (owner.hostname !== os.hostname()) return false;
-  } catch {
-    return false;
-  }
-  try {
-    process.kill(owner.pid, 0);
-  } catch (error) {
-    return isNodeError(error) && error.code === 'ESRCH';
-  }
-  if (owner.startTimeSource !== 'observed') return false;
-  const currentStartTimeMs = readProcessStartTime(owner.pid);
-  return (
-    currentStartTimeMs !== undefined &&
-    Math.abs(currentStartTimeMs - owner.startTimeMs) >
-      PROCESS_START_TOLERANCE_MS
-  );
-}
-
-function listManagedSandboxContainers(config: SandboxConfig): Promise<string> {
-  return execFileOutput(config.command, [
-    'ps',
-    '--filter',
-    `label=${SANDBOX_MANAGED_LABEL}`,
-    '--format',
-    `{{.ID}}	{{.Label "${SANDBOX_OWNER_LABEL}"}}`,
-  ]);
-}
-
-async function reapManagedSandboxContainer(
+async function planWorkspacesAndDependencies(
   config: SandboxConfig,
-  row: string,
-): Promise<void> {
-  const container = parseManagedContainerRow(row);
-  if (container === undefined) return;
-  const [containerId, owner] = container;
-  if (!sandboxOwnerIsDead(owner)) return;
-  try {
-    await execFileOutput(config.command, ['rm', '-f', containerId]);
-  } catch (error) {
-    debugLogger.warn(
-      `Could not reap orphaned ${config.command} sandbox ${containerId}: ${getErrorMessage(error)}`,
-    );
-  }
+  cliConfig: Config | undefined,
+): Promise<{
+  readonly workspacePlan: ContainerWorkspacePlan;
+  readonly dependencyMountPlan: DependencyMountPlan;
+}> {
+  const workdir = path.resolve(process.cwd());
+  const acceptedWorkspaceRoots =
+    cliConfig === undefined
+      ? [workdir]
+      : [
+          ...cliConfig.getWorkspaceContext().getDirectories(),
+          ...cliConfig.getConfiguredIncludeDirectories(),
+        ];
+  const workspacePlan = planContainerWorkspaces(
+    workdir,
+    acceptedWorkspaceRoots,
+  );
+  const dependencyMountPlan = planPrivateDependencyMounts(workspacePlan.roots);
+  await reapOrphanedSandboxResources(config);
+  return { workspacePlan, dependencyMountPlan };
 }
 
-async function reapOrphanedSandboxContainers(
+/**
+ * #3464: derives the checkpoint persistence plan and its entrypoint stanza.
+ * Checkpointing is enabled exactly as the in-container CLI will resolve it
+ * (same argv/settings), so host and container agree on whether a persistent
+ * checkpoint store must back the session; sessions without checkpointing get
+ * no stanza and keep today's fully-ephemeral behavior.
+ */
+function planCheckpointPersistence(
   config: SandboxConfig,
-): Promise<void> {
-  if (config.command !== 'docker' && config.command !== 'podman') return;
-  let output: string;
-  try {
-    output = await listManagedSandboxContainers(config);
-  } catch (error) {
-    debugLogger.warn(
-      `Could not list managed ${config.command} sandboxes for orphan recovery: ${getErrorMessage(error)}`,
-    );
-    return;
-  }
-  const rows = output
-    .split('\n')
-    .map((row) => (row.endsWith('\r') ? row.slice(0, -1) : row))
-    .filter((row) => row.length > 0);
-  for (const row of rows) {
-    await reapManagedSandboxContainer(config, row);
-  }
+  workdir: string,
+  cliConfig: Config | undefined,
+): { plan: CheckpointStoragePlan; stanza: string | undefined } {
+  const plan = planCheckpointStorage(
+    config,
+    workdir,
+    cliConfig?.getCheckpointingEnabled() ?? false,
+  );
+  return {
+    plan,
+    stanza: plan.enabled ? buildCheckpointEntrypointScript() : undefined,
+  };
 }
 
-/** Runs the Docker/Podman sandbox path — image build, arg assembly, and proxy setup. */
+/** Runs the Docker/Podman sandbox path: image build, arg assembly, and proxy setup. */
 async function prepareContainerSandbox(
   config: SandboxConfig,
   nodeArgs: string[],
   cliConfig: Config | undefined,
   cliArgs: string[],
+  lifecycle: SandboxLaunchLifecycle,
 ): Promise<ContainerSandboxPrepared> {
   validateContainerSandboxEnv();
-  await reapOrphanedSandboxContainers(config);
+  const { workspacePlan, dependencyMountPlan } =
+    await planWorkspacesAndDependencies(config, cliConfig);
+  const checkpoint = planCheckpointPersistence(
+    config,
+    workspacePlan.primaryRoot,
+    cliConfig,
+  );
 
-  const { image, workdir, sessionTmpdir, args } =
-    await prepareContainerImageAndArgs(config);
-
-  const reservedTunnelPorts = new Set<number>();
-  let networkAndEnv: ContainerNetworkAndEnv;
-  try {
-    const isPodmanMacOS =
-      config.command === 'podman' && os.platform() === 'darwin';
-    networkAndEnv = await prepareContainerNetworkAndEnv(
+  const { image, workdir, sessionTmpdir, args, dependencyVolumeLifecycle } =
+    await prepareContainerImageAndArgs(
       config,
-      args,
-      workdir,
-      isPodmanMacOS,
-      reservedTunnelPorts,
+      workspacePlan,
+      dependencyMountPlan,
+      lifecycle,
     );
-    const containerName = assignContainerName(args, config, image);
-    addContainerEnvVars(args, config, containerName, nodeArgs, workdir);
-  } catch (error) {
-    runBestEffortSyncCleanup(() => removeSessionTmpdir(sessionTmpdir));
-    throw error;
-  }
+
+  // #3464: the persistent checkpoint store is attached before the network
+  // and name are provisioned. It is intentionally not owned by the launch
+  // lifecycle: it may hold valid history and must survive launch failures.
+  attachPersistentCheckpointStore(config, args, checkpoint.plan);
+
+  // #3469/#3450: from here on, every acquired resource is registered with
+  // the launch lifecycle; a failure at any later step releases all of them.
+  const reservedTunnelPorts = new Set<number>();
+  const isPodmanMacOS =
+    config.command === 'podman' && os.platform() === 'darwin';
+  const networkAndEnv = await prepareContainerNetworkAndEnv(
+    config,
+    args,
+    workdir,
+    isPodmanMacOS,
+    reservedTunnelPorts,
+    lifecycle,
+  );
+  const containerName = assignContainerName(args, config, image);
+  addContainerEnvVars(args, config, containerName, nodeArgs, workdir);
+
   const {
     sshResult,
     podmanMacOSPortsForwarded,
     proxyCommand,
     portForwardingResult,
   } = networkAndEnv;
-
   // Compose bridge prefixes after the trusted capability capture stanza (F1).
   const entrypointPrefixes: string[] = [];
-  let credentialProxySetup: Awaited<ReturnType<typeof setupCredentialProxy>>;
-  try {
-    if (sshResult.entrypointPrefix !== undefined) {
-      entrypointPrefixes.push(sshResult.entrypointPrefix);
-    }
-    credentialProxySetup = await startCredentialProxyGuarded(
-      args,
-      config,
-      sessionTmpdir,
-      reservedTunnelPorts,
-      entrypointPrefixes,
-    );
-  } catch (error) {
-    runBestEffortSyncCleanup(() => removeSessionTmpdir(sessionTmpdir));
-    throw error;
+  if (sshResult.entrypointPrefix !== undefined) {
+    entrypointPrefixes.push(sshResult.entrypointPrefix);
   }
+  const credentialProxySetup = await startCredentialProxyGuarded(
+    args,
+    config,
+    sessionTmpdir,
+    reservedTunnelPorts,
+    entrypointPrefixes,
+    lifecycle,
+  );
 
   const { finalEntrypoint, userFlag } = await prepareContainerEntrypoint({
     args,
@@ -495,8 +358,7 @@ async function prepareContainerSandbox(
     cliArgs,
     podmanMacOSPortsForwarded,
     entrypointPrefixes,
-    credentialProxyBridgeCleanup:
-      credentialProxySetup.credentialProxyBridgeCleanup,
+    checkpointStoreStanza: checkpoint.stanza,
   });
 
   return {
@@ -505,9 +367,11 @@ async function prepareContainerSandbox(
     proxyCommand,
     userFlag,
     image,
+    containerName,
     workdir,
     portForwardingResult,
     ...credentialProxySetup,
+    dependencyVolumeLifecycle,
     reservedTunnelPorts,
     sshResult,
   };
@@ -519,22 +383,41 @@ async function startCredentialProxyGuarded(
   sessionTmpdir: string,
   reservedTunnelPorts: Set<number>,
   entrypointPrefixes: string[],
+  lifecycle: SandboxLaunchLifecycle,
 ): Promise<Awaited<ReturnType<typeof setupCredentialProxy>>> {
-  let credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
+  let cpResult: Awaited<ReturnType<typeof setupCredentialProxy>>;
   try {
-    const cpResult = await setupCredentialProxy(
+    cpResult = await setupCredentialProxy(
       args,
       config,
       sessionTmpdir,
       reservedTunnelPorts,
       entrypointPrefixes,
     );
-    credentialProxyBridgeResult = cpResult.credentialProxyBridgeResult;
-    const credentialProxyBridgeCleanup = cpResult.credentialProxyBridgeCleanup;
-    return { credentialProxyBridgeResult, credentialProxyBridgeCleanup };
   } catch (error) {
-    return rethrowCredentialProxySetupError(error, credentialProxyBridgeResult);
+    // setupCredentialProxy releases everything it acquired on its own
+    // failure paths (proxy server, bridge, env file, tmpdir); the launch
+    // lifecycle owns nothing from it yet.
+    if (error instanceof FatalSandboxError) throw error;
+    // @plan:PLAN-20250214-CREDPROXY.P34 R25.1a: Proxy creation failure aborts before spawning container
+    throw new FatalSandboxError(
+      `Failed to start credential proxy: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
+  lifecycle.own(
+    'credential-proxy',
+    'credential proxy bridge',
+    cpResult.credentialProxyBridgeCleanup,
+  );
+  lifecycle.own('credential-proxy', 'credential proxy server', () => {
+    void stopProxy().catch((err) => {
+      debugLogger.error(
+        'Credential proxy stop() failed after failed launch:',
+        err,
+      );
+    });
+  });
+  return cpResult;
 }
 
 /** Spawns container and proxy, wires cleanup, and waits for exit. */
@@ -542,6 +425,7 @@ async function executeContainerSandbox(
   config: SandboxConfig,
   cliConfig: Config | undefined,
   prepared: Awaited<ReturnType<typeof prepareContainerSandbox>>,
+  lifecycle: SandboxLaunchLifecycle,
 ): Promise<{
   exitCode: number;
   portForwardingResult: PortForwardingResult | undefined;
@@ -553,9 +437,11 @@ async function executeContainerSandbox(
     proxyCommand,
     userFlag,
     image,
+    containerName,
     workdir,
     portForwardingResult,
     sshResult,
+    dependencyVolumeLifecycle,
   } = prepared;
   let credentialProxyBridgeCleanup = prepared.credentialProxyBridgeCleanup;
 
@@ -564,6 +450,9 @@ async function executeContainerSandbox(
   args.push(image);
   args.push(...finalEntrypoint);
 
+  // #3469: a sidecar or main-launch failure here is still covered; every
+  // resource stays owned by the launch lifecycle until the process/close
+  // handlers take over below.
   const proxyContainerProcess =
     proxyCommand !== undefined
       ? await startProxyContainer(
@@ -572,11 +461,16 @@ async function executeContainerSandbox(
           userFlag,
           image,
           workdir,
+          lifecycle,
         )
       : undefined;
 
   const { stdinWasPaused, stdinHadRawMode } = handleStdinForSandbox();
   const sandboxProcess = spawn(config.command, args, { stdio: 'inherit' });
+  lifecycle.own('main-container', `main container ${containerName}`, () => {
+    sandboxProcess.kill('SIGTERM');
+  });
+  dependencyVolumeLifecycle.recordMainContainerName(containerName);
   wireProxyContainerCloseHandler(proxyContainerProcess, sandboxProcess);
   restoreStdinAfterSandbox(
     sandboxProcess,
@@ -595,6 +489,9 @@ async function executeContainerSandbox(
       credentialProxyBridgeCleanup = c;
     },
   );
+  // #3469: ownership explicitly moves to the wired process/close handlers;
+  // from here the normal session lifecycle performs every release.
+  lifecycle.transferToProcessHandlers();
 
   const exitCode = await new Promise<number>((resolve) => {
     sandboxProcess.on('close', (code, signal) => {
@@ -607,6 +504,12 @@ async function executeContainerSandbox(
       resolve(ec);
     });
   });
+
+  // Release volumes after every close listener and its queued I/O have
+  // completed. Docker Desktop can expose a nested destination until teardown
+  // finishes; an early release can leave an engine-created mountpoint behind.
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  dependencyVolumeLifecycle.release();
 
   return { exitCode, portForwardingResult, credentialProxyBridgeCleanup };
 }
@@ -622,13 +525,29 @@ export async function runContainerSandbox(
   portForwardingResult: PortForwardingResult | undefined;
   credentialProxyBridgeCleanup: (() => void) | undefined;
 }> {
-  const prepared = await prepareContainerSandbox(
-    config,
-    nodeArgs,
-    cliConfig,
-    cliArgs,
-  );
-  return executeContainerSandbox(config, cliConfig, prepared);
+  // #3469: one explicit owner for every launch-acquired resource. Any
+  // failure in preparation or launch releases them all in stage order;
+  // secondary release failures stay visible on stderr without replacing
+  // the original error.
+  const lifecycle = new SandboxLaunchLifecycle();
+  try {
+    const prepared = await prepareContainerSandbox(
+      config,
+      nodeArgs,
+      cliConfig,
+      cliArgs,
+      lifecycle,
+    );
+    return await executeContainerSandbox(
+      config,
+      cliConfig,
+      prepared,
+      lifecycle,
+    );
+  } catch (error) {
+    lifecycle.releaseForFailedLaunch();
+    throw error;
+  }
 }
 
 export function buildSandboxCommandArgs(
@@ -644,6 +563,16 @@ export function buildSandboxCommandArgs(
     buildArgsArray.push('-f', resolvedProjectSandboxDockerfile, '-i', image);
   }
   return buildArgsArray;
+}
+
+function failOnMissingSandboxImage(image: string): never {
+  const remedy =
+    image === LOCAL_DEV_SANDBOX_IMAGE_NAME
+      ? 'Try running `npm run build:all` or `npm run build:sandbox` under the gemini-cli repo to build it locally, or check the image name and your network connection.'
+      : 'Please check the image name, your network connection, or visit https://github.com/vybestack/llxprt-code/discussions if the issue persists.';
+  throw new FatalSandboxError(
+    `Sandbox image '${image}' is missing or could not be pulled. ${remedy}`,
+  );
 }
 
 function buildSandboxImage(

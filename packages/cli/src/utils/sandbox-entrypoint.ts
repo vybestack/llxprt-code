@@ -10,6 +10,7 @@ import {
   getContainerPath,
   sandboxPorts,
   isSandboxDebugModeEnabled,
+  isSourceDevelopmentWorkdir,
   resolveDebugPort,
 } from './sandbox-env.js';
 
@@ -36,10 +37,14 @@ function buildPathSuffix(
   return suffix;
 }
 
-function resolveCliCommand(): string {
+function resolveCliCommand(workdir: string): string {
   const isDebugMode = isSandboxDebugModeEnabled(process.env.DEBUG);
   const debugPort = resolveDebugPort();
-  if (process.env.NODE_ENV === 'development') {
+  // #3455: only a positively identified llxprt-code source checkout in
+  // development mode runs the checked-out source entry; ambient
+  // NODE_ENV=development in an arbitrary repository must fall through to
+  // the sandbox image's installed command.
+  if (isSourceDevelopmentWorkdir(workdir)) {
     // The local-development sandbox command bypasses npm so npm cannot drop
     // the inherited capability descriptor. Bun is launched directly on the
     // source entry, preserving fd 3.
@@ -96,8 +101,12 @@ const CAPABILITY_CAPTURE_STANZA = [
  * `${VAR:-...}`) so no image-inherited or host override can redirect these
  * roots back into the mounted config directory; SANDBOX_ENV is additionally
  * filtered for these keys in sandbox-containers.ts.
+ *
+ * Exported because the real-engine checkpoint integration suite replays this
+ * exact stanza (plus the checkpoint-store stanza) inside its containers so
+ * the tested prologue is byte-identical to production.
  */
-const XDG_HOME_PIN_STANZA = [
+export const XDG_HOME_PIN_STANZA = [
   'export LLXPRT_DATA_HOME="$HOME/.local/share/llxprt-code"',
   'export LLXPRT_CACHE_HOME="$HOME/.cache/llxprt-code"',
   'export LLXPRT_LOG_HOME="$HOME/.local/state/llxprt-code"',
@@ -145,6 +154,7 @@ export function entrypoint(
   cliArgs: string[],
   skipPortRelays?: Set<string>,
   entrypointPrefixes?: string[],
+  checkpointStoreStanza?: string,
 ): string[] {
   const isWindows = os.platform() === 'win32';
   const containerWorkdir = getContainerPath(workdir);
@@ -159,6 +169,16 @@ export function entrypoint(
   // takes (default and current-user `su -p` modes, docker and podman). Runs
   // before prefixes/relays/exec; the exports propagate to the exec'd CLI.
   shellCmds.push(XDG_HOME_PIN_STANZA);
+
+  // STEP 1.6 (#3464): when checkpointing is enabled, link the pinned history
+  // and checkpoint metadata directories into the persistent checkpoint
+  // store volume (after the pin stanza defines those roots, before bridges
+  // and the exec'd CLI). The stanza fails the sandbox when the store mount
+  // is missing so checkpointing is never presented as working while its
+  // state would be discarded with the container.
+  if (checkpointStoreStanza !== undefined) {
+    shellCmds.push(checkpointStoreStanza);
+  }
 
   // STEP 2: trusted prefixes (ssh-agent / cred-proxy bridges) run AFTER capture
   // and env scrub, so they have neither the token nor (it was never on fd 3
@@ -201,7 +221,7 @@ export function entrypoint(
   }
 
   const quotedCliArgs = cliArgs.slice(2).map((arg) => quote([arg]));
-  const cliCmd = resolveCliCommand();
+  const cliCmd = resolveCliCommand(workdir);
 
   // STEP 3: re-open fd 3 with the scrubbed capability (only when present) and
   // exec the final CLI.

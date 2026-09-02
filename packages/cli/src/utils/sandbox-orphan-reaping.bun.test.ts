@@ -19,14 +19,19 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { SandboxConfig } from '@vybestack/llxprt-code-core';
+import {
+  FIXTURE_TIMEOUT_MS,
+  removeFixtureDirectory,
+  removeNewRootBunBuildIntermediates,
+  rootBunBuildIntermediatePaths,
+  writePortableExecutable,
+} from '../../test-utils/sandbox-fixture-compiler.js';
 import { assignContainerName } from './sandbox-containers.js';
 import { runContainerSandbox } from './sandbox-exec.js';
 
 const MANAGED_LABEL = 'com.vybestack.llxprt.sandbox-managed=true';
 const TEST_IMAGE = 'llxprt-code-sandbox';
 const TIMEZONE_REGRESSION_CHILD = 'LLXPRT_TEST_TIMEZONE_REGRESSION_CHILD';
-const REPOSITORY_ROOT = path.resolve(import.meta.dirname, '../../../..');
-const BUN_BUILD_INTERMEDIATE_PATTERN = /^\.[0-9a-f]+-00000000\.bun-build$/i;
 const ENGINE_ENV_KEYS = [
   'LLXPRT_TEST_DOCKER_STATE',
   'LLXPRT_TEST_PODMAN_STATE',
@@ -46,28 +51,6 @@ interface OwnerMetadata {
   readonly pid: number;
   readonly startTimeMs: number;
   readonly startTimeSource: 'observed' | 'estimated';
-}
-
-function rootBunBuildIntermediatePaths(): ReadonlySet<string> {
-  return new Set(
-    fs
-      .readdirSync(REPOSITORY_ROOT, { withFileTypes: true })
-      .filter(
-        (entry) =>
-          entry.isFile() && BUN_BUILD_INTERMEDIATE_PATTERN.test(entry.name),
-      )
-      .map((entry) => path.join(REPOSITORY_ROOT, entry.name)),
-  );
-}
-
-function removeNewRootBunBuildIntermediates(
-  existingPaths: ReadonlySet<string>,
-): void {
-  for (const artifactPath of rootBunBuildIntermediatePaths()) {
-    if (!existingPaths.has(artifactPath)) {
-      fs.rmSync(artifactPath, { force: true });
-    }
-  }
 }
 
 function requirePid(child: ChildProcess): number {
@@ -144,16 +127,44 @@ if (statePath === undefined || logPath === undefined) process.exit(46);
 
 const args = process.argv.slice(2);
 appendFileSync(logPath, engine + ':' + args.join(' ') + '\\n');
-if (args[0] === 'ps' && args[1] === '-a') process.exit(0);
-if (args[0] === 'ps' && args[1] !== '-a') {
+if (args[0] === 'ps') {
   if (process.env.LLXPRT_TEST_LIST_HANG === '1') {
     await new Promise((resolve) => setTimeout(resolve, 7000));
   }
   if (process.env.LLXPRT_TEST_LIST_FAILURE === '1') process.exit(42);
-  if (!args.includes(${JSON.stringify(`label=${MANAGED_LABEL}`)})) process.exit(43);
-  process.stdout.write(readFileSync(statePath, 'utf8'));
+  if (args.includes('--filter') &&
+      !args.includes(${JSON.stringify(`label=${MANAGED_LABEL}`)})) process.exit(43);
+  const rows = readFileSync(statePath, 'utf8')
+    .split('\\n')
+    .filter((line) => line !== '');
+  const formatIndex = args.indexOf('--format');
+  const format = formatIndex < 0 ? '' : args[formatIndex + 1];
+  if (format === '{{.ID}}') {
+    const ids = rows.map((line) => line.split('\\t')[0]);
+    if (ids.length > 0) process.stdout.write(ids.join('\\n') + '\\n');
+  } else {
+    process.stdout.write(readFileSync(statePath, 'utf8'));
+  }
   process.exit(0);
 }
+if (args[0] === 'inspect') {
+  const containerId = args[1];
+  const row = readFileSync(statePath, 'utf8')
+    .split('\\n')
+    .find((line) => line.startsWith(containerId + '\\t'));
+  if (row === undefined) process.exit(45);
+  const owner = row.slice(row.indexOf('\\t') + 1);
+  process.stdout.write(JSON.stringify([{
+    Id: containerId,
+    Config: { Labels: {
+      'com.vybestack.llxprt.sandbox-managed': 'true',
+      'com.vybestack.llxprt.sandbox-owner': owner,
+    } },
+    State: { Running: true },
+  }]) + '\\n');
+  process.exit(0);
+}
+if (args[0] === 'volume' && args[1] === 'ls') process.exit(0);
 if (args[0] === 'rm' && args[1] === '-f') {
   const containerId = args[2];
   if (containerId === undefined) process.exit(45);
@@ -213,40 +224,6 @@ process.stdout.write(weekdays[date.getUTCDay()] + ' ' +
 `;
 }
 
-function writePortableExecutable(
-  commandName: string,
-  source: string,
-  fixtureDir: string,
-): void {
-  const executableName =
-    process.platform === 'win32' ? `${commandName}.exe` : commandName;
-  const executablePath = path.join(fixtureDir, executableName);
-  const sourcePath = path.join(fixtureDir, `${commandName}.fixture.ts`);
-  const existingBuildIntermediates = rootBunBuildIntermediatePaths();
-  fs.writeFileSync(sourcePath, source);
-  try {
-    const compilation = spawnSync(
-      process.execPath,
-      ['build', '--compile', sourcePath, '--outfile', executablePath],
-      {
-        cwd: fixtureDir,
-        encoding: 'utf8',
-        timeout: 30_000,
-        windowsHide: true,
-      },
-    );
-    if (compilation.error !== undefined) throw compilation.error;
-    if (compilation.status !== 0) {
-      throw new Error(
-        `Failed to compile ${executableName}: ${compilation.stderr.trim()}`,
-      );
-    }
-  } finally {
-    fs.rmSync(sourcePath, { force: true });
-    removeNewRootBunBuildIntermediates(existingBuildIntermediates);
-  }
-}
-
 function warmProcessStartExecutable(fixtureDir: string): void {
   const executableName = process.platform === 'win32' ? 'ps.exe' : 'ps';
   const executablePath = path.join(fixtureDir, executableName);
@@ -259,7 +236,7 @@ function warmProcessStartExecutable(fixtureDir: string): void {
       {
         encoding: 'utf8',
         env: { ...process.env, LLXPRT_TEST_PROCESS_STARTS: startsPath },
-        timeout: 30_000,
+        timeout: FIXTURE_TIMEOUT_MS,
         windowsHide: true,
       },
     );
@@ -304,7 +281,14 @@ function rerunInNonUtcTimezone(testName: string): void {
   );
   const child = spawnSync(
     process.execPath,
-    ['test', testPath, '--test-name-pattern', testName],
+    [
+      'test',
+      '--timeout',
+      String(FIXTURE_TIMEOUT_MS),
+      testPath,
+      '--test-name-pattern',
+      testName,
+    ],
     {
       encoding: 'utf8',
       env: {
@@ -312,7 +296,7 @@ function rerunInNonUtcTimezone(testName: string): void {
         TZ: 'America/New_York',
         [TIMEZONE_REGRESSION_CHILD]: '1',
       },
-      timeout: 30_000,
+      timeout: FIXTURE_TIMEOUT_MS,
       windowsHide: true,
     },
   );
@@ -328,16 +312,6 @@ function rerunInNonUtcTimezone(testName: string): void {
       ].join('\n'),
     );
   }
-}
-
-function removeFixtureDirectory(fixtureDir: string): void {
-  if (fixtureDir === '') return;
-  fs.rmSync(fixtureDir, {
-    recursive: true,
-    force: true,
-    maxRetries: 10,
-    retryDelay: 100,
-  });
 }
 
 describe('sandbox orphan recovery startup', () => {
@@ -396,6 +370,7 @@ describe('sandbox orphan recovery startup', () => {
     process.env.LLXPRT_TEST_PROCESS_STARTS = processStarts;
     process.env.SANDBOX_SET_UID_GID = 'false';
     process.env.LLXPRT_SANDBOX_SSH_AGENT = 'off';
+    process.env.NODE_ENV = 'development';
     liveChildren = [];
   });
 
@@ -459,7 +434,7 @@ describe('sandbox orphan recovery startup', () => {
       state: fs.readFileSync(statePath, 'utf8'),
       queried: fs
         .readFileSync(logPath, 'utf8')
-        .includes(`docker:ps --filter label=${MANAGED_LABEL}`),
+        .includes(`docker:ps -a --filter label=${MANAGED_LABEL}`),
     }).toEqual({
       startupResult: expect.stringContaining(
         `Sandbox image '${TEST_IMAGE}' is missing`,
