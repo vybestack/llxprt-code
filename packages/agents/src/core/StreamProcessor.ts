@@ -53,9 +53,13 @@ import { filterHookRestrictedBlocks } from './hookToolRestrictions.js';
 import {
   attachStreamTiming,
   logStreamTelemetry,
+  RawTokenDeltaBridge,
   StreamTimingTracker,
 } from './streamTelemetryLogger.js';
-import { LOGICAL_REQUEST_ID_KEY } from '@vybestack/llxprt-code-providers';
+import {
+  LOGICAL_REQUEST_ID_KEY,
+  RAW_TOKEN_DELTA_SINK_KEY,
+} from '@vybestack/llxprt-code-providers';
 import { canonicalizeToolName } from './toolGovernance.js';
 import {
   buildRequestContentsResult,
@@ -121,6 +125,16 @@ export class StreamProcessor {
   private currentTurnPromptId: string | null = null;
   private currentAttemptIndex = 0;
 
+  /**
+   * Raw token-delta bridge for the attempt in flight (#3493). Null when no
+   * attempt is in flight; minted fresh per attempt in
+   * makeApiCallAndProcessStream so an abandoned attempt's stream cannot feed
+   * the next attempt's tracker. The sink rides request metadata, which the
+   * providers layer treats as optional — an absent sink simply means "no raw
+   * signal" and visible-chunk timing applies.
+   */
+  private currentRawTokenDeltaBridge: RawTokenDeltaBridge | null = null;
+
   getPromptEnvelopeEstimate(): PromptEnvelopeEstimate | null {
     return this.currentPromptEnvelopeEstimate;
   }
@@ -157,6 +171,7 @@ export class StreamProcessor {
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     this.currentPromptEnvelopeEstimate = null;
     this.currentAttemptIndex = attemptIndex ?? 0;
+    this.currentRawTokenDeltaBridge = new RawTokenDeltaBridge();
     const provider = this.providerResolver('stream');
 
     const providerBaseUrl = this.runtimeContext.state.baseUrl;
@@ -429,6 +444,9 @@ export class StreamProcessor {
         // join caller-side registries (#3257); internal plumbing, never sent
         // on the wire.
         [LOGICAL_REQUEST_ID_KEY]: promptId,
+        // Raw token-delta timing sink for agents-layer per-attempt timing
+        // (#3493); internal plumbing, never sent on the wire.
+        [RAW_TOKEN_DELTA_SINK_KEY]: this.currentRawTokenDeltaBridge?.notify,
       },
       userMemory,
       systemInstruction: extractSystemInstructionText(
@@ -474,6 +492,10 @@ export class StreamProcessor {
       });
 
       const streamResponse = provider.generateChatCompletion(prepared.options);
+      // Captured explicitly (not read inside the generator below): a later
+      // attempt replaces the instance field, and the explicit parameter is
+      // what keeps this attempt's stream wired to this attempt's tracker.
+      const rawTokenDeltaBridge = this.currentRawTokenDeltaBridge;
 
       return await this._consumeFirstChunkAndReturn(
         streamResponse,
@@ -481,6 +503,7 @@ export class StreamProcessor {
         promptId,
         startTime,
         hookRestrictedAllowedTools,
+        rawTokenDeltaBridge,
       );
     } catch (error) {
       const durationMs = Date.now() - startTime;
@@ -506,12 +529,14 @@ export class StreamProcessor {
     promptId: string,
     startTime: number,
     hookRestrictedAllowedTools: string[] | undefined,
+    rawTokenDeltaBridge: RawTokenDeltaBridge | null,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const convertedStream = this._convertIContentStream(
       streamResponse,
       requestPayload,
       { promptId, startTime, attemptIndex: this.currentAttemptIndex },
       hookRestrictedAllowedTools,
+      rawTokenDeltaBridge,
     );
 
     const firstChunk = await convertedStream.next();
@@ -639,12 +664,18 @@ export class StreamProcessor {
       attemptIndex?: number;
     },
     hookRestrictedAllowedTools?: string[],
+    rawTokenDeltaBridge?: RawTokenDeltaBridge | null,
   ): AsyncGenerator<ModelStreamChunk> {
     let lastIContent: IContent | undefined;
     // Constructed at generator-body start (first pull — the provider call
     // boundary), so provider_request_ms covers the stream lifecycle alone
     // and excludes send-seam estimation (#3257).
     const timing = new StreamTimingTracker();
+    // The provider stream is only iterated inside this generator body, so
+    // attach always happens before any provider code can fire a raw delta.
+    // A null bridge means no attempt context threaded a sink (#3493): the
+    // tracker then runs on visible-chunk timing alone.
+    rawTokenDeltaBridge?.attach(timing);
 
     // The caller iterates this generator after _sendProviderRequest returned,
     // so a mid-stream failure never re-enters its try/catch; clear the failed

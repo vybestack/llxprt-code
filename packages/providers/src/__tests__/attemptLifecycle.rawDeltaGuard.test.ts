@@ -14,11 +14,16 @@
  * makes resolveRawTokenDeltaNotifier call .bind on a non-function and throw
  * a TypeError at request time, failing the whole request instead of
  * degrading to visible-chunk timing.
+ *
+ * Issue #3493 adds a caller-supplied sink on a separate metadata key. The
+ * raw signal must fan out to both consumers (observer hook first, then the
+ * caller sink), and a malformed consumer must never disable the other.
  */
 
 import { describe, it, expect } from 'bun:test';
 import {
   ATTEMPT_LIFECYCLE_KEY,
+  RAW_TOKEN_DELTA_SINK_KEY,
   getAttemptLifecycleObserver,
   resolveRawTokenDeltaNotifier,
 } from '../logging/attemptLifecycle.js';
@@ -68,5 +73,86 @@ describe('issue #3473: lifecycle observer guard for the raw-delta hook', () => {
   it('resolves no notifier when no observer is present in metadata', () => {
     expect(resolveRawTokenDeltaNotifier(undefined)).toBeUndefined();
     expect(resolveRawTokenDeltaNotifier({})).toBeUndefined();
+  });
+});
+
+describe('issue #3493: raw token-delta sink fan-out', () => {
+  it('resolves a notifier that fires a caller-supplied sink when only the sink is present', () => {
+    let sinkFired = 0;
+    const metadata = {
+      [RAW_TOKEN_DELTA_SINK_KEY]: () => {
+        sinkFired++;
+      },
+    };
+
+    const notifier = resolveRawTokenDeltaNotifier(metadata);
+    expect(notifier).toBeTypeOf('function');
+    notifier?.();
+    expect(sinkFired).toBe(1);
+  });
+
+  it('fans one raw delta out to the observer hook and the caller sink, each exactly once, observer first', () => {
+    const calls: string[] = [];
+    const metadata = {
+      [ATTEMPT_LIFECYCLE_KEY]: {
+        onAttemptStart: () => {},
+        onAttemptEnd: () => {},
+        onRawTokenDelta: () => {
+          calls.push('observer');
+        },
+      },
+      [RAW_TOKEN_DELTA_SINK_KEY]: () => {
+        calls.push('sink');
+      },
+    };
+
+    const notifier = resolveRawTokenDeltaNotifier(metadata);
+    expect(notifier).toBeTypeOf('function');
+    notifier?.();
+    expect(calls).toEqual(['observer', 'sink']);
+  });
+
+  it('ignores a present-but-non-function sink beside a valid observer hook', () => {
+    let observerFired = 0;
+    const metadata = {
+      [ATTEMPT_LIFECYCLE_KEY]: {
+        onAttemptStart: () => {},
+        onAttemptEnd: () => {},
+        onRawTokenDelta: () => {
+          observerFired++;
+        },
+      },
+      [RAW_TOKEN_DELTA_SINK_KEY]: 'not-a-function',
+    };
+
+    const notifier = resolveRawTokenDeltaNotifier(metadata);
+    expect(notifier).toBeTypeOf('function');
+    notifier?.();
+    expect(observerFired).toBe(1);
+  });
+
+  it('ignores a present-but-non-function sink and resolves no notifier when no observer is present', () => {
+    const metadata = { [RAW_TOKEN_DELTA_SINK_KEY]: 42 };
+
+    expect(resolveRawTokenDeltaNotifier(metadata)).toBeUndefined();
+  });
+
+  it('still resolves a working sink notifier when the observer onRawTokenDelta is malformed', () => {
+    let sinkFired = 0;
+    const metadata = {
+      [ATTEMPT_LIFECYCLE_KEY]: {
+        onAttemptStart: () => {},
+        onAttemptEnd: () => {},
+        onRawTokenDelta: 'malformed',
+      },
+      [RAW_TOKEN_DELTA_SINK_KEY]: () => {
+        sinkFired++;
+      },
+    };
+
+    const notifier = resolveRawTokenDeltaNotifier(metadata);
+    expect(notifier).toBeTypeOf('function');
+    notifier?.();
+    expect(sinkFired).toBe(1);
   });
 });
