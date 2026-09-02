@@ -20,6 +20,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { Storage } from '@vybestack/llxprt-code-storage';
+import { useFakeEngine } from '../../test-utils/fake-dependency-engine-harness.js';
 import { runContainerSandbox } from './sandbox-exec.js';
 
 // The host credential-proxy server binds real sockets and reads the real
@@ -37,15 +38,14 @@ void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
   stopProxy: vi.fn(async () => {}),
 }));
 
-// Explicit factory mock: execFile, execSync, and spawn are stubbed so these
-// tests do not invoke the container engine (see sandbox-containers.test.ts for
-// the full rationale; `exec` stays real so promisify(exec) keeps settling).
+// Main-container spawn and shell-based name lookup are stubbed. The async
+// orphan-recovery engine probe and synchronous dependency-volume operations
+// stay real and reach the executable fake engine through PATH.
 const __actual = { ...(await import('node:child_process')) };
 void vi.mock('node:child_process', () => {
   const actual: typeof import('node:child_process') = __actual;
   return {
     ...actual,
-    execFile: vi.fn(),
     execSync: vi.fn(),
     spawn: vi.fn(),
   };
@@ -73,6 +73,7 @@ function setNetworkEnvironment(
 }
 
 describe('#3450 private dependency storage lifecycle on a failed launch', () => {
+  const engine = useFakeEngine();
   let environmentSnapshot: NodeJS.ProcessEnv;
   let fixturePath = '';
   let originalCwd = '';
@@ -92,29 +93,6 @@ describe('#3450 private dependency storage lifecycle on a failed launch', () => 
       });
     });
     return proc;
-  }
-
-  /** Lets startup orphan recovery run against an empty managed-container list. */
-  function satisfyOrphanRecoveryProbe(): void {
-    const execFileMock = childProcess.execFile as unknown as Mock<
-      typeof childProcess.execFile
-    >;
-    execFileMock.mockImplementation(((
-      _command: string,
-      _args: readonly string[],
-      _options: childProcess.ExecFileOptionsWithStringEncoding,
-      callback: (
-        error: childProcess.ExecFileException | null,
-        stdout: string,
-        stderr: string,
-      ) => void,
-    ) => {
-      const proc = completedEngineProcess('');
-      queueMicrotask(() => {
-        callback(null, '', '');
-      });
-      return proc;
-    }) as unknown as typeof childProcess.execFile);
   }
 
   /** Lets preparation continue past the selected-image presence check. */
@@ -145,10 +123,50 @@ describe('#3450 private dependency storage lifecycle on a failed launch', () => 
     }) as unknown as typeof childProcess.spawn);
   }
 
+  function requiredFlagValue(args: readonly string[], flag: string): string {
+    const index = args.indexOf(flag);
+    const value = index === -1 ? undefined : args[index + 1];
+    if (value === undefined) throw new Error(`Missing ${flag} value`);
+    return value;
+  }
+
+  function satisfyProbeThenAttachSuccessfulMain(): void {
+    const spawnMock = childProcess.spawn as unknown as Mock<
+      typeof childProcess.spawn
+    >;
+    spawnMock.mockImplementation(((_command: string, args: string[]) => {
+      if (args[0] === 'images') {
+        return completedEngineProcess('image-id\n');
+      }
+      const attachArgs = ['run', '--name', requiredFlagValue(args, '--name')];
+      for (let index = 0; index < args.length - 1; index++) {
+        if (args[index] === '--mount') {
+          attachArgs.push('--mount', args[index + 1]);
+        }
+      }
+      attachArgs.push(engine.config.image, 'true');
+      const attached = __actual.spawnSync(engine.command, attachArgs, {
+        encoding: 'utf8',
+        env: process.env,
+      });
+      if (attached.status !== 0) {
+        throw new Error(`Fake main container failed: ${attached.stderr}`);
+      }
+      return completedEngineProcess('');
+    }) as unknown as typeof childProcess.spawn);
+  }
+
   function leakedRunRoots(): string[] {
     return fs
       .readdirSync(Storage.getGlobalCacheDir())
       .filter((entry) => entry.startsWith('sandbox-node-modules-'));
+  }
+
+  /** The engine-owned dependency storage is fully released again. */
+  function assertStorageReleased(): void {
+    expect(leakedRunRoots()).toStrictEqual([]);
+    expect(engine.volumeNames()).toStrictEqual([]);
+    expect(engine.containerNames()).toStrictEqual([]);
   }
 
   beforeEach(() => {
@@ -177,7 +195,6 @@ describe('#3450 private dependency storage lifecycle on a failed launch', () => 
     delete process.env.SANDBOX_SET_UID_GID;
     delete process.env.LLXPRT_DEBUG_PORT;
     delete process.env.NODE_ENV;
-    satisfyOrphanRecoveryProbe();
     satisfyImagePresenceProbe();
   });
 
@@ -193,17 +210,21 @@ describe('#3450 private dependency storage lifecycle on a failed launch', () => 
     }
   });
 
-  it('rejects with the credential bridge error and leaves no per-run subtree', async () => {
+  it('rejects with the credential bridge error and leaves no dependency volume behind', async () => {
     await expect(runContainerSandbox(CONFIG, [])).rejects.toThrowError(
       'macOS credential bridge requires container networking; enable networking or use Linux for network-off sandboxing.',
     );
 
-    // Storage is created earlier in preparation; the handled failure must
-    // remove it again rather than leak the private subtree in the cache.
-    expect(leakedRunRoots()).toStrictEqual([]);
-  });
+    // Storage is created earlier in preparation (the engine saw the volume
+    // creates and the init run); the handled failure must release every
+    // engine resource again rather than leak it.
+    expect(engine.invocations().some((argv) => argv[0] === 'volume')).toBe(
+      true,
+    );
+    assertStorageReleased();
+  }, 30_000);
 
-  it('rejects and releases the per-run storage when the engine launch itself fails', async () => {
+  it('rejects and releases the dependency volumes when the engine launch itself fails', async () => {
     // Preparation must complete, so the credential bridge requirement may
     // not fire: networking is unset (the macOS requirement triggers only
     // with `network: off`) and the os.platform spy still reports 'darwin'
@@ -216,10 +237,23 @@ describe('#3450 private dependency storage lifecycle on a failed launch', () => 
       'engine launch failed',
     );
 
-    // The storage was created during preparation; a launch failure after
-    // preparation must remove it again rather than leak the subtree.
-    expect(leakedRunRoots()).toStrictEqual([]);
+    // The volumes were created during preparation; a launch failure after
+    // preparation must release them again rather than leak them.
+    expect(engine.invocations().some((argv) => argv[0] === 'volume')).toBe(
+      true,
+    );
+    assertStorageReleased();
   });
+
+  it('records and removes an attached main container before releasing its volumes', async () => {
+    setNetworkEnvironment(undefined, undefined, undefined);
+    satisfyProbeThenAttachSuccessfulMain();
+
+    const result = await runContainerSandbox(CONFIG, []);
+
+    expect(result.exitCode).toBe(0);
+    assertStorageReleased();
+  }, 30_000);
 
   it('stops a recognized wrong-platform host tree before any engine invocation', async () => {
     // A host ELF addon under a macOS host: the preflight must abort the
@@ -232,19 +266,13 @@ describe('#3450 private dependency storage lifecycle on a failed launch', () => 
       path.join(fixturePath, 'node_modules', 'host-pkg', 'addon.node'),
       Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00]),
     );
-    const spawnMock = childProcess.spawn as unknown as Mock<
-      typeof childProcess.spawn
-    >;
-
     await expect(runContainerSandbox(CONFIG, [])).rejects.toThrowError(
       'Sandbox dependency preflight failed',
     );
 
-    const engineInvocations = spawnMock.mock.calls
-      .map((call) => call[1])
-      .filter((callArgs) => Array.isArray(callArgs));
-    expect(engineInvocations).toHaveLength(1);
-    expect(engineInvocations[0]?.[0]).toBe('images');
+    // Host planning stopped the launch before image lookup, orphan recovery,
+    // volume creation, or any other engine side effect.
+    expect(engine.snapshot().invocations).toStrictEqual([]);
     expect(leakedRunRoots()).toStrictEqual([]);
   });
 });

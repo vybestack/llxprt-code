@@ -49,6 +49,7 @@ import {
   getProxyCapabilityToken,
 } from '@vybestack/llxprt-code-providers/auth.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
+import type { DependencyVolumeLifecycle } from './sandbox-node-modules.js';
 
 export { containerMountSources };
 
@@ -65,11 +66,12 @@ export interface ContainerSandboxPrepared {
   proxyCommand: string | undefined;
   userFlag: string;
   image: string;
+  containerName: string;
   workdir: string;
   portForwardingResult: PortForwardingResult | undefined;
   credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
   credentialProxyBridgeCleanup: (() => void) | undefined;
-  dependencyStorageCleanup: (() => void) | undefined;
+  dependencyVolumeLifecycle: DependencyVolumeLifecycle;
   reservedTunnelPorts: Set<number>;
   sshResult: SshAgentResult;
 }

@@ -11,10 +11,9 @@
  * The sandbox shares the workspace with the host as a read-write bind, so
  * host-installed `node_modules` trees leak into the container with host
  * binaries (and vice versa). Before a container launch, the workspace's
- * dependency destinations are replaced by fresh, empty, host-backed private
- * binds rooted under the LLxprt cache directory. The sandboxed agent then
- * installs, builds, and tests against that per-run storage, and the storage
- * is removed when the session ends.
+ * dependency destinations are replaced by fresh, empty engine-owned named
+ * volumes. The sandboxed agent installs, builds, and tests against that
+ * per-run storage, and the selected engine removes it when the session ends.
  *
  * A read-only preflight walks the EXISTING protected host trees in full
  * and fails the launch when it recognizes wrong-platform native binaries
@@ -36,10 +35,20 @@ import path from 'node:path';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import type { SandboxConfig } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import { Storage } from '@vybestack/llxprt-code-storage';
 import { getContainerPath } from './sandbox-env.js';
-
-const RUN_ROOT_PREFIX = 'sandbox-node-modules-';
+import {
+  INIT_RUN_TIMEOUT_MS,
+  VOLUME_OPERATION_TIMEOUT_MS,
+  addSandboxDependencyRunLabel,
+  buildDependencyInitRunArgs,
+  buildDependencyVolumeCreateArgs,
+  buildVolumeMountFlagArg,
+  createSandboxDependencyRunId,
+  engineFailureDetail,
+  listEngineContainerNames,
+  planDependencyVolumeNames,
+  runEngineCommand,
+} from './sandbox-dependency-volumes.js';
 
 /**
  * The image-global executable location validated for this sandbox image:
@@ -439,10 +448,9 @@ function resolveNearestExistingPath(candidate: string): string {
 function readLiteralWorkspaceDeclarations(manifestPath: string): string[] {
   let declarations: unknown;
   try {
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as {
-      workspaces?: unknown;
-    };
-    declarations = manifest.workspaces;
+    const manifest: unknown = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    if (typeof manifest !== 'object' || manifest === null) return [];
+    declarations = Reflect.get(manifest, 'workspaces');
   } catch {
     return [];
   }
@@ -595,88 +603,176 @@ function warnCleanupFailed(
   process.stderr.write(message);
 }
 
-/**
- * Registers the idempotent per-run storage cleanup on the process-level
- * handled exits immediately after creation, so signals and failures in any
- * later preparation or launch step cannot leak the subtree. The returned
- * cleanup removes the subtree plus engine-created empty mountpoints,
- * reports failures as user-visible warnings, and unregisters itself.
- *
- * The signal handlers cooperate with handlers owned by other lifecycles:
- * registering any listener replaces a signal's default termination, so
- * after cleaning up, a signal no other handler owns is re-raised to
- * restore that termination. When another owner's handler is present (for
- * example the sandbox-process lifecycle wired after launch), that owner
- * decides how the process ends (#3450 OCR F9).
- */
-function registerStorageLifecycle(
-  runRoot: string,
-  originallyAbsentDestinations: readonly string[],
-): () => void {
-  let removed = false;
-  const onSigint = (): void => handleTerminationSignal('SIGINT');
-  const onSigterm = (): void => handleTerminationSignal('SIGTERM');
-  const removeStorage = (): void => {
-    if (removed) return;
-    removed = true;
-    process.off('exit', removeStorage);
-    process.off('SIGINT', onSigint);
-    process.off('SIGTERM', onSigterm);
-    try {
-      fs.rmSync(runRoot, { recursive: true, force: true });
-    } catch (error) {
-      warnCleanupFailed(
-        'remove the private sandbox dependency storage',
-        runRoot,
-        error,
+export interface DependencyVolumeLifecycle {
+  (): void;
+  recordMainContainerName(name: string): void;
+  release(): void;
+}
+
+export type DependencyMountPlan =
+  | { readonly enabled: false }
+  | {
+      readonly enabled: true;
+      readonly workdir: string;
+      readonly destinations: readonly string[];
+      readonly originallyAbsentDestinations: readonly string[];
+    };
+
+interface MutableDependencyVolumeLifecycle extends DependencyVolumeLifecycle {
+  recordCreatedVolume(name: string): void;
+}
+
+function containerEngine(config: SandboxConfig): 'docker' | 'podman' {
+  if (config.command === 'docker' || config.command === 'podman') {
+    return config.command;
+  }
+  throw new FatalSandboxError(
+    `Private sandbox dependency volumes require Docker or Podman, not '${config.command}'.`,
+  );
+}
+
+function warnEngineCleanupFailed(
+  operation: string,
+  target: string,
+  detail: string,
+): void {
+  const message = `Warning: failed to ${operation} '${target}': ${detail}
+`;
+  debugLogger.error(message);
+  process.stderr.write(message);
+}
+
+function removeDependencyContainer(
+  engine: 'docker' | 'podman',
+  name: string,
+): void {
+  const result = runEngineCommand(
+    engine,
+    ['rm', '-f', name],
+    VOLUME_OPERATION_TIMEOUT_MS,
+  );
+  if (result.status !== 0) {
+    warnEngineCleanupFailed(
+      'remove the private sandbox dependency container',
+      name,
+      engineFailureDetail(result),
+    );
+  }
+}
+
+function removeAttachedDependencyContainers(
+  engine: 'docker' | 'podman',
+  names: readonly string[],
+): void {
+  const listed = listEngineContainerNames(engine);
+  if (!listed.ok) {
+    warnEngineCleanupFailed(
+      'list private sandbox dependency containers before removing',
+      names.join(', '),
+      listed.detail,
+    );
+    for (const name of names) removeDependencyContainer(engine, name);
+    return;
+  }
+  for (const name of names) {
+    if (listed.names.includes(name)) removeDependencyContainer(engine, name);
+  }
+}
+
+function removeDependencyVolumes(
+  engine: 'docker' | 'podman',
+  names: readonly string[],
+): void {
+  for (const name of names) {
+    const result = runEngineCommand(
+      engine,
+      ['volume', 'rm', '-f', name],
+      VOLUME_OPERATION_TIMEOUT_MS,
+    );
+    if (result.status !== 0) {
+      warnEngineCleanupFailed(
+        'remove the private sandbox dependency volume',
+        name,
+        engineFailureDetail(result),
       );
     }
+  }
+}
+
+function runEngineCleanupStep(
+  operation: string,
+  engine: 'docker' | 'podman',
+  cleanup: () => void,
+): void {
+  try {
+    cleanup();
+  } catch (error) {
+    warnEngineCleanupFailed(operation, engine, errorMessage(error));
+  }
+}
+
+function registerVolumeLifecycle(
+  engine: 'docker' | 'podman',
+  initContainerName: string,
+  originallyAbsentDestinations: readonly string[],
+): MutableDependencyVolumeLifecycle {
+  let released = false;
+  let createdVolumes: readonly string[] = [];
+  let mainContainerName: string | undefined;
+  const onSigint = (): void => handleTerminationSignal('SIGINT');
+  const onSigterm = (): void => handleTerminationSignal('SIGTERM');
+  const release = (): void => {
+    if (released) return;
+    released = true;
+    process.off('exit', release);
+    process.off('SIGINT', onSigint);
+    process.off('SIGTERM', onSigterm);
+    const containers = [mainContainerName, initContainerName].filter(
+      (name): name is string => name !== undefined,
+    );
+    runEngineCleanupStep('remove dependency containers for', engine, () =>
+      removeAttachedDependencyContainers(engine, containers),
+    );
+    runEngineCleanupStep('remove dependency volumes for', engine, () =>
+      removeDependencyVolumes(engine, createdVolumes),
+    );
     for (const destination of originallyAbsentDestinations) {
       removeEngineCreatedMountpoint(destination);
     }
   };
   const handleTerminationSignal = (signal: 'SIGINT' | 'SIGTERM'): void => {
-    removeStorage();
-    // removeStorage unregistered this handler first, so any listener still
-    // attached belongs to another lifecycle; only when nobody else owns the
-    // signal do we re-raise it so the process keeps its default exit.
+    release();
     if (process.listenerCount(signal) === 0) {
       process.kill(process.pid, signal);
     }
   };
-  process.on('exit', removeStorage);
+  const lifecycle = Object.assign(release, {
+    recordCreatedVolume: (name: string): void => {
+      if (!released) createdVolumes = [...createdVolumes, name];
+    },
+    recordMainContainerName: (name: string): void => {
+      if (!released) mainContainerName = name;
+    },
+    release,
+  });
+  process.on('exit', release);
   process.on('SIGINT', onSigint);
   process.on('SIGTERM', onSigterm);
-  return removeStorage;
+  return lifecycle;
 }
 
-/**
- * Prepares the private per-run dependency mounts for a container launch and
- * appends them to `args` AFTER the shared workspace bind (later mounts win,
- * so each protected destination is hidden by its empty private bind).
- *
- * The read-only host preflight runs BEFORE any storage is created; it
- * traverses the full protected trees (unbounded, so contamination is not
- * missed) while keeping each file's inspection bounded to a header probe
- * with at most one positioned follow-up read. If it fails, nothing is
- * created and the launch stops with repair guidance.
- * `NODE_ENV=development` keeps the legacy single workspace bind (#3455).
- *
- * @returns an idempotent cleanup that removes the per-run storage subtree.
- */
-export function addPrivateDependencyMounts(
-  config: SandboxConfig,
-  args: string[],
+function noDependencyVolumeLifecycle(): DependencyVolumeLifecycle {
+  const release = (): void => {};
+  return Object.assign(release, {
+    recordMainContainerName: (_name: string): void => {},
+    release,
+  });
+}
+
+export function planPrivateDependencyMounts(
   workdir: string,
-): () => void {
-  if (process.env.NODE_ENV === 'development') {
-    debugLogger.log(
-      'NODE_ENV=development: keeping the shared workspace bind for the ' +
-        'source-entrypoint sandbox path; private dependency isolation is ' +
-        'installed-mode only.',
-    );
-    return () => {};
-  }
+): DependencyMountPlan {
+  if (process.env.NODE_ENV === 'development') return { enabled: false };
 
   const workspaceRealRoot = fs.realpathSync(workdir);
   const destinations = resolveProtectedNodeModulesDestinations(workdir);
@@ -684,51 +780,88 @@ export function addPrivateDependencyMounts(
     assertDestinationChainIsDirectories(workdir, destination);
     preflightProtectedTree(destination, workdir, workspaceRealRoot);
   }
-  const originallyAbsent = destinations.filter(
-    (destination) => !fs.existsSync(destination),
+  return {
+    enabled: true,
+    workdir,
+    destinations,
+    originallyAbsentDestinations: destinations.filter(
+      (destination) => !fs.existsSync(destination),
+    ),
+  };
+}
+
+export function addPrivateDependencyMounts(
+  config: SandboxConfig,
+  args: string[],
+  workdir: string,
+  planned: DependencyMountPlan = planPrivateDependencyMounts(workdir),
+): DependencyVolumeLifecycle {
+  if (!planned.enabled) {
+    debugLogger.log(
+      'NODE_ENV=development: keeping the shared workspace bind for the ' +
+        'source-entrypoint sandbox path; private dependency isolation is ' +
+        'installed-mode only.',
+    );
+    return noDependencyVolumeLifecycle();
+  }
+
+  const engine = containerEngine(config);
+  const runId = createSandboxDependencyRunId();
+  const volumeNames = planDependencyVolumeNames(planned.destinations.length);
+  const initContainerName = `${volumeNames[0]}-init`;
+  const lifecycle = registerVolumeLifecycle(
+    engine,
+    initContainerName,
+    planned.originallyAbsentDestinations,
   );
 
-  const cacheDir = Storage.getGlobalCacheDir();
-  let runRoot: string;
-  try {
-    runRoot = fs.mkdtempSync(path.join(cacheDir, RUN_ROOT_PREFIX));
-  } catch (error) {
-    throw new FatalSandboxError(
-      `Failed to create private sandbox dependency storage under ${cacheDir}: ` +
-        `${errorMessage(error)}`,
+  for (const name of volumeNames) {
+    const result = runEngineCommand(
+      engine,
+      buildDependencyVolumeCreateArgs(name, runId),
+      VOLUME_OPERATION_TIMEOUT_MS,
     );
-  }
-  const cleanup = registerStorageLifecycle(runRoot, originallyAbsent);
-
-  const labelSuffix = config.command === 'podman' ? ':z' : '';
-  try {
-    destinations.forEach((destination, index) => {
-      const privateDir = path.join(runRoot, String(index));
-      // The random run parent keeps mkdtemp's 0700 so nothing else on the
-      // host reaches the tree; each bind source itself must stay writable
-      // by whatever uid the engine selected for the main container, which
-      // can differ from the host owner (#3450 remediation F1).
-      fs.mkdirSync(privateDir, { mode: 0o777 });
-      fs.chmodSync(privateDir, 0o777);
-      args.push(
-        '--volume',
-        `${privateDir}:${getContainerPath(destination)}${labelSuffix}`,
+    if (result.status !== 0) {
+      lifecycle.release();
+      throw new FatalSandboxError(
+        `Failed to create the private sandbox dependency volume '${name}' with ${engine}: ${engineFailureDetail(result)}`,
       );
-    });
-  } catch (error) {
-    cleanup();
+    }
+    lifecycle.recordCreatedVolume(name);
+  }
+
+  const initResult = runEngineCommand(
+    engine,
+    buildDependencyInitRunArgs({
+      engine,
+      image: config.image,
+      initContainerName,
+      volumes: volumeNames,
+      runId,
+    }),
+    INIT_RUN_TIMEOUT_MS,
+  );
+  if (initResult.status !== 0) {
+    lifecycle.release();
     throw new FatalSandboxError(
-      `Failed to prepare private sandbox dependency storage for ${workdir}: ` +
-        `${errorMessage(error)}`,
+      `Failed to initialize the private sandbox dependency volumes with ${engine}: ${engineFailureDetail(initResult)}`,
     );
   }
 
+  addSandboxDependencyRunLabel(args, runId);
+  planned.destinations.forEach((destination, index) => {
+    args.push(
+      '--mount',
+      buildVolumeMountFlagArg(
+        volumeNames[index],
+        getContainerPath(destination),
+      ),
+    );
+  });
   debugLogger.log(
-    `Prepared private sandbox dependency storage ${runRoot} for ` +
-      `${destinations.length} destination(s).`,
+    `Prepared ${volumeNames.length} engine-owned private sandbox dependency volume(s).`,
   );
-
-  return cleanup;
+  return lifecycle;
 }
 
 function errorMessage(error: unknown): string {

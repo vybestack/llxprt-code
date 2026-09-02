@@ -10,9 +10,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-storage';
+import { useFakeEngine } from '../../test-utils/fake-dependency-engine-harness.js';
 import { addPrivateDependencyMounts } from './sandbox-node-modules.js';
 
-const DOCKER_CONFIG = { command: 'docker', image: 'test' } as const;
 const RUN_ROOT_PREFIX = 'sandbox-node-modules-';
 
 function makeWorkspace(): string {
@@ -21,8 +21,8 @@ function makeWorkspace(): string {
 
 /**
  * Points the production Storage resolver at a private temp cache root so
- * the tests never create or inspect run directories in the shared live
- * user cache (#3450 remediation F8).
+ * the tests never inspect run directories in the shared live user cache
+ * (#3450 remediation F8); engine-owned storage must never appear there.
  */
 function isolateCacheEnv(): () => void {
   const saved = process.env.LLXPRT_CACHE_HOME;
@@ -52,6 +52,7 @@ function privateRunRoots(): string[] {
 }
 
 describe('#3450 private dependency storage lifecycle', () => {
+  const engine = useFakeEngine();
   let workdir = '';
   let restoreCacheEnv: () => void;
 
@@ -69,37 +70,39 @@ describe('#3450 private dependency storage lifecycle', () => {
     restoreCacheEnv();
   });
 
-  it('registers process-level cleanup handlers immediately after creation and unregisters after completion', () => {
+  it('registers process-level cleanup handlers immediately after creation and unregisters after release', () => {
     const args: string[] = [];
     const exitBefore = process.listenerCount('exit');
     const sigintBefore = process.listenerCount('SIGINT');
     const sigtermBefore = process.listenerCount('SIGTERM');
-    const cleanup = addPrivateDependencyMounts(DOCKER_CONFIG, args, workdir);
+    const lifecycle = addPrivateDependencyMounts(engine.config, args, workdir);
     try {
       // Exactly one handler per signal is live while the storage exists.
       expect(process.listenerCount('exit') - exitBefore).toBe(1);
       expect(process.listenerCount('SIGINT') - sigintBefore).toBe(1);
       expect(process.listenerCount('SIGTERM') - sigtermBefore).toBe(1);
+      expect(engine.volumeNames()).toHaveLength(2);
     } finally {
-      cleanup();
+      lifecycle.release();
     }
-    // Completion unregisters every handler the creation registered.
+    // Release unregisters every handler the creation registered.
     expect(process.listenerCount('exit') - exitBefore).toBe(0);
     expect(process.listenerCount('SIGINT') - sigintBefore).toBe(0);
     expect(process.listenerCount('SIGTERM') - sigtermBefore).toBe(0);
+    expect(engine.volumeNames()).toStrictEqual([]);
     expect(privateRunRoots()).toStrictEqual([]);
   });
 
   it.each(['SIGINT', 'SIGTERM'] as const)(
-    'removes the per-run storage and terminates on %s instead of continuing',
+    'removes the engine-owned volumes and terminates on %s instead of continuing',
     (signal) => {
-      // A subprocess runs the production helper and signals itself while
-      // the storage exists. Registering a cleanup listener replaces the
-      // signal's default termination, so the lifecycle must both remove
-      // the subtree AND restore that termination when no other handler
-      // owns the signal: the child has to die from the signal, not
-      // continue into later work with its storage already gone (#3450
-      // OCR F9).
+      // A subprocess runs the production helper against the same fake
+      // engine state and signals itself while the storage exists.
+      // Registering a cleanup listener replaces the signal's default
+      // termination, so the lifecycle must both release the volumes AND
+      // restore that termination when no other handler owns the signal:
+      // the child has to die from the signal, not continue into later
+      // work with its storage already gone (#3450 OCR F9).
       const cacheDir = Storage.getGlobalCacheDir();
       const scriptPath = path.join(
         cacheDir,
@@ -114,15 +117,16 @@ describe('#3450 private dependency storage lifecycle', () => {
         'sandbox-node-modules.ts',
       );
       const script = [
+        'import { spawnSync } from "node:child_process";',
         'import fs from "node:fs";',
         `import { addPrivateDependencyMounts } from ${JSON.stringify(helperModule)};`,
         `const workdir = ${JSON.stringify(workdir)};`,
-        `const cacheDir = ${JSON.stringify(cacheDir)};`,
         `const storageReadyMarker = ${JSON.stringify(storageReadyMarker)};`,
         'const args: string[] = [];',
         'addPrivateDependencyMounts({ command: "docker", image: "test" }, args, workdir);',
-        `const runRoots = fs.readdirSync(cacheDir).filter((entry) => entry.startsWith(${JSON.stringify(RUN_ROOT_PREFIX)}));`,
-        'if (runRoots.length !== 1) throw new Error(`Expected exactly one private run root, found ${runRoots.length}`);',
+        'const listed = spawnSync("docker", ["volume", "ls", "--format", "{{.Name}}"], { encoding: "utf8", env: process.env });',
+        'const volumes = listed.stdout.trim().split("\\n").filter(Boolean);',
+        'if (listed.status !== 0 || volumes.length !== 2) throw new Error(`Expected two dependency volumes, found ${volumes.length}`);',
         'fs.writeFileSync(storageReadyMarker, "PRIVATE-STORAGE-READY:1\\n", { flush: true });',
         `process.kill(process.pid, ${JSON.stringify(signal)});`,
         // Only reachable when the cleanup handler wrongly swallows the
@@ -135,50 +139,57 @@ describe('#3450 private dependency storage lifecycle', () => {
         encoding: 'utf8',
         timeout: 30_000,
       });
+      if (!fs.existsSync(storageReadyMarker)) {
+        throw new Error(
+          `Signal fixture failed before readiness: status=${String(result.status)} signal=${String(result.signal)} stdout=${result.stdout} stderr=${result.stderr}`,
+        );
+      }
       expect(fs.readFileSync(storageReadyMarker, 'utf8')).toBe(
         'PRIVATE-STORAGE-READY:1\n',
       );
       expect(result.status).toBeNull();
       expect(result.signal).toBe(signal);
       expect(result.stdout).not.toContain('CONTINUED-AFTER-SIGNAL');
+      // The signal handler released the engine-owned volumes.
+      expect(engine.volumeNames()).toStrictEqual([]);
       expect(privateRunRoots()).toStrictEqual([]);
     },
   );
 
-  it('warns on stderr naming the operation and path when removal fails', () => {
-    const args: string[] = [];
-    const cleanup = addPrivateDependencyMounts(DOCKER_CONFIG, args, workdir);
-    const created = privateRunRoots()[0];
-    // Deterministic on privileged runners too: a chmod-based denial lets
-    // root remove the tree anyway, so the fault is injected at the
-    // filesystem boundary instead. Recursive removal of the run root
-    // fails the way an EPERM from the OS would (#3450 OCR F13), and the
-    // warning must still reach the user on stderr.
-    const realRmSync = fs.rmSync;
-    const rmSpy = vi
-      .spyOn(fs, 'rmSync')
-      .mockImplementation((...rmArgs: Parameters<typeof fs.rmSync>) => {
-        if (rmArgs[0] === created) {
-          throw Object.assign(
-            new Error(
-              `EPERM: operation not permitted, rm '${String(rmArgs[0])}'`,
-            ),
-            { code: 'EPERM' },
-          );
-        }
-        return realRmSync(...rmArgs);
-      });
+  it('warns on stderr naming the operation and volume when engine removal fails', () => {
+    const lifecycle = addPrivateDependencyMounts(engine.config, [], workdir);
+    const created = [...engine.volumeNames()].sort();
+    expect(created).toHaveLength(2);
+    // The fault lives in the engine, not the host: the first volume rm
+    // fails once (deterministic under any runner uid).
+    engine.setKnob('fail-volume-rm-once');
     const writeSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
     try {
-      expect(() => cleanup()).not.toThrow();
+      expect(() => lifecycle.release()).not.toThrow();
       const text = writeSpy.mock.calls.map((call) => String(call[0])).join('');
       expect(text).toContain(
-        'failed to remove the private sandbox dependency storage',
+        `failed to remove the private sandbox dependency volume '${created[0]}'`,
       );
-      expect(text).toContain(created);
+      expect(text).toContain('fake engine: volume rm failed by request');
+      // The warning did not stop the rest of the release: only the volume
+      // whose one removal failed remains, while the other was removed.
+      expect(engine.volumeNames()).toStrictEqual([created[0]]);
     } finally {
       writeSpy.mockRestore();
-      rmSpy.mockRestore();
     }
+  });
+
+  it('releases exactly once: a second release makes no engine calls and warns about nothing', () => {
+    const lifecycle = addPrivateDependencyMounts(engine.config, [], workdir);
+    lifecycle.release();
+    const invocationCount = engine.invocations().length;
+    const writeSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    try {
+      expect(() => lifecycle.release()).not.toThrow();
+    } finally {
+      writeSpy.mockRestore();
+    }
+    expect(engine.invocations()).toHaveLength(invocationCount);
+    expect(writeSpy.mock.calls).toStrictEqual([]);
   });
 });

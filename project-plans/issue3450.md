@@ -941,3 +941,198 @@ Final verification on the resulting tree:
 - test audit: 2,756 files scanned with zero scanner errors and no finding on
   `sandbox-launch-lifecycle.test.ts` (`test-audit-final/`);
 - `git diff --check`: exit 0.
+
+## Native Linux permission diagnosis after candidate `a0a800813`
+
+GitHub Actions run 33541297723, job 99968051249, failed the real Docker
+fixture on all three attempts. The raw Linux mode probe continued to establish
+that mode 0755 denies an unrelated UID and mode 0777 permits the initial write.
+The remaining failures separate into test-fixture defects and one unresolved
+host-backed storage limitation.
+
+### Evidence-backed failure classes
+
+1. The fixture root came from `mkdtempSync` at mode 0700. Docker could establish
+   the bind and working directory, and shell-relative installation operations
+   could run from that inherited directory. Node resolved
+   `./node_modules/private-dep/answer.js` to an absolute path beneath `/tmp` and
+   could not traverse the host-runner-owned fixture ancestor as image UID 1000.
+   Node reported the traversal failure as `MODULE_NOT_FOUND`. This was not lost
+   private storage or incorrect mount ordering.
+2. Ordinary direct sessions used the image UID instead of the UID selected by
+   production's Debian/Ubuntu current-user path. The reused shared `results`
+   directory then contained mode 0755 directories and mode 0644 files from a
+   different UID. Later fixture users could not create or replace source output.
+3. The image-global fixture forced `SANDBOX_SET_UID_GID=false` while host startup
+   populated its isolated config tree as the runner UID. The image UID could
+   not update prompts or telemetry files in that host-owned config mount.
+4. A mode 0777 private bind root permits a selected container UID to install.
+   It does not make package-manager descendants host-deletable. A foreign UID
+   normally creates directories at mode 0755 and files at mode 0644. The host
+   runner cannot unlink files inside those foreign-owned directories, so strict
+   recursive cleanup reports `EACCES` and leaves the run root.
+5. The final fixture `afterAll` failure followed from the same leaked
+   foreign-owned private tree. It is a consequence of item 4, not a separate
+   production workspace defect.
+
+### Small test-fixture correction
+
+The fixture now gives its temporary ancestor execute-only traversal to other
+UIDs with mode 0711, while retaining no directory-list permission. Its shared
+workspace and result directory are explicitly mode 0777, independent of the
+host umask. Ordinary production-argv sessions select the host UID on native
+Linux, matching the effective UID selected by production's current-user path.
+Before the dedicated UID 54321 workflow, the host fixture removes prior
+same-host-UID result output and recreates the empty result directory at mode
+0777. This prevents stale result ownership from stopping the foreign-UID test
+before it reaches private dependency storage. The UID 54321 workflow remains
+unchanged in strength and still executes the full root and nested install,
+build, and test sequence.
+
+On native Linux, the image-global fixture exercises `SANDBOX_SET_UID_GID=true`
+with a synthetic HOME located on its isolated config mount. Host startup and
+the container agent therefore use the same UID for that user-owned config tree,
+which models normal Debian/Ubuntu behavior without changing production or
+making a real user config directory world-writable. macOS retains the image
+user and real HOME because Docker and Podman use that HOME to locate their VM
+and image stores.
+
+### Native filesystem proof and unresolved blocker
+
+A deterministic Docker named-volume probe used the daemon VM's native Linux
+filesystem rather than macOS host-bind ownership translation. With workspace
+and private roots owned by UID 1001:
+
+- UID 1001 installed a realistic `node_modules/pkg/value` tree and UID 1001
+  removed the run root successfully.
+- UID 54321 installed the same tree through a mode 0777 private root.
+- UID 1001 then failed to remove `pkg/value` with `Permission denied` because
+  `pkg` was mode 0755 and owned by UID 54321.
+
+The complete output is preserved at
+`tmp/issue3450/native-linux-remediation/docker-vm-cross-uid-cleanup-proof.log`.
+This proves that initial writability and recursive cleanup are distinct POSIX
+operations. The current host-backed design cannot guarantee strict host cleanup
+for arbitrary mismatched container UIDs after realistic package-manager writes.
+
+No safe issue-scoped production correction was established. A same-UID normal
+Linux session is valid and cleanable. Supporting arbitrary foreign writers
+would require a separately designed in-container exit cleanup or an
+engine-mediated privileged cleanup lifecycle, including signal, crash, launch
+failure, Podman rootless mapping, and privilege-hardening behavior. Adding that
+mechanism here without native cross-engine proof would be speculative and would
+violate the prohibition on broad resource cleanup. The dedicated mismatched-UID
+plus strict-cleanup acceptance combination therefore remains an architectural
+blocker under the current host-backed design.
+
+### Finding classification
+
+| Finding or proposal | Class | Disposition |
+| --- | --- | --- |
+| Mode 0700 fixture ancestor prevents absolute-path traversal by the selected container UID | Blocker-Fix | Test fixture now uses mode 0711 on only its temporary ancestor. |
+| Ordinary direct harness bypasses production's native current-user selection | Blocker-Fix | Native Linux direct sessions use the host UID/GID; explicit UID 54321 coverage remains separate. |
+| Reused shared result output is not writable across fixture UIDs | Blocker-Fix | Recreate only the fixture result directory at mode 0777 before changing fixture UID; production never changes workspace permissions. |
+| Agent fixture forces image UID against runner-owned config and HOME | Blocker-Fix | On native Linux, exercise current-user setup with a mounted synthetic HOME. |
+| Arbitrary foreign UID creates mode 0755 dependency descendants that the host UID cannot recursively delete | Blocker-Fix, unresolved architecture blocker | Report explicitly. Do not mask the failure or claim strict cleanup. |
+| Change production to chmod the user's shared workspace | Reject | Violates shared-workspace permission ownership and the task constraint. |
+| Set umask 000 or chmod installed dependency descendants in the fixture | Reject | Makes the test manufacture cleanup behavior that package managers do not guarantee. |
+| Have the mismatched container delete its own tree solely to satisfy host cleanup | Reject | Weakens production cleanup evidence and conceals the host-backed limitation. |
+| Add a helper container, privileged engine cleanup, or entrypoint trap without a lifecycle and cross-engine design | Defer | Requires separate architecture, security, signal, crash, and rootless Podman acceptance. |
+| Persistent caches, retries, sleeps, stale-storage reaping, or broad cleanup | Defer | Not required for the diagnosed ordinary same-UID fixture defects and prohibited in this remediation. |
+
+### Remediation TDD and verification evidence
+
+The three repeated native-Linux failures are the behavioral RED at
+`tmp/issue3450/post-main/linux-docker-final-failed.log`. The corrected ordinary
+workflow is supported locally by the exact real Docker suite at 7 pass, 0 fail,
+11 runtime-selected skips (`local-docker-final.log`) and the exact real Podman
+suite at 7 pass, 0 fail, 11 runtime-selected skips
+(`local-podman-final2.log`). Both logs are under
+`tmp/issue3450/native-linux-remediation/`.
+
+Docker Desktop cannot prove native host-bind ownership, so the named-volume
+native-filesystem proof above supplies deterministic Linux evidence for both the
+same-UID GREEN cleanup and the foreign-UID blocker. The issue-focused six-file
+suite passed 131/131, targeted ESLint and Prettier passed, the test audit found
+no finding on the changed real-engine test, repository typecheck and build
+passed, full format completed without widening the change set, and the
+stepfun-37 smoke returned a haiku. `git diff --check` passed.
+
+The full `npm run test` emitted no observed failure before the configured
+900-second shell ceiling terminated it. Full `npm run lint` likewise exceeded
+the shell ceiling without emitting a diagnostic; the changed TypeScript file
+passed targeted ESLint with zero warnings. Candidate `a0a800813` had already
+passed both full gates before these test-only fixture changes. No production
+file changed, and no native-Linux CI GREEN is claimed for the unresolved
+foreign-UID strict-cleanup combination.
+
+## Engine-volume completion record
+
+The final storage implementation supersedes the earlier host-backed design
+statements in this plan. Each dependency lifecycle now creates one engine-owned
+named volume per protected destination. A bounded uid-0 init container verifies
+that every fresh volume is empty and sets its root to mode 1777. The main
+sandbox can then create realistic mode 0755 directories and mode 0644 files as
+an arbitrary selected UID, while Docker or rootless Podman owns final removal.
+No `sandbox-node-modules-*` directory is created in the host cache.
+
+Every lifecycle generates one UUID run ID. The volumes, init container, and
+named main sandbox container carry
+`com.vybestack.llxprt.sandbox-dependency-run=<uuid>` in addition to the existing
+managed and owner labels. This label is for run-scoped observation and cleanup
+ownership. It does not add stale-resource discovery or reclamation.
+
+### Run-label RED/GREEN evidence
+
+- RED: `tmp/issue3450/engine-volume-remediation/integration/run-label-red.log`
+  fails before collection because `SANDBOX_DEPENDENCY_RUN_LABEL` does not exist.
+- GREEN:
+  `tmp/issue3450/engine-volume-remediation/integration/run-label-green-attempt1.log`
+  passes 10 of 10 tests. State assertions prove one UUID is shared by all named
+  volumes, the init argv, and the live named main-container record. A second
+  lifecycle receives a different UUID.
+- Final focused suite:
+  `tmp/issue3450/engine-volume-remediation/integration/focused-green-final.log`
+  passes 72 of 72 tests. It retains state-based coverage for partial volume
+  creation failure, init failure details, attached-container cleanup ordering,
+  launch failure, SIGINT, SIGTERM, idempotent release, and strict restoration of
+  an originally absent mountpoint.
+
+### Real-engine evidence
+
+Both engines were available and held the selected image. Exact probes are in
+`docker-probe.log` and `podman-probe.log` under
+`tmp/issue3450/engine-volume-remediation/integration/`. Podman reports
+`rootless: true`.
+
+- Docker:
+  `tmp/issue3450/engine-volume-remediation/integration/docker-real-final.log`
+  passes all six selected-engine tests. Four production-argv runs query volumes
+  while their named main containers are alive. Each query is scoped to its UUID
+  and finds exactly one labeled volume per protected destination. The same query
+  finds zero after lifecycle release. The arbitrary `54321:54321` run records
+  actual UID 54321, completes environment check, install, build, and test, and
+  validates mode 0755 dependency directories plus mode 0644 dependency files.
+  The two gated image-global agent runs also pass.
+- Rootless Podman:
+  `tmp/issue3450/engine-volume-remediation/integration/podman-real-final.log`
+  passes the same six selected-engine tests with the same UID, mode, host-tree,
+  strict-absence, freshness, source-edit, run-scoped volume, and post-release
+  zero-volume assertions. The two gated image-global agent runs also pass.
+- Every production-argv run observes zero host cache directories matching
+  `sandbox-node-modules-*` while the volumes are active and after release.
+  Existing host dependency snapshots remain byte-for-byte unchanged, and the
+  declared destination that started absent is strictly absent after cleanup.
+
+### Verification and deferred boundary
+
+Targeted ESLint, Prettier check, CLI typecheck, test audit, and
+`git diff --check` pass. Logs are under
+`tmp/issue3450/engine-volume-remediation/integration/`. The test-audit scanner
+reports no finding on the touched #3450 tests.
+
+Stale named-volume reaping after SIGKILL, engine crash, host crash, or daemon
+interruption remains issue #3470. This completion does not list old run labels,
+apply age policy, or remove resources from another lifecycle. Active and
+handled-failure cleanup only removes resources recorded by the current
+lifecycle, with containers removed before their volumes.

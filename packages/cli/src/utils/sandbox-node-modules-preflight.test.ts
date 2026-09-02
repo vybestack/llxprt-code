@@ -10,9 +10,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-storage';
+import { useFakeEngine } from '../../test-utils/fake-dependency-engine-harness.js';
 import { addPrivateDependencyMounts } from './sandbox-node-modules.js';
 
-const DOCKER_CONFIG = { command: 'docker', image: 'test' } as const;
 const RUN_ROOT_PREFIX = 'sandbox-node-modules-';
 
 function makeWorkspace(): string {
@@ -170,6 +170,7 @@ function privateRunRoots(): string[] {
 }
 
 describe('#3450 bounded wrong-platform contamination preflight', () => {
+  const engine = useFakeEngine();
   let workdir = '';
   let restoreCacheEnv: () => void;
 
@@ -192,8 +193,8 @@ describe('#3450 bounded wrong-platform contamination preflight', () => {
     readonly cleanup: () => void;
   } {
     const args: string[] = [];
-    const cleanup = addPrivateDependencyMounts(DOCKER_CONFIG, args, workdir);
-    return { args, cleanup };
+    const lifecycle = addPrivateDependencyMounts(engine.config, args, workdir);
+    return { args, cleanup: () => lifecycle.release() };
   }
 
   /** The no-contamination cases still create storage; release it again. */
@@ -547,5 +548,9 @@ describe('#3450 bounded wrong-platform contamination preflight', () => {
 
     expect(() => prepareOnHost()).toThrowError(FatalSandboxError);
     expect(privateRunRoots()).toStrictEqual([]);
+    // No engine resource was created: the launch stopped before the very
+    // first engine invocation.
+    expect(engine.snapshot().invocations).toStrictEqual([]);
+    expect(engine.volumeNames()).toStrictEqual([]);
   });
 });

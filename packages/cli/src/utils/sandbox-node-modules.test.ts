@@ -10,13 +10,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-storage';
+import { useFakeEngine } from '../../test-utils/fake-dependency-engine-harness.js';
 import {
   addPrivateDependencyMounts,
   resolveProtectedNodeModulesDestinations,
 } from './sandbox-node-modules.js';
 
-const DOCKER_CONFIG = { command: 'docker', image: 'test' } as const;
-const PODMAN_CONFIG = { command: 'podman', image: 'test' } as const;
 const RUN_ROOT_PREFIX = 'sandbox-node-modules-';
 
 function makeWorkspace(): string {
@@ -292,6 +291,7 @@ describe('#3450 protected node_modules destination resolution', () => {
 });
 
 describe('#3450 private per-run dependency mounts', () => {
+  const engine = useFakeEngine();
   let workdir = '';
   let restoreCacheEnv: () => void;
 
@@ -329,99 +329,42 @@ describe('#3450 private per-run dependency mounts', () => {
     restoreCacheEnv();
   });
 
-  function volumeOperands(args: readonly string[]): string[] {
-    const operands: string[] = [];
-    for (let i = 0; i < args.length; i++) {
-      if (args[i] === '--volume' && i + 1 < args.length) {
-        operands.push(args[i + 1]);
-      }
-    }
-    return operands;
-  }
-
-  it('adds one nested bind per protected destination after the workspace bind', () => {
+  it('adds one engine volume mount per protected destination after the workspace bind', () => {
     const args: string[] = ['--volume', `${workdir}:${workdir}`];
-    const cleanup = addPrivateDependencyMounts(DOCKER_CONFIG, args, workdir);
+    const lifecycle = addPrivateDependencyMounts(engine.config, args, workdir);
     try {
-      const runRoot = privateRunRoots()[0];
-      const operands = volumeOperands(args);
-      expect(operands).toStrictEqual([
-        `${workdir}:${workdir}`,
-        `${path.join(runRoot, '0')}:${path.join(workdir, 'node_modules')}`,
-        `${path.join(runRoot, '1')}:${path.join(workdir, 'packages', 'nested', 'node_modules')}`,
-        `${path.join(runRoot, '2')}:${path.join(workdir, 'packages', 'absent', 'node_modules')}`,
-      ]);
+      const mountValues = args.filter(
+        (token, index) => index > 0 && args[index - 1] === '--mount',
+      );
+      expect(mountValues).toHaveLength(3);
+      // Mounts come after the shared workspace bind; later mounts win, so
+      // each protected destination is hidden by its empty volume mount.
+      expect(args.indexOf('--mount')).toBeGreaterThan(1);
+      expect(
+        mountValues.every((value) => value.startsWith('type=volume,src=')),
+      ).toBe(true);
     } finally {
-      cleanup();
+      lifecycle.release();
     }
   });
 
-  it('sources the private binds from a unique run directory under the LLxprt cache root', () => {
-    const args: string[] = [];
-    const cleanup = addPrivateDependencyMounts(DOCKER_CONFIG, args, workdir);
+  it('creates no host-backed dependency storage', () => {
+    const lifecycle = addPrivateDependencyMounts(engine.config, [], workdir);
     try {
-      const cacheDir = Storage.getGlobalCacheDir();
-      const created = fs
-        .readdirSync(cacheDir)
-        .filter((entry) => entry.startsWith(RUN_ROOT_PREFIX));
-      expect(created).toHaveLength(1);
-      const runRoot = path.join(cacheDir, created[0]);
-      // Each protected destination gets its own fresh child directory.
-      for (const child of ['0', '1', '2']) {
-        expect(fs.statSync(path.join(runRoot, child)).isDirectory()).toBe(true);
-      }
+      // The per-run storage is engine-owned named volumes; nothing may
+      // appear under the LLxprt cache root.
+      expect(privateRunRoots()).toStrictEqual([]);
+      expect(engine.volumeNames()).toHaveLength(3);
     } finally {
-      cleanup();
-    }
-  });
-
-  it('makes each private directory writable by any container uid while the run parent stays host-private', () => {
-    const args: string[] = [];
-    const cleanup = addPrivateDependencyMounts(DOCKER_CONFIG, args, workdir);
-    try {
-      const runRoot = privateRunRoots()[0];
-      // The engine may select a main-container user whose uid differs from
-      // the host owner; a 0755 bind source would be unwritable there
-      // (#3450 remediation F1). Each child is world-writable...
-      for (const child of ['0', '1', '2']) {
-        expect(fs.statSync(path.join(runRoot, child)).mode & 0o777).toBe(0o777);
-      }
-      // ...while the random run parent keeps its mkdtemp-private 0700.
-      expect(fs.statSync(runRoot).mode & 0o777).toBe(0o700);
-    } finally {
-      cleanup();
-    }
-  });
-
-  it('labels podman mounts for SELinux sharing and leaves docker mounts unlabeled', () => {
-    const dockerArgs: string[] = [];
-    const dockerCleanup = addPrivateDependencyMounts(
-      DOCKER_CONFIG,
-      dockerArgs,
-      workdir,
-    );
-    const podmanArgs: string[] = [];
-    const podmanCleanup = addPrivateDependencyMounts(
-      PODMAN_CONFIG,
-      podmanArgs,
-      workdir,
-    );
-    try {
-      const dockerPrivate = volumeOperands(dockerArgs)[0];
-      const podmanPrivate = volumeOperands(podmanArgs)[0];
-      expect(dockerPrivate.endsWith(':z')).toBe(false);
-      expect(podmanPrivate.endsWith(':z')).toBe(true);
-    } finally {
-      dockerCleanup();
-      podmanCleanup();
+      lifecycle.release();
     }
   });
 
   it('leaves host dependency trees exactly as seeded and absent paths absent', () => {
     const absentDir = path.join(workdir, 'packages', 'absent', 'node_modules');
     const args: string[] = [];
-    const cleanup = addPrivateDependencyMounts(DOCKER_CONFIG, args, workdir);
-    cleanup();
+    const lifecycle = addPrivateDependencyMounts(engine.config, args, workdir);
+    lifecycle.release();
 
     // The trees were seeded by this test with known literal content, so the
     // full expectation is written out literally: preparation must not add,
@@ -451,25 +394,25 @@ describe('#3450 private per-run dependency mounts', () => {
   it('removes an engine-created empty mountpoint for a destination absent before launch', () => {
     const absentDir = path.join(workdir, 'packages', 'absent', 'node_modules');
     const args: string[] = [];
-    const cleanup = addPrivateDependencyMounts(DOCKER_CONFIG, args, workdir);
+    const lifecycle = addPrivateDependencyMounts(engine.config, args, workdir);
     // The engine materializes the mountpoint through the workspace bind
     // when the destination did not exist; simulate that observed behavior.
     fs.mkdirSync(absentDir, { recursive: true });
-    cleanup();
+    lifecycle.release();
     expect(fs.existsSync(absentDir)).toBe(false);
   });
 
   it('never removes a destination that gained content', () => {
     const absentDir = path.join(workdir, 'packages', 'absent', 'node_modules');
     const args: string[] = [];
-    const cleanup = addPrivateDependencyMounts(DOCKER_CONFIG, args, workdir);
+    const lifecycle = addPrivateDependencyMounts(engine.config, args, workdir);
     fs.mkdirSync(absentDir, { recursive: true });
     fs.writeFileSync(path.join(absentDir, 'kept.txt'), 'content\n');
-    cleanup();
+    lifecycle.release();
     expect(fs.existsSync(path.join(absentDir, 'kept.txt'))).toBe(true);
   });
 
-  it('keeps development-mode launches unchanged: no preflight, no mounts, no storage', () => {
+  it('keeps development-mode launches unchanged: no preflight, no mounts, no storage, no engine calls', () => {
     // NODE_ENV=development selects the excluded source-entrypoint path
     // (#3455); it must keep the legacy single workspace bind, and even a
     // recognized wrong-platform host tree must not stop it (#3450 F7).
@@ -481,10 +424,16 @@ describe('#3450 private per-run dependency mounts', () => {
         elfBytes(),
       );
       const args: string[] = ['--volume', `${workdir}:${workdir}`];
-      const cleanup = addPrivateDependencyMounts(DOCKER_CONFIG, args, workdir);
+      const lifecycle = addPrivateDependencyMounts(
+        engine.config,
+        args,
+        workdir,
+      );
       expect(args).toStrictEqual(['--volume', `${workdir}:${workdir}`]);
       expect(privateRunRoots()).toStrictEqual([]);
-      expect(() => cleanup()).not.toThrow();
+      expect(engine.snapshot().invocations).toStrictEqual([]);
+      expect(() => lifecycle.recordMainContainerName('any')).not.toThrow();
+      expect(() => lifecycle.release()).not.toThrow();
     } finally {
       if (savedEnv === undefined) {
         delete process.env.NODE_ENV;
@@ -504,52 +453,21 @@ describe('#3450 private per-run dependency mounts', () => {
       'a regular file where a directory is required',
     );
     const args: string[] = [];
-    expect(() =>
-      addPrivateDependencyMounts(DOCKER_CONFIG, args, workdir),
-    ).toThrowError(FatalSandboxError);
-    expect(() =>
-      addPrivateDependencyMounts(DOCKER_CONFIG, args, workdir),
-    ).toThrowError('non-directory');
-    expect(() =>
-      addPrivateDependencyMounts(DOCKER_CONFIG, args, workdir),
-    ).toThrowError(path.join(workdir, 'packages', 'absent', 'node_modules'));
-    expect(privateRunRoots()).toStrictEqual([]);
-  });
-
-  it('removes the dedicated run subtree on cleanup', () => {
-    const args: string[] = [];
-    const cleanup = addPrivateDependencyMounts(DOCKER_CONFIG, args, workdir);
-    expect(privateRunRoots()).not.toStrictEqual([]);
-    cleanup();
-    expect(privateRunRoots()).toStrictEqual([]);
-    // A second cleanup (the lifecycle may fire it more than once) stays quiet.
-    expect(() => cleanup()).not.toThrow();
-  });
-
-  it('reports the failing operation and path when cache storage cannot be created', () => {
-    // Deterministic on privileged runners too: a chmod-based denial is
-    // silently writable under root, but a regular file in the cache path
-    // makes mkdtemp fail with ENOTDIR no matter who runs the test
-    // (#3450 OCR F12).
-    const cacheDir = Storage.getGlobalCacheDir();
-    const denyFile = path.join(cacheDir, 'issue3450-deny-file');
-    fs.writeFileSync(denyFile, 'a regular file where the cache root must be');
-    const unusableCacheDir = path.join(denyFile, 'cache');
-    const cacheSpy = vi
-      .spyOn(Storage, 'getGlobalCacheDir')
-      .mockReturnValue(unusableCacheDir);
+    let thrown: unknown;
     try {
-      const args: string[] = [];
-      expect(() =>
-        addPrivateDependencyMounts(DOCKER_CONFIG, args, workdir),
-      ).toThrowError(FatalSandboxError);
-      expect(() =>
-        addPrivateDependencyMounts(DOCKER_CONFIG, args, workdir),
-      ).toThrowError(unusableCacheDir);
-    } finally {
-      cacheSpy.mockRestore();
-      fs.rmSync(denyFile, { force: true });
+      addPrivateDependencyMounts(engine.config, args, workdir);
+    } catch (error) {
+      thrown = error;
     }
+    if (!(thrown instanceof FatalSandboxError)) {
+      throw new Error('Expected a FatalSandboxError');
+    }
+    expect(thrown.message).toContain('non-directory');
+    expect(thrown.message).toContain(
+      path.join(workdir, 'packages', 'absent', 'node_modules'),
+    );
     expect(privateRunRoots()).toStrictEqual([]);
+    // The failure happens before any engine resource is created.
+    expect(engine.snapshot().invocations).toStrictEqual([]);
   });
 });

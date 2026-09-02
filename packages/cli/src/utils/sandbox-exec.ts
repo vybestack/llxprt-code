@@ -40,7 +40,12 @@ import {
 } from './sandbox-containers.js';
 import { stopProxy } from '@vybestack/llxprt-code-providers/auth.js';
 import { entrypoint } from './sandbox-entrypoint.js';
-import { addPrivateDependencyMounts } from './sandbox-node-modules.js';
+import {
+  addPrivateDependencyMounts,
+  planPrivateDependencyMounts,
+  type DependencyMountPlan,
+  type DependencyVolumeLifecycle,
+} from './sandbox-node-modules.js';
 import { ensureSandboxImageIsPresent } from './sandbox-image.js';
 import {
   setupSshAgentForwarding,
@@ -61,13 +66,17 @@ function removeSessionTmpdir(sessionTmpdir: string): void {
 }
 
 /** Validates image and builds initial container run args. */
-async function prepareContainerImageAndArgs(config: SandboxConfig): Promise<{
+async function prepareContainerImageAndArgs(
+  config: SandboxConfig,
+  workdir: string,
+  dependencyMountPlan: DependencyMountPlan,
+): Promise<{
   image: string;
   workdir: string;
   containerWorkdir: string;
   sessionTmpdir: string;
   args: string[];
-  dependencyStorageCleanup: () => void;
+  dependencyVolumeLifecycle: DependencyVolumeLifecycle;
 }> {
   // @plan:PLAN-20250214-CREDPROXY.P34 R3.4: Use realpath to resolve symlinks
   debugLogger.error(`hopping into sandbox (command: ${config.command}) ...`);
@@ -78,7 +87,6 @@ async function prepareContainerImageAndArgs(config: SandboxConfig): Promise<{
   );
   const isCustomProjectSandbox = fs.existsSync(projectSandboxDockerfile);
   const image = config.image;
-  const workdir = path.resolve(process.cwd());
   const containerWorkdir = getContainerPath(workdir);
 
   if (process.env.BUILD_SANDBOX !== undefined) {
@@ -114,14 +122,14 @@ async function prepareContainerImageAndArgs(config: SandboxConfig): Promise<{
       sessionTmpdir,
     );
     addContainerVolumeMounts(args);
-    // #3450: replace the workspace's node_modules destinations with fresh
-    // per-run private binds, appended after the shared workspace bind so the
-    // nested mounts win. The host-side contamination preflight runs inside
-    // this call BEFORE any storage is created.
-    const dependencyStorageCleanup = addPrivateDependencyMounts(
+    // #3450: append fresh engine-owned dependency volumes after the shared
+    // workspace bind so the nested mounts win. Host preflight and destination
+    // planning already completed before any engine operation.
+    const dependencyVolumeLifecycle = addPrivateDependencyMounts(
       config,
       args,
       workdir,
+      dependencyMountPlan,
     );
     return {
       image,
@@ -129,7 +137,7 @@ async function prepareContainerImageAndArgs(config: SandboxConfig): Promise<{
       containerWorkdir,
       sessionTmpdir,
       args,
-      dependencyStorageCleanup,
+      dependencyVolumeLifecycle,
     };
   } catch (error) {
     runBestEffortSyncCleanup(() => removeSessionTmpdir(sessionTmpdir));
@@ -186,7 +194,7 @@ interface ContainerEntrypointSetup {
   readonly podmanMacOSPortsForwarded: Set<string>;
   readonly entrypointPrefixes: string[];
   readonly credentialProxyBridgeCleanup: (() => void) | undefined;
-  readonly dependencyStorageCleanup: (() => void) | undefined;
+  readonly dependencyVolumeLifecycle: DependencyVolumeLifecycle;
 }
 
 async function prepareContainerEntrypoint({
@@ -196,7 +204,7 @@ async function prepareContainerEntrypoint({
   podmanMacOSPortsForwarded,
   entrypointPrefixes,
   credentialProxyBridgeCleanup,
-  dependencyStorageCleanup,
+  dependencyVolumeLifecycle,
 }: ContainerEntrypointSetup): Promise<{
   finalEntrypoint: string[];
   userFlag: string;
@@ -214,7 +222,7 @@ async function prepareContainerEntrypoint({
     return { finalEntrypoint, userFlag };
   } catch (error) {
     runBestEffortSyncCleanup(credentialProxyBridgeCleanup);
-    runBestEffortSyncCleanup(dependencyStorageCleanup);
+    runBestEffortSyncCleanup(dependencyVolumeLifecycle);
     throw error;
   }
 }
@@ -281,7 +289,12 @@ function execFileOutput(
     execFile(
       command,
       args,
-      { encoding: 'utf8', timeout: 5_000, killSignal: 'SIGKILL' },
+      {
+        encoding: 'utf8',
+        timeout: 5_000,
+        killSignal: 'SIGKILL',
+        env: process.env,
+      },
       (error, stdout) => {
         if (error !== null) {
           reject(error);
@@ -453,7 +466,17 @@ async function reapOrphanedSandboxContainers(
   }
 }
 
-/** Runs the Docker/Podman sandbox path — image build, arg assembly, and proxy setup. */
+async function planDependenciesAndReapOrphans(config: SandboxConfig): Promise<{
+  readonly workdir: string;
+  readonly dependencyMountPlan: DependencyMountPlan;
+}> {
+  const workdir = path.resolve(process.cwd());
+  const dependencyMountPlan = planPrivateDependencyMounts(workdir);
+  await reapOrphanedSandboxContainers(config);
+  return { workdir, dependencyMountPlan };
+}
+
+/** Runs the Docker/Podman sandbox path: image build, arg assembly, and proxy setup. */
 async function prepareContainerSandbox(
   config: SandboxConfig,
   nodeArgs: string[],
@@ -461,15 +484,17 @@ async function prepareContainerSandbox(
   cliArgs: string[],
 ): Promise<ContainerSandboxPrepared> {
   validateContainerSandboxEnv();
-  await reapOrphanedSandboxContainers(config);
+  const { workdir, dependencyMountPlan } =
+    await planDependenciesAndReapOrphans(config);
 
-  const { image, workdir, sessionTmpdir, args, dependencyStorageCleanup } =
-    await prepareContainerImageAndArgs(config);
+  const { image, sessionTmpdir, args, dependencyVolumeLifecycle } =
+    await prepareContainerImageAndArgs(config, workdir, dependencyMountPlan);
 
   // #3450: the private dependency storage exists from here on; every abort
   // path below releases it, and the per-session tmpdir (#3440) alongside it.
   const reservedTunnelPorts = new Set<number>();
   let networkAndEnv: ContainerNetworkAndEnv;
+  let containerName: string;
   try {
     const isPodmanMacOS =
       config.command === 'podman' && os.platform() === 'darwin';
@@ -480,11 +505,11 @@ async function prepareContainerSandbox(
       isPodmanMacOS,
       reservedTunnelPorts,
     );
-    const containerName = assignContainerName(args, config, image);
+    containerName = assignContainerName(args, config, image);
     addContainerEnvVars(args, config, containerName, nodeArgs, workdir);
   } catch (error) {
     runBestEffortSyncCleanup(() => removeSessionTmpdir(sessionTmpdir));
-    runBestEffortSyncCleanup(dependencyStorageCleanup);
+    runBestEffortSyncCleanup(dependencyVolumeLifecycle);
     throw error;
   }
   const {
@@ -510,7 +535,7 @@ async function prepareContainerSandbox(
     );
   } catch (error) {
     runBestEffortSyncCleanup(() => removeSessionTmpdir(sessionTmpdir));
-    runBestEffortSyncCleanup(dependencyStorageCleanup);
+    runBestEffortSyncCleanup(dependencyVolumeLifecycle);
     throw error;
   }
 
@@ -524,7 +549,7 @@ async function prepareContainerSandbox(
     entrypointPrefixes,
     credentialProxyBridgeCleanup:
       credentialProxySetup.credentialProxyBridgeCleanup,
-    dependencyStorageCleanup,
+    dependencyVolumeLifecycle,
   });
 
   return {
@@ -533,10 +558,11 @@ async function prepareContainerSandbox(
     proxyCommand,
     userFlag,
     image,
+    containerName,
     workdir,
     portForwardingResult,
     ...credentialProxySetup,
-    dependencyStorageCleanup,
+    dependencyVolumeLifecycle,
     reservedTunnelPorts,
     sshResult,
   };
@@ -582,10 +608,11 @@ async function executeContainerSandbox(
     proxyCommand,
     userFlag,
     image,
+    containerName,
     workdir,
     portForwardingResult,
     sshResult,
-    dependencyStorageCleanup,
+    dependencyVolumeLifecycle,
   } = prepared;
   let credentialProxyBridgeCleanup = prepared.credentialProxyBridgeCleanup;
 
@@ -610,6 +637,7 @@ async function executeContainerSandbox(
 
     const { stdinWasPaused, stdinHadRawMode } = handleStdinForSandbox();
     const sandboxProcess = spawn(config.command, args, { stdio: 'inherit' });
+    dependencyVolumeLifecycle.recordMainContainerName(containerName);
     wireProxyContainerCloseHandler(proxyContainerProcess, sandboxProcess);
     restoreStdinAfterSandbox(
       sandboxProcess,
@@ -641,16 +669,15 @@ async function executeContainerSandbox(
       });
     });
 
-    // Run storage cleanup after every close listener and its queued I/O have
-    // completed. Docker Desktop can expose the nested bind destination until
-    // teardown finishes; cleanup inside `close` can inspect that still-mounted
-    // destination and leave the engine-created empty mountpoint behind.
+    // Release volumes after every close listener and its queued I/O have
+    // completed. Docker Desktop can expose a nested destination until teardown
+    // finishes; an early release can leave an engine-created mountpoint behind.
     await new Promise<void>((resolve) => setImmediate(resolve));
-    dependencyStorageCleanup?.();
+    dependencyVolumeLifecycle.release();
 
     return { exitCode, portForwardingResult, credentialProxyBridgeCleanup };
   } catch (err) {
-    runBestEffortSyncCleanup(dependencyStorageCleanup);
+    runBestEffortSyncCleanup(dependencyVolumeLifecycle);
     throw err;
   }
 }

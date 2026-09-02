@@ -13,7 +13,7 @@
  * `addPrivateDependencyMounts` from packages/cli) and launch a REAL
  * Docker/Podman container with that exact argv. Inside one container
  * session, a fixture Node workspace runs its offline installer, build, and
- * test commands — the issue's exact workflow — so every assertion is on
+ * test commands, the issue's exact workflow, so every assertion is on
  * OBSERVED FILESYSTEM STATE (result files, host dependency tree snapshots,
  * leftover private per-run storage), never on hand-built mount flags.
  *
@@ -59,6 +59,7 @@ import {
   addContainerVolumeMounts,
 } from '../packages/cli/src/utils/sandbox-containers.js';
 import { addPrivateDependencyMounts } from '../packages/cli/src/utils/sandbox-node-modules.js';
+import { SANDBOX_DEPENDENCY_RUN_LABEL } from '../packages/cli/src/utils/sandbox-dependency-volumes.js';
 import { getContainerPath } from '../packages/cli/src/utils/sandbox-env.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -159,7 +160,6 @@ function imageGlobalCliBoots(engine: string, image: string): boolean {
 
 const IMAGE = resolveSandboxImage();
 const ENGINES = detectEngines(IMAGE);
-const RUN_ROOT_PREFIX = 'sandbox-node-modules-';
 
 // --- fixture ----------------------------------------------------------------
 
@@ -191,15 +191,28 @@ function writeScript(filePath: string, body: string): void {
   chmodSync(filePath, 0o755);
 }
 
+function resetFixtureResults(repoRoot: string): void {
+  const resultsDir = join(repoRoot, 'results');
+  rmSync(resultsDir, { recursive: true, force: true });
+  mkdirSync(resultsDir, { mode: 0o777 });
+  chmodSync(resultsDir, 0o777);
+}
+
 function buildFixture(home: string): FixtureWorkspace {
   const repoRoot = join(home, 'repo');
   const storageRoot = join(home, 'storage');
 
+  // Native Linux resolves absolute module paths through this ancestor after
+  // Docker bind-mounts /tmp. Keep the fixture private from listing while
+  // allowing the deliberately distinct container UID to traverse to the
+  // explicitly shared children.
+  chmodSync(home, 0o711);
   // The direct production-argv sessions intentionally run as image or
   // mismatched UIDs, so the shared source bind must model a writable workspace
   // rather than inheriting the host test runner's owner-only write permission.
   mkdirSync(repoRoot, { mode: 0o777 });
   chmodSync(repoRoot, 0o777);
+  resetFixtureResults(repoRoot);
 
   writeJsonFile(join(repoRoot, 'package.json'), {
     name: 'issue3450-fixture',
@@ -277,6 +290,7 @@ function buildFixture(home: string): FixtureWorkspace {
     join(repoRoot, 'env-check.sh'),
     [
       'mkdir -p results',
+      'id -u > results/actual-uid.txt',
       'command -v llxprt > results/llxprt-path.txt',
       'test -x /usr/local/bun/bin/bun',
       'echo ok > results/image-global-ok.txt',
@@ -317,6 +331,12 @@ function buildFixture(home: string): FixtureWorkspace {
     [
       'grep -q "answer=42" results/build-ok.txt',
       'grep -q "nested-answer=42" results/build-ok.txt',
+      'test "$(stat -c %a node_modules/private-dep)" = 755',
+      'test "$(stat -c %a node_modules/private-dep/answer.js)" = 644',
+      'test "$(stat -c %a node_modules/.bin/fixture-tool)" = 755',
+      'test "$(stat -c %a packages/nested/node_modules/nested-private-dep)" = 755',
+      'test "$(stat -c %a packages/nested/node_modules/nested-private-dep/answer.js)" = 644',
+      'echo realistic-permissions > results/dependency-modes-ok.txt',
       'echo tests-passed > results/test-ok.txt',
     ].join('\n'),
   );
@@ -466,39 +486,128 @@ function assertTreeUnchanged(
   expect(snapshotTree(root)).toStrictEqual(before);
 }
 
-function privateRunRoots(cacheDir: string): string[] {
-  if (!existsSync(cacheDir)) {
-    return [];
-  }
+function hostDependencyCacheRoots(cacheDir: string): string[] {
+  if (!existsSync(cacheDir)) return [];
   return readdirSync(cacheDir)
-    .filter((entry) => entry.startsWith(RUN_ROOT_PREFIX))
+    .filter((entry) => entry.startsWith('sandbox-node-modules-'))
     .map((entry) => join(cacheDir, entry));
 }
 
 // --- production-argv workflow launcher --------------------------------------
 
-interface WorkflowSession {
-  /** Exit status of the container command (null on timeout/signal). */
-  readonly status: number | null;
-  /** Captured container stdout for actionable CI launch failures. */
-  readonly stdout: string;
-  /** Captured container stderr, including spawn errors when present. */
-  readonly stderr: string;
-  /** Private per-run storage roots that existed BEFORE cleanup ran. */
-  readonly runRootsBeforeCleanup: readonly string[];
+interface WorkflowSession extends LaunchResult {
+  readonly runId: string;
+  readonly labeledVolumesWhileActive: readonly string[];
+  readonly mountedVolumeNames: readonly string[];
+  readonly mountedDestinations: readonly string[];
+  readonly labeledVolumesAfterRelease: readonly string[];
+  readonly hostCacheRootsWhileActive: readonly string[];
+  readonly hostCacheRootsAfterRelease: readonly string[];
+}
+
+interface WorkflowOptions {
+  readonly user?: string;
+  readonly whileActive?: () => void;
+}
+
+function addNativeLinuxHostUser(args: string[]): void {
+  if (process.platform !== 'linux') return;
+  args.push(
+    '--user',
+    `${String(process.getuid())}:${String(process.getgid())}`,
+  );
+}
+
+function flagValues(argv: readonly string[], flag: string): string[] {
+  const values: string[] = [];
+  for (let index = 0; index < argv.length - 1; index++) {
+    if (argv[index] === flag) values.push(argv[index + 1]);
+  }
+  return values;
+}
+
+function labelValue(argv: readonly string[], labelName: string): string {
+  const prefix = `${labelName}=`;
+  const value = flagValues(argv, '--label').find((label) =>
+    label.startsWith(prefix),
+  );
+  if (value === undefined) throw new Error(`Missing label '${labelName}'`);
+  return value.slice(prefix.length);
+}
+
+function mountField(spec: string, fieldName: string): string {
+  const prefix = `${fieldName}=`;
+  const value = spec
+    .split(',')
+    .find((field) => field.startsWith(prefix))
+    ?.slice(prefix.length);
+  if (value === undefined) {
+    throw new Error(`Mount '${spec}' is missing '${fieldName}'`);
+  }
+  return value;
+}
+
+function queryRunVolumes(engine: string, runId: string): string[] {
+  const filter = `label=${SANDBOX_DEPENDENCY_RUN_LABEL}=${runId}`;
+  const result = spawnSync(
+    engine,
+    ['volume', 'ls', '--filter', filter, '--format', '{{.Name}}'],
+    {
+      encoding: 'utf8',
+      timeout: 30_000,
+      killSignal: 'SIGKILL',
+      maxBuffer: 1024 * 1024,
+    },
+  );
+  if (result.status !== 0 || result.error !== undefined) {
+    throw new Error(
+      `Failed to query ${engine} volumes for run ID '${runId}' ` +
+        `(status ${String(result.status)}).\n` +
+        `--- stdout ---\n${result.stdout ?? ''}\n` +
+        `--- stderr ---\n${result.stderr ?? ''}\n` +
+        `--- spawn error ---\n${result.error?.message ?? ''}`,
+    );
+  }
+  return (result.stdout ?? '')
+    .split(/\r?\n/)
+    .filter((name) => name !== '')
+    .sort();
+}
+
+function bounded<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  description: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${description} exceeded ${timeoutMs}ms`)),
+      timeoutMs,
+    );
+    operation.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }
 
 /**
- * Builds the PRODUCTION container argv (same functions, same order, as
- * prepareContainerImageAndArgs in sandbox-exec.ts), runs one container
- * session executing `innerScript`, then performs the production cleanup and
- * reports what the launch created.
+ * Builds the production container argv in production order, observes the
+ * labeled engine volumes while the named main container is alive, then runs
+ * the requested workflow and releases the production lifecycle.
  */
-function runSandboxedWorkflow(
+async function runSandboxedWorkflow(
   engine: string,
   fixture: FixtureWorkspace,
   innerScript: string,
-): WorkflowSession {
+  options: WorkflowOptions = {},
+): Promise<WorkflowSession> {
   const config = { command: engine, image: IMAGE };
   const containerWorkdir = getContainerPath(fixture.repoRoot);
   const args = buildContainerRunArgs(
@@ -508,40 +617,104 @@ function runSandboxedWorkflow(
     containerWorkdir,
     realpathSync(tmpdir()),
   );
-  // The real launch runs attached to the user's terminal; this harness runs
-  // non-interactive, where docker rejects -t. Drop only the TTY allocation —
-  // every mount and hardening flag stays exactly as produced.
   const ttyIndex = args.indexOf('-t');
   if (ttyIndex !== -1) args.splice(ttyIndex, 1);
   addContainerVolumeMounts(args);
-  const cleanup = addPrivateDependencyMounts(config, args, fixture.repoRoot);
-  const runRoots = privateRunRoots(join(fixture.storageRoot, 'cache'));
-  let status: number | null = null;
+  const lifecycle = addPrivateDependencyMounts(config, args, fixture.repoRoot);
+  if (options.user === undefined) {
+    addNativeLinuxHostUser(args);
+  } else {
+    args.push('--user', options.user);
+  }
+  const containerName = `issue3450-${engine}-${randomUUID()}`;
+  args.push('--name', containerName);
+  lifecycle.recordMainContainerName(containerName);
+
+  const runId = labelValue(args, SANDBOX_DEPENDENCY_RUN_LABEL);
+  const mounts = flagValues(args, '--mount');
+  const mountedVolumeNames = mounts.map((mount) => mountField(mount, 'src'));
+  const mountedDestinations = mounts.map((mount) => mountField(mount, 'dst'));
+  const cacheDir = join(fixture.storageRoot, 'cache');
+  const readinessMarker = `issue3450-ready-${randomUUID()}`;
+  const wrappedScript = [
+    `printf '${readinessMarker}\\n'`,
+    'read issue3450_release',
+    innerScript,
+  ].join(' && ');
+
   let stdout = '';
   let stderr = '';
-  try {
-    const result = spawnSync(
-      engine,
-      [...args, IMAGE, 'sh', '-c', innerScript],
-      {
-        cwd: fixture.repoRoot,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        encoding: 'utf8',
-        timeout: SESSION_TIMEOUT_MS,
-        maxBuffer: 10 * 1024 * 1024,
-      },
-    );
-    status = result.status;
-    stdout = result.stdout ?? '';
-    stderr = result.stderr ?? '';
-    if (result.error !== undefined) {
-      status = null;
-      stderr += String(result.error);
+  let completed = false;
+  let readinessObserved = false;
+  let observeReadiness: () => void = () => {};
+  const readiness = new Promise<void>((resolve) => {
+    observeReadiness = resolve;
+  });
+  const child = spawn(engine, [...args, IMAGE, 'sh', '-c', wrappedScript], {
+    cwd: fixture.repoRoot,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  child.stdout.on('data', (chunk: Buffer) => {
+    stdout += chunk.toString();
+    if (!readinessObserved && stdout.includes(`${readinessMarker}\n`)) {
+      readinessObserved = true;
+      observeReadiness();
     }
+  });
+  child.stderr.on('data', (chunk: Buffer) => {
+    stderr += chunk.toString();
+  });
+  const completion = new Promise<LaunchResult>((resolve) => {
+    child.once('error', (error) => {
+      completed = true;
+      resolve({ status: null, stdout, stderr: `${stderr}${String(error)}` });
+    });
+    child.once('close', (status) => {
+      completed = true;
+      resolve({ status, stdout, stderr });
+    });
+  });
+
+  let activeVolumes: readonly string[] = [];
+  let hostCacheWhileActive: readonly string[] = [];
+  let launchResult: LaunchResult = { status: null, stdout: '', stderr: '' };
+  try {
+    const exitedBeforeReady = completion.then((result) => {
+      throw new Error(
+        `Container exited before readiness with status ${String(result.status)}.\n` +
+          `--- stdout ---\n${result.stdout}\n--- stderr ---\n${result.stderr}`,
+      );
+    });
+    await bounded(
+      Promise.race([readiness, exitedBeforeReady]),
+      SESSION_TIMEOUT_MS,
+      `${engine} container readiness`,
+    );
+    activeVolumes = queryRunVolumes(engine, runId);
+    hostCacheWhileActive = hostDependencyCacheRoots(cacheDir);
+    options.whileActive?.();
+    child.stdin.write('release\n');
+    child.stdin.end();
+    launchResult = await bounded(
+      completion,
+      SESSION_TIMEOUT_MS,
+      `${engine} workflow completion`,
+    );
   } finally {
-    cleanup();
+    lifecycle.release();
+    if (!completed) child.kill('SIGKILL');
   }
-  return { status, stdout, stderr, runRootsBeforeCleanup: runRoots };
+
+  return {
+    ...launchResult,
+    runId,
+    labeledVolumesWhileActive: activeVolumes,
+    mountedVolumeNames,
+    mountedDestinations,
+    labeledVolumesAfterRelease: queryRunVolumes(engine, runId),
+    hostCacheRootsWhileActive: hostCacheWhileActive,
+    hostCacheRootsAfterRelease: hostDependencyCacheRoots(cacheDir),
+  };
 }
 
 const RUN_ONE_SCRIPT = [
@@ -601,6 +774,32 @@ function expectLaunchSucceeded(result: LaunchResult): void {
   }
 }
 
+function expectEngineVolumeLifecycle(
+  session: WorkflowSession,
+  fixture: FixtureWorkspace,
+): void {
+  const expectedDestinations = [
+    ...fixture.protectedHostDirs,
+    fixture.absentProtectedDir,
+  ].map(getContainerPath);
+  expect(session.runId).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+  );
+  expect(session.labeledVolumesWhileActive).toHaveLength(
+    expectedDestinations.length,
+  );
+  expect(new Set(session.labeledVolumesWhileActive).size).toBe(
+    expectedDestinations.length,
+  );
+  expect([...session.mountedVolumeNames].sort()).toStrictEqual(
+    session.labeledVolumesWhileActive,
+  );
+  expect(session.mountedDestinations).toStrictEqual(expectedDestinations);
+  expect(session.hostCacheRootsWhileActive).toStrictEqual([]);
+  expect(session.labeledVolumesAfterRelease).toStrictEqual([]);
+  expect(session.hostCacheRootsAfterRelease).toStrictEqual([]);
+}
+
 // --- gated image-global agent launcher ---------------------------------------
 
 type SessionResult = LaunchResult;
@@ -615,12 +814,17 @@ function runAgentSession(
   // realpath lives under /private/var/folders. Forward the resolved form so
   // the path the in-container CLI reads exists through the bind.
   const responsesPath = realpathSync(responsesFile);
+  const useNativeLinuxUser = process.platform === 'linux';
   const childEnv: NodeJS.ProcessEnv = {
     PATH: process.env.PATH,
-    HOME: process.env.HOME,
-    // Keep this dependency-isolation fixture on the image-default user across
-    // host OSes; the engine suites separately retain an explicit mismatched UID.
-    SANDBOX_SET_UID_GID: 'false',
+    // Native Debian/Ubuntu production selects the host UID/GID. Keep that
+    // synthetic user's HOME on the writable config mount. On macOS the engine
+    // needs the real HOME to locate its VM and image store, and uses its image
+    // user as production does by default.
+    HOME: useNativeLinuxUser
+      ? join(fixture.storageRoot, 'config')
+      : process.env.HOME,
+    SANDBOX_SET_UID_GID: useNativeLinuxUser ? 'true' : 'false',
     NO_BROWSER: 'true',
     LLXPRT_NO_BROWSER_AUTH: 'true',
     CI: 'true',
@@ -698,9 +902,8 @@ function describeEngine(engine: string): void {
       beforeAll(() => {
         home = mkdtempSync(join(tmpdir(), `issue3450-${engine}-`));
         fixture = buildFixture(home);
-        // Point the PRODUCTION Storage resolver at the fixture's isolated
-        // cache/config roots so the private per-run storage lands there and
-        // can be asserted after exit, without touching the real user cache.
+        // Isolate the production cache root so each run can prove that engine
+        // volumes create no sandbox-node-modules directories on the host.
         savedStorageEnv = {
           LLXPRT_CONFIG_HOME: process.env.LLXPRT_CONFIG_HOME,
           LLXPRT_CACHE_HOME: process.env.LLXPRT_CACHE_HOME,
@@ -735,9 +938,14 @@ function describeEngine(engine: string): void {
 
       it(
         'one sandbox session installs, builds, and tests against private dependencies',
-        () => {
-          const session = runSandboxedWorkflow(engine, fixture, RUN_ONE_SCRIPT);
+        async () => {
+          const session = await runSandboxedWorkflow(
+            engine,
+            fixture,
+            RUN_ONE_SCRIPT,
+          );
           expectLaunchSucceeded(session);
+          expectEngineVolumeLifecycle(session, fixture);
 
           // The image-global llxprt and /usr/local/bun stayed available (not
           // over-mounted by the private dependency binds).
@@ -785,22 +993,20 @@ function describeEngine(engine: string): void {
           // nothing from the session.
           assertAbsentProtectedPathStrictlyGone(fixture.absentProtectedDir);
           expect(beforeAbsent).toBeUndefined();
-
-          // The launch created exactly one private per-run subtree under the
-          // LLxprt cache root, and the production cleanup removed it.
-          expect(session.runRootsBeforeCleanup).toHaveLength(1);
-          expect(
-            privateRunRoots(join(fixture.storageRoot, 'cache')),
-          ).toStrictEqual([]);
         },
         SESSION_TIMEOUT_MS,
       );
 
       it(
         'a second run starts with fresh private dependency storage',
-        () => {
-          const session = runSandboxedWorkflow(engine, fixture, RUN_TWO_SCRIPT);
+        async () => {
+          const session = await runSandboxedWorkflow(
+            engine,
+            fixture,
+            RUN_TWO_SCRIPT,
+          );
           expectLaunchSucceeded(session);
+          expectEngineVolumeLifecycle(session, fixture);
 
           expectResultFile(fixture, 'second-run-fresh.txt');
           expectNoBadResultFiles(fixture);
@@ -813,10 +1019,6 @@ function describeEngine(engine: string): void {
             assertTreeUnchanged(dir, beforeSnapshots[i]);
           });
           assertAbsentProtectedPathStrictlyGone(fixture.absentProtectedDir);
-          expect(session.runRootsBeforeCleanup).toHaveLength(1);
-          expect(
-            privateRunRoots(join(fixture.storageRoot, 'cache')),
-          ).toStrictEqual([]);
         },
         SESSION_TIMEOUT_MS,
       );
@@ -824,86 +1026,22 @@ function describeEngine(engine: string): void {
       it(
         'shows host source edits inside the running container',
         async () => {
-          // Production argv, async launch: the container polls for a source
-          // file that the HOST writes while the container is running, then
-          // reads it back. Proves the shared source bind is live in both
-          // directions during a session, not only at launch.
-          const config = { command: engine, image: IMAGE };
-          const containerWorkdir = getContainerPath(fixture.repoRoot);
-          const args = buildContainerRunArgs(
-            config,
-            IMAGE,
-            fixture.repoRoot,
-            containerWorkdir,
-            realpathSync(tmpdir()),
-          );
-          const ttyIndex = args.indexOf('-t');
-          if (ttyIndex !== -1) args.splice(ttyIndex, 1);
-          addContainerVolumeMounts(args);
-          const cleanup = addPrivateDependencyMounts(
-            config,
-            args,
-            fixture.repoRoot,
-          );
-          const innerScript = [
-            'i=0',
-            'while [ ! -f host-live-edit.txt ] && [ "$i" -lt 300 ]; do sleep 0.2; i=$((i+1)); done',
-            'mkdir -p results',
-            'cat host-live-edit.txt > results/host-edit-seen.txt',
-          ].join(String.fromCharCode(10));
-          const child = spawn(
+          const hostEditPath = join(fixture.repoRoot, 'host-live-edit.txt');
+          const session = await runSandboxedWorkflow(
             engine,
-            [...args, IMAGE, 'sh', '-c', innerScript],
+            fixture,
+            'mkdir -p results && cat host-live-edit.txt > results/host-edit-seen.txt',
             {
-              cwd: fixture.repoRoot,
-              stdio: ['ignore', 'pipe', 'pipe'],
+              whileActive: () => {
+                writeFileSync(
+                  hostEditPath,
+                  'host-written-while-running' + String.fromCharCode(10),
+                );
+              },
             },
           );
-          let stdout = '';
-          let stderr = '';
-          child.stdout.on('data', (chunk: Buffer) => {
-            stdout += chunk.toString();
-          });
-          child.stderr.on('data', (chunk: Buffer) => {
-            stderr += chunk.toString();
-          });
-          const hostEditPath = join(fixture.repoRoot, 'host-live-edit.txt');
-          const writeHostEdit = setTimeout(() => {
-            writeFileSync(
-              hostEditPath,
-              'host-written-while-running' + String.fromCharCode(10),
-            );
-          }, 750);
-          let closeStatus: number | null = null;
-          let closeError: string | null = null;
-          let raceTimer: ReturnType<typeof setTimeout> | undefined;
-          try {
-            const closed = new Promise<void>((resolve) => {
-              child.on('close', (code) => {
-                closeStatus = code;
-                resolve();
-              });
-              child.on('error', (err) => {
-                closeError = String(err);
-                resolve();
-              });
-            });
-            const timedOut = new Promise<void>((resolve) => {
-              raceTimer = setTimeout(resolve, SESSION_TIMEOUT_MS);
-            });
-            await Promise.race([closed, timedOut]);
-          } finally {
-            clearTimeout(writeHostEdit);
-            clearTimeout(raceTimer);
-            cleanup();
-          }
-          expectLaunchSucceeded({
-            status: closeError === null ? closeStatus : null,
-            stdout,
-            stderr:
-              stderr +
-              (closeError === null ? '' : `\nspawn error: ${closeError}`),
-          });
+          expectLaunchSucceeded(session);
+          expectEngineVolumeLifecycle(session, fixture);
           expect(
             readFileSync(
               join(fixture.repoRoot, 'results', 'host-edit-seen.txt'),
@@ -914,206 +1052,40 @@ function describeEngine(engine: string): void {
           fixture.protectedHostDirs.forEach((dir, i) => {
             assertTreeUnchanged(dir, beforeSnapshots[i]);
           });
-          expect(
-            privateRunRoots(join(fixture.storageRoot, 'cache')),
-          ).toStrictEqual([]);
+          assertAbsentProtectedPathStrictlyGone(fixture.absentProtectedDir);
         },
         SESSION_TIMEOUT_MS,
       );
 
       it(
-        'accepts mismatched-container-UID writes into the private dependency mounts',
-        () => {
-          // The private bind children are mode 0777 precisely so the
-          // already-selected main-container user can write them even when
-          // its UID differs from the host owner. Run the production argv
-          // with an arbitrary mismatched UID and execute the installer
-          // workflow end to end (root and nested trees).
-          const config = { command: engine, image: IMAGE };
-          const containerWorkdir = getContainerPath(fixture.repoRoot);
-          const args = buildContainerRunArgs(
-            config,
-            IMAGE,
-            fixture.repoRoot,
-            containerWorkdir,
-            realpathSync(tmpdir()),
+        'runs the complete workflow as arbitrary uid 54321 against realistic dependency modes',
+        async () => {
+          resetFixtureResults(fixture.repoRoot);
+          const session = await runSandboxedWorkflow(
+            engine,
+            fixture,
+            RUN_ONE_SCRIPT,
+            { user: '54321:54321' },
           );
-          const ttyIndex = args.indexOf('-t');
-          if (ttyIndex !== -1) args.splice(ttyIndex, 1);
-          addContainerVolumeMounts(args);
-          const cleanup = addPrivateDependencyMounts(
-            config,
-            args,
-            fixture.repoRoot,
-          );
-          // Select the main-container user explicitly as a UID that cannot
-          // match the host owner of the cache-resident private directories.
-          args.push('--user', '54321:54321');
-          let status: number | null = null;
-          let stdout = '';
-          let stderr = '';
-          try {
-            const result = spawnSync(
-              engine,
-              [
-                ...args,
-                IMAGE,
-                'sh',
-                '-c',
-                './install.sh && ./build.sh && ./test.sh',
-              ],
-              {
-                cwd: fixture.repoRoot,
-                stdio: ['ignore', 'pipe', 'pipe'],
-                encoding: 'utf8',
-                timeout: SESSION_TIMEOUT_MS,
-                maxBuffer: 10 * 1024 * 1024,
-              },
-            );
-            status = result.status;
-            stdout = result.stdout ?? '';
-            stderr =
-              (result.stderr ?? '') +
-              (result.error === undefined ? '' : String(result.error));
-          } finally {
-            cleanup();
-          }
-          expectLaunchSucceeded({ status, stdout, stderr });
+          expectLaunchSucceeded(session);
+          expectEngineVolumeLifecycle(session, fixture);
+          expect(
+            readFileSync(
+              join(fixture.repoRoot, 'results', 'actual-uid.txt'),
+              'utf8',
+            ).trim(),
+          ).toBe('54321');
+          expectResultFile(fixture, 'image-global-ok.txt');
           expectResultFile(fixture, 'install-ok.txt');
           expectResultFile(fixture, 'nested-install-ok.txt');
           expectResultFile(fixture, 'build-ok.txt');
           expectResultFile(fixture, 'test-ok.txt');
+          expectResultFile(fixture, 'dependency-modes-ok.txt');
           expectNoBadResultFiles(fixture);
           fixture.protectedHostDirs.forEach((dir, i) => {
             assertTreeUnchanged(dir, beforeSnapshots[i]);
           });
           assertAbsentProtectedPathStrictlyGone(fixture.absentProtectedDir);
-          expect(
-            privateRunRoots(join(fixture.storageRoot, 'cache')),
-          ).toStrictEqual([]);
-        },
-        SESSION_TIMEOUT_MS,
-      );
-
-      it(
-        'enforces uid-mismatch write semantics on real Linux engine storage (0755 denies, 0777 allows)',
-        () => {
-          // On this macOS host, host-backed binds cross virtiofs, which does
-          // NOT enforce mode bits (probe evidence: a 0755 root-owned host
-          // bind accepted writes from --user 54321 on BOTH engines), so the
-          // denial cannot be shown through the workspace bind here. The
-          // private-directory mode matters exactly where the engine stores
-          // state on real Linux filesystems, so prove the semantics there:
-          //   - Docker: named volumes live on the VM's real ext4; a root
-          //     -owned 0755 volume denies a mismatched UID, 0777 allows it.
-          //   - Podman (macOS rootless machine): named volumes are idmapped
-          //     (appear owned by the container uid, no denial), so the
-          //     enforced path is a root-owned tmpfs with an unprivileged su.
-          const probe = (
-            runArgs: string[],
-          ): { status: number | null; stderr: string } => {
-            const result = spawnSync(engine, runArgs, {
-              stdio: ['ignore', 'pipe', 'pipe'],
-              encoding: 'utf8',
-              timeout: SESSION_TIMEOUT_MS,
-              maxBuffer: 10 * 1024 * 1024,
-            });
-            return { status: result.status, stderr: result.stderr ?? '' };
-          };
-          if (engine === 'docker') {
-            const suffix = randomUUID().slice(0, 8);
-            const vol755 = `issue3450-uid-755-${suffix}`;
-            const vol777 = `issue3450-uid-777-${suffix}`;
-            try {
-              for (const volume of [vol755, vol777]) {
-                execFileSync(engine, ['volume', 'create', volume], {
-                  timeout: 60_000,
-                });
-                execFileSync(
-                  engine,
-                  [
-                    'run',
-                    '--rm',
-                    '--user',
-                    '0:0',
-                    '-v',
-                    `${volume}:/p`,
-                    IMAGE,
-                    'chmod',
-                    volume === vol755 ? '0755' : '0777',
-                    '/p',
-                  ],
-                  { timeout: SESSION_TIMEOUT_MS },
-                );
-              }
-              const denied = probe([
-                'run',
-                '--rm',
-                '--user',
-                '54321:54321',
-                '-v',
-                `${vol755}:/p`,
-                IMAGE,
-                'sh',
-                '-c',
-                'touch /p/f',
-              ]);
-              expect(denied.status).not.toBe(0);
-              expect(denied.stderr).toContain('Permission denied');
-              const allowed = probe([
-                'run',
-                '--rm',
-                '--user',
-                '54321:54321',
-                '-v',
-                `${vol777}:/p`,
-                IMAGE,
-                'sh',
-                '-c',
-                'touch /p/f',
-              ]);
-              expect(allowed.status).toBe(0);
-            } finally {
-              for (const volume of [vol755, vol777]) {
-                spawnSync(engine, ['volume', 'rm', '-f', volume], {
-                  timeout: 60_000,
-                });
-              }
-            }
-          } else {
-            const denied = probe([
-              'run',
-              '--rm',
-              '--user',
-              '0:0',
-              '--tmpfs',
-              '/p:mode=0755',
-              IMAGE,
-              'su',
-              '-s',
-              '/bin/sh',
-              'nobody',
-              '-c',
-              'touch /p/f',
-            ]);
-            expect(denied.status).not.toBe(0);
-            const allowed = probe([
-              'run',
-              '--rm',
-              '--user',
-              '0:0',
-              '--tmpfs',
-              '/p:mode=0777',
-              IMAGE,
-              'su',
-              '-s',
-              '/bin/sh',
-              'nobody',
-              '-c',
-              'touch /p/f',
-            ]);
-            expect(allowed.status).toBe(0);
-          }
         },
         SESSION_TIMEOUT_MS,
       );
@@ -1203,7 +1175,7 @@ function describeEngine(engine: string): void {
           assertAbsentProtectedPathStrictlyGone(fixture.absentProtectedDir);
           expect(beforeAbsent).toBeUndefined();
           expect(
-            privateRunRoots(join(fixture.storageRoot, 'cache')),
+            hostDependencyCacheRoots(join(fixture.storageRoot, 'cache')),
           ).toStrictEqual([]);
         },
         AGENT_SESSION_TIMEOUT_MS,
@@ -1228,7 +1200,7 @@ function describeEngine(engine: string): void {
           });
           assertAbsentProtectedPathStrictlyGone(fixture.absentProtectedDir);
           expect(
-            privateRunRoots(join(fixture.storageRoot, 'cache')),
+            hostDependencyCacheRoots(join(fixture.storageRoot, 'cache')),
           ).toStrictEqual([]);
         },
         AGENT_SESSION_TIMEOUT_MS,
