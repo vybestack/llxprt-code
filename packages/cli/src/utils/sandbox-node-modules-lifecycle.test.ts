@@ -10,6 +10,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-storage';
+import {
+  SANDBOX_SIGNAL_CHILD_PATH,
+  SANDBOX_SIGNAL_CHILD_READY_MARKER_ENV,
+  SANDBOX_SIGNAL_CHILD_WORKDIR_ENV,
+} from '../../test-utils/sandbox-node-modules-signal-child.js';
 import { useFakeEngine } from '../../test-utils/fake-dependency-engine-harness.js';
 import { addPrivateDependencyMounts } from './sandbox-node-modules.js';
 
@@ -96,49 +101,35 @@ describe('#3450 private dependency storage lifecycle', () => {
   it.each(['SIGINT', 'SIGTERM'] as const)(
     'removes the engine-owned volumes and terminates on %s instead of continuing',
     (signal) => {
-      // A subprocess runs the production helper against the same fake
-      // engine state and signals itself while the storage exists.
+      // A real child process runs the checked-in signal fixture against the
+      // same fake engine state and signals itself while the storage exists.
+      // The fixture receives only data — the signal as argv and the
+      // workspace and marker paths as validated environment variables — so
+      // no source code is constructed at runtime.
       // Registering a cleanup listener replaces the signal's default
       // termination, so the lifecycle must both release the volumes AND
       // restore that termination when no other handler owns the signal:
       // the child has to die from the signal, not continue into later
       // work with its storage already gone (#3450 OCR F9).
       const cacheDir = Storage.getGlobalCacheDir();
-      const scriptPath = path.join(
-        cacheDir,
-        `issue3450-signal-self-${signal}.ts`,
-      );
       const storageReadyMarker = path.join(
         cacheDir,
         `issue3450-storage-ready-${signal}.txt`,
       );
-      const helperModule = path.join(
-        import.meta.dirname,
-        'sandbox-node-modules.ts',
+      const result = spawnSync(
+        process.execPath,
+        [SANDBOX_SIGNAL_CHILD_PATH, signal],
+        {
+          env: {
+            ...process.env,
+            NODE_ENV: 'production',
+            [SANDBOX_SIGNAL_CHILD_WORKDIR_ENV]: workdir,
+            [SANDBOX_SIGNAL_CHILD_READY_MARKER_ENV]: storageReadyMarker,
+          },
+          encoding: 'utf8',
+          timeout: 30_000,
+        },
       );
-      const script = [
-        'import { spawnSync } from "node:child_process";',
-        'import fs from "node:fs";',
-        `import { addPrivateDependencyMounts } from ${JSON.stringify(helperModule)};`,
-        `const workdir = ${JSON.stringify(workdir)};`,
-        `const storageReadyMarker = ${JSON.stringify(storageReadyMarker)};`,
-        'const args: string[] = [];',
-        'addPrivateDependencyMounts({ command: "docker", image: "test" }, args, workdir);',
-        'const listed = spawnSync("docker", ["volume", "ls", "--format", "{{.Name}}"], { encoding: "utf8", env: process.env });',
-        'const volumes = listed.stdout.trim().split("\\n").filter(Boolean);',
-        'if (listed.status !== 0 || volumes.length !== 2) throw new Error(`Expected two dependency volumes, found ${volumes.length}`);',
-        'fs.writeFileSync(storageReadyMarker, "PRIVATE-STORAGE-READY:1\\n", { flush: true });',
-        `process.kill(process.pid, ${JSON.stringify(signal)});`,
-        // Only reachable when the cleanup handler wrongly swallows the
-        // signal instead of restoring the default termination.
-        'setTimeout(() => { console.log("CONTINUED-AFTER-SIGNAL"); process.exit(4); }, 1500);',
-      ].join('\n');
-      fs.writeFileSync(scriptPath, script);
-      const result = spawnSync(process.execPath, [scriptPath], {
-        env: { ...process.env, NODE_ENV: 'production' },
-        encoding: 'utf8',
-        timeout: 30_000,
-      });
       if (!fs.existsSync(storageReadyMarker)) {
         throw new Error(
           `Signal fixture failed before readiness: status=${String(result.status)} signal=${String(result.signal)} stdout=${result.stdout} stderr=${result.stderr}`,
