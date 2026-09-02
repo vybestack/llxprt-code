@@ -27,7 +27,7 @@ import {
   InMemoryProviderKeyStorage,
   makeToken,
   CAPABILITY_TOKEN,
-} from './credential-proxy-server-helpers.test.js';
+} from './credential-proxy-server-helpers.js';
 
 const isWindows = process.platform === 'win32';
 
