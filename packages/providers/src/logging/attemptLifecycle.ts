@@ -77,6 +77,15 @@ export interface AttemptEndInfo {
 export interface AttemptLifecycleObserver {
   onAttemptStart(info: AttemptStartInfo): void;
   onAttemptEnd(info: AttemptEndInfo): void;
+  /**
+   * Raw token-delta timing signal (issue #3473). Invoked by the provider
+   * stream processor at each raw token-bearing delta (reasoning, content,
+   * or tool-call fragment) that may yield no visible chunk until much
+   * later. Optional so observers that only track attempt lifecycles need
+   * no changes; when present it must be a function or the observer is
+   * rejected by the metadata guard.
+   */
+  onRawTokenDelta?(): void;
 }
 
 /**
@@ -121,6 +130,33 @@ export function getAttemptLifecycleObserver(
   return undefined;
 }
 
+/**
+ * Resolve the raw token-delta timing notifier from GenerateChatOptions
+ * metadata (issue #3473). Providers call this once per request and invoke
+ * the returned notifier at each raw token-bearing delta. Returns undefined
+ * when no observer (or no timing hook) is present, leaving attempt timing
+ * to visible-chunk stamping.
+ */
+export function resolveRawTokenDeltaNotifier(
+  metadata: Record<string, unknown> | undefined,
+): (() => void) | undefined {
+  const observer = getAttemptLifecycleObserver(metadata);
+  if (observer?.onRawTokenDelta === undefined) {
+    return undefined;
+  }
+  return observer.onRawTokenDelta.bind(observer);
+}
+
+/**
+ * True when an optional observer hook value is absent or a function.
+ * Present-but-non-function hooks are malformed external input: accepting
+ * them would make hook resolution (e.g. onRawTokenDelta.bind) throw at
+ * request time instead of degrading to visible-chunk timing.
+ */
+function isOptionalFunctionHook(value: unknown): boolean {
+  return value === undefined || typeof value === 'function';
+}
+
 function isAttemptLifecycleObserver(
   raw: unknown,
 ): raw is AttemptLifecycleObserver {
@@ -130,6 +166,7 @@ function isAttemptLifecycleObserver(
   const candidate = raw as Record<string, unknown>;
   return (
     typeof candidate.onAttemptStart === 'function' &&
-    typeof candidate.onAttemptEnd === 'function'
+    typeof candidate.onAttemptEnd === 'function' &&
+    isOptionalFunctionHook(candidate.onRawTokenDelta)
   );
 }

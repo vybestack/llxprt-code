@@ -336,6 +336,57 @@ describe('<StatsDisplay /> sections', () => {
       expect(output).toMatchSnapshot();
     });
 
+    it('hides Output Gen Rate row when outputGenerationTps is 0 (AC-8 boundary guard)', () => {
+      const metrics = withTokenTracking({
+        models: {
+          'gemini-2.5-pro': {
+            api: { totalRequests: 2, totalErrors: 0, totalLatencyMs: 2500 },
+            tokens: {
+              input: 600,
+              prompt: 900,
+              candidates: 400,
+              total: 1300,
+              cached: 300,
+              thoughts: 0,
+              tool: 0,
+            },
+          },
+        },
+        tools: {
+          totalCalls: 0,
+          totalSuccess: 0,
+          totalFail: 0,
+          totalDurationMs: 0,
+          totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
+          byName: {},
+        },
+        files: {
+          totalLinesAdded: 0,
+          totalLinesRemoved: 0,
+        },
+        tokenTracking: {
+          ...defaultTokenTracking,
+          tokensPerMinute: 1234,
+          timeToFirstToken: 187,
+          tokensPerSecond: 42.42,
+        },
+        timing: {
+          ...defaultTiming,
+          completeTokensPerMinute: 1234,
+          outputGenerationTps: 0,
+          lastOutputGenerationTps: 0,
+        },
+      });
+
+      const { lastFrame } = renderWithMockedStats(metrics);
+      const output = lastFrame();
+
+      expect(output).toContain('Throughput');
+      expect(output).toContain('TTFT (last):');
+      expect(output).not.toContain('Output Gen Rate');
+      expect(output).toMatchSnapshot();
+    });
+
     it('hides throughput, TTFT, and output rate when values are non-finite', () => {
       const metrics = withTokenTracking({
         models: {},

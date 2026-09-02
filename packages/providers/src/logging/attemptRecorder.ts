@@ -55,6 +55,14 @@ interface ActiveAttempt {
   readonly requestStartMs: number;
   firstTokenMs: number | null;
   lastTokenMs: number | null;
+  /**
+   * True once a raw token-delta timing signal (issue #3473) has stamped
+   * this attempt. Raw-delta timing is then authoritative: later deferred
+   * visible emissions (terminal combined chunk, buffered-text flush) still
+   * update usage, streamedText, chunkCount, and finishReasons but must not
+   * overwrite first/last token timestamps.
+   */
+  rawTimingStamped: boolean;
   latestTokenUsage: UsageStats | undefined;
   streamedText: string;
   chunkCount: number;
@@ -163,6 +171,7 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
       requestStartMs,
       firstTokenMs: null,
       lastTokenMs: null,
+      rawTimingStamped: false,
       latestTokenUsage: undefined,
       streamedText: '',
       chunkCount: 0,
@@ -190,6 +199,13 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
    * (first/last token timestamps) and accumulates text. Only token-bearing
    * chunks should be passed here — metadata-only chunks must use
    * recordMetadataUsage instead.
+   *
+   * When raw token-delta timing has already stamped the attempt (issue
+   * #3473), those raw stamps are authoritative: this method still updates
+   * usage, streamedText, chunkCount, and finishReasons but leaves
+   * first/last token timestamps untouched, because deferred visible
+   * emissions (terminal combined chunk, buffered-text flush) trail the
+   * final raw delta.
    */
   recordTokenBearingChunk(
     attemptId: string,
@@ -200,9 +216,11 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
     const attempt = this.attempts.get(attemptId);
     if (!attempt) return;
 
-    const now = performance.now();
-    attempt.firstTokenMs ??= now;
-    attempt.lastTokenMs = now;
+    if (!attempt.rawTimingStamped) {
+      const now = performance.now();
+      attempt.firstTokenMs ??= now;
+      attempt.lastTokenMs = now;
+    }
 
     if (usage) {
       attempt.latestTokenUsage = usage;
@@ -211,6 +229,36 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
     attempt.chunkCount++;
     if (finishReason && !attempt.finishReasons.includes(finishReason)) {
       attempt.finishReasons.push(finishReason);
+    }
+  }
+
+  /**
+   * Record a raw token-delta timing signal for the given attempt (issue
+   * #3473). Stamps firstTokenMs/lastTokenMs via performance.now() without
+   * touching chunkCount, streamedText, usage, or finishReasons, and makes
+   * the raw stamps authoritative over later visible-chunk stamps.
+   */
+  recordTimingOnly(attemptId: string): void {
+    const attempt = this.attempts.get(attemptId);
+    if (!attempt) return;
+
+    const now = performance.now();
+    attempt.firstTokenMs ??= now;
+    attempt.lastTokenMs = now;
+    attempt.rawTimingStamped = true;
+  }
+
+  /**
+   * Raw token-delta timing hook (issue #3473): invoked by the provider
+   * stream processor through the lifecycle-observer metadata channel at
+   * each raw token-bearing delta. Timing travels on this internal channel,
+   * never as stream output, so it cannot affect consumer-visible chunk
+   * sequences or retry/timeout/load-balancer content semantics.
+   */
+  onRawTokenDelta(): void {
+    const attemptId = this.getCurrentAttemptId();
+    if (attemptId) {
+      this.recordTimingOnly(attemptId);
     }
   }
 

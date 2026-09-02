@@ -29,6 +29,9 @@ function makeAttempt(
     cacheReads: overrides.cacheReads ?? undefined,
     cacheWrites: overrides.cacheWrites ?? undefined,
     timestampMs: overrides.timestampMs ?? 0,
+    ...(overrides.lastTokenMs !== undefined
+      ? { lastTokenMs: overrides.lastTokenMs }
+      : {}),
   };
 }
 
@@ -235,17 +238,32 @@ describe('SessionMetricsAggregator', () => {
   });
 
   describe('output generation TPS (Req 4)', () => {
-    it('computes weighted sum(O-1)/sum(G) for O>=2 and G>0', () => {
+    it('excludes attempts without lastTokenMs (no duration fallback)', () => {
       agg.recordApiAttempt(
         makeAttempt({
           attemptId: 'a1',
           outputTokens: 10,
           durationMs: 5000,
           timeToFirstTokenMs: 1000,
+          // lastTokenMs absent — must not fall back to duration - TTFT
         }),
       );
       const snap = agg.getSnapshot();
-      // G = duration - TTFT = 5000 - 1000 = 4000
+      expect(snap.outputGenerationTps).toBe(0);
+    });
+
+    it('computes weighted sum(O-1)/sum(G) with lastTokenMs - TTFT', () => {
+      agg.recordApiAttempt(
+        makeAttempt({
+          attemptId: 'a1',
+          outputTokens: 10,
+          durationMs: 5000,
+          timeToFirstTokenMs: 1000,
+          lastTokenMs: 5000,
+        }),
+      );
+      const snap = agg.getSnapshot();
+      // G = lastTokenMs - TTFT = 5000 - 1000 = 4000
       // sum(O-1) = 9, sum(G) = 4000
       // TPS = 9/4000 = 0.00225 tok/ms = 2.25 tok/s
       expect(snap.outputGenerationTps).toBeCloseTo((9 / 4000) * 1000, 5);
@@ -258,18 +276,20 @@ describe('SessionMetricsAggregator', () => {
           outputTokens: 1,
           durationMs: 5000,
           timeToFirstTokenMs: 1000,
+          lastTokenMs: 5000,
         }),
       );
       expect(agg.getSnapshot().outputGenerationTps).toBe(0);
     });
 
-    it('excludes requests with G <= 0', () => {
+    it('excludes requests with G <= 0 (lastTokenMs == TTFT)', () => {
       agg.recordApiAttempt(
         makeAttempt({
           attemptId: 'a1',
           outputTokens: 10,
-          durationMs: 1000,
-          timeToFirstTokenMs: 1000, // G = 0
+          durationMs: 5000,
+          timeToFirstTokenMs: 1000, // G = lastTokenMs - TTFT = 0
+          lastTokenMs: 1000,
         }),
       );
       expect(agg.getSnapshot().outputGenerationTps).toBe(0);
@@ -282,6 +302,7 @@ describe('SessionMetricsAggregator', () => {
           outputTokens: 10,
           durationMs: 5000,
           timeToFirstTokenMs: null,
+          lastTokenMs: 5000,
         }),
       );
       expect(agg.getSnapshot().outputGenerationTps).toBe(0);
@@ -294,6 +315,7 @@ describe('SessionMetricsAggregator', () => {
           outputTokens: 10,
           durationMs: 3000,
           timeToFirstTokenMs: 1000,
+          lastTokenMs: 3000,
         }),
       );
       agg.recordApiAttempt(
@@ -302,12 +324,94 @@ describe('SessionMetricsAggregator', () => {
           outputTokens: 5,
           durationMs: 4000,
           timeToFirstTokenMs: 1000,
+          lastTokenMs: 4000,
         }),
       );
       const snap = agg.getSnapshot();
       // G1 = 2000, G2 = 3000
       // sum(O-1) = 9 + 4 = 13, sum(G) = 5000
       expect(snap.outputGenerationTps).toBeCloseTo((13 / 5000) * 1000, 5);
+    });
+
+    it('degenerate single-instant window (first==last) produces 0, not (O-1)/epsilon', () => {
+      // Reported-session shape: all tokens arrive at one instant
+      agg.recordApiAttempt(
+        makeAttempt({
+          attemptId: 'deg1',
+          outputTokens: 1250,
+          durationMs: 36000,
+          timeToFirstTokenMs: 35995,
+          lastTokenMs: 35995, // window = 0
+        }),
+      );
+      const snap = agg.getSnapshot();
+      // Must be 0, not ~249800 tok/s as the duration fallback would produce
+      expect(snap.outputGenerationTps).toBe(0);
+    });
+
+    it('degenerate attempts do not perturb qualifying attempts in the weighted sum', () => {
+      // Three degenerate attempts (reported-session shape)
+      for (let i = 0; i < 3; i++) {
+        agg.recordApiAttempt(
+          makeAttempt({
+            attemptId: `deg_${i}`,
+            outputTokens: 1250,
+            durationMs: 36000,
+            timeToFirstTokenMs: 35995,
+            lastTokenMs: 35995,
+          }),
+        );
+      }
+      // Two qualifying attempts
+      agg.recordApiAttempt(
+        makeAttempt({
+          attemptId: 'q1',
+          outputTokens: 100,
+          durationMs: 3000,
+          timeToFirstTokenMs: 1000,
+          lastTokenMs: 3000, // window = 2000
+        }),
+      );
+      agg.recordApiAttempt(
+        makeAttempt({
+          attemptId: 'q2',
+          outputTokens: 300,
+          durationMs: 7000,
+          timeToFirstTokenMs: 1000,
+          lastTokenMs: 7000, // window = 6000
+        }),
+      );
+      const snap = agg.getSnapshot();
+      // sum(O-1) = 99 + 299 = 398, sum(G) = 2000 + 6000 = 8000
+      // TPS = 398/8000*1000 = 49.75
+      expect(snap.outputGenerationTps).toBeCloseTo(49.75, 5);
+    });
+
+    it('lastOutputGenerationTps stays unchanged after a degenerate attempt', () => {
+      // Qualifying attempt
+      agg.recordApiAttempt(
+        makeAttempt({
+          attemptId: 'q1',
+          outputTokens: 100,
+          durationMs: 3000,
+          timeToFirstTokenMs: 1000,
+          lastTokenMs: 3000, // window = 2000, 99/2000*1000 = 49.5
+        }),
+      );
+
+      // Degenerate attempt must NOT update last-attempt state: the value
+      // stays at the qualifying attempt's 49.5 rather than its ~249800
+      // (or 0 if the qualifying attempt had wrongly been excluded).
+      agg.recordApiAttempt(
+        makeAttempt({
+          attemptId: 'deg1',
+          outputTokens: 1250,
+          durationMs: 36000,
+          timeToFirstTokenMs: 35995,
+          lastTokenMs: 35995,
+        }),
+      );
+      expect(agg.getSnapshot().lastOutputGenerationTps).toBeCloseTo(49.5, 5);
     });
   });
 

@@ -305,6 +305,7 @@ describe('Canonical consumer behavior: API timing through real event path', () =
         outputTokens: 10,
         ttft: 1000,
         durationMs: 5000,
+        lastTokenMs: 5000,
       }),
     );
 
@@ -314,6 +315,22 @@ describe('Canonical consumer behavior: API timing through real event path', () =
     expect(snap.outputGenerationTps).toBeCloseTo(2.25, 5);
     // last = same as session for single request
     expect(snap.lastOutputGenerationTps).toBeCloseTo(2.25, 5);
+  });
+
+  it('output generation TPS is 0 when last_token_ms is absent (no duration fallback)', () => {
+    svc.addEvent(
+      makeApiResponseEvent({
+        attemptId: 'a2',
+        outputTokens: 10,
+        ttft: 1000,
+        durationMs: 5000,
+        lastTokenMs: null,
+      }),
+    );
+
+    const snap = svc.getSessionSnapshot();
+    expect(snap.outputGenerationTps).toBe(0);
+    expect(snap.lastOutputGenerationTps).toBe(0);
   });
 
   it('attempts and errors tracked', () => {

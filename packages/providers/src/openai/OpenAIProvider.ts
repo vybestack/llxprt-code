@@ -73,9 +73,11 @@ import {
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
 import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
+import { resolveRawTokenDeltaNotifier } from '../logging/attemptLifecycle.js';
 
 import { buildContinuationMessages } from './OpenAIRequestBuilder.js';
 import { extractSanitizedChunkText } from './OpenAIStreamChunkText.js';
+import { parseStreamingReasoningDelta } from './OpenAIResponseParser.js';
 import {
   createHttpAgents,
   resolveRuntimeKey,
@@ -104,6 +106,11 @@ interface DispatchResponseOptions {
   baseURL: string | undefined;
   logger: DebugLogger;
   reasoningFieldName: string | undefined;
+  /**
+   * Raw token-delta timing notifier resolved from request metadata (issue
+   * #3473). Undefined when no attempt-lifecycle observer is attached.
+   */
+  onRawTokenDelta: (() => void) | undefined;
 }
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
@@ -588,6 +595,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         logger: options.logger,
         getBaseURL: () => this.getBaseURL(),
         reasoningFieldName: options.reasoningFieldName,
+        onRawTokenDelta: options.onRawTokenDelta,
       };
       yield* processStreamingResponse(
         options.response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
@@ -807,6 +815,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       baseURL,
       logger,
       reasoningFieldName,
+      onRawTokenDelta: resolveRawTokenDeltaNotifier(metadata),
     });
   }
 
@@ -905,6 +914,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     logger: DebugLogger,
     mergedHeaders: Record<string, string> | undefined,
     toolFormat: ToolFormat,
+    reasoningFieldName?: string,
+    onRawTokenDelta?: () => void,
   ): AsyncGenerator<IContent, void, unknown> {
     const continuationMessages = buildContinuationMessages(
       toolCalls,
@@ -934,15 +945,27 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           break;
         }
 
-        const sanitized = extractSanitizedChunkText(chunk);
-        if (sanitized !== '') {
-          accumulatedText += sanitized;
+        // Continuation raw deltas are token-bearing output of the same
+        // attempt (issue #3473): each token-bearing delta (content,
+        // reasoning, or tool-call fragments) fires the raw-timing signal
+        // exactly once so the attempt window spans the whole continuation
+        // decode; only content changes visible output.
+        const { sanitizedText, isTokenBearing } = classifyContinuationDelta(
+          chunk,
+          logger,
+          reasoningFieldName,
+        );
+        if (isTokenBearing) {
+          onRawTokenDelta?.();
+        }
+        if (sanitizedText !== '') {
+          accumulatedText += sanitizedText;
           yield {
             speaker: 'ai',
             blocks: [
               {
                 type: 'text',
-                text: sanitized,
+                text: sanitizedText,
               } as TextBlock,
             ],
           } as IContent;
@@ -970,6 +993,39 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       // Don't re-throw - tool calls were already successful
     }
   }
+}
+
+/**
+ * Classify a continuation raw delta (issue #3473): the sanitized text (the
+ * only payload that changes visible output) and whether the delta is
+ * token-bearing (content, reasoning_content/reasoning, or tool-call
+ * fragments), which fires the attempt's raw-timing signal exactly once.
+ * The configured reasoning.fieldName must be honored here just as it is
+ * in the primary stream, or custom-field reasoning deltas look
+ * non-token-bearing and stop stamping raw timing.
+ */
+function classifyContinuationDelta(
+  chunk: OpenAI.Chat.Completions.ChatCompletionChunk,
+  logger: DebugLogger,
+  reasoningFieldName?: string,
+): { sanitizedText: string; isTokenBearing: boolean } {
+  const sanitizedText = extractSanitizedChunkText(chunk);
+  const chunkChoices = (
+    chunk as {
+      choices?: OpenAI.Chat.Completions.ChatCompletionChunk.Choice[];
+    }
+  ).choices;
+  const delta = chunkChoices?.[0]?.delta;
+  const { thinking, toolCalls: reasoningToolCalls } =
+    parseStreamingReasoningDelta(delta, logger, reasoningFieldName);
+  const hasDeltaToolCalls =
+    delta?.tool_calls !== undefined && delta.tool_calls.length > 0;
+  const isTokenBearing =
+    sanitizedText !== '' ||
+    thinking !== null ||
+    reasoningToolCalls.length > 0 ||
+    hasDeltaToolCalls;
+  return { sanitizedText, isTokenBearing };
 }
 
 function resolveAgentSettings(

@@ -185,17 +185,18 @@ describe('SessionMetricsAggregator', () => {
   });
 
   describe('standard generation TPS excludes TTFT', () => {
-    it('generation gap G = duration - TTFT, not duration', () => {
+    it('generation gap G = lastTokenMs - TTFT, not duration - TTFT', () => {
       agg.recordApiAttempt(
         makeAttempt({
           attemptId: 'a1',
           outputTokens: 11,
           durationMs: 10000,
           timeToFirstTokenMs: 3000,
+          lastTokenMs: 10000,
         }),
       );
       const snap = agg.getSnapshot();
-      // G = 10000 - 3000 = 7000ms
+      // G = lastTokenMs - TTFT = 10000 - 3000 = 7000ms
       // sum(O-1) = 10, sum(G) = 7000
       // TPS = 10/7000*1000 = 1.4286 tok/s
       expect(snap.outputGenerationTps).toBeCloseTo((10 / 7000) * 1000, 4);
