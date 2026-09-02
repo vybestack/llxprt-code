@@ -19,14 +19,19 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { SandboxConfig } from '@vybestack/llxprt-code-core';
+import {
+  FIXTURE_TIMEOUT_MS,
+  removeFixtureDirectory,
+  removeNewRootBunBuildIntermediates,
+  rootBunBuildIntermediatePaths,
+  writePortableExecutable,
+} from '../../test-utils/sandbox-fixture-compiler.js';
 import { assignContainerName } from './sandbox-containers.js';
 import { runContainerSandbox } from './sandbox-exec.js';
 
 const MANAGED_LABEL = 'com.vybestack.llxprt.sandbox-managed=true';
 const TEST_IMAGE = 'llxprt-code-sandbox';
 const TIMEZONE_REGRESSION_CHILD = 'LLXPRT_TEST_TIMEZONE_REGRESSION_CHILD';
-const REPOSITORY_ROOT = path.resolve(import.meta.dirname, '../../../..');
-const BUN_BUILD_INTERMEDIATE_PATTERN = /^\.[0-9a-f]+-00000000\.bun-build$/i;
 const ENGINE_ENV_KEYS = [
   'LLXPRT_TEST_DOCKER_STATE',
   'LLXPRT_TEST_PODMAN_STATE',
@@ -46,28 +51,6 @@ interface OwnerMetadata {
   readonly pid: number;
   readonly startTimeMs: number;
   readonly startTimeSource: 'observed' | 'estimated';
-}
-
-function rootBunBuildIntermediatePaths(): ReadonlySet<string> {
-  return new Set(
-    fs
-      .readdirSync(REPOSITORY_ROOT, { withFileTypes: true })
-      .filter(
-        (entry) =>
-          entry.isFile() && BUN_BUILD_INTERMEDIATE_PATTERN.test(entry.name),
-      )
-      .map((entry) => path.join(REPOSITORY_ROOT, entry.name)),
-  );
-}
-
-function removeNewRootBunBuildIntermediates(
-  existingPaths: ReadonlySet<string>,
-): void {
-  for (const artifactPath of rootBunBuildIntermediatePaths()) {
-    if (!existingPaths.has(artifactPath)) {
-      fs.rmSync(artifactPath, { force: true });
-    }
-  }
 }
 
 function requirePid(child: ChildProcess): number {
@@ -213,40 +196,6 @@ process.stdout.write(weekdays[date.getUTCDay()] + ' ' +
 `;
 }
 
-function writePortableExecutable(
-  commandName: string,
-  source: string,
-  fixtureDir: string,
-): void {
-  const executableName =
-    process.platform === 'win32' ? `${commandName}.exe` : commandName;
-  const executablePath = path.join(fixtureDir, executableName);
-  const sourcePath = path.join(fixtureDir, `${commandName}.fixture.ts`);
-  const existingBuildIntermediates = rootBunBuildIntermediatePaths();
-  fs.writeFileSync(sourcePath, source);
-  try {
-    const compilation = spawnSync(
-      process.execPath,
-      ['build', '--compile', sourcePath, '--outfile', executablePath],
-      {
-        cwd: fixtureDir,
-        encoding: 'utf8',
-        timeout: 30_000,
-        windowsHide: true,
-      },
-    );
-    if (compilation.error !== undefined) throw compilation.error;
-    if (compilation.status !== 0) {
-      throw new Error(
-        `Failed to compile ${executableName}: ${compilation.stderr.trim()}`,
-      );
-    }
-  } finally {
-    fs.rmSync(sourcePath, { force: true });
-    removeNewRootBunBuildIntermediates(existingBuildIntermediates);
-  }
-}
-
 function warmProcessStartExecutable(fixtureDir: string): void {
   const executableName = process.platform === 'win32' ? 'ps.exe' : 'ps';
   const executablePath = path.join(fixtureDir, executableName);
@@ -259,7 +208,7 @@ function warmProcessStartExecutable(fixtureDir: string): void {
       {
         encoding: 'utf8',
         env: { ...process.env, LLXPRT_TEST_PROCESS_STARTS: startsPath },
-        timeout: 30_000,
+        timeout: FIXTURE_TIMEOUT_MS,
         windowsHide: true,
       },
     );
@@ -304,7 +253,14 @@ function rerunInNonUtcTimezone(testName: string): void {
   );
   const child = spawnSync(
     process.execPath,
-    ['test', testPath, '--test-name-pattern', testName],
+    [
+      'test',
+      '--timeout',
+      String(FIXTURE_TIMEOUT_MS),
+      testPath,
+      '--test-name-pattern',
+      testName,
+    ],
     {
       encoding: 'utf8',
       env: {
@@ -312,7 +268,7 @@ function rerunInNonUtcTimezone(testName: string): void {
         TZ: 'America/New_York',
         [TIMEZONE_REGRESSION_CHILD]: '1',
       },
-      timeout: 30_000,
+      timeout: FIXTURE_TIMEOUT_MS,
       windowsHide: true,
     },
   );
@@ -328,16 +284,6 @@ function rerunInNonUtcTimezone(testName: string): void {
       ].join('\n'),
     );
   }
-}
-
-function removeFixtureDirectory(fixtureDir: string): void {
-  if (fixtureDir === '') return;
-  fs.rmSync(fixtureDir, {
-    recursive: true,
-    force: true,
-    maxRetries: 10,
-    retryDelay: 100,
-  });
 }
 
 describe('sandbox orphan recovery startup', () => {
