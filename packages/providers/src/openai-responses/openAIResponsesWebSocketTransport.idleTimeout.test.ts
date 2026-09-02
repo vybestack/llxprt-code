@@ -100,7 +100,7 @@ describe('Codex Responses WebSocket stream idle timeout', () => {
     );
     const text = messages
       .flatMap((message) => message.blocks)
-      .map((block) => (blockTextOrEmpty(block)))
+      .map((block) => blockTextOrEmpty(block))
       .join('');
 
     expect(text).toBe('tickticktick');

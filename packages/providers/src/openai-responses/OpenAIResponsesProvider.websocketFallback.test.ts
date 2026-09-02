@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { assertDefined, blockTextOrEmpty } from '@vybestack/llxprt-code-test-utils';
+import {
+  assertDefined,
+  blockTextOrEmpty,
+} from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
@@ -141,7 +144,7 @@ async function runRequest(
   }
   const text = chunks
     .flatMap((c) => c.blocks)
-    .map((b) => (blockTextOrEmpty(b)))
+    .map((b) => blockTextOrEmpty(b))
     .join('');
   void fetchCalls;
   return text;

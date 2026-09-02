@@ -29,7 +29,10 @@
  * These tests are expected to fail against the Phase 12 stub implementation.
  */
 
-import { assertDefined, blockTextOrEmpty } from '@vybestack/llxprt-code-test-utils';
+import {
+  assertDefined,
+  blockTextOrEmpty,
+} from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
