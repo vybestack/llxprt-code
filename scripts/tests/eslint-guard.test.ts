@@ -7741,6 +7741,76 @@ describe('scanRepositoryLintEscapeHatches (#2227)', () => {
     expect(violations[0].message).toContain('--max-warnings 0');
   });
 
+  it('accepts lint:ci delegating to the partitioned runner with --max-warnings 0', () => {
+    const tmpDir = mkdtempSync(
+      join(tmpdir(), 'eslint-guard-2227-package-runner-ok-'),
+    );
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify(
+        {
+          scripts: {
+            'lint:ci': 'bun scripts/run-lint.ts --max-warnings 0',
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    expect(scanRepositoryLintEscapeHatches(tmpDir, '2227')).toEqual([]);
+  });
+
+  it('reports lint:ci delegating to the runner without --max-warnings 0', () => {
+    const tmpDir = mkdtempSync(
+      join(tmpdir(), 'eslint-guard-2227-package-runner-missing-'),
+    );
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify(
+        {
+          scripts: {
+            'lint:ci': 'bun scripts/run-lint.ts',
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const violations = scanRepositoryLintEscapeHatches(tmpDir, '2227');
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain('--max-warnings 0');
+  });
+
+  it('reports an indirect lint:ci whose runner flags the guard cannot see', () => {
+    const tmpDir = mkdtempSync(
+      join(tmpdir(), 'eslint-guard-2227-package-runner-indirect-'),
+    );
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify(
+        {
+          scripts: {
+            'lint:ci': 'npm run lint:runner',
+            'lint:runner': 'bun scripts/run-lint.ts --max-warnings 0',
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const violations = scanRepositoryLintEscapeHatches(tmpDir, '2227');
+
+    // Delegation must spell the flags at the lint:ci site itself: the runner
+    // forwards whatever it is given, so only the visible invocation proves
+    // every ESLint child runs strict.
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain('--max-warnings 0');
+  });
+
   it('ignores commented config text and reports multiline disabled config entries', () => {
     const tmpDir = mkdtempSync(
       join(tmpdir(), 'eslint-guard-2227-config-comments-'),

@@ -487,8 +487,6 @@ jobs:
           key: ${{ runner.os }}-eslint-${{ hashFiles('packages/*/src/**', 'packages/*/package.json', 'packages/*/tsconfig.json', 'scripts/**', 'evals/**', 'integration-tests/**', 'eslint.config.js', 'eslint-rules/**', 'package.json', 'package-lock.json', 'bun.lock', 'tsconfig.json', 'tsconfig.scripts.json', '*.js', 'test-setup/**', '.github/workflows/**', '.github/scripts/**') }}
 
       - name: 'Run linter'
-        env:
-          NODE_OPTIONS: '--max-old-space-size=12288'
         run: |
           set -euo pipefail
           # Fail closed: if the selector did not succeed, or reported a full
@@ -508,7 +506,10 @@ jobs:
             LLXPRT_LINT_CACHE=true LLXPRT_LINT_TARGETS="$lint_targets" \
               npm run lint:runner
           else
-            # Full run: one root ESLint invocation covers integration-tests.
+            # Full run: the partitioned runner covers the whole tree,
+            # integration-tests included, one ESLint process per package
+            # plus a root slice (#3387). Both branches rely on the runner's
+            # own per-child heap, so no NODE_OPTIONS is set here.
             npm run lint:ci
           fi
 

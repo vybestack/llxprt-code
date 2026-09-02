@@ -14,9 +14,13 @@
  * discovery test reads the REAL `packages/` directory.
  *
  * Coverage:
- *  - lint/lint:fix delegate to the runner (package-script migration test)
+ *  - lint/lint:fix/lint:ci delegate to the runner (package-script wiring)
+ *  - lint:ci keeps --max-warnings 0 and hardcodes no heap, so it stays
+ *    stricter than lint while the runner owns the per-child heap
  *  - A full run is partitioned one process per package plus one for the rest,
  *    and that partition covers every package on disk (#3387)
+ *  - every command of a full run carries the 6144 heap (never the retired
+ *    12288) and forwarded args such as --max-warnings 0 reach every command
  *  - The rest group complements the package groups via --ignore-pattern
  *  - Scoped runs are partitioned one process per target
  *  - Scoped run always includes integration-tests as a target
@@ -26,6 +30,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -521,5 +526,78 @@ describe('run-lint runner — heap normalization', () => {
     });
     expect(commands[0].nodeOptions).toContain('--max-old-space-size=6144');
     expect(commands[0].nodeOptions).not.toContain('Infinity');
+  });
+});
+
+describe('run-lint runner — lint:ci delegates to the partitioned runner (#3387)', () => {
+  it('package.json lint:ci invokes the runner and keeps --max-warnings 0', () => {
+    const pkg = JSON.parse(
+      readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'),
+    ) as { readonly scripts: Record<string, string> };
+    expect(pkg.scripts['lint:ci']).toContain('bun scripts/run-lint.ts');
+    expect(pkg.scripts['lint:ci']).toContain('--max-warnings 0');
+  });
+
+  it('package.json lint:ci hardcodes no heap and no monolithic eslint pass', () => {
+    const pkg = JSON.parse(
+      readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'),
+    ) as { readonly scripts: Record<string, string> };
+    // The runner normalizes NODE_OPTIONS per ESLint child, so lint:ci must
+    // not pin a heap itself; 12288 was the retired monolithic invocation's
+    // ask, and a bare `eslint .` is exactly the single-process run #3387
+    // removed.
+    expect(pkg.scripts['lint:ci']).not.toContain('max-old-space-size');
+    expect(pkg.scripts['lint:ci']).not.toContain('12288');
+    expect(pkg.scripts['lint:ci']).not.toContain('eslint .');
+  });
+
+  it('a full run over the real package set is one command per package plus the root slice', async () => {
+    const { buildLintCommands, readPackageDirs } = await loadRunner();
+    const onDisk = readPackageDirs(REPO_ROOT);
+    expect(onDisk.length).toBeGreaterThan(1);
+    const commands = buildLintCommands({
+      targets: null,
+      forwardedArgs: [],
+      cache: false,
+      packageDirs: onDisk,
+    });
+    expect(commands.length).toBe(onDisk.length + 1);
+    expect(commands.slice(0, -1).map((c) => [...targetsOf(c)])).toEqual(
+      onDisk.map((dir) => [dir]),
+    );
+    const rootSlice = commands[commands.length - 1];
+    expect([...targetsOf(rootSlice)]).toEqual(['.']);
+    expect(rootSlice.args).toContain('--ignore-pattern');
+  });
+
+  it('every command of a full run carries the 6144 heap, never the retired 12288', async () => {
+    const { buildLintCommands } = await loadRunner();
+    const commands = buildLintCommands({
+      targets: null,
+      forwardedArgs: [],
+      cache: false,
+      packageDirs: TWO_PACKAGES,
+    });
+    expect(commands.length).toBeGreaterThan(1);
+    for (const command of commands) {
+      expect(command.nodeOptions).toContain('--max-old-space-size=6144');
+      expect(command.nodeOptions).not.toContain('12288');
+    }
+  });
+
+  it('forwards --max-warnings 0 to every command of a full run', async () => {
+    const { buildLintCommands } = await loadRunner();
+    const commands = buildLintCommands({
+      targets: null,
+      forwardedArgs: ['--max-warnings', '0'],
+      cache: false,
+      packageDirs: TWO_PACKAGES,
+    });
+    expect(commands.length).toBeGreaterThan(1);
+    for (const command of commands) {
+      const flagIndex = command.args.indexOf('--max-warnings');
+      expect(flagIndex).toBeGreaterThan(-1);
+      expect(command.args[flagIndex + 1]).toBe('0');
+    }
   });
 });

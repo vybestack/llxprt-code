@@ -93,7 +93,7 @@
     "test:all_evals": "cross-env RUN_EVALS=1 bun scripts/run_bun_tests.ts --root evals --json-report evals/logs/report.json",
     "lint": "cross-env NODE_OPTIONS=--max-old-space-size=6144 bun scripts/run-lint.ts",
     "lint:fix": "cross-env NODE_OPTIONS=--max-old-space-size=6144 bun scripts/run-lint.ts --fix",
-    "lint:ci": "cross-env NODE_OPTIONS=--max-old-space-size=12288 eslint . --max-warnings 0",
+    "lint:ci": "bun scripts/run-lint.ts --max-warnings 0",
     "lint:runner": "bun scripts/run-lint.ts --max-warnings 0",
     "lint:scoped": "bun scripts/lint-scoped.ts",
     "lint:changed": "bun scripts/lint-scoped.ts --changed",
