@@ -27,7 +27,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync, type ChildProcess } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { entrypoint } from './sandbox-entrypoint.js';
 import {
@@ -35,6 +34,8 @@ import {
   wireCleanupHandlers,
 } from './sandbox-containers.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { LLXPRT_PLATFORM_PATHS } from '@vybestack/llxprt-code-storage/config/path-resolver.js';
+import { STORAGE_ENV_KEYS } from '@vybestack/llxprt-code-storage/testing';
 
 // Hoisted mocks for auth module — used by AC12 setupCredentialProxy/wireCleanupHandlers tests
 const authMocks = {
@@ -55,13 +56,6 @@ const VALID_TOKEN = 'a'.repeat(64);
 const BASH_CAP_REF = '${' + 'LLXPRT_CAPABILITY_TOKEN-}';
 const realHome = os.homedir();
 let realHomeCapabilityArtifacts = new Set<string>();
-let realConfigDir = '';
-let realConfigSnapshot: DirectorySnapshot | undefined;
-
-interface DirectorySnapshot {
-  readonly exists: boolean;
-  readonly entries: readonly string[];
-}
 
 function legacyCapabilityArtifacts(home: string): string[] {
   return fs
@@ -70,70 +64,8 @@ function legacyCapabilityArtifacts(home: string): string[] {
     .sort();
 }
 
-function resolveRealConfigDir(): string {
-  const probe = spawnSync(
-    process.execPath,
-    [
-      '-e',
-      "import { Storage } from '@vybestack/llxprt-code-storage'; process.stdout.write(Storage.getGlobalConfigDir());",
-    ],
-    { encoding: 'utf8' },
-  );
-  const resolved = probe.stdout.trim();
-  if (probe.status !== 0 || resolved === '') {
-    throw new Error(
-      `Could not resolve the real CLI config directory: ${probe.stderr.trim()}`,
-    );
-  }
-  return resolved;
-}
-
-function snapshotDirectoryEntries(
-  directory: string,
-  relativeDirectory = '',
-): string[] {
-  const snapshot: string[] = [];
-  const entries = fs
-    .readdirSync(directory, { withFileTypes: true })
-    .sort((left, right) => left.name.localeCompare(right.name));
-
-  for (const entry of entries) {
-    const relativePath = path.join(relativeDirectory, entry.name);
-    const entryPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      snapshot.push(`directory:${relativePath}`);
-      snapshot.push(...snapshotDirectoryEntries(entryPath, relativePath));
-    } else if (entry.isFile()) {
-      const hash = createHash('sha256')
-        .update(fs.readFileSync(entryPath))
-        .digest('hex');
-      snapshot.push(`file:${relativePath}:${hash}`);
-    } else if (entry.isSymbolicLink()) {
-      snapshot.push(
-        `symbolic-link:${relativePath}:${fs.readlinkSync(entryPath)}`,
-      );
-    } else {
-      snapshot.push(`other:${relativePath}`);
-    }
-  }
-
-  return snapshot;
-}
-
-function snapshotDirectory(directory: string): DirectorySnapshot {
-  if (!fs.existsSync(directory)) {
-    return { exists: false, entries: [] };
-  }
-  return {
-    exists: true,
-    entries: snapshotDirectoryEntries(directory),
-  };
-}
-
 beforeAll(() => {
   realHomeCapabilityArtifacts = new Set(legacyCapabilityArtifacts(realHome));
-  realConfigDir = resolveRealConfigDir();
-  realConfigSnapshot = snapshotDirectory(realConfigDir);
 });
 
 afterAll(() => {
@@ -141,9 +73,6 @@ afterAll(() => {
     (entry) => !realHomeCapabilityArtifacts.has(entry),
   );
   expect(newRealHomeArtifacts).toStrictEqual([]);
-  if (realConfigDir !== '' && realConfigSnapshot !== undefined) {
-    expect(snapshotDirectory(realConfigDir)).toStrictEqual(realConfigSnapshot);
-  }
 });
 
 function useTempDir(
@@ -180,6 +109,38 @@ function restoreOsTmpdir(): void {
   });
 }
 
+/**
+ * Produces the environment every spawned child runs with. spawnSync with an
+ * inherited environment snapshots the process's ORIGINAL environment (see
+ * packages/storage/src/config/assertTestStorageIsolation.ts), so the storage
+ * isolation preload's post-startup assignments never reach children and they
+ * resolve the real user config dir. Carrying the isolated roots explicitly
+ * closes that gap; the key list comes from STORAGE_ENV_KEYS so a future
+ * storage root cannot silently escape isolation.
+ */
+function withIsolatedStorageRoots(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const childEnv: NodeJS.ProcessEnv = { ...process.env, ...env };
+  for (const key of STORAGE_ENV_KEYS) {
+    const isolated = process.env[key];
+    if (isolated === undefined) {
+      throw new Error(
+        `${key} is unset: the storage isolation preload must run before this suite spawns children`,
+      );
+    }
+    childEnv[key] = isolated;
+  }
+  return childEnv;
+}
+
+/**
+ * Path form safe to compare across the macOS /var -> /private/var symlink:
+ * resolved through realpath when the path exists, plainly resolved otherwise
+ * (a fresh runner may not have created the platform default config dir).
+ */
+function comparablePath(target: string): string {
+  return fs.existsSync(target) ? fs.realpathSync(target) : path.resolve(target);
+}
+
 function runCmd(
   cmd: string[],
   env: NodeJS.ProcessEnv,
@@ -187,7 +148,7 @@ function runCmd(
 ): { stdout: string; stderr: string; exit: number } {
   const r = spawnSync(cmd[0], cmd.slice(1), {
     encoding: 'utf8',
-    env,
+    env: withIsolatedStorageRoots(env),
     cwd: options.cwd,
   });
   return { stdout: r.stdout, stderr: r.stderr, exit: r.status ?? -1 };
@@ -225,7 +186,25 @@ function writeStealer(sentinelPath: string): string {
   return file;
 }
 
-/** Installs a PATH-discoverable recorder that reads fd 3 and writes a JSON report. */
+/**
+ * Interpreter and module URL for the recorder's config-root probe. The
+ * recorder fixture runs under whatever `node` is on PATH (standing in for an
+ * installed CLI), and plain node can neither execute the TypeScript entry
+ * bun resolves for `@vybestack/llxprt-code-storage` nor depend on a built
+ * dist being present. The fixture therefore spawns this test process's bun
+ * — the same interpreter the direct-child isolation test below uses — to run
+ * the REAL resolver, `Storage.getGlobalConfigDir()`, in the recorder's own
+ * (post-entrypoint) environment.
+ */
+const RESOLVER_EXECUTABLE = process.execPath;
+const STORAGE_ENTRY_URL = import.meta.resolve('@vybestack/llxprt-code-storage');
+
+/**
+ * Installs a PATH-discoverable recorder that reads fd 3 and writes a JSON
+ * report. Besides the token/env/fd fields, the report carries `configDir`,
+ * the config root `Storage.getGlobalConfigDir()` resolves in the recorder's
+ * environment, and `configDirError` (resolver stderr) when that probe fails.
+ */
 function installRecorder(
   binDir: string,
   sentinelPath: string,
@@ -242,7 +221,8 @@ function installRecorder(
       'let token = "";',
       'try { const b = Buffer.alloc(256); const n = fs.readSync(fd, b, 0, 256, null); token = b.slice(0, n).toString("utf8"); } catch (e) {}',
       'try { fs.closeSync(fd); } catch (e) {}',
-      'const out = { tokenValid: /^[0-9a-f]{64}\\n$/.test(token), envToken: process.env.LLXPRT_CAPABILITY_TOKEN === undefined ? "UNSET" : "LEAKED", fdMarker: process.env.LLXPRT_CAPABILITY_FD };',
+      `const resolution = require("node:child_process").spawnSync(${JSON.stringify(RESOLVER_EXECUTABLE)}, ["-e", ${JSON.stringify(`import(${JSON.stringify(STORAGE_ENTRY_URL)}).then((m) => process.stdout.write(String(m.Storage.getGlobalConfigDir())))`)}], { encoding: "utf8" });`,
+      'const out = { tokenValid: /^[0-9a-f]{64}\\n$/.test(token), envToken: process.env.LLXPRT_CAPABILITY_TOKEN === undefined ? "UNSET" : "LEAKED", fdMarker: process.env.LLXPRT_CAPABILITY_FD, configDir: resolution.stdout || "", configDirError: resolution.status === 0 ? null : String(resolution.stderr || "") };',
       `fs.writeFileSync(${JSON.stringify(sentinelPath)}, JSON.stringify(out));`,
     ].join('\n'),
   );
@@ -297,6 +277,33 @@ describe('sandbox-entrypoint: trusted entrypoint security (AC2, AC3, F1, F7, F10
     };
   }
 
+  it('spawned children resolve the isolated config dir, not the real user config dir', () => {
+    const isolatedConfigHome = process.env.LLXPRT_CONFIG_HOME;
+    if (isolatedConfigHome === undefined) {
+      throw new Error(
+        'LLXPRT_CONFIG_HOME is unset: the storage isolation preload must run before this suite spawns children',
+      );
+    }
+    const probe = runCmd(
+      [
+        process.execPath,
+        '-e',
+        "import { Storage } from '@vybestack/llxprt-code-storage'; process.stdout.write(Storage.getGlobalConfigDir());",
+      ],
+      {},
+    );
+    if (probe.exit !== 0) {
+      throw new Error(`config dir probe failed: ${probe.stderr.trim()}`);
+    }
+    // macOS reports the temp root as /var/folders/... while realpath resolves
+    // /private/var/folders/...; resolve both sides before comparing.
+    const resolvedConfigDir = comparablePath(probe.stdout.trim());
+    expect(resolvedConfigDir).toBe(comparablePath(isolatedConfigHome));
+    expect(resolvedConfigDir).not.toBe(
+      comparablePath(LLXPRT_PLATFORM_PATHS.config),
+    );
+  });
+
   it.skipIf(process.platform === 'win32')(
     'captures and unsets the token; passes it on fd 3 to the final CLI (PATH recorder)',
     () => {
@@ -313,10 +320,31 @@ describe('sandbox-entrypoint: trusted entrypoint security (AC2, AC3, F1, F7, F10
         tokenValid: boolean;
         envToken: string;
         fdMarker: string;
+        configDir: string;
       }>(sentinel);
       expect(rec.tokenValid).toBe(true);
       expect(rec.envToken).toBe('UNSET');
       expect(rec.fdMarker).toBe('3');
+      // The direct-child test above proves `runCmd` injects the isolated
+      // root; this proves it SURVIVES the real generated entrypoint chain
+      // (`env -u BASH_ENV` -> `bash --noprofile --norc` -> `exec` recorder).
+      // A future entrypoint change that scrubs the child environment would
+      // otherwise drop the final CLI onto the user's platform config dir
+      // while the direct-child probe stays green. The recorder resolves the
+      // root with the real `Storage.getGlobalConfigDir()` in its own
+      // environment, so an empty `configDir` (probe failed) cannot pass
+      // vacuously either.
+      const isolatedConfigHome = process.env.LLXPRT_CONFIG_HOME;
+      if (isolatedConfigHome === undefined) {
+        throw new Error(
+          'LLXPRT_CONFIG_HOME is unset: the storage isolation preload must run before this suite spawns children',
+        );
+      }
+      const resolvedConfigDir = comparablePath(rec.configDir);
+      expect(resolvedConfigDir).toBe(comparablePath(isolatedConfigHome));
+      expect(resolvedConfigDir).not.toBe(
+        comparablePath(LLXPRT_PLATFORM_PATHS.config),
+      );
     },
   );
 
