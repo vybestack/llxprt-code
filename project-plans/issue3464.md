@@ -338,3 +338,33 @@ Nothing chmods or alters the host workspace.
 
 Quality gates: typecheck, scoped lint, prettier, copyright guard, and the
 test audit are clean for every touched file (`tmp/issue3450-ci-fix/`).
+
+## Native Linux direct-session ownership follow-up (PR #3471)
+
+A later Linux Docker run exposed a separate checkpoint test-fixture portability
+defect. The direct-container checkpoint harness called production argument
+construction but bypassed production's `setupContainerUser` phase. Its ordinary
+run-one and run-two containers therefore used the image UID. On native Linux,
+run-two's `git restore` recreated bind-mounted `tracked.txt` as that foreign UID.
+The host test runner then received `EPERM` while applying the narrow mode 0666
+setup required before the explicit `54321:54321` session. Docker Desktop on
+macOS hid the ownership mismatch through its bind-mount virtualization.
+
+The fixture now appends `--user <host uid>:<host gid>` to every ordinary direct
+checkpoint session on native Linux. It pins `HOME` to an isolated writable path
+under the temporary fixture storage, substituting for the home that production
+user setup creates before dropping privileges. This models the effective
+identity selected by production's Debian/Ubuntu current-user path, so restored
+shared-source files remain owned by the host test user. An explicit user always
+takes precedence, which preserves the `54321:54321` session, its existing
+explicit home, and its full history-read, commit, restore, and UID assertions.
+Non-Linux hosts retain the image user. The fixture still widens only synthetic
+`tracked.txt` immediately before the foreign-UID session. Production workspace
+permissions and checkpoint behavior are unchanged.
+
+A state-based Bun test covers ordinary Linux host-identity selection, explicit
+user precedence, and the unchanged macOS argument shape. The native CI failure
+is preserved in
+`tmp/issue3450/final-verification-expanded/ci-linux-docker-final-failed.log`.
+Final local verification for this correction is recorded under
+`tmp/issue3450/checkpoint-host-user-fix/`.

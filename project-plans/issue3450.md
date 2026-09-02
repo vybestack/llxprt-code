@@ -1213,3 +1213,31 @@ test-audit findings 0 on all touched test files; `git diff --check` clean.
 The new home-creation tests live in
 `sandbox-containers.user-home.test.ts` (split from
 `sandbox-containers.test.ts` for max-lines compliance).
+
+## Fresh Linux Docker checkpoint fixture correction (PR #3471)
+
+The next Linux Docker run proved that the prior narrow `tracked.txt` permission
+setup was correct but occurred after an ownership mismatch. The checkpoint
+fixture's ordinary direct-container runs bypassed production
+`setupContainerUser`, so they ran as the image UID. On native Linux, run-two's
+`git restore` recreated the shared bind-mounted file as that foreign UID. The
+host runner did not own the restored file and received `EPERM` before it could
+set mode 0666 for the explicit `54321:54321` session. Docker Desktop on macOS
+did not reproduce native bind ownership.
+
+The direct checkpoint fixture now selects the host UID and GID for ordinary
+sessions on native Linux, matching production's effective Debian/Ubuntu user
+selection. It also pins `HOME` to an isolated writable path under the temporary
+fixture storage, which substitutes for the home that production user setup
+creates before dropping privileges. The helper is applied to the ordinary run,
+coexistence, and version-skew direct launch shapes. Explicit selection takes
+precedence, so the `54321:54321` session, its existing explicit home, its narrow
+synthetic-file setup, persistent checkpoint store, and all production assertions
+remain unchanged. Non-Linux direct sessions continue to use the image user. No
+production workspace is chmodded, and no cleanup, retry, sleep, or skip behavior
+was added.
+
+A state-based Bun test proves the generated argument state for ordinary native
+Linux, explicit foreign-UID, and macOS sessions. RED, GREEN, real-engine, and
+quality-gate logs for this correction are under
+`tmp/issue3450/checkpoint-host-user-fix/`.

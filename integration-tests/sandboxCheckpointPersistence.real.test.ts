@@ -567,6 +567,30 @@ interface SessionOptions {
   readonly homeEnv?: string;
 }
 
+function addDirectSessionIdentity(
+  args: string[],
+  requestedUser: string | undefined,
+  directSessionHome: string,
+  platform: NodeJS.Platform = process.platform,
+  hostIdentity?: string,
+): void {
+  if (requestedUser !== undefined) {
+    args.push('--user', requestedUser);
+    return;
+  }
+
+  if (platform !== 'linux') return;
+
+  const selectedUser =
+    hostIdentity ?? `${String(process.getuid())}:${String(process.getgid())}`;
+  args.push(
+    '--user',
+    selectedUser,
+    '--env',
+    `HOME=${getContainerPath(directSessionHome)}`,
+  );
+}
+
 interface SessionResult extends LaunchResult {
   readonly containerName: string;
   readonly checkpointVolumeName: string;
@@ -604,9 +628,11 @@ function runCheckpointSession(
   );
   const ttyIndex = args.indexOf('-t');
   if (ttyIndex !== -1) args.splice(ttyIndex, 1);
-  if (options.user !== undefined) {
-    args.push('--user', options.user);
-  }
+  addDirectSessionIdentity(
+    args,
+    options.user,
+    join(fixture.storageRoot, 'direct-home'),
+  );
   if (options.homeEnv !== undefined) {
     args.push('--env', `HOME=${options.homeEnv}`);
   }
@@ -1005,6 +1031,11 @@ function describeEngine(engine: string): void {
           );
           const ttyIndex = args.indexOf('-t');
           if (ttyIndex !== -1) args.splice(ttyIndex, 1);
+          addDirectSessionIdentity(
+            args,
+            undefined,
+            join(ctx.fixture.storageRoot, 'direct-home'),
+          );
           const lifecycle = addPrivateDependencyMounts(config, args, workdir);
           const plan = planCheckpointStorage(config, workdir, true);
           attachPersistentCheckpointStore(config, args, plan);
@@ -1095,6 +1126,11 @@ function describeEngine(engine: string): void {
             );
             const ttyIndex = args.indexOf('-t');
             if (ttyIndex !== -1) args.splice(ttyIndex, 1);
+            addDirectSessionIdentity(
+              args,
+              undefined,
+              join(fixture.storageRoot, 'direct-home'),
+            );
             args.push('--env', 'SANDBOX=issue3464-version-skew');
             args.push('--name', `issue3464-skew-${engine}-${randomUUID()}`);
 
@@ -1244,6 +1280,31 @@ function describeEngine(engine: string): void {
     },
   );
 }
+
+describe('Checkpoint direct-session identity selection', () => {
+  it('uses the host identity and isolated home only for ordinary native Linux sessions', () => {
+    const linuxArgs = ['run'];
+    addDirectSessionIdentity(linuxArgs, undefined, '/tmp/home', 'linux', '1:2');
+
+    const explicitArgs = ['run'];
+    addDirectSessionIdentity(explicitArgs, '3:4', '/tmp/home', 'linux', '1:2');
+
+    const darwinArgs = ['run'];
+    addDirectSessionIdentity(
+      darwinArgs,
+      undefined,
+      '/tmp/home',
+      'darwin',
+      '1:2',
+    );
+
+    expect({ linuxArgs, explicitArgs, darwinArgs }).toStrictEqual({
+      linuxArgs: ['run', '--user', '1:2', '--env', 'HOME=/tmp/home'],
+      explicitArgs: ['run', '--user', '3:4'],
+      darwinArgs: ['run'],
+    });
+  });
+});
 
 // The fixture creates POSIX shell scripts and symlinks; Windows hosts cannot.
 if (process.platform !== 'win32') {
