@@ -35,6 +35,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { globSync } from 'glob';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import type { SandboxConfig } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
@@ -60,6 +61,11 @@ import {
   planDependencyVolumeNames,
   runEngineCommand,
 } from './sandbox-dependency-volumes.js';
+import {
+  planWorkspacePackageDiscovery,
+  type WorkspacePackageDiscoveryPlan,
+  type WorkspacePackagePattern,
+} from './sandbox-workspace-discovery.js';
 
 /**
  * The image-global executable location validated for this sandbox image:
@@ -430,41 +436,135 @@ function isInsideWorkspace(workdir: string, candidate: string): boolean {
   );
 }
 
-/**
- * Reads the root manifest's ordinary workspace list and returns its literal
- * package-root declarations. Glob, exclusion, and non-string entries are
- * package-manager syntax, not literal roots; expanding them would invent
- * destinations the plan forbids. Non-list workspace metadata (for example
- * the `workspaces.packages` object form) is outside this issue's accepted
- * behavior and is not interpreted.
- */
-function readLiteralWorkspaceDeclarations(manifestPath: string): string[] {
-  let declarations: unknown;
+const EMPTY_WORKSPACE_DISCOVERY_PLAN: WorkspacePackageDiscoveryPlan = {
+  inclusions: [],
+  exclusions: [],
+};
+
+function readWorkspacePackageDiscoveryPlan(
+  manifestPath: string,
+): WorkspacePackageDiscoveryPlan {
+  let manifest: unknown;
   try {
-    const manifest: unknown = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-    if (typeof manifest !== 'object' || manifest === null) return [];
-    declarations = Reflect.get(manifest, 'workspaces');
+    manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   } catch {
-    return [];
+    return EMPTY_WORKSPACE_DISCOVERY_PLAN;
   }
-  if (!Array.isArray(declarations)) return [];
-  return declarations.filter(
-    (declaration): declaration is string =>
-      typeof declaration === 'string' &&
-      declaration !== '' &&
-      !declaration.startsWith('!') &&
-      !/[*?[]/.test(declaration),
+  if (typeof manifest !== 'object' || manifest === null) {
+    return EMPTY_WORKSPACE_DISCOVERY_PLAN;
+  }
+  return planWorkspacePackageDiscovery(Reflect.get(manifest, 'workspaces'));
+}
+
+function comparePackageRoots(left: string, right: string): number {
+  const depthDifference =
+    left.split(path.sep).length - right.split(path.sep).length;
+  if (depthDifference !== 0) return depthDifference;
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+function expandWorkspacePattern(
+  workdir: string,
+  planned: WorkspacePackagePattern,
+  failOnNoMatch: boolean,
+): string[] {
+  if (planned.kind === 'literal') {
+    return [path.resolve(workdir, planned.pattern)];
+  }
+  const packageRoots = globSync(`${planned.pattern}/package.json`, {
+    cwd: workdir,
+    absolute: true,
+    nodir: true,
+    follow: false,
+    dot: false,
+    ignore: ['**/node_modules/**', '**/.git/**'],
+  })
+    .map((manifest) => path.dirname(manifest))
+    .sort(comparePackageRoots);
+  if (failOnNoMatch && packageRoots.length === 0) {
+    throw new FatalSandboxError(
+      `Workspace glob '${planned.source}' matched no package roots in ` +
+        `'${workdir}'. Correct the pattern, or use a literal workspace path ` +
+        `for a package root that does not exist yet.`,
+    );
+  }
+  return packageRoots;
+}
+
+interface ResolvedProtectedDestination {
+  readonly identity: string;
+  readonly destination: string;
+}
+
+function resolveContainedDestination(
+  workdir: string,
+  workspaceRealRoot: string,
+  lexicalDestination: string,
+  source: string,
+  filesystem?: SandboxPathFilesystem,
+): ResolvedProtectedDestination {
+  // Lexical containment first: this catches `../` declarations before any
+  // filesystem probing and keeps the error message path-shaped.
+  if (!isInsideWorkspace(workdir, lexicalDestination)) {
+    throw new FatalSandboxError(
+      `Invalid workspace declaration ${source}: it resolves outside the ` +
+        `workspace to ${lexicalDestination}.`,
+    );
+  }
+  // Then real-tree containment: an existing symlink component must not
+  // smuggle the destination out of the mounted workspace.
+  const identity = canonicalizeNearestExistingPath(
+    lexicalDestination,
+    'resolve the protected sandbox dependency destination',
+    filesystem,
+  );
+  if (!isInsideWorkspace(workspaceRealRoot, identity)) {
+    throw new FatalSandboxError(
+      `Invalid workspace declaration ${source}: it resolves outside the ` +
+        `workspace to ${identity}.`,
+    );
+  }
+  // Re-anchor the resolved route onto the launch workspace path so the
+  // nested bind lands inside the shared workspace bind in the container
+  // (the workspace may itself sit under a symlinked host prefix).
+  return {
+    identity,
+    destination: path.join(workdir, path.relative(workspaceRealRoot, identity)),
+  };
+}
+
+function resolvePatternDestinations(
+  workdir: string,
+  workspaceRealRoot: string,
+  manifestPath: string,
+  planned: WorkspacePackagePattern,
+  failOnNoMatch: boolean,
+  filesystem?: SandboxPathFilesystem,
+): ResolvedProtectedDestination[] {
+  return expandWorkspacePattern(workdir, planned, failOnNoMatch).map(
+    (packageRoot) =>
+      resolveContainedDestination(
+        workdir,
+        workspaceRealRoot,
+        path.join(packageRoot, 'node_modules'),
+        `'${planned.source}' in ${manifestPath}`,
+        filesystem,
+      ),
   );
 }
 
 /**
- * Returns the `node_modules` destinations that must be replaced by private
- * per-run mounts for a workspace: the root tree first, then one tree per
- * literal workspace declaration in the root manifest. Duplicates that
- * reach one directory (directly or through symlinks) are removed by
- * filesystem identity, and a declaration that resolves outside the real
- * workspace tree fails the launch. A missing or unparseable manifest
- * protects the root tree only.
+ * Returns the root and declared nested `node_modules` destinations that
+ * need private per-run mounts for a workspace. Literal declarations
+ * preserve #3450 behavior; supported globs discover contained package
+ * roots with manifests, and exclusions remove discovered roots after
+ * every positive declaration has been validated. Duplicates that reach
+ * one directory (directly or through symlinks) are removed by filesystem
+ * identity, and a declaration that resolves outside the real workspace
+ * tree fails the launch. A missing or unparseable manifest protects the
+ * root tree only.
  *
  * The optional `filesystem` seam exists so tests can exercise the
  * discovery-then-resolution race deterministically; production callers
@@ -479,55 +579,48 @@ export function resolveProtectedNodeModulesDestinations(
     'resolve the sandbox workspace root',
     filesystem,
   );
-  const destinations: string[] = [];
-  const seenIdentities = new Set<string>();
-
-  const acceptDestination = (
-    lexicalDestination: string,
-    source: string,
-  ): void => {
-    // Lexical containment first: this catches `../` declarations before any
-    // filesystem probing and keeps the error message path-shaped.
-    if (!isInsideWorkspace(workdir, lexicalDestination)) {
-      throw new FatalSandboxError(
-        `Invalid workspace declaration ${source}: it resolves outside the ` +
-          `workspace to ${lexicalDestination}.`,
-      );
-    }
-    // Then real-tree containment: an existing symlink component must not
-    // smuggle the destination out of the mounted workspace.
-    const identity = canonicalizeNearestExistingPath(
-      lexicalDestination,
-      'resolve the protected sandbox dependency destination',
-      filesystem,
-    );
-    if (!isInsideWorkspace(workspaceRealRoot, identity)) {
-      throw new FatalSandboxError(
-        `Invalid workspace declaration ${source}: it resolves outside the ` +
-          `workspace to ${identity}.`,
-      );
-    }
-    if (seenIdentities.has(identity)) return;
-    seenIdentities.add(identity);
-    // Re-anchor the resolved route onto the launch workspace path so the
-    // nested bind lands inside the shared workspace bind in the container
-    // (the workspace may itself sit under a symlinked host prefix).
-    destinations.push(
-      path.join(workdir, path.relative(workspaceRealRoot, identity)),
-    );
-  };
-
-  acceptDestination(
+  const root = resolveContainedDestination(
+    workdir,
+    workspaceRealRoot,
     path.join(workdir, 'node_modules'),
     `'node_modules' (the workspace root dependency tree)`,
+    filesystem,
   );
-
   const manifestPath = path.join(workdir, 'package.json');
-  for (const declaration of readLiteralWorkspaceDeclarations(manifestPath)) {
-    acceptDestination(
-      path.join(path.resolve(workdir, declaration), 'node_modules'),
-      `'${declaration}' in ${manifestPath}`,
-    );
+  const plan = readWorkspacePackageDiscoveryPlan(manifestPath);
+  const included = plan.inclusions.flatMap((planned) =>
+    resolvePatternDestinations(
+      workdir,
+      workspaceRealRoot,
+      manifestPath,
+      planned,
+      true,
+      filesystem,
+    ),
+  );
+  const excludedIdentities = new Set(
+    plan.exclusions.flatMap((planned) =>
+      resolvePatternDestinations(
+        workdir,
+        workspaceRealRoot,
+        manifestPath,
+        planned,
+        false,
+        filesystem,
+      ).map((resolved) => resolved.identity),
+    ),
+  );
+  const destinations = [root.destination];
+  const seenIdentities = new Set([root.identity]);
+  for (const resolved of included) {
+    if (
+      excludedIdentities.has(resolved.identity) ||
+      seenIdentities.has(resolved.identity)
+    ) {
+      continue;
+    }
+    seenIdentities.add(resolved.identity);
+    destinations.push(resolved.destination);
   }
   return destinations;
 }

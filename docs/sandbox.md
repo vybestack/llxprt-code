@@ -302,9 +302,22 @@ over each of these locations in the primary workspace and every accepted
 
 - `<workspace-root>/node_modules`; and
 - `node_modules` beneath each nested Node package root declared in that root's
-  `package.json` `workspaces` list. Only literal list entries are used. Glob
-  entries are not expanded, and each root `node_modules` is protected even
-  without a manifest.
+  `package.json` `workspaces` list.
+
+Workspace declarations may use an array or an object with a `packages` array.
+Literal paths retain support for package roots that do not exist yet. Supported
+globs use `*` as a complete path segment, such as `packages/*`, or a final `**`
+after a literal directory prefix, such as `tools/**`. A leading `!` excludes
+matching package roots. Glob discovery selects directories that contain a
+`package.json`, ignores `node_modules` and `.git` trees, and rejects a matched
+package root whose resolved path leaves the real workspace. Each accepted root's
+`node_modules` is protected even without a manifest.
+
+A positive glob that matches no package roots stops the launch and suggests
+using a literal path for a package root that does not exist yet. Unsupported
+glob operators also stop the launch and report the accepted forms. An exclusion
+that matches nothing has no effect. These checks finish before Docker or Podman
+creates a volume or container.
 
 Each private volume is writable by the user the container already runs as,
 even when that user's UID differs from the host owner. This isolation applies
@@ -327,7 +340,8 @@ the session exits, is interrupted, or fails to launch. A protected path that
 was absent before the session is absent again afterward: LLxprt removes an
 empty mountpoint materialized through a workspace bind, but never removes a
 nonempty directory. Cleanup failures print a warning naming the operation and
-resource. Before creating the private mounts, a read-only preflight
+the engine resource or host path. Before creating the private mounts, a
+read-only preflight
 scans the existing host `node_modules` trees (the whole protected trees, so
 nothing is missed) for recognized wrong-platform binaries and stops the launch
 with repair guidance when it finds one (see

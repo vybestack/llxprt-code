@@ -18,6 +18,7 @@ import {
   planPrivateDependencyMounts,
   resolveProtectedNodeModulesDestinations,
 } from './sandbox-node-modules.js';
+import { planWorkspacePackageDiscovery } from './sandbox-workspace-discovery.js';
 
 const RUN_ROOT_PREFIX = 'sandbox-node-modules-';
 
@@ -101,7 +102,138 @@ function snapshotTree(
   return snapshot;
 }
 
-describe('#3450 protected node_modules destination resolution', () => {
+describe('#3468 workspace package discovery planning', () => {
+  it('plans supported literals, globs, and exclusions from an array', () => {
+    expect(
+      planWorkspacePackageDiscovery([
+        'packages/literal',
+        'packages/*',
+        'tools/**',
+        '!packages/excluded',
+        42,
+        '',
+      ]),
+    ).toStrictEqual({
+      inclusions: [
+        {
+          source: 'packages/literal',
+          pattern: 'packages/literal',
+          kind: 'literal',
+        },
+        {
+          source: 'packages/*',
+          pattern: 'packages/*',
+          kind: 'glob',
+        },
+        { source: 'tools/**', pattern: 'tools/**', kind: 'glob' },
+      ],
+      exclusions: [
+        {
+          source: '!packages/excluded',
+          pattern: 'packages/excluded',
+          kind: 'literal',
+        },
+      ],
+    });
+  });
+
+  it('supports the established workspaces.packages object form', () => {
+    expect(
+      planWorkspacePackageDiscovery({
+        packages: ['./packages/literal', 'packages/*', '!packages/private'],
+        nohoist: ['**/fixture'],
+      }),
+    ).toStrictEqual({
+      inclusions: [
+        {
+          source: './packages/literal',
+          pattern: 'packages/literal',
+          kind: 'literal',
+        },
+        {
+          source: 'packages/*',
+          pattern: 'packages/*',
+          kind: 'glob',
+        },
+      ],
+      exclusions: [
+        {
+          source: '!packages/private',
+          pattern: 'packages/private',
+          kind: 'literal',
+        },
+      ],
+    });
+  });
+
+  it('preserves literal punctuation that is not a glob operator', () => {
+    expect(
+      planWorkspacePackageDiscovery([
+        'packages/c++',
+        'packages/email@scope',
+        'packages/group(name)',
+        'packages/bang!name',
+        'packages/pipe|name',
+      ]),
+    ).toStrictEqual({
+      inclusions: [
+        { source: 'packages/c++', pattern: 'packages/c++', kind: 'literal' },
+        {
+          source: 'packages/email@scope',
+          pattern: 'packages/email@scope',
+          kind: 'literal',
+        },
+        {
+          source: 'packages/group(name)',
+          pattern: 'packages/group(name)',
+          kind: 'literal',
+        },
+        {
+          source: 'packages/bang!name',
+          pattern: 'packages/bang!name',
+          kind: 'literal',
+        },
+        {
+          source: 'packages/pipe|name',
+          pattern: 'packages/pipe|name',
+          kind: 'literal',
+        },
+      ],
+      exclusions: [],
+    });
+  });
+
+  it('rejects unsupported glob syntax with the declaration and supported forms', () => {
+    for (const declaration of [
+      'packages/pkg-*',
+      'packages/**/nested',
+      'packages/pkg?',
+      'packages/[ab]',
+      'packages/{a,b}',
+      'packages/?(a|b)',
+      'packages/*(a|b)',
+      'packages/+(a|b)',
+      'packages/@(a|b)',
+      'packages/!(a|b)',
+      'packages/*/../hidden',
+      '!!packages/private',
+      '**',
+      './**',
+      './*/**',
+      '/absolute/*',
+      'C:/absolute/*',
+    ]) {
+      expect(() => planWorkspacePackageDiscovery([declaration])).toThrowError(
+        declaration,
+      );
+      expect(() => planWorkspacePackageDiscovery([declaration])).toThrowError(
+        "'*' as a complete segment",
+      );
+    }
+  });
+});
+
+describe('#3450/#3468 protected node_modules destination resolution', () => {
   let workdir = '';
 
   beforeEach(() => {
@@ -109,7 +241,6 @@ describe('#3450 protected node_modules destination resolution', () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
     if (workdir !== '') fs.rmSync(workdir, { recursive: true, force: true });
   });
 
@@ -137,15 +268,29 @@ describe('#3450 protected node_modules destination resolution', () => {
     ]);
   });
 
-  it('does not invent nested roots from non-list workspace metadata', () => {
-    // The object form (`workspaces.packages`) is package-manager-specific
-    // metadata outside the ordinary workspace list this issue accepted;
-    // it is deliberately not interpreted (#3450 remediation F9).
+  it('protects literal roots from the workspaces.packages object form', () => {
     writeJson(path.join(workdir, 'package.json'), {
       workspaces: { packages: ['packages/nested'] },
     });
     expect(resolveProtectedNodeModulesDestinations(workdir)).toStrictEqual([
       path.join(workdir, 'node_modules'),
+      path.join(workdir, 'packages', 'nested', 'node_modules'),
+    ]);
+  });
+
+  it('discovers and excludes package roots from the workspaces.packages object form', () => {
+    for (const name of ['included', 'excluded']) {
+      writeJson(path.join(workdir, 'packages', name, 'package.json'), { name });
+    }
+    writeJson(path.join(workdir, 'package.json'), {
+      workspaces: {
+        packages: ['packages/*', '!packages/excluded/**'],
+      },
+    });
+
+    expect(resolveProtectedNodeModulesDestinations(workdir)).toStrictEqual([
+      path.join(workdir, 'node_modules'),
+      path.join(workdir, 'packages', 'included', 'node_modules'),
     ]);
   });
 
@@ -159,14 +304,91 @@ describe('#3450 protected node_modules destination resolution', () => {
     ]);
   });
 
-  it('skips glob-style declarations instead of expanding them', () => {
-    writeJson(path.join(workdir, 'package.json'), {
-      workspaces: ['packages/*', 'tools/**', '!excluded', './literal'],
+  it('discovers package roots from one-segment and recursive globs', () => {
+    writeJson(path.join(workdir, 'packages', 'alpha', 'package.json'), {
+      name: 'alpha',
     });
+    fs.mkdirSync(path.join(workdir, 'packages', 'not-a-package'), {
+      recursive: true,
+    });
+    writeJson(path.join(workdir, 'tools', 'package.json'), {
+      name: 'tools-root',
+    });
+    writeJson(path.join(workdir, 'tools', 'group', 'deep', 'package.json'), {
+      name: 'deep-tool',
+    });
+    writeJson(
+      path.join(workdir, 'tools', 'node_modules', 'ignored', 'package.json'),
+      { name: 'ignored-dependency' },
+    );
+    writeJson(path.join(workdir, 'tools', '.git', 'ignored', 'package.json'), {
+      name: 'ignored-metadata',
+    });
+    writeJson(path.join(workdir, 'package.json'), {
+      workspaces: ['packages/*', 'tools/**', './literal'],
+    });
+
     expect(resolveProtectedNodeModulesDestinations(workdir)).toStrictEqual([
       path.join(workdir, 'node_modules'),
+      path.join(workdir, 'packages', 'alpha', 'node_modules'),
+      path.join(workdir, 'tools', 'node_modules'),
+      path.join(workdir, 'tools', 'group', 'deep', 'node_modules'),
       path.join(workdir, 'literal', 'node_modules'),
     ]);
+  });
+
+  it('applies exclusions after positive glob discovery', () => {
+    for (const name of ['included', 'excluded']) {
+      writeJson(path.join(workdir, 'packages', name, 'package.json'), { name });
+    }
+    writeJson(path.join(workdir, 'package.json'), {
+      workspaces: ['!packages/excluded', '!packages/not-present', 'packages/*'],
+    });
+
+    expect(resolveProtectedNodeModulesDestinations(workdir)).toStrictEqual([
+      path.join(workdir, 'node_modules'),
+      path.join(workdir, 'packages', 'included', 'node_modules'),
+    ]);
+  });
+
+  it('fails actionably when a positive glob matches no package roots', () => {
+    fs.mkdirSync(path.join(workdir, 'packages', 'not-a-package'), {
+      recursive: true,
+    });
+    writeJson(path.join(workdir, 'package.json'), {
+      workspaces: ['packages/*'],
+    });
+
+    expect(() => resolveProtectedNodeModulesDestinations(workdir)).toThrowError(
+      "Workspace glob 'packages/*' matched no package roots",
+    );
+    expect(() => resolveProtectedNodeModulesDestinations(workdir)).toThrowError(
+      'use a literal workspace path',
+    );
+  });
+
+  it('rejects a glob match that resolves through a symlink outside the workspace', () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'issue3468-out-'));
+    try {
+      writeJson(path.join(outside, 'package.json'), { name: 'escaped' });
+      fs.mkdirSync(path.join(workdir, 'packages'), { recursive: true });
+      fs.symlinkSync(outside, path.join(workdir, 'packages', 'escaped'));
+      writeJson(path.join(workdir, 'package.json'), {
+        workspaces: ['packages/*', '!packages/escaped'],
+      });
+
+      expect(() =>
+        resolveProtectedNodeModulesDestinations(workdir),
+      ).toThrowError(FatalSandboxError);
+      expect(() =>
+        resolveProtectedNodeModulesDestinations(workdir),
+      ).toThrowError("'packages/*'");
+      expect(() =>
+        resolveProtectedNodeModulesDestinations(workdir),
+      ).toThrowError('resolves outside the workspace');
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   it('ignores non-string declaration entries', () => {
@@ -293,7 +515,7 @@ describe('#3450 protected node_modules destination resolution', () => {
   });
 });
 
-describe('#3450 private per-run dependency mounts', () => {
+describe('#3450/#3468 private per-run dependency mounts', () => {
   const engine = useFakeEngine();
   let workdir = '';
   let restoreCacheEnv: () => void;
@@ -327,7 +549,6 @@ describe('#3450 private per-run dependency mounts', () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
     if (workdir !== '') fs.rmSync(workdir, { recursive: true, force: true });
     restoreCacheEnv();
   });
@@ -438,11 +659,13 @@ describe('#3450 private per-run dependency mounts', () => {
         args,
         workdir,
       );
+      lifecycle.recordMainContainerName('development-container');
+      lifecycle.release();
+
       expect(args).toStrictEqual(['--volume', `${workdir}:${workdir}`]);
       expect(privateRunRoots()).toStrictEqual([]);
-      expect(engine.snapshot().invocations).toStrictEqual([]);
-      expect(() => lifecycle.recordMainContainerName('any')).not.toThrow();
-      expect(() => lifecycle.release()).not.toThrow();
+      expect(engine.volumeNames()).toStrictEqual([]);
+      expect(engine.containerNames()).toStrictEqual([]);
     } finally {
       if (savedEnv === undefined) {
         delete process.env.NODE_ENV;
@@ -476,8 +699,50 @@ describe('#3450 private per-run dependency mounts', () => {
       path.join(workdir, 'packages', 'absent', 'node_modules'),
     );
     expect(privateRunRoots()).toStrictEqual([]);
-    // The failure happens before any engine resource is created.
-    expect(engine.snapshot().invocations).toStrictEqual([]);
+    expect(engine.volumeNames()).toStrictEqual([]);
+    expect(engine.containerNames()).toStrictEqual([]);
+    expect(args).toStrictEqual([]);
+  });
+
+  it('rejects unsupported workspace syntax before engine or host side effects', () => {
+    const hostMarker = path.join(
+      workdir,
+      'node_modules',
+      'host-root-marker.txt',
+    );
+    writeJson(path.join(workdir, 'package.json'), {
+      workspaces: ['packages/{one,two}'],
+    });
+
+    expect(() =>
+      addPrivateDependencyMounts(engine.config, [], workdir),
+    ).toThrowError("'packages/{one,two}'");
+    expect(engine.volumeNames()).toStrictEqual([]);
+    expect(engine.containerNames()).toStrictEqual([]);
+    expect(snapshotTree(path.join(workdir, 'node_modules'))).toStrictEqual(
+      new Map<string, TreeEntry>([
+        ['host-pkg', { kind: 'dir' }],
+        [
+          'host-root-marker.txt',
+          { kind: 'file', content: 'host-root-marker\n' },
+        ],
+      ]),
+    );
+    expect(fs.readFileSync(hostMarker, 'utf8')).toBe('host-root-marker\n');
+  });
+
+  it('rejects a no-match glob before creating an engine volume', () => {
+    const args: string[] = [];
+    writeJson(path.join(workdir, 'package.json'), {
+      workspaces: ['packages/*'],
+    });
+
+    expect(() =>
+      addPrivateDependencyMounts(engine.config, args, workdir),
+    ).toThrowError("Workspace glob 'packages/*' matched no package roots");
+    expect(engine.volumeNames()).toStrictEqual([]);
+    expect(engine.containerNames()).toStrictEqual([]);
+    expect(args).toStrictEqual([]);
   });
 });
 

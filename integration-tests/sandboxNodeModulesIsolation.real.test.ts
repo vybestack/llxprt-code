@@ -173,6 +173,8 @@ interface FixtureWorkspace {
   readonly responsesRun2: string;
   /** Protected host dependency trees snapshotted before launch. */
   readonly protectedHostDirs: readonly string[];
+  /** A glob-excluded dependency tree that remains on the shared bind. */
+  readonly excludedHostDir: string;
   /** A declared nested root whose node_modules is absent before launch. */
   readonly absentProtectedDir: string;
 }
@@ -217,15 +219,22 @@ function buildFixture(home: string): FixtureWorkspace {
   writeJsonFile(join(repoRoot, 'package.json'), {
     name: 'issue3450-fixture',
     private: true,
-    workspaces: ['packages/nested', 'packages/absent'],
+    workspaces: ['packages/*', 'tools/**', '!packages/excluded/**'],
   });
   writeJsonFile(join(repoRoot, 'packages', 'nested', 'package.json'), {
     name: 'issue3450-nested',
     private: true,
   });
-  // Declared but not created: its node_modules must stay absent on the host.
   writeJsonFile(join(repoRoot, 'packages', 'absent', 'package.json'), {
     name: 'issue3450-absent',
+    private: true,
+  });
+  writeJsonFile(join(repoRoot, 'packages', 'excluded', 'package.json'), {
+    name: 'issue3468-excluded',
+    private: true,
+  });
+  writeJsonFile(join(repoRoot, 'tools', 'group', 'deep', 'package.json'), {
+    name: 'issue3468-deep-tool',
     private: true,
   });
 
@@ -282,6 +291,27 @@ function buildFixture(home: string): FixtureWorkspace {
     '/usr/local/bin/issue3450-missing-nested-tool',
     join(repoRoot, 'packages', 'nested', 'node_modules', '.bin', 'nested-tool'),
   );
+  writeTextFile(
+    join(
+      repoRoot,
+      'tools',
+      'group',
+      'deep',
+      'node_modules',
+      'host-deep-tool-marker.txt',
+    ),
+    'host-deep-tool-marker-3468\n',
+  );
+  writeTextFile(
+    join(
+      repoRoot,
+      'packages',
+      'excluded',
+      'node_modules',
+      'host-excluded-marker.txt',
+    ),
+    'host-excluded-marker-3468\n',
+  );
 
   // The fixture's offline installer, build, and test commands. Every claim is
   // recorded as a distinct result file so the host test can attribute each
@@ -313,17 +343,23 @@ function buildFixture(home: string): FixtureWorkspace {
       'chmod +x packages/nested/node_modules/.bin/nested-tool',
       'packages/nested/node_modules/.bin/nested-tool > results/nested-install-ok.txt',
       "printf 'nested-run-one\\n' > packages/nested/node_modules/nested-run1-private-marker.txt",
+      'mkdir -p tools/group/deep/node_modules/deep-private-dep',
+      'cp vendor/private-dep/answer.js tools/group/deep/node_modules/deep-private-dep/answer.js',
+      "printf 'deep-run-one\\n' > tools/group/deep/node_modules/deep-run1-private-marker.txt",
       'if [ ! -e node_modules/host-root-marker.txt ]; then echo hidden > results/host-root-marker-hidden.txt; else echo visible > results/HOST-ROOT-MARKER-VISIBLE-BAD.txt; fi',
       'if [ ! -e packages/nested/node_modules/host-nested-marker.txt ]; then echo hidden > results/host-nested-marker-hidden.txt; else echo visible > results/HOST-NESTED-MARKER-VISIBLE-BAD.txt; fi',
+      'if [ ! -e tools/group/deep/node_modules/host-deep-tool-marker.txt ]; then echo hidden > results/host-deep-tool-marker-hidden.txt; else echo visible > results/HOST-DEEP-TOOL-MARKER-VISIBLE-BAD.txt; fi',
+      'if [ -e packages/excluded/node_modules/host-excluded-marker.txt ]; then echo visible > results/excluded-marker-visible.txt; else echo hidden > results/EXCLUDED-MARKER-HIDDEN-BAD.txt; fi',
     ].join('\n'),
   );
   writeScript(
     join(repoRoot, 'build.sh'),
     [
       'node -e \'const d = require("./node_modules/private-dep/answer.js"); require("fs").writeFileSync("results/build-ok.txt", "answer=" + d.answer)\'',
-      // The later build consumes the nested private dependency the same
+      // The later build consumes the nested private dependencies the same
       // installer run wrote: persistence within one session.
       'node -e \'const d = require("./packages/nested/node_modules/nested-private-dep/answer.js"); require("fs").appendFileSync("results/build-ok.txt", " nested-answer=" + d.answer)\'',
+      'node -e \'const d = require("./tools/group/deep/node_modules/deep-private-dep/answer.js"); require("fs").appendFileSync("results/build-ok.txt", " deep-answer=" + d.answer)\'',
     ].join('\n'),
   );
   writeScript(
@@ -331,11 +367,13 @@ function buildFixture(home: string): FixtureWorkspace {
     [
       'grep -q "answer=42" results/build-ok.txt',
       'grep -q "nested-answer=42" results/build-ok.txt',
+      'grep -q "deep-answer=42" results/build-ok.txt',
       'test "$(stat -c %a node_modules/private-dep)" = 755',
       'test "$(stat -c %a node_modules/private-dep/answer.js)" = 644',
       'test "$(stat -c %a node_modules/.bin/fixture-tool)" = 755',
       'test "$(stat -c %a packages/nested/node_modules/nested-private-dep)" = 755',
       'test "$(stat -c %a packages/nested/node_modules/nested-private-dep/answer.js)" = 644',
+      'test "$(stat -c %a tools/group/deep/node_modules/deep-private-dep/answer.js)" = 644',
       'echo realistic-permissions > results/dependency-modes-ok.txt',
       'echo tests-passed > results/test-ok.txt',
     ].join('\n'),
@@ -344,7 +382,7 @@ function buildFixture(home: string): FixtureWorkspace {
     join(repoRoot, 'fresh-check.sh'),
     [
       'mkdir -p results',
-      'if [ ! -e node_modules/run1-private-marker.txt ] && [ ! -e packages/nested/node_modules/nested-run1-private-marker.txt ]; then echo fresh > results/second-run-fresh.txt; else echo stale > results/SECOND-RUN-STALE-BAD.txt; fi',
+      'if [ ! -e node_modules/run1-private-marker.txt ] && [ ! -e packages/nested/node_modules/nested-run1-private-marker.txt ] && [ ! -e tools/group/deep/node_modules/deep-run1-private-marker.txt ]; then echo fresh > results/second-run-fresh.txt; else echo stale > results/SECOND-RUN-STALE-BAD.txt; fi',
     ].join('\n'),
   );
 
@@ -438,7 +476,9 @@ function buildFixture(home: string): FixtureWorkspace {
     protectedHostDirs: [
       join(repoRoot, 'node_modules'),
       join(repoRoot, 'packages', 'nested', 'node_modules'),
+      join(repoRoot, 'tools', 'group', 'deep', 'node_modules'),
     ],
+    excludedHostDir: join(repoRoot, 'packages', 'excluded', 'node_modules'),
     absentProtectedDir: join(repoRoot, 'packages', 'absent', 'node_modules'),
   };
 }
@@ -547,21 +587,30 @@ function mountField(spec: string, fieldName: string): string {
   return value;
 }
 
-function queryRunVolumes(engine: string, runId: string): string[] {
-  const filter = `label=${SANDBOX_DEPENDENCY_RUN_LABEL}=${runId}`;
-  const result = spawnSync(
-    engine,
-    ['volume', 'ls', '--filter', filter, '--format', '{{.Name}}'],
-    {
-      encoding: 'utf8',
-      timeout: 30_000,
-      killSignal: 'SIGKILL',
-      maxBuffer: 1024 * 1024,
-    },
-  );
+type DependencyResourceKind = 'container' | 'volume';
+
+function queryDependencyResources(
+  engine: string,
+  kind: DependencyResourceKind,
+  runId?: string,
+): string[] {
+  const filter =
+    runId === undefined
+      ? `label=${SANDBOX_DEPENDENCY_RUN_LABEL}`
+      : `label=${SANDBOX_DEPENDENCY_RUN_LABEL}=${runId}`;
+  const args =
+    kind === 'volume'
+      ? ['volume', 'ls', '--filter', filter, '--format', '{{.Name}}']
+      : ['ps', '-a', '--filter', filter, '--format', '{{.Names}}'];
+  const result = spawnSync(engine, args, {
+    encoding: 'utf8',
+    timeout: 30_000,
+    killSignal: 'SIGKILL',
+    maxBuffer: 1024 * 1024,
+  });
   if (result.status !== 0 || result.error !== undefined) {
     throw new Error(
-      `Failed to query ${engine} volumes for run ID '${runId}' ` +
+      `Failed to query ${engine} ${kind}s with filter '${filter}' ` +
         `(status ${String(result.status)}).\n` +
         `--- stdout ---\n${result.stdout ?? ''}\n` +
         `--- stderr ---\n${result.stderr ?? ''}\n` +
@@ -572,6 +621,10 @@ function queryRunVolumes(engine: string, runId: string): string[] {
     .split(/\r?\n/)
     .filter((name) => name !== '')
     .sort();
+}
+
+function queryRunVolumes(engine: string, runId: string): string[] {
+  return queryDependencyResources(engine, 'volume', runId);
 }
 
 function bounded<T>(
@@ -758,10 +811,79 @@ function assertAbsentProtectedPathStrictlyGone(absentDir: string): void {
   expect(existsSync(absentDir)).toBe(false);
 }
 
+interface PlanningFailureObservation {
+  readonly errorMessage: string;
+  readonly hostMarker: string;
+  readonly hostEntries: readonly string[];
+  readonly containersBefore: readonly string[];
+  readonly containersAfter: readonly string[];
+  readonly volumesBefore: readonly string[];
+  readonly volumesAfter: readonly string[];
+}
+
+function observePlanningFailureBeforeEngineLaunch(
+  engine: string,
+  workspaces: readonly string[],
+  configure: (repoRoot: string, home: string) => void,
+): PlanningFailureObservation {
+  const home = mkdtempSync(join(tmpdir(), `issue3468-${engine}-prelaunch-`));
+  const repoRoot = join(home, 'repo');
+  const hostDependencyRoot = join(repoRoot, 'node_modules');
+  const hostMarkerPath = join(hostDependencyRoot, 'host-marker.txt');
+  mkdirSync(repoRoot, { recursive: true });
+  writeJsonFile(join(repoRoot, 'package.json'), {
+    name: 'issue3468-prelaunch-fixture',
+    private: true,
+    workspaces,
+  });
+  writeTextFile(hostMarkerPath, 'host-marker-before-prelaunch-failure\n');
+  configure(repoRoot, home);
+  const containersBefore = queryDependencyResources(engine, 'container');
+  const volumesBefore = queryDependencyResources(engine, 'volume');
+  let lifecycle: ReturnType<typeof addPrivateDependencyMounts> | undefined;
+  try {
+    let failure: Error | undefined;
+    try {
+      lifecycle = addPrivateDependencyMounts(
+        { command: engine, image: IMAGE },
+        [],
+        repoRoot,
+      );
+    } catch (error) {
+      if (!(error instanceof Error)) throw error;
+      failure = error;
+    }
+    if (failure === undefined) {
+      throw new Error('Expected dependency mount planning to fail');
+    }
+    return {
+      errorMessage: failure.message,
+      hostMarker: readFileSync(hostMarkerPath, 'utf8'),
+      hostEntries: readdirSync(hostDependencyRoot).sort(),
+      containersBefore,
+      containersAfter: queryDependencyResources(engine, 'container'),
+      volumesBefore,
+      volumesAfter: queryDependencyResources(engine, 'volume'),
+    };
+  } finally {
+    lifecycle?.release();
+    rmSync(home, { recursive: true, force: true });
+  }
+}
+
 interface LaunchResult {
   readonly status: number | null;
   readonly stdout: string;
   readonly stderr: string;
+}
+
+function expectPlanningFailurePreservedState(
+  observed: PlanningFailureObservation,
+): void {
+  expect(observed.hostMarker).toBe('host-marker-before-prelaunch-failure\n');
+  expect(observed.hostEntries).toStrictEqual(['host-marker.txt']);
+  expect(observed.containersAfter).toStrictEqual(observed.containersBefore);
+  expect(observed.volumesAfter).toStrictEqual(observed.volumesBefore);
 }
 
 function expectLaunchSucceeded(result: LaunchResult): void {
@@ -779,8 +901,10 @@ function expectEngineVolumeLifecycle(
   fixture: FixtureWorkspace,
 ): void {
   const expectedDestinations = [
-    ...fixture.protectedHostDirs,
+    join(fixture.repoRoot, 'node_modules'),
     fixture.absentProtectedDir,
+    join(fixture.repoRoot, 'packages', 'nested', 'node_modules'),
+    join(fixture.repoRoot, 'tools', 'group', 'deep', 'node_modules'),
   ].map(getContainerPath);
   expect(session.runId).toMatch(
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
@@ -891,11 +1015,12 @@ ${result.stderr ?? ''}
 
 function describeEngine(engine: string): void {
   describe.skipIf(!ENGINES.includes(engine))(
-    `Sandbox node_modules isolation (real ${engine}) #3450`,
+    `Sandbox node_modules isolation (real ${engine}) #3450/#3468`,
     () => {
       let fixture: FixtureWorkspace;
       let home: string;
       let beforeSnapshots: ReadonlyMap<string, TreeEntry>[];
+      let beforeExcluded: ReadonlyMap<string, TreeEntry>;
       let beforeAbsent: ReadonlyMap<string, TreeEntry> | undefined;
       let savedStorageEnv: NodeJS.ProcessEnv | undefined;
 
@@ -917,6 +1042,13 @@ function describeEngine(engine: string): void {
           }
           return snapshot;
         });
+        const excludedSnapshot = snapshotTree(fixture.excludedHostDir);
+        if (excludedSnapshot === undefined) {
+          throw new Error(
+            `excluded host dir missing before launch: ${fixture.excludedHostDir}`,
+          );
+        }
+        beforeExcluded = excludedSnapshot;
         beforeAbsent = snapshotTree(fixture.absentProtectedDir);
       });
 
@@ -934,6 +1066,53 @@ function describeEngine(engine: string): void {
           if (process.env.ISSUE3450_KEEP !== undefined) return;
           rmSync(home, { recursive: true, force: true });
         }
+      });
+
+      it('rejects a positive glob with no package roots before engine launch', () => {
+        const observed = observePlanningFailureBeforeEngineLaunch(
+          engine,
+          ['packages/*'],
+          () => {},
+        );
+
+        expect(observed.errorMessage).toContain(
+          "Workspace glob 'packages/*' matched no package roots",
+        );
+        expectPlanningFailurePreservedState(observed);
+      });
+
+      it('rejects unsupported glob syntax before engine launch', () => {
+        const observed = observePlanningFailureBeforeEngineLaunch(
+          engine,
+          ['packages/{one,two}'],
+          () => {},
+        );
+
+        expect(observed.errorMessage).toContain(
+          "Unsupported workspace glob 'packages/{one,two}'",
+        );
+        expect(observed.errorMessage).toContain("'*' as a complete segment");
+        expectPlanningFailurePreservedState(observed);
+      });
+
+      it('rejects an excluded glob-selected symlink escape before engine launch', () => {
+        const observed = observePlanningFailureBeforeEngineLaunch(
+          engine,
+          ['packages/*', '!packages/escaped'],
+          (repoRoot, fixtureHome) => {
+            const outside = join(fixtureHome, 'outside-package');
+            writeJsonFile(join(outside, 'package.json'), {
+              name: 'issue3468-escaped-package',
+            });
+            mkdirSync(join(repoRoot, 'packages'), { recursive: true });
+            symlinkSync(outside, join(repoRoot, 'packages', 'escaped'));
+          },
+        );
+
+        expect(observed.errorMessage).toContain(
+          'resolves outside the workspace',
+        );
+        expectPlanningFailurePreservedState(observed);
       });
 
       it(
@@ -964,10 +1143,12 @@ function describeEngine(engine: string): void {
               join(fixture.repoRoot, 'results', 'build-ok.txt'),
               'utf8',
             ),
-          ).toBe('answer=42 nested-answer=42');
-          // Host dependency trees were hidden inside the container.
+          ).toBe('answer=42 nested-answer=42 deep-answer=42');
+          // Positive glob matches are hidden; the exclusion remains shared.
           expectResultFile(fixture, 'host-root-marker-hidden.txt');
           expectResultFile(fixture, 'host-nested-marker-hidden.txt');
+          expectResultFile(fixture, 'host-deep-tool-marker-hidden.txt');
+          expectResultFile(fixture, 'excluded-marker-visible.txt');
           expectNoBadResultFiles(fixture);
 
           // Source output outside node_modules is shared: the in-container
@@ -989,6 +1170,7 @@ function describeEngine(engine: string): void {
           fixture.protectedHostDirs.forEach((dir, i) => {
             assertTreeUnchanged(dir, beforeSnapshots[i]);
           });
+          assertTreeUnchanged(fixture.excludedHostDir, beforeExcluded);
           // A protected host path that was absent before launch gained
           // nothing from the session.
           assertAbsentProtectedPathStrictlyGone(fixture.absentProtectedDir);
@@ -1018,6 +1200,7 @@ function describeEngine(engine: string): void {
           fixture.protectedHostDirs.forEach((dir, i) => {
             assertTreeUnchanged(dir, beforeSnapshots[i]);
           });
+          assertTreeUnchanged(fixture.excludedHostDir, beforeExcluded);
           assertAbsentProtectedPathStrictlyGone(fixture.absentProtectedDir);
         },
         SESSION_TIMEOUT_MS,
@@ -1052,6 +1235,7 @@ function describeEngine(engine: string): void {
           fixture.protectedHostDirs.forEach((dir, i) => {
             assertTreeUnchanged(dir, beforeSnapshots[i]);
           });
+          assertTreeUnchanged(fixture.excludedHostDir, beforeExcluded);
           assertAbsentProtectedPathStrictlyGone(fixture.absentProtectedDir);
         },
         SESSION_TIMEOUT_MS,
@@ -1085,6 +1269,7 @@ function describeEngine(engine: string): void {
           fixture.protectedHostDirs.forEach((dir, i) => {
             assertTreeUnchanged(dir, beforeSnapshots[i]);
           });
+          assertTreeUnchanged(fixture.excludedHostDir, beforeExcluded);
           assertAbsentProtectedPathStrictlyGone(fixture.absentProtectedDir);
         },
         SESSION_TIMEOUT_MS,
@@ -1105,11 +1290,12 @@ function describeEngine(engine: string): void {
   const imageGlobalBoots =
     ENGINES.includes(engine) && imageGlobalCliBoots(engine, IMAGE);
   describe.skipIf(!ENGINES.includes(engine) || !imageGlobalBoots)(
-    `Sandbox node_modules isolation (real ${engine}) image-global agent #3450`,
+    `Sandbox node_modules isolation (real ${engine}) image-global agent #3450/#3468`,
     () => {
       let fixture: FixtureWorkspace;
       let home: string;
       let beforeSnapshots: ReadonlyMap<string, TreeEntry>[];
+      let beforeExcluded: ReadonlyMap<string, TreeEntry>;
       let beforeAbsent: ReadonlyMap<string, TreeEntry> | undefined;
       let savedStorageEnv: NodeJS.ProcessEnv | undefined;
 
@@ -1129,6 +1315,13 @@ function describeEngine(engine: string): void {
           }
           return snapshot;
         });
+        const excludedSnapshot = snapshotTree(fixture.excludedHostDir);
+        if (excludedSnapshot === undefined) {
+          throw new Error(
+            `excluded host dir missing before launch: ${fixture.excludedHostDir}`,
+          );
+        }
+        beforeExcluded = excludedSnapshot;
         beforeAbsent = snapshotTree(fixture.absentProtectedDir);
       });
 
@@ -1164,6 +1357,8 @@ function describeEngine(engine: string): void {
           expectResultFile(fixture, 'test-ok.txt');
           expectResultFile(fixture, 'host-root-marker-hidden.txt');
           expectResultFile(fixture, 'host-nested-marker-hidden.txt');
+          expectResultFile(fixture, 'host-deep-tool-marker-hidden.txt');
+          expectResultFile(fixture, 'excluded-marker-visible.txt');
           expectNoBadResultFiles(fixture);
 
           expect(
@@ -1172,6 +1367,7 @@ function describeEngine(engine: string): void {
           fixture.protectedHostDirs.forEach((dir, i) => {
             assertTreeUnchanged(dir, beforeSnapshots[i]);
           });
+          assertTreeUnchanged(fixture.excludedHostDir, beforeExcluded);
           assertAbsentProtectedPathStrictlyGone(fixture.absentProtectedDir);
           expect(beforeAbsent).toBeUndefined();
           expect(
@@ -1198,6 +1394,7 @@ function describeEngine(engine: string): void {
           fixture.protectedHostDirs.forEach((dir, i) => {
             assertTreeUnchanged(dir, beforeSnapshots[i]);
           });
+          assertTreeUnchanged(fixture.excludedHostDir, beforeExcluded);
           assertAbsentProtectedPathStrictlyGone(fixture.absentProtectedDir);
           expect(
             hostDependencyCacheRoots(join(fixture.storageRoot, 'cache')),
