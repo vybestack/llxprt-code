@@ -130,9 +130,9 @@ function classifyNormalizedOpenaiModel(
   const version = /^gpt-(\d+)(?:\.(\d+))?/.exec(normalized);
   if (version !== null) {
     const major = parseInt(version[1], 10);
-    // The optional minor capture is undefined when the group did not
-    // participate, so test for that directly.
-    const minor = version[2] !== undefined ? parseInt(version[2], 10) : 0;
+    // The optional minor group is either absent (undefined, falsy) or a
+    // digit run (never empty), so a truthiness check separates the cases.
+    const minor = version[2] ? parseInt(version[2], 10) : 0;
     if (major > 5 || (major === 5 && minor >= 2)) return 'patch';
   }
   // Known legacy models
