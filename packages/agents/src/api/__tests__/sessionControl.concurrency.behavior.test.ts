@@ -492,9 +492,7 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
 
       expect(thrown).toBeInstanceOf(AggregateError);
       expect(
-        (thrown as AggregateError).errors.map((error) =>
-          errorMessage(error),
-        ),
+        (thrown as AggregateError).errors.map((error) => errorMessage(error)),
       ).toStrictEqual(['clear failed', 'resubscribe failed']);
       await control.dispose();
     });

@@ -13,7 +13,10 @@
  * See the License for the specific language.
  */
 
-import { assertInstanceOf, errorMessage } from '@vybestack/llxprt-code-test-utils';
+import {
+  assertInstanceOf,
+  errorMessage,
+} from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import {
   uploadKimiFiles,

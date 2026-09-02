@@ -67,9 +67,9 @@ describe('parseInlineProfile — same content as the on-disk parse boundary (#26
       // invisible temp-directory leaks. process.emitWarning rather than
       // console.* because the repo bans console statements.
       process.emitWarning(
-        `parseBoundary test: failed to remove ${tempDir}: ${
-          errorMessage(error)
-        }`,
+        `parseBoundary test: failed to remove ${tempDir}: ${errorMessage(
+          error,
+        )}`,
       );
     }
   });

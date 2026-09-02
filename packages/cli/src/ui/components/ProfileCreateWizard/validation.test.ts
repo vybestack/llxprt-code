@@ -32,30 +32,30 @@ import {
   validateProfileName,
 } from './validation.js';
 
-/**
- * Shared temp-dir lifecycle. Registers beforeEach/afterEach that provision a
- * throwaway directory under the OS temp dir and always remove it afterwards.
- * Returns a lazy accessor for the directory path for the current test.
- */
-function useTempDir(): () => string {
-  let dir: string | undefined;
-
-  beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(osTmpdir(), 'wizard-keyfile-'));
-  });
-
-  afterEach(() => {
-    homeDirOverride = undefined;
-    if (dir) {
-      fs.rmSync(dir, { recursive: true, force: true });
-      dir = undefined;
-    }
-  });
-
-  return () => dir as string;
-}
-
 describe('validation', () => {
+  /**
+   * Shared temp-dir lifecycle. Registers beforeEach/afterEach that provision a
+   * throwaway directory under the OS temp dir and always remove it afterwards.
+   * Returns a lazy accessor for the directory path for the current test.
+   */
+  function useTempDir(): () => string {
+    let dir: string | undefined;
+
+    beforeEach(() => {
+      dir = fs.mkdtempSync(path.join(osTmpdir(), 'wizard-keyfile-'));
+    });
+
+    afterEach(() => {
+      homeDirOverride = undefined;
+      if (dir) {
+        fs.rmSync(dir, { recursive: true, force: true });
+        dir = undefined;
+      }
+    });
+
+    return () => dir as string;
+  }
+
   describe('validateBaseUrl', () => {
     it('rejects empty and whitespace-only URLs with the required message', () => {
       for (const url of ['', '   ']) {

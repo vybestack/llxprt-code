@@ -23,7 +23,10 @@
  * turn-2 history is fed verbatim from turn-1's ACTUAL yielded IContents.
  */
 
-import { assertDefined, blockTextOrEmpty } from '@vybestack/llxprt-code-test-utils';
+import {
+  assertDefined,
+  blockTextOrEmpty,
+} from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   clearActiveProviderRuntimeContext,
@@ -130,7 +133,7 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
 
         const text = messages
           .flatMap((m) => m.blocks)
-          .map((b) => (blockTextOrEmpty(b)))
+          .map((b) => blockTextOrEmpty(b))
           .join('');
         expect(text).toContain('recovered text');
       } finally {

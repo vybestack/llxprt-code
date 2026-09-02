@@ -863,29 +863,15 @@ export default tseslint.config(
           ],
         },
       ],
-      // 'warn', deliberately, and not a lowering of the bar. The harm this
-      // rule is named for -- a test that may not assert -- is caught by
-      // jest/no-conditional-expect above, which is 'error' and currently
-      // reports zero violations. This rule is the broader one: it flags any
-      // conditional lexically inside a test, so it also catches branching in
-      // mock implementations, array callbacks and polling loops, which is
-      // ordinary code that happens to live in an it().
-      //
-      // Measured over the tree: of 785 reports, 36 wrapped an actual expect(),
-      // and exactly ONE made a test pass vacuously
-      // (chatSession.media-history.test.ts, where `?? []` let an assertion
-      // about a second request succeed when no second request existed). That
-      // one is fixed. The rest are worth cleaning up as the files are touched,
-      // which a warning supports and a red build does not.
-      'jest/no-conditional-in-test': 'warn',
+      // 'off' since #3489 (option 4): the 785-report measurement and the
+      // history of the warn choice live in 376bf0105 and #3489.
+      'jest/no-conditional-in-test': 'off', // eslint-policy-allow-off: #2970/#3489 harmful subset enforced by jest/no-conditional-expect at error; 781 remaining reports tracked in #3129
       'jest/prefer-strict-equal': 'error',
-      // 'warn' for a mechanical reason: the remaining reports are hooks
-      // registered from shared lifecycle helper functions. They are correctly
-      // scoped at runtime -- the helper is called inside a describe -- but the
-      // rule only sees that they are not lexically nested, and unlike
-      // no-standalone-expect it has no additionalTestBlockFunctions option to
-      // declare them. Satisfying it would mean inlining shared setup into
-      // every describe, duplicating it for no behavioural gain.
+      // Hooks registered from shared lifecycle helpers are wrapped in a
+      // per-file root describe (see #3489), so the helper stays defined
+      // once and every hook is lexically inside a describe. The rule stays
+      // on so every file, including new ones, must nest hooks inside a
+      // describe.
       'jest/require-top-level-describe': 'warn',
       'jest/valid-expect': 'error',
       // vitest/no-import-node-test → no-restricted-imports banning node:test
