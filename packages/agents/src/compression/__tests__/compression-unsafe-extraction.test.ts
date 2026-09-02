@@ -203,13 +203,16 @@ describe('ProviderContentEnforcer envelope-based enforcement (issue #2304)', () 
     const pending = makeUserMessage('new pending request');
 
     const harness = buildEnforcerHarness(historyService, runtimeContext);
-    vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-      10_000,
-    );
+    const estimateSpy = vi
+      .spyOn(historyService, 'estimateTokensForContents')
+      .mockResolvedValue(135_000);
 
     harness.deps.performCompression.mockImplementation(async () => {
       historyService.clear();
       historyService.add(makeUserMessage('compressed summary'));
+      // Post-compression estimate fits the margin-adjusted limit, so the
+      // callback ladder returns after the compression round.
+      estimateSpy.mockResolvedValue(100_000);
       return PerformCompressionResult.COMPRESSED;
     });
 

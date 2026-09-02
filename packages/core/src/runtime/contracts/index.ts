@@ -16,6 +16,7 @@
  */
 
 export type {
+  RuntimeCompressionGuardInfo,
   RuntimeProvider,
   RuntimeToolDeclaration,
   RuntimeToolset,
