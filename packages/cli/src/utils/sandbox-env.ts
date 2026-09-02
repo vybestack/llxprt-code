@@ -96,6 +96,32 @@ export function isSandboxDebugModeEnabled(debugValue?: string): boolean {
   return debugValue === 'true' || debugValue === '1';
 }
 
+/**
+ * True only when the sandbox launches from a positively identified
+ * llxprt-code source checkout in development mode (#3455).
+ *
+ * `NODE_ENV=development` alone is an ambient shell value that can leak into
+ * any repository, so it never selects the source path by itself; the
+ * workspace must contain the checked-out CLI source entrypoint that the
+ * source command execs. Entrypoint command selection and the #3450 private
+ * dependency-volume planning share this one predicate so an arbitrary
+ * repository can neither receive a nonexistent source command nor bypass
+ * private dependency isolation, while a supported source checkout keeps the
+ * shared workspace bind its bootstrap requires.
+ */
+export function isSourceDevelopmentWorkdir(workdir: string): boolean {
+  if (process.env.NODE_ENV !== 'development') {
+    return false;
+  }
+  try {
+    return fs
+      .statSync(path.join(workdir, 'packages', 'cli', 'index.ts'))
+      .isFile();
+  } catch {
+    return false;
+  }
+}
+
 function isCiEnvironment(env: NodeJS.ProcessEnv): boolean {
   if (env.CI === 'true' || env.CI === '1') {
     return true;

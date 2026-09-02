@@ -24,9 +24,12 @@
  * bounded: each candidate gets one fixed-size header probe plus at most
  * one positioned follow-up read.
  *
- * The `NODE_ENV=development` source-entrypoint path (#3455) is excluded:
- * it keeps the legacy single workspace bind, because bootstrapping the
- * source CLI needs the repository's own dependencies.
+ * The source-development path (#3455) — a positively identified llxprt-code
+ * source checkout under NODE_ENV=development — is excluded: it keeps the
+ * legacy single workspace bind, because bootstrapping the source CLI needs
+ * the repository's own dependencies. The same shared predicate selects the
+ * source entrypoint command, so an arbitrary repository with ambient
+ * NODE_ENV=development never bypasses the private volumes.
  */
 
 import fs from 'node:fs';
@@ -35,7 +38,7 @@ import path from 'node:path';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import type { SandboxConfig } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import { getContainerPath } from './sandbox-env.js';
+import { getContainerPath, isSourceDevelopmentWorkdir } from './sandbox-env.js';
 import {
   INIT_RUN_TIMEOUT_MS,
   VOLUME_OPERATION_TIMEOUT_MS,
@@ -772,7 +775,7 @@ function noDependencyVolumeLifecycle(): DependencyVolumeLifecycle {
 export function planPrivateDependencyMounts(
   workdir: string,
 ): DependencyMountPlan {
-  if (process.env.NODE_ENV === 'development') return { enabled: false };
+  if (isSourceDevelopmentWorkdir(workdir)) return { enabled: false };
 
   const workspaceRealRoot = fs.realpathSync(workdir);
   const destinations = resolveProtectedNodeModulesDestinations(workdir);
@@ -798,7 +801,8 @@ export function addPrivateDependencyMounts(
 ): DependencyVolumeLifecycle {
   if (!planned.enabled) {
     debugLogger.log(
-      'NODE_ENV=development: keeping the shared workspace bind for the ' +
+      'Source-development launch (NODE_ENV=development in an llxprt-code ' +
+        'source checkout): keeping the shared workspace bind for the ' +
         'source-entrypoint sandbox path; private dependency isolation is ' +
         'installed-mode only.',
     );

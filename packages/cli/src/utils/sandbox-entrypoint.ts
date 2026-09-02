@@ -10,6 +10,7 @@ import {
   getContainerPath,
   sandboxPorts,
   isSandboxDebugModeEnabled,
+  isSourceDevelopmentWorkdir,
   resolveDebugPort,
 } from './sandbox-env.js';
 
@@ -36,10 +37,14 @@ function buildPathSuffix(
   return suffix;
 }
 
-function resolveCliCommand(): string {
+function resolveCliCommand(workdir: string): string {
   const isDebugMode = isSandboxDebugModeEnabled(process.env.DEBUG);
   const debugPort = resolveDebugPort();
-  if (process.env.NODE_ENV === 'development') {
+  // #3455: only a positively identified llxprt-code source checkout in
+  // development mode runs the checked-out source entry; ambient
+  // NODE_ENV=development in an arbitrary repository must fall through to
+  // the sandbox image's installed command.
+  if (isSourceDevelopmentWorkdir(workdir)) {
     // The local-development sandbox command bypasses npm so npm cannot drop
     // the inherited capability descriptor. Bun is launched directly on the
     // source entry, preserving fd 3.
@@ -201,7 +206,7 @@ export function entrypoint(
   }
 
   const quotedCliArgs = cliArgs.slice(2).map((arg) => quote([arg]));
-  const cliCmd = resolveCliCommand();
+  const cliCmd = resolveCliCommand(workdir);
 
   // STEP 3: re-open fd 3 with the scrubbed capability (only when present) and
   // exec the final CLI.

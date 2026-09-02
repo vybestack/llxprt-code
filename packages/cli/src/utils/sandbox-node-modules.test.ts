@@ -412,10 +412,16 @@ describe('#3450 private per-run dependency mounts', () => {
     expect(fs.existsSync(path.join(absentDir, 'kept.txt'))).toBe(true);
   });
 
-  it('keeps development-mode launches unchanged: no preflight, no mounts, no storage, no engine calls', () => {
-    // NODE_ENV=development selects the excluded source-entrypoint path
-    // (#3455); it must keep the legacy single workspace bind, and even a
-    // recognized wrong-platform host tree must not stop it (#3450 F7).
+  it('keeps source-development launches unchanged: no preflight, no mounts, no storage, no engine calls', () => {
+    // NODE_ENV=development in a positively identified llxprt-code source
+    // checkout selects the excluded source-entrypoint path (#3455); it must
+    // keep the legacy single workspace bind, and even a recognized
+    // wrong-platform host tree must not stop it (#3450 F7).
+    fs.mkdirSync(path.join(workdir, 'packages', 'cli'), { recursive: true });
+    fs.writeFileSync(
+      path.join(workdir, 'packages', 'cli', 'index.ts'),
+      '// checked-out CLI source entrypoint\n',
+    );
     const savedEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';
     try {
