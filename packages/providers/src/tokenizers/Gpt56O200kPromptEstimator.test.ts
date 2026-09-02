@@ -216,7 +216,7 @@ describe('ModelPromptEstimatorRegistry', () => {
       method: 'calibrated',
       family: 'legacy-unregistered',
     });
-    expect(input.legacyEstimate).toHaveBeenCalledOnce();
+    expect(input.legacyEstimate).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -226,15 +226,19 @@ describe('ModelPromptEstimatorRegistry', () => {
     'gpt-05.06',
     'gpt-5.06',
   ])(
-    'rejects claimed malformed identity %s without legacy fallback',
+    'falls back to the legacy estimate for claimed malformed identity %s',
     async (model) => {
       const input = request(model);
-      expect(
-        await captureRejection(registry.estimatePrompt(input)),
-      ).toMatchObject({
-        code: 'unresolved-model-identity',
+      const result = await registry.estimatePrompt(input);
+      expect(result).toMatchObject({
+        count: 999,
+        method: 'calibrated',
+        family: 'legacy-unresolved-identity',
+        estimatorVersion: 'core-estimate-tokens-v1',
+        assetRevision: 'none',
+        projectionRevision: 3,
       });
-      expect(input.legacyEstimate).not.toHaveBeenCalled();
+      expect(input.legacyEstimate).toHaveBeenCalledTimes(1);
     },
   );
 
@@ -291,7 +295,6 @@ describe('createDefaultEstimatorRegistrations', () => {
       claim: /^test-extra-default/,
       matches: (model: string) => model.startsWith('test-extra-default'),
       protocols: new Set<PromptEnvelopeProtocol>(['openai-responses']),
-      identityErrorHint: 'use a test-extra-default model',
       estimate: async (estimateRequest) => ({
         count: await estimateRequest.legacyEstimate(),
         method: 'calibrated',

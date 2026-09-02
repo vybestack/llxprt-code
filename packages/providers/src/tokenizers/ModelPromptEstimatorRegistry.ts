@@ -9,6 +9,7 @@ import type {
   RuntimePromptEstimateResult,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { PromptEnvelopeProtocol } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { isSanctionedGpt56Model } from '../openai/openaiModelPolicy.js';
 import {
   createGpt56PromptEstimator,
@@ -22,8 +23,14 @@ export interface ModelPromptEstimatorRegistration {
   readonly family: string;
   readonly claim: RegExp;
   readonly matches: (model: string) => boolean;
+  /**
+   * Optional rule recognizing a *point release* of the family: a claimed
+   * model that is not a sanctioned identity but is close enough to inherit
+   * the family's estimate (with an explicit warning) instead of falling back
+   * to the legacy heuristic.
+   */
+  readonly matchesPointRelease?: (model: string) => boolean;
   readonly protocols: ReadonlySet<PromptEnvelopeProtocol>;
-  readonly identityErrorHint: string;
   /**
    * Optional active-provider restriction.
    *
@@ -49,8 +56,6 @@ export const GPT_56_PROMPT_ESTIMATOR_REGISTRATION: ModelPromptEstimatorRegistrat
       'openai-chat',
       'openai-responses',
     ]),
-    identityErrorHint:
-      'use a sanctioned GPT-5.6 base, sol, terra, or luna alias with latest or a valid date snapshot',
     estimate: estimateGpt56Prompt,
   });
 
@@ -118,20 +123,59 @@ function appliesToRequest(
   return registration.appliesToProvider?.(request.activeProvider) ?? true;
 }
 
-function createIdentityError(
+const degradationLogger = new DebugLogger('llxprt:model-prompt-estimator');
+
+/**
+ * Degradation warnings fire once per provider+model per process: the first
+ * estimate for a pair tells the user their token counts may be off, and
+ * repeating that on every request would only bury it in noise.
+ */
+const warnedDegradations = new Set<string>();
+
+function warnDegradationOnce(
+  request: RuntimePromptEstimateRequest,
+  detail: string,
+): void {
+  const key = `${request.activeProvider}:${request.canonicalModel}`;
+  if (warnedDegradations.has(key)) return;
+  warnedDegradations.add(key);
+  degradationLogger.warn(
+    `model ${request.canonicalModel} on provider ${request.activeProvider} ${detail}`,
+  );
+}
+
+function warnPointReleaseOnce(
   request: RuntimePromptEstimateRequest,
   registration: ModelPromptEstimatorRegistration,
-): ModelPromptEstimatorError {
-  return new ModelPromptEstimatorError(
-    'unresolved-model-identity',
-    {
-      activeProvider: request.activeProvider,
-      canonicalModel: request.canonicalModel,
-      protocol: request.protocol,
-      family: registration.family,
-    },
-    registration.identityErrorHint,
+): void {
+  warnDegradationOnce(
+    request,
+    `is not directly calibrated; applying ${registration.family} calibration until a dedicated calibration exists; estimates may be less accurate`,
   );
+}
+
+function warnLegacyFallbackOnce(
+  request: RuntimePromptEstimateRequest,
+  registration: ModelPromptEstimatorRegistration,
+): void {
+  warnDegradationOnce(
+    request,
+    `is not a sanctioned identity of ${registration.family}; falling back to the legacy estimate; token estimates may be inaccurate`,
+  );
+}
+
+async function legacyEstimate(
+  request: RuntimePromptEstimateRequest,
+  family: string,
+): Promise<RuntimePromptEstimateResult> {
+  return {
+    count: await request.legacyEstimate(),
+    method: 'calibrated',
+    family,
+    estimatorVersion: 'core-estimate-tokens-v1',
+    assetRevision: 'none',
+    projectionRevision: request.projectionRevision,
+  };
 }
 
 function createProtocolError(
@@ -179,17 +223,17 @@ export class ModelPromptEstimatorRegistry {
         ? claimed
         : undefined;
     if (registration === undefined) {
-      return {
-        count: await request.legacyEstimate(),
-        method: 'calibrated',
-        family: 'legacy-unregistered',
-        estimatorVersion: 'core-estimate-tokens-v1',
-        assetRevision: 'none',
-        projectionRevision: request.projectionRevision,
-      };
+      return legacyEstimate(request, 'legacy-unregistered');
     }
     if (!registration.matches(request.canonicalModel)) {
-      throw createIdentityError(request, registration);
+      // The registry sits on the request path, so an unresolved identity must
+      // degrade, never throw: a point release inherits the family estimate,
+      // anything else falls back to the legacy heuristic. Both warn once.
+      if (registration.matchesPointRelease?.(request.canonicalModel) !== true) {
+        warnLegacyFallbackOnce(request, registration);
+        return legacyEstimate(request, 'legacy-unresolved-identity');
+      }
+      warnPointReleaseOnce(request, registration);
     }
     if (!registration.protocols.has(request.protocol)) {
       throw createProtocolError(request, registration);

@@ -74,7 +74,7 @@ export interface SessionMetricsSnapshot {
 
   /** 60 * Σ(P+O) / ΣD — excludes gaps, tool time, idle */
   completeTokensPerMinute: number;
-  /** Σ(O-1)/ΣG * 1000 tok/s where G = duration - TTFT, only O>=2, G>0 */
+  /** Σ(O-1)/ΣG * 1000 tok/s where G = lastTokenMs − TTFT > 0, only O>=2, G>0 */
   outputGenerationTps: number;
   /** ΣP / ΣTTFT * 1000 tok/s (effective/observed) */
   effectiveInputTps: number;
@@ -406,14 +406,12 @@ export class SessionMetricsAggregator {
       this.timing.sumDurationForRateMs += durationMs;
     }
 
-    // Output generation TPS: Σ(O-1)/ΣG, only O>=2, G>0, with usage
+    // Output generation TPS: Σ(O-1)/ΣG, only O>=2, G>0, with usage.
+    // G = lastTokenMs − TTFT, strictly positive. No duration fallback.
     if (this.qualifiesForOutputTps(outputTokens, ttft, isRateEligible)) {
       const positiveTtft = ttft as number;
-      const gap =
-        lastTokenMs !== null && lastTokenMs > positiveTtft
-          ? lastTokenMs - positiveTtft
-          : durationMs - positiveTtft;
-      if (gap > 0) {
+      if (lastTokenMs !== null && lastTokenMs - positiveTtft > 0) {
+        const gap = lastTokenMs - positiveTtft;
         this.timing.sumOutputMinusOne += outputTokens - 1;
         this.timing.sumGenerationGapMs += gap;
         this.timing.lastOutputTokens = outputTokens - 1;
