@@ -4,13 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import * as tiktoken from '@dqbd/tiktoken';
 import type {
   RuntimePromptEstimateRequest,
   RuntimePromptEstimateResult,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { PromptEnvelopeProtocol } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { PROJECTION_REVISION } from '../../runtime/promptEnvelopeProjections.js';
 import { ModelPromptEstimatorError } from '../ModelPromptEstimatorError.js';
 import { ModelPromptEstimatorRegistry } from '../ModelPromptEstimatorRegistry.js';
@@ -400,6 +401,23 @@ describe('Claude 5 incremental history counter', () => {
     );
   });
 
+  it('counts a point-release history entry with the family marginal calibration', async () => {
+    const tokenizer = createClaudeRuntimeTokenizer(
+      'claudecode',
+      'claude-fable-5-1',
+    );
+    expect(tokenizer).toBeDefined();
+    const encoder = tiktoken.get_encoding('o200k_base');
+    const baseTokens = encoder.encode(HISTORY_TEXT, [], []).length;
+    expect(await tokenizer!.countTokens(HISTORY_TEXT)).toBe(
+      applyClaudeMarginalCalibration(
+        baseTokens,
+        extractClaudeContentFeatures(HISTORY_TEXT),
+        CLAUDE_FABLE_5_CALIBRATION,
+      ),
+    );
+  });
+
   /**
    * The intercept is per-request framing carried by the synchronized baseline.
    * Charging it to every history entry would inflate the running total by
@@ -545,38 +563,142 @@ describe('Claude 5 registry composition', () => {
     expect(fable.estimatorVersion).toContain('claude-fable-5');
   });
 
-  it('rejects a Fable 5 lookalike with an actionable identity error', async () => {
-    const error = await captureRejection(
-      registry.estimatePrompt(
-        request(
-          { promptText: CONTENT_SHAPES.prose },
-          {
-            canonicalModel: 'claude-fable-5-mini',
-          },
-        ),
+  it('estimates a Fable 5 point release with its family calibration instead of the legacy estimate', async () => {
+    const legacyEstimate = vi.fn(() => Promise.resolve(4242));
+    const result = await registry.estimatePrompt(
+      request(
+        { promptText: CONTENT_SHAPES.prose },
+        {
+          activeProvider: 'claudecode',
+          canonicalModel: 'claude-fable-5-1',
+          legacyEstimate,
+        },
       ),
     );
-    expect(error).toBeInstanceOf(ModelPromptEstimatorError);
-    expect((error as ModelPromptEstimatorError).code).toBe(
-      'unresolved-model-identity',
+    expect(result.family).toBe(CLAUDE_FABLE_5_ESTIMATOR_FAMILY);
+    expect(result.method).toBe('calibrated');
+    expect(result.estimatorVersion).toBe(
+      CLAUDE_FABLE_5_CALIBRATION.estimatorVersion,
+    );
+    expect(result.count).toBeGreaterThan(0);
+    expect(legacyEstimate).not.toHaveBeenCalled();
+  });
+
+  it('estimates an Opus 5 point release with the opus calibration', async () => {
+    const legacyEstimate = vi.fn(() => Promise.resolve(4242));
+    const result = await registry.estimatePrompt(
+      request(
+        { promptText: CONTENT_SHAPES.prose },
+        {
+          activeProvider: 'claudecode',
+          canonicalModel: 'claude-opus-5-1',
+          legacyEstimate,
+        },
+      ),
+    );
+    expect(result.family).toBe(CLAUDE_OPUS_5_ESTIMATOR_FAMILY);
+    expect(result.method).toBe('calibrated');
+    expect(result.estimatorVersion).toBe(
+      CLAUDE_OPUS_5_CALIBRATION.estimatorVersion,
+    );
+    expect(legacyEstimate).not.toHaveBeenCalled();
+  });
+
+  it('estimates a dated point release with the family calibration', async () => {
+    const result = await registry.estimatePrompt(
+      request(
+        { promptText: CONTENT_SHAPES.prose },
+        {
+          activeProvider: 'claudecode',
+          canonicalModel: 'claude-fable-5-1-20260829',
+        },
+      ),
+    );
+    expect(result.family).toBe(CLAUDE_FABLE_5_ESTIMATOR_FAMILY);
+    expect(result.estimatorVersion).toBe(
+      CLAUDE_FABLE_5_CALIBRATION.estimatorVersion,
     );
   });
 
-  it('rejects an Opus 5 lookalike with an actionable identity error', async () => {
-    const error = await captureRejection(
-      registry.estimatePrompt(
-        request(
-          { promptText: CONTENT_SHAPES.prose },
-          {
-            canonicalModel: 'claude-opus-5-mini',
-          },
-        ),
+  it('estimates an eight-digit point release with -latest using the family calibration', async () => {
+    const legacyEstimate = vi.fn(() => Promise.resolve(4242));
+    const result = await registry.estimatePrompt(
+      request(
+        { promptText: CONTENT_SHAPES.prose },
+        {
+          activeProvider: 'claudecode',
+          canonicalModel: 'claude-fable-5-12345678-latest',
+          legacyEstimate,
+        },
       ),
     );
-    expect(error).toBeInstanceOf(ModelPromptEstimatorError);
-    expect((error as ModelPromptEstimatorError).code).toBe(
-      'unresolved-model-identity',
+    expect(result.family).toBe(CLAUDE_FABLE_5_ESTIMATOR_FAMILY);
+    expect(result.method).toBe('calibrated');
+    expect(result.estimatorVersion).toBe(
+      CLAUDE_FABLE_5_CALIBRATION.estimatorVersion,
     );
+    expect(legacyEstimate).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the legacy estimate for a point release with an impossible date', async () => {
+    const legacyEstimate = vi.fn(() => Promise.resolve(4242));
+    const result = await registry.estimatePrompt(
+      request(
+        { promptText: CONTENT_SHAPES.prose },
+        {
+          activeProvider: 'claudecode',
+          canonicalModel: 'claude-fable-5-1-20261345',
+          legacyEstimate,
+        },
+      ),
+    );
+    expect(result).toMatchObject({
+      count: 4242,
+      method: 'calibrated',
+      family: 'legacy-unresolved-identity',
+      estimatorVersion: 'core-estimate-tokens-v1',
+      assetRevision: 'none',
+      projectionRevision: PROJECTION_REVISION,
+    });
+    expect(legacyEstimate).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the legacy estimate for a Fable 5 lookalike', async () => {
+    const legacyEstimate = vi.fn(() => Promise.resolve(4242));
+    const result = await registry.estimatePrompt(
+      request(
+        { promptText: CONTENT_SHAPES.prose },
+        { canonicalModel: 'claude-fable-5-mini', legacyEstimate },
+      ),
+    );
+    expect(result).toMatchObject({
+      count: 4242,
+      method: 'calibrated',
+      family: 'legacy-unresolved-identity',
+      estimatorVersion: 'core-estimate-tokens-v1',
+      assetRevision: 'none',
+      projectionRevision: PROJECTION_REVISION,
+    });
+    expect(legacyEstimate).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the legacy estimate for an Opus 5 lookalike', async () => {
+    const legacyEstimate = vi.fn(() => Promise.resolve(4242));
+    const result = await registry.estimatePrompt(
+      request(
+        { promptText: CONTENT_SHAPES.prose },
+        { canonicalModel: 'claude-opus-5-mini', legacyEstimate },
+      ),
+    );
+    expect(result).toMatchObject({
+      count: 4242,
+      method: 'calibrated',
+      family: 'legacy-unresolved-identity',
+      estimatorVersion: 'core-estimate-tokens-v1',
+      assetRevision: 'none',
+      projectionRevision: PROJECTION_REVISION,
+    });
+    expect(legacyEstimate).toHaveBeenCalledTimes(1);
   });
 
   it.each(['openai-chat', 'openai-responses'] as const)(
@@ -616,21 +738,43 @@ describe('Claude 5 registry composition', () => {
     },
   );
 
-  it('still rejects an unsanctioned model id on a calibrated provider', async () => {
+  it('still throws unsupported-protocol for a point release over the wrong protocol', async () => {
     const error = await captureRejection(
       registry.estimatePrompt(
         request(
-          { promptText: CONTENT_SHAPES.prose },
+          { promptText: CONTENT_SHAPES.prose, protocol: 'openai-chat' },
           {
             activeProvider: 'claudecode',
-            canonicalModel: 'claude-opus-5-mini',
+            canonicalModel: 'claude-fable-5-1',
+            protocol: 'openai-chat',
           },
         ),
       ),
     );
+    expect(error).toBeInstanceOf(ModelPromptEstimatorError);
     expect((error as ModelPromptEstimatorError).code).toBe(
-      'unresolved-model-identity',
+      'unsupported-protocol',
     );
+  });
+
+  it('falls back to the legacy estimate for an unsanctioned model id on a calibrated provider', async () => {
+    const legacyEstimate = vi.fn(() => Promise.resolve(4242));
+    const result = await registry.estimatePrompt(
+      request(
+        { promptText: CONTENT_SHAPES.prose },
+        {
+          activeProvider: 'claudecode',
+          canonicalModel: 'claude-opus-5-thinking',
+          legacyEstimate,
+        },
+      ),
+    );
+    expect(result).toMatchObject({
+      count: 4242,
+      method: 'calibrated',
+      family: 'legacy-unresolved-identity',
+    });
+    expect(legacyEstimate).toHaveBeenCalledTimes(1);
   });
 
   it('does not claim other Claude models', () => {
@@ -642,5 +786,73 @@ describe('Claude 5 registry composition', () => {
     ]) {
       expect(registry.claimsModel(model)).toBe(false);
     }
+  });
+
+  describe('degradation warnings', () => {
+    let warnSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      warnSpy = vi
+        .spyOn(DebugLogger.prototype, 'warn')
+        .mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
+    it('warns once per process that a point release inherits the family calibration', async () => {
+      const estimate = () =>
+        registry.estimatePrompt(
+          request(
+            { promptText: CONTENT_SHAPES.prose },
+            {
+              activeProvider: 'claudecode',
+              canonicalModel: 'claude-fable-5-3',
+            },
+          ),
+        );
+      const first = await estimate();
+      expect(first.family).toBe(CLAUDE_FABLE_5_ESTIMATOR_FAMILY);
+      await estimate();
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      const message = String(warnSpy.mock.calls[0]?.[0] ?? '');
+      expect(message).toContain('claude-fable-5-3');
+      expect(message).toContain(CLAUDE_FABLE_5_ESTIMATOR_FAMILY);
+      expect(message).toContain('claudecode');
+      expect(message).toContain('not directly calibrated');
+    });
+
+    it('warns once per process that an unsanctioned lookalike falls back to the legacy estimate', async () => {
+      const estimate = () =>
+        registry.estimatePrompt(
+          request(
+            { promptText: CONTENT_SHAPES.prose },
+            {
+              activeProvider: 'claudecode',
+              canonicalModel: 'claude-fable-5-thinking',
+            },
+          ),
+        );
+      const first = await estimate();
+      expect(first.family).toBe('legacy-unresolved-identity');
+      await estimate();
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      const message = String(warnSpy.mock.calls[0]?.[0] ?? '');
+      expect(message).toContain('claude-fable-5-thinking');
+      expect(message).toContain(CLAUDE_FABLE_5_ESTIMATOR_FAMILY);
+      expect(message).toContain('claudecode');
+      expect(message).toContain('legacy');
+    });
+
+    it('does not warn for a sanctioned model on a calibrated provider', async () => {
+      const result = await registry.estimatePrompt(
+        request({ promptText: CONTENT_SHAPES.prose }),
+      );
+      expect(result.family).toBe(CLAUDE_OPUS_5_ESTIMATOR_FAMILY);
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
   });
 });

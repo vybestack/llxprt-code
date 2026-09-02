@@ -7,7 +7,6 @@
 import type { PromptEnvelopeProtocol } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 
 export type ModelPromptEstimatorErrorCode =
-  | 'unresolved-model-identity'
   | 'unsupported-protocol'
   | 'asset-unavailable'
   | 'projection-unavailable'
