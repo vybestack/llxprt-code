@@ -12,7 +12,10 @@ import {
   type IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type {
+  RuntimeProvider as IProvider,
+  RuntimeCompressionGuardInfo,
+} from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { getCompletionBudget } from './compressionBudgeting.js';
@@ -62,6 +65,13 @@ interface ContextLimits {
   marginAdjustedLimit: number;
   compressionThreshold: number;
 }
+
+/**
+ * Guard facts supplied by the load-balancer context guard when it invokes the
+ * compression callback: its own finalized-envelope estimate and the configured
+ * per-sub-profile context limit (issue #3499).
+ */
+export type CompressionGuardInfo = RuntimeCompressionGuardInfo;
 
 interface ProjectionResult {
   contents: IContent[];
@@ -125,37 +135,13 @@ export class ProviderContentEnforcer {
       return postOpt.contents;
     }
 
-    const firstResult = await this.runCompressionAndRecompose(
-      promptId,
-      envelope.pendingContents,
-      limits.completionBudget,
-      model,
-    );
-    if (firstResult.projected <= limits.marginAdjustedLimit) {
-      return firstResult.contents;
-    }
-
-    const retryResult = await this.retryCompressionIfIneffective(
-      promptId,
-      envelope.pendingContents,
-      limits.completionBudget,
-      model,
-      limits.marginAdjustedLimit,
-      postOpt.projected,
-      firstResult,
-    );
-    if (retryResult.projected <= limits.marginAdjustedLimit) {
-      return retryResult.contents;
-    }
-
-    return this.enforceTruncation(
+    return this.enforceWithEscalation(
       promptId,
       envelope.pendingContents,
       limits,
       model,
       initialProjected,
-      retryResult.compressionFailure,
-      retryResult.projected,
+      postOpt.projected,
     );
   }
 
@@ -293,33 +279,143 @@ export class ProviderContentEnforcer {
   }
 
   /**
-   * Compresses history and recomposes it with pending content.
+   * Compresses history and recomposes it with pending content, escalating
+   * through the same reduction ladder as enforce() (density optimization,
+   * compression, ineffective-compression retry, deficit-exact history
+   * truncation, unified tool-response truncation) so a structurally
+   * ineffective compression round no longer dead-ends the callback.
    *
-   * @throws When compression throws or returns a non-COMPRESSED result.
+   * When guard facts are supplied, the ladder targets the guard's limit minus
+   * the per-request overhead the contents-only estimator cannot see, with no
+   * completion budget of its own — the guard defines the contract being
+   * satisfied (issue #3499). Without guard facts it converges against the
+   * enforcer's own computed limits.
+   *
+   * @throws When even unified tool-response truncation cannot fit the target
+   * (structured context-overflow error).
    */
   async compressAndRecompose(
     pendingContents: IContent[],
     promptId: string,
+    guard?: CompressionGuardInfo,
+    provider?: IProvider,
   ): Promise<IContent[]> {
     if (pendingContents.length === 0) {
       return [];
     }
-    const result = await this.runCompressionAndRecompose(
+    const model = this.resolveModel(provider);
+    const { limits, initialProjected } = await this.computeCallbackLimits(
+      pendingContents,
+      guard,
+      provider,
+      model,
+    );
+    const postOpt = await this.optimizeAndProject(
+      pendingContents,
+      limits.completionBudget,
+      model,
+    );
+    if (postOpt.projected <= limits.marginAdjustedLimit) {
+      return postOpt.contents;
+    }
+    return this.enforceWithEscalation(
       promptId,
       pendingContents,
-      0,
-      this.deps.runtimeContext.state.model,
+      limits,
+      model,
+      initialProjected,
+      postOpt.projected,
     );
-    // runCompressionAndRecompose catches errors/non-COMPRESSED results and
-    // returns them as a structured compressionFailure. The provider compression
-    // callback contract (attachCompressionCallback) expects failure to throw
-    // so the provider can reject the request. Rethrow here honors that contract;
-    // the enforcement orchestration (enforce) consumes the structured failure
-    // directly via runCompressionAndRecompose and is unaffected.
-    if (result.compressionFailure !== undefined) {
-      throw result.compressionFailure;
+  }
+
+  /**
+   * Compression → ineffective-compression retry → truncation escalation
+   * shared by the pre-send enforce() path and the provider compression
+   * callback. Projections and limits must follow one budget convention per
+   * call, supplied via `limits`.
+   */
+  private async enforceWithEscalation(
+    promptId: string,
+    pendingContents: IContent[],
+    limits: ContextLimits,
+    model: string,
+    initialProjected: number,
+    preCompressionProjected: number,
+  ): Promise<IContent[]> {
+    const firstResult = await this.runCompressionAndRecompose(
+      promptId,
+      pendingContents,
+      limits.completionBudget,
+      model,
+    );
+    if (firstResult.projected <= limits.marginAdjustedLimit) {
+      return firstResult.contents;
     }
-    return result.contents;
+
+    const retryResult = await this.retryCompressionIfIneffective(
+      promptId,
+      pendingContents,
+      limits.completionBudget,
+      model,
+      limits.marginAdjustedLimit,
+      preCompressionProjected,
+      firstResult,
+    );
+    if (retryResult.projected <= limits.marginAdjustedLimit) {
+      return retryResult.contents;
+    }
+
+    return this.enforceTruncation(
+      promptId,
+      pendingContents,
+      limits,
+      model,
+      initialProjected,
+      retryResult.compressionFailure,
+      retryResult.projected,
+    );
+  }
+
+  /**
+   * Limits for the compression-callback entry point. Guard facts override the
+   * enforcer's own budget-derived limits: the guard's estimate covers the full
+   * finalized envelope (tool schemas, system prompt) the contents-only
+   * estimator cannot see, so that difference is treated as fixed overhead and
+   * the fit predicate mirrors the guard's own check,
+   * ownEstimate(contents') + overhead <= guard.contextLimit, with no
+   * completion budget re-reserved (issue #3499).
+   */
+  private async computeCallbackLimits(
+    pendingContents: IContent[],
+    guard: CompressionGuardInfo | undefined,
+    provider: IProvider | undefined,
+    model: string,
+  ): Promise<{ limits: ContextLimits; initialProjected: number }> {
+    if (guard === undefined) {
+      const limits = this.computeContextLimits(provider, model);
+      const initialProjected = await this.estimateProviderProjection(
+        this.recomposeProviderContents(pendingContents),
+        limits.completionBudget,
+        model,
+        'initial',
+      );
+      return { limits, initialProjected };
+    }
+    const initialProjected = await this.estimateProviderProjection(
+      this.recomposeProviderContents(pendingContents),
+      0,
+      model,
+      'initial',
+    );
+    const overhead = Math.max(0, guard.estimatedTokens - initialProjected);
+    const effectiveLimit = Math.max(1, guard.contextLimit - overhead);
+    const limits: ContextLimits = {
+      completionBudget: 0,
+      limit: guard.contextLimit,
+      marginAdjustedLimit: effectiveLimit,
+      compressionThreshold: effectiveLimit,
+    };
+    return { limits, initialProjected };
   }
 
   private async truncateToolResponsesUnified(
