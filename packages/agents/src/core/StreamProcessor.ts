@@ -127,9 +127,10 @@ export class StreamProcessor {
 
   /**
    * Raw token-delta bridge for the attempt in flight (#3493). Null when no
-   * attempt is in flight; minted fresh per attempt in
-   * makeApiCallAndProcessStream so an abandoned attempt's stream cannot feed
-   * the next attempt's tracker. The sink rides request metadata, which the
+   * attempt is in flight; minted fresh per attempt at the retry boundary in
+   * _executeStreamApiCall — where retryWithBackoff re-invokes the apiCall
+   * closure — so an abandoned attempt's stream cannot feed the next
+   * attempt's tracker. The sink rides request metadata, which the
    * providers layer treats as optional — an absent sink simply means "no raw
    * signal" and visible-chunk timing applies.
    */
@@ -171,7 +172,6 @@ export class StreamProcessor {
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     this.currentPromptEnvelopeEstimate = null;
     this.currentAttemptIndex = attemptIndex ?? 0;
-    this.currentRawTokenDeltaBridge = new RawTokenDeltaBridge();
     const provider = this.providerResolver('stream');
 
     const providerBaseUrl = this.runtimeContext.state.baseUrl;
@@ -284,8 +284,18 @@ export class StreamProcessor {
     userContent: IContent | IContent[],
     provider: IProvider,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
-    const apiCall = () =>
-      this._buildAndSendStreamRequest(params, promptId, userContent, provider);
+    // retryWithBackoff re-invokes this closure once per attempt, so the
+    // bridge is minted here: each attempt's sink closure stays pointed at
+    // its own tracker even after a later attempt attaches its own (#3493).
+    const apiCall = () => {
+      this.currentRawTokenDeltaBridge = new RawTokenDeltaBridge();
+      return this._buildAndSendStreamRequest(
+        params,
+        promptId,
+        userContent,
+        provider,
+      );
+    };
 
     return retryWithBackoff(apiCall, {
       onPersistent429: () =>

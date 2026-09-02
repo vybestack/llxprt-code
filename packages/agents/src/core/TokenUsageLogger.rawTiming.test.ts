@@ -705,4 +705,83 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
     // Fresh attempt-2 timing wins: three chunks, not attempt 1's single one.
     expect(success.chunk_count).toBe(3);
   });
+
+  // Inner retryWithBackoff retry: attempt 1 fires raw deltas then fails
+  // BEFORE its first chunk, so the failure lands inside the retry boundary
+  // and attempt 2 runs within the same makeApiCallAndProcessStream call.
+  // The retry's own generator fires attempt 1's captured sink at a known
+  // point — attach runs at generator-body start, before the first provider
+  // pull, so the stale call deterministically lands after the retry's
+  // tracker is attached. With a shared bridge that stale call stamps the
+  // retry's tracker (ttft ~0, generation spanning the stale-to-last-delta
+  // gap); with a per-attempt bridge the retry's window holds only its own
+  // deltas (ttft past the 80ms sleep, generation near one 15ms sleep).
+  it('keeps retry timing free of a late raw delta from the abandoned attempt (#3493)', async () => {
+    let staleSink: (() => void) | undefined;
+    let attempt = 0;
+    const mockProvider = {
+      name: 'anthropic',
+      generateChatCompletion: vi
+        .fn()
+        .mockImplementation(async function* (options: {
+          metadata?: Record<string, unknown>;
+        }) {
+          attempt++;
+          if (attempt === 1) {
+            staleSink = rawDeltaSinkFrom(options.metadata);
+            staleSink?.();
+            await sleep(15);
+            staleSink?.();
+            // Fail before the first chunk so the error surfaces inside the
+            // retryWithBackoff boundary rather than ChatSession's outer retry.
+            throw new Error('Connection error.');
+          }
+          const sink = rawDeltaSinkFrom(options.metadata);
+          // Deterministic late callback from the abandoned attempt's stream.
+          staleSink?.();
+          await sleep(80);
+          sink?.();
+          await sleep(15);
+          sink?.();
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'The answer is 4.' }],
+            metadata: {
+              usage: {
+                promptTokens: 5100,
+                completionTokens: 15,
+                totalTokens: 5115,
+              },
+            },
+          };
+        }),
+    };
+
+    const records = await runTurnReadRecords(
+      mockProvider,
+      'stale-sink-retry-session',
+      'stale-sink-retry-prompt',
+    );
+
+    expect(attempt).toBe(2);
+    expect(records).toHaveLength(1);
+    const success = records[0];
+    expect(success.attempt_outcome).toBe('success');
+    // One visible chunk, so the timing window can only come from raw deltas.
+    expect(success.chunk_count).toBe(1);
+    if (
+      typeof success.ttft_ms !== 'number' ||
+      typeof success.generation_ms !== 'number'
+    ) {
+      throw new Error('expected ttft_ms/generation_ms to be recorded');
+    }
+    // The retry's first own delta trails the stale call by a full 80ms
+    // sleep; a ttft under 50ms means the stale sink stamped the tracker.
+    expect(success.ttft_ms).toBeGreaterThanOrEqual(50);
+    // The retry's raw deltas span one 15ms sleep; a window that also
+    // covered the stale call would sit near 95ms. Both bounds keep ≥30ms
+    // of margin against scheduling noise.
+    expect(success.generation_ms).toBeGreaterThan(0);
+    expect(success.generation_ms).toBeLessThan(50);
+  });
 });
