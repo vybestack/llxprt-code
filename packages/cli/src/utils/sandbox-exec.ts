@@ -60,16 +60,29 @@ import {
   resolveDebugPort,
   sandboxPorts,
 } from './sandbox-env.js';
+import {
+  addContainerWorkspaceMounts,
+  planContainerWorkspaces,
+  type ContainerWorkspacePlan,
+} from './sandbox-workspaces.js';
 import { SETTINGS_DIRECTORY_NAME } from '../config/settings.js';
 
 function removeSessionTmpdir(sessionTmpdir: string): void {
   fs.rmSync(sessionTmpdir, { recursive: true, force: true });
 }
 
+function cleanupPreparationFailure(
+  sessionTmpdir: string,
+  dependencyVolumeLifecycle: DependencyVolumeLifecycle,
+): void {
+  runBestEffortSyncCleanup(() => removeSessionTmpdir(sessionTmpdir));
+  runBestEffortSyncCleanup(dependencyVolumeLifecycle);
+}
+
 /** Validates image and builds initial container run args. */
 async function prepareContainerImageAndArgs(
   config: SandboxConfig,
-  workdir: string,
+  workspacePlan: ContainerWorkspacePlan,
   dependencyMountPlan: DependencyMountPlan,
 ): Promise<{
   image: string;
@@ -81,6 +94,7 @@ async function prepareContainerImageAndArgs(
 }> {
   // @plan:PLAN-20250214-CREDPROXY.P34 R3.4: Use realpath to resolve symlinks
   debugLogger.error(`hopping into sandbox (command: ${config.command}) ...`);
+  const workdir = workspacePlan.primaryRoot;
   const gcPath = canonicalizeExistingPath(
     process.argv[1],
     'resolve the sandbox executable',
@@ -128,14 +142,15 @@ async function prepareContainerImageAndArgs(
       containerWorkdir,
       sessionTmpdir,
     );
+    addContainerWorkspaceMounts(args, workspacePlan);
     addContainerVolumeMounts(args);
-    // #3450: append fresh engine-owned dependency volumes after the shared
-    // workspace bind so the nested mounts win. Host preflight and destination
-    // planning already completed before any engine operation.
+    // #3450/#3463: append fresh engine-owned dependency volumes after every
+    // shared workspace bind so the nested mounts win. Host preflight and
+    // destination planning already completed before any engine operation.
     const dependencyVolumeLifecycle = addPrivateDependencyMounts(
       config,
       args,
-      workdir,
+      workspacePlan.roots,
       dependencyMountPlan,
     );
     return {
@@ -473,14 +488,41 @@ async function reapOrphanedSandboxContainers(
   }
 }
 
-async function planDependenciesAndReapOrphans(config: SandboxConfig): Promise<{
-  readonly workdir: string;
+async function planWorkspacesAndDependencies(
+  config: SandboxConfig,
+  cliConfig: Config | undefined,
+): Promise<{
+  readonly workspacePlan: ContainerWorkspacePlan;
   readonly dependencyMountPlan: DependencyMountPlan;
 }> {
   const workdir = path.resolve(process.cwd());
-  const dependencyMountPlan = planPrivateDependencyMounts(workdir);
+  const acceptedWorkspaceRoots =
+    cliConfig === undefined
+      ? [workdir]
+      : [
+          ...cliConfig.getWorkspaceContext().getDirectories(),
+          ...cliConfig.getConfiguredIncludeDirectories(),
+        ];
+  const workspacePlan = planContainerWorkspaces(
+    workdir,
+    acceptedWorkspaceRoots,
+  );
+  const dependencyMountPlan = planPrivateDependencyMounts(workspacePlan.roots);
   await reapOrphanedSandboxContainers(config);
-  return { workdir, dependencyMountPlan };
+  return { workspacePlan, dependencyMountPlan };
+}
+
+async function prepareContainerFilesystem(
+  config: SandboxConfig,
+  cliConfig: Config | undefined,
+): Promise<Awaited<ReturnType<typeof prepareContainerImageAndArgs>>> {
+  const { workspacePlan, dependencyMountPlan } =
+    await planWorkspacesAndDependencies(config, cliConfig);
+  return prepareContainerImageAndArgs(
+    config,
+    workspacePlan,
+    dependencyMountPlan,
+  );
 }
 
 /** Runs the Docker/Podman sandbox path: image build, arg assembly, and proxy setup. */
@@ -491,14 +533,8 @@ async function prepareContainerSandbox(
   cliArgs: string[],
 ): Promise<ContainerSandboxPrepared> {
   validateContainerSandboxEnv();
-  const { workdir, dependencyMountPlan } =
-    await planDependenciesAndReapOrphans(config);
-
-  const { image, sessionTmpdir, args, dependencyVolumeLifecycle } =
-    await prepareContainerImageAndArgs(config, workdir, dependencyMountPlan);
-
-  // #3450: the private dependency storage exists from here on; every abort
-  // path below releases it, and the per-session tmpdir (#3440) alongside it.
+  const { image, workdir, sessionTmpdir, args, dependencyVolumeLifecycle } =
+    await prepareContainerFilesystem(config, cliConfig);
   const reservedTunnelPorts = new Set<number>();
   let networkAndEnv: ContainerNetworkAndEnv;
   let containerName: string;
@@ -515,8 +551,7 @@ async function prepareContainerSandbox(
     containerName = assignContainerName(args, config, image);
     addContainerEnvVars(args, config, containerName, nodeArgs, workdir);
   } catch (error) {
-    runBestEffortSyncCleanup(() => removeSessionTmpdir(sessionTmpdir));
-    runBestEffortSyncCleanup(dependencyVolumeLifecycle);
+    cleanupPreparationFailure(sessionTmpdir, dependencyVolumeLifecycle);
     throw error;
   }
   const {
@@ -525,7 +560,6 @@ async function prepareContainerSandbox(
     proxyCommand,
     portForwardingResult,
   } = networkAndEnv;
-
   // Compose bridge prefixes after the trusted capability capture stanza (F1).
   const entrypointPrefixes: string[] = [];
   let credentialProxySetup: Awaited<ReturnType<typeof setupCredentialProxy>>;
@@ -541,13 +575,10 @@ async function prepareContainerSandbox(
       entrypointPrefixes,
     );
   } catch (error) {
-    runBestEffortSyncCleanup(() => removeSessionTmpdir(sessionTmpdir));
-    runBestEffortSyncCleanup(dependencyVolumeLifecycle);
+    cleanupPreparationFailure(sessionTmpdir, dependencyVolumeLifecycle);
     throw error;
   }
 
-  // #3450: entrypoint/user-setup aborts release the private dependency
-  // storage inside prepareContainerEntrypoint's failure path.
   const { finalEntrypoint, userFlag } = await prepareContainerEntrypoint({
     args,
     workdir,

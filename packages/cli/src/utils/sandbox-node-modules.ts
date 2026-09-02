@@ -619,10 +619,18 @@ export type DependencyMountPlan =
   | { readonly enabled: false }
   | {
       readonly enabled: true;
-      readonly workdir: string;
+      readonly workspaceRoots: readonly string[];
       readonly destinations: readonly string[];
       readonly originallyAbsentDestinations: readonly string[];
     };
+
+type WorkspaceRoots = string | readonly string[];
+
+function normalizeWorkspaceRoots(
+  workspaceRoots: WorkspaceRoots,
+): readonly string[] {
+  return typeof workspaceRoots === 'string' ? [workspaceRoots] : workspaceRoots;
+}
 
 interface MutableDependencyVolumeLifecycle extends DependencyVolumeLifecycle {
   recordCreatedVolume(name: string): void;
@@ -776,22 +784,31 @@ function noDependencyVolumeLifecycle(): DependencyVolumeLifecycle {
 }
 
 export function planPrivateDependencyMounts(
-  workdir: string,
+  workspaceRoots: WorkspaceRoots,
 ): DependencyMountPlan {
-  if (isSourceDevelopmentWorkdir(workdir)) return { enabled: false };
+  const roots = normalizeWorkspaceRoots(workspaceRoots);
+  if (isSourceDevelopmentWorkdir(roots[0])) return { enabled: false };
 
-  const workspaceRealRoot = canonicalizeExistingPath(
-    workdir,
-    'resolve the sandbox workspace root',
-  );
-  const destinations = resolveProtectedNodeModulesDestinations(workdir);
-  for (const destination of destinations) {
-    assertDestinationChainIsDirectories(workdir, destination);
-    preflightProtectedTree(destination, workdir, workspaceRealRoot);
+  const destinations: string[] = [];
+  const seenDestinations = new Set<string>();
+  for (const workdir of roots) {
+    const workspaceRealRoot = canonicalizeExistingPath(
+      workdir,
+      'resolve the sandbox workspace root',
+    );
+    for (const destination of resolveProtectedNodeModulesDestinations(
+      workdir,
+    )) {
+      if (seenDestinations.has(destination)) continue;
+      seenDestinations.add(destination);
+      assertDestinationChainIsDirectories(workdir, destination);
+      preflightProtectedTree(destination, workdir, workspaceRealRoot);
+      destinations.push(destination);
+    }
   }
   return {
     enabled: true,
-    workdir,
+    workspaceRoots: roots,
     destinations,
     originallyAbsentDestinations: destinations.filter(
       (destination) => !fs.existsSync(destination),
@@ -802,8 +819,8 @@ export function planPrivateDependencyMounts(
 export function addPrivateDependencyMounts(
   config: SandboxConfig,
   args: string[],
-  workdir: string,
-  planned: DependencyMountPlan = planPrivateDependencyMounts(workdir),
+  workspaceRoots: WorkspaceRoots,
+  planned: DependencyMountPlan = planPrivateDependencyMounts(workspaceRoots),
 ): DependencyVolumeLifecycle {
   if (!planned.enabled) {
     debugLogger.log(

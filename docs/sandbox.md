@@ -241,6 +241,13 @@ by default. Detailed limitations follow.
 In container mode, these paths are always mounted into the container:
 
 - Your project working directory (read-write)
+- Every accepted workspace root supplied through `--include-directories`
+  (read-write). Docker and Podman bind each root to the same path inside the
+  container, using the same Windows-to-POSIX translation as the primary
+  workspace. LLxprt resolves and checks every root before contacting the
+  container engine. A missing path, a path that is not a readable, writable, and
+  searchable directory, or roots that contain one another stop startup with an
+  error that names the paths and suggests correcting `--include-directories`.
 - The system temp directory (read-write)
 - The LLxprt Code global **configuration** directory (read-write). This is your
   platform-standard config directory (the same one resolved by
@@ -287,22 +294,22 @@ is not accessible from inside the container unless you explicitly mount it.
 
 #### Project `node_modules` are private per run (container mode)
 
-The workspace bind keeps your project read-write with one exception: the
-project's `node_modules` directories do not cross the host/container platform
-boundary. At launch, LLxprt Code creates fresh, empty, host-backed directories
-under its cache root and mounts one over each of:
+The workspace binds keep source read-write with one exception: project
+`node_modules` directories do not cross the host/container platform boundary.
+At launch, LLxprt Code creates fresh, empty engine-owned volumes and mounts one
+over each of these locations in the primary workspace and every accepted
+`--include-directories` root:
 
-- `<workspace>/node_modules`; and
-- `node_modules` beneath each nested Node package root declared in the root
-  `package.json` `workspaces` list (literal list entries only; glob entries
-  are not expanded, and the root `node_modules` is protected even without a
-  manifest).
+- `<workspace-root>/node_modules`; and
+- `node_modules` beneath each nested Node package root declared in that root's
+  `package.json` `workspaces` list. Only literal list entries are used. Glob
+  entries are not expanded, and each root `node_modules` is protected even
+  without a manifest.
 
-Each private directory is writable by the user the container already runs as,
-even when that user's UID differs from the host owner of the cache-resident
-directories. This isolation applies to normal installed-mode sessions; a
-`NODE_ENV=development` source-entrypoint session keeps using the shared
-workspace bind unchanged.
+Each private volume is writable by the user the container already runs as,
+even when that user's UID differs from the host owner. This isolation applies
+to normal installed-mode sessions. A `NODE_ENV=development` source-entrypoint
+session keeps using the shared workspace binds unchanged.
 
 Inside a sandboxed session this means:
 
@@ -315,12 +322,12 @@ Inside a sandboxed session this means:
 - Source outside `node_modules` stays shared: edits made inside the sandbox are
   immediately visible on the host, and host edits are visible inside.
 
-The per-run storage lives under the LLxprt cache root and is removed when the
-session exits, is interrupted, or fails to launch; a protected path that was
-absent before the session is absent again afterward (an empty mountpoint the
-container engine materializes is removed; a nonempty directory is never
-removed). If removing the storage fails, a warning naming the operation and
-path is printed. Before creating the private mounts, a read-only preflight
+The selected container engine owns the per-run volumes and removes them when
+the session exits, is interrupted, or fails to launch. A protected path that
+was absent before the session is absent again afterward: LLxprt removes an
+empty mountpoint materialized through a workspace bind, but never removes a
+nonempty directory. Cleanup failures print a warning naming the operation and
+resource. Before creating the private mounts, a read-only preflight
 scans the existing host `node_modules` trees (the whole protected trees, so
 nothing is missed) for recognized wrong-platform binaries and stops the launch
 with repair guidance when it finds one (see
@@ -332,10 +339,13 @@ read but never executed, included) and recognizes ELF, Mach-O (including
 universal/fat binaries), and PE headers, including PE files whose header
 offset lies deeper in the file than the first probe.
 
-Seatbelt restricts **writes** to an allow-list of paths (project directory, temp
-directory, and canonical config/data/cache/log roots). It grants broader read
-access, including a read-only grant for the legacy global directory that startup
-migration reads from — see
+Seatbelt keeps its existing profile-based behavior. Its built-in profiles expose
+up to five accepted `--include-directories` roots through the existing
+`INCLUDE_DIR_0` through `INCLUDE_DIR_4` parameters and add those paths to the
+write allow-list. The container-only overlap preflight and private dependency
+volumes do not apply because Seatbelt runs directly on the host. Seatbelt also
+grants broader read access, including a read-only grant for the legacy global
+directory that startup migration reads from. See
 [Application Directories](./reference/application-directories.md).
 
 ### Network

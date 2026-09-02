@@ -12,6 +12,7 @@ import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import type { SandboxPathFilesystem } from './sandbox-path-canonicalization.js';
 import { useFakeEngine } from '../../test-utils/fake-dependency-engine-harness.js';
+import { getContainerPath } from './sandbox-env.js';
 import {
   addPrivateDependencyMounts,
   planPrivateDependencyMounts,
@@ -630,5 +631,100 @@ describe('#3475 sandbox path canonicalization failures', () => {
       'resolve the protected sandbox dependency destination',
     );
     expect(thrown.message).toContain('ELOOP');
+  });
+});
+
+describe('#3463 multi-root private dependency mounts', () => {
+  const engine = useFakeEngine();
+  let fixtureRoot = '';
+  let primaryRoot = '';
+  let includeRoot = '';
+  let restoreCacheEnv: () => void;
+
+  beforeEach(() => {
+    fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'issue3463-deps-'));
+    primaryRoot = path.join(fixtureRoot, 'primary');
+    includeRoot = path.join(fixtureRoot, 'included');
+    fs.mkdirSync(primaryRoot);
+    fs.mkdirSync(includeRoot);
+    restoreCacheEnv = isolateCacheEnv();
+    writeJson(path.join(primaryRoot, 'package.json'), {
+      workspaces: ['packages/primary-nested'],
+    });
+    writeJson(path.join(includeRoot, 'package.json'), {
+      workspaces: ['packages/included-nested'],
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+    restoreCacheEnv();
+  });
+
+  it('plans the root and declared nested dependency trees for every accepted workspace root', () => {
+    const plan = planPrivateDependencyMounts([primaryRoot, includeRoot]);
+
+    if (!plan.enabled) throw new Error('Expected dependency isolation plan');
+    expect(plan.destinations).toStrictEqual([
+      path.join(primaryRoot, 'node_modules'),
+      path.join(primaryRoot, 'packages', 'primary-nested', 'node_modules'),
+      path.join(includeRoot, 'node_modules'),
+      path.join(includeRoot, 'packages', 'included-nested', 'node_modules'),
+    ]);
+  });
+
+  it('preflights an included root before any engine resource is created', () => {
+    vi.spyOn(os, 'platform').mockReturnValue('darwin');
+    writeBytes(
+      path.join(includeRoot, 'node_modules', 'host-pkg', 'addon.node'),
+      elfBytes(),
+    );
+
+    expect(() =>
+      addPrivateDependencyMounts(engine.config, [], [primaryRoot, includeRoot]),
+    ).toThrowError('Sandbox dependency preflight failed');
+    expect(engine.snapshot().invocations).toStrictEqual([]);
+  });
+
+  it('mounts private volumes over every root and removes absent mountpoints from both roots', () => {
+    const destinations = [
+      path.join(primaryRoot, 'node_modules'),
+      path.join(primaryRoot, 'packages', 'primary-nested', 'node_modules'),
+      path.join(includeRoot, 'node_modules'),
+      path.join(includeRoot, 'packages', 'included-nested', 'node_modules'),
+    ];
+    const args: string[] = [
+      '--volume',
+      `${primaryRoot}:${primaryRoot}`,
+      '--volume',
+      `${includeRoot}:${includeRoot}`,
+    ];
+    const lifecycle = addPrivateDependencyMounts(engine.config, args, [
+      primaryRoot,
+      includeRoot,
+    ]);
+    for (const destination of destinations) {
+      fs.mkdirSync(destination, { recursive: true });
+    }
+
+    lifecycle.release();
+
+    const mountValues = args.filter(
+      (token, index) => index > 0 && args[index - 1] === '--mount',
+    );
+    expect(mountValues).toHaveLength(destinations.length);
+    expect(
+      destinations.every((destination) =>
+        mountValues.some((mount) =>
+          mount.includes(`dst=${getContainerPath(destination)}`),
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      destinations.every((destination) => !fs.existsSync(destination)),
+    ).toBe(true);
+    expect(engine.volumeNames()).toStrictEqual([]);
+    expect(engine.containerNames()).toStrictEqual([]);
   });
 });

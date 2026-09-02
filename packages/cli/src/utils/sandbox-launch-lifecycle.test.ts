@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
+import { Config } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import { useFakeEngine } from '../../test-utils/fake-dependency-engine-harness.js';
 import { runContainerSandbox } from './sandbox-exec.js';
@@ -156,6 +157,21 @@ describe('#3450 private dependency storage lifecycle on a failed launch', () => 
     }) as unknown as typeof childProcess.spawn);
   }
 
+  function configWithIncludeDirectories(
+    includeDirectories: readonly string[],
+  ): Config {
+    return new Config({
+      cwd: fixturePath,
+      targetDir: fixturePath,
+      includeDirectories: [...includeDirectories],
+      debugMode: false,
+      question: undefined,
+      userMemory: '',
+      sessionId: 'issue3463-workspace-validation',
+      model: 'test-model',
+    });
+  }
+
   function leakedRunRoots(): string[] {
     return fs
       .readdirSync(Storage.getGlobalCacheDir())
@@ -274,5 +290,44 @@ describe('#3450 private dependency storage lifecycle on a failed launch', () => 
     // volume creation, or any other engine side effect.
     expect(engine.snapshot().invocations).toStrictEqual([]);
     expect(leakedRunRoots()).toStrictEqual([]);
+  });
+
+  it('rejects a configured missing include root before any engine invocation', async () => {
+    const missingRoot = path.join(fixturePath, 'missing-include');
+    const cliConfig = configWithIncludeDirectories([missingRoot]);
+
+    await expect(
+      runContainerSandbox(CONFIG, [], cliConfig),
+    ).rejects.toThrowError(missingRoot);
+    expect(engine.snapshot().invocations).toStrictEqual([]);
+    expect(leakedRunRoots()).toStrictEqual([]);
+  });
+
+  it('rejects overlapping accepted roots before any engine invocation', async () => {
+    const nestedRoot = path.join(fixturePath, 'nested-include');
+    fs.mkdirSync(nestedRoot);
+    const cliConfig = configWithIncludeDirectories([nestedRoot]);
+
+    await expect(
+      runContainerSandbox(CONFIG, [], cliConfig),
+    ).rejects.toThrowError('overlap');
+    expect(engine.snapshot().invocations).toStrictEqual([]);
+    expect(leakedRunRoots()).toStrictEqual([]);
+  });
+
+  it('rejects a non-directory configured root before any engine invocation', async () => {
+    const fileRoot = path.join(fixturePath, 'include-file');
+    fs.writeFileSync(fileRoot, 'not a directory');
+    try {
+      const cliConfig = configWithIncludeDirectories([fileRoot]);
+
+      await expect(
+        runContainerSandbox(CONFIG, [], cliConfig),
+      ).rejects.toThrowError('mountable directory');
+      expect(engine.snapshot().invocations).toStrictEqual([]);
+      expect(leakedRunRoots()).toStrictEqual([]);
+    } finally {
+      fs.rmSync(fileRoot, { force: true });
+    }
   });
 });

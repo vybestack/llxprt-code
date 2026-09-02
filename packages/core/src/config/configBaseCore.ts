@@ -100,6 +100,7 @@ export abstract class ConfigBaseCore {
   protected readonly embeddingModel: string | undefined;
   protected readonly sandbox: SandboxConfig | undefined;
   protected readonly targetDir!: string;
+  protected readonly configuredIncludeDirectories!: readonly string[];
   protected workspaceContext!: WorkspaceContext;
   protected readonly debugMode!: boolean;
   protected readonly outputFormat!: OutputFormat;
@@ -506,6 +507,9 @@ export abstract class ConfigBaseCore {
   }
   getProjectRoot(): string {
     return this.targetDir;
+  }
+  getConfiguredIncludeDirectories(): readonly string[] {
+    return [...this.configuredIncludeDirectories];
   }
   getWorkspaceContext(): WorkspaceContext {
     return this.workspaceContext;
