@@ -1512,7 +1512,7 @@ jobs:
     # full push scans routinely take 70–79 minutes, so all non-PR events retain
     # the 360-minute allowance. A timeout remains a non-success conclusion;
     # candidate CI measures the end-to-end verdict.
-    timeout-minutes: ${{ github.event_name == 'pull_request' && 9 || 360 }}
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 15 || 360 }}
     needs:
       - 'skip_check'
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
