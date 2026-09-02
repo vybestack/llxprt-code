@@ -1036,7 +1036,7 @@ jobs:
       - name: 'Run test-runner and orchestrator meta-tests'
         if: steps.filter.outputs.affected == 'true'
         run: |-
-          bun test --preload ./scripts/tests/test-setup.ts scripts/tests/run_bun_tests.test.ts scripts/tests/test-orchestrator.test.ts scripts/tests/test-shard-orchestrator.test.ts
+          bun test --preload ./scripts/tests/test-setup.ts scripts/tests/run_bun_tests.test.ts scripts/tests/bun-test-reaper.bun.test.ts scripts/tests/test-orchestrator.test.ts scripts/tests/test-shard-orchestrator.test.ts
           cd packages/cli && bun test test/run-bun-tests.test.ts
           cd ../core && bun test test/run-bun-tests.test.ts
           cd ../agents && bun test ./test-bun/run-bun-tests.issue3253.bun.ts
