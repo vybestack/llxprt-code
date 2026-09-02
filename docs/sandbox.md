@@ -296,7 +296,7 @@ is not accessible from inside the container unless you explicitly mount it.
 
 The workspace binds keep source read-write with one exception: project
 `node_modules` directories do not cross the host/container platform boundary.
-At launch, LLxprt Code creates fresh, empty engine-owned volumes and mounts one
+At launch, LLxprt Code creates fresh engine-owned named volumes and mounts one
 over each of these locations in the primary workspace and every accepted
 `--include-directories` root:
 
@@ -319,8 +319,8 @@ glob operators also stop the launch and report the accepted forms. An exclusion
 that matches nothing has no effect. These checks finish before Docker or Podman
 creates a volume or container.
 
-Each private volume is writable by the user the container already runs as,
-even when that user's UID differs from the host owner. This isolation applies
+Each private volume is initialized for the user the container already runs as,
+even when that user's UID differs from the host user. This isolation applies
 to normal installed-mode sessions. A `NODE_ENV=development` source-entrypoint
 session keeps using the shared workspace binds unchanged.
 
@@ -328,30 +328,54 @@ Inside a sandboxed session this means:
 
 - The agent starts from the image-global `llxprt` install, so no host install
   is required before the agent can run the project's installer itself.
-- Installer, build, and test output goes to the private per-run storage, never
+- Installer, build, and test output goes to the private per-run volumes, never
   to your host `node_modules`. Host-installed dependencies are hidden while the
   container runs, and container-installed dependencies are discarded with the
   session; a later session starts with fresh, empty storage.
 - Source outside `node_modules` stays shared: edits made inside the sandbox are
   immediately visible on the host, and host edits are visible inside.
 
-The selected container engine owns the per-run volumes and removes them when
-the session exits, is interrupted, or fails to launch. A protected path that
-was absent before the session is absent again afterward: LLxprt removes an
-empty mountpoint materialized through a workspace bind, but never removes a
-nonempty directory. Cleanup failures print a warning naming the operation and
-the engine resource or host path. Before creating the private mounts, a
-read-only preflight
-scans the existing host `node_modules` trees (the whole protected trees, so
-nothing is missed) for recognized wrong-platform binaries and stops the launch
-with repair guidance when it finds one (see
-[Troubleshooting](#troubleshooting)). Each file it inspects is read only far
-enough to classify its header. The preflight covers `.node` native addons and
-entries reached through protected `.bin` directories (regular executables
-directly in `.bin` and symlinked `.node` files, whose contained targets are
-read but never executed, included) and recognizes ELF, Mach-O (including
-universal/fat binaries), and PE headers, including PE files whose header
-offset lies deeper in the file than the first probe.
+Normal exit, handled interruption, preparation failure, and launch failure
+remove the per-run volumes; the selected container engine owns them. A
+protected path that was absent before the session is absent again afterward:
+LLxprt removes an empty mountpoint materialized through a workspace bind, but
+never removes a nonempty directory. Cleanup failures print a warning naming
+the operation and the engine resource or host path. Docker and Podman startup
+also recover storage left by `SIGKILL`, OOM termination, LLxprt failure, host
+restart, or power loss. Recovery runs after all filesystem planning and
+preflight have succeeded. It first removes managed containers whose
+process-instance owner is provably dead. It then considers only managed
+volumes whose name starts with `sandbox-node-modules-`, whose process-instance
+owner is provably dead, and whose dependency run ID is not present on a
+running managed container. Volume removal is not forced, so an existing or
+newly appearing attachment causes the engine to retain the volume. Unknown
+ownership, foreign-host ownership, active owners, malformed labels, anonymous
+volumes, custom volumes, and persistent checkpoint storage are retained.
+
+A recovery failure prints the engine operation and resource name. To inspect a
+reported volume, use the selected engine, its exact name from the warning, and
+these label-scoped commands:
+
+```bash
+docker volume ls --filter label=com.vybestack.llxprt.sandbox-managed=true
+docker volume inspect VOLUME_NAME
+docker volume rm VOLUME_NAME
+```
+
+Replace `docker` with `podman` for rootless Podman. Check the owner and
+`com.vybestack.llxprt.sandbox-dependency-run` labels before manual removal. Do
+not use a broad volume prune or container removal with `--volumes`.
+
+Before creating the private mounts, a read-only preflight scans the existing
+host `node_modules` trees (the whole protected trees, so nothing is missed) for
+recognized wrong-platform binaries and stops the launch with repair guidance
+when it finds one (see [Troubleshooting](#troubleshooting)). Each file it
+inspects is read only far enough to classify its header. The preflight covers
+`.node` native addons and entries reached through protected `.bin` directories
+(regular executables directly in `.bin` and symlinked `.node` files, whose
+contained targets are read but never executed, included) and recognizes ELF,
+Mach-O (including universal/fat binaries), and PE headers, including PE files
+whose header offset lies deeper in the file than the first probe.
 
 Seatbelt keeps its existing profile-based behavior. Its built-in profiles expose
 up to five accepted `--include-directories` roots through the existing

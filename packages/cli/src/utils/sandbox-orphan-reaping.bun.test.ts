@@ -127,16 +127,44 @@ if (statePath === undefined || logPath === undefined) process.exit(46);
 
 const args = process.argv.slice(2);
 appendFileSync(logPath, engine + ':' + args.join(' ') + '\\n');
-if (args[0] === 'ps' && args[1] === '-a') process.exit(0);
-if (args[0] === 'ps' && args[1] !== '-a') {
+if (args[0] === 'ps') {
   if (process.env.LLXPRT_TEST_LIST_HANG === '1') {
     await new Promise((resolve) => setTimeout(resolve, 7000));
   }
   if (process.env.LLXPRT_TEST_LIST_FAILURE === '1') process.exit(42);
-  if (!args.includes(${JSON.stringify(`label=${MANAGED_LABEL}`)})) process.exit(43);
-  process.stdout.write(readFileSync(statePath, 'utf8'));
+  if (args.includes('--filter') &&
+      !args.includes(${JSON.stringify(`label=${MANAGED_LABEL}`)})) process.exit(43);
+  const rows = readFileSync(statePath, 'utf8')
+    .split('\\n')
+    .filter((line) => line !== '');
+  const formatIndex = args.indexOf('--format');
+  const format = formatIndex < 0 ? '' : args[formatIndex + 1];
+  if (format === '{{.ID}}') {
+    const ids = rows.map((line) => line.split('\\t')[0]);
+    if (ids.length > 0) process.stdout.write(ids.join('\\n') + '\\n');
+  } else {
+    process.stdout.write(readFileSync(statePath, 'utf8'));
+  }
   process.exit(0);
 }
+if (args[0] === 'inspect') {
+  const containerId = args[1];
+  const row = readFileSync(statePath, 'utf8')
+    .split('\\n')
+    .find((line) => line.startsWith(containerId + '\\t'));
+  if (row === undefined) process.exit(45);
+  const owner = row.slice(row.indexOf('\\t') + 1);
+  process.stdout.write(JSON.stringify([{
+    Id: containerId,
+    Config: { Labels: {
+      'com.vybestack.llxprt.sandbox-managed': 'true',
+      'com.vybestack.llxprt.sandbox-owner': owner,
+    } },
+    State: { Running: true },
+  }]) + '\\n');
+  process.exit(0);
+}
+if (args[0] === 'volume' && args[1] === 'ls') process.exit(0);
 if (args[0] === 'rm' && args[1] === '-f') {
   const containerId = args[2];
   if (containerId === undefined) process.exit(45);
@@ -342,6 +370,7 @@ describe('sandbox orphan recovery startup', () => {
     process.env.LLXPRT_TEST_PROCESS_STARTS = processStarts;
     process.env.SANDBOX_SET_UID_GID = 'false';
     process.env.LLXPRT_SANDBOX_SSH_AGENT = 'off';
+    process.env.NODE_ENV = 'development';
     liveChildren = [];
   });
 
@@ -405,7 +434,7 @@ describe('sandbox orphan recovery startup', () => {
       state: fs.readFileSync(statePath, 'utf8'),
       queried: fs
         .readFileSync(logPath, 'utf8')
-        .includes(`docker:ps --filter label=${MANAGED_LABEL}`),
+        .includes(`docker:ps -a --filter label=${MANAGED_LABEL}`),
     }).toEqual({
       startupResult: expect.stringContaining(
         `Sandbox image '${TEST_IMAGE}' is missing`,

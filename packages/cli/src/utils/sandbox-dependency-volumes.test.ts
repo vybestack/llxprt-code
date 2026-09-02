@@ -19,6 +19,10 @@ import {
 } from './sandbox-dependency-volumes.js';
 import { addPrivateDependencyMounts } from './sandbox-node-modules.js';
 import { getContainerPath } from './sandbox-env.js';
+import {
+  SANDBOX_OWNER_LABEL,
+  addSandboxOwnershipLabels,
+} from './sandbox-owner-labels.js';
 
 const RUN_ROOT_PREFIX = 'sandbox-node-modules-';
 
@@ -153,8 +157,9 @@ describe('#3450 engine-owned dependency volumes', () => {
     expect(engine.volumeNames()).toStrictEqual([]);
   });
 
-  it('shares one explicit run ID across volumes, init container, and main container state', () => {
+  it('shares exact owner metadata and one run ID across volumes, init container, and main container state', () => {
     const mainArgs: string[] = [];
+    addSandboxOwnershipLabels(mainArgs);
     const lifecycle = addPrivateDependencyMounts(
       engine.config,
       mainArgs,
@@ -170,6 +175,11 @@ describe('#3450 engine-owned dependency volumes', () => {
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     );
     expect(volumeRunIds).toStrictEqual(volumeNames.map(() => runId));
+    const volumeOwners = volumeNames.map(
+      (name) => engine.snapshot().volumes[name].labels[SANDBOX_OWNER_LABEL],
+    );
+    const owner = volumeOwners[0];
+    expect(volumeOwners).toStrictEqual(volumeNames.map(() => owner));
 
     const initRun = engine
       .invocations()
@@ -177,6 +187,8 @@ describe('#3450 engine-owned dependency volumes', () => {
     if (initRun === undefined) throw new Error('Init container run is missing');
     expect(labelValue(initRun, SANDBOX_DEPENDENCY_RUN_LABEL)).toBe(runId);
     expect(labelValue(mainArgs, SANDBOX_DEPENDENCY_RUN_LABEL)).toBe(runId);
+    expect(labelValue(initRun, SANDBOX_OWNER_LABEL)).toBe(owner);
+    expect(labelValue(mainArgs, SANDBOX_OWNER_LABEL)).toBe(owner);
 
     const mainContainerName = 'issue3450-labeled-main';
     lifecycle.recordMainContainerName(mainContainerName);

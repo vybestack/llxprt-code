@@ -36,7 +36,12 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
-import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import {
+  execFileSync,
+  spawn,
+  spawnSync,
+  type ChildProcess,
+} from 'node:child_process';
 import {
   chmodSync,
   existsSync,
@@ -61,10 +66,17 @@ import {
 import { addPrivateDependencyMounts } from '../packages/cli/src/utils/sandbox-node-modules.js';
 import { SANDBOX_DEPENDENCY_RUN_LABEL } from '../packages/cli/src/utils/sandbox-dependency-volumes.js';
 import { getContainerPath } from '../packages/cli/src/utils/sandbox-env.js';
+import { reapOrphanedSandboxResources } from '../packages/cli/src/utils/sandbox-orphan-recovery.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
 const CLI_ENTRY = join(REPO_ROOT, 'packages', 'cli', 'index.ts');
+const RECOVERY_HELPER = join(
+  REPO_ROOT,
+  'integration-tests',
+  'helpers',
+  'sandboxDependencyRecoveryHelper.ts',
+);
 
 // One container workflow session on a warm daemon measured well under this;
 // the bound exists so a hung runtime fails the test rather than the suite.
@@ -647,6 +659,158 @@ function bounded<T>(
         reject(error);
       },
     );
+  });
+}
+
+interface AbruptOwnerRun {
+  readonly child: ChildProcess;
+  readonly runId: string;
+  readonly volumeName: string;
+  readonly containerName: string;
+}
+
+function isUnknownRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function parseAbruptOwnerRun(
+  value: unknown,
+  child: ChildProcess,
+): AbruptOwnerRun | undefined {
+  if (!isUnknownRecord(value)) return undefined;
+  if (
+    typeof value.runId !== 'string' ||
+    typeof value.volumeName !== 'string' ||
+    typeof value.containerName !== 'string'
+  ) {
+    return undefined;
+  }
+  return {
+    child,
+    runId: value.runId,
+    volumeName: value.volumeName,
+    containerName: value.containerName,
+  };
+}
+
+async function startAbruptOwnerRun(
+  engine: string,
+  suffix: string,
+): Promise<AbruptOwnerRun> {
+  const runId = randomUUID();
+  const volumeName = `sandbox-node-modules-issue3470-${suffix}-${runId}`;
+  const containerName = `issue3470-${suffix}-${runId}`;
+  const child = spawn(
+    process.execPath,
+    [RECOVERY_HELPER, engine, IMAGE, runId, volumeName, containerName],
+    { stdio: ['pipe', 'pipe', 'pipe'], env: process.env },
+  );
+  let stdout = '';
+  let stderr = '';
+  const readiness = new Promise<AbruptOwnerRun>((resolve, reject) => {
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString();
+      const lines = stdout.split(/\r?\n/);
+      for (const line of lines.slice(0, -1)) {
+        try {
+          const parsed: unknown = JSON.parse(line);
+          const run = parseAbruptOwnerRun(parsed, child);
+          if (run !== undefined) {
+            resolve(run);
+            return;
+          }
+        } catch {
+          continue;
+        }
+      }
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.once('error', reject);
+    child.once('close', (status) => {
+      reject(
+        new Error(
+          `${engine} owner helper exited before readiness with status ${String(status)}: ${stderr}`,
+        ),
+      );
+    });
+  });
+  try {
+    return await bounded(
+      readiness,
+      SESSION_TIMEOUT_MS,
+      `${engine} owner readiness`,
+    );
+  } catch (error) {
+    const failedRun = { child, runId, volumeName, containerName };
+    await stopOwnerWithSigkill(failedRun);
+    removeAbruptRunResources(engine, failedRun);
+    throw error;
+  }
+}
+
+function stopOwnerWithSigkill(run: AbruptOwnerRun): Promise<void> {
+  return bounded(
+    new Promise<void>((resolve) => {
+      if (run.child.exitCode !== null || run.child.signalCode !== null) {
+        resolve();
+        return;
+      }
+      run.child.once('close', () => resolve());
+      run.child.kill('SIGKILL');
+    }),
+    SESSION_TIMEOUT_MS,
+    'owner SIGKILL completion',
+  );
+}
+
+function queryRunContainers(engine: string, runId: string): string[] {
+  const result = spawnSync(
+    engine,
+    [
+      'ps',
+      '-a',
+      '--filter',
+      `label=${SANDBOX_DEPENDENCY_RUN_LABEL}=${runId}`,
+      '--format',
+      '{{.Names}}',
+    ],
+    {
+      encoding: 'utf8',
+      timeout: 30_000,
+      killSignal: 'SIGKILL',
+    },
+  );
+  if (result.status !== 0 || result.error !== undefined) {
+    throw new Error(
+      `Failed to query ${engine} containers for run ID '${runId}': ` +
+        `${result.stderr}${result.error?.message ?? ''}`,
+    );
+  }
+  return result.stdout.split(/\r?\n/).filter((name) => name !== '');
+}
+
+async function releaseOwnerRun(run: AbruptOwnerRun): Promise<void> {
+  if (run.child.exitCode !== null || run.child.signalCode !== null) return;
+  const completion = new Promise<void>((resolve) => {
+    run.child.once('close', () => resolve());
+  });
+  run.child.stdin.write('release\n');
+  run.child.stdin.end();
+  await bounded(completion, SESSION_TIMEOUT_MS, 'live owner release');
+}
+
+function removeAbruptRunResources(engine: string, run: AbruptOwnerRun): void {
+  spawnSync(engine, ['rm', '-f', run.containerName], {
+    encoding: 'utf8',
+    timeout: 30_000,
+    killSignal: 'SIGKILL',
+  });
+  spawnSync(engine, ['volume', 'rm', run.volumeName], {
+    encoding: 'utf8',
+    timeout: 30_000,
+    killSignal: 'SIGKILL',
   });
 }
 
@@ -1406,9 +1570,79 @@ function describeEngine(engine: string): void {
   );
 }
 
+function describeAbruptRecoveryEngine(engine: 'docker' | 'podman'): void {
+  describe.skipIf(!ENGINES.includes(engine))(
+    `Sandbox dependency recovery (real ${engine}) #3470`,
+    () => {
+      it(
+        'recovers a SIGKILLed owner without reclaiming a concurrent live run',
+        async () => {
+          let deadRun: AbruptOwnerRun | undefined;
+          let liveRun: AbruptOwnerRun | undefined;
+          try {
+            deadRun = await startAbruptOwnerRun(engine, 'dead');
+            liveRun = await startAbruptOwnerRun(engine, 'live');
+            expect({
+              deadVolumes: queryRunVolumes(engine, deadRun.runId),
+              deadContainers: queryRunContainers(engine, deadRun.runId),
+              liveVolumes: queryRunVolumes(engine, liveRun.runId),
+              liveContainers: queryRunContainers(engine, liveRun.runId),
+            }).toEqual({
+              deadVolumes: [deadRun.volumeName],
+              deadContainers: [deadRun.containerName],
+              liveVolumes: [liveRun.volumeName],
+              liveContainers: [liveRun.containerName],
+            });
+
+            await stopOwnerWithSigkill(deadRun);
+            await reapOrphanedSandboxResources({
+              command: engine,
+              image: IMAGE,
+            });
+
+            expect({
+              deadVolumes: queryRunVolumes(engine, deadRun.runId),
+              deadContainers: queryRunContainers(engine, deadRun.runId),
+              liveVolumes: queryRunVolumes(engine, liveRun.runId),
+              liveContainers: queryRunContainers(engine, liveRun.runId),
+            }).toEqual({
+              deadVolumes: [],
+              deadContainers: [],
+              liveVolumes: [liveRun.volumeName],
+              liveContainers: [liveRun.containerName],
+            });
+          } finally {
+            if (
+              liveRun !== undefined &&
+              liveRun.child.exitCode === null &&
+              liveRun.child.signalCode === null
+            ) {
+              await releaseOwnerRun(liveRun);
+            }
+            if (
+              deadRun !== undefined &&
+              deadRun.child.exitCode === null &&
+              deadRun.child.signalCode === null
+            ) {
+              await stopOwnerWithSigkill(deadRun);
+            }
+            if (deadRun !== undefined)
+              removeAbruptRunResources(engine, deadRun);
+            if (liveRun !== undefined)
+              removeAbruptRunResources(engine, liveRun);
+          }
+        },
+        SESSION_TIMEOUT_MS,
+      );
+    },
+  );
+}
+
 // The fixture creates symlinks and POSIX shell scripts; Windows hosts cannot
 // create the symlinks unconditionally.
 if (process.platform !== 'win32') {
   describeEngine('docker');
   describeEngine('podman');
+  describeAbruptRecoveryEngine('docker');
+  describeAbruptRecoveryEngine('podman');
 }

@@ -353,9 +353,9 @@ describe('#3469 launch resource release', () => {
     createdSessionTmpdirs.length = 0;
     const realMkdtempSync = fs.mkdtempSync;
     vi.spyOn(fs, 'mkdtempSync').mockImplementation(((
-      prefix: fs.PathLike,
+      prefix: string,
     ): string => {
-      const dir = realMkdtempSync.call(fs, prefix);
+      const dir = realMkdtempSync(prefix);
       if (dir.includes('llxprt-sandbox-')) createdSessionTmpdirs.push(dir);
       return dir;
     }) as typeof fs.mkdtempSync);

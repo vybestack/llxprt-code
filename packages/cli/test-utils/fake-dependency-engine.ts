@@ -56,6 +56,7 @@ export interface FakeEngineVolumeRecord {
 export interface FakeEngineContainerRecord {
   readonly volumes: string[];
   readonly labels: Record<string, string>;
+  readonly running: boolean;
 }
 
 export interface FakeEngineNetworkRecord {
@@ -129,6 +130,7 @@ function decodeContainers(
     containers[name] = {
       volumes: volumeNames,
       labels: decodeLabels(record.labels),
+      running: record.running !== false,
     };
   }
   return containers;
@@ -465,7 +467,14 @@ function cmdVolumeRm(
   if (failure !== '') fail(failure);
 }
 
-function cmdVolumeLs(state: FakeEngineState, argv: string[]): void {
+function cmdVolumeLs(
+  root: string,
+  state: FakeEngineState,
+  argv: string[],
+): void {
+  if (takeKnob(root, 'fail-volume-ls-once')) {
+    fail('fake engine: volume ls failed by request');
+  }
   let labelKey = '';
   let labelValue = '';
   for (let index = 2; index < argv.length; index++) {
@@ -499,9 +508,45 @@ function cmdVolumeLs(state: FakeEngineState, argv: string[]): void {
   if (names.length > 0) process.stdout.write(`${names.join('\n')}\n`);
 }
 
-function cmdPs(state: FakeEngineState, argv: string[]): void {
+function cmdVolumeInspect(state: FakeEngineState, argv: string[]): void {
+  const names = argv.slice(2).filter((token) => !token.startsWith('-'));
+  const inspected = names.map((name) => {
+    const volume = state.volumes[name];
+    if (volume === undefined) fail(`no such volume '${name}'`);
+    return { Name: name, Labels: volume.labels };
+  });
+  process.stdout.write(`${JSON.stringify(inspected)}\n`);
+}
+
+function formattedLabel(
+  format: string,
+  labels: Record<string, string>,
+): string {
+  const labelPattern = /\{\{\.Label "([^"]+)"\}\}/g;
+  return format.replace(
+    labelPattern,
+    (_match, key: string) => labels[key] ?? '',
+  );
+}
+
+function formatContainer(
+  format: string,
+  name: string,
+  container: FakeEngineContainerRecord,
+): string {
+  return formattedLabel(format, container.labels)
+    .replaceAll('{{.ID}}', name)
+    .replaceAll('{{.Names}}', name);
+}
+
+function cmdPs(root: string, state: FakeEngineState, argv: string[]): void {
+  if (takeKnob(root, 'fail-ps-once')) {
+    fail('fake engine: container list failed by request');
+  }
   let labelKey = '';
   let labelValue = '';
+  let format = '{{.Names}}';
+  const includeStopped = argv.includes('-a') || argv.includes('--all');
   for (let index = 1; index < argv.length; index++) {
     const token = argv[index];
     if (token === '--filter') {
@@ -516,6 +561,9 @@ function cmdPs(state: FakeEngineState, argv: string[]): void {
       continue;
     }
     if (token === '--format') {
+      const value = argv[index + 1];
+      if (value === undefined) fail('fake engine: --format requires a value');
+      format = value;
       index++;
       continue;
     }
@@ -523,14 +571,36 @@ function cmdPs(state: FakeEngineState, argv: string[]): void {
   }
   const names = Object.keys(state.containers)
     .filter((name) => {
+      const container = state.containers[name];
+      if (container === undefined) return false;
+      if (!includeStopped && !container.running) return false;
       if (labelKey === '') return true;
-      const labels = state.containers[name]?.labels ?? {};
+      const labels = container.labels;
       return labelValue === ''
         ? labels[labelKey] !== undefined
         : labels[labelKey] === labelValue;
     })
     .sort();
-  if (names.length > 0) process.stdout.write(`${names.join('\n')}\n`);
+  const output = names.map((name) => {
+    const container = state.containers[name];
+    if (container === undefined) fail(`missing container '${name}'`);
+    return formatContainer(format, name, container);
+  });
+  if (output.length > 0) process.stdout.write(`${output.join('\n')}\n`);
+}
+
+function cmdInspect(state: FakeEngineState, argv: string[]): void {
+  const names = argv.slice(1).filter((token) => !token.startsWith('-'));
+  const inspected = names.map((name) => {
+    const container = state.containers[name];
+    if (container === undefined) fail(`No such container: ${name}`);
+    return {
+      Id: name,
+      Config: { Labels: container.labels },
+      State: { Running: container.running },
+    };
+  });
+  process.stdout.write(`${JSON.stringify(inspected)}\n`);
 }
 
 function cmdRm(root: string, state: FakeEngineState, argv: string[]): void {
@@ -601,6 +671,7 @@ function cmdRun(root: string, state: FakeEngineState, argv: string[]): void {
   state.containers[run.containerName] = {
     volumes: volumeNames,
     labels: run.labels,
+    running: true,
   };
   saveState(root, state);
   if (takeKnob(root, 'fail-run-once')) {
@@ -649,12 +720,20 @@ function main(): void {
     cmdVolumeRm(root, state, argv);
     return;
   }
+  if (subcommand === 'volume' && verb === 'inspect') {
+    cmdVolumeInspect(state, argv);
+    return;
+  }
   if (subcommand === 'volume' && verb === 'ls') {
-    cmdVolumeLs(state, argv);
+    cmdVolumeLs(root, state, argv);
     return;
   }
   if (subcommand === 'ps') {
-    cmdPs(state, argv);
+    cmdPs(root, state, argv);
+    return;
+  }
+  if (subcommand === 'inspect') {
+    cmdInspect(state, argv);
     return;
   }
   if (subcommand === 'rm') {

@@ -7,10 +7,12 @@
 import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 
-const SANDBOX_MANAGED_LABEL = 'com.vybestack.llxprt.sandbox-managed=true';
-const SANDBOX_OWNER_LABEL = 'com.vybestack.llxprt.sandbox-owner';
+export const SANDBOX_MANAGED_LABEL = 'com.vybestack.llxprt.sandbox-managed';
+export const SANDBOX_MANAGED_LABEL_SPEC = `${SANDBOX_MANAGED_LABEL}=true`;
+export const SANDBOX_OWNER_LABEL = 'com.vybestack.llxprt.sandbox-owner';
 
-interface CurrentSandboxOwner {
+/** Versioned process-instance identity stored on managed engine resources. */
+export interface SandboxOwnerMetadata {
   readonly version: 1;
   readonly hostname: string;
   readonly pid: number;
@@ -89,7 +91,7 @@ function observeCurrentProcessStartTime(): number | undefined {
   }
 }
 
-function buildCurrentSandboxOwner(): CurrentSandboxOwner {
+function buildCurrentSandboxOwner(): SandboxOwnerMetadata {
   const observedStartTimeMs = observeCurrentProcessStartTime();
   return observedStartTimeMs === undefined
     ? {
@@ -108,12 +110,95 @@ function buildCurrentSandboxOwner(): CurrentSandboxOwner {
       };
 }
 
+function isUnknownRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isSandboxOwnerMetadata(value: unknown): value is SandboxOwnerMetadata {
+  if (!isUnknownRecord(value) || value.version !== 1) return false;
+  if (typeof value.hostname !== 'string' || value.hostname.length === 0) {
+    return false;
+  }
+  if (
+    typeof value.pid !== 'number' ||
+    !Number.isInteger(value.pid) ||
+    value.pid <= 0
+  ) {
+    return false;
+  }
+  if (
+    typeof value.startTimeMs !== 'number' ||
+    !Number.isFinite(value.startTimeMs) ||
+    value.startTimeMs <= 0
+  ) {
+    return false;
+  }
+  return (
+    value.startTimeSource === 'observed' ||
+    value.startTimeSource === 'estimated'
+  );
+}
+
+/** Parses a supported owner label, retaining unknown versions fail-closed. */
+export function parseSandboxOwner(
+  payload: string,
+): SandboxOwnerMetadata | undefined {
+  try {
+    const parsed: unknown = JSON.parse(payload);
+    return isSandboxOwnerMetadata(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readProcessStartTime(pid: number): number | undefined {
+  try {
+    const output = execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], {
+      encoding: 'utf8',
+      timeout: 250,
+      env: { ...process.env, LC_ALL: 'C', LANG: 'C', TZ: 'UTC' },
+    }).trim();
+    return parseProcessStartTime(output);
+  } catch {
+    return undefined;
+  }
+}
+
+function processIsMissing(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'ESRCH'
+  );
+}
+
+/** Returns true only when this host can prove the recorded process instance ended. */
+export function sandboxOwnerIsDead(owner: SandboxOwnerMetadata): boolean {
+  try {
+    if (owner.hostname !== os.hostname()) return false;
+  } catch {
+    return false;
+  }
+  try {
+    process.kill(owner.pid, 0);
+  } catch (error) {
+    return processIsMissing(error);
+  }
+  if (owner.startTimeSource !== 'observed') return false;
+  const currentStartTimeMs = readProcessStartTime(owner.pid);
+  return (
+    currentStartTimeMs !== undefined &&
+    Math.abs(currentStartTimeMs - owner.startTimeMs) > 2_000
+  );
+}
+
 /** Adds process-instance ownership labels to a main sandbox container. */
 export function addSandboxOwnershipLabels(args: string[]): void {
   const owner = JSON.stringify(buildCurrentSandboxOwner());
   args.push(
     '--label',
-    SANDBOX_MANAGED_LABEL,
+    SANDBOX_MANAGED_LABEL_SPEC,
     '--label',
     `${SANDBOX_OWNER_LABEL}=${owner}`,
   );
