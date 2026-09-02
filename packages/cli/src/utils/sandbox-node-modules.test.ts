@@ -10,9 +10,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-storage';
+import type { SandboxPathFilesystem } from './sandbox-path-canonicalization.js';
 import { useFakeEngine } from '../../test-utils/fake-dependency-engine-harness.js';
 import {
   addPrivateDependencyMounts,
+  planPrivateDependencyMounts,
   resolveProtectedNodeModulesDestinations,
 } from './sandbox-node-modules.js';
 
@@ -475,5 +477,158 @@ describe('#3450 private per-run dependency mounts', () => {
     expect(privateRunRoots()).toStrictEqual([]);
     // The failure happens before any engine resource is created.
     expect(engine.snapshot().invocations).toStrictEqual([]);
+  });
+});
+
+describe('#3475 sandbox path canonicalization failures', () => {
+  let workdir = '';
+  let savedNodeEnv: string | undefined;
+
+  beforeEach(() => {
+    workdir = makeWorkspace();
+    // The planner short-circuits to the development path before any
+    // canonicalization when NODE_ENV=development; keep it unset so the
+    // canonicalization behavior is what runs.
+    savedNodeEnv = process.env.NODE_ENV;
+    delete process.env.NODE_ENV;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (savedNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = savedNodeEnv;
+    }
+    if (workdir !== '') fs.rmSync(workdir, { recursive: true, force: true });
+  });
+
+  it('fails with a classified preparation error when the workspace root is a symlink cycle', () => {
+    const cyclic = path.join(workdir, 'cycle');
+    fs.symlinkSync(cyclic, cyclic);
+    let thrown: unknown;
+    try {
+      planPrivateDependencyMounts(cyclic);
+    } catch (error) {
+      thrown = error;
+    }
+    if (!(thrown instanceof FatalSandboxError)) {
+      throw new Error('Expected a FatalSandboxError');
+    }
+    expect(thrown.message).toContain(cyclic);
+    expect(thrown.message).toContain('resolve the sandbox workspace root');
+  });
+
+  it('does not weaken workspace containment when a declared root reaches a cycle', () => {
+    // A cyclic symlink is unresolvable, so it can never smuggle a
+    // destination out of the workspace: the walk treats it as a
+    // not-yet-existing tail and the protected destination stays contained.
+    const cyclic = path.join(workdir, 'cyclic-root');
+    fs.symlinkSync(cyclic, cyclic);
+    writeJson(path.join(workdir, 'package.json'), {
+      workspaces: ['cyclic-root'],
+    });
+    expect(resolveProtectedNodeModulesDestinations(workdir)).toStrictEqual([
+      path.join(workdir, 'node_modules'),
+      path.join(workdir, 'cyclic-root', 'node_modules'),
+    ]);
+  });
+
+  it('reports a classified preparation error when the workspace root is removed between discovery and resolution', () => {
+    const filesystem: SandboxPathFilesystem = {
+      existsSync: (targetPath) => fs.existsSync(targetPath),
+      realpathSync: (targetPath) => {
+        if (targetPath === workdir) {
+          throw Object.assign(
+            new Error(
+              `ENOENT: no such file or directory, realpathSync '${workdir}'`,
+            ),
+            { code: 'ENOENT' },
+          );
+        }
+        return fs.realpathSync(targetPath);
+      },
+    };
+    let thrown: unknown;
+    try {
+      resolveProtectedNodeModulesDestinations(workdir, filesystem);
+    } catch (error) {
+      thrown = error;
+    }
+    if (!(thrown instanceof FatalSandboxError)) {
+      throw new Error('Expected a FatalSandboxError');
+    }
+    expect(thrown.message).toContain(workdir);
+    expect(thrown.message).toContain('resolve the sandbox workspace root');
+    expect(thrown.message).toContain('ENOENT');
+  });
+
+  it('reports a classified preparation error when a protected destination is removed between discovery and resolution', () => {
+    const destination = path.join(workdir, 'node_modules');
+    fs.mkdirSync(destination);
+    const filesystem: SandboxPathFilesystem = {
+      existsSync: (targetPath) => fs.existsSync(targetPath),
+      realpathSync: (targetPath) => {
+        if (targetPath === destination) {
+          throw Object.assign(
+            new Error(
+              `ENOENT: no such file or directory, realpathSync '${destination}'`,
+            ),
+            { code: 'ENOENT' },
+          );
+        }
+        return fs.realpathSync(targetPath);
+      },
+    };
+    let thrown: unknown;
+    try {
+      resolveProtectedNodeModulesDestinations(workdir, filesystem);
+    } catch (error) {
+      thrown = error;
+    }
+    if (!(thrown instanceof FatalSandboxError)) {
+      throw new Error('Expected a FatalSandboxError');
+    }
+    expect(thrown.message).toContain(destination);
+    expect(thrown.message).toContain(
+      'resolve the protected sandbox dependency destination',
+    );
+    expect(thrown.message).toContain('ENOENT');
+  });
+
+  it('reports a classified preparation error when a declared destination root is replaced between discovery and resolution', () => {
+    const declaredRoot = path.join(workdir, 'packages', 'nested');
+    fs.mkdirSync(declaredRoot, { recursive: true });
+    writeJson(path.join(workdir, 'package.json'), {
+      workspaces: ['packages/nested'],
+    });
+    const filesystem: SandboxPathFilesystem = {
+      existsSync: (targetPath) => fs.existsSync(targetPath),
+      realpathSync: (targetPath) => {
+        if (targetPath === declaredRoot) {
+          throw Object.assign(
+            new Error(
+              `ELOOP: too many levels of symbolic links, realpathSync '${declaredRoot}'`,
+            ),
+            { code: 'ELOOP' },
+          );
+        }
+        return fs.realpathSync(targetPath);
+      },
+    };
+    let thrown: unknown;
+    try {
+      resolveProtectedNodeModulesDestinations(workdir, filesystem);
+    } catch (error) {
+      thrown = error;
+    }
+    if (!(thrown instanceof FatalSandboxError)) {
+      throw new Error('Expected a FatalSandboxError');
+    }
+    expect(thrown.message).toContain(declaredRoot);
+    expect(thrown.message).toContain(
+      'resolve the protected sandbox dependency destination',
+    );
+    expect(thrown.message).toContain('ELOOP');
   });
 });

@@ -38,7 +38,15 @@ import path from 'node:path';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import type { SandboxConfig } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import { getContainerPath, isSourceDevelopmentWorkdir } from './sandbox-env.js';
+import {
+  canonicalizeExistingPath,
+  canonicalizeNearestExistingPath,
+  type SandboxPathFilesystem,
+} from './sandbox-path-canonicalization.js';
+import {
+  getContainerPath,
+  isSourceDevelopmentWorkdir,
+} from './sandbox-env.js';
 import {
   INIT_RUN_TIMEOUT_MS,
   VOLUME_OPERATION_TIMEOUT_MS,
@@ -283,7 +291,10 @@ function isContainedTarget(
   workspaceRealRoot: string,
   resolvedTarget: string,
 ): boolean {
-  const nearest = resolveNearestExistingPath(resolvedTarget);
+  const nearest = canonicalizeNearestExistingPath(
+    resolvedTarget,
+    'resolve the sandbox dependency symlink target',
+  );
   return isInsideWorkspace(workspaceRealRoot, nearest);
 }
 
@@ -420,27 +431,6 @@ function isInsideWorkspace(workdir: string, candidate: string): boolean {
 }
 
 /**
- * Resolves `candidate` against the real filesystem: the nearest EXISTING
- * ancestor is realpath'd and the (possibly empty) not-yet-existing tail is
- * appended. The result identifies the directory a path will really occupy,
- * following symlinks that already exist while keeping support for missing
- * contained destinations.
- */
-function resolveNearestExistingPath(candidate: string): string {
-  const tail: string[] = [];
-  let current = candidate;
-  for (;;) {
-    if (fs.existsSync(current)) {
-      return path.join(fs.realpathSync(current), ...tail.reverse());
-    }
-    const parent = path.dirname(current);
-    if (parent === current) return candidate;
-    tail.push(path.basename(current));
-    current = parent;
-  }
-}
-
-/**
  * Reads the root manifest's ordinary workspace list and returns its literal
  * package-root declarations. Glob, exclusion, and non-string entries are
  * package-manager syntax, not literal roots; expanding them would invent
@@ -475,11 +465,20 @@ function readLiteralWorkspaceDeclarations(manifestPath: string): string[] {
  * filesystem identity, and a declaration that resolves outside the real
  * workspace tree fails the launch. A missing or unparseable manifest
  * protects the root tree only.
+ *
+ * The optional `filesystem` seam exists so tests can exercise the
+ * discovery-then-resolution race deterministically; production callers
+ * use Node's fs.
  */
 export function resolveProtectedNodeModulesDestinations(
   workdir: string,
+  filesystem?: SandboxPathFilesystem,
 ): string[] {
-  const workspaceRealRoot = fs.realpathSync(workdir);
+  const workspaceRealRoot = canonicalizeExistingPath(
+    workdir,
+    'resolve the sandbox workspace root',
+    filesystem,
+  );
   const destinations: string[] = [];
   const seenIdentities = new Set<string>();
 
@@ -497,7 +496,11 @@ export function resolveProtectedNodeModulesDestinations(
     }
     // Then real-tree containment: an existing symlink component must not
     // smuggle the destination out of the mounted workspace.
-    const identity = resolveNearestExistingPath(lexicalDestination);
+    const identity = canonicalizeNearestExistingPath(
+      lexicalDestination,
+      'resolve the protected sandbox dependency destination',
+      filesystem,
+    );
     if (!isInsideWorkspace(workspaceRealRoot, identity)) {
       throw new FatalSandboxError(
         `Invalid workspace declaration ${source}: it resolves outside the ` +
@@ -777,7 +780,10 @@ export function planPrivateDependencyMounts(
 ): DependencyMountPlan {
   if (isSourceDevelopmentWorkdir(workdir)) return { enabled: false };
 
-  const workspaceRealRoot = fs.realpathSync(workdir);
+  const workspaceRealRoot = canonicalizeExistingPath(
+    workdir,
+    'resolve the sandbox workspace root',
+  );
   const destinations = resolveProtectedNodeModulesDestinations(workdir);
   for (const destination of destinations) {
     assertDestinationChainIsDirectories(workdir, destination);

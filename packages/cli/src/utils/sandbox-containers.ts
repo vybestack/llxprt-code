@@ -40,6 +40,7 @@ import {
   setupCredentialProxyDockerMacOS,
   SSH_TUNNEL_POLL_TIMEOUT_MS,
 } from './sandbox-ssh.js';
+import { canonicalizeExistingPath } from './sandbox-path-canonicalization.js';
 import { addSandboxOwnershipLabels } from './sandbox-owner-labels.js';
 import { setupCredentialProxyPodmanMacOS } from './sandbox-podman.js';
 import {
@@ -271,11 +272,14 @@ function addCustomMounts(
           `Path '${from}' listed in ${mountsEnvName} must be absolute`,
         );
       }
-      if (!fs.existsSync(from)) {
-        throw new FatalSandboxError(
-          `Missing mount path '${from}' listed in ${mountsEnvName}`,
-        );
-      }
+      // Fail fast when the source cannot be resolved against the real
+      // filesystem: absent at validation, removed or replaced between
+      // discovery and resolution, cyclic, or malformed sources all surface
+      // as the same classified preparation error naming the path (#3475).
+      canonicalizeExistingPath(
+        from,
+        `validate the mount source listed in ${mountsEnvName}`,
+      );
       debugLogger.error(`${mountsEnvName}: ${from} -> ${to} (${opts})`);
       args.push('--volume', mount);
     }

@@ -40,6 +40,7 @@ import {
 } from './sandbox-containers.js';
 import { stopProxy } from '@vybestack/llxprt-code-providers/auth.js';
 import { entrypoint } from './sandbox-entrypoint.js';
+import { canonicalizeExistingPath } from './sandbox-path-canonicalization.js';
 import {
   addPrivateDependencyMounts,
   planPrivateDependencyMounts,
@@ -80,7 +81,10 @@ async function prepareContainerImageAndArgs(
 }> {
   // @plan:PLAN-20250214-CREDPROXY.P34 R3.4: Use realpath to resolve symlinks
   debugLogger.error(`hopping into sandbox (command: ${config.command}) ...`);
-  const gcPath = fs.realpathSync(process.argv[1]);
+  const gcPath = canonicalizeExistingPath(
+    process.argv[1],
+    'resolve the sandbox executable',
+  );
   const projectSandboxDockerfile = path.join(
     SETTINGS_DIRECTORY_NAME,
     'sandbox.Dockerfile',
@@ -109,7 +113,10 @@ async function prepareContainerImageAndArgs(
     );
   }
 
-  const resolvedTmpdir = fs.realpathSync(os.tmpdir());
+  const resolvedTmpdir = canonicalizeExistingPath(
+    os.tmpdir(),
+    'resolve the sandbox temporary directory',
+  );
   const sessionTmpdir = fs.mkdtempSync(
     path.join(resolvedTmpdir, 'llxprt-sandbox-'),
   );
