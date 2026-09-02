@@ -101,7 +101,13 @@ export {
 // Production needs only the ownership setter; `auditLog` stays public so
 // CLI-package hop tests can drive a real audit record through the real
 // routing (this subpath is the package's only auth entry point).
-export { auditLog, setTuiOwnsTerminal } from './proxy/audit-log.js';
+// `resetAuditLogStateForTesting` is test-only (ownership flag, deferred
+// buffer and overflow counter) and must not be used by production code.
+export {
+  auditLog,
+  resetAuditLogStateForTesting,
+  setTuiOwnsTerminal,
+} from './proxy/audit-log.js';
 
 // ─── File-backed OAuth Settings Provider ─────────────────────────────────────
 // Isolated-runtime OAuth enablement surface: reads the user-scope global

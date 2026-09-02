@@ -31,7 +31,7 @@ import {
 import { start_sandbox } from './utils/sandbox.js';
 import {
   auditLog,
-  setTuiOwnsTerminal,
+  resetAuditLogStateForTesting,
 } from '@vybestack/llxprt-code-providers/auth.js';
 import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
 import { initializeOutputListenersAndFlush } from './session/outputListeners.js';
@@ -270,6 +270,45 @@ function useUnsetSandboxEnv(): void {
 }
 
 /**
+ * Resets audit-log routing state — terminal ownership, the deferred buffer
+ * and its overflow counter — before AND after every test. An afterEach-only
+ * reset cannot clear records buffered while ownership is already released,
+ * and cannot protect a block that enters dirty; the beforeEach half closes
+ * both gaps.
+ */
+function useAuditLogStateReset(): void {
+  beforeEach(() => {
+    resetAuditLogStateForTesting();
+  });
+  afterEach(() => {
+    resetAuditLogStateForTesting();
+  });
+}
+
+/** Type guard for a valid Node buffer encoding name. */
+function isBufferEncoding(value: unknown): value is BufferEncoding {
+  return typeof value === 'string' && Buffer.isEncoding(value);
+}
+
+/**
+ * Decodes one stderr write chunk into text. Byte chunks must be decoded,
+ * not stringified: String(Uint8Array) yields "[object Uint8Array]", which
+ * would let a broken implementation pass assertions like
+ * expect(stderr).toBe('').
+ */
+function decodeStderrChunk(
+  chunk: string | Uint8Array,
+  encoding: unknown,
+): string {
+  if (typeof chunk === 'string') {
+    return chunk;
+  }
+  return Buffer.from(chunk).toString(
+    isBufferEncoding(encoding) ? encoding : 'utf8',
+  );
+}
+
+/**
  * Installs a stderr collector that records every byte written while it is
  * active, keeping the bytes off the runner's own output. The stream is an
  * external sink being observed, not the unit under test.
@@ -278,8 +317,8 @@ function collectStderr(): { captured: () => string; restore: () => void } {
   const chunks: string[] = [];
   const writeSpy = vi
     .spyOn(process.stderr, 'write')
-    .mockImplementation((chunk: string | Uint8Array) => {
-      chunks.push(typeof chunk === 'string' ? chunk : String(chunk));
+    .mockImplementation((chunk: string | Uint8Array, ...rest: unknown[]) => {
+      chunks.push(decodeStderrChunk(chunk, rest[0]));
       return true;
     });
   return {
@@ -372,6 +411,7 @@ describe('maybeHopIntoSandbox hop-exit stdio flush (#3408)', () => {
 describe('maybeHopIntoSandbox TUI terminal ownership (#3490)', () => {
   const startSandboxMock = start_sandbox as Mock<typeof start_sandbox>;
   useUnsetSandboxEnv();
+  useAuditLogStateReset();
 
   /**
    * Stubs start_sandbox to drive a real INFO audit record mid-hop and
@@ -393,7 +433,6 @@ describe('maybeHopIntoSandbox TUI terminal ownership (#3490)', () => {
     // The file-level factory default; other describes in this file depend
     // on exit code 7.
     startSandboxMock.mockImplementation(async () => 7);
-    setTuiOwnsTerminal(false);
     __resetCleanupStateForTesting();
   });
 

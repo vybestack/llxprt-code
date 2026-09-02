@@ -24,6 +24,18 @@ export type AuditLevel = 'INFO' | 'WARN' | 'ERROR';
 const SINK_FILE_NAME = 'credential-proxy-audit.log';
 
 /**
+ * Upper bound on records held per TUI-ownership span (#3490). frame_decode_error
+ * (WARN) and process_frames_error (ERROR) fire per incoming proxy-socket chunk,
+ * so a broken or hostile client can otherwise buffer one record per chunk for a
+ * whole sandbox session — an unbounded-memory path that would also dump an
+ * enormous block to stderr at release. 256 keeps the flush readable while
+ * bounding the worst case. When full, the OLDEST records are dropped in favor
+ * of the newest, and a summary line reports the drop on flush. Durability is
+ * unaffected: every dropped record is already in the file sink.
+ */
+const MAX_DEFERRED_LINES = 256;
+
+/**
  * Whether an Ink TUI owns this process's terminal (#3490). Set by the CLI
  * around the sandbox hop, when the host hands its terminal to the sandbox
  * TUI and stderr bytes would corrupt the interface.
@@ -36,8 +48,16 @@ let tuiOwned = false;
  * coreEvents feedback — the Ink UI subscribing to it lives in the child,
  * and per-process events cannot cross that boundary — so without this
  * buffer the host's warnings and errors would never reach the operator.
+ * Bounded to MAX_DEFERRED_LINES, keeping the most recent lines.
  */
 const deferredDuringOwnership: string[] = [];
+
+/**
+ * Count of records evicted from {@link deferredDuringOwnership} because the
+ * buffer was full. Reported once as the first line of the flush, then reset
+ * alongside the buffer.
+ */
+let droppedFromDeferred = 0;
 
 /**
  * Marks terminal ownership for the audit log. The only production caller is
@@ -62,6 +82,18 @@ export function tuiOwnsTerminal(): boolean {
 }
 
 /**
+ * Resets the audit-log routing state: terminal ownership, the deferred
+ * buffer and the overflow counter. Test-only — deterministic per-test state
+ * for suites that drive ownership; production resets ownership through
+ * {@link setTuiOwnsTerminal} alone.
+ */
+export function resetAuditLogStateForTesting(): void {
+  tuiOwned = false;
+  deferredDuringOwnership.length = 0;
+  droppedFromDeferred = 0;
+}
+
+/**
  * Writes one formatted record line to stderr through the guarded path shared
  * by the default write and the deferred flush. A closed or full stream must
  * never crash the proxy.
@@ -78,13 +110,29 @@ function writeRecordToStderr(line: string): void {
 
 /**
  * Emits the WARN/ERROR lines deferred while a TUI owned the terminal, then
- * clears the buffer so a later release cannot reprint them.
+ * clears the buffer so a later release cannot reprint them. When records
+ * were dropped to keep the buffer at MAX_DEFERRED_LINES, a summary line
+ * goes out FIRST so the operator knows the block is truncated; it is a JSON
+ * object of the same shape as the records so the stream stays
+ * one-JSON-object-per-line.
  */
 function flushDeferredLines(): void {
+  if (droppedFromDeferred > 0) {
+    writeRecordToStderr(
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        level: 'WARN' satisfies AuditLevel,
+        component: 'credential-proxy',
+        op: 'audit_deferred_overflow',
+        details: { dropped: droppedFromDeferred },
+      }),
+    );
+  }
   for (const line of deferredDuringOwnership) {
     writeRecordToStderr(line);
   }
   deferredDuringOwnership.length = 0;
+  droppedFromDeferred = 0;
 }
 
 /**
@@ -168,6 +216,12 @@ export function auditLog(
     // (for any process that has a subscriber) and are deferred to stderr so
     // the hop host — which has none — can flush them once the child exits.
     if (level !== 'INFO') {
+      if (deferredDuringOwnership.length >= MAX_DEFERRED_LINES) {
+        // Keep the most recent records; the evicted ones are already in the
+        // durable sink, so this trades stderr flush volume, not durability.
+        deferredDuringOwnership.shift();
+        droppedFromDeferred++;
+      }
       deferredDuringOwnership.push(line);
       coreEvents.emitFeedback(level === 'WARN' ? 'warning' : 'error', line);
     }

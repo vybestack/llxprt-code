@@ -30,7 +30,12 @@ import {
   CoreEvent,
   type UserFeedbackPayload,
 } from '@vybestack/llxprt-code-core';
-import { auditLog, setTuiOwnsTerminal, tuiOwnsTerminal } from '../audit-log.js';
+import {
+  auditLog,
+  resetAuditLogStateForTesting,
+  setTuiOwnsTerminal,
+  tuiOwnsTerminal,
+} from '../audit-log.js';
 
 const SINK_FILE_NAME = 'credential-proxy-audit.log';
 /** A realistically shaped GitHub token; must never survive into any sink. */
@@ -82,6 +87,45 @@ function captureUserFeedback(): () => UserFeedbackPayload[] {
 }
 
 /**
+ * Resets audit-log routing state — terminal ownership, the deferred buffer
+ * and its overflow counter — before AND after every test. An afterEach-only
+ * reset cannot clear records buffered while ownership is already released,
+ * and cannot protect a block that enters dirty; the beforeEach half closes
+ * both gaps. One registered lifecycle instead of per-describe boilerplate.
+ */
+function useAuditLogStateReset(): void {
+  beforeEach(() => {
+    resetAuditLogStateForTesting();
+  });
+  afterEach(() => {
+    resetAuditLogStateForTesting();
+  });
+}
+
+/** Type guard for a valid Node buffer encoding name. */
+function isBufferEncoding(value: unknown): value is BufferEncoding {
+  return typeof value === 'string' && Buffer.isEncoding(value);
+}
+
+/**
+ * Decodes one stderr write chunk into text. Byte chunks must be decoded,
+ * not stringified: String(Uint8Array) yields "[object Uint8Array]", which
+ * would let a broken implementation pass assertions like
+ * expect(stderr).toBe('').
+ */
+function decodeStderrChunk(
+  chunk: string | Uint8Array,
+  encoding: unknown,
+): string {
+  if (typeof chunk === 'string') {
+    return chunk;
+  }
+  return Buffer.from(chunk).toString(
+    isBufferEncoding(encoding) ? encoding : 'utf8',
+  );
+}
+
+/**
  * Captures everything written to process.stderr while `emit` runs. The
  * stream is an external sink being observed, not the unit under test; the
  * spy also keeps the bytes off the runner's own output.
@@ -90,8 +134,8 @@ function captureStderrDuring(emit: () => void): string {
   const chunks: string[] = [];
   const writeSpy = vi
     .spyOn(process.stderr, 'write')
-    .mockImplementation((chunk: string | Uint8Array) => {
-      chunks.push(typeof chunk === 'string' ? chunk : String(chunk));
+    .mockImplementation((chunk: string | Uint8Array, ...rest: unknown[]) => {
+      chunks.push(decodeStderrChunk(chunk, rest[0]));
       return true;
     });
   try {
@@ -100,6 +144,25 @@ function captureStderrDuring(emit: () => void): string {
     writeSpy.mockRestore();
   }
   return chunks.join('');
+}
+
+/** Type guard narrowing a parsed JSON line to an object for field access. */
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
+ * Parses one audit line as a JSON object. A line that fails to parse or is
+ * not an object corrupts the one-JSON-object-per-line contract, so it fails
+ * the test right here rather than via substring lookups that would pass on
+ * malformed records.
+ */
+function parseAuditRecord(line: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(line);
+  if (!isJsonObject(parsed)) {
+    throw new Error(`audit line is not a JSON object: ${line}`);
+  }
+  return parsed;
 }
 
 /** Reads the sink file back and returns its individual JSON lines. */
@@ -119,11 +182,7 @@ function readSinkLines(logHome: string): string[] {
  */
 describe('deferred stderr flush on ownership release, no feedback subscriber (#3490)', () => {
   const logHome = useIsolatedLogHome();
-
-  // No test may leak ownership into another suite: the flag is process state.
-  afterEach(() => {
-    setTuiOwnsTerminal(false);
-  });
+  useAuditLogStateReset();
 
   it('holds WARN and ERROR stderr bytes while owned, then flushes exactly those lines in order on release', () => {
     setTuiOwnsTerminal(true);
@@ -179,16 +238,108 @@ describe('deferred stderr flush on ownership release, no feedback subscriber (#3
     expect(firstRelease).toContain('"op":"printed_once"');
     expect(secondRelease).toBe('');
   });
+
+  it('delivers every record of an acquire-release-re-acquire cycle to stderr exactly once, in order', () => {
+    setTuiOwnsTerminal(true);
+    auditLog('WARN', 14, 'cycle_first_warn');
+    const firstFlush = captureStderrDuring(() => {
+      setTuiOwnsTerminal(false);
+    });
+
+    setTuiOwnsTerminal(true);
+    auditLog('ERROR', 14, 'cycle_second_error');
+    const secondFlush = captureStderrDuring(() => {
+      setTuiOwnsTerminal(false);
+    });
+
+    // Each flush carries its own cycle's record exactly once...
+    expect(firstFlush).toContain('"op":"cycle_first_warn"');
+    expect(firstFlush).not.toContain('"op":"cycle_second_error"');
+    expect(secondFlush).toContain('"op":"cycle_second_error"');
+    // ...and the second flush does not reprint the first cycle's record.
+    expect(secondFlush).not.toContain('"op":"cycle_first_warn"');
+    const combined = firstFlush + secondFlush;
+    expect(combined.split('"op":"cycle_first_warn"').length - 1).toBe(1);
+    expect(combined.split('"op":"cycle_second_error"').length - 1).toBe(1);
+    expect(combined.indexOf('"op":"cycle_first_warn"')).toBeLessThan(
+      combined.indexOf('"op":"cycle_second_error"'),
+    );
+  });
+
+  /**
+   * The deferred buffer is bounded (module constant MAX_DEFERRED_LINES =
+   * 256) because frame_decode_error / process_frames_error fire per
+   * incoming proxy-socket chunk: a hostile client can otherwise buffer one
+   * record per chunk for a whole session. 260 records = 4 dropped + 256
+   * retained; the arithmetic below pins that exact split.
+   */
+  it('keeps only the most recent deferred lines and announces the truncation before them on flush', () => {
+    setTuiOwnsTerminal(true);
+    const duringOwnership = captureStderrDuring(() => {
+      for (let i = 0; i < 260; i++) {
+        auditLog('WARN', 15, `overflow_${String(i).padStart(3, '0')}`);
+      }
+    });
+    const flush = captureStderrDuring(() => {
+      setTuiOwnsTerminal(false);
+    });
+
+    // Durability is unaffected by the bound: every record, dropped or
+    // retained, reached the sink.
+    const sinkLines = readSinkLines(logHome());
+    expect(sinkLines.length).toBe(260);
+    expect(sinkLines[0]).toContain('"op":"overflow_000"');
+    expect(sinkLines[259]).toContain('"op":"overflow_259"');
+    expect(duringOwnership).toBe('');
+
+    // One summary line first, then the 256 newest records in order.
+    const flushedLines = flush.trimEnd().split(String.fromCharCode(10));
+    expect(flushedLines.length).toBe(257);
+    const summary = parseAuditRecord(flushedLines[0]);
+    expect(summary.level).toBe('WARN');
+    expect(summary.component).toBe('credential-proxy');
+    expect(summary.op).toBe('audit_deferred_overflow');
+    expect(summary.details).toEqual({ dropped: 4 });
+    expect(flushedLines[1]).toContain('"op":"overflow_004"');
+    expect(flushedLines[256]).toContain('"op":"overflow_259"');
+    // The oldest records are gone from the flush, the retained ones appear
+    // exactly once.
+    expect(flush).not.toContain('"op":"overflow_003"');
+    expect(flush.split('"op":"overflow_004"').length - 1).toBe(1);
+    expect(flush.split('"op":"overflow_259"').length - 1).toBe(1);
+  });
+
+  it('does not repeat the truncation summary on a later flush after an overflow was flushed', () => {
+    setTuiOwnsTerminal(true);
+    captureStderrDuring(() => {
+      for (let i = 0; i < 257; i++) {
+        auditLog('ERROR', 16, `post_overflow_${i}`);
+      }
+    });
+    const overflowFlush = captureStderrDuring(() => {
+      setTuiOwnsTerminal(false);
+    });
+
+    setTuiOwnsTerminal(true);
+    auditLog('WARN', 16, 'after_overflow_warn');
+    const nextFlush = captureStderrDuring(() => {
+      setTuiOwnsTerminal(false);
+    });
+
+    expect(overflowFlush).toContain('"op":"audit_deferred_overflow"');
+    // The dropped counter resets with the buffer: a later flush without a
+    // new overflow carries only its own record.
+    expect(nextFlush.trimEnd().split(String.fromCharCode(10)).length).toBe(1);
+    expect(nextFlush).toContain('"op":"after_overflow_warn"');
+    expect(nextFlush).not.toContain('"op":"audit_deferred_overflow"');
+    expect(nextFlush).not.toContain('"op":"post_overflow_0"');
+  });
 });
 
 describe('auditLog sink and TUI terminal ownership (#3490)', () => {
   const logHome = useIsolatedLogHome();
   const feedback = captureUserFeedback();
-
-  // No test may leak ownership into another suite: the flag is process state.
-  afterEach(() => {
-    setTuiOwnsTerminal(false);
-  });
+  useAuditLogStateReset();
 
   it('does not own the terminal by default', () => {
     expect(tuiOwnsTerminal()).toBe(false);
@@ -263,18 +414,22 @@ describe('auditLog sink and TUI terminal ownership (#3490)', () => {
   });
 
   /** AB1: the no-secrets property holds in the durable file, not just stderr. */
-  it('redacts token-shaped detail values in the sink file', () => {
-    captureStderrDuring(() => {
+  it('redacts token-shaped detail values in the sink file and on stderr', () => {
+    const stderr = captureStderrDuring(() => {
       auditLog('INFO', 5, 'get_api_key', { name: 'github-pat', key: SECRET });
     });
 
     const sink = fs.readFileSync(path.join(logHome(), SINK_FILE_NAME), 'utf8');
     expect(sink).not.toContain(SECRET);
     expect(sink).toContain('"op":"get_api_key"');
+    // Default mode copies the same redacted line to stderr; the secret must
+    // not survive on that surface either.
+    expect(stderr).not.toContain(SECRET);
+    expect(stderr).toContain('"op":"get_api_key"');
   });
 
   /** AB1: a missing audit record is itself a security signal. */
-  it('still writes a sink record when details cannot be serialised', () => {
+  it('still writes a valid JSON sink record when details cannot be serialised', () => {
     captureStderrDuring(() => {
       const circular: Record<string, unknown> = {};
       circular.self = circular;
@@ -283,8 +438,13 @@ describe('auditLog sink and TUI terminal ownership (#3490)', () => {
 
     const lines = readSinkLines(logHome());
     expect(lines.length).toBe(1);
-    expect(lines[0]).toContain('"op":"circular_op"');
-    expect(lines[0]).toContain('unserialisable');
+    // The fallback record must remain a parseable JSONL object with the
+    // fields a consumer relies on; substring matches alone would pass on a
+    // malformed line that corrupts the sink.
+    const record = parseAuditRecord(lines[0]);
+    expect(record.op).toBe('circular_op');
+    expect(record.level).toBe('WARN');
+    expect(record.details).toBe('unserialisable');
   });
 
   /**
