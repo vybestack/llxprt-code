@@ -40,7 +40,11 @@ export interface SandboxProxyConfig {
    * Fired on every handshake that presents a valid capability token —
    * proof the token reached the process inside the container. Lets the
    * caller release the capability env file that delivered it; the
-   * callback must be idempotent (issue #3524).
+   * callback must be idempotent (issue #3524). The callback runs on the
+   * proxy connection's frame-processing path: a throw does not reach
+   * this caller but surfaces as a connection error that destroys that
+   * socket, so the callback must not throw — consumers handle their
+   * own failures.
    */
   onSandboxHandshake?: () => void;
 }

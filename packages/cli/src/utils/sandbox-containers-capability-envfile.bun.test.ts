@@ -18,6 +18,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
   setupCredentialProxy,
   wireCleanupHandlers,
@@ -323,6 +324,85 @@ describe('#3524 capability env-file early release', () => {
       expect(fs.existsSync(launched.envFileDir)).toBe(false);
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  /**
+   * Drops write permission on the host-only directory so the REAL cleanup's
+   * unlink fails (EACCES/EPERM — non-idempotent, unlike ENOENT/EBADF). This
+   * is a genuine OS-level filesystem failure driven through the real fs
+   * calls, not a mocked throw; it relies on the runner being non-root (root
+   * bypasses directory DAC), which holds for this repo's dev machines and
+   * CI runners. Restores 0o700 so the shared afterEach teardown can delete
+   * the artifact.
+   */
+  function forceRealCleanupFailure(envFileDir: string): void {
+    fs.chmodSync(envFileDir, 0o500);
+  }
+
+  function restoreCleanupFailureForcing(envFileDir: string): void {
+    fs.chmodSync(envFileDir, 0o700);
+  }
+
+  it('does not throw when the handshake release fails on a real filesystem error', async () => {
+    const launched = await launchCredentialProxy();
+    forceRealCleanupFailure(launched.envFileDir);
+    try {
+      const errorSpy = vi.spyOn(debugLogger, 'error');
+
+      expect(() => launched.handshake()).not.toThrow();
+
+      // The release genuinely failed (file survives) and the failure was
+      // logged rather than propagated into the proxy connection handler.
+      expect(fs.existsSync(launched.envFilePath)).toBe(true);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('capability env-file release failed'),
+        expect.any(Error),
+      );
+    } finally {
+      restoreCleanupFailureForcing(launched.envFileDir);
+    }
+  });
+
+  it('does not throw when the bounded fallback release fails on a real filesystem error', async () => {
+    vi.useFakeTimers();
+    const launched = await launchCredentialProxy();
+    forceRealCleanupFailure(launched.envFileDir);
+    try {
+      wireCleanupHandlers(
+        spawnSandboxStandin(),
+        undefined,
+        NO_SSH,
+        undefined,
+        launched.exitCleanup,
+        () => {},
+      );
+
+      // An uncaught throw from the timer callback would be an unhandled
+      // exception; the guard must keep the fallback best-effort.
+      expect(() => vi.advanceTimersByTime(FALLBACK_BOUND_MS)).not.toThrow();
+
+      expect(fs.existsSync(launched.envFilePath)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      restoreCleanupFailureForcing(launched.envFileDir);
+    }
+  });
+
+  it('still surfaces a cleanup failure from the exit-time teardown', async () => {
+    const launched = await launchCredentialProxy();
+    forceRealCleanupFailure(launched.envFileDir);
+    try {
+      expect(() => launched.exitCleanup()).toThrow(
+        /Credential proxy cleanup failed/,
+      );
+
+      // The throw reports a genuinely failed deletion: the env file is
+      // still on disk, proving the early-release guard did not silently
+      // weaken the exit path.
+      expect(fs.existsSync(launched.envFilePath)).toBe(true);
+    } finally {
+      restoreCleanupFailureForcing(launched.envFileDir);
     }
   });
 });

@@ -99,8 +99,10 @@ export interface CredentialProxyServerOptions {
    * container — already tolerates repeated cleanup). Never fired for
    * unauthorized handshakes or for servers constructed without a
    * capabilityToken (non-sandbox connections never authenticate as
-   * sandbox). Invoked directly — a throwing callback propagates
-   * (fail fast).
+   * sandbox). Invoked on the connection's frame-processing path: a
+   * throw does not reach the caller but surfaces as a connection
+   * error (`process_frames_error`) that destroys that socket, so the
+   * callback must not throw — consumers handle their own failures.
    */
   onSandboxHandshake?: () => void;
   /**
@@ -437,8 +439,9 @@ export class CredentialProxyServer {
       }
       state.isSandboxConnection = true;
       // Each authenticated sandbox handshake proves the capability token
-      // reached the process inside the container. Invoked directly so a
-      // throwing callback fails fast; the caller's callback must be
+      // reached the process inside the container. Runs on the frame-
+      // processing path: a throw surfaces as a connection error that
+      // destroys this socket, so the callback must not throw and must be
       // idempotent (see the option docs).
       this.options.onSandboxHandshake?.();
     }

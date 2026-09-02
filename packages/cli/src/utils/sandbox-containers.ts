@@ -661,9 +661,12 @@ export interface CredentialProxyBridgeCleanup {
  * release(), so every deletion path clears the holder and cancels the
  * fallback timer. Handshake delivery is at-least-once: the first release
  * runs the cleanup and clears the holder; every later one is a no-op.
+ * Early release (handshake, fallback expiry) passes bestEffort=true because
+ * both fire in contexts that must not throw; the exit-time composed cleanup
+ * calls release() strict and still surfaces filesystem failures.
  */
 interface CapabilityEnvFileRelease {
-  release: () => void;
+  release: (bestEffort?: boolean) => void;
   adopt: (cleanup: () => void) => void;
   armFallback: () => void;
 }
@@ -671,7 +674,14 @@ interface CapabilityEnvFileRelease {
 function createCapabilityEnvFileRelease(): CapabilityEnvFileRelease {
   let held: (() => void) | undefined;
   let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
-  const release = (): void => {
+  // bestEffort is the early-release mode: the handshake callback fires on
+  // the proxy's frame-processing path (a throw there surfaces as a
+  // connection error and destroys that sandbox's credential connection)
+  // and the fallback fires from a timer (a throw there is an unhandled
+  // exception). A failed unlink is OS-level variance, so early release
+  // logs the failure instead of throwing. The default stays strict: the
+  // exit-time composed cleanup must still surface cleanup failures.
+  const release = (bestEffort = false): void => {
     const cleanup = held;
     if (cleanup === undefined) return;
     held = undefined;
@@ -679,7 +689,12 @@ function createCapabilityEnvFileRelease(): CapabilityEnvFileRelease {
       clearTimeout(fallbackTimer);
       fallbackTimer = undefined;
     }
-    cleanup();
+    try {
+      cleanup();
+    } catch (err) {
+      if (!bestEffort) throw err;
+      debugLogger.error('Early capability env-file release failed:', err);
+    }
   };
   return {
     release,
@@ -688,7 +703,10 @@ function createCapabilityEnvFileRelease(): CapabilityEnvFileRelease {
     },
     armFallback: (): void => {
       if (held === undefined || fallbackTimer !== undefined) return;
-      fallbackTimer = setTimeout(release, CAPABILITY_ENV_FILE_FALLBACK_MS);
+      // Best-effort release: a throw from this timer callback would be an
+      // unhandled exception, so expiry logs filesystem failures (#3524).
+      const onExpire = (): void => release(true);
+      fallbackTimer = setTimeout(onExpire, CAPABILITY_ENV_FILE_FALLBACK_MS);
       // Unref so the fallback can never hold the process open.
       fallbackTimer.unref();
     },
@@ -734,14 +752,16 @@ export async function setupCredentialProxy(
 
   let credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
   let credentialProxyBridgeCleanup: (() => void) | undefined;
-  let envFileCleanup: (() => void) | undefined;
   const envFileRelease = createCapabilityEnvFileRelease();
 
   // @plan:PLAN-20250214-CREDPROXY.P34 R25.1: Start credential proxy BEFORE spawning container
   try {
+    // bestEffort: the handshake fires on the proxy's frame-processing path,
+    // where a throw would destroy this sandbox's credential connection, so
+    // an early release failure is logged, not propagated (#3524).
     await createAndStartProxy({
       socketPath: resolvedTmpdir,
-      onSandboxHandshake: envFileRelease.release,
+      onSandboxHandshake: () => envFileRelease.release(true),
     });
   } catch (err) {
     throw new FatalSandboxError(
@@ -786,13 +806,12 @@ export async function setupCredentialProxy(
     );
     if (envFileResult !== undefined) {
       args.push(...envFileResult.args);
-      envFileCleanup = envFileResult.cleanup;
-      envFileRelease.adopt(envFileCleanup);
+      envFileRelease.adopt(envFileResult.cleanup);
     }
   } catch (err) {
     capabilityEnvFileLaunchActive = false;
     const errors: unknown[] = [err];
-    runCapabilityCleanupStep(() => envFileCleanup?.(), errors);
+    runCapabilityCleanupStep(() => envFileRelease.release(), errors);
     runCapabilityCleanupStep(() => credentialProxyBridgeCleanup?.(), errors);
     try {
       await stopProxy();
