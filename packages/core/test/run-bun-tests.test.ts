@@ -859,12 +859,19 @@ describe('runTestFile: per-test timeout classification (AC3)', () => {
     );
     tempDirs.push(dir);
     const fixture = join(dir, 'hang.test.ts');
+    // Finite work longer than the 300ms budget: Windows Bun 1.3.14 did not
+    // close the child after the per-test timeout fired, so an infinite await
+    // held it until the harness killed it. The sleep lets the child exit on
+    // its own even when the timeout does not terminate it, and the 60s
+    // containing budget exceeds the runner's whole file-timeout settlement
+    // window (30s budget plus reap plus cleanup), so a recurrence surfaces
+    // as an assertion failure instead of a colliding harness deadline.
     writeFileSync(
       fixture,
       [
         "import { it } from 'bun:test';",
         "it('hangs', async () => {",
-        '  await new Promise(() => undefined);',
+        '  await Bun.sleep(5000);',
         '}, 300);',
       ].join('\n'),
     );
@@ -880,7 +887,7 @@ describe('runTestFile: per-test timeout classification (AC3)', () => {
     expect(result.timeoutMs).toBeNull();
     expect(result.reapFailed).toBe(false);
     expect(result.reapError).toBeNull();
-  }, 30_000);
+  }, 60_000);
 
   it('classifies an ordinary assertion failure that exits 1 as not timedOut', async () => {
     const dir = mkdtempSync(join(import.meta.dir, 'runner-assert-fixture-'));
@@ -1137,5 +1144,113 @@ describe('runTestFile: attempt directory cleanup', () => {
     expect(result?.reapFailed).toBe(true);
     expect(result?.reapError).toContain('attempt cleanup failed');
     expect(result?.reapError).toContain('simulated non-lock removal failure');
+  }, 30_000);
+});
+
+describe('runTestFile: report-scan failure settlement', () => {
+  it('rejects with the exact original scan error and removes the attempt directory when cleanup succeeds', async () => {
+    const dir = mkdtempSync(
+      join(import.meta.dir, 'runner-scan-error-fixture-'),
+    );
+    tempDirs.push(dir);
+    const fixture = join(dir, 'fail.test.ts');
+    writeFileSync(
+      fixture,
+      [
+        "import { it, expect } from 'bun:test';",
+        "it('fails', () => {",
+        '  expect(1).toBe(2);',
+        '});',
+      ].join('\n'),
+    );
+    const scanError = Object.assign(
+      new Error('simulated report scan failure (EIO)'),
+      { code: 'EIO' },
+    );
+    const scannedReports: string[] = [];
+
+    const resultPromise = runTestFile(fixture, {
+      timeoutMs: 30_000,
+      reapTimeoutMs: 5000,
+      taskkillTimeoutMs: 5000,
+      scanJUnitReport: (reportPath) => {
+        scannedReports.push(reportPath);
+        throw scanError;
+      },
+    });
+
+    await expect(resultPromise).rejects.toBe(scanError);
+    expect(scannedReports).toHaveLength(1);
+    const attemptDir = dirname(scannedReports[0]);
+    expect(basename(attemptDir).startsWith('llxprt-runner-junit-')).toBe(true);
+    expect(existsSync(attemptDir)).toBe(false);
+  }, 30_000);
+
+  it('rejects with the ordered scan and cleanup errors after exactly one cleanup attempt when cleanup fails non-retryably', async () => {
+    const dir = mkdtempSync(
+      join(import.meta.dir, 'runner-scan-cleanup-fixture-'),
+    );
+    tempDirs.push(dir);
+    const fixture = join(dir, 'fail.test.ts');
+    writeFileSync(
+      fixture,
+      [
+        "import { it, expect } from 'bun:test';",
+        "it('fails', () => {",
+        '  expect(1).toBe(2);',
+        '});',
+      ].join('\n'),
+    );
+    const scanError = Object.assign(
+      new Error('simulated report scan failure (EIO)'),
+      { code: 'EIO' },
+    );
+    const cleanupError = Object.assign(
+      new Error('simulated non-lock removal failure (EINVAL)'),
+      { code: 'EINVAL' },
+    );
+    const removals: string[] = [];
+    const unhandledRejections: unknown[] = [];
+    const recordUnhandled = (reason: unknown): void => {
+      unhandledRejections.push(reason);
+    };
+    process.on('unhandledRejection', recordUnhandled);
+    let rejection: unknown;
+    let settled: TestResult | undefined;
+    try {
+      settled = await runTestFile(fixture, {
+        timeoutMs: 30_000,
+        reapTimeoutMs: 5000,
+        taskkillTimeoutMs: 5000,
+        cleanupAttempts: 3,
+        cleanupRetryDelayMs: 1,
+        scanJUnitReport: () => {
+          throw scanError;
+        },
+        removeAttemptDir: (attemptDir) => {
+          removals.push(attemptDir);
+          throw cleanupError;
+        },
+      });
+    } catch (error) {
+      rejection = error;
+    } finally {
+      await Bun.sleep(25);
+      process.off('unhandledRejection', recordUnhandled);
+    }
+
+    expect(settled).toBeUndefined();
+    expect(rejection).toBeInstanceOf(AggregateError);
+    if (!(rejection instanceof AggregateError)) {
+      throw new Error('runTestFile did not reject with an AggregateError');
+    }
+    expect(rejection.errors).toHaveLength(2);
+    expect(rejection.errors[0]).toBe(scanError);
+    expect(rejection.errors[1]).toBe(cleanupError);
+    expect(rejection.message).toContain(
+      'report scan and attempt cleanup both failed',
+    );
+    expect(removals).toHaveLength(1);
+    expect(unhandledRejections).toEqual([]);
   }, 30_000);
 });

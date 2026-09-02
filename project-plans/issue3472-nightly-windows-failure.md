@@ -745,3 +745,230 @@ AC4: Focused Windows workflow coverage. This would add a dedicated Windows
 test shard or workflow adjustment to catch platform-specific failures in CI.
 This is explicitly excluded from the current task and requires approval before
 implementation. No workflow files are modified.
+
+## PR #3497 remediation: CI evidence, review triage, and fixes (2026-09-01)
+
+The pushed branch (head `5ceca1e4cd4f6597e9b78f0f83c6fbfba7edaeb3`) failed
+two checks on GitHub. This section records the evidence, the classification of
+each failed check, the classification of each review thread, and the
+remediation. Working-tree changes were made on top of that head without any
+commit, push, thread resolution, or GitHub metadata change. All logs named
+below live under `tmp/issue3472/pr-remediation/`.
+
+### PR CI evidence
+
+- Windows Test-Infra Gate: FAILURE, job `100063547830`, run `33570585106`
+  (`red-windows-test-infra-gate.log`). The per-test timeout classification
+  test `classifies a Bun per-test timeout that exits 1 as timedOut` failed
+  after its own 30000ms Bun deadline
+  (`^ this test timed out after 30000ms.`), and inside it the runner
+  reported `exitCode` null where 1 was asserted. 25 pass / 4 skip / 1 fail
+  / 1 error across 30 tests in the file, exit 1.
+- Test (aggregate): FAILURE, job `100064970011`, run `33570585106`
+  (`red-aggregate-test.log`). The Check shard results step reported
+  `Windows test-infra gate did not succeed (result: failure)` and exited 1.
+  Every shard result upstream of that gate was success, so the aggregate
+  failure is derivative of the Windows gate failure alone.
+
+### Failed-check classifications
+
+1. Windows Test-Infra Gate, Blocker-Fix. The classification test's fixture
+   used an infinitely pending operation (`await new Promise(() =>
+   undefined)`) under a 300ms per-test timeout, and both `runTestFile`
+   (`timeoutMs: 30_000`) and the containing Bun test (third argument
+   `30_000`) were given the same 30-second deadline. Windows Bun 1.3.14 did
+   not close the child after the 300ms per-test timeout fired, so the
+   fixture's infinite await held the child alive; the runner's 30-second
+   file budget then expired and classified `exitCode: null`, and the
+   containing test's identical 30-second deadline killed it at the same
+   moment, producing the observed null exit code and the 30012.75ms
+   harness timeout. The defect is in the test harness, not the production
+   runner: production correctly reported a file-timeout result for a child
+   that genuinely would not close.
+2. Test (aggregate), derivative. No independent defect; the gate above is
+   the sole cause. Not remediated separately because fixing the harness
+   removes the only failure the aggregate step observed.
+
+### Review-thread classifications
+
+Two threads were open on `packages/core/run-bun-tests.ts` (saved verbatim in
+`pr-review-threads.txt`):
+
+1. CodeRabbit (bug, minor, `close` handler cleanup call): Blocker-Fix. The
+   close path's scan-error branch called `void cleanupAttemptDir(...)`,
+   which could reject with no handler, and a non-ENOENT report-scan error
+   thrown out of the close listener left `runTestFile` pending (an
+   infrastructure failure could hang the promise forever) with the cleanup
+   rejection arriving later as an unhandled rejection that can mask the
+   original scan error. CodeRabbit proposed catching and logging the
+   cleanup error via `console.error`, which would swallow an infrastructure
+   failure; that suggestion is not used.
+2. PR OCR inline (bug/high, timer vs close race): Reject. After the
+   per-file timer fires, `runTestFile` sets `resolved = true` before
+   scheduling the reap, and the close handler begins with `clearTimeout`
+   then `if (resolved) return`, so a close event during the reap window can
+   never call `settleAfterCleanup` a second time and can never overwrite
+   the timeout result. The path-ownership latch already prevents both double
+   settlement and double cleanup. No change made.
+
+### Remediation A: Windows gate test harness (defect 1)
+
+`packages/core/test/run-bun-tests.test.ts`, the per-test timeout
+classification test only:
+
+- The infinite `await new Promise(() => undefined)` is replaced by a finite
+  real operation, `await Bun.sleep(5000)`, which is longer than the
+  fixture's 300ms test budget. If Windows Bun still fails to close the
+  child after the per-test timeout, the child now exits on its own once the
+  sleep finishes, so the close path can classify `exitCode: 1` instead of
+  being held until a budget collision.
+- The runner call keeps its 30-second `timeoutMs` budget exactly as before.
+- The containing test's own deadline is raised from 30_000 to 60_000, which
+  exceeds the runner's whole settlement window (30s file budget plus reap
+  plus cleanup), so if the child still fails to exit the test observes the
+  file-timeout result and fails on the original `exitCode 1` assertion
+  instead of both deadlines firing together.
+- Every original assertion is kept: `exitCode` 1, `timedOut` true,
+  `timeoutMs` null, `reapFailed` false, `reapError` null.
+
+RED evidence for A is the Windows CI job log itself
+(`red-windows-test-infra-gate.log`): the test failed with the 30000ms
+harness timeout and `Expected: 1 / Received: null` before any local edit.
+GREEN evidence: five consecutive full-file focused runs and the complete
+Windows test-infra sequence below, all exit 0 with the test passing in
+roughly 5.3s locally (fixture child closes on its own after the sleep).
+
+### Remediation B: scan-error close path (CodeRabbit thread)
+
+The production change is confined to `packages/core/run-bun-tests.ts`:
+
+- `RunTestFileOptions` gains the internal test seam
+  `scanJUnitReport?: (reportPath: string) => boolean`, resolved to the
+  unchanged `junitReportContainsPerTestTimeout` when absent. This mirrors
+  the existing `removeAttemptDir` and `reapTimedOutChild` seams. No export,
+  script, workflow, or dependency changed; the module's public exports are
+  identical.
+- The close handler catches the scan error instead of letting it escape the
+  listener. With a caught scan error the classified result is never built,
+  so the close path is claimed exactly once and cleanup runs exactly once
+  through the same single branch: `cleanupAttemptDir(attemptDir, options)`
+  with both outcomes chained to a rejection.
+  - Cleanup succeeds: `runTestFile` rejects with the original scan error
+    object itself (identity preserved, not a copy or a message).
+  - Cleanup fails: `runTestFile` rejects with an `AggregateError` whose
+    `errors` array is `[scanError, cleanupError]` in that order, with the
+    message `report scan and attempt cleanup both failed for <file>: could
+    not remove <attemptDir>`. Neither error is swallowed; both are
+    retained on the rejection.
+- Because the cleanup promise is always chained, no unhandled rejection can
+  be emitted on this path. Because the rejection always happens after
+  cleanup settles, `runTestFile` can never stay pending. Fail-fast behavior
+  (an infrastructure scan failure aborts the run rather than becoming a
+  test outcome) is preserved; the accepted OCR round 1 finding 4 rejection
+  (never degrade a scan error to `timedOut: false`) is unchanged.
+- The timer path, `resolved` latch, reap behavior, retry policy, timeout
+  budgets, JUnit generation, and Windows taskkill logic are untouched.
+  The rejected OCR thread (C) produced no change.
+
+TDD evidence for B (all under `tmp/issue3472/pr-remediation/`):
+
+- RED (behavioral): `red-scan-error-tests.log`, exit 1. Two new
+  behavioral `runTestFile` tests drove real failing child processes
+  (`fail.test.ts` fixtures exiting 1) with a narrowly injected
+  `scanJUnitReport` seam, run against the unchanged production runner.
+  Test 1 failed because the promise resolved with a TestResult instead of
+  rejecting with the exact scan error. Test 2 failed because the promise
+  resolved normally instead of rejecting with an ordered AggregateError.
+  An early authoring-syntax RED (unterminated string literal from the
+  fixture writer) was captured in the same log file before the behavioral
+  RED; the behavioral RED was then re-captured cleanly.
+- RED (typecheck): `red-typecheck.log`, TS2353 twice, `scanJUnitReport`
+  not a known property of `RunTestFileOptions` (plus one TS7006 on the
+  untyped callback parameter), before the production option existed.
+- GREEN: `green-scan-error-tests-1.log` through
+  `green-scan-error-tests-5.log`, five consecutive full-file runs, each
+  exit 0 with 31 pass / 1 skip / 0 fail, plus `green-final-formatted.log`
+  (exit 0 after prettier) and `green-typecheck.log` (runner config clean).
+
+The two new behavioral tests (in `packages/core/test/run-bun-tests.test.ts`,
+describe block `runTestFile: report-scan failure settlement`):
+
+1. Scan error plus successful cleanup: asserts the rejection is the exact
+   original scan error object (`rejects.toBe(scanError)`), exactly one scan
+   call, and that the attempt directory (runner-owned
+   `llxprt-runner-junit-` under `tmpdir()`) no longer exists afterward.
+2. Scan error plus nonretryable cleanup error (EINVAL, so exactly one
+   removal attempt by construction): asserts an `AggregateError` whose
+   `errors` are exactly `[scanError, cleanupError]` in that order, the
+   specific aggregate message, exactly one cleanup attempt
+   (`removals` length 1), the promise resolved to no TestResult, and an
+   `unhandledRejection` listener observed zero unhandled rejections after
+   settlement. The real failing child exercises the genuine close path;
+   only the scan operation is injected, so this is not a helper unit test.
+
+### Verification (all logs under `tmp/issue3472/pr-remediation/`)
+
+Focused core runner repetition, five consecutive full-file runs
+(`green-scan-error-tests-1..5.log`), each exit 0, 31 pass / 1 skip /
+0 fail. The only `(fail)` lines in every log belong to the tests' own
+fixture children (the 300ms per-test timeout fixture and the assertion
+fixtures), the behavior under assertion.
+
+The exact unchanged Windows test-infra command sequence, run serially from
+the repo root, every command exit 0:
+
+1. `bun test --preload ./scripts/tests/test-setup.ts scripts/tests/run_bun_tests.test.ts scripts/tests/test-orchestrator.test.ts scripts/tests/test-shard-orchestrator.test.ts`
+   (`win-seq-1-meta-tests.log`, 101 pass / 0 fail).
+2. `(cd packages/cli && bun test test/run-bun-tests.test.ts)`
+   (`win-seq-2-cli.log`, 78 pass / 0 fail).
+3. `(cd packages/core && bun test test/run-bun-tests.test.ts)`
+   (`win-seq-3-core.log`, 31 pass / 1 skip / 0 fail).
+4. `(cd packages/agents && bun test ./test-bun/run-bun-tests.issue3253.bun.ts)`
+   (`win-seq-4-agents.log`, 5 pass / 0 fail).
+5. `(cd packages/auth && bun test src/__tests__/run-bun-tests.behavior.test.ts)`
+   (`win-seq-5-auth.log`, 12 pass / 0 fail).
+
+Test audit: `bun scripts/test-audit/scan.ts` exit 0 with 2023 findings
+(`audit-branch.log`, `AUDIT_EXIT:0`); the candidate `findings.tsv` is
+byte-identical to the main baseline (`audit-compare.log`, `CMP_EXIT:0`),
+so this remediation adds zero audit findings (2 new tests, same count).
+
+Full required cycle, run serially, every complete command exit 0:
+
+- `npm run test`: exit 0 (`full-01-test.log`, `FULL_TEST_EXIT:0`). All
+  workspaces green, including `Passed 405/405` core and `Passed 719/719`
+  CLI test files. The runner test file passed inside it. No
+  shared-state sibling collision occurred in this cycle.
+- `npm run lint`: exit 0 (`full-02-lint.log`, `LINT_EXIT:0`).
+- `npm run typecheck`: exit 0 (`full-03-typecheck.log`,
+  `TYPECHECK_EXIT:0`).
+- `npm run format`: exit 0 (`full-04-format.log`, `FORMAT_EXIT:0`); the
+  candidate file hashes are identical before and after
+  (`pre-format-hashes.txt` vs `post-format-hashes.txt`), so the formatter
+  changed nothing in them. Prettier had flagged one pre-format issue in
+  `run-bun-tests.ts` (the new scan expression's line width); it was fixed
+  with `prettier --write` on that file only, before the full-cycle format
+  run, and the focused tests were rerun green on the formatted code
+  (`green-final-formatted.log`).
+- `npm run build`: exit 0 (`full-05-build.log`, `BUILD_EXIT:0`).
+- `bun scripts/start.ts --profile-load stepfun-37 "write me a haiku and
+  nothing else"`: exit 0, haiku returned (`full-06-smoke.log`,
+  `SMOKE_EXIT:0`).
+- `git diff --check`: clean. Working tree relative to head `5ceca1e4`:
+  exactly the expected files. This remediation modifies
+  `packages/core/run-bun-tests.ts` (defect B),
+  `packages/core/test/run-bun-tests.test.ts` (defects A and B), and this
+  plan (this required evidence update); `sandbox-capability.test.ts`, the
+  fourth PR candidate file, needed no change because neither accepted
+  classification touches it. No file outside the four PR candidates is
+  modified. No generated fixture directory remains under
+  `packages/core/test/` and no leftover fixture process is running.
+
+Scope confirmation: no workflow, dependency, package script, lockfile,
+public API or export map, `.llxprt`, quality tool, Config/LSP production
+behavior, timeout budget, retry count, exact marker, bounded scanner,
+cleanup retry policy, process reaping, Windows taskkill, or unrelated
+test/refactor change. AC4 remains excluded and approval-gated; nothing in
+this cycle implemented or verified Windows workflow coverage. The rejected
+OCR timer/close thread was not implemented. Nothing was committed, pushed,
+or resolved on GitHub.

@@ -136,6 +136,7 @@ export interface RunTestFileOptions {
     child: ChildProcess,
     childClosed: Promise<void>,
   ) => Promise<void>;
+  readonly scanJUnitReport?: (reportPath: string) => boolean;
 }
 
 const REAP_TIMEOUT_MS = 10_000;
@@ -443,7 +444,7 @@ export function runTestFile(
   options: RunTestFileOptions = {},
 ): Promise<TestResult> {
   const timeoutMs = options.timeoutMs ?? PER_FILE_TIMEOUT_MS;
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     let resolved = false;
     let spawnError: Error | null = null;
     const attemptDir = mkdtempSync(join(tmpdir(), 'llxprt-runner-junit-'));
@@ -510,6 +511,10 @@ export function runTestFile(
       options.reapTimedOutChild ??
       ((childToReap: ChildProcess, closed: Promise<void>) =>
         killChildTreeAndWait(childToReap, closed, options));
+    // Test seam mirroring removeAttemptDir and reapTimedOutChild: replaces
+    // the report scan so a test can force its failure deterministically.
+    const scanReport =
+      options.scanJUnitReport ?? junitReportContainsPerTestTimeout;
 
     const timer = setTimeout(() => {
       if (resolved) return;
@@ -546,11 +551,10 @@ export function runTestFile(
         console.error(`Error spawning test for ${file}: ${spawnError.message}`);
       }
       let classified: Omit<TestResult, 'reapFailed' | 'reapError'> | undefined;
+      let scanError: unknown;
       try {
         const perTestTimeout =
-          spawnError === null &&
-          code !== 0 &&
-          junitReportContainsPerTestTimeout(reportPath);
+          spawnError === null && code !== 0 && scanReport(reportPath);
         classified = {
           file,
           passed: spawnError === null && code === 0,
@@ -558,16 +562,30 @@ export function runTestFile(
           timedOut: perTestTimeout,
           timeoutMs: perTestTimeout ? null : timeoutMs,
         };
-      } finally {
-        if (classified !== undefined) {
-          settleAfterCleanup(classified, false, null);
-        } else {
-          // Report-scan errors stay fail-fast: they are infrastructure
-          // failures, not test outcomes. Cleanup is still attempted before
-          // the error propagates out of this handler.
-          void cleanupAttemptDir(attemptDir, options);
-        }
+      } catch (error) {
+        scanError = error;
       }
+      if (classified !== undefined) {
+        settleAfterCleanup(classified, false, null);
+        return;
+      }
+      // Report-scan errors stay fail-fast: they are infrastructure
+      // failures, not test outcomes. Cleanup runs exactly once before the
+      // rejection, and a cleanup failure is preserved alongside the scan
+      // error instead of surfacing as an unhandled rejection.
+      void cleanupAttemptDir(attemptDir, options).then(
+        () => {
+          reject(scanError);
+        },
+        (cleanupError: unknown) => {
+          reject(
+            new AggregateError(
+              [scanError, cleanupError],
+              `report scan and attempt cleanup both failed for ${file}: could not remove ${attemptDir}`,
+            ),
+          );
+        },
+      );
     });
   });
 }
