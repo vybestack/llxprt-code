@@ -258,10 +258,21 @@ describe('resolveImageResizePolicy', () => {
     ).toBeUndefined();
   });
 
-  it('honors the per-call opt-out before resolving profile values', () => {
+  it('resolves the runtime nested delivery shape and ignores unrelated keys', () => {
     expect(
-      resolveImageResizePolicy({ 'image-resize.maxLongEdge': 'invalid' }, true),
-    ).toBeUndefined();
+      resolveImageResizePolicy({
+        'image-resize': {
+          maxLongEdge: 2000,
+          maxShortEdge: 2000,
+          maxPixels: 1_572_864,
+        },
+        'unrelated.setting': true,
+      }),
+    ).toStrictEqual({
+      maxLongEdge: 2000,
+      maxShortEdge: 2000,
+      maxPixels: 1_572_864,
+    });
   });
 
   it.each([

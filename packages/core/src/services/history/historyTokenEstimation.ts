@@ -125,6 +125,7 @@ export interface TokenizerProvider {
 function estimateMediaBlockImageTokens(
   block: MediaBlock,
   provider: string | undefined,
+  model: string | undefined,
 ): number {
   if (!block.mimeType.toLowerCase().startsWith('image/')) return 0;
   let dimensions: MediaBlock['dimensions'];
@@ -133,7 +134,7 @@ function estimateMediaBlockImageTokens(
   } else if (block.encoding === 'base64') {
     dimensions = parseImageDimensionsFromBase64(block.data) ?? block.dimensions;
   }
-  return estimateImageTokens({ provider, dimensions });
+  return estimateImageTokens({ provider, dimensions, model });
 }
 
 /**
@@ -153,6 +154,7 @@ export async function estimateContentTokens(
       totalTokens += estimateMediaBlockImageTokens(
         block,
         tokenizerProvider.activeProvider,
+        modelName,
       );
     }
     const blockText = blockToEstimationText(block, logger);

@@ -86,7 +86,7 @@
     "auth": ["test-utils"],
     "core": ["providers", "test-utils"],
     "providers": ["test-utils"],
-    "tools": ["storage", "test-utils"],
+    "tools": ["settings", "storage", "test-utils"],
     "zed-acp": ["test-utils"]
   },
   "observers": {

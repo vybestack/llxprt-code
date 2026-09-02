@@ -5,6 +5,7 @@
  */
 
 import sharp, { type Metadata, type Sharp } from 'sharp';
+import { readSettingFlatOrNested } from './flatOrNestedSetting.js';
 
 export interface ImageResizePolicy {
   readonly maxLongEdge?: number;
@@ -152,7 +153,9 @@ function readPositiveInteger(
   settings: Readonly<Record<string, unknown>>,
   key: string,
 ): number | undefined {
-  const value = settings[key];
+  // Dotted keys reach us both flat and nested depending on the producer of
+  // the settings map (see readSettingFlatOrNested), so never index directly.
+  const value = readSettingFlatOrNested(settings, key);
   if (value === undefined) {
     return undefined;
   }
@@ -166,25 +169,21 @@ function readPositiveInteger(
 
 export function resolveImageResizePolicy(
   settings: Readonly<Record<string, unknown>>,
-  skipImageResize = false,
 ): ImageResizePolicy | undefined {
-  if (skipImageResize) {
-    return undefined;
-  }
-  const enabled = settings['image-resize.enabled'];
+  const enabled = readSettingFlatOrNested(settings, 'image-resize.enabled');
   if (enabled !== undefined && typeof enabled !== 'boolean') {
     throw new Error(
       'Invalid image resize settings: image-resize.enabled must be a boolean',
     );
-  }
-  if (enabled === false) {
-    return undefined;
   }
   const policy: ImageResizePolicy = {
     maxLongEdge: readPositiveInteger(settings, 'image-resize.maxLongEdge'),
     maxShortEdge: readPositiveInteger(settings, 'image-resize.maxShortEdge'),
     maxPixels: readPositiveInteger(settings, 'image-resize.maxPixels'),
   };
+  if (enabled === false) {
+    return undefined;
+  }
   if (!hasLimits(policy)) {
     if (enabled === true) {
       throw new Error(

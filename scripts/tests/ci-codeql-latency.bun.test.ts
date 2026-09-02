@@ -9,7 +9,7 @@
  *
  * A behavioral workflow contract against the real parsed
  * `.github/workflows/ci.yml` (not a mock). Pins the CodeQL job's event-aware
- * timeout (9 minutes for pull_request, 360 for all other events) and
+ * timeout (15 minutes for pull_request, 360 for all other events) and
  * credential-free checkout while proving the job's runner, duplicate-only
  * gate, least-privilege permissions, pinned SHA actions, default-query
  * JavaScript configuration, and event coverage remain unchanged.
@@ -92,9 +92,10 @@ describe('Issue #3187: bound CodeQL latency on the PR feedback path', () => {
   });
 
   describe('event-aware latency bound (timeout-minutes)', () => {
-    it('caps pull_request at 9 and all other events at 360', () => {
+    // Raised 9→15 per #3495 (PR analysis exceeded 9 minutes); the #3187 latency-bound intent is unchanged.
+    it('caps pull_request at 15 and all other events at 360', () => {
       expect(asString(codeql['timeout-minutes'])).toBe(
-        "${{ github.event_name == 'pull_request' && 9 || 360 }}",
+        "${{ github.event_name == 'pull_request' && 15 || 360 }}",
       );
     });
   });

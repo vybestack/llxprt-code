@@ -56,7 +56,13 @@ const ANTHROPIC_UNKNOWN_DIMENSIONS_TOKENS = Math.ceil(
  * preferred over an arbitrarily large constant that would make context
  * compression fire spuriously for every URL-referenced image.
  */
-const OPENAI_UNKNOWN_DIMENSIONS_TOKENS = 1105;
+const OPENAI_LEGACY_UNKNOWN_DIMENSIONS_TOKENS = 1105;
+
+/**
+ * GPT-5.2+ patch formula caps at 1536 patches, so the worst case at standard
+ * detail is ceil(1.2 x 1536) = 1844 tokens.
+ */
+const OPENAI_PATCH_UNKNOWN_DIMENSIONS_TOKENS = 1844;
 
 /** OpenAI first fits the image inside a square of this many pixels per edge. */
 const OPENAI_MAX_EDGE = 2048;
@@ -73,9 +79,101 @@ const OPENAI_TOKENS_PER_TILE = 170;
 /** OpenAI charges this base cost for every high-detail image. */
 const OPENAI_BASE_TOKENS = 85;
 
+/** GPT-5.2+ patch formula: max patches at standard detail. */
+const OPENAI_PATCH_MAX_PATCHES = 1536;
+
+/** GPT-5.2+ patch formula: multiplier applied to patch count. */
+const OPENAI_PATCH_MULTIPLIER = 1.2;
+
+/**
+ * GPT-5.2+ patch formula: ceil(1.2 x min(ceil(w/32) x ceil(h/32), 1536)).
+ * Maximum 1844 tokens at standard detail.
+ */
+function estimateOpenaiPatchTokens(dimensions: ImageDimensions): number {
+  const patchesW = Math.ceil(dimensions.width / 32);
+  const patchesH = Math.ceil(dimensions.height / 32);
+  const patches = Math.min(patchesW * patchesH, OPENAI_PATCH_MAX_PATCHES);
+  return Math.ceil(OPENAI_PATCH_MULTIPLIER * patches);
+}
+
+/** Classification of an OpenAI-family model for image token estimation. */
+export type OpenaiImageTokenGeneration = 'patch' | 'legacy' | 'unknown';
+
+/**
+ * Classify a model name for OpenAI image token estimation.
+ *
+ * - 'patch': GPT-5.2 and newer, including any later minor (gpt-5.6,
+ *   gpt-5.10), named variants like gpt-5.6-sol/terra/luna, and every
+ *   GPT-6+ model (gpt-6, gpt-10). The major/minor version is parsed
+ *   numerically so multi-digit versions classify correctly.
+ * - 'legacy': gpt-4o, gpt-4.1, gpt-5.0, gpt-5.1, and o-series models
+ *   (o1, o3, o4-mini).
+ * - 'unknown': model is provided but does not match either category.
+ *   Callers in the OpenAI family should use the patch formula (conservative-high).
+ * - Returns 'unknown' for undefined/empty model so callers can decide.
+ */
+export function classifyOpenaiModel(
+  model: string | undefined,
+): OpenaiImageTokenGeneration {
+  if (model === undefined || model.length === 0) return 'unknown';
+  const normalized = model.trim().toLowerCase();
+  const generation = classifyNormalizedOpenaiModel(normalized);
+  return generation;
+}
+
+function classifyNormalizedOpenaiModel(
+  normalized: string,
+): OpenaiImageTokenGeneration {
+  // Patch when major > 5 (gpt-6, gpt-10, ...) or major == 5 with a minor
+  // of at least 2 (gpt-5.2, gpt-5.10). Parsed numerically because regex
+  // digit ranges cannot express ">= 2" or ">= 6" for multi-digit versions.
+  const version = /^gpt-(\d+)(?:\.(\d+))?/.exec(normalized);
+  if (version !== null) {
+    const major = parseInt(version[1], 10);
+    // The optional minor group is either absent (undefined, falsy) or a
+    // digit run (never empty), so a truthiness check separates the cases.
+    const minor = version[2] ? parseInt(version[2], 10) : 0;
+    if (major > 5 || (major === 5 && minor >= 2)) return 'patch';
+  }
+  // Known legacy models
+  if (isLegacyOpenaiModel(normalized)) return 'legacy';
+  return 'unknown';
+}
+
+const LEGACY_OPENAI_MODEL_PATTERNS: readonly RegExp[] = [
+  /^gpt-4o/,
+  /^gpt-4\.1/,
+  /^gpt-5\.0/,
+  /^gpt-5\.1/,
+  /^o[1-9]/,
+];
+
+function isLegacyOpenaiModel(normalized: string): boolean {
+  return LEGACY_OPENAI_MODEL_PATTERNS.some((pattern) =>
+    pattern.test(normalized),
+  );
+}
+
+/**
+ * Determine whether a model name belongs to the GPT-5.2-or-newer generation
+ * that uses the patch-based image token formula. For unknown models in the
+ * OpenAI family, returns true (conservative-high, per issue #3477).
+ * Returns false for undefined/empty model (no basis to choose).
+ */
+export function isGpt52OrNewer(model: string | undefined): boolean {
+  const generation = classifyOpenaiModel(model);
+  if (generation === 'unknown') {
+    // Unknown but non-empty model in the openai family: use patch formula
+    // (conservative-high). Undefined/empty model: no basis, use legacy.
+    return model !== undefined && model.trim().length > 0;
+  }
+  return generation === 'patch';
+}
+
 export interface ImageTokenEstimateInput {
   readonly provider?: string;
   readonly dimensions?: ImageDimensions;
+  readonly model?: string;
 }
 
 /**
@@ -165,13 +263,16 @@ function estimateOpenaiTokens(dimensions: ImageDimensions): number {
 function estimateForFamily(
   family: ImageTokenProviderFamily,
   dimensions: ImageDimensions | undefined,
+  model: string | undefined,
 ): number {
   if (!hasValidDimensions(dimensions)) {
     switch (family) {
       case 'anthropic':
         return ANTHROPIC_UNKNOWN_DIMENSIONS_TOKENS;
       case 'openai':
-        return OPENAI_UNKNOWN_DIMENSIONS_TOKENS;
+        return isGpt52OrNewer(model)
+          ? OPENAI_PATCH_UNKNOWN_DIMENSIONS_TOKENS
+          : OPENAI_LEGACY_UNKNOWN_DIMENSIONS_TOKENS;
       case 'gemini':
         return FLAT_IMAGE_TOKEN_ESTIMATE;
       default:
@@ -182,7 +283,9 @@ function estimateForFamily(
     case 'anthropic':
       return estimateAnthropicTokens(dimensions);
     case 'openai':
-      return estimateOpenaiTokens(dimensions);
+      return isGpt52OrNewer(model)
+        ? estimateOpenaiPatchTokens(dimensions)
+        : estimateOpenaiTokens(dimensions);
     case 'gemini':
       return FLAT_IMAGE_TOKEN_ESTIMATE;
     default:
@@ -196,7 +299,7 @@ function estimateForFamily(
  */
 export function estimateImageTokens(input: ImageTokenEstimateInput): number {
   const family = resolveImageTokenProviderFamily(input.provider);
-  return estimateForFamily(family, input.dimensions);
+  return estimateForFamily(family, input.dimensions, input.model);
 }
 
 /**
@@ -208,6 +311,7 @@ export function estimateNonTextPartTokens(
   mimeType: string | undefined,
   base64Data: string | undefined,
   provider?: string,
+  model?: string,
 ): number {
   const isImage = mimeType?.toLowerCase().startsWith('image/') ?? false;
   if (!isImage) {
@@ -217,5 +321,5 @@ export function estimateNonTextPartTokens(
     base64Data === undefined
       ? undefined
       : parseImageDimensionsFromBase64(base64Data);
-  return estimateImageTokens({ provider, dimensions });
+  return estimateImageTokens({ provider, dimensions, model });
 }
