@@ -6,6 +6,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 import { SCOPE_STRING_PATTERN, isCommentOnlyLine } from './constants.ts';
@@ -513,10 +514,16 @@ export function scanRepositoryLintEscapeHatches(
  * (legacyDirectiveCleanupScopes or completedDirectiveCleanupScopes) from
  * eslint.config.js source text. Returns the raw string values.
  */
+// Derived from this module's location (scripts/eslint-guard/), not
+// process.cwd(): extractScopeArray is exported and invoked by tests from any
+// working directory, so the default read must always find the repository's
+// eslint.config.js (#3387).
+const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
+
 export function extractScopeArray(scopeName: string, configSource?: string) {
   const source =
     configSource ??
-    readFileSync(join(process.cwd(), 'eslint.config.js'), 'utf8');
+    readFileSync(join(repositoryRoot, 'eslint.config.js'), 'utf8');
   const startMatch = new RegExp('const\\s+' + scopeName + '\\s*=\\s*\\[').exec(
     source,
   );

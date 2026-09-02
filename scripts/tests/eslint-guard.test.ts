@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -8554,5 +8554,61 @@ describe('packages/a2a-server directive cleanup (#2123)', () => {
       a2aEntries,
       'Legacy a2a-server entries: ' + a2aEntries.join(', '),
     ).toEqual([]);
+  });
+});
+
+describe('extractScopeArray default config resolution (#3387)', () => {
+  // extractScopeArray is exported and called without configSource by the
+  // directive-cleanup assertions above. Its default read must resolve
+  // eslint.config.js from the repository root (derived from the module's own
+  // location), never from process.cwd(), so the helper keeps working when a
+  // test process runs from another directory (#3387).
+
+  it('returns the repository config scopes when cwd has no eslint.config.js', () => {
+    const originalCwd = process.cwd();
+    const foreignDir = mkdtempSync(join(tmpdir(), 'eslint-guard-no-config-'));
+    process.chdir(foreignDir);
+    try {
+      const fromRepositoryConfig = extractScopeArray(
+        'legacyDirectiveCleanupScopes',
+        readFileSync(join(repoRoot, 'eslint.config.js'), 'utf8'),
+      );
+
+      expect(extractScopeArray('legacyDirectiveCleanupScopes')).toEqual(
+        fromRepositoryConfig,
+      );
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  it('reads the repository config even when cwd contains a decoy eslint.config.js', () => {
+    const originalCwd = process.cwd();
+    const foreignDir = mkdtempSync(
+      join(tmpdir(), 'eslint-guard-decoy-config-'),
+    );
+    writeFileSync(
+      join(foreignDir, 'eslint.config.js'),
+      [
+        'const legacyDirectiveCleanupScopes = [',
+        "  'packages/decoy/src/**/*.{ts,tsx}',",
+        '];',
+        '',
+      ].join(String.fromCharCode(10)),
+    );
+    process.chdir(foreignDir);
+    try {
+      const entries = extractScopeArray('legacyDirectiveCleanupScopes');
+
+      expect(entries).not.toContain('packages/decoy/src/**/*.{ts,tsx}');
+      expect(entries).toEqual(
+        extractScopeArray(
+          'legacyDirectiveCleanupScopes',
+          readFileSync(join(repoRoot, 'eslint.config.js'), 'utf8'),
+        ),
+      );
+    } finally {
+      process.chdir(originalCwd);
+    }
   });
 });
