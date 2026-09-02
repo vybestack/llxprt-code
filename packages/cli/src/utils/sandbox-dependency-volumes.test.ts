@@ -110,6 +110,24 @@ function mountField(spec: string, fieldName: string): string | undefined {
     ?.slice(prefix.length);
 }
 
+/**
+ * A positively recognized native-binary header for a platform that is
+ * necessarily foreign to the CURRENT host: ELF identifies Linux, Mach-O
+ * identifies macOS, and each family is foreign to the other's hosts (and to
+ * Windows hosts). A fixed fixture would be native on same-platform hosts
+ * (an x64 ELF header is native on the x64 Linux CI runner) and the
+ * production preflight would correctly allow it, so the recognition is
+ * driven by the real host platform, not a stub.
+ */
+function foreignNativeBinaryHeader(): Buffer {
+  return os.platform() === 'darwin'
+    ? // 64-bit little-endian ELF header (Linux binary) under a macOS host.
+      Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00])
+    : // 0xCFFAEDFE on disk: the little-endian 64-bit thin Mach-O header
+      // (macOS binary) under Linux and Windows hosts.
+      Buffer.from([0xcf, 0xfa, 0xed, 0xfe]);
+}
+
 describe('#3450 engine-owned dependency volumes', () => {
   const engine = useFakeEngine();
   let workdir = '';
@@ -404,7 +422,7 @@ describe('#3450 engine-owned dependency volumes', () => {
     });
     fs.writeFileSync(
       path.join(workdir, 'node_modules', 'host-pkg', 'addon.node'),
-      Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00]),
+      foreignNativeBinaryHeader(),
     );
 
     expect(() =>

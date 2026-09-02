@@ -952,6 +952,15 @@ function describeEngine(engine: string): void {
           // launcher can use; production's selected-uid path pins HOME to a
           // writable directory (sandbox-containers.ts setupContainerUser).
           // This session models exactly that topology for uid 54321.
+          //
+          // Run-two's `git restore` recreated tracked.txt as the restoring
+          // container user with mode 0644 (git's create-mode after umask),
+          // and no later code re-normalizes the workspace bind: re-widen
+          // exactly the one pre-existing file this session must edit, so
+          // the deliberately mismatched uid can perform the accepted
+          // source-edit workflow against the shared fixture. Production
+          // must not chmod the user's workspace instead.
+          chmodSync(join(ctx.fixture.repoRoot, 'tracked.txt'), 0o666);
           const session = runCheckpointSession(
             engine,
             ctx.fixture,

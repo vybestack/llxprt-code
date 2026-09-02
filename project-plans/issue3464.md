@@ -286,3 +286,55 @@ Real-engine evidence (image rebuilt from this tree, `npm run build:sandbox`):
 Smoke: `bun scripts/start.ts --profile-load stepfun-37 "write me a haiku
 and nothing else"` exits 0 with a completed turn. Logs under
 `tmp/verify3464/`.
+
+## Linux CI follow-up: the selected container home is created before the su drop (PR #3471)
+
+The Linux Docker CI job failed the image-global checkpoint suites with
+`mkdir: cannot create directory '/home/runner': Permission denied` followed
+by `ENOENT: no such file or directory, lstat '/home/runner'`. Debian/Ubuntu
+hosts auto-select the current-user path, which sets `--env HOME` to the host
+home (e.g. `/home/runner`) and runs `useradd -d <home>`, but `useradd -d`
+never creates that directory, and a fresh container does not contain it.
+After the `su` privilege drop the selected uid could not create
+`$HOME/.local/...` under the root-owned parent, the checkpoint entrypoint's
+`ln -sfn` failed, and the in-container CLI aborted resolving settings.
+
+Production fix (`setupContainerUser`): the root setup now appends
+`mkdir -p <quoted-home> && chown <uid>:<gid> <quoted-home>` after the
+groupadd/useradd chain (shell precedence keeps it running when the user
+pre-exists via the `id` short-circuit), and the host-derived home path is
+single-quote shell-escaped everywhere it is embedded, including `useradd -d`
+(previously unquoted). `mkdir` needs no capability beyond root's own write
+on `/`; `chown` uses the already-granted CHOWN capability from
+CURRENT_USER_CAPABILITIES, which stays exactly {CHOWN, SETUID, SETGID}.
+Nothing chmods or alters the host workspace.
+
+### RED/GREEN evidence
+
+- RED: `tmp/issue3450/final-verification-expanded/ci-linux-docker-failed.log`
+  (image-global two-session test failing on every native attempt) and the new
+  unit tests failing pre-fix with "home-creation command missing from the
+  setup block".
+- GREEN: `sandbox-containers.user-home.test.ts` (split from
+  `sandbox-containers.test.ts` for max-lines compliance): one suite proves
+  the creation command sits inside the root setup block, strictly before
+  `exec su -p`, with `chown uid:gid` and a `useradd -d` that agrees on the
+  exact quoted path token; a second executes the emitted creation text for a
+  hostile home (`issue 3471 'selected' $home`: spaces, an embedded single
+  quote, and a `$` variable reference) through a real `sh` and asserts the
+  exact directory is created with the selected uid/gid and no word-split
+  strays.
+- GREEN (real engine): `bun tmp/issue3450-ci-fix/probe-currentuser-home.ts`
+  runs the actual `setupContainerUser` against Docker with
+  `HOME='/tmp/issue3450-ci-fix/probe home $selected'`; the emitted script
+  shows `mkdir -p '<home>' && chown 501:20 '<home>'` before
+  `exec su -p gemini`, and the unprivileged inner process reports
+  `HOME-WRITABLE`/`HOME-DIR-PRESENT` after creating
+  `$HOME/.local/share/llxprt-code` (PROBE-PASS;
+  `probe-emitted-script.sh`).
+- GREEN (suites): real Docker `sandboxCheckpointPersistence` 6/6 twice,
+  real Podman 6/6, Docker privilege 9/9, Docker isolation 10/10
+  (logs under `tmp/issue3450-ci-fix/`).
+
+Quality gates: typecheck, scoped lint, prettier, copyright guard, and the
+test audit are clean for every touched file (`tmp/issue3450-ci-fix/`).

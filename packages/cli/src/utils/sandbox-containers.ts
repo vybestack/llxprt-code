@@ -502,6 +502,16 @@ export function assignContainerName(
  */
 const CURRENT_USER_CAPABILITIES = ['CHOWN', 'SETUID', 'SETGID'] as const;
 
+/**
+ * Single-quotes a value for the container entrypoint shell: every embedded
+ * quote becomes '\'' (close quote, escaped quote, reopen), the standard
+ * safe-representation for sh. The same escaping is applied to the wrapped
+ * inner script below, so quoted values nest correctly.
+ */
+function shQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
 /** Configures user/UID for the container and modifies entrypoint if needed. */
 export async function setupContainerUser(
   args: string[],
@@ -526,9 +536,16 @@ export async function setupContainerUser(
     // Use the shared container-home resolution so the HOME pinned here and the
     // LLXPRT_*_HOME roots set by buildContainerRunArgs agree (#3081).
     const homeDir = resolveSandboxContainerHome();
+    // `useradd -d` never creates the home dir, and the fresh container does
+    // not have the host user's home path; without it the su'd user cannot
+    // create $HOME/.local/... (the parent is root-owned), so the root setup
+    // must create the selected home before the drop. The path comes from the
+    // host, so it is single-quoted for the shell whatever it contains.
+    const quotedHome = shQuote(homeDir);
     const setupUserCommands = [
       `groupadd -f -g ${gid} ${username}`,
-      `id -u ${username} &>/dev/null || useradd -o -u ${uid} -g ${gid} -d ${homeDir} -s /bin/bash ${username}`,
+      `id -u ${username} &>/dev/null || useradd -o -u ${uid} -g ${gid} -d ${quotedHome} -s /bin/bash ${username}`,
+      `mkdir -p ${quotedHome} && chown ${uid}:${gid} ${quotedHome}`,
     ].join(' && ');
 
     // Current-user path (AC3): root captures token, opens fd 3, runs setup

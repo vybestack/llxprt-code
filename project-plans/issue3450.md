@@ -1153,3 +1153,63 @@ alongside #3450:
 - [#3470](issue3470.md) - reclaim abandoned dependency volumes
 - [#3475](issue3475.md) - fail-fast real-path resolution
 - [#3479](issue3479.md) - stable orphan-reaping fixture compilation
+
+## Linux CI remediation round 2: platform-native fixture and selected-home creation (PR #3471)
+
+The post-merge CI run surfaced two branch-caused failures.
+
+### CLI shard: wrong-platform preflight fixture was host-native
+
+`sandbox-dependency-volumes.test.ts` pinned its wrong-platform fixture to a
+fixed x64 ELF header. The preflight maps ELF to Linux, so on the macOS dev
+host the fixture was foreign and threw, while on the x64 Linux CI runner the
+same header is native and the launch correctly proceeded: the test's
+"did not throw" failure was the fixture being wrong, not the production
+check. The fixture now derives from the real host platform: an ELF header
+under macOS hosts and a 64-bit little-endian thin Mach-O header
+(`0xCFFAEDFE` on disk) under Linux and Windows hosts, so the tree is
+necessarily foreign wherever the test runs. The Linux-host/Mach-O pairing is
+independently pinned by `sandbox-node-modules-preflight.test.ts`. No
+production check or assertion changed.
+
+- RED: `tmp/issue3450/final-verification-expanded/ci-cli-2of3-failed.log`
+  (`stops a recognized wrong-platform host tree before any engine side
+  effect`: "Received function did not throw").
+- GREEN: `bun test packages/cli/src/utils/sandbox-dependency-volumes.test.ts`
+  → 10 pass, and the same Linux combination is pinned by the preflight suite.
+
+### Linux Docker shard: arbitrary-uid fixture file and image-global home
+
+1. The arbitrary-uid session (`--user 54321:54321`) failed `bash:
+   tracked.txt: Permission denied`. The store volume is permission-normalized
+   by every launch's init container, but run-two's `git restore` recreates
+   the workspace `tracked.txt` with mode 0644 owned by the restoring
+   container user (reproduced locally: a 0666 file is restored as
+   0666&~umask), and the workspace bind is deliberately not chmodded by
+   production. The test now re-widens exactly that one pre-existing file to
+   0666 before the mismatched-uid session, restoring the fixture's initial
+   `chmod -R a+rwX` state.
+2. The image-global checkpoint sessions died at startup because Debian/
+   Ubuntu hosts auto-select the current-user path while `useradd -d` never
+   creates the selected home (see `issue3464.md` for the production fix and
+   evidence).
+
+- RED: `tmp/issue3450/final-verification-expanded/ci-linux-docker-failed.log`
+  (all three native attempts: arbitrary-uid `Permission denied`; image-global
+  `mkdir: cannot create directory '/home/runner': Permission denied` then
+  `ENOENT: lstat '/home/runner'`).
+- GREEN: real Docker `sandboxCheckpointPersistence` 6/6 pass twice
+  (`tmp/issue3450-ci-fix/real-docker-checkpoint.log`,
+  `real-docker-checkpoint-final.log`), including the arbitrary-uid and
+  image-global tests; real Podman 6/6 pass (`real-podman-checkpoint.log`);
+  Docker privilege 9 pass and isolation 10 pass
+  (`real-docker-privilege.log`, `real-docker-isolation.log`); focused unit
+  set 79 pass across the containers/dependency-volumes/checkpoint-storage/
+  gitServiceCheckpoints files.
+
+Focused quality gates: `npm run typecheck` clean; targeted
+`lint-scoped.ts` clean; `prettier --check` clean; copyright guard pass;
+test-audit findings 0 on all touched test files; `git diff --check` clean.
+The new home-creation tests live in
+`sandbox-containers.user-home.test.ts` (split from
+`sandbox-containers.test.ts` for max-lines compliance).
