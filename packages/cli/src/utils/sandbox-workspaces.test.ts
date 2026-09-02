@@ -100,6 +100,32 @@ describe('#3463 container multi-root workspace planning', () => {
     expect(thrown.message).toContain('does not exist');
   });
 
+  it.skipIf(process.platform === 'win32')(
+    'rejects a symlink-cycle include root as a classified preparation error',
+    () => {
+      // #3475 canonicalization inside the #3463 multi-root planner: a root
+      // that cannot be resolved against the real filesystem fails through
+      // the shared fail-fast helper, keeping the mount correction guidance.
+      const cyclic = path.join(fixtureRoot, 'cycle');
+      fs.symlinkSync(cyclic, cyclic);
+
+      let thrown: unknown;
+      try {
+        planContainerWorkspaces(primaryRoot, [primaryRoot, cyclic]);
+      } catch (error) {
+        thrown = error;
+      }
+
+      if (!(thrown instanceof FatalSandboxError)) {
+        throw new Error('Expected a FatalSandboxError');
+      }
+      expect(thrown.message).toContain(cyclic);
+      expect(thrown.message).toContain('--include-directories');
+      expect(thrown.message).toContain('cannot be resolved');
+      expect(thrown.cause).toBeInstanceOf(Error);
+    },
+  );
+
   it('rejects an accepted root that is not a mountable directory', () => {
     const filePath = path.join(fixtureRoot, 'not-a-directory');
     fs.writeFileSync(filePath, 'file');

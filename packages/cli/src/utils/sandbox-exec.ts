@@ -114,13 +114,7 @@ async function prepareContainerImageAndArgs(
   }
 
   if (!(await ensureSandboxImageIsPresent(config.command, image))) {
-    const remedy =
-      image === LOCAL_DEV_SANDBOX_IMAGE_NAME
-        ? 'Try running `npm run build:all` or `npm run build:sandbox` under the gemini-cli repo to build it locally, or check the image name and your network connection.'
-        : 'Please check the image name, your network connection, or visit https://github.com/vybestack/llxprt-code/discussions if the issue persists.';
-    throw new FatalSandboxError(
-      `Sandbox image '${image}' is missing or could not be pulled. ${remedy}`,
-    );
+    failOnMissingSandboxImage(image);
   }
 
   const resolvedTmpdir = canonicalizeExistingPath(
@@ -338,8 +332,12 @@ async function prepareContainerSandbox(
   const containerName = assignContainerName(args, config, image);
   addContainerEnvVars(args, config, containerName, nodeArgs, workdir);
 
-  const { sshResult, podmanMacOSPortsForwarded, proxyCommand, portForwardingResult } =
-    networkAndEnv;
+  const {
+    sshResult,
+    podmanMacOSPortsForwarded,
+    proxyCommand,
+    portForwardingResult,
+  } = networkAndEnv;
   // Compose bridge prefixes after the trusted capability capture stanza (F1).
   const entrypointPrefixes: string[] = [];
   if (sshResult.entrypointPrefix !== undefined) {
@@ -565,6 +563,16 @@ export function buildSandboxCommandArgs(
     buildArgsArray.push('-f', resolvedProjectSandboxDockerfile, '-i', image);
   }
   return buildArgsArray;
+}
+
+function failOnMissingSandboxImage(image: string): never {
+  const remedy =
+    image === LOCAL_DEV_SANDBOX_IMAGE_NAME
+      ? 'Try running `npm run build:all` or `npm run build:sandbox` under the gemini-cli repo to build it locally, or check the image name and your network connection.'
+      : 'Please check the image name, your network connection, or visit https://github.com/vybestack/llxprt-code/discussions if the issue persists.';
+  throw new FatalSandboxError(
+    `Sandbox image '${image}' is missing or could not be pulled. ${remedy}`,
+  );
 }
 
 function buildSandboxImage(

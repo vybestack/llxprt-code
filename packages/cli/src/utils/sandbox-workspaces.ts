@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
+import { canonicalizeExistingPath } from './sandbox-path-canonicalization.js';
 import { getContainerPath } from './sandbox-env.js';
 
 export interface ContainerWorkspacePlan {
@@ -25,12 +26,23 @@ function resolveMountableRoot(candidate: string, isPrimary: boolean): string {
     : `--include-directories path '${candidate}'`;
   let realRoot: string;
   try {
-    realRoot = fs.realpathSync(candidate);
+    // #3475: canonicalization goes through the shared fail-fast helper so a
+    // raced or malformed root is a classified preparation error with the
+    // errno cause preserved; the mount guidance below stays the same.
+    realRoot = canonicalizeExistingPath(
+      candidate,
+      `resolve the ${isPrimary ? 'primary' : 'included'} container workspace root`,
+    );
   } catch (error) {
-    throw new FatalSandboxError(
+    // The shared canonicalization helper throws a classified error carrying
+    // the underlying errno as its cause; keep that chain on the wrapper so
+    // callers can inspect why resolution failed.
+    const wrapped = new FatalSandboxError(
       `Cannot mount ${source}: the path does not exist or cannot be resolved (${errorMessage(error)}). ` +
         'Correct or remove the path and retry.',
     );
+    wrapped.cause = error instanceof Error ? error : undefined;
+    throw wrapped;
   }
 
   let stat: fs.Stats;
