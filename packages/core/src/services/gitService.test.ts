@@ -186,7 +186,7 @@ describe('GitService', () => {
       await service.setupShadowGitRepository();
 
       const expectedConfigContent =
-        '[user]\n  name = llxprt-code\n  email = llxprt-code-bot@users.noreply.github.com\n[commit]\n  gpgsign = false\n';
+        '[user]\n  name = llxprt-code\n  email = llxprt-code-bot@users.noreply.github.com\n[commit]\n  gpgsign = false\n[safe]\n  directory = *\n';
       const actualConfigContent = await fs.readFile(gitConfigPath, 'utf-8');
       expect(actualConfigContent).toBe(expectedConfigContent);
     });

@@ -57,6 +57,7 @@ export interface FakeEngineContainerRecord {
   readonly volumes: string[];
   readonly labels: Record<string, string>;
   readonly running: boolean;
+  readonly env: Record<string, string>;
 }
 
 export interface FakeEngineNetworkRecord {
@@ -131,6 +132,7 @@ function decodeContainers(
       volumes: volumeNames,
       labels: decodeLabels(record.labels),
       running: record.running !== false,
+      env: decodeLabels(record.env),
     };
   }
   return containers;
@@ -259,6 +261,7 @@ function parseFilter(spec: string): readonly [string, string] {
 interface ParsedRun {
   readonly mounts: ReadonlyMap<string, string>;
   readonly labels: Record<string, string>;
+  readonly env: Record<string, string>;
   readonly containerName: string;
   readonly removeOnExit: boolean;
   readonly image: string;
@@ -283,6 +286,7 @@ const RUN_VALUE_FLAGS: ReadonlySet<string> = new Set([
   '--pull',
   '--workdir',
   '--hostname',
+  '--env',
 ]);
 
 const RUN_INLINE_VALUE_FLAGS: readonly string[] = [
@@ -318,6 +322,7 @@ function applyRunValueFlag(
   mounts: Map<string, string>,
   labels: Record<string, string>,
   naming: { name?: string },
+  env: Record<string, string>,
 ): void {
   switch (flag) {
     case '--mount':
@@ -326,6 +331,12 @@ function applyRunValueFlag(
     case '--label': {
       const [key, labelValue] = parseLabel(value);
       labels[key] = labelValue;
+      return;
+    }
+    case '--env': {
+      const separator = value.indexOf('=');
+      if (separator <= 0) fail(`fake engine: invalid --env '${value}'`);
+      env[value.slice(0, separator)] = value.slice(separator + 1);
       return;
     }
     case '--name':
@@ -339,6 +350,7 @@ function applyRunValueFlag(
 function parseRunArgv(argv: string[]): ParsedRun {
   const mounts = new Map<string, string>();
   const labels: Record<string, string> = {};
+  const env: Record<string, string> = {};
   const naming: { name?: string } = {};
   let removeOnExit = false;
   let index = 1;
@@ -359,7 +371,7 @@ function parseRunArgv(argv: string[]): ParsedRun {
     if (RUN_VALUE_FLAGS.has(token)) {
       const value = argv[index + 1];
       if (value === undefined) fail(`fake engine: missing value for ${token}`);
-      applyRunValueFlag(token, value, mounts, labels, naming);
+      applyRunValueFlag(token, value, mounts, labels, naming, env);
       index++;
       continue;
     }
@@ -375,6 +387,7 @@ function parseRunArgv(argv: string[]): ParsedRun {
           mounts,
           labels,
           naming,
+          env,
         );
       }
       continue;
@@ -390,6 +403,7 @@ function parseRunArgv(argv: string[]): ParsedRun {
   return {
     mounts,
     labels,
+    env,
     containerName,
     removeOnExit,
     image,
@@ -672,6 +686,7 @@ function cmdRun(root: string, state: FakeEngineState, argv: string[]): void {
     volumes: volumeNames,
     labels: run.labels,
     running: true,
+    env: run.env,
   };
   saveState(root, state);
   if (takeKnob(root, 'fail-run-once')) {

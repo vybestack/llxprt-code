@@ -38,6 +38,12 @@ import { stopProxy } from '@vybestack/llxprt-code-providers/auth.js';
 import { entrypoint } from './sandbox-entrypoint.js';
 import { canonicalizeExistingPath } from './sandbox-path-canonicalization.js';
 import {
+  planCheckpointStorage,
+  attachPersistentCheckpointStore,
+  buildCheckpointEntrypointScript,
+  type CheckpointStoragePlan,
+} from './sandbox-checkpoint-storage.js';
+import {
   addPrivateDependencyMounts,
   planPrivateDependencyMounts,
   type DependencyMountPlan,
@@ -212,6 +218,7 @@ interface ContainerEntrypointSetup {
   readonly cliArgs: string[];
   readonly podmanMacOSPortsForwarded: Set<string>;
   readonly entrypointPrefixes: string[];
+  readonly checkpointStoreStanza: string | undefined;
 }
 
 async function prepareContainerEntrypoint({
@@ -220,6 +227,7 @@ async function prepareContainerEntrypoint({
   cliArgs,
   podmanMacOSPortsForwarded,
   entrypointPrefixes,
+  checkpointStoreStanza,
 }: ContainerEntrypointSetup): Promise<{
   finalEntrypoint: string[];
   userFlag: string;
@@ -231,6 +239,7 @@ async function prepareContainerEntrypoint({
     cliArgs,
     podmanMacOSPortsForwarded.size > 0 ? podmanMacOSPortsForwarded : undefined,
     entrypointPrefixes,
+    checkpointStoreStanza,
   );
   const userFlag = await setupContainerUser(args, finalEntrypoint);
   return { finalEntrypoint, userFlag };
@@ -260,6 +269,29 @@ async function planWorkspacesAndDependencies(
   return { workspacePlan, dependencyMountPlan };
 }
 
+/**
+ * #3464: derives the checkpoint persistence plan and its entrypoint stanza.
+ * Checkpointing is enabled exactly as the in-container CLI will resolve it
+ * (same argv/settings), so host and container agree on whether a persistent
+ * checkpoint store must back the session; sessions without checkpointing get
+ * no stanza and keep today's fully-ephemeral behavior.
+ */
+function planCheckpointPersistence(
+  config: SandboxConfig,
+  workdir: string,
+  cliConfig: Config | undefined,
+): { plan: CheckpointStoragePlan; stanza: string | undefined } {
+  const plan = planCheckpointStorage(
+    config,
+    workdir,
+    cliConfig?.getCheckpointingEnabled() ?? false,
+  );
+  return {
+    plan,
+    stanza: plan.enabled ? buildCheckpointEntrypointScript() : undefined,
+  };
+}
+
 /** Runs the Docker/Podman sandbox path: image build, arg assembly, and proxy setup. */
 async function prepareContainerSandbox(
   config: SandboxConfig,
@@ -271,6 +303,11 @@ async function prepareContainerSandbox(
   validateContainerSandboxEnv();
   const { workspacePlan, dependencyMountPlan } =
     await planWorkspacesAndDependencies(config, cliConfig);
+  const checkpoint = planCheckpointPersistence(
+    config,
+    workspacePlan.primaryRoot,
+    cliConfig,
+  );
 
   const { image, workdir, sessionTmpdir, args, dependencyVolumeLifecycle } =
     await prepareContainerImageAndArgs(
@@ -279,6 +316,11 @@ async function prepareContainerSandbox(
       dependencyMountPlan,
       lifecycle,
     );
+
+  // #3464: the persistent checkpoint store is attached before the network
+  // and name are provisioned. It is intentionally not owned by the launch
+  // lifecycle: it may hold valid history and must survive launch failures.
+  attachPersistentCheckpointStore(config, args, checkpoint.plan);
 
   // #3469/#3450: from here on, every acquired resource is registered with
   // the launch lifecycle; a failure at any later step releases all of them.
@@ -295,12 +337,9 @@ async function prepareContainerSandbox(
   );
   const containerName = assignContainerName(args, config, image);
   addContainerEnvVars(args, config, containerName, nodeArgs, workdir);
-  const {
-    sshResult,
-    podmanMacOSPortsForwarded,
-    proxyCommand,
-    portForwardingResult,
-  } = networkAndEnv;
+
+  const { sshResult, podmanMacOSPortsForwarded, proxyCommand, portForwardingResult } =
+    networkAndEnv;
   // Compose bridge prefixes after the trusted capability capture stanza (F1).
   const entrypointPrefixes: string[] = [];
   if (sshResult.entrypointPrefix !== undefined) {
@@ -321,6 +360,7 @@ async function prepareContainerSandbox(
     cliArgs,
     podmanMacOSPortsForwarded,
     entrypointPrefixes,
+    checkpointStoreStanza: checkpoint.stanza,
   });
 
   return {

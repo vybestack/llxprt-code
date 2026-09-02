@@ -377,6 +377,33 @@ contained targets are read but never executed, included) and recognizes ELF,
 Mach-O (including universal/fat binaries), and PE headers, including PE files
 whose header offset lies deeper in the file than the first probe.
 
+#### Persistent checkpoint storage (container mode)
+
+With `--checkpointing` enabled, one additional engine-owned named volume backs
+the session: `sandbox-checkpoints-<project_hash>`, carrying the labels
+`com.vybestack.llxprt.sandbox-managed=true`,
+`com.vybestack.llxprt.sandbox-checkpoint-store=<project_hash>`, and
+`com.vybestack.llxprt.sandbox-checkpoint-persistent=true`. A bounded uid-0
+init container prepares it before the main container starts, and the trusted
+entrypoint links the shadow git history and the `/restore` checkpoint metadata
+into it, so checkpoint state survives the `--rm` container and later sandbox
+sessions of the same project restore from the same history (see
+[Checkpointing](./checkpointing.md)).
+
+This volume is deliberately **not** part of the per-run dependency storage
+lifecycle. Dependency volumes are created and released with each run and may
+be reclaimed by stale-run cleanup; the checkpoint store is persistent project
+state. The distinction is enforced by naming and labels: the store never
+carries the per-run dependency label or process owner labels, and run-scoped
+reclamation matches only those, so it can never delete checkpoint history.
+Session cleanup, launch failure, and crash recovery all leave the checkpoint
+store in place; remove it manually with `docker volume rm` / `podman volume
+rm` when you no longer want it.
+
+If the engine cannot create or initialize the store, or the store is missing
+at entry (for example an older launcher with a newer image), the session fails
+before checkpointing is presented as available.
+
 Seatbelt keeps its existing profile-based behavior. Its built-in profiles expose
 up to five accepted `--include-directories` roots through the existing
 `INCLUDE_DIR_0` through `INCLUDE_DIR_4` parameters and add those paths to the

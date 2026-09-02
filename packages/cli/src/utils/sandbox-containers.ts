@@ -302,6 +302,11 @@ const RESERVED_SANDBOX_ENV_KEYS = new Set([
   'LLXPRT_DATA_HOME',
   'LLXPRT_CACHE_HOME',
   'LLXPRT_LOG_HOME',
+  // #3464: the checkpoint store mount identity is pinned by the launcher; a
+  // SANDBOX_ENV override could detach the entrypoint links (or point the
+  // marker gate) at attacker-chosen paths inside the container.
+  'LLXPRT_SANDBOX_PROJECT_KEY',
+  'LLXPRT_SANDBOX_CHECKPOINT_STORE',
 ]);
 
 function parseSandboxEnvVars(): string[] {
