@@ -424,6 +424,65 @@ describe('#2946 container credential isolation', () => {
     expect(args).toContain('--volume');
     expect(args).toContain(`${tmpDir}:${tmpDir}:ro`);
   });
+
+  it('#3462 forwards VIRTUAL_ENV into the container without creating or binding .llxprt/sandbox.venv', () => {
+    const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue3462-ws-'));
+    tempDirs.push(workdir);
+    process.env.VIRTUAL_ENV = path.join(workdir, '.venv');
+
+    // Run from inside the workspace so a CWD-relative resolution bug (the
+    // old path.resolve(SETTINGS_DIRECTORY_NAME, 'sandbox.venv')) would
+    // create the directory under the real workspace root.
+    const originalCwd = process.cwd();
+    process.chdir(workdir);
+    const args: string[] = [];
+    try {
+      addContainerEnvVars(args, ENV_CONFIG, 'test-container', [], workdir);
+    } finally {
+      process.chdir(originalCwd);
+    }
+
+    // The in-container destination is unchanged (AC3)...
+    const envPairs: string[] = [];
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '--env' && i + 1 < args.length) {
+        envPairs.push(args[i + 1]);
+      }
+    }
+    expect(envPairs).toContain(
+      `VIRTUAL_ENV=${getContainerPath(path.join(workdir, '.venv'))}`,
+    );
+    // ...but no host-backed bind exists for it any more, and the
+    // version-controlled settings directory was never created (AC1/AC4).
+    const volumeOperands: string[] = [];
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '--volume' && i + 1 < args.length) {
+        volumeOperands.push(args[i + 1]);
+      }
+    }
+    expect(volumeOperands.some((spec) => spec.includes('sandbox.venv'))).toBe(
+      false,
+    );
+    expect(fs.existsSync(path.join(workdir, '.llxprt'))).toBe(false);
+  });
+
+  it('#3462 emits no VIRTUAL_ENV env when the venv is outside the workspace or unset', () => {
+    const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue3462-ws-'));
+    tempDirs.push(workdir);
+    process.env.VIRTUAL_ENV = path.join(os.tmpdir(), 'issue3462-outside');
+
+    const outsideArgs: string[] = [];
+    addContainerEnvVars(outsideArgs, ENV_CONFIG, 'test-container', [], workdir);
+    delete process.env.VIRTUAL_ENV;
+    const unsetArgs: string[] = [];
+    addContainerEnvVars(unsetArgs, ENV_CONFIG, 'test-container', [], workdir);
+    expect(
+      [outsideArgs, unsetArgs].every((args) =>
+        args.every((arg) => !arg.startsWith('VIRTUAL_ENV=')),
+      ),
+    ).toBe(true);
+    expect(fs.existsSync(path.join(workdir, '.llxprt'))).toBe(false);
+  });
 });
 
 const HARDENING_ENV_KEYS = [

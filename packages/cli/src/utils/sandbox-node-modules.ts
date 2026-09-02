@@ -48,6 +48,7 @@ import {
   getContainerPath,
   isSourceDevelopmentWorkdir,
 } from './sandbox-env.js';
+import { planSandboxVenvDestination } from './sandbox-venv.js';
 import {
   INIT_RUN_TIMEOUT_MS,
   VOLUME_OPERATION_TIMEOUT_MS,
@@ -897,6 +898,19 @@ export function planPrivateDependencyMounts(
       assertDestinationChainIsDirectories(workdir, destination);
       preflightProtectedTree(destination, workdir, workspaceRealRoot);
       destinations.push(destination);
+    }
+  }
+  // #3462: an in-workspace venv is one more protected destination, appended
+  // after the node_modules trees. It is not preflighted: the host venv tree
+  // is never mounted, so its contents cannot reach the container. A venv
+  // path equal to an already-planned destination leaves that volume in place
+  // (two volumes at one destination is an engine error, not isolation).
+  // The venv may sit beneath the primary root or any accepted include root.
+  for (const workdir of roots) {
+    const venv = planSandboxVenvDestination(workdir);
+    if (venv !== undefined && !destinations.includes(venv.destination)) {
+      assertDestinationChainIsDirectories(workdir, venv.destination);
+      destinations.push(venv.destination);
     }
   }
   return {

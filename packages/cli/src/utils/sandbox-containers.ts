@@ -23,7 +23,6 @@ import {
   createHostOnlyCapabilityEnvFile,
   runCapabilityCleanupStep,
 } from './sandbox-capability.js';
-import { SETTINGS_DIRECTORY_NAME } from '../config/settings.js';
 import {
   getContainerPath,
   mountGitConfigFiles,
@@ -381,19 +380,15 @@ export function addContainerEnvVars(
   args.push('--env', 'GIT_DISCOVERY_ACROSS_FILESYSTEM=1');
 
   const virtualEnv = process.env.VIRTUAL_ENV;
+  // #3462: an in-workspace venv is backed by a per-run engine-owned volume
+  // planned together with the private dependency storage in
+  // planPrivateDependencyMounts; only the in-container destination is pinned
+  // here and no host directory is created or bound for it.
   if (
     virtualEnv !== undefined &&
     virtualEnv.length > 0 &&
     virtualEnv.toLowerCase().startsWith(workdir.toLowerCase())
   ) {
-    const sandboxVenvPath = path.resolve(
-      SETTINGS_DIRECTORY_NAME,
-      'sandbox.venv',
-    );
-    if (!fs.existsSync(sandboxVenvPath)) {
-      fs.mkdirSync(sandboxVenvPath, { recursive: true });
-    }
-    args.push('--volume', `${sandboxVenvPath}:${getContainerPath(virtualEnv)}`);
     args.push('--env', `VIRTUAL_ENV=${getContainerPath(virtualEnv)}`);
   }
 
