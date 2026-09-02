@@ -15,13 +15,9 @@ import {
   isNodeError,
 } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import type {
-  PortForwardingResult,
-  CredentialProxyBridgeResult,
-  SshAgentResult,
-} from './sandbox-ssh.js';
+import type { PortForwardingResult, SshAgentResult } from './sandbox-ssh.js';
 import type { ContainerSandboxPrepared } from './sandbox-containers.js';
-import { runBestEffortSyncCleanup } from './cleanup.js';
+import { SandboxLaunchLifecycle } from './sandbox-lifecycle.js';
 import {
   buildContainerRunArgs,
   addContainerVolumeMounts,
@@ -71,19 +67,12 @@ function removeSessionTmpdir(sessionTmpdir: string): void {
   fs.rmSync(sessionTmpdir, { recursive: true, force: true });
 }
 
-function cleanupPreparationFailure(
-  sessionTmpdir: string,
-  dependencyVolumeLifecycle: DependencyVolumeLifecycle,
-): void {
-  runBestEffortSyncCleanup(() => removeSessionTmpdir(sessionTmpdir));
-  runBestEffortSyncCleanup(dependencyVolumeLifecycle);
-}
-
 /** Validates image and builds initial container run args. */
 async function prepareContainerImageAndArgs(
   config: SandboxConfig,
   workspacePlan: ContainerWorkspacePlan,
   dependencyMountPlan: DependencyMountPlan,
+  lifecycle: SandboxLaunchLifecycle,
 ): Promise<{
   image: string;
   workdir: string;
@@ -134,37 +123,40 @@ async function prepareContainerImageAndArgs(
   const sessionTmpdir = fs.mkdtempSync(
     path.join(resolvedTmpdir, 'llxprt-sandbox-'),
   );
-  try {
-    const args = buildContainerRunArgs(
-      config,
-      image,
-      workdir,
-      containerWorkdir,
-      sessionTmpdir,
-    );
-    addContainerWorkspaceMounts(args, workspacePlan);
-    addContainerVolumeMounts(args);
-    // #3450/#3463: append fresh engine-owned dependency volumes after every
-    // shared workspace bind so the nested mounts win. Host preflight and
-    // destination planning already completed before any engine operation.
-    const dependencyVolumeLifecycle = addPrivateDependencyMounts(
-      config,
-      args,
-      workspacePlan.roots,
-      dependencyMountPlan,
-    );
-    return {
-      image,
-      workdir,
-      containerWorkdir,
-      sessionTmpdir,
-      args,
-      dependencyVolumeLifecycle,
-    };
-  } catch (error) {
-    runBestEffortSyncCleanup(() => removeSessionTmpdir(sessionTmpdir));
-    throw error;
-  }
+  // #3469: from creation on, the per-session tmpdir is owned by the launch
+  // lifecycle and released on every later failure.
+  lifecycle.own('session-tmpdir', 'session tmpdir', () =>
+    removeSessionTmpdir(sessionTmpdir),
+  );
+  const args = buildContainerRunArgs(
+    config,
+    image,
+    workdir,
+    containerWorkdir,
+    sessionTmpdir,
+  );
+  addContainerWorkspaceMounts(args, workspacePlan);
+  addContainerVolumeMounts(args);
+  // #3450/#3463: append fresh engine-owned dependency volumes after every
+  // shared workspace bind so the nested mounts win. Host preflight and
+  // destination planning already completed before any engine operation.
+  const dependencyVolumeLifecycle = addPrivateDependencyMounts(
+    config,
+    args,
+    workspacePlan.roots,
+    dependencyMountPlan,
+  );
+  lifecycle.own('dependency-volume', 'private dependency volumes', () =>
+    dependencyVolumeLifecycle.release(),
+  );
+  return {
+    image,
+    workdir,
+    containerWorkdir,
+    sessionTmpdir,
+    args,
+    dependencyVolumeLifecycle,
+  };
 }
 
 /** Sets up SSH forwarding, port forwarding, networking, and env vars. */
@@ -174,6 +166,7 @@ async function prepareContainerNetworkAndEnv(
   workdir: string,
   isPodmanMacOS: boolean,
   reservedTunnelPorts: Set<number>,
+  lifecycle: SandboxLaunchLifecycle,
 ): Promise<{
   sshResult: SshAgentResult;
   podmanMacOSPortsForwarded: Set<string>;
@@ -186,6 +179,8 @@ async function prepareContainerNetworkAndEnv(
     },
     excludedTunnelPorts: reservedTunnelPorts,
   });
+  // #3469: each live tunnel is owned from the moment it is up.
+  lifecycle.own('tunnel', 'SSH agent forwarding tunnel', sshResult.cleanup);
 
   let portForwardingResult: PortForwardingResult | undefined;
   const podmanMacOSPortsForwarded = await setupPodmanMacosPortForwarding(
@@ -194,6 +189,11 @@ async function prepareContainerNetworkAndEnv(
     (result) => {
       portForwardingResult = result;
     },
+  );
+  lifecycle.own(
+    'tunnel',
+    'port-forwarding tunnels',
+    portForwardingResult?.cleanup,
   );
 
   const proxyCommand = setupContainerNetworking(args, config, isPodmanMacOS);
@@ -205,18 +205,12 @@ async function prepareContainerNetworkAndEnv(
   };
 }
 
-type ContainerNetworkAndEnv = Awaited<
-  ReturnType<typeof prepareContainerNetworkAndEnv>
->;
-
 interface ContainerEntrypointSetup {
   readonly args: string[];
   readonly workdir: string;
   readonly cliArgs: string[];
   readonly podmanMacOSPortsForwarded: Set<string>;
   readonly entrypointPrefixes: string[];
-  readonly credentialProxyBridgeCleanup: (() => void) | undefined;
-  readonly dependencyVolumeLifecycle: DependencyVolumeLifecycle;
 }
 
 async function prepareContainerEntrypoint({
@@ -225,45 +219,20 @@ async function prepareContainerEntrypoint({
   cliArgs,
   podmanMacOSPortsForwarded,
   entrypointPrefixes,
-  credentialProxyBridgeCleanup,
-  dependencyVolumeLifecycle,
 }: ContainerEntrypointSetup): Promise<{
   finalEntrypoint: string[];
   userFlag: string;
 }> {
-  try {
-    const finalEntrypoint = entrypoint(
-      workdir,
-      cliArgs,
-      podmanMacOSPortsForwarded.size > 0
-        ? podmanMacOSPortsForwarded
-        : undefined,
-      entrypointPrefixes,
-    );
-    const userFlag = await setupContainerUser(args, finalEntrypoint);
-    return { finalEntrypoint, userFlag };
-  } catch (error) {
-    runBestEffortSyncCleanup(credentialProxyBridgeCleanup);
-    runBestEffortSyncCleanup(dependencyVolumeLifecycle);
-    throw error;
-  }
-}
-
-async function rethrowCredentialProxySetupError(
-  error: unknown,
-  credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined,
-): Promise<never> {
-  runBestEffortSyncCleanup(credentialProxyBridgeResult?.cleanup);
-  try {
-    await stopProxy();
-  } catch {
-    // best-effort cleanup; the original error is the one we want to throw
-  }
-  if (error instanceof FatalSandboxError) throw error;
-  // @plan:PLAN-20250214-CREDPROXY.P34 R25.1a: Proxy creation failure aborts before spawning container
-  throw new FatalSandboxError(
-    `Failed to start credential proxy: ${error instanceof Error ? error.message : String(error)}`,
+  // #3469: on failure here the launch lifecycle still owns every resource
+  // acquired above; there is nothing entrypoint-local to release.
+  const finalEntrypoint = entrypoint(
+    workdir,
+    cliArgs,
+    podmanMacOSPortsForwarded.size > 0 ? podmanMacOSPortsForwarded : undefined,
+    entrypointPrefixes,
   );
+  const userFlag = await setupContainerUser(args, finalEntrypoint);
+  return { finalEntrypoint, userFlag };
 }
 
 const SANDBOX_MANAGED_LABEL = 'com.vybestack.llxprt.sandbox-managed=true';
@@ -512,48 +481,41 @@ async function planWorkspacesAndDependencies(
   return { workspacePlan, dependencyMountPlan };
 }
 
-async function prepareContainerFilesystem(
-  config: SandboxConfig,
-  cliConfig: Config | undefined,
-): Promise<Awaited<ReturnType<typeof prepareContainerImageAndArgs>>> {
-  const { workspacePlan, dependencyMountPlan } =
-    await planWorkspacesAndDependencies(config, cliConfig);
-  return prepareContainerImageAndArgs(
-    config,
-    workspacePlan,
-    dependencyMountPlan,
-  );
-}
-
 /** Runs the Docker/Podman sandbox path: image build, arg assembly, and proxy setup. */
 async function prepareContainerSandbox(
   config: SandboxConfig,
   nodeArgs: string[],
   cliConfig: Config | undefined,
   cliArgs: string[],
+  lifecycle: SandboxLaunchLifecycle,
 ): Promise<ContainerSandboxPrepared> {
   validateContainerSandboxEnv();
+  const { workspacePlan, dependencyMountPlan } =
+    await planWorkspacesAndDependencies(config, cliConfig);
+
   const { image, workdir, sessionTmpdir, args, dependencyVolumeLifecycle } =
-    await prepareContainerFilesystem(config, cliConfig);
-  const reservedTunnelPorts = new Set<number>();
-  let networkAndEnv: ContainerNetworkAndEnv;
-  let containerName: string;
-  try {
-    const isPodmanMacOS =
-      config.command === 'podman' && os.platform() === 'darwin';
-    networkAndEnv = await prepareContainerNetworkAndEnv(
+    await prepareContainerImageAndArgs(
       config,
-      args,
-      workdir,
-      isPodmanMacOS,
-      reservedTunnelPorts,
+      workspacePlan,
+      dependencyMountPlan,
+      lifecycle,
     );
-    containerName = assignContainerName(args, config, image);
-    addContainerEnvVars(args, config, containerName, nodeArgs, workdir);
-  } catch (error) {
-    cleanupPreparationFailure(sessionTmpdir, dependencyVolumeLifecycle);
-    throw error;
-  }
+
+  // #3469/#3450: from here on, every acquired resource is registered with
+  // the launch lifecycle; a failure at any later step releases all of them.
+  const reservedTunnelPorts = new Set<number>();
+  const isPodmanMacOS =
+    config.command === 'podman' && os.platform() === 'darwin';
+  const networkAndEnv = await prepareContainerNetworkAndEnv(
+    config,
+    args,
+    workdir,
+    isPodmanMacOS,
+    reservedTunnelPorts,
+    lifecycle,
+  );
+  const containerName = assignContainerName(args, config, image);
+  addContainerEnvVars(args, config, containerName, nodeArgs, workdir);
   const {
     sshResult,
     podmanMacOSPortsForwarded,
@@ -562,22 +524,17 @@ async function prepareContainerSandbox(
   } = networkAndEnv;
   // Compose bridge prefixes after the trusted capability capture stanza (F1).
   const entrypointPrefixes: string[] = [];
-  let credentialProxySetup: Awaited<ReturnType<typeof setupCredentialProxy>>;
-  try {
-    if (sshResult.entrypointPrefix !== undefined) {
-      entrypointPrefixes.push(sshResult.entrypointPrefix);
-    }
-    credentialProxySetup = await startCredentialProxyGuarded(
-      args,
-      config,
-      sessionTmpdir,
-      reservedTunnelPorts,
-      entrypointPrefixes,
-    );
-  } catch (error) {
-    cleanupPreparationFailure(sessionTmpdir, dependencyVolumeLifecycle);
-    throw error;
+  if (sshResult.entrypointPrefix !== undefined) {
+    entrypointPrefixes.push(sshResult.entrypointPrefix);
   }
+  const credentialProxySetup = await startCredentialProxyGuarded(
+    args,
+    config,
+    sessionTmpdir,
+    reservedTunnelPorts,
+    entrypointPrefixes,
+    lifecycle,
+  );
 
   const { finalEntrypoint, userFlag } = await prepareContainerEntrypoint({
     args,
@@ -585,9 +542,6 @@ async function prepareContainerSandbox(
     cliArgs,
     podmanMacOSPortsForwarded,
     entrypointPrefixes,
-    credentialProxyBridgeCleanup:
-      credentialProxySetup.credentialProxyBridgeCleanup,
-    dependencyVolumeLifecycle,
   });
 
   return {
@@ -612,22 +566,41 @@ async function startCredentialProxyGuarded(
   sessionTmpdir: string,
   reservedTunnelPorts: Set<number>,
   entrypointPrefixes: string[],
+  lifecycle: SandboxLaunchLifecycle,
 ): Promise<Awaited<ReturnType<typeof setupCredentialProxy>>> {
-  let credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
+  let cpResult: Awaited<ReturnType<typeof setupCredentialProxy>>;
   try {
-    const cpResult = await setupCredentialProxy(
+    cpResult = await setupCredentialProxy(
       args,
       config,
       sessionTmpdir,
       reservedTunnelPorts,
       entrypointPrefixes,
     );
-    credentialProxyBridgeResult = cpResult.credentialProxyBridgeResult;
-    const credentialProxyBridgeCleanup = cpResult.credentialProxyBridgeCleanup;
-    return { credentialProxyBridgeResult, credentialProxyBridgeCleanup };
   } catch (error) {
-    return rethrowCredentialProxySetupError(error, credentialProxyBridgeResult);
+    // setupCredentialProxy releases everything it acquired on its own
+    // failure paths (proxy server, bridge, env file, tmpdir); the launch
+    // lifecycle owns nothing from it yet.
+    if (error instanceof FatalSandboxError) throw error;
+    // @plan:PLAN-20250214-CREDPROXY.P34 R25.1a: Proxy creation failure aborts before spawning container
+    throw new FatalSandboxError(
+      `Failed to start credential proxy: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
+  lifecycle.own(
+    'credential-proxy',
+    'credential proxy bridge',
+    cpResult.credentialProxyBridgeCleanup,
+  );
+  lifecycle.own('credential-proxy', 'credential proxy server', () => {
+    void stopProxy().catch((err) => {
+      debugLogger.error(
+        'Credential proxy stop() failed after failed launch:',
+        err,
+      );
+    });
+  });
+  return cpResult;
 }
 
 /** Spawns container and proxy, wires cleanup, and waits for exit. */
@@ -635,6 +608,7 @@ async function executeContainerSandbox(
   config: SandboxConfig,
   cliConfig: Config | undefined,
   prepared: Awaited<ReturnType<typeof prepareContainerSandbox>>,
+  lifecycle: SandboxLaunchLifecycle,
 ): Promise<{
   exitCode: number;
   portForwardingResult: PortForwardingResult | undefined;
@@ -659,65 +633,68 @@ async function executeContainerSandbox(
   args.push(image);
   args.push(...finalEntrypoint);
 
-  // #3450: from here through process exit, a sidecar or main-launch
-  // failure must release the per-run private dependency storage again.
-  try {
-    const proxyContainerProcess =
-      proxyCommand !== undefined
-        ? await startProxyContainer(
-            config,
-            proxyCommand,
-            userFlag,
-            image,
-            workdir,
-          )
-        : undefined;
+  // #3469: a sidecar or main-launch failure here is still covered — every
+  // resource stays owned by the launch lifecycle until the process/close
+  // handlers take over below.
+  const proxyContainerProcess =
+    proxyCommand !== undefined
+      ? await startProxyContainer(
+          config,
+          proxyCommand,
+          userFlag,
+          image,
+          workdir,
+          lifecycle,
+        )
+      : undefined;
 
-    const { stdinWasPaused, stdinHadRawMode } = handleStdinForSandbox();
-    const sandboxProcess = spawn(config.command, args, { stdio: 'inherit' });
-    dependencyVolumeLifecycle.recordMainContainerName(containerName);
-    wireProxyContainerCloseHandler(proxyContainerProcess, sandboxProcess);
-    restoreStdinAfterSandbox(
-      sandboxProcess,
-      stdinWasPaused,
-      stdinHadRawMode,
-      cliConfig,
-    );
+  const { stdinWasPaused, stdinHadRawMode } = handleStdinForSandbox();
+  const sandboxProcess = spawn(config.command, args, { stdio: 'inherit' });
+  lifecycle.own('main-container', `main container ${containerName}`, () => {
+    sandboxProcess.kill('SIGTERM');
+  });
+  dependencyVolumeLifecycle.recordMainContainerName(containerName);
+  wireProxyContainerCloseHandler(proxyContainerProcess, sandboxProcess);
+  restoreStdinAfterSandbox(
+    sandboxProcess,
+    stdinWasPaused,
+    stdinHadRawMode,
+    cliConfig,
+  );
 
-    wireCleanupHandlers(
-      sandboxProcess,
-      cliConfig,
-      sshResult,
-      portForwardingResult,
-      credentialProxyBridgeCleanup,
-      (c) => {
-        credentialProxyBridgeCleanup = c;
-      },
-    );
+  wireCleanupHandlers(
+    sandboxProcess,
+    cliConfig,
+    sshResult,
+    portForwardingResult,
+    credentialProxyBridgeCleanup,
+    (c) => {
+      credentialProxyBridgeCleanup = c;
+    },
+  );
+  // #3469: ownership explicitly moves to the wired process/close handlers;
+  // from here the normal session lifecycle performs every release.
+  lifecycle.transferToProcessHandlers();
 
-    const exitCode = await new Promise<number>((resolve) => {
-      sandboxProcess.on('close', (code, signal) => {
-        const ec = normalizeExitCode(code, signal);
-        if (ec !== 0) {
-          debugLogger.log(
-            `Sandbox process exited with code: ${code}, signal: ${signal}`,
-          );
-        }
-        resolve(ec);
-      });
+  const exitCode = await new Promise<number>((resolve) => {
+    sandboxProcess.on('close', (code, signal) => {
+      const ec = normalizeExitCode(code, signal);
+      if (ec !== 0) {
+        debugLogger.log(
+          `Sandbox process exited with code: ${code}, signal: ${signal}`,
+        );
+      }
+      resolve(ec);
     });
+  });
 
-    // Release volumes after every close listener and its queued I/O have
-    // completed. Docker Desktop can expose a nested destination until teardown
-    // finishes; an early release can leave an engine-created mountpoint behind.
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    dependencyVolumeLifecycle.release();
+  // Release volumes after every close listener and its queued I/O have
+  // completed. Docker Desktop can expose a nested destination until teardown
+  // finishes; an early release can leave an engine-created mountpoint behind.
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  dependencyVolumeLifecycle.release();
 
-    return { exitCode, portForwardingResult, credentialProxyBridgeCleanup };
-  } catch (err) {
-    runBestEffortSyncCleanup(dependencyVolumeLifecycle);
-    throw err;
-  }
+  return { exitCode, portForwardingResult, credentialProxyBridgeCleanup };
 }
 
 /** Runs the Docker/Podman sandbox path. */
@@ -731,13 +708,29 @@ export async function runContainerSandbox(
   portForwardingResult: PortForwardingResult | undefined;
   credentialProxyBridgeCleanup: (() => void) | undefined;
 }> {
-  const prepared = await prepareContainerSandbox(
-    config,
-    nodeArgs,
-    cliConfig,
-    cliArgs,
-  );
-  return executeContainerSandbox(config, cliConfig, prepared);
+  // #3469: one explicit owner for every launch-acquired resource. Any
+  // failure in preparation or launch releases them all in stage order;
+  // secondary release failures stay visible on stderr without replacing
+  // the original error.
+  const lifecycle = new SandboxLaunchLifecycle();
+  try {
+    const prepared = await prepareContainerSandbox(
+      config,
+      nodeArgs,
+      cliConfig,
+      cliArgs,
+      lifecycle,
+    );
+    return await executeContainerSandbox(
+      config,
+      cliConfig,
+      prepared,
+      lifecycle,
+    );
+  } catch (error) {
+    lifecycle.releaseForFailedLaunch();
+    throw error;
+  }
 }
 
 export function buildSandboxCommandArgs(

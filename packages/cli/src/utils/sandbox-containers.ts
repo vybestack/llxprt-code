@@ -50,6 +50,7 @@ import {
 } from '@vybestack/llxprt-code-providers/auth.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import type { DependencyVolumeLifecycle } from './sandbox-node-modules.js';
+import type { SandboxLaunchLifecycle } from './sandbox-lifecycle.js';
 
 export { containerMountSources };
 
@@ -738,6 +739,7 @@ export async function startProxyContainer(
   userFlag: string,
   image: string,
   workdir: string,
+  lifecycle?: SandboxLaunchLifecycle,
 ): Promise<ProxyContainerHandle> {
   const proxyContainerArgs = [
     'run',
@@ -765,13 +767,30 @@ export async function startProxyContainer(
     detached: true,
   });
   const proxyContainerCommand = `${config.command} ${proxyContainerArgs.join(' ')}`;
+  // #3469: the stop is idempotent and detaches its own process handlers, so
+  // whichever path fires first (failed-launch release or process exit) owns
+  // the removal and the other becomes a no-op.
+  let proxyContainerStopped = false;
   const stopProxyContainer = () => {
+    if (proxyContainerStopped) return;
+    proxyContainerStopped = true;
+    process.off('exit', stopProxyContainer);
+    process.off('SIGINT', stopProxyContainer);
+    process.off('SIGTERM', stopProxyContainer);
     debugLogger.log('stopping proxy container ...');
     execSync(`${config.command} rm -f ${SANDBOX_PROXY_NAME}`);
   };
   process.on('exit', stopProxyContainer);
   process.on('SIGINT', stopProxyContainer);
   process.on('SIGTERM', stopProxyContainer);
+  // #3469: register ownership before the readiness wait; an internal
+  // readiness failure already self-stops, and the registered release then
+  // no-ops.
+  lifecycle?.own(
+    'proxy-sidecar',
+    'proxy sidecar container',
+    stopProxyContainer,
+  );
   proxyProcess.stderr.on('data', (data) => {
     debugLogger.error(data.toString().trim());
   });

@@ -7,6 +7,10 @@
 /**
  * Test-side harness for fake-dependency-engine.ts (#3450).
  *
+ * Also used by the #3469 launch-lifecycle tests: the fake engine's network
+ * records and sidecar-aware run parsing keep the proxy-sidecar launch path
+ * observable through the same persistent state files.
+ *
  * `useFakeEngine()` wires the suite lifecycle: it installs the fake engine
  * executable on PATH under the names `docker` and `podman` (so production
  * `spawnSync(config.command, ...)` calls reach it), points
@@ -97,6 +101,7 @@ export function useFakeEngine(
       return {
         volumes: {},
         containers: {},
+        networks: {},
         invocations: [],
         counters: {},
       };

@@ -34,6 +34,11 @@
  * Fault injection is file-based: creating a knob file makes the matching
  * operation fail once (fail-volume-create-once, fail-run-once,
  * fail-volume-rm-once).
+ *
+ * #3469 additions: `network inspect|create|connect`, value-consuming run
+ * flags (-p/--publish, -v/--volume, --env/-e, --env-file, --authfile), and
+ * `sh -lc` command scripts, so the proxy-sidecar launch path runs against
+ * the same real engine semantics as the main container path.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -53,9 +58,14 @@ export interface FakeEngineContainerRecord {
   readonly labels: Record<string, string>;
 }
 
+export interface FakeEngineNetworkRecord {
+  readonly containers: string[];
+}
+
 export interface FakeEngineState {
   volumes: Record<string, FakeEngineVolumeRecord>;
   containers: Record<string, FakeEngineContainerRecord>;
+  networks: Record<string, FakeEngineNetworkRecord>;
   invocations: string[][];
   counters: Record<string, number>;
 }
@@ -73,7 +83,13 @@ function stateRootOrDie(): string {
 }
 
 function emptyState(): FakeEngineState {
-  return { volumes: {}, containers: {}, invocations: [], counters: {} };
+  return {
+    volumes: {},
+    containers: {},
+    networks: {},
+    invocations: [],
+    counters: {},
+  };
 }
 
 function isUnknownRecord(value: unknown): value is Record<string, unknown> {
@@ -118,6 +134,21 @@ function decodeContainers(
   return containers;
 }
 
+function decodeNetworks(
+  value: unknown,
+): Record<string, FakeEngineNetworkRecord> {
+  if (!isUnknownRecord(value)) return {};
+  const networks: Record<string, FakeEngineNetworkRecord> = {};
+  for (const [name, record] of Object.entries(value)) {
+    if (!isUnknownRecord(record) || !Array.isArray(record.containers)) continue;
+    const members = record.containers.filter(
+      (member): member is string => typeof member === 'string',
+    );
+    networks[name] = { containers: members };
+  }
+  return networks;
+}
+
 function decodeInvocations(value: unknown): string[][] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((invocation) => {
@@ -148,6 +179,7 @@ export function decodeFakeEngineState(value: unknown): FakeEngineState {
   return {
     volumes: decodeVolumes(value.volumes),
     containers: decodeContainers(value.containers),
+    networks: decodeNetworks(value.networks),
     invocations: decodeInvocations(value.invocations),
     counters: decodeCounters(value.counters),
   };
@@ -232,6 +264,14 @@ interface ParsedRun {
 }
 
 const RUN_VALUE_FLAGS: ReadonlySet<string> = new Set([
+  '-p',
+  '--publish',
+  '-v',
+  '--volume',
+  '--env',
+  '-e',
+  '--env-file',
+  '--authfile',
   '--mount',
   '--label',
   '--name',
@@ -509,6 +549,52 @@ function cmdRm(root: string, state: FakeEngineState, argv: string[]): void {
   }
 }
 
+/** Last non-flag argument from `start` onward (engine names are positional). */
+function trailingName(argv: string[], start: number): string {
+  let name = '';
+  for (let index = start; index < argv.length; index++) {
+    if (!argv[index].startsWith('-')) name = argv[index];
+  }
+  return name;
+}
+
+function cmdNetwork(
+  root: string,
+  state: FakeEngineState,
+  argv: string[],
+): void {
+  const verb = argv[1];
+  if (verb === 'inspect') {
+    // The production launch only probes with `inspect X || create X`; every
+    // probe answering "exists" keeps `create` on its real (unprobed) path.
+    process.exit(0);
+  }
+  if (verb === 'create') {
+    const name = trailingName(argv, 2);
+    if (name === '') fail('fake engine: network create requires a name');
+    if (state.networks[name] === undefined) {
+      state.networks[name] = { containers: [] };
+    }
+    saveState(root, state);
+    return;
+  }
+  if (verb === 'connect') {
+    const names = argv.slice(2).filter((token) => !token.startsWith('-'));
+    const [network, container] = names;
+    if (network === undefined || container === undefined) {
+      fail('fake engine: network connect requires a network and a container');
+    }
+    if (state.containers[container] === undefined) {
+      fail(`No such container: ${container}`);
+    }
+    const members = state.networks[network]?.containers ?? [];
+    state.networks[network] = { containers: [...members, container] };
+    saveState(root, state);
+    return;
+  }
+  fail(`fake engine: unsupported network verb '${verb ?? ''}'`);
+}
+
 function cmdRun(root: string, state: FakeEngineState, argv: string[]): void {
   const run = parseRunArgv(argv);
   const volumeNames = [...run.mounts.values()];
@@ -526,13 +612,18 @@ function cmdRun(root: string, state: FakeEngineState, argv: string[]): void {
       saveState(root, state);
     }
   };
-  if (run.command[0] === 'sh' && run.command[1] === '-c') {
+  if (
+    run.command[0] === 'sh' &&
+    (run.command[1] === '-c' || run.command[1] === '-lc')
+  ) {
     const script = run.command[2];
     if (script === undefined) fail('fake engine: sh -c requires a script');
     const positional = run.command.slice(3).map((argument) => {
       const source = run.mounts.get(argument);
       return source === undefined ? argument : volumeDir(root, source);
     });
+    // The login flag is emulated away: host /bin/sh (dash) rejects -l, and
+    // the fake only needs the script semantics, not a login environment.
     const child = spawnSync('sh', ['-c', script, ...positional], {
       stdio: 'inherit',
     });
@@ -568,6 +659,10 @@ function main(): void {
   }
   if (subcommand === 'rm') {
     cmdRm(root, state, argv);
+    return;
+  }
+  if (subcommand === 'network') {
+    cmdNetwork(root, state, argv);
     return;
   }
   if (subcommand === 'run') {
