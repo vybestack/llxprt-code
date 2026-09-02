@@ -157,6 +157,47 @@ describe.skipIf(os.platform() === 'win32')(
       fs.rmSync(path.dirname(sentinel), { recursive: true, force: true });
     });
 
+    it('a background job launched during one turn stays registered and running across several subsequent turns', async () => {
+      const manager = makeManager();
+      const sentinelDir = makeTempBase();
+      // Registered so afterEach removes it on failure as well as success.
+      baseDirs.push(sentinelDir);
+      const gate = path.join(sentinelDir, 'gate');
+      const completion = path.join(sentinelDir, 'completed');
+
+      // Turn 1: the agent backgrounds a job gated on a signal this test
+      // controls, so the still-running assertions below never depend on a
+      // fixed sleep outliving the turns on a loaded runner.
+      const command = `while [ ! -f ${gate} ]; do sleep 0.1; done; touch ${completion} &`;
+      const result = detectTrailingBackgroundOperator(command);
+      expect(result.promoted).toBe(true);
+      const job = manager.launch({ command: result.command, cwd: os.tmpdir() });
+      expect(job.state).toBe('running');
+
+      // Several subsequent turns: other jobs run to completion and the
+      // notification pipeline between turns drains. None of that may
+      // unregister or terminate the still-running background job.
+      for (let turn = 2; turn <= 4; turn++) {
+        const foreground = manager.launch({
+          command: 'true',
+          cwd: os.tmpdir(),
+        });
+        await waitForTerminal(manager, foreground.id, 10000);
+        manager.markNotified(
+          manager.getPendingNotifications().map((pending) => pending.id),
+        );
+        expect(manager.get(job.id)?.state).toBe('running');
+      }
+      expect(manager.get(job.id)?.state).toBe('running');
+
+      // Release the gate: the job ends on its own terms, proving nothing
+      // killed it mid-flight.
+      fs.writeFileSync(gate, '');
+      const terminal = await waitForTerminal(manager, job.id, 15000);
+      expect(terminal?.state).toBe('completed');
+      expect(fs.existsSync(completion)).toBe(true);
+    }, 20_000);
+
     it('a fast-completing background job returns a job-shaped result immediately, not foreground-shaped', () => {
       const manager = makeManager();
       const job = manager.launch({

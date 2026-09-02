@@ -460,6 +460,13 @@ export abstract class ConfigBaseCore {
   getSessionRecordingService(): SessionRecordingService | undefined {
     return this.sessionRecordingService;
   }
+  /**
+   * Never constructs a manager; read-only paths (exit-time shutdown notice)
+   * must use it so a job-free session does not build one and mkdtemp its log directory.
+   */
+  peekShellJobManager(): ShellJobManager | undefined {
+    return this.shellJobManager;
+  }
   setInteractiveSubagentSchedulerFactory(
     factory: SubagentSchedulerFactory | undefined,
   ): void {
