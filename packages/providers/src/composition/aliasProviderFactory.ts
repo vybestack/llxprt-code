@@ -46,6 +46,31 @@ export function sanitizeApiKey(key: string): string {
   return sanitized;
 }
 
+/**
+ * Resolves the API key an alias declares through `apiKeyEnv`.
+ *
+ * Returns undefined when authOnly is enabled: authOnly forces OAuth-only
+ * authentication, so ambient environment credentials must not be bound to any
+ * alias provider. This mirrors the rule the composition root already applies
+ * to the shared OpenAI key in `resolveOpenaiApiKey`.
+ */
+function resolveAliasEnvApiKey(
+  entry: ProviderAliasEntry,
+  authOnlyEnabled: boolean,
+): string | undefined {
+  if (authOnlyEnabled || !entry.config.apiKeyEnv) {
+    return undefined;
+  }
+
+  const envValue = process.env[entry.config.apiKeyEnv];
+  if (!envValue || envValue.trim() === '') {
+    return undefined;
+  }
+
+  const sanitized = sanitizeApiKey(envValue);
+  return sanitized === '' ? undefined : sanitized;
+}
+
 export type AliasAwareBaseProvider = {
   authResolver?: {
     updateConfig?: (config: { providerId?: string }) => void;
@@ -207,6 +232,7 @@ export function createOpenAIAliasProvider(
   openaiApiKey: string | undefined,
   openaiBaseUrl: string | undefined,
   openaiProviderConfig: IProviderConfig,
+  authOnlyEnabled: boolean,
 ): OpenAIProvider | null {
   const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
   if (!resolvedBaseUrl) {
@@ -229,16 +255,8 @@ export function createOpenAIAliasProvider(
     aliasProviderConfig.defaultModel = entry.config.defaultModel;
   }
 
-  let aliasApiKey: string | undefined;
-  if (entry.config.apiKeyEnv) {
-    const envValue = process.env[entry.config.apiKeyEnv];
-    if (envValue && envValue.trim() !== '') {
-      aliasApiKey = sanitizeApiKey(envValue);
-    }
-  }
-  if (!aliasApiKey && openaiApiKey) {
-    aliasApiKey = openaiApiKey;
-  }
+  const aliasApiKey =
+    resolveAliasEnvApiKey(entry, authOnlyEnabled) ?? openaiApiKey;
 
   const provider = new OpenAIProvider(
     aliasApiKey ?? undefined,
@@ -260,6 +278,7 @@ export function createOpenAIResponsesAliasProvider(
   openaiBaseUrl: string | undefined,
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
+  authOnlyEnabled: boolean,
 ): OpenAIResponsesProvider | null {
   const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
   if (!resolvedBaseUrl) {
@@ -282,16 +301,8 @@ export function createOpenAIResponsesAliasProvider(
     aliasProviderConfig.defaultModel = entry.config.defaultModel;
   }
 
-  let aliasApiKey: string | undefined;
-  if (entry.config.apiKeyEnv) {
-    const envValue = process.env[entry.config.apiKeyEnv];
-    if (envValue && envValue.trim() !== '') {
-      aliasApiKey = sanitizeApiKey(envValue);
-    }
-  }
-  if (!aliasApiKey && openaiApiKey) {
-    aliasApiKey = openaiApiKey;
-  }
+  const aliasApiKey =
+    resolveAliasEnvApiKey(entry, authOnlyEnabled) ?? openaiApiKey;
 
   const provider = new OpenAIResponsesProvider(
     aliasApiKey ?? undefined,
@@ -319,6 +330,7 @@ export function createOpenAIVercelAliasProvider(
   openaiApiKey: string | undefined,
   openaiBaseUrl: string | undefined,
   openaiProviderConfig: IProviderConfig,
+  authOnlyEnabled: boolean,
 ): OpenAIVercelProvider | null {
   const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
   if (!resolvedBaseUrl) {
@@ -341,16 +353,8 @@ export function createOpenAIVercelAliasProvider(
     aliasProviderConfig.defaultModel = entry.config.defaultModel;
   }
 
-  let aliasApiKey: string | undefined;
-  if (entry.config.apiKeyEnv) {
-    const envValue = process.env[entry.config.apiKeyEnv];
-    if (envValue && envValue.trim() !== '') {
-      aliasApiKey = sanitizeApiKey(envValue);
-    }
-  }
-  if (!aliasApiKey && openaiApiKey) {
-    aliasApiKey = openaiApiKey;
-  }
+  const aliasApiKey =
+    resolveAliasEnvApiKey(entry, authOnlyEnabled) ?? openaiApiKey;
 
   const provider = new OpenAIVercelProvider(
     aliasApiKey ?? undefined,
@@ -368,15 +372,10 @@ export function createOpenAIVercelAliasProvider(
 
 export function createGeminiAliasProvider(
   entry: ProviderAliasEntry,
-  config?: Config,
+  config: Config | undefined,
+  authOnlyEnabled: boolean,
 ): GeminiProvider | null {
-  let aliasApiKey: string | undefined;
-  if (entry.config.apiKeyEnv) {
-    const envValue = process.env[entry.config.apiKeyEnv];
-    if (envValue && envValue.trim() !== '') {
-      aliasApiKey = sanitizeApiKey(envValue);
-    }
-  }
+  const aliasApiKey = resolveAliasEnvApiKey(entry, authOnlyEnabled);
 
   const resolvedBaseUrl = entry.config['base-url'];
 
@@ -400,16 +399,9 @@ export function createGeminiAliasProvider(
 export function createAnthropicAliasProvider(
   entry: ProviderAliasEntry,
   oauthManager: OAuthManager | undefined,
-  authOnlyEnabled = false,
+  authOnlyEnabled: boolean,
 ): AnthropicProvider | null {
-  let aliasApiKey: string | undefined;
-  // Only use environment variable API key if authOnly is not enabled
-  if (!authOnlyEnabled && entry.config.apiKeyEnv) {
-    const envValue = process.env[entry.config.apiKeyEnv];
-    if (envValue && envValue.trim() !== '') {
-      aliasApiKey = sanitizeApiKey(envValue);
-    }
-  }
+  const aliasApiKey = resolveAliasEnvApiKey(entry, authOnlyEnabled);
 
   const resolvedBaseUrl = entry.config['base-url'];
 
@@ -433,6 +425,82 @@ export function createAnthropicAliasProvider(
   return provider;
 }
 
+/** Inputs shared by every alias factory in one registration pass. */
+interface AliasProviderContext {
+  openaiApiKey: string | undefined;
+  openaiBaseUrl: string | undefined;
+  openaiProviderConfig: IProviderConfig;
+  oauthManager: OAuthManager;
+  config: Config | undefined;
+  authOnlyEnabled: boolean;
+}
+
+type AliasProvider =
+  | OpenAIProvider
+  | OpenAIResponsesProvider
+  | OpenAIVercelProvider
+  | GeminiProvider
+  | AnthropicProvider;
+
+function createAliasProvider(
+  entry: ProviderAliasEntry,
+  context: AliasProviderContext,
+): AliasProvider | null {
+  const {
+    openaiApiKey,
+    openaiBaseUrl,
+    openaiProviderConfig,
+    oauthManager,
+    config,
+    authOnlyEnabled,
+  } = context;
+
+  switch (entry.config.baseProvider.toLowerCase()) {
+    case 'openai':
+      return createOpenAIAliasProvider(
+        entry,
+        openaiApiKey,
+        openaiBaseUrl,
+        openaiProviderConfig,
+        authOnlyEnabled,
+      );
+    case 'openai-responses':
+      return createOpenAIResponsesAliasProvider(
+        entry,
+        openaiApiKey,
+        openaiBaseUrl,
+        openaiProviderConfig,
+        oauthManager,
+        authOnlyEnabled,
+      );
+    case 'openaivercel':
+    case 'openai-vercel':
+      return createOpenAIVercelAliasProvider(
+        entry,
+        openaiApiKey,
+        openaiBaseUrl,
+        openaiProviderConfig,
+        authOnlyEnabled,
+      );
+    case 'gemini':
+      return createGeminiAliasProvider(entry, config, authOnlyEnabled);
+    case 'anthropic':
+      // Binding is by identity, not host: only the `claudecode` alias
+      // receives the Claude subscription OAuth manager/identity; the
+      // `anthropic` alias is API-key-only and must not bind OAuth.
+      return createAnthropicAliasProvider(
+        entry,
+        entry.alias === 'claudecode' ? oauthManager : undefined,
+        authOnlyEnabled,
+      );
+    default:
+      debugLogger.warn(
+        `[ProviderManager] Unsupported base provider '${entry.config.baseProvider}' for alias '${entry.alias}', skipping.`,
+      );
+      return null;
+  }
+}
+
 export function registerAliasProviders(
   providerManagerInstance: ProviderManager,
   aliasEntries: ProviderAliasEntry[],
@@ -440,77 +508,20 @@ export function registerAliasProviders(
   openaiBaseUrl: string | undefined,
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
-  config?: Config,
-  authOnlyEnabled = false,
+  config: Config | undefined,
+  authOnlyEnabled: boolean,
 ): void {
   for (const entry of aliasEntries) {
-    switch (entry.config.baseProvider.toLowerCase()) {
-      case 'openai': {
-        const provider = createOpenAIAliasProvider(
-          entry,
-          openaiApiKey,
-          openaiBaseUrl,
-          openaiProviderConfig,
-        );
-        if (provider) {
-          providerManagerInstance.registerProvider(provider as never);
-        }
-        break;
-      }
-      case 'openai-responses': {
-        const provider = createOpenAIResponsesAliasProvider(
-          entry,
-          openaiApiKey,
-          openaiBaseUrl,
-          openaiProviderConfig,
-          oauthManager,
-        );
-        if (provider) {
-          providerManagerInstance.registerProvider(provider as never);
-        }
-        break;
-      }
-      case 'openaivercel':
-      case 'openai-vercel': {
-        const provider = createOpenAIVercelAliasProvider(
-          entry,
-          openaiApiKey,
-          openaiBaseUrl,
-          openaiProviderConfig,
-        );
-        if (provider) {
-          providerManagerInstance.registerProvider(provider as never);
-        }
-        break;
-      }
-      case 'gemini': {
-        const provider = createGeminiAliasProvider(entry, config);
-        if (provider) {
-          providerManagerInstance.registerProvider(provider as never);
-        }
-        break;
-      }
-      case 'anthropic': {
-        // Binding is by identity, not host: only the `claudecode` alias
-        // receives the Claude subscription OAuth manager/identity; the
-        // `anthropic` alias is API-key-only and must not bind OAuth.
-        const oauthManagerForAlias =
-          entry.alias === 'claudecode' ? oauthManager : undefined;
-        const provider = createAnthropicAliasProvider(
-          entry,
-          oauthManagerForAlias,
-          authOnlyEnabled,
-        );
-        if (provider) {
-          providerManagerInstance.registerProvider(provider as never);
-        }
-        break;
-      }
-      default: {
-        debugLogger.warn(
-          `[ProviderManager] Unsupported base provider '${entry.config.baseProvider}' for alias '${entry.alias}', skipping.`,
-        );
-      }
+    const provider = createAliasProvider(entry, {
+      openaiApiKey,
+      openaiBaseUrl,
+      openaiProviderConfig,
+      oauthManager,
+      config,
+      authOnlyEnabled,
+    });
+    if (provider) {
+      providerManagerInstance.registerProvider(provider as never);
     }
   }
 }

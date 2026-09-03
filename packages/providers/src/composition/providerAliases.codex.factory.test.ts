@@ -43,6 +43,7 @@ function buildCodexProvider() {
     undefined,
     {},
     NULL_OAUTH_MANAGER,
+    false,
   );
   if (!provider) {
     throw new Error('codex alias provider not created');
