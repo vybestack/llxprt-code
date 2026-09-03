@@ -171,6 +171,23 @@ describe('tokenLimit', () => {
       expect(catalogData.exactLimits['claude-fable-5-1-latest']).toBe(200_000);
     });
 
+    it('should return 200K limit for a claude-fable-5-1 dated snapshot @issue:3531', () => {
+      expect(tokenLimit('claude-fable-5-1-20260815')).toBe(200_000);
+    });
+
+    it('resolves a dated claude-fable-5-1 snapshot through an ordered rule @issue:3531', () => {
+      // Returns undefined rather than defaultLimit when no rule matches, so
+      // this fails if the claude-fable-5 substring rule is dropped from the
+      // catalog even while the 200_000 default masks it in tokenLimit().
+      expect(
+        resolveOrderedRuleFromCatalog(
+          catalogData,
+          'claude-fable-5-1-20260815',
+          '',
+        ),
+      ).toBe(200_000);
+    });
+
     it('honors a user-supplied context limit override (e.g. /set or profile)', () => {
       expect(tokenLimit('claude-opus-4-8', 1_000_000)).toBe(1_000_000);
     });
