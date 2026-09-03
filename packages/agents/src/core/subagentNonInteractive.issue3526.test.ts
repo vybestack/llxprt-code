@@ -172,6 +172,7 @@ describe('issue 3526 non-interactive emitter completion invariants', () => {
       gamma: 'C',
       delta: 'D',
     });
+    expect(output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
     expect(requestCount).toBe(1);
   });
 
@@ -220,7 +221,7 @@ describe('issue 3526 non-interactive emitter completion invariants', () => {
     expect(requestCount).toBe(1);
   });
 
-  it('fails missing-emitter provisioning when a required key exists only on the prototype', async () => {
+  it('fails missing-emitter provisioning when the required output key is named toString', async () => {
     const outputConfig: OutputConfig = {
       outputs: { toString: 'required value' },
     };
@@ -235,7 +236,7 @@ describe('issue 3526 non-interactive emitter completion invariants', () => {
     expect(output.final_message).toContain('toString');
   });
 
-  it('nudges for a required key that exists only on the emitted_vars prototype', async () => {
+  it('nudges when the required output key named toString has not been emitted', async () => {
     const output: OutputObject = {
       terminate_reason: SubagentTerminateMode.ERROR,
       emitted_vars: {},

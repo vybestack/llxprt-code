@@ -30,6 +30,7 @@ import {
   SubagentTerminateMode,
   type OutputConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import { SubAgentScope } from './subagent.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
@@ -103,11 +104,40 @@ type CompletedToolCallFixture = Omit<
   readonly status: 'success' | 'error' | 'cancelled';
 };
 
+const MOCK_TOOL = new MockTool('mock_tool');
+const MOCK_INVOCATION = MOCK_TOOL.build({});
+
+function completeToolCallFixture(
+  response: CompletedToolCallFixture,
+): Awaited<ReturnType<typeof executeToolCall>> {
+  const completedResponse = {
+    ...response.response,
+    resultDisplay: undefined,
+  };
+  if (response.status === 'success') {
+    return {
+      ...response,
+      status: 'success',
+      response: completedResponse,
+      tool: MOCK_TOOL,
+      invocation: MOCK_INVOCATION,
+    };
+  }
+  if (response.status === 'cancelled') {
+    return {
+      ...response,
+      status: 'cancelled',
+      response: completedResponse,
+      tool: MOCK_TOOL,
+      invocation: MOCK_INVOCATION,
+    };
+  }
+  return { ...response, status: 'error', response: completedResponse };
+}
+
 function mockCompletedToolCall(response: CompletedToolCallFixture): void {
-  const mockedExecutor = executeToolCall as Mock<
-    () => Promise<CompletedToolCallFixture>
-  >;
-  mockedExecutor.mockResolvedValueOnce(response);
+  const mockedExecutor = executeToolCall as Mock<typeof executeToolCall>;
+  mockedExecutor.mockResolvedValueOnce(completeToolCallFixture(response));
 }
 
 function mockSuccessfulPause(callId: string, toolName = 'todo_pause'): void {

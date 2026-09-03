@@ -54,6 +54,27 @@ Focused tests run after each red and green step. Final focused verification is l
 
 No finding was rejected or deferred. Every accepted change is limited to issue 3526 completion, emitter availability, and required-key membership behavior.
 
+## PR 3539 remediation triage
+
+| Finding | Classification | Verification and disposition |
+| --- | --- | --- |
+| 1. Missing or null `self_emitvalue` arguments are coerced to strings. | **Defer** | Malformed emitter argument validation is outside the accepted issue behavior. Follow-up issue #3540 tracks this policy. Production behavior is unchanged here. |
+| 2. The `executeToolCall` mock erases the real callable signature, with duplicate reports also requesting argument assertions. | **In-scope-Fix** for typing; **Reject** for interaction assertions | The cast uses a zero-argument function type even though the real function requires execution context and request parameters. Type the mock as `Mock<typeof executeToolCall>`. Do not assert mock calls because `dev-docs/RULES.md` prohibits mock verification. One edit resolves both duplicate reports. |
+| 3. The provider fake advertises an `IContent[]` overload but rejects that call shape. | **Reject** | `RuntimeProvider` requires both the options overload and the legacy `IContent[]` overload. Removing the overload would make the fake incompatible with the interface, while implementing an unused legacy path would add behavior unrelated to this test. |
+| 4. Add a nullish fallback around `Object.keys(ctx.output.emitted_vars)`. | **Reject** | `OutputObject.emitted_vars` is a required, non-null `Record<string, string>`. A fallback would hide an internal invariant violation rather than fix an allowed input case. |
+| 5. Execute non-emitter calls queued in a turn where the required emitter is missing. | **Reject** | Accepted behavior makes missing emitter provisioning a terminal infrastructure failure. No queued side effects or later provider work should run after that invariant fails. |
+| 6. Canonicalize aliases such as `todoPause` or `functions.todo_pause` for successful pause detection. | **Reject** | Existing pause policy in the agent loop and continuation service recognizes the exact `todo_pause` name case-insensitively. Alias expansion was not accepted for issue 3526. |
+| 7. Preserve accumulated tool responses and execute calls after a successful `todo_pause`. | **Reject** | Successful pause is intentionally terminal. It stops the batch immediately, and no later provider turn consumes a response transcript. |
+| 8. Extract a shared `isScopeLocalEmitterName` helper. | **Reject** | The implementation already shares the emitter constant and general name normalizer. Another abstraction was not planned and is outside the accepted scope. |
+| 9. Extract duplicate issue-test fixtures. | **Reject** | Fixture refactoring is unrelated to the accepted behavior and is not required for the narrow test-quality corrections. |
+| 10. Extract a shared missing-required-output helper across three production sites. | **Reject** | The review did not demonstrate a current behavioral inconsistency. A new abstraction for possible future drift is outside scope. |
+| 11. Two test names claim a property exists only on a prototype. | **In-scope-Fix** | Both tests use an own required-output key named `toString` and verify that inherited membership on an empty emitted-output object does not count as emission. Rename the tests to state that behavior accurately. |
+| 12. A direct-runtime successful four-output test lacks an explicit `GOAL` assertion. | **In-scope-Fix** | The Hermes direct-runtime case verifies values and request count but not termination mode. Add the behavioral `GOAL` assertion using the existing import. |
+| 13. Add docstrings to satisfy a coverage warning. | **Reject** | Docstring coverage is outside issue scope, and repository guidance requires comments only when they add necessary context. |
+| 14. CLI sandbox node-modules preflight expected a symlink path but received its contained target path. | **Defer** | This is an external CI observation in an unrelated CLI shard. The failed job was rerun. No agents or issue-3526 behavior is changed for it. |
+
+This remediation has no additional Blocker-Fix findings. Accepted edits are limited to the three test-quality corrections in findings 2, 11, and 12.
+
 ## Prior verification-log disposition
 
 `tmp/verify3526/npm-test-post-review.log` ends with the vscode companion summary and an explicit `Exit Code: 0` record. It therefore contains completion evidence for that prior full `npm run test` invocation. The final focused commands for this continuation are recorded separately and do not replace the foreground orchestrator's requested repository-wide verification.
