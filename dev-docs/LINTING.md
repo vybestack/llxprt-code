@@ -59,10 +59,12 @@ npm run check
 
 ## Scoped and Changed-Files Linting (Fast Local Lint)
 
-`npm run lint` runs a single type-aware ESLint pass over the whole monorepo.
-That is correct but slow (~9 min) and memory-hungry (~10 GB peak). The two
-commands below surface the runner's already-existing scoped-target mode for
-local iteration, without changing CI behavior or the full-run command shape.
+`npm run lint` partitions the whole monorepo into one type-aware ESLint
+process per `packages/<pkg>` directory plus one process for the rest of the
+tree (`scripts/run-lint.ts`, #3387). That is correct and bounded: a full run
+completes in about 132 s with a ~4.5 GiB peak RSS, and the largest single
+group is `packages/cli` at ~4.5 GiB. The two commands below surface the
+runner's scoped-target mode for even faster local iteration.
 
 ### Lint explicit targets
 
@@ -141,12 +143,18 @@ runner. The wrapper always decides the targets itself, so an exported
 
 ### Heap requirement and the OOM exit code
 
-The full-tree run needs the **12 GB heap** that `npm run lint` sets via
-`cross-env NODE_OPTIONS=--max-old-space-size=12288`. A bare
-`npx eslint .` (without that heap) dies with a V8
-`JavaScript heap out of memory` fatal error and exits **134** — this is an
-out-of-memory crash, **not** a lint failure. Always use `npm run lint`
-(full) or the scoped commands above rather than invoking ESLint directly.
+A full run is partitioned: `scripts/run-lint.ts` spawns one ESLint process
+per `packages/<pkg>` directory plus one for the rest of the tree, and gives
+every process a **6144 MB heap** (`DEFAULT_HEAP_MB` in the runner, sized to
+the largest single group, `packages/cli` at ~4.5 GiB peak, not to the whole
+tree). The retired monolithic form, a single `eslint .` asking for
+`--max-old-space-size=12288`, peaked well above that heap and exhausted it
+on 16 GB machines (#3387); `lint` and `lint:ci` both delegate to the
+partitioned runner now. A bare `npx eslint .` still lints the whole
+monorepo in one process, dies with a V8 `JavaScript heap out of memory`
+fatal error, and exits **134** — this is an out-of-memory crash, **not** a
+lint failure. Always use `npm run lint` (full), `npm run lint:ci`, or the
+scoped commands above rather than invoking ESLint directly.
 
 ### Signal-termination diagnostic
 
@@ -155,7 +163,8 @@ killer), `scripts/run-lint.ts` prints an explicit stderr diagnostic naming the
 signal and stating that this is an interruption/kill rather than a lint
 failure, then exits with `128 + signum` (e.g. `137` for `SIGKILL`,
 `143` for `SIGTERM`). For `SIGKILL`, the diagnostic notes that an
-out-of-memory kill is a likely cause given the full-tree run's memory profile.
+out-of-memory kill is a likely cause: each group already runs with the
+runner's 6144 MB heap, so a kill means the machine could not supply it.
 An ordinary lint failure (non-zero `exitCode`) propagates that exit code with
 no extra message, since ESLint's own report already went to the inherited
 stdio.

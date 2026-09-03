@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -7741,6 +7741,76 @@ describe('scanRepositoryLintEscapeHatches (#2227)', () => {
     expect(violations[0].message).toContain('--max-warnings 0');
   });
 
+  it('accepts lint:ci delegating to the partitioned runner with --max-warnings 0', () => {
+    const tmpDir = mkdtempSync(
+      join(tmpdir(), 'eslint-guard-2227-package-runner-ok-'),
+    );
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify(
+        {
+          scripts: {
+            'lint:ci': 'bun scripts/run-lint.ts --max-warnings 0',
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    expect(scanRepositoryLintEscapeHatches(tmpDir, '2227')).toEqual([]);
+  });
+
+  it('reports lint:ci delegating to the runner without --max-warnings 0', () => {
+    const tmpDir = mkdtempSync(
+      join(tmpdir(), 'eslint-guard-2227-package-runner-missing-'),
+    );
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify(
+        {
+          scripts: {
+            'lint:ci': 'bun scripts/run-lint.ts',
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const violations = scanRepositoryLintEscapeHatches(tmpDir, '2227');
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain('--max-warnings 0');
+  });
+
+  it('reports an indirect lint:ci whose runner flags the guard cannot see', () => {
+    const tmpDir = mkdtempSync(
+      join(tmpdir(), 'eslint-guard-2227-package-runner-indirect-'),
+    );
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify(
+        {
+          scripts: {
+            'lint:ci': 'npm run lint:runner',
+            'lint:runner': 'bun scripts/run-lint.ts --max-warnings 0',
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const violations = scanRepositoryLintEscapeHatches(tmpDir, '2227');
+
+    // Delegation must spell the flags at the lint:ci site itself: the runner
+    // forwards whatever it is given, so only the visible invocation proves
+    // every ESLint child runs strict.
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain('--max-warnings 0');
+  });
+
   it('ignores commented config text and reports multiline disabled config entries', () => {
     const tmpDir = mkdtempSync(
       join(tmpdir(), 'eslint-guard-2227-config-comments-'),
@@ -8484,5 +8554,61 @@ describe('packages/a2a-server directive cleanup (#2123)', () => {
       a2aEntries,
       'Legacy a2a-server entries: ' + a2aEntries.join(', '),
     ).toEqual([]);
+  });
+});
+
+describe('extractScopeArray default config resolution (#3387)', () => {
+  // extractScopeArray is exported and called without configSource by the
+  // directive-cleanup assertions above. Its default read must resolve
+  // eslint.config.js from the repository root (derived from the module's own
+  // location), never from process.cwd(), so the helper keeps working when a
+  // test process runs from another directory (#3387).
+
+  it('returns the repository config scopes when cwd has no eslint.config.js', () => {
+    const originalCwd = process.cwd();
+    const foreignDir = mkdtempSync(join(tmpdir(), 'eslint-guard-no-config-'));
+    process.chdir(foreignDir);
+    try {
+      const fromRepositoryConfig = extractScopeArray(
+        'legacyDirectiveCleanupScopes',
+        readFileSync(join(repoRoot, 'eslint.config.js'), 'utf8'),
+      );
+
+      expect(extractScopeArray('legacyDirectiveCleanupScopes')).toEqual(
+        fromRepositoryConfig,
+      );
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  it('reads the repository config even when cwd contains a decoy eslint.config.js', () => {
+    const originalCwd = process.cwd();
+    const foreignDir = mkdtempSync(
+      join(tmpdir(), 'eslint-guard-decoy-config-'),
+    );
+    writeFileSync(
+      join(foreignDir, 'eslint.config.js'),
+      [
+        'const legacyDirectiveCleanupScopes = [',
+        "  'packages/decoy/src/**/*.{ts,tsx}',",
+        '];',
+        '',
+      ].join(String.fromCharCode(10)),
+    );
+    process.chdir(foreignDir);
+    try {
+      const entries = extractScopeArray('legacyDirectiveCleanupScopes');
+
+      expect(entries).not.toContain('packages/decoy/src/**/*.{ts,tsx}');
+      expect(entries).toEqual(
+        extractScopeArray(
+          'legacyDirectiveCleanupScopes',
+          readFileSync(join(repoRoot, 'eslint.config.js'), 'utf8'),
+        ),
+      );
+    } finally {
+      process.chdir(originalCwd);
+    }
   });
 });

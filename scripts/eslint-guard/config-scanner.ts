@@ -6,6 +6,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 import { SCOPE_STRING_PATTERN, isCommentOnlyLine } from './constants.ts';
@@ -386,11 +387,15 @@ function scanEslintConfigLine(
   return checkEslintConfigLine(line, lines, i, candidateLine, issueNumber);
 }
 
-function eslintCommandSegments(command: string) {
+function commandSegments(command: string) {
   return command
     .split(/&&|\|\||;/)
     .map((segment: string) => segment.trim())
-    .filter((segment) => isEslintSegment(segment));
+    .filter((segment) => segment.length > 0);
+}
+
+function eslintCommandSegments(command: string) {
+  return commandSegments(command).filter((segment) => isEslintSegment(segment));
 }
 
 function isEslintSegment(segment: string) {
@@ -398,7 +403,18 @@ function isEslintSegment(segment: string) {
   return parts.includes('eslint');
 }
 
-function eslintSegmentHasMaxWarningsZero(segment: string) {
+/**
+ * Whether a segment invokes the canonical partitioned lint runner
+ * (`scripts/run-lint.ts`). The runner forwards its CLI arguments to every
+ * ESLint child it spawns (asserted in scripts/tests/run-lint.test.ts), so a
+ * runner segment carrying --max-warnings 0 keeps every ESLint invocation of
+ * a delegated lint:ci strict (#3387).
+ */
+function isLintRunnerSegment(segment: string) {
+  return segment.split(/\s+/).includes('scripts/run-lint.ts');
+}
+
+function segmentHasMaxWarningsZero(segment: string) {
   const parts = segment.split(/\s+/);
   for (let i = 0; i < parts.length; i++) {
     if (parts[i] === '--max-warnings' && parts[i + 1] === '0') {
@@ -413,9 +429,19 @@ function eslintSegmentHasMaxWarningsZero(segment: string) {
 
 function lintCiKeepsMaxWarningsZero(lintCi: string) {
   const eslintSegments = eslintCommandSegments(lintCi);
+  if (eslintSegments.length > 0) {
+    return eslintSegments.every((segment) =>
+      segmentHasMaxWarningsZero(segment),
+    );
+  }
+  // No literal eslint invocation: lint:ci may instead delegate to the
+  // partitioned runner (#3387), but the strictness flag must be spelled on
+  // the runner invocation itself, where this guard can verify it. Indirect
+  // delegation (e.g. `npm run lint:runner`) hides the flags and fails here.
+  const runnerSegments = commandSegments(lintCi).filter(isLintRunnerSegment);
   return (
-    eslintSegments.length > 0 &&
-    eslintSegments.every((segment) => eslintSegmentHasMaxWarningsZero(segment))
+    runnerSegments.length > 0 &&
+    runnerSegments.every((segment) => segmentHasMaxWarningsZero(segment))
   );
 }
 
@@ -488,10 +514,16 @@ export function scanRepositoryLintEscapeHatches(
  * (legacyDirectiveCleanupScopes or completedDirectiveCleanupScopes) from
  * eslint.config.js source text. Returns the raw string values.
  */
+// Derived from this module's location (scripts/eslint-guard/), not
+// process.cwd(): extractScopeArray is exported and invoked by tests from any
+// working directory, so the default read must always find the repository's
+// eslint.config.js (#3387).
+const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
+
 export function extractScopeArray(scopeName: string, configSource?: string) {
   const source =
     configSource ??
-    readFileSync(join(process.cwd(), 'eslint.config.js'), 'utf8');
+    readFileSync(join(repositoryRoot, 'eslint.config.js'), 'utf8');
   const startMatch = new RegExp('const\\s+' + scopeName + '\\s*=\\s*\\[').exec(
     source,
   );
