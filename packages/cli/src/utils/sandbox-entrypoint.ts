@@ -37,6 +37,24 @@ function buildPathSuffix(
   return suffix;
 }
 
+function buildSourceDependencyPreparation(workdir: string): string | undefined {
+  if (!isSourceDevelopmentWorkdir(workdir)) return undefined;
+  return [
+    'if [ ! -f package.json ] || [ ! -f bun.lock ]; then',
+    '  echo "LLxprt source development requires package.json and bun.lock in the repository root" >&2',
+    '  exit 1',
+    'fi',
+    'if ! command -v bun >/dev/null 2>&1; then',
+    '  echo "LLxprt source development requires Bun in the sandbox image" >&2',
+    '  exit 1',
+    'fi',
+    'if ! bun install --no-save; then',
+    '  echo "Failed to prepare isolated Linux dependencies for LLxprt source development" >&2',
+    '  exit 1',
+    'fi',
+  ].join(NL);
+}
+
 function resolveCliCommand(workdir: string): string {
   const isDebugMode = isSandboxDebugModeEnabled(process.env.DEBUG);
   const debugPort = resolveDebugPort();
@@ -222,6 +240,10 @@ export function entrypoint(
 
   const quotedCliArgs = cliArgs.slice(2).map((arg) => quote([arg]));
   const cliCmd = resolveCliCommand(workdir);
+  const sourceDependencyPreparation = buildSourceDependencyPreparation(workdir);
+  if (sourceDependencyPreparation !== undefined) {
+    shellCmds.push(sourceDependencyPreparation);
+  }
 
   // STEP 3: re-open fd 3 with the scrubbed capability (only when present) and
   // exec the final CLI.

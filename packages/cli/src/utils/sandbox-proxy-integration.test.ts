@@ -11,11 +11,13 @@
  * @plan:PLAN-20250214-CREDPROXY.P34
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, vi } from 'bun:test';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { testRegex } from '../test-utils/regex.js';
+import { createCredentialSocketRuntime } from './sandbox-credential-runtime.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -163,8 +165,26 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
       );
     });
 
-    it('passes sessionTmpdir to createAndStartProxy', () => {
-      expect(sandboxSource).toContain('socketPath: sessionTmpdir');
+    it('uses a separate short private credential runtime for Darwin Podman sessions', () => {
+      const sessionTmpdir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'proxy-integration-session-'),
+      );
+      const platformSpy = vi.spyOn(os, 'platform').mockReturnValue('darwin');
+      const runtime = createCredentialSocketRuntime(
+        { command: 'podman', image: 'test' },
+        sessionTmpdir,
+      );
+
+      try {
+        expect(runtime.path).not.toBe(sessionTmpdir);
+        expect(runtime.path.startsWith('/tmp/lx-')).toBe(true);
+        expect(fs.statSync(runtime.path).mode & 0o777).toBe(0o700);
+      } finally {
+        runtime.cleanup();
+        platformSpy.mockRestore();
+        fs.rmSync(sessionTmpdir, { recursive: true, force: true });
+      }
+      expect(fs.existsSync(runtime.path)).toBe(false);
     });
   });
 

@@ -51,6 +51,10 @@ import {
 import { Storage } from '@vybestack/llxprt-code-storage';
 import type { DependencyVolumeLifecycle } from './sandbox-node-modules.js';
 import type { SandboxLaunchLifecycle } from './sandbox-lifecycle.js';
+import {
+  cleanupCredentialSocketRuntime,
+  createCredentialSocketRuntime,
+} from './sandbox-credential-runtime.js';
 
 export { containerMountSources };
 
@@ -650,7 +654,7 @@ function assertSupportedCredentialNetwork(config: SandboxConfig): void {
 
 async function startCredentialProxyForSandbox(
   config: SandboxConfig,
-  sessionTmpdir: string,
+  socketRuntimePath: string,
   sessionTmpdirCleanup: () => void,
 ): Promise<string> {
   try {
@@ -659,7 +663,7 @@ async function startCredentialProxyForSandbox(
     throwCredentialProxySetupError(error, sessionTmpdirCleanup);
   }
   try {
-    await createAndStartProxy({ socketPath: sessionTmpdir });
+    await createAndStartProxy({ socketPath: socketRuntimePath });
   } catch (error) {
     throwCredentialProxySetupError(
       new FatalSandboxError(
@@ -685,15 +689,15 @@ export async function setupCredentialProxy(
   credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
   credentialProxyBridgeCleanup: (() => void) | undefined;
 }> {
-  const sessionTmpdirCleanup = (): void => {
-    fs.rmSync(sessionTmpdir, { recursive: true, force: true });
-  };
+  const socketRuntime = createCredentialSocketRuntime(config, sessionTmpdir);
+  const sessionTmpdirCleanup = (): void =>
+    cleanupCredentialSocketRuntime(socketRuntime, sessionTmpdir);
   // @plan:PLAN-20250214-CREDPROXY.P34 R25.1: Start credential proxy BEFORE spawning container
   let socketPath: string;
   try {
     socketPath = await startCredentialProxyForSandbox(
       config,
-      sessionTmpdir,
+      socketRuntime.path,
       sessionTmpdirCleanup,
     );
   } catch (error) {

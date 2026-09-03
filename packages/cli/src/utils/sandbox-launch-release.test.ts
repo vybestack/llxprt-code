@@ -214,7 +214,9 @@ describe('#3469 launch resource release', () => {
         return completedEngineProcess('');
       }
       if (command === 'ssh') {
-        const child = __actual.spawn('sleep', ['120'], { stdio: 'ignore' });
+        const child = __actual.spawn('sleep', ['120'], {
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
         trackedChildren.push(child);
         onTunnel?.(child);
         return child;

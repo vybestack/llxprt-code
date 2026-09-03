@@ -31,6 +31,7 @@ import { useFakeEngine } from '../../test-utils/fake-dependency-engine-harness.j
 
 /** The checked-out CLI source entrypoint a real llxprt-code checkout has. */
 const SOURCE_ENTRY = path.join('packages', 'cli', 'index.ts');
+const LOCKFILE_FIXTURE = '{}\n';
 
 function makeWorkspace(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -52,6 +53,11 @@ function seedSourceCheckout(workdir: string): void {
     path.join(workdir, SOURCE_ENTRY),
     '// checked-out CLI source entrypoint\n',
   );
+  fs.writeFileSync(
+    path.join(workdir, 'package.json'),
+    JSON.stringify({ name: 'llxprt-source-fixture', private: true }) + '\n',
+  );
+  fs.writeFileSync(path.join(workdir, 'bun.lock'), LOCKFILE_FIXTURE);
 }
 
 /** Saves/restores NODE_ENV around one test-controlled assignment. */
@@ -89,6 +95,11 @@ function installRecordingShims(binDir: string, recordPath: string): void {
       shimPath,
       [
         '#!/usr/bin/env bash',
+        'if [ "$(basename "$0")" = "bun" ] && [ "${1-}" = "install" ]; then',
+        '  printf \'%s\\n\' "$@" > ' + JSON.stringify(`${recordPath}.install`),
+        '  case " $* " in *" --no-save "*) ;; *) printf \'mutated by install\\n\' > bun.lock ;; esac',
+        '  exit "${ISSUE3534_BUN_INSTALL_EXIT:-0}"',
+        'fi',
         'printf \'%s\\n\' "$(basename "$0")" "$@" >> ' +
           JSON.stringify(recordPath),
       ].join('\n'),
@@ -173,7 +184,73 @@ describe('#3455 entrypoint command selection', () => {
           command: 'bun',
           args: ['./packages/cli/index.ts'],
         });
+        expect(fs.readFileSync(`${recordPath}.install`, 'utf8')).toBe(
+          'install\n--no-save\n',
+        );
+        expect(fs.readFileSync(path.join(repo, 'bun.lock'), 'utf8')).toBe(
+          LOCKFILE_FIXTURE,
+        );
       } finally {
+        restore();
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'fails before dependency preparation when the committed Bun lockfile is missing',
+    () => {
+      seedSourceCheckout(repo);
+      fs.rmSync(path.join(repo, 'bun.lock'));
+      const restore = setNodeEnv('development');
+      try {
+        const cmd = entrypoint(repo, ['llxprt', 'chat']);
+        const result = spawnSync(cmd[0], cmd.slice(1), {
+          encoding: 'utf8',
+          cwd: repo,
+          env: {
+            ...process.env,
+            BASH_ENV: '',
+            PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ''}`,
+          },
+        });
+
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain(
+          'requires package.json and bun.lock in the repository root',
+        );
+        expect(fs.existsSync(`${recordPath}.install`)).toBe(false);
+        expect(readShimInvocation(recordPath)).toBeUndefined();
+      } finally {
+        restore();
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'does not execute checked-out source when isolated dependency preparation fails',
+    () => {
+      seedSourceCheckout(repo);
+      const restore = setNodeEnv('development');
+      process.env.ISSUE3534_BUN_INSTALL_EXIT = '17';
+      try {
+        const cmd = entrypoint(repo, ['llxprt', 'chat']);
+        const result = spawnSync(cmd[0], cmd.slice(1), {
+          encoding: 'utf8',
+          cwd: repo,
+          env: {
+            ...process.env,
+            BASH_ENV: '',
+            PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ''}`,
+          },
+        });
+
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain(
+          'Failed to prepare isolated Linux dependencies for LLxprt source development',
+        );
+        expect(readShimInvocation(recordPath)).toBeUndefined();
+      } finally {
+        delete process.env.ISSUE3534_BUN_INSTALL_EXIT;
         restore();
       }
     },
@@ -289,14 +366,43 @@ describe('#3455 shared predicate drives private dependency isolation', () => {
     }
   });
 
-  it('source checkout with NODE_ENV=development keeps the shared workspace bind', () => {
+  it('source checkout with NODE_ENV=development overlays host dependencies with private engine storage', () => {
     seedSourceCheckout(workdir);
-    fs.mkdirSync(path.join(workdir, 'node_modules'), { recursive: true });
+    fs.mkdirSync(path.join(workdir, 'node_modules', '.bin'), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(workdir, 'node_modules', 'host-marker.txt'),
+      'macOS host dependency\n',
+    );
+    fs.symlinkSync(
+      '../host-marker.txt',
+      path.join(workdir, 'node_modules', '.bin', 'host-tool'),
+    );
+    const hostMarker = fs.readFileSync(
+      path.join(workdir, 'node_modules', 'host-marker.txt'),
+      'utf8',
+    );
+    const hostLink = fs.readlinkSync(
+      path.join(workdir, 'node_modules', '.bin', 'host-tool'),
+    );
+
     const planned = planWithEngine(engine.config, 'development');
     try {
-      expect(planned.args).toStrictEqual(['--volume', `${workdir}:${workdir}`]);
-      expect(engine.snapshot().invocations).toStrictEqual([]);
-      expect(engine.volumeNames()).toStrictEqual([]);
+      expect(mountValues(planned.args)).toHaveLength(1);
+      expect(mountValues(planned.args)[0]).toMatch(/^type=volume,/);
+      expect(engine.volumeNames()).toHaveLength(1);
+      expect(
+        fs.readFileSync(
+          path.join(workdir, 'node_modules', 'host-marker.txt'),
+          'utf8',
+        ),
+      ).toBe(hostMarker);
+      expect(
+        fs.readlinkSync(
+          path.join(workdir, 'node_modules', '.bin', 'host-tool'),
+        ),
+      ).toBe(hostLink);
     } finally {
       planned.release();
     }

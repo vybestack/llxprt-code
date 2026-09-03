@@ -12,6 +12,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { testRegex } from '../test-utils/regex.js';
+import {
+  createMockTunnelProcess,
+  type MockTunnelProcess,
+} from './sandbox-ssh.test-helper.js';
 
 const realNodeChildProcessModule = { ...(await import('node:child_process')) };
 
@@ -286,16 +290,8 @@ function mockValidPodmanConnection() {
   });
 }
 
-function mockTunnelProcess(exitCode: number | null = null) {
-  const fakeProcess = {
-    pid: 99999,
-    exitCode,
-    on: vi.fn().mockReturnThis(),
-    removeListener: vi.fn().mockReturnThis(),
-    kill: vi.fn(),
-    stdout: { on: vi.fn() },
-    stderr: { on: vi.fn() },
-  };
+function mockTunnelProcess(exitCode: number | null = null): MockTunnelProcess {
+  const fakeProcess = createMockTunnelProcess(exitCode);
   (
     child_process.spawn as unknown as Mock<typeof child_process.spawn>
   ).mockReturnValue(fakeProcess as unknown as child_process.ChildProcess);
