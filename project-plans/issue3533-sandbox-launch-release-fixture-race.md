@@ -349,107 +349,156 @@ mechanism was touched.
 
 Executed 2026-09-03 on the same branch; all logs under
 `tmp/issue3533/coderabbit-remediation/`. The finding targets the shared
-teardown in `restoreFixture` (introduced by this PR's head commit
-`148ead3b5`): `await terminateTrackedChildren()` discarded the returned
-group ids, so teardown never called `expectProcessGroupsGone()`, and the
-8877 wait ran only when `trackedServers` was non-empty even though
-`routeSpawns()` records sidecars only in `trackedChildren` (the proxied
-scenarios' own `finally` removes their servers before `afterEach`, and the
-quoted-release-path test records a sidecar with no server at all).
+teardown in `restoreFixture` as it stood on head `148ead3b5`.
 
-**Classification: In-scope-Fix.** #3533's accepted behavior requires that no
-sidecar remains after failure and that sidecar process groups are reaped
-deterministically; the `afterEach` is the release path every test takes
-(including failing ones), and on head it terminated sidecar groups without
-verifying them and skipped the fixed-port wait on sidecar-only paths. One
-tempering fact verified against source: the fake engine parses
-`-p 8877:8877` but never binds a socket (`fake-dependency-engine.ts`
-`cmdRun`), so the literal "descendant owns 8877" leak cannot occur under
-the current fake engine; the fix is still the smallest completion of this
-file's own existing mechanisms (reuse `expectProcessGroupsGone` and
-`awaitPortRebindable`), not a new design. Not Blocker (the group SIGKILL
-itself was already comprehensive), not #3538 (bind-failure listener cleanup
-is untouched).
+### Claims checked against the source
 
-Fix: `restoreFixture` now retains the terminated group ids, awaits
-`expectProcessGroupsGone(terminatedGroups)` when non-empty, and drives
-`awaitPortRebindable(8877)` when terminated groups or tracked servers
-exist. Failure propagation is unchanged: a termination error (the
-injected-EPERM test) still aborts the try block, restores the fixture in
-the `finally`, and rejects.
+Each claim was read against `148ead3b5` before deciding, not accepted on
+the reviewer's word:
 
-The test file grew past the repo's 800 effective-line `max-lines` limit
-(734 on main, 837 after the fix). `eslint.config.js` gains one per-file
-override raising the limit to 900 for this file, modeled on the #3240
-`app.test.ts` precedent: the file is one E2E launch suite whose shared
-fixture must stay together, and the alternative would be splitting the
-release machinery across files for line-count compliance. That override
-is the only quality-tool change in this remediation.
+1. "`terminateTrackedChildren()` waits only for the direct child exit" —
+   **accurate.** It sends `killProcessGroup(child.pid)` (a `SIGKILL` to
+   `-pgid`) and then awaits `whenExited`, which resolves on the direct
+   child's `exit`/`error` event. Signal delivery to the rest of the group
+   is asynchronous with respect to that event, so the child's exit does
+   not establish that the group is empty.
+2. "Line 548 discards the returned group IDs, so teardown never calls
+   `expectProcessGroupsGone()`" — **accurate.** `restoreFixture` called
+   `await terminateTrackedChildren();` and dropped the return value. The
+   ESRCH probe existed but ran only inside two individual tests, never on
+   the `afterEach` path that every test (including a failing one) takes.
+3. "The port probe runs only when `trackedServers` is non-empty, but
+   `routeSpawns()` records sidecars only in `trackedChildren`" —
+   **structurally accurate**, and worse than it reads: the proxied
+   scenarios' own `finally` splices their 8877 listener out of
+   `trackedServers` before `afterEach` runs, and the quoted-release-path
+   test registers a sidecar with no server at all. So on exactly the paths
+   that used 8877, `servers.length` was 0 and the port wait was skipped.
+   The stated *consequence* is the one part that does not hold today: the
+   fake engine (`packages/cli/test-utils/fake-dependency-engine.ts`)
+   imports only `spawnSync`, `fs`, `path`, `url` and `crypto`, parses
+   `-p/--publish` as a flag, and never opens a socket, so no sidecar
+   descendant can literally own 8877 under the current harness.
+
+### Classification: In-scope-Fix
+
+#3533's accepted behavior includes deterministic reaping of sidecar
+process groups, probed until `kill(-pgid, 0)` fails with `ESRCH`. On head
+that guarantee was only asserted inside two tests while the shared release
+path terminated groups without ever verifying them, and skipped its own
+fixed-port hygiene on the sidecar-only paths. Completing the `afterEach`
+with the file's existing helpers is that accepted behavior, so the finding
+is in scope.
+
+It is not a Blocker: the group `SIGKILL` was already comprehensive and the
+fake engine binds no socket, so no failure is reachable on CI today. It is
+not a Reject: claims 1-3 are literally true of the source. It is not a
+Defer: the fix reuses helpers that already exist in this file and stays
+inside the accepted test-fixture-only scope. Deferred #3538
+(readiness-listener bind-failure cleanup) remains unimplemented, and no
+production code, workflow, dependency, quality-tool config, public API,
+fake engine or fixed-port design was touched.
+
+### Fix
+
+`restoreFixture` retains the ids returned by `terminateTrackedChildren()`,
+drives `awaitPortRebindable(8877)` when terminated groups **or** tracked
+servers exist, and awaits `expectProcessGroupsGone(terminatedGroups)` when
+any group was terminated. Failure propagation is unchanged: the
+injected-EPERM path still aborts the `try`, restores env/mocks/cwd/fixture
+dirs in the `finally`, and rejects. The other two prior OCR fixes
+(`awaitPortRebindable` throwing on deadline expiry, the POSIX-escaped
+readiness-gate release path) are untouched.
+
+The regression needs one new helper, `holdFixedPortUntracked(holdMs)`,
+which really binds 8877 outside `trackedServers` and releases it after
+`holdMs`. It stands in for any owner of the fixed port that teardown never
+registered as a tracked server, which is precisely the gap claim 3
+describes.
 
 ### TDD evidence
 
-- RED (`red-run-1/2/3.log`, `red-runs.exit`, final test shape in
-  `red-final-shape.log`): the new test
-  `waits out terminated sidecar groups and the fixed port before teardown
-  completes` records a real detached sidecar-shaped group
-  (`sh -c 'sleep 120'`, group leader plus live descendant) and a real
-  holder child listening on 8877 that self-releases ~1.2 s after it
-  reports listening, then runs the exact teardown path (`restoreFixture`)
-  and asserts, through real state, that the group is ESRCH-gone and the
-  port is rebindable within a short probe deadline. On head the group
-  assertion passed (the SIGKILL works) and the port assertion failed
-  3/3 runs with the exact symptom (`port 8877 did not become rebindable
-  within 250ms` in the first shape; the equivalent rejected-promise form
-  in the final shape): teardown had completed while the port was still
-  owned. All ten pre-existing tests stayed green (10 pass / 1 fail each
-  run).
-- GREEN (`green-run-1/2/3.log`, `green-runs.exit`, `green-final-shape.log`):
-  11 pass / 0 fail on every run after the fix; the new test takes ~1.7 s
-  because `restoreFixture` now demonstrably blocks until the holder
-  released 8877, then proves the group gone.
-- GREEN repeats on the final shape
-  (`green-refactored-4.log`+`.exit`,
-  `green-refactored-4-repeat-1/2/3.log`+`.exit`, all exit 0): the final
-  shape kills the sidecar group while the real holder owns 8877, awaits
-  the group's death through `whenSidecarGroupFullyKilled` (ESRCH, not the
-  direct child's exit event), then `restoreFixture()` proves the port
-  free and the group gone before returning; the test re-proves both with
-  a 250 ms rebind deadline. 11 pass / 0 fail on every run.
+- RED (`red-run-1/2/3.log`, `red-runs.exit`, all exit 1): with only the
+  `restoreFixture` hunk reverted to its `148ead3b5` shape, the new test
+  `waits out the sidecar group and the fixed port before teardown ends`
+  fails 3/3 with the exact symptom `port 8877 did not become rebindable
+  within 250ms`, thrown from the assertion immediately after
+  `await restoreFixture()`. Teardown had returned while the port was still
+  really owned. All ten pre-existing tests stayed green (10 pass / 1 fail).
+- GREEN (`green-run-1/2/3/4/5.log`, `green-runs.exit`, all exit 0): 11 pass
+  / 0 fail on five consecutive runs. The new test takes ~1.84 s against a
+  1.5 s port hold, which is the observable proof that `restoreFixture`
+  really blocked on the port instead of returning early.
+- The regression asserts real state only: a real detached sidecar process
+  group (`sh -c 'sleep 120'`, recorded exactly as `routeSpawns` records a
+  sidecar), a real `bind()` on 8877, an `ESRCH` probe via
+  `processGroupAlive`, and a real rebind attempt. There are no mock-call
+  assertions.
+- Honest limit of the RED: the deterministic failure comes from the port
+  gate. The group gate cannot be driven to a deterministic RED, because
+  `SIGKILL` cannot be delayed or caught, so any "group still alive after
+  the direct child exited" window is a race that would make the test flaky.
+  The group half is therefore asserted as a real post-condition
+  (`expect(processGroupAlive(sidecarPid)).toBe(false)` right after teardown
+  returns) rather than faked into failing with timer or process mocks.
 
 ### Leak and audit evidence
 
-- Process-group leak probes (`group-probe-run-1/2/3.log`,
-  `group-probes-summary.log`): three captured probe runs, each exit 0 with
-  `surviving_groups=0` (every captured detached sidecar group reached
-  ESRCH). Three more on the final shape
-  (`group-probe-refactored-1/2/3.log`, exit 0): `captured_detached_groups=6`,
-  `surviving_groups=0` every probe.
-- Post-run `sleep 120` scans (`post-runs-sleep120.txt`,
-  `post-probes-sleep120.txt`, `post-probes-sleep120-recheck.txt`,
-  `post-suite-sleep120.txt`): only the pre-existing external lane-watcher
-  chain (ppid 19869) or the other lanes' own work; port 8877 free after
-  every run.
-- Test-audit (`test-audit-run.log`, `test-audit-final/`,
-  `test-audit-refactored-run.log`, `test-audit-refactored/`): the first
-  scan flagged one `NO_ASSERT` on the new test (assertions only via
-  throwing helpers); after converting the port probe to the same
-  `expect(...).resolves` shape the existing fail-fast port test uses, every
-  scan reports 2028 findings, zero for the touched file, and a
-  findings.tsv byte-identical to the pre-change baseline
-  (`tmp/issue3533/pr-ocr-remediation/test-audit-final/findings.tsv`).
+- Leak probes (`leak-probe.sh`, `leak-probe-1/2/3.out`, `leak-probes.exit`,
+  all exit 0): `leaked_groups_from_run=0` and `port_8877_free=yes` on 3/3
+  runs. Attribution is by process group, because this box runs several
+  llxprt checkouts plus an external `watch-lanes.sh` watcher (pid 19869)
+  that loops on `sleep 120` in its own long-lived group; a first probe
+  pass naively diffed pids and misattributed that watcher's `sleep` as a
+  leak. The refined probe classifies survivors whose pgid pre-dates the
+  run as `pre_existing_group` and leaves them alone. No unrelated process
+  was signalled at any point.
+- Test-audit (`test-audit-run.log`, `test-audit/`): 2028 findings, zero for
+  the touched file, and `findings.tsv` byte-identical to the PR baseline
+  `tmp/issue3533/pr-ocr-remediation/test-audit-final/findings.tsv`
+  (`test-audit-vs-baseline.diff` empty).
 
-### Full verification cycle (final tree, post-format)
+### max-lines
 
-- Focused eslint on the touched file exit 0 under the new override
-  (`02-eslint-touched.log`); full `npm run lint` exit 0
-  (`03-npm-lint.log`, `.exit`).
-- `npm run typecheck` exit 0 (`04-npm-typecheck.log`, `.exit`).
-- `npm run format` exit 0 (`05-npm-format.log`, `.exit`); prettier made
-  no edits to the touched files.
-- `LLXPRT_CLI_TEST_CONCURRENCY=1 npm run test` exit 0 (`01-npm-test.log`,
-  `.exit`): 738/738 CLI test files, 9512 passed / 0 failed / 5 skipped /
-  13 todo, every other workspace green; the junit entry for the touched
-  file carries no failure (`06-junit-touched-file.txt`).
-- `npm run build` exit 0 (`06-npm-build.log`, `.exit`).
-- stepfun-37 smoke exit 0 (`07-stepfun-smoke.log`, `.exit`).
-- `git diff --check` clean (`08-git-diff-check.log`, exit 0).
+The file lands at 768 effective lines against the repo's 800-line
+`max-lines` budget (734 before this remediation, +34), so it needs no
+`eslint.config.js` override.
+
+The first draft of this remediation, pushed as head `4580bf93d`, added
+~103 effective lines and carried a per-file `eslint.config.js` block
+raising `max-lines` to 900 for this file. **That relaxation is reverted,
+not kept**: weakening a lint, complexity or source-size rule is out of
+scope for a test-fixture-only change, and `eslint.config.js` is
+quality tooling this issue has no licence to touch. The revert is the
+only `eslint.config.js` change in the tree, and it restores the file
+byte-for-byte to its pre-`4580bf93d` state.
+
+The line budget is met by shrinking the new fixture code rather than by
+dropping coverage: the spawned Node port-holder child plus its marker-file
+handshake became a direct in-process `net.createServer()` hold
+(`holdFixedPortUntracked`), and the bespoke `whenSidecarGroupFullyKilled`
+poller was deleted because `restoreFixture` itself now performs that wait
+— asserting it from the test was duplicating the behavior under test. The
+suite still has the same 11 `it()` blocks before and after; only the new
+test's title changed.
+
+### Verification cycle (final tree)
+
+Logs under `tmp/issue3533/coderabbit-remediation/final/`.
+
+- Focused file, twice (`focused-1.log`/`.exit`, `focused-2.log`/`.exit`,
+  both exit 0): 11 pass / 0 fail / 73 `expect()` calls each. The new test
+  runs 1.86 s and 1.94 s against a 1.5 s port hold, which is the
+  observable proof that `restoreFixture` really blocked on the port.
+- `npm run lint` exit 0 (`lint.log`, `.exit`) with the `eslint.config.js`
+  override gone, so the file clears the standard 800-line `max-lines`
+  budget on its own.
+- `npm run typecheck` exit 0 (`typecheck.log`, `.exit`).
+- `npm run build` exit 0 (`build.log`, `.exit`).
+- `npm run format` exit 0 (`format.log`, `.exit`); prettier left all three
+  touched files unchanged, so no check needed re-running after it.
+- stepfun-37 smoke exit 0 (`stepfun-smoke.log`, `.exit`).
+- `git diff --check` exit 0 (`git-diff-check.log`, `.exit`).
+
+The full `npm run test` suite is re-run outside this tree; the run
+recorded in `01-npm-test.log` predates the `max-lines` revert.

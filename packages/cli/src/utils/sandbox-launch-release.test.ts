@@ -307,97 +307,21 @@ describe('#3469 launch resource release', () => {
   }
 
   /**
-   * #3533 CodeRabbit remediation: resolves once the fixture's sidecar shape
-   * is fully dead after a SIGKILL to its whole process group. The direct
-   * child exits while its `sleep 120` descendant may still hold the group
-   * alive, so the boundary must await the group's death, not the child's
-   * exit event (exactly the gap this remediation closes).
+   * #3533 CodeRabbit remediation: really binds the fixed port outside
+   * `trackedServers`, standing in for any owner of 8877 that teardown never
+   * registered as a tracked server, and releases it after `holdMs`.
    */
-  function whenSidecarGroupFullyKilled(child: ChildProcess): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      const pid = child.pid;
-      if (pid === undefined) {
-        resolve();
-        return;
-      }
-      const deadline = Date.now() + 5_000;
-      const poll = (): void => {
-        if (!processGroupAlive(pid)) {
-          resolve();
-          return;
-        }
-        if (Date.now() > deadline) {
-          reject(new Error(`sidecar group ${pid} still alive after SIGKILL`));
-          return;
-        }
-        setTimeout(poll, 50);
-      };
-      child.once('exit', poll);
-      child.once('error', (err) => reject(err));
+  async function holdFixedPortUntracked(holdMs: number): Promise<() => void> {
+    const holder = net.createServer();
+    await new Promise<void>((resolve, reject) => {
+      holder.once('listening', () => resolve());
+      holder.once('error', reject);
+      holder.listen(8877, '127.0.0.1');
     });
-  }
-
-  /**
-   * #3533 CodeRabbit remediation: a real child that owns 8877 and releases
-   * it ~1.2 s after it reports listening, standing in for any lingering
-   * fixed-port owner at sidecar teardown time (for example the kernel
-   * releasing a killed group member's socket after the direct child's exit
-   * was already observed).
-   */
-  async function spawnFixedPortHolder(): Promise<{
-    release: () => Promise<void>;
-  }> {
-    const holderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue3533-cr-'));
-    const holderMarker = path.join(holderDir, 'listening');
-    const holderCode = [
-      'const fs = require("node:fs"), net = require("node:net");',
-      'const marker = process.argv[2];',
-      'const lifetimeMs = Number(process.argv[3]);',
-      'if (marker === undefined || !Number.isFinite(lifetimeMs)) {',
-      '  process.exit(2);',
-      '}',
-      'const server = net.createServer(() => {});',
-      'server.on("error", (err) => {',
-      '  fs.writeFileSync(marker, "error: " + err.message);',
-      '  process.exit(3);',
-      '});',
-      'server.listen(8877, "127.0.0.1", () => {',
-      '  fs.writeFileSync(marker, "listening");',
-      '  setTimeout(() => process.exit(0), lifetimeMs);',
-      '});',
-    ].join('\n');
-    const holder = __actual.spawn(
-      process.execPath,
-      ['-e', holderCode, 'holder', holderMarker, '1200'],
-      { stdio: 'ignore' },
-    );
-    const holderExited = new Promise<void>((resolve) =>
-      holder.once('exit', resolve),
-    );
-    const listeningDeadline = Date.now() + 5_000;
-    while (!fs.existsSync(holderMarker)) {
-      if (holder.exitCode !== null || holder.signalCode !== null) {
-        throw new Error(
-          `port holder exited before listening (exitCode=${holder.exitCode}, signal=${holder.signalCode})`,
-        );
-      }
-      if (Date.now() > listeningDeadline) {
-        throw new Error('port holder never reported listening');
-      }
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    if (fs.readFileSync(holderMarker, 'utf8') !== 'listening') {
-      throw new Error('port holder failed to listen');
-    }
-    return {
-      release: async () => {
-        if (holder.exitCode === null && holder.signalCode === null) {
-          holder.kill('SIGKILL');
-        }
-        await holderExited;
-        fs.rmSync(holderDir, { recursive: true, force: true });
-        await awaitPortRebindable(8877);
-      },
+    const timer = setTimeout(() => holder.close(), holdMs);
+    return () => {
+      clearTimeout(timer);
+      if (holder.listening) holder.close();
     };
   }
 
@@ -1057,31 +981,28 @@ describe('#3469 launch resource release', () => {
     await expectProcessGroupsGone([sleeperPid]);
   }, 20_000);
 
-  it('waits out terminated sidecar groups and the fixed port before teardown completes', async () => {
-    // A real sidecar-shaped tracked child: a detached group leader with a
-    // live shell descendant, exactly what the spawn router records.
+  it('waits out the sidecar group and the fixed port before teardown ends', async () => {
+    // A real detached sidecar group: a group leader with a live shell
+    // descendant, the shape routeSpawns records for the proxy sidecar.
     const sidecar = __actual.spawn('sh', ['-c', 'sleep 120'], {
       stdio: 'ignore',
       detached: true,
     });
     const sidecarPid = sidecar.pid;
-    if (sidecarPid === undefined) {
-      throw new Error('sidecar child never got a pid');
-    }
+    if (sidecarPid === undefined) throw new Error('sidecar got no pid');
     trackedChildren.push({ child: sidecar, groupLeader: true });
-    const holder = await spawnFixedPortHolder();
+    // 8877 is really owned by something teardown never tracked as a server,
+    // so only a sidecar-group-driven port wait can outlast it.
+    const releaseHolder = await holdFixedPortUntracked(1_500);
     try {
-      killProcessGroup(sidecarPid);
-      await whenSidecarGroupFullyKilled(sidecar);
-
-      // The exact teardown path: with a sidecar group terminated while the
-      // fixed port is still owned elsewhere, restoration must not complete
-      // until the port is really free and the group is really gone.
       await restoreFixture();
-      await expectProcessGroupsGone([sidecarPid]);
-      await expect(awaitPortRebindable(8877, 250)).resolves.toBeUndefined();
+      // Restoration returned, so the sidecar group is really ESRCH-gone and
+      // the fixed port is really rebindable right now.
+      expect(processGroupAlive(sidecarPid)).toBe(false);
+      await awaitPortRebindable(8877, 250);
     } finally {
-      await holder.release();
+      releaseHolder();
+      await awaitPortRebindable(8877, 5_000);
     }
   }, 30_000);
 });

@@ -646,22 +646,6 @@ export default tseslint.config(
     },
   },
   // ============================================================================
-  // Issue #3533: sandbox-launch-release.test.ts was already at 734 effective
-  // lines on main (957 total). The CodeRabbit teardown remediation adds one
-  // behavioral regression (real sidecar process group + real fixed-port
-  // holder driving the shared restoreFixture path) plus its two fixture
-  // helpers, pushing it to 837 effective. The file is a single E2E launch
-  // suite whose scenario machinery must stay in one file; relaxing
-  // max-lines preserves the pre-existing state rather than splitting the
-  // shared fixture apart.
-  // ============================================================================
-  {
-    files: ['packages/cli/src/utils/sandbox-launch-release.test.ts'],
-    rules: {
-      'max-lines': ['error', { max: 900, skipBlankLines: true, skipComments: true }], // eslint-policy-allow-off: #3533 raised from 800 for CodeRabbit teardown remediation
-    },
-  },
-  // ============================================================================
   // Issue #2605: Apply strict code-quality lint rules to eval TypeScript
   // ============================================================================
   // The eval suite (evals/**/*.ts) is real source executed by the nightly
