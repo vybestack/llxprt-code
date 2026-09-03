@@ -125,6 +125,55 @@ function deferredExit(): {
   };
 }
 
+/**
+ * #3533 remediation: a real child this file spawned. Sidecar children are
+ * spawned detached, so each is a process-group leader whose release must
+ * cover the entire group it created.
+ */
+interface TrackedChild {
+  readonly child: ChildProcess;
+  readonly groupLeader: boolean;
+}
+
+/**
+ * #3533 remediation: private deterministic readiness-gate barrier. The gate
+ * counts every readiness request it observes, rejects the ones that arrive
+ * before the sidecar registered, and owns the release file that a gated
+ * sidecar's engine registration waits for.
+ */
+interface ReadinessGate {
+  /** Readiness requests destroyed while the sidecar was not registered. */
+  rejections: number;
+  /** Readiness requests answered 200 after registration. */
+  acceptances: number;
+  /**
+   * Created by the gate only after the first observed rejection, so gated
+   * registration is causally ordered behind a rejected readiness request.
+   */
+  readonly releasePath: string;
+}
+
+/** narrows a Node kill error to its errno code */
+function errnoCode(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return undefined;
+  }
+  const code: unknown = error.code;
+  return typeof code === 'string' ? code : undefined;
+}
+
+/**
+ * #3533 remediation: kills every member of a sidecar process group this
+ * fixture created. The group may already be gone, which is not an error.
+ */
+function killProcessGroup(groupId: number): void {
+  try {
+    process.kill(-groupId, 'SIGKILL');
+  } catch (err) {
+    if (errnoCode(err) !== 'ESRCH') throw err;
+  }
+}
+
 /** Captures stderr written while the async `run` settles. */
 async function captureStderr(run: () => Promise<void>): Promise<string> {
   const chunks: string[] = [];
@@ -149,7 +198,7 @@ describe('#3469 launch resource release', () => {
   let fixturePath = '';
   let originalCwd = '';
   let isolatedCacheDir = '';
-  const trackedChildren: ChildProcess[] = [];
+  const trackedChildren: TrackedChild[] = [];
   const trackedServers: net.Server[] = [];
   const createdSessionTmpdirs: string[] = [];
   let tmpdirSnapshot = new Set<string>();
@@ -193,6 +242,102 @@ describe('#3469 launch resource release', () => {
   }
 
   /**
+   * #3533 remediation: terminates and reaps every real child this file
+   * spawned and returns the process-group ids of the sidecar groups this
+   * run created. Detached sidecar children lead a process group that also
+   * holds the engine's real shell descendants, so their release must
+   * terminate the whole group, not only the tracked direct child.
+   */
+  async function terminateTrackedChildren(): Promise<number[]> {
+    const terminatedGroups: number[] = [];
+    for (const { child, groupLeader } of trackedChildren.splice(0)) {
+      // Await exit so the direct child is collected, never left a zombie.
+      const whenExited = new Promise<void>((resolve) => {
+        if (child.exitCode !== null || child.signalCode !== null) {
+          resolve();
+          return;
+        }
+        child.once('exit', () => resolve());
+        child.once('error', () => resolve());
+      });
+      if (groupLeader && child.pid !== undefined) {
+        terminatedGroups.push(child.pid);
+        // #3533 remediation: the sidecar group also holds the fake
+        // engine's real shell descendants; killing only the tracked
+        // direct child orphans them (PPID 1 `sleep 120` leftovers).
+        killProcessGroup(child.pid);
+      } else if (child.exitCode === null && child.signalCode === null) {
+        child.kill('SIGKILL');
+      }
+      await whenExited;
+    }
+    return terminatedGroups;
+  }
+
+  /**
+   * #3533 remediation regression: a fully terminated and reaped sidecar
+   * leaves no living or zombie member in its process group; probing the
+   * group then fails with ESRCH. Only groups this run created are probed.
+   */
+  function processGroupAlive(groupId: number): boolean {
+    try {
+      process.kill(-groupId, 0);
+      return true;
+    } catch (err) {
+      if (errnoCode(err) !== 'ESRCH') throw err;
+      return false;
+    }
+  }
+
+  async function expectProcessGroupsGone(
+    groupIds: readonly number[],
+  ): Promise<void> {
+    expect(groupIds.length).toBeGreaterThan(0);
+    const deadline = Date.now() + 5_000;
+    for (const groupId of groupIds) {
+      while (processGroupAlive(groupId)) {
+        if (Date.now() > deadline) {
+          throw new Error(
+            `sidecar process group ${groupId} still has live members after termination`,
+          );
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
+  }
+
+  /**
+   * #3533 remediation: after heavy readiness-poll churn, closing the
+   * fixed-port listener can leave the port briefly unbindable; wait until a
+   * probe bind succeeds so the next scenario starts deterministically. A
+   * real holder is never hidden: when the port does not come back, the next
+   * test's listenAt still rejects with the bind error.
+   */
+  async function awaitPortRebindable(port: number): Promise<void> {
+    const deadline = Date.now() + 10_000;
+    for (;;) {
+      const probe = net.createServer();
+      const outcome = new Promise<'bound' | 'busy'>((resolve) => {
+        probe.once('listening', () => resolve('bound'));
+        probe.once('error', () => resolve('busy'));
+      });
+      probe.listen(port, '127.0.0.1');
+      if ((await outcome) === 'busy') {
+        if (Date.now() > deadline) return;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        continue;
+      }
+      // Return only once this probe's own listen socket is fully released,
+      // so the next real bind cannot race the probe's unbind.
+      await new Promise<void>((resolve) => {
+        probe.once('close', resolve);
+        probe.close();
+      });
+      return;
+    }
+  }
+
+  /**
    * Routes child_process spawns: the image probe gets a present image, `ssh`
    * invocations become real long-lived children standing in for tunnels, the
    * proxy sidecar runs against the fake engine for real, and the main
@@ -201,7 +346,7 @@ describe('#3469 launch resource release', () => {
   function routeSpawns(
     mainLaunch: 'throw' | 'attach',
     onTunnel?: (child: ChildProcess) => void,
-    sidecarDelayMs?: number,
+    sidecarGate?: ReadinessGate,
   ): void {
     const spawnMock = childProcess.spawn as unknown as Mock<
       typeof childProcess.spawn
@@ -216,7 +361,7 @@ describe('#3469 launch resource release', () => {
       }
       if (command === 'ssh') {
         const child = __actual.spawn('sleep', ['120'], { stdio: 'ignore' });
-        trackedChildren.push(child);
+        trackedChildren.push({ child, groupLeader: false });
         onTunnel?.(child);
         return child;
       }
@@ -228,24 +373,26 @@ describe('#3469 launch resource release', () => {
         args.includes('--name') &&
         args.includes('llxprt-code-sandbox-proxy')
       ) {
-        // #3533: spawning through a shell sleep delays the sidecar child's
-        // engine registration past listener readiness; `exec` hands the
-        // tracked child's pid to the engine process itself.
+        // #3533: a gated sidecar cannot reach the fake engine until the
+        // readiness gate creates the release file, so its registration is
+        // deterministically ordered behind an observed readiness request.
+        // `exec` hands the tracked child's pid to the engine process
+        // itself, keeping the child a process-group leader.
         const child =
-          sidecarDelayMs === undefined
+          sidecarGate === undefined
             ? __actual.spawn(command, args, options)
             : __actual.spawn(
                 'sh',
                 [
                   '-c',
-                  `sleep ${(sidecarDelayMs / 1000).toFixed(2)} && exec "$@"`,
+                  `until [ -e '${sidecarGate.releasePath}' ]; do sleep 0.05; done; exec "$@"`,
                   'sh',
                   command,
                   ...args,
                 ],
                 options,
               );
-        trackedChildren.push(child);
+        trackedChildren.push({ child, groupLeader: true });
         return child;
       }
       if (args[0] === 'run') {
@@ -381,14 +528,14 @@ describe('#3469 launch resource release', () => {
     proxyFake.socketPath = undefined;
   });
 
-  afterEach(() => {
-    for (const child of trackedChildren.splice(0)) {
-      if (child.exitCode === null && child.signalCode === null) {
-        child.kill('SIGKILL');
-      }
-    }
-    for (const server of trackedServers.splice(0)) {
+  afterEach(async () => {
+    await terminateTrackedChildren();
+    const servers = trackedServers.splice(0);
+    for (const server of servers) {
       server.close();
+    }
+    if (servers.length > 0) {
+      await awaitPortRebindable(8877);
     }
     process.env = environmentSnapshot;
     vi.restoreAllMocks();
@@ -478,13 +625,15 @@ describe('#3469 launch resource release', () => {
    * Runs the proxied-network launch scenario: the proxy sidecar runs for
    * real against the fake engine, the 8877 listener stands in for the
    * sidecar's HTTP readiness endpoint, and the main container launch is
-   * injected to throw. `sidecarDelayMs` delays the sidecar child so its
-   * engine registration lands after the listener binds (#3533). Returns the
-   * captured launch stderr.
+   * injected to throw. With `sidecar: 'gated'` the sidecar child's engine
+   * registration waits for the readiness gate's release file, which the
+   * gate creates only after it observed and rejected a pre-registration
+   * readiness request (#3533). Returns the captured launch stderr and the
+   * gate's observable request counts.
    */
   async function runProxiedLaunchFailure(
-    sidecarDelayMs?: number,
-  ): Promise<string> {
+    sidecar?: 'gated',
+  ): Promise<{ stderr: string; gate: ReadinessGate }> {
     process.env.LLXPRT_SANDBOX_NETWORK = 'proxied';
     process.env.LLXPRT_SANDBOX_PROXY_COMMAND = 'sleep 120';
     // macOS has no `timeout`; the readiness probe shells out to it. A shim
@@ -495,31 +644,67 @@ describe('#3469 launch resource release', () => {
       '#!/bin/sh\nshift\nexec "$@"\n',
       { mode: 0o755 },
     );
+    const gateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue3533-gate-'));
+    const gate: ReadinessGate = {
+      rejections: 0,
+      acceptances: 0,
+      releasePath: path.join(gateDir, 'released'),
+    };
     const originalPath = process.env.PATH ?? '';
-    process.env.PATH = `${shimDir}${path.delimiter}${process.env.PATH}`;
-    await listenAt(8877, (socket) => {
-      // #3533: readiness must reflect the engine record, not the listener
-      // bind. A reply before the fake engine persisted the sidecar lets the
-      // launch proceed to `network connect`, which finds no container.
-      // Destroying the connection keeps the production retry loop polling;
-      // a never-registering sidecar still runs into the readiness timeout.
-      if (!engine.containerNames().includes('llxprt-code-sandbox-proxy')) {
-        socket.destroy();
-        return;
-      }
-      socket.end('HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n');
-    });
-    routeSpawns('throw', undefined, sidecarDelayMs);
-    routeExecSync({});
+    const scenarioServers: net.Server[] = [];
     try {
-      return await captureStderr(async () => {
+      process.env.PATH = `${shimDir}${path.delimiter}${process.env.PATH}`;
+      scenarioServers.push(
+        (
+          await listenAt(8877, (socket) => {
+            // #3533: readiness must reflect the engine record, not the
+            // listener bind. A reply before the fake engine persisted the
+            // sidecar lets the launch proceed to `network connect`, which
+            // finds no container. Destroying the connection keeps the
+            // production retry loop polling; a never-registering sidecar
+            // still runs into the readiness timeout.
+            if (
+              !engine.containerNames().includes('llxprt-code-sandbox-proxy')
+            ) {
+              gate.rejections++;
+              // #3533: the first observed rejection releases the gated
+              // registration, so the request order is causal: no
+              // registration can precede an observed, rejected readiness
+              // request.
+              if (gate.rejections === 1) {
+                fs.writeFileSync(gate.releasePath, 'released\n');
+              }
+              socket.destroy();
+              return;
+            }
+            gate.acceptances++;
+            socket.end('HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n');
+          })
+        ).server,
+      );
+      routeSpawns('throw', undefined, sidecar === 'gated' ? gate : undefined);
+      routeExecSync({});
+      const stderr = await captureStderr(async () => {
         await expect(
           runContainerSandbox(engine.config, []),
         ).rejects.toThrowError('engine launch failed');
       });
+      return { stderr, gate };
     } finally {
       process.env.PATH = originalPath;
       fs.rmSync(shimDir, { recursive: true, force: true });
+      fs.rmSync(gateDir, { recursive: true, force: true });
+      // #3533 remediation: the scenario owns its fixed-port listener so
+      // repeated scenarios (and the process-group regression loop) rebind
+      // deterministically instead of racing the teardown sweep.
+      for (const server of scenarioServers) {
+        const index = trackedServers.indexOf(server);
+        if (index >= 0) trackedServers.splice(index, 1);
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+      if (scenarioServers.length > 0) {
+        await awaitPortRebindable(8877);
+      }
     }
   }
 
@@ -554,7 +739,7 @@ describe('#3469 launch resource release', () => {
   }
 
   it('stops a started proxy sidecar when the main engine spawn throws', async () => {
-    const stderr = await runProxiedLaunchFailure();
+    const { stderr } = await runProxiedLaunchFailure();
     const { sidecarRun, networkConnect, sidecarRm, volumeRm } =
       sidecarReleaseOrder();
     // The sidecar really started: its container was recorded and connected
@@ -572,13 +757,17 @@ describe('#3469 launch resource release', () => {
     assertSessionTmpdirsReleased();
   }, 60_000);
 
-  it('network-connects a proxy sidecar whose engine registration is delayed past listener readiness', async () => {
-    const stderr = await runProxiedLaunchFailure(750);
+  it('network-connects a proxy sidecar whose registration the readiness gate releases only after a rejected pre-registration request', async () => {
+    const { stderr, gate } = await runProxiedLaunchFailure('gated');
     const { sidecarRun, networkConnect, sidecarRm, volumeRm } =
       sidecarReleaseOrder();
-    // #3533: the listener was ready the whole time; only the engine record
-    // opened the readiness gate, so the launch still passed network connect
-    // before the injected main-container failure released everything.
+    // #3533: the gated child could not register until the gate observed and
+    // rejected a real pre-registration readiness request, so the request
+    // order is proven, not assumed from scheduler timing. The launch then
+    // passed network connect before the injected main-container failure
+    // released everything.
+    expect(gate.rejections).toBeGreaterThanOrEqual(1);
+    expect(gate.acceptances).toBeGreaterThanOrEqual(1);
     expect(sidecarRun).toBeGreaterThanOrEqual(0);
     expect(networkConnect).toBeGreaterThan(sidecarRun);
     expect(sidecarRm).toBeGreaterThan(networkConnect);
@@ -590,6 +779,19 @@ describe('#3469 launch resource release', () => {
     expect(leakedRunRoots()).toStrictEqual([]);
     assertSessionTmpdirsReleased();
   }, 60_000);
+
+  it('leaves no sidecar process-group descendants after repeated proxied launches', async () => {
+    // #3533 remediation: the sidecar child leads a real process group that
+    // also holds the fake engine's shell descendants; every group this run
+    // created must be fully terminated and reaped, repeatedly.
+    const groupIds: number[] = [];
+    for (let launch = 0; launch < 3; launch++) {
+      await runProxiedLaunchFailure();
+      groupIds.push(...(await terminateTrackedChildren()));
+    }
+    expect(groupIds.length).toBeGreaterThanOrEqual(3);
+    await expectProcessGroupsGone(groupIds);
+  }, 120_000);
 
   it('keeps the normal success path on the wired close handlers', async () => {
     fs.writeFileSync(path.join(fixturePath, 'agent.sock'), '');
