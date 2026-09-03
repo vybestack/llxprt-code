@@ -29,6 +29,8 @@
     "claude-sonnet-5-latest": 200000,
     "claude-fable-5": 200000,
     "claude-fable-5-latest": 200000,
+    "claude-fable-5-1": 200000,
+    "claude-fable-5-1-latest": 200000,
     "claude-3-7-opus-20250115": 300000,
     "claude-3-7-sonnet-20250115": 300000,
     "claude-3-opus-20240229": 200000,

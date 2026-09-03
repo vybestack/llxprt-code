@@ -156,6 +156,15 @@ describe('tokenLimit', () => {
       expect(tokenLimit('claude-fable-5-20260701')).toBe(200_000);
     });
 
+    // Claude Fable 5.1 keeps the same subscription-tier 200K default.
+    it('should return 200K (auth default) limit for claude-fable-5-1 @issue:3531', () => {
+      expect(tokenLimit('claude-fable-5-1')).toBe(200_000);
+    });
+
+    it('should return 200K limit for the claude-fable-5-1-latest alias @issue:3531', () => {
+      expect(tokenLimit('claude-fable-5-1-latest')).toBe(200_000);
+    });
+
     it('honors a user-supplied context limit override (e.g. /set or profile)', () => {
       expect(tokenLimit('claude-opus-4-8', 1_000_000)).toBe(1_000_000);
     });

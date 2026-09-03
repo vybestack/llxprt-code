@@ -642,6 +642,52 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
     expect(defaults['context-limit']).toBe(1000000);
   });
 
+  it('claude-fable-5-1 matches the broad Claude rule (reasoning defaults) @issue:3531', () => {
+    const entry = getAnthropicEntry();
+    const defaults = computeMatchedDefaults(
+      'claude-fable-5-1',
+      entry.config.modelDefaults!,
+    );
+    expect(defaults['reasoning.enabled']).toBe(true);
+    expect(defaults['reasoning.adaptiveThinking']).toBe(true);
+    expect(defaults['reasoning.includeInContext']).toBe(true);
+  });
+
+  it('rules merge in order — claude-fable-5-1 gets broad + 1M-context settings @issue:3531', () => {
+    const entry = getAnthropicEntry();
+    const defaults = computeMatchedDefaults(
+      'claude-fable-5-1',
+      entry.config.modelDefaults!,
+    );
+    // From the broad "claude-(opus|sonnet|haiku|fable)" rule
+    expect(defaults['reasoning.enabled']).toBe(true);
+    expect(defaults['reasoning.adaptiveThinking']).toBe(true);
+    expect(defaults['reasoning.includeInContext']).toBe(true);
+    // From the 1M-context rule, which names fable-5-1 explicitly (merged on
+    // top)
+    expect(defaults['reasoning.effort']).toBe('high');
+    expect(defaults['context-limit']).toBe(1000000);
+    expect(defaults['maxOutputTokens']).toBe(128000);
+  });
+
+  it('claudecode rules merge in order — claude-fable-5-1 gets broad + 1M-context settings @issue:3531', () => {
+    const entry = loadProviderAliasEntries().find(
+      (candidate) =>
+        candidate.alias === 'claudecode' && candidate.source === 'builtin',
+    );
+    expect(entry).toBeDefined();
+    const defaults = computeMatchedDefaults(
+      'claude-fable-5-1',
+      entry?.config.modelDefaults ?? [],
+    );
+    expect(defaults['reasoning.enabled']).toBe(true);
+    expect(defaults['reasoning.adaptiveThinking']).toBe(true);
+    expect(defaults['reasoning.includeInContext']).toBe(true);
+    expect(defaults['reasoning.effort']).toBe('high');
+    expect(defaults['context-limit']).toBe(1000000);
+    expect(defaults['maxOutputTokens']).toBe(128000);
+  });
+
   it('anthropic applies image-resize limits to Opus and Sonnet families only', () => {
     const entry = loadProviderAliasEntries().find(
       (candidate) =>

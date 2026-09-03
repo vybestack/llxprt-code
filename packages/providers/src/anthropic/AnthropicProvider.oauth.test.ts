@@ -474,7 +474,7 @@ describe('AnthropicProvider', () => {
       expect(options).toBeDefined();
       expect(options?.headers).toBeDefined();
       expect(options?.headers?.['User-Agent']).toBe(
-        'claude-cli/2.1.2 (external, cli)',
+        'claude-cli/2.1.257 (external, cli)',
       );
     });
 
