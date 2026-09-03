@@ -307,6 +307,101 @@ describe('#3469 launch resource release', () => {
   }
 
   /**
+   * #3533 CodeRabbit remediation: resolves once the fixture's sidecar shape
+   * is fully dead after a SIGKILL to its whole process group. The direct
+   * child exits while its `sleep 120` descendant may still hold the group
+   * alive, so the boundary must await the group's death, not the child's
+   * exit event (exactly the gap this remediation closes).
+   */
+  function whenSidecarGroupFullyKilled(child: ChildProcess): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const pid = child.pid;
+      if (pid === undefined) {
+        resolve();
+        return;
+      }
+      const deadline = Date.now() + 5_000;
+      const poll = (): void => {
+        if (!processGroupAlive(pid)) {
+          resolve();
+          return;
+        }
+        if (Date.now() > deadline) {
+          reject(new Error(`sidecar group ${pid} still alive after SIGKILL`));
+          return;
+        }
+        setTimeout(poll, 50);
+      };
+      child.once('exit', poll);
+      child.once('error', (err) => reject(err));
+    });
+  }
+
+  /**
+   * #3533 CodeRabbit remediation: a real child that owns 8877 and releases
+   * it ~1.2 s after it reports listening, standing in for any lingering
+   * fixed-port owner at sidecar teardown time (for example the kernel
+   * releasing a killed group member's socket after the direct child's exit
+   * was already observed).
+   */
+  async function spawnFixedPortHolder(): Promise<{
+    release: () => Promise<void>;
+  }> {
+    const holderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue3533-cr-'));
+    const holderMarker = path.join(holderDir, 'listening');
+    const holderCode = [
+      'const fs = require("node:fs"), net = require("node:net");',
+      'const marker = process.argv[2];',
+      'const lifetimeMs = Number(process.argv[3]);',
+      'if (marker === undefined || !Number.isFinite(lifetimeMs)) {',
+      '  process.exit(2);',
+      '}',
+      'const server = net.createServer(() => {});',
+      'server.on("error", (err) => {',
+      '  fs.writeFileSync(marker, "error: " + err.message);',
+      '  process.exit(3);',
+      '});',
+      'server.listen(8877, "127.0.0.1", () => {',
+      '  fs.writeFileSync(marker, "listening");',
+      '  setTimeout(() => process.exit(0), lifetimeMs);',
+      '});',
+    ].join('\n');
+    const holder = __actual.spawn(
+      process.execPath,
+      ['-e', holderCode, 'holder', holderMarker, '1200'],
+      { stdio: 'ignore' },
+    );
+    const holderExited = new Promise<void>((resolve) =>
+      holder.once('exit', resolve),
+    );
+    const listeningDeadline = Date.now() + 5_000;
+    while (!fs.existsSync(holderMarker)) {
+      if (holder.exitCode !== null || holder.signalCode !== null) {
+        throw new Error(
+          `port holder exited before listening (exitCode=${holder.exitCode}, signal=${holder.signalCode})`,
+        );
+      }
+      if (Date.now() > listeningDeadline) {
+        throw new Error('port holder never reported listening');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    if (fs.readFileSync(holderMarker, 'utf8') !== 'listening') {
+      throw new Error('port holder failed to listen');
+    }
+    return {
+      release: async () => {
+        if (holder.exitCode === null && holder.signalCode === null) {
+          holder.kill('SIGKILL');
+        }
+        await holderExited;
+        fs.rmSync(holderDir, { recursive: true, force: true });
+        await awaitPortRebindable(8877);
+      },
+    };
+  }
+
+  /**
    * #3533 remediation: after heavy readiness-poll churn, closing the
    * fixed-port listener can leave the port briefly unbindable; wait until a
    * probe bind succeeds so the next scenario starts deterministically. If
@@ -541,17 +636,24 @@ describe('#3469 launch resource release', () => {
   /**
    * #3533 OCR remediation: the per-test restoration. Child termination and
    * port waiting can fail; the fixture is restored either way, and the
-   * failure itself still propagates (fail fast, never swallow).
+   * failure itself still propagates (fail fast, never swallow). Sidecar
+   * teardown awaits what it terminated: every sidecar process group is
+   * proven gone (ESRCH), and the fixed port is proven rebindable whenever
+   * sidecar groups or tracked servers were released, so restoration never
+   * completes while a group member or the port is still held.
    */
   const restoreFixture = async (): Promise<void> => {
     try {
-      await terminateTrackedChildren();
+      const terminatedGroups = await terminateTrackedChildren();
       const servers = trackedServers.splice(0);
       for (const server of servers) {
         server.close();
       }
-      if (servers.length > 0) {
+      if (terminatedGroups.length > 0 || servers.length > 0) {
         await awaitPortRebindable(8877);
+      }
+      if (terminatedGroups.length > 0) {
+        await expectProcessGroupsGone(terminatedGroups);
       }
     } finally {
       process.env = environmentSnapshot;
@@ -954,4 +1056,32 @@ describe('#3469 launch resource release', () => {
     }
     await expectProcessGroupsGone([sleeperPid]);
   }, 20_000);
+
+  it('waits out terminated sidecar groups and the fixed port before teardown completes', async () => {
+    // A real sidecar-shaped tracked child: a detached group leader with a
+    // live shell descendant, exactly what the spawn router records.
+    const sidecar = __actual.spawn('sh', ['-c', 'sleep 120'], {
+      stdio: 'ignore',
+      detached: true,
+    });
+    const sidecarPid = sidecar.pid;
+    if (sidecarPid === undefined) {
+      throw new Error('sidecar child never got a pid');
+    }
+    trackedChildren.push({ child: sidecar, groupLeader: true });
+    const holder = await spawnFixedPortHolder();
+    try {
+      killProcessGroup(sidecarPid);
+      await whenSidecarGroupFullyKilled(sidecar);
+
+      // The exact teardown path: with a sidecar group terminated while the
+      // fixed port is still owned elsewhere, restoration must not complete
+      // until the port is really free and the group is really gone.
+      await restoreFixture();
+      await expectProcessGroupsGone([sidecarPid]);
+      await expect(awaitPortRebindable(8877, 250)).resolves.toBeUndefined();
+    } finally {
+      await holder.release();
+    }
+  }, 30_000);
 });

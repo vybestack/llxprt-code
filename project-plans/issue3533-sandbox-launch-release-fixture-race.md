@@ -344,3 +344,112 @@ mechanism was touched.
 - `npm run build` exit 0 (`11-npm-build.log`).
 - stepfun-37 smoke exit 0 (`12-stepfun-smoke.log`).
 - `git diff --check` clean (`13-git-diff-check.log`).
+
+## CodeRabbit remediation (thread PRRT_kwDOPB5qbc6e7fQC)
+
+Executed 2026-09-03 on the same branch; all logs under
+`tmp/issue3533/coderabbit-remediation/`. The finding targets the shared
+teardown in `restoreFixture` (introduced by this PR's head commit
+`148ead3b5`): `await terminateTrackedChildren()` discarded the returned
+group ids, so teardown never called `expectProcessGroupsGone()`, and the
+8877 wait ran only when `trackedServers` was non-empty even though
+`routeSpawns()` records sidecars only in `trackedChildren` (the proxied
+scenarios' own `finally` removes their servers before `afterEach`, and the
+quoted-release-path test records a sidecar with no server at all).
+
+**Classification: In-scope-Fix.** #3533's accepted behavior requires that no
+sidecar remains after failure and that sidecar process groups are reaped
+deterministically; the `afterEach` is the release path every test takes
+(including failing ones), and on head it terminated sidecar groups without
+verifying them and skipped the fixed-port wait on sidecar-only paths. One
+tempering fact verified against source: the fake engine parses
+`-p 8877:8877` but never binds a socket (`fake-dependency-engine.ts`
+`cmdRun`), so the literal "descendant owns 8877" leak cannot occur under
+the current fake engine; the fix is still the smallest completion of this
+file's own existing mechanisms (reuse `expectProcessGroupsGone` and
+`awaitPortRebindable`), not a new design. Not Blocker (the group SIGKILL
+itself was already comprehensive), not #3538 (bind-failure listener cleanup
+is untouched).
+
+Fix: `restoreFixture` now retains the terminated group ids, awaits
+`expectProcessGroupsGone(terminatedGroups)` when non-empty, and drives
+`awaitPortRebindable(8877)` when terminated groups or tracked servers
+exist. Failure propagation is unchanged: a termination error (the
+injected-EPERM test) still aborts the try block, restores the fixture in
+the `finally`, and rejects.
+
+The test file grew past the repo's 800 effective-line `max-lines` limit
+(734 on main, 837 after the fix). `eslint.config.js` gains one per-file
+override raising the limit to 900 for this file, modeled on the #3240
+`app.test.ts` precedent: the file is one E2E launch suite whose shared
+fixture must stay together, and the alternative would be splitting the
+release machinery across files for line-count compliance. That override
+is the only quality-tool change in this remediation.
+
+### TDD evidence
+
+- RED (`red-run-1/2/3.log`, `red-runs.exit`, final test shape in
+  `red-final-shape.log`): the new test
+  `waits out terminated sidecar groups and the fixed port before teardown
+  completes` records a real detached sidecar-shaped group
+  (`sh -c 'sleep 120'`, group leader plus live descendant) and a real
+  holder child listening on 8877 that self-releases ~1.2 s after it
+  reports listening, then runs the exact teardown path (`restoreFixture`)
+  and asserts, through real state, that the group is ESRCH-gone and the
+  port is rebindable within a short probe deadline. On head the group
+  assertion passed (the SIGKILL works) and the port assertion failed
+  3/3 runs with the exact symptom (`port 8877 did not become rebindable
+  within 250ms` in the first shape; the equivalent rejected-promise form
+  in the final shape): teardown had completed while the port was still
+  owned. All ten pre-existing tests stayed green (10 pass / 1 fail each
+  run).
+- GREEN (`green-run-1/2/3.log`, `green-runs.exit`, `green-final-shape.log`):
+  11 pass / 0 fail on every run after the fix; the new test takes ~1.7 s
+  because `restoreFixture` now demonstrably blocks until the holder
+  released 8877, then proves the group gone.
+- GREEN repeats on the final shape
+  (`green-refactored-4.log`+`.exit`,
+  `green-refactored-4-repeat-1/2/3.log`+`.exit`, all exit 0): the final
+  shape kills the sidecar group while the real holder owns 8877, awaits
+  the group's death through `whenSidecarGroupFullyKilled` (ESRCH, not the
+  direct child's exit event), then `restoreFixture()` proves the port
+  free and the group gone before returning; the test re-proves both with
+  a 250 ms rebind deadline. 11 pass / 0 fail on every run.
+
+### Leak and audit evidence
+
+- Process-group leak probes (`group-probe-run-1/2/3.log`,
+  `group-probes-summary.log`): three captured probe runs, each exit 0 with
+  `surviving_groups=0` (every captured detached sidecar group reached
+  ESRCH). Three more on the final shape
+  (`group-probe-refactored-1/2/3.log`, exit 0): `captured_detached_groups=6`,
+  `surviving_groups=0` every probe.
+- Post-run `sleep 120` scans (`post-runs-sleep120.txt`,
+  `post-probes-sleep120.txt`, `post-probes-sleep120-recheck.txt`,
+  `post-suite-sleep120.txt`): only the pre-existing external lane-watcher
+  chain (ppid 19869) or the other lanes' own work; port 8877 free after
+  every run.
+- Test-audit (`test-audit-run.log`, `test-audit-final/`,
+  `test-audit-refactored-run.log`, `test-audit-refactored/`): the first
+  scan flagged one `NO_ASSERT` on the new test (assertions only via
+  throwing helpers); after converting the port probe to the same
+  `expect(...).resolves` shape the existing fail-fast port test uses, every
+  scan reports 2028 findings, zero for the touched file, and a
+  findings.tsv byte-identical to the pre-change baseline
+  (`tmp/issue3533/pr-ocr-remediation/test-audit-final/findings.tsv`).
+
+### Full verification cycle (final tree, post-format)
+
+- Focused eslint on the touched file exit 0 under the new override
+  (`02-eslint-touched.log`); full `npm run lint` exit 0
+  (`03-npm-lint.log`, `.exit`).
+- `npm run typecheck` exit 0 (`04-npm-typecheck.log`, `.exit`).
+- `npm run format` exit 0 (`05-npm-format.log`, `.exit`); prettier made
+  no edits to the touched files.
+- `LLXPRT_CLI_TEST_CONCURRENCY=1 npm run test` exit 0 (`01-npm-test.log`,
+  `.exit`): 738/738 CLI test files, 9512 passed / 0 failed / 5 skipped /
+  13 todo, every other workspace green; the junit entry for the touched
+  file carries no failure (`06-junit-touched-file.txt`).
+- `npm run build` exit 0 (`06-npm-build.log`, `.exit`).
+- stepfun-37 smoke exit 0 (`07-stepfun-smoke.log`, `.exit`).
+- `git diff --check` clean (`08-git-diff-check.log`, exit 0).
