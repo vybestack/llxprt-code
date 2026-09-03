@@ -61,6 +61,10 @@ import {
   processFunctionCalls,
   buildTodoCompletionPrompt,
 } from './subagentToolProcessing.js';
+import {
+  canonicalizeToolName,
+  SCOPE_LOCAL_EMIT_TOOL_NAME,
+} from './toolGovernance.js';
 
 // ---------------------------------------------------------------------------
 // Run context — carries all collaborators the non-interactive path needs
@@ -351,6 +355,38 @@ async function readStreamToCompletion(
 // Turn execution
 // ---------------------------------------------------------------------------
 
+function hasEffectiveEmitter(
+  toolsList: readonly ToolDeclaration[],
+  hookRestrictedAllowedTools: readonly string[] | undefined,
+): boolean {
+  const emitterName = canonicalizeToolName(SCOPE_LOCAL_EMIT_TOOL_NAME);
+  const emitterDeclared = toolsList.some(
+    (declaration) => canonicalizeToolName(declaration.name) === emitterName,
+  );
+  const emitterAllowed =
+    hookRestrictedAllowedTools === undefined ||
+    hookRestrictedAllowedTools.some(
+      (name) => canonicalizeToolName(name) === emitterName,
+    );
+  return emitterDeclared && emitterAllowed;
+}
+
+function resolveNonInteractiveToolName(
+  rawName: string | undefined,
+  toolsView: ExecutionLoopContext['toolsView'],
+  effectiveEmitterAvailable: boolean,
+): string | null {
+  if (
+    effectiveEmitterAvailable &&
+    rawName !== undefined &&
+    canonicalizeToolName(rawName) ===
+      canonicalizeToolName(SCOPE_LOCAL_EMIT_TOOL_NAME)
+  ) {
+    return SCOPE_LOCAL_EMIT_TOOL_NAME;
+  }
+  return resolveToolName(rawName, toolsView);
+}
+
 /**
  * Execute a single non-interactive turn: send the message, consume the
  * stream, and parse any textual tool calls.
@@ -367,7 +403,11 @@ export async function runNonInteractiveTurn(
   config: Config,
   logger: DebugLogger,
   output: OutputObject,
-): Promise<{ functionCalls: ToolCallBlock[]; textResponse: string }> {
+): Promise<{
+  functionCalls: ToolCallBlock[];
+  textResponse: string;
+  effectiveEmitterAvailable: boolean;
+}> {
   const blocks = currentMessages[0]?.blocks ?? [];
   const messageParams = {
     message: blocks,
@@ -399,9 +439,18 @@ export async function runNonInteractiveTurn(
     output,
   );
   if (abortController.signal.aborted === true) {
-    return { functionCalls: [], textResponse: '' };
+    return {
+      functionCalls: [],
+      textResponse: '',
+      effectiveEmitterAvailable: false,
+    };
   }
   recordTurnOutputTokens(execCtx, reportedOutputTokens, outputCharacterCount);
+
+  const effectiveEmitterAvailable = hasEffectiveEmitter(
+    toolsList,
+    hookRestrictedAllowedTools,
+  );
 
   let functionCalls = rawCalls;
   if (parseableTextResponse) {
@@ -409,13 +458,22 @@ export async function runNonInteractiveTurn(
       parseableTextResponse,
       functionCalls,
       execCtx,
-      resolveToolName,
+      (rawName, toolsView) =>
+        resolveNonInteractiveToolName(
+          rawName,
+          toolsView,
+          effectiveEmitterAvailable,
+        ),
       hookRestrictedAllowedTools,
     );
     functionCalls = result.functionCalls;
   }
 
-  return { functionCalls, textResponse };
+  return {
+    functionCalls,
+    textResponse,
+    effectiveEmitterAvailable,
+  };
 }
 
 /**
@@ -429,16 +487,53 @@ export async function dispatchNonInteractiveTurnResult(
   currentTurn: number,
   execCtx: ExecutionLoopContext,
   ctx: NonInteractiveRunContext,
+  effectiveEmitterAvailable: boolean,
 ): Promise<IContent[] | null> {
+  const requiredOutputKeys = Object.keys(ctx.outputConfig?.outputs ?? {});
+  const emittedOutputKeys = Object.keys(ctx.output.emitted_vars);
+  const missingOutputKeys = requiredOutputKeys.filter(
+    (key) => !emittedOutputKeys.includes(key),
+  );
+  if (missingOutputKeys.length > 0 && !effectiveEmitterAvailable) {
+    const errorMessage =
+      `Required tool ${SCOPE_LOCAL_EMIT_TOOL_NAME} is unavailable while required outputs are missing: ` +
+      `${missingOutputKeys.join(', ')}.`;
+    ctx.output.terminate_reason = SubagentTerminateMode.ERROR;
+    ctx.output.final_message = errorMessage;
+    ctx.logger.warn(
+      () =>
+        `Subagent ${ctx.subagentId} cannot complete output emission: ${errorMessage}`,
+    );
+    return null;
+  }
   if (functionCalls.length > 0) {
-    return processFunctionCalls(functionCalls, abortController, promptId, {
-      output: ctx.output,
-      subagentId: ctx.subagentId,
-      logger: ctx.logger,
-      toolExecutorContext: ctx.toolExecutorContext,
-      config: ctx.config,
-      messageBus: ctx.messageBus,
-    });
+    const nextMessages = await processFunctionCalls(
+      functionCalls,
+      abortController,
+      promptId,
+      {
+        output: ctx.output,
+        ...(ctx.outputConfig === undefined
+          ? {}
+          : { outputConfig: ctx.outputConfig }),
+        subagentId: ctx.subagentId,
+        logger: ctx.logger,
+        toolExecutorContext: ctx.toolExecutorContext,
+        config: ctx.config,
+        messageBus: ctx.messageBus,
+      },
+    );
+    const emittedKeysAfterToolCalls = Object.keys(ctx.output.emitted_vars);
+    const completedDeclaredOutputs =
+      requiredOutputKeys.length > 0 &&
+      requiredOutputKeys.every((key) =>
+        emittedKeysAfterToolCalls.includes(key),
+      );
+    if (completedDeclaredOutputs) {
+      ctx.output.terminate_reason = SubagentTerminateMode.GOAL;
+      return null;
+    }
+    return nextMessages;
   }
   const todoReminder = await buildTodoCompletionPrompt(
     ctx.runtimeContext,
@@ -496,19 +591,20 @@ async function runNonInteractiveLoopIteration(
     () => `Subagent ${ctx.subagentId} turn=${currentTurn} promptId=${promptId}`,
   );
 
-  const { functionCalls } = await runNonInteractiveTurn(
-    chat,
-    currentMessages,
-    toolsList,
-    abortController,
-    currentTurn,
-    sessionId,
-    ctx.subagentId,
-    execCtx,
-    ctx.config,
-    ctx.logger,
-    ctx.output,
-  );
+  const { functionCalls, effectiveEmitterAvailable } =
+    await runNonInteractiveTurn(
+      chat,
+      currentMessages,
+      toolsList,
+      abortController,
+      currentTurn,
+      sessionId,
+      ctx.subagentId,
+      execCtx,
+      ctx.config,
+      ctx.logger,
+      ctx.output,
+    );
   if (abortController.signal.aborted === true) return { action: 'abort' };
 
   // Only the output budget is re-checked here. Re-checking the turn and time
@@ -527,6 +623,7 @@ async function runNonInteractiveLoopIteration(
     currentTurn,
     execCtx,
     ctx,
+    effectiveEmitterAvailable,
   );
   // `processFunctionCalls` returns `[]` (an empty, truthy array) when no
   // tool calls were executed. `!nextMessages` only catches null/undefined,
