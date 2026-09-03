@@ -92,6 +92,20 @@ export interface CredentialProxyServerOptions {
    */
   capabilityToken?: string;
   /**
+   * Notification that a connection has authenticated as a sandbox.
+   * Fired on EVERY handshake that presents a valid capability token,
+   * so a consumer must be idempotent (the intended one — releasing
+   * the capability env file that delivered the token into the
+   * container — already tolerates repeated cleanup). Never fired for
+   * unauthorized handshakes or for servers constructed without a
+   * capabilityToken (non-sandbox connections never authenticate as
+   * sandbox). Invoked on the connection's frame-processing path: a
+   * throw does not reach the caller but surfaces as a connection
+   * error (`process_frames_error`) that destroys that socket, so the
+   * callback must not throw — consumers handle their own failures.
+   */
+  onSandboxHandshake?: () => void;
+  /**
    * Extra request handlers merged into the server's requestHandlers at
    * construction. If any key collides with a built-in op name, the
    * constructor THROWS (fail fast). A silent override of get_api_key would
@@ -424,6 +438,12 @@ export class CredentialProxyServer {
         return false;
       }
       state.isSandboxConnection = true;
+      // Each authenticated sandbox handshake proves the capability token
+      // reached the process inside the container. Runs on the frame-
+      // processing path: a throw surfaces as a connection error that
+      // destroys this socket, so the callback must not throw and must be
+      // idempotent (see the option docs).
+      this.options.onSandboxHandshake?.();
     }
 
     this.auditLog('INFO', state.id, 'handshake_ok', {

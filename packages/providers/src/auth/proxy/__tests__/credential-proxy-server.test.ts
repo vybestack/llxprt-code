@@ -21,144 +21,15 @@ import {
   CredentialProxyServer,
   type CredentialProxyServerOptions,
 } from '../credential-proxy-server.js';
-import type {
-  TokenStore,
-  OAuthToken,
-  BucketStats,
-} from '@vybestack/llxprt-code-core';
 import { ProxySocketClient } from '@vybestack/llxprt-code-core';
+import {
+  InMemoryTokenStore,
+  InMemoryProviderKeyStorage,
+  makeToken,
+  CAPABILITY_TOKEN,
+} from './credential-proxy-server-helpers.js';
 
 const isWindows = process.platform === 'win32';
-
-// ─── In-Memory Test Double: TokenStore ───────────────────────────────────────
-
-class InMemoryTokenStore implements TokenStore {
-  private tokens: Map<string, OAuthToken> = new Map();
-  private locks: Set<string> = new Set();
-  private bucketStats: Map<string, BucketStats> = new Map();
-
-  private key(provider: string, bucket?: string): string {
-    return bucket ? `${provider}:${bucket}` : provider;
-  }
-
-  async saveToken(
-    provider: string,
-    token: OAuthToken,
-    bucket?: string,
-  ): Promise<void> {
-    this.tokens.set(this.key(provider, bucket), token);
-  }
-
-  async getToken(
-    provider: string,
-    bucket?: string,
-  ): Promise<OAuthToken | null> {
-    return this.tokens.get(this.key(provider, bucket)) ?? null;
-  }
-
-  async removeToken(provider: string, bucket?: string): Promise<void> {
-    this.tokens.delete(this.key(provider, bucket));
-  }
-
-  async listProviders(): Promise<string[]> {
-    const providers = new Set<string>();
-    for (const k of this.tokens.keys()) {
-      providers.add(k.split(':')[0]);
-    }
-    return [...providers];
-  }
-
-  async listBuckets(provider: string): Promise<string[]> {
-    const buckets: string[] = [];
-    for (const k of this.tokens.keys()) {
-      const parts = k.split(':');
-      if (parts[0] === provider && parts.length > 1) {
-        buckets.push(parts[1]);
-      }
-    }
-    return buckets;
-  }
-
-  async getBucketStats(
-    provider: string,
-    bucket: string,
-  ): Promise<BucketStats | null> {
-    return this.bucketStats.get(this.key(provider, bucket)) ?? null;
-  }
-
-  /** Test helper: populate bucket stats to prove sandbox path suppresses real data. */
-  setBucketStats(provider: string, bucket: string, stats: BucketStats): void {
-    this.bucketStats.set(this.key(provider, bucket), stats);
-  }
-
-  async acquireRefreshLock(
-    provider: string,
-    options?: { waitMs?: number; bucket?: string },
-  ): Promise<boolean> {
-    const k = this.key(provider, options?.bucket);
-    if (this.locks.has(k)) return false;
-    this.locks.add(k);
-    return true;
-  }
-
-  async releaseRefreshLock(provider: string, bucket?: string): Promise<void> {
-    this.locks.delete(this.key(provider, bucket));
-  }
-
-  async acquireAuthLock(
-    provider: string,
-    options?: { waitMs?: number; bucket?: string },
-  ): Promise<boolean> {
-    const k = `${this.key(provider, options?.bucket)}:auth`;
-    if (this.locks.has(k)) return false;
-    this.locks.add(k);
-    return true;
-  }
-
-  async releaseAuthLock(provider: string, bucket?: string): Promise<void> {
-    this.locks.delete(`${this.key(provider, bucket)}:auth`);
-  }
-}
-
-// ─── In-Memory Test Double: ProviderKeyStorage ───────────────────────────────
-
-class InMemoryProviderKeyStorage {
-  private keys: Map<string, string> = new Map();
-
-  async saveKey(name: string, apiKey: string): Promise<void> {
-    this.keys.set(name, apiKey.trim());
-  }
-
-  async getKey(name: string): Promise<string | null> {
-    return this.keys.get(name) ?? null;
-  }
-
-  async deleteKey(name: string): Promise<boolean> {
-    return this.keys.delete(name);
-  }
-
-  async listKeys(): Promise<string[]> {
-    return [...this.keys.keys()];
-  }
-
-  async hasKey(name: string): Promise<boolean> {
-    return this.keys.has(name);
-  }
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function makeToken(overrides: Partial<OAuthToken> = {}): OAuthToken {
-  return {
-    access_token: 'test-access-token',
-    refresh_token: 'test-refresh-token-secret',
-    expiry: 9999999999,
-    token_type: 'Bearer' as const,
-    ...overrides,
-  };
-}
-
-const CAPABILITY_TOKEN = 'a'.repeat(64);
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
@@ -1322,5 +1193,180 @@ describe('CredentialProxyServer', () => {
       expect(response.ok).toBe(false);
       expect(response.code).toBe('FORBIDDEN');
     }
+  });
+
+  // ─── Sandbox Handshake Signal (Issue #3524) ───────────────────────────────
+
+  /**
+   * @scenario First valid sandbox handshake fires onSandboxHandshake exactly once
+   * @given A server configured with a capability token and an onSandboxHandshake callback
+   * @when A real client completes a handshake presenting the correct token
+   * @then The callback has fired exactly once — proof the token was delivered
+   *       to and consumed by the process inside the container
+   */
+  it('fires onSandboxHandshake exactly once on the first valid sandbox handshake', async () => {
+    let handshakeCount = 0;
+    server = createServer({
+      capabilityToken: CAPABILITY_TOKEN,
+      onSandboxHandshake: () => {
+        handshakeCount++;
+      },
+    });
+    client = await startAndConnect(server, CAPABILITY_TOKEN);
+
+    // Synchronize on the real protocol exchange: a completed round trip
+    // proves the handshake finished before the count is read.
+    const response = await client.request('list_providers', {});
+    expect(response.ok).toBe(true);
+
+    expect(handshakeCount).toBe(1);
+  });
+
+  /**
+   * @scenario A second sandbox connection fires onSandboxHandshake again
+   * @given A server whose first sandbox handshake already fired the callback
+   * @when A second real client completes another valid sandbox handshake
+   * @then The callback count is 2 — one notification per authenticating
+   *       sandbox connection, so a consumer sees every delivery and must
+   *       be idempotent
+   */
+  it('fires onSandboxHandshake again for a second sandbox connection', async () => {
+    let handshakeCount = 0;
+    server = createServer({
+      capabilityToken: CAPABILITY_TOKEN,
+      onSandboxHandshake: () => {
+        handshakeCount++;
+      },
+    });
+    const socketPath = await server.start();
+
+    const first = new ProxySocketClient(socketPath, CAPABILITY_TOKEN);
+    await first.ensureConnected();
+    const firstResponse = await first.request('list_providers', {});
+    expect(firstResponse.ok).toBe(true);
+    first.close();
+
+    const second = new ProxySocketClient(socketPath, CAPABILITY_TOKEN);
+    await second.ensureConnected();
+    const secondResponse = await second.request('list_providers', {});
+    expect(secondResponse.ok).toBe(true);
+    second.close();
+
+    expect(handshakeCount).toBe(2);
+  });
+
+  /**
+   * @scenario Two servers built from one options object both fire the callback
+   * @given A single options object literal, used to construct two separate
+   *        CredentialProxyServer instances
+   * @when A real client completes a valid sandbox handshake against each
+   *        server in turn
+   * @then The callback fires for both servers — constructing or firing one
+   *        server must never consume the callback out of the shared options
+   *        object the caller still owns
+   */
+  it('fires onSandboxHandshake for two servers constructed from one shared options object', async () => {
+    let handshakeCount = 0;
+    const sharedOptions: CredentialProxyServerOptions = {
+      tokenStore,
+      providerKeyStorage: keyStorage,
+      capabilityToken: CAPABILITY_TOKEN,
+      onSandboxHandshake: () => {
+        handshakeCount++;
+      },
+    };
+
+    const serverA = new CredentialProxyServer(sharedOptions);
+    const serverB = new CredentialProxyServer(sharedOptions);
+
+    try {
+      const clientA = await startAndConnect(serverA, CAPABILITY_TOKEN);
+      const responseA = await clientA.request('list_providers', {});
+      expect(responseA.ok).toBe(true);
+      clientA.close();
+
+      const clientB = await startAndConnect(serverB, CAPABILITY_TOKEN);
+      const responseB = await clientB.request('list_providers', {});
+      expect(responseB.ok).toBe(true);
+      clientB.close();
+
+      expect(handshakeCount).toBe(2);
+    } finally {
+      await serverA.stop();
+      await serverB.stop();
+    }
+  });
+
+  /**
+   * @scenario A handshake with the wrong token does not fire onSandboxHandshake
+   * @given A server configured with a capability token and the callback
+   * @when A client completes a handshake presenting an incorrect token
+   * @then The server still responds UNAUTHORIZED and the callback never fires
+   */
+  it('does not fire onSandboxHandshake when the capability token is wrong', async () => {
+    let handshakeCount = 0;
+    server = createServer({
+      capabilityToken: CAPABILITY_TOKEN,
+      onSandboxHandshake: () => {
+        handshakeCount++;
+      },
+    });
+    const socketPath = await server.start();
+
+    const response = await sendRawHandshake(socketPath, {
+      v: 2,
+      op: 'handshake',
+      payload: { minVersion: 1, maxVersion: 2, capabilityToken: 'wrong-token' },
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.code).toBe('UNAUTHORIZED');
+    expect(handshakeCount).toBe(0);
+  });
+
+  /**
+   * @scenario A handshake with no token does not fire onSandboxHandshake
+   * @given A server configured with a capability token and the callback
+   * @when A client completes a handshake presenting no token at all
+   * @then The server still responds UNAUTHORIZED and the callback never fires
+   */
+  it('does not fire onSandboxHandshake when the capability token is missing', async () => {
+    let handshakeCount = 0;
+    server = createServer({
+      capabilityToken: CAPABILITY_TOKEN,
+      onSandboxHandshake: () => {
+        handshakeCount++;
+      },
+    });
+    const socketPath = await server.start();
+
+    const response = await sendRawHandshake(socketPath, {
+      v: 2,
+      op: 'handshake',
+      payload: { minVersion: 1, maxVersion: 2 },
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.code).toBe('UNAUTHORIZED');
+    expect(handshakeCount).toBe(0);
+  });
+
+  /**
+   * @scenario The onSandboxHandshake option is genuinely optional
+   * @given A server configured with a capability token but NO callback
+   * @when A sandbox client completes a valid handshake and makes a request
+   * @then The handshake succeeds and the connection is treated as a sandbox
+   *       (FORBIDDEN, not NOT_FOUND, for an unknown provider)
+   */
+  it('completes sandbox handshake normally when onSandboxHandshake is not provided', async () => {
+    server = createServer({ capabilityToken: CAPABILITY_TOKEN });
+    client = await startAndConnect(server, CAPABILITY_TOKEN);
+
+    const response = await client.request('get_token', {
+      provider: 'nonexistent',
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.code).toBe('FORBIDDEN');
   });
 });
