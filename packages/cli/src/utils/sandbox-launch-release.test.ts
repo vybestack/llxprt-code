@@ -201,6 +201,7 @@ describe('#3469 launch resource release', () => {
   function routeSpawns(
     mainLaunch: 'throw' | 'attach',
     onTunnel?: (child: ChildProcess) => void,
+    sidecarDelayMs?: number,
   ): void {
     const spawnMock = childProcess.spawn as unknown as Mock<
       typeof childProcess.spawn
@@ -227,7 +228,23 @@ describe('#3469 launch resource release', () => {
         args.includes('--name') &&
         args.includes('llxprt-code-sandbox-proxy')
       ) {
-        const child = __actual.spawn(command, args, options);
+        // #3533: spawning through a shell sleep delays the sidecar child's
+        // engine registration past listener readiness; `exec` hands the
+        // tracked child's pid to the engine process itself.
+        const child =
+          sidecarDelayMs === undefined
+            ? __actual.spawn(command, args, options)
+            : __actual.spawn(
+                'sh',
+                [
+                  '-c',
+                  `sleep ${(sidecarDelayMs / 1000).toFixed(2)} && exec "$@"`,
+                  'sh',
+                  command,
+                  ...args,
+                ],
+                options,
+              );
         trackedChildren.push(child);
         return child;
       }
@@ -457,7 +474,17 @@ describe('#3469 launch resource release', () => {
     assertSessionTmpdirsReleased();
   }, 30_000);
 
-  it('stops a started proxy sidecar when the main engine spawn throws', async () => {
+  /**
+   * Runs the proxied-network launch scenario: the proxy sidecar runs for
+   * real against the fake engine, the 8877 listener stands in for the
+   * sidecar's HTTP readiness endpoint, and the main container launch is
+   * injected to throw. `sidecarDelayMs` delays the sidecar child so its
+   * engine registration lands after the listener binds (#3533). Returns the
+   * captured launch stderr.
+   */
+  async function runProxiedLaunchFailure(
+    sidecarDelayMs?: number,
+  ): Promise<string> {
     process.env.LLXPRT_SANDBOX_NETWORK = 'proxied';
     process.env.LLXPRT_SANDBOX_PROXY_COMMAND = 'sleep 120';
     // macOS has no `timeout`; the readiness probe shells out to it. A shim
@@ -471,45 +498,97 @@ describe('#3469 launch resource release', () => {
     const originalPath = process.env.PATH ?? '';
     process.env.PATH = `${shimDir}${path.delimiter}${process.env.PATH}`;
     await listenAt(8877, (socket) => {
+      // #3533: readiness must reflect the engine record, not the listener
+      // bind. A reply before the fake engine persisted the sidecar lets the
+      // launch proceed to `network connect`, which finds no container.
+      // Destroying the connection keeps the production retry loop polling;
+      // a never-registering sidecar still runs into the readiness timeout.
+      if (!engine.containerNames().includes('llxprt-code-sandbox-proxy')) {
+        socket.destroy();
+        return;
+      }
       socket.end('HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n');
     });
-    routeSpawns('throw', undefined);
+    routeSpawns('throw', undefined, sidecarDelayMs);
     routeExecSync({});
-
     try {
-      const stderr = await captureStderr(async () => {
+      return await captureStderr(async () => {
         await expect(
           runContainerSandbox(engine.config, []),
         ).rejects.toThrowError('engine launch failed');
       });
-
-      // The sidecar really started: its container was recorded before the
-      // launch failure, then removed again (AC2), before the volumes.
-      const invocations = engine.invocations();
-      const sidecarRun = invocations.findIndex(
-        (argv) =>
-          argv[0] === 'run' && argv.includes('llxprt-code-sandbox-proxy'),
-      );
-      const sidecarRm = invocations.findIndex(
-        (argv) =>
-          argv[0] === 'rm' && argv.includes('llxprt-code-sandbox-proxy'),
-      );
-      const volumeRm = invocations.findIndex(
-        (argv) => argv[0] === 'volume' && argv[1] === 'rm',
-      );
-      expect(sidecarRun).toBeGreaterThanOrEqual(0);
-      expect(sidecarRm).toBeGreaterThan(sidecarRun);
-      expect(volumeRm).toBeGreaterThan(sidecarRm);
-      expect(engine.containerNames()).toStrictEqual([]);
-      expect(fs.existsSync(proxyFake.markerPath)).toBe(false);
-      expect(stderr).not.toContain('Warning: failed to release');
-      expect(engine.volumeNames()).toStrictEqual([]);
-      expect(leakedRunRoots()).toStrictEqual([]);
-      assertSessionTmpdirsReleased();
     } finally {
       process.env.PATH = originalPath;
       fs.rmSync(shimDir, { recursive: true, force: true });
     }
+  }
+
+  /**
+   * Engine invocation-log indices for the proxied launch: where the sidecar
+   * ran, where it was connected to the sandbox network, and where the launch
+   * failure released it and the dependency volume, in order.
+   */
+  function sidecarReleaseOrder(): {
+    sidecarRun: number;
+    networkConnect: number;
+    sidecarRm: number;
+    volumeRm: number;
+  } {
+    const invocations = engine.invocations();
+    return {
+      sidecarRun: invocations.findIndex(
+        (argv) =>
+          argv[0] === 'run' && argv.includes('llxprt-code-sandbox-proxy'),
+      ),
+      networkConnect: invocations.findIndex(
+        (argv) => argv[0] === 'network' && argv[1] === 'connect',
+      ),
+      sidecarRm: invocations.findIndex(
+        (argv) =>
+          argv[0] === 'rm' && argv.includes('llxprt-code-sandbox-proxy'),
+      ),
+      volumeRm: invocations.findIndex(
+        (argv) => argv[0] === 'volume' && argv[1] === 'rm',
+      ),
+    };
+  }
+
+  it('stops a started proxy sidecar when the main engine spawn throws', async () => {
+    const stderr = await runProxiedLaunchFailure();
+    const { sidecarRun, networkConnect, sidecarRm, volumeRm } =
+      sidecarReleaseOrder();
+    // The sidecar really started: its container was recorded and connected
+    // to the sandbox network before the launch failure, then removed again
+    // (AC2), before the volumes.
+    expect(sidecarRun).toBeGreaterThanOrEqual(0);
+    expect(networkConnect).toBeGreaterThan(sidecarRun);
+    expect(sidecarRm).toBeGreaterThan(networkConnect);
+    expect(volumeRm).toBeGreaterThan(sidecarRm);
+    expect(engine.containerNames()).toStrictEqual([]);
+    expect(fs.existsSync(proxyFake.markerPath)).toBe(false);
+    expect(stderr).not.toContain('Warning: failed to release');
+    expect(engine.volumeNames()).toStrictEqual([]);
+    expect(leakedRunRoots()).toStrictEqual([]);
+    assertSessionTmpdirsReleased();
+  }, 60_000);
+
+  it('network-connects a proxy sidecar whose engine registration is delayed past listener readiness', async () => {
+    const stderr = await runProxiedLaunchFailure(750);
+    const { sidecarRun, networkConnect, sidecarRm, volumeRm } =
+      sidecarReleaseOrder();
+    // #3533: the listener was ready the whole time; only the engine record
+    // opened the readiness gate, so the launch still passed network connect
+    // before the injected main-container failure released everything.
+    expect(sidecarRun).toBeGreaterThanOrEqual(0);
+    expect(networkConnect).toBeGreaterThan(sidecarRun);
+    expect(sidecarRm).toBeGreaterThan(networkConnect);
+    expect(volumeRm).toBeGreaterThan(sidecarRm);
+    expect(engine.containerNames()).toStrictEqual([]);
+    expect(fs.existsSync(proxyFake.markerPath)).toBe(false);
+    expect(stderr).not.toContain('Warning: failed to release');
+    expect(engine.volumeNames()).toStrictEqual([]);
+    expect(leakedRunRoots()).toStrictEqual([]);
+    assertSessionTmpdirsReleased();
   }, 60_000);
 
   it('keeps the normal success path on the wired close handlers', async () => {
