@@ -60,7 +60,10 @@ import {
   LOGICAL_REQUEST_ID_KEY,
   RAW_TOKEN_DELTA_SINK_KEY,
 } from '@vybestack/llxprt-code-providers';
-import { canonicalizeToolName } from './toolGovernance.js';
+import {
+  canonicalizeToolName,
+  SCOPE_LOCAL_EMIT_TOOL_NAME,
+} from './toolGovernance.js';
 import {
   buildRequestContentsResult,
   contentForTelemetryPreservingUsage,
@@ -604,7 +607,20 @@ export class StreamProcessor {
     const toolConfig = modifiedConfig?.toolConfig as unknown;
     const allowedFunctions = extractAllowedFunctionNames(toolConfig);
     if (allowedFunctions !== undefined) {
-      const allowedNames = new Set(allowedFunctions.map(canonicalizeToolName));
+      const emitterName = canonicalizeToolName(SCOPE_LOCAL_EMIT_TOOL_NAME);
+      const hasScopeLocalEmitter = toolsFromConfig.some(
+        (toolGroup) =>
+          toolGroup.functionDeclarations?.some(
+            (declaration) =>
+              canonicalizeToolName(declaration.name) === emitterName,
+          ) === true,
+      );
+      const effectiveAllowedFunctions = hasScopeLocalEmitter
+        ? Array.from(new Set([...allowedFunctions, SCOPE_LOCAL_EMIT_TOOL_NAME]))
+        : allowedFunctions;
+      const allowedNames = new Set(
+        effectiveAllowedFunctions.map(canonicalizeToolName),
+      );
       const filteredTools = toolsFromConfig
         .map((toolGroup) => ({
           ...toolGroup,
@@ -617,7 +633,10 @@ export class StreamProcessor {
             : [],
         }))
         .filter((g) => g.functionDeclarations.length > 0) as ToolGroupArray;
-      return { tools: filteredTools, allowedFunctionNames: allowedFunctions };
+      return {
+        tools: filteredTools,
+        allowedFunctionNames: effectiveAllowedFunctions,
+      };
     }
 
     return { tools: toolsFromConfig, allowedFunctionNames: undefined };
