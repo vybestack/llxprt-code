@@ -721,6 +721,39 @@ describe('Anthropic reasoning wire translation (issue #3255)', () => {
     );
   });
 
+  it('rejects a direct Fable 5.1 budget before transport instead of ignoring it @issue:3531', async () => {
+    const request = prepare({
+      model: 'claude-fable-5-1',
+      modelBehavior: {
+        'reasoning.enabled': true,
+        'reasoning.budgetTokens': 6000,
+        'reasoning.effortWireFormat': 'anthropic',
+        'reasoning.enabledWireFormat': 'thinking',
+        'reasoning.enabledMap': { true: 'adaptive' },
+      },
+    });
+
+    await expect(request).rejects.toThrow(
+      "Model 'claude-fable-5-1' is adaptive-only: reasoning.budgetTokens cannot select budgeted thinking. Remove reasoning.budgetTokens to use adaptive thinking.",
+    );
+  });
+
+  it('rejects an anthropic-budget selection for Fable 5.1 before transport @issue:3531', async () => {
+    const request = prepare({
+      model: 'claude-fable-5-1',
+      modelBehavior: {
+        'reasoning.enabled': true,
+        'reasoning.effort': 'high',
+        'reasoning.effortWireFormat': 'anthropic-budget',
+        'reasoning.effortMap': { high: 8192 },
+      },
+    });
+
+    await expect(request).rejects.toThrow(
+      "Model 'claude-fable-5-1' is adaptive-only: the anthropic-budget effort format cannot emit budgeted thinking. Use the 'anthropic' effort format or remove reasoning.effortWireFormat=anthropic-budget.",
+    );
+  });
+
   it('reports only own reasoning properties and ignores inherited ones', () => {
     const body: Record<string, unknown> = Object.create({
       reasoning_effort: 'inherited',

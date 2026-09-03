@@ -136,7 +136,7 @@ describe('registerProvidersOntoManager OAuth wiring (Issue #2410)', () => {
     return provider;
   }
 
-  it('registers the Claude Code alias with its subscription model catalog', async () => {
+  it('registers the Claude Code alias with its subscription model catalog @issue:3531', async () => {
     writeSettings({ oauthEnabledProviders: { claudecode: true } });
 
     const claudecode = await registerAndGet('claudecode');
@@ -144,9 +144,10 @@ describe('registerProvidersOntoManager OAuth wiring (Issue #2410)', () => {
     const ids = models.map((m) => m.id);
 
     expect(ids).toContain(OAUTH_ONLY_MODEL_ID);
+    expect(ids).toContain('claude-fable-5-1');
   });
 
-  it('keeps the Anthropic API-key alias separate from subscription models', async () => {
+  it('keeps the Anthropic API-key alias separate from subscription models @issue:3531', async () => {
     writeSettings({ oauthEnabledProviders: { claudecode: true } });
 
     const anthropic = await registerAndGet('anthropic');
@@ -154,5 +155,6 @@ describe('registerProvidersOntoManager OAuth wiring (Issue #2410)', () => {
     const ids = models.map((m) => m.id);
 
     expect(ids).not.toContain(OAUTH_ONLY_MODEL_ID);
+    expect(ids).not.toContain('claude-fable-5-1');
   });
 });

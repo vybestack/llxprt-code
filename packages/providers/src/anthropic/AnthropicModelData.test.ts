@@ -266,6 +266,23 @@ describe('AnthropicModelData Claude Fable 5 @issue:2328', () => {
     it('is case-insensitive', () => {
       expect(isFable5('Claude-Fable-5')).toBe(true);
     });
+
+    it('returns true for the claude-fable-5-1 point release and its variants @issue:3531', () => {
+      expect(isFable5('claude-fable-5-1')).toBe(true);
+      expect(isFable5('claude-fable-5-1-latest')).toBe(true);
+      expect(isFable5('claude-fable-5-1-20260901')).toBe(true);
+    });
+
+    it('returns false for fable-5-1 near-misses @issue:3531', () => {
+      expect(isFable5('claude-fable-5-1-mini')).toBe(false);
+      expect(isFable5('claude-fable-5-11')).toBe(false);
+      expect(isFable5('claude-fable-50')).toBe(false);
+      expect(isFable5('claude-fable-51')).toBe(false);
+    });
+
+    it('is case-insensitive for fable-5-1 ids @issue:3531', () => {
+      expect(isFable5('CLAUDE-FABLE-5-1')).toBe(true);
+    });
   });
 
   describe('supportsAdaptiveThinking', () => {
@@ -277,6 +294,11 @@ describe('AnthropicModelData Claude Fable 5 @issue:2328', () => {
     it('returns false for models without adaptive thinking', () => {
       expect(supportsAdaptiveThinking('claude-opus-4-5')).toBe(false);
       expect(supportsAdaptiveThinking('claude-haiku-4-5')).toBe(false);
+    });
+
+    it('returns true for claude-fable-5-1 @issue:3531', () => {
+      expect(supportsAdaptiveThinking('claude-fable-5-1')).toBe(true);
+      expect(supportsAdaptiveThinking('claude-fable-5-1-20260901')).toBe(true);
     });
   });
 
@@ -290,6 +312,12 @@ describe('AnthropicModelData Claude Fable 5 @issue:2328', () => {
     it('is case-insensitive (routes through isFable5)', () => {
       expect(getMaxTokensForModel('Claude-Fable-5')).toBe(40000);
     });
+
+    it('returns 40000 for claude-fable-5-1 variants @issue:3531', () => {
+      expect(getMaxTokensForModel('claude-fable-5-1')).toBe(40000);
+      expect(getMaxTokensForModel('claude-fable-5-1-latest')).toBe(40000);
+      expect(getMaxTokensForModel('claude-fable-5-1-20260901')).toBe(40000);
+    });
   });
 
   describe('getContextWindowForModel', () => {
@@ -301,6 +329,14 @@ describe('AnthropicModelData Claude Fable 5 @issue:2328', () => {
 
     it('is case-insensitive (routes through isFable5)', () => {
       expect(getContextWindowForModel('Claude-Fable-5')).toBe(200000);
+    });
+
+    it('returns 200000 (auth default) for claude-fable-5-1 variants @issue:3531', () => {
+      expect(getContextWindowForModel('claude-fable-5-1')).toBe(200000);
+      expect(getContextWindowForModel('claude-fable-5-1-latest')).toBe(200000);
+      expect(getContextWindowForModel('claude-fable-5-1-20260901')).toBe(
+        200000,
+      );
     });
   });
 });
