@@ -247,3 +247,100 @@ Status: the #3538 deferral stands (issue OPEN, mechanism unimplemented, no
 bind-failure cleanup tests); the two prior #3533 findings (readiness barrier
 proof, process-group reaping) are preserved verbatim from the previous
 commit; the full cycle above ran on the final corrected tree.
+
+## PR OCR remediation (second review, final)
+
+Executed 2026-09-03 on the same branch; all logs under
+`tmp/issue3533/pr-ocr-remediation/`. The second and final PR OCR review
+(2 of 2; no third review was run) emitted three findings, all on
+`packages/cli/src/utils/sandbox-launch-release.test.ts`, all introduced by
+this PR's commits. Classification and action for each:
+
+1. `awaitPortRebindable` returned silently at its 10-second deadline.
+   **In-scope-Fix (fail-fast):** the wait now throws
+   `port N did not become rebindable within Xms` at the deadline instead of
+   deferring attribution to whatever bind fails next. The deadline became
+   an optional parameter (`deadlineMs = 10_000`, call sites unchanged) so
+   the failure is testable without adding a 10 s wait to every suite run.
+   Behavioral test: `fails fast when a held port never becomes rebindable`
+   holds a real listener on an ephemeral port, expects the rejection, then
+   releases the holder and expects the same wait to resolve.
+2. `sidecarGate.releasePath` was interpolated unescaped into the
+   single-quoted `sh -c` barrier. The gate path is rooted at
+   `os.tmpdir()`, which resolves from OS/environment input (TMPDIR) and may
+   legally contain a single quote; that is exactly the external-input case
+   where hardening is appropriate. **In-scope-Fix:** POSIX single-quote
+   escaping (`.replaceAll("'", "'\''")`). Behavioral test:
+   `gated sidecar registers through a release path containing a single
+   quote` routes a real gated sidecar spawn whose release file lives in a
+   quote-named directory and observes the fake engine register the
+   container.
+3. The async `afterEach` ran child termination and the port wait before
+   restoration with no try/finally. **In-scope-Fix:** the cleanup is now a
+   named `restoreFixture` with restoration in a `finally`; failures still
+   propagate (nothing is swallowed). Behavioral test:
+   `restores the fixture even when child termination fails` injects a
+   real-shaped OS kill failure (EPERM for the sidecar group) at the
+   `process.kill` boundary, asserts the rejection still surfaces, and that
+   env, cwd, and the fixture directory were restored anyway.
+
+No Reject or Defer classifications: every finding is fixture-local,
+introduced by this PR, and each fix is the smallest correction (one
+throw, one escape, one try/finally). No production code, workflow,
+dependency, quality tool, fake-engine behavior, public API, or #3538
+mechanism was touched.
+
+### TDD evidence
+
+- Refactor first (`01-refactor-focused.log`): naming the cleanup changed
+  nothing; 7/7 before any new test was added.
+- RED (`02-red-finding1.log`, `02-red-finding2.log`,
+  `02-red-finding3.log`, `02-red-full-file.log`): each new test failed for
+  the finding's exact symptom (the promise resolved silently after the
+  10 s deadline; the gated child died instantly with `exitCode=2`, a
+  shell syntax error, and never registered; the injected EPERM propagated
+  but `process.env` stayed dirty), while the seven pre-existing tests
+  stayed green (7 pass / 3 fail in the full-file run).
+- GREEN (`03-green-run-1/2/3.log`, `05-focused-post-cast-removal.log`,
+  `05-focused-post-assert.log`, `10-post-format-focused.log`): 10 pass /
+  0 fail on every run; the three new tests take ~0.3-0.5 s each.
+
+### Process-group leak evidence
+
+- 14 probe runs (`03-group-probe-run-1..12.log`,
+  `14-group-probe-final-13/14.log`): `surviving_groups=0` on every probe.
+  One probe (run 1) saw its test run exit 1 with output discarded by the
+  pre-existing probe script; its group evidence still held. Runs 4-14
+  used a captured variant (`group-leak-probe-captured.ts`) and were fully
+  green.
+- During probes 7-12 a port-8877 watcher (`03-port8877-watch.log`)
+  attributed the only 8877 listener to each probe's own test process
+  (~7 s per run, the intended fixed-port scenario listener); no external
+  holder appeared.
+- Post-run `sleep 120` scans (`14-post-runs-sleep120.txt`): the only
+  survivor is the pre-existing external lane watcher chain (ppid 19869).
+
+### Test-audit
+
+- `test-audit/` and `test-audit-final/` (pre- and post-format): zero
+  findings for the touched file, 2028 findings total, byte-identical to
+  the pre-change baseline
+  (`tmp/issue3533/remediation/test-audit-final/findings.tsv`).
+
+### Full verification cycle (final tree, post-format)
+
+- `LLXPRT_CLI_TEST_CONCURRENCY=1 npm run test` exit 0 (`06-npm-test.log`):
+  738/738 CLI test files, 9511 passed / 0 failed / 5 skipped / 13 todo
+  (the pre-change baseline's 9508 passed plus this change's three new
+  tests); the junit entry for the touched file carries no failure
+  (`06-junit-touched-file.txt`); every other workspace green.
+- `npm run lint` exit 0 (`07-npm-lint.log`).
+- `npm run typecheck` exit 0 (`08-npm-typecheck.log`; an earlier
+  pre-final-shape run also passed, `04-typecheck-early.log`).
+- `npm run format` exit 0 (`09-npm-format.log`); it rewrapped one
+  expression in the touched file (`09-format-diff-touched.txt`), after
+  which eslint and the focused file were re-run green
+  (`10-post-format-eslint.log`, `10-post-format-focused.log`).
+- `npm run build` exit 0 (`11-npm-build.log`).
+- stepfun-37 smoke exit 0 (`12-stepfun-smoke.log`).
+- `git diff --check` clean (`13-git-diff-check.log`).

@@ -309,12 +309,15 @@ describe('#3469 launch resource release', () => {
   /**
    * #3533 remediation: after heavy readiness-poll churn, closing the
    * fixed-port listener can leave the port briefly unbindable; wait until a
-   * probe bind succeeds so the next scenario starts deterministically. A
-   * real holder is never hidden: when the port does not come back, the next
-   * test's listenAt still rejects with the bind error.
+   * probe bind succeeds so the next scenario starts deterministically. If
+   * the port does not come back within the deadline, fail fast here instead
+   * of deferring the attribution to the next bind.
    */
-  async function awaitPortRebindable(port: number): Promise<void> {
-    const deadline = Date.now() + 10_000;
+  async function awaitPortRebindable(
+    port: number,
+    deadlineMs = 10_000,
+  ): Promise<void> {
+    const deadline = Date.now() + deadlineMs;
     for (;;) {
       const probe = net.createServer();
       const outcome = new Promise<'bound' | 'busy'>((resolve) => {
@@ -323,7 +326,11 @@ describe('#3469 launch resource release', () => {
       });
       probe.listen(port, '127.0.0.1');
       if ((await outcome) === 'busy') {
-        if (Date.now() > deadline) return;
+        if (Date.now() > deadline) {
+          throw new Error(
+            `port ${port} did not become rebindable within ${deadlineMs}ms`,
+          );
+        }
         await new Promise((resolve) => setTimeout(resolve, 100));
         continue;
       }
@@ -377,7 +384,10 @@ describe('#3469 launch resource release', () => {
         // readiness gate creates the release file, so its registration is
         // deterministically ordered behind an observed readiness request.
         // `exec` hands the tracked child's pid to the engine process
-        // itself, keeping the child a process-group leader.
+        // itself, keeping the child a process-group leader. The release
+        // path is rooted at os.tmpdir(), environment-provided input whose
+        // value may contain single quotes; escape them so the single-quoted
+        // shell word stays one word.
         const child =
           sidecarGate === undefined
             ? __actual.spawn(command, args, options)
@@ -385,7 +395,7 @@ describe('#3469 launch resource release', () => {
                 'sh',
                 [
                   '-c',
-                  `until [ -e '${sidecarGate.releasePath}' ]; do sleep 0.05; done; exec "$@"`,
+                  `until [ -e '${sidecarGate.releasePath.replaceAll("'", "'\\''")}' ]; do sleep 0.05; done; exec "$@"`,
                   'sh',
                   command,
                   ...args,
@@ -528,30 +538,40 @@ describe('#3469 launch resource release', () => {
     proxyFake.socketPath = undefined;
   });
 
-  afterEach(async () => {
-    await terminateTrackedChildren();
-    const servers = trackedServers.splice(0);
-    for (const server of servers) {
-      server.close();
+  /**
+   * #3533 OCR remediation: the per-test restoration. Child termination and
+   * port waiting can fail; the fixture is restored either way, and the
+   * failure itself still propagates (fail fast, never swallow).
+   */
+  const restoreFixture = async (): Promise<void> => {
+    try {
+      await terminateTrackedChildren();
+      const servers = trackedServers.splice(0);
+      for (const server of servers) {
+        server.close();
+      }
+      if (servers.length > 0) {
+        await awaitPortRebindable(8877);
+      }
+    } finally {
+      process.env = environmentSnapshot;
+      vi.restoreAllMocks();
+      if (fixturePath !== '') {
+        process.chdir(originalCwd);
+        fs.rmSync(fixturePath, { recursive: true, force: true });
+      }
+      fs.rmSync(isolatedCacheDir, { recursive: true, force: true });
+      fs.rmSync(proxyMarkerDir, { recursive: true, force: true });
+      for (const leaked of leakedTmpdirs()) {
+        fs.rmSync(path.join(fs.realpathSync(os.tmpdir()), leaked), {
+          recursive: true,
+          force: true,
+        });
+      }
     }
-    if (servers.length > 0) {
-      await awaitPortRebindable(8877);
-    }
-    process.env = environmentSnapshot;
-    vi.restoreAllMocks();
-    if (fixturePath !== '') {
-      process.chdir(originalCwd);
-      fs.rmSync(fixturePath, { recursive: true, force: true });
-    }
-    fs.rmSync(isolatedCacheDir, { recursive: true, force: true });
-    fs.rmSync(proxyMarkerDir, { recursive: true, force: true });
-    for (const leaked of leakedTmpdirs()) {
-      fs.rmSync(path.join(fs.realpathSync(os.tmpdir()), leaked), {
-        recursive: true,
-        force: true,
-      });
-    }
-  });
+  };
+
+  afterEach(restoreFixture);
 
   it('releases a live SSH agent tunnel when a later preparation step fails', async () => {
     fs.writeFileSync(path.join(fixturePath, 'agent.sock'), '');
@@ -816,4 +836,122 @@ describe('#3469 launch resource release', () => {
     assertEngineEmpty();
     expect(leakedRunRoots()).toStrictEqual([]);
   }, 30_000);
+
+  it('fails fast when a held port never becomes rebindable', async () => {
+    const holder = net.createServer();
+    const heldPort = await new Promise<number>((resolve, reject) => {
+      holder.once('listening', () => {
+        const address = holder.address();
+        if (address === null || typeof address === 'string') {
+          reject(new Error('holder did not bind a TCP port'));
+          return;
+        }
+        resolve(address.port);
+      });
+      holder.once('error', reject);
+      holder.listen(0, '127.0.0.1');
+    });
+    try {
+      await expect(awaitPortRebindable(heldPort, 250)).rejects.toThrowError(
+        `port ${heldPort} did not become rebindable`,
+      );
+    } finally {
+      await new Promise<void>((resolve) => holder.close(() => resolve()));
+    }
+    // Once really free again, the same wait resolves.
+    await awaitPortRebindable(heldPort, 5_000);
+  }, 20_000);
+
+  it('gated sidecar registers through a release path containing a single quote', async () => {
+    // os.tmpdir() comes from the environment, so the gate's release path may
+    // contain a single quote; the gated shell command must still hold.
+    const quotedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'issue3533-ocr-'));
+    const quotedGateDir = path.join(quotedRoot, "gate-it's");
+    fs.mkdirSync(quotedGateDir);
+    const gate: ReadinessGate = {
+      rejections: 0,
+      acceptances: 0,
+      releasePath: path.join(quotedGateDir, 'released'),
+    };
+    try {
+      routeSpawns('throw', undefined, gate);
+      const spawnMock = childProcess.spawn as unknown as Mock<
+        typeof childProcess.spawn
+      >;
+      const sidecar = spawnMock(
+        'docker',
+        [
+          'run',
+          '--rm',
+          '--init',
+          '--name',
+          'llxprt-code-sandbox-proxy',
+          '--network',
+          'llxprt-code-sandbox-proxy',
+          '-p',
+          '8877:8877',
+          engine.config.image,
+          'sh',
+          '-lc',
+          'sleep 120',
+        ],
+        { detached: true, stdio: 'ignore' },
+      );
+      fs.writeFileSync(gate.releasePath, 'released\n');
+      const deadline = Date.now() + 10_000;
+      while (!engine.containerNames().includes('llxprt-code-sandbox-proxy')) {
+        if (Date.now() > deadline) {
+          throw new Error(
+            `gated sidecar never registered (exitCode=${sidecar.exitCode}, signal=${sidecar.signalCode})`,
+          );
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      // The gated child passed the quoted release-path barrier and the
+      // fake engine really registered the sidecar container.
+      expect(engine.containerNames()).toContain('llxprt-code-sandbox-proxy');
+    } finally {
+      fs.rmSync(quotedRoot, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('restores the fixture even when child termination fails', async () => {
+    const sleeper = __actual.spawn('sleep', ['120'], {
+      stdio: 'ignore',
+      detached: true,
+    });
+    const sleeperPid = sleeper.pid;
+    if (sleeperPid === undefined) {
+      throw new Error('sleeper child never got a pid');
+    }
+    trackedChildren.push({ child: sleeper, groupLeader: true });
+    process.env.LLXPRT_ISSUE3533_DIRTY = '1';
+    // An OS-level kill failure (e.g. EPERM on a group this run does not
+    // own) is external input: inject it at the kill boundary.
+    const realKill = process.kill;
+    const injected: NodeJS.ErrnoException = new Error(
+      `injected EPERM killing sidecar group ${sleeperPid}`,
+    );
+    injected.code = 'EPERM';
+    const killSpy = vi
+      .spyOn(process, 'kill')
+      .mockImplementation((pid: number, signal?: string | number) => {
+        if (pid === -sleeperPid) throw injected;
+        return signal === undefined ? realKill(pid) : realKill(pid, signal);
+      });
+    try {
+      await expect(restoreFixture()).rejects.toThrowError('injected EPERM');
+      // The failure propagated, and the fixture was restored anyway.
+      expect(process.env.LLXPRT_ISSUE3533_DIRTY).toBeUndefined();
+      expect(process.cwd()).toBe(originalCwd);
+      expect(fs.existsSync(fixturePath)).toBe(false);
+    } finally {
+      killSpy.mockRestore();
+      await new Promise<void>((resolve) => {
+        sleeper.once('exit', resolve);
+        realKill(-sleeperPid, 'SIGKILL');
+      });
+    }
+    await expectProcessGroupsGone([sleeperPid]);
+  }, 20_000);
 });
