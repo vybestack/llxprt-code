@@ -9,7 +9,6 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { setupCredentialProxyPodmanMacOS } from './sandbox-podman.js';
 
 const DARWIN_SOCKET_PATH_MAX_BYTES = 103;
 const DIAGNOSTIC_MAX_BYTES = 4096;
@@ -21,15 +20,6 @@ function writeExecutable(filePath: string, content: string): void {
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
-}
-
-async function captureFailure(action: () => Promise<unknown>): Promise<string> {
-  try {
-    await action();
-  } catch (error) {
-    return error instanceof Error ? error.message : String(error);
-  }
-  throw new Error('Expected action to fail');
 }
 
 function processExists(pid: number): boolean {
@@ -44,10 +34,24 @@ function processExists(pid: number): boolean {
   }
 }
 
+/**
+ * Runs the real credential bridge in a fresh Bun process whose PATH is set
+ * through the child `env` so the fixture `podman` and `ssh` are the only ones
+ * reachable.
+ *
+ * Calling the bridge in-process instead is not deterministic: production
+ * resolves both binaries through child processes it spawns without an
+ * explicit `env` (`execSync` in `getPodmanMachineConnection`, `spawn('ssh')`),
+ * and a `process.env.PATH` mutation made inside a Bun test process is not
+ * guaranteed to reach them. On a host with a real Podman that reports no
+ * machine connections, the in-process form reached that Podman and failed in
+ * `getPodmanMachineConnection` before the fixture `ssh` ever ran.
+ */
 function invokeCredentialBridgeInFreshBun(
   fixtureRoot: string,
   originalPath: string,
   socketPath: string,
+  pollTimeoutMs = 1000,
 ): string {
   const runnerPath = path.join(fixtureRoot, 'invoke-credential-bridge.ts');
   const modulePath = path.join(import.meta.dirname, 'sandbox-podman.ts');
@@ -57,7 +61,7 @@ function invokeCredentialBridgeInFreshBun(
       `import { setupCredentialProxyPodmanMacOS } from ${JSON.stringify(modulePath)};`,
       `const socketPath = ${JSON.stringify(socketPath)};`,
       'try {',
-      '  await setupCredentialProxyPodmanMacOS([], socketPath, 1000);',
+      `  await setupCredentialProxyPodmanMacOS([], socketPath, ${String(pollTimeoutMs)});`,
       "  console.log('unexpected success');",
       '} catch (error) {',
       '  console.log(error instanceof Error ? error.message : String(error));',
@@ -90,9 +94,14 @@ describe('#3534 Podman tunnel startup diagnostics', () => {
 
   beforeEach(() => {
     fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'issue3534-ssh-'));
+    // Only used to build the child PATH; the host PATH is never mutated, so
+    // the fixture binaries are reachable exactly where they are needed.
     originalPath = process.env.PATH ?? '';
     podmanInvocationLog = path.join(fixtureRoot, 'podman-invocations.log');
     sshInvocationLog = path.join(fixtureRoot, 'ssh-invocations.log');
+    // The connection lookup is answered by this fixture rather than the host
+    // engine, so a machine-less environment (Linux CI) reaches the SSH path
+    // instead of failing early with "No Podman machine connections found".
     writeExecutable(
       path.join(fixtureRoot, 'podman'),
       [
@@ -108,15 +117,13 @@ describe('#3534 Podman tunnel startup diagnostics', () => {
         'esac',
       ].join('\n'),
     );
-    process.env.PATH = `${fixtureRoot}${path.delimiter}${originalPath}`;
   });
 
   afterEach(() => {
-    process.env.PATH = originalPath;
     fs.rmSync(fixtureRoot, { recursive: true, force: true });
   });
 
-  it('surfaces a late OpenSSH forwarding failure after draining chatty output and reaping the child', async () => {
+  it('surfaces a late OpenSSH forwarding failure after draining chatty output and reaping the child', () => {
     const sshPidPath = path.join(fixtureRoot, 'ssh.pid');
     writeExecutable(
       path.join(fixtureRoot, 'ssh'),
@@ -131,16 +138,24 @@ describe('#3534 Podman tunnel startup diagnostics', () => {
       ].join('\n'),
     );
 
-    const message = await captureFailure(() =>
-      setupCredentialProxyPodmanMacOS([], '/tmp/cred-proxy.sock', 3000),
+    const message = invokeCredentialBridgeInFreshBun(
+      fixtureRoot,
+      originalPath,
+      '/tmp/cred-proxy.sock',
+      3000,
     );
     const sshPid = Number(fs.readFileSync(sshPidPath, 'utf8').trim());
 
+    // The fixture Podman answered the connection lookup, so the diagnostic
+    // below came from the fixture ssh rather than an ambient host engine.
+    expect(fs.readFileSync(podmanInvocationLog, 'utf8')).toContain(
+      'system connection list',
+    );
     expect(message).toContain('late OpenSSH forwarding failure');
     expect(processExists(sshPid)).toBe(false);
   }, 10000);
 
-  it('retains exactly 4096 encoded bytes from an oversized OpenSSH diagnostic', async () => {
+  it('retains exactly 4096 encoded bytes from an oversized OpenSSH diagnostic', () => {
     writeExecutable(
       path.join(fixtureRoot, 'ssh'),
       [
@@ -153,13 +168,18 @@ describe('#3534 Podman tunnel startup diagnostics', () => {
       ].join('\n'),
     );
 
-    const message = await captureFailure(() =>
-      setupCredentialProxyPodmanMacOS([], '/tmp/cred-proxy.sock'),
+    const message = invokeCredentialBridgeInFreshBun(
+      fixtureRoot,
+      originalPath,
+      '/tmp/cred-proxy.sock',
     );
     const diagnosticMarker = ' SSH diagnostic: ';
     const markerIndex = message.indexOf(diagnosticMarker);
     const diagnostic = message.slice(markerIndex + diagnosticMarker.length);
 
+    expect(fs.readFileSync(podmanInvocationLog, 'utf8')).toContain(
+      'system connection list',
+    );
     expect(message).toContain(
       'Bad remote forwarding specification for credential socket',
     );

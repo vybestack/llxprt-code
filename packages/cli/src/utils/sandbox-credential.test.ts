@@ -41,6 +41,7 @@ void vi.mock('./sandbox-podman.js', () => ({
 }));
 
 import { setupCredentialProxy } from './sandbox-containers.js';
+import { createCredentialSocketRuntime } from './sandbox-credential-runtime.js';
 
 const NETWORK_ENV_KEYS = ['LLXPRT_SANDBOX_NETWORK', 'SANDBOX_NETWORK'] as const;
 const CAPABILITY_TOKEN = 'a'.repeat(64);
@@ -479,6 +480,110 @@ describe('#3534 Podman credential socket runtime', () => {
     ).toBe(true);
     expect(fs.existsSync(sessionTmpdir)).toBe(false);
     realRmSync(socketRuntime, { recursive: true, force: true });
+  });
+
+  // The runtime root is the literal '/tmp', so a real mkdtemp there can never
+  // reach the boundary; only the runtime directory name is substituted, and
+  // the directory itself is real so the guard's own cleanup is observed.
+  it('rejects a 104-byte Darwin runtime socket path before starting the proxy or Podman bridge', async () => {
+    const socketBasename = `${process.pid}-${'x'.repeat(22)}.sock`;
+    const shortestRuntime = path.join('/tmp', `r${process.pid}`);
+    const shortestSocketPath = path.join(shortestRuntime, socketBasename);
+    const runtimePath =
+      shortestRuntime + 'r'.repeat(104 - Buffer.byteLength(shortestSocketPath));
+    const longestSocketPath = path.join(runtimePath, socketBasename);
+    fs.mkdirSync(runtimePath, { recursive: true, mode: 0o700 });
+    const mkdtempSpy = vi.spyOn(fs, 'mkdtempSync').mockReturnValue(runtimePath);
+
+    const invocation = invokeCredentialSetup('podman', sessionTmpdir);
+
+    try {
+      expect(Buffer.byteLength(longestSocketPath)).toBe(104);
+      await expect(invocation.promise).rejects.toThrowError(
+        /exceeds Darwin's 103-byte pathname limit/,
+      );
+      // The rejection names the boundary rather than the downstream
+      // "proxy started but did not produce a socket path" failure, so the
+      // guard ran while the runtime was being constructed. Nothing was
+      // wired for the container and the rejected runtime left nothing behind.
+      expect(fs.existsSync(runtimePath)).toBe(false);
+      expect(invocation.args).toStrictEqual([]);
+      expect(invocation.prefixes).toStrictEqual([]);
+    } finally {
+      mkdtempSpy.mockRestore();
+      fs.rmSync(runtimePath, { recursive: true, force: true });
+    }
+  });
+
+  it('accepts a 103-byte Darwin runtime socket path and keeps the runtime', async () => {
+    const socketBasename = `${process.pid}-${'x'.repeat(22)}.sock`;
+    const shortestRuntime = path.join('/tmp', `r${process.pid}`);
+    const shortestSocketPath = path.join(shortestRuntime, socketBasename);
+    const runtimePath =
+      shortestRuntime + 'r'.repeat(103 - Buffer.byteLength(shortestSocketPath));
+    const longestSocketPath = path.join(runtimePath, socketBasename);
+    fs.mkdirSync(runtimePath, { recursive: true, mode: 0o700 });
+    const mkdtempSpy = vi.spyOn(fs, 'mkdtempSync').mockReturnValue(runtimePath);
+
+    try {
+      expect(Buffer.byteLength(longestSocketPath)).toBe(103);
+      const runtime = createCredentialSocketRuntime(
+        { command: 'podman', image: 'test' },
+        sessionTmpdir,
+      );
+      expect(runtime.path).toBe(runtimePath);
+      expect(fs.existsSync(runtimePath)).toBe(true);
+      runtime.cleanup();
+      expect(fs.existsSync(runtimePath)).toBe(false);
+    } finally {
+      mkdtempSpy.mockRestore();
+      fs.rmSync(runtimePath, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves runtime initialization and cleanup failures together', () => {
+    const runtimePath = path.join('/tmp', 'lx-initialization-failure');
+    const initializationFailure = new Error(
+      'induced runtime permission initialization failure',
+    );
+    const cleanupFailure = new Error('induced runtime cleanup failure');
+    const mkdtempSpy = vi.spyOn(fs, 'mkdtempSync').mockReturnValue(runtimePath);
+    const chmodSpy = vi.spyOn(fs, 'chmodSync').mockImplementation(() => {
+      throw initializationFailure;
+    });
+    const rmSpy = vi.spyOn(fs, 'rmSync').mockImplementation(() => {
+      throw cleanupFailure;
+    });
+    let thrown: unknown;
+
+    try {
+      createCredentialSocketRuntime(
+        { command: 'podman', image: 'test' },
+        sessionTmpdir,
+      );
+    } catch (error) {
+      thrown = error;
+    } finally {
+      mkdtempSpy.mockRestore();
+      chmodSpy.mockRestore();
+      rmSpy.mockRestore();
+    }
+
+    expect(thrown).toBeInstanceOf(AggregateError);
+    if (!(thrown instanceof AggregateError)) {
+      throw new Error('Expected runtime failures to be aggregated');
+    }
+    expect(thrown.errors).toHaveLength(2);
+    // The initialization failure survives the failing cleanup instead of
+    // being replaced by it, and the cleanup failure is carried alongside.
+    const preserved: unknown = thrown.errors[0];
+    expect(preserved).toBeInstanceOf(FatalSandboxError);
+    if (!(preserved instanceof FatalSandboxError)) {
+      throw new Error('Expected the initialization failure to be preserved');
+    }
+    expect(preserved.message).toContain(initializationFailure.message);
+    expect(preserved.message).toContain("under '/tmp'");
+    expect(thrown.errors[1]).toBe(cleanupFailure);
   });
 
   it('keeps installed Docker compatibility by using the normal session directory', async () => {

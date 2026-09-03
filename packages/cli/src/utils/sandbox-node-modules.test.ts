@@ -11,6 +11,7 @@ import path from 'node:path';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import { useFakeEngine } from '../../test-utils/fake-dependency-engine-harness.js';
+import { getContainerPath } from './sandbox-env.js';
 import {
   addPrivateDependencyMounts,
   resolveProtectedNodeModulesDestinations,
@@ -658,8 +659,24 @@ describe('#3450/#3468 private per-run dependency mounts', () => {
       const mountValues = args.filter(
         (token, index) => index > 0 && args[index - 1] === '--mount',
       );
+      const protectedDestinations = [
+        path.join(workdir, 'node_modules'),
+        path.join(workdir, 'packages', 'nested', 'node_modules'),
+        path.join(workdir, 'packages', 'absent', 'node_modules'),
+      ];
+      const mountDestinations = mountValues.map((value) =>
+        value
+          .split(',')
+          .find((field) => field.startsWith('dst='))
+          ?.slice('dst='.length),
+      );
       try {
-        expect(mountValues).toHaveLength(3);
+        expect(resolveProtectedNodeModulesDestinations(workdir)).toStrictEqual(
+          protectedDestinations,
+        );
+        expect(mountDestinations).toStrictEqual(
+          protectedDestinations.map(getContainerPath),
+        );
         expect(
           mountValues.every((value) => value.startsWith('type=volume,src=')),
         ).toBe(true);

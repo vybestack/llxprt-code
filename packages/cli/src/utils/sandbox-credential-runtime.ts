@@ -72,13 +72,24 @@ export function createCredentialSocketRuntime(
       );
     }
   } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    const initializationError =
+      error instanceof FatalSandboxError
+        ? error
+        : new FatalSandboxError(
+            `Failed to create a private Podman macOS credential socket runtime under '${PODMAN_DARWIN_SOCKET_RUNTIME_ROOT}': ${detail}`,
+          );
     if (runtimePath !== '') {
-      fs.rmSync(runtimePath, { recursive: true, force: true });
+      try {
+        fs.rmSync(runtimePath, { recursive: true, force: true });
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [initializationError, cleanupError],
+          'Podman macOS credential socket runtime initialization and cleanup failed',
+        );
+      }
     }
-    if (error instanceof FatalSandboxError) throw error;
-    throw new FatalSandboxError(
-      `Failed to create a private Podman macOS credential socket runtime under '${PODMAN_DARWIN_SOCKET_RUNTIME_ROOT}': ${error instanceof Error ? error.message : String(error)}`,
-    );
+    throw initializationError;
   }
   return {
     path: runtimePath,
