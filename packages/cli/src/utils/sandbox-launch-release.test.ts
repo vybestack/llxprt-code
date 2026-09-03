@@ -652,36 +652,37 @@ describe('#3469 launch resource release', () => {
     };
     const originalPath = process.env.PATH ?? '';
     const scenarioServers: net.Server[] = [];
-    try {
-      process.env.PATH = `${shimDir}${path.delimiter}${process.env.PATH}`;
-      scenarioServers.push(
-        (
-          await listenAt(8877, (socket) => {
-            // #3533: readiness must reflect the engine record, not the
-            // listener bind. A reply before the fake engine persisted the
-            // sidecar lets the launch proceed to `network connect`, which
-            // finds no container. Destroying the connection keeps the
-            // production retry loop polling; a never-registering sidecar
-            // still runs into the readiness timeout.
-            if (
-              !engine.containerNames().includes('llxprt-code-sandbox-proxy')
-            ) {
-              gate.rejections++;
-              // #3533: the first observed rejection releases the gated
-              // registration, so the request order is causal: no
-              // registration can precede an observed, rejected readiness
-              // request.
-              if (gate.rejections === 1) {
-                fs.writeFileSync(gate.releasePath, 'released\n');
-              }
-              socket.destroy();
-              return;
+    // #3538 (deferred): the listener is acquired before the try/finally, so
+    // a bind failure still rejects the scenario with the bind error and the
+    // shim/gate cleanup below does not run for it.
+    scenarioServers.push(
+      (
+        await listenAt(8877, (socket) => {
+          // #3533: readiness must reflect the engine record, not the
+          // listener bind. A reply before the fake engine persisted the
+          // sidecar lets the launch proceed to `network connect`, which
+          // finds no container. Destroying the connection keeps the
+          // production retry loop polling; a never-registering sidecar
+          // still runs into the readiness timeout.
+          if (!engine.containerNames().includes('llxprt-code-sandbox-proxy')) {
+            gate.rejections++;
+            // #3533: the first observed rejection releases the gated
+            // registration, so the request order is causal: no
+            // registration can precede an observed, rejected readiness
+            // request.
+            if (gate.rejections === 1) {
+              fs.writeFileSync(gate.releasePath, 'released\n');
             }
-            gate.acceptances++;
-            socket.end('HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n');
-          })
-        ).server,
-      );
+            socket.destroy();
+            return;
+          }
+          gate.acceptances++;
+          socket.end('HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n');
+        })
+      ).server,
+    );
+    process.env.PATH = `${shimDir}${path.delimiter}${process.env.PATH}`;
+    try {
       routeSpawns('throw', undefined, sidecar === 'gated' ? gate : undefined);
       routeExecSync({});
       const stderr = await captureStderr(async () => {

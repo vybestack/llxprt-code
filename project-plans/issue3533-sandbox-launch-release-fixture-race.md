@@ -174,3 +174,76 @@ flake is load-sensitive.
 Deferred out of scope: the readiness-listener bind-failure shim cleanup is
 tracked as #3538 and is not implemented here. No production file, workflow,
 dependency, quality tool, or fake-engine public behavior was touched.
+
+## Final remediation (scope correction)
+
+Executed 2026-09-03 on the same branch; all logs under
+`tmp/issue3533/final-remediation/`.
+
+### Scope-boundary correction
+
+The first remediation accidentally moved the listener acquisition inside the
+scenario helper's try/finally, which made a rejected `listenAt(8877, ...)`
+bind run the finally's timeout-shim and gate-directory cleanup. That is the
+central cleanup mechanism explicitly deferred to #3538, and it was never in
+this issue's scope. The final correction moves the `listenAt(8877, ...)`
+acquisition (and the `PATH` shim prepend) back to before the try/finally, so
+the pre-remediation behavior holds: a bind failure rejects the scenario with
+the bind error and the shim/gate temp-dir cleanup does not run for it. A
+comment marks the boundary as the deferred #3538 limitation. No bind-failure
+cleanup test was added; #3538 remains unimplemented and OPEN. The resolved
+readiness barrier, gate counters, process-group termination/reaping, and
+behavioral order are unchanged.
+
+### Focused evidence on the final tree
+
+- Focused file, repeated (`11-focused-run-1/2/3.log` exit 0 each,
+  `13-focused-final.log` exit 0): 7 pass / 0 fail on every run.
+- Process-group leak probe, repeated (`11-group-probe-run-1/2/3.log`,
+  `13-group-probe-final.log`, exits 0): each run captured the 5 detached
+  sidecar groups the scenarios created and every one was fully gone
+  (ESRCH); `surviving_groups=0` on all four probes.
+- Post-run `sleep 120` scans (`11-post-focus-ps.txt`,
+  `12-post-focus-ps-final.txt`, `12-sleep120-pids.txt`): every surviving
+  `sleep 120` is attributable to the pre-existing external lane watcher
+  (ppid 19869 `watch-lanes.sh`) or to other LLxprt sessions' own scenario
+  work; none descend from this file's runs.
+- Test-audit (`test-audit/findings.tsv`): zero findings for the touched
+  file and 2028 findings total, byte-identical to the pre-change baseline
+  (`tmp/issue3533/remediation/test-audit-final/findings.tsv`).
+
+### Full verification cycle on the final tree
+
+- `npm run test` exit 0 (`04-npm-test.log`, `04-npm-test.exit`): passed with
+  the CLI phase pinned to concurrency 1 via the sanctioned
+  `LLXPRT_CLI_TEST_CONCURRENCY` escape hatch (`scripts/lib/bun-test-policy.ts`
+  parses it deliberately for exactly this purpose), because runs 1-3 at the
+  default concurrency 4 (`01/02/03-npm-test.log`, exits 1) failed only in the
+  unchanged `sandbox-seatbelt.test.ts` `assertSeatbeltProxyPortAvailable`
+  cleanup — the known intra-suite fixed-port-8877 race tracked as #3501 and
+  #3512, already reproduced on the unmodified tree and never in the touched
+  file. Watcher attribution (`port8877-watch-run3.log`,
+  `port8877-watch-run4.log`) confirmed both causes: sibling sessions and
+  this suite's own concurrent files held 8877 during runs 1-3; at
+  concurrency 1 the only holder during the passing run was this file's own
+  scenario listener (pid 44914, ~7 s), which is exactly the intended
+  fixed-port design. No production, test, or workflow change was made to
+  work around the contention. Full summaries in the passing run: 738/738
+  CLI test files, 9508 passed / 0 failed test cases, plus 13/13, 590/590,
+  388/388, 7/7, 22/22, 13/13, and 7/7 across the other workspaces.
+- `npm run lint` exit 0 (`05-npm-lint.log`, `05-npm-lint.exit`).
+- `npm run typecheck` exit 0 (`06-npm-typecheck.log`,
+  `06-npm-typecheck.exit`).
+- `npm run format` exit 0 (`07-npm-format.log`, `07-npm-format.exit`);
+  post-format `git status` shows only the two scoped files, and the
+  pre-format and post-format diffs of the touched file are identical
+  (prettier made no edits).
+- `npm run build` exit 0 (`08-npm-build.log`, `08-npm-build.exit`).
+- stepfun-37 smoke exit 0 (`09-stepfun-smoke.log`, `09-stepfun-smoke.exit`):
+  the haiku rendered through the stepfun-37 profile.
+- `git diff --check` clean (`10-git-diff-check.log`, exit 0).
+
+Status: the #3538 deferral stands (issue OPEN, mechanism unimplemented, no
+bind-failure cleanup tests); the two prior #3533 findings (readiness barrier
+proof, process-group reaping) are preserved verbatim from the previous
+commit; the full cycle above ran on the final corrected tree.
