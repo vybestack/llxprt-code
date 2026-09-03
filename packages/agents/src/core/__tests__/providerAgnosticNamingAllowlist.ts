@@ -119,6 +119,8 @@ export const ALLOWED_GEMINI_PAIRS: readonly string[] = [
   'providers/src/__tests__/LoadBalancingProvider.delegation.test.ts::mockGeminiProvider',
   'providers/src/__tests__/LoadBalancingProvider.delegation.test.ts::mockGemini',
   'providers/src/composition/providerManagerInstance.oauthRegistration.test.ts::MockGeminiProvider',
+  'providers/src/composition/providerManagerInstance.oauthRegistration.test.ts::geminiCtorState',
+  'providers/src/composition/providerManagerInstance.oauthRegistration.test.ts::geminiCtor',
   'providers/src/composition/providerManagerInstance.schemaDefaults.test.ts::MockGeminiProvider',
 ];
 
