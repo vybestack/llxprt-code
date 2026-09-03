@@ -356,7 +356,7 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
         'async function runSeatbeltSandbox',
       );
       const seatbeltEnd = sandboxSources.seatbelt.indexOf(
-        'function resolveProxyUrl',
+        'export function buildSeatbeltArgs',
       );
 
       expect(seatbeltStart).toBeGreaterThan(-1);

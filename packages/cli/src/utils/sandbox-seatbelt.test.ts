@@ -19,9 +19,13 @@ import {
 } from './sandbox-seatbelt.js';
 import {
   assertSeatbeltProxyPortAvailable,
-  captureSeatbeltHarnessProcessState,
-  cleanupSeatbeltHarnessFixture,
-  restoreSeatbeltHarnessFixture,
+  createSeatbeltHarness,
+  executeSeatbeltHarness,
+  restoreSeatbeltHarnessEnvironment,
+  snapshotSeatbeltHarnessEnvironment,
+  SEATBELT_HARNESS_TIMEOUT_MS,
+  type SeatbeltHarness,
+  type SeatbeltHarnessEnvironmentSnapshot,
 } from './sandbox-seatbelt.test-helpers.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
@@ -482,164 +486,9 @@ describe('AC11: seatbelt spawn env carries no capability transport (#1954)', () 
   );
 });
 
-const ISSUE_1456_ENV_KEYS = [
-  'SEATBELT_PROFILE',
-  'LLXPRT_SANDBOX_NETWORK',
-  'SANDBOX_NETWORK',
-  'LLXPRT_SANDBOX_PROXY_COMMAND',
-  'LLXPRT_CAPABILITY_TOKEN',
-  'LLXPRT_CAPABILITY_FD',
-  'LLXPRT_CREDENTIAL_SOCKET',
-  'PATH',
-] as const;
 const PROXIED_PROFILE_ERROR =
   'Seatbelt proxied profile requires a non-empty LLXPRT_SANDBOX_PROXY_COMMAND.';
 const BUILTIN_PROFILE_DIRECTORY = __dirname;
-
-type Issue1456Environment = Partial<
-  Record<(typeof ISSUE_1456_ENV_KEYS)[number], string>
->;
-
-interface SeatbeltHarness {
-  readonly cwd: string;
-  readonly argsFile: string;
-  readonly envFile: string;
-  readonly sandboxMarker: string;
-  readonly proxyMarker: string;
-  readonly proxyCommand: string;
-  readonly cleanup: () => Promise<void>;
-}
-
-function restoreEnvironment(
-  snapshot: Readonly<Record<string, string | undefined>>,
-): void {
-  for (const key of ISSUE_1456_ENV_KEYS) {
-    const value = snapshot[key];
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
-  }
-}
-
-function applyEnvironment(environment: Issue1456Environment): void {
-  for (const key of ISSUE_1456_ENV_KEYS) {
-    if (key !== 'PATH') delete process.env[key];
-  }
-  Object.assign(
-    process.env,
-    Object.fromEntries(
-      ISSUE_1456_ENV_KEYS.flatMap((key) => {
-        const value = environment[key];
-        return value === undefined ? [] : [[key, value]];
-      }),
-    ),
-  );
-}
-
-function writeExecutable(filePath: string, content: string): void {
-  fs.writeFileSync(filePath, content, { mode: 0o755 });
-}
-
-function createSeatbeltHarness(cwd: string = process.cwd()): SeatbeltHarness {
-  const restoreHarnessState = captureSeatbeltHarnessProcessState();
-  const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'seatbelt-1456-'));
-
-  try {
-    const argsFile = path.join(fixtureDir, 'args');
-    const envFile = path.join(fixtureDir, 'env');
-    const sandboxMarker = path.join(fixtureDir, 'sandbox-spawned');
-    const sandboxExitMarker = path.join(fixtureDir, 'sandbox-exit');
-    const proxyMarker = path.join(fixtureDir, 'proxy-listening');
-    const proxyPidFile = path.join(fixtureDir, 'proxy-pid');
-    const proxyServer = path.join(fixtureDir, 'proxy.cjs');
-
-    writeExecutable(
-      path.join(fixtureDir, 'sandbox-exec'),
-      `#!/bin/sh\nprintf '%s\\n' "$@" > "${argsFile}"\nenv > "${envFile}"\ntouch "${sandboxMarker}"\nif [ -n "${'$'}{LLXPRT_SANDBOX_PROXY_COMMAND-}" ]; then attempts=0; while [ ! -f "${sandboxExitMarker}" ]; do attempts=$((attempts + 1)); [ "$attempts" -ge 1000 ] && exit 124; sleep 0.01; done; fi\n`,
-    );
-    fs.writeFileSync(
-      proxyServer,
-      [
-        "const fs = require('node:fs');",
-        "const http = require('node:http');",
-        `const server = http.createServer((_request, response) => response.end('ok'));`,
-        `server.listen(8877, '127.0.0.1', () => {`,
-        `  fs.writeFileSync(${JSON.stringify(proxyPidFile)}, String(process.pid));`,
-        `  fs.writeFileSync(${JSON.stringify(proxyMarker)}, 'listening');`,
-        `  const interval = setInterval(() => {`,
-        `    if (fs.existsSync(${JSON.stringify(sandboxMarker)})) {`,
-        `      clearInterval(interval);`,
-        `      fs.writeFileSync(${JSON.stringify(sandboxExitMarker)}, 'exit');`,
-        `      server.close(() => process.exit(0));`,
-        `    }`,
-        `  }, 10);`,
-        '});',
-        "process.on('SIGTERM', () => server.close(() => process.exit(0)));",
-      ].join('\n'),
-    );
-    writeExecutable(
-      path.join(fixtureDir, 'timeout'),
-      ['#!/bin/sh', 'shift', 'exec "$@"'].join('\n'),
-    );
-    writeExecutable(
-      path.join(fixtureDir, 'curl'),
-      `#!/bin/sh\ncase "${'$'}{LLXPRT_SANDBOX_PROXY_COMMAND-}" in *proxy.cjs*) attempts=0; while [ ! -f "${proxyMarker}" ]; do attempts=$((attempts + 1)); [ "$attempts" -ge 1000 ] && exit 124; sleep 0.01; done;; esac\nexit 0\n`,
-    );
-    process.env.PATH = `${fixtureDir}:${process.env.PATH ?? ''}`;
-
-    Object.defineProperty(process, 'kill', {
-      configurable: true,
-      value: () => {
-        const error = new Error('kill ESRCH');
-        Object.assign(error, { code: 'ESRCH' });
-        throw error;
-      },
-      writable: true,
-    });
-    Object.defineProperty(process, 'exit', {
-      configurable: true,
-      value: () => undefined,
-      writable: true,
-    });
-
-    const proxyCommand = `${JSON.stringify(process.execPath)} ${JSON.stringify(proxyServer)}`;
-    const cleanup = async (): Promise<void> => {
-      const proxyPid = fs.existsSync(proxyPidFile)
-        ? Number(fs.readFileSync(proxyPidFile, 'utf8').trim())
-        : undefined;
-      await cleanupSeatbeltHarnessFixture(
-        fixtureDir,
-        restoreHarnessState,
-        proxyPid,
-      );
-    };
-    return {
-      cwd,
-      argsFile,
-      envFile,
-      sandboxMarker,
-      proxyMarker,
-      proxyCommand,
-      cleanup,
-    };
-  } catch (error) {
-    restoreSeatbeltHarnessFixture(fixtureDir, restoreHarnessState);
-    throw error;
-  }
-}
-
-async function executeSeatbeltHarness(
-  harness: SeatbeltHarness,
-  environment: Issue1456Environment,
-): Promise<number> {
-  applyEnvironment(environment);
-  process.chdir(harness.cwd);
-  return runSeatbeltSandbox(
-    { command: 'sandbox-exec', image: 'test' },
-    [],
-    undefined,
-    [],
-  );
-}
 
 function assertSelectedProfile(
   harness: SeatbeltHarness,
@@ -661,19 +510,17 @@ function assertScrubbedEnvironment(harness: SeatbeltHarness): void {
 }
 
 describe('#1456 Seatbelt network policy', () => {
-  let environmentSnapshot: Record<string, string | undefined>;
+  let environmentSnapshot: SeatbeltHarnessEnvironmentSnapshot;
   let originalCwd: string;
 
   beforeEach(() => {
-    environmentSnapshot = Object.fromEntries(
-      ISSUE_1456_ENV_KEYS.map((key) => [key, process.env[key]]),
-    );
+    environmentSnapshot = snapshotSeatbeltHarnessEnvironment();
     originalCwd = process.cwd();
   });
 
   afterEach(() => {
     process.chdir(originalCwd);
-    restoreEnvironment(environmentSnapshot);
+    restoreSeatbeltHarnessEnvironment(environmentSnapshot);
   });
 
   it.skipIf(process.platform === 'win32').each([
@@ -687,7 +534,7 @@ describe('#1456 Seatbelt network policy', () => {
   ])(
     'maps primary=%s and legacy=%s to %s',
     async (primary, legacy, profile) => {
-      const harness = createSeatbeltHarness();
+      const harness = await createSeatbeltHarness();
       try {
         await executeSeatbeltHarness(harness, {
           LLXPRT_SANDBOX_NETWORK: primary,
@@ -703,12 +550,13 @@ describe('#1456 Seatbelt network policy', () => {
         await harness.cleanup();
       }
     },
+    SEATBELT_HARNESS_TIMEOUT_MS,
   );
 
   it.skipIf(process.platform === 'win32')(
     'uses an empty explicit profile as automatic network selection',
     async () => {
-      const harness = createSeatbeltHarness();
+      const harness = await createSeatbeltHarness();
       try {
         await executeSeatbeltHarness(harness, {
           SEATBELT_PROFILE: '',
@@ -726,12 +574,13 @@ describe('#1456 Seatbelt network policy', () => {
         await harness.cleanup();
       }
     },
+    SEATBELT_HARNESS_TIMEOUT_MS,
   );
 
   it.skipIf(process.platform === 'win32')(
     'honors a conflicting non-empty explicit profile',
     async () => {
-      const harness = createSeatbeltHarness();
+      const harness = await createSeatbeltHarness();
       try {
         await executeSeatbeltHarness(harness, {
           SEATBELT_PROFILE: 'permissive-closed',
@@ -749,6 +598,7 @@ describe('#1456 Seatbelt network policy', () => {
         await harness.cleanup();
       }
     },
+    SEATBELT_HARNESS_TIMEOUT_MS,
   );
 
   it
@@ -764,7 +614,7 @@ describe('#1456 Seatbelt network policy', () => {
       );
       fs.mkdirSync(profileDirectory, { recursive: true });
       fs.writeFileSync(profilePath, '(version 1)\n(deny default)\n');
-      const harness = createSeatbeltHarness(cwd);
+      const harness = await createSeatbeltHarness(cwd);
       try {
         await executeSeatbeltHarness(harness, {
           SEATBELT_PROFILE: profile,
@@ -780,14 +630,15 @@ describe('#1456 Seatbelt network policy', () => {
         fs.rmSync(cwd, { recursive: true, force: true });
       }
     },
+    SEATBELT_HARNESS_TIMEOUT_MS,
   );
 
   it.skipIf(process.platform === 'win32')(
     'allocates both proxy listener and sandbox for valid proxied mode and scrubs child credentials',
     async () => {
-      await assertSeatbeltProxyPortAvailable();
-      const harness = createSeatbeltHarness();
+      const harness = await createSeatbeltHarness();
       try {
+        await assertSeatbeltProxyPortAvailable(harness.proxyPort);
         await executeSeatbeltHarness(harness, {
           LLXPRT_SANDBOX_NETWORK: 'proxied',
           LLXPRT_SANDBOX_PROXY_COMMAND: harness.proxyCommand,
@@ -809,6 +660,32 @@ describe('#1456 Seatbelt network policy', () => {
         await harness.cleanup();
       }
     },
+    SEATBELT_HARNESS_TIMEOUT_MS,
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'waits for readiness on the configured proxy endpoint, not a fixed port',
+    async () => {
+      const harness = await createSeatbeltHarness();
+      try {
+        await executeSeatbeltHarness(harness, {
+          LLXPRT_SANDBOX_NETWORK: 'proxied',
+          LLXPRT_SANDBOX_PROXY_COMMAND: harness.proxyCommand,
+        });
+
+        // The readiness probe really ran against the endpoint this harness
+        // owns; a hard-coded probe target would never name this port.
+        const probeArgv = fs.readFileSync(
+          harness.readinessProbeArgsFile,
+          'utf8',
+        );
+        expect(probeArgv.split('\n')).toContain(harness.proxyUrl);
+        expect(fs.existsSync(harness.proxyMarker)).toBe(true);
+      } finally {
+        await harness.cleanup();
+      }
+    },
+    SEATBELT_HARNESS_TIMEOUT_MS,
   );
 
   it.skipIf(process.platform === 'win32').each([
@@ -818,7 +695,7 @@ describe('#1456 Seatbelt network policy', () => {
   ])(
     'rejects automatic proxied mode with %s command before allocation',
     async (_label, command) => {
-      const harness = createSeatbeltHarness();
+      const harness = await createSeatbeltHarness();
       try {
         const result = executeSeatbeltHarness(harness, {
           LLXPRT_SANDBOX_NETWORK: 'proxied',
@@ -832,6 +709,7 @@ describe('#1456 Seatbelt network policy', () => {
         await harness.cleanup();
       }
     },
+    SEATBELT_HARNESS_TIMEOUT_MS,
   );
 
   it
@@ -839,7 +717,7 @@ describe('#1456 Seatbelt network policy', () => {
     .each(['permissive-proxied', 'restrictive-proxied'])(
     'rejects explicit built-in %s without a proxy command',
     async (profile) => {
-      const harness = createSeatbeltHarness();
+      const harness = await createSeatbeltHarness();
       try {
         const result = executeSeatbeltHarness(harness, {
           SEATBELT_PROFILE: profile,
@@ -852,6 +730,7 @@ describe('#1456 Seatbelt network policy', () => {
         await harness.cleanup();
       }
     },
+    SEATBELT_HARNESS_TIMEOUT_MS,
   );
 });
 
