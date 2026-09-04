@@ -18,7 +18,7 @@ import { isErrnoException, messageOf } from './utils/error-guards.ts';
 import { NON_NPM_RELEASE_PACKAGES } from './utils/release-packages.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const DEFAULT_LOCKFILE_TIMEOUT_MS = 300_000;
+const DEFAULT_LOCKFILE_TIMEOUT_MS = 600_000;
 const MIN_LOCKFILE_TIMEOUT_MS = 10_000;
 const MAX_LOCKFILE_TIMEOUT_MS = 1_800_000;
 const BACKUP_SUFFIX = '.bind-backup';
@@ -480,41 +480,57 @@ function updateLockfileAfterBinding(
       Number.isInteger(rawTimeout) && rawTimeout >= MIN_LOCKFILE_TIMEOUT_MS
         ? Math.min(rawTimeout, MAX_LOCKFILE_TIMEOUT_MS)
         : DEFAULT_LOCKFILE_TIMEOUT_MS;
-    const result = spawnSync(
-      npmBin,
-      ['install', '--package-lock-only', '--ignore-scripts'],
-      {
-        cwd: ROOT,
-        encoding: 'utf8',
-        stdio: 'pipe',
-        timeout: lockfileTimeout,
-        maxBuffer: 16 * 1024 * 1024,
-      },
-    );
-    if (result.error !== undefined) {
-      if (isErrnoException(result.error, 'ETIMEDOUT')) {
+    let attempt = 0;
+    while (true) {
+      attempt += 1;
+      const result = spawnSync(
+        npmBin,
+        ['install', '--package-lock-only', '--ignore-scripts'],
+        {
+          cwd: ROOT,
+          encoding: 'utf8',
+          stdio: 'pipe',
+          timeout: lockfileTimeout,
+          maxBuffer: 16 * 1024 * 1024,
+        },
+      );
+      const timedOut =
+        result.error !== undefined &&
+        isErrnoException(result.error, 'ETIMEDOUT');
+      if (timedOut && attempt >= 2) {
         throw new Error(
           `npm install timed out after ${lockfileTimeout}ms. Increase BIND_LOCKFILE_TIMEOUT_MS if needed.`,
         );
       }
-      throw new Error(
-        `Failed to execute ${npmBin}: ${messageOf(result.error)}. Ensure npm is installed and available on PATH.`,
-      );
-    }
-    if (result.signal !== null) {
-      throw new Error(`npm install was terminated by signal ${result.signal}`);
-    }
-    if (result.status === null) {
-      throw new Error('npm install exited without a status code.');
-    }
-    if (result.status !== 0) {
-      const stdout = (result.stdout ?? '').trim();
-      const stderr = (result.stderr ?? '').trim();
-      const details = [stdout, stderr].filter((text) => text.length > 0);
-      const suffix = details.length > 0 ? `: ${details.join('\n')}` : '';
-      throw new Error(
-        `npm install exited with status ${result.status}${suffix}`,
-      );
+      if (timedOut) {
+        console.warn(
+          `npm lockfile update timed out after ${lockfileTimeout}ms (attempt ${attempt}); retrying.`,
+        );
+        continue;
+      }
+      if (result.error !== undefined) {
+        throw new Error(
+          `Failed to execute ${npmBin}: ${messageOf(result.error)}. Ensure npm is installed and available on PATH.`,
+        );
+      }
+      if (result.signal !== null) {
+        throw new Error(
+          `npm install was terminated by signal ${result.signal}`,
+        );
+      }
+      if (result.status === null) {
+        throw new Error('npm install exited without a status code.');
+      }
+      if (result.status !== 0) {
+        const stdout = (result.stdout ?? '').trim();
+        const stderr = (result.stderr ?? '').trim();
+        const details = [stdout, stderr].filter((text) => text.length > 0);
+        const suffix = details.length > 0 ? `: ${details.join('\n')}` : '';
+        throw new Error(
+          `npm install exited with status ${result.status}${suffix}`,
+        );
+      }
+      return;
     }
   } catch (error) {
     console.error('Failed to update package-lock.json after binding deps.');
