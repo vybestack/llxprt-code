@@ -531,8 +531,8 @@ export async function setupContainerUser(
     for (const cap of CURRENT_USER_CAPABILITIES) {
       args.push(`--cap-add=${cap}`);
     }
-    const uid = execSync('id -u').toString().trim();
-    const gid = execSync('id -g').toString().trim();
+    const uid = execSync('id -u', { env: process.env }).toString().trim();
+    const gid = execSync('id -g', { env: process.env }).toString().trim();
 
     const username = 'gemini';
     // Use the shared container-home resolution so the HOME pinned here and the

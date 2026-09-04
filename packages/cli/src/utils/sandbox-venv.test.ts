@@ -36,9 +36,9 @@ function isolateCacheEnv(): () => void {
 }
 
 /**
- * Assert a volume root is mode 1777 on POSIX; win32 stat modes never carry
- * POSIX bits ('1777' surfaces as '666'), so there the observable contract —
- * the init container ran against the volume — is proven by the caller.
+ * POSIX-only assertion: win32 stat modes never carry POSIX bits ('1777' surfaces
+ * as '666'), so on win32 the chmod contract is asserted via the init-run mounts
+ * below.
  */
 function assertVolumeRootMode1777(root: string): void {
   if (process.platform !== 'win32') {
@@ -352,6 +352,15 @@ describe('#3462 venv volume is writable by the selected container uid', () => {
       // observable contract: the init container actually ran against it.
       for (const name of names) {
         assertVolumeRootMode1777(path.join(engine.stateRoot, 'volumes', name));
+      }
+      const initRun = engine
+        .invocations()
+        .find((argv) => argv[0] === 'run' && argv.includes('--init'));
+      if (initRun === undefined)
+        throw new Error('Init container run is missing');
+      const mounts = initRun.join(' ');
+      for (const name of names) {
+        expect(mounts).toContain(`src=${name},`);
       }
     } finally {
       lifecycle.release();

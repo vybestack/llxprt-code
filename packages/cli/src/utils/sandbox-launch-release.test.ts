@@ -819,10 +819,11 @@ describe('#3469 launch resource release', () => {
     };
   }
 
-  // POSIX-only: teardown kills the sidecar's process group
+  // POSIX-only fixture: teardown kills the sidecar's process group
   // (process.kill(-pid)) and the gated variant spawns via `sh -c`; neither
   // is constructible on win32, so the port could never be freed there.
-  // Linux/macOS PR CI retains the coverage.
+  // Linux/macOS PR CI retains the coverage; win32 production close-handler
+  // behavior is unverified (tracked in a follow-up issue).
 
   /** Shared end-state of every proxied-launch failure scenario. */
   function assertProxyScenarioReleased(stderr: string): void {

@@ -127,6 +127,7 @@ export function useFakeEngine(
   });
 
   afterAll(() => {
+    delete process.env[PS_STARTS_ENV];
     // Retry-aware removal: Windows can briefly lock just-executed exes.
     removeFixtureDirectory(suiteRoot);
   });
