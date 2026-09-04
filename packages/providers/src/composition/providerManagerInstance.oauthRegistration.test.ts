@@ -23,7 +23,7 @@ let openaiCtorState: new (...args: unknown[]) => unknown = class {};
 let openaiResponsesCtorState: new (...args: unknown[]) => unknown = class {};
 let openaiVercelCtorState: new (...args: unknown[]) => unknown = class {};
 let anthropicCtorState: new (...args: unknown[]) => unknown = class {};
-let geminiCtorState: new (...args: unknown[]) => unknown = class {};
+let googleCtorState: new (...args: unknown[]) => unknown = class {};
 
 // Wrapper constructors so each test can swap the target without needing
 // vi.resetModules (unsupported in Bun).
@@ -44,7 +44,7 @@ void mock.module('../ProviderManager.js', () => {
   return { ProviderManager: MockProviderManager };
 });
 void mock.module('../gemini/GeminiProvider.js', () => ({
-  GeminiProvider: makeWrapper(() => geminiCtorState),
+  GeminiProvider: makeWrapper(() => googleCtorState),
 }));
 void mock.module('../openai/OpenAIProvider.js', () => ({
   OpenAIProvider: makeWrapper(() => openaiCtorState),
@@ -167,7 +167,7 @@ describe('claudecode OAuth registration with environment key', () => {
     const openaiResponsesCtor = vi.fn(() => ({}));
     const openaivercelCtor = vi.fn(() => ({}));
     const anthropicCtor = vi.fn(() => ({}));
-    const geminiCtor = vi.fn(() => ({}));
+    const googleCtor = vi.fn(() => ({}));
 
     // Wire mutable state for this test
     ensureOAuthProviderRegisteredState = ensureOAuthProviderRegisteredMock;
@@ -189,7 +189,7 @@ describe('claudecode OAuth registration with environment key', () => {
     anthropicCtorState = anthropicCtor as unknown as new (
       ...args: unknown[]
     ) => unknown;
-    geminiCtorState = geminiCtor as unknown as new (
+    googleCtorState = googleCtor as unknown as new (
       ...args: unknown[]
     ) => unknown;
 
@@ -237,7 +237,7 @@ describe('claudecode OAuth registration with environment key', () => {
     expectEveryCallKeyless(openaiResponsesCtor);
     expectEveryCallKeyless(openaivercelCtor);
     expectEveryCallKeyless(anthropicCtor);
-    expectEveryCallKeyless(geminiCtor);
+    expectEveryCallKeyless(googleCtor);
   });
 
   it('threads OAuth manager only into OAuth-capable alias providers', async () => {
