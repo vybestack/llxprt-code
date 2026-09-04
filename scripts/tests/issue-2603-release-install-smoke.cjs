@@ -246,6 +246,9 @@ function spawnTarExtractLocal(tarball, extractDir) {
  * unbounded.
  */
 function parseSmokeDeadlineMs(value) {
+  if (typeof value === 'string' && value.trim() === '') {
+    return 690_000;
+  }
   const parsed = Number(value);
   if (Number.isFinite(parsed) && parsed >= 0) {
     return parsed;
