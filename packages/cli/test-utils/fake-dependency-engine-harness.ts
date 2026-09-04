@@ -31,6 +31,10 @@ import {
   decodeFakeEngineState,
   type FakeEngineState,
 } from './fake-dependency-engine.js';
+import {
+  removeFixtureDirectory,
+  writePortableExecutable,
+} from './sandbox-fixture-compiler.js';
 
 export const FAKE_ENGINE_IMAGE = 'issue3450-fake-image';
 
@@ -69,6 +73,22 @@ export function useFakeEngine(
 
   beforeAll(() => {
     fs.mkdirSync(binDir, { recursive: true });
+    if (process.platform === 'win32') {
+      // Windows CreateProcess cannot exec an extensionless symlink, so
+      // engine resolution would fall through to the real docker.exe or a
+      // missing podman. Install real compiled executables from this
+      // module's own source. Both engine names must resolve on PATH, but the
+      // fake engine never reads argv[0], so podman is an identical copy of
+      // the docker executable — that halves the number of `bun build --compile`
+      // runs per suite on the Windows shard (11 suites).
+      const engineSource = fs.readFileSync(FAKE_ENGINE_SCRIPT_PATH, 'utf8');
+      writePortableExecutable('docker', engineSource, binDir);
+      fs.copyFileSync(
+        path.join(binDir, 'docker.exe'),
+        path.join(binDir, 'podman.exe'),
+      );
+      return;
+    }
     fs.chmodSync(FAKE_ENGINE_SCRIPT_PATH, 0o755);
     for (const name of ['docker', 'podman']) {
       fs.symlinkSync(FAKE_ENGINE_SCRIPT_PATH, path.join(binDir, name));
@@ -88,7 +108,8 @@ export function useFakeEngine(
   });
 
   afterAll(() => {
-    fs.rmSync(suiteRoot, { recursive: true, force: true });
+    // Retry-aware removal: Windows can briefly lock just-executed exes.
+    removeFixtureDirectory(suiteRoot);
   });
 
   const readState = (): FakeEngineState => {

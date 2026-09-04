@@ -41,6 +41,7 @@ import {
   validateContainerSandboxEnv,
 } from './sandbox-containers.js';
 import { entrypoint } from './sandbox-entrypoint.js';
+import { getContainerPath } from './sandbox-env.js';
 import { addPrivateDependencyMounts } from './sandbox-node-modules.js';
 import {
   DEPENDENCY_VOLUME_NAME_PREFIX,
@@ -104,15 +105,17 @@ describe('persistent sandbox checkpoint storage (#3464)', () => {
 
     it('derives the project key exactly as the in-container history dir does', () => {
       const workdir = makeWorkspace();
+      // The container project root is the POSIX-converted workdir on
+      // Windows (parity bind), so the key hashes that form.
+      const projectKey = sha256(getContainerPath(workdir));
       for (const engineConfig of [config, podmanConfig]) {
         const plan = planCheckpointStorage(engineConfig, workdir, true);
         expect(plan.enabled).toBe(true);
         // Independent re-derivation: the shadow repository lives at
-        // LLXPRT_DATA_HOME/history/<sha256(project root)> and the container
-        // project root equals the host workdir path (parity bind).
-        expect(plan.projectKey).toBe(sha256(workdir));
+        // LLXPRT_DATA_HOME/history/<sha256(project root)>.
+        expect(plan.projectKey).toBe(projectKey);
         expect(plan.volumeName).toBe(
-          `${CHECKPOINT_VOLUME_NAME_PREFIX}${sha256(workdir)}`,
+          `${CHECKPOINT_VOLUME_NAME_PREFIX}${projectKey}`,
         );
       }
     });
@@ -418,14 +421,48 @@ describe('persistent sandbox checkpoint storage (#3464)', () => {
     it('is idempotent across repeated launches', () => {
       const layout = buildLayout();
       expect(runStanza(layout).status).toBe(0);
-      // The second launch must succeed AND leave the link still pointing into
-      // the store (ln -sfn replaced, not duplicated or broken).
       const second = runStanza(layout);
       expect(second.status).toBe(0);
-      expect(fs.readlinkSync(path.join(layout.dataHome, 'history'))).toBe(
-        path.join(layout.store, 'history'),
+      expect(fs.realpathSync(path.join(layout.dataHome, 'history'))).toBe(
+        fs.realpathSync(path.join(layout.store, 'history')),
       );
+      fs.writeFileSync(
+        path.join(
+          layout.dataHome,
+          'history',
+          layout.projectKey,
+          'idempotence-probe.txt',
+        ),
+        'idempotence probe',
+      );
+      expect(
+        fs.readFileSync(
+          path.join(
+            layout.store,
+            'history',
+            layout.projectKey,
+            'idempotence-probe.txt',
+          ),
+          'utf8',
+        ),
+      ).toBe('idempotence probe');
     });
+
+    it.skipIf(process.platform === 'win32')(
+      'keeps the history link itself a symlink to the store on POSIX',
+      () => {
+        // Git-bash's second `ln -sfn` can leave a non-symlink on Windows
+        // (the stanza itself targets container Linux), so the strict
+        // link-type assertion only runs where native symlinks are guaranteed;
+        // every platform asserts the persistence contract instead.
+        const layout = buildLayout();
+        expect(runStanza(layout).status).toBe(0);
+        expect(runStanza(layout).status).toBe(0);
+        expect(fs.readlinkSync(path.join(layout.dataHome, 'history'))).toBe(
+          path.join(layout.store, 'history'),
+        );
+      },
+    );
 
     it('aborts the sandbox before the CLI runs when the store is not mounted', () => {
       const layout = buildLayout();

@@ -766,10 +766,18 @@ function main(): void {
   fail(`fake engine: unsupported command '${subcommand ?? ''}'`);
 }
 
+// Invocation-based detection only: filesystem signals are unreliable in a
+// bun build --compile executable, where the embedded bunfs still contains
+// this module's source. `import.meta.main` is true when bun runs this file
+// as the script (POSIX PATH symlink via the shebang) and for the compiled
+// exe (this module is its entry); the argv[1] name check covers a compiled
+// copy invoked under a different entry shape. A test-runner import sets
+// neither.
 const invokedPath = process.argv[1];
-if (
-  invokedPath !== undefined &&
-  fs.realpathSync(invokedPath) === fs.realpathSync(FAKE_ENGINE_SCRIPT_PATH)
-) {
+const invokedAsScript =
+  import.meta.main === true ||
+  (invokedPath !== undefined &&
+    ['docker', 'podman'].includes(path.parse(invokedPath).name));
+if (invokedAsScript) {
   main();
 }

@@ -338,7 +338,7 @@ const SHADOW_GIT_HELPERS = [
   '}',
   'hist_setup() {',
   '  mkdir -p "$HIST"',
-  "  printf '%s\\n' '[user]' '  name = llxprt-code' '  email = llxprt-code-bot@users.noreply.github.com' '[commit]' '  gpgsign = false' '[safe]' '  directory = *' > \"$HIST/.gitconfig\"",
+  "  printf '%s\\n' '[user]' '  name = llxprt-code' '  email = llxprt-code-bot@users.noreply.github.com' '[commit]' '  gpgsign = false' '[safe]' '  directory = *' '[core]' '  autocrlf = false' > \"$HIST/.gitconfig\"",
   '  if [ ! -d "$HIST/.git" ]; then',
   '    ( export HOME="$HIST" XDG_CONFIG_HOME="$HIST"',
   '      cd "$HIST" && git init --initial-branch=main . >/dev/null \\',
