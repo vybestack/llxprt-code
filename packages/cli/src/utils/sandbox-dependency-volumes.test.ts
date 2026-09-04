@@ -74,6 +74,28 @@ function labelValue(argv: readonly string[], labelName: string): string {
   return value.slice(prefix.length);
 }
 
+/** Assert a root is mode 1777 on POSIX; win32 stat modes never carry POSIX bits ('1777' surfaces as '666'). */
+function assertRootMode1777(root: string): void {
+  if (process.platform !== 'win32') {
+    expect(fs.statSync(root).mode & 0o1777).toBe(0o1777);
+  }
+}
+
+/**
+ * Assert each volume root is mode 1777 on POSIX only; win32 stat modes never
+ * carry POSIX bits. On win32 the mode assertion is skipped: the observable
+ * contract is carried by the init-run mount assertions in the tests (set equality
+ * below).
+ */
+function assertVolumeRootModes(
+  volumeNames: readonly string[],
+  engine: { readonly stateRoot: string },
+): void {
+  for (const name of volumeNames) {
+    assertRootMode1777(path.join(engine.stateRoot, 'volumes', name));
+  }
+}
+
 function isUnknownRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -271,21 +293,20 @@ describe('#3450 engine-owned dependency volumes', () => {
       const volumeNames = engine.volumeNames();
       const mounts = flagValues(argv, '--mount');
       expect(mounts).toHaveLength(3);
-      for (const mount of mounts) {
-        const source = /^type=volume,src=([^,]+),dst=/.exec(mount)?.[1];
-        expect(volumeNames.includes(source ?? '')).toBe(true);
-      }
+      const initMountSrcs = mounts
+        .map((mount) => mountField(mount, 'src') ?? '')
+        .sort();
+      expect(initMountSrcs).toStrictEqual([...volumeNames].sort());
       // Init destinations are neutral image paths, never host paths.
       const absoluteTokens = argv.filter((token) => token.startsWith('/'));
       for (const token of absoluteTokens) {
         expect(/^\/tmp\/llxprt-deps-\d+$/.test(token)).toBe(true);
       }
       // The real init script ran inside the engine: each volume root is now
-      // mode 1777 (world-writable with the sticky bit).
-      for (const name of volumeNames) {
-        const root = path.join(engine.stateRoot, 'volumes', name);
-        expect(fs.statSync(root).mode & 0o1777).toBe(0o1777);
-      }
+      // mode 1777 (world-writable with the sticky bit). Windows stat modes
+      // never carry POSIX bits, so there we assert the observable contract:
+      // the init container actually ran against every volume.
+      assertVolumeRootModes(volumeNames, engine);
     } finally {
       lifecycle.release();
     }
@@ -449,8 +470,7 @@ describe('#3450 dependency init script', () => {
       emptyRoot,
     ]);
     expect(emptyRun.status).toBe(0);
-    expect(fs.statSync(emptyRoot).mode & 0o1777).toBe(0o1777);
-
+    assertRootMode1777(emptyRoot);
     const seededRoot = fs.mkdtempSync(
       path.join(os.tmpdir(), 'issue3450-init-seeded-'),
     );

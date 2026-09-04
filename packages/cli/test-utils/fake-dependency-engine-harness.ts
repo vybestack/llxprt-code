@@ -13,12 +13,14 @@
  *
  * `useFakeEngine()` wires the suite lifecycle: it installs the fake engine
  * executable on PATH under the names `docker` and `podman` (so production
- * `spawnSync(config.command, ...)` calls reach it), points
- * FAKE_ENGINE_STATE at an isolated per-suite root, and resets that state
- * before every test. Tests then observe the fake engine's persistent state
- * files; nothing about the production code is mocked. Both engine names
- * share one state root because they are the same executable: a test can
- * interleave docker and podman invocations against one observed state.
+ * `spawnSync(config.command, ...)` calls reach it), plus a fake `ps` (so
+ * production's 250ms lstart owner probe answers deterministically on Windows,
+ * where Git-bash's MSYS ps has no `-o`). It points FAKE_ENGINE_STATE at an
+ * isolated per-suite root, and resets that state before every test. Tests then
+ * observe the fake engine's persistent state files; nothing about the production
+ * code is mocked. Both engine names share one state root because they are the same
+ * executable: a test can interleave docker and podman invocations against one
+ * observed state.
  */
 
 import { beforeAll, beforeEach, afterAll, afterEach } from 'bun:test';
@@ -31,8 +33,15 @@ import {
   decodeFakeEngineState,
   type FakeEngineState,
 } from './fake-dependency-engine.js';
+import { psExecutableSource } from './ps-executable-fixture.js';
+import {
+  removeFixtureDirectory,
+  writePortableExecutable,
+} from './sandbox-fixture-compiler.js';
 
 export const FAKE_ENGINE_IMAGE = 'issue3450-fake-image';
+/** Env key the fake `ps` reads (`pid\tstartTimeMs` rows). */
+const PS_STARTS_ENV = 'LLXPRT_TEST_PROCESS_STARTS';
 
 export interface FakeEngineHarness {
   /** The docker engine command value; resolves to the fake through PATH. */
@@ -65,14 +74,44 @@ export function useFakeEngine(
   const suiteRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fake-engine-3450-'));
   const binDir = path.join(suiteRoot, 'bin');
   const stateRoot = path.join(suiteRoot, 'state');
+  const psStarts = path.join(suiteRoot, 'process-starts.tsv');
   let environmentSnapshot: NodeJS.ProcessEnv = {};
 
   beforeAll(() => {
     fs.mkdirSync(binDir, { recursive: true });
+    if (process.platform === 'win32') {
+      // Windows CreateProcess cannot exec an extensionless symlink, so
+      // engine resolution would fall through to the real docker.exe or a
+      // missing podman. Install real compiled executables from this
+      // module's own source. Both engine names must resolve on PATH, but the
+      // fake engine never reads argv[0], so podman is an identical copy of
+      // the docker executable — that halves the number of `bun build --compile`
+      // runs per suite on the Windows shard (11 suites).
+      const engineSource = fs.readFileSync(FAKE_ENGINE_SCRIPT_PATH, 'utf8');
+      writePortableExecutable('docker', engineSource, binDir);
+      fs.copyFileSync(
+        path.join(binDir, 'docker.exe'),
+        path.join(binDir, 'podman.exe'),
+      );
+      writePortableExecutable('ps', psExecutableSource(), binDir);
+      // The fake `ps` is only for Windows (MSYS ps has no -o). Seed the
+      // process-start row for the test runner pid so the owner probe from the
+      // dependency init/volume code resolves to `observed`. Child pids (e.g. the
+      // #3450 signal fixture) are not seeded: the fake ps exits non-zero for an
+      // unknown pid, the owner probe falls back to `estimated`, and both
+      // observations in a given child agree because `estimated` is derived from that
+      // same child's uptime.
+      fs.writeFileSync(psStarts, `${process.pid}\t${Date.now()}\n`);
+      process.env[PS_STARTS_ENV] = psStarts;
+      return;
+    }
     fs.chmodSync(FAKE_ENGINE_SCRIPT_PATH, 0o755);
     for (const name of ['docker', 'podman']) {
       fs.symlinkSync(FAKE_ENGINE_SCRIPT_PATH, path.join(binDir, name));
     }
+    // No fake `ps` on POSIX: the real ps already answers `-o lstart=`, so
+    // owner-helper children that inherit PATH can probe themselves (the fake would
+    // reject their unseeded pids).
   });
 
   beforeEach(() => {
@@ -88,7 +127,9 @@ export function useFakeEngine(
   });
 
   afterAll(() => {
-    fs.rmSync(suiteRoot, { recursive: true, force: true });
+    delete process.env[PS_STARTS_ENV];
+    // Retry-aware removal: Windows can briefly lock just-executed exes.
+    removeFixtureDirectory(suiteRoot);
   });
 
   const readState = (): FakeEngineState => {

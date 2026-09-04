@@ -440,17 +440,26 @@ describe('#3450 bounded wrong-platform contamination preflight', () => {
     expect(() => prepareOnHost()).toThrowError('Windows');
   });
 
-  it('fails on a dangling absolute .bin symlink into the image-global bun location', () => {
-    vi.spyOn(os, 'platform').mockReturnValue('darwin');
-    danglingBinLink(workdir, '/usr/local/bun/bin/bun');
+  // POSIX-only: the fixture creates a file symlink to the absolute POSIX
+  // image-global target, and Windows CreateSymbolicLink rejects an absolute
+  // target whose path does not exist (its readlink also always carries the
+  // current drive root), so the POSIX dangling-`/usr/local/bun/bin/`
+  // condition is not constructible on win32. The relative dangling variant
+  // and the absolute-`/usr/local/bin/`-style cases still run everywhere.
+  it.skipIf(process.platform === 'win32')(
+    'fails on a dangling absolute .bin symlink into the image-global bun location',
+    () => {
+      vi.spyOn(os, 'platform').mockReturnValue('darwin');
+      danglingBinLink(workdir, '/usr/local/bun/bin/bun');
 
-    expect(() => prepareOnHost()).toThrowError(FatalSandboxError);
-    expect(() => prepareOnHost()).toThrowError(
-      path.join('node_modules', '.bin', 'tool'),
-    );
-    expect(() => prepareOnHost()).toThrowError('/usr/local/bun/bin/bun');
-    expect(() => prepareOnHost()).toThrowError('retry');
-  });
+      expect(() => prepareOnHost()).toThrowError(FatalSandboxError);
+      expect(() => prepareOnHost()).toThrowError(
+        path.join('node_modules', '.bin', 'tool'),
+      );
+      expect(() => prepareOnHost()).toThrowError('/usr/local/bun/bin/bun');
+      expect(() => prepareOnHost()).toThrowError('retry');
+    },
+  );
 
   it.each([
     '/usr/bin/issue3450-missing-tool',

@@ -114,9 +114,21 @@ export class GitService {
     // are pinned to the history dir for every shadow git invocation): it lets
     // a later sandbox run under a different selected uid keep using a
     // persistent store whose objects a previous uid wrote (#3464).
+    // `core.autocrlf = false` is required because Git-for-Windows' SYSTEM
+    // gitconfig (outside the HOME/XDG pinning) can set autocrlf=true, which
+    // would rewrite LF to CRLF on `git restore`; checkpoint restores must be
+    // byte-identical on every platform.
     const gitConfigContent =
-      '[user]\n  name = llxprt-code\n  email = llxprt-code-bot@users.noreply.github.com\n[commit]\n  gpgsign = false\n[safe]\n  directory = *\n';
+      '[user]\n  name = llxprt-code\n  email = llxprt-code-bot@users.noreply.github.com\n[commit]\n  gpgsign = false\n[safe]\n  directory = *\n[core]\n  autocrlf = false\n';
     await fs.writeFile(gitConfigPath, gitConfigContent);
+
+    // A work-tree `.gitattributes` (or a `core.attributesfile` from system/
+    // global config) could otherwise re-enable text/eol conversion on `git
+    // restore`; this repo-local attributes override disables it with the highest
+    // precedence so checkpoint restores stay byte-identical.
+    const attributesPath = path.join(repoDir, '.git', 'info', 'attributes');
+    await fs.mkdir(path.dirname(attributesPath), { recursive: true });
+    await fs.writeFile(attributesPath, '* -text\n');
 
     // The init-time instance reads config from the shadow dir itself (same
     // HOME/XDG pinning as every snapshot/restore invocation): a container

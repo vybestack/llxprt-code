@@ -35,6 +35,18 @@ function isolateCacheEnv(): () => void {
   };
 }
 
+/**
+ * POSIX-only assertion: win32 stat modes never carry POSIX bits ('1777' surfaces
+ * as '666'), so on win32 the chmod contract is asserted via the init-run
+ * mounts: the init container mounts every volume, and the set-equality assertion
+ * below pins it to exactly engine.volumeNames().
+ */
+function assertVolumeRootMode1777(root: string): void {
+  if (process.platform !== 'win32') {
+    expect(fs.statSync(root).mode & 0o1777).toBe(0o1777);
+  }
+}
+
 function flagValues(argv: readonly string[], flag: string): string[] {
   const values: string[] = [];
   for (let index = 0; index < argv.length - 1; index++) {
@@ -271,11 +283,10 @@ describe('#3462 venv destination in the engine-owned dependency plan', () => {
         .filter((argv) => argv[0] === 'run' && argv.includes('--init'));
       expect(initRuns).toHaveLength(1);
       const volumeNames = engine.volumeNames();
-      expect(
-        flagValues(initRuns[0], '--mount').every((spec) =>
-          volumeNames.includes(mountField(spec, 'src') ?? ''),
-        ),
-      ).toBe(true);
+      const initMountSrcs = flagValues(initRuns[0], '--mount')
+        .map((spec) => mountField(spec, 'src') ?? '')
+        .sort();
+      expect(initMountSrcs).toStrictEqual([...volumeNames].sort());
     } finally {
       lifecycle.release();
     }
@@ -336,11 +347,21 @@ describe('#3462 venv volume is writable by the selected container uid', () => {
       const names = engine.volumeNames();
       expect(names).toHaveLength(2);
       // Every volume root, including the venv's, is world-writable with the
-      // sticky bit, so any selected container uid can write into it.
+      // sticky bit, so any selected container uid can write into it. Windows
+      // stat modes never carry POSIX bits, so there the helper asserts the
+      // observable contract: the init container actually ran against it.
       for (const name of names) {
-        const root = path.join(engine.stateRoot, 'volumes', name);
-        expect(fs.statSync(root).mode & 0o1777).toBe(0o1777);
+        assertVolumeRootMode1777(path.join(engine.stateRoot, 'volumes', name));
       }
+      const initRun = engine
+        .invocations()
+        .find((argv) => argv[0] === 'run' && argv.includes('--init'));
+      if (initRun === undefined)
+        throw new Error('Init container run is missing');
+      const initMountSrcs = flagValues(initRun, '--mount')
+        .map((spec) => mountField(spec, 'src') ?? '')
+        .sort();
+      expect(initMountSrcs).toStrictEqual([...names].sort());
     } finally {
       lifecycle.release();
       delete process.env.VIRTUAL_ENV;

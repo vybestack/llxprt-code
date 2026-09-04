@@ -434,12 +434,17 @@ export function setupContainerNetworking(
       args.push('--env', `NO_PROXY=${noProxy}`);
       args.push('--env', `no_proxy=${noProxy}`);
     }
+    // execSync resolves the command against the process STARTUP env in Bun,
+    // so PATH mutations made in-process (e.g. by tests) are ignored unless
+    // the current env is passed explicitly.
     execSync(
       `${config.command} network inspect ${SANDBOX_NETWORK_NAME} || ${config.command} network create --internal ${SANDBOX_NETWORK_NAME}`,
+      { env: process.env },
     );
     args.push('--network', SANDBOX_NETWORK_NAME);
     execSync(
       `${config.command} network inspect ${SANDBOX_PROXY_NAME} || ${config.command} network create ${SANDBOX_PROXY_NAME}`,
+      { env: process.env },
     );
   }
 
@@ -465,6 +470,7 @@ export function assignContainerName(
   const imageName = parseImageName(image);
   const containerNameCheck = execSync(
     `${config.command} ps -a --format "{{.Names}}"`,
+    { env: process.env },
   )
     .toString()
     .trim();
@@ -525,8 +531,8 @@ export async function setupContainerUser(
     for (const cap of CURRENT_USER_CAPABILITIES) {
       args.push(`--cap-add=${cap}`);
     }
-    const uid = execSync('id -u').toString().trim();
-    const gid = execSync('id -g').toString().trim();
+    const uid = execSync('id -u', { env: process.env }).toString().trim();
+    const gid = execSync('id -g', { env: process.env }).toString().trim();
 
     const username = 'gemini';
     // Use the shared container-home resolution so the HOME pinned here and the
@@ -801,7 +807,9 @@ export async function startProxyContainer(
     process.off('SIGINT', stopProxyContainer);
     process.off('SIGTERM', stopProxyContainer);
     debugLogger.log('stopping proxy container ...');
-    execSync(`${config.command} rm -f ${SANDBOX_PROXY_NAME}`);
+    execSync(`${config.command} rm -f ${SANDBOX_PROXY_NAME}`, {
+      env: process.env,
+    });
   };
   process.on('exit', stopProxyContainer);
   process.on('SIGINT', stopProxyContainer);

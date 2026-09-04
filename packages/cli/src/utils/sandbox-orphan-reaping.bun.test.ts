@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { SandboxConfig } from '@vybestack/llxprt-code-core';
+import { psExecutableSource } from '../../test-utils/ps-executable-fixture.js';
 import {
   FIXTURE_TIMEOUT_MS,
   removeFixtureDirectory,
@@ -185,42 +186,6 @@ if (args[0] === 'rm' && args[1] === '-f') {
 }
 if (args[0] === 'images' && args[1] === '-q') process.exit(0);
 process.exit(45);
-`;
-}
-
-function psExecutableSource(): string {
-  return `#!/usr/bin/env bun
-import { readFileSync } from 'node:fs';
-
-if (process.env.LLXPRT_TEST_PS_HANG === '1') {
-  await new Promise((resolve) => setTimeout(resolve, 30000));
-}
-const fixedOutput = process.env.LLXPRT_TEST_PS_OUTPUT;
-if (fixedOutput !== undefined) {
-  process.stdout.write(fixedOutput + '\\n');
-  process.exit(0);
-}
-const startsPath = process.env.LLXPRT_TEST_PROCESS_STARTS;
-const pid = process.argv.at(-1);
-if (startsPath === undefined || pid === undefined) process.exit(47);
-const processStart = readFileSync(startsPath, 'utf8')
-  .split('\\n')
-  .find((row) => row.startsWith(pid + '\\t'));
-if (processStart === undefined) process.exit(48);
-const startTimeMs = Number(processStart.slice(processStart.indexOf('\\t') + 1));
-if (!Number.isFinite(startTimeMs)) process.exit(49);
-const date = new Date(startTimeMs);
-const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const months = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
-const time = [date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds()]
-  .map((part) => String(part).padStart(2, '0'))
-  .join(':');
-process.stdout.write(weekdays[date.getUTCDay()] + ' ' +
-  months[date.getUTCMonth()] + ' ' + String(date.getUTCDate()).padStart(2, ' ') +
-  ' ' + time + ' ' + date.getUTCFullYear() + '\\n');
 `;
 }
 
@@ -577,6 +542,43 @@ describe('sandbox orphan recovery startup', () => {
       statePath,
       `${row('reused-pid-container', reusedPidMetadata)}\n`,
     );
+
+    // Windows cold-start of the compiled ps fixture (Defender scanning each
+    // spawn under runner load) can exceed the production 250ms
+    // readProcessStartTime budget and burn the owner probe; warm the
+    // executable with the live owner pid already recorded until a spawn
+    // answers well inside that budget, so the probe that matters is fast too.
+    if (process.platform === 'win32') {
+      let warm = false;
+      for (let attempt = 0; attempt < 8 && !warm; attempt++) {
+        const startedAt = Date.now();
+        const prewarm = spawnSync(
+          path.join(fixtureDir, 'ps.exe'),
+          ['-o', 'lstart=', '-p', String(metadata.pid)],
+          {
+            encoding: 'utf8',
+            env: process.env,
+            timeout: FIXTURE_TIMEOUT_MS,
+            windowsHide: true,
+          },
+        );
+        if (prewarm.error !== undefined) {
+          throw prewarm.error;
+        }
+        if (prewarm.status !== 0) {
+          throw new Error(
+            `ps fixture prewarm failed with status ${prewarm.status}: ${prewarm.stderr}`,
+          );
+        }
+        warm = Date.now() - startedAt <= 150;
+      }
+      if (!warm) {
+        throw new Error(
+          'ps fixture never answered within 150ms after 8 warm attempts; ' +
+            'the production owner probe budget would race',
+        );
+      }
+    }
 
     await runRecoveryStartup('docker');
 
