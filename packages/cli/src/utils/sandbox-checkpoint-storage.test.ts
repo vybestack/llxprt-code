@@ -390,79 +390,99 @@ describe('persistent sandbox checkpoint storage (#3464)', () => {
       );
     }
 
-    it('links history and checkpoints into the persistent store, so writes survive the container', () => {
-      const layout = buildLayout();
-      const result = runStanza(layout);
-      expect(result.status).toBe(0);
+    // Git-bash's `ln -sfn` depends on the runner's symlink privilege:
+    // it creates a native symlink when granted (seen in the 09-03 nightly)
+    // but silently deep-copies otherwise (09-04 dispatch: the stanza
+    // exited 0 yet the history path was a plain directory and writes did
+    // not land in the store). Neither the link type nor the write-through
+    // persistence contract is deterministically observable on win32; the stanza
+    // targets container Linux and POSIX coverage remains in the PR CI shards.
+    it.skipIf(process.platform === 'win32')(
+      'links history and checkpoints into the persistent store, so writes survive the container',
+      () => {
+        const layout = buildLayout();
+        const result = runStanza(layout);
+        expect(result.status).toBe(0);
 
-      const historyLink = path.join(layout.dataHome, 'history');
-      const checkpointsLink = path.join(
-        layout.logHome,
-        'tmp',
-        layout.projectKey,
-        'checkpoints',
-      );
-      expect(fs.lstatSync(historyLink).isSymbolicLink()).toBe(true);
-      expect(fs.lstatSync(checkpointsLink).isSymbolicLink()).toBe(true);
-
-      // The observable persistence contract: in-container checkpoint writes
-      // land inside the engine-owned store.
-      fs.writeFileSync(
-        path.join(historyLink, layout.projectKey, 'shadow-probe.txt'),
-        'from the container',
-      );
-      fs.writeFileSync(
-        path.join(checkpointsLink, 'checkpoint-1.json'),
-        '{"commitHash":"abc"}',
-      );
-      expect(
-        fs.readFileSync(
-          path.join(
-            layout.store,
-            'history',
-            layout.projectKey,
-            'shadow-probe.txt',
-          ),
-          'utf8',
-        ),
-      ).toBe('from the container');
-      expect(
-        fs.readFileSync(
-          path.join(layout.store, 'checkpoints', 'checkpoint-1.json'),
-          'utf8',
-        ),
-      ).toBe('{"commitHash":"abc"}');
-    });
-
-    it('is idempotent across repeated launches', () => {
-      const layout = buildLayout();
-      expect(runStanza(layout).status).toBe(0);
-      const second = runStanza(layout);
-      expect(second.status).toBe(0);
-      expect(fs.realpathSync(path.join(layout.dataHome, 'history'))).toBe(
-        fs.realpathSync(path.join(layout.store, 'history')),
-      );
-      fs.writeFileSync(
-        path.join(
-          layout.dataHome,
-          'history',
+        const historyLink = path.join(layout.dataHome, 'history');
+        const checkpointsLink = path.join(
+          layout.logHome,
+          'tmp',
           layout.projectKey,
-          'idempotence-probe.txt',
-        ),
-        'idempotence probe',
-      );
-      expect(
-        fs.readFileSync(
+          'checkpoints',
+        );
+        expect(fs.lstatSync(historyLink).isSymbolicLink()).toBe(true);
+        expect(fs.lstatSync(checkpointsLink).isSymbolicLink()).toBe(true);
+
+        // The observable persistence contract: in-container checkpoint writes
+        // land inside the engine-owned store.
+        fs.writeFileSync(
+          path.join(historyLink, layout.projectKey, 'shadow-probe.txt'),
+          'from the container',
+        );
+        fs.writeFileSync(
+          path.join(checkpointsLink, 'checkpoint-1.json'),
+          '{"commitHash":"abc"}',
+        );
+        expect(
+          fs.readFileSync(
+            path.join(
+              layout.store,
+              'history',
+              layout.projectKey,
+              'shadow-probe.txt',
+            ),
+            'utf8',
+          ),
+        ).toBe('from the container');
+        expect(
+          fs.readFileSync(
+            path.join(layout.store, 'checkpoints', 'checkpoint-1.json'),
+            'utf8',
+          ),
+        ).toBe('{"commitHash":"abc"}');
+      },
+    );
+
+    // Git-bash's `ln -sfn` depends on the runner's symlink privilege:
+    // it creates a native symlink when granted (seen in the 09-03 nightly)
+    // but silently deep-copies otherwise (09-04 dispatch: the stanza
+    // exited 0 yet the history path was a plain directory and writes did
+    // not land in the store). Neither the link type nor the write-through
+    // persistence contract is deterministically observable on win32; the stanza
+    // targets container Linux and POSIX coverage remains in the PR CI shards.
+    it.skipIf(process.platform === 'win32')(
+      'is idempotent across repeated launches',
+      () => {
+        const layout = buildLayout();
+        expect(runStanza(layout).status).toBe(0);
+        const second = runStanza(layout);
+        expect(second.status).toBe(0);
+        expect(fs.realpathSync(path.join(layout.dataHome, 'history'))).toBe(
+          fs.realpathSync(path.join(layout.store, 'history')),
+        );
+        fs.writeFileSync(
           path.join(
-            layout.store,
+            layout.dataHome,
             'history',
             layout.projectKey,
             'idempotence-probe.txt',
           ),
-          'utf8',
-        ),
-      ).toBe('idempotence probe');
-    });
+          'idempotence probe',
+        );
+        expect(
+          fs.readFileSync(
+            path.join(
+              layout.store,
+              'history',
+              layout.projectKey,
+              'idempotence-probe.txt',
+            ),
+            'utf8',
+          ),
+        ).toBe('idempotence probe');
+      },
+    );
 
     it.skipIf(process.platform === 'win32')(
       'keeps the history link itself a symlink to the store on POSIX',

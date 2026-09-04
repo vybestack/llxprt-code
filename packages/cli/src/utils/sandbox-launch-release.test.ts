@@ -897,18 +897,22 @@ describe('#3469 launch resource release', () => {
     assertTmpdirsReleased(createdScenarioTmpdirs);
   }, 30_000);
 
-  it('leaves no sidecar process-group descendants after repeated proxied launches', async () => {
-    // #3533 remediation: the sidecar child leads a real process group that
-    // also holds the fake engine's shell descendants; every group this run
-    // created must be fully terminated and reaped, repeatedly.
-    const groupIds: number[] = [];
-    for (let launch = 0; launch < 3; launch++) {
-      await runProxiedLaunchFailure();
-      groupIds.push(...(await terminateTrackedChildren()));
-    }
-    expect(groupIds.length).toBeGreaterThanOrEqual(3);
-    await expectProcessGroupsGone(groupIds);
-  }, 120_000);
+  it.skipIf(process.platform === 'win32')(
+    'leaves no sidecar process-group descendants after repeated proxied launches',
+    async () => {
+      // #3533 remediation: the sidecar child leads a real process group that
+      // also holds the fake engine's shell descendants; every group this run
+      // created must be fully terminated and reaped, repeatedly.
+      const groupIds: number[] = [];
+      for (let launch = 0; launch < 3; launch++) {
+        await runProxiedLaunchFailure();
+        groupIds.push(...(await terminateTrackedChildren()));
+      }
+      expect(groupIds.length).toBeGreaterThanOrEqual(3);
+      await expectProcessGroupsGone(groupIds);
+    },
+    120_000,
+  );
 
   it('keeps the normal success path on the wired close handlers', async () => {
     fs.writeFileSync(path.join(fixturePath, 'agent.sock'), '');
@@ -1009,68 +1013,76 @@ describe('#3469 launch resource release', () => {
     }
   }, 30_000);
 
-  it('restores the fixture even when child termination fails', async () => {
-    const sleeper = __actual.spawn('sleep', ['120'], {
-      stdio: 'ignore',
-      detached: true,
-    });
-    const sleeperPid = sleeper.pid;
-    if (sleeperPid === undefined) {
-      throw new Error('sleeper child never got a pid');
-    }
-    trackedChildren.push({ child: sleeper, groupLeader: true });
-    process.env.LLXPRT_ISSUE3533_DIRTY = '1';
-    // An OS-level kill failure (e.g. EPERM on a group this run does not
-    // own) is external input: inject it at the kill boundary.
-    const realKill = process.kill;
-    const injected: NodeJS.ErrnoException = new Error(
-      `injected EPERM killing sidecar group ${sleeperPid}`,
-    );
-    injected.code = 'EPERM';
-    const killSpy = vi
-      .spyOn(process, 'kill')
-      .mockImplementation((pid: number, signal?: string | number) => {
-        if (pid === -sleeperPid) throw injected;
-        return signal === undefined ? realKill(pid) : realKill(pid, signal);
+  it.skipIf(process.platform === 'win32')(
+    'restores the fixture even when child termination fails',
+    async () => {
+      const sleeper = __actual.spawn('sleep', ['120'], {
+        stdio: 'ignore',
+        detached: true,
       });
-    try {
-      await expect(restoreFixture()).rejects.toThrowError('injected EPERM');
-      // The failure propagated, and the fixture was restored anyway.
-      expect(process.env.LLXPRT_ISSUE3533_DIRTY).toBeUndefined();
-      expect(process.cwd()).toBe(originalCwd);
-      expect(fs.existsSync(fixturePath)).toBe(false);
-    } finally {
-      killSpy.mockRestore();
-      await new Promise<void>((resolve) => {
-        sleeper.once('exit', resolve);
-        realKill(-sleeperPid, 'SIGKILL');
-      });
-    }
-    await expectProcessGroupsGone([sleeperPid]);
-  }, 20_000);
+      const sleeperPid = sleeper.pid;
+      if (sleeperPid === undefined) {
+        throw new Error('sleeper child never got a pid');
+      }
+      trackedChildren.push({ child: sleeper, groupLeader: true });
+      process.env.LLXPRT_ISSUE3533_DIRTY = '1';
+      // An OS-level kill failure (e.g. EPERM on a group this run does not
+      // own) is external input: inject it at the kill boundary.
+      const realKill = process.kill;
+      const injected: NodeJS.ErrnoException = new Error(
+        `injected EPERM killing sidecar group ${sleeperPid}`,
+      );
+      injected.code = 'EPERM';
+      const killSpy = vi
+        .spyOn(process, 'kill')
+        .mockImplementation((pid: number, signal?: string | number) => {
+          if (pid === -sleeperPid) throw injected;
+          return signal === undefined ? realKill(pid) : realKill(pid, signal);
+        });
+      try {
+        await expect(restoreFixture()).rejects.toThrowError('injected EPERM');
+        // The failure propagated, and the fixture was restored anyway.
+        expect(process.env.LLXPRT_ISSUE3533_DIRTY).toBeUndefined();
+        expect(process.cwd()).toBe(originalCwd);
+        expect(fs.existsSync(fixturePath)).toBe(false);
+      } finally {
+        killSpy.mockRestore();
+        await new Promise<void>((resolve) => {
+          sleeper.once('exit', resolve);
+          realKill(-sleeperPid, 'SIGKILL');
+        });
+      }
+      await expectProcessGroupsGone([sleeperPid]);
+    },
+    20_000,
+  );
 
-  it('waits out the sidecar group and the proxy port before teardown ends', async () => {
-    // A real detached sidecar group: a group leader with a live shell
-    // descendant, the shape routeSpawns records for the proxy sidecar.
-    const sidecar = __actual.spawn('sh', ['-c', 'sleep 120'], {
-      stdio: 'ignore',
-      detached: true,
-    });
-    const sidecarPid = sidecar.pid;
-    if (sidecarPid === undefined) throw new Error('sidecar got no pid');
-    trackedChildren.push({ child: sidecar, groupLeader: true });
-    // The proxy port is really owned by something teardown never tracked as
-    // a server, so only a sidecar-group-driven port wait can outlast it.
-    const releaseHolder = await holdProxyPortUntracked(1_500);
-    try {
-      await restoreFixture();
-      // Restoration returned, so the sidecar group is really ESRCH-gone and
-      // the proxy port is really rebindable right now.
-      expect(processGroupAlive(sidecarPid)).toBe(false);
-      await awaitPortRebindable(proxyPort, 250);
-    } finally {
-      releaseHolder();
-      await awaitPortRebindable(proxyPort, 5_000);
-    }
-  }, 30_000);
+  it.skipIf(process.platform === 'win32')(
+    'waits out the sidecar group and the proxy port before teardown ends',
+    async () => {
+      // A real detached sidecar group: a group leader with a live shell
+      // descendant, the shape routeSpawns records for the proxy sidecar.
+      const sidecar = __actual.spawn('sh', ['-c', 'sleep 120'], {
+        stdio: 'ignore',
+        detached: true,
+      });
+      const sidecarPid = sidecar.pid;
+      if (sidecarPid === undefined) throw new Error('sidecar got no pid');
+      trackedChildren.push({ child: sidecar, groupLeader: true });
+      // The proxy port is really owned by something teardown never tracked as
+      // a server, so only a sidecar-group-driven port wait can outlast it.
+      const releaseHolder = await holdProxyPortUntracked(1_500);
+      try {
+        await restoreFixture();
+        // Restoration returned, so the sidecar group is really ESRCH-gone and
+        // the proxy port is really rebindable right now.
+        expect(processGroupAlive(sidecarPid)).toBe(false);
+        await awaitPortRebindable(proxyPort, 250);
+      } finally {
+        releaseHolder();
+        await awaitPortRebindable(proxyPort, 5_000);
+      }
+    },
+    30_000,
+  );
 });

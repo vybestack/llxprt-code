@@ -27,6 +27,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { entrypoint } from './sandbox-entrypoint.js';
 import { addPrivateDependencyMounts } from './sandbox-node-modules.js';
+import { getContainerPath } from './sandbox-env.js';
 import { useFakeEngine } from '../../test-utils/fake-dependency-engine-harness.js';
 
 /** The checked-out CLI source entrypoint a real llxprt-code checkout has. */
@@ -347,7 +348,7 @@ describe('#3455 shared predicate drives private dependency isolation', () => {
     const planned = planWithEngine(engine.podmanConfig, 'development');
     try {
       expect(mountValues(planned.args)).toStrictEqual([
-        `type=volume,src=${engine.volumeNames()[0]},dst=${path.join(workdir, 'node_modules')}`,
+        `type=volume,src=${engine.volumeNames()[0]},dst=${getContainerPath(path.join(workdir, 'node_modules'))}`,
       ]);
       expect(engine.volumeNames()).toHaveLength(1);
     } finally {

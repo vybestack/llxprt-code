@@ -366,3 +366,15 @@ cycles 3, 4, 5 all green.
   node-modules-lifecycle (W8 signal-death helper), node-modules-preflight
   (W9 skipIf), venv (W8 helper), fake-dependency-engine-harness (W7 win32
   ps), shellParser.background (C2 resetParser afterAll), this plan.
+
+
+## Batch 3 (dispatch-2 evidence at 5cb3f4433)
+
+- Run 33868549250 job outcomes: macOS [cli] and macOS [core] shards green;
+  Windows [core] green (proving C2 is resolved); Windows [cli] has 14
+  unique remaining failures.
+- Classification of the 14: 5 skipIf-class fixes in this batch; 1 expectation
+  derivation; 8 out-of-scope #3545-born items documented in #3559 comment
+  https://github.com/vybestack/llxprt-code/issues/3559#issuecomment-5540275065.
+- Environmental: the macOS [scripts] and the ubuntu docker E2E failures from
+  that run are environmental and being verified by rerun.
