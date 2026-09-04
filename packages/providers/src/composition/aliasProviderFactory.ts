@@ -73,12 +73,49 @@ function resolveAliasEnvApiKey(
 
 export type AliasAwareBaseProvider = {
   authResolver?: {
-    updateConfig?: (config: { providerId?: string }) => void;
+    updateConfig?: (config: {
+      providerId?: string;
+      envKeyNames?: string[];
+    }) => void;
   };
   baseProviderConfig?: {
     name?: string;
+    envKeyNames?: string[];
   };
 };
+
+/**
+ * Strips the environment credential names an alias provider would otherwise
+ * authenticate with, when the alias is built under authOnly.
+ *
+ * `resolveAliasEnvApiKey` only withholds the key an alias declares in its own
+ * `apiKeyEnv`; each concrete provider additionally hardcodes its own
+ * `envKeyNames` (OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY,
+ * GOOGLE_API_KEY) in its BaseProviderConfig. AuthPrecedenceResolver skips that
+ * environment fallback only while the settings service it resolves against
+ * reports authOnly, but the composition root derives authOnly from ephemeral
+ * config and merged user settings as well (resolveAuthOnlyFlag), which the
+ * runtime settings service need not carry. An ambient key then authenticated
+ * an alias that authOnly had already disqualified.
+ *
+ * The decision is therefore taken once, here, at construction: an alias built
+ * under authOnly holds no environment names to resolve, so no later settings
+ * lookup can disagree with the policy it was created with.
+ */
+function enforceAliasAuthOnly(
+  provider: unknown,
+  authOnlyEnabled: boolean,
+): void {
+  if (!authOnlyEnabled) {
+    return;
+  }
+
+  const aliasAwareProvider = provider as AliasAwareBaseProvider;
+  if (aliasAwareProvider.baseProviderConfig) {
+    aliasAwareProvider.baseProviderConfig.envKeyNames = [];
+  }
+  aliasAwareProvider.authResolver?.updateConfig?.({ envKeyNames: [] });
+}
 
 type AliasDefaultModelProvider = {
   getDefaultModel: () => string;
@@ -264,6 +301,8 @@ export function createOpenAIAliasProvider(
     withMediaSupport(aliasProviderConfig, entry),
   );
 
+  enforceAliasAuthOnly(provider, authOnlyEnabled);
+
   overrideAliasDefaultModel(provider, entry);
   overrideStaticModels(provider, entry);
 
@@ -310,6 +349,8 @@ export function createOpenAIResponsesAliasProvider(
     aliasProviderConfig,
     oauthManager,
   );
+
+  enforceAliasAuthOnly(provider, authOnlyEnabled);
 
   // Override the provider name to match the alias
   Object.defineProperty(provider, 'name', {
@@ -362,6 +403,8 @@ export function createOpenAIVercelAliasProvider(
     aliasProviderConfig,
   );
 
+  enforceAliasAuthOnly(provider, authOnlyEnabled);
+
   overrideAliasDefaultModel(provider, entry);
   overrideStaticModels(provider, entry);
 
@@ -384,6 +427,8 @@ export function createGeminiAliasProvider(
     resolvedBaseUrl,
     config,
   );
+
+  enforceAliasAuthOnly(provider, authOnlyEnabled);
 
   if (config && typeof provider.setConfig === 'function') {
     provider.setConfig(config);
@@ -416,6 +461,8 @@ export function createAnthropicAliasProvider(
     providerConfig,
     oauthManager,
   );
+
+  enforceAliasAuthOnly(provider, authOnlyEnabled);
 
   overrideAliasDefaultModel(provider, entry);
   overrideStaticModels(provider, entry);
