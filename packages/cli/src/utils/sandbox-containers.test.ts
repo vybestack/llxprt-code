@@ -239,13 +239,13 @@ describe('#1456 container network policy', () => {
       childProcess.execSync as Mock<typeof childProcess.execSync>,
     ).toHaveBeenCalledWith(
       'docker network inspect llxprt-code-sandbox || docker network create --internal llxprt-code-sandbox',
-      { env: process.env },
+      expect.objectContaining({ env: process.env }),
     );
     expect(
       childProcess.execSync as Mock<typeof childProcess.execSync>,
     ).toHaveBeenCalledWith(
       'docker network inspect llxprt-code-sandbox-proxy || docker network create llxprt-code-sandbox-proxy',
-      { env: process.env },
+      expect.objectContaining({ env: process.env }),
     );
     expect(warnSpy).not.toHaveBeenCalled();
   });

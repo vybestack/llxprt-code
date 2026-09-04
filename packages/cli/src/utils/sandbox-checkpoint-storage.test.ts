@@ -444,13 +444,8 @@ describe('persistent sandbox checkpoint storage (#3464)', () => {
       },
     );
 
-    // Git-bash's `ln -sfn` depends on the runner's symlink privilege:
-    // it creates a native symlink when granted (seen in the 09-03 nightly)
-    // but silently deep-copies otherwise (09-04 dispatch: the stanza
-    // exited 0 yet the history path was a plain directory and writes did
-    // not land in the store). Neither the link type nor the write-through
-    // persistence contract is deterministically observable on win32; the stanza
-    // targets container Linux and POSIX coverage remains in the PR CI shards.
+    // win32 skip — Git-bash `ln -sfn` rationale (see the full note at the
+    // first win32 skip in this file).
     it.skipIf(process.platform === 'win32')(
       'is idempotent across repeated launches',
       () => {
@@ -487,10 +482,10 @@ describe('persistent sandbox checkpoint storage (#3464)', () => {
     it.skipIf(process.platform === 'win32')(
       'keeps the history link itself a symlink to the store on POSIX',
       () => {
-        // Git-bash's second `ln -sfn` can leave a non-symlink on Windows
-        // (the stanza itself targets container Linux), so the strict
-        // link-type assertion only runs where native symlinks are guaranteed;
-        // every platform asserts the persistence contract instead.
+        // Git-bash `ln -sfn` is not deterministically observable on win32 —
+        // see the full note at the first win32 skip in this file; the strict
+        // link-type assertion only runs where native symlinks are guaranteed,
+        // and every platform asserts the persistence contract instead.
         const layout = buildLayout();
         expect(runStanza(layout).status).toBe(0);
         expect(runStanza(layout).status).toBe(0);

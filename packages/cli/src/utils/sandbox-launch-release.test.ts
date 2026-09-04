@@ -4,15 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-  type Mock,
-} from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import * as childProcess from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
@@ -25,6 +17,33 @@ import { Storage } from '@vybestack/llxprt-code-storage';
 import { useFakeEngine } from '../../test-utils/fake-dependency-engine-harness.js';
 import { allocateEphemeralPort } from '../../test-utils/ephemeral-port.js';
 import { runContainerSandbox } from './sandbox-exec.js';
+import {
+  captureStderr,
+  deferredExit,
+  errnoCode,
+  killProcessGroup,
+  PODMAN_MACHINE_CONNECTION,
+  type ExecSyncMock,
+  type ReadinessGate,
+  type SpawnMock,
+  type TrackedChild,
+} from './sandbox-launch-release.test-helpers.js';
+
+function completedEngineProcess(stdout: string): ChildProcess {
+  const proc = new EventEmitter() as unknown as ChildProcess;
+  const stdoutStream = new PassThrough();
+  const stderrStream = new PassThrough();
+  proc.stdout = stdoutStream;
+  proc.stderr = stderrStream;
+  queueMicrotask(() => {
+    stdoutStream.end(stdout === '' ? undefined : Buffer.from(stdout));
+    stderrStream.end();
+    queueMicrotask(() => {
+      proc.emit('close', 0);
+    });
+  });
+  return proc;
+}
 
 /**
  * #3469 launch-boundary tests: every resource acquired during sandbox
@@ -77,125 +96,6 @@ void vi.mock('node:child_process', () => {
     spawn: vi.fn(),
   };
 });
-
-/** The two mocked child_process entry points, named once for the routers. */
-type SpawnMock = Mock<typeof childProcess.spawn>;
-type ExecSyncMock = Mock<typeof childProcess.execSync>;
-
-const PODMAN_MACHINE_CONNECTION = JSON.stringify([
-  {
-    Name: 'podman-machine-default-root',
-    URI: 'ssh://root@127.0.0.1:52322/run/podman/podman.sock?secure=true',
-    Identity: '/tmp/issue3469-fake-key',
-    Default: true,
-  },
-]);
-
-function completedEngineProcess(stdout: string): childProcess.ChildProcess {
-  const proc = new EventEmitter() as unknown as childProcess.ChildProcess;
-  const stdoutStream = new PassThrough();
-  const stderrStream = new PassThrough();
-  proc.stdout = stdoutStream;
-  proc.stderr = stderrStream;
-  queueMicrotask(() => {
-    stdoutStream.end(stdout === '' ? undefined : Buffer.from(stdout));
-    stderrStream.end();
-    queueMicrotask(() => {
-      proc.emit('close', 0);
-    });
-  });
-  return proc;
-}
-
-/**
- * Deferred exit signal for children spawned during the launch itself: the
- * resolver is handed to the spawn router, so the promise exists before the
- * child does.
- */
-function deferredExit(): {
-  signal: Promise<NodeJS.Signals | null>;
-  track: (child: ChildProcess) => void;
-} {
-  let resolveSignal: ((signal: NodeJS.Signals | null) => void) | undefined;
-  const signal = new Promise<NodeJS.Signals | null>((resolve) => {
-    resolveSignal = resolve;
-  });
-  return {
-    signal,
-    track: (child) => {
-      child.on('close', (_code, childSignal) => {
-        resolveSignal?.(childSignal);
-      });
-    },
-  };
-}
-
-/**
- * #3533 remediation: a real child this file spawned. Sidecar children are
- * spawned detached, so each is a process-group leader whose release must
- * cover the entire group it created.
- */
-interface TrackedChild {
-  readonly child: ChildProcess;
-  readonly groupLeader: boolean;
-}
-
-/**
- * #3533 remediation: private deterministic readiness-gate barrier. The gate
- * counts every readiness request it observes, rejects the ones that arrive
- * before the sidecar registered, and owns the release file that a gated
- * sidecar's engine registration waits for.
- */
-interface ReadinessGate {
-  /** Readiness requests destroyed while the sidecar was not registered. */
-  rejections: number;
-  /** Readiness requests answered 200 after registration. */
-  acceptances: number;
-  /**
-   * Created by the gate only after the first observed rejection, so gated
-   * registration is causally ordered behind a rejected readiness request.
-   */
-  readonly releasePath: string;
-}
-
-/** narrows a Node kill error to its errno code */
-function errnoCode(error: unknown): string | undefined {
-  if (typeof error !== 'object' || error === null || !('code' in error)) {
-    return undefined;
-  }
-  const code: unknown = error.code;
-  return typeof code === 'string' ? code : undefined;
-}
-
-/**
- * #3533 remediation: kills every member of a sidecar process group this
- * fixture created. The group may already be gone, which is not an error.
- */
-function killProcessGroup(groupId: number): void {
-  try {
-    process.kill(-groupId, 'SIGKILL');
-  } catch (err) {
-    if (errnoCode(err) !== 'ESRCH') throw err;
-  }
-}
-
-/** Captures stderr written while the async `run` settles. */
-async function captureStderr(run: () => Promise<void>): Promise<string> {
-  const chunks: string[] = [];
-  const original = process.stderr.write.bind(process.stderr);
-  process.stderr.write = ((chunk: Uint8Array | string): boolean => {
-    chunks.push(
-      typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString(),
-    );
-    return true;
-  }) as typeof process.stderr.write;
-  try {
-    await run();
-  } finally {
-    process.stderr.write = original;
-  }
-  return chunks.join('');
-}
 
 describe('#3469 launch resource release', () => {
   const engine = useFakeEngine();

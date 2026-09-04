@@ -645,22 +645,6 @@ export default tseslint.config(
       'max-lines': ['error', { max: 900, skipBlankLines: true, skipComments: true }], // eslint-policy-allow-off: #3240 raised from 800 for mock-theater fix
     },
   },
-  // ============================================================================
-  // Issue #3542: sandbox-launch-release.test.ts was at the 800 effective-line
-  // cap on main; the Windows platform-honesty guards (it.skipIf on the POSIX
-  // process-group teardown scenarios) and prettier's re-wrapping pushed it to
-  // 812. The file is one describe sharing a mutable process-group harness
-  // (tracked children, routed spawns, fixture restore); splitting it across
-  // files would duplicate that state and invite ordering bugs, so the bound is
-  // raised instead.
-  // ============================================================================
-  {
-    files: ['packages/cli/src/utils/sandbox-launch-release.test.ts'],
-    rules: {
-      'max-lines': ['error', { max: 900, skipBlankLines: true, skipComments: true }], // eslint-policy-allow-off: #3542 raised from 800 for platform-honest skipIf guards
-    },
-  },
-  // ============================================================================
   // Issue #2605: Apply strict code-quality lint rules to eval TypeScript
   // ============================================================================
   // The eval suite (evals/**/*.ts) is real source executed by the nightly

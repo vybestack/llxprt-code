@@ -44,22 +44,17 @@ function isolateCacheEnv(): () => void {
 }
 
 /**
- * Assert the signal fixture died from its signal: strictly (status null,
- * signal name) on POSIX, or via bun's win32 emulation of signal delivery as
- * a normal exit status 1 — the observable contract there is termination (it
- * did not continue into the trailing timer) and the handler having released
- * the engine-owned volumes, asserted by the caller.
+ * Assert the signal fixture died from its signal (status null, signal name).
+ * The caller is skipped on win32, where bun's emulation of signal delivery as
+ * a normal exit status 1 does not run the child's registered handlers, so the
+ * volume-release contract is not observable there.
  */
 function assertSignalDeath(
   result: ReturnType<typeof spawnSync>,
   signal: 'SIGINT' | 'SIGTERM',
 ): void {
-  if (process.platform === 'win32') {
-    expect(result.status === 1 || result.signal === signal).toBe(true);
-  } else {
-    expect(result.status).toBeNull();
-    expect(result.signal).toBe(signal);
-  }
+  expect(result.status).toBeNull();
+  expect(result.signal).toBe(signal);
 }
 
 function writeJson(filePath: string, value: unknown): void {

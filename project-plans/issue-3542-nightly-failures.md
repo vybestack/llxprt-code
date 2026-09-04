@@ -430,3 +430,35 @@ Failure trajectory on Windows [cli]: 34 (09-03 nightly) → 14 (batch 1) →
 - Final nightly dispatched on a669f057c for the remediation batch (Windows
   evidence for the strengthened bidirectional assertions and prewarm guard).
 - OCR PR round 2 (final allowed round) launched on a669f057c.
+
+## Dispatch 4 (nightly 33878382918 on a669f057c) and final remediation
+
+- Windows [cli]: exactly the 7 out-of-scope #3559 cases again (identical set
+  to dispatch 3) — the a669f057c remediation batch introduced no Windows
+  regressions. Windows [core] green (C1+C2 hold). macOS [cli]/[core]/scripts
+  green.
+- Windows [rest]: ONE failure, "TestRig setup and cleanup behavior > does not
+  record to the ledger when fakeResponsesPath is set" — a 180s per-file
+  timeout with its 6 siblings and the shard's other 6648 tests passing, in
+  packages/test-utils/src/test-rig.test.ts, which this PR never touches.
+  Same environmental sick-runner/hang family as C2; discrimination run is
+  the post-OCR nightly below.
+- OCR round-2 findings (final round; all 6 triaged In-scope-Fix, applied):
+  venv init-mount assertion switched to sorted src-set equality; checkpoint
+  -storage duplicated ln -sfn notes deduped to pointer comments; integration
+  sandboxCheckpointPersistence attributes write made unconditional (matching
+  production's unconditional .git/info/attributes write); containers network
+  assertions loosened to expect.objectContaining({ env: process.env }) so
+  added exec options do not break the M1 contract; lifecycle
+  assertSignalDeath dead win32 branch removed (caller is skipIf(win32)).
+- The a669f057c eslint override for sandbox-launch-release.test.ts was
+  REJECTED by the ESLint policy guard in PR CI: packages/cli directive
+  scopes are forbidden by #2114 ("fix CLI code instead"). Resolution: the
+  override was deleted and the file split per the existing
+  sandbox-seatbelt.test-helpers.ts convention — pure helpers, types, and the
+  podman-connection constant moved to
+  sandbox-launch-release.test-helpers.ts (production lint scope, so the
+  cast-based completedEngineProcess mock stays in the test file); the test
+  file is back under the 800 effective-line cap with the standard gate.
+  12/12 tests pass, eslint + policy guard green.
+- Final commit chain: OCR fixes + #2114-compliant split + this evidence.

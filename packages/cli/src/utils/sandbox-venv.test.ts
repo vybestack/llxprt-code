@@ -358,10 +358,10 @@ describe('#3462 venv volume is writable by the selected container uid', () => {
         .find((argv) => argv[0] === 'run' && argv.includes('--init'));
       if (initRun === undefined)
         throw new Error('Init container run is missing');
-      const mounts = initRun.join(' ');
-      for (const name of names) {
-        expect(mounts).toContain(`src=${name},`);
-      }
+      const initMountSrcs = flagValues(initRun, '--mount')
+        .map((spec) => mountField(spec, 'src') ?? '')
+        .sort();
+      expect(initMountSrcs).toStrictEqual([...names].sort());
     } finally {
       lifecycle.release();
       delete process.env.VIRTUAL_ENV;
