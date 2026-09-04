@@ -34,9 +34,14 @@ if (fixedOutput !== undefined) {
 const startsPath = process.env.LLXPRT_TEST_PROCESS_STARTS;
 const pid = process.argv.at(-1);
 if (startsPath === undefined || pid === undefined) process.exit(47);
-const processStart = readFileSync(startsPath, 'utf8')
-  .split('\\n')
-  .find((row) => row.startsWith(pid + '\\t'));
+let processStart: string | undefined;
+try {
+  processStart = readFileSync(startsPath, 'utf8')
+    .split('\\n')
+    .find((row) => row.startsWith(pid + '\\t'));
+} catch {
+  process.exit(50);
+}
 if (processStart === undefined) process.exit(48);
 const startTimeMs = Number(processStart.slice(processStart.indexOf('\\t') + 1));
 if (!Number.isFinite(startTimeMs)) process.exit(49);

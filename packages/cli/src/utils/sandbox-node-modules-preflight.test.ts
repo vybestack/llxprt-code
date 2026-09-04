@@ -398,7 +398,7 @@ describe('#3450 bounded wrong-platform contamination preflight', () => {
     expect(() => prepareOnHost()).toThrowError('Windows');
   });
 
-  // win32-only: the fixture creates a file symlink to the absolute POSIX
+  // POSIX-only: the fixture creates a file symlink to the absolute POSIX
   // image-global target, and Windows CreateSymbolicLink rejects an absolute
   // target whose path does not exist (its readlink also always carries the
   // current drive root), so the POSIX dangling-`/usr/local/bun/bin/`

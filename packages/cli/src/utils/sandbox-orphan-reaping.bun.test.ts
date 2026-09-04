@@ -547,18 +547,25 @@ describe('sandbox orphan recovery startup', () => {
     // first spawn) can exceed the production 250ms readProcessStartTime
     // budget and burn the owner probe; warm the executable once with the
     // live owner pid already recorded so the probe is answered promptly.
-    const prewarm = spawnSync(
-      path.join(fixtureDir, process.platform === 'win32' ? 'ps.exe' : 'ps'),
-      ['-o', 'lstart=', '-p', String(metadata.pid)],
-      {
-        encoding: 'utf8',
-        env: process.env,
-        timeout: FIXTURE_TIMEOUT_MS,
-        windowsHide: true,
-      },
-    );
-    if (prewarm.error !== undefined) {
-      throw prewarm.error;
+    if (process.platform === 'win32') {
+      const prewarm = spawnSync(
+        path.join(fixtureDir, 'ps.exe'),
+        ['-o', 'lstart=', '-p', String(metadata.pid)],
+        {
+          encoding: 'utf8',
+          env: process.env,
+          timeout: FIXTURE_TIMEOUT_MS,
+          windowsHide: true,
+        },
+      );
+      if (prewarm.error !== undefined) {
+        throw prewarm.error;
+      }
+      if (prewarm.status !== 0) {
+        throw new Error(
+          `ps fixture prewarm failed with status ${prewarm.status}: ${prewarm.stderr}`,
+        );
+      }
     }
 
     await runRecoveryStartup('docker');

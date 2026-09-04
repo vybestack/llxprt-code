@@ -82,9 +82,10 @@ function assertRootMode1777(root: string): void {
 }
 
 /**
- * Assert each volume root is mode 1777 on POSIX; on win32, where stat modes
- * never carry POSIX bits, assert the observable contract instead: the init
- * container actually ran against every volume.
+ * Assert each volume root is mode 1777 on POSIX only; win32 stat modes never
+ * carry POSIX bits. On win32 the mode assertion is skipped: the observable
+ * contract is carried by the init-run mount assertions in the tests (set equality
+ * below).
  */
 function assertVolumeRootModes(
   volumeNames: readonly string[],
@@ -292,10 +293,10 @@ describe('#3450 engine-owned dependency volumes', () => {
       const volumeNames = engine.volumeNames();
       const mounts = flagValues(argv, '--mount');
       expect(mounts).toHaveLength(3);
-      for (const mount of mounts) {
-        const source = /^type=volume,src=([^,]+),dst=/.exec(mount)?.[1];
-        expect(volumeNames.includes(source ?? '')).toBe(true);
-      }
+      const initMountSrcs = mounts
+        .map((mount) => mountField(mount, 'src') ?? '')
+        .sort();
+      expect(initMountSrcs).toStrictEqual([...volumeNames].sort());
       // Init destinations are neutral image paths, never host paths.
       const absoluteTokens = argv.filter((token) => token.startsWith('/'));
       for (const token of absoluteTokens) {

@@ -343,6 +343,8 @@ const SHADOW_GIT_HELPERS = [
   '    ( export HOME="$HIST" XDG_CONFIG_HOME="$HIST"',
   '      cd "$HIST" && git init --initial-branch=main . >/dev/null \\',
   "        && git commit --allow-empty -m 'Initial commit' >/dev/null )",
+  '    mkdir -p "$HIST/.git/info"',
+  "    printf '%s\\n' '* -text' > \"$HIST/.git/info/attributes\"",
   '  fi',
   '  cat "$WS/.gitignore" > "$HIST/.gitignore" 2>/dev/null || : > "$HIST/.gitignore"',
   '  hist_sync_exclude',

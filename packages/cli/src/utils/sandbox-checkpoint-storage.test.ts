@@ -58,7 +58,7 @@ function makeWorkspace(): string {
   );
 }
 
-/** The checkpoint store layout contract: marker content on win32, mode 1777 on POSIX. */
+/** The checkpoint store layout contract: marker content on win32, mode 777 on POSIX. */
 function assertStoreLayoutContract(storeDir: string, historyDir: string): void {
   if (process.platform === 'win32') {
     // Windows stat modes never carry POSIX bits; assert the observable
