@@ -294,13 +294,36 @@ function runPreparePackage(workCopy) {
   }
 }
 
+/**
+ * Runs bind-release-deps with a bounded retry: one per-attempt timeout of 600s,
+ * retrying ONCE when the spawn itself dies with ETIMEDOUT. The pack phase runs
+ * BEFORE the npm steps and is not covered by the smoke's 690s global deadline,
+ * so the enlarged single-step budget is bounded by this helper rather than the outer
+ * smoke deadline. Round-3 CI (job 101004113997) hit
+ * `spawnSync bun ETIMEDOUT` at 300s; a single 600s attempt also timed out
+ * because bind-release-deps itself can exceed 600s, so we allow one retry.
+ * All non-timeout errors and the second timeout keep the original fatal messages.
+ */
 function runBindReleaseDeps(workCopy) {
-  const bindResult = spawnSync('bun', ['scripts/bind-release-deps.ts'], {
-    cwd: workCopy,
-    encoding: 'utf8',
-    timeout: 300_000,
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  const attempts = 2;
+  const attemptTimeoutMs = 600_000;
+  let bindResult = null;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    bindResult = spawnSync('bun', ['scripts/bind-release-deps.ts'], {
+      cwd: workCopy,
+      encoding: 'utf8',
+      timeout: attemptTimeoutMs,
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    if (!bindResult.error || bindResult.error.code !== 'ETIMEDOUT') {
+      break;
+    }
+    if (attempt < attempts) {
+      console.warn(
+        `bind-release-deps attempt ${attempt} timed out after ${attemptTimeoutMs}ms; retrying (attempt ${attempt + 1})`,
+      );
+    }
+  }
   if (bindResult.error) {
     throw new Error(
       `bind-release-deps spawn failed: ${bindResult.error.message}`,

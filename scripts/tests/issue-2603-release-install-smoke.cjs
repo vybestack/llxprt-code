@@ -238,6 +238,128 @@ function spawnTarExtractLocal(tarball, extractDir) {
   return spawnTarExtract(tarball, extractDir);
 }
 
+/**
+ * Parses the optional global-deadline override from
+ * LLXPRT_SMOKE_GLOBAL_DEADLINE_MS. Only a finite, non-negative number
+ * (0 included) is honored; anything else (empty, NaN, negative, Infinity, or
+ * non-numeric) falls back to the default so the deadline can never become
+ * unbounded.
+ */
+function parseSmokeDeadlineMs(value) {
+  if (typeof value === 'string' && value.trim() === '') {
+    return 690_000;
+  }
+  const parsed = Number(value);
+  if (Number.isFinite(parsed) && parsed >= 0) {
+    return parsed;
+  }
+  return 690_000;
+}
+
+/**
+ * Global budget for the whole smoke, mirrored from SMOKE_TIMEOUT_MS in
+ * issue-2603-release-install.test.ts (issue #3550). PR #3561 CI showed both
+ * install steps recovered via retry but consumed the entire grant, so this was raised
+ * from 480s to 690s so a degraded-registry window plus the rest of a healthy
+ * run fits. 690s still stays inside the wrapper's hard kill (default 780s).
+ * Overridable via LLXPRT_SMOKE_GLOBAL_DEADLINE_MS; only a finite,
+ * non-negative override is honored, anything else falls back to the default.
+ */
+const SMOKE_GLOBAL_DEADLINE_MS = parseSmokeDeadlineMs(
+  process.env.LLXPRT_SMOKE_GLOBAL_DEADLINE_MS,
+);
+
+/**
+ * Per-attempt budget for a real npm registry network call, bounded so no step can
+ * carry the whole smoke past its deadline.
+ */
+const DEFAULT_STEP_TIMEOUT_MS = 300_000;
+
+/**
+ * A step may retry after an ETIMEDOUT only while at least this much of the
+ * global deadline remains — enough for a bounded recovery attempt on a marginal
+ * registry window, while still failing fast when the budget is spent.
+ */
+const MIN_SMOKE_RETRY_BUDGET_MS = 90_000;
+
+/**
+ * The instant the smoke's global deadline starts being measured, captured once at
+ * module load so every step shares the same clock.
+ */
+const _smokeDeadlineStartMs = Date.now();
+
+function startDeadlineTimestampMs() {
+  return _smokeDeadlineStartMs;
+}
+
+/**
+ * Wraps spawnSync for a real npm registry network call and retries ONCE when the
+ * spawn itself dies with ETIMEDOUT (issue #3550). Registry degradation windows on
+ * GitHub runners surface as `error.code === 'ETIMEDOUT'` on the spawn result.
+ * Only that exact condition retries: a non-zero exit or any other spawn error fails
+ * fast, keeping the smoke's fail-fast guarantee intact. A warning naming the attempt
+ * is printed to stderr before the retry.
+ *
+ * The per-attempt timeout is the smaller of the step budget
+ * (DEFAULT_STEP_TIMEOUT_MS) and the time remaining until
+ * SMOKE_GLOBAL_DEADLINE_MS, so a marginal step can never carry the whole
+ * smoke past its bound. A retry happens only when the failed attempt died with
+ * `error.code === 'ETIMEDOUT'` AND at least MIN_SMOKE_RETRY_BUDGET_MS
+ * of the global deadline remains; otherwise the smoke fails fast with a message
+ * that names the deadline.
+ *
+ * @param {string} command
+ * @param {readonly string[]} args
+ * @param {object} [opts] spawnSync options (e.g. cwd, encoding, maxBuffer).
+ * @returns {ReturnType<typeof spawnSync>}
+ */
+function spawnNpmWithTimeoutRetry(command, args, opts) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const elapsedMs = Date.now() - startDeadlineTimestampMs();
+    const remainingDeadlineMs = Math.max(
+      0,
+      SMOKE_GLOBAL_DEADLINE_MS - elapsedMs,
+    );
+    if (remainingDeadlineMs <= 0) {
+      return {
+        error: new Error(
+          `smoke global deadline of ${SMOKE_GLOBAL_DEADLINE_MS}ms already exhausted; not spawning attempt ${attempt}`,
+        ),
+      };
+    }
+    const attemptOpts = {
+      ...opts,
+      timeout: Math.min(DEFAULT_STEP_TIMEOUT_MS, remainingDeadlineMs),
+    };
+    const result = spawnSync(command, args, attemptOpts);
+    if (!result.error || !(result.error.code === 'ETIMEDOUT')) {
+      return result;
+    }
+    if (attempt >= 2) {
+      return result;
+    }
+    const remainingAfterMs = Math.max(
+      0,
+      SMOKE_GLOBAL_DEADLINE_MS - (Date.now() - startDeadlineTimestampMs()),
+    );
+    if (remainingAfterMs < MIN_SMOKE_RETRY_BUDGET_MS) {
+      return {
+        error: new Error(
+          `npm attempt ${attempt} hit the per-step spawn timeout, but only ${remainingAfterMs}ms of the ${SMOKE_GLOBAL_DEADLINE_MS}ms smoke global deadline remains (need at least ${MIN_SMOKE_RETRY_BUDGET_MS}ms to retry); failing fast`,
+        ),
+      };
+    }
+    console.warn(
+      `npm spawn ETIMEDOUT after ${Date.now() - startDeadlineTimestampMs()}ms (attempt ${attempt}); retrying with attempt ${attempt + 1} (${remainingAfterMs}ms of the ${SMOKE_GLOBAL_DEADLINE_MS}ms global deadline remains).`,
+    );
+  }
+  return {
+    error: new Error(
+      `npm spawn ETIMEDOUT twice without a bounded retry window; smoke global deadline is ${SMOKE_GLOBAL_DEADLINE_MS}ms`,
+    ),
+  };
+}
+
 // Track tempDir at module scope so signal handlers can clean up even if main
 // has not yet reached the finally block.
 let _cleanupTempDir = null;
@@ -303,9 +425,9 @@ function main() {
         'error',
         replicaTarball,
       ]);
-      const installResult = spawnSync(command, args, {
+      const installResult = spawnNpmWithTimeoutRetry(command, args, {
         encoding: 'utf8',
-        timeout: 180_000,
+        timeout: 300_000,
         maxBuffer: 64 * 1024 * 1024,
       });
       if (installResult.error) {
@@ -413,10 +535,10 @@ function main() {
         'error',
         replicaTarball,
       ]);
-      const installResult = spawnSync(command, args, {
+      const installResult = spawnNpmWithTimeoutRetry(command, args, {
         cwd: consumerDir,
         encoding: 'utf8',
-        timeout: 180_000,
+        timeout: 300_000,
         maxBuffer: 64 * 1024 * 1024,
       });
       if (installResult.error) {
@@ -468,7 +590,9 @@ function main() {
     // and runs the bin, then leaves the clean dir with no node_modules. This
     // is the real ephemeral install path — NOT `npx llxprt` against an
     // already-local-installed bin, which would only exercise the local .bin
-    // link. We use a separate clean cache so the cache install is genuine.
+    // link. We reuse the cache warmed by the global-install step above so the
+    // ephemeral install path is still genuinely exercised; only the redundant cold
+    // registry re-fetch of the whole dependency tree is eliminated (issue #3550).
     runStep('npm-exec-ephemeral', () => {
       const cleanDir = join(tempDir, 'npm-exec-clean');
       mkdirSync(cleanDir, { recursive: true });
@@ -476,7 +600,7 @@ function main() {
         join(cleanDir, 'package.json'),
         JSON.stringify({ name: 'clean-consumer', version: '0.0.0' }, null, 2),
       );
-      const npmCache = join(tempDir, 'npm-exec-cache');
+      const npmCache = join(tempDir, 'npm-cache');
       const { command, args } = npmInvocation([
         'exec',
         '--package',
@@ -485,7 +609,7 @@ function main() {
         'llxprt',
         '--version',
       ]);
-      const result = spawnSync(command, args, {
+      const result = spawnNpmWithTimeoutRetry(command, args, {
         cwd: cleanDir,
         encoding: 'utf8',
         timeout: 300_000,
