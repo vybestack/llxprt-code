@@ -61,10 +61,15 @@ interface CreateReviewCall {
   comments: Array<Record<string, unknown>>;
 }
 
+/** Pairs an internal comment with its finding under a path-derived id, matching the shape the post step builds before a batch post. */
 function internalPair(comment: InternalComment): Pair {
   return { comment, finding: { path: comment.path } };
 }
 
+/**
+ * Fixture for a finding that spans a line range, carrying the internal
+ * `_severity` sort key the payload helper must strip before transmission.
+ */
 function multiLineComment(severity: string): InternalComment {
   return {
     path: 'a.ts',
@@ -77,6 +82,10 @@ function multiLineComment(severity: string): InternalComment {
   };
 }
 
+/**
+ * Fixture for a finding anchored to a single line, carrying the internal
+ * `_severity` sort key the payload helper must strip before transmission.
+ */
 function singleLineComment(severity: string): InternalComment {
   return {
     path: 'b.ts',
@@ -87,6 +96,7 @@ function singleLineComment(severity: string): InternalComment {
   };
 }
 
+/** Returns a record's keys in sorted order so assertions compare key sets without depending on insertion order. */
 function sortedKeys(record: Record<string, unknown>): string[] {
   return Object.keys(record).sort();
 }

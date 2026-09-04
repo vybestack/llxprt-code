@@ -75,6 +75,7 @@ describe.skipIf(!hasBash())(
       );
     }
 
+    /** Returns the raw artifact contents so tests can pin the byte-identical format the notifier workflow parses. */
     function readArtifact(): string {
       return fs.readFileSync(
         path.join(directory, 'ocr-infrastructure-failure.txt'),
@@ -82,7 +83,10 @@ describe.skipIf(!hasBash())(
       );
     }
 
-    /** Run the extracted helper once and return its stdout. */
+    /**
+     * Run the extracted helper once in the scratch directory and return its stdout,
+     * so tests can assert the warning annotation the real workflow would emit.
+     */
     function markFailure(phase: string, reason: string): string {
       try {
         return execFileSync(

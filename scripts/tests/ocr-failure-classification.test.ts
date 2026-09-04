@@ -139,6 +139,10 @@ describe.skipIf(!hasBash())(
       fs.rmSync(directory, { recursive: true, force: true });
     });
 
+    /**
+     * Run the real extracted classifier and return the reason it recorded in the
+     * artifact, throwing a diagnostic if it failed or recorded nothing.
+     */
     function classify(stderrContent: string): string {
       const artifactPath = path.join(
         directory,

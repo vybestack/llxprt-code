@@ -237,6 +237,10 @@ export function loadHarness(
   };
 }
 
+/**
+ * Associates a comment with its finding under the comment's path as id, the
+ * pair shape the post step feeds to the 422 regrouping logic.
+ */
 export function pair(comment: ReviewComment, id = comment.path): Pair {
   return { comment, finding: { path: comment.path, id } };
 }
