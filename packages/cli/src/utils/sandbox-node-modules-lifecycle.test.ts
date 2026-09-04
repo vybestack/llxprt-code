@@ -43,6 +43,25 @@ function isolateCacheEnv(): () => void {
   };
 }
 
+/**
+ * Assert the signal fixture died from its signal: strictly (status null,
+ * signal name) on POSIX, or via bun's win32 emulation of signal delivery as
+ * a normal exit status 1 — the observable contract there is termination (it
+ * did not continue into the trailing timer) and the handler having released
+ * the engine-owned volumes, asserted by the caller.
+ */
+function assertSignalDeath(
+  result: ReturnType<typeof spawnSync>,
+  signal: 'SIGINT' | 'SIGTERM',
+): void {
+  if (process.platform === 'win32') {
+    expect(result.status === 1 || result.signal === signal).toBe(true);
+  } else {
+    expect(result.status).toBeNull();
+    expect(result.signal).toBe(signal);
+  }
+}
+
 function writeJson(filePath: string, value: unknown): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
@@ -138,8 +157,7 @@ describe('#3450 private dependency storage lifecycle', () => {
       expect(fs.readFileSync(storageReadyMarker, 'utf8')).toBe(
         'PRIVATE-STORAGE-READY:1\n',
       );
-      expect(result.status).toBeNull();
-      expect(result.signal).toBe(signal);
+      assertSignalDeath(result, signal);
       expect(result.stdout).not.toContain('CONTINUED-AFTER-SIGNAL');
       // The signal handler released the engine-owned volumes.
       expect(engine.volumeNames()).toStrictEqual([]);

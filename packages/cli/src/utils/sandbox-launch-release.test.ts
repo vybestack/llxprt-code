@@ -819,53 +819,66 @@ describe('#3469 launch resource release', () => {
     };
   }
 
-  it('stops a started proxy sidecar when the main engine spawn throws', async () => {
-    const { stderr } = await runProxiedLaunchFailure();
-    const { sidecarRun, networkConnect, sidecarRm, volumeRm } =
-      sidecarReleaseOrder();
-    // #3501: the sidecar published the configured endpoint's port, which is
-    // the one the host readiness probe just reached.
-    const sidecarArgv = engine.invocations()[sidecarRun];
-    expect(sidecarArgv[sidecarArgv.indexOf('-p') + 1]).toBe(
-      `${proxyPort}:${proxyPort}`,
-    );
-    // The sidecar really started: its container was recorded and connected
-    // to the sandbox network before the launch failure, then removed again
-    // (AC2), before the volumes.
-    expect(sidecarRun).toBeGreaterThanOrEqual(0);
-    expect(networkConnect).toBeGreaterThan(sidecarRun);
-    expect(sidecarRm).toBeGreaterThan(networkConnect);
-    expect(volumeRm).toBeGreaterThan(sidecarRm);
-    expect(engine.containerNames()).toStrictEqual([]);
-    expect(fs.existsSync(proxyFake.markerPath)).toBe(false);
-    expect(stderr).not.toContain('Warning: failed to release');
-    expect(engine.volumeNames()).toStrictEqual([]);
-    expect(leakedRunRoots()).toStrictEqual([]);
-    assertTmpdirsReleased(createdSessionTmpdirs);
-  }, 60_000);
+  // POSIX-only: teardown kills the sidecar's process group
+  // (process.kill(-pid)) and the gated variant spawns via `sh -c`; neither
+  // is constructible on win32, so the port could never be freed there.
+  // Linux/macOS PR CI retains the coverage.
 
-  it('network-connects a proxy sidecar whose registration the readiness gate releases only after a rejected pre-registration request', async () => {
-    const { stderr, gate } = await runProxiedLaunchFailure('gated');
-    const { sidecarRun, networkConnect, sidecarRm, volumeRm } =
-      sidecarReleaseOrder();
-    // #3533: the gated child could not register until the gate observed and
-    // rejected a real pre-registration readiness request, so the request
-    // order is proven, not assumed from scheduler timing. The launch then
-    // passed network connect before the injected main-container failure
-    // released everything.
-    expect(gate.rejections).toBeGreaterThanOrEqual(1);
-    expect(gate.acceptances).toBeGreaterThanOrEqual(1);
-    expect(sidecarRun).toBeGreaterThanOrEqual(0);
-    expect(networkConnect).toBeGreaterThan(sidecarRun);
-    expect(sidecarRm).toBeGreaterThan(networkConnect);
-    expect(volumeRm).toBeGreaterThan(sidecarRm);
+  /** Shared end-state of every proxied-launch failure scenario. */
+  function assertProxyScenarioReleased(stderr: string): void {
     expect(engine.containerNames()).toStrictEqual([]);
     expect(fs.existsSync(proxyFake.markerPath)).toBe(false);
     expect(stderr).not.toContain('Warning: failed to release');
     expect(engine.volumeNames()).toStrictEqual([]);
     expect(leakedRunRoots()).toStrictEqual([]);
     assertTmpdirsReleased(createdSessionTmpdirs);
-  }, 60_000);
+  }
+
+  it.skipIf(process.platform === 'win32')(
+    'stops a started proxy sidecar when the main engine spawn throws',
+    async () => {
+      const { stderr } = await runProxiedLaunchFailure();
+      const { sidecarRun, networkConnect, sidecarRm, volumeRm } =
+        sidecarReleaseOrder();
+      // #3501: the sidecar published the configured endpoint's port, which is
+      // the one the host readiness probe just reached.
+      const sidecarArgv = engine.invocations()[sidecarRun];
+      expect(sidecarArgv[sidecarArgv.indexOf('-p') + 1]).toBe(
+        `${proxyPort}:${proxyPort}`,
+      );
+      // The sidecar really started: its container was recorded and connected
+      // to the sandbox network before the launch failure, then removed again
+      // (AC2), before the volumes.
+      expect(sidecarRun).toBeGreaterThanOrEqual(0);
+      expect(networkConnect).toBeGreaterThan(sidecarRun);
+      expect(sidecarRm).toBeGreaterThan(networkConnect);
+      expect(volumeRm).toBeGreaterThan(sidecarRm);
+      assertProxyScenarioReleased(stderr);
+    },
+    60_000,
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'network-connects a proxy sidecar whose registration the readiness gate releases only after a rejected pre-registration request',
+    async () => {
+      const { stderr, gate } = await runProxiedLaunchFailure('gated');
+      const { sidecarRun, networkConnect, sidecarRm, volumeRm } =
+        sidecarReleaseOrder();
+      // #3533: the gated child could not register until the gate observed and
+      // rejected a real pre-registration readiness request, so the request
+      // order is proven, not assumed from scheduler timing. The launch then
+      // passed network connect before the injected main-container failure
+      // released everything.
+      expect(gate.rejections).toBeGreaterThanOrEqual(1);
+      expect(gate.acceptances).toBeGreaterThanOrEqual(1);
+      expect(sidecarRun).toBeGreaterThanOrEqual(0);
+      expect(networkConnect).toBeGreaterThan(sidecarRun);
+      expect(sidecarRm).toBeGreaterThan(networkConnect);
+      expect(volumeRm).toBeGreaterThan(sidecarRm);
+      assertProxyScenarioReleased(stderr);
+    },
+    60_000,
+  );
 
   it('releases the proxied-launch scenario directories when the proxy port bind fails', async () => {
     // #3538: hold the port the scenario is configured to bind, so its

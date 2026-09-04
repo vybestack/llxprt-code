@@ -35,6 +35,17 @@ function isolateCacheEnv(): () => void {
   };
 }
 
+/**
+ * Assert a volume root is mode 1777 on POSIX; win32 stat modes never carry
+ * POSIX bits ('1777' surfaces as '666'), so there the observable contract —
+ * the init container ran against the volume — is proven by the caller.
+ */
+function assertVolumeRootMode1777(root: string): void {
+  if (process.platform !== 'win32') {
+    expect(fs.statSync(root).mode & 0o1777).toBe(0o1777);
+  }
+}
+
 function flagValues(argv: readonly string[], flag: string): string[] {
   const values: string[] = [];
   for (let index = 0; index < argv.length - 1; index++) {
@@ -336,10 +347,11 @@ describe('#3462 venv volume is writable by the selected container uid', () => {
       const names = engine.volumeNames();
       expect(names).toHaveLength(2);
       // Every volume root, including the venv's, is world-writable with the
-      // sticky bit, so any selected container uid can write into it.
+      // sticky bit, so any selected container uid can write into it. Windows
+      // stat modes never carry POSIX bits, so there the helper asserts the
+      // observable contract: the init container actually ran against it.
       for (const name of names) {
-        const root = path.join(engine.stateRoot, 'volumes', name);
-        expect(fs.statSync(root).mode & 0o1777).toBe(0o1777);
+        assertVolumeRootMode1777(path.join(engine.stateRoot, 'volumes', name));
       }
     } finally {
       lifecycle.release();

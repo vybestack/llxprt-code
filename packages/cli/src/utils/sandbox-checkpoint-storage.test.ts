@@ -58,6 +58,30 @@ function makeWorkspace(): string {
   );
 }
 
+/** The checkpoint store layout contract: marker content on win32, mode 1777 on POSIX. */
+function assertStoreLayoutContract(storeDir: string, historyDir: string): void {
+  if (process.platform === 'win32') {
+    // Windows stat modes never carry POSIX bits; assert the observable
+    // contract instead: the init container materialized the layout and marker.
+    expect(
+      fs.readFileSync(
+        path.join(historyDir, '.llxprt-checkpoint-store'),
+        'utf8',
+      ),
+    ).toBe('llxprt-code persistent checkpoint store\n');
+  } else {
+    // World-writable WITHOUT the sticky bit: a later sandbox run under a
+    // different selected uid must be able to rename git lockfiles over
+    // entries this run created (index, refs, COMMIT_EDITMSG); the sticky
+    // bit denies exactly that rename. Cross-uid behavior is proven against
+    // real engines by integration-tests/sandboxCheckpointPersistence.
+    const storeMode = fs.statSync(storeDir).mode & 0o7777;
+    const historyMode = fs.statSync(historyDir).mode & 0o7777;
+    expect(storeMode.toString(8)).toBe('777');
+    expect(historyMode.toString(8)).toBe('777');
+  }
+}
+
 /** The value following a flag token, when the flag is present. */
 function flagValue(argv: readonly string[], flag: string): string | undefined {
   const index = argv.indexOf(flag);
@@ -175,15 +199,7 @@ describe('persistent sandbox checkpoint storage (#3464)', () => {
         fs.existsSync(path.join(historyDir, '.llxprt-checkpoint-store')),
       ).toBe(true);
       expect(fs.existsSync(path.join(storeDir, 'checkpoints'))).toBe(true);
-      // World-writable WITHOUT the sticky bit: a later sandbox run under a
-      // different selected uid must be able to rename git lockfiles over
-      // entries this run created (index, refs, COMMIT_EDITMSG); the sticky
-      // bit denies exactly that rename. Cross-uid behavior is proven against
-      // real engines by integration-tests/sandboxCheckpointPersistence.
-      const storeMode = fs.statSync(storeDir).mode & 0o7777;
-      const historyMode = fs.statSync(historyDir).mode & 0o7777;
-      expect(storeMode.toString(8)).toBe('777');
-      expect(historyMode.toString(8)).toBe('777');
+      assertStoreLayoutContract(storeDir, historyDir);
     });
 
     it('mounts the store at the neutral path and pins both env keys on the main container', () => {

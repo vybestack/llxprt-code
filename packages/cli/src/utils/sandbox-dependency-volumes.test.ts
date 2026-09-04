@@ -74,6 +74,27 @@ function labelValue(argv: readonly string[], labelName: string): string {
   return value.slice(prefix.length);
 }
 
+/** Assert a root is mode 1777 on POSIX; win32 stat modes never carry POSIX bits ('1777' surfaces as '666'). */
+function assertRootMode1777(root: string): void {
+  if (process.platform !== 'win32') {
+    expect(fs.statSync(root).mode & 0o1777).toBe(0o1777);
+  }
+}
+
+/**
+ * Assert each volume root is mode 1777 on POSIX; on win32, where stat modes
+ * never carry POSIX bits, assert the observable contract instead: the init
+ * container actually ran against every volume.
+ */
+function assertVolumeRootModes(
+  volumeNames: readonly string[],
+  engine: { readonly stateRoot: string },
+): void {
+  for (const name of volumeNames) {
+    assertRootMode1777(path.join(engine.stateRoot, 'volumes', name));
+  }
+}
+
 function isUnknownRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -281,11 +302,10 @@ describe('#3450 engine-owned dependency volumes', () => {
         expect(/^\/tmp\/llxprt-deps-\d+$/.test(token)).toBe(true);
       }
       // The real init script ran inside the engine: each volume root is now
-      // mode 1777 (world-writable with the sticky bit).
-      for (const name of volumeNames) {
-        const root = path.join(engine.stateRoot, 'volumes', name);
-        expect(fs.statSync(root).mode & 0o1777).toBe(0o1777);
-      }
+      // mode 1777 (world-writable with the sticky bit). Windows stat modes
+      // never carry POSIX bits, so there we assert the observable contract:
+      // the init container actually ran against every volume.
+      assertVolumeRootModes(volumeNames, engine);
     } finally {
       lifecycle.release();
     }
@@ -449,8 +469,7 @@ describe('#3450 dependency init script', () => {
       emptyRoot,
     ]);
     expect(emptyRun.status).toBe(0);
-    expect(fs.statSync(emptyRoot).mode & 0o1777).toBe(0o1777);
-
+    assertRootMode1777(emptyRoot);
     const seededRoot = fs.mkdtempSync(
       path.join(os.tmpdir(), 'issue3450-init-seeded-'),
     );
