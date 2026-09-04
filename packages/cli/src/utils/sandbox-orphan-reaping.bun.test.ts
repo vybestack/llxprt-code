@@ -543,27 +543,39 @@ describe('sandbox orphan recovery startup', () => {
       `${row('reused-pid-container', reusedPidMetadata)}\n`,
     );
 
-    // Windows cold-start of the compiled ps fixture (Defender scanning the
-    // first spawn) can exceed the production 250ms readProcessStartTime
-    // budget and burn the owner probe; warm the executable once with the
-    // live owner pid already recorded so the probe is answered promptly.
+    // Windows cold-start of the compiled ps fixture (Defender scanning each
+    // spawn under runner load) can exceed the production 250ms
+    // readProcessStartTime budget and burn the owner probe; warm the
+    // executable with the live owner pid already recorded until a spawn
+    // answers well inside that budget, so the probe that matters is fast too.
     if (process.platform === 'win32') {
-      const prewarm = spawnSync(
-        path.join(fixtureDir, 'ps.exe'),
-        ['-o', 'lstart=', '-p', String(metadata.pid)],
-        {
-          encoding: 'utf8',
-          env: process.env,
-          timeout: FIXTURE_TIMEOUT_MS,
-          windowsHide: true,
-        },
-      );
-      if (prewarm.error !== undefined) {
-        throw prewarm.error;
+      let warm = false;
+      for (let attempt = 0; attempt < 8 && !warm; attempt++) {
+        const startedAt = Date.now();
+        const prewarm = spawnSync(
+          path.join(fixtureDir, 'ps.exe'),
+          ['-o', 'lstart=', '-p', String(metadata.pid)],
+          {
+            encoding: 'utf8',
+            env: process.env,
+            timeout: FIXTURE_TIMEOUT_MS,
+            windowsHide: true,
+          },
+        );
+        if (prewarm.error !== undefined) {
+          throw prewarm.error;
+        }
+        if (prewarm.status !== 0) {
+          throw new Error(
+            `ps fixture prewarm failed with status ${prewarm.status}: ${prewarm.stderr}`,
+          );
+        }
+        warm = Date.now() - startedAt <= 150;
       }
-      if (prewarm.status !== 0) {
+      if (!warm) {
         throw new Error(
-          `ps fixture prewarm failed with status ${prewarm.status}: ${prewarm.stderr}`,
+          'ps fixture never answered within 150ms after 8 warm attempts; ' +
+            'the production owner probe budget would race',
         );
       }
     }
