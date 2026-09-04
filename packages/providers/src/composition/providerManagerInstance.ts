@@ -78,7 +78,7 @@ interface OpenAIRegistrationContext {
   providerConfig: IProviderConfig;
   oauthManager: OAuthManager;
   config?: Config;
-  authOnlyEnabled?: boolean;
+  authOnlyEnabled: boolean;
 }
 
 function createRuntimeContentGeneratorFactory(

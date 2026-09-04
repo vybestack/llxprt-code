@@ -1175,6 +1175,371 @@ ${result.stderr ?? ''}
   };
 }
 
+interface SourceFailureFixture {
+  readonly root: string;
+  readonly storageRoot: string;
+  readonly preparationStarted: string;
+  readonly sourceEntrypointRan: string;
+  readonly responsesFile: string;
+  readonly nodeModulesSnapshot: ReadonlyMap<string, TreeEntry>;
+  readonly bunLock: Buffer;
+  readonly packageLock: Buffer;
+}
+
+interface BranchLaunch {
+  readonly child: ChildProcess;
+  readonly completion: Promise<LaunchResult>;
+  readonly output: () => { readonly stdout: string; readonly stderr: string };
+}
+
+function buildSourceFailureFixture(home: string): SourceFailureFixture {
+  const root = join(home, 'source-checkout');
+  const storageRoot = join(home, 'storage');
+  const preparationStarted = join(root, 'preparation-started.txt');
+  const sourceEntrypointRan = join(root, 'source-entrypoint-ran.txt');
+  const responsesFile = join(root, 'fake-responses.jsonl');
+  const nodeModules = join(root, 'node_modules');
+  const binDir = join(nodeModules, '.bin');
+  const hostToolDir = join(nodeModules, 'host-tool');
+
+  writeJsonFile(join(root, 'package.json'), {
+    name: 'issue3534-source-failure-fixture',
+    private: true,
+    workspaces: [],
+    scripts: { postinstall: 'sh ./fail-preparation.sh' },
+  });
+  writeTextFile(
+    join(root, 'bun.lock'),
+    JSON.stringify({
+      lockfileVersion: 1,
+      configVersion: 0,
+      workspaces: {
+        '': { name: 'issue3534-source-failure-fixture' },
+      },
+      packages: {},
+    }) + '\n',
+  );
+  writeJsonFile(join(root, 'package-lock.json'), {
+    name: 'issue3534-source-failure-fixture',
+    lockfileVersion: 3,
+  });
+  writeTextFile(join(hostToolDir, 'index.js'), 'host dependency marker\n');
+  mkdirSync(binDir, { recursive: true });
+  symlinkSync('../host-tool/index.js', join(binDir, 'host-tool'));
+  writeTextFile(join(nodeModules, 'host-marker.txt'), 'host node_modules\n');
+  writeTextFile(
+    join(root, 'packages', 'cli', 'index.ts'),
+    [
+      "import { writeFileSync } from 'node:fs';",
+      `writeFileSync(${JSON.stringify(sourceEntrypointRan)}, 'unexpected source execution\\n');`,
+    ].join('\n'),
+  );
+  writeScript(
+    join(root, 'fail-preparation.sh'),
+    [
+      "printf 'dependency preparation acquired resources\\n' > ./preparation-started.txt",
+      'sleep 3',
+      "printf 'induced dependency preparation failure\\n' >&2",
+      'exit 42',
+    ].join('\n'),
+  );
+  writeTextFile(
+    responsesFile,
+    JSON.stringify({
+      chunks: [
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'must not execute' }],
+        },
+      ],
+    }) + '\n',
+  );
+  for (const dir of ['config', 'data', 'cache', 'log']) {
+    mkdirSync(join(storageRoot, dir), { recursive: true });
+  }
+
+  const nodeModulesSnapshot = snapshotTree(nodeModules);
+  if (nodeModulesSnapshot === undefined) {
+    throw new Error('source failure fixture node_modules was not created');
+  }
+  return {
+    root,
+    storageRoot,
+    preparationStarted,
+    sourceEntrypointRan,
+    responsesFile,
+    nodeModulesSnapshot,
+    bunLock: readFileSync(join(root, 'bun.lock')),
+    packageLock: readFileSync(join(root, 'package-lock.json')),
+  };
+}
+
+function entriesWithPrefix(root: string, prefix: string): string[] {
+  if (!existsSync(root)) return [];
+  return readdirSync(root)
+    .filter((entry) => entry.startsWith(prefix))
+    .map((entry) => join(root, entry))
+    .sort();
+}
+
+function podmanReverseTunnelPids(): number[] {
+  const output = execFileSync('ps', ['-axo', 'pid=,command='], {
+    encoding: 'utf8',
+    timeout: 10_000,
+  });
+  const pids: number[] = [];
+  for (const line of output.split(/\r?\n/)) {
+    const match = /^\s*(\d+)\s+(.+)$/.exec(line);
+    if (match === null) continue;
+    const command = match[2];
+    if (
+      command.includes('ssh ') &&
+      command.includes('ExitOnForwardFailure=yes') &&
+      command.includes(' -R ')
+    ) {
+      pids.push(Number(match[1]));
+    }
+  }
+  return pids.sort((left, right) => left - right);
+}
+
+function launchSourcePreparationFailure(
+  fixture: SourceFailureFixture,
+): BranchLaunch {
+  const childEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    NODE_ENV: 'development',
+    HOME: process.env.HOME,
+    NO_BROWSER: 'true',
+    LLXPRT_NO_BROWSER_AUTH: 'true',
+    CI: 'true',
+    SANDBOX_SET_UID_GID: 'false',
+    LLXPRT_CONFIG_HOME: join(fixture.storageRoot, 'config'),
+    LLXPRT_DATA_HOME: join(fixture.storageRoot, 'data'),
+    LLXPRT_CACHE_HOME: join(fixture.storageRoot, 'cache'),
+    LLXPRT_LOG_HOME: join(fixture.storageRoot, 'log'),
+    LLXPRT_FAKE_RESPONSES: fixture.responsesFile,
+    SANDBOX_FLAGS: '',
+    SANDBOX_MOUNTS: '',
+  };
+  delete childEnv.SSH_AUTH_SOCK;
+  const child = spawn(
+    process.execPath,
+    [
+      CLI_ENTRY,
+      '--yolo',
+      '--ide-mode',
+      'disable',
+      '--sandbox',
+      '--sandbox-engine',
+      'podman',
+      '--sandbox-image',
+      IMAGE,
+      '--provider',
+      'fake',
+      '--model',
+      'fake-model',
+      'This prompt must not reach the source entrypoint.',
+    ],
+    {
+      cwd: fixture.root,
+      env: childEnv,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: AGENT_SESSION_TIMEOUT_MS,
+      killSignal: 'SIGKILL',
+    },
+  );
+  let stdout = '';
+  let stderr = '';
+  let spawnError = '';
+  child.stdout?.setEncoding('utf8');
+  child.stderr?.setEncoding('utf8');
+  child.stdout?.on('data', (chunk: string) => {
+    stdout += chunk;
+  });
+  child.stderr?.on('data', (chunk: string) => {
+    stderr += chunk;
+  });
+  child.once('error', (error) => {
+    spawnError = error.message;
+  });
+  const completion = new Promise<LaunchResult>((resolve) => {
+    child.once('close', (status) => {
+      resolve({
+        status,
+        stdout,
+        stderr: stderr + (spawnError === '' ? '' : `\n${spawnError}`),
+      });
+    });
+  });
+  return {
+    child,
+    completion,
+    output: () => ({ stdout, stderr }),
+  };
+}
+
+function waitForPreparationStart(
+  launch: BranchLaunch,
+  markerPath: string,
+): Promise<void> {
+  return bounded(
+    new Promise<void>((resolve, reject) => {
+      const timer = setInterval(() => {
+        if (existsSync(markerPath)) {
+          clearInterval(timer);
+          resolve();
+          return;
+        }
+        if (
+          launch.child.exitCode !== null ||
+          launch.child.signalCode !== null
+        ) {
+          clearInterval(timer);
+          const output = launch.output();
+          reject(
+            new Error(
+              `Branch launcher exited before dependency preparation started.\n` +
+                `--- stdout ---\n${output.stdout}\n` +
+                `--- stderr ---\n${output.stderr}`,
+            ),
+          );
+        }
+      }, 100);
+    }),
+    120_000,
+    'source dependency preparation startup',
+  );
+}
+
+function describePodmanSourcePreparationFailure(): void {
+  const enabled =
+    process.platform === 'darwin' &&
+    process.env.LLXPRT_RUN_REAL_PODMAN_SOURCE_FAILURE === 'true' &&
+    ENGINES.includes('podman');
+  describe.skipIf(!enabled)(
+    'Sandbox source preparation failure cleanup (real Podman macOS) #3534',
+    () => {
+      it(
+        'uses inherited TMPDIR and releases every acquired resource without mutating host dependencies',
+        async () => {
+          const home = mkdtempSync(join(tmpdir(), 'issue3534-source-failure-'));
+          const fixture = buildSourceFailureFixture(home);
+          const sessionRoot = realpathSync(tmpdir());
+          const shortRuntimeRoot = '/tmp';
+          const containersBefore = queryDependencyResources(
+            'podman',
+            'container',
+          );
+          const volumesBefore = queryDependencyResources('podman', 'volume');
+          const sessionsBefore = entriesWithPrefix(
+            sessionRoot,
+            'llxprt-sandbox-',
+          );
+          const shortRuntimesBefore = entriesWithPrefix(
+            shortRuntimeRoot,
+            'lx-',
+          );
+          const tunnelsBefore = podmanReverseTunnelPids();
+          let launch: BranchLaunch | undefined;
+
+          try {
+            launch = launchSourcePreparationFailure(fixture);
+            await waitForPreparationStart(launch, fixture.preparationStarted);
+            const activeContainers = queryDependencyResources(
+              'podman',
+              'container',
+            ).filter((name) => !containersBefore.includes(name));
+            const activeVolumes = queryDependencyResources(
+              'podman',
+              'volume',
+            ).filter((name) => !volumesBefore.includes(name));
+            const activeSessions = entriesWithPrefix(
+              sessionRoot,
+              'llxprt-sandbox-',
+            ).filter((entry) => !sessionsBefore.includes(entry));
+            const activeShortRuntimes = entriesWithPrefix(
+              shortRuntimeRoot,
+              'lx-',
+            ).filter((entry) => !shortRuntimesBefore.includes(entry));
+            const activeTunnels = podmanReverseTunnelPids().filter(
+              (pid) => !tunnelsBefore.includes(pid),
+            );
+            const result = await bounded(
+              launch.completion,
+              AGENT_SESSION_TIMEOUT_MS + 10_000,
+              'source preparation failure launch',
+            );
+            const containersAfter = queryDependencyResources(
+              'podman',
+              'container',
+            );
+            const volumesAfter = queryDependencyResources('podman', 'volume');
+            const tunnelsAfter = podmanReverseTunnelPids();
+
+            expect(process.env.TMPDIR).toBeDefined();
+            expect(activeContainers.length).toBeGreaterThan(0);
+            expect(activeVolumes.length).toBeGreaterThan(0);
+            expect(activeSessions.length).toBeGreaterThan(0);
+            expect(activeShortRuntimes.length).toBeGreaterThan(0);
+            expect(activeTunnels.length).toBeGreaterThan(0);
+            expect(result.status).not.toBe(0);
+            expect(result.stderr).toContain(
+              'induced dependency preparation failure',
+            );
+            expect(result.stderr).toContain(
+              'Failed to prepare isolated Linux dependencies for LLxprt source development',
+            );
+            expect(existsSync(fixture.sourceEntrypointRan)).toBe(false);
+            expect(containersAfter).toStrictEqual(containersBefore);
+            expect(volumesAfter).toStrictEqual(volumesBefore);
+            for (const resourcePath of [
+              ...activeSessions,
+              ...activeShortRuntimes,
+            ]) {
+              expect(existsSync(resourcePath)).toBe(false);
+            }
+            for (const pid of activeTunnels) {
+              expect(tunnelsAfter).not.toContain(pid);
+            }
+            expect(
+              snapshotTree(join(fixture.root, 'node_modules')),
+            ).toStrictEqual(fixture.nodeModulesSnapshot);
+            expect(readFileSync(join(fixture.root, 'bun.lock'))).toStrictEqual(
+              fixture.bunLock,
+            );
+            expect(
+              readFileSync(join(fixture.root, 'package-lock.json')),
+            ).toStrictEqual(fixture.packageLock);
+          } finally {
+            try {
+              if (
+                launch !== undefined &&
+                launch.child.exitCode === null &&
+                launch.child.signalCode === null
+              ) {
+                launch.child.kill('SIGKILL');
+              }
+              if (launch !== undefined) {
+                await bounded(
+                  launch.completion,
+                  10_000,
+                  'source failure test process cleanup',
+                );
+              }
+            } finally {
+              if (process.env.ISSUE3534_KEEP_REAL_FIXTURE === undefined) {
+                rmSync(home, { recursive: true, force: true });
+              }
+            }
+          }
+        },
+        AGENT_SESSION_TIMEOUT_MS + 30_000,
+      );
+    },
+  );
+}
+
 // --- the real-engine suites ---------------------------------------------------
 
 function describeEngine(engine: string): void {
@@ -1644,5 +2009,6 @@ if (process.platform !== 'win32') {
   describeEngine('docker');
   describeEngine('podman');
   describeAbruptRecoveryEngine('docker');
+  describePodmanSourcePreparationFailure();
   describeAbruptRecoveryEngine('podman');
 }

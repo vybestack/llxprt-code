@@ -23,7 +23,9 @@ let openaiCtorState: new (...args: unknown[]) => unknown = class {};
 let openaiResponsesCtorState: new (...args: unknown[]) => unknown = class {};
 let openaiVercelCtorState: new (...args: unknown[]) => unknown = class {};
 let anthropicCtorState: new (...args: unknown[]) => unknown = class {};
-let googleCtorState: new (...args: unknown[]) => unknown = class {};
+let geminiCtorState: new (...args: unknown[]) => unknown = class {
+  setConfig(): void {}
+};
 
 // Wrapper constructors so each test can swap the target without needing
 // vi.resetModules (unsupported in Bun).
@@ -44,7 +46,7 @@ void mock.module('../ProviderManager.js', () => {
   return { ProviderManager: MockProviderManager };
 });
 void mock.module('../gemini/GeminiProvider.js', () => ({
-  GeminiProvider: makeWrapper(() => googleCtorState),
+  GeminiProvider: makeWrapper(() => geminiCtorState),
 }));
 void mock.module('../openai/OpenAIProvider.js', () => ({
   OpenAIProvider: makeWrapper(() => openaiCtorState),
@@ -91,6 +93,18 @@ function createRegisterStandardOAuthProvidersMock(
       ensureMock(provider, oauthManager, tokenStore, addItem);
     }
   };
+}
+
+/**
+ * Collects the API keys a provider constructor received across EVERY alias it
+ * was used for. Asserting on a single call would only cover whichever alias
+ * happened to be registered first, and alias registration order follows
+ * `fs.readdirSync` of the alias directory, which differs per filesystem.
+ */
+function apiKeysPassedTo(ctor: ReturnType<typeof vi.fn>): unknown[] {
+  return ctor.mock.calls
+    .map((call) => (call as unknown[])[0])
+    .filter((apiKey) => apiKey !== undefined);
 }
 
 describe('claudecode OAuth registration with environment key', () => {
@@ -167,7 +181,7 @@ describe('claudecode OAuth registration with environment key', () => {
     const openaiResponsesCtor = vi.fn(() => ({}));
     const openaivercelCtor = vi.fn(() => ({}));
     const anthropicCtor = vi.fn(() => ({}));
-    const googleCtor = vi.fn(() => ({}));
+    const geminiCtor = vi.fn(() => ({}));
 
     // Wire mutable state for this test
     ensureOAuthProviderRegisteredState = ensureOAuthProviderRegisteredMock;
@@ -189,7 +203,7 @@ describe('claudecode OAuth registration with environment key', () => {
     anthropicCtorState = anthropicCtor as unknown as new (
       ...args: unknown[]
     ) => unknown;
-    googleCtorState = googleCtor as unknown as new (
+    geminiCtorState = geminiCtor as unknown as new (
       ...args: unknown[]
     ) => unknown;
 
@@ -222,22 +236,86 @@ describe('claudecode OAuth registration with environment key', () => {
     });
     registerProviderManagerSingleton(manager, oauthManager);
 
-    // Alias registration order is filesystem-dependent, so EVERY alias
-    // construction must be keyless under authOnly; asserting only the first
-    // call let a late-registered alias leak an environment key on runners
-    // whose readdir order differed (@issue:3546).
-    const expectEveryCallKeyless = (ctor: ReturnType<typeof vi.fn>): void => {
-      expect(ctor.mock.calls.length).toBeGreaterThan(0);
-      for (const call of ctor.mock.calls) {
-        expect((call as unknown[])[0]).toBeUndefined();
-      }
+    // No alias may receive an API key while authOnly is on — not the alias
+    // that happens to be registered first, and not the ones that declare
+    // their own `apiKeyEnv` (openai, openai-responses, openai-vercel, gemini).
+    expect(openaiCtor).toHaveBeenCalled();
+    expect(apiKeysPassedTo(openaiCtor)).toEqual([]);
+
+    expect(openaiResponsesCtor).toHaveBeenCalled();
+    expect(apiKeysPassedTo(openaiResponsesCtor)).toEqual([]);
+
+    expect(openaivercelCtor).toHaveBeenCalled();
+    expect(apiKeysPassedTo(openaivercelCtor)).toEqual([]);
+
+    expect(anthropicCtor).toHaveBeenCalled();
+    expect(apiKeysPassedTo(anthropicCtor)).toEqual([]);
+
+    expect(geminiCtor).toHaveBeenCalled();
+    expect(apiKeysPassedTo(geminiCtor)).toEqual([]);
+  });
+
+  it('still binds alias environment keys when authOnly is disabled', async () => {
+    process.env.ANTHROPIC_API_KEY = 'sk-test-key';
+    process.env.GEMINI_API_KEY = 'sk-test-gemini';
+
+    const ensureOAuthProviderRegisteredMock = vi.fn();
+    const anthropicCtor = vi.fn(() => ({}));
+    const geminiCtor = vi.fn(() => ({}));
+
+    // Wire mutable state for this test
+    ensureOAuthProviderRegisteredState = ensureOAuthProviderRegisteredMock;
+    registerStandardOAuthProvidersState =
+      createRegisterStandardOAuthProvidersMock(
+        ensureOAuthProviderRegisteredMock,
+      );
+    isOAuthProviderRegisteredState = vi.fn();
+    resetRegisteredProvidersState = vi.fn();
+    openaiCtorState = class {} as new (...args: unknown[]) => unknown;
+    openaiResponsesCtorState = class {} as new (...args: unknown[]) => unknown;
+    openaiVercelCtorState = class {} as new (...args: unknown[]) => unknown;
+    anthropicCtorState = anthropicCtor as unknown as new (
+      ...args: unknown[]
+    ) => unknown;
+    geminiCtorState = geminiCtor as unknown as new (
+      ...args: unknown[]
+    ) => unknown;
+
+    const mockSettingsService = new SettingsService();
+    const activeContext = {
+      settingsService: mockSettingsService,
+      metadata: { scope: 'test' },
     };
 
-    expectEveryCallKeyless(openaiCtor);
-    expectEveryCallKeyless(openaiResponsesCtor);
-    expectEveryCallKeyless(openaivercelCtor);
-    expectEveryCallKeyless(anthropicCtor);
-    expectEveryCallKeyless(googleCtor);
+    const {
+      createProviderManager,
+      resetProviderManager,
+      registerProviderManagerSingleton,
+    } = await import('./providerManagerInstance.js');
+
+    resetProviderManager();
+    const mockConfig = {
+      setProviderManager(): void {},
+      getEphemeralSettings() {
+        return {};
+      },
+      getSettingsService() {
+        return mockSettingsService;
+      },
+    } as unknown as Config;
+
+    const { manager, oauthManager } = createProviderManager(activeContext, {
+      config: mockConfig,
+      allowBrowserEnvironment: false,
+    });
+    registerProviderManagerSingleton(manager, oauthManager);
+
+    // Without authOnly, an alias still receives the key its own `apiKeyEnv`
+    // names. Both families below resolve their key ONLY from that alias-level
+    // environment read — neither falls back to the shared OpenAI key — so this
+    // fails if the authOnly gate is applied unconditionally.
+    expect(apiKeysPassedTo(geminiCtor)).toContain('sk-test-gemini');
+    expect(apiKeysPassedTo(anthropicCtor)).toContain('sk-test-key');
   });
 
   it('threads OAuth manager only into OAuth-capable alias providers', async () => {

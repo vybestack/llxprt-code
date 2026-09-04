@@ -51,6 +51,15 @@ import {
 import { Storage } from '@vybestack/llxprt-code-storage';
 import type { DependencyVolumeLifecycle } from './sandbox-node-modules.js';
 import type { SandboxLaunchLifecycle } from './sandbox-lifecycle.js';
+import {
+  cleanupCredentialSocketRuntime,
+  createCredentialSocketRuntime,
+} from './sandbox-credential-runtime.js';
+import {
+  awaitSandboxProxyReady,
+  resolveSandboxProxyPort,
+  resolveSandboxProxyUrl,
+} from './sandbox-network-proxy.js';
 
 export { containerMountSources };
 
@@ -132,19 +141,6 @@ function rewriteProxyHostname(proxyUrl: string): string {
   } catch {
     return proxyUrl;
   }
-}
-
-function resolveProxyUrl(): string {
-  const candidates = [
-    process.env.HTTPS_PROXY,
-    process.env.https_proxy,
-    process.env.HTTP_PROXY,
-    process.env.http_proxy,
-  ];
-  return (
-    candidates.find((v): v is string => v !== undefined && v !== '') ??
-    'http://localhost:8877'
-  );
 }
 
 function isNonEmptyEnvValue(value: string | undefined): value is string {
@@ -427,7 +423,7 @@ export function setupContainerNetworking(
 ): string | undefined {
   const proxyCommand = process.env.LLXPRT_SANDBOX_PROXY_COMMAND;
   if (isNonEmptyEnvValue(proxyCommand)) {
-    const proxy = rewriteProxyHostname(resolveProxyUrl());
+    const proxy = rewriteProxyHostname(resolveSandboxProxyUrl(process.env));
     args.push('--env', `HTTPS_PROXY=${proxy}`);
     args.push('--env', `https_proxy=${proxy}`);
     args.push('--env', `HTTP_PROXY=${proxy}`);
@@ -650,7 +646,7 @@ function assertSupportedCredentialNetwork(config: SandboxConfig): void {
 
 async function startCredentialProxyForSandbox(
   config: SandboxConfig,
-  sessionTmpdir: string,
+  socketRuntimePath: string,
   sessionTmpdirCleanup: () => void,
 ): Promise<string> {
   try {
@@ -659,7 +655,7 @@ async function startCredentialProxyForSandbox(
     throwCredentialProxySetupError(error, sessionTmpdirCleanup);
   }
   try {
-    await createAndStartProxy({ socketPath: sessionTmpdir });
+    await createAndStartProxy({ socketPath: socketRuntimePath });
   } catch (error) {
     throwCredentialProxySetupError(
       new FatalSandboxError(
@@ -685,15 +681,15 @@ export async function setupCredentialProxy(
   credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
   credentialProxyBridgeCleanup: (() => void) | undefined;
 }> {
-  const sessionTmpdirCleanup = (): void => {
-    fs.rmSync(sessionTmpdir, { recursive: true, force: true });
-  };
+  const socketRuntime = createCredentialSocketRuntime(config, sessionTmpdir);
+  const sessionTmpdirCleanup = (): void =>
+    cleanupCredentialSocketRuntime(socketRuntime, sessionTmpdir);
   // @plan:PLAN-20250214-CREDPROXY.P34 R25.1: Start credential proxy BEFORE spawning container
   let socketPath: string;
   try {
     socketPath = await startCredentialProxyForSandbox(
       config,
-      sessionTmpdir,
+      socketRuntime.path,
       sessionTmpdirCleanup,
     );
   } catch (error) {
@@ -763,6 +759,11 @@ export async function startProxyContainer(
   workdir: string,
   lifecycle?: SandboxLaunchLifecycle,
 ): Promise<ProxyContainerHandle> {
+  // The host probes this endpoint for readiness and the sandboxed child is
+  // handed the same port on the sidecar's hostname, so the published mapping
+  // has to follow the configured endpoint rather than a fixed number.
+  const proxyUrl = resolveSandboxProxyUrl(process.env);
+  const proxyPort = resolveSandboxProxyPort(proxyUrl);
   const proxyContainerArgs = [
     'run',
     '--rm',
@@ -774,7 +775,7 @@ export async function startProxyContainer(
     '--network',
     SANDBOX_PROXY_NAME,
     '-p',
-    '8877:8877',
+    `${proxyPort}:${proxyPort}`,
     '-v',
     `${process.cwd()}:${workdir}`,
     '--workdir',
@@ -819,10 +820,7 @@ export async function startProxyContainer(
   debugLogger.log('waiting for proxy to start ...');
   const PROXY_READY_TIMEOUT_MS = 30000;
   try {
-    await execAsync(
-      `timeout ${Math.floor(PROXY_READY_TIMEOUT_MS / 1000)} bash -c 'until curl -s http://localhost:8877; do sleep 0.25; done'`,
-      { timeout: PROXY_READY_TIMEOUT_MS + 5000 },
-    );
+    await awaitSandboxProxyReady(proxyUrl, PROXY_READY_TIMEOUT_MS);
   } catch (err) {
     stopProxyContainer();
     throw new FatalSandboxError(

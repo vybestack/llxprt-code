@@ -25,11 +25,10 @@
  * one positioned follow-up read.
  *
  * The source-development path (#3455), a positively identified llxprt-code
- * source checkout under NODE_ENV=development, is excluded: it keeps the
- * legacy single workspace bind, because bootstrapping the source CLI needs
- * the repository's own dependencies. The same shared predicate selects the
- * source entrypoint command, so an arbitrary repository with ambient
- * NODE_ENV=development never bypasses the private volumes.
+ * source checkout under NODE_ENV=development, also receives fresh dependency
+ * volumes. Its trusted entrypoint prepares Linux dependencies in those mounts
+ * before executing checked-out TypeScript. Host preflight remains specific to
+ * installed mode because source dependencies are never read from the host.
  */
 
 import fs from 'node:fs';
@@ -512,8 +511,7 @@ export function planPrivateDependencyMounts(
   workspaceRoots: WorkspaceRoots,
 ): DependencyMountPlan {
   const roots = normalizeWorkspaceRoots(workspaceRoots);
-  if (isSourceDevelopmentWorkdir(roots[0])) return { enabled: false };
-
+  const sourceDevelopment = isSourceDevelopmentWorkdir(roots[0]);
   const destinations: string[] = [];
   const seenDestinations = new Set<string>();
   for (const workdir of roots) {
@@ -527,7 +525,9 @@ export function planPrivateDependencyMounts(
       if (seenDestinations.has(destination)) continue;
       seenDestinations.add(destination);
       assertDestinationChainIsDirectories(workdir, destination);
-      preflightProtectedTree(destination, workdir, workspaceRealRoot);
+      if (!sourceDevelopment) {
+        preflightProtectedTree(destination, workdir, workspaceRealRoot);
+      }
       destinations.push(destination);
     }
   }
@@ -562,10 +562,7 @@ export function addPrivateDependencyMounts(
 ): DependencyVolumeLifecycle {
   if (!planned.enabled) {
     debugLogger.log(
-      'Source-development launch (NODE_ENV=development in an llxprt-code ' +
-        'source checkout): keeping the shared workspace bind for the ' +
-        'source-entrypoint sandbox path; private dependency isolation is ' +
-        'installed-mode only.',
+      'No protected dependency destinations were discovered; skipping private dependency mounts.',
     );
     return noDependencyVolumeLifecycle();
   }

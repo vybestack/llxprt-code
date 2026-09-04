@@ -5,141 +5,289 @@
  */
 
 /**
- * Behavioral regression tests for authOnly gating of alias-provider API-key
- * resolution (@issue #3546). When authOnly is enabled, an alias's apiKeyEnv
- * environment variable must NOT become the provider API key; explicitly
- * resolved upstream keys must still flow through. Mirrors the gating
- * createAnthropicAliasProvider already applies.
+ * Alias providers built while authOnly is on must not authenticate from
+ * ambient environment credentials.
+ *
+ * `resolveAliasEnvApiKey` already refuses to bind the key an alias names in
+ * its own `apiKeyEnv`, but every concrete provider hardcodes its own
+ * `envKeyNames` (OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY,
+ * GOOGLE_API_KEY). AuthPrecedenceResolver skips that environment fallback only
+ * while the settings service it resolves against reports authOnly, whereas the
+ * factories decide authOnly from ephemeral config and merged user settings
+ * (resolveAuthOnlyFlag). When those two sources disagree, the alias was
+ * constructed under authOnly yet still authenticated from the environment.
+ * The factories therefore have to fail closed at construction time.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import type { OAuthManager } from '../auth/oauth-manager.js';
-
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
+  createAnthropicAliasProvider,
+  createGeminiAliasProvider,
   createOpenAIAliasProvider,
   createOpenAIResponsesAliasProvider,
   createOpenAIVercelAliasProvider,
 } from './aliasProviderFactory.js';
+import type { OAuthManager } from '../auth/index.js';
 import type { ProviderAliasEntry } from './providerAliases.js';
-import type { IProviderConfig } from '../types/IProviderConfig.js';
 
-const ENV_KEY_NAME = 'LLXPRT_ALIAS_AUTHONLY_TEST_KEY';
-const ENV_KEY_VALUE = 'sk-env-alias-key';
-const EXPLICIT_UPSTREAM_KEY = 'sk-explicit-upstream';
-
-const NULL_OAUTH_MANAGER: OAuthManager = {
+/**
+ * The responses factory takes the concrete OAuthManager. These tests only need
+ * it to report no OAuth credential, so the precedence chain falls through to
+ * the environment fallback under test; a stub of the two methods that chain
+ * calls stands in for the full manager.
+ */
+const NULL_OAUTH_MANAGER = {
   getToken: async () => null,
   isAuthenticated: async () => false,
 } as unknown as OAuthManager;
 
-const EMPTY_PROVIDER_CONFIG: IProviderConfig = {};
+const ALIAS_BASE_URL = 'https://alias.invalid/v1';
 
-function makeAuthOnlyProbeEntry(baseProvider: string): ProviderAliasEntry {
+/**
+ * The environment variables the concrete providers read on their own. The
+ * aliases below deliberately declare no `apiKeyEnv`, so nothing but these
+ * hardcoded provider-level names can supply a credential.
+ */
+const ENV_KEYS = [
+  'OPENAI_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'GEMINI_API_KEY',
+  'GOOGLE_API_KEY',
+] as const;
+
+type AliasBaseProvider =
+  | 'openai'
+  | 'openai-responses'
+  | 'openai-vercel'
+  | 'anthropic'
+  | 'gemini';
+
+/** The authentication surface every alias provider inherits from BaseProvider. */
+interface AliasAuthProbe {
+  setRuntimeSettingsService(settingsService: SettingsService): void;
+  isAuthenticated(): Promise<boolean>;
+  getAuthMethodName(): Promise<string | null>;
+}
+
+function aliasEntry(baseProvider: AliasBaseProvider): ProviderAliasEntry {
   return {
-    alias: `authonly-probe-${baseProvider}`,
-    config: {
-      baseProvider,
-      'base-url': 'https://alias-factory-authonly.test/v1',
-      apiKeyEnv: ENV_KEY_NAME,
-    },
-    filePath: `authonly-probe-${baseProvider}.config`,
+    alias: `${baseProvider}-authonly-alias`,
+    config: { baseProvider, 'base-url': ALIAS_BASE_URL },
+    filePath: `/virtual/${baseProvider}-authonly-alias.config`,
     source: 'builtin',
   };
 }
 
-type AliasProviderWithBaseConfig = {
-  baseProviderConfig?: { apiKey?: string };
-};
+/**
+ * Builds an alias provider through the real factory the composition root uses
+ * for that base provider, with no key of its own so only the provider's
+ * hardcoded environment names can authenticate it.
+ */
+function buildAliasProvider(
+  baseProvider: AliasBaseProvider,
+  authOnlyEnabled: boolean,
+): AliasAuthProbe {
+  const entry = aliasEntry(baseProvider);
+  const provider = ((): AliasAuthProbe | null => {
+    switch (baseProvider) {
+      case 'openai':
+        return createOpenAIAliasProvider(
+          entry,
+          undefined,
+          undefined,
+          {},
+          authOnlyEnabled,
+        );
+      case 'openai-responses':
+        return createOpenAIResponsesAliasProvider(
+          entry,
+          undefined,
+          undefined,
+          {},
+          NULL_OAUTH_MANAGER,
+          authOnlyEnabled,
+        );
+      case 'openai-vercel':
+        return createOpenAIVercelAliasProvider(
+          entry,
+          undefined,
+          undefined,
+          {},
+          authOnlyEnabled,
+        );
+      case 'anthropic':
+        return createAnthropicAliasProvider(entry, undefined, authOnlyEnabled);
+      case 'gemini':
+        return createGeminiAliasProvider(entry, undefined, authOnlyEnabled);
+      default:
+        return null;
+    }
+  })();
+
+  if (!provider) {
+    throw new Error(`${baseProvider} alias provider was not created`);
+  }
+  return provider;
+}
 
 /**
- * Reads the API key the factory handed to the real provider constructor.
- * Every alias provider stores its constructor key on baseProviderConfig,
- * which is the value request-time auth would send.
+ * Resolves the alias against a settings service, which is what the runtime
+ * consults. An empty service reports no authOnly, reproducing the divergence
+ * from the ephemeral setting the factories were built with.
  */
-function storedApiKey(provider: object | null): string | undefined {
-  const withBaseConfig = provider as unknown as AliasProviderWithBaseConfig;
-  return withBaseConfig.baseProviderConfig?.apiKey;
+async function resolveAliasAuth(
+  provider: AliasAuthProbe,
+  settings: SettingsService,
+): Promise<{ authenticated: boolean; method: string | null }> {
+  provider.setRuntimeSettingsService(settings);
+  return {
+    authenticated: await provider.isAuthenticated(),
+    method: await provider.getAuthMethodName(),
+  };
 }
 
-type AliasProviderFactoryFn = (
-  entry: ProviderAliasEntry,
-  openaiApiKey: string | undefined,
-  authOnlyEnabled: boolean,
-) => object | null;
+describe('alias provider factories under authOnly', () => {
+  let environmentSnapshot: NodeJS.ProcessEnv;
+  let runtimeSettings: SettingsService;
 
-const ALIAS_FACTORIES: ReadonlyArray<{
-  readonly label: string;
-  readonly create: AliasProviderFactoryFn;
-}> = [
-  {
-    label: 'openai',
-    create: (entry, openaiApiKey, authOnlyEnabled) =>
-      createOpenAIAliasProvider(
-        entry,
-        openaiApiKey,
-        undefined,
-        EMPTY_PROVIDER_CONFIG,
-        authOnlyEnabled,
-      ),
-  },
-  {
-    label: 'openai-responses',
-    create: (entry, openaiApiKey, authOnlyEnabled) =>
-      createOpenAIResponsesAliasProvider(
-        entry,
-        openaiApiKey,
-        undefined,
-        EMPTY_PROVIDER_CONFIG,
-        NULL_OAUTH_MANAGER,
-        authOnlyEnabled,
-      ),
-  },
-  {
-    label: 'openai-vercel',
-    create: (entry, openaiApiKey, authOnlyEnabled) =>
-      createOpenAIVercelAliasProvider(
-        entry,
-        openaiApiKey,
-        undefined,
-        EMPTY_PROVIDER_CONFIG,
-        authOnlyEnabled,
-      ),
-  },
-];
+  beforeEach(() => {
+    environmentSnapshot = { ...process.env };
+    for (const key of ENV_KEYS) {
+      delete process.env[key];
+    }
+    // The runtime settings service that does not carry the ephemeral authOnly
+    // the factories were given.
+    runtimeSettings = new SettingsService();
+  });
 
-for (const { label, create } of ALIAS_FACTORIES) {
-  describe(`authOnly API-key gating for ${label} alias providers (@issue:3546)`, () => {
-    beforeEach(() => {
-      process.env[ENV_KEY_NAME] = ENV_KEY_VALUE;
-    });
+  afterEach(() => {
+    process.env = environmentSnapshot;
+  });
 
-    afterEach(() => {
-      delete process.env[ENV_KEY_NAME];
-    });
+  describe('refuses ambient environment credentials', () => {
+    it('does not authenticate an openai alias from OPENAI_API_KEY', async () => {
+      process.env.OPENAI_API_KEY = 'sk-ambient-openai';
 
-    it('does not use the apiKeyEnv environment key when authOnly is enabled', () => {
-      const provider = create(makeAuthOnlyProbeEntry(label), undefined, true);
-
-      expect(provider).not.toBeNull();
-      expect(storedApiKey(provider)).toBeUndefined();
-    });
-
-    it('still receives an explicitly resolved upstream key when authOnly is enabled', () => {
-      const provider = create(
-        makeAuthOnlyProbeEntry(label),
-        EXPLICIT_UPSTREAM_KEY,
-        true,
+      const auth = await resolveAliasAuth(
+        buildAliasProvider('openai', true),
+        runtimeSettings,
       );
 
-      expect(provider).not.toBeNull();
-      expect(storedApiKey(provider)).toBe(EXPLICIT_UPSTREAM_KEY);
+      expect(auth).toStrictEqual({ authenticated: false, method: null });
     });
 
-    it('uses the apiKeyEnv environment key when authOnly is not enabled', () => {
-      const provider = create(makeAuthOnlyProbeEntry(label), undefined, false);
+    it('does not authenticate an openai-responses alias from OPENAI_API_KEY', async () => {
+      process.env.OPENAI_API_KEY = 'sk-ambient-openai';
 
-      expect(provider).not.toBeNull();
-      expect(storedApiKey(provider)).toBe(ENV_KEY_VALUE);
+      const auth = await resolveAliasAuth(
+        buildAliasProvider('openai-responses', true),
+        runtimeSettings,
+      );
+
+      expect(auth).toStrictEqual({ authenticated: false, method: null });
+    });
+
+    it('does not authenticate an openai-vercel alias from OPENAI_API_KEY', async () => {
+      process.env.OPENAI_API_KEY = 'sk-ambient-openai';
+
+      const auth = await resolveAliasAuth(
+        buildAliasProvider('openai-vercel', true),
+        runtimeSettings,
+      );
+
+      expect(auth).toStrictEqual({ authenticated: false, method: null });
+    });
+
+    it('does not authenticate an anthropic alias from ANTHROPIC_API_KEY', async () => {
+      process.env.ANTHROPIC_API_KEY = 'sk-ambient-anthropic';
+
+      const auth = await resolveAliasAuth(
+        buildAliasProvider('anthropic', true),
+        runtimeSettings,
+      );
+
+      expect(auth).toStrictEqual({ authenticated: false, method: null });
+    });
+
+    it('does not authenticate a gemini alias from GEMINI_API_KEY', async () => {
+      process.env.GEMINI_API_KEY = 'sk-ambient-gemini';
+
+      const auth = await resolveAliasAuth(
+        buildAliasProvider('gemini', true),
+        runtimeSettings,
+      );
+
+      expect(auth).toStrictEqual({ authenticated: false, method: null });
+    });
+
+    it('does not authenticate a gemini alias from GOOGLE_API_KEY', async () => {
+      // The Gemini provider declares two environment names; clearing only the
+      // first would leave the second as a way in.
+      process.env.GOOGLE_API_KEY = 'sk-ambient-google';
+
+      const auth = await resolveAliasAuth(
+        buildAliasProvider('gemini', true),
+        runtimeSettings,
+      );
+
+      expect(auth).toStrictEqual({ authenticated: false, method: null });
+    });
+
+    it('still refuses OPENAI_API_KEY when the runtime settings service reports authOnly too', async () => {
+      process.env.OPENAI_API_KEY = 'sk-ambient-openai';
+      runtimeSettings.set('authOnly', true);
+
+      const auth = await resolveAliasAuth(
+        buildAliasProvider('openai', true),
+        runtimeSettings,
+      );
+
+      expect(auth).toStrictEqual({ authenticated: false, method: null });
     });
   });
-}
+
+  describe('leaves environment credentials alone when authOnly is off', () => {
+    it('authenticates an openai alias from OPENAI_API_KEY', async () => {
+      process.env.OPENAI_API_KEY = 'sk-ambient-openai';
+
+      const auth = await resolveAliasAuth(
+        buildAliasProvider('openai', false),
+        runtimeSettings,
+      );
+
+      expect(auth).toStrictEqual({
+        authenticated: true,
+        method: 'env-openai_api_key',
+      });
+    });
+
+    it('authenticates an anthropic alias from ANTHROPIC_API_KEY', async () => {
+      process.env.ANTHROPIC_API_KEY = 'sk-ambient-anthropic';
+
+      const auth = await resolveAliasAuth(
+        buildAliasProvider('anthropic', false),
+        runtimeSettings,
+      );
+
+      expect(auth).toStrictEqual({
+        authenticated: true,
+        method: 'env-anthropic_api_key',
+      });
+    });
+
+    it('authenticates a gemini alias from GEMINI_API_KEY', async () => {
+      process.env.GEMINI_API_KEY = 'sk-ambient-gemini';
+
+      const auth = await resolveAliasAuth(
+        buildAliasProvider('gemini', false),
+        runtimeSettings,
+      );
+
+      expect(auth).toStrictEqual({
+        authenticated: true,
+        method: 'env-gemini_api_key',
+      });
+    });
+  });
+});

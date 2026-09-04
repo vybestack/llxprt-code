@@ -41,6 +41,7 @@ void vi.mock('./sandbox-podman.js', () => ({
 }));
 
 import { setupCredentialProxy } from './sandbox-containers.js';
+import { createCredentialSocketRuntime } from './sandbox-credential-runtime.js';
 
 const NETWORK_ENV_KEYS = ['LLXPRT_SANDBOX_NETWORK', 'SANDBOX_NETWORK'] as const;
 const CAPABILITY_TOKEN = 'a'.repeat(64);
@@ -337,4 +338,271 @@ describe('#1456 credential proxy network policy', () => {
       }
     },
   );
+});
+
+describe('#3534 Podman credential socket runtime', () => {
+  let environmentSnapshot: NodeJS.ProcessEnv;
+  let fixtureRoot = '';
+  let sessionTmpdir = '';
+
+  beforeEach(() => {
+    environmentSnapshot = { ...process.env };
+    fixtureRoot = fs.mkdtempSync(path.join(realOsTmpdir(), 'issue3534-cred-'));
+    const longTmpRoot = path.join(
+      fixtureRoot,
+      'private',
+      'var',
+      'folders',
+      'abcdefghijklmnopqrstuvwxyz0123456789',
+      'T',
+    );
+    sessionTmpdir = path.join(longTmpRoot, 'llxprt-sandbox-session');
+    fs.mkdirSync(sessionTmpdir, { recursive: true, mode: 0o700 });
+    overrideOsTmpdir(longTmpRoot);
+    vi.spyOn(os, 'platform').mockReturnValue('darwin');
+    authMocks.getProxyCapabilityToken.mockReturnValue(CAPABILITY_TOKEN);
+    authMocks.stopProxy.mockResolvedValue(undefined);
+    bridgeMocks.setupCredentialProxyPodmanMacOS.mockResolvedValue({
+      cleanup: bridgeMocks.podmanCleanup,
+      entrypointPrefix: 'PODMAN_CREDENTIAL_BRIDGE',
+      containerSocketPath: '/tmp/podman-credential.sock',
+    });
+  });
+
+  afterEach(() => {
+    process.env = environmentSnapshot;
+    restoreOsTmpdir();
+    vi.restoreAllMocks();
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  });
+
+  it('uses a private short socket directory despite a long normal temporary root and removes it on cleanup', async () => {
+    let socketRuntime = '';
+    let socketPath = '';
+    authMocks.createAndStartProxy.mockImplementation(
+      async (config: { socketPath: string }) => {
+        socketRuntime = config.socketPath;
+        socketPath = path.join(
+          socketRuntime,
+          `${process.pid}-${'n'.repeat(22)}.sock`,
+        );
+        fs.writeFileSync(socketPath, 'socket fixture');
+        return { stop: async (): Promise<void> => {} };
+      },
+    );
+    authMocks.getProxySocketPath.mockImplementation(() => socketPath);
+
+    const invocation = invokeCredentialSetup('podman', sessionTmpdir);
+    const result = await invocation.promise;
+
+    expect(socketRuntime.startsWith(sessionTmpdir)).toBe(false);
+    expect(Buffer.byteLength(socketPath)).toBeLessThanOrEqual(103);
+    expect(fs.statSync(socketRuntime).mode & 0o777).toBe(0o700);
+    expect(fs.existsSync(socketPath)).toBe(true);
+
+    result.credentialProxyBridgeCleanup?.();
+    expect(fs.existsSync(socketRuntime)).toBe(false);
+    expect(fs.existsSync(sessionTmpdir)).toBe(false);
+  });
+
+  it('removes the short socket directory and normal session directory when bridge setup fails', async () => {
+    let socketRuntime = '';
+    let socketPath = '';
+    authMocks.createAndStartProxy.mockImplementation(
+      async (config: { socketPath: string }) => {
+        socketRuntime = config.socketPath;
+        socketPath = path.join(
+          socketRuntime,
+          `${process.pid}-${'n'.repeat(22)}.sock`,
+        );
+        fs.writeFileSync(socketPath, 'socket fixture');
+        return { stop: async (): Promise<void> => {} };
+      },
+    );
+    authMocks.getProxySocketPath.mockImplementation(() => socketPath);
+    bridgeMocks.setupCredentialProxyPodmanMacOS.mockRejectedValue(
+      new FatalSandboxError('induced Podman bridge failure'),
+    );
+
+    const result = invokeCredentialSetup('podman', sessionTmpdir).promise;
+
+    await expect(result).rejects.toThrow('induced Podman bridge failure');
+    expect(socketRuntime).not.toBe('');
+    expect(fs.existsSync(socketRuntime)).toBe(false);
+    expect(fs.existsSync(sessionTmpdir)).toBe(false);
+  });
+
+  it('removes the normal session directory when short socket runtime removal fails and surfaces the failure', async () => {
+    let socketRuntime = '';
+    let socketPath = '';
+    authMocks.createAndStartProxy.mockImplementation(
+      async (config: { socketPath: string }) => {
+        socketRuntime = config.socketPath;
+        socketPath = path.join(
+          socketRuntime,
+          `${process.pid}-${'n'.repeat(22)}.sock`,
+        );
+        fs.writeFileSync(socketPath, 'socket fixture');
+        return { stop: async (): Promise<void> => {} };
+      },
+    );
+    authMocks.getProxySocketPath.mockImplementation(() => socketPath);
+    const result = await invokeCredentialSetup('podman', sessionTmpdir).promise;
+    const realRmSync = fs.rmSync.bind(fs);
+    const rmSpy = vi
+      .spyOn(fs, 'rmSync')
+      .mockImplementation((target, options) => {
+        if (target.toString() === socketRuntime) {
+          throw new Error('induced short runtime cleanup failure');
+        }
+        return realRmSync(target, options);
+      });
+    let cleanupError: unknown;
+
+    try {
+      result.credentialProxyBridgeCleanup?.();
+    } catch (error) {
+      cleanupError = error;
+    } finally {
+      rmSpy.mockRestore();
+    }
+
+    expect(cleanupError).toBeInstanceOf(AggregateError);
+    if (!(cleanupError instanceof AggregateError)) {
+      throw new Error('Expected credential cleanup to aggregate its failure');
+    }
+    expect(
+      cleanupError.errors.some(
+        (error: unknown) =>
+          error instanceof Error &&
+          error.message === 'induced short runtime cleanup failure',
+      ),
+    ).toBe(true);
+    expect(fs.existsSync(sessionTmpdir)).toBe(false);
+    realRmSync(socketRuntime, { recursive: true, force: true });
+  });
+
+  // The runtime root is the literal '/tmp', so a real mkdtemp there can never
+  // reach the boundary; only the runtime directory name is substituted, and
+  // the directory itself is real so the guard's own cleanup is observed.
+  it('rejects a 104-byte Darwin runtime socket path before starting the proxy or Podman bridge', async () => {
+    const socketBasename = `${process.pid}-${'x'.repeat(22)}.sock`;
+    const shortestRuntime = path.join('/tmp', `r${process.pid}`);
+    const shortestSocketPath = path.join(shortestRuntime, socketBasename);
+    const runtimePath =
+      shortestRuntime + 'r'.repeat(104 - Buffer.byteLength(shortestSocketPath));
+    const longestSocketPath = path.join(runtimePath, socketBasename);
+    fs.mkdirSync(runtimePath, { recursive: true, mode: 0o700 });
+    const mkdtempSpy = vi.spyOn(fs, 'mkdtempSync').mockReturnValue(runtimePath);
+
+    const invocation = invokeCredentialSetup('podman', sessionTmpdir);
+
+    try {
+      expect(Buffer.byteLength(longestSocketPath)).toBe(104);
+      await expect(invocation.promise).rejects.toThrowError(
+        /exceeds Darwin's 103-byte pathname limit/,
+      );
+      // The rejection names the boundary rather than the downstream
+      // "proxy started but did not produce a socket path" failure, so the
+      // guard ran while the runtime was being constructed. Nothing was
+      // wired for the container and the rejected runtime left nothing behind.
+      expect(fs.existsSync(runtimePath)).toBe(false);
+      expect(invocation.args).toStrictEqual([]);
+      expect(invocation.prefixes).toStrictEqual([]);
+    } finally {
+      mkdtempSpy.mockRestore();
+      fs.rmSync(runtimePath, { recursive: true, force: true });
+    }
+  });
+
+  it('accepts a 103-byte Darwin runtime socket path and keeps the runtime', async () => {
+    const socketBasename = `${process.pid}-${'x'.repeat(22)}.sock`;
+    const shortestRuntime = path.join('/tmp', `r${process.pid}`);
+    const shortestSocketPath = path.join(shortestRuntime, socketBasename);
+    const runtimePath =
+      shortestRuntime + 'r'.repeat(103 - Buffer.byteLength(shortestSocketPath));
+    const longestSocketPath = path.join(runtimePath, socketBasename);
+    fs.mkdirSync(runtimePath, { recursive: true, mode: 0o700 });
+    const mkdtempSpy = vi.spyOn(fs, 'mkdtempSync').mockReturnValue(runtimePath);
+
+    try {
+      expect(Buffer.byteLength(longestSocketPath)).toBe(103);
+      const runtime = createCredentialSocketRuntime(
+        { command: 'podman', image: 'test' },
+        sessionTmpdir,
+      );
+      expect(runtime.path).toBe(runtimePath);
+      expect(fs.existsSync(runtimePath)).toBe(true);
+      runtime.cleanup();
+      expect(fs.existsSync(runtimePath)).toBe(false);
+    } finally {
+      mkdtempSpy.mockRestore();
+      fs.rmSync(runtimePath, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves runtime initialization and cleanup failures together', () => {
+    const runtimePath = path.join('/tmp', 'lx-initialization-failure');
+    const initializationFailure = new Error(
+      'induced runtime permission initialization failure',
+    );
+    const cleanupFailure = new Error('induced runtime cleanup failure');
+    const mkdtempSpy = vi.spyOn(fs, 'mkdtempSync').mockReturnValue(runtimePath);
+    const chmodSpy = vi.spyOn(fs, 'chmodSync').mockImplementation(() => {
+      throw initializationFailure;
+    });
+    const rmSpy = vi.spyOn(fs, 'rmSync').mockImplementation(() => {
+      throw cleanupFailure;
+    });
+    let thrown: unknown;
+
+    try {
+      createCredentialSocketRuntime(
+        { command: 'podman', image: 'test' },
+        sessionTmpdir,
+      );
+    } catch (error) {
+      thrown = error;
+    } finally {
+      mkdtempSpy.mockRestore();
+      chmodSpy.mockRestore();
+      rmSpy.mockRestore();
+    }
+
+    expect(thrown).toBeInstanceOf(AggregateError);
+    if (!(thrown instanceof AggregateError)) {
+      throw new Error('Expected runtime failures to be aggregated');
+    }
+    expect(thrown.errors).toHaveLength(2);
+    // The initialization failure survives the failing cleanup instead of
+    // being replaced by it, and the cleanup failure is carried alongside.
+    const preserved: unknown = thrown.errors[0];
+    expect(preserved).toBeInstanceOf(FatalSandboxError);
+    if (!(preserved instanceof FatalSandboxError)) {
+      throw new Error('Expected the initialization failure to be preserved');
+    }
+    expect(preserved.message).toContain(initializationFailure.message);
+    expect(preserved.message).toContain("under '/tmp'");
+    expect(thrown.errors[1]).toBe(cleanupFailure);
+  });
+
+  it('keeps installed Docker compatibility by using the normal session directory', async () => {
+    let socketRuntime = '';
+    const socketPath = path.join(sessionTmpdir, HOST_SOCKET_NAME);
+    authMocks.createAndStartProxy.mockImplementation(
+      async (config: { socketPath: string }) => {
+        socketRuntime = config.socketPath;
+        fs.writeFileSync(socketPath, 'socket fixture');
+        return { stop: async (): Promise<void> => {} };
+      },
+    );
+    authMocks.getProxySocketPath.mockReturnValue(socketPath);
+
+    const invocation = invokeCredentialSetup('docker', sessionTmpdir);
+    const result = await invocation.promise;
+
+    expect(socketRuntime).toBe(sessionTmpdir);
+    result.credentialProxyBridgeCleanup?.();
+    expect(fs.existsSync(sessionTmpdir)).toBe(false);
+  });
 });
