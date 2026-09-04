@@ -240,14 +240,15 @@ function spawnTarExtractLocal(tarball, extractDir) {
 
 /**
  * Global budget for the whole smoke, mirrored from SMOKE_TIMEOUT_MS in
- * issue-2603-release-install.test.ts (issue #3550). Chosen so total runtime
- * stays comfortably inside the wrapper's hard kill (default 780s) while still
- * admitting one marginal step plus the rest of a healthy run. Overridable via
- * LLXPRT_SMOKE_GLOBAL_DEADLINE_MS; the number is taken verbatim (a
- * non-number falls back to the default).
+ * issue-2603-release-install.test.ts (issue #3550). PR #3561 CI showed both
+ * install steps recovered via retry but consumed the entire grant, so this was raised
+ * from 480s to 690s so a degraded-registry window plus the rest of a healthy
+ * run fits. 690s still stays inside the wrapper's hard kill (default 780s).
+ * Overridable via LLXPRT_SMOKE_GLOBAL_DEADLINE_MS; the number is taken
+ * verbatim (a non-number falls back to the default).
  */
 const SMOKE_GLOBAL_DEADLINE_MS =
-  Number(process.env.LLXPRT_SMOKE_GLOBAL_DEADLINE_MS) || 480_000;
+  Number(process.env.LLXPRT_SMOKE_GLOBAL_DEADLINE_MS) || 690_000;
 
 /**
  * Per-attempt budget for a real npm registry network call, bounded so no step can
@@ -570,7 +571,9 @@ function main() {
     // and runs the bin, then leaves the clean dir with no node_modules. This
     // is the real ephemeral install path — NOT `npx llxprt` against an
     // already-local-installed bin, which would only exercise the local .bin
-    // link. We use a separate clean cache so the cache install is genuine.
+    // link. We reuse the cache warmed by the global-install step above so the
+    // ephemeral install path is still genuinely exercised; only the redundant cold
+    // registry re-fetch of the whole dependency tree is eliminated (issue #3550).
     runStep('npm-exec-ephemeral', () => {
       const cleanDir = join(tempDir, 'npm-exec-clean');
       mkdirSync(cleanDir, { recursive: true });
@@ -578,7 +581,7 @@ function main() {
         join(cleanDir, 'package.json'),
         JSON.stringify({ name: 'clean-consumer', version: '0.0.0' }, null, 2),
       );
-      const npmCache = join(tempDir, 'npm-exec-cache');
+      const npmCache = join(tempDir, 'npm-cache');
       const { command, args } = npmInvocation([
         'exec',
         '--package',
