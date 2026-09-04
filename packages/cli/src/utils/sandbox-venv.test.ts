@@ -225,10 +225,7 @@ describe('#3462 venv destination in the engine-owned dependency plan', () => {
     expect(venvEntries).toStrictEqual(['host-venv-marker.txt']);
   });
 
-  it('excludes the venv volume for a positive source-checkout development launch like the rest of the plan', () => {
-    // #3455: ambient NODE_ENV=development alone no longer bypasses the
-    // dependency plan; the predicate additionally requires the checked-out
-    // packages/cli/index.ts entry file.
+  it('isolates the venv and root dependencies for a source-checkout development launch', () => {
     fs.mkdirSync(path.join(workdir, 'packages', 'cli'), { recursive: true });
     fs.writeFileSync(
       path.join(workdir, 'packages', 'cli', 'index.ts'),
@@ -237,9 +234,32 @@ describe('#3462 venv destination in the engine-owned dependency plan', () => {
     process.env.NODE_ENV = 'development';
     const args: string[] = ['--volume', `${workdir}:${workdir}`];
     const lifecycle = addPrivateDependencyMounts(engine.config, args, workdir);
-    expect(args).toStrictEqual(['--volume', `${workdir}:${workdir}`]);
-    expect(engine.snapshot().invocations).toStrictEqual([]);
-    lifecycle.release();
+
+    try {
+      const mounts = flagValues(args, '--mount');
+      const destinations = mounts.map((spec) => mountField(spec, 'dst'));
+      expect(destinations).toContain(
+        getContainerPath(path.join(workdir, 'node_modules')),
+      );
+      expect(destinations).toContain(
+        getContainerPath(process.env.VIRTUAL_ENV!),
+      );
+      expect(
+        fs.readFileSync(
+          path.join(workdir, 'node_modules', 'host-root-marker.txt'),
+          'utf8',
+        ),
+      ).toBe('host-root-marker\n');
+      expect(
+        fs.readFileSync(
+          path.join(workdir, '.venv', 'host-venv-marker.txt'),
+          'utf8',
+        ),
+      ).toBe('host-venv-marker\n');
+    } finally {
+      lifecycle.release();
+    }
+    expect(engine.volumeNames()).toStrictEqual([]);
   });
 
   it('initializes the venv volume in the same bounded uid-0 init container run', () => {

@@ -361,15 +361,21 @@ describe('#3450 bounded wrong-platform contamination preflight', () => {
 
   it('fails on a symlinked .node file through its contained target', () => {
     vi.spyOn(os, 'platform').mockReturnValue('darwin');
+    // The stored target deliberately does not end in `.node`: the walk also
+    // inspects regular `.node` files in place, so naming it `real-addon.node`
+    // would make the store copy a second, independent contamination source and
+    // the reported path would depend on `fs.readdirSync` order (which of `pkg`
+    // and `store` is visited first varies by filesystem). Leaving the symlink
+    // as the only trigger keeps the asserted path deterministic everywhere.
     writeBytes(
-      path.join(workdir, 'node_modules', 'store', 'real-addon.node'),
+      path.join(workdir, 'node_modules', 'store', 'real-addon.bin'),
       elfBytes(),
     );
     fs.mkdirSync(path.join(workdir, 'node_modules', 'pkg'), {
       recursive: true,
     });
     fs.symlinkSync(
-      '../store/real-addon.node',
+      '../store/real-addon.bin',
       path.join(workdir, 'node_modules', 'pkg', 'addon.node'),
     );
 

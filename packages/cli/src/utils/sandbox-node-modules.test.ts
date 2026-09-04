@@ -11,6 +11,7 @@ import path from 'node:path';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import { useFakeEngine } from '../../test-utils/fake-dependency-engine-harness.js';
+import { getContainerPath } from './sandbox-env.js';
 import {
   addPrivateDependencyMounts,
   resolveProtectedNodeModulesDestinations,
@@ -633,11 +634,7 @@ describe('#3450/#3468 private per-run dependency mounts', () => {
     expect(fs.existsSync(path.join(absentDir, 'kept.txt'))).toBe(true);
   });
 
-  it('keeps source-development launches unchanged: no preflight, no mounts, no storage, no engine calls', () => {
-    // NODE_ENV=development in a positively identified llxprt-code source
-    // checkout selects the excluded source-entrypoint path (#3455); it must
-    // keep the legacy single workspace bind, and even a recognized
-    // wrong-platform host tree must not stop it (#3450 F7).
+  it('isolates source-development dependencies without applying installed-mode host preflight', () => {
     fs.mkdirSync(path.join(workdir, 'packages', 'cli'), { recursive: true });
     fs.writeFileSync(
       path.join(workdir, 'packages', 'cli', 'index.ts'),
@@ -646,21 +643,55 @@ describe('#3450/#3468 private per-run dependency mounts', () => {
     const savedEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';
     try {
-      writeBytes(
-        path.join(workdir, 'node_modules', 'pkg', 'addon.node'),
-        elfBytes(),
+      const contaminatedHostFile = path.join(
+        workdir,
+        'node_modules',
+        'pkg',
+        'addon.node',
       );
+      writeBytes(contaminatedHostFile, elfBytes());
       const args: string[] = ['--volume', `${workdir}:${workdir}`];
       const lifecycle = addPrivateDependencyMounts(
         engine.config,
         args,
         workdir,
       );
-      lifecycle.recordMainContainerName('development-container');
-      lifecycle.release();
+      const mountValues = args.filter(
+        (token, index) => index > 0 && args[index - 1] === '--mount',
+      );
+      const protectedDestinations = [
+        path.join(workdir, 'node_modules'),
+        path.join(workdir, 'packages', 'nested', 'node_modules'),
+        path.join(workdir, 'packages', 'absent', 'node_modules'),
+      ];
+      const mountDestinations = mountValues.map((value) =>
+        value
+          .split(',')
+          .find((field) => field.startsWith('dst='))
+          ?.slice('dst='.length),
+      );
+      try {
+        expect(resolveProtectedNodeModulesDestinations(workdir)).toStrictEqual(
+          protectedDestinations,
+        );
+        expect(mountDestinations).toStrictEqual(
+          protectedDestinations.map(getContainerPath),
+        );
+        expect(
+          mountValues.every((value) => value.startsWith('type=volume,src=')),
+        ).toBe(true);
+        expect(engine.volumeNames()).toHaveLength(3);
+        expect(
+          Buffer.compare(
+            fs.readFileSync(contaminatedHostFile),
+            Buffer.from(elfBytes()),
+          ),
+        ).toBe(0);
+        expect(privateRunRoots()).toStrictEqual([]);
+      } finally {
+        lifecycle.release();
+      }
 
-      expect(args).toStrictEqual(['--volume', `${workdir}:${workdir}`]);
-      expect(privateRunRoots()).toStrictEqual([]);
       expect(engine.volumeNames()).toStrictEqual([]);
       expect(engine.containerNames()).toStrictEqual([]);
     } finally {

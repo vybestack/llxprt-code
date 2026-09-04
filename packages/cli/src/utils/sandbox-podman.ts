@@ -35,6 +35,24 @@ const CONTAINER_CREDENTIAL_PROXY_SOCK = '/tmp/llxprt-credential.sock';
 const SSH_TUNNEL_POLL_INTERVAL_MS = 200;
 const TUNNEL_PORT_MIN = 49152;
 const TUNNEL_PORT_SPAN = 16383;
+const DARWIN_UNIX_SOCKET_PATH_MAX_BYTES = 103;
+const SSH_STARTUP_OUTPUT_MAX_BYTES = 4096;
+const SSH_TERMINATE_TIMEOUT_MS = 1000;
+
+interface TunnelStartupMonitor {
+  readonly process: ChildProcess;
+  readonly failure: Promise<never>;
+  readonly isRunning: () => boolean;
+  readonly markReady: () => void;
+  readonly terminateAndReap: () => Promise<void>;
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
 function sampleTunnelPort(
   exclude: ReadonlySet<number> = new Set<number>(),
 ): number {
@@ -66,26 +84,204 @@ function buildPodmanSshBaseArgs(
   ];
 }
 
+function appendBoundedOutput(current: Buffer, chunk: Buffer | string): Buffer {
+  const remaining = SSH_STARTUP_OUTPUT_MAX_BYTES - current.byteLength;
+  if (remaining <= 0) return current;
+  const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+  return Buffer.concat([current, bytes.subarray(0, remaining)]);
+}
+
+function boundedUtf8Text(output: Buffer): string {
+  const chars: string[] = [];
+  let encodedBytes = 0;
+  for (const char of output.toString('utf8').trim()) {
+    const charBytes = Buffer.byteLength(char);
+    if (encodedBytes + charBytes > SSH_STARTUP_OUTPUT_MAX_BYTES) break;
+    chars.push(char);
+    encodedBytes += charBytes;
+  }
+  return chars.join('');
+}
+
+function startupFailureDetail(stderr: Buffer, stdout: Buffer): string {
+  const diagnostic = boundedUtf8Text(stderr) || boundedUtf8Text(stdout);
+  return diagnostic === '' ? '' : ` SSH diagnostic: ${diagnostic}`;
+}
+
+function waitForClose(
+  closePromise: Promise<void>,
+  timeoutMs: number,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), timeoutMs);
+    void closePromise.then(() => {
+      clearTimeout(timer);
+      resolve(true);
+    });
+  });
+}
+
+async function terminateAndReapTunnel(
+  tunnelProcess: ChildProcess,
+  isClosed: () => boolean,
+  closePromise: Promise<void>,
+): Promise<void> {
+  const errors: unknown[] = [];
+  if (
+    !isClosed() &&
+    tunnelProcess.exitCode === null &&
+    tunnelProcess.signalCode === null
+  ) {
+    try {
+      tunnelProcess.kill('SIGTERM');
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (
+    !isClosed() &&
+    !(await waitForClose(closePromise, SSH_TERMINATE_TIMEOUT_MS))
+  ) {
+    try {
+      tunnelProcess.kill('SIGKILL');
+    } catch (error) {
+      errors.push(error);
+    }
+    if (!(await waitForClose(closePromise, SSH_TERMINATE_TIMEOUT_MS))) {
+      errors.push(
+        new Error('OpenSSH tunnel process did not close after SIGKILL'),
+      );
+    }
+  }
+  if (errors.length === 1) throw errors[0];
+  if (errors.length > 1) {
+    throw new AggregateError(errors, 'OpenSSH tunnel cleanup failed');
+  }
+}
+
+function monitorTunnelProcess(
+  tunnelProcess: ChildProcess,
+  failureMessage: string,
+): TunnelStartupMonitor {
+  let stdout: Buffer = Buffer.alloc(0);
+  let stderr: Buffer = Buffer.alloc(0);
+  let ready = false;
+  let closed = false;
+  let exitDescription = '';
+  let rejectFailure: ((error: Error) => void) | undefined;
+  let resolveClose: (() => void) | undefined;
+
+  const closePromise = new Promise<void>((resolve) => {
+    resolveClose = resolve;
+  });
+  const failure = new Promise<never>((_resolve, reject) => {
+    rejectFailure = reject;
+  });
+  const onStdout = (chunk: Buffer | string): void => {
+    stdout = appendBoundedOutput(stdout, chunk);
+  };
+  const onStderr = (chunk: Buffer | string): void => {
+    stderr = appendBoundedOutput(stderr, chunk);
+  };
+  const buildFailure = (): FatalSandboxError =>
+    new FatalSandboxError(
+      failureMessage + exitDescription + startupFailureDetail(stderr, stdout),
+    );
+
+  tunnelProcess.stdout?.on('data', onStdout);
+  tunnelProcess.stderr?.on('data', onStderr);
+  tunnelProcess.once('error', (error) => {
+    if (!ready) {
+      exitDescription = ` OpenSSH process error: ${error.message}.`;
+      rejectFailure?.(buildFailure());
+    }
+  });
+  tunnelProcess.once('exit', (code, signal) => {
+    if (!ready) {
+      exitDescription =
+        code === null
+          ? ` OpenSSH exited from signal ${signal ?? 'unknown'}.`
+          : ` OpenSSH exited with code ${String(code)}.`;
+    }
+  });
+  tunnelProcess.once('close', () => {
+    closed = true;
+    tunnelProcess.stdout?.removeListener('data', onStdout);
+    tunnelProcess.stderr?.removeListener('data', onStderr);
+    resolveClose?.();
+    if (!ready && exitDescription !== '') {
+      rejectFailure?.(buildFailure());
+    }
+  });
+
+  return {
+    process: tunnelProcess,
+    failure,
+    isRunning: () =>
+      !closed &&
+      tunnelProcess.exitCode === null &&
+      tunnelProcess.signalCode === null,
+    markReady: () => {
+      ready = true;
+    },
+    terminateAndReap: () =>
+      terminateAndReapTunnel(tunnelProcess, () => closed, closePromise),
+  };
+}
+
+async function terminateAfterFailure(
+  monitor: TunnelStartupMonitor,
+  failure: unknown,
+): Promise<never> {
+  try {
+    await monitor.terminateAndReap();
+  } catch (cleanupError) {
+    throw new AggregateError(
+      [failure, cleanupError],
+      'OpenSSH tunnel startup and cleanup failed',
+    );
+  }
+  throw failure;
+}
+
+async function waitForTunnelReadiness(
+  monitor: TunnelStartupMonitor,
+  readiness: (signal: AbortSignal) => Promise<void>,
+): Promise<ChildProcess> {
+  const abortController = new AbortController();
+  try {
+    await Promise.race([readiness(abortController.signal), monitor.failure]);
+    if (!monitor.isRunning()) {
+      await monitor.failure;
+    }
+    monitor.markReady();
+    return monitor.process;
+  } catch (error) {
+    abortController.abort();
+    return await terminateAfterFailure(monitor, error);
+  } finally {
+    abortController.abort();
+  }
+}
+
 /** Spawns an SSH process and waits up to 500ms for it to stabilize. */
 async function spawnAndWaitForTunnel(
   sshArgs: string[],
   failureMessage: string,
-): Promise<ChildProcess> {
+): Promise<TunnelStartupMonitor> {
   const tunnelProcess = spawn('ssh', sshArgs, {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  const started = await new Promise<boolean>((resolve) => {
-    const handler = () => resolve(false);
-    tunnelProcess.on('error', handler);
-    setTimeout(() => {
-      tunnelProcess.removeListener('error', handler);
-      resolve(tunnelProcess.exitCode === null);
-    }, 500);
-  });
-  if (!started) {
-    throw new FatalSandboxError(failureMessage);
+  const monitor = monitorTunnelProcess(tunnelProcess, failureMessage);
+  try {
+    await Promise.race([delay(500), monitor.failure]);
+    if (!monitor.isRunning()) {
+      await monitor.failure;
+    }
+  } catch (error) {
+    return terminateAfterFailure(monitor, error);
   }
-  return tunnelProcess;
+  return monitor;
 }
 
 /** Polls Podman VM for a TCP port to become listen-ready. */
@@ -93,11 +289,10 @@ async function pollPodmanVmPortReady(
   tunnelPort: number,
   pollTimeoutMs: number,
   timeoutMessage: string,
-  tunnelProcess?: ChildProcess,
+  signal: AbortSignal,
 ): Promise<void> {
   const pollStart = Date.now();
-  let portReady = false;
-  while (Date.now() - pollStart < pollTimeoutMs) {
+  while (!signal.aborted && Date.now() - pollStart < pollTimeoutMs) {
     try {
       const result = execSync(
         `podman machine ssh -- ss -tln | grep -q ':${tunnelPort} ' && echo ok`,
@@ -106,24 +301,14 @@ async function pollPodmanVmPortReady(
         .toString()
         .trim();
       if (result === 'ok') {
-        portReady = true;
-        break;
+        return;
       }
     } catch {
       // Port not ready yet
     }
-    await new Promise((r) => setTimeout(r, SSH_TUNNEL_POLL_INTERVAL_MS));
+    await delay(SSH_TUNNEL_POLL_INTERVAL_MS);
   }
-  if (!portReady) {
-    if (tunnelProcess) {
-      try {
-        tunnelProcess.kill('SIGTERM');
-      } catch {
-        // ignore
-      }
-    }
-    throw new FatalSandboxError(timeoutMessage);
-  }
+  if (!signal.aborted) throw new FatalSandboxError(timeoutMessage);
 }
 
 function reservePodmanTunnelPort(options: PodmanTunnelOptions): number {
@@ -153,6 +338,12 @@ async function startPodmanReverseTunnel(
   pollTimeoutMs: number,
   options: PodmanTunnelOptions,
 ): Promise<PodmanReverseTunnelResult> {
+  const socketPathBytes = Buffer.byteLength(hostSocketPath);
+  if (socketPathBytes > DARWIN_UNIX_SOCKET_PATH_MAX_BYTES) {
+    throw new FatalSandboxError(
+      `Podman macOS reverse tunnel socket path '${hostSocketPath}' is ${socketPathBytes} bytes, exceeding Darwin's ${DARWIN_UNIX_SOCKET_PATH_MAX_BYTES}-byte pathname limit.`,
+    );
+  }
   const conn = getPodmanMachineConnection();
   const tunnelPort = reservePodmanTunnelPort(options);
   const sshArgs = buildPodmanReverseTunnelArgs(
@@ -160,15 +351,9 @@ async function startPodmanReverseTunnel(
     tunnelPort,
     hostSocketPath,
   );
-  const tunnelProcess = await spawnAndWaitForTunnel(
-    sshArgs,
-    startupFailureMessage,
-  );
-  await pollPodmanVmPortReady(
-    tunnelPort,
-    pollTimeoutMs,
-    timeoutMessage,
-    tunnelProcess,
+  const monitor = await spawnAndWaitForTunnel(sshArgs, startupFailureMessage);
+  const tunnelProcess = await waitForTunnelReadiness(monitor, (signal) =>
+    pollPodmanVmPortReady(tunnelPort, pollTimeoutMs, timeoutMessage, signal),
   );
   return { tunnelPort, tunnelProcess };
 }
@@ -328,21 +513,13 @@ export async function setupPortForwardingPodmanMacOS(
 ): Promise<PortForwardingResult> {
   const conn = getPodmanMachineConnection();
   const sshArgs = buildPodmanLocalTunnelArgs(conn, portsToForward);
-  const tunnelProcess = await spawnAndWaitForTunnel(
+  const monitor = await spawnAndWaitForTunnel(
     sshArgs,
     'Port forwarding SSH tunnel failed to start for Podman macOS. Ensure Podman machine is running: `podman machine start`. Check SSH connectivity: `podman machine ssh`.',
   );
-
-  try {
-    await pollLocalPortsReady(portsToForward, pollTimeoutMs);
-  } catch (error) {
-    try {
-      tunnelProcess.kill('SIGTERM');
-    } catch {
-      // ignore
-    }
-    throw error;
-  }
+  const tunnelProcess = await waitForTunnelReadiness(monitor, (signal) =>
+    pollLocalPortsReady(portsToForward, pollTimeoutMs, signal),
+  );
 
   const cleanup = createTunnelProcessCleanup(tunnelProcess);
   return { tunnelProcess, cleanup };
@@ -352,19 +529,35 @@ export async function setupPortForwardingPodmanMacOS(
 async function pollLocalPortsReady(
   portsToForward: string[],
   pollTimeoutMs: number,
+  signal: AbortSignal,
 ): Promise<void> {
   const pollPromises = portsToForward.map(
     (port) =>
       new Promise<void>((resolve, reject) => {
         const pollStart = Date.now();
-        let timedOut = false;
+        let settled = false;
         let currentSocket: net.Socket | undefined;
+        let retryTimer: NodeJS.Timeout | undefined;
 
-        const tryConnect = () => {
+        const settle = (result?: Error): void => {
+          if (settled) return;
+          settled = true;
+          currentSocket?.destroy();
+          if (retryTimer !== undefined) clearTimeout(retryTimer);
+          signal.removeEventListener('abort', abort);
+          if (result === undefined) resolve();
+          else reject(result);
+        };
+        const abort = (): void => settle();
+        signal.addEventListener('abort', abort, { once: true });
+
+        const tryConnect = (): void => {
+          if (signal.aborted) {
+            settle();
+            return;
+          }
           if (Date.now() - pollStart > pollTimeoutMs) {
-            timedOut = true;
-            currentSocket?.destroy();
-            reject(
+            settle(
               new FatalSandboxError(
                 `Port forwarding timed out waiting for port ${port} to be ready.`,
               ),
@@ -377,15 +570,10 @@ async function pollLocalPortsReady(
             port: parseInt(port, 10),
           });
           const socket = currentSocket;
-          socket.on('connect', () => {
-            socket.destroy();
-            if (!timedOut) {
-              resolve();
-            }
-          });
+          socket.on('connect', () => settle());
           socket.on('error', () => {
-            if (!timedOut) {
-              setTimeout(tryConnect, SSH_TUNNEL_POLL_INTERVAL_MS);
+            if (!settled) {
+              retryTimer = setTimeout(tryConnect, SSH_TUNNEL_POLL_INTERVAL_MS);
             }
           });
         };

@@ -9,9 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
 import { quote } from 'shell-quote';
-import { exec } from 'node:child_process';
 import type { Config, SandboxConfig } from '@vybestack/llxprt-code-core';
 import {
   FatalSandboxError,
@@ -24,9 +22,11 @@ import {
   isSandboxDebugModeEnabled,
 } from './sandbox-env.js';
 import { canonicalizeExistingPath } from './sandbox-path-canonicalization.js';
+import {
+  awaitSandboxProxyReady,
+  resolveSandboxProxyUrl,
+} from './sandbox-network-proxy.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
-
-const execAsync = promisify(exec);
 
 const BUILTIN_SEATBELT_PROFILES = [
   'permissive-open',
@@ -140,15 +140,6 @@ export async function runSeatbeltSandbox(
     stdinHadRawMode,
     cliConfig,
   );
-}
-function resolveProxyUrl(): string {
-  const candidates = [
-    process.env.HTTPS_PROXY,
-    process.env.https_proxy,
-    process.env.HTTP_PROXY,
-    process.env.http_proxy,
-  ];
-  return candidates.find((v): v is string => !!v) ?? 'http://localhost:8877';
 }
 
 export function buildSeatbeltArgs(
@@ -274,7 +265,7 @@ async function setupSeatbeltProxy(): Promise<SeatbeltProxySetup> {
     return { sandboxEnv };
   }
 
-  const proxy = resolveProxyUrl();
+  const proxy = resolveSandboxProxyUrl(process.env);
   sandboxEnv['HTTPS_PROXY'] = proxy;
   sandboxEnv['https_proxy'] = proxy;
   sandboxEnv['HTTP_PROXY'] = proxy;
@@ -305,10 +296,7 @@ async function setupSeatbeltProxy(): Promise<SeatbeltProxySetup> {
   debugLogger.log('waiting for proxy to start ...');
   const SEATBELT_PROXY_READY_TIMEOUT_MS = 30000;
   try {
-    await execAsync(
-      `timeout ${Math.floor(SEATBELT_PROXY_READY_TIMEOUT_MS / 1000)} bash -c 'until curl -s http://localhost:8877; do sleep 0.25; done'`,
-      { timeout: SEATBELT_PROXY_READY_TIMEOUT_MS + 5000 },
-    );
+    await awaitSandboxProxyReady(proxy, SEATBELT_PROXY_READY_TIMEOUT_MS);
   } catch (err) {
     const proxyPid = proxyProcess.pid;
     if (proxyPid !== undefined && proxyPid !== 0) {

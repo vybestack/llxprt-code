@@ -636,6 +636,74 @@ describe('#2902 sandbox privilege hardening', () => {
     expect(proxyArgs[userIdx + 1]).toBe('501:20');
   });
 });
+describe('#3501 sandbox proxy sidecar endpoint', () => {
+  let environmentSnapshot: NodeJS.ProcessEnv;
+
+  beforeEach(() => {
+    environmentSnapshot = { ...process.env };
+    vi.resetAllMocks();
+    for (const key of NETWORK_ENV_KEYS) delete process.env[key];
+  });
+
+  afterEach(() => {
+    process.env = environmentSnapshot;
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * Records the sidecar argv without launching anything: spawn throws
+   * immediately, so startProxyContainer rejects before any I/O while the
+   * call arguments remain observable.
+   */
+  async function captureProxySidecarArgv(): Promise<string[]> {
+    const spawnMock = childProcess.spawn as unknown as Mock<
+      typeof childProcess.spawn
+    >;
+    spawnMock.mockImplementation(() => {
+      throw new Error('proxy-argv-captured');
+    });
+    await expect(
+      startProxyContainer(CONFIG, 'echo proxy', '', 'test-image', '/workspace'),
+    ).rejects.toThrow('proxy-argv-captured');
+    const argv = spawnMock.mock.calls[0][1];
+    if (!Array.isArray(argv)) {
+      throw new Error('proxy sidecar was spawned without an argv');
+    }
+    return argv;
+  }
+
+  function publishedPortMapping(argv: readonly string[]): string {
+    const publishIndex = argv.indexOf('-p');
+    expect(publishIndex).toBeGreaterThanOrEqual(0);
+    return argv[publishIndex + 1];
+  }
+
+  it('publishes the documented default port when nothing configures a proxy', async () => {
+    expect(publishedPortMapping(await captureProxySidecarArgv())).toBe(
+      '8877:8877',
+    );
+  });
+
+  it('publishes the configured proxy port so the host readiness probe reaches the sidecar', async () => {
+    process.env.HTTPS_PROXY = 'http://localhost:49877';
+
+    expect(publishedPortMapping(await captureProxySidecarArgv())).toBe(
+      '49877:49877',
+    );
+  });
+
+  it('rejects a proxy endpoint with no resolvable port before starting the sidecar', async () => {
+    process.env.HTTPS_PROXY = 'localhost:8877';
+    const spawnMock = childProcess.spawn as unknown as Mock<
+      typeof childProcess.spawn
+    >;
+
+    await expect(
+      startProxyContainer(CONFIG, 'echo proxy', '', 'test-image', '/workspace'),
+    ).rejects.toBeInstanceOf(FatalSandboxError);
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
+});
 
 // Parsing helpers that operate on the produced docker argv. They look only at
 // the real buildContainerRunArgs output — no mocks — so the assertions pin the
