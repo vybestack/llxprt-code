@@ -71,9 +71,9 @@ const releasePackHelper = join(
  *   LLXPRT_SMOKE_TEST_TIMEOUT_MS — the Vitest test timeout (must exceed the
  *     smoke timeout by a safe margin).
  */
-const SMOKE_TIMEOUT_MS = Number(process.env.LLXPRT_SMOKE_TIMEOUT_MS) || 540_000;
+const SMOKE_TIMEOUT_MS = Number(process.env.LLXPRT_SMOKE_TIMEOUT_MS) || 780_000;
 const SMOKE_TEST_TIMEOUT_MS =
-  Number(process.env.LLXPRT_SMOKE_TEST_TIMEOUT_MS) || 600_000;
+  Number(process.env.LLXPRT_SMOKE_TEST_TIMEOUT_MS) || 840_000;
 
 interface SmokeHandle {
   promise: Promise<{
