@@ -239,16 +239,32 @@ function spawnTarExtractLocal(tarball, extractDir) {
 }
 
 /**
+ * Parses the optional global-deadline override from
+ * LLXPRT_SMOKE_GLOBAL_DEADLINE_MS. Only a finite, non-negative number
+ * (0 included) is honored; anything else (empty, NaN, negative, Infinity, or
+ * non-numeric) falls back to the default so the deadline can never become
+ * unbounded.
+ */
+function parseSmokeDeadlineMs(value) {
+  const parsed = Number(value);
+  if (Number.isFinite(parsed) && parsed >= 0) {
+    return parsed;
+  }
+  return 690_000;
+}
+
+/**
  * Global budget for the whole smoke, mirrored from SMOKE_TIMEOUT_MS in
  * issue-2603-release-install.test.ts (issue #3550). PR #3561 CI showed both
  * install steps recovered via retry but consumed the entire grant, so this was raised
  * from 480s to 690s so a degraded-registry window plus the rest of a healthy
  * run fits. 690s still stays inside the wrapper's hard kill (default 780s).
- * Overridable via LLXPRT_SMOKE_GLOBAL_DEADLINE_MS; the number is taken
- * verbatim (a non-number falls back to the default).
+ * Overridable via LLXPRT_SMOKE_GLOBAL_DEADLINE_MS; only a finite,
+ * non-negative override is honored, anything else falls back to the default.
  */
-const SMOKE_GLOBAL_DEADLINE_MS =
-  Number(process.env.LLXPRT_SMOKE_GLOBAL_DEADLINE_MS) || 690_000;
+const SMOKE_GLOBAL_DEADLINE_MS = parseSmokeDeadlineMs(
+  process.env.LLXPRT_SMOKE_GLOBAL_DEADLINE_MS,
+);
 
 /**
  * Per-attempt budget for a real npm registry network call, bounded so no step can
@@ -331,7 +347,7 @@ function spawnNpmWithTimeoutRetry(command, args, opts) {
       };
     }
     console.warn(
-      `npm spawn ETIMEDOUT after ${elapsedMs}ms (attempt ${attempt}); retrying with attempt ${attempt + 1} (${remainingAfterMs}ms of the ${SMOKE_GLOBAL_DEADLINE_MS}ms global deadline remains).`,
+      `npm spawn ETIMEDOUT after ${Date.now() - startDeadlineTimestampMs()}ms (attempt ${attempt}); retrying with attempt ${attempt + 1} (${remainingAfterMs}ms of the ${SMOKE_GLOBAL_DEADLINE_MS}ms global deadline remains).`,
     );
   }
   return {
