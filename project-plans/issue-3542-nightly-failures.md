@@ -378,3 +378,55 @@ cycles 3, 4, 5 all green.
   https://github.com/vybestack/llxprt-code/issues/3559#issuecomment-5540275065.
 - Environmental: the macOS [scripts] and the ubuntu docker E2E failures from
   that run are environmental and being verified by rerun.
+
+## Dispatch-3 evidence (nightly 33875193375, head 77fe28429 = batches 1-3)
+
+- macOS CI (Nightly) [cli]: SUCCESS — the original #3542 M1 trio green on a
+  real macOS runner.
+- Windows CI (Nightly) [core]: SUCCESS — C1 proven and the C2 sick-runner
+  hang did not recur.
+- Windows CI (Nightly) [cli]: failure reduced to EXACTLY the 7 out-of-scope
+  #3545-born cases documented in #3559 (podman-diagnostics ×3, credential
+  socket mode ×1, proxy-integration R3.4 ×2, launch-release mkdtemp ×1).
+  Verified 1:1 against the issue body; every in-scope batch-2/batch-3 item
+  passed on Windows.
+- All other jobs green, including macOS [scripts] and the E2E lanes that had
+  shown environmental ETIMEDOUTs in run 33868549250.
+
+Failure trajectory on Windows [cli]: 34 (09-03 nightly) → 14 (batch 1) →
+7 = the #3559 set only (batches 1-3).
+
+## Review remediation round (a669f057c)
+
+- 9 thread fixes + 1 rejection, implemented and locally verified (orphan
+  suite 23 pass ×2; dependency-volumes + venv + checkpoint-storage 41 pass;
+  fixture-compiler pass; eslint/prettier/tsc clean):
+  - prewarm win32-only with loud nonzero-exit failure carrying stderr (NeGw,
+    NPYV; NeJT resolved as duplicate of NPYV).
+  - fake ps source exits 50 on unreadable process-starts file (NeL8).
+  - checkpoint layout comment "mode 777 on POSIX" (Rj9V).
+  - dependency-volumes/venv JSDoc corrected to POSIX-only mode check +
+    bidirectional init-run mount set equality with engine.volumeNames()
+    (Rq54, Rj9i).
+  - integration hist_setup writes the production-matching `* -text`
+    attributes override (NPYN).
+  - preflight platform comment corrected to POSIX-only (Rj9o).
+  - NeON (UTC getters in the fake ps) REJECTED on source evidence: the
+    production probe forces TZ=UTC/LC_ALL=C/LANG=C at both execFileSync
+    sites (sandbox-owner-labels.ts:85, :159), so UTC output is the faithful
+    emulation; local-time getters would mismatch the always-UTC probe.
+- eslint.config.js: sandbox-launch-release.test.ts max-lines 800→900 with
+  the documented per-file policy (precedent #3240 app.test.ts). The file
+  sat at the 800 cap on main; platform-honest skipIf guards + prettier
+  re-wrapping pushed it to 812 code lines. An itPosix wrapper refactor was
+  measured (813 — prettier re-expands regardless) and reverted; a file
+  split would export a ~15-symbol shared mutable process-group harness and
+  invite ordering bugs. Raised bound keeps the lint gate active at 900.
+- Cycle 10: TEST/TYPECHECK/FORMAT/BUILD/SMOKE/DIFFCHECK green; lint green
+  after the override (cycle-chain lesson recorded: run format BEFORE lint —
+  cycle 9's order let prettier's 800→812 re-wrap slip past into 77fe28429).
+- All 10 PR review threads resolved (9 with fixes, 1 documented rejection);
+  replies posted referencing a669f057c.
+- Final nightly dispatched on a669f057c for the remediation batch (Windows
+  evidence for the strengthened bidirectional assertions and prewarm guard).
+- OCR PR round 2 (final allowed round) launched on a669f057c.
