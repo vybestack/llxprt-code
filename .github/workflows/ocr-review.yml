@@ -1451,6 +1451,7 @@ jobs:
           cat > ocr-workflow-helpers.sh <<'EOF'
           mark_infrastructure_failure() {
             echo "phase=$1; reason=$2" >> ocr-infrastructure-failure.txt
+            echo "::warning::OCR infrastructure failure recorded: phase=$1; reason=$2"
           }
           mark_policy_failure() {
             echo "$1" > ocr-policy-failure.txt
@@ -3344,6 +3345,28 @@ jobs:
               });
             }
 
+            // Issue #3544: GitHub's REST-to-GraphQL bridge rejects unknown
+            // members on a draft review thread — the internal `_severity`
+            // sort key maps onto a nonexistent `Severity` field and fails
+            // the whole batched createReview with HTTP 422. The transmitted
+            // payload is therefore rebuilt here as an allow-list of exactly
+            // the fields the review API defines. `_severity` is internal
+            // sort state and stays on the in-memory objects; only this
+            // boundary strips it.
+            function reviewCommentPayload(comment) {
+              const payload = {
+                path: comment.path,
+                line: comment.line,
+                side: comment.side,
+                body: comment.body,
+              };
+              if (comment.start_line) {
+                payload.start_line = comment.start_line;
+                payload.start_side = comment.start_side;
+              }
+              return payload;
+            }
+
             // Phase 2 (issue #2649): run-scoped finding fingerprint for
             // publication reconciliation within a single OCR run. Uses
             // Math.imul for correct 32-bit FNV-1a arithmetic. The fingerprint
@@ -3848,7 +3871,7 @@ jobs:
               try {
                 await github.rest.pulls.createReview({
                   owner, repo, pull_number: number,
-                  event: 'COMMENT', commit_id: commitSha, comments: validPairs.map((pair) => pair.comment),
+                  event: 'COMMENT', commit_id: commitSha, comments: validPairs.map((pair) => reviewCommentPayload(pair.comment)),
                 });
                 core.info(`OCR 422 fallback: posted ${validPairs.length} in-diff inline comment(s) as one grouped review; ${invalidPairs.length} comment(s) were outside the diff.`);
                 return {
@@ -4575,7 +4598,7 @@ jobs:
               try {
                 await github.rest.pulls.createReview({
                   owner, repo, pull_number: number,
-                  event: 'COMMENT', commit_id: headSha, comments: inlineToPost,
+                  event: 'COMMENT', commit_id: headSha, comments: inlineToPost.map(reviewCommentPayload),
                 });
                 postedInline = inlineToPost.length;
               } catch (batchErr) {

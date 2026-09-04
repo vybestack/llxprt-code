@@ -142,6 +142,9 @@ describe('.github/workflows/ocr-review.yml — 422 grouping wired into the batch
       // Real key derivation, so dedup is exercised exactly as shipped.
       extractFunctionSource(postScript, 'unrenderFindingText'),
       extractFunctionSource(postScript, 'inlineCommentKey'),
+      // The 422 block strips internal keys at its createReview boundary via
+      // this helper (defined near sortInlineComments in the post step).
+      extractFunctionSource(postScript, 'reviewCommentPayload'),
       helperBlock,
       'async function existingInlineCommentKeys() {',
       '  return new Set(__listKeys().map(inlineCommentKey));',
@@ -266,6 +269,70 @@ describe('.github/workflows/ocr-review.yml — 422 grouping wired into the batch
     // The already-posted comment must not be re-sent by the grouped review.
     expect(result.createReviewCalls[0].comments).toEqual([good.comment]);
     expect(result.outOfDiffRouted).toEqual([bad.finding]);
+  });
+
+  it('transmits only GitHub-defined comment fields in the grouped 422 retry (#3544)', async () => {
+    // The pairs carry the full internal shape the post step builds: the
+    // GitHub-defined fields plus the `_severity` sort key that must be
+    // stripped at the transmission boundary.
+    const multi = pair(
+      {
+        path: 'a.ts',
+        line: 9,
+        start_line: 3,
+        start_side: 'RIGHT',
+        side: 'RIGHT',
+        body: 'spans a range',
+        _severity: 'high',
+      },
+      'multi',
+    );
+    const single = pair(
+      {
+        path: 'a.ts',
+        line: 4,
+        side: 'RIGHT',
+        body: 'single line',
+        _severity: 'low',
+      },
+      'single',
+    );
+    const bad = pair(
+      {
+        path: 'a.ts',
+        line: 900,
+        side: 'RIGHT',
+        body: 'outside',
+        _severity: 'high',
+      },
+      'bad',
+    );
+
+    const result = await runWiring({
+      pairsToPost: [multi, single, bad],
+      batchErr: LINE_422,
+    });
+
+    expect(result.createReviewCalls.length).toBe(1);
+    const transmitted = result.createReviewCalls[0].comments;
+    expect(transmitted.length).toBe(2);
+    const [multiPayload, singlePayload] = transmitted;
+    expect(Object.keys(multiPayload).sort()).toEqual([
+      'body',
+      'line',
+      'path',
+      'side',
+      'start_line',
+      'start_side',
+    ]);
+    expect(Object.keys(singlePayload).sort()).toEqual([
+      'body',
+      'line',
+      'path',
+      'side',
+    ]);
+    expect('_severity' in multiPayload).toBe(false);
+    expect('_severity' in singlePayload).toBe(false);
   });
 
   it('re-reads what landed when the grouped write throws', async () => {
