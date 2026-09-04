@@ -462,3 +462,23 @@ Failure trajectory on Windows [cli]: 34 (09-03 nightly) → 14 (batch 1) →
   file is back under the 800 effective-line cap with the standard gate.
   12/12 tests pass, eslint + policy guard green.
 - Final commit chain: OCR fixes + #2114-compliant split + this evidence.
+
+## Dispatch 6 (final evidence, head 8d053cd0f, run 33888593888)
+
+- Windows [cli]: failure set is EXACTLY the out-of-scope #3559 set (7 cases,
+  6 unique names — podman diagnostics ×3, credential socket ×1, R3.4 ×2,
+  launch-release close-handlers ×1). The reused-PID W4 case is GREEN with the
+  strengthened warm-until-fast prewarm (dispatch 5 on e4a260cd8 had flaked it
+  once more: single prewarm succeeded but the decision probe still exceeded
+  the 250ms budget; the fix now loops up to 8 spawns until one answers within
+  150ms, else fails with an explicit message).
+- Windows [core]: single failure `TIMEOUT: shell-parser.tree-lifetime.test.ts
+  [REAP FAILED (recovered on retry)]` — the same environmental bun process-exit
+  hang family as C2, on a sibling WASM-parser file, untouched by this PR.
+  Tracked as #3564; job-level rerun is the discriminator (green expected).
+- macOS [cli]: SUCCESS. All other jobs green.
+- PR CI on 8d053cd0f: ALL GREEN (39 pass, 3 skip, 0 fail).
+
+Out-of-scope sets remain: #3559 (Windows-only #3534/#3545-born failures),
+#3554 (bare execSync in sandbox-ssh/podman), #3563 (win32 kill(-pid) close
+handler), #3564 (Windows parser exit-hang), #3442 (runner policy).
