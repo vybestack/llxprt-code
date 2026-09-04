@@ -333,6 +333,17 @@ function assertNodeSymlinkMatchesHost(
   }
 }
 
+/**
+ * Code-unit (locale-independent) comparison for directory entry names, so
+ * walk order — and therefore the first-reported violation — is deterministic
+ * across filesystems and ICU builds.
+ */
+function compareDirentNames(a: fs.Dirent, b: fs.Dirent): number {
+  if (a.name < b.name) return -1;
+  if (a.name > b.name) return 1;
+  return 0;
+}
+
 export function preflightProtectedTree(
   tree: string,
   workdir: string,
@@ -342,7 +353,9 @@ export function preflightProtectedTree(
   const walk = (dir: string): void => {
     let entries: fs.Dirent[];
     try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
+      entries = fs
+        .readdirSync(dir, { withFileTypes: true })
+        .sort(compareDirentNames);
     } catch {
       // Unreadable or absent trees are not contamination; the empty private
       // mount replaces them anyway.

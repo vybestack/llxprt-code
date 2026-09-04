@@ -386,6 +386,48 @@ describe('#3450 bounded wrong-platform contamination preflight', () => {
     expect(() => prepareOnHost()).toThrowError('ELF');
   });
 
+  it('reports the lexicographically first sibling violation regardless of directory read order', () => {
+    vi.spyOn(os, 'platform').mockReturnValue('darwin');
+    // Two wrong-platform addons in sibling directories whose names sort in
+    // the opposite order from their contained file names, so only a sorted
+    // walk deterministically reaches alpha-pkg first (@issue:3546).
+    writeBytes(
+      path.join(workdir, 'node_modules', 'zeta-pkg', 'a-addon.node'),
+      elfBytes(),
+    );
+    writeBytes(
+      path.join(workdir, 'node_modules', 'alpha-pkg', 'z-addon.node'),
+      elfBytes(),
+    );
+
+    // Reverse every directory listing inside the workspace so the walk
+    // cannot rely on the host filesystem's incidental order.
+    const realReaddirSync = fs.readdirSync;
+    const isInsideWorkspace = (dirPath: fs.PathLike): boolean =>
+      typeof dirPath === 'string' &&
+      (dirPath === workdir || dirPath.startsWith(workdir + path.sep));
+    vi.spyOn(fs, 'readdirSync').mockImplementation(((
+      dirPath: fs.PathLike,
+      options?: unknown,
+    ) => {
+      const entries = realReaddirSync(dirPath, options as never);
+      if (
+        isInsideWorkspace(dirPath) &&
+        Array.isArray(entries) &&
+        entries.length > 1
+      ) {
+        return [...(entries as unknown[])].reverse();
+      }
+      return entries;
+    }) as typeof fs.readdirSync);
+
+    expect(() => prepareOnHost()).toThrowError(FatalSandboxError);
+    expect(() => prepareOnHost()).toThrowError(
+      path.join('node_modules', 'alpha-pkg', 'z-addon.node'),
+    );
+    expect(() => prepareOnHost()).not.toThrowError('zeta-pkg');
+  });
+
   it('recognizes a PE whose validated e_lfanew lies beyond the initial probe', () => {
     vi.spyOn(os, 'platform').mockReturnValue('darwin');
     writeBytes(
