@@ -273,6 +273,7 @@ describe('.github/workflows/ocr-review.yml — review comment payload allow-list
 
       expect(result.createReviewCalls.length).toBe(1);
       expect(result.postedInline).toBe(2);
+      expect(result.createReviewCalls[0].commit_id).toBe('sha-1');
       const [multi, single] = result.createReviewCalls[0].comments;
       expect(sortedKeys(multi)).toEqual([...BASE_KEYS, ...RANGE_KEYS].sort());
       expect(sortedKeys(single)).toEqual(BASE_KEYS);

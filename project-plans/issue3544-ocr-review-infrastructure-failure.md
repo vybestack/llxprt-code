@@ -34,8 +34,10 @@ directs a reader to are empty for this attempt:
 1. *Trusted workflow logs.* `mark_infrastructure_failure` appends
    `phase=…; reason=…` to `ocr-infrastructure-failure.txt` and emits nothing to
    the log. Every phase before `review` pairs its call with its own
-   `echo "::warning::…"`, but the six review-phase classifier branches
-   (`.github/workflows/ocr-review.yml` lines 2475–2487) do not. `ocr-stderr.log`
+   `echo "::warning::…"`, but seven call sites do not: the six review-phase
+   classifier branches (`.github/workflows/ocr-review.yml` lines 2477–2487) and
+   the preview extraction / cardinality branch
+   (`.github/workflows/ocr-review.yml` line 1909). `ocr-stderr.log`
    is likewise never surfaced. Attempt 1's `Run OpenCodeReview` step therefore
    produced **zero** log output across its ten minutes.
 2. *The `ocr-review-output` artifact.* `Upload OCR artifacts` (line 6367) uses
