@@ -28,9 +28,39 @@ function npmBin(): string {
   return process.platform === 'win32' ? 'npm.cmd' : 'npm';
 }
 
-function runNpm(args: readonly string[]): void {
-  console.log(`> npm ${args.join(' ')}`);
-  execFileSync(npmBin(), args, { stdio: 'inherit', timeout: 120_000 });
+type RunNpmOptions = {
+  timeoutMs?: number;
+  retries?: number;
+};
+
+function runNpm(args: readonly string[], opts?: RunNpmOptions): void {
+  const timeoutMs = opts?.timeoutMs ?? 120_000;
+  const retries = opts?.retries ?? 0;
+  let attempt = 0;
+  while (true) {
+    attempt += 1;
+    console.log(`> npm ${args.join(' ')}`);
+    try {
+      execFileSync(npmBin(), args, { stdio: 'inherit', timeout: timeoutMs });
+      return;
+    } catch (error) {
+      if (attempt <= retries && isEtimedout(error)) {
+        console.warn(
+          `npm ${args.join(' ')} timed out (attempt ${attempt}); retrying.`,
+        );
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
+function isEtimedout(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    'code' in error &&
+    (error as { code?: unknown }).code === 'ETIMEDOUT'
+  );
 }
 
 function readJson(filePath: string): PackageJson {
@@ -169,7 +199,10 @@ updateSandboxImageUri(
 
 // 6. Update package-lock.json without reinstalling node_modules.
 try {
-  runNpm(['install', '--package-lock-only']);
+  runNpm(['install', '--package-lock-only'], {
+    timeoutMs: 600_000,
+    retries: 1,
+  });
 } catch (error) {
   console.error(
     'package-lock.json update failed. Revert package.json, packages/*/package.json, and package-lock.json before retrying.',
