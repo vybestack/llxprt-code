@@ -38,8 +38,15 @@ export interface ReviewComment {
   path: string;
   line?: number | null;
   start_line?: number | null;
+  start_side?: string | null;
   side?: string;
   body?: string;
+  /**
+   * Internal severity sort key the post step attaches to inline comment
+   * objects (issue #3544). Present on the in-memory objects; must never
+   * reach the transmitted createReview payload.
+   */
+  _severity?: string;
 }
 
 export interface Pair {
@@ -185,6 +192,10 @@ export function loadHarness(
   vm.createContext(sandbox);
   vm.runInContext(
     [
+      // The 422 block calls the payload allow-list helper (defined earlier in
+      // the post step, near sortInlineComments) at its createReview boundary,
+      // so the harness loads it alongside the extracted block.
+      extractFunctionSource(postScript, 'reviewCommentPayload'),
       block,
       '__EXPOSED__ = {',
       '  errorStatus,',
@@ -226,6 +237,10 @@ export function loadHarness(
   };
 }
 
+/**
+ * Associates a comment with its finding under the comment's path as id, the
+ * pair shape the post step feeds to the 422 regrouping logic.
+ */
 export function pair(comment: ReviewComment, id = comment.path): Pair {
   return { comment, finding: { path: comment.path, id } };
 }
