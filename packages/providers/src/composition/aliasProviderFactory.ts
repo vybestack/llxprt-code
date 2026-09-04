@@ -207,6 +207,7 @@ export function createOpenAIAliasProvider(
   openaiApiKey: string | undefined,
   openaiBaseUrl: string | undefined,
   openaiProviderConfig: IProviderConfig,
+  authOnlyEnabled = false,
 ): OpenAIProvider | null {
   const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
   if (!resolvedBaseUrl) {
@@ -230,7 +231,8 @@ export function createOpenAIAliasProvider(
   }
 
   let aliasApiKey: string | undefined;
-  if (entry.config.apiKeyEnv) {
+  // Only use environment variable API key if authOnly is not enabled
+  if (!authOnlyEnabled && entry.config.apiKeyEnv) {
     const envValue = process.env[entry.config.apiKeyEnv];
     if (envValue && envValue.trim() !== '') {
       aliasApiKey = sanitizeApiKey(envValue);
@@ -260,6 +262,7 @@ export function createOpenAIResponsesAliasProvider(
   openaiBaseUrl: string | undefined,
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
+  authOnlyEnabled = false,
 ): OpenAIResponsesProvider | null {
   const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
   if (!resolvedBaseUrl) {
@@ -283,7 +286,8 @@ export function createOpenAIResponsesAliasProvider(
   }
 
   let aliasApiKey: string | undefined;
-  if (entry.config.apiKeyEnv) {
+  // Only use environment variable API key if authOnly is not enabled
+  if (!authOnlyEnabled && entry.config.apiKeyEnv) {
     const envValue = process.env[entry.config.apiKeyEnv];
     if (envValue && envValue.trim() !== '') {
       aliasApiKey = sanitizeApiKey(envValue);
@@ -319,6 +323,7 @@ export function createOpenAIVercelAliasProvider(
   openaiApiKey: string | undefined,
   openaiBaseUrl: string | undefined,
   openaiProviderConfig: IProviderConfig,
+  authOnlyEnabled = false,
 ): OpenAIVercelProvider | null {
   const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
   if (!resolvedBaseUrl) {
@@ -342,7 +347,8 @@ export function createOpenAIVercelAliasProvider(
   }
 
   let aliasApiKey: string | undefined;
-  if (entry.config.apiKeyEnv) {
+  // Only use environment variable API key if authOnly is not enabled
+  if (!authOnlyEnabled && entry.config.apiKeyEnv) {
     const envValue = process.env[entry.config.apiKeyEnv];
     if (envValue && envValue.trim() !== '') {
       aliasApiKey = sanitizeApiKey(envValue);
@@ -369,9 +375,11 @@ export function createOpenAIVercelAliasProvider(
 export function createGeminiAliasProvider(
   entry: ProviderAliasEntry,
   config?: Config,
+  authOnlyEnabled = false,
 ): GeminiProvider | null {
   let aliasApiKey: string | undefined;
-  if (entry.config.apiKeyEnv) {
+  // Only use environment variable API key if authOnly is not enabled
+  if (!authOnlyEnabled && entry.config.apiKeyEnv) {
     const envValue = process.env[entry.config.apiKeyEnv];
     if (envValue && envValue.trim() !== '') {
       aliasApiKey = sanitizeApiKey(envValue);
@@ -433,6 +441,13 @@ export function createAnthropicAliasProvider(
   return provider;
 }
 
+type AliasFactoryProvider =
+  | OpenAIProvider
+  | OpenAIResponsesProvider
+  | OpenAIVercelProvider
+  | GeminiProvider
+  | AnthropicProvider;
+
 export function registerAliasProviders(
   providerManagerInstance: ProviderManager,
   aliasEntries: ProviderAliasEntry[],
@@ -443,6 +458,12 @@ export function registerAliasProviders(
   config?: Config,
   authOnlyEnabled = false,
 ): void {
+  const registerIfPresent = (provider: AliasFactoryProvider | null): void => {
+    if (provider) {
+      providerManagerInstance.registerProvider(provider as never);
+    }
+  };
+
   for (const entry of aliasEntries) {
     switch (entry.config.baseProvider.toLowerCase()) {
       case 'openai': {
@@ -451,10 +472,9 @@ export function registerAliasProviders(
           openaiApiKey,
           openaiBaseUrl,
           openaiProviderConfig,
+          authOnlyEnabled,
         );
-        if (provider) {
-          providerManagerInstance.registerProvider(provider as never);
-        }
+        registerIfPresent(provider);
         break;
       }
       case 'openai-responses': {
@@ -464,10 +484,9 @@ export function registerAliasProviders(
           openaiBaseUrl,
           openaiProviderConfig,
           oauthManager,
+          authOnlyEnabled,
         );
-        if (provider) {
-          providerManagerInstance.registerProvider(provider as never);
-        }
+        registerIfPresent(provider);
         break;
       }
       case 'openaivercel':
@@ -477,17 +496,18 @@ export function registerAliasProviders(
           openaiApiKey,
           openaiBaseUrl,
           openaiProviderConfig,
+          authOnlyEnabled,
         );
-        if (provider) {
-          providerManagerInstance.registerProvider(provider as never);
-        }
+        registerIfPresent(provider);
         break;
       }
       case 'gemini': {
-        const provider = createGeminiAliasProvider(entry, config);
-        if (provider) {
-          providerManagerInstance.registerProvider(provider as never);
-        }
+        const provider = createGeminiAliasProvider(
+          entry,
+          config,
+          authOnlyEnabled,
+        );
+        registerIfPresent(provider);
         break;
       }
       case 'anthropic': {
@@ -501,9 +521,7 @@ export function registerAliasProviders(
           oauthManagerForAlias,
           authOnlyEnabled,
         );
-        if (provider) {
-          providerManagerInstance.registerProvider(provider as never);
-        }
+        registerIfPresent(provider);
         break;
       }
       default: {

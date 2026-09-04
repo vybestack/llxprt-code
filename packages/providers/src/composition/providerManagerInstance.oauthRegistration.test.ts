@@ -23,6 +23,7 @@ let openaiCtorState: new (...args: unknown[]) => unknown = class {};
 let openaiResponsesCtorState: new (...args: unknown[]) => unknown = class {};
 let openaiVercelCtorState: new (...args: unknown[]) => unknown = class {};
 let anthropicCtorState: new (...args: unknown[]) => unknown = class {};
+let geminiCtorState: new (...args: unknown[]) => unknown = class {};
 
 // Wrapper constructors so each test can swap the target without needing
 // vi.resetModules (unsupported in Bun).
@@ -42,12 +43,9 @@ void mock.module('../ProviderManager.js', () => {
   }
   return { ProviderManager: MockProviderManager };
 });
-void mock.module('../gemini/GeminiProvider.js', () => {
-  class MockGeminiProvider {
-    setConfig(): void {}
-  }
-  return { GeminiProvider: MockGeminiProvider };
-});
+void mock.module('../gemini/GeminiProvider.js', () => ({
+  GeminiProvider: makeWrapper(() => geminiCtorState),
+}));
 void mock.module('../openai/OpenAIProvider.js', () => ({
   OpenAIProvider: makeWrapper(() => openaiCtorState),
 }));
@@ -99,6 +97,7 @@ describe('claudecode OAuth registration with environment key', () => {
   afterEach(() => {
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
     vi.clearAllMocks();
   });
 
@@ -161,12 +160,14 @@ describe('claudecode OAuth registration with environment key', () => {
   it('ignores API keys when authOnly is enabled', async () => {
     process.env.ANTHROPIC_API_KEY = 'sk-test-key';
     process.env.OPENAI_API_KEY = 'sk-test-openai';
+    process.env.GEMINI_API_KEY = 'sk-test-gemini';
 
     const ensureOAuthProviderRegisteredMock = vi.fn();
     const openaiCtor = vi.fn(() => ({}));
     const openaiResponsesCtor = vi.fn(() => ({}));
     const openaivercelCtor = vi.fn(() => ({}));
     const anthropicCtor = vi.fn(() => ({}));
+    const geminiCtor = vi.fn(() => ({}));
 
     // Wire mutable state for this test
     ensureOAuthProviderRegisteredState = ensureOAuthProviderRegisteredMock;
@@ -186,6 +187,9 @@ describe('claudecode OAuth registration with environment key', () => {
       ...args: unknown[]
     ) => unknown;
     anthropicCtorState = anthropicCtor as unknown as new (
+      ...args: unknown[]
+    ) => unknown;
+    geminiCtorState = geminiCtor as unknown as new (
       ...args: unknown[]
     ) => unknown;
 
@@ -218,19 +222,22 @@ describe('claudecode OAuth registration with environment key', () => {
     });
     registerProviderManagerSingleton(manager, oauthManager);
 
-    expect(openaiCtor).toHaveBeenCalled();
-    const firstOpenaiCall = openaiCtor.mock.calls[0] as unknown[] | undefined;
-    expect(firstOpenaiCall?.[0]).toBeUndefined();
+    // Alias registration order is filesystem-dependent, so EVERY alias
+    // construction must be keyless under authOnly; asserting only the first
+    // call let a late-registered alias leak an environment key on runners
+    // whose readdir order differed (@issue:3546).
+    const expectEveryCallKeyless = (ctor: ReturnType<typeof vi.fn>): void => {
+      expect(ctor.mock.calls.length).toBeGreaterThan(0);
+      for (const call of ctor.mock.calls) {
+        expect((call as unknown[])[0]).toBeUndefined();
+      }
+    };
 
-    expect(openaiResponsesCtor).toHaveBeenCalled();
-    const firstResponsesCall = openaiResponsesCtor.mock.calls[0] as
-      | unknown[]
-      | undefined;
-    expect(firstResponsesCall?.[0]).toBeUndefined();
-
-    expect(anthropicCtor).toHaveBeenCalled();
-    const anthropicArgs = anthropicCtor.mock.calls[0] as unknown[] | undefined;
-    expect(anthropicArgs?.[0]).toBeUndefined();
+    expectEveryCallKeyless(openaiCtor);
+    expectEveryCallKeyless(openaiResponsesCtor);
+    expectEveryCallKeyless(openaivercelCtor);
+    expectEveryCallKeyless(anthropicCtor);
+    expectEveryCallKeyless(geminiCtor);
   });
 
   it('threads OAuth manager only into OAuth-capable alias providers', async () => {
