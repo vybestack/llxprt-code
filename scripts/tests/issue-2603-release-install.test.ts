@@ -66,14 +66,21 @@ const releasePackHelper = join(
  * timeout must be strictly less than the test timeout so the kill+dispose
  * completes before the test timeout fires.
  *
+ * The defaults track the outer pack-phase budget: the pack phase runs BEFORE the
+ * npm steps and is not covered by the smoke's 690s global deadline, and the
+ * inner bind-release-deps spawn now allows one ETIMEDOUT retry at 600s per
+ * attempt. The 2_100s smoke kill (2_160s test timeout) leaves room for
+ * the enlarged pack phase plus the later 690s npm/deadline-bounded steps.
+ *
  * Override via env for per-CI tuning:
  *   LLXPRT_SMOKE_TIMEOUT_MS — the hard kill timer for the smoke child.
  *   LLXPRT_SMOKE_TEST_TIMEOUT_MS — the Vitest test timeout (must exceed the
  *     smoke timeout by a safe margin).
  */
-const SMOKE_TIMEOUT_MS = Number(process.env.LLXPRT_SMOKE_TIMEOUT_MS) || 780_000;
+const SMOKE_TIMEOUT_MS =
+  Number(process.env.LLXPRT_SMOKE_TIMEOUT_MS) || 2_100_000;
 const SMOKE_TEST_TIMEOUT_MS =
-  Number(process.env.LLXPRT_SMOKE_TEST_TIMEOUT_MS) || 840_000;
+  Number(process.env.LLXPRT_SMOKE_TEST_TIMEOUT_MS) || 2_160_000;
 
 interface SmokeHandle {
   promise: Promise<{
