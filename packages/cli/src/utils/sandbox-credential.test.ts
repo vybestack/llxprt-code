@@ -43,6 +43,7 @@ void vi.mock('./sandbox-podman.js', () => ({
 import { setupCredentialProxy } from './sandbox-containers.js';
 import { createCredentialSocketRuntime } from './sandbox-credential-runtime.js';
 
+const isWindows = process.platform === 'win32';
 const NETWORK_ENV_KEYS = ['LLXPRT_SANDBOX_NETWORK', 'SANDBOX_NETWORK'] as const;
 const CAPABILITY_TOKEN = 'a'.repeat(64);
 const HOST_SOCKET_NAME = 'credential-proxy.sock';
@@ -340,7 +341,7 @@ describe('#1456 credential proxy network policy', () => {
   );
 });
 
-describe('#3534 Podman credential socket runtime', () => {
+describe.skipIf(isWindows)('#3534 Podman credential socket runtime', () => {
   let environmentSnapshot: NodeJS.ProcessEnv;
   let fixtureRoot = '';
   let sessionTmpdir = '';
