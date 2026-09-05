@@ -271,7 +271,6 @@ describe('subagent.ts', () => {
               },
             },
           ],
-          'stop',
         ]),
       );
 
@@ -292,17 +291,7 @@ describe('subagent.ts', () => {
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
       expect(scope.output.emitted_vars).toStrictEqual({ result: 'Success!' });
       expect(scope.output.final_message).toContain('result=Success');
-      expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
-
-      const secondCallArgs = mockSendMessageStream.mock.calls[1][0];
-      expect(secondCallArgs.message).toHaveLength(1);
-      expect(secondCallArgs.message[0]).toMatchObject({
-        type: 'tool_response',
-      });
-      expect(secondCallArgs.message[0].toolName).toBe('self_emitvalue');
-      expect(secondCallArgs.message[0].result.message).toBe(
-        'Emitted variable result successfully',
-      );
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
     });
 
     it('should execute external tools and provide the response to the model', async () => {
@@ -667,7 +656,6 @@ describe('subagent.ts', () => {
               },
             },
           ],
-          'stop',
         ]),
       );
 
@@ -695,7 +683,7 @@ describe('subagent.ts', () => {
       expect(scope.output.emitted_vars).toStrictEqual({
         required_var: 'Here it is',
       });
-      expect(mockSendMessageStream).toHaveBeenCalledTimes(3);
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
     });
   });
 });

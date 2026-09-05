@@ -83,6 +83,8 @@ describe('#3524 capability env-file early release', () => {
   let environmentSnapshot: NodeJS.ProcessEnv;
   let tmpDir = '';
   let isolatedHome = '';
+  let capabilityRuntimeRoot = '';
+  let sessionTmpdir = '';
   let sandboxStandin: ChildProcess | undefined;
   let activeLaunchCleanup: (() => void) | undefined;
 
@@ -90,11 +92,16 @@ describe('#3524 capability env-file early release', () => {
     environmentSnapshot = { ...process.env };
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cap-envfile-3524-'));
     isolatedHome = path.join(tmpDir, 'home');
+    capabilityRuntimeRoot = path.join(tmpDir, 'runtime');
+    sessionTmpdir = path.join(tmpDir, 'session');
     fs.mkdirSync(isolatedHome);
+    fs.mkdirSync(capabilityRuntimeRoot);
+    fs.mkdirSync(sessionTmpdir);
     process.env.HOME = isolatedHome;
     process.env.USERPROFILE = isolatedHome;
-    // createHostOnlyDir reads os.homedir() at call time, so the env file
-    // lands in the isolated home where the assertions can see it.
+    process.env.XDG_RUNTIME_DIR = capabilityRuntimeRoot;
+    // Isolate both the current runtime-root location and the legacy home
+    // location inspected during orphan reclamation.
     vi.spyOn(os, 'homedir').mockReturnValue(isolatedHome);
     // Linux skips the macOS SSH bridge entirely; the proxy env var and env
     // file are the only launch-path side effects under test.
@@ -112,8 +119,8 @@ describe('#3524 capability env-file early release', () => {
     // is released for the next test (#3524).
     activeLaunchCleanup?.();
     activeLaunchCleanup = undefined;
-    for (const artifact of capabilityArtifacts(isolatedHome)) {
-      fs.rmSync(path.join(isolatedHome, artifact), {
+    for (const artifact of capabilityArtifacts(capabilityRuntimeRoot)) {
+      fs.rmSync(path.join(capabilityRuntimeRoot, artifact), {
         recursive: true,
         force: true,
       });
@@ -124,10 +131,10 @@ describe('#3524 capability env-file early release', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  function capabilityArtifacts(home: string): string[] {
+  function capabilityArtifacts(runtimeRoot: string): string[] {
     return fs
-      .readdirSync(home)
-      .filter((entry) => entry.startsWith('.llxprt-code-cap-'));
+      .readdirSync(runtimeRoot)
+      .filter((entry) => entry.startsWith('llxprt-code-cap-'));
   }
 
   /** Real child process standing in for the spawned sandbox container. */
@@ -146,7 +153,7 @@ describe('#3524 capability env-file early release', () => {
     const result = await setupCredentialProxy(
       args,
       { command: 'docker', image: 'test' },
-      tmpDir,
+      sessionTmpdir,
       new Set<number>(),
       [],
     );
@@ -202,7 +209,7 @@ describe('#3524 capability env-file early release', () => {
 
     expect(() => launched.exitCleanup()).not.toThrow();
 
-    expect(capabilityArtifacts(isolatedHome)).toStrictEqual([]);
+    expect(capabilityArtifacts(capabilityRuntimeRoot)).toStrictEqual([]);
   });
 
   it('removes the env file via the bounded fallback when no handshake ever arrives', async () => {
@@ -264,14 +271,14 @@ describe('#3524 capability env-file early release', () => {
 
   it('fails fast on a second launch while one capability env file launch is active', async () => {
     const first = await launchCredentialProxy();
-    const artifactsAfterFirst = capabilityArtifacts(isolatedHome);
+    const artifactsAfterFirst = capabilityArtifacts(capabilityRuntimeRoot);
     expect(artifactsAfterFirst).toHaveLength(1);
 
     await expect(launchCredentialProxy()).rejects.toThrow(
       /not supported by the capability transport/,
     );
 
-    expect(capabilityArtifacts(isolatedHome)).toStrictEqual(
+    expect(capabilityArtifacts(capabilityRuntimeRoot)).toStrictEqual(
       artifactsAfterFirst,
     );
     expect(fs.existsSync(first.envFilePath)).toBe(true);

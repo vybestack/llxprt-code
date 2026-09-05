@@ -743,19 +743,20 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
   });
 
   // -----------------------------------------------------------------------
-  // Test H: compressAndRecompose callback contract (issue #2588 regression).
+  // Test H: compressAndRecompose callback contract (issue #2588 regression,
+  // updated for issue #3499).
   //
   // compressAndRecompose is invoked from the provider compression callback
-  // (CompressionHandler.attachCompressionCallback). That callback's try/catch
-  // expects failure to THROW so the provider can reject the request.
-  // runCompressionAndRecompose catches errors/non-COMPRESSED results and
-  // returns them as structured compressionFailure — compressAndRecompose must
-  // rethrow that failure so the callback contract is honored, while the
-  // enforcement orchestration (enforce) continues to consume structured
+  // (CompressionHandler.attachCompressionCallback). It now runs the full
+  // escalation ladder: a plain compression failure or non-COMPRESSED result
+  // no longer aborts the callback — truncation rescues the request — but the
+  // compression failure still surfaces in the structured overflow error when
+  // even truncation cannot fit, preserving the provider rejection contract.
+  // The enforcement orchestration (enforce) continues to consume structured
   // failures for its own retry/truncation/overflow diagnostics.
   // -----------------------------------------------------------------------
-  describe('compressAndRecompose callback contract (rethrow compressionFailure)', () => {
-    it('throws when performCompression throws during callback compression', async () => {
+  describe('compressAndRecompose callback contract (overflow surfaces compressionFailure)', () => {
+    it('reports the compression failure through the structured overflow error when performCompression throws and truncation cannot fit', async () => {
       runtimeContext = buildRuntimeContext(historyService, {
         contextLimit: STANDARD_CONTEXT_LIMIT,
         compressionThreshold: COMPRESSION_THRESHOLD,
@@ -766,7 +767,7 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
 
       const harness = buildEnforcerHarness(historyService, runtimeContext);
       vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-        10_000,
+        150_000,
       );
 
       harness.deps.performCompression.mockRejectedValue(
@@ -778,7 +779,7 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       ).rejects.toThrow('callback compression network failure');
     });
 
-    it('throws when performCompression returns a non-COMPRESSED result during callback compression', async () => {
+    it('reports a non-COMPRESSED result through the structured overflow error when truncation cannot fit', async () => {
       runtimeContext = buildRuntimeContext(historyService, {
         contextLimit: STANDARD_CONTEXT_LIMIT,
         compressionThreshold: COMPRESSION_THRESHOLD,
@@ -789,15 +790,16 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
 
       const harness = buildEnforcerHarness(historyService, runtimeContext);
       vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-        10_000,
+        150_000,
       );
 
       harness.deps.performCompression.mockResolvedValue(
         PerformCompressionResult.FAILED,
       );
 
-      // A non-COMPRESSED result is a failure in the callback context; it must
-      // throw (not silently return unprojected contents).
+      // A non-COMPRESSED result no longer throws directly; the ladder first
+      // attempts truncation, and the failure surfaces via the structured
+      // overflow error only when nothing fits.
       await expect(
         harness.enforcer.compressAndRecompose([pending], 'test-prompt'),
       ).rejects.toThrow(/Auto compression did not complete/);

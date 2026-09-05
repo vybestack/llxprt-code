@@ -164,6 +164,41 @@ describe('Shell background integration', () => {
         fs.rmSync(path.dirname(sentinel), { recursive: true, force: true });
       });
 
+      it('a background job launched during one turn stays registered and running across several subsequent turns', async () => {
+        const manager = makeManager();
+        const sentinelDir = makeTempBase();
+        baseDirs.push(sentinelDir);
+        const gate = path.join(sentinelDir, 'gate');
+        const completion = path.join(sentinelDir, 'completed');
+
+        const command = `while [ ! -f ${gate} ]; do sleep 0.1; done; touch ${completion} &`;
+        const result = detectTrailingBackgroundOperator(command);
+        expect(result.promoted).toBe(true);
+        const job = manager.launch({
+          command: result.command,
+          cwd: os.tmpdir(),
+        });
+        expect(job.state).toBe('running');
+
+        for (let turn = 2; turn <= 4; turn++) {
+          const foreground = manager.launch({
+            command: 'true',
+            cwd: os.tmpdir(),
+          });
+          await waitForTerminal(manager, foreground.id, 10000);
+          manager.markNotified(
+            manager.getPendingNotifications().map((pending) => pending.id),
+          );
+          expect(manager.get(job.id)?.state).toBe('running');
+        }
+        expect(manager.get(job.id)?.state).toBe('running');
+
+        fs.writeFileSync(gate, '');
+        const terminal = await waitForTerminal(manager, job.id, 15000);
+        expect(terminal?.state).toBe('completed');
+        expect(fs.existsSync(completion)).toBe(true);
+      }, 20_000);
+
       it('a fast-completing background job returns a job-shaped result immediately, not foreground-shaped', () => {
         const manager = makeManager();
         const job = manager.launch({

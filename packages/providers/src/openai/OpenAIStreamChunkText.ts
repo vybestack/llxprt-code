@@ -15,8 +15,12 @@
  */
 
 import type OpenAI from 'openai';
+import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { sanitizeProviderText } from '../utils/textSanitizer.js';
-import { coerceMessageContentToString } from './OpenAIResponseParser.js';
+import {
+  coerceMessageContentToString,
+  parseStreamingReasoningDelta,
+} from './OpenAIResponseParser.js';
 
 export function extractSanitizedChunkText(
   chunk: OpenAI.Chat.Completions.ChatCompletionChunk,
@@ -45,4 +49,35 @@ export function extractSanitizedChunkText(
     return '';
   }
   return sanitizeProviderText(deltaContent);
+}
+
+/**
+ * Returns visible continuation text and stamps token-bearing raw deltas once.
+ */
+export function extractContinuationChunkText(
+  chunk: OpenAI.Chat.Completions.ChatCompletionChunk,
+  logger: DebugLogger,
+  reasoningFieldName?: string,
+  onRawTokenDelta?: () => void,
+): string {
+  const sanitizedText = extractSanitizedChunkText(chunk);
+  const chunkChoices = (
+    chunk as {
+      choices?: OpenAI.Chat.Completions.ChatCompletionChunk.Choice[];
+    }
+  ).choices;
+  const delta = chunkChoices?.[0]?.delta;
+  const { thinking, toolCalls: reasoningToolCalls } =
+    parseStreamingReasoningDelta(delta, logger, reasoningFieldName);
+  const hasDeltaToolCalls =
+    delta?.tool_calls !== undefined && delta.tool_calls.length > 0;
+  if (
+    sanitizedText !== '' ||
+    thinking !== null ||
+    reasoningToolCalls.length > 0 ||
+    hasDeltaToolCalls
+  ) {
+    onRawTokenDelta?.();
+  }
+  return sanitizedText;
 }

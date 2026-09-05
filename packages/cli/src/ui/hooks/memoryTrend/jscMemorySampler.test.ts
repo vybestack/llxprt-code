@@ -79,6 +79,40 @@ function jscHeapSize(): number | null {
   return isJscHeapSizeApi(jsc) ? jsc.heapSize() : null;
 }
 
+/**
+ * Runs `run` with a pass-through recorder installed on the real `bun:jsc`
+ * singleton's `heapSize` property. The wrapper calls the real function and
+ * records the exact value it handed to the sampler, so assertions compare
+ * the sampler's output against the observation it actually consumed instead
+ * of taking a second independent live heap read. The original property is
+ * restored in `finally` even if `run` throws; the value stays real.
+ */
+function withRecordedHeapSize<T>(run: () => T): {
+  result: T;
+  observed: number;
+} {
+  const jsc = globalThis.process.getBuiltinModule('bun:jsc');
+  if (!isJscHeapSizeApi(jsc)) {
+    throw new Error('bun:jsc heap size test API is unavailable');
+  }
+  const originalHeapSize = jsc.heapSize;
+  let observed: number | undefined;
+  jsc.heapSize = () => {
+    const value = originalHeapSize();
+    observed = value;
+    return value;
+  };
+  try {
+    const result = run();
+    if (observed === undefined) {
+      throw new Error('the sampler returned without reading heapSize');
+    }
+    return { result, observed };
+  } finally {
+    jsc.heapSize = originalHeapSize;
+  }
+}
+
 const jscAvailable = jscHeapSize() !== null;
 
 describe('sampleMemoryUsage', () => {
@@ -116,14 +150,16 @@ describe('heapUsed correctness', () => {
   it.skipIf(!jscAvailable)(
     'replaces the base heapUsed with the real JSC heap size',
     () => {
-      const sample = sampleMemoryUsage(base);
+      const { result: sample, observed } = withRecordedHeapSize(() =>
+        sampleMemoryUsage(base),
+      );
       // The whole point: the incoming heapUsed must NOT survive.
       expect(sample.heapUsed).not.toBe(BASE.heapUsed);
-      const truth = jscHeapSize();
-      expect(truth).not.toBeNull();
-      expect(
-        Math.abs(sample.heapUsed - (truth as number)) / (truth as number),
-      ).toBeLessThan(0.05);
+      // Exact equality against the observation the sampler itself
+      // consumed: no second live heap read, no tolerance window.
+      expect(sample.heapUsed).toBe(observed);
+      // The shim heapTotal is floored at that same single observation.
+      expect(sample.heapTotal).toBe(Math.max(BASE.heapTotal, observed));
     },
   );
 
@@ -134,17 +170,16 @@ describe('heapUsed correctness', () => {
       if (!isJscTestApi(jsc)) {
         throw new Error('bun:jsc test API is unavailable');
       }
-      const expectedHeapSize = jsc.heapSize();
       const originalHeapStats = jsc.heapStats;
       jsc.heapStats = () => {
         throw new Error('full heap enumeration must not run during sampling');
       };
 
       try {
-        const sample = sampleMemoryUsage(base);
-        expect(
-          Math.abs(sample.heapUsed - expectedHeapSize) / expectedHeapSize,
-        ).toBeLessThan(0.05);
+        const { result: sample, observed } = withRecordedHeapSize(() =>
+          sampleMemoryUsage(base),
+        );
+        expect(sample.heapUsed).toBe(observed);
       } finally {
         jsc.heapStats = originalHeapStats;
       }

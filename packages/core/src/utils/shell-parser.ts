@@ -21,6 +21,7 @@ import type {
   Tree,
   Node,
   Query as QueryType,
+  QueryMatch,
 } from 'web-tree-sitter';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -59,13 +60,46 @@ type TreeSitterDefaultExport =
   | {
       Parser?: new () => ParserType;
       Language?: TreeSitterLanguageLoader;
+      Query?: new (language: Language, source: string) => QueryType;
     }
   | (new () => ParserType);
 
 interface TreeSitterModule {
   Parser?: new () => ParserType;
   Language?: TreeSitterLanguageLoader;
+  Query?: new (language: Language, source: string) => QueryType;
   default?: TreeSitterDefaultExport;
+}
+
+function isQueryConstructor(
+  value: unknown,
+): value is new (language: Language, source: string) => QueryType {
+  return typeof value === 'function';
+}
+
+/**
+ * Resolve the tree-sitter Query constructor. web-tree-sitter 0.25.x exports
+ * `Query` as a named export; some bundler configurations also nest it under
+ * `default`.
+ */
+function resolveTreeSitterQuery(
+  named: unknown,
+  defaultExport: unknown,
+): (new (language: Language, source: string) => QueryType) | undefined {
+  if (isQueryConstructor(named)) {
+    return named;
+  }
+  if (
+    typeof defaultExport === 'object' &&
+    defaultExport !== null &&
+    'Query' in defaultExport
+  ) {
+    const nestedQuery = defaultExport.Query;
+    if (isQueryConstructor(nestedQuery)) {
+      return nestedQuery;
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -172,18 +206,6 @@ async function resolvePwshWasmBytes(): Promise<Uint8Array> {
   }
   return new Uint8Array(readFileSync(wasmPath));
 }
-
-// Type definitions for tree-sitter query results
-interface QueryCapture {
-  name: string;
-  node: Node;
-}
-
-interface QueryMatch {
-  pattern: number;
-  captures: QueryCapture[];
-}
-
 /**
  * Identifies which grammar language to use for parsing.
  */
@@ -195,6 +217,17 @@ let pwshParser: ParserType | null = null;
 let pwshLanguage: Language | null = null;
 let initializationPromise: Promise<boolean> | null = null;
 let initializationError: Error | null = null;
+
+/**
+ * Resolved tree-sitter `Query` constructor, published alongside `bashLanguage`
+ * once the winning generation's initialization completes. The deprecated
+ * `Language#query()` shim is what logs the no-once-guard console.warn; all
+ * query construction goes through `new QueryCtor(language, source)` instead.
+ * Guarded exactly like `bashLanguage` at every callsite.
+ */
+let QueryCtor:
+  | (new (language: Language, source: string) => QueryType)
+  | undefined;
 
 /**
  * Monotonic generation counter for race-safe initialization. Each
@@ -269,6 +302,13 @@ async function performParserInitialization(
       );
     }
 
+    const Query = resolveTreeSitterQuery(TreeSitter.Query, TreeSitter.default);
+    if (!Query) {
+      throw new Error(
+        'web-tree-sitter Query export not found; expected top-level or default-nested Query class',
+      );
+    }
+
     // Load the Bash grammar (required for all paths) into local variables.
     const bashWasmBytes = await resolveBashWasmBytes();
     const localBashLanguage = await LanguageLoader.load(bashWasmBytes);
@@ -307,6 +347,7 @@ async function performParserInitialization(
     // Publish resources to module-level state.
     parser = localParser;
     bashLanguage = localBashLanguage;
+    QueryCtor = Query;
     pwshParser = localPwshParser;
     pwshLanguage = localPwshLanguage;
 
@@ -319,6 +360,7 @@ async function performParserInitialization(
         error instanceof Error ? error : new Error(String(error));
       parser = pwshParser = null;
       bashLanguage = pwshLanguage = null;
+      QueryCtor = undefined;
     }
     return false;
   }
@@ -462,16 +504,19 @@ export function hasCommandSubstitutionForLanguage(
  * This handles pipelines, command lists (&&, ||, ;), and subshells.
  */
 export function extractCommandNames(tree: Tree): string[] {
-  if (!bashLanguage) {
+  if (!bashLanguage || !QueryCtor) {
     return [];
   }
 
   const commands: string[] = [];
 
   // Query for command_name nodes which are the actual command being executed
-  const query = bashLanguage.query('(command name: (command_name) @cmd)');
+  const query = new QueryCtor(
+    bashLanguage,
+    '(command name: (command_name) @cmd)',
+  );
   try {
-    const matches = query.matches(tree.rootNode) as QueryMatch[];
+    const matches = query.matches(tree.rootNode);
 
     for (const match of matches) {
       collectCommandNamesFromCaptures(match.captures, commands);
@@ -668,10 +713,11 @@ function hasPromptTransformInExpansion(node: Node): boolean {
 export function parseCommandDetails(
   command: string,
 ): CommandParseResult | null {
-  if (!parser || !bashLanguage) {
+  if (!parser || !bashLanguage || !QueryCtor) {
     return null;
   }
   const activeBashLanguage = bashLanguage;
+  const ActiveQuery = QueryCtor;
 
   try {
     return (
@@ -693,10 +739,11 @@ export function parseCommandDetails(
         if (hasError) {
           let query: QueryType | null = null;
           try {
-            query = activeBashLanguage.query(
+            query = new ActiveQuery(
+              activeBashLanguage,
               '(ERROR) @error (MISSING) @missing',
             );
-            const captures = query.captures(tree.rootNode) as QueryCapture[];
+            const captures = query.captures(tree.rootNode);
             const syntaxErrors = captures.map((capture) => {
               const { node, name } = capture;
               const type = name === 'missing' ? 'Missing' : 'Error';
@@ -725,19 +772,22 @@ export function parseCommandDetails(
 }
 
 function hasParsedCommandSubstitution(tree: Tree): boolean {
-  if (!bashLanguage) {
+  if (!bashLanguage || !QueryCtor) {
     return false;
   }
 
-  const query = bashLanguage.query(`
+  const query = new QueryCtor(
+    bashLanguage,
+    `
     [
       (command_substitution) @sub
       (process_substitution) @proc
     ]
-  `);
+  `,
+  );
 
   try {
-    const matches = query.matches(tree.rootNode) as QueryMatch[];
+    const matches = query.matches(tree.rootNode);
     return matches.length > 0;
   } finally {
     query.delete();
@@ -841,6 +891,7 @@ export function resetParser(): void {
   pwshParser = null;
   bashLanguage = null;
   pwshLanguage = null;
+  QueryCtor = undefined;
   initializationPromise = initializationError = null;
 }
 

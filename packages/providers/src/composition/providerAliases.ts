@@ -402,7 +402,9 @@ function readAliasFile(
 
 function readAliasDirectoryFiles(dirPath: string): string[] | null {
   try {
-    return fs.readdirSync(dirPath);
+    // Filesystems return directory entries in arbitrary order; sorting keeps
+    // alias registration order deterministic across platforms.
+    return fs.readdirSync(dirPath).sort();
   } catch (error) {
     debugLogger.warn(
       `[ProviderAliases] Failed to read directory ${dirPath}: ${

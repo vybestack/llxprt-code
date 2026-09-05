@@ -23,7 +23,7 @@ const { spawnSync } = require('node:child_process');
 const { existsSync, mkdirSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 
-const { assert, runStep, runRequiredStep } = require('./assert.cjs');
+const { assert, runStep, runRequiredStep, getState } = require('./assert.cjs');
 const {
   INSTALL_TIMEOUT_MS,
   VERSION_TIMEOUT_MS,
@@ -160,6 +160,7 @@ function localInstall(tempDir, replicaTarball) {
 }
 
 function checkLocalCmdVersion(consumerDir) {
+  const before = getState();
   runStep('local-cmd-version', () => {
     const cmdPath = join(consumerDir, 'node_modules', '.bin', 'llxprt.cmd');
     assert(existsSync(cmdPath), `local cmd launcher not found: ${cmdPath}`);
@@ -180,6 +181,7 @@ function checkLocalCmdVersion(consumerDir) {
       );
     }
   });
+  return getState().failures.length === before.failures.length;
 }
 
 function checkPackageLocalBun(
@@ -187,6 +189,7 @@ function checkPackageLocalBun(
   findInstalledPackageRoot,
   findBundledBun,
 ) {
+  const before = getState();
   runStep('package-local-bun-exists', () => {
     const packageRoot = findInstalledPackageRoot(prefix);
     if (!packageRoot || typeof packageRoot !== 'string') {
@@ -206,6 +209,7 @@ function checkPackageLocalBun(
     // partial/timed-out install that left a non-Windows or wrong-version binary.
     assertBundledBunHealthy(bunExe, EXPECTED_BUN_VERSION);
   });
+  return getState().failures.length === before.failures.length;
 }
 
 module.exports = {

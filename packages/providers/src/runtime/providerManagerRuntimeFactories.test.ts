@@ -10,10 +10,15 @@ import type {
   RuntimeContentGeneratorFactory,
   RuntimeTokenizerFactory,
 } from '@vybestack/llxprt-code-core';
+import type { RuntimePromptEstimateRequest } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { ProviderContentGenerator } from '@vybestack/llxprt-code-providers';
 import { configureProviderRuntimeFactories } from '../composition/index.js';
 import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
 import { ModelPromptEstimatorError } from '../tokenizers/ModelPromptEstimatorError.js';
+import {
+  CLAUDE_FABLE_5_CALIBRATION,
+  CLAUDE_FABLE_5_ESTIMATOR_FAMILY,
+} from '../tokenizers/claude/claudeCalibrationAssets.js';
 import type { TiktokenModuleLoader } from '../tokenizers/o200kBaseCounter.js';
 import {
   activateIsolatedRuntimeContext,
@@ -113,6 +118,28 @@ describe('configureProviderRuntimeFactories', () => {
     ).toBeDefined();
   });
 
+  function buildClaudeEstimateRequest(
+    canonicalModel: string,
+    activeProvider = 'claudecode',
+  ): RuntimePromptEstimateRequest {
+    return {
+      activeProvider,
+      canonicalModel,
+      protocol: 'anthropic-messages',
+      wireMethod: 'messages/v1',
+      finalizedProjection: {
+        kind: 'llxprt-provider-prompt-v3',
+        protocol: 'anthropic-messages',
+        promptText: JSON.stringify({
+          system: 'You are helpful.',
+          messages: [{ role: 'user', content: 'Explain tokenization.' }],
+        }),
+      },
+      projectionRevision: 3,
+      legacyEstimate: () => Promise.resolve(1234),
+    };
+  }
+
   /**
    * The Claude 5 registrations are only useful if the composition root
    * actually installs them, so this asserts through the composed factory
@@ -144,44 +171,44 @@ describe('configureProviderRuntimeFactories', () => {
       'anthropic-claude-fable-5',
     );
 
-    const estimateRequest = (
-      canonicalModel: string,
-      activeProvider: string,
-    ) => ({
-      activeProvider,
-      canonicalModel,
-      protocol: 'anthropic-messages' as const,
-      wireMethod: 'messages/v1' as const,
-      finalizedProjection: {
-        kind: 'llxprt-provider-prompt-v3' as const,
-        protocol: 'anthropic-messages' as const,
-        promptText: JSON.stringify({
-          system: 'You are helpful.',
-          messages: [{ role: 'user', content: 'Explain tokenization.' }],
-        }),
-      },
-      projectionRevision: 3,
-      legacyEstimate: () => Promise.resolve(1234),
-    });
-
     const opus = await tokenizerFactory!.estimatePrompt(
-      estimateRequest('claude-opus-5', 'anthropic'),
+      buildClaudeEstimateRequest('claude-opus-5', 'anthropic'),
     );
     expect(opus.family).toBe('anthropic-claude-opus-5');
     expect(opus.method).toBe('calibrated');
     expect(opus.count).toBeGreaterThan(0);
 
     const fable = await tokenizerFactory!.estimatePrompt(
-      estimateRequest('claude-fable-5', 'anthropic'),
+      buildClaudeEstimateRequest('claude-fable-5', 'anthropic'),
     );
     expect(fable.family).toBe('anthropic-claude-fable-5');
     expect(fable.method).toBe('calibrated');
     expect(fable.estimatorVersion).not.toBe(opus.estimatorVersion);
 
     const proxied = await tokenizerFactory!.estimatePrompt(
-      estimateRequest('claude-opus-5', 'zai'),
+      buildClaudeEstimateRequest('claude-opus-5', 'zai'),
     );
     expect(proxied.family).toBe('legacy-unregistered');
+  });
+
+  /**
+   * Issue #3485: a point release such as claude-fable-5-1 must inherit its
+   * family calibration instead of throwing an unresolved-identity error on
+   * the request path. This exercises the runtime tokenizer factory directly.
+   */
+  it('estimates a Claude 5 point release with the family calibration', async () => {
+    const factory = createRuntimeTokenizerFactory();
+    const result = await factory.estimatePrompt(
+      buildClaudeEstimateRequest('claude-fable-5-1'),
+    );
+
+    expect(result.family).toBe(CLAUDE_FABLE_5_ESTIMATOR_FAMILY);
+    expect(result.family).not.toBe('legacy-unresolved-identity');
+    expect(result.method).toBe('calibrated');
+    expect(result.estimatorVersion).toBe(
+      CLAUDE_FABLE_5_CALIBRATION.estimatorVersion,
+    );
+    expect(result.count).toBeGreaterThan(0);
   });
 
   it('preserves an explicitly injected tokenizer factory as the authoritative runtime factory', async () => {

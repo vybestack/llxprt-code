@@ -86,7 +86,7 @@ interface OpenAIRegistrationContext {
   providerConfig: IProviderConfig;
   oauthManager: OAuthManager;
   config?: Config;
-  authOnlyEnabled?: boolean;
+  authOnlyEnabled: boolean;
   /**
    * The registry alias construction used for this manager. Stored so
    * {@link refreshAliasProviders} re-registers through the SAME registry

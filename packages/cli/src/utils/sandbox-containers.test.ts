@@ -249,11 +249,13 @@ describe('#1456 container network policy', () => {
       childProcess.execSync as Mock<typeof childProcess.execSync>,
     ).toHaveBeenCalledWith(
       'docker network inspect llxprt-code-sandbox || docker network create --internal llxprt-code-sandbox',
+      expect.objectContaining({ env: process.env }),
     );
     expect(
       childProcess.execSync as Mock<typeof childProcess.execSync>,
     ).toHaveBeenCalledWith(
       'docker network inspect llxprt-code-sandbox-proxy || docker network create llxprt-code-sandbox-proxy',
+      expect.objectContaining({ env: process.env }),
     );
     expect(warnSpy).not.toHaveBeenCalled();
   });
@@ -419,6 +421,65 @@ describe('#2946 container credential isolation', () => {
     expect(args).toContain('--volume');
     expect(args).toContain(`${tmpDir}:${tmpDir}:ro`);
   });
+
+  it('#3462 forwards VIRTUAL_ENV into the container without creating or binding .llxprt/sandbox.venv', () => {
+    const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue3462-ws-'));
+    tempDirs.push(workdir);
+    process.env.VIRTUAL_ENV = path.join(workdir, '.venv');
+
+    // Run from inside the workspace so a CWD-relative resolution bug (the
+    // old path.resolve(SETTINGS_DIRECTORY_NAME, 'sandbox.venv')) would
+    // create the directory under the real workspace root.
+    const originalCwd = process.cwd();
+    process.chdir(workdir);
+    const args: string[] = [];
+    try {
+      addContainerEnvVars(args, ENV_CONFIG, 'test-container', [], workdir);
+    } finally {
+      process.chdir(originalCwd);
+    }
+
+    // The in-container destination is unchanged (AC3)...
+    const envPairs: string[] = [];
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '--env' && i + 1 < args.length) {
+        envPairs.push(args[i + 1]);
+      }
+    }
+    expect(envPairs).toContain(
+      `VIRTUAL_ENV=${getContainerPath(path.join(workdir, '.venv'))}`,
+    );
+    // ...but no host-backed bind exists for it any more, and the
+    // version-controlled settings directory was never created (AC1/AC4).
+    const volumeOperands: string[] = [];
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '--volume' && i + 1 < args.length) {
+        volumeOperands.push(args[i + 1]);
+      }
+    }
+    expect(volumeOperands.some((spec) => spec.includes('sandbox.venv'))).toBe(
+      false,
+    );
+    expect(fs.existsSync(path.join(workdir, '.llxprt'))).toBe(false);
+  });
+
+  it('#3462 emits no VIRTUAL_ENV env when the venv is outside the workspace or unset', () => {
+    const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue3462-ws-'));
+    tempDirs.push(workdir);
+    process.env.VIRTUAL_ENV = path.join(os.tmpdir(), 'issue3462-outside');
+
+    const outsideArgs: string[] = [];
+    addContainerEnvVars(outsideArgs, ENV_CONFIG, 'test-container', [], workdir);
+    delete process.env.VIRTUAL_ENV;
+    const unsetArgs: string[] = [];
+    addContainerEnvVars(unsetArgs, ENV_CONFIG, 'test-container', [], workdir);
+    expect(
+      [outsideArgs, unsetArgs].every((args) =>
+        args.every((arg) => !arg.startsWith('VIRTUAL_ENV=')),
+      ),
+    ).toBe(true);
+    expect(fs.existsSync(path.join(workdir, '.llxprt'))).toBe(false);
+  });
 });
 
 const HARDENING_ENV_KEYS = [
@@ -570,6 +631,74 @@ describe('#2902 sandbox privilege hardening', () => {
     const userIdx = proxyArgs.indexOf('--user');
     expect(userIdx).toBeGreaterThanOrEqual(0);
     expect(proxyArgs[userIdx + 1]).toBe('501:20');
+  });
+});
+describe('#3501 sandbox proxy sidecar endpoint', () => {
+  let environmentSnapshot: NodeJS.ProcessEnv;
+
+  beforeEach(() => {
+    environmentSnapshot = { ...process.env };
+    vi.resetAllMocks();
+    for (const key of NETWORK_ENV_KEYS) delete process.env[key];
+  });
+
+  afterEach(() => {
+    process.env = environmentSnapshot;
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * Records the sidecar argv without launching anything: spawn throws
+   * immediately, so startProxyContainer rejects before any I/O while the
+   * call arguments remain observable.
+   */
+  async function captureProxySidecarArgv(): Promise<string[]> {
+    const spawnMock = childProcess.spawn as unknown as Mock<
+      typeof childProcess.spawn
+    >;
+    spawnMock.mockImplementation(() => {
+      throw new Error('proxy-argv-captured');
+    });
+    await expect(
+      startProxyContainer(CONFIG, 'echo proxy', '', 'test-image', '/workspace'),
+    ).rejects.toThrow('proxy-argv-captured');
+    const argv = spawnMock.mock.calls[0][1];
+    if (!Array.isArray(argv)) {
+      throw new Error('proxy sidecar was spawned without an argv');
+    }
+    return argv;
+  }
+
+  function publishedPortMapping(argv: readonly string[]): string {
+    const publishIndex = argv.indexOf('-p');
+    expect(publishIndex).toBeGreaterThanOrEqual(0);
+    return argv[publishIndex + 1];
+  }
+
+  it('publishes the documented default port when nothing configures a proxy', async () => {
+    expect(publishedPortMapping(await captureProxySidecarArgv())).toBe(
+      '8877:8877',
+    );
+  });
+
+  it('publishes the configured proxy port so the host readiness probe reaches the sidecar', async () => {
+    process.env.HTTPS_PROXY = 'http://localhost:49877';
+
+    expect(publishedPortMapping(await captureProxySidecarArgv())).toBe(
+      '49877:49877',
+    );
+  });
+
+  it('rejects a proxy endpoint with no resolvable port before starting the sidecar', async () => {
+    process.env.HTTPS_PROXY = 'localhost:8877';
+    const spawnMock = childProcess.spawn as unknown as Mock<
+      typeof childProcess.spawn
+    >;
+
+    await expect(
+      startProxyContainer(CONFIG, 'echo proxy', '', 'test-image', '/workspace'),
+    ).rejects.toBeInstanceOf(FatalSandboxError);
+    expect(spawnMock).not.toHaveBeenCalled();
   });
 });
 

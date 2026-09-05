@@ -249,7 +249,10 @@ export class LoadBalancingProvider implements IProvider {
     );
     let compressed: IContent[];
     try {
-      compressed = await this.compressionCallback(clonedContents);
+      compressed = await this.compressionCallback(clonedContents, {
+        estimatedTokens: result.tokens,
+        contextLimit,
+      });
     } catch (error) {
       throw new LoadBalancerCompressionCallbackError({
         profileName: this.config.profileName,

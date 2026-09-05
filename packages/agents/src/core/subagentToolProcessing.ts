@@ -41,11 +41,13 @@ import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import { toolFailureMarker } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import {
   SubagentTerminateMode,
+  type OutputConfig,
   type OutputObject,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { createSchedulerConfig } from './subagentRuntimeSetup.js';
 import { isToolNameRestricted } from './hookToolRestrictions.js';
+import { SCOPE_LOCAL_EMIT_TOOL_NAME } from './toolGovernance.js';
 
 // ---------------------------------------------------------------------------
 // Pure helpers
@@ -445,11 +447,53 @@ export function buildPartsFromCompletedCalls(
 
 export interface ProcessFunctionCallsContext {
   output: OutputObject;
+  outputConfig?: OutputConfig;
   subagentId: string;
   logger: DebugLogger;
   toolExecutorContext: ToolExecutionConfig;
   config: Config;
   messageBus?: MessageBus;
+}
+
+interface NonInteractiveToolExecutionResult {
+  readonly status: CompletedToolCall['status'];
+  readonly response: ToolCallResponseInfo;
+}
+
+function isSuccessfulTodoPause(
+  toolName: string,
+  result: NonInteractiveToolExecutionResult,
+): boolean {
+  return (
+    toolName.toLowerCase() === 'todo_pause' &&
+    result.status === 'success' &&
+    result.response.error === undefined &&
+    result.response.errorType === undefined
+  );
+}
+
+function getMissingRequiredOutputKeys(
+  ctx: ProcessFunctionCallsContext,
+): string[] {
+  const emittedOutputKeys = Object.keys(ctx.output.emitted_vars);
+  return Object.keys(ctx.outputConfig?.outputs ?? {}).filter(
+    (key) => !emittedOutputKeys.includes(key),
+  );
+}
+
+function terminateAfterSuccessfulTodoPause(
+  ctx: ProcessFunctionCallsContext,
+): void {
+  const missingOutputKeys = getMissingRequiredOutputKeys(ctx);
+  if (missingOutputKeys.length === 0) {
+    ctx.output.terminate_reason = SubagentTerminateMode.GOAL;
+    return;
+  }
+
+  ctx.output.terminate_reason = SubagentTerminateMode.ERROR;
+  ctx.output.final_message =
+    'Subagent paused via todo_pause before completing required outputs: ' +
+    `${missingOutputKeys.join(', ')}.`;
 }
 
 export async function processFunctionCalls(
@@ -488,15 +532,21 @@ export async function processFunctionCalls(
           `Subagent ${ctx.subagentId} executing tool '${requestInfo.name}' with args=${JSON.stringify(requestInfo.args)}`,
       );
 
-      const toolResponse = await executeNonInteractiveTool(
+      const executionResult = await executeNonInteractiveTool(
         functionCall,
         requestInfo,
         callId,
         abortController,
         ctx,
       );
+      const toolResponse = executionResult.response;
 
       logToolResult(functionCall, toolResponse, ctx);
+
+      if (isSuccessfulTodoPause(functionCall.name, executionResult)) {
+        terminateAfterSuccessfulTodoPause(ctx);
+        return [];
+      }
 
       if (isFatalToolError(toolResponse.errorType)) {
         const fatalMessage = buildToolUnavailableMessage(
@@ -574,31 +624,34 @@ async function executeNonInteractiveTool(
   callId: string,
   abortController: AbortController,
   ctx: ProcessFunctionCallsContext,
-): Promise<ToolCallResponseInfo> {
-  if (functionCall.name === 'self_emitvalue') {
+): Promise<NonInteractiveToolExecutionResult> {
+  if (functionCall.name === SCOPE_LOCAL_EMIT_TOOL_NAME) {
     const valName = String(requestInfo.args['emit_variable_name']);
     const valVal = String(requestInfo.args['emit_variable_value']);
     ctx.output.emitted_vars[valName] = valVal;
 
     const successMessage = `Emitted variable ${valName} successfully`;
     return {
-      callId,
-      responseParts: [
-        {
-          type: 'tool_response',
-          callId,
-          toolName: requestInfo.name,
-          result: {
-            emit_variable_name: valName,
-            emit_variable_value: valVal,
-            message: successMessage,
+      status: 'success',
+      response: {
+        callId,
+        responseParts: [
+          {
+            type: 'tool_response',
+            callId,
+            toolName: requestInfo.name,
+            result: {
+              emit_variable_name: valName,
+              emit_variable_value: valVal,
+              message: successMessage,
+            },
           },
-        },
-      ],
-      resultDisplay: successMessage,
-      error: undefined,
-      errorType: undefined,
-      agentId: requestInfo.agentId,
+        ],
+        resultDisplay: successMessage,
+        error: undefined,
+        errorType: undefined,
+        agentId: requestInfo.agentId,
+      },
     };
   }
 
@@ -613,7 +666,7 @@ async function executeNonInteractiveTool(
     abortController.signal,
     { messageBus: ctx.messageBus },
   );
-  return completed.response;
+  return { status: completed.status, response: completed.response };
 }
 
 function logToolResult(

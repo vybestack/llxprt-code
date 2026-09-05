@@ -154,6 +154,21 @@ describe('scripts/version.ts', () => {
     expect(versionTs).toContain('isVersionedReleasePackage');
     expect(versionTs).toContain('--workspace');
   });
+
+  it('keeps the default lockfile install timeout for existing runNpm callers', () => {
+    expect(versionTs).toContain('timeoutMs ?? 120_000');
+  });
+
+  it('raises the timeout and allows a single ETIMEDOUT retry for the lockfile-only install', () => {
+    expect(versionTs).toContain("runNpm(['install', '--package-lock-only'], {");
+    expect(versionTs).toContain('timeoutMs: 600_000');
+    expect(versionTs).toContain('retries: 1');
+    expect(versionTs).toContain(
+      `(error as { code?: unknown }).code === 'ETIMEDOUT'`,
+    );
+    expect(versionTs).toContain('(attempt ');
+    expect(versionTs).toContain('retrying.');
+  });
 });
 
 describe('.github/workflows/release.yml', () => {

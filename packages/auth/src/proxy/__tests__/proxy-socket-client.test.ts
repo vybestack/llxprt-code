@@ -560,6 +560,10 @@ describe('ProxySocketClient', () => {
    * @scenario Request times out after REQUEST_TIMEOUT_MS
    */
   it('rejects request after 30s timeout', async () => {
+    let markRequestReceived: () => void = () => {};
+    const requestReceived = new Promise<void>((resolve) => {
+      markRequestReceived = resolve;
+    });
     server = net.createServer((socket) => {
       trackServerSockets(initialized(server, 'server'));
       const decoder = new FrameDecoder();
@@ -569,6 +573,8 @@ describe('ProxySocketClient', () => {
           const msg = frame;
           if (msg.op === 'handshake') {
             socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+          } else {
+            markRequestReceived();
           }
           // Deliberately do NOT respond to other requests (simulates timeout)
         }
@@ -585,6 +591,7 @@ describe('ProxySocketClient', () => {
     vi.useFakeTimers();
 
     const requestPromise = client.request('slow-op', {});
+    await requestReceived;
 
     // Advance past the request timeout
     vi.advanceTimersByTime(REQUEST_TIMEOUT_MS + 100);

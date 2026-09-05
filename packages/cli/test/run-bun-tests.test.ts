@@ -269,6 +269,14 @@ describe('toPathArgument', () => {
   it('leaves an absolute path alone', () => {
     expect(toPathArgument('/tmp/a.test.ts')).toBe('/tmp/a.test.ts');
   });
+
+  it('leaves an absolute Windows path alone', () => {
+    // On a Windows host isAbsolute accepts drive-letter paths; a ./ splice
+    // yields ./D:\..., which bun resolves relative to cwd and fails to find.
+    expect(toPathArgument('D:\\work\\src\\a.test.ts')).toBe(
+      'D:\\work\\src\\a.test.ts',
+    );
+  });
 });
 
 describe('parseCaseCounts', () => {

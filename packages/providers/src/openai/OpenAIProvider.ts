@@ -45,6 +45,7 @@ import { ToolCallPipeline } from './ToolCallPipeline.js';
 
 import { isLocalEndpoint } from '../utils/localEndpoint.js';
 import { type DumpMode } from '../utils/dumpContext.js';
+import { createCredentialResolutionError } from '../utils/credentialResolutionError.js';
 
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
@@ -68,6 +69,7 @@ import {
 } from './OpenAIPromptEnvelopeStore.js';
 import {
   prepareOpenAIChatProjection,
+  readOpenAIMediaSupport,
   registerOpenAIChatRequestCleanup,
   withProjectionModel,
 } from './OpenAIPromptProjectionPreparation.js';
@@ -82,9 +84,10 @@ import {
 import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import { resolveKimiProviderFileRequestPolicy } from '../kimi/kimiProviderFilePolicy.js';
 import { requireRuntimeEntry } from '../runtime/runtimeRegistry.js';
+import { resolveRawTokenDeltaNotifier } from '../logging/attemptLifecycle.js';
 
 import { buildContinuationMessages } from './OpenAIRequestBuilder.js';
-import { extractSanitizedChunkText } from './OpenAIStreamChunkText.js';
+import { extractContinuationChunkText } from './OpenAIStreamChunkText.js';
 import {
   createHttpAgents,
   resolveRuntimeKey,
@@ -113,6 +116,11 @@ interface DispatchResponseOptions {
   baseURL: string | undefined;
   logger: DebugLogger;
   reasoningFieldName: string | undefined;
+  /**
+   * Raw token-delta timing notifier resolved from request metadata (issue
+   * #3473). Undefined when no attempt-lifecycle observer is attached.
+   */
+  onRawTokenDelta: (() => void) | undefined;
 }
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
@@ -120,7 +128,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   private readonly toolCallPipeline = new ToolCallPipeline();
   private readonly preparedPromptEnvelopes = new OpenAIPromptEnvelopeStore();
 
-  private getLogger(): DebugLogger {
+  protected getLogger(): DebugLogger {
     return new DebugLogger('llxprt:provider:openai');
   }
 
@@ -231,18 +239,30 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   protected async getClient(
     options: NormalizedGenerateChatOptions,
   ): Promise<OpenAI> {
-    const authToken =
-      (await resolveRuntimeAuthToken(options.resolved.authToken)) ?? '';
     const baseURL = options.resolved.baseURL ?? this.baseProviderConfig.baseURL;
-
     const requiresAuth = options.settings.getProviderSettings(this.name)[
       'requires-auth'
     ];
     const authExempt = requiresAuth === false || isLocalEndpoint(baseURL);
-    if (!authToken && !authExempt) {
-      throw new Error(
-        `ProviderCacheError("Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003).")`,
+    let authToken = '';
+    try {
+      authToken =
+        (await resolveRuntimeAuthToken(options.resolved.authToken)) ?? '';
+    } catch (cause) {
+      const failure = createCredentialResolutionError(options, this.name, {
+        kind: 'credential-source-failed',
+        cause,
+      });
+      if (!authExempt) {
+        throw failure;
+      }
+      this.getLogger().debug(
+        () =>
+          `Continuing without credentials for auth-exempt endpoint after authentication resolution failed: ${failure.message}`,
       );
+    }
+    if (!authToken && !authExempt) {
+      throw createCredentialResolutionError(options, this.name);
     }
 
     const agentSettings = options.invocation.ephemerals;
@@ -602,6 +622,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         logger: options.logger,
         getBaseURL: () => this.getBaseURL(),
         reasoningFieldName: options.reasoningFieldName,
+        onRawTokenDelta: options.onRawTokenDelta,
       };
       yield* processStreamingResponse(
         options.response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
@@ -645,7 +666,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const requestPolicy = resolveKimiProviderFileRequestPolicy(
       options,
       this.name,
-      this.readMediaSupport(),
+      readOpenAIMediaSupport(this.providerConfig?.providerSpecific),
       this.getMediaTransportCapabilities(),
       client,
     );
@@ -700,32 +721,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     return { ...options, contents: result.contents };
   }
 
-  /**
-   * Read the mediaSupport block threaded onto providerConfig.providerSpecific
-   * by the alias factory. Returns undefined for non-Kimi or when not declared.
-   */
-  private readMediaSupport():
-    | { inlineImages?: boolean; fileUpload?: boolean; videoSupport?: boolean }
-    | undefined {
-    const specific = this.providerConfig?.providerSpecific as
-      | { mediaSupport?: unknown }
-      | undefined;
-    const raw = specific?.mediaSupport;
-    if (
-      raw === null ||
-      raw === undefined ||
-      typeof raw !== 'object' ||
-      Array.isArray(raw)
-    ) {
-      return undefined;
-    }
-    return raw as {
-      inlineImages?: boolean;
-      fileUpload?: boolean;
-      videoSupport?: boolean;
-    };
-  }
-
   private async *generateChatCompletionImpl(
     options: NormalizedGenerateChatOptions,
     toolFormatter: ToolFormatter,
@@ -734,8 +729,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     mediaRequest: ResolvedMediaRequest,
     preparedRequestContext?: Awaited<ReturnType<typeof prepareRequest>>,
   ): AsyncGenerator<IContent, void, unknown> {
-    const { metadata } = options;
-    const abortSignal = metadata.abortSignal as AbortSignal | undefined;
+    const abortSignal = options.metadata.abortSignal as AbortSignal | undefined;
     const ephemeralSettings = (
       options.invocation as { ephemerals?: Readonly<Record<string, unknown>> }
     ).ephemerals;
@@ -816,6 +810,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       baseURL,
       logger,
       reasoningFieldName,
+      onRawTokenDelta: resolveRawTokenDeltaNotifier(options.metadata),
     });
   }
 
@@ -845,7 +840,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         ),
       prepareChat: () =>
         prepareOpenAIChatProjection(normalized, {
-          readMediaSupport: () => this.readMediaSupport(),
+          readMediaSupport: () =>
+            readOpenAIMediaSupport(this.providerConfig?.providerSpecific),
           getClient: (clientOptions) => this.getClient(clientOptions),
           resolveAuthToken: (authOptions) =>
             this.resolveProjectionAuthToken(authOptions),
@@ -920,6 +916,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     logger: DebugLogger,
     mergedHeaders: Record<string, string> | undefined,
     toolFormat: ToolFormat,
+    reasoningFieldName?: string,
+    onRawTokenDelta?: () => void,
   ): AsyncGenerator<IContent, void, unknown> {
     const continuationMessages = buildContinuationMessages(
       toolCalls,
@@ -951,15 +949,25 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           break;
         }
 
-        const sanitized = extractSanitizedChunkText(chunk);
-        if (sanitized !== '') {
-          accumulatedText += sanitized;
+        // Continuation raw deltas are token-bearing output of the same
+        // attempt (issue #3473): each token-bearing delta (content,
+        // reasoning, or tool-call fragments) fires the raw-timing signal
+        // exactly once so the attempt window spans the whole continuation
+        // decode; only content changes visible output.
+        const sanitizedText = extractContinuationChunkText(
+          chunk,
+          logger,
+          reasoningFieldName,
+          onRawTokenDelta,
+        );
+        if (sanitizedText !== '') {
+          accumulatedText += sanitizedText;
           yield {
             speaker: 'ai',
             blocks: [
               {
                 type: 'text',
-                text: sanitized,
+                text: sanitizedText,
               } as TextBlock,
             ],
           } as IContent;

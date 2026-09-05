@@ -221,3 +221,31 @@ exports[`<StatsDisplay /> sections performance metrics display shows throughput,
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
+
+exports[`<StatsDisplay /> sections performance metrics display hides Output Gen Rate row when outputGenerationTps is 0 (AC-8 boundary guard) 1`] = `
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  Session Stats                                                                                   │
+│                                                                                                  │
+│  Session API                                                                                     │
+│  Total Requests:             2                                                                   │
+│  Total Errors:               0                                                                   │
+│  Avg Latency:                1.3s                                                                │
+│                                                                                                  │
+│  Performance                                                                                     │
+│  Wall Time:                  1s                                                                  │
+│    » API Time:               0s (0.0%)                                                           │
+│    » Tool Time:              0s (0.0%)                                                           │
+│    » Throughput (TPM):       1.23k TPM (session weighted)                                        │
+│    » TTFT (last):            187ms                                                               │
+│                                                                                                  │
+│                                                                                                  │
+│  Model Usage                 Reqs   Input Tokens   Cache Reads  Output Tokens                    │
+│  ────────────────────────────────────────────────────────────────────────────                    │
+│  gemini-2.5-pro                 2            600           300            400                    │
+│    Latency: 1.3s avg / 2.5s total                                                                │
+│                                                                                                  │
+│  Savings Highlight: 300 (33.3%) of input tokens were served from the cache, reducing costs.      │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+`;

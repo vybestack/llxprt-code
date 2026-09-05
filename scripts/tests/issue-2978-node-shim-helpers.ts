@@ -158,12 +158,12 @@ export interface RunResult {
 const captureChildOutput = [
   'const { closeSync, openSync } = require("node:fs");',
   'const { spawnSync } = require("node:child_process");',
-  'const [stdoutPath, stderrPath, command, ...args] = process.argv.slice(1);',
+  'const [stdoutPath, stderrPath, shimPath, ...args] = process.argv.slice(1);',
   'const stdoutFd = openSync(stdoutPath, "w");',
   'const stderrFd = openSync(stderrPath, "w");',
   'let status = 1;',
   'try {',
-  '  status = spawnSync(command, args, { stdio: ["ignore", stdoutFd, stderrFd] }).status ?? 1;',
+  '  status = spawnSync(process.execPath, [shimPath, ...args], { stdio: ["ignore", stdoutFd, stderrFd] }).status ?? 1;',
   '} finally {',
   '  closeSync(stdoutFd);',
   '  closeSync(stderrFd);',
@@ -188,6 +188,10 @@ export function runShim(
   const stderrPath = path.join(layout.root, 'shim-stderr.log');
   writeFileSync(stdoutPath, '');
   writeFileSync(stderrPath, '');
+  // Outer process stays `node`: the shim's production contract is
+  // `node <shim>` (its shebang is `#!/usr/bin/env node`), and under
+  // `bun test` process.execPath would be bun, silently changing what is
+  // under test. Inside the wrapper, process.execPath is this same node.
   const result = spawnSync(
     'node',
     ['-e', captureChildOutput, stdoutPath, stderrPath, layout.shim, ...args],

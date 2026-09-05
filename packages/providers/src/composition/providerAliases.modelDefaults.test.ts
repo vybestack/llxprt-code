@@ -27,6 +27,7 @@ import {
   loadProviderAliasEntries,
   type ModelDefaultRule,
 } from './providerAliases.js';
+import { loadWithTempConfig } from './providerAliases.test-helpers.js';
 
 function expectNoImageResizeDefaults(
   defaults: Readonly<Record<string, unknown>>,
@@ -53,34 +54,6 @@ function configuredModelDefaultRules(
   entry: ReturnType<typeof loadProviderAliasEntries>[number] | undefined,
 ): ModelDefaultRule[] {
   return entry?.config.modelDefaults ?? [];
-}
-
-/**
- * Helper to load entries from a temp user alias dir via Storage mock.
- * Shared across multiple test suites to avoid sonarjs/no-identical-functions.
- */
-async function loadWithTempConfig(
-  tmpDir: string,
-  filename: string,
-  config: Record<string, unknown>,
-) {
-  const { Storage } = await import('@vybestack/llxprt-code-settings');
-  const fakeLlxprtDir = path.join(tmpDir, '.llxprt');
-  const fakeProvidersDir = path.join(fakeLlxprtDir, 'providers');
-  fs.mkdirSync(fakeProvidersDir, { recursive: true });
-
-  const configPath = path.join(fakeProvidersDir, filename);
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-
-  vi.spyOn(Storage, 'getGlobalDataDir').mockReturnValue(fakeLlxprtDir);
-
-  try {
-    return loadProviderAliasEntries();
-  } finally {
-    (
-      Storage.getGlobalDataDir as Mock<typeof Storage.getGlobalDataDir>
-    ).mockRestore();
-  }
 }
 
 describe('providerAliases modelDefaults parsing (Phase 01)', () => {
@@ -659,6 +632,52 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
     expect(defaults['context-limit']).toBe(1000000);
   });
 
+  it('claude-fable-5-1 matches the broad Claude rule (reasoning defaults) @issue:3531', () => {
+    const entry = getAnthropicEntry();
+    const defaults = computeMatchedDefaults(
+      'claude-fable-5-1',
+      entry.config.modelDefaults!,
+    );
+    expect(defaults['reasoning.enabled']).toBe(true);
+    expect(defaults['reasoning.adaptiveThinking']).toBe(true);
+    expect(defaults['reasoning.includeInContext']).toBe(true);
+  });
+
+  it('rules merge in order — claude-fable-5-1 gets broad + 1M-context settings @issue:3531', () => {
+    const entry = getAnthropicEntry();
+    const defaults = computeMatchedDefaults(
+      'claude-fable-5-1',
+      entry.config.modelDefaults!,
+    );
+    // From the broad "claude-(opus|sonnet|haiku|fable)" rule
+    expect(defaults['reasoning.enabled']).toBe(true);
+    expect(defaults['reasoning.adaptiveThinking']).toBe(true);
+    expect(defaults['reasoning.includeInContext']).toBe(true);
+    // From the 1M-context rule, which names fable-5-1 explicitly (merged on
+    // top)
+    expect(defaults['reasoning.effort']).toBe('high');
+    expect(defaults['context-limit']).toBe(1000000);
+    expect(defaults['maxOutputTokens']).toBe(128000);
+  });
+
+  it('claudecode rules merge in order — claude-fable-5-1 gets broad + 1M-context settings @issue:3531', () => {
+    const entry = loadProviderAliasEntries().find(
+      (candidate) =>
+        candidate.alias === 'claudecode' && candidate.source === 'builtin',
+    );
+    expect(entry).toBeDefined();
+    const defaults = computeMatchedDefaults(
+      'claude-fable-5-1',
+      entry?.config.modelDefaults ?? [],
+    );
+    expect(defaults['reasoning.enabled']).toBe(true);
+    expect(defaults['reasoning.adaptiveThinking']).toBe(true);
+    expect(defaults['reasoning.includeInContext']).toBe(true);
+    expect(defaults['reasoning.effort']).toBe('high');
+    expect(defaults['context-limit']).toBe(1000000);
+    expect(defaults['maxOutputTokens']).toBe(128000);
+  });
+
   it('anthropic applies image-resize limits to Opus and Sonnet families only', () => {
     const entry = findBuiltinAliasEntry('anthropic');
     expect(entry).toBeDefined();
@@ -851,74 +870,5 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
         Storage.getGlobalDataDir as Mock<typeof Storage.getGlobalDataDir>
       ).mockRestore();
     }
-  });
-});
-
-describe('providerAliases sandbox field validation', () => {
-  let tmpDir: string;
-  let warnSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alias-sandbox-test-'));
-    warnSpy = vi
-      .spyOn(DebugLogger.prototype, 'warn')
-      .mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    warnSpy.mockRestore();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  it('preserves valid sandbox-base-url string', async () => {
-    const entries = await loadWithTempConfig(tmpDir, 'sandbox-valid.config', {
-      name: 'sandbox-valid',
-      baseProvider: 'openai',
-      'sandbox-base-url': 'http://host.docker.internal:1234',
-    });
-    const entry = entries.find((e) => e.alias === 'sandbox-valid');
-    expect(entry).toBeDefined();
-    expect(entry?.config['sandbox-base-url']).toBe(
-      'http://host.docker.internal:1234',
-    );
-  });
-
-  it('drops non-string sandbox-base-url and warns', async () => {
-    const entries = await loadWithTempConfig(tmpDir, 'sandbox-bad-url.config', {
-      name: 'sandbox-bad-url',
-      baseProvider: 'openai',
-      'sandbox-base-url': 12345,
-    });
-    const entry = entries.find((e) => e.alias === 'sandbox-bad-url');
-    expect(entry).toBeDefined();
-    expect(entry?.config['sandbox-base-url']).toBeUndefined();
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('non-string sandbox-base-url'),
-    );
-  });
-
-  it('preserves valid requires-auth boolean', async () => {
-    const entries = await loadWithTempConfig(tmpDir, 'auth-valid.config', {
-      name: 'auth-valid',
-      baseProvider: 'openai',
-      'requires-auth': false,
-    });
-    const entry = entries.find((e) => e.alias === 'auth-valid');
-    expect(entry).toBeDefined();
-    expect(entry?.config['requires-auth']).toBe(false);
-  });
-
-  it('drops non-boolean requires-auth and warns', async () => {
-    const entries = await loadWithTempConfig(tmpDir, 'auth-bad.config', {
-      name: 'auth-bad',
-      baseProvider: 'openai',
-      'requires-auth': 'yes',
-    });
-    const entry = entries.find((e) => e.alias === 'auth-bad');
-    expect(entry).toBeDefined();
-    expect(entry?.config['requires-auth']).toBeUndefined();
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('non-boolean requires-auth'),
-    );
   });
 });

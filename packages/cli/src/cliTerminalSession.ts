@@ -20,6 +20,7 @@ import { setupTerminalAndTheme } from './utils/terminalTheme.js';
 import { drainStdinBuffer } from './ui/utils/terminalContract.js';
 import { StdinRawModeManager } from './utils/stdinSafety.js';
 import { registerCleanup, runExitCleanup } from './utils/cleanup.js';
+import { registerShellJobShutdownNotice } from './utils/shellJobShutdownNotice.js';
 import { appEvents, AppEvent } from './utils/events.js';
 import type { LoadedSettings } from './config/settings.js';
 import type { ParsedCliArgs } from './cliBootstrap.js';
@@ -174,13 +175,16 @@ function patchConsoleForRun(config: Config): void {
 /**
  * Prepare the interactive terminal session: enable raw mode when needed, set up
  * the terminal title/theme, register the session-summary writer, and patch the
- * console for the run.
+ * console for the run. Registering the shutdown notice here — once, before any
+ * signal handler or UI path can exit — covers SIGTERM, SIGINT, and the quit
+ * path uniformly via the process `exit` event.
  */
 export async function prepareTerminalSession(
   config: Config,
   settings: LoadedSettings,
   argv: ParsedCliArgs,
 ): Promise<void> {
+  registerShellJobShutdownNotice(config);
   const wasRaw = process.stdin.isRaw;
   const stdinManager = new StdinRawModeManager({
     debug: config.getDebugMode(),

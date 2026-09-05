@@ -518,7 +518,7 @@ jobs:
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         env:
           SANDBOX_SMOKE_IMAGE: ${{ env.REGISTRY }}/${{ env.SANDBOX_IMAGE_NAME }}:${{ steps.version.outputs.RELEASE_VERSION }}
-        run: docker run --rm "$SANDBOX_SMOKE_IMAGE" llxprt --version
+        run: bun scripts/sandbox-image-probe.ts --engine docker --image "$SANDBOX_SMOKE_IMAGE" --platform linux/amd64
 
       # Second candidate for the other published platform; loading it under
       # the same local tags replaces the amd64 image locally, which is fine
@@ -540,7 +540,7 @@ jobs:
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         env:
           SANDBOX_SMOKE_IMAGE: ${{ env.REGISTRY }}/${{ env.SANDBOX_IMAGE_NAME }}:${{ steps.version.outputs.RELEASE_VERSION }}
-        run: docker run --rm --platform linux/arm64 "$SANDBOX_SMOKE_IMAGE" llxprt --version
+        run: bun scripts/sandbox-image-probe.ts --engine docker --image "$SANDBOX_SMOKE_IMAGE" --platform linux/arm64
 
       - name: Build and push sandbox image
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}

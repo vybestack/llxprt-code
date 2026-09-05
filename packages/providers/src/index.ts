@@ -150,6 +150,9 @@ export { PROVIDER_CONFIG_KEYS } from './providerConfigKeys.js';
 // Callers (e.g. the agents layer) thread their logical request id through
 // options metadata so provider-attempt records join caller-side registries.
 export { LOGICAL_REQUEST_ID_KEY } from './logging/attemptLifecycle.js';
+// Callers thread a raw token-delta sink so caller-side timing consumers
+// observe raw generation deltas.
+export { RAW_TOKEN_DELTA_SINK_KEY } from './logging/attemptLifecycle.js';
 
 // --- Provider utilities ---
 export {

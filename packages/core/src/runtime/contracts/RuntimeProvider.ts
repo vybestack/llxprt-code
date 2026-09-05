@@ -37,6 +37,12 @@ export interface RuntimeToolset {
   functionDeclarations: RuntimeToolDeclaration[];
 }
 
+/** Guard facts a provider supplies when its context guard invokes the compression callback (issue #3499). */
+export interface RuntimeCompressionGuardInfo {
+  readonly estimatedTokens: number;
+  readonly contextLimit: number;
+}
+
 /**
  * Core-owned structural provider contract.
  *
@@ -67,7 +73,12 @@ export interface RuntimeProvider {
   clearAuth?(): void;
 
   setCompressionCallback?(
-    callback: ((contents: IContent[]) => Promise<IContent[]>) | null,
+    callback:
+      | ((
+          contents: IContent[],
+          guard?: RuntimeCompressionGuardInfo,
+        ) => Promise<IContent[]>)
+      | null,
   ): void;
 
   generateChatCompletion(

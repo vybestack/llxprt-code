@@ -298,6 +298,7 @@ describe('OpenAIResponsesProvider stateful conversations @issue:207', () => {
       undefined,
       {},
       NULL_OAUTH_MANAGER,
+      false,
     );
     const settings = new SettingsService();
     const contents: IContent[] = [

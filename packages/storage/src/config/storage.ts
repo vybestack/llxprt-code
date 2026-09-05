@@ -403,7 +403,20 @@ export class Storage {
   }
 
   private getFilePathHash(filePath: string): string {
-    return crypto.createHash('sha256').update(filePath).digest('hex');
+    return Storage.getProjectHistoryKey(filePath);
+  }
+
+  /**
+   * The per-project key under `history/` for a project root path. Both the
+   * host CLI and the in-container CLI derive their checkpoint history path
+   * from this hash, and the sandbox launcher derives its persistent
+   * checkpoint-store volume name from it, so the hash has one authority
+   * here (#3464). The input must already be the absolute project path the
+   * CLI resolves (container workspaces bind at path parity, so host and
+   * container agree on the string).
+   */
+  static getProjectHistoryKey(projectRoot: string): string {
+    return crypto.createHash('sha256').update(projectRoot).digest('hex');
   }
 
   getHistoryDir(): string {

@@ -61,6 +61,7 @@ function configuredStaticModelIds(entry: ProviderAliasEntry): string[] {
 // drift (retired models, geometry changes) is caught here.
 const EXPECTED_CLAUDECODE_CATALOG = [
   { id: 'claude-opus-5', contextWindow: 1000000, maxOutputTokens: 128000 },
+  { id: 'claude-fable-5-1', contextWindow: 1000000, maxOutputTokens: 128000 },
   { id: 'claude-fable-5', contextWindow: 1000000, maxOutputTokens: 128000 },
   { id: 'claude-opus-4-8', contextWindow: 1000000, maxOutputTokens: 128000 },
   { id: 'claude-opus-4-7', contextWindow: 1000000, maxOutputTokens: 128000 },
@@ -179,6 +180,23 @@ describe('claudecode alias static models (@issue:2274)', () => {
 
     expect(ids).toContain('claude-sonnet-4-20250514');
     expect(ids).toContain('claude-fable-5');
+  });
+
+  it('lists claude-fable-5-1 grouped directly above claude-fable-5 (A3) @issue:3531', async () => {
+    const entry = findAliasEntry('claudecode');
+    const provider = createAnthropicAliasProvider(
+      entry,
+      STUB_OAUTH_MANAGER,
+      true,
+    );
+
+    const models = await provider.getModels();
+    const ids = models.map((m) => m.id);
+
+    expect(ids).toContain('claude-fable-5-1');
+    expect(ids.indexOf('claude-fable-5-1')).toBeLessThan(
+      ids.indexOf('claude-fable-5'),
+    );
   });
 
   it('does NOT include retired claude-opus-4-1 or claude-opus-4-1-20250805 (A3)', async () => {

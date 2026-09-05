@@ -16,6 +16,32 @@ import {
   resolveRequestMedia,
 } from '../utils/request-media-resolution.js';
 
+export interface OpenAIMediaSupport {
+  readonly inlineImages?: boolean;
+  readonly fileUpload?: boolean;
+  readonly videoSupport?: boolean;
+}
+
+export function readOpenAIMediaSupport(
+  providerSpecific: unknown,
+): OpenAIMediaSupport | undefined {
+  if (typeof providerSpecific !== 'object' || providerSpecific === null) {
+    return undefined;
+  }
+  if (
+    Array.isArray(providerSpecific) ||
+    !('mediaSupport' in providerSpecific)
+  ) {
+    return undefined;
+  }
+  const mediaSupport: unknown = providerSpecific.mediaSupport;
+  if (typeof mediaSupport !== 'object' || mediaSupport === null) {
+    return undefined;
+  }
+  if (Array.isArray(mediaSupport)) return undefined;
+  return mediaSupport as OpenAIMediaSupport;
+}
+
 /**
  * Ensure projection options carry an explicit model before normalization.
  *

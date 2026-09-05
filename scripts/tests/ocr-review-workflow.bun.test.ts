@@ -770,6 +770,29 @@ describe('.github/workflows/ocr-review.yml', () => {
       'INLINE_MARKER',
     ]);
   });
+
+  it('routes every batch createReview call through reviewCommentPayload', () => {
+    // Issue #3544: the batched inline review post must transmit only GitHub-accepted
+    // fields. `reviewCommentPayload` strips the internal `_severity` sort key at
+    // the boundary; a future createReview call site that rebuilds its comments
+    // without it would reintroduce the 422 the batch call first hit. Count every
+    // call site and pin each one to the allow-list helper so none can be added
+    // unguarded, matching the style of the mark_infrastructure_failure and
+    // mark_policy_failure occurrence assertions above.
+    const callSites = [
+      ...postScript.matchAll(/await\s+github\.rest\.pulls\.createReview\(\{/g),
+    ];
+
+    expect(callSites.length).toBeGreaterThan(0);
+    for (const match of callSites) {
+      const callText = postScript.slice(match.index, match.index + 400);
+      const commentsArgument = /comments:\s*([^,}]+)/.exec(callText)?.[1] ?? '';
+      expect(
+        commentsArgument,
+        `every github.rest.pulls.createReview call in the "Post OCR results" step must pass its comments through reviewCommentPayload so the internal _severity key is stripped at the transmission boundary; the call starting at character ${match.index} passes comments via: ${commentsArgument.trim()}`,
+      ).toContain('reviewCommentPayload');
+    }
+  });
 });
 
 describe('.github/workflows/ocr-review.yml — no-reviewable-files short-circuit (issue #2824)', () => {

@@ -94,6 +94,7 @@ describe('provider media transport capabilities', () => {
       'test-key',
       undefined,
       {},
+      false,
     );
 
     expect(provider.getMediaTransportCapabilities()).toStrictEqual(
@@ -117,6 +118,7 @@ describe('provider media transport capabilities', () => {
       'test-key',
       undefined,
       {},
+      false,
     );
 
     expect(provider.getMediaTransportCapabilities()).toStrictEqual(

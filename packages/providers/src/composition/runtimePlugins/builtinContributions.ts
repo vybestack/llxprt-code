@@ -15,9 +15,7 @@ import type { RuntimeProviderContribution } from './types.js';
 
 /**
  * Built-in provider contributions that the CLI's provider composition resolves aliases
- * against. Each provider id delegates to the existing alias factory with no behavior
- * change. The missing-base-url null return on the OpenAI-family factories is a
- * documented existing behavior (plan section 4) and is preserved exactly.
+ * against. Each provider id delegates to the existing alias factory.
  */
 export function createBuiltinProviderContributions(): RuntimeProviderContribution[] {
   return [
@@ -29,6 +27,7 @@ export function createBuiltinProviderContributions(): RuntimeProviderContributio
           context.openaiApiKey,
           context.openaiBaseUrl,
           context.openaiProviderConfig,
+          context.authOnlyEnabled,
         ),
     },
     {
@@ -40,6 +39,7 @@ export function createBuiltinProviderContributions(): RuntimeProviderContributio
           context.openaiBaseUrl,
           context.openaiProviderConfig,
           context.oauthManager,
+          context.authOnlyEnabled,
         ),
     },
     {
@@ -50,6 +50,7 @@ export function createBuiltinProviderContributions(): RuntimeProviderContributio
           context.openaiApiKey,
           context.openaiBaseUrl,
           context.openaiProviderConfig,
+          context.authOnlyEnabled,
         ),
     },
     {
@@ -60,12 +61,17 @@ export function createBuiltinProviderContributions(): RuntimeProviderContributio
           context.openaiApiKey,
           context.openaiBaseUrl,
           context.openaiProviderConfig,
+          context.authOnlyEnabled,
         ),
     },
     {
       providerId: 'gemini',
       createProvider: (entry, context) =>
-        createGeminiAliasProvider(entry, context.config),
+        createGeminiAliasProvider(
+          entry,
+          context.config,
+          context.authOnlyEnabled,
+        ),
     },
     {
       providerId: 'anthropic',

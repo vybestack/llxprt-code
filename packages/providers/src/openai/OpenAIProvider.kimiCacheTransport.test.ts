@@ -74,6 +74,7 @@ describe('OpenAIProvider', () => {
       'test-key',
       undefined,
       {},
+      false,
     );
     return provider;
   }

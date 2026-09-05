@@ -31,6 +31,7 @@
     "index.ts",
     "src",
     "scripts/install-native-launchers.cjs",
+    "scripts/verify-sandbox-runtime.ts",
     "README.md",
     "LICENSE",
     "!**/*.test.ts",

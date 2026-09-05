@@ -18,11 +18,7 @@ import type {
   CredentialProxyBridgeResult,
   SshAgentResult,
 } from './sandbox-ssh.js';
-import {
-  createHostOnlyCapabilityEnvFile,
-  runCapabilityCleanupStep,
-} from './sandbox-capability.js';
-import { SETTINGS_DIRECTORY_NAME } from '../config/settings.js';
+import { containerMountSources } from './sandbox-capability.js';
 import {
   getContainerPath,
   mountGitConfigFiles,
@@ -35,18 +31,24 @@ import {
   sandboxPorts,
   resolveDebugPort,
 } from './sandbox-env.js';
-import {
-  setupCredentialProxyDockerMacOS,
-  SSH_TUNNEL_POLL_TIMEOUT_MS,
-} from './sandbox-ssh.js';
-import { setupCredentialProxyPodmanMacOS } from './sandbox-podman.js';
-import {
-  createAndStartProxy,
-  stopProxy,
-  getProxySocketPath,
-  getProxyCapabilityToken,
-} from '@vybestack/llxprt-code-providers/auth.js';
+import { canonicalizeExistingPath } from './sandbox-path-canonicalization.js';
+import { addSandboxOwnershipLabels } from './sandbox-owner-labels.js';
+import { stopProxy } from '@vybestack/llxprt-code-providers/auth.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
+import type { DependencyVolumeLifecycle } from './sandbox-node-modules.js';
+import type { SandboxLaunchLifecycle } from './sandbox-lifecycle.js';
+import {
+  setupCredentialProxy,
+  type CredentialProxyBridgeCleanup,
+} from './sandbox-credential-proxy.js';
+import {
+  awaitSandboxProxyReady,
+  resolveSandboxProxyPort,
+  resolveSandboxProxyUrl,
+} from './sandbox-network-proxy.js';
+
+export { containerMountSources, setupCredentialProxy };
+export type { CredentialProxyBridgeCleanup };
 
 const execAsync = promisify(exec);
 
@@ -61,10 +63,12 @@ export interface ContainerSandboxPrepared {
   proxyCommand: string | undefined;
   userFlag: string;
   image: string;
+  containerName: string;
   workdir: string;
   portForwardingResult: PortForwardingResult | undefined;
   credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
   credentialProxyBridgeCleanup: CredentialProxyBridgeCleanup | undefined;
+  dependencyVolumeLifecycle: DependencyVolumeLifecycle;
   reservedTunnelPorts: Set<number>;
   sshResult: SshAgentResult;
 }
@@ -89,22 +93,6 @@ const BASE_CONTAINER_HARDENING_FLAGS = [
   'no-new-privileges',
 ] as const;
 
-/** Composes cleanup callbacks and surfaces failures after attempting both. */
-function composeCleanups(
-  a: (() => void) | undefined,
-  b: (() => void) | undefined,
-): (() => void) | undefined {
-  if (a === undefined && b === undefined) return undefined;
-  return () => {
-    const errors: unknown[] = [];
-    runCapabilityCleanupStep(() => a?.(), errors);
-    runCapabilityCleanupStep(() => b?.(), errors);
-    if (errors.length > 0) {
-      throw new AggregateError(errors, 'Credential proxy cleanup failed');
-    }
-  };
-}
-
 /** Rewrites the loopback hostname of a proxy URL to the sandbox proxy name. */
 function rewriteProxyHostname(proxyUrl: string): string {
   try {
@@ -124,19 +112,6 @@ function rewriteProxyHostname(proxyUrl: string): string {
   }
 }
 
-function resolveProxyUrl(): string {
-  const candidates = [
-    process.env.HTTPS_PROXY,
-    process.env.https_proxy,
-    process.env.HTTP_PROXY,
-    process.env.http_proxy,
-  ];
-  return (
-    candidates.find((v): v is string => v !== undefined && v !== '') ??
-    'http://localhost:8877'
-  );
-}
-
 function isNonEmptyEnvValue(value: string | undefined): value is string {
   return value !== undefined && value !== '';
 }
@@ -147,7 +122,7 @@ export function buildContainerRunArgs(
   image: string,
   workdir: string,
   containerWorkdir: string,
-  resolvedTmpdir: string,
+  sessionTmpdir: string,
 ): string[] {
   const args = ['run', '-i', '--rm', '--init', '--workdir', containerWorkdir];
   // Privilege hardening defaults: applied before SANDBOX_FLAGS so a user can
@@ -213,10 +188,10 @@ export function buildContainerRunArgs(
   args.push('--env', `LLXPRT_CONFIG_HOME=${containerConfigDir}`);
   const containerHome = resolveSandboxContainerHome();
   mountGitConfigFiles(args, os.homedir(), containerHome);
-  args.push(
-    '--volume',
-    `${resolvedTmpdir}:${getContainerPath(resolvedTmpdir)}`,
-  );
+  // Issue #3440: mount only the per-session subdirectory so host-only
+  // capability directories under the runtime root remain unreadable in the
+  // container, preserving issue #1954 AC1.
+  args.push('--volume', `${sessionTmpdir}:${getContainerPath(sessionTmpdir)}`);
   return args;
 }
 
@@ -262,11 +237,14 @@ function addCustomMounts(
           `Path '${from}' listed in ${mountsEnvName} must be absolute`,
         );
       }
-      if (!fs.existsSync(from)) {
-        throw new FatalSandboxError(
-          `Missing mount path '${from}' listed in ${mountsEnvName}`,
-        );
-      }
+      // Fail fast when the source cannot be resolved against the real
+      // filesystem: absent at validation, removed or replaced between
+      // discovery and resolution, cyclic, or malformed sources all surface
+      // as the same classified preparation error naming the path (#3475).
+      canonicalizeExistingPath(
+        from,
+        `validate the mount source listed in ${mountsEnvName}`,
+      );
       debugLogger.error(`${mountsEnvName}: ${from} -> ${to} (${opts})`);
       args.push('--volume', mount);
     }
@@ -289,6 +267,11 @@ const RESERVED_SANDBOX_ENV_KEYS = new Set([
   'LLXPRT_DATA_HOME',
   'LLXPRT_CACHE_HOME',
   'LLXPRT_LOG_HOME',
+  // #3464: the checkpoint store mount identity is pinned by the launcher; a
+  // SANDBOX_ENV override could detach the entrypoint links (or point the
+  // marker gate) at attacker-chosen paths inside the container.
+  'LLXPRT_SANDBOX_PROJECT_KEY',
+  'LLXPRT_SANDBOX_CHECKPOINT_STORE',
 ]);
 
 function parseSandboxEnvVars(): string[] {
@@ -368,19 +351,15 @@ export function addContainerEnvVars(
   args.push('--env', 'GIT_DISCOVERY_ACROSS_FILESYSTEM=1');
 
   const virtualEnv = process.env.VIRTUAL_ENV;
+  // #3462: an in-workspace venv is backed by a per-run engine-owned volume
+  // planned together with the private dependency storage in
+  // planPrivateDependencyMounts; only the in-container destination is pinned
+  // here and no host directory is created or bound for it.
   if (
     virtualEnv !== undefined &&
     virtualEnv.length > 0 &&
     virtualEnv.toLowerCase().startsWith(workdir.toLowerCase())
   ) {
-    const sandboxVenvPath = path.resolve(
-      SETTINGS_DIRECTORY_NAME,
-      'sandbox.venv',
-    );
-    if (!fs.existsSync(sandboxVenvPath)) {
-      fs.mkdirSync(sandboxVenvPath, { recursive: true });
-    }
-    args.push('--volume', `${sandboxVenvPath}:${getContainerPath(virtualEnv)}`);
     args.push('--env', `VIRTUAL_ENV=${getContainerPath(virtualEnv)}`);
   }
 
@@ -413,7 +392,7 @@ export function setupContainerNetworking(
 ): string | undefined {
   const proxyCommand = process.env.LLXPRT_SANDBOX_PROXY_COMMAND;
   if (isNonEmptyEnvValue(proxyCommand)) {
-    const proxy = rewriteProxyHostname(resolveProxyUrl());
+    const proxy = rewriteProxyHostname(resolveSandboxProxyUrl(process.env));
     args.push('--env', `HTTPS_PROXY=${proxy}`);
     args.push('--env', `https_proxy=${proxy}`);
     args.push('--env', `HTTP_PROXY=${proxy}`);
@@ -424,12 +403,17 @@ export function setupContainerNetworking(
       args.push('--env', `NO_PROXY=${noProxy}`);
       args.push('--env', `no_proxy=${noProxy}`);
     }
+    // execSync resolves the command against the process STARTUP env in Bun,
+    // so PATH mutations made in-process (e.g. by tests) are ignored unless
+    // the current env is passed explicitly.
     execSync(
       `${config.command} network inspect ${SANDBOX_NETWORK_NAME} || ${config.command} network create --internal ${SANDBOX_NETWORK_NAME}`,
+      { env: process.env },
     );
     args.push('--network', SANDBOX_NETWORK_NAME);
     execSync(
       `${config.command} network inspect ${SANDBOX_PROXY_NAME} || ${config.command} network create ${SANDBOX_PROXY_NAME}`,
+      { env: process.env },
     );
   }
 
@@ -455,6 +439,7 @@ export function assignContainerName(
   const imageName = parseImageName(image);
   const containerNameCheck = execSync(
     `${config.command} ps -a --format "{{.Names}}"`,
+    { env: process.env },
   )
     .toString()
     .trim();
@@ -473,6 +458,7 @@ export function assignContainerName(
   while (existingNames.has(containerName)) {
     containerName = `${imageName}-${process.pid}-${++suffix}`;
   }
+  addSandboxOwnershipLabels(args);
   args.push('--name', containerName, '--hostname', containerName);
   return containerName;
 }
@@ -486,6 +472,16 @@ export function assignContainerName(
  * project-plans/issue-2902-sandbox-privilege-hardening.md. Do not add more.
  */
 const CURRENT_USER_CAPABILITIES = ['CHOWN', 'SETUID', 'SETGID'] as const;
+
+/**
+ * Single-quotes a value for the container entrypoint shell: every embedded
+ * quote becomes '\'' (close quote, escaped quote, reopen), the standard
+ * safe-representation for sh. The same escaping is applied to the wrapped
+ * inner script below, so quoted values nest correctly.
+ */
+function shQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
 
 /** Configures user/UID for the container and modifies entrypoint if needed. */
 export async function setupContainerUser(
@@ -504,16 +500,23 @@ export async function setupContainerUser(
     for (const cap of CURRENT_USER_CAPABILITIES) {
       args.push(`--cap-add=${cap}`);
     }
-    const uid = execSync('id -u').toString().trim();
-    const gid = execSync('id -g').toString().trim();
+    const uid = execSync('id -u', { env: process.env }).toString().trim();
+    const gid = execSync('id -g', { env: process.env }).toString().trim();
 
     const username = 'gemini';
     // Use the shared container-home resolution so the HOME pinned here and the
     // LLXPRT_*_HOME roots set by buildContainerRunArgs agree (#3081).
     const homeDir = resolveSandboxContainerHome();
+    // `useradd -d` never creates the home dir, and the fresh container does
+    // not have the host user's home path; without it the su'd user cannot
+    // create $HOME/.local/... (the parent is root-owned), so the root setup
+    // must create the selected home before the drop. The path comes from the
+    // host, so it is single-quoted for the shell whatever it contains.
+    const quotedHome = shQuote(homeDir);
     const setupUserCommands = [
       `groupadd -f -g ${gid} ${username}`,
-      `id -u ${username} &>/dev/null || useradd -o -u ${uid} -g ${gid} -d ${homeDir} -s /bin/bash ${username}`,
+      `id -u ${username} &>/dev/null || useradd -o -u ${uid} -g ${gid} -d ${quotedHome} -s /bin/bash ${username}`,
+      `mkdir -p ${quotedHome} && chown ${uid}:${gid} ${quotedHome}`,
     ].join(' && ');
 
     // Current-user path (AC3): root captures token, opens fd 3, runs setup
@@ -544,294 +547,6 @@ export async function setupContainerUser(
   return userFlag;
 }
 
-/** Sets up the macOS credential proxy bridge based on container command. */
-async function setupMacOSCredProxyBridge(
-  args: string[],
-  config: SandboxConfig,
-  socketPath: string,
-  reservedTunnelPorts: Set<number>,
-): Promise<CredentialProxyBridgeResult | undefined> {
-  switch (config.command) {
-    case 'podman':
-      return setupCredentialProxyPodmanMacOS(
-        args,
-        socketPath,
-        SSH_TUNNEL_POLL_TIMEOUT_MS,
-        {
-          reserveTunnelPort: (port: number) => {
-            reservedTunnelPorts.add(port);
-          },
-          excludedTunnelPorts: reservedTunnelPorts,
-        },
-      );
-    case 'docker':
-      return setupCredentialProxyDockerMacOS(args, socketPath);
-    case 'sandbox-exec':
-    default:
-      return undefined;
-  }
-}
-
-/** Starts credential proxy and sets up bridge for Podman/Docker macOS. */
-async function failOnMissingSocketPath(): Promise<Error> {
-  const invariantError = new FatalSandboxError(
-    'Credential proxy started but did not produce a socket path',
-  );
-  const errors: unknown[] = [invariantError];
-  try {
-    await stopProxy();
-  } catch (stopErr) {
-    errors.push(stopErr);
-  }
-  return errors.length === 1
-    ? invariantError
-    : new AggregateError(errors, 'Credential proxy setup failed');
-}
-
-function assertSupportedCredentialNetwork(config: SandboxConfig): void {
-  const networkMode =
-    process.env.LLXPRT_SANDBOX_NETWORK ?? process.env.SANDBOX_NETWORK;
-  if (
-    os.platform() === 'darwin' &&
-    (config.command === 'docker' || config.command === 'podman') &&
-    networkMode === 'off'
-  ) {
-    throw new FatalSandboxError(
-      'macOS credential bridge requires container networking; enable networking or use Linux for network-off sandboxing.',
-    );
-  }
-}
-
-/**
- * Milliseconds after the sandbox process spawns that the capability env
- * file is deleted even when no sandbox handshake ever arrives (#3524). A
- * sandbox that never requests credentials never handshakes; without this
- * bound its env file would live until session exit — exactly the path that
- * does not run under SIGKILL, `tmux kill-session`, an OOM kill or a crash.
- * The bound errs long on purpose: deleting late only widens the window in
- * which the token is exposed, while deleting early breaks the launch,
- * because a remote or VM-backed runtime may not have read --env-file yet.
- * Ten minutes is ~20x the proxy-sidecar readiness budget and still bounds
- * exposure far below a session's lifetime.
- */
-const CAPABILITY_ENV_FILE_FALLBACK_MS = 10 * 60 * 1000;
-
-/**
- * #3524: the credential proxy, its socket, and its capability token are
- * process-wide, so a sandbox handshake carries no launch identity. At most
- * one launch may hold a live capability env file: a second launch's
- * handshake would be attributed to the first launch's release holder and
- * could delete the wrong launch's env file mid-launch.
- */
-let capabilityEnvFileLaunchActive = false;
-
-/**
- * Claims the single active capability env-file launch slot or throws. The
- * claim is a synchronous check-and-set, so of two concurrent callers only
- * one can hold it; the other fails before creating a bridge or env file
- * whose handshake could be attributed to the wrong launch.
- */
-function claimCapabilityEnvFileLaunch(): void {
-  if (capabilityEnvFileLaunchActive) {
-    throw new FatalSandboxError(
-      'Concurrent sandbox launches in one process are not supported by the capability transport: the credential proxy, its socket, and its capability token are process-wide, so a sandbox handshake cannot be attributed to a specific launch and could delete the env file of the wrong launch. Run the active launch cleanup before starting another sandbox.',
-    );
-  }
-  capabilityEnvFileLaunchActive = true;
-}
-
-/**
- * Bridge cleanup returned by setupCredentialProxy. When a capability env
- * file exists the cleanup also carries armCapabilityEnvFileFallback so the
- * post-spawn wiring (wireCleanupHandlers) can start the no-handshake
- * release countdown without widening every launch-path signature (#3524).
- */
-export interface CredentialProxyBridgeCleanup {
-  /** Runs the composed bridge and env-file cleanup (idempotent). */
-  (): void;
-  /** Starts the bounded no-handshake env-file release countdown. */
-  armCapabilityEnvFileFallback?(): void;
-}
-
-/**
- * Mutable holder for the capability env-file cleanup (#3524). The proxy
- * handshake callback is registered before the env file exists, so it reads
- * the holder at fire time rather than capturing the cleanup eagerly.
- * Handshake, fallback expiry, and the composed exit cleanup all go through
- * release(), so every deletion path clears the holder and cancels the
- * fallback timer. Handshake delivery is at-least-once: the first release
- * runs the cleanup and clears the holder; every later one is a no-op.
- * Early release (handshake, fallback expiry) passes bestEffort=true because
- * both fire in contexts that must not throw; the exit-time composed cleanup
- * calls release() strict and still surfaces filesystem failures.
- */
-interface CapabilityEnvFileRelease {
-  release: (bestEffort?: boolean) => void;
-  adopt: (cleanup: () => void) => void;
-  armFallback: () => void;
-}
-
-function createCapabilityEnvFileRelease(): CapabilityEnvFileRelease {
-  let held: (() => void) | undefined;
-  let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
-  // bestEffort is the early-release mode: the handshake callback fires on
-  // the proxy's frame-processing path (a throw there surfaces as a
-  // connection error and destroys that sandbox's credential connection)
-  // and the fallback fires from a timer (a throw there is an unhandled
-  // exception). A failed unlink is OS-level variance, so early release
-  // logs the failure instead of throwing. The default stays strict: the
-  // exit-time composed cleanup must still surface cleanup failures.
-  const release = (bestEffort = false): void => {
-    const cleanup = held;
-    if (cleanup === undefined) return;
-    held = undefined;
-    if (fallbackTimer !== undefined) {
-      clearTimeout(fallbackTimer);
-      fallbackTimer = undefined;
-    }
-    try {
-      cleanup();
-    } catch (err) {
-      if (!bestEffort) throw err;
-      debugLogger.error('Early capability env-file release failed:', err);
-    }
-  };
-  return {
-    release,
-    adopt: (cleanup: () => void): void => {
-      held = cleanup;
-    },
-    armFallback: (): void => {
-      if (held === undefined || fallbackTimer !== undefined) return;
-      // Best-effort release: a throw from this timer callback would be an
-      // unhandled exception, so expiry logs filesystem failures (#3524).
-      const onExpire = (): void => release(true);
-      fallbackTimer = setTimeout(onExpire, CAPABILITY_ENV_FILE_FALLBACK_MS);
-      // Unref so the fallback can never hold the process open.
-      fallbackTimer.unref();
-    },
-  };
-}
-
-/**
- * Composes the bridge cleanup and the env-file release and, when an env
- * file exists, exposes armCapabilityEnvFileFallback on the result so
- * wireCleanupHandlers can start the no-handshake release countdown once the
- * sandbox process has spawned (#3524). The exit-time cleanup stays
- * registered as the backstop; early deletion only makes it a no-op. The
- * env-file leg is release() itself — the same path the handshake and the
- * fallback take — so running the composed cleanup also cancels the armed
- * fallback timer and ends the single-active-launch claim.
- */
-function composeArmableBridgeCleanup(
-  bridgeCleanup: (() => void) | undefined,
-  envFileRelease: CapabilityEnvFileRelease,
-): CredentialProxyBridgeCleanup {
-  const launchTeardown = (): void => {
-    capabilityEnvFileLaunchActive = false;
-    // release is always a function, so the composed cleanup always exists;
-    // the optional call only satisfies composeCleanups' union return type.
-    composeCleanups(bridgeCleanup, envFileRelease.release)?.();
-  };
-  return Object.assign(launchTeardown, {
-    armCapabilityEnvFileFallback: envFileRelease.armFallback,
-  });
-}
-
-export async function setupCredentialProxy(
-  args: string[],
-  config: SandboxConfig,
-  resolvedTmpdir: string,
-  reservedTunnelPorts: Set<number>,
-  entrypointPrefixes: string[],
-): Promise<{
-  credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
-  credentialProxyBridgeCleanup: CredentialProxyBridgeCleanup | undefined;
-}> {
-  assertSupportedCredentialNetwork(config);
-
-  let credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
-  let credentialProxyBridgeCleanup: (() => void) | undefined;
-  const envFileRelease = createCapabilityEnvFileRelease();
-
-  // @plan:PLAN-20250214-CREDPROXY.P34 R25.1: Start credential proxy BEFORE spawning container
-  try {
-    // bestEffort: the handshake fires on the proxy's frame-processing path,
-    // where a throw would destroy this sandbox's credential connection, so
-    // an early release failure is logged, not propagated (#3524).
-    await createAndStartProxy({
-      socketPath: resolvedTmpdir,
-      onSandboxHandshake: () => envFileRelease.release(true),
-    });
-  } catch (err) {
-    throw new FatalSandboxError(
-      `Failed to start credential proxy: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-  const socketPath = getProxySocketPath();
-  if (socketPath === undefined) {
-    throw await failOnMissingSocketPath();
-  }
-
-  // #3524: claim the single-launch slot before any bridge or env-file side
-  // effects. Placed after the proxy-start failure paths above (which must
-  // not release a claim they never took) and outside the setup try below,
-  // so a losing concurrent launch aborts without tearing down the winning
-  // launch's shared proxy through that catch's stopProxy().
-  claimCapabilityEnvFileLaunch();
-
-  // @plan:PLAN-20250214-CREDPROXY.P34 R3.6: Pass socket path to container via env var
-  const isDarwin = os.platform() === 'darwin';
-  try {
-    if (isDarwin) {
-      credentialProxyBridgeResult = await setupMacOSCredProxyBridge(
-        args,
-        config,
-        socketPath,
-        reservedTunnelPorts,
-      );
-    }
-    const effectiveSocketPath =
-      credentialProxyBridgeResult?.containerSocketPath ?? socketPath;
-    args.push('--env', `LLXPRT_CREDENTIAL_SOCKET=${effectiveSocketPath}`);
-
-    if (credentialProxyBridgeResult !== undefined && isDarwin) {
-      credentialProxyBridgeCleanup = credentialProxyBridgeResult.cleanup;
-      const prefix = credentialProxyBridgeResult.entrypointPrefix;
-      if (prefix !== undefined) entrypointPrefixes.push(prefix);
-    }
-    // @plan project-plans/issue-1954-sandbox-hardening.md (AC1): host-only env file.
-    const envFileResult = createHostOnlyCapabilityEnvFile(
-      getProxyCapabilityToken(),
-    );
-    if (envFileResult !== undefined) {
-      args.push(...envFileResult.args);
-      envFileRelease.adopt(envFileResult.cleanup);
-    }
-  } catch (err) {
-    capabilityEnvFileLaunchActive = false;
-    const errors: unknown[] = [err];
-    runCapabilityCleanupStep(() => envFileRelease.release(), errors);
-    runCapabilityCleanupStep(() => credentialProxyBridgeCleanup?.(), errors);
-    try {
-      await stopProxy();
-    } catch (stopErr) {
-      errors.push(stopErr);
-    }
-    throw errors.length === 1
-      ? err
-      : new AggregateError(errors, 'Credential proxy setup failed');
-  }
-
-  return {
-    credentialProxyBridgeResult,
-    credentialProxyBridgeCleanup: composeArmableBridgeCleanup(
-      credentialProxyBridgeCleanup,
-      envFileRelease,
-    ),
-  };
-}
-
 /** Spawns proxy container and waits for it to be ready. */
 export async function startProxyContainer(
   config: SandboxConfig,
@@ -839,7 +554,13 @@ export async function startProxyContainer(
   userFlag: string,
   image: string,
   workdir: string,
+  lifecycle?: SandboxLaunchLifecycle,
 ): Promise<ProxyContainerHandle> {
+  // The host probes this endpoint for readiness and the sandboxed child is
+  // handed the same port on the sidecar's hostname, so the published mapping
+  // has to follow the configured endpoint rather than a fixed number.
+  const proxyUrl = resolveSandboxProxyUrl(process.env);
+  const proxyPort = resolveSandboxProxyPort(proxyUrl);
   const proxyContainerArgs = [
     'run',
     '--rm',
@@ -851,7 +572,7 @@ export async function startProxyContainer(
     '--network',
     SANDBOX_PROXY_NAME,
     '-p',
-    '8877:8877',
+    `${proxyPort}:${proxyPort}`,
     '-v',
     `${process.cwd()}:${workdir}`,
     '--workdir',
@@ -866,23 +587,39 @@ export async function startProxyContainer(
     detached: true,
   });
   const proxyContainerCommand = `${config.command} ${proxyContainerArgs.join(' ')}`;
+  // #3469: the stop is idempotent and detaches its own process handlers, so
+  // whichever path fires first (failed-launch release or process exit) owns
+  // the removal and the other becomes a no-op.
+  let proxyContainerStopped = false;
   const stopProxyContainer = () => {
+    if (proxyContainerStopped) return;
+    proxyContainerStopped = true;
+    process.off('exit', stopProxyContainer);
+    process.off('SIGINT', stopProxyContainer);
+    process.off('SIGTERM', stopProxyContainer);
     debugLogger.log('stopping proxy container ...');
-    execSync(`${config.command} rm -f ${SANDBOX_PROXY_NAME}`);
+    execSync(`${config.command} rm -f ${SANDBOX_PROXY_NAME}`, {
+      env: process.env,
+    });
   };
   process.on('exit', stopProxyContainer);
   process.on('SIGINT', stopProxyContainer);
   process.on('SIGTERM', stopProxyContainer);
+  // #3469: register ownership before the readiness wait; an internal
+  // readiness failure already self-stops, and the registered release then
+  // no-ops.
+  lifecycle?.own(
+    'proxy-sidecar',
+    'proxy sidecar container',
+    stopProxyContainer,
+  );
   proxyProcess.stderr.on('data', (data) => {
     debugLogger.error(data.toString().trim());
   });
   debugLogger.log('waiting for proxy to start ...');
   const PROXY_READY_TIMEOUT_MS = 30000;
   try {
-    await execAsync(
-      `timeout ${Math.floor(PROXY_READY_TIMEOUT_MS / 1000)} bash -c 'until curl -s http://localhost:8877; do sleep 0.25; done'`,
-      { timeout: PROXY_READY_TIMEOUT_MS + 5000 },
-    );
+    await awaitSandboxProxyReady(proxyUrl, PROXY_READY_TIMEOUT_MS);
   } catch (err) {
     stopProxyContainer();
     throw new FatalSandboxError(

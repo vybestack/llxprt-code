@@ -9,6 +9,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
+  formatSummary,
   parseArgs,
   type CommandRunner,
   orchestrateTests,
@@ -291,15 +292,17 @@ describe('orchestrateTests (--shard)', () => {
       failingRunner,
     );
 
-    // No workspace ran, so passed/failed are both 0.
+    // No workspace ran, so passed is 0.
     expect(summary.passed).toBe(0);
-    expect(summary.failed).toBe(0);
     expect(summary.totalWorkspaces).toBe(0);
-    // But the scripts phase failed — the caller (main) must check results.
+    // A failed scripts phase must be reflected in the summary's failed count
+    // so its printed verdict matches the exit code.
+    expect(summary.failed).toBe(1);
     const scriptsResult = summary.results.find((r) => r.phase === 'scripts');
     expect(scriptsResult).toBeDefined();
     expect(scriptsResult!.success).toBe(false);
     expect(summary.results.some((r) => !r.success)).toBe(true);
+    expect(formatSummary(summary)).toContain('Result: FAILED');
   });
 
   // Each scripts-shard root is its own invocation so that one root's timeout

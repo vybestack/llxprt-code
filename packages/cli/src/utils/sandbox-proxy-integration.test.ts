@@ -11,11 +11,13 @@
  * @plan:PLAN-20250214-CREDPROXY.P34
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, vi } from 'bun:test';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { testRegex } from '../test-utils/regex.js';
+import { createCredentialSocketRuntime } from './sandbox-credential-runtime.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,11 +67,18 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
     });
 
     it('calls createAndStartProxy before container spawn', () => {
-      const setupProxyIndex = sandboxSource.indexOf(
-        'async function setupCredentialProxy',
+      const startProxyHelperIndex = sandboxSource.indexOf(
+        'async function startCredentialProxyForSandbox',
       );
       const createProxyIndex = sandboxSource.indexOf(
         'await createAndStartProxy',
+        startProxyHelperIndex,
+      );
+      const setupProxyIndex = sandboxSource.indexOf(
+        'async function setupCredentialProxy',
+      );
+      const startProxyHelperCallIndex = sandboxSource.indexOf(
+        'await startCredentialProxyForSandbox',
         setupProxyIndex,
       );
       const prepareContainerIndex = sandboxSource.indexOf(
@@ -91,11 +100,12 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
         executeContainerIndex,
       );
 
-      expect(createProxyIndex).toBeGreaterThan(setupProxyIndex);
+      expect(createProxyIndex).toBeGreaterThan(startProxyHelperIndex);
+      expect(startProxyHelperCallIndex).toBeGreaterThan(setupProxyIndex);
       expect(setupProxyCallIndex).toBeGreaterThan(prepareContainerIndex);
       expect(pushImageIndex).toBeGreaterThan(executeContainerIndex);
       expect(spawnInDocker).toBeGreaterThan(pushImageIndex);
-      expect(setupProxyCallIndex).toBeLessThan(pushImageIndex);
+      expect(createProxyIndex).toBeLessThan(pushImageIndex);
     });
   });
 
@@ -134,21 +144,47 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
   });
 
   describe('R3.4: macOS Realpath for Socket', () => {
-    it('uses fs.realpathSync for tmpdir in volume mount', () => {
-      // Verify the tmpdir mount uses realpath
+    it('canonicalizes tmpdir fail-fast before the volume mount', () => {
+      // The tmpdir mount resolves the real root; since #3475 the
+      // resolution is the shared fail-fast helper, so a tmpdir removed or
+      // replaced concurrently fails as a classified sandbox error.
       expect(sandboxSource).toContain(
-        'const resolvedTmpdir = fs.realpathSync(os.tmpdir())',
+        'const resolvedTmpdir = canonicalizeExistingPath(',
+      );
+      expect(sandboxSource).toContain(
+        "'resolve the sandbox temporary directory'",
       );
     });
 
-    it('passes resolvedTmpdir to volume mount', () => {
+    it('narrows the tmpdir mount to a per-session directory', () => {
+      expect(sandboxSource).toMatch(
+        /fs\.mkdtempSync\(\s*path\.join\(resolvedTmpdir,\s*'llxprt-sandbox-',?\s*\)/,
+      );
       expect(sandboxSource).toContain(
-        '`${resolvedTmpdir}:${getContainerPath(resolvedTmpdir)}`',
+        '`${sessionTmpdir}:${getContainerPath(sessionTmpdir)}`',
       );
     });
 
-    it('passes resolvedTmpdir to createAndStartProxy', () => {
-      expect(sandboxSource).toContain('socketPath: resolvedTmpdir');
+    it('uses a separate short private credential runtime for Darwin Podman sessions', () => {
+      const sessionTmpdir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'proxy-integration-session-'),
+      );
+      const platformSpy = vi.spyOn(os, 'platform').mockReturnValue('darwin');
+      const runtime = createCredentialSocketRuntime(
+        { command: 'podman', image: 'test' },
+        sessionTmpdir,
+      );
+
+      try {
+        expect(runtime.path).not.toBe(sessionTmpdir);
+        expect(runtime.path.startsWith('/tmp/lx-')).toBe(true);
+        expect(fs.statSync(runtime.path).mode & 0o777).toBe(0o700);
+      } finally {
+        runtime.cleanup();
+        platformSpy.mockRestore();
+        fs.rmSync(sessionTmpdir, { recursive: true, force: true });
+      }
+      expect(fs.existsSync(runtime.path)).toBe(false);
     });
   });
 
@@ -320,7 +356,7 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
         'async function runSeatbeltSandbox',
       );
       const seatbeltEnd = sandboxSources.seatbelt.indexOf(
-        'function resolveProxyUrl',
+        'export function buildSeatbeltArgs',
       );
 
       expect(seatbeltStart).toBeGreaterThan(-1);

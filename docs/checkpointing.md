@@ -101,7 +101,7 @@ Or in your [user `settings.json`](./reference/application-directories.md):
 }
 ```
 
-When enabled, LLxprt creates a shadow git snapshot (in `<data>/history/<project_hash>` within LLxprt's [data directory](./reference/application-directories.md), separate from your project's git) each time a `write_file` or `replace` tool is about to run. It also saves the conversation state and tool call details to `<log>/tmp/<project_hash>/checkpoints/` under LLxprt's [log/state directory](./reference/application-directories.md).
+When enabled, LLxprt creates a shadow git snapshot (in `<data>/history/<project_hash>` within LLxprt's [data directory](./reference/application-directories.md), separate from your project's git) each time a `write_file` or `replace` tool is about to run. Snapshots honor your project's ignore semantics: root and nested `.gitignore` files apply through the work tree, and the repository-local `.git/info/exclude` rules are mirrored into the shadow repository before every snapshot. It also saves the conversation state and tool call details to `<log>/tmp/<project_hash>/checkpoints/` under LLxprt's [log/state directory](./reference/application-directories.md).
 
 The `/restore` command (only available when checkpointing is enabled) lets you roll back:
 
@@ -113,3 +113,14 @@ The `/restore` command (only available when checkpointing is enabled) lets you r
 Restoring reverts your project files via the shadow git snapshot, reloads the conversation history, and re-proposes the original tool call so you can retry or skip it.
 
 > **Limitation:** Checkpointing currently only covers `write_file` and `replace` tool calls. Other file-modifying tools (`apply_patch`, `delete_line_range`, `insert_at_line`) are not checkpointed.
+
+### Checkpointing inside a container sandbox
+
+A container sandbox runs `--rm`, so the container's filesystem is destroyed when the session ends. With checkpointing enabled, the sandbox launcher therefore provisions one persistent, engine-owned named volume per project (`sandbox-checkpoints-<project_hash>`, labeled `com.vybestack.llxprt.sandbox-checkpoint-persistent=true`) and links the shadow repository and checkpoint metadata directories into it before the CLI starts. Checkpoint history then survives container exit and daemon restarts, and a later sandbox session of the same project restores from the same history.
+
+Two properties follow from this design:
+
+- The store lives outside the project repository and outside the ephemeral container home, and only your project's sandbox containers can mount it.
+- If persistence cannot be provided (the engine cannot create or initialize the volume, or an older launcher starts an image that expects the store), the session fails before checkpointing is presented as available, rather than writing checkpoints that die with the container.
+
+The volume is never removed by session cleanup or crash recovery; it is your project's accumulated checkpoint history. Remove it manually with `docker volume rm` / `podman volume rm` when you no longer want it.

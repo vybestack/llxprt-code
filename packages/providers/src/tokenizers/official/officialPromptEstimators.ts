@@ -39,7 +39,6 @@ interface OfficialFamilySpec {
   readonly claim: RegExp;
   readonly identity: RegExp;
   readonly protocols: ReadonlySet<PromptEnvelopeProtocol>;
-  readonly identityErrorHint: string;
   readonly create: () => OfficialSegmentCounter;
 }
 
@@ -73,8 +72,6 @@ const OFFICIAL_FAMILY_SPECS: readonly OfficialFamilySpec[] = Object.freeze([
     claim: /^(?:[a-z0-9_.-]+\/)?kimi-k3(?:$|-)/i,
     identity: /^(?:[a-z0-9_.-]+\/)?kimi-k3(?:-[a-z0-9.-]+)?$/i,
     protocols: OPENAI_CHAT_ONLY,
-    identityErrorHint:
-      'use a canonical kimi-k3 model id, optionally with a vendor prefix or dated snapshot suffix',
     create: () => new KimiK3Tokenizer(),
   },
   {
@@ -84,8 +81,6 @@ const OFFICIAL_FAMILY_SPECS: readonly OfficialFamilySpec[] = Object.freeze([
     claim: /^(?:[a-z0-9_.-]+\/)?glm-5\.2(?:$|-)/i,
     identity: /^(?:[a-z0-9_.-]+\/)?glm-5\.2(?:-[a-z0-9.-]+)?$/i,
     protocols: OPENAI_CHAT_AND_ANTHROPIC,
-    identityErrorHint:
-      'use a canonical glm-5.2 model id, optionally with a vendor prefix or dated snapshot suffix',
     create: () => new GlmTokenizer(),
   },
   {
@@ -95,8 +90,6 @@ const OFFICIAL_FAMILY_SPECS: readonly OfficialFamilySpec[] = Object.freeze([
     claim: /^(?:[a-z0-9_.-]+\/)?minimax-m3(?:$|-)/i,
     identity: /^(?:[a-z0-9_.-]+\/)?minimax-m3(?:-[a-z0-9.-]+)?$/i,
     protocols: OPENAI_CHAT_ONLY,
-    identityErrorHint:
-      'use a canonical minimax-m3 model id, optionally with a vendor prefix or dated snapshot suffix',
     create: () => new MinimaxTokenizer(),
   },
 ]);
@@ -232,7 +225,6 @@ function toRegistration(
     claim: spec.claim,
     matches: (model: string) => spec.identity.test(model),
     protocols: spec.protocols,
-    identityErrorHint: spec.identityErrorHint,
     estimate: (request: RuntimePromptEstimateRequest) =>
       estimateOfficialPrompt(request, spec),
   });

@@ -30,14 +30,27 @@ void vi.mock('@ai-sdk/openai', () => ({
 }));
 
 import { createOpenAI } from '@ai-sdk/openai';
+import { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
 import { createOpenAIClient } from './vercelModelClient.js';
-import { AuthenticationError } from './errors.js';
 import type { ProviderClientConfig } from './vercelModelClient.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { ResolvedAuthToken } from '../types/providerRuntime.js';
+
+class RecordingLogger {
+  readonly messages: string[] = [];
+
+  debug(messageOrFactory: string | (() => string), ..._args: unknown[]): void {
+    this.messages.push(
+      typeof messageOrFactory === 'function'
+        ? messageOrFactory()
+        : messageOrFactory,
+    );
+  }
+}
 
 function buildOptions(
   baseURL: string | undefined,
-  authToken: string | undefined,
+  authToken: ResolvedAuthToken | undefined,
 ): NormalizedGenerateChatOptions {
   return {
     settings: {
@@ -147,7 +160,31 @@ describe('createOpenAIClient local-endpoint auth exemption (issue #2506)', () =>
     expect(apiKey).toBe('');
   });
 
-  it('throws AuthenticationError for a non-local endpoint with no key (no regression)', async () => {
+  it('logs a safe diagnostic when auth resolution fails for an exempt endpoint', async () => {
+    const forbiddenDetail = 'issue3451-sensitive-failure-detail';
+    const logger = new RecordingLogger();
+    const authToken: ResolvedAuthToken = {
+      provide: async () => {
+        throw new Error(forbiddenDetail);
+      },
+    };
+
+    await createOpenAIClient(
+      buildOptions('https://api.openai.com/v1', authToken),
+      buildClientConfig('https://api.openai.com/v1', {
+        requiresAuth: false,
+      }),
+      undefined,
+      logger,
+    );
+
+    const output = logger.messages.join('\n');
+    expect(output).toContain('kind=credential-source-failed');
+    expect(output).toContain('auth-exempt endpoint');
+    expect(output).not.toContain(forbiddenDetail);
+  });
+
+  it('throws CredentialResolutionError for a non-local endpoint with no key', async () => {
     const mockCreateOpenAI = createOpenAI as ReturnType<typeof vi.fn>;
 
     await expect(
@@ -155,7 +192,7 @@ describe('createOpenAIClient local-endpoint auth exemption (issue #2506)', () =>
         buildOptions('https://api.openai.com/v1', undefined),
         buildClientConfig('https://api.openai.com/v1'),
       ),
-    ).rejects.toThrow(AuthenticationError);
+    ).rejects.toThrow(CredentialResolutionError);
 
     expect(mockCreateOpenAI).not.toHaveBeenCalled();
   });

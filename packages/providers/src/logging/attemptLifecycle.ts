@@ -109,6 +109,15 @@ export interface AttemptEndInfo {
 export interface AttemptLifecycleObserver {
   onAttemptStart(info: AttemptStartInfo): void;
   onAttemptEnd(info: AttemptEndInfo): void;
+  /**
+   * Raw token-delta timing signal (issue #3473). Invoked by the provider
+   * stream processor at each raw token-bearing delta (reasoning, content,
+   * or tool-call fragment) that may yield no visible chunk until much
+   * later. Optional so observers that only track attempt lifecycles need
+   * no changes; when present it must be a function or the observer is
+   * rejected by the metadata guard.
+   */
+  onRawTokenDelta?(): void;
 }
 
 /**
@@ -124,6 +133,18 @@ export const ATTEMPT_LIFECYCLE_KEY = '__attemptLifecycle';
  * namespace (issue #3257).
  */
 export const LOGICAL_REQUEST_ID_KEY = '__logicalRequestId';
+
+/**
+ * Metadata key carrying an internal, caller-supplied () => void sink
+ * notified at each raw token-bearing delta (issue #3493). It is a separate
+ * key from ATTEMPT_LIFECYCLE_KEY because LoggingProviderWrapper overwrites
+ * that key with its own AttemptRecorder (see LoggingProviderWrapper.ts
+ * ~lines 264-270, which spreads caller metadata then assigns its own
+ * recorder), so a caller-side timing consumer needs a channel that
+ * survives the wrapper's metadata spread. Internal plumbing; never sent
+ * on the wire.
+ */
+export const RAW_TOKEN_DELTA_SINK_KEY = '__rawTokenDeltaSink';
 
 /**
  * Extract the logical request id from GenerateChatOptions metadata.
@@ -153,6 +174,57 @@ export function getAttemptLifecycleObserver(
   return undefined;
 }
 
+/**
+ * Resolve the raw token-delta timing notifier from GenerateChatOptions
+ * metadata (issue #3473). Providers call this once per request and invoke
+ * the returned notifier at each raw token-bearing delta. The single raw
+ * signal fans out to every usable consumer (issue #3493): the lifecycle
+ * observer's bound onRawTokenDelta hook first, then the caller sink at
+ * RAW_TOKEN_DELTA_SINK_KEY. A present-but-non-function consumer is
+ * malformed external input and is ignored, never allowed to throw at
+ * resolve time. Returns undefined when neither consumer is usable,
+ * leaving attempt timing to visible-chunk stamping.
+ */
+export function resolveRawTokenDeltaNotifier(
+  metadata: Record<string, unknown> | undefined,
+): (() => void) | undefined {
+  const observer = getAttemptLifecycleObserver(metadata);
+  const observerHook =
+    observer?.onRawTokenDelta !== undefined
+      ? observer.onRawTokenDelta.bind(observer)
+      : undefined;
+  const rawSink = metadata?.[RAW_TOKEN_DELTA_SINK_KEY];
+  const sink = isRawTokenDeltaSink(rawSink) ? rawSink : undefined;
+  if (observerHook !== undefined && sink !== undefined) {
+    return () => {
+      observerHook();
+      sink();
+    };
+  }
+  return observerHook ?? sink;
+}
+
+/**
+ * True when a metadata value is a usable raw token-delta sink. A
+ * present-but-non-function sink is malformed external input, in the same
+ * spirit as isOptionalFunctionHook: metadata is genuinely external input
+ * and throwing there fails the whole request instead of degrading timing,
+ * so it is ignored instead.
+ */
+function isRawTokenDeltaSink(value: unknown): value is () => void {
+  return typeof value === 'function';
+}
+
+/**
+ * True when an optional observer hook value is absent or a function.
+ * Present-but-non-function hooks are malformed external input: accepting
+ * them would make hook resolution (e.g. onRawTokenDelta.bind) throw at
+ * request time instead of degrading to visible-chunk timing.
+ */
+function isOptionalFunctionHook(value: unknown): boolean {
+  return value === undefined || typeof value === 'function';
+}
+
 function isAttemptLifecycleObserver(
   raw: unknown,
 ): raw is AttemptLifecycleObserver {
@@ -162,6 +234,7 @@ function isAttemptLifecycleObserver(
   const candidate = raw as Record<string, unknown>;
   return (
     typeof candidate.onAttemptStart === 'function' &&
-    typeof candidate.onAttemptEnd === 'function'
+    typeof candidate.onAttemptEnd === 'function' &&
+    isOptionalFunctionHook(candidate.onRawTokenDelta)
   );
 }

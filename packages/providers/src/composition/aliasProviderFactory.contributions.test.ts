@@ -504,6 +504,7 @@ describe('built-in alias factory parity', () => {
       'sk-direct',
       'https://direct.example.com/v1',
       EMPTY_PROVIDER_CONFIG,
+      false,
     );
 
     expect(provider.name).toBe('direct-alias');
@@ -520,6 +521,7 @@ describe('built-in alias factory parity', () => {
         undefined,
         undefined,
         EMPTY_PROVIDER_CONFIG,
+        false,
       );
     } catch (error) {
       thrown = error;

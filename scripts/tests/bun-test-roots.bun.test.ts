@@ -31,6 +31,7 @@ import {
   resolveRootCwd,
   selectsRoot,
 } from '../bun-test-roots.js';
+import { smokeTestFileTimeoutMs } from '../lib/bun-smoke-harness.js';
 
 const repoRoot = resolve(import.meta.dir, '..', '..');
 
@@ -579,6 +580,12 @@ describe('resolveBunTestFiles (real repository)', () => {
     );
     expect(slow).toBeDefined();
     expect(slow?.timeout).toBe(300_000);
+
+    const nativeSmoke = files.find((f) =>
+      f.file.endsWith('nightly-bun-native-smoke.test.ts'),
+    );
+    expect(nativeSmoke).toBeDefined();
+    expect(nativeSmoke?.timeout).toBe(smokeTestFileTimeoutMs());
 
     const ordinary = files.find((f) =>
       f.file.endsWith('run_bun_tests.test.ts'),

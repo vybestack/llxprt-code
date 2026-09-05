@@ -241,6 +241,13 @@ by default. Detailed limitations follow.
 In container mode, these paths are always mounted into the container:
 
 - Your project working directory (read-write)
+- Every accepted workspace root supplied through `--include-directories`
+  (read-write). Docker and Podman bind each root to the same path inside the
+  container, using the same Windows-to-POSIX translation as the primary
+  workspace. LLxprt resolves and checks every root before contacting the
+  container engine. A missing path, a path that is not a readable, writable, and
+  searchable directory, or roots that contain one another stop startup with an
+  error that names the paths and suggests correcting `--include-directories`.
 - The system temp directory (read-write)
 - The LLxprt Code global **configuration** directory (read-write). This is your
   platform-standard config directory (the same one resolved by
@@ -285,10 +292,125 @@ profile configuration:
 Everything else on your host (`~/.ssh` private keys, `~/.aws`, other projects)
 is not accessible from inside the container unless you explicitly mount it.
 
-Seatbelt restricts **writes** to an allow-list of paths (project directory, temp
-directory, and canonical config/data/cache/log roots). It grants broader read
-access, including a read-only grant for the legacy global directory that startup
-migration reads from — see
+#### Project `node_modules` are private per run (container mode)
+
+The workspace binds keep source read-write with one exception: project
+`node_modules` directories do not cross the host/container platform boundary.
+At launch, LLxprt Code creates fresh engine-owned named volumes and mounts one
+over each of these locations in the primary workspace and every accepted
+`--include-directories` root:
+
+- `<workspace-root>/node_modules`; and
+- `node_modules` beneath each nested Node package root declared in that root's
+  `package.json` `workspaces` list.
+
+Workspace declarations may use an array or an object with a `packages` array.
+Literal paths retain support for package roots that do not exist yet. Supported
+globs use `*` as a complete path segment, such as `packages/*`, or a final `**`
+after a literal directory prefix, such as `tools/**`. A leading `!` excludes
+matching package roots. Glob discovery selects directories that contain a
+`package.json`, ignores `node_modules` and `.git` trees, and rejects a matched
+package root whose resolved path leaves the real workspace. Each accepted root's
+`node_modules` is protected even without a manifest.
+
+A positive glob that matches no package roots stops the launch and suggests
+using a literal path for a package root that does not exist yet. Unsupported
+glob operators also stop the launch and report the accepted forms. An exclusion
+that matches nothing has no effect. These checks finish before Docker or Podman
+creates a volume or container.
+
+Each private volume is initialized for the user the container already runs as,
+even when that user's UID differs from the host user. This isolation applies
+to normal installed-mode sessions. A `NODE_ENV=development` source-entrypoint
+session keeps using the shared workspace binds unchanged.
+
+Inside a sandboxed session this means:
+
+- The agent starts from the image-global `llxprt` install, so no host install
+  is required before the agent can run the project's installer itself.
+- Installer, build, and test output goes to the private per-run volumes, never
+  to your host `node_modules`. Host-installed dependencies are hidden while the
+  container runs, and container-installed dependencies are discarded with the
+  session; a later session starts with fresh, empty storage.
+- Source outside `node_modules` stays shared: edits made inside the sandbox are
+  immediately visible on the host, and host edits are visible inside.
+
+Normal exit, handled interruption, preparation failure, and launch failure
+remove the per-run volumes; the selected container engine owns them. A
+protected path that was absent before the session is absent again afterward:
+LLxprt removes an empty mountpoint materialized through a workspace bind, but
+never removes a nonempty directory. Cleanup failures print a warning naming
+the operation and the engine resource or host path. Docker and Podman startup
+also recover storage left by `SIGKILL`, OOM termination, LLxprt failure, host
+restart, or power loss. Recovery runs after all filesystem planning and
+preflight have succeeded. It first removes managed containers whose
+process-instance owner is provably dead. It then considers only managed
+volumes whose name starts with `sandbox-node-modules-`, whose process-instance
+owner is provably dead, and whose dependency run ID is not present on a
+running managed container. Volume removal is not forced, so an existing or
+newly appearing attachment causes the engine to retain the volume. Unknown
+ownership, foreign-host ownership, active owners, malformed labels, anonymous
+volumes, custom volumes, and persistent checkpoint storage are retained.
+
+A recovery failure prints the engine operation and resource name. To inspect a
+reported volume, use the selected engine, its exact name from the warning, and
+these label-scoped commands:
+
+```bash
+docker volume ls --filter label=com.vybestack.llxprt.sandbox-managed=true
+docker volume inspect VOLUME_NAME
+docker volume rm VOLUME_NAME
+```
+
+Replace `docker` with `podman` for rootless Podman. Check the owner and
+`com.vybestack.llxprt.sandbox-dependency-run` labels before manual removal. Do
+not use a broad volume prune or container removal with `--volumes`.
+
+Before creating the private mounts, a read-only preflight scans the existing
+host `node_modules` trees (the whole protected trees, so nothing is missed) for
+recognized wrong-platform binaries and stops the launch with repair guidance
+when it finds one (see [Troubleshooting](#troubleshooting)). Each file it
+inspects is read only far enough to classify its header. The preflight covers
+`.node` native addons and entries reached through protected `.bin` directories
+(regular executables directly in `.bin` and symlinked `.node` files, whose
+contained targets are read but never executed, included) and recognizes ELF,
+Mach-O (including universal/fat binaries), and PE headers, including PE files
+whose header offset lies deeper in the file than the first probe.
+
+#### Persistent checkpoint storage (container mode)
+
+With `--checkpointing` enabled, one additional engine-owned named volume backs
+the session: `sandbox-checkpoints-<project_hash>`, carrying the labels
+`com.vybestack.llxprt.sandbox-managed=true`,
+`com.vybestack.llxprt.sandbox-checkpoint-store=<project_hash>`, and
+`com.vybestack.llxprt.sandbox-checkpoint-persistent=true`. A bounded uid-0
+init container prepares it before the main container starts, and the trusted
+entrypoint links the shadow git history and the `/restore` checkpoint metadata
+into it, so checkpoint state survives the `--rm` container and later sandbox
+sessions of the same project restore from the same history (see
+[Checkpointing](./checkpointing.md)).
+
+This volume is deliberately **not** part of the per-run dependency storage
+lifecycle. Dependency volumes are created and released with each run and may
+be reclaimed by stale-run cleanup; the checkpoint store is persistent project
+state. The distinction is enforced by naming and labels: the store never
+carries the per-run dependency label or process owner labels, and run-scoped
+reclamation matches only those, so it can never delete checkpoint history.
+Session cleanup, launch failure, and crash recovery all leave the checkpoint
+store in place; remove it manually with `docker volume rm` / `podman volume
+rm` when you no longer want it.
+
+If the engine cannot create or initialize the store, or the store is missing
+at entry (for example an older launcher with a newer image), the session fails
+before checkpointing is presented as available.
+
+Seatbelt keeps its existing profile-based behavior. Its built-in profiles expose
+up to five accepted `--include-directories` roots through the existing
+`INCLUDE_DIR_0` through `INCLUDE_DIR_4` parameters and add those paths to the
+write allow-list. The container-only overlap preflight and private dependency
+volumes do not apply because Seatbelt runs directly on the host. Seatbelt also
+grants broader read access, including a read-only grant for the legacy global
+directory that startup migration reads from. See
 [Application Directories](./reference/application-directories.md).
 
 ### Network
@@ -970,6 +1092,20 @@ profile.
 **"macOS credential bridge requires container networking"** — you combined
 `network: off` with Docker or Podman on macOS. The credential bridge needs
 networking there. Use `network: on`, switch to Seatbelt, or run on Linux.
+
+**"Sandbox dependency preflight failed"**: the host `node_modules` of your
+project contains a file the preflight recognized as a binary built for another
+platform (ELF, Mach-O, including universal/fat binaries, or PE where the
+format does not match your host), or a `node_modules/.bin` symlink pointing at
+the image-global bun location (`/usr/local/bun/bin/...`, such as `bun` or
+`bunx`) while no such path exists on your host. Because the sandbox replaces
+those trees with fresh private per-run mounts anyway, the launch stops before
+the container starts rather than failing later inside it. Remove the affected
+project-local `node_modules` directory named in the message, reinstall on the
+host, and retry. Files the preflight cannot positively identify (scripts,
+unknown or truncated bytes, matching-host binaries, `prebuilds/` trees for
+other platforms), and `.bin` links to absolute paths outside the image-global
+bun location, do not trigger this error.
 
 ### Podman macOS: OOM-killed with exit code 137
 

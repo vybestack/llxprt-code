@@ -108,6 +108,7 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   protected readonly embeddingModel: string | undefined;
   protected readonly sandbox: SandboxConfig | undefined;
   protected readonly targetDir!: string;
+  protected readonly configuredIncludeDirectories!: readonly string[];
   protected workspaceContext!: WorkspaceContext;
   protected readonly debugMode!: boolean;
   protected readonly outputFormat!: OutputFormat;
@@ -471,6 +472,13 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   getSessionRecordingService(): SessionRecordingService | undefined {
     return this.sessionRecordingService;
   }
+  /**
+   * Never constructs a manager; read-only paths (exit-time shutdown notice)
+   * must use it so a job-free session does not build one and mkdtemp its log directory.
+   */
+  peekShellJobManager(): ShellJobManager | undefined {
+    return this.shellJobManager;
+  }
   setInteractiveSubagentSchedulerFactory(
     factory: SubagentSchedulerFactory | undefined,
   ): void {
@@ -517,6 +525,9 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   }
   getProjectRoot(): string {
     return this.targetDir;
+  }
+  getConfiguredIncludeDirectories(): readonly string[] {
+    return [...this.configuredIncludeDirectories];
   }
   getWorkspaceContext(): WorkspaceContext {
     return this.workspaceContext;

@@ -127,14 +127,15 @@ system prompt, and project memory files.
 ### Anthropic API key (`anthropic` alias)
 
 Configured context-limit for current-generation models (`claude-opus-5`,
-`claude-opus-4-8`, `claude-fable-5`, `claude-sonnet-4-6`, `claude-sonnet-5`):
-**1,000,000 tokens**.
+`claude-opus-4-8`, `claude-fable-5-1`, `claude-fable-5`, `claude-sonnet-4-6`,
+`claude-sonnet-5`): **1,000,000 tokens**.
 
 Max output tokens configured: **128,000**.
 
 Reasoning is enabled by default for `claude-(opus|sonnet|haiku|fable)` models,
 with `reasoning.effort` set to **`high`** only for `claude-opus-5`,
-`claude-opus-4-8`, `claude-fable-5`, `claude-sonnet-4-6`, and `claude-sonnet-5`.
+`claude-opus-4-8`, `claude-fable-5-1`, `claude-fable-5`, `claude-sonnet-4-6`,
+and `claude-sonnet-5`.
 Other matching models (for example, `claude-haiku-4-5`) get reasoning enabled
 without a default effort. Temperature, `top_p`, and `top_k` are disallowed for
 all `claude-(opus|sonnet|haiku|fable)` models (reasoning models manage sampling
@@ -180,9 +181,9 @@ Recommended settings:
 ### Claude Code OAuth (`claudecode` alias)
 
 Same context and output limits as the `anthropic` alias for current-generation
-models. Available static models include: `claude-opus-5`, `claude-fable-5`,
-`claude-opus-4-8`, `claude-opus-4-7`, `claude-opus-4-6`, `claude-sonnet-5`,
-`claude-sonnet-4-6`, and earlier versions.
+models. Available static models include: `claude-opus-5`, `claude-fable-5-1`,
+`claude-fable-5`, `claude-opus-4-8`, `claude-opus-4-7`, `claude-opus-4-6`,
+`claude-sonnet-5`, `claude-sonnet-4-6`, and earlier versions.
 
 See [Provider Setup Quick Reference](./quick-reference.md#subscription-and-oauth-providers)
 for OAuth setup instructions.

@@ -43,6 +43,12 @@ import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveBunTestFiles, type BunTestFile } from './bun-test-roots.js';
 import { DEFAULT_PER_TEST_TIMEOUT_MS } from './lib/bun-test-policy.js';
+import { reapStaleBunTestProcesses } from './lib/bun-test-reaper.js';
+import {
+  planNextAttempt,
+  resolveTimeoutRetryBudget,
+  wasKilledByTimeoutSignal,
+} from './lib/bun-test-retry.js';
 import {
   buildVitestJsonReport,
   parseJUnitXml,
@@ -51,67 +57,10 @@ import {
   type JUnitTestSuite,
 } from './bun-junit-to-json-report.js';
 
-/**
- * Detects and kills stale orphaned `bun test` processes (PPID=1) before
- * starting a new run. When a parent test runner is killed (e.g. by OOM),
- * child `bun test` processes reparent to PID 1 and keep spinning
- * indefinitely — consuming CPU and memory. This guard prevents that
- * accumulation by reaping orphans at the start of every run.
- *
- * Exposed as a standalone function for testability.
- */
-function isOrphanedTestProcess(
-  ppid: number,
-  pid: number,
-  comm: string,
-  ownPid: number,
-): boolean {
-  if (ppid !== 1 || pid === ownPid) return false;
-  const runtime = comm.includes('bun') || comm.includes('node');
-  const isTest = comm.includes('test') || comm.includes('spec');
-  return runtime && isTest;
-}
-
-export function reapStaleBunTestProcesses(
-  spawnSync: (cmd: readonly string[]) => { stdout: string | null },
-  kill: (pid: number, signal: string) => void,
-  ownPid: number,
-  stderr?: (line: string) => void,
-): number {
-  let output: string;
-  try {
-    output = spawnSync(['ps', '-eo', 'pid=,ppid=,args=']).stdout ?? '';
-  } catch {
-    return 0;
-  }
-
-  let killed = 0;
-  for (const line of output.split('\n')) {
-    const parts = line.trim().split(/\s+/);
-    const pid = parseInt(parts[0] ?? '', 10);
-    const ppid = parseInt(parts[1] ?? '', 10);
-    const comm = parts.slice(2).join(' ');
-    if (
-      Number.isFinite(pid) &&
-      Number.isFinite(ppid) &&
-      isOrphanedTestProcess(ppid, pid, comm, ownPid)
-    ) {
-      try {
-        kill(pid, 'SIGTERM');
-        killed++;
-      } catch {
-        // Process may have already exited
-      }
-    }
-  }
-
-  if (killed > 0 && stderr) {
-    stderr(
-      `[run_bun_tests] Reaped ${killed} stale orphaned test process(es) (PPID=1) before run.`,
-    );
-  }
-  return killed;
-}
+// The reaper implementation moved to scripts/lib/bun-test-reaper.ts; it is
+// re-exported here so the pre-existing import surface of this module is
+// unchanged.
+export { reapStaleBunTestProcesses };
 
 /**
  * Bun SyncSubprocess shape for the fields used in diagnostics.  The full
@@ -256,9 +205,7 @@ export function isChildSuccess(child: ChildExitInfo): boolean {
   if (child.exitCode === 0) {
     return true;
   }
-  const killedByTimeout =
-    child.signalCode === 'SIGTERM' || child.signalCode === 'SIGKILL';
-  if (!killedByTimeout) {
+  if (!wasKilledByTimeoutSignal(child)) {
     return false;
   }
   return outputShowsCompleteSummary(child.stdout, child.stderr);
@@ -509,7 +456,13 @@ function spawnTestFileOnce(
   run: RunWideOptions,
   dependencies: BunTestRunnerDependencies,
   junitOutfile?: string,
-): { passed: boolean; stdout: string; diagnostic: string; junitPath?: string } {
+): {
+  passed: boolean;
+  timedOut: boolean;
+  stdout: string;
+  diagnostic: string;
+  junitPath?: string;
+} {
   try {
     const child = dependencies.spawn(
       buildSpawnArgs(
@@ -529,8 +482,13 @@ function spawnTestFileOnce(
         timeout: processTimeoutFor(entry.timeout ?? run.timeout),
       },
     );
+    const passed = isChildSuccess(child);
     return {
-      passed: isChildSuccess(child),
+      passed,
+      // A signal kill that did NOT yield a complete passing summary (the
+      // isChildSuccess call above already accounted for that case) is the
+      // per-file timeout firing.
+      timedOut: !passed && wasKilledByTimeoutSignal(child),
       stdout: child.stdout ?? '',
       diagnostic: formatFailureDiagnostic(child),
       junitPath: junitOutfile,
@@ -540,7 +498,12 @@ function spawnTestFileOnce(
       error instanceof Error
         ? (error.stack ?? error.toString())
         : String(error);
-    return { passed: false, stdout: '', diagnostic: `\n${diagnostic}` };
+    return {
+      passed: false,
+      timedOut: false,
+      stdout: '',
+      diagnostic: `\n${diagnostic}`,
+    };
   }
 }
 
@@ -551,18 +514,31 @@ function runSingleTestFile(
   junitOutfile?: string,
 ): FileTestResult {
   const relativeName = entry.file.replace(entry.cwd + '/', '');
-  const attempts = (entry.retries ?? 0) + 1;
-  let last = { passed: false, stdout: '', diagnostic: '' };
-  for (let attempt = 1; attempt <= attempts; attempt++) {
+  // Two independent retry budgets: `entry.retries` retries any failure
+  // (pre-existing opt-in used by the e2e configs), while the timeout budget
+  // retries only per-file timeout kills (issue #3439) and defaults to 1.
+  // planNextAttempt owns the exact retry decision and messages.
+  const failureAttempts = (entry.retries ?? 0) + 1;
+  let timeoutRetriesLeft = resolveTimeoutRetryBudget();
+  let attempt = 1;
+  let last = spawnTestFileOnce(entry, run, dependencies, junitOutfile);
+  let retry = planNextAttempt(
+    last,
+    { attempt, failureAttempts, timeoutRetriesLeft },
+    entry.file,
+  );
+  while (retry !== null) {
+    if (retry.kind === 'timeout') {
+      timeoutRetriesLeft--;
+    }
+    dependencies.stderr(retry.message);
+    attempt++;
     last = spawnTestFileOnce(entry, run, dependencies, junitOutfile);
-    if (last.passed) {
-      break;
-    }
-    if (attempt < attempts) {
-      dependencies.stderr(
-        `Native Bun test failed (attempt ${attempt}/${attempts}), retrying: ${entry.file}${last.diagnostic}`,
-      );
-    }
+    retry = planNextAttempt(
+      last,
+      { attempt, failureAttempts, timeoutRetriesLeft },
+      entry.file,
+    );
   }
   if (!last.passed) {
     dependencies.stderr(

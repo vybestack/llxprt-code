@@ -82,6 +82,15 @@ export type { SanitizedOAuthToken } from './token-sanitization.js';
 
 // ─── Precedence / Auth Resolution ────────────────────────────────────────────
 export { AuthPrecedenceResolver } from './auth-precedence-resolver.js';
+export type { ResolveAuthOptions } from './auth-precedence-resolver.js';
+export { CredentialResolutionError } from './credential-resolution-error.js';
+export type {
+  CredentialMechanism,
+  CredentialResolutionDiagnostics,
+  CredentialResolutionErrorKind,
+  CredentialResolutionErrorOptions,
+  CredentialResolutionResult,
+} from './credential-resolution-error.js';
 
 export {
   flushRuntimeAuthScope,

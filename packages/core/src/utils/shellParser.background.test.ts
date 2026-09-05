@@ -4,15 +4,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeAll, describe, expect, it } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import {
   initializeParser,
+  resetParser,
   detectTrailingBackgroundOperator,
 } from './shell-parser.js';
 
 describe('detectTrailingBackgroundOperator', () => {
   beforeAll(async () => {
     await initializeParser();
+  });
+
+  // #3542 (run B) C2: web-tree-sitter's Parser/Language/Query keep the WASM
+  // module (and on win32 a live transfer-buffer/fd) referenced for the life of
+  // this bun process. resetParser() deterministically delete()s the two Parser
+  // instances it published and drops the published Language/Query references, so nothing
+  // the suite initialized outlives the suite (bun then exits promptly after the
+  // last test on the dispatched Windows run instead of hanging to the job timeout).
+  afterAll(() => {
+    resetParser();
   });
 
   describe('promotes a genuine trailing &', () => {

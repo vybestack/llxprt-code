@@ -307,8 +307,9 @@ export async function checkGoalCompletion(
     return null;
   }
 
+  const emittedOutputKeys = Object.keys(ctx.output.emitted_vars);
   const remainingVars = Object.keys(ctx.outputConfig.outputs).filter(
-    (key) => !(key in ctx.output.emitted_vars),
+    (key) => !emittedOutputKeys.includes(key),
   );
 
   if (remainingVars.length === 0) {

@@ -27,6 +27,10 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import {
+  canonicalizeToolName,
+  SCOPE_LOCAL_EMIT_TOOL_NAME,
+} from './toolGovernance.js';
 
 export type ToolGroupArray = Array<{
   functionDeclarations?: Array<{
@@ -96,6 +100,76 @@ export function extractAllowedFunctionNames(
   if (!('allowedFunctionNames' in toolConfig)) return undefined;
   if (!Array.isArray(toolConfig.allowedFunctionNames)) return undefined;
   return toolConfig.allowedFunctionNames;
+}
+
+export async function applyToolSelectionHook(
+  configForHooks: AgentRuntimeContext['providerRuntime']['config'],
+  tools: AgentClientGenerateConfig['tools'],
+): Promise<ToolSelectionHookResult> {
+  if (configForHooks === undefined) {
+    return { tools, allowedFunctionNames: undefined };
+  }
+
+  const getToolSelectionHooksEnabled = configForHooks.getEnableHooks;
+  if (
+    typeof getToolSelectionHooksEnabled !== 'function' ||
+    getToolSelectionHooksEnabled.call(configForHooks) !== true
+  ) {
+    return { tools, allowedFunctionNames: undefined };
+  }
+
+  const getToolSelectionHookSystem = configForHooks.getHookSystem;
+  const hookSystem =
+    typeof getToolSelectionHookSystem === 'function'
+      ? getToolSelectionHookSystem.call(configForHooks)
+      : undefined;
+  if (hookSystem === undefined) {
+    return { tools, allowedFunctionNames: undefined };
+  }
+
+  await hookSystem.initialize();
+  const toolsFromConfig = Array.isArray(tools) ? (tools as ToolGroupArray) : [];
+  const toolSelectionResult =
+    await hookSystem.fireBeforeToolSelectionEvent(toolsFromConfig);
+  const modifiedConfig = toolSelectionResult?.applyToolConfigModifications({
+    tools: toolsFromConfig,
+  });
+
+  const toolConfig = modifiedConfig?.toolConfig as unknown;
+  const allowedFunctions = extractAllowedFunctionNames(toolConfig);
+  if (allowedFunctions === undefined) {
+    return { tools: toolsFromConfig, allowedFunctionNames: undefined };
+  }
+
+  const emitterName = canonicalizeToolName(SCOPE_LOCAL_EMIT_TOOL_NAME);
+  const hasScopeLocalEmitter = toolsFromConfig.some(
+    (toolGroup) =>
+      toolGroup.functionDeclarations?.some(
+        (declaration) => canonicalizeToolName(declaration.name) === emitterName,
+      ) === true,
+  );
+  const effectiveAllowedFunctions = hasScopeLocalEmitter
+    ? Array.from(new Set([...allowedFunctions, SCOPE_LOCAL_EMIT_TOOL_NAME]))
+    : allowedFunctions;
+  const allowedNames = new Set(
+    effectiveAllowedFunctions.map(canonicalizeToolName),
+  );
+  const filteredTools = toolsFromConfig
+    .map((toolGroup) => ({
+      ...toolGroup,
+      functionDeclarations: Array.isArray(toolGroup.functionDeclarations)
+        ? toolGroup.functionDeclarations.filter(
+            (fn) =>
+              typeof fn.name === 'string' &&
+              allowedNames.has(canonicalizeToolName(fn.name)),
+          )
+        : [],
+    }))
+    .filter((group) => group.functionDeclarations.length > 0) as ToolGroupArray;
+  return {
+    tools: filteredTools,
+    allowedFunctionNames: effectiveAllowedFunctions,
+  };
 }
 
 /**

@@ -20,6 +20,7 @@ import {
   WORKFLOW_PATH,
   commandText,
   extractBashBlock,
+  extractHeredocBody,
   hasBash,
   readRootFile,
   stepNamed,
@@ -91,22 +92,27 @@ const TIMEOUT_REASON = 'OCR review failed: timeout';
 const ALL_FAILED_REASON =
   'all OCR per-file reviews failed; likely LLM provider/config/auth failure';
 
-// Mirrors the real helper the workflow writes in "Initialize OCR artifact
-// files" (ocr-workflow-helpers.sh).
-const MARK_STUB =
-  'mark_infrastructure_failure() {\n' +
-  '  echo "phase=$1; reason=$2" >> ocr-infrastructure-failure.txt\n' +
-  '}\n';
-
 describe.skipIf(!hasBash())(
   '.github/workflows/ocr-review.yml — review failure classification (issue #2929)',
   () => {
+    // The REAL mark_infrastructure_failure (and siblings the helper file defines)
+    // is extracted from the "Initialize OCR artifact files" heredoc rather than
+    // re-implemented here, so the artifact format under test cannot drift from
+    // what the workflow actually writes.
+    let markFailureHelper: string;
     let classifierBlock: string;
 
     beforeAll(() => {
       const workflow = parseWorkflowYaml(readRootFile(WORKFLOW_PATH));
       const jobs = workflow.jobs;
       if (!jobs) throw new Error('workflow should have jobs');
+      markFailureHelper = extractHeredocBody(
+        commandText(
+          stepNamed(jobs['code-review'], 'Initialize OCR artifact files'),
+        ),
+        'Initialize OCR artifact files',
+        'EOF',
+      );
       const reviewStep = stepNamed(
         asRecord(jobs['code-review']),
         'Run OpenCodeReview',
@@ -133,6 +139,10 @@ describe.skipIf(!hasBash())(
       fs.rmSync(directory, { recursive: true, force: true });
     });
 
+    /**
+     * Run the real extracted classifier and return the reason it recorded in the
+     * artifact, throwing a diagnostic if it failed or recorded nothing.
+     */
     function classify(stderrContent: string): string {
       const artifactPath = path.join(
         directory,
@@ -149,7 +159,12 @@ describe.skipIf(!hasBash())(
       try {
         execFileSync(
           'bash',
-          ['-c', ['set -euo pipefail', MARK_STUB, classifierBlock].join('\n')],
+          [
+            '-c',
+            ['set -euo pipefail', markFailureHelper, classifierBlock].join(
+              '\n',
+            ),
+          ],
           {
             cwd: directory,
             stdio: ['ignore', 'pipe', 'pipe'],

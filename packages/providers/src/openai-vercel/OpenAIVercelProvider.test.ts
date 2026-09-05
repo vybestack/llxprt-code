@@ -28,7 +28,7 @@ import {
   clearActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { AuthenticationError } from './errors.js';
+import { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
@@ -485,7 +485,14 @@ describe('Authentication (REQ-OAV-003)', () => {
       });
 
       const iterator = provider.generateChatCompletion(options);
-      await expect(iterator.next()).rejects.toThrow(AuthenticationError);
+      const rejection = iterator.next();
+      await expect(rejection).rejects.toBeInstanceOf(CredentialResolutionError);
+      await expect(rejection).rejects.toMatchObject({
+        kind: 'no-credential-configured',
+        message: expect.stringContaining(
+          'provider=openaivercel; profile=no-profile; runtimeId=test.provider.runtime',
+        ),
+      });
     });
   });
 

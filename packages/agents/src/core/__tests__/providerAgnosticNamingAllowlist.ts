@@ -110,6 +110,8 @@ export const ALLOWED_GEMINI_PAIRS: readonly string[] = [
   'providers/src/__tests__/LoadBalancingProvider.delegation.test.ts::mockGeminiProvider',
   'providers/src/__tests__/LoadBalancingProvider.delegation.test.ts::mockGemini',
   'providers/src/composition/providerManagerInstance.oauthRegistration.test.ts::MockGeminiProvider',
+  'providers/src/composition/providerManagerInstance.oauthRegistration.test.ts::geminiCtorState',
+  'providers/src/composition/providerManagerInstance.oauthRegistration.test.ts::geminiCtor',
   'providers/src/composition/providerManagerInstance.schemaDefaults.test.ts::MockGeminiProvider',
 ];
 
@@ -165,6 +167,8 @@ export const ALLOWED_IMPORT_TUPLES: readonly string[] = [
   'core/src/services/history/ContentConverters.ts::../../llm-types/geminiContent.js::GeminiContentPart::GeminiContentPart',
   'core/test/models/profiles.test.ts::./__fixtures__/mock-data.js::geminiModel::geminiModel',
   'core/test/models/transformer.test.ts::./__fixtures__/mock-data.js::geminiModel::geminiModel',
+  'providers/src/fake/FakeProvider.ts::@vybestack/llxprt-code-core/llm-types/index.js::GeminiContent::GeminiContent',
+  'providers/src/composition/aliasProviderFactory.authOnly.test.ts::./aliasProviderFactory.js::createGeminiAliasProvider::createGeminiAliasProvider',
   'providers/src/composition/aliasProviderFactory.ts::../gemini/GeminiProvider.js::GeminiProvider::GeminiProvider',
   // The built-in provider contribution table enumerates every built-in
   // provider, Gemini included, and delegates to the existing alias factory.

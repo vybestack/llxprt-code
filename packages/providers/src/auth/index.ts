@@ -121,6 +121,21 @@ export {
   executeGitHubOp,
 } from './proxy/github-broker.js';
 
+// ─── Proxy Audit Log ─────────────────────────────────────────────────────────
+// Durable audit sink plus explicit TUI-terminal ownership for the credential
+// proxy (#3490): when the sandbox hop hands the terminal to the Ink TUI,
+// audit records must route to the file sink / feedback surface, not stderr.
+// Production needs only the ownership setter; `auditLog` stays public so
+// CLI-package hop tests can drive a real audit record through the real
+// routing (this subpath is the package's only auth entry point).
+// `resetAuditLogStateForTesting` is test-only (ownership flag, deferred
+// buffer and overflow counter) and must not be used by production code.
+export {
+  auditLog,
+  resetAuditLogStateForTesting,
+  setTuiOwnsTerminal,
+} from './proxy/audit-log.js';
+
 // ─── File-backed OAuth Settings Provider ─────────────────────────────────────
 // Isolated-runtime OAuth enablement surface: reads the user-scope global
 // settings file so provider instances built outside the CLI (subagents /

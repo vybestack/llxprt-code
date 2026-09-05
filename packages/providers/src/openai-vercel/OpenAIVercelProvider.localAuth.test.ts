@@ -24,7 +24,7 @@
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
-import { AuthenticationError } from './errors.js';
+import { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
@@ -118,7 +118,7 @@ describe('OpenAIVercelProvider local-endpoint keyless auth (issue #2506)', () =>
     expect(typeof callArgs.apiKey).toBe('string');
   });
 
-  it('throws AuthenticationError for a remote endpoint with no key (no regression)', async () => {
+  it('throws CredentialResolutionError for a remote endpoint with no key', async () => {
     const provider = new OpenAIVercelProvider(undefined, undefined, {
       settingsService,
     });
@@ -146,7 +146,7 @@ describe('OpenAIVercelProvider local-endpoint keyless auth (issue #2506)', () =>
 
     await expect(
       collectResults(provider.generateChatCompletion(options)),
-    ).rejects.toThrow(AuthenticationError);
+    ).rejects.toThrow(CredentialResolutionError);
 
     expect(mockCreateOpenAI).not.toHaveBeenCalled();
   });

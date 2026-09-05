@@ -55,7 +55,10 @@ import {
   estimatePendingTokens,
   getCompletionBudget,
 } from './compressionBudgeting.js';
-import { ProviderContentEnforcer } from './providerContentEnforcement.js';
+import {
+  ProviderContentEnforcer,
+  type CompressionGuardInfo,
+} from './providerContentEnforcement.js';
 import {
   TOKEN_SAFETY_MARGIN,
   CONTEXT_LIMIT_FUDGE_FACTOR,
@@ -376,7 +379,10 @@ export class CompressionHandler {
       return;
     }
 
-    const callback = async (_contents: IContent[]): Promise<IContent[]> => {
+    const callback = async (
+      _contents: IContent[],
+      guard?: CompressionGuardInfo,
+    ): Promise<IContent[]> => {
       if (pendingContents === undefined) {
         throw new Error(
           'Compression callback invoked but the pending-content boundary is ' +
@@ -387,7 +393,12 @@ export class CompressionHandler {
         );
       }
       try {
-        return await enforcer.compressAndRecompose(pendingContents, promptId);
+        return await enforcer.compressAndRecompose(
+          pendingContents,
+          promptId,
+          guard,
+          provider,
+        );
       } catch (error) {
         this.logger.warn(
           () => '[CompressionHandler] Compression callback failed',

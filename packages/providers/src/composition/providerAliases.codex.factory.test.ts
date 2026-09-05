@@ -47,6 +47,7 @@ function buildCodexProvider() {
     undefined,
     {},
     NULL_OAUTH_MANAGER,
+    false,
   );
   return provider;
 }

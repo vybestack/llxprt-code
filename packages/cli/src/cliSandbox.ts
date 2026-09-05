@@ -6,7 +6,10 @@
 
 import { type Config, ExitCodes } from '@vybestack/llxprt-code-core';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import { setTuiOwnsTerminal } from '@vybestack/llxprt-code-providers/auth.js';
 import { loadCliConfig } from './config/config.js';
+import { isImageModeActive } from './config/imageMode.js';
+import { buildImageModeFlags } from './config/imageModeDispatch.js';
 import { start_sandbox } from './utils/sandbox.js';
 import {
   computeSandboxMemoryArgs,
@@ -199,12 +202,27 @@ export async function maybeHopIntoSandbox(
       : undefined;
   const finalSandboxArgs = augmentArgvWithInternalEnvPath(sandboxArgs, envPath);
 
-  const exitCode = await start_sandbox(
-    sandboxConfig,
-    sandboxMemoryArgs,
-    partialConfig,
-    finalSandboxArgs,
+  // From here until start_sandbox settles, the sandbox Ink TUI owns this
+  // terminal, so credential-proxy audit records must route to their file
+  // sink / the feedback surface instead of stderr (#3490). Direct image
+  // mode dispatches after the hop without ever mounting Ink, so an
+  // interactive-looking TTY must not claim ownership for it; the image-flag
+  // pair is the same one the post-hop dispatch uses, so the two can never
+  // disagree.
+  setTuiOwnsTerminal(
+    config.isInteractive() && !isImageModeActive(buildImageModeFlags(argv)),
   );
+  let exitCode: number;
+  try {
+    exitCode = await start_sandbox(
+      sandboxConfig,
+      sandboxMemoryArgs,
+      partialConfig,
+      finalSandboxArgs,
+    );
+  } finally {
+    setTuiOwnsTerminal(false);
+  }
   // Drains the patched-stdio backlog (registered flush) before the bare exit
   // that terminates this process, mirroring the initialAuthFailed branch.
   await runExitCleanup();

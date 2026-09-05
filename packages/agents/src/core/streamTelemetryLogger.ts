@@ -70,16 +70,40 @@ function isTokenBearingChunk(chunk: IContent): boolean {
  * generator execution begins (the provider call boundary), fed every raw
  * chunk before any conversion or hook processing, and read out at stream
  * end. Excludes send-seam estimation, which runs before the provider call.
+ *
+ * Timing source precedence (issue #3493): firstTokenMs/lastTokenMs are
+ * stamped from raw token deltas via recordRawTokenDelta whenever that
+ * signal arrives, falling back to visible token-bearing chunks when it
+ * does not. Once a raw delta has stamped the attempt, visible chunks still
+ * count toward chunkCount but must not move the token window, because
+ * deferred visible emissions (a terminal combined chunk, a buffered-text
+ * flush) trail the final raw delta. This mirrors the providers-layer
+ * AttemptRecorder rule from issue #3473 (`rawTimingStamped` guarding
+ * `recordTokenBearingChunk` after `recordTimingOnly`), so both layers
+ * agree on the same token window.
  */
 export class StreamTimingTracker {
   private readonly startMs = performance.now();
   private firstTokenMs: number | null = null;
   private lastTokenMs: number | null = null;
   private chunkCount = 0;
+  private rawTimingStamped = false;
+
+  /**
+   * Record a raw token-delta timing signal for this attempt (issue #3493).
+   * Stamps firstTokenMs/lastTokenMs without touching chunkCount, and makes
+   * the raw stamps authoritative over later visible-chunk stamps.
+   */
+  recordRawTokenDelta(): void {
+    const now = performance.now() - this.startMs;
+    this.firstTokenMs ??= now;
+    this.lastTokenMs = now;
+    this.rawTimingStamped = true;
+  }
 
   recordChunk(chunk: IContent): void {
     this.chunkCount++;
-    if (isTokenBearingChunk(chunk)) {
+    if (!this.rawTimingStamped && isTokenBearingChunk(chunk)) {
       const now = performance.now() - this.startMs;
       this.firstTokenMs ??= now;
       this.lastTokenMs = now;
@@ -93,6 +117,28 @@ export class StreamTimingTracker {
       providerRequestMs: performance.now() - this.startMs,
       chunkCount: this.chunkCount,
     };
+  }
+}
+
+/**
+ * Stable indirection between request metadata and the per-attempt tracker
+ * (issue #3493). Request metadata is built in _buildStreamChatOptions
+ * before the provider call, while the tracker only comes into existence at
+ * the generator-body start of _convertIContentStream — the provider-call
+ * boundary that keeps provider_request_ms free of send-seam estimation
+ * (#3257). The bridge is threaded into metadata first and attached to the
+ * tracker when that boundary is crossed, so the sink identity stays stable
+ * across the two moments. `notify` is an arrow-function property so it can
+ * be passed as a bare function value without losing `this`.
+ */
+export class RawTokenDeltaBridge {
+  private tracker: StreamTimingTracker | null = null;
+  /** Stable sink threaded into request metadata before the tracker exists. */
+  readonly notify = (): void => {
+    this.tracker?.recordRawTokenDelta();
+  };
+  attach(tracker: StreamTimingTracker): void {
+    this.tracker = tracker;
   }
 }
 

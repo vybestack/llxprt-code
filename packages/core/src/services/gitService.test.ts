@@ -186,9 +186,18 @@ describe('GitService', () => {
       await service.setupShadowGitRepository();
 
       const expectedConfigContent =
-        '[user]\n  name = llxprt-code\n  email = llxprt-code-bot@users.noreply.github.com\n[commit]\n  gpgsign = false\n';
+        '[user]\n  name = llxprt-code\n  email = llxprt-code-bot@users.noreply.github.com\n[commit]\n  gpgsign = false\n[safe]\n  directory = *\n[core]\n  autocrlf = false\n';
       const actualConfigContent = await fs.readFile(gitConfigPath, 'utf-8');
       expect(actualConfigContent).toBe(expectedConfigContent);
+    });
+
+    it('should write the shadow repo attributes override', async () => {
+      const service = new GitService(projectRoot, storage);
+      await service.setupShadowGitRepository();
+
+      const attributesPath = path.join(repoDir, '.git', 'info', 'attributes');
+      const attributesContent = await fs.readFile(attributesPath, 'utf-8');
+      expect(attributesContent).toBe('* -text\n');
     });
 
     it('should initialize git repo in historyDir if not already initialized', async () => {

@@ -75,7 +75,9 @@ export function buildAnthropicCustomHeaders(params: {
     customHeaders = {
       ...customHeaders,
       'anthropic-beta': betaWithThinking,
-      'User-Agent': 'claude-cli/2.1.2 (external, cli)',
+      // Fable 5.1 and other subscription models reject clients below
+      // claude-cli 2.1.255; 2.1.257 is the released version that includes it.
+      'User-Agent': 'claude-cli/2.1.257 (external, cli)',
     };
   }
 
