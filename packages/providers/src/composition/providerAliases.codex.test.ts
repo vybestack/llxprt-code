@@ -6,13 +6,25 @@
 
 import { describe, it, expect } from 'bun:test';
 
-import { loadProviderAliasEntries } from './providerAliases.js';
+import {
+  computeUnallowedParameters,
+  loadProviderAliasEntries,
+} from './providerAliases.js';
+import { computeModelDefaults } from '../runtime/providerMutations.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const SAMPLING_PARAMETERS = [
+  'frequency_penalty',
+  'presence_penalty',
+  'temperature',
+  'top_k',
+  'top_p',
+] as const;
 
 describe('Codex provider alias', () => {
   it('should have a codex.config file (not .json extension)', () => {
@@ -71,6 +83,7 @@ describe('Codex provider alias', () => {
     const modelIds = (codexAlias?.config.staticModels ?? []).map((m) => m.id);
 
     expect(modelIds).toStrictEqual([
+      'gpt-6-astra',
       'gpt-5.6-sol',
       'gpt-5.6-terra',
       'gpt-5.6-luna',
@@ -79,6 +92,63 @@ describe('Codex provider alias', () => {
       'gpt-5.4-mini',
       'gpt-5.3-codex-spark',
     ]);
+  });
+
+  it('exposes GPT-6 Astra with its OAuth context window while preserving provider defaults', () => {
+    const aliases = loadProviderAliasEntries();
+    const codexAlias = aliases.find((a) => a.alias === 'codex');
+    const astra = codexAlias?.config.staticModels?.find(
+      (model) => model.id === 'gpt-6-astra',
+    );
+
+    expect(astra).toStrictEqual({
+      id: 'gpt-6-astra',
+      name: 'GPT-6 Astra',
+      contextWindow: 872000,
+    });
+    expect(codexAlias?.config.ephemeralSettings['context-limit']).toBe(262144);
+    expect(codexAlias?.config.defaultModel).toBe('gpt-5.6-sol');
+  });
+
+  it('applies Astra model defaults without changing GPT-5.6 defaults', () => {
+    const aliases = loadProviderAliasEntries();
+    const codexAlias = aliases.find((a) => a.alias === 'codex');
+    const rules = codexAlias?.config.modelDefaults ?? [];
+
+    expect(computeModelDefaults('gpt-6-astra', rules)).toMatchObject({
+      'context-limit': 872000,
+    });
+    for (const model of [
+      'gpt-5.6-sol',
+      'gpt-5.6-terra',
+      'gpt-5.6-luna',
+      'gpt-5.3-codex-spark',
+    ]) {
+      expect(computeModelDefaults(model, rules)).not.toHaveProperty(
+        'context-limit',
+      );
+    }
+    expect(
+      [...computeUnallowedParameters('gpt-6-astra', rules)].sort(),
+    ).toStrictEqual([...SAMPLING_PARAMETERS]);
+    expect(
+      [...computeUnallowedParameters('gpt-5.6-sol', rules)].sort(),
+    ).toStrictEqual([...SAMPLING_PARAMETERS]);
+  });
+
+  it('resolves Astra to 872000 while retaining the 262144 GPT-5.6 effective limit', () => {
+    const aliases = loadProviderAliasEntries();
+    const codexAlias = aliases.find((a) => a.alias === 'codex');
+    if (!codexAlias) {
+      throw new Error('codex alias entry not found');
+    }
+    const effectiveDefaults = (model: string): Record<string, unknown> => ({
+      ...codexAlias.config.ephemeralSettings,
+      ...computeModelDefaults(model, codexAlias.config.modelDefaults ?? []),
+    });
+
+    expect(effectiveDefaults('gpt-6-astra')['context-limit']).toBe(872000);
+    expect(effectiveDefaults('gpt-5.6-sol')['context-limit']).toBe(262144);
   });
 
   it('should preserve the gpt-5.3-codex-spark 131072 context window', () => {
