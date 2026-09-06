@@ -378,8 +378,9 @@ describe('claudecode OAuth registration with environment key', () => {
       | unknown[]
       | undefined;
 
-    expect(openaiArgs).toHaveLength(3);
+    expect(openaiArgs).toHaveLength(4);
     expect(openaivercelArgs).toHaveLength(3);
     expect(openaiResponsesArgs?.[3]).toBe(oauthManager);
+    expect(Array.isArray(openaiResponsesArgs?.[4])).toBe(true);
   });
 });

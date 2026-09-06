@@ -8,7 +8,7 @@ import type {
   RuntimeTokenizer,
   RuntimeTokenizerFactory,
 } from '@vybestack/llxprt-code-core';
-import { isSanctionedGpt56Model } from '../openai/openaiModelPolicy.js';
+import { isSanctionedOpenAIO200kModel } from '../openai/openaiModelPolicy.js';
 import { AnthropicTokenizer } from '../tokenizers/AnthropicTokenizer.js';
 import {
   createGpt56RuntimeTokenizer,
@@ -77,8 +77,8 @@ function matchesTokenizer(
  *   bootstrap or composition consumer (CLI start-up, `fromConfig`, headless
  *   runtime assembly) MUST `await` it for each active provider/model BEFORE
  *   exposing `getTokenizer` or `estimatePrompt` to downstream callers. For
- *   sanctioned GPT-5.6 models it eagerly loads and smoke-tests the o200k_base
- *   encoder so that the first real counting call is never the first
+ *   sanctioned GPT-5.6 and GPT-6 models it eagerly loads and smoke-tests the
+ *   o200k_base encoder so that the first real counting call is never the first
  *   initialization attempt. Preparation failures surface with full estimator
  *   context and causal detail and are fatal to the bootstrap.
  * - `getTokenizer` is **synchronous** and deliberately free of readiness
@@ -114,7 +114,7 @@ export function createRuntimeTokenizerFactory(
   return {
     async prepareTokenizer(providerName, model): Promise<void> {
       const resolvedModel = model ?? providerName;
-      if (isSanctionedGpt56Model(resolvedModel)) {
+      if (isSanctionedOpenAIO200kModel(resolvedModel)) {
         await prepareGpt56RuntimeTokenizer(
           providerName,
           resolvedModel,
@@ -132,7 +132,7 @@ export function createRuntimeTokenizerFactory(
       model?: string,
     ): RuntimeTokenizer | undefined {
       const resolvedModel = model ?? providerName;
-      if (isSanctionedGpt56Model(resolvedModel)) {
+      if (isSanctionedOpenAIO200kModel(resolvedModel)) {
         return createGpt56RuntimeTokenizer(
           providerName,
           resolvedModel,

@@ -198,6 +198,10 @@ export function isSanctionedGpt6Model(model: string): boolean {
   return isValidQualifier(model.slice(GPT_6_ASTRA.length));
 }
 
+export function isSanctionedOpenAIO200kModel(model: string): boolean {
+  return isSanctionedGpt56Model(model) || isSanctionedGpt6Model(model);
+}
+
 /**
  * Validate that the suffix qualifier (the part after a bare alias or
  * after a tier) is empty, `-latest`, a compact 8-digit date snapshot

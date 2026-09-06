@@ -110,7 +110,7 @@ describe('Codex provider alias', () => {
     expect(codexAlias?.config.defaultModel).toBe('gpt-5.6-sol');
   });
 
-  it('applies Astra model defaults without changing GPT-5.6 defaults', () => {
+  it('applies Astra and Spark context defaults without changing GPT-5.6 defaults', () => {
     const aliases = loadProviderAliasEntries();
     const codexAlias = aliases.find((a) => a.alias === 'codex');
     const rules = codexAlias?.config.modelDefaults ?? [];
@@ -118,16 +118,14 @@ describe('Codex provider alias', () => {
     expect(computeModelDefaults('gpt-6-astra', rules)).toMatchObject({
       'context-limit': 872000,
     });
-    for (const model of [
-      'gpt-5.6-sol',
-      'gpt-5.6-terra',
-      'gpt-5.6-luna',
-      'gpt-5.3-codex-spark',
-    ]) {
+    for (const model of ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']) {
       expect(computeModelDefaults(model, rules)).not.toHaveProperty(
         'context-limit',
       );
     }
+    expect(computeModelDefaults('gpt-5.3-codex-spark', rules)).toMatchObject({
+      'context-limit': 131072,
+    });
     expect(
       [...computeUnallowedParameters('gpt-6-astra', rules)].sort(),
     ).toStrictEqual([...SAMPLING_PARAMETERS]);

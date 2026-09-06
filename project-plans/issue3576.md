@@ -140,6 +140,24 @@ for each new behavior before its implementation.
   `npm run test`, `npm run lint`, `npm run typecheck`, `npm run format`,
   `npm run build`, then
   `bun scripts/start.ts --profile-load stepfun-37 "write me a haiku and nothing else"`.
+- 2026-09-06 post-crash cycle results: test/lint/typecheck/format/build all
+  ran; see the environment-failure record below for the test exceptions.
+  The smoke test is currently BLOCKED by sandbox host infrastructure, not
+  code: the host-side credential proxy died with the crash
+  (`/tmp/llxprt-credential.sock` is a stale socket — connect fails with
+  "No such device or address"), so `auth-key-name 'stepfun'` cannot resolve.
+  The identical failure occurs on the `main` worktree, and
+  `bun scripts/start.ts --version` boots cleanly (0.11.0) on this branch, so
+  startup, config validation, and profile load all work; only the
+  credential-dependent API round-trip is impossible until the host proxy is
+  restored. Additionally, the first smoke attempt failed on
+  `Unrecognized key(s) in object: 'logConversations'` because a full-suite
+  CLI test had written `{"telemetry":{"logConversations":true}}` into the
+  real user-global settings.json (written 15:50 during the test phase),
+  and the settings-package startup validation rejects a key that core's
+  TelemetrySettings defines — both trees fail identically on that too; the
+  local settings file was reset to `{}` to unblock. Follow-up issues filed
+  for the schema drift and the test pollution.
 - `bun scripts/test-audit/scan.ts` self-check on touched test files: no new
   MOCK_MIRROR / ALWAYS_TRUE / SELF_CONFIRMING / NO_ASSERT findings versus a
   main-baseline scan diff.
@@ -148,6 +166,76 @@ for each new behavior before its implementation.
   in-process interference between `providerAliases.mediaSupport.test.ts` and
   `providerAliases.unallowedParameters.test.ts` (run per-file). Anything else
   red must be reproduced and fixed, never assumed unrelated.
+
+### Local sandbox environment failures (2026-09-06 full-cycle, proven pre-existing on main)
+
+The post-crash full `npm run test` run had failures beyond the known flakes.
+Each was reproduced on a clean `main` worktree (`tmp/main3576`, own `bun
+install`) in this same sandbox and failed identically there, so none are
+caused by this branch:
+
+- `packages/storage/src/secure-store/secure-store.native-keyring.test.ts` —
+  requires a real OS keyring; this sandbox has none
+  (`SecureStoreError: Platform failure: Unknown(38)`). CI runs it only on
+  Ubuntu with a keyring backend installed
+  (`packages/storage` `test:secure-store:keyring` + nightly.yml).
+- `packages/providers/src/auth/` 8 files (4 behavioral specs,
+  `oauthManager.proactive-renewal`, 2 proactive-renewal specs,
+  `proxy/factory-detection-wiring`) — pass per-file in isolation on both
+  trees; fail inside the full providers suite run on BOTH branch and main
+  with identical signatures (proactive-renewal timer spies never called).
+  Main's full providers run failed exactly the same 8 files.
+- `packages/cli`: `docsCommand.test.ts` (sandbox detection changes the
+  info message; test asserts the non-sandbox text), `Footer.responsive`
+  (2), `sandbox-node-modules-preflight` (1), `cli-args.integration` (2) —
+  each fails identically on main in isolation in this sandbox.
+- `packages/vscode-ide-companion` — Bun 1.3.14 internal error ("directory
+  mismatch for tsconfig.bun-test.json ... indicates a bug"); 0 test
+  failures. Tooling, not code.
+
+All branch-owned test files (codex alias, factory, policy, estimator,
+unallowedParameters, contextLimit integration, oauthRegistration,
+runtimeFactories, executor suites) passed in the full run. Evidence logs:
+`tmp/verify3576/` (test.log, main-providers-suite.log, per-file
+branch-/main-*.log).
+
+## Review record and remediation (2026-09-06)
+
+Deepthinker review round 1 found one HIGH and two MEDIUM issues; all three
+were remediated and verified with targeted per-file test runs:
+
+1. HIGH — the `unallowedParameters` alias rule was enforced only in the UI
+   layer (`runtimeAccessors.ts` model-config dialog path); the codex
+   Responses executor forwarded `temperature` and the other sampling keys on
+   the wire. Fix: `applyCodexRequestSettings` in
+   `openAIResponsesExecutor.ts` strips request keys via an injected
+   `getUnallowedModelParameters(model)` resolver; the alias factory passes
+   the entry's `modelDefaults` rules into `OpenAIProvider` and
+   `OpenAIResponsesProvider` constructors, which capture the rules once at
+   construction (no per-request alias-file reload; the initial draft called
+   `loadProviderAliasEntries()` per request and was corrected before
+   commit). Plain (non-alias) providers get an empty rule set, so canonical
+   OpenAI behavior is unchanged; a mirror test asserts sampling parameters
+   survive on plain OpenAI.
+2. MEDIUM — the runtime tokenizer factory restricted o200k prepare/select to
+   `isSanctionedGpt56Model`, so `gpt-6-astra` fell through to the
+   OpenAITokenizer adapter with a silent char-based fallback. Fix: shared
+   `isSanctionedOpenAIO200kModel` (= GPT-5.6 or GPT-6 sanctioned identity)
+   used by both the factory and the estimator registry; the registry keeps a
+   single widened o200k registration (no duplicate GPT-5.6 entry).
+3. MEDIUM — effective-context coverage was config-level only. Fix:
+   `providerAliases.codex.contextLimit.integration.test.ts` drives the live
+   provider-switch path and asserts 872000 (astra) vs 262144 (sol) vs 131072
+   (spark, now pinned by an explicit `^gpt-5\.3-codex-spark$` context-limit
+   rule); `providerManagerRuntimeFactories.test.ts` gained factory-level
+   coverage.
+
+Post-remediation machine cycle found and fixed three mechanical issues:
+constructor-arity assertions in `providerManagerInstance.oauthRegistration.test.ts`
+(4th/5th constructor args), two TS2345 type errors in the new test files
+(bun test does not typecheck), and two `max-lines` violations resolved by
+extracting the duplicated resolver closure into
+`openai-responses/unallowedModelParameters.ts`.
 
 ## Out of scope / follow-ups
 
