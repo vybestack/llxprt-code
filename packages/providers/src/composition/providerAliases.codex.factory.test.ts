@@ -79,6 +79,18 @@ describe('codex alias factory getModels (@issue:2272)', () => {
     );
   });
 
+  it('returns GPT-6 Astra first with its OAuth context window', async () => {
+    const provider = buildCodexProvider();
+
+    const models = await provider.getModels();
+
+    expect(models[0]).toMatchObject({
+      id: 'gpt-6-astra',
+      name: 'GPT-6 Astra',
+      contextWindow: 872000,
+    });
+  });
+
   it('returns the GPT-5.6 tiers and defaults to Sol', async () => {
     const provider = buildCodexProvider();
 

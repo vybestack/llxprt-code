@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
+import { RESPONSES_API_MODELS } from './RESPONSES_API_MODELS.js';
 
 // Use vi.hoisted so the mock is created in the hoisted scope the vi.mock
 // factory runs in. This avoids referencing a module-scoped binding from
@@ -21,6 +22,7 @@ void vi.mock('openai', () => ({
 // discovery fails. Asserting the exact list (order included) makes the
 // regression tests fail on ANY unintended addition, removal, or reorder.
 const EXPECTED_FALLBACK_MODEL_IDS = [
+  'gpt-6-astra',
   'gpt-5.6',
   'gpt-5.6-sol',
   'gpt-5.6-terra',
@@ -34,6 +36,10 @@ const EXPECTED_FALLBACK_MODEL_IDS = [
 describe('OpenAIProvider fallback models', () => {
   beforeEach(() => {
     mockModelsList.mockReset();
+  });
+
+  it('lists GPT-6 Astra first on the Responses API surface', () => {
+    expect(RESPONSES_API_MODELS[0]).toBe('gpt-6-astra');
   });
 
   it('includes the GPT-5.6 alias and named tiers when model discovery fails', async () => {

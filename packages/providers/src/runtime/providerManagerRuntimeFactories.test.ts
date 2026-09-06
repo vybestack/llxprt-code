@@ -207,6 +207,150 @@ describe('configureProviderRuntimeFactories', () => {
     ).toBe(10);
   });
 
+  it('prepares GPT-6 Astra for exact o200k runtime counting and prompt estimation', async () => {
+    const factory = createRuntimeTokenizerFactory();
+    const prepareTokenizer = factory.prepareTokenizer;
+    if (prepareTokenizer === undefined) {
+      throw new Error('runtime tokenizer factory has no readiness operation');
+    }
+
+    await prepareTokenizer('codex', 'gpt-6-astra');
+    const tokenizer = factory.getTokenizer('codex', 'gpt-6-astra');
+    const estimate = await factory.estimatePrompt({
+      activeProvider: 'codex',
+      canonicalModel: 'gpt-6-astra',
+      protocol: 'openai-responses',
+      wireMethod: 'responses/v1',
+      finalizedProjection: {
+        kind: 'llxprt-provider-prompt-v3',
+        protocol: 'openai-responses',
+        promptText: 'The quick brown fox jumps over the lazy dog.',
+      },
+      projectionRevision: 3,
+      legacyEstimate: () => Promise.resolve(999),
+    });
+
+    expect(tokenizer?.fallbackPolicy).toBe('deny');
+    expect(
+      await tokenizer?.countTokens(
+        'The quick brown fox jumps over the lazy dog.',
+      ),
+    ).toBe(10);
+    expect(estimate).toMatchObject({
+      count: 10,
+      method: 'exact',
+      family: 'openai-gpt-5.6',
+    });
+  });
+
+  it('shares the injected o200k resolver across Astra readiness, runtime counting, and final estimation', async () => {
+    const injectedCount = 29;
+    let loadCount = 0;
+    const loadModule: TiktokenModuleLoader = async () => {
+      loadCount += 1;
+      const tiktoken = await import('@dqbd/tiktoken');
+      return {
+        ...tiktoken,
+        get_encoding: (...args: Parameters<typeof tiktoken.get_encoding>) =>
+          new Proxy(tiktoken.get_encoding(...args), {
+            get(target, property, receiver) {
+              if (property === 'encode') {
+                return (): Uint32Array =>
+                  Uint32Array.from(
+                    { length: injectedCount },
+                    (_unused, index) => index,
+                  );
+              }
+              return Reflect.get(target, property, receiver);
+            },
+          }),
+      };
+    };
+    const factory = createRuntimeTokenizerFactory(loadModule);
+    const prepareTokenizer = factory.prepareTokenizer;
+    if (prepareTokenizer === undefined) {
+      throw new Error('runtime tokenizer factory has no readiness operation');
+    }
+
+    await prepareTokenizer('codex', 'gpt-6-astra');
+    const runtimeCount = await factory
+      .getTokenizer('codex', 'gpt-6-astra')
+      ?.countTokens('The quick brown fox jumps over the lazy dog.');
+    const estimate = await factory.estimatePrompt({
+      activeProvider: 'codex',
+      canonicalModel: 'gpt-6-astra',
+      protocol: 'openai-responses',
+      wireMethod: 'responses/v1',
+      finalizedProjection: {
+        kind: 'llxprt-provider-prompt-v3',
+        protocol: 'openai-responses',
+        promptText: 'The quick brown fox jumps over the lazy dog.',
+      },
+      projectionRevision: 3,
+      legacyEstimate: () => Promise.resolve(999),
+    });
+
+    expect(runtimeCount).toBe(injectedCount);
+    expect(estimate).toMatchObject({
+      count: injectedCount,
+      method: 'exact',
+      family: 'openai-gpt-5.6',
+    });
+    expect(loadCount).toBe(1);
+  });
+
+  it('fails Astra preparation when the shared o200k codec cannot initialize', async () => {
+    const loaderFailure = new Error('Astra codec initialization exploded');
+    const factory = createRuntimeTokenizerFactory(() =>
+      Promise.reject(loaderFailure),
+    );
+    const prepareTokenizer = factory.prepareTokenizer;
+    if (prepareTokenizer === undefined) {
+      throw new Error('runtime tokenizer factory has no readiness operation');
+    }
+
+    const error = await captureRejection(
+      prepareTokenizer('codex', 'gpt-6-astra'),
+    );
+
+    expect(error).toBeInstanceOf(ModelPromptEstimatorError);
+    expect(error).toMatchObject({
+      code: 'asset-unavailable',
+      context: {
+        activeProvider: 'codex',
+        canonicalModel: 'gpt-6-astra',
+        protocol: 'openai-responses',
+        family: 'openai-gpt-5.6',
+      },
+      cause: loaderFailure,
+    });
+  });
+
+  it('prepares sanctioned Astra identities without preparing or claiming lookalikes', async () => {
+    let loadCount = 0;
+    const loadModule: TiktokenModuleLoader = async () => {
+      loadCount += 1;
+      return import('@dqbd/tiktoken');
+    };
+    const factory = createRuntimeTokenizerFactory(loadModule);
+    const prepareTokenizer = factory.prepareTokenizer;
+    if (prepareTokenizer === undefined) {
+      throw new Error('runtime tokenizer factory has no readiness operation');
+    }
+
+    await prepareTokenizer('codex', 'gpt-6-astral');
+    await prepareTokenizer('codex', 'gpt-6-astra-mini');
+
+    expect(loadCount).toBe(0);
+    expect(factory.claimsModel?.('gpt-6-astral')).toBe(false);
+    expect(factory.claimsModel?.('gpt-6-astra-mini')).toBe(false);
+
+    await prepareTokenizer('codex', 'gpt-6-astra-latest');
+
+    expect(loadCount).toBe(1);
+    expect(factory.claimsModel?.('gpt-6-astra-latest')).toBe(true);
+  });
+
   it('does not load the GPT-5.6 encoder while preparing another model', async () => {
     const loaderFailure = new Error('GPT codec loader must remain unused');
     const factory = createRuntimeTokenizerFactory(() =>

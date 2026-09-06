@@ -8,11 +8,11 @@
  * Pure, providers-owned model/transport policy for OpenAI.
  *
  * This module is the single authority for:
- * - Which model IDs **require** the Responses API (GPT-5.6+ bare and
- *   durable tier aliases on canonical OpenAI).
+ * - Which model IDs **require** the Responses API (GPT-5.6+ dotted IDs,
+ *   durable tier aliases, and sanctioned GPT-6 IDs on canonical OpenAI).
  * - Which model IDs **support** (but do not require) Responses.
- * - Mapping the project-canonical `reasoning.effort=minimal` to the
- *   OpenAI wire value `none` for GPT-5.6+.
+ * - Mapping the project-canonical `reasoning.effort=minimal` to each
+ *   Responses model family's supported wire value.
  *
  * It is used by both the OpenAI Chat-Completions provider (for per-call
  * routing) and the UI info function (getOpenAIProviderInfo) so that UI
@@ -189,6 +189,19 @@ export function isSanctionedGpt56Model(model: string): boolean {
   );
 }
 
+const GPT_6_ASTRA = 'gpt-6-astra';
+
+export function isSanctionedGpt6Model(model: string): boolean {
+  if (!model.startsWith(GPT_6_ASTRA)) {
+    return false;
+  }
+  return isValidQualifier(model.slice(GPT_6_ASTRA.length));
+}
+
+export function isSanctionedOpenAIO200kModel(model: string): boolean {
+  return isSanctionedGpt56Model(model) || isSanctionedGpt6Model(model);
+}
+
 /**
  * Validate that the suffix qualifier (the part after a bare alias or
  * after a tier) is empty, `-latest`, a compact 8-digit date snapshot
@@ -210,7 +223,7 @@ export interface OpenAIModelTransport {
   supportsResponses: boolean;
   /**
    * The model **must** use the Responses API — Chat Completions is not
-   * available for it. GPT-5.6+ bare and tier IDs only.
+   * available for it. GPT-5.6+ dotted IDs, tiers, and sanctioned GPT-6 IDs.
    */
   requiresResponses: boolean;
 }
@@ -219,6 +232,7 @@ export interface OpenAIModelTransport {
  * Parse a model ID to determine its transport policy.
  *
  * Rules:
+ * - Sanctioned `gpt-6-astra` IDs → **require** Responses.
  * - Bare `gpt-X.Y` where X.Y >= 5.6 → **requires** Responses.
  * - `gpt-X.Y-{sol|terra|luna}` where X.Y >= 5.6 → **requires** Responses.
  *   Qualifiers: bare, `-latest`, compact date (`-YYYYMMDD`), or
@@ -227,6 +241,10 @@ export interface OpenAIModelTransport {
  * - Everything else → neither.
  */
 export function parseOpenAIModelTransport(model: string): OpenAIModelTransport {
+  if (isSanctionedGpt6Model(model)) {
+    return { supportsResponses: true, requiresResponses: true };
+  }
+
   const parsed = parseGptModelId(model);
 
   // Not a parseable gpt-X.Y model — check the known pre-5.6 set
@@ -295,14 +313,15 @@ export function isOpenAICanonicalBaseURL(baseURL: string | undefined): boolean {
  * Map the project-canonical `reasoning.effort` value to the OpenAI
  * Responses API wire value for the given model.
  *
- * GPT-5.6 and later renamed the lowest effort level from "minimal" to
- * "none" on the wire. The project setting remains "minimal" for backward
- * compatibility across all providers, so we translate it here.
+ * GPT-5.6 dotted IDs renamed the lowest effort level from "minimal" to
+ * "none" on the wire. GPT-6 Astra instead has a `low` effort floor. The
+ * project setting remains "minimal" for compatibility across providers, so
+ * sanctioned GPT-6 Astra IDs map to `low` while GPT-5.6+ dotted IDs retain
+ * the existing `none` mapping.
  *
- * The mapping applies ONLY to models that require the Responses API
- * — i.e. valid GPT-5.6+ bare/tier IDs with documented qualifiers.
- * Malformed lookalikes (gpt-5.6-mini, gpt-5.6-solar, etc.) are NOT
- * mapped so they cannot accidentally receive the wire value `none`.
+ * The mapping applies only to sanctioned identities with documented
+ * qualifiers. Malformed lookalikes are not mapped to a model-specific wire
+ * value.
  *
  * Pre-5.6 Responses API models (o3, o1, gpt-5.5, etc.) still use
  * "minimal".
@@ -313,6 +332,9 @@ export function toOpenAIResponsesWireEffort(
 ): string {
   if (effort !== 'minimal' || model === undefined) {
     return effort;
+  }
+  if (isSanctionedGpt6Model(model)) {
+    return 'low';
   }
   // Only map for GPT-5.6+ models that require the Responses API.
   const transport = parseOpenAIModelTransport(model);

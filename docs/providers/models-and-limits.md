@@ -1,6 +1,6 @@
 # Provider Models and Limits
 
-**As of:** 2026-08-01
+**As of:** 2026-09-05
 **Owner:** the LLxprt Code maintainers
 **Companion page:** [Provider Setup Quick Reference](./quick-reference.md)
 
@@ -225,11 +225,19 @@ Recommended settings:
 
 ### OpenAI Codex OAuth (`codex` alias)
 
-The `codex` alias uses the ChatGPT subscription backend and has a configured
-context-limit of **262,144 tokens** — lower than the OpenAI API key path.
+The `codex` alias uses the ChatGPT subscription backend. Its provider-level
+context-limit is **262,144 tokens**, while `gpt-6-astra` has a per-model OAuth
+context-limit of **872,000 tokens**.
 
-Common Codex models: `gpt-5.6-sol` (default), `gpt-5.6-terra`, `gpt-5.6-luna`,
-`gpt-5.5`, `gpt-5.3-codex-spark` (131,072 context).
+| Model                           | OAuth context limit | Reasoning effort values                            |
+| ------------------------------- | ------------------- | -------------------------------------------------- |
+| `gpt-6-astra`                   | 872,000             | `low`, `medium`, `high`, `xhigh`, `max`            |
+| `gpt-5.6-sol` (default)         | 262,144             | `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
+| `gpt-5.6-terra`, `gpt-5.6-luna` | 262,144             | `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
+| `gpt-5.3-codex-spark`           | 131,072             | Provider-dependent                                 |
+
+Common Codex models: `gpt-6-astra`, `gpt-5.6-sol` (default), `gpt-5.6-terra`,
+`gpt-5.6-luna`, `gpt-5.5`, `gpt-5.3-codex-spark`.
 
 See [Provider Setup Quick Reference](./quick-reference.md#subscription-and-oauth-providers)
 for OAuth setup instructions.

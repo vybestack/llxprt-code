@@ -10,7 +10,7 @@ import type {
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { PromptEnvelopeProtocol } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { isSanctionedGpt56Model } from '../openai/openaiModelPolicy.js';
+import { isSanctionedOpenAIO200kModel } from '../openai/openaiModelPolicy.js';
 import {
   createGpt56PromptEstimator,
   estimateGpt56Prompt,
@@ -50,8 +50,9 @@ export interface ModelPromptEstimatorRegistration {
 export const GPT_56_PROMPT_ESTIMATOR_REGISTRATION: ModelPromptEstimatorRegistration =
   Object.freeze({
     family: GPT_56_ESTIMATOR_FAMILY,
-    claim: /^gpt-(?:0*5\.0*6)(?:$|-)/,
-    matches: isSanctionedGpt56Model,
+    claim:
+      /^gpt-(?:0*5\.0*6(?:$|-)|6-astra(?:$|-(?:latest|\d{8}|\d{4}-\d{2}-\d{2})$))/,
+    matches: isSanctionedOpenAIO200kModel,
     protocols: new Set<PromptEnvelopeProtocol>([
       'openai-chat',
       'openai-responses',
@@ -211,7 +212,15 @@ export class ModelPromptEstimatorRegistry {
   }
 
   getEstimatorFamily(canonicalModel: string): string | undefined {
-    return findClaim(canonicalModel, this.registrations)?.family;
+    const registration = findClaim(canonicalModel, this.registrations);
+    if (
+      registration === undefined ||
+      (!registration.matches(canonicalModel) &&
+        registration.matchesPointRelease?.(canonicalModel) !== true)
+    ) {
+      return undefined;
+    }
+    return registration.family;
   }
 
   async estimatePrompt(

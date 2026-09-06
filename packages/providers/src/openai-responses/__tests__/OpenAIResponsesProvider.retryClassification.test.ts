@@ -165,6 +165,7 @@ function buildDeps(provider: TestableResponsesProvider): ResponsesExecutorDeps {
     shouldRetryOnError: (error) => provider.retryDecision(error),
     getDefaultModel: () => 'gpt-5',
     getGlobalConfig: () => undefined,
+    getUnallowedModelParameters: () => new Set<string>(),
   };
 }
 

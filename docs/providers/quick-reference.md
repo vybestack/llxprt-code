@@ -86,8 +86,13 @@ Two providers support OAuth for authentication:
 # Or for Codex
 /auth codex enable
 /provider codex
-/model gpt-5.6-sol
+/model gpt-6-astra
 ```
+
+`gpt-6-astra` uses an 872,000-token OAuth context limit and supports `low`,
+`medium`, `high`, `xhigh`, and `max` reasoning effort. `gpt-5.6-sol` remains
+the unconditional alias default; `gpt-6-astra` is an explicit model selection
+for accounts with Astra access (staged Trusted Access rollout).
 
 OAuth is lazy — authentication happens when you first use the provider, not when
 you enable it. Check OAuth status with `/auth`, and log out with
@@ -199,10 +204,11 @@ Or Claude Code OAuth (Claude.ai subscription):
 OpenAI models can use the newer **Responses API** or the classic **Chat
 Completions API**. LLxprt Code picks one automatically:
 
-- **GPT-5.6 and later** (bare model IDs like `gpt-5.6` and durable-tier IDs
-  like `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`) use the **Responses
-  transport** when pointed at the official `api.openai.com` endpoint. Chat
-  Completions is not available for these on that endpoint.
+- **GPT-5.6 and later** (including `gpt-6-astra`, bare model IDs like
+  `gpt-5.6`, and durable-tier IDs like `gpt-5.6-sol`, `gpt-5.6-terra`, and
+  `gpt-5.6-luna`) use the **Responses transport** when pointed at the official
+  `api.openai.com` endpoint. Chat Completions is not available for these on
+  that endpoint.
 - **Custom OpenAI-compatible endpoints** (proxies, gateways, self-hosted
   servers, or any non-`api.openai.com` base URL) **default to Chat
   Completions**, even for GPT-5.6+.
