@@ -157,7 +157,7 @@ for each new behavior before its implementation.
   and the settings-package startup validation rejects a key that core's
   TelemetrySettings defines — both trees fail identically on that too; the
   local settings file was reset to `{}` to unblock. Follow-up issues filed
-  for the schema drift and the test pollution.
+  for the schema drift (#3582) and the test pollution (#3581).
 - `bun scripts/test-audit/scan.ts` self-check on touched test files: no new
   MOCK_MIRROR / ALWAYS_TRUE / SELF_CONFIRMING / NO_ASSERT findings versus a
   main-baseline scan diff.
