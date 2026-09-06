@@ -90,8 +90,9 @@ Two providers support OAuth for authentication:
 ```
 
 `gpt-6-astra` uses an 872,000-token OAuth context limit and supports `low`,
-`medium`, `high`, `xhigh`, and `max` reasoning effort. The alias default remains
-`gpt-5.6-sol` for accounts where Astra access has not rolled out.
+`medium`, `high`, `xhigh`, and `max` reasoning effort. `gpt-5.6-sol` remains
+the unconditional alias default; `gpt-6-astra` is an explicit model selection
+for accounts with Astra access (staged Trusted Access rollout).
 
 OAuth is lazy — authentication happens when you first use the provider, not when
 you enable it. Check OAuth status with `/auth`, and log out with

@@ -149,6 +149,58 @@ describe('Codex provider alias', () => {
     expect(effectiveDefaults('gpt-5.6-sol')['context-limit']).toBe(262144);
   });
 
+  it('sanctions only documented gpt-6-astra ids for the 872000 limit and sampling stripping @issue:3576', () => {
+    const aliases = loadProviderAliasEntries();
+    const codexAlias = aliases.find((a) => a.alias === 'codex');
+    if (!codexAlias) {
+      throw new Error('codex alias entry not found');
+    }
+    const rules = codexAlias.config.modelDefaults ?? [];
+    const effectiveContextLimit = (model: string): unknown =>
+      ({
+        ...codexAlias.config.ephemeralSettings,
+        ...computeModelDefaults(model, rules),
+      })['context-limit'];
+
+    const sanctionedModels = [
+      'gpt-6-astra',
+      'gpt-6-astra-latest',
+      'gpt-6-astra-20260903',
+      'gpt-6-astra-2026-09-03',
+    ];
+    for (const model of sanctionedModels) {
+      expect(computeModelDefaults(model, rules)).toMatchObject({
+        'context-limit': 872000,
+      });
+      expect(
+        [...computeUnallowedParameters(model, rules)].sort(),
+      ).toStrictEqual([...SAMPLING_PARAMETERS]);
+      expect(effectiveContextLimit(model)).toBe(872000);
+    }
+
+    const lookalikeModels = [
+      'gpt-6-astral',
+      'gpt-6-astra-mini',
+      'gpt-6-astra-solar',
+      'gpt-6',
+      'gpt-6-turbo',
+    ];
+    for (const model of lookalikeModels) {
+      expect(computeModelDefaults(model, rules)).not.toHaveProperty(
+        'context-limit',
+      );
+      expect(computeUnallowedParameters(model, rules).size).toBe(0);
+      expect(effectiveContextLimit(model)).toBe(262144);
+    }
+
+    // Regression guards: GPT-5 behavior survives the anchored gpt-6 rules.
+    expect(
+      [...computeUnallowedParameters('gpt-5.6-sol', rules)].sort(),
+    ).toStrictEqual([...SAMPLING_PARAMETERS]);
+    expect(effectiveContextLimit('gpt-5.6-sol')).toBe(262144);
+    expect(effectiveContextLimit('gpt-5.3-codex-spark')).toBe(131072);
+  });
+
   it('should preserve the gpt-5.3-codex-spark 131072 context window', () => {
     const aliases = loadProviderAliasEntries();
     const codexAlias = aliases.find((a) => a.alias === 'codex');

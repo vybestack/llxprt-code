@@ -237,8 +237,60 @@ constructor-arity assertions in `providerManagerInstance.oauthRegistration.test.
 extracting the duplicated resolver closure into
 `openai-responses/unallowedModelParameters.ts`.
 
+## CodeRabbit round and crash recovery (2026-09-06 evening)
+
+CodeRabbit reviewed f4765f865b and opened three threads (one Major, two
+Minor). The system crashed mid-remediation; the branch survived with the
+fixes written but uncommitted, and the sandbox lost its root `node_modules`
+(restored with plain `bun install`, exit 0). The recovered remediation was
+re-verified end-to-end and pushed:
+
+1. **Major** — the `gpt-6` `unallowedParameters` rule used a loose `^gpt-6`
+   prefix, so any resolved codex model beginning with `gpt-6` (custom or
+   lookalike ids included) would get sampling parameters deleted on the wire.
+   Fixed: the rule now uses the anchored sanctioned pattern.
+2. **Minor** — the `^gpt-6-astra` context-limit prefix also matched
+   lookalikes (`computeModelDefaults` applies patterns case-insensitively,
+   so `gpt-6-astral` / `gpt-6-astra-mini` matched). Fixed: both gpt-6 rules
+   use `^gpt-6-astra(?:-(?:latest|[0-9]{8}|[0-9]{4}-[0-9]{2}-[0-9]{2}))?$`.
+3. **Minor** — quick-reference wording could imply Astra changes the alias
+   default. Fixed: `gpt-5.6-sol` stated as the unconditional default; Astra
+   is an explicit selection for accounts with access.
+
+New behavioral test in `providerAliases.codex.test.ts` covers the sanctioned
+matrix (bare / `-latest` / compact date / hyphenated date → context-limit
+872000 + full sampling strip) and lookalikes (`gpt-6-astral`, `-mini`,
+`-solar`, bare `gpt-6`, `gpt-6-turbo` → no rule effects, provider default
+262144), with `gpt-5.6-sol` and `gpt-5.3-codex-spark` regression guards.
+
+Post-crash verification cycle: targeted per-file runs green for all six
+touched-area suites (codex 16, factory 8, contextLimit integration 1,
+unallowedParameters 4, openaiModelPolicy 150, estimator 42). Full cycle:
+test exit 1 with only environment-classified failures (see below); lint,
+typecheck, format, build all exit 0. Cycle-generated `bun.lock`
+re-normalization and `NOTICES.txt` CRLF churn were reverted as artifacts.
+Evidence: `tmp/verify3576/post-crash-*`.
+
+Two environment failures appeared that were NOT in the earlier documented
+set; both reproduced identically per-file on the clean main worktree
+(`tmp/main3576` @ 72ea679a5f) in the same sandbox, so they are
+crash-environment fallout, not branch regressions — filed as #3586
+(gitService: checkpoint tests don't provision the persistent checkpoint-store
+marker their fake HOME needs) and #3585 (editor "not in sandbox mode" cases
+don't control the sandbox-detection signal).
+
+Smoke test: still blocked by host credential infrastructure, new variant —
+the proxy socket is back (recreated 2026-09-06 20:50) but auth fails with
+`Invalid or missing capability token`, and no capability dir exists in this
+sandbox; identical on main. `bun scripts/start.ts --version` boots 0.11.0.
+CI startup coverage remains green on GitHub runners.
+
 ## Out of scope / follow-ups
 
+- Sandbox-environment test failures documented above, filed during this
+  effort: #3581 (integration test writes fixture settings into the real
+  global config dir), #3582 (`telemetry.logConversations` schema drift),
+  #3585, #3586.
 - Flipping `defaultModel` to `gpt-6-astra` once rollout is generally
   available.
 - Long-context surcharge/pricing metadata beyond context length.
