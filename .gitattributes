@@ -3,6 +3,10 @@
 # line endings in the repository, which helps prevent cross-platform issues.
 * text=auto eol=lf
 
+# TypeScript source must remain diffable when correcting embedded control bytes.
+*.ts text diff eol=lf
+*.tsx text diff eol=lf
+
 # Explicitly declare files that must have LF line endings for proper execution
 # on Unix-like systems.
 *.sh eol=lf
