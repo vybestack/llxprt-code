@@ -39,7 +39,7 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",
-    "@vybestack/llxprt-code-telemetry": "file:../telemetry",
+    "@vybestack/llxprt-code-telemetry": "0.11.0",
     "undici": "^7.29.0",
     "vscode-jsonrpc": "^8.2.1",
     "zod": "^3.25.76"

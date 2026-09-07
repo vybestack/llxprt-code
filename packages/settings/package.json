@@ -68,7 +68,7 @@
     "dist"
   ],
   "dependencies": {
-    "@vybestack/llxprt-code-storage": "file:../storage",
+    "@vybestack/llxprt-code-storage": "0.11.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
