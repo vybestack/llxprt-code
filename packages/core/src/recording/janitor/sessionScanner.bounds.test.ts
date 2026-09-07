@@ -60,7 +60,7 @@ describe('session scanner finite work bounds', () => {
     await writeFile(join(chatsDirectory, 'session-1.jsonl'), first);
     await writeFile(
       join(chatsDirectory, 'session-2.jsonl'),
-      recording('second'),
+      recording('other'),
     );
 
     const result = await scanGlobalSessions(tempDirectory, undefined, {
