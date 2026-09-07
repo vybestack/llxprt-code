@@ -148,6 +148,7 @@ function buildDeps(): ResponsesExecutorDeps {
     shouldRetryOnError: () => false,
     getDefaultModel: () => 'gpt-5',
     getGlobalConfig: () => undefined,
+    getUnallowedModelParameters: () => new Set<string>(),
   };
 }
 

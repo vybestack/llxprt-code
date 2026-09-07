@@ -162,6 +162,7 @@ export function buildDeps(
       streamingRequestBody: false,
     }),
     getGlobalConfig: () => undefined,
+    getUnallowedModelParameters: () => new Set<string>(),
     // Codex statefulness is WS-bound; these harnesses exercise the WS path.
     isWebSocketTransportActive: () => true,
     ...overrides,

@@ -211,13 +211,28 @@ describe('ModelPromptEstimatorRegistry', () => {
     'gpt-5.6-sol',
     'gpt-5.6-terra-latest',
     'gpt-5.6-luna-2026-01-15',
+    'gpt-6-astra',
+    'gpt-6-astra-latest',
+    'gpt-6-astra-20260903',
+    'gpt-6-astra-2026-09-03',
   ])(
     'registers sanctioned identity %s independently of provider name',
     async (model) => {
       const result = await registry.estimatePrompt(request(model));
       expect(result.method).toBe('exact');
+      expect(registry.claimsModel(model)).toBe(true);
     },
   );
+
+  it.each([
+    'gpt-6',
+    'gpt-6-astral',
+    'gpt-6-astra-mini',
+    'gpt-6-astra-solar',
+    'gpt-6-astra-2026-02-30',
+  ])('leaves GPT-6 Astra lookalike %s unclaimed', (model) => {
+    expect(registry.claimsModel(model)).toBe(false);
+  });
 
   it('uses the explicit legacy path for unregistered families', async () => {
     const input = request('gpt-4.1');

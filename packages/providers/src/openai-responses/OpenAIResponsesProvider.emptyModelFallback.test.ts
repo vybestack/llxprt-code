@@ -87,6 +87,7 @@ function buildDeps(
     shouldRetryOnError: () => false,
     getDefaultModel: () => 'o3-mini',
     getGlobalConfig: () => undefined,
+    getUnallowedModelParameters: () => new Set<string>(),
     ...overrides,
   };
 }

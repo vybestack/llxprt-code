@@ -110,6 +110,8 @@ export interface ResponsesExecutorDeps {
   ) => ReturnType<typeof resolveMediaCapabilities>;
   /** Return the provider instance's global config for tool-output-limiter fallback. */
   readonly getGlobalConfig: () => ToolOutputSettingsProvider | undefined;
+  /** Return model parameters disallowed by the provider's captured alias rules. */
+  readonly getUnallowedModelParameters: (model: string) => Set<string>;
   /**
    * Returns the package-internal Codex WebSocket transport when the provider
    * should use WebSockets for this request (Codex mode and not sticky-fallen
@@ -828,6 +830,9 @@ function applyCodexRequestSettings(
   // See the design rationale doc comment on applyStatefulConversation in
   // openAIResponsesStateful.ts for the full trade-off discussion (#3134).
   request.store = false;
+  for (const parameter of deps.getUnallowedModelParameters(request.model)) {
+    delete request[parameter];
+  }
   if ('max_output_tokens' in request) {
     delete request.max_output_tokens;
     deps.logger.debug(

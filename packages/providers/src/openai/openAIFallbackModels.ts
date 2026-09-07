@@ -15,6 +15,7 @@ const FALLBACK_MODEL_SPECS: ReadonlyArray<{
   readonly id: string;
   readonly name: string;
 }> = [
+  { id: 'gpt-6-astra', name: 'GPT-6 Astra' },
   { id: 'gpt-5.6', name: 'GPT-5.6' },
   { id: 'gpt-5.6-sol', name: 'GPT-5.6 Sol' },
   { id: 'gpt-5.6-terra', name: 'GPT-5.6 Terra' },

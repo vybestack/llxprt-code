@@ -160,12 +160,12 @@ describe('OpenAIResponsesProvider hooksConfig leak @issue:3218', () => {
 
     const requestBody = await generateAndCaptureBody(provider, settings, {
       hooksConfig: { enabled: true, notifications: false },
-      temperature: 0.7,
+      service_tier: 'priority',
     });
 
     expect(requestBody.hooksConfig).toBeUndefined();
     // Legitimate model params still pass through
-    expect(requestBody.temperature).toBe(0.7);
+    expect(requestBody.service_tier).toBe('priority');
   });
 
   it('does not send hooks (event definitions) in the Codex request body', async () => {

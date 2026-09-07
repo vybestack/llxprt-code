@@ -85,6 +85,8 @@ import { declaredMediaTransportCapabilities } from '../providerMediaTransportCap
 import { resolveKimiProviderFileRequestPolicy } from '../kimi/kimiProviderFilePolicy.js';
 import { requireRuntimeEntry } from '../runtime/runtimeRegistry.js';
 import { resolveRawTokenDeltaNotifier } from '../logging/attemptLifecycle.js';
+import type { ModelDefaultRule } from '../composition/providerAliases.js';
+import { createUnallowedModelParametersResolver as makeResolver } from '../openai-responses/unallowedModelParameters.js';
 
 import { buildContinuationMessages } from './OpenAIRequestBuilder.js';
 import { extractContinuationChunkText } from './OpenAIStreamChunkText.js';
@@ -127,6 +129,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   private readonly textToolParser = new GemmaToolCallParser();
   private readonly toolCallPipeline = new ToolCallPipeline();
   private readonly preparedPromptEnvelopes = new OpenAIPromptEnvelopeStore();
+  private readonly getUnallowedModelParameters: ReturnType<typeof makeResolver>;
 
   protected getLogger(): DebugLogger {
     return new DebugLogger('llxprt:provider:openai');
@@ -135,12 +138,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   /**
    * @plan:PLAN-20251023-STATELESS-HARDENING.P08
    * @requirement:REQ-SP4-003
-   * Constructor reduced to minimal initialization - no state captured
+   * Captures static alias rules while keeping request state per call.
    */
   constructor(
     apiKey: string | undefined,
     baseURL?: string,
     config?: IProviderConfig,
+    modelDefaultRules: readonly ModelDefaultRule[] = [],
   ) {
     const normalizedApiKey =
       apiKey && apiKey.trim() !== '' ? apiKey : undefined;
@@ -158,9 +162,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       config,
     );
 
+    this.getUnallowedModelParameters = makeResolver(modelDefaultRules);
+
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
     // @requirement:REQ-SP4-002
-    // No constructor-captured state - all values sourced from normalized options per call
+    // Request-specific values remain sourced from normalized options per call.
   }
 
   /**
@@ -192,6 +198,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           ? declaredMediaTransportCapabilities('openai-responses')
           : this.getMediaTransportCapabilities(),
       getGlobalConfig: () => undefined,
+      getUnallowedModelParameters: this.getUnallowedModelParameters,
     };
   }
 

@@ -125,6 +125,7 @@ function createDeps(
     shouldRetryOnError: () => false,
     getDefaultModel: () => 'gpt-5.6-sol',
     getGlobalConfig: () => undefined,
+    getUnallowedModelParameters: () => new Set<string>(),
   } satisfies ResponsesExecutorDeps;
 }
 

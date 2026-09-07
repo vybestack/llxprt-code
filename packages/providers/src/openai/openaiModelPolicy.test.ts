@@ -100,6 +100,35 @@ describe('parseOpenAIModelTransport', () => {
     });
   });
 
+  describe('GPT-6 Astra identity', () => {
+    it.each([
+      'gpt-6-astra',
+      'gpt-6-astra-latest',
+      'gpt-6-astra-20260903',
+      'gpt-6-astra-2026-09-03',
+    ])('requires Responses for sanctioned model %s', (model) => {
+      expect(parseOpenAIModelTransport(model)).toStrictEqual({
+        supportsResponses: true,
+        requiresResponses: true,
+      });
+    });
+
+    it.each([
+      'gpt-6',
+      'gpt-6-astral',
+      'gpt-6-astra-mini',
+      'gpt-6-astra-solar',
+      'gpt-6-astra-2026093',
+      'gpt-6-astra-20261345',
+      'gpt-6-astra-2026-02-30',
+    ])('rejects unsanctioned lookalike %s', (model) => {
+      expect(parseOpenAIModelTransport(model)).toStrictEqual({
+        supportsResponses: false,
+        requiresResponses: false,
+      });
+    });
+  });
+
   describe('durable tier IDs (sol/terra/luna) with qualifiers', () => {
     it.each(['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
       'requires Responses for current tier %s',
@@ -259,6 +288,14 @@ describe('isOpenAICanonicalBaseURL', () => {
 });
 
 describe('toOpenAIResponsesWireEffort', () => {
+  it('maps minimal to low for GPT-6 Astra without changing other efforts', () => {
+    expect(toOpenAIResponsesWireEffort('minimal', 'gpt-6-astra')).toBe('low');
+    for (const effort of ['low', 'medium', 'high', 'xhigh', 'max']) {
+      expect(toOpenAIResponsesWireEffort(effort, 'gpt-6-astra')).toBe(effort);
+    }
+    expect(toOpenAIResponsesWireEffort('minimal', 'gpt-5.6-sol')).toBe('none');
+  });
+
   it.each([
     ['gpt-5.6', 'none'],
     ['gpt-5.6-sol', 'none'],

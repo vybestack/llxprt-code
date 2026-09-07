@@ -296,6 +296,12 @@ describe('OpenAIResponsesProvider reasoning.effort', () => {
 });
 
 describe('toOpenAIResponsesWireEffort @issue:2483', () => {
+  it('maps GPT-6 Astra minimal effort to its low wire floor @issue:3576', () => {
+    expect(toOpenAIResponsesWireEffort('minimal', 'gpt-6-astra')).toBe('low');
+    expect(toOpenAIResponsesWireEffort('max', 'gpt-6-astra')).toBe('max');
+    expect(toOpenAIResponsesWireEffort('minimal', 'gpt-5.6-sol')).toBe('none');
+  });
+
   it.each([
     ['gpt-5.6', 'none'],
     ['gpt-5.6-sol', 'none'],

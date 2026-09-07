@@ -814,28 +814,32 @@ describe('#3469 launch resource release', () => {
     120_000,
   );
 
-  it('keeps the normal success path on the wired close handlers', async () => {
-    fs.writeFileSync(path.join(fixturePath, 'agent.sock'), '');
-    process.env.SSH_AUTH_SOCK = path.join(fixturePath, 'agent.sock');
-    routeExecSync({});
+  it.skipIf(process.platform === 'win32')(
+    'keeps the normal success path on the wired close handlers',
+    async () => {
+      fs.writeFileSync(path.join(fixturePath, 'agent.sock'), '');
+      process.env.SSH_AUTH_SOCK = path.join(fixturePath, 'agent.sock');
+      routeExecSync({});
 
-    const tunnel = deferredExit();
-    routeSpawns('attach', tunnel.track);
+      const tunnel = deferredExit();
+      routeSpawns('attach', tunnel.track);
 
-    let exitCode: number | undefined;
-    const stderr = await captureStderr(async () => {
-      const result = await runContainerSandbox(engine.podmanConfig, []);
-      exitCode = result.exitCode;
-    });
-    const signal = await tunnel.signal;
+      let exitCode: number | undefined;
+      const stderr = await captureStderr(async () => {
+        const result = await runContainerSandbox(engine.podmanConfig, []);
+        exitCode = result.exitCode;
+      });
+      const signal = await tunnel.signal;
 
-    expect(exitCode).toBe(0);
-    // The tunnel is released by the normal close wiring, not by a drain.
-    expect(signal).toBe('SIGTERM');
-    expect(stderr).not.toContain('Warning: failed to release');
-    assertEngineEmpty();
-    expect(leakedRunRoots()).toStrictEqual([]);
-  }, 30_000);
+      expect(exitCode).toBe(0);
+      // The tunnel is released by the normal close wiring, not by a drain.
+      expect(signal).toBe('SIGTERM');
+      expect(stderr).not.toContain('Warning: failed to release');
+      assertEngineEmpty();
+      expect(leakedRunRoots()).toStrictEqual([]);
+    },
+    30_000,
+  );
 
   it('fails fast when a held port never becomes rebindable', async () => {
     const holder = net.createServer();

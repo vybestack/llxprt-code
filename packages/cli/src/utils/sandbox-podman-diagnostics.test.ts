@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+const isWindows = process.platform === 'win32';
 const DARWIN_SOCKET_PATH_MAX_BYTES = 103;
 const DIAGNOSTIC_MAX_BYTES = 4096;
 
@@ -86,7 +87,7 @@ function invokeCredentialBridgeInFreshBun(
   return result.stdout.trim();
 }
 
-describe('#3534 Podman tunnel startup diagnostics', () => {
+describe.skipIf(isWindows)('#3534 Podman tunnel startup diagnostics', () => {
   let fixtureRoot = '';
   let originalPath = '';
   let podmanInvocationLog = '';

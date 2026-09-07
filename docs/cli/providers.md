@@ -6,27 +6,31 @@ LLxprt Code works with multiple AI providers. You can switch between them mid-se
 
 LLxprt Code ships with aliases for these providers — just use `/provider <name>` to switch:
 
-| Provider                      | Alias           | Default Model              | Auth                 |
-| ----------------------------- | --------------- | -------------------------- | -------------------- |
-| Anthropic                     | `anthropic`     | claude-opus-5              | OAuth or API key     |
-| Google Gemini                 | `gemini`        | gemini-2.5-pro             | API key or Vertex AI |
-| OpenAI (API)                  | `openai`        | gpt-5.5                    | API key              |
-| OpenAI (ChatGPT subscription) | `codex`         | gpt-5.6-sol                | OAuth                |
-| Qwen                          | `qwen`          | qwen3-coder-plus           | API key              |
-| xAI                           | `xai`           | grok-4                     | API key              |
-| Kimi                          | `kimi`          | kimi-for-coding            | API key              |
-| DeepSeek                      | `deepseek`      | deepseek-v4-flash          | API key              |
-| Z.AI                          | `zai`           | glm-5                      | API key              |
-| Synthetic                     | `Synthetic`     | hf:zai-org/GLM-4.7         | API key              |
-| Chutes.ai                     | `chutes-ai`     | zai-org/GLM-5-TEE          | API key              |
-| Mistral                       | `mistral`       | mistral-large-latest       | API key              |
-| Cerebras Code                 | `cerebras-code` | qwen-3-coder-480b          | API key              |
-| OpenRouter                    | `openrouter`    | nvidia/nemotron-nano-9b-v2 | API key              |
-| Fireworks                     | `fireworks`     | fireworks/minimax-m3       | API key              |
-| Makora                        | `makora`        | nvidia/Kimi-K2.6-NVFP4     | API key              |
-| Ollama Cloud                  | `ollama-cloud`  | kimi-k2.6                  | API key              |
-| LM Studio                     | `lm-studio`     | gemma-3b-it                | None (local)         |
-| llama.cpp                     | `llama-cpp`     | local-model                | None (local)         |
+| Provider                      | Alias           | Default / Notable Models           | Auth                 |
+| ----------------------------- | --------------- | ---------------------------------- | -------------------- |
+| Anthropic                     | `anthropic`     | claude-opus-5                      | OAuth or API key     |
+| Google Gemini                 | `gemini`        | gemini-2.5-pro                     | API key or Vertex AI |
+| OpenAI (API)                  | `openai`        | gpt-5.5                            | API key              |
+| OpenAI (ChatGPT subscription) | `codex`         | gpt-5.6-sol (default); gpt-6-astra | OAuth                |
+| Qwen                          | `qwen`          | qwen3-coder-plus                   | API key              |
+| xAI                           | `xai`           | grok-4                             | API key              |
+| Kimi                          | `kimi`          | kimi-for-coding                    | API key              |
+| DeepSeek                      | `deepseek`      | deepseek-v4-flash                  | API key              |
+| Z.AI                          | `zai`           | glm-5                              | API key              |
+| Synthetic                     | `Synthetic`     | hf:zai-org/GLM-4.7                 | API key              |
+| Chutes.ai                     | `chutes-ai`     | zai-org/GLM-5-TEE                  | API key              |
+| Mistral                       | `mistral`       | mistral-large-latest               | API key              |
+| Cerebras Code                 | `cerebras-code` | qwen-3-coder-480b                  | API key              |
+| OpenRouter                    | `openrouter`    | nvidia/nemotron-nano-9b-v2         | API key              |
+| Fireworks                     | `fireworks`     | fireworks/minimax-m3               | API key              |
+| Makora                        | `makora`        | nvidia/Kimi-K2.6-NVFP4             | API key              |
+| Ollama Cloud                  | `ollama-cloud`  | kimi-k2.6                          | API key              |
+| LM Studio                     | `lm-studio`     | gemma-3b-it                        | None (local)         |
+| llama.cpp                     | `llama-cpp`     | local-model                        | None (local)         |
+
+For Codex OAuth, `gpt-6-astra` has an 872,000-token context limit and supports
+`low`, `medium`, `high`, `xhigh`, and `max` reasoning effort. The Codex default
+remains `gpt-5.6-sol`.
 
 ## Switching Providers
 

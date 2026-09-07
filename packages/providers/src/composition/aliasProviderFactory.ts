@@ -331,6 +331,7 @@ export function createOpenAIAliasProvider(
     aliasApiKey ?? undefined,
     resolvedBaseUrl,
     withMediaSupport(aliasProviderConfig, entry),
+    entry.config.modelDefaults ?? [],
   );
 
   enforceAliasAuthOnly(provider, authOnlyEnabled);
@@ -382,6 +383,7 @@ export function createOpenAIResponsesAliasProvider(
     resolvedBaseUrl,
     aliasProviderConfig,
     oauthManager,
+    entry.config.modelDefaults ?? [],
   );
 
   enforceAliasAuthOnly(provider, authOnlyEnabled);

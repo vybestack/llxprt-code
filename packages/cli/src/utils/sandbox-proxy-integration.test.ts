@@ -165,27 +165,30 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
       );
     });
 
-    it('uses a separate short private credential runtime for Darwin Podman sessions', () => {
-      const sessionTmpdir = fs.mkdtempSync(
-        path.join(os.tmpdir(), 'proxy-integration-session-'),
-      );
-      const platformSpy = vi.spyOn(os, 'platform').mockReturnValue('darwin');
-      const runtime = createCredentialSocketRuntime(
-        { command: 'podman', image: 'test' },
-        sessionTmpdir,
-      );
+    it.skipIf(process.platform === 'win32')(
+      'uses a separate short private credential runtime for Darwin Podman sessions',
+      () => {
+        const sessionTmpdir = fs.mkdtempSync(
+          path.join(os.tmpdir(), 'proxy-integration-session-'),
+        );
+        const platformSpy = vi.spyOn(os, 'platform').mockReturnValue('darwin');
+        const runtime = createCredentialSocketRuntime(
+          { command: 'podman', image: 'test' },
+          sessionTmpdir,
+        );
 
-      try {
-        expect(runtime.path).not.toBe(sessionTmpdir);
-        expect(runtime.path.startsWith('/tmp/lx-')).toBe(true);
-        expect(fs.statSync(runtime.path).mode & 0o777).toBe(0o700);
-      } finally {
-        runtime.cleanup();
-        platformSpy.mockRestore();
-        fs.rmSync(sessionTmpdir, { recursive: true, force: true });
-      }
-      expect(fs.existsSync(runtime.path)).toBe(false);
-    });
+        try {
+          expect(runtime.path).not.toBe(sessionTmpdir);
+          expect(runtime.path.startsWith('/tmp/lx-')).toBe(true);
+          expect(fs.statSync(runtime.path).mode & 0o777).toBe(0o700);
+        } finally {
+          runtime.cleanup();
+          platformSpy.mockRestore();
+          fs.rmSync(sessionTmpdir, { recursive: true, force: true });
+        }
+        expect(fs.existsSync(runtime.path)).toBe(false);
+      },
+    );
   });
 
   describe('R3.5: Socket in tmpdir (No Extra Mount)', () => {

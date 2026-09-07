@@ -15,6 +15,7 @@
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { projectOpenAIResponsesPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
@@ -32,10 +33,17 @@ import {
   type WebSocketTransport,
 } from './openAIResponsesWebSocketTransport.js';
 import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
+import type { IProviderConfig } from '../types/IProviderConfig.js';
+import type { ModelDefaultRule } from '../composition/providerAliases.js';
+import {
+  createUnallowedModelParametersResolver,
+  type UnallowedModelParametersResolver,
+} from './unallowedModelParameters.js';
 
 export { toOpenAIResponsesWireEffort } from '../openai/openaiModelPolicy.js';
 
 export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
+  private readonly getUnallowedModelParameters: UnallowedModelParametersResolver;
   // Codex (codex-rs/core/src/responses_retry.rs) only switches to a sticky HTTP
   // fallback after exhausting its WebSocket stream-retry budget (default
   // `stream_max_retries` = 5). We rely on the outer RetryOrchestrator to retry
@@ -58,6 +66,19 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     Awaited<ReturnType<typeof buildResponsesRequestContextForProjection>>
   >();
 
+  constructor(
+    apiKey: string | undefined,
+    baseURL?: string,
+    config?: IProviderConfig,
+    oauthManager?: OAuthManager,
+    modelDefaultRules: readonly ModelDefaultRule[] = [],
+  ) {
+    super(apiKey, baseURL, config, oauthManager);
+
+    this.getUnallowedModelParameters =
+      createUnallowedModelParametersResolver(modelDefaultRules);
+  }
+
   private buildExecutorDeps(): ResponsesExecutorDeps {
     return {
       providerName: this.name,
@@ -74,6 +95,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
           ? declaredMediaTransportCapabilities('codex')
           : this.getMediaTransportCapabilities(),
       getGlobalConfig: () => this.globalConfig,
+      getUnallowedModelParameters: this.getUnallowedModelParameters,
       getWebSocketTransport: () => this.resolveWebSocketTransport(),
       // Codex statefulness is only valid over the WebSocket transport, so the
       // request builder needs to know the transport BEFORE it decides whether
