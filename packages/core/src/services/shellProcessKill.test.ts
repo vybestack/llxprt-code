@@ -14,6 +14,7 @@ import {
   boundedTaskkill,
   escalateKillUnix,
   isKillablePid,
+  reapProcessGroup,
   taskkillTree,
 } from './shellProcessKill.js';
 import { createExitGuard } from './shellExitGuard.js';
@@ -287,6 +288,105 @@ describe('ShellProcessKill platform behavior', () => {
       }
     }, 20000);
   });
+
+  // ---------------------------------------------------------------------------
+  // escalateKillUnix group escalation / reapProcessGroup — POSIX-only
+  // (production behavior is POSIX-gated) — Issue #3517
+  // ---------------------------------------------------------------------------
+
+  describe.skipIf(isWindows)(
+    'escalateKillUnix group escalation (POSIX, issue #3517)',
+    () => {
+      it('group SIGKILL still fires when the direct child is dead but a TERM-immune group member lives', async () => {
+        // Incident #3517: the direct child (bash wrapper) died from the group
+        // SIGTERM, the shared guard was marked exited, and the group SIGKILL
+        // was gated on that guard — leaving a TERM-immune grandchild alive in
+        // the group after termination was reported. Escalation must be gated
+        // on GROUP liveness, not on the direct child.
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'escalate-group-'));
+        const marker = path.join(dir, 'member.pid');
+        // The subshell stays in the leader's process group; `trap '' TERM`
+        // sets SIG_IGN, a disposition that survives `exec sleep 30`.
+        const leader = spawn(
+          'bash',
+          ['-c', `( trap '' TERM; exec sleep 30 ) & echo $! > ${marker}; exit 0`],
+          { detached: true, stdio: 'ignore' },
+        );
+        leader.on('error', () => {});
+        leader.unref();
+        // Attach before any await: the leader exits within a few ms, and an
+        // 'exit' listener attached after the event dispatched never fires.
+        const leaderExited = new Promise<void>((resolve) =>
+          leader.once('exit', () => resolve()),
+        );
+        const leaderPid = observedProcessPid(leader.pid);
+        expect(leaderPid).toBeGreaterThan(0);
+        try {
+          const memberPid = Number(await waitForMarker(marker, 8000));
+          expect(memberPid).toBeGreaterThan(0);
+          // Wait for the leader's exit through the handle: this process is
+          // its parent, so a signal-0 probe could observe an unreaped zombie
+          // instead of a dead group leader.
+          await leaderExited;
+          // Reproduce the incident's guard state: the direct child is dead
+          // and the guard knows it. The old predicate skipped the group
+          // SIGKILL from here.
+          const guard = createExitGuard();
+          guard.markExited();
+          await escalateKillUnix(leaderPid, guard, () => {});
+          // The member is NOT this process's child (it was reparented when
+          // the leader exited), so a signal-0 probe proves real death.
+          await waitForPidGone(memberPid, 8000);
+          expect(isPidAlive(memberPid)).toBe(false);
+        } finally {
+          reapGroup(leaderPid);
+          fs.rmSync(dir, { recursive: true, force: true });
+        }
+      }, 30000);
+    },
+  );
+
+  describe.skipIf(isWindows)(
+    'reapProcessGroup bounded confirmation (POSIX, issue #3517)',
+    () => {
+      it('resolves true promptly when the group is already gone', async () => {
+        const leader = spawn('bash', ['-c', 'exit 0'], {
+          detached: true,
+          stdio: 'ignore',
+        });
+        leader.on('error', () => {});
+        leader.unref();
+        // Attach before any await: see the escalation test for the
+        // missed-event race this ordering avoids.
+        const leaderExited = new Promise<void>((resolve) =>
+          leader.once('exit', () => resolve()),
+        );
+        const leaderPid = observedProcessPid(leader.pid);
+        expect(leaderPid).toBeGreaterThan(0);
+        try {
+          // A non-killable pid must be treated as reaped without ever being
+          // probed with a real signal target (pid 0 would be the caller's
+          // own group).
+          await expect(reapProcessGroup(0)).resolves.toBe(true);
+          await leaderExited;
+          const start = Date.now();
+          await expect(reapProcessGroup(leaderPid)).resolves.toBe(true);
+          expect(Date.now() - start).toBeLessThan(1000);
+        } finally {
+          reapGroup(leaderPid);
+        }
+      }, 20000);
+
+      it('resolves false when a probed group stays alive for the window', async () => {
+        // pid 1 always exists and never dies, so the probe window must
+        // expire. Signal-0 probes ONLY: sig 0 delivers no signal, so init is
+        // never actually signalled.
+        const start = Date.now();
+        await expect(reapProcessGroup(1, 300)).resolves.toBe(false);
+        expect(Date.now() - start).toBeGreaterThanOrEqual(250);
+      }, 20000);
+    },
+  );
 
   // ---------------------------------------------------------------------------
   // boundedTaskkill / taskkillTree — Windows-only (production behavior gated)

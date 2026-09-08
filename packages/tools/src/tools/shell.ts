@@ -630,6 +630,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
         } else {
           llmContent += ' There was no output before timeout.';
         }
+        llmContent = appendAbortSurvivorWarning(llmContent, result, pgid);
         returnDisplayMessage = llmContent;
       } else {
         llmContent = 'Command was cancelled by user before it could complete.';
@@ -639,6 +640,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
         } else {
           llmContent += ' There was no output before it was cancelled.';
         }
+        llmContent = appendAbortSurvivorWarning(llmContent, result, pgid);
 
         if (this.host.getDebugMode()) {
           returnDisplayMessage = llmContent;
@@ -768,6 +770,33 @@ export class ShellToolInvocation extends BaseToolInvocation<
   private isInvocationAllowlisted(command: string): boolean {
     return this.host.isShellInvocationAllowlisted(command, ShellTool.Name);
   }
+}
+
+/**
+ * Survivor warning appended to an aborted result when the executor's bounded
+ * group-reap window expired with live process-group members (Issue #3517).
+ * Foreground commands have no managed task id, so the explicit kill
+ * instruction is the actionable cleanup the caller can be given. The pgid is
+ * the one already resolved via collectProcessInfo; on POSIX the detached
+ * spawn makes result.pid the process-group id, so it is the fallback.
+ */
+function appendAbortSurvivorWarning(
+  content: string,
+  result: ShellExecutionResult,
+  pgid: number | null,
+): string {
+  if (result.survivingGroupMembersOnAbort !== true) {
+    return content;
+  }
+  const cleanupPgid = pgid ?? result.pid;
+  if (cleanupPgid === undefined) {
+    return `${content}\n\nWarning: child processes from the aborted command may still be running; they could not be fully terminated.`;
+  }
+  return (
+    `${content}\n\nWarning: child processes from the aborted command may still be ` +
+    `running (process group ${cleanupPgid} could not be fully terminated). ` +
+    `Kill them with \`kill -9 -- -${cleanupPgid}\`.`
+  );
 }
 
 export class ShellTool extends BaseDeclarativeTool<

@@ -43,6 +43,12 @@ export interface ShellExecutionResult {
   /** Process group ID discovered for non-Windows shells. */
   pgid?: number | null;
   /**
+   * True when an abort-timeout kill left live members in the spawned process
+   * group after the executor's bounded reap window expired (Issue #3517).
+   * Absent means the group was confirmed empty (or no group kill applies).
+   */
+  survivingGroupMembersOnAbort?: boolean;
+  /**
    * Acquisition-time truncation metadata when output exceeded the retention
    * byte budget. Present (with `truncated: true`) when the output was bounded
    * during acquisition. The tools layer surfaces this so the model-facing

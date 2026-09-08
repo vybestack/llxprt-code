@@ -5,6 +5,9 @@
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type { IPty } from '@lydell/node-pty';
 import headless from '@xterm/headless';
 
@@ -15,16 +18,25 @@ import type {
 } from './shellExecutionTypes.js';
 import { createExitGuard } from './shellExitGuard.js';
 import {
+  createPtyResultPromise,
   ptyAbortAction,
   ptyInactivityAbortAction,
 } from './shellPtyLifecycle.js';
-import type { PtyImplementation } from '../utils/getPty.js';
+import type { ActivePty } from './shellPtyHelpers.js';
+import { loadNodePty, type PtyImplementation } from '../utils/getPty.js';
+import { getShellConfiguration } from '../utils/shell-utils.js';
+import {
+  ensureNativeExitCodePropagated,
+  ensurePromptvarsDisabled,
+} from './shellOutputUtils.js';
 import {
   BoundedCombinedCollector,
   createByteBudget,
 } from '@vybestack/llxprt-code-tools/acquisition.js';
 
 const { Terminal } = headless;
+
+const isWindows = os.platform() === 'win32';
 
 /**
  * The abort actions take an exhaustive state bag; only a handful of fields
@@ -278,3 +290,187 @@ describe('ptyInactivityAbortAction pid validation', () => {
     expect(killSignals.length).toBeGreaterThan(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Real forkpty abort behavior (POSIX, issue #3517)
+// ---------------------------------------------------------------------------
+
+/** Signal-0 existence check. */
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Poll until `markerPath` exists and contains non-whitespace. */
+async function waitForMarker(
+  markerPath: string,
+  timeoutMs = 8000,
+): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      const content = fs.readFileSync(markerPath, 'utf8').trim();
+      if (content !== '') return content;
+    } catch {
+      // Not written yet.
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`Marker ${markerPath} not written within ${timeoutMs}ms`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
+/** Race a promise against a deadline, resolving `timeoutValue` on expiry. */
+function withDeadline<T>(promise: Promise<T>, ms: number, timeoutValue: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => {
+      const timer = setTimeout(() => resolve(timeoutValue), ms);
+      timer.unref();
+    }),
+  ]);
+}
+
+/**
+ * Deadline-bounded probe for a usable forkpty backend. Under Bun POSIX
+ * getPty() routes to bun-pty (no process groups, so the group-kill branch
+ * under test is unreachable there), which is why the lydell backend is
+ * loaded directly here. @lydell/node-pty can spawn children that exit
+ * without delivering any output under the Bun test runner
+ * (oven-sh/bun#25822), so a single-spawn check is not trustworthy: the
+ * probe requires PROBE_ROUNDS consecutive spawns that each deliver output
+ * within the deadline. The suite skips when any round fails.
+ */
+const PROBE_ROUNDS = 3;
+
+async function probeUsableForkptyPty(): Promise<PtyImplementation> {
+  const ptyInfo = await withDeadline(loadNodePty(), 5000, null);
+  if (ptyInfo === null) {
+    return null;
+  }
+  for (let round = 0; round < PROBE_ROUNDS; round++) {
+    const ok = await withDeadline(
+      new Promise<boolean>((resolve, reject) => {
+        let dataDisposable: { dispose(): void } | undefined;
+        let exitDisposable: { dispose(): void } | undefined;
+        let settled = false;
+        const settle = (ok: boolean, error?: unknown): void => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          dataDisposable?.dispose();
+          exitDisposable?.dispose();
+          if (error !== undefined) {
+            reject(error instanceof Error ? error : new Error(String(error)));
+            return;
+          }
+          resolve(ok);
+        };
+        try {
+          const probe = ptyInfo.module.spawn(
+            'bash',
+            ['-c', 'echo PTY_PROBE_OK'],
+            {
+              cols: 80,
+              rows: 30,
+              env: { ...process.env, TERM: 'xterm-256color' },
+            },
+          );
+          dataDisposable = probe.onData((chunk: string) => {
+            if (chunk.includes('PTY_PROBE_OK')) {
+              settle(true);
+            }
+          });
+          exitDisposable = probe.onExit(() => settle(false));
+        } catch (error) {
+          settle(false, error);
+        }
+      }),
+      5000,
+      false,
+    );
+    if (!ok) {
+      return null;
+    }
+  }
+  return ptyInfo;
+}
+
+const forkptyBackend = isWindows ? null : await probeUsableForkptyPty();
+
+describe.skipIf(isWindows || forkptyBackend === null)(
+  'PTY abort group reap (POSIX, forkpty backend, issue #3517)',
+  () => {
+    it('kills a TERM-immune grandchild before the abort result resolves', async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pty-abort-'));
+      const marker = path.join(dir, 'grandchild.pid');
+      const { executable, argsPrefix, shell } = getShellConfiguration();
+      const guardedCommand = ensureNativeExitCodePropagated(
+        ensurePromptvarsDisabled(
+          // The subshell stays in the pty shell's process group; `trap '' TERM`
+          // sets SIG_IGN, a disposition that survives `exec sleep 30`. The
+          // foreground `sleep 30` keeps the pty leader alive until the abort.
+          `( trap '' TERM; exec sleep 30 ) & echo $! > ${marker}; sleep 30`,
+          shell,
+        ),
+        shell,
+      );
+      const backend = forkptyBackend as NonNullable<PtyImplementation>;
+      const ptyProcess: IPty = backend.module.spawn(
+        executable,
+        [...argsPrefix, guardedCommand],
+        {
+          cwd: dir,
+          name: 'xterm-256color',
+          cols: 80,
+          rows: 30,
+          env: { ...process.env, TERM: 'xterm-256color' },
+        },
+      );
+      const abortController = new AbortController();
+      const activePtys = new Map<number, ActivePty>();
+      try {
+        const resultPromise = createPtyResultPromise(
+          ptyProcess,
+          false,
+          80,
+          30,
+          () => undefined,
+          abortController.signal,
+          { scrollback: 10 },
+          backend,
+          activePtys,
+          { value: null },
+        );
+        const grandchildPid = Number(await waitForMarker(marker, 8000));
+        expect(grandchildPid).toBeGreaterThan(0);
+
+        abortController.abort();
+        const result = await resultPromise;
+
+        expect(result.aborted).toBe(true);
+        // Escalation succeeded within the reap window: no survivor flag.
+        expect(result.survivingGroupMembersOnAbort).toBeUndefined();
+        // THE assertion (AC1+AC2): the TERM-immune grandchild is dead by the
+        // time the abort result exists. It was reparented when the pty leader
+        // died, so a signal-0 probe proves real death.
+        expect(isPidAlive(grandchildPid)).toBe(false);
+      } finally {
+        if (Number.isInteger(ptyProcess.pid) && ptyProcess.pid > 0) {
+          try {
+            process.kill(-ptyProcess.pid, 'SIGKILL');
+          } catch {
+            // Already gone.
+          }
+        }
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    }, 30000);
+  },
+);

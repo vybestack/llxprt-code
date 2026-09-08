@@ -33,6 +33,7 @@ import type {
   HostShellJobInfo,
   HostShellJobTailResult,
   BackgroundPromotionResult,
+  ShellExecutionResult,
 } from '../interfaces/index.js';
 import { executeToolForBehavioralAssertion } from './red-test-helpers.js';
 
@@ -599,5 +600,85 @@ describe('shell result contracts @plan:issue1995 @plan:issue3200', () => {
     // The error must be caught and surfaced, not silently degraded.
     expect(result.error).toBeDefined();
     expect(result.error?.message).toContain('not supported');
+  });
+
+  describe('timeout survivor warning formatting @plan:issue3517', () => {
+    /**
+     * Builds a host whose foreground execution resolves with an aborted
+     * result only when the combined timeout/user signal fires, so the tool
+     * computes a genuine timeout-triggered abort path the way production
+     * does.
+     */
+    function createTimeoutAbortingHost(
+      resultFields: Partial<ShellExecutionResult>,
+    ): IShellToolHost {
+      const base = createFakeHostWithBackground(() => {
+        throw new Error(
+          'Foreground execution must not launch a background job',
+        );
+      });
+      const buildResult = (): ShellExecutionResult => ({
+        output: 'partial output',
+        exitCode: null,
+        signal: '15',
+        error: null,
+        aborted: true,
+        pid: 4321,
+        ...resultFields,
+      });
+      return {
+        ...base,
+        executeShellCommand: (_command, _cwd, _onOutput, signal) =>
+          new Promise<ShellExecutionResult>((resolve) => {
+            if (signal.aborted) {
+              resolve(buildResult());
+              return;
+            }
+            signal.addEventListener(
+              'abort',
+              () => {
+                resolve(buildResult());
+              },
+              { once: true },
+            );
+          }),
+      };
+    }
+
+    it('a timeout result with surviving group members includes the kill -9 cleanup instruction', async () => {
+      const tool = new ShellTool(
+        createTimeoutAbortingHost({ survivingGroupMembersOnAbort: true }),
+        createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
+      );
+
+      const result = await executeToolForBehavioralAssertion(tool, {
+        command: 'sleep 60',
+        timeout_seconds: 0.5,
+      });
+
+      const llm = String(result.llmContent);
+      expect(llm).toContain('timed out');
+      expect(llm).toContain('may still be running');
+      // The cleanup instruction names the process group id (the resolved pgid
+      // falls back to result.pid, the detached group leader on POSIX).
+      expect(llm).toContain('kill -9 -- -4321');
+    });
+
+    it('a clean timeout result carries no survivor warning', async () => {
+      const tool = new ShellTool(
+        createTimeoutAbortingHost({}),
+        createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
+      );
+
+      const result = await executeToolForBehavioralAssertion(tool, {
+        command: 'sleep 60',
+        timeout_seconds: 0.5,
+      });
+
+      const llm = String(result.llmContent);
+      expect(llm).toContain('timed out');
+      expect(llm).not.toContain('may still be running');
+      expect(llm).not.toContain('kill -9');
+    });
   });
 });
