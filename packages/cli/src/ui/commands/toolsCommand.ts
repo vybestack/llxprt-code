@@ -28,7 +28,6 @@ const toolsSchema: CommandArgumentSchema = [
       { value: 'disable', description: 'Disable a tool by name' },
       { value: 'enable', description: 'Enable a tool by name' },
       { value: 'desc', description: 'List tools with descriptions' },
-      { value: 'descriptions', description: 'Alias for desc' },
     ],
   },
 ];
@@ -304,8 +303,7 @@ export const toolsCommand: SlashCommand = {
     const { disabled, allowed } = readToolLists(context);
     const tools = agent.tools.list();
 
-    const showDescriptions =
-      subcommand === 'desc' || subcommand === 'descriptions';
+    const showDescriptions = subcommand === 'desc';
 
     if (subcommand === 'list' || showDescriptions) {
       const message = formatListMessage(

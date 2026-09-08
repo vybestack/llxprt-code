@@ -54,8 +54,6 @@ The `/tools` command provides several subcommands for managing disabled tools:
 
 ```bash
 /tools desc
-# or
-/tools descriptions
 ```
 
 ## Profile Integration
