@@ -58,6 +58,129 @@ function dig(root: unknown, path: readonly string[]): unknown {
   return cursor;
 }
 
+/** Normalises a project parameter to non-empty, trimmed project titles. */
+export function requestedProjectTitles(value: unknown): string[] {
+  let values: readonly unknown[] = [];
+  if (typeof value === 'string') {
+    values = [value];
+  } else if (Array.isArray(value)) {
+    values = value;
+  }
+
+  const titles: string[] = [];
+  for (const candidate of values) {
+    if (typeof candidate !== 'string') continue;
+    const title = candidate.trim();
+    if (title.length > 0) titles.push(title);
+  }
+  return titles;
+}
+
+/** Extracts project titles from a projectItems page. */
+function projectTitlesFromNodes(nodes: unknown): string[] {
+  if (!Array.isArray(nodes)) return [];
+
+  const titles: string[] = [];
+  for (const node of nodes) {
+    const title = dig(node, ['project', 'title']);
+    if (typeof title === 'string' && title.length > 0) titles.push(title);
+  }
+  return titles;
+}
+
+/**
+ * Confirms that an issue belongs to every requested project.
+ *
+ * GitHub can report a successful project mutation without applying it, so a
+ * successful CLI exit is not sufficient. Every projectItems page is read
+ * before deciding whether a requested membership is missing.
+ *
+ * @plan project-plans/issue3592.md
+ * @requirement AC-1, AC-2, AC-3, AC-6
+ * @issue 3592
+ */
+export async function verifyIssueProjectMembership(
+  run: GhRunner,
+  owner: string,
+  name: string,
+  number: number,
+  titles: readonly string[],
+  opName: string,
+): Promise<void> {
+  const query = `query($owner:String!,$name:String!,$issueNumber:Int!,$endCursor:String){repository(owner:$owner,name:$name){issue(number:$issueNumber){projectItems(first:100,after:$endCursor){nodes{project{title}}pageInfo{hasNextPage endCursor}}}}}`;
+  const containingTitles: string[] = [];
+  let endCursor: string | undefined;
+  let hasNextPage: boolean;
+
+  do {
+    const argv = [
+      'api',
+      'graphql',
+      '-f',
+      `query=${query}`,
+      '-f',
+      `owner=${owner}`,
+      '-f',
+      `name=${name}`,
+      '-F',
+      `issueNumber=${number}`,
+    ];
+    if (endCursor !== undefined) {
+      argv.push('-f', `endCursor=${endCursor}`);
+    }
+
+    const raw = await run(argv);
+    const nodes = dig(raw, [
+      'data',
+      'repository',
+      'issue',
+      'projectItems',
+      'nodes',
+    ]);
+    containingTitles.push(...projectTitlesFromNodes(nodes));
+
+    hasNextPage =
+      dig(raw, [
+        'data',
+        'repository',
+        'issue',
+        'projectItems',
+        'pageInfo',
+        'hasNextPage',
+      ]) === true;
+    if (!hasNextPage) continue;
+
+    const nextCursor = dig(raw, [
+      'data',
+      'repository',
+      'issue',
+      'projectItems',
+      'pageInfo',
+      'endCursor',
+    ]);
+    if (typeof nextCursor !== 'string' || nextCursor.length === 0) {
+      throw brokerError(
+        'GITHUB_ERROR',
+        `${opName}: projectItems pagination returned no end cursor for ${owner}/${name}#${number}`,
+      );
+    }
+    endCursor = nextCursor;
+  } while (hasNextPage);
+
+  const memberships = new Set(
+    containingTitles.map((title) => title.toLowerCase()),
+  );
+  const missing = titles.filter(
+    (title) => !memberships.has(title.toLowerCase()),
+  );
+  if (missing.length === 0) return;
+
+  throw brokerError(
+    'GITHUB_ERROR',
+    `${opName}: project membership verification failed for ${owner}/${name}#${number}. Missing project membership: ${missing.map((title) => `"${title}"`).join(', ')}. Projects containing the issue: ${containingTitles.length > 0 ? containingTitles.join(', ') : '(none)'}`,
+  );
+}
+
 // ─── issue.edit ──────────────────────────────────────────────────────────────
 
 /**
@@ -226,25 +349,45 @@ export async function executeIssueEdit(
     await run(buildIssueEditArgv(params), { rawOutput: true });
   }
 
+  const projectTitles = requestedProjectTitles(params.addProject);
   const typeName = params.type;
-  if (typeof typeName === 'string' && typeName.length > 0) {
-    const { owner, name } = await resolveOwnerName(run, params);
-    const number = Number(params.number);
-    const [issueTypeId, issueId] = await Promise.all([
-      resolveIssueTypeId(run, owner, name, typeName),
-      resolveIssueNodeId(run, owner, name, number),
-    ]);
-    const mutation = `mutation($id:ID!,$typeId:ID!){updateIssue(input:{id:$id,issueTypeId:$typeId}){issue{number}}}`;
-    await run([
-      'api',
-      'graphql',
-      '-f',
-      `query=${mutation}`,
-      '-f',
-      `id=${issueId}`,
-      '-f',
-      `typeId=${issueTypeId}`,
-    ]);
+  const hasType = typeof typeName === 'string' && typeName.length > 0;
+  const needsRepository = hasType || projectTitles.length > 0;
+  const repository = needsRepository
+    ? await resolveOwnerName(run, params)
+    : null;
+  const number = Number(params.number);
+
+  if (repository !== null) {
+    const { owner, name } = repository;
+    if (hasType) {
+      const [issueTypeId, issueId] = await Promise.all([
+        resolveIssueTypeId(run, owner, name, typeName),
+        resolveIssueNodeId(run, owner, name, number),
+      ]);
+      const mutation = `mutation($id:ID!,$typeId:ID!){updateIssue(input:{id:$id,issueTypeId:$typeId}){issue{number}}}`;
+      await run([
+        'api',
+        'graphql',
+        '-f',
+        `query=${mutation}`,
+        '-f',
+        `id=${issueId}`,
+        '-f',
+        `typeId=${issueTypeId}`,
+      ]);
+    }
+
+    if (projectTitles.length > 0) {
+      await verifyIssueProjectMembership(
+        run,
+        owner,
+        name,
+        number,
+        projectTitles,
+        'issue.edit',
+      );
+    }
   }
 
   return {

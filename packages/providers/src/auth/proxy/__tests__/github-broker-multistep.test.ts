@@ -26,6 +26,7 @@ import {
   executeResolveThread,
   hasCliEditFields,
 } from '../github-broker-multistep-ops.js';
+import { brokerError, BrokerErrorException } from '../github-broker-errors.js';
 
 /**
  * Records every argv the operation issues and replies with canned GraphQL
@@ -45,6 +46,24 @@ function makeRunner(replies: Array<[string, unknown]> = []): {
     return {};
   };
   return { run, calls };
+}
+
+async function captureFailure(
+  action: () => Promise<unknown>,
+): Promise<unknown> {
+  try {
+    await action();
+    return null;
+  } catch (error) {
+    return error;
+  }
+}
+
+function asBrokerError(value: unknown): BrokerErrorException {
+  if (!(value instanceof BrokerErrorException)) {
+    throw new Error('expected a BrokerErrorException');
+  }
+  return value;
 }
 
 const ISSUE_TYPES_REPLY: [string, unknown] = [
@@ -67,6 +86,27 @@ const ISSUE_NODE_REPLY: [string, unknown] = [
   'issue(number:$number)',
   { data: { repository: { issue: { id: 'I_kwDO123' } } } },
 ];
+
+function projectItemsReply(
+  titles: readonly string[],
+  pageInfo: { hasNextPage: boolean; endCursor: string | null } = {
+    hasNextPage: false,
+    endCursor: null,
+  },
+): unknown {
+  return {
+    data: {
+      repository: {
+        issue: {
+          projectItems: {
+            nodes: titles.map((title) => ({ project: { title } })),
+            pageInfo,
+          },
+        },
+      },
+    },
+  };
+}
 
 function isIssueEditCall(call: readonly string[]): boolean {
   return call[0] === 'issue' && call[1] === 'edit';
@@ -206,6 +246,203 @@ describe('issue.edit (multi-step)', () => {
     expect(calls.some(isRepoViewCall)).toBe(true);
     const typesCall = calls.find((c) => c.join(' ').includes('issueTypes'));
     expect(typesCall!.join(' ')).toContain('owner=acoliver');
+  });
+});
+
+/**
+ * @plan project-plans/issue3592.md
+ * @requirement AC-1, AC-2, AC-3, AC-4, AC-6
+ * @issue 3592
+ */
+describe('issue.edit addProject verification', () => {
+  /**
+   * @plan project-plans/issue3592.md
+   * @requirement AC-1
+   * @issue 3592
+   */
+  it('returns success after confirming the requested project membership', async () => {
+    const { run, calls } = makeRunner([
+      ['projectItems', projectItemsReply(['LLxprt Roadmap'])],
+    ]);
+
+    const result = await executeIssueEdit(
+      {
+        number: 3592,
+        addProject: 'LLxprt Roadmap',
+        repo: 'vybestack/llxprt-code',
+      },
+      run,
+    );
+
+    expect(result).toStrictEqual({ number: 3592, type: null });
+    expect(calls).toHaveLength(2);
+    expect(calls[0].slice(0, 2)).toStrictEqual(['issue', 'edit']);
+    expect(calls[1].join(' ')).toContain('projectItems');
+  });
+
+  /**
+   * @plan project-plans/issue3592.md
+   * @requirement AC-1
+   * @issue 3592
+   */
+  it('matches requested project titles case-insensitively', async () => {
+    const { run } = makeRunner([
+      ['projectItems', projectItemsReply(['LLxprt Roadmap'])],
+    ]);
+
+    const result = await executeIssueEdit(
+      {
+        number: 3592,
+        addProject: 'llxprt roadmap',
+        repo: 'vybestack/llxprt-code',
+      },
+      run,
+    );
+
+    expect(result).toStrictEqual({ number: 3592, type: null });
+  });
+
+  /**
+   * @plan project-plans/issue3592.md
+   * @requirement AC-2
+   * @issue 3592
+   */
+  it('throws a structured error when gh reports success without adding the project', async () => {
+    const { run } = makeRunner([['projectItems', projectItemsReply([])]]);
+
+    const caught = await captureFailure(() =>
+      executeIssueEdit(
+        {
+          number: 3592,
+          addProject: 'LLxprt Roadmap',
+          repo: 'vybestack/llxprt-code',
+        },
+        run,
+      ),
+    );
+
+    expect(caught).toBeInstanceOf(BrokerErrorException);
+    const error = asBrokerError(caught);
+    expect(error.brokerError.code).toBe('GITHUB_ERROR');
+    expect(error.message).toContain('"LLxprt Roadmap"');
+    expect(error.message).toMatch(/Projects containing the issue: \(none\)/);
+  });
+
+  /**
+   * @plan project-plans/issue3592.md
+   * @requirement AC-1, AC-2
+   * @issue 3592
+   */
+  it('names only missing requested projects and lists present memberships', async () => {
+    const { run } = makeRunner([
+      ['projectItems', projectItemsReply(['Project One'])],
+    ]);
+
+    const caught = await captureFailure(() =>
+      executeIssueEdit(
+        {
+          number: 3592,
+          addProject: ['Project One', 'Project Two'],
+          repo: 'vybestack/llxprt-code',
+        },
+        run,
+      ),
+    );
+
+    const error = asBrokerError(caught);
+    expect(error.message).toContain(
+      'Missing project membership: "Project Two"',
+    );
+    expect(error.message).toContain(
+      'Projects containing the issue: Project One',
+    );
+  });
+
+  /**
+   * @plan project-plans/issue3592.md
+   * @requirement AC-3
+   * @issue 3592
+   */
+  it('reads every projectItems page before deciding membership is absent', async () => {
+    const { run, calls } = makeRunner([
+      ['endCursor=cursor-1', projectItemsReply(['Target Project'])],
+      [
+        'projectItems',
+        projectItemsReply(['Other Project'], {
+          hasNextPage: true,
+          endCursor: 'cursor-1',
+        }),
+      ],
+    ]);
+
+    const result = await executeIssueEdit(
+      {
+        number: 3592,
+        addProject: 'Target Project',
+        repo: 'vybestack/llxprt-code',
+      },
+      run,
+    );
+
+    expect(result).toStrictEqual({ number: 3592, type: null });
+    expect(calls).toHaveLength(3);
+    expect(calls[2].join(' ')).toContain('endCursor=cursor-1');
+  });
+
+  /**
+   * @plan project-plans/issue3592.md
+   * @requirement AC-1, AC-4
+   * @issue 3592
+   */
+  it('shares repository resolution when setting a type and adding a project', async () => {
+    const { run, calls } = makeRunner([
+      ['repo view', { owner: { login: 'vybestack' }, name: 'llxprt-code' }],
+      ISSUE_TYPES_REPLY,
+      ISSUE_NODE_REPLY,
+      ['projectItems', projectItemsReply(['LLxprt Roadmap'])],
+    ]);
+
+    const result = await executeIssueEdit(
+      { number: 3592, type: 'Feature', addProject: 'LLxprt Roadmap' },
+      run,
+    );
+
+    expect(result).toStrictEqual({ number: 3592, type: 'Feature' });
+    expect(calls.some((call) => call.join(' ').includes('updateIssue'))).toBe(
+      true,
+    );
+    expect(calls.filter(isRepoViewCall)).toHaveLength(1);
+  });
+
+  /**
+   * @plan project-plans/issue3592.md
+   * @requirement AC-6
+   * @issue 3592
+   */
+  it('preserves a structured error raised by the verification read', async () => {
+    const expectedError = brokerError(
+      'GITHUB_ERROR',
+      'projectItems verification transport failed',
+    );
+    const calls: string[][] = [];
+    const run = async (argv: readonly string[]): Promise<unknown> => {
+      calls.push([...argv]);
+      if (argv.join(' ').includes('projectItems')) throw expectedError;
+      return {};
+    };
+
+    const caught = await captureFailure(() =>
+      executeIssueEdit(
+        {
+          number: 3592,
+          addProject: 'LLxprt Roadmap',
+          repo: 'vybestack/llxprt-code',
+        },
+        run,
+      ),
+    );
+
+    expect(caught).toBe(expectedError);
   });
 });
 

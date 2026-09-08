@@ -68,6 +68,7 @@ const VALID_SAMPLE_BY_KIND: Record<GithubParamKind, unknown> = {
   assignee: ['x'],
   milestone: 'x',
   project: 'x',
+  projectList: ['x'],
   branch: 'x',
 };
 
@@ -586,13 +587,15 @@ describe('github tool', () => {
     /**
      * A `type: ['string','array']` union is unprojectable: every provider's
      * `normalizeType` collapses it to `'string'`, so the model would be told
-     * arrays are invalid. The label/assignee family must declare a concrete
+     * arrays are invalid. Repeatable string parameters must declare a concrete
      * array type so a model can pass an array.
      *
      * @plan PLAN-20260731-GHBROKER.P15
-     * @requirement REQ-008
+     * @plan project-plans/issue3592.md
+     * @requirement REQ-008, AC-1
+     * @issue 3592
      */
-    it('declares label/assignee params as array<string>, never a type union', () => {
+    it('declares repeatable string params as array<string>, never a type union', () => {
       const tool = new GithubTool(stubClient());
       const schema = tool.parameterSchema as {
         properties: Record<
@@ -607,6 +610,7 @@ describe('github tool', () => {
         'assignee',
         'addAssignee',
         'removeAssignee',
+        'addProject',
       ]) {
         const prop = schema.properties[name];
         expect(prop.type).toBe('array');

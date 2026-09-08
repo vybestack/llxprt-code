@@ -170,7 +170,7 @@ function buildOpReferenceBlock(): string {
 }
 
 /**
- * Array-of-strings parameters (labels, assignees).
+ * Array-of-strings parameters (labels, assignees, projects).
  *
  * The tool schema declares these as `{ type: 'array', items: { type: 'string' } }`
  * rather than a `type: ['string', 'array']` union. A union type is
@@ -196,6 +196,8 @@ const ARRAY_PARAMS: Readonly<Record<string, string>> = {
     'Logins to add as assignee, as an array (use a single-element array for one). Accepted by issue.edit, pr.edit.',
   removeAssignee:
     'Logins to remove as assignee, as an array (use a single-element array for one). Accepted by issue.edit.',
+  addProject:
+    'Project names to add, as a string or array of strings. Accepted by issue.edit.',
 };
 
 /** Schema for boolean-kind parameters (no additional constraints). */
@@ -298,7 +300,6 @@ function textHintFor(name: string): string {
     milestone:
       'Milestone name or number. Accepted by issue.create, issue.edit.',
     project: 'Project name. Accepted by issue.create.',
-    addProject: 'Project to add the item to. Accepted by issue.edit.',
     removeProject: 'Project to remove the item from. Accepted by issue.edit.',
     type: 'Issue type (e.g. Bug, Feature). Set AFTER creation via issue.edit; NOT accepted by issue.create.',
     base: 'Base branch for the pull request. Accepted by pr.create.',
