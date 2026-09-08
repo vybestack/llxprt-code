@@ -14,7 +14,9 @@ import {
   hasToolSchema,
   resolveToolDescription,
   type ToolRegistry,
-  normalizeToolName,
+  buildToolGovernance,
+  isToolBlocked,
+  type ToolGovernance,
 } from '@vybestack/llxprt-code-tools';
 import type { RuntimeProviderManager } from './contracts/RuntimeProviderManager.js';
 import {
@@ -114,53 +116,20 @@ function hydrateContentGeneratorConfig(
   };
 }
 
-type ToolGovernance = {
-  allowed: Set<string>;
-  allowedExplicit: boolean;
-  disabled: Set<string>;
-  excluded: Set<string>;
-};
-
-function buildToolGovernance(
+function buildToolGovernanceFromProfile(
   profile: AgentRuntimeProfileSnapshot,
 ): ToolGovernance {
-  const allowedRaw = Array.isArray(profile.settings.tools?.allowed)
-    ? profile.settings.tools.allowed
-    : undefined;
-  const disabledRaw = Array.isArray(profile.settings.tools?.disabled)
-    ? profile.settings.tools.disabled
-    : undefined;
-  const excludedRaw = profile.config.getExcludeTools() ?? [];
-
-  return {
-    allowed: new Set(
-      (allowedRaw ?? []).map((tool) => normalizeToolName(tool) ?? tool),
-    ),
-    allowedExplicit: allowedRaw !== undefined,
-    disabled: new Set(
-      (disabledRaw ?? []).map((tool) => normalizeToolName(tool) ?? tool),
-    ),
-    excluded: new Set(
-      excludedRaw.map((tool) => normalizeToolName(tool) ?? tool),
-    ),
-  };
-}
-
-function isToolPermitted(
-  toolName: string,
-  governance: ToolGovernance,
-): boolean {
-  const canonical = normalizeToolName(toolName) ?? toolName;
-  if (governance.excluded.has(canonical)) {
-    return false;
-  }
-  if (governance.disabled.has(canonical)) {
-    return false;
-  }
-  if (governance.allowedExplicit && !governance.allowed.has(canonical)) {
-    return false;
-  }
-  return true;
+  return buildToolGovernance({
+    getEphemeralSettings: () => ({
+      ...(Array.isArray(profile.settings.tools?.allowed)
+        ? { 'tools.allowed': profile.settings.tools.allowed }
+        : {}),
+      ...(Array.isArray(profile.settings.tools?.disabled)
+        ? { 'tools.disabled': profile.settings.tools.disabled }
+        : {}),
+    }),
+    getExcludeTools: () => profile.config.getExcludeTools(),
+  });
 }
 
 function createFilteredToolRegistryView(
@@ -180,10 +149,10 @@ function createFilteredToolRegistryView(
   return {
     listToolNames: () =>
       getTools()
-        .filter((tool) => isToolPermitted(tool.name, governance))
+        .filter((tool) => !isToolBlocked(tool.name, governance))
         .map((tool) => tool.name),
     getToolMetadata: (name) => {
-      if (!isToolPermitted(name, governance)) {
+      if (isToolBlocked(name, governance)) {
         return undefined;
       }
       const tool = getTools().find((candidate) => candidate.name === name);
@@ -228,7 +197,7 @@ export async function loadAgentRuntime(
     overrides.telemetryAdapter ??
     createTelemetryAdapterFromConfig(profile.config);
 
-  const governance = buildToolGovernance(profile);
+  const governance = buildToolGovernanceFromProfile(profile);
   const toolsView: ToolRegistryView =
     overrides.toolsView ??
     createFilteredToolRegistryView(

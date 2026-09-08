@@ -12,6 +12,10 @@ import {
 import { MessageType } from '../types.js';
 import type { ToolInfo } from '@vybestack/llxprt-code-agents';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  canonicalizeToolName,
+  INVALID_TOOL_NAME,
+} from '@vybestack/llxprt-code-tools';
 import { type CommandArgumentSchema } from './schema/types.js';
 
 const toolsSchema: CommandArgumentSchema = [
@@ -29,7 +33,10 @@ const toolsSchema: CommandArgumentSchema = [
   },
 ];
 
-const normalizeToolName = (name: string): string => name.trim().toLowerCase();
+const normalizeToolName = (name: string): string => {
+  const canonical = canonicalizeToolName(name);
+  return canonical === INVALID_TOOL_NAME ? '' : canonical;
+};
 
 // Tokenizes quoted/unquoted args. The pattern is passed to RegExp via an
 // identifier so it is not a static literal flagged by sonarjs/regular-expr.

@@ -103,15 +103,77 @@ ${error.details}`;
   return message;
 }
 
-function normalizeToolName(toolName: string): string {
-  if (
-    toolName === 'ShellTool' ||
-    toolName.startsWith('ShellTool(') ||
-    toolName.startsWith('run_shell_command(')
-  ) {
-    return 'run_shell_command';
+// Legacy policy spellings mapped to canonical registry names, compared
+// lowercased. Mirrors LEGACY_TOOL_NAME_ALIASES in @vybestack/llxprt-code-tools.
+const LEGACY_TOOL_NAME_ALIASES: ReadonlyMap<string, string> = new Map([
+  ['shelltool', 'run_shell_command'],
+]);
+
+function isValidPolicyToolName(name: string): boolean {
+  return name.length > 0 && name.length <= 100 && /^[a-zA-Z0-9_.-]+$/.test(name);
+}
+
+function toSnakeCaseToolName(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[\s-]+/g, '_')
+    .toLowerCase();
+}
+
+function hasMultipleWordsInName(name: string): boolean {
+  return /[A-Z]/.test(name.slice(1)) || name.includes('_') || name.includes('-');
+}
+
+// Strip a trailing 'Tool' suffix from the last dotted segment when the
+// remainder is still multi-word ('ReadFileTool' -> 'ReadFile').
+function stripToolSuffixFromLastSegment(name: string): string {
+  const dot = name.lastIndexOf('.');
+  const last = name.slice(dot + 1);
+  if (!last.endsWith('Tool') || last.length <= 4) {
+    return name;
   }
-  return toolName;
+  const withoutTool = last.slice(0, -4);
+  if (!hasMultipleWordsInName(withoutTool)) {
+    return name;
+  }
+  return name.slice(0, dot + 1) + withoutTool;
+}
+
+// Mirror of tools' canonicalizeToolName for policy entries (zero-dep).
+function canonicalizeEntryName(base: string): string {
+  if (base.split('.').some((segment) => segment === '')) {
+    return '';
+  }
+  const stripped = stripToolSuffixFromLastSegment(base);
+  if (isValidPolicyToolName(stripped) && stripped === stripped.toLowerCase()) {
+    return stripped;
+  }
+  return toSnakeCaseToolName(stripped);
+}
+
+/**
+ * Decode one user-authored policy entry to its canonical registry name.
+ *
+ * Boundary duplicate of tools canonicalizePolicyToolEntry (policy has zero
+ * workspace deps); removal condition: policy gains a tools dependency or the
+ * decoder moves to a zero-dep shared module. Must stay behavior-identical —
+ * guarded by the tools drift test (core toolEntryDecoderDrift.test.ts).
+ */
+export function normalizeToolName(toolName: string): string {
+  const trimmed = toolName.trim();
+  if (!trimmed || trimmed.includes('*')) {
+    return trimmed;
+  }
+  const openParen = trimmed.indexOf('(');
+  const base = (openParen === -1 ? trimmed : trimmed.slice(0, openParen)).trim();
+  if (!base) {
+    return '';
+  }
+  const alias = LEGACY_TOOL_NAME_ALIASES.get(base.toLowerCase());
+  if (alias) {
+    return alias;
+  }
+  return canonicalizeEntryName(base);
 }
 
 export const AUTO_EDIT_TOOLS = [
