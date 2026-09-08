@@ -64,6 +64,7 @@ export const handleSlashCommand = async (
     const logger = new Logger(config?.getSessionId() ?? '', loggerStorage);
 
     const context: CommandContext = {
+      signal: abortController.signal,
       services: {
         config,
         agent: null,

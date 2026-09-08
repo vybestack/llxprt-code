@@ -63,6 +63,13 @@ function createMockContext(initialTodos: Todo[] = []): CommandContext {
   } as unknown as CommandContext;
 }
 
+function commandProducedEffect(
+  updateTodosCallCount: number,
+  addItemCallCount: number,
+): boolean {
+  return updateTodosCallCount > 0 || addItemCallCount > 0;
+}
+
 describe('todoCommand', () => {
   describe('/todo list', () => {
     /**
@@ -140,12 +147,14 @@ describe('todoCommand', () => {
       await loadSubcommand!.action!(ctx, '1');
 
       // Either updateTodos is called (files exist) or addItem shows error (no files)
-      const updateTodosCalled =
-        (ctx.todoContext?.updateTodos as ReturnType<typeof vi.fn>).mock.calls
-          .length > 0;
-      const addItemCalled =
-        (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock.calls.length > 0;
-      expect(updateTodosCalled || addItemCalled).toBe(true);
+      const updateTodosCallCount = (
+        ctx.todoContext?.updateTodos as ReturnType<typeof vi.fn>
+      ).mock.calls.length;
+      const addItemCallCount = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock
+        .calls.length;
+      expect(
+        commandProducedEffect(updateTodosCallCount, addItemCallCount),
+      ).toBe(true);
     });
 
     /**
@@ -389,7 +398,7 @@ describe('todoCommand', () => {
               ctx.todoContext!.updateTodos as ReturnType<typeof vi.fn>
             ).mock.calls;
             const todosAfterAdd = calls[calls.length - 1][0];
-            expect(todosAfterAdd.length).toBe(initialLength + 1);
+            expect(todosAfterAdd).toHaveLength(initialLength + 1);
 
             // Reset mock to track next call
             (
@@ -406,7 +415,7 @@ describe('todoCommand', () => {
             calls = (ctx.todoContext!.updateTodos as ReturnType<typeof vi.fn>)
               .mock.calls;
             const todosAfterRemove = calls[calls.length - 1][0];
-            expect(todosAfterRemove.length).toBe(initialLength);
+            expect(todosAfterRemove).toHaveLength(initialLength);
           },
         ),
         { numRuns: 10 },

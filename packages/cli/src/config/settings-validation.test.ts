@@ -434,9 +434,9 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
       assertDefined(result.error);
-      const issue = result.error.issues.find(
-        (i) => i.code === 'invalid_type' && i.message.includes('Required'),
-      );
+      const issue = result.error.issues
+        .filter((candidate) => candidate.code === 'invalid_type')
+        .find((candidate) => candidate.message.includes('Required'));
       expect(issue).toBeDefined();
     });
 
@@ -577,15 +577,17 @@ describe('settings-validation', () => {
       expect(result.success).toBe(true);
     });
 
-    it.each(['target', 'otlpEndpoint', 'otlpProtocol', 'useCollector'])(
-      'should reject removed telemetry property %s',
-      (property) => {
-        const result = validateSettings({
-          telemetry: { [property]: property === 'useCollector' ? true : 'x' },
-        });
-        expect(result.success).toBe(false);
-      },
-    );
+    it.each([
+      ['target', 'x'],
+      ['otlpEndpoint', 'x'],
+      ['otlpProtocol', 'x'],
+      ['useCollector', true],
+    ])('should reject removed telemetry property %s', (property, value) => {
+      const result = validateSettings({
+        telemetry: { [property]: value },
+      });
+      expect(result.success).toBe(false);
+    });
 
     it('should accept sandbox as boolean false', () => {
       const result = validateSettings({ sandbox: false });

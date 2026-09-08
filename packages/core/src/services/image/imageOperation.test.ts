@@ -17,6 +17,8 @@ import {
   type ImageOperationBackend,
 } from './imageOperation.js';
 
+const bunIt = it;
+
 /**
  * Runs `operation` expecting rejection and returns the rejection reason.
  * Fails closed by throwing if the operation fulfills, so tests cannot pass
@@ -237,21 +239,21 @@ describe('resolveOutputPath', () => {
     ).toBeInstanceOf(ImageOperationError);
   });
 
-  it.skipIf(!SYMLINKS_SUPPORTED)(
-    'rejects when the output path is a symlink escaping the workspace',
-    async () => {
+  {
+    const it = !SYMLINKS_SUPPORTED ? bunIt.skip : bunIt;
+    it('rejects when the output path is a symlink escaping the workspace', async () => {
       const linkPath = path.join(workspaceRoot, 'link.png');
       const target = path.join(os.tmpdir(), 'escape-target.png');
       await fs.promises.symlink(target, linkPath, 'file');
       expect(
         await captureRejection(resolveOutputPath('link.png', workspaceRoot)),
       ).toBeInstanceOf(ImageOperationError);
-    },
-  );
+    });
+  }
 
-  it.skipIf(!SYMLINKS_SUPPORTED)(
-    'rejects when a parent directory is a symlink/junction escaping the workspace',
-    async () => {
+  {
+    const it = !SYMLINKS_SUPPORTED ? bunIt.skip : bunIt;
+    it('rejects when a parent directory is a symlink/junction escaping the workspace', async () => {
       // Create a directory symlink INSIDE the workspace pointing OUTSIDE, then
       // attempt to write a file under it. The output must not escape.
       const outsideDir = await fs.promises.realpath(
@@ -266,8 +268,8 @@ describe('resolveOutputPath', () => {
       ).toBeInstanceOf(ImageOperationError);
       // The outside directory must remain untouched (no file written).
       expect(fs.existsSync(path.join(outsideDir, 'out.png'))).toBe(false);
-    },
-  );
+    });
+  }
 });
 
 describe('writeImageAtomically', () => {
@@ -469,9 +471,9 @@ describe('resolveInputPaths (parent symlink escape)', () => {
     await fs.promises.rm(outsideDir, { recursive: true, force: true });
   });
 
-  it.skipIf(!SYMLINKS_SUPPORTED)(
-    'rejects an input path under a parent symlink/junction that escapes the workspace',
-    async () => {
+  {
+    const it = !SYMLINKS_SUPPORTED ? bunIt.skip : bunIt;
+    it('rejects an input path under a parent symlink/junction that escapes the workspace', async () => {
       // Place a real PNG OUTSIDE the workspace, then symlink a directory inside
       // the workspace to the outside dir. The input path under that symlinked
       // directory resolves to an outside file and must be rejected.
@@ -484,12 +486,12 @@ describe('resolveInputPaths (parent symlink escape)', () => {
           resolveInputPaths(['escapelink/secret.png'], workspaceRoot),
         ),
       ).toBeInstanceOf(ImageOperationError);
-    },
-  );
+    });
+  }
 
-  it.skipIf(!SYMLINKS_SUPPORTED)(
-    'rejects an input symlink that points to a regular file outside the workspace',
-    async () => {
+  {
+    const it = !SYMLINKS_SUPPORTED ? bunIt.skip : bunIt;
+    it('rejects an input symlink that points to a regular file outside the workspace', async () => {
       const outsidePng = path.join(outsideDir, 'outside.png');
       await fs.promises.writeFile(outsidePng, makeRealMinimalPng());
       const linkFile = path.join(workspaceRoot, 'link-input.png');
@@ -499,8 +501,8 @@ describe('resolveInputPaths (parent symlink escape)', () => {
           resolveInputPaths(['link-input.png'], workspaceRoot),
         ),
       ).toBeInstanceOf(ImageOperationError);
-    },
-  );
+    });
+  }
 
   it('accepts a legitimate in-workspace input file', async () => {
     const inputPng = path.join(workspaceRoot, 'in.png');

@@ -13,6 +13,24 @@ import {
   runBunLauncherIfNeeded,
 } from './bun-launcher.js';
 
+function rejectCapabilityFdClose(
+  descriptor: number,
+  capabilityDescriptor: number,
+): void {
+  if (descriptor === capabilityDescriptor) {
+    throw new Error('close EIO');
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function recordExitCode(exitCalls: number[], code: number | undefined): never {
+  exitCalls.push(code ?? 0);
+  return undefined as never;
+}
+
 describe('relaunchUnderBunIfNeeded', () => {
   let originalArgv: string[];
   let originalEnv: NodeJS.ProcessEnv;
@@ -376,14 +394,13 @@ describe('relaunchUnderBunIfNeeded', () => {
     }
 
     /** @plan project-plans/issue-1954-sandbox-hardening.md (O9-O12) — real spawn with guaranteed fd 3. */
-    it.skipIf(process.platform === 'win32')(
-      'O9/O10: direct platform fd-forwarding — explicit stdio array maps parent fd 3 to child fd 3',
-      async () => {
+    describe.skipIf(process.platform === 'win32')('POSIX behavior', () => {
+      it('O9/O10: direct platform fd-forwarding — explicit stdio array maps parent fd 3 to child fd 3', async () => {
         const pathMod = await import('node:path');
         const fsMod = await import('node:fs');
         const dir = await mkLauncherTmpDir('launcher-o9-');
         try {
-          const sentinel = pathMod.join(dir, 'child.json');
+          const marker = pathMod.join(dir, 'child.json');
           const recorder = pathMod.join(dir, 'rec.js');
           const tokenFile = pathMod.join(dir, 'token.txt');
           const token = 'b'.repeat(64) + '\n';
@@ -391,7 +408,7 @@ describe('relaunchUnderBunIfNeeded', () => {
           fsMod.writeFileSync(
             recorder,
             '#!/usr/bin/env node\nconst fs=require("fs");let r=Buffer.alloc(0),c=Buffer.alloc(128),n;try{while((n=fs.readSync(3,c,0,128,null))>0)r=Buffer.concat([r,c.subarray(0,n)]);}catch{}try{fs.closeSync(3);}catch{}fs.writeFileSync(' +
-              JSON.stringify(sentinel) +
+              JSON.stringify(marker) +
               ',JSON.stringify({len:r.length,text:r.toString("utf8")}));',
           );
           fsMod.chmodSync(recorder, 0o755);
@@ -412,7 +429,7 @@ describe('relaunchUnderBunIfNeeded', () => {
             { encoding: 'utf8', timeout: 10000, input: token },
           );
           expect(result.status).toBe(0);
-          const rec = JSON.parse(fsMod.readFileSync(sentinel, 'utf8')) as {
+          const rec = JSON.parse(fsMod.readFileSync(marker, 'utf8')) as {
             len: number;
             text: string;
           };
@@ -421,9 +438,8 @@ describe('relaunchUnderBunIfNeeded', () => {
         } finally {
           await rmLauncherTmpDir(dir);
         }
-      },
-      10000,
-    );
+      }, 10000);
+    });
 
     /** O11/O12: Verify real relaunchUnderBunIfNeeded closes parent fd 3 after spawn, with guaranteed fd 3. */
     it('O11/O12: real relaunchUnderBunIfNeeded closes the parent fd 3 after successful spawn', async () => {
@@ -659,7 +675,7 @@ describe('relaunchUnderBunIfNeeded', () => {
         capturedChild = new EventEmitter();
         Object.defineProperty(capturedChild, 'kill', {
           value: (sig: string) => {
-            if (sig === 'SIGTERM') killed = true;
+            killed = sig === 'SIGTERM';
             return true;
           },
         });
@@ -667,10 +683,9 @@ describe('relaunchUnderBunIfNeeded', () => {
       });
       const closeSpy = vi
         .spyOn(fsDefault, 'closeSync')
-        .mockImplementation((fdArg: number) => {
-          if (fdArg === fd) throw new Error('close EIO');
-          return undefined;
-        });
+        .mockImplementation((fdArg: number) =>
+          rejectCapabilityFdClose(fdArg, fd),
+        );
       try {
         const promise = relaunchUnderBunIfNeeded({
           isRunningUnderBun: () => false,
@@ -689,9 +704,7 @@ describe('relaunchUnderBunIfNeeded', () => {
         expect(thrown).toBeInstanceOf(AggregateError);
         expect(
           (thrown as AggregateError).errors.some((e) =>
-            /close EIO|capability fd/i.test(
-              e instanceof Error ? e.message : String(e),
-            ),
+            /close EIO|capability fd/i.test(errorMessage(e)),
           ),
         ).toBe(true);
         expect(killed).toBe(true);
@@ -740,10 +753,7 @@ describe('runBunLauncherIfNeeded', () => {
         resolveBun: vi.fn(async () => null),
         resolveEntry: vi.fn(async () => '/entry.ts'),
         spawn: vi.fn(),
-        exit: (code?: number) => {
-          exitCalls.push(code ?? 0);
-          return undefined as never;
-        },
+        exit: (code?: number) => recordExitCode(exitCalls, code),
       }),
     ).rejects.toBeInstanceOf(FatalError);
 
@@ -764,10 +774,7 @@ describe('runBunLauncherIfNeeded', () => {
       resolveBun: vi.fn(async () => '/path/to/bun'),
       resolveEntry: vi.fn(async () => '/entry.ts'),
       spawn: spawnFn as unknown as typeof import('node:child_process').spawn,
-      exit: (code?: number) => {
-        exitCalls.push(code ?? 0);
-        return undefined as never;
-      },
+      exit: (code?: number) => recordExitCode(exitCalls, code),
     });
 
     await waitFor(() => expect(capturedChild).not.toBeNull());
@@ -787,10 +794,7 @@ describe('runBunLauncherIfNeeded', () => {
       resolveBun: vi.fn(async () => '/path/to/bun'),
       resolveEntry: vi.fn(async () => '/entry.ts'),
       spawn: spawnFn as unknown as typeof import('node:child_process').spawn,
-      exit: (code?: number) => {
-        exitCalls.push(code ?? 0);
-        return undefined as never;
-      },
+      exit: (code?: number) => recordExitCode(exitCalls, code),
     });
 
     expect(exitCalls).toHaveLength(0);
@@ -811,10 +815,7 @@ describe('runBunLauncherIfNeeded', () => {
       resolveBun: vi.fn(async () => '/path/to/bun'),
       resolveEntry: vi.fn(async () => '/entry.ts'),
       spawn: spawnFn as unknown as typeof import('node:child_process').spawn,
-      exit: (code?: number) => {
-        exitCalls.push(code ?? 0);
-        return undefined as never;
-      },
+      exit: (code?: number) => recordExitCode(exitCalls, code),
     });
 
     await waitFor(() => expect(capturedChild).not.toBeNull());

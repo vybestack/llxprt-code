@@ -330,7 +330,7 @@ describe('registerShellJobShutdownNotice', () => {
     fireExit();
 
     expect(laterListenerRan).toBe(true);
-    expect(stderrChunks).toEqual([]);
+    expect(stderrChunks).toStrictEqual([]);
   });
 
   it('a throwing manager read does not escape the exit listener and a later exit listener still runs', () => {
@@ -354,7 +354,7 @@ describe('registerShellJobShutdownNotice', () => {
     fireExit();
 
     expect(laterListenerRan).toBe(true);
-    expect(stderrChunks).toEqual([]);
+    expect(stderrChunks).toStrictEqual([]);
   });
 
   it('resumes a short fd-2 write until the whole notice is out', () => {
@@ -392,7 +392,7 @@ describe('registerShellJobShutdownNotice', () => {
     registerShellJobShutdownNotice(host, target);
     fireExit();
 
-    expect(stderrChunks).toEqual([]);
+    expect(stderrChunks).toStrictEqual([]);
   });
 
   it('a job-free exit writes nothing and constructs no manager or filesystem state', () => {
@@ -417,7 +417,7 @@ describe('registerShellJobShutdownNotice', () => {
 
     expect(creatingGetterCalls).toBe(0);
     expect(mkdtemp).not.toHaveBeenCalled();
-    expect(stderrChunks).toEqual([]);
+    expect(stderrChunks).toStrictEqual([]);
   });
 
   it('registers the exit listener on the real process by default', () => {
@@ -437,7 +437,7 @@ describe('registerShellJobShutdownNotice', () => {
         process.removeListener('exit', listener);
       }
     }
-    expect(process.listeners('exit')).toEqual(before);
+    expect(process.listeners('exit')).toStrictEqual(before);
   });
 
   it('reaches the physical stderr of a process whose stdio is patched when it exits via the quit path', async () => {

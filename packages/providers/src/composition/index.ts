@@ -60,7 +60,38 @@ export {
   createAnthropicAliasProvider,
   registerAliasProviders,
 } from './aliasProviderFactory.js';
-export type { AliasAwareBaseProvider } from './aliasProviderFactory.js';
+export type {
+  AliasAwareBaseProvider,
+  RegisterAliasProvidersOptions,
+} from './aliasProviderFactory.js';
+
+// ─── Runtime plugins (issue #2758) ───────────────────────────────────────────
+export {
+  createBuiltinProviderContributions,
+  createBuiltinProviderContributionRegistry,
+  buildProviderContributionRegistry,
+  discoverRuntimePluginPackages,
+  resolvePluginSearchRoot,
+  RUNTIME_PLUGIN_MANIFEST_MARKER,
+  loadRuntimePlugins,
+  loadInstalledRuntimePlugins,
+  parseRuntimePluginManifest,
+  RUNTIME_PLUGIN_SUPPORTED_API_VERSION,
+  RuntimePluginIncompatibleError,
+  RuntimePluginMalformedError,
+} from './runtimePlugins/index.js';
+export type {
+  ContributedAliasRegistration,
+  RuntimePluginDiscoveryDeps,
+  LoadedRuntimePlugin,
+  ProviderAliasFactory,
+  ProviderContributionOrigin,
+  ProviderContributionRegistry,
+  ProviderFactoryContext,
+  RuntimeContributedAlias,
+  RuntimePluginManifest,
+  RuntimeProviderContribution,
+} from './runtimePlugins/index.js';
 
 // ─── OAuth provider registration ─────────────────────────────────────────────
 export {

@@ -21,12 +21,15 @@ import type {
   MCPResource,
   MCPServerConfig,
   MessageBus,
+  LocalMediaStore,
   PolicyEngine,
   RedactionConfig,
   RuntimeProviderManager,
   SandboxConfig,
   SchedulerCallbacks,
   SchedulerOptions,
+  SessionPersistenceService,
+  SessionRecordingService,
   ShellExecutionConfig,
   ShellReplacementMode,
   SkillManager,
@@ -112,17 +115,6 @@ export interface UiContentGeneratorConfig {
           getContextLimit?: () => number | undefined;
         }
       | undefined;
-    getServerToolsProvider?():
-      | {
-          getServerTools: () => string[];
-          invokeServerTool: (
-            name: string,
-            params: { prompt: string },
-            options: { signal: AbortSignal },
-          ) => Promise<unknown>;
-        }
-      | null
-      | undefined;
   };
 }
 
@@ -140,7 +132,7 @@ export interface UiContentGeneratorConfig {
 export interface AgentClientSource {
   getAgentClient(): AgentClientContract;
   getAgentClientFactory?(): AgentClientFactory | undefined;
-  createDetachedAgentClient?(runtimeId?: string): AgentClientContract;
+  createDetachedAgentClient?(runtimeId?: string): Promise<AgentClientContract>;
 }
 
 /**
@@ -154,6 +146,10 @@ export interface SessionIdentity {
   getProjectRoot(): string;
   getWorkingDir(): string;
   getProjectTempDir(): string;
+  getLocalMediaStore(): LocalMediaStore;
+  getSessionRecordingService?(): SessionRecordingService | undefined;
+  getSessionRecordingQueueByteLimit(): number;
+  createSessionPersistenceService(sessionId: string): SessionPersistenceService;
   getLlxprtDir(): string;
 }
 
@@ -418,6 +414,7 @@ export interface AppStateRuntime {
   getQuestion(): string | undefined;
   getConversationLogPath(): string;
   getEnablePromptCompletion(): boolean;
+  getUtilityModel(): string | undefined;
   isJitContextEnabled(): boolean;
   getContextManager(): ContextManager | undefined;
   getEphemeralSettings(): Record<string, unknown>;
@@ -537,6 +534,12 @@ function buildSessionRuntime(source: StreamRuntimeBareSource): SessionIdentity {
     getProjectRoot: () => source.getProjectRoot(),
     getWorkingDir: () => source.getWorkingDir(),
     getProjectTempDir: () => source.getProjectTempDir(),
+    getLocalMediaStore: () => source.getLocalMediaStore(),
+    getSessionRecordingService: () => source.getSessionRecordingService?.(),
+    getSessionRecordingQueueByteLimit: () =>
+      source.getSessionRecordingQueueByteLimit(),
+    createSessionPersistenceService: (sessionId) =>
+      source.createSessionPersistenceService(sessionId),
     getLlxprtDir: () => source.getLlxprtDir(),
   };
 }
@@ -774,6 +777,7 @@ export function buildUiRuntimeFromSource(
       getQuestion: () => source.getQuestion(),
       getConversationLogPath: () => source.getConversationLogPath(),
       getEnablePromptCompletion: () => source.getEnablePromptCompletion(),
+      getUtilityModel: () => source.getUtilityModel(),
       isJitContextEnabled: () => source.isJitContextEnabled(),
       getContextManager: () => source.getContextManager(),
       getEphemeralSettings: () => source.getEphemeralSettings(),

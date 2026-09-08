@@ -15,6 +15,7 @@
 
 import type {
   ContinueTarget,
+  LocalMediaStore,
   SessionRecordingService,
   SessionSummary,
 } from '@vybestack/llxprt-code-core';
@@ -59,6 +60,8 @@ export interface UseSessionBrowserProps {
   onSelect: (target: ContinueTarget) => Promise<PerformResumeResult>;
   /** Active recording, used to tombstone checkpoints in the current session. */
   activeRecording?: SessionRecordingService | null;
+  /** Project store used to validate references during discovery. */
+  mediaStore?: LocalMediaStore;
   /** Callback to close the browser */
   onClose: () => void;
   /** Whether there's an active conversation that would be abandoned */

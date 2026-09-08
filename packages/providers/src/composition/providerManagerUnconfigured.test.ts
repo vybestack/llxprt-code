@@ -12,7 +12,7 @@
  * active and issues no implicit requests.
  */
 
-import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
+import { restoreGlobals } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import {
   createProviderManager,
@@ -80,31 +80,29 @@ describe('createProviderManager: unconfigured state (#2481)', () => {
     expect(manager.getActiveProviderName()).toBeUndefined();
   });
 
-  it('getServerToolsProvider returns null when unconfigured', () => {
-    const manager = buildUnconfiguredManager();
-
-    expect(manager.getServerToolsProvider()).toBeNull();
-  });
-
-  it('does not issue any network request via getServerToolsProvider when unconfigured', () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(new Response('{}', { status: 200 }));
-    setGlobal('fetch', fetchMock);
-
-    const manager = buildUnconfiguredManager();
-    const result = manager.getServerToolsProvider();
-
-    expect(result).toBeNull();
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
   it('still registers providers for explicit selection', () => {
     const manager = buildUnconfiguredManager();
 
     // Providers are registered (available for explicit selection) but none active.
     expect(manager.listProviders().length).toBeGreaterThan(0);
     expect(manager.hasActiveProvider()).toBe(false);
+  });
+
+  it('issues no network request while unconfigured', () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 200 }));
+    const savedFetch = globalThis.fetch;
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    try {
+      const manager = buildUnconfiguredManager();
+
+      expect(manager.hasActiveProvider()).toBe(false);
+      expect(manager.listProviders().length).toBeGreaterThan(0);
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = savedFetch;
+    }
   });
 });
 
@@ -129,11 +127,6 @@ describe('createProviderManager: explicit gemini unchanged (#2481)', () => {
     manager.setActiveProvider('gemini');
     expect(manager.hasActiveProvider()).toBe(true);
     expect(manager.getActiveProviderName()).toBe('gemini');
-
-    // And server tools should be available for the explicitly active gemini.
-    const serverTools = manager.getServerToolsProvider();
-    expect(serverTools).not.toBeNull();
-    expect(serverTools?.name).toBe('gemini');
   });
 
   it('auto-activates gemini from explicit settingsService activeProvider (no manual setActiveProvider)', () => {

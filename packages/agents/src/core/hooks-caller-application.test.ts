@@ -650,39 +650,53 @@ describe('Hook Caller Application', () => {
    */
   describe('chatSession applies request modifications from BeforeModel hook', () => {
     it('chatSession should call applyLLMRequestModifications (currently does not)', async () => {
-      // This test verifies that the hook handler calls applyLLMRequestModifications
-      // after getting a BeforeModel hook result (when not blocking/synthetic).
-      // After decomposition, this logic lives in DirectMessageProcessor.ts.
-      //
-      // F1 DRY unification: DirectMessageProcessor delegates to the shared
-      // applyRequestModifications helper (streamRequestHelpers.ts), which in
-      // turn calls applyLLMRequestModifications. Verify BOTH the delegation
-      // in DMP and the actual call in the shared helper.
-      const fs = await import('node:fs/promises');
-      const directMessageProcessorPath = fileURLToPath(
-        new URL('../core/DirectMessageProcessor.ts', import.meta.url),
-      );
-      const streamRequestHelpersPath = fileURLToPath(
-        new URL('../core/streamRequestHelpers.ts', import.meta.url),
-      );
-      const dmpSource = await fs.readFile(directMessageProcessorPath, 'utf-8');
-      const helperSource = await fs.readFile(streamRequestHelpersPath, 'utf-8');
-
-      // DMP delegates content modification to the shared helper.
-      const dmpDelegatesToSharedHelper = dmpSource.includes(
-        'applyRequestModifications',
-      );
-      // The shared helper calls applyLLMRequestModifications.
-      const helperCallsApplyLLMRequestModifications = helperSource.includes(
-        'applyLLMRequestModifications',
-      );
-      const callsApplyLLMRequestModifications =
-        dmpDelegatesToSharedHelper && helperCallsApplyLLMRequestModifications;
-
-      // This assertion PASSES when the hook handler applies request
-      // modifications (directly or via the shared helper).
+      const { callsApplyLLMRequestModifications } =
+        await observeChatSessionCallApplyLLMRequestModificationsCurrentlyDoesNot();
       expect(callsApplyLLMRequestModifications).toBe(true);
     });
+
+    const observeChatSessionCallApplyLLMRequestModificationsCurrentlyDoesNot =
+      async () => {
+        // This test verifies that the hook handler calls applyLLMRequestModifications
+        // after getting a BeforeModel hook result (when not blocking/synthetic).
+        // After decomposition, this logic lives in DirectMessageProcessor.ts.
+        //
+        // F1 DRY unification: DirectMessageProcessor delegates to the shared
+        // applyRequestModifications helper (streamRequestHelpers.ts), which in
+        // turn calls applyLLMRequestModifications. Verify BOTH the delegation
+        // in DMP and the actual call in the shared helper.
+        const fs = await import('node:fs/promises');
+        const directMessageProcessorPath = fileURLToPath(
+          new URL('../core/DirectMessageProcessor.ts', import.meta.url),
+        );
+        const streamRequestHelpersPath = fileURLToPath(
+          new URL('../core/streamRequestHelpers.ts', import.meta.url),
+        );
+        const dmpSource = await fs.readFile(
+          directMessageProcessorPath,
+          'utf-8',
+        );
+        const helperSource = await fs.readFile(
+          streamRequestHelpersPath,
+          'utf-8',
+        );
+
+        // DMP delegates content modification to the shared helper.
+        const dmpDelegatesToSharedHelper = dmpSource.includes(
+          'applyRequestModifications',
+        );
+        // The shared helper calls applyLLMRequestModifications.
+        const helperCallsApplyLLMRequestModifications = helperSource.includes(
+          'applyLLMRequestModifications',
+        );
+        const callsApplyLLMRequestModifications =
+          dmpDelegatesToSharedHelper && helperCallsApplyLLMRequestModifications;
+
+        // This assertion PASSES when the hook handler applies request
+        // modifications (directly or via the shared helper).
+
+        return { callsApplyLLMRequestModifications };
+      };
   });
 
   /**
@@ -694,40 +708,48 @@ describe('Hook Caller Application', () => {
    */
   describe('chatSession surfaces systemMessage from BeforeModel hook when stopping', () => {
     it('chatSession should pass systemMessage to AgentExecutionStoppedError', async () => {
-      // This test verifies that stream handling passes systemMessage from hook
-      // output to AgentExecutionStoppedError when a BeforeModel hook stops execution.
-      //
-      // The code should look like:
-      //   const beforeModelResult = await triggerBeforeModelHook(...);
-      //   if (beforeModelResult?.shouldStopExecution()) {
-      //     throw new AgentExecutionStoppedError(
-      //       beforeModelResult.getEffectiveReason() || 'Execution stopped by BeforeModel hook',
-      //       beforeModelResult.systemMessage,  // <-- systemMessage must be passed here
-      //     );
-      //   }
-      //
-      // After decomposition, this logic lives in beforeModelHookDecision.ts
-      // (extracted from StreamProcessor.ts).
-
-      const fs = await import('node:fs/promises');
-      const hookDecisionPath = fileURLToPath(
-        new URL('../core/beforeModelHookDecision.ts', import.meta.url),
-      );
-      const sourceCode = await fs.readFile(hookDecisionPath, 'utf-8');
-
-      // Check that AgentExecutionStoppedError exists (constructor lives in chatSession.ts)
-      const hasStoppedErrorReference = sourceCode.includes(
-        'AgentExecutionStoppedError',
-      );
+      const { hasStoppedErrorReference, passesSystemMessageToStoppedError } =
+        await observeChatSessionPassSystemMessageToAgentExecutionStoppedError();
       expect(hasStoppedErrorReference).toBe(true);
-
-      // Check that systemMessage is passed when throwing AgentExecutionStoppedError after BeforeModel
-      // Look for pattern: beforeModelResult.systemMessage being passed to the error
-      const passesSystemMessageToStoppedError =
-        sourceCode.includes('beforeModelResult.systemMessage') &&
-        sourceCode.includes('AgentExecutionStoppedError');
       expect(passesSystemMessageToStoppedError).toBe(true);
     });
+
+    const observeChatSessionPassSystemMessageToAgentExecutionStoppedError =
+      async () => {
+        // This test verifies that stream handling passes systemMessage from hook
+        // output to AgentExecutionStoppedError when a BeforeModel hook stops execution.
+        //
+        // The code should look like:
+        //   const beforeModelResult = await triggerBeforeModelHook(...);
+        //   if (beforeModelResult?.shouldStopExecution()) {
+        //     throw new AgentExecutionStoppedError(
+        //       beforeModelResult.getEffectiveReason() || 'Execution stopped by BeforeModel hook',
+        //       beforeModelResult.systemMessage,  // <-- systemMessage must be passed here
+        //     );
+        //   }
+        //
+        // After decomposition, this logic lives in beforeModelHookDecision.ts
+        // (extracted from StreamProcessor.ts).
+
+        const fs = await import('node:fs/promises');
+        const hookDecisionPath = fileURLToPath(
+          new URL('../core/beforeModelHookDecision.ts', import.meta.url),
+        );
+        const sourceCode = await fs.readFile(hookDecisionPath, 'utf-8');
+
+        // Check that AgentExecutionStoppedError exists (constructor lives in chatSession.ts)
+        const hasStoppedErrorReference = sourceCode.includes(
+          'AgentExecutionStoppedError',
+        );
+
+        // Check that systemMessage is passed when throwing AgentExecutionStoppedError after BeforeModel
+        // Look for pattern: beforeModelResult.systemMessage being passed to the error
+        const passesSystemMessageToStoppedError =
+          sourceCode.includes('beforeModelResult.systemMessage') &&
+          sourceCode.includes('AgentExecutionStoppedError');
+
+        return { hasStoppedErrorReference, passesSystemMessageToStoppedError };
+      };
   });
 
   /**
@@ -739,22 +761,30 @@ describe('Hook Caller Application', () => {
    */
   describe('chatSession surfaces systemMessage from AfterModel hook when stopping', () => {
     it('chatSession should pass systemMessage to AgentExecutionStoppedError from AfterModel', async () => {
-      // This test verifies that stream handling passes systemMessage from
-      // AfterModel hook output to AgentExecutionStoppedError when execution is stopped.
-      // After decomposition, this logic lives in StreamProcessor.ts.
-
-      const fs = await import('node:fs/promises');
-      const streamProcessorPath = fileURLToPath(
-        new URL('../core/StreamProcessor.ts', import.meta.url),
-      );
-      const sourceCode = await fs.readFile(streamProcessorPath, 'utf-8');
-
-      // Check that systemMessage is passed when throwing AgentExecutionStoppedError after AfterModel
-      const passesSystemMessageFromAfterModel =
-        sourceCode.includes('afterModelResult.systemMessage') &&
-        sourceCode.includes('AgentExecutionStoppedError');
+      const { passesSystemMessageFromAfterModel } =
+        await observeChatSessionPassSystemMessageToAgentExecutionStoppedErrorFromAfterModel();
       expect(passesSystemMessageFromAfterModel).toBe(true);
     });
+
+    const observeChatSessionPassSystemMessageToAgentExecutionStoppedErrorFromAfterModel =
+      async () => {
+        // This test verifies that stream handling passes systemMessage from
+        // AfterModel hook output to AgentExecutionStoppedError when execution is stopped.
+        // After decomposition, this logic lives in StreamProcessor.ts.
+
+        const fs = await import('node:fs/promises');
+        const streamProcessorPath = fileURLToPath(
+          new URL('../core/StreamProcessor.ts', import.meta.url),
+        );
+        const sourceCode = await fs.readFile(streamProcessorPath, 'utf-8');
+
+        // Check that systemMessage is passed when throwing AgentExecutionStoppedError after AfterModel
+        const passesSystemMessageFromAfterModel =
+          sourceCode.includes('afterModelResult.systemMessage') &&
+          sourceCode.includes('AgentExecutionStoppedError');
+
+        return { passesSystemMessageFromAfterModel };
+      };
   });
 
   /**
@@ -766,37 +796,45 @@ describe('Hook Caller Application', () => {
    */
   describe('chatSession surfaces systemMessage from AfterModel hook when blocking', () => {
     it('chatSession should pass systemMessage to AgentExecutionBlockedError', async () => {
-      // This test verifies that stream handling passes systemMessage from hook
-      // output to AgentExecutionBlockedError when execution is blocked.
-      //
-      // The code should look like:
-      //   if (afterModelResult?.isBlockingDecision()) {
-      //     throw new AgentExecutionBlockedError(
-      //       afterModelResult.getEffectiveReason() || 'Execution blocked by AfterModel hook',
-      //       syntheticResponse,
-      //       afterModelResult.systemMessage,  // <-- systemMessage must be passed here
-      //     );
-      //   }
-      //
-      // After decomposition, this logic lives in StreamProcessor.ts.
-
-      const fs = await import('node:fs/promises');
-      const streamProcessorPath = fileURLToPath(
-        new URL('../core/StreamProcessor.ts', import.meta.url),
-      );
-      const sourceCode = await fs.readFile(streamProcessorPath, 'utf-8');
-
-      // Check that AgentExecutionBlockedError is referenced in stream handling
-      const hasBlockedErrorReference = sourceCode.includes(
-        'AgentExecutionBlockedError',
-      );
+      const { hasBlockedErrorReference, passesSystemMessageToBlockedError } =
+        await observeChatSessionPassSystemMessageToAgentExecutionBlockedError();
       expect(hasBlockedErrorReference).toBe(true);
-
-      // Check that systemMessage is passed when throwing AgentExecutionBlockedError
-      const passesSystemMessageToBlockedError =
-        sourceCode.includes('afterModelResult.systemMessage') &&
-        sourceCode.includes('AgentExecutionBlockedError');
       expect(passesSystemMessageToBlockedError).toBe(true);
     });
+
+    const observeChatSessionPassSystemMessageToAgentExecutionBlockedError =
+      async () => {
+        // This test verifies that stream handling passes systemMessage from hook
+        // output to AgentExecutionBlockedError when execution is blocked.
+        //
+        // The code should look like:
+        //   if (afterModelResult?.isBlockingDecision()) {
+        //     throw new AgentExecutionBlockedError(
+        //       afterModelResult.getEffectiveReason() || 'Execution blocked by AfterModel hook',
+        //       syntheticResponse,
+        //       afterModelResult.systemMessage,  // <-- systemMessage must be passed here
+        //     );
+        //   }
+        //
+        // After decomposition, this logic lives in StreamProcessor.ts.
+
+        const fs = await import('node:fs/promises');
+        const streamProcessorPath = fileURLToPath(
+          new URL('../core/StreamProcessor.ts', import.meta.url),
+        );
+        const sourceCode = await fs.readFile(streamProcessorPath, 'utf-8');
+
+        // Check that AgentExecutionBlockedError is referenced in stream handling
+        const hasBlockedErrorReference = sourceCode.includes(
+          'AgentExecutionBlockedError',
+        );
+
+        // Check that systemMessage is passed when throwing AgentExecutionBlockedError
+        const passesSystemMessageToBlockedError =
+          sourceCode.includes('afterModelResult.systemMessage') &&
+          sourceCode.includes('AgentExecutionBlockedError');
+
+        return { hasBlockedErrorReference, passesSystemMessageToBlockedError };
+      };
   });
 });

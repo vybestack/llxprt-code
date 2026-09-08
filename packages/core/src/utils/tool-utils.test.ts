@@ -58,6 +58,19 @@ describe('doesToolInvocationMatch', () => {
     expect(result).toBe(true);
   });
 
+  it('should not coerce a non-string command into a match', () => {
+    const invocation = {
+      params: { command: 42 },
+    } as AnyToolInvocation;
+    const patterns = ['ShellTool(42)'];
+    const result = doesToolInvocationMatch(
+      'run_shell_command',
+      invocation,
+      patterns,
+    );
+    expect(result).toBe(false);
+  });
+
   describe('for non-shell tools', () => {
     const readFileTool = new ReadFileTool({
       getTargetDir: () => '',

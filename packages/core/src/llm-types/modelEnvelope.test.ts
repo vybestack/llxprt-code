@@ -75,6 +75,111 @@ function deepFreeze<T>(value: T): Readonly<T> {
   return Object.freeze(value);
 }
 
+/**
+ * True when the accumulated text blocks match the flattened input blocks in length and
+ * preserve text order exactly. Keeps the structural check outside the test callback.
+ */
+function accumulatedTextMatches(
+  result: ModelOutput,
+  expectedBlocks: TextBlock[],
+): boolean {
+  return (
+    result.content.blocks.length === expectedBlocks.length &&
+    result.content.blocks.every(
+      (b, i) => b.type === 'text' && b.text === expectedBlocks[i].text,
+    )
+  );
+}
+
+function extractToolCallNames(
+  output: ModelOutput,
+  calls: Array<{ name: string }>,
+): boolean {
+  const result = getToolCalls(output);
+  return (
+    result.length === calls.length &&
+    result.every((r, i) => r.name === calls[i].name)
+  );
+}
+
+function isEmptyOutput(out: ModelOutput, speaker: string): boolean {
+  return (
+    out.content.speaker === speaker &&
+    Array.isArray(out.content.blocks) &&
+    out.content.blocks.length === 0
+  );
+}
+
+function hasNoOptionalKeys(out: ModelOutput): boolean {
+  const optionalKeys = [
+    'finishReason',
+    'rawStopReason',
+    'usage',
+    'responseId',
+    'providerMetadata',
+    'hookRestrictions',
+  ];
+  return optionalKeys.every((key) => !(key in out));
+}
+
+/**
+ * Performs the providerMetadata shallow-merge and applies the expected precedence:
+ * chunk keys overwrite acc keys for shared keys, acc-only keys survive, and
+ * chunk-only keys are introduced. Returns false when the merge is absent.
+ */
+function mergedMetaHasExpectedPrecedence(
+  accMeta: Record<string, number>,
+  chunkMeta: Record<string, number>,
+): boolean {
+  const merged = accumulateModelStreamChunk(
+    metaOutput(accMeta),
+    metaChunk(chunkMeta),
+  ).providerMetadata;
+  if (!merged) return false;
+  return (
+    merged['b'] === chunkMeta['b'] &&
+    merged['a'] === accMeta['a'] &&
+    merged['c'] === chunkMeta['c']
+  );
+}
+
+function extractToolCallArgs(
+  output: ModelOutput,
+  calls: Array<{ parameters: Record<string, unknown> }>,
+): boolean {
+  const result = getToolCalls(output);
+  return (
+    result.length === calls.length &&
+    result.every(
+      (r, i) => JSON.stringify(r.args) === JSON.stringify(calls[i].parameters),
+    )
+  );
+}
+
+function canonicalChunkPreserved(
+  result: ModelStreamChunk,
+  canonical: string,
+): boolean {
+  return (
+    result.finishReason === canonical && result.rawStopReason === canonical
+  );
+}
+
+function metaOutput(providerMetadata: Record<string, number>): ModelOutput {
+  return {
+    content: { speaker: 'ai', blocks: [] },
+    providerMetadata,
+  };
+}
+
+function metaChunk(providerMetadata: Record<string, number>): ModelStreamChunk {
+  const chunk: ModelStreamChunk = {
+    content: { speaker: 'ai', blocks: [] },
+    providerMetadata,
+  };
+  return chunk;
+}
+
 // ---------------------------------------------------------------------------
 // emptyModelOutput
 // ---------------------------------------------------------------------------
@@ -289,12 +394,7 @@ describe('accumulateModelStreamChunk property-based', () => {
             emptyModelOutput(),
           );
           const expectedBlocks = blocksPerChunk.flat();
-          return (
-            result.content.blocks.length === expectedBlocks.length &&
-            result.content.blocks.every(
-              (b, i) => b.type === 'text' && b.text === expectedBlocks[i].text,
-            )
-          );
+          return accumulatedTextMatches(result, expectedBlocks);
         },
       ),
     ));
@@ -394,11 +494,7 @@ describe('getToolCalls property-based', () => {
               blocks: calls.map((c) => toolCallBlock(c.id, c.name, {})),
             },
           };
-          const result = getToolCalls(output);
-          return (
-            result.length === calls.length &&
-            result.every((r, i) => r.name === calls[i].name)
-          );
+          return extractToolCallNames(output, calls);
         },
       ),
     ));
@@ -530,10 +626,7 @@ describe('toModelStreamChunk property-based', () => {
             metadata: { stopReason: canonical },
           };
           const result = toModelStreamChunk(ic);
-          return (
-            result.finishReason === canonical &&
-            result.rawStopReason === canonical
-          );
+          return canonicalChunkPreserved(result, canonical);
         },
       ),
     ));
@@ -610,11 +703,7 @@ describe('emptyModelOutput property-based', () => {
     fc.assert(
       fc.property(fc.constantFrom('human', 'ai', 'tool'), (speaker) => {
         const out = emptyModelOutput(speaker);
-        return (
-          out.content.speaker === speaker &&
-          Array.isArray(out.content.blocks) &&
-          out.content.blocks.length === 0
-        );
+        return isEmptyOutput(out, speaker);
       }),
     ));
 
@@ -622,15 +711,7 @@ describe('emptyModelOutput property-based', () => {
     fc.assert(
       fc.property(fc.constantFrom('human', 'ai', 'tool'), (speaker) => {
         const out = emptyModelOutput(speaker);
-        const optionalKeys = [
-          'finishReason',
-          'rawStopReason',
-          'usage',
-          'responseId',
-          'providerMetadata',
-          'hookRestrictions',
-        ];
-        return optionalKeys.every((key) => !(key in out));
+        return hasNoOptionalKeys(out);
       }),
     ));
 });
@@ -651,24 +732,8 @@ describe('accumulateModelStreamChunk additional property-based', () => {
           b: fc.nat({ max: 100 }),
           c: fc.nat({ max: 100 }),
         }),
-        (accMeta, chunkMeta) => {
-          const acc: ModelOutput = {
-            content: { speaker: 'ai', blocks: [] },
-            providerMetadata: accMeta,
-          };
-          const chunk: ModelStreamChunk = {
-            content: { speaker: 'ai', blocks: [] },
-            providerMetadata: chunkMeta,
-          };
-          const result = accumulateModelStreamChunk(acc, chunk);
-          const merged = result.providerMetadata;
-          if (!merged) return false;
-          return (
-            merged['b'] === chunkMeta['b'] &&
-            merged['a'] === accMeta['a'] &&
-            merged['c'] === chunkMeta['c']
-          );
-        },
+        (accMeta, chunkMeta) =>
+          mergedMetaHasExpectedPrecedence(accMeta, chunkMeta),
       ),
     ));
 
@@ -731,14 +796,7 @@ describe('accumulateModelStreamChunk additional property-based', () => {
               ),
             },
           };
-          const result = getToolCalls(output);
-          return (
-            result.length === calls.length &&
-            result.every(
-              (r, i) =>
-                JSON.stringify(r.args) === JSON.stringify(calls[i].parameters),
-            )
-          );
+          return extractToolCallArgs(output, calls);
         },
       ),
     ));

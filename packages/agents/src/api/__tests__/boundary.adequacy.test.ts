@@ -121,47 +121,85 @@ function discoverSpecFiles(): FileSpecifiers[] {
 
 const FILES = discoverSpecFiles();
 
+interface ImportBoundaryObservation {
+  readonly fileName: string;
+  readonly offendingSpecifiers: readonly string[];
+}
+
+function inspectDeepImports(file: FileSpecifiers): ImportBoundaryObservation {
+  return {
+    fileName: file.fileName,
+    offendingSpecifiers: file.specifiers.filter(isDeepImport),
+  };
+}
+
+function inspectInternalsImports(
+  file: FileSpecifiers,
+): ImportBoundaryObservation {
+  return {
+    fileName: file.fileName,
+    offendingSpecifiers: isPermittedInternalsConsumer(file.fileName)
+      ? []
+      : file.specifiers.filter(isInternalsSubpath),
+  };
+}
+
+function collectDeepImportOffenders(
+  files: readonly FileSpecifiers[],
+): string[] {
+  const offenders: string[] = [];
+  for (const file of files) {
+    const observation = inspectDeepImports(file);
+    for (const specifier of observation.offendingSpecifiers) {
+      offenders.push(`${observation.fileName} -> ${specifier}`);
+    }
+  }
+  return offenders;
+}
+
+function collectUnpermittedInternalsImporters(
+  files: readonly FileSpecifiers[],
+): string[] {
+  const offenders: string[] = [];
+  for (const file of files) {
+    const observation = inspectInternalsImports(file);
+    for (const specifier of observation.offendingSpecifiers) {
+      offenders.push(`${observation.fileName} -> ${specifier}`);
+    }
+  }
+  return offenders;
+}
+
+function findPathARootImporters(
+  files: readonly FileSpecifiers[],
+): readonly FileSpecifiers[] {
+  return files.filter(
+    ({ fileName, specifiers }) =>
+      !isPermittedInternalsConsumer(fileName) &&
+      specifiers.includes('@vybestack/llxprt-code-agents'),
+  );
+}
+
+function selectDiscoveredFile(fileIndex: number): FileSpecifiers {
+  return FILES[fileIndex];
+}
+
 describe('REQ-INT-004 @plan:PLAN-20260621-COREAPIREMED.P21 — no-deep-import boundary across the remediated set', () => {
   it('Test A (Path A AND Path B): NO file deep-imports /src/, core/src, or providers/src', () => {
-    const offenders: string[] = [];
-    for (const { fileName, specifiers } of FILES) {
-      for (const spec of specifiers) {
-        if (isDeepImport(spec)) {
-          offenders.push(`${fileName} -> ${spec}`);
-        }
-      }
-    }
-    expect(
-      offenders,
-      `deep imports found:\n${offenders.join('\n')}`,
-    ).toStrictEqual([]);
+    const offenders = collectDeepImportOffenders(FILES);
+    expect(offenders).toStrictEqual([]);
   });
 
   it('Test B (CRIT-6, Path A): NO Path-A file imports ./internals.js (only *.reference-drive.* or *nonbreaking* may)', () => {
-    const offenders: string[] = [];
-    for (const { fileName, specifiers } of FILES) {
-      if (isPermittedInternalsConsumer(fileName)) continue;
-      for (const spec of specifiers) {
-        if (isInternalsSubpath(spec)) {
-          offenders.push(`${fileName} -> ${spec}`);
-        }
-      }
-    }
-    expect(
-      offenders,
-      `Path-A files importing internals:\n${offenders.join('\n')}`,
-    ).toStrictEqual([]);
+    const offenders = collectUnpermittedInternalsImporters(FILES);
+    expect(offenders).toStrictEqual([]);
   });
 
   it('Test C: at least one Path-A file imports the public root @vybestack/llxprt-code-agents', () => {
     // Restrict to genuine Path-A files: a Path-B/meta internals consumer must
     // not be able to satisfy this assertion and mask a missing Path-A root
     // import.
-    const rootImporters = FILES.filter(
-      ({ fileName, specifiers }) =>
-        !isPermittedInternalsConsumer(fileName) &&
-        specifiers.includes('@vybestack/llxprt-code-agents'),
-    );
+    const rootImporters = findPathARootImporters(FILES);
     expect(rootImporters.length).toBeGreaterThan(0);
   });
 
@@ -171,9 +209,8 @@ describe('REQ-INT-004 @plan:PLAN-20260621-COREAPIREMED.P21 — no-deep-import bo
         fc.integer({ min: 0, max: Math.max(0, FILES.length - 1) }),
         fc.integer({ min: 0, max: 50 }),
         (fileIdx, _runs) => {
-          if (FILES.length === 0) return true;
-          const { specifiers } = FILES[fileIdx];
-          return specifiers.every((s) => !isDeepImport(s));
+          const observation = inspectDeepImports(selectDiscoveredFile(fileIdx));
+          expect(observation.offendingSpecifiers).toStrictEqual([]);
         },
       ),
     );
@@ -187,11 +224,10 @@ describe('REQ-INT-004 @plan:PLAN-20260621-COREAPIREMED.P21 — no-deep-import bo
       fc.property(
         fc.integer({ min: 0, max: Math.max(0, FILES.length - 1) }),
         (fileIdx) => {
-          if (FILES.length === 0) return true;
-          const { fileName, specifiers } = FILES[fileIdx];
-          const importsInternals = specifiers.some(isInternalsSubpath);
-          if (!importsInternals) return true;
-          return isPermittedInternalsConsumer(fileName);
+          const observation = inspectInternalsImports(
+            selectDiscoveredFile(fileIdx),
+          );
+          expect(observation.offendingSpecifiers).toStrictEqual([]);
         },
       ),
     );

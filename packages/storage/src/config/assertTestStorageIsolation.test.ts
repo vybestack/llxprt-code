@@ -67,13 +67,15 @@ function unIsolate(): void {
   setEnv('LLXPRT_LOG_HOME', undefined);
 }
 
-afterEach(() => {
+function restoreManagedEnvironment(): void {
   for (const [key, value] of originalEnv) {
     setEnv(key, value);
   }
-});
+}
 
 describe('Storage config root inside an isolated test process', () => {
+  afterEach(restoreManagedEnvironment);
+
   it('throws instead of returning the real config directory', () => {
     setEnv(ISOLATION_MARKER_ENV, '1');
     unIsolate();
@@ -162,6 +164,8 @@ describe('Storage config root inside an isolated test process', () => {
 });
 
 describe('Storage config root outside an isolated test process', () => {
+  afterEach(restoreManagedEnvironment);
+
   it('returns the real config directory when the marker is absent', () => {
     setEnv(ISOLATION_MARKER_ENV, undefined);
     unIsolate();
@@ -193,15 +197,16 @@ process.stdout.write(Storage.getGlobalConfigDir());`,
       { encoding: 'utf8', timeout: 60_000 },
     );
 
-    expect(
-      probe.error?.message,
-      'the probe process could not be spawned',
-    ).toBeUndefined();
-    expect(
-      probe.status,
-      `stdout: ${probe.stdout}
-stderr: ${probe.stderr}`,
-    ).toBe(0);
+    expect({
+      'the probe process could not be spawned': probe.error?.message,
+    }).toStrictEqual({
+      'the probe process could not be spawned': undefined,
+    });
+    expect({
+      status: probe.status,
+      stdout: probe.stdout,
+      stderr: probe.stderr,
+    }).toMatchObject({ status: 0 });
     // Not an equality check against the platform default: a developer whose
     // shell exports LLXPRT_CONFIG_HOME before Bun starts passes it to the child
     // through the original environment. The property under test is that the

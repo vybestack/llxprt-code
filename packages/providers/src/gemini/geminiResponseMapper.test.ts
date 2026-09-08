@@ -24,11 +24,11 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import {
+import type {
+  Candidate,
+  Content,
   GenerateContentResponse,
-  type Content,
-  type Candidate,
-} from '@google/genai';
+} from './geminiWireTypes.js';
 import type {
   ContentBlock,
   IContent,
@@ -62,15 +62,14 @@ function toolResponseCallIdOf(block: ContentBlock): string {
 }
 
 /**
- * Build a REAL `GenerateContentResponse` instance (the genuine SDK class,
- * mirroring `fromGenerateContentResponse` in core/code_assist/converter.ts).
+ * Build a REAL `GenerateContentResponse` instance (the genuine SDK class).
  */
 function makeResponse(options: {
   candidates?: Candidate[];
   afcHistory?: Content[];
   withUsage?: boolean;
 }): GenerateContentResponse {
-  const response = new GenerateContentResponse();
+  const response: GenerateContentResponse = {};
   response.candidates = options.candidates ?? [];
   if (options.afcHistory !== undefined) {
     response.automaticFunctionCallingHistory = options.afcHistory;

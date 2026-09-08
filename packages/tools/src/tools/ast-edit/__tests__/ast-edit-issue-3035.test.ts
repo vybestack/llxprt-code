@@ -38,16 +38,20 @@ function declarationCountFromPreview(output: string): number {
 }
 
 describe('REQ-3035-1: force schema documents the two-step contract', () => {
-  it('states that omitted/false previews and true applies', () => {
+  const observeStatesThatOmittedFalsePreviewsAndTrueAppliesAt41 = () => {
     const tool = new ASTEditTool(createFakeToolHost('/tmp'));
     const schema = tool.parameterSchema as {
       properties?: { force?: { description?: string } };
     };
     const description = schema.properties?.force?.description ?? '';
-    // Preview vs. apply semantics must be explicit to the agent.
+    return { description };
+  };
+
+  it('states that omitted/false previews and true applies', () => {
+    const { description } =
+      observeStatesThatOmittedFalsePreviewsAndTrueAppliesAt41();
     expect(description.toLowerCase()).toContain('preview');
     expect(description.toLowerCase()).toContain('apply');
-    // force must NOT be documented as a validation bypass.
     expect(description.toLowerCase()).not.toContain('bypass');
   });
 });

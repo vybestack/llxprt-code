@@ -109,7 +109,7 @@ describe('issue #3493: raw token-delta sink fan-out', () => {
     const notifier = resolveRawTokenDeltaNotifier(metadata);
     expect(notifier).toBeTypeOf('function');
     notifier?.();
-    expect(calls).toEqual(['observer', 'sink']);
+    expect(calls).toStrictEqual(['observer', 'sink']);
   });
 
   it('ignores a present-but-non-function sink beside a valid observer hook', () => {

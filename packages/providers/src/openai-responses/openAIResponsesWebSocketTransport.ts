@@ -4,6 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * Codex Responses WebSocket transport.
+ *
+ * One serialized, identity-keyed reusable connection per transport. The
+ * backend retires each connection at its lifecycle limit (about sixty
+ * minutes) by sending a top-level error frame whose nested code is
+ * {@link WEBSOCKET_CONNECTION_LIMIT_CODE} (#2771). That verdict is scoped to
+ * the connection, not the request, so `streamResponse` closes the retired
+ * socket and replays the SAME request exactly once on a brand-new
+ * connection. The retry is bounded by three invariants: it never happens
+ * after any IContent has been yielded (the turn is no longer safely
+ * replayable), it never happens more than once per request (a second
+ * lifecycle-limit rejection fails the turn with a terminal
+ * StreamInterruptionError), and an abort at any point — including while
+ * reconnecting — rejects with AbortError. A successful retry is transport
+ * health: it does not trigger the provider's sticky HTTP fallback, and later
+ * requests keep using the WebSocket.
+ */
+
 import { WebSocket } from 'undici';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
@@ -17,8 +36,88 @@ import {
 import { createStreamInterruptionError } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
+import { BoundedJsonBody } from '../utils/boundedJsonBody.js';
 
+export const DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES = 32 * 1024 * 1024;
 export const CODEX_WEBSOCKET_BETA_HEADER = 'responses_websockets=2026-02-06';
+
+/**
+ * The documented WebSocket connection-lifecycle signal: the server closes a
+ * connection that has been open for its sixty-minute lifecycle limit. Only this
+ * exact code is a connection lifecycle event eligible for reconnect-and-retry.
+ */
+export const WEBSOCKET_CONNECTION_LIMIT_CODE =
+  'websocket_connection_limit_reached';
+
+/**
+ * True only for a stream-interruption error whose nested provider error carries the
+ * documented connection-limit code. No message substrings and no other codes.
+ */
+export function isWebSocketConnectionLimitError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const details = (error as { details?: unknown }).details;
+  if (typeof details !== 'object' || details === null) return false;
+  const providerError = (details as { providerError?: unknown }).providerError;
+  if (typeof providerError !== 'object' || providerError === null) return false;
+  return (
+    (providerError as { code?: unknown }).code ===
+    WEBSOCKET_CONNECTION_LIMIT_CODE
+  );
+}
+
+/**
+ * Per-request lifecycle state shared between {@link streamResponse} and its
+ * single attempt helper so the #2771 retry decision sees what has already
+ * been yielded and whether the one allowed retry was spent.
+ */
+interface LifecycleAttemptState {
+  completed: boolean;
+  retryUsed: boolean;
+  contentYielded: boolean;
+}
+
+type LifecycleRetryOutcome =
+  | { readonly retry: true }
+  | { readonly retry: false; readonly error: unknown };
+
+/**
+ * #2771 retry policy: the connection-limit verdict is scoped to the
+ * connection, not the request, so the same request may be retried exactly
+ * once on a brand-new connection. Aborts always surface unchanged, any other
+ * error surfaces unchanged once IContent has been yielded (the turn is no
+ * longer safely replayable), and a second lifecycle-limit rejection fails
+ * the turn with a terminal StreamInterruptionError instead of looping.
+ */
+function decideLifecycleRetry(
+  error: unknown,
+  state: LifecycleAttemptState,
+): LifecycleRetryOutcome {
+  if (error instanceof Error && error.name === 'AbortError') {
+    return { retry: false, error };
+  }
+  if (!isWebSocketConnectionLimitError(error) || state.contentYielded) {
+    return { retry: false, error };
+  }
+  if (state.retryUsed) {
+    // Preserve the original providerError payload and cause so generic
+    // classification (details.providerError) and diagnostics survive the
+    // terminal wrap; nothing outside this module retries on this code.
+    const providerError = (error as { details?: { providerError?: unknown } })
+      .details?.providerError;
+    return {
+      retry: false,
+      error: createStreamInterruptionError(
+        'Codex Responses WebSocket reached the connection lifecycle ' +
+          `limit (${WEBSOCKET_CONNECTION_LIMIT_CODE}) and the single ` +
+          'retry was also rejected',
+        providerError !== undefined ? { providerError } : undefined,
+        error,
+      ),
+    };
+  }
+  return { retry: true };
+}
+
 export interface TransportLogger {
   debug(messageFactory: (() => string) | string): void;
 }
@@ -50,7 +149,7 @@ export interface TransportSocket {
   readonly readyState: number;
   readonly CONNECTING: number;
   readonly OPEN: number;
-  send(data: string): void;
+  send(data: string | Uint8Array): void;
   close(): void;
   onOpen(listener: () => void): () => void;
   onMessage(listener: (data: unknown) => void): () => void;
@@ -72,11 +171,21 @@ interface WebSocketTransportConfig {
    * path without waiting the full production duration.
    */
   readonly handshakeTimeoutMs?: number;
+  /**
+   * Established-stream idle timeout. Defaults to
+   * {@link STREAM_IDLE_TIMEOUT_MS}. Exposed so tests can exercise the timeout
+   * path without waiting the full production duration. Values <= 0 disable it.
+   */
+  readonly streamIdleTimeoutMs?: number;
 }
 
 // Matches the Codex client's default WebSocket connect timeout
 // (websocket_connect_timeout_ms in codex-rs/model-provider-info/src/lib.rs).
 const HANDSHAKE_TIMEOUT_MS = 15_000;
+
+// Matches the Codex client's default established-stream idle timeout
+// (stream_idle_timeout_ms in codex-rs/model-provider-info/src/lib.rs).
+export const STREAM_IDLE_TIMEOUT_MS = 300_000;
 
 function eventType(value: unknown): string | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
@@ -160,7 +269,7 @@ class UndiciTransportSocket implements TransportSocket {
     return this.socket.readyState;
   }
 
-  send(data: string): void {
+  send(data: string | Uint8Array): void {
     this.socket.send(data);
   }
 
@@ -234,51 +343,24 @@ class RequestFrameSource {
   private readonly detachListeners: () => void;
   private readonly detachAbort: () => void;
   private readonly logger: TransportLogger | undefined;
+  private readonly streamIdleTimeoutMs: number;
+  private readonly onIdleTimeout: () => void;
+  private idleTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     socket: TransportSocket,
     abortSignal: AbortSignal | undefined,
     onResponseEvent: (() => void) | undefined,
     logger: TransportLogger | undefined,
+    streamIdleTimeoutMs: number,
+    onIdleTimeout: () => void,
   ) {
     this.logger = logger;
-    const detachMessage = socket.onMessage((data) => {
-      if (this.ended) return;
-      if (typeof data !== 'string') {
-        this.fail(
-          createStreamInterruptionError(
-            'Codex Responses WebSocket received a non-text frame',
-          ),
-        );
-        return;
-      }
-      let frame: { type: string | undefined; data: string };
-      try {
-        frame = parseFrame(data);
-      } catch (error) {
-        this.fail(
-          error instanceof Error
-            ? error
-            : createStreamInterruptionError(
-                'Codex Responses WebSocket received an invalid frame',
-              ),
-        );
-        return;
-      }
-      this.queue.push(frame.data);
-      if (isTerminalEventType(frame.type)) {
-        this.receivedTerminal = true;
-        if (
-          frame.type !== undefined &&
-          ACCEPTED_TERMINAL_EVENT_TYPES.has(frame.type)
-        ) {
-          this.acceptedTerminal = true;
-        }
-        this.ended = true;
-      }
-      this.drain();
-      this.notifyResponseEvent(onResponseEvent);
-    });
+    this.streamIdleTimeoutMs = streamIdleTimeoutMs;
+    this.onIdleTimeout = onIdleTimeout;
+    const detachMessage = socket.onMessage((data) =>
+      this.handleMessage(data, onResponseEvent),
+    );
     const detachClose = socket.onClose((info) => {
       this.logger?.debug(
         () =>
@@ -313,6 +395,50 @@ class RequestFrameSource {
     } else {
       this.detachAbort = () => undefined;
     }
+    this.resetIdleTimer();
+  }
+  private handleMessage(
+    data: unknown,
+    onResponseEvent: (() => void) | undefined,
+  ): void {
+    if (this.ended) return;
+    if (typeof data !== 'string') {
+      this.fail(
+        createStreamInterruptionError(
+          'Codex Responses WebSocket received a non-text frame',
+        ),
+      );
+      return;
+    }
+    let frame: { type: string | undefined; data: string };
+    try {
+      frame = parseFrame(data);
+    } catch (error) {
+      this.fail(
+        error instanceof Error
+          ? error
+          : createStreamInterruptionError(
+              'Codex Responses WebSocket received an invalid frame',
+            ),
+      );
+      return;
+    }
+    const isTerminal = isTerminalEventType(frame.type);
+    this.queue.push(frame.data);
+    if (isTerminal) {
+      this.receivedTerminal = true;
+      if (
+        frame.type !== undefined &&
+        ACCEPTED_TERMINAL_EVENT_TYPES.has(frame.type)
+      ) {
+        this.acceptedTerminal = true;
+      }
+      this.ended = true;
+    }
+    if (isTerminal) this.clearIdleTimer();
+    else this.resetIdleTimer();
+    this.drain();
+    this.notifyResponseEvent(onResponseEvent);
   }
 
   didReceiveAcceptedTerminal(): boolean {
@@ -353,6 +479,7 @@ class RequestFrameSource {
   }
 
   detach(): void {
+    this.clearIdleTimer();
     this.detachListeners();
     this.detachAbort();
     this.ended = true;
@@ -360,12 +487,36 @@ class RequestFrameSource {
   }
 
   private fail(error: Error): void {
+    this.clearIdleTimer();
     // First outcome wins: a terminal frame or recorded failure cannot be
     // replaced by a later close/error/abort.
     if (this.receivedTerminal || this.failure !== undefined) return;
     this.failure = error;
     this.ended = true;
     this.drain();
+  }
+
+  private resetIdleTimer(): void {
+    this.clearIdleTimer();
+    if (this.ended || this.streamIdleTimeoutMs <= 0) return;
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = undefined;
+      // A terminal frame or earlier failure clears the timer, so an armed
+      // timer only fires on a genuinely idle stream; the predicate keeps a
+      // late firing from invalidating a socket that already settled.
+      const settled =
+        this.ended || this.receivedTerminal || this.failure !== undefined;
+      this.fail(
+        createStreamInterruptionError('Codex Responses WebSocket idle timeout'),
+      );
+      if (!settled) this.onIdleTimeout();
+    }, this.streamIdleTimeoutMs);
+  }
+
+  private clearIdleTimer(): void {
+    if (this.idleTimer === undefined) return;
+    clearTimeout(this.idleTimer);
+    this.idleTimer = undefined;
   }
 
   private drain(): void {
@@ -408,16 +559,46 @@ function createResponseByteStream(
   });
 }
 
+async function sendBoundedRequestEnvelope(
+  socket: TransportSocket,
+  request: OpenAIResponsesRequest,
+): Promise<void> {
+  const boundedEnvelope = new BoundedJsonBody(
+    { ...request, type: 'response.create' },
+    {
+      maxChunkBytes: DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES,
+      maxEnvelopeBytes: DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES,
+    },
+  );
+  try {
+    socket.send(boundedEnvelope.toUint8Array());
+  } catch (error) {
+    try {
+      await boundedEnvelope.dispose(error);
+    } catch (disposalError) {
+      throw new AggregateError(
+        [error, disposalError],
+        'Codex Responses WebSocket send and request cleanup failed',
+      );
+    }
+    throw error;
+  }
+  await boundedEnvelope.dispose();
+}
+
 class CodexResponsesWebSocketTransport implements WebSocketTransport {
   private active: LiveConnection | undefined;
   private requestQueue: Promise<void> = Promise.resolve();
 
   private readonly openSocket: OpenTransportSocket;
   private readonly handshakeTimeoutMs: number;
+  private readonly streamIdleTimeoutMs: number;
 
   constructor(private readonly config: WebSocketTransportConfig) {
     this.openSocket = config.openSocket ?? openUndiciSocket;
     this.handshakeTimeoutMs = config.handshakeTimeoutMs ?? HANDSHAKE_TIMEOUT_MS;
+    this.streamIdleTimeoutMs =
+      config.streamIdleTimeoutMs ?? STREAM_IDLE_TIMEOUT_MS;
   }
 
   async *streamResponse(
@@ -425,52 +606,98 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
     options: StreamResponseOptions,
   ): AsyncIterableIterator<IContent> {
     const resolveTurn = await this.acquireRequestTurn(options.abortSignal);
+    const state: LifecycleAttemptState = {
+      completed: false,
+      retryUsed: false,
+      contentYielded: false,
+    };
     let socket: TransportSocket | undefined;
-    let completed = false;
     try {
-      throwIfAborted(options.abortSignal);
-      socket = await this.acquireConnection(options);
-      throwIfAborted(options.abortSignal);
-      const source = new RequestFrameSource(
-        socket,
-        options.abortSignal,
-        options.onResponseEvent,
-        this.config.logger,
-      );
-      try {
+      // #2771: at most one fresh-connection retry per request.
+      for (;;) {
         throwIfAborted(options.abortSignal);
-        // A close in the gap between handshake listener removal and source
-        // attachment is unobserved; undici send silently no-ops on
-        // CLOSING/CLOSED, so require OPEN to avoid a hang.
-        if (socket.readyState !== socket.OPEN) {
-          throw createStreamInterruptionError(
-            'Codex Responses WebSocket closed before the request was sent',
-          );
-        }
-        socket.send(JSON.stringify({ ...request, type: 'response.create' }));
-        for await (const message of parseResponsesStream(
-          createResponseByteStream(source),
-          {
-            includeThinkingInResponse: options.includeThinkingInResponse,
-            responsesStored: options.responsesStored,
-            onStreamLiveness: options.onStreamLiveness,
-          },
-        )) {
-          source.throwIfFailed();
-          yield message;
-        }
-        if (!source.didReceiveAcceptedTerminal()) {
-          throw createStreamInterruptionError(
-            'Codex Responses WebSocket ended before a terminal response event',
-          );
-        }
-        completed = true;
-      } finally {
-        source.detach();
+        socket = await this.acquireConnection(options);
+        throwIfAborted(options.abortSignal);
+        const result = yield* this.attemptResponse(
+          socket,
+          request,
+          options,
+          state,
+        );
+        if (result !== 'retry') return;
+        socket = undefined;
       }
     } finally {
-      if (!completed && socket !== undefined) this.invalidate(socket);
+      if (!state.completed && socket !== undefined) this.invalidate(socket);
       resolveTurn();
+    }
+  }
+
+  /**
+   * Streams one request over `socket`. Returns 'retry' when the attempt
+   * failed with the connection-lifecycle verdict and the #2771 retry budget
+   * is still available (the retired socket has already been invalidated);
+   * throws or returns 'completed' otherwise.
+   */
+  private async *attemptResponse(
+    socket: TransportSocket,
+    request: OpenAIResponsesRequest,
+    options: StreamResponseOptions,
+    state: LifecycleAttemptState,
+  ): AsyncGenerator<IContent, 'completed' | 'retry'> {
+    const source = new RequestFrameSource(
+      socket,
+      options.abortSignal,
+      options.onResponseEvent,
+      this.config.logger,
+      this.streamIdleTimeoutMs,
+      // The consumer may be suspended at a yield when the idle timer fires, so
+      // the source's failure alone never closes the socket; invalidate eagerly
+      // so a stalled stream cannot hold the connection open.
+      () => this.invalidate(socket),
+    );
+    try {
+      if (socket.readyState !== socket.OPEN) {
+        throw createStreamInterruptionError(
+          'Codex Responses WebSocket closed before the request was sent',
+        );
+      }
+      throwIfAborted(options.abortSignal);
+      // #3199: the physical body goes out through the bounded envelope so a
+      // large media payload cannot serialize an unbounded string here.
+      await sendBoundedRequestEnvelope(socket, request);
+      for await (const message of parseResponsesStream(
+        createResponseByteStream(source),
+        {
+          includeThinkingInResponse: options.includeThinkingInResponse,
+          responsesStored: options.responsesStored,
+          onStreamLiveness: options.onStreamLiveness,
+        },
+      )) {
+        source.throwIfFailed();
+        state.contentYielded = true;
+        yield message;
+      }
+      if (!source.didReceiveAcceptedTerminal()) {
+        throw createStreamInterruptionError(
+          'Codex Responses WebSocket ended before a terminal response event',
+        );
+      }
+      state.completed = true;
+      return 'completed';
+    } catch (error) {
+      const outcome = decideLifecycleRetry(error, state);
+      if (!outcome.retry) throw outcome.error;
+      state.retryUsed = true;
+      this.invalidate(socket);
+      this.config.logger?.debug(
+        () =>
+          'Codex Responses WebSocket reported the connection lifecycle ' +
+          'limit; retrying the request once on a fresh connection',
+      );
+      return 'retry';
+    } finally {
+      source.detach();
     }
   }
 

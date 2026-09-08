@@ -4,6 +4,10 @@ import { AnthropicProvider } from './AnthropicProvider.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import { createProviderWithRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 
+function isOptionalObject(value: unknown): boolean {
+  return value === undefined || typeof value === 'object';
+}
+
 describe('AnthropicProvider - modelParams', () => {
   let provider: AnthropicProvider;
   let settingsService: SettingsService;
@@ -32,7 +36,7 @@ describe('AnthropicProvider - modelParams', () => {
       // Test that it doesn't throw and returns params from SettingsService
       const params = provider.getModelParams();
       // Should either return params or undefined, but not throw
-      expect(params === undefined || typeof params === 'object').toBe(true);
+      expect(isOptionalObject(params)).toBe(true);
     });
   });
 });

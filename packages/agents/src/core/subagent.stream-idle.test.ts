@@ -41,7 +41,6 @@ import type { AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runti
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core/config/models.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools/tools/tool-registry.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -171,8 +170,6 @@ describe('subagent.ts', () => {
                 name: config.getProvider(),
                 generateChatCompletion: vi.fn(async function* () {}),
                 getDefaultModel: () => config.getModel(),
-                getServerTools: () => [],
-                invokeServerTool: vi.fn(),
               }) as IProvider,
           ),
           setActiveProvider: vi.fn(),
@@ -218,7 +215,7 @@ describe('subagent.ts', () => {
       const settingsService = new SettingsService();
       const configParams: ConfigParameters = {
         sessionId: 'test-session',
-        model: DEFAULT_GEMINI_MODEL,
+        model: 'gemini-2.5-pro',
         targetDir: '.',
         debugMode: false,
         cwd: process.cwd(),
@@ -307,7 +304,7 @@ describe('subagent.ts', () => {
       const settingsService = new SettingsService();
       const configParams: ConfigParameters = {
         sessionId: 'test-session',
-        model: DEFAULT_GEMINI_MODEL,
+        model: 'gemini-2.5-pro',
         targetDir: '.',
         debugMode: false,
         cwd: process.cwd(),
@@ -429,7 +426,7 @@ describe('subagent.ts', () => {
       const settingsService = new SettingsService();
       const configParams: ConfigParameters = {
         sessionId: 'test-session',
-        model: DEFAULT_GEMINI_MODEL,
+        model: 'gemini-2.5-pro',
         targetDir: '.',
         debugMode: false,
         cwd: process.cwd(),

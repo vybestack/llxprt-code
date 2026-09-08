@@ -39,14 +39,7 @@ import { SessionRecordingService } from '../SessionRecordingService.js';
 import type { SessionRecordingServiceConfig } from '../types.js';
 import { ARCHIVE_DIR_NAME } from './sessionScanner.js';
 
-/**
- * File-level hook reset so process-global test seams never leak into
- * subsequent test files, regardless of which describe block ran last.
- */
-afterEach(() => {
-  setScanToMutationHookForTest(null);
-  setRmdirFaultForTest(null);
-});
+const bunIt = it;
 
 async function makeTempDir(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), 'janitor-safety-'));
@@ -109,6 +102,13 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
+async function readArchiveEntriesIfPresent(
+  archiveDir: string,
+): Promise<string[]> {
+  if (!(await fileExists(archiveDir))) return [];
+  return fs.readdir(archiveDir);
+}
+
 describe('runSessionCleanup — global temp root is never removed (Item 1)', () => {
   let tempDir: string;
 
@@ -147,9 +147,9 @@ describe('runSessionCleanup — symlinked archive directory (Item 1)', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'does not write into or follow a symlinked archive directory during sweep',
-    async () => {
+  {
+    const it = process.platform === 'win32' ? bunIt.skip : bunIt;
+    it('does not write into or follow a symlinked archive directory during sweep', async () => {
       const hash = validHash64();
       const chatsDir = path.join(tempDir, hash, 'chats');
       await fs.mkdir(chatsDir, { recursive: true });
@@ -181,8 +181,8 @@ describe('runSessionCleanup — symlinked archive directory (Item 1)', () => {
       // No .gz files should have been created in the outside dir.
       const outsideEntries = await fs.readdir(outsideDir);
       expect(outsideEntries.some((f) => f.endsWith('.gz'))).toBe(false);
-    },
-  );
+    });
+  }
 });
 
 describe('runSessionCleanup — post-scan file replacement (Item 4)', () => {
@@ -196,9 +196,9 @@ describe('runSessionCleanup — post-scan file replacement (Item 4)', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'retains data when a session file is replaced with a symlink between scan and mutation',
-    async () => {
+  {
+    const it = process.platform === 'win32' ? bunIt.skip : bunIt;
+    it('retains data when a session file is replaced with a symlink between scan and mutation', async () => {
       const hash = validHash64();
       const chatsDir = path.join(tempDir, hash, 'chats');
       const { filePath } = await createSession(chatsDir, {
@@ -226,13 +226,10 @@ describe('runSessionCleanup — post-scan file replacement (Item 4)', () => {
       expect(await fileExists(outsideTarget)).toBe(true);
       // No archives should have been created from the symlink.
       const archiveDir = path.join(chatsDir, ARCHIVE_DIR_NAME);
-      let archiveEntries: string[] = [];
-      if (await fileExists(archiveDir)) {
-        archiveEntries = await fs.readdir(archiveDir);
-      }
+      const archiveEntries = await readArchiveEntriesIfPresent(archiveDir);
       expect(archiveEntries.some((f) => f.endsWith('.gz'))).toBe(false);
-    },
-  );
+    });
+  }
 });
 
 describe('runSessionCleanup — exact temp grammar cleanup (Item 8)', () => {
@@ -289,6 +286,7 @@ describe('runSessionCleanup — mutation-time inode revalidation (Item 4, findin
   });
 
   afterEach(async () => {
+    setScanToMutationHookForTest(null);
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
@@ -333,10 +331,7 @@ describe('runSessionCleanup — mutation-time inode revalidation (Item 4, findin
     expect(await fileExists(filePath)).toBe(true);
     // No archive should have been created.
     const archiveDir = path.join(chatsDir, ARCHIVE_DIR_NAME);
-    let archiveEntries: string[] = [];
-    if (await fileExists(archiveDir)) {
-      archiveEntries = await fs.readdir(archiveDir);
-    }
+    const archiveEntries = await readArchiveEntriesIfPresent(archiveDir);
     expect(archiveEntries.some((f) => f.endsWith('.gz'))).toBe(false);
     // The replacement was NOT archived or deleted.
     expect(result.archived).toBe(0);
@@ -359,6 +354,7 @@ describe('runSessionCleanup — diagnostic error counting (Item 4)', () => {
   });
 
   afterEach(async () => {
+    setRmdirFaultForTest(null);
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 

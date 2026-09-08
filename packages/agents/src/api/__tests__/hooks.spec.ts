@@ -324,42 +324,68 @@ describe('Hooks @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-015 @requiremen
     });
 
     it('a partial aggregate preserves base continue/hookSpecificOutput and OMITS unset optional keys @plan:PLAN-20260617-COREAPI.P23 @requirement:REQ-015', async () => {
-      // The aggregate sets ONLY decision; continue/stopReason/systemMessage/
-      // reason/hookSpecificOutput are all absent. The public output must keep the
-      // base continue=true + base hookSpecificOutput, and must NOT materialize the
-      // optional keys (they are conditionally spread only when present).
-      const handle = createHookControlDeps({
-        lifecycle: { start: { decision: 'block' } },
-      });
-      const rawOutputs: Array<Record<string, unknown>> = [];
-      const unsub = handle.control.onHookExecution((_req, resp) => {
-        // HookOutput is always a structured object; snapshot its own keys so a
-        // later assertion can prove which optional keys were (not) materialized.
-        rawOutputs.push({ ...(resp.output as Record<string, unknown>) });
-      });
-      try {
-        await handle.control.triggerSessionStart();
-        expect(rawOutputs).toHaveLength(1);
-        const out = rawOutputs[0];
-        // decision came from the aggregate
-        expect(out['decision']).toBe('block');
-        // continue/hookSpecificOutput fall back to the base values (not nullish)
-        expect(out['continue']).toBe(true);
-        expect(out['suppressOutput']).toBe(false);
-        const hso = out['hookSpecificOutput'];
-        expect(typeof hso === 'object' && hso !== null).toBe(true);
-        expect((hso as Record<string, unknown>)['hookEventName']).toBe(
-          HookEventName.SessionStart,
-        );
-        // unset optional keys are OMITTED entirely (not present-with-undefined)
-        expect('stopReason' in out).toBe(false);
-        expect('systemMessage' in out).toBe(false);
-        expect('reason' in out).toBe(false);
-      } finally {
-        unsub();
-        handle.control.detach();
-      }
+      const {
+        rawOutputs,
+        out,
+        hso,
+        aPartialAggregatePreservesBaseContinueHookSpecificOutputAndOMITSUnsetOptionalKeysObservation1,
+      } =
+        await observeAPartialAggregatePreservesBaseContinueHookSpecificOutputAndOMITSUnsetOptionalKeys();
+      expect(rawOutputs).toHaveLength(1);
+      expect(out['decision']).toBe('block');
+      expect(out['continue']).toBe(true);
+      expect(out['suppressOutput']).toBe(false);
+      expect(
+        aPartialAggregatePreservesBaseContinueHookSpecificOutputAndOMITSUnsetOptionalKeysObservation1,
+      ).toBe(true);
+      expect((hso as Record<string, unknown>)['hookEventName']).toBe(
+        HookEventName.SessionStart,
+      );
+      expect('stopReason' in out).toBe(false);
+      expect('systemMessage' in out).toBe(false);
+      expect('reason' in out).toBe(false);
     });
+
+    const observeAPartialAggregatePreservesBaseContinueHookSpecificOutputAndOMITSUnsetOptionalKeys =
+      async () => {
+        // The aggregate sets ONLY decision; continue/stopReason/systemMessage/
+        // reason/hookSpecificOutput are all absent. The public output must keep the
+        // base continue=true + base hookSpecificOutput, and must NOT materialize the
+        // optional keys (they are conditionally spread only when present).
+        const handle = createHookControlDeps({
+          lifecycle: { start: { decision: 'block' } },
+        });
+        const rawOutputs: Array<Record<string, unknown>> = [];
+        const unsub = handle.control.onHookExecution((_req, resp) => {
+          // HookOutput is always a structured object; snapshot its own keys so a
+          // later assertion can prove which optional keys were (not) materialized.
+          rawOutputs.push({ ...(resp.output as Record<string, unknown>) });
+        });
+        try {
+          await handle.control.triggerSessionStart();
+
+          const out = rawOutputs[0];
+          // decision came from the aggregate
+
+          // continue/hookSpecificOutput fall back to the base values (not nullish)
+
+          const hso = out['hookSpecificOutput'];
+
+          // unset optional keys are OMITTED entirely (not present-with-undefined)
+
+          const aPartialAggregatePreservesBaseContinueHookSpecificOutputAndOMITSUnsetOptionalKeysObservation1 =
+            typeof hso === 'object' && hso !== null;
+          return {
+            rawOutputs,
+            out,
+            hso,
+            aPartialAggregatePreservesBaseContinueHookSpecificOutputAndOMITSUnsetOptionalKeysObservation1,
+          };
+        } finally {
+          unsub();
+          handle.control.detach();
+        }
+      };
 
     it('triggerSessionEnd emits a SessionEnd pair and merges its aggregated output @plan:PLAN-20260617-COREAPI.P23 @requirement:REQ-015', async () => {
       const handle = createHookControlDeps({

@@ -49,6 +49,10 @@ function getObjectProperty(value: unknown, property: string): unknown {
   return Reflect.get(value, property);
 }
 
+function stringIncludes(value: unknown, search: string): boolean {
+  return typeof value === 'string' && value.includes(search);
+}
+
 function getCommandDescription(tool: ShellTool): string {
   const properties = getObjectProperty(
     tool.schema.parametersJsonSchema,
@@ -64,9 +68,14 @@ describe('ShellTool schema guidance on Windows', () => {
     mockPlatform.mockReturnValue('win32');
   });
 
-  it('describes the PowerShell runtime invocation', () => {
+  const observeDescribesThePowerShellRuntimeInvocationAt67 = () => {
     const description = createShellTool().schema.description ?? '';
+    return { description };
+  };
 
+  it('describes the PowerShell runtime invocation', () => {
+    const { description } =
+      observeDescribesThePowerShellRuntimeInvocationAt67();
     expect({
       PowerShell: description.includes('PowerShell'),
       powershellExecutable: description.includes('powershell.exe'),
@@ -108,9 +117,15 @@ describe('ShellTool schema guidance on Windows', () => {
     );
   });
 
-  it('describes managed background jobs with Start-Process and taskkill guidance', () => {
-    const description = createShellTool().schema.description ?? '';
+  const observeDescribesManagedBackgroundJobsWithStartProcessAndTaskkillGuidanceAt111 =
+    () => {
+      const description = createShellTool().schema.description ?? '';
+      return { description };
+    };
 
+  it('describes managed background jobs with Start-Process and taskkill guidance', () => {
+    const { description } =
+      observeDescribesManagedBackgroundJobsWithStartProcessAndTaskkillGuidanceAt111();
     expect({
       managedJob: description.includes('managed background job'),
       checkAsyncTasks: description.includes('check_async_tasks'),
@@ -124,8 +139,15 @@ describe('ShellTool schema guidance on Windows', () => {
     });
   });
 
+  const observeDoesNotAdvertisePOSIXKillPGIDInTheWindowsDescriptionAt127 =
+    () => {
+      const description = createShellTool().schema.description ?? '';
+      return { description };
+    };
+
   it('does not advertise POSIX kill -- -PGID in the Windows description', () => {
-    const description = createShellTool().schema.description ?? '';
+    const { description } =
+      observeDoesNotAdvertisePOSIXKillPGIDInTheWindowsDescriptionAt127();
     expect(description).not.toContain('kill -- -PGID');
   });
 });
@@ -206,13 +228,8 @@ describe('ShellTool schema is_background property', () => {
     expect(getObjectProperty(isBackground, 'type')).toBe('boolean');
     const description = getObjectProperty(isBackground, 'description');
     expect(typeof description).toBe('string');
-    expect(
-      typeof description === 'string' &&
-        description.includes('check_async_tasks'),
-    ).toBe(true);
-    expect(
-      typeof description === 'string' && description.includes('job id'),
-    ).toBe(true);
+    expect(stringIncludes(description, 'check_async_tasks')).toBe(true);
+    expect(stringIncludes(description, 'job id')).toBe(true);
   });
 
   it('exposes is_background on Windows with the managed job contract', () => {
@@ -227,21 +244,21 @@ describe('ShellTool schema is_background property', () => {
     expect(getObjectProperty(isBackground, 'type')).toBe('boolean');
     const description = getObjectProperty(isBackground, 'description');
     expect(typeof description).toBe('string');
-    expect(
-      typeof description === 'string' &&
-        description.includes('check_async_tasks'),
-    ).toBe(true);
-    expect(
-      typeof description === 'string' && description.includes('job id'),
-    ).toBe(true);
+    expect(stringIncludes(description, 'check_async_tasks')).toBe(true);
+    expect(stringIncludes(description, 'job id')).toBe(true);
   });
 });
 
 describe('ShellTool description mentions managed background jobs', () => {
-  it('documents the trailing & managed job path on non-Windows', () => {
+  const observeDocumentsTheTrailingManagedJobPathOnNonWindowsAt241 = () => {
     mockPlatform.mockReturnValue('darwin');
-
     const description = createShellTool().schema.description ?? '';
+    return { description };
+  };
+
+  it('documents the trailing & managed job path on non-Windows', () => {
+    const { description } =
+      observeDocumentsTheTrailingManagedJobPathOnNonWindowsAt241();
     expect(description).toContain('managed background job');
     expect(description).toContain('check_async_tasks');
     expect(description).toContain('daemonizes');

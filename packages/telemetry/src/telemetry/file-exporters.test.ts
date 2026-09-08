@@ -45,6 +45,16 @@ import {
   FileMetricExporter,
 } from './file-exporters.js';
 
+function isNonEmpty(line: string): boolean {
+  return line.length > 0;
+}
+
+function parseNonEmptyJsonLines(content: string): void {
+  for (const line of content.trim().split('\n').filter(isNonEmpty)) {
+    JSON.parse(line);
+  }
+}
+
 describe('FileSpanExporter', () => {
   const directories: string[] = [];
 
@@ -455,9 +465,8 @@ describe('FileExporter rotation (REQ-3315.4, REQ-3315.6)', () => {
     for (const file of allFiles) {
       const size = statSync(file).size;
       expect(size).toBeLessThanOrEqual(cap + 2 * recordSize + 1);
-      for (const line of readFileSync(file, 'utf-8').trim().split('\n')) {
-        if (line.length > 0) JSON.parse(line);
-      }
+      const content = readFileSync(file, 'utf-8');
+      expect(() => parseNonEmptyJsonLines(content)).not.toThrow();
     }
     expect(allFiles.length).toBeLessThanOrEqual(maxFiles + 1);
   });
@@ -558,9 +567,10 @@ describe('FileExporter rotation (REQ-3315.4, REQ-3315.6)', () => {
     expect(rotatedFiles(dir, outfile).length).toBeLessThanOrEqual(3);
   });
 
-  it.skipIf(typeof process.getuid === 'function' && process.getuid() === 0)(
-    'fails open: rotation errors fall back to append so export still succeeds',
-    () => {
+  describe.skipIf(
+    typeof process.getuid === 'function' && process.getuid() === 0,
+  )('rotation errors', () => {
+    it('fails open: rotation errors fall back to append so export still succeeds', () => {
       const dir = makeDir();
       const outfile = join(dir, 'failopen.jsonl');
       writeFileSync(outfile, 'seed', 'utf-8');
@@ -581,8 +591,8 @@ describe('FileExporter rotation (REQ-3315.4, REQ-3315.6)', () => {
       } finally {
         chmodSync(dir, 0o700);
       }
-    },
-  );
+    });
+  });
 
   it('FileMetricExporter rotates under the same cap and retention policy', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'llxprt-metric-rot-'));
@@ -611,9 +621,8 @@ describe('FileExporter rotation (REQ-3315.4, REQ-3315.6)', () => {
     const rotated = rotatedFiles(directory, outfile);
     expect(rotated.length).toBeGreaterThanOrEqual(1);
     expect(rotated.length).toBeLessThanOrEqual(2);
-    for (const line of readFileSync(outfile, 'utf-8').trim().split('\n')) {
-      if (line.length > 0) JSON.parse(line);
-    }
+    const content = readFileSync(outfile, 'utf-8');
+    expect(() => parseNonEmptyJsonLines(content)).not.toThrow();
   });
 
   it('a multi-record batch still respects cap + one record per file (per-record writes)', async () => {
@@ -639,10 +648,7 @@ describe('FileExporter rotation (REQ-3315.4, REQ-3315.6)', () => {
       () => undefined,
     );
 
-    const base = basename(outfile);
-    const files = readdirSync(directory)
-      .filter((entry) => entry === base || rotatedPattern(entry, base))
-      .map((entry) => join(directory, entry));
+    const files = [outfile, ...rotatedFiles(directory, outfile)];
     for (const file of files) {
       expect(statSync(file).size).toBeLessThanOrEqual(500 + recordBytes);
     }

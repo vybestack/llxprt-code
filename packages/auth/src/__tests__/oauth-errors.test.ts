@@ -24,6 +24,29 @@ function serviceUnavailable(): OAuthError {
   );
 }
 
+function createComplexRetryOperation(): {
+  readonly run: () => Promise<string>;
+  readonly attemptCount: () => number;
+} {
+  let attempts = 0;
+  return {
+    run: async () => {
+      attempts++;
+      switch (attempts) {
+        case 1:
+          throw OAuthErrorFactory.networkError('test-provider');
+        case 2:
+          throw OAuthErrorFactory.rateLimited('test-provider', 1);
+        case 3:
+          return 'success';
+        default:
+          throw new Error('Unexpected attempt');
+      }
+    },
+    attemptCount: () => attempts,
+  };
+}
+
 describe('OAuthError', () => {
   it('should create error with proper classification', () => {
     const error = new OAuthError(
@@ -725,32 +748,17 @@ describe('Integration Tests', () => {
         jitter: false,
       }),
     );
-    let attempts = 0;
-
-    const simulateComplexOperation = async (): Promise<string> => {
-      attempts++;
-
-      switch (attempts) {
-        case 1:
-          throw OAuthErrorFactory.networkError('test-provider'); // Should retry
-        case 2:
-          throw OAuthErrorFactory.rateLimited('test-provider', 1); // Should retry with delay
-        case 3:
-          return 'success';
-        default:
-          throw new Error('Unexpected attempt');
-      }
-    };
+    const simulateComplexOperation = createComplexRetryOperation();
 
     const result = await gracefulHandler.handleGracefully(
-      simulateComplexOperation,
+      simulateComplexOperation.run,
       'fallback',
       'test-provider',
       'complexOperation',
     );
 
     expect(result).toBe('success');
-    expect(attempts).toBe(3);
+    expect(simulateComplexOperation.attemptCount()).toBe(3);
   });
 
   it('should provide comprehensive error information for debugging', () => {

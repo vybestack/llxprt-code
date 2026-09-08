@@ -29,6 +29,11 @@ import {
   readPerfRecords,
   streamPerfRecords,
 } from './perfRecords.js';
+import type {
+  PerfOperationRecord,
+  PerfRecord,
+  PerfStreamEntry,
+} from './perfRecords.js';
 
 // ---------------------------------------------------------------------------
 // Record builders
@@ -100,6 +105,27 @@ function unversionedOperation(
   return operationFields(overrides);
 }
 
+function requireOkRecord(entry: PerfStreamEntry | undefined): PerfRecord {
+  if (entry?.kind !== 'ok') {
+    throw new Error('expected an ok perf record');
+  }
+  return entry.record;
+}
+
+function requireOperationRecord(record: PerfRecord): PerfOperationRecord {
+  if (record.record_type !== 'operation') {
+    throw new Error('expected an operation record');
+  }
+  return record;
+}
+
+function requireParsedRecord(record: PerfRecord | null): PerfRecord {
+  if (record === null) {
+    throw new Error('expected a parsed record');
+  }
+  return record;
+}
+
 // ---------------------------------------------------------------------------
 // classifyPerfLine: v0 normalization
 // ---------------------------------------------------------------------------
@@ -111,33 +137,32 @@ describe('classifyPerfLine v0 normalization (finding D)', () => {
   });
 
   it('normalized v0 record carries schema_version 0 and record_type operation', () => {
-    const c = classifyPerfLine(unversionedOperation());
-    expect(c.kind).toBe('ok');
-    if (c.kind !== 'ok') throw new Error('expected ok');
-    expect(c.record.schema_version).toBe(0);
-    expect(c.record.record_type).toBe('operation');
+    const classification = classifyPerfLine(unversionedOperation());
+    expect(classification.kind).toBe('ok');
+    const record = requireOkRecord(classification);
+    expect(record.schema_version).toBe(0);
+    expect(record.record_type).toBe('operation');
   });
 
   it('normalized v0 record preserves all operation fields', () => {
-    const c = classifyPerfLine(
+    const classification = classifyPerfLine(
       unversionedOperation({ provider: 'anthropic', status: 'error' }),
     );
-    expect(c.kind).toBe('ok');
-    if (c.kind !== 'ok') throw new Error('expected ok');
-    expect(c.record.record_type).toBe('operation');
-    if (c.record.record_type !== 'operation') throw new Error('op');
-    expect(c.record.provider).toBe('anthropic');
-    expect(c.record.status).toBe('error');
+    expect(classification.kind).toBe('ok');
+    const record = requireOperationRecord(requireOkRecord(classification));
+    expect(record.record_type).toBe('operation');
+    expect(record.provider).toBe('anthropic');
+    expect(record.status).toBe('error');
   });
 
   it('strips unknown fields from a normalized v0 record (§2 tolerance)', () => {
-    const c = classifyPerfLine(
+    const classification = classifyPerfLine(
       unversionedOperation({ future_field: 42, extra: 'x' }),
     );
-    expect(c.kind).toBe('ok');
-    if (c.kind !== 'ok') throw new Error('expected ok');
-    expect('future_field' in c.record).toBe(false);
-    expect('extra' in c.record).toBe(false);
+    expect(classification.kind).toBe('ok');
+    const record = requireOkRecord(classification);
+    expect('future_field' in record).toBe(false);
+    expect('extra' in record).toBe(false);
   });
 
   it('classifies an incomplete unversioned object (missing fields) as unversioned', () => {
@@ -167,9 +192,9 @@ describe('classifyPerfLine v0 normalization (finding D)', () => {
 
 describe('parsePerfRecord v0 normalization (finding D)', () => {
   it('returns a parsed record for a normalized v0 operation', () => {
-    const parsed = parsePerfRecord(unversionedOperation());
-    expect(parsed).not.toBeNull();
-    if (parsed === null) throw new Error('expected a record');
+    const result = parsePerfRecord(unversionedOperation());
+    expect(result).not.toBeNull();
+    const parsed = requireParsedRecord(result);
     expect(parsed.record_type).toBe('operation');
     expect(parsed.schema_version).toBe(0);
   });
@@ -185,10 +210,10 @@ describe('parsePerfRecord v0 normalization (finding D)', () => {
 
 describe('v0 normalization preserves existing behavior (finding D)', () => {
   it('valid current v1 operation classifies as ok with schema_version 1', () => {
-    const c = classifyPerfLine(v1Operation());
-    expect(c.kind).toBe('ok');
-    if (c.kind !== 'ok') throw new Error('expected ok');
-    expect(c.record.schema_version).toBe(1);
+    const classification = classifyPerfLine(v1Operation());
+    expect(classification.kind).toBe('ok');
+    const record = requireOkRecord(classification);
+    expect(record.schema_version).toBe(1);
   });
 
   it('future-version record is still future_version (skip+count)', () => {
@@ -197,10 +222,10 @@ describe('v0 normalization preserves existing behavior (finding D)', () => {
   });
 
   it('v1 record with unknown fields still classifies as ok (stripped)', () => {
-    const c = classifyPerfLine(v1Operation({ new_metric: 7 }));
-    expect(c.kind).toBe('ok');
-    if (c.kind !== 'ok') throw new Error('expected ok');
-    expect('new_metric' in c.record).toBe(false);
+    const classification = classifyPerfLine(v1Operation({ new_metric: 7 }));
+    expect(classification.kind).toBe('ok');
+    const record = requireOkRecord(classification);
+    expect('new_metric' in record).toBe(false);
   });
 
   it('a record with record_type but missing schema_version is malformed', () => {
@@ -289,8 +314,8 @@ describe('v0 normalization real-file + streaming (finding D)', () => {
 
       expect(entries).toHaveLength(1);
       expect(entries[0].kind).toBe('ok');
-      if (entries[0].kind !== 'ok') throw new Error('expected ok');
-      expect(entries[0].record.schema_version).toBe(0);
+      const record = requireOkRecord(entries[0]);
+      expect(record.schema_version).toBe(0);
     } finally {
       await cleanup();
     }

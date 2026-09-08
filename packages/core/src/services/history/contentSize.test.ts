@@ -164,7 +164,7 @@ describe('computeHistorySizeBreakdown', () => {
 
   it('attributes the bulk to tool_response blocks', () => {
     const breakdown = computeHistorySizeBreakdown(history);
-    const toolBytes = breakdown.bytesByBlockType['tool_response'] ?? 0;
+    const toolBytes = bytesFor(breakdown, 'tool_response');
     expect(toolBytes / breakdown.totalBytes).toBeGreaterThan(0.9);
   });
 
@@ -203,3 +203,10 @@ describe('computeHistorySizeBreakdown', () => {
     expect(breakdown.largestToolResponses).toHaveLength(0);
   });
 });
+
+function bytesFor(
+  breakdown: { bytesByBlockType: Record<string, number> },
+  key: string,
+): number {
+  return breakdown.bytesByBlockType[key] ?? 0;
+}

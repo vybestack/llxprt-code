@@ -867,19 +867,21 @@ describe('REQ-3035-9: stale last_modified in preview refuses with conflict', () 
 // ---------------------------------------------------------------------------
 
 describe('REQ-3035-1 (strengthened): force schema wording asserts preview/apply mapping', () => {
-  it('states that omitted/false => preview and true => apply', () => {
+  const observeStatesThatOmittedFalsePreviewAndTrueApplyAt870 = () => {
     const tool = new ASTEditTool(createFakeToolHost('/tmp'));
     const schema = tool.parameterSchema as {
       properties?: { force?: { description?: string } };
     };
     const desc = (schema.properties?.force?.description ?? '').toLowerCase();
-    // The description must explicitly map false/omit to preview.
+    return { desc };
+  };
+
+  it('states that omitted/false => preview and true => apply', () => {
+    const { desc } = observeStatesThatOmittedFalsePreviewAndTrueApplyAt870();
     expect(desc).toContain('preview');
     expect(desc).toMatch(/(omit|false).*preview|preview.*(omit|false)/);
-    // The description must explicitly map true to apply.
     expect(desc).toContain('apply');
     expect(desc).toMatch(/true.*apply|apply.*true/);
-    // force must NOT be documented as a validation bypass.
     expect(desc).not.toContain('bypass');
   });
 });

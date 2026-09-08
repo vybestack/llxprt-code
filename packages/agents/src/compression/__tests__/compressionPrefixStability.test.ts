@@ -195,13 +195,20 @@ describe('A3: completion-budget trigger arithmetic (#3070 Defect A)', () => {
   });
 
   it('throws when a live maxOutputTokens setting >= context-limit', () => {
-    const settingsService = {
-      get: (key: string) => (key === 'maxOutputTokens' ? 50_000 : undefined),
-    };
+    const { settingsService } =
+      observeThrowsWhenALiveMaxOutputTokensSettingContextLimit();
     expect(() =>
       getCompletionBudget({}, 'm', undefined, settingsService, 50_000),
     ).toThrow(InvalidContextBudgetError);
   });
+
+  const observeThrowsWhenALiveMaxOutputTokensSettingContextLimit = () => {
+    const settingsService = {
+      get: (key: string) => (key === 'maxOutputTokens' ? 50_000 : undefined),
+    };
+
+    return { settingsService };
+  };
 
   it('default budget on a 32768 window produces a POSITIVE trigger (every-send loop is gone)', () => {
     const budget = getCompletionBudget({}, 'm', undefined, undefined, 32_768);
@@ -323,6 +330,15 @@ describe('A1: preserved head never shrinks across successive compressions (#3070
 
 describe('A2: serialized head content never decreases across 5 append-compress cycles (#3070 Defect B)', () => {
   it('5 cycles of append-12-then-compress keep the head content monotonically non-decreasing', async () => {
+    const checks = await observeFiveCompressionCycles();
+    expect(checks[0]?.prefix).toBe(checks[0]?.expectedLength);
+    expect(checks[1]?.prefix).toBe(checks[1]?.expectedLength);
+    expect(checks[2]?.prefix).toBe(checks[2]?.expectedLength);
+    expect(checks[3]?.prefix).toBe(checks[3]?.expectedLength);
+    expect(checks[4]?.prefix).toBe(checks[4]?.expectedLength);
+  });
+
+  const observeFiveCompressionCycles = async () => {
     const strategy = new MiddleOutStrategy();
 
     // Start with enough messages to compress
@@ -335,6 +351,10 @@ describe('A2: serialized head content never decreases across 5 append-compress c
     let currentHistory = stampHistory(baseHistory);
     let anchor = 0;
     let prevSerializedHead: string[] = [];
+    const checks: Array<{
+      readonly prefix: number;
+      readonly expectedLength: number;
+    }> = [];
 
     for (let cycle = 0; cycle < 5; cycle++) {
       const ctx = buildCtx(currentHistory, anchor);
@@ -347,7 +367,7 @@ describe('A2: serialized head content never decreases across 5 append-compress c
 
       // Content prefix must be monotonically non-decreasing
       const prefix = commonPrefixLength(prevSerializedHead, serializedHead);
-      expect(prefix).toBe(prevSerializedHead.length);
+      checks.push({ prefix, expectedLength: prevSerializedHead.length });
       prevSerializedHead = serializedHead;
 
       // Advance anchor via the production path (resolveHeadAnchorSeq)
@@ -364,7 +384,8 @@ describe('A2: serialized head content never decreases across 5 append-compress c
       }
       currentHistory = restampAndAppend(newHistory, extra);
     }
-  });
+    return checks;
+  };
 });
 
 // ---------------------------------------------------------------------------
@@ -373,57 +394,78 @@ describe('A2: serialized head content never decreases across 5 append-compress c
 
 describe('A5: anchor invariants (#3070 Defect B)', () => {
   it('anchor floor HOLDS when an UNMATCHED tool_call sits at the boundary — no silent drop below floor', async () => {
-    const strategy = new MiddleOutStrategy();
-
-    // Build history where an UNMATCHED tool_call sits at/near the anchor floor.
-    // The anchor floor is set to the entry just before the unmatched tool_call,
-    // so adjustForToolCallBoundary would try to move the split backward below
-    // the floor. The fix must search FORWARD for a valid split at or above the
-    // floor, or return a clean structural no-op.
-    const history: IContent[] = [
-      humanMsg('h0'),
-      aiTextMsg('a1'),
-      aiTextMsg('a2'),
-      aiTextMsg('a3'),
-      aiTextMsg('a4'),
-      aiTextMsg('a5'),
-      aiTextMsg('a6'),
-      aiTextMsg('a7'),
-      // Unmatched tool_call at index 8 — no matching tool_response follows
-      aiToolCallMsg({ id: 'tc-orphan', name: 'interrupted_tool' }),
-      humanMsg('h9'),
-      aiTextMsg('a10'),
-      humanMsg('h11'),
-      aiTextMsg('a12'),
-      humanMsg('h13'),
-      aiTextMsg('a14'),
-      humanMsg('h15'),
-      aiTextMsg('a16'),
-      humanMsg('h17'),
-      aiTextMsg('a18'),
-      humanMsg('h19'),
-      aiTextMsg('a20'),
-    ];
-
-    const stamped = stampHistory(history);
-    // Anchor to the seq of index 7 (a7), so the floor is index 8
-    const anchorSeq = stamped[7].metadata?.chronology?.seq ?? 0;
-
-    const ctx = buildCtx(stamped, anchorSeq);
-    const result = await strategy.compress(ctx);
-
-    // Either the anchor floor held (applied with topPreserved >= 8) or a clean
-    // structural no-op was returned. The floor must NEVER be silently violated.
+    const { result, floorHeld } =
+      await observeAnchorFloorHOLDSWhenAnUNMATCHEDToolCallSitsAtTheBoundary();
     expect(['applied', 'noop']).toContain(result.kind);
-    // The unmatched tool_call at index 8 must never be silently dropped. On the
-    // 'applied' path the preserved head must cover the floor; on the 'noop'
-    // path compression was declined so the floor is intact by definition.
-    // Expressed as a single non-conditional assertion — no sentinel fallback.
-    const floorHeld =
-      result.kind === 'noop' || (result.metadata.topPreserved ?? 0) >= 8;
     expect(floorHeld).toBe(true);
   });
+
+  const observeAnchorFloorHOLDSWhenAnUNMATCHEDToolCallSitsAtTheBoundary =
+    async () => {
+      const strategy = new MiddleOutStrategy();
+
+      // Build history where an UNMATCHED tool_call sits at/near the anchor floor.
+      // The anchor floor is set to the entry just before the unmatched tool_call,
+      // so adjustForToolCallBoundary would try to move the split backward below
+      // the floor. The fix must search FORWARD for a valid split at or above the
+      // floor, or return a clean structural no-op.
+      const history: IContent[] = [
+        humanMsg('h0'),
+        aiTextMsg('a1'),
+        aiTextMsg('a2'),
+        aiTextMsg('a3'),
+        aiTextMsg('a4'),
+        aiTextMsg('a5'),
+        aiTextMsg('a6'),
+        aiTextMsg('a7'),
+        // Unmatched tool_call at index 8 — no matching tool_response follows
+        aiToolCallMsg({ id: 'tc-orphan', name: 'interrupted_tool' }),
+        humanMsg('h9'),
+        aiTextMsg('a10'),
+        humanMsg('h11'),
+        aiTextMsg('a12'),
+        humanMsg('h13'),
+        aiTextMsg('a14'),
+        humanMsg('h15'),
+        aiTextMsg('a16'),
+        humanMsg('h17'),
+        aiTextMsg('a18'),
+        humanMsg('h19'),
+        aiTextMsg('a20'),
+      ];
+
+      const stamped = stampHistory(history);
+      // Anchor to the seq of index 7 (a7), so the floor is index 8
+      const anchorSeq = stamped[7].metadata?.chronology?.seq ?? 0;
+
+      const ctx = buildCtx(stamped, anchorSeq);
+      const result = await strategy.compress(ctx);
+
+      // Either the anchor floor held (applied with topPreserved >= 8) or a clean
+      // structural no-op was returned. The floor must NEVER be silently violated.
+
+      // The unmatched tool_call at index 8 must never be silently dropped. On the
+      // 'applied' path the preserved head must cover the floor; on the 'noop'
+      // path compression was declined so the floor is intact by definition.
+      // Expressed as a single non-conditional assertion — no sentinel fallback.
+      const floorHeld =
+        result.kind === 'noop' || (result.metadata.topPreserved ?? 0) >= 8;
+
+      return { result, floorHeld };
+    };
   it('keeps a matched tool call and response on the same side of the anchor floor', async () => {
+    const {
+      callIndex,
+      responseIndex,
+      keepsAMatchedToolCallAndResponseOnTheSameSideOfObservation1,
+    } = await observeKeepsAMatchedToolCallAndResponseOnTheSameSideOf();
+    expect(callIndex === -1).toBe(responseIndex === -1);
+    expect(keepsAMatchedToolCallAndResponseOnTheSameSideOfObservation1).toBe(
+      true,
+    );
+  });
+
+  const observeKeepsAMatchedToolCallAndResponseOnTheSameSideOf = async () => {
     const strategy = new MiddleOutStrategy();
     const history: IContent[] = [
       humanMsg('h0'),
@@ -469,31 +511,46 @@ describe('A5: anchor invariants (#3070 Defect B)', () => {
           block.type === 'tool_response' && block.callId === 'tc-matched',
       ),
     );
-    expect(callIndex === -1).toBe(responseIndex === -1);
+
     // If found, the response must come after the call
-    expect(callIndex < 0 || responseIndex > callIndex).toBe(true);
-  });
+
+    const keepsAMatchedToolCallAndResponseOnTheSameSideOfObservation1 =
+      callIndex < 0 || responseIndex > callIndex;
+    return {
+      callIndex,
+      responseIndex,
+      keepsAMatchedToolCallAndResponseOnTheSameSideOfObservation1,
+    };
+  };
 
   it('anchor that would push past the bottom split yields a clean structural no-op with unmodified history', async () => {
-    const strategy = new MiddleOutStrategy();
-
-    const history: IContent[] = [];
-    for (let i = 0; i < 10; i++) {
-      history.push(humanMsg(`user ${i}`));
-      history.push(aiTextMsg(`ai ${i}`));
-    }
-
-    // Stamp to get seqs, then set the anchor to the last entry's seq
-    const stamped = stampHistory(history);
-    const anchorSeq =
-      stamped[stamped.length - 1].metadata?.chronology?.seq ?? 0;
-
-    const ctx = buildCtx(stamped, anchorSeq);
-    const result = await strategy.compress(ctx);
-
-    // An anchor at the very end pushes topSplit past bottomSplit → structural no-op
+    const { result } =
+      await observeAnchorThatWouldPushPastTheBottomSplitYieldsACleanStructural();
     expect(result.kind).toBe('noop');
   });
+
+  const observeAnchorThatWouldPushPastTheBottomSplitYieldsACleanStructural =
+    async () => {
+      const strategy = new MiddleOutStrategy();
+
+      const history: IContent[] = [];
+      for (let i = 0; i < 10; i++) {
+        history.push(humanMsg(`user ${i}`));
+        history.push(aiTextMsg(`ai ${i}`));
+      }
+
+      // Stamp to get seqs, then set the anchor to the last entry's seq
+      const stamped = stampHistory(history);
+      const anchorSeq =
+        stamped[stamped.length - 1].metadata?.chronology?.seq ?? 0;
+
+      const ctx = buildCtx(stamped, anchorSeq);
+      const result = await strategy.compress(ctx);
+
+      // An anchor at the very end pushes topSplit past bottomSplit → structural no-op
+
+      return { result };
+    };
 });
 
 // ---------------------------------------------------------------------------
@@ -534,27 +591,35 @@ describe('A6: resolveHeadAnchorSeq (#3070 Defect B)', () => {
   });
 
   it('the resolved seq is accepted by setCacheAnchorSeq and pins the head', () => {
-    const hs = new HistoryService();
-    const stamped = stampHistory([
-      humanMsg('h0'),
-      aiTextMsg('a1'),
-      humanMsg('h2'),
-    ]);
-    const summary: IContent = {
-      ...aiTextMsg('<state_snapshot>summary</state_snapshot>'),
-      metadata: { isSummary: true },
-    };
-    const seq = resolveHeadAnchorSeq(
-      [stamped[0], stamped[1], summary, stamped[2]],
-      2,
-    );
+    const { seq, hs } =
+      observeTheResolvedSeqIsAcceptedBySetCacheAnchorSeqAndPinsTheHead();
     expect(seq).toBeDefined();
-    if (seq === undefined) {
-      throw new Error('Expected a cache-anchor chronology seq');
-    }
-
-    hs.setCacheAnchorSeq(seq);
-
     expect(hs.getCacheAnchorSeq()).toBe(seq);
   });
+
+  const observeTheResolvedSeqIsAcceptedBySetCacheAnchorSeqAndPinsTheHead =
+    () => {
+      const hs = new HistoryService();
+      const stamped = stampHistory([
+        humanMsg('h0'),
+        aiTextMsg('a1'),
+        humanMsg('h2'),
+      ]);
+      const summary: IContent = {
+        ...aiTextMsg('<state_snapshot>summary</state_snapshot>'),
+        metadata: { isSummary: true },
+      };
+      const seq = resolveHeadAnchorSeq(
+        [stamped[0], stamped[1], summary, stamped[2]],
+        2,
+      );
+
+      if (seq === undefined) {
+        throw new Error('Expected a cache-anchor chronology seq');
+      }
+
+      hs.setCacheAnchorSeq(seq);
+
+      return { seq, hs };
+    };
 });

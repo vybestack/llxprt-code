@@ -380,7 +380,7 @@ describe('refresh_token handler', () => {
       expect(response.ok).toBe(true);
       expect(response.data?.access_token).toBe('new_access');
       expect(response.data?.refresh_token).toBeUndefined();
-      expect('refresh_token' in (response.data ?? {})).toBe(false);
+      expect(response.data).not.toHaveProperty('refresh_token');
     });
 
     it('response includes token_type and expiry', async () => {

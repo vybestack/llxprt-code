@@ -33,28 +33,41 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
 describe('resolvePromptMemory (issue #3173)', () => {
   describe('JIT enabled', () => {
     it('sources user memory from global plus JIT memory for the working directory', async () => {
-      // The JIT lookup is keyed by directory: only the working directory's
-      // memory may reach the output, so a mis-forwarded path shows up as the
-      // wrong JIT content in the assertion below.
-      const getJitMemoryForPath = vi.fn(async (lookupPath: string) =>
-        lookupPath === '/proj/sub' ? 'JIT_SUBDIRECTORY' : 'JIT_ELSEWHERE',
-      );
-      const config = makeConfig({
-        isJitContextEnabled: vi.fn().mockReturnValue(true),
-        getGlobalMemory: vi.fn().mockReturnValue('GLOBAL_MEMORY'),
-        getJitMemoryForPath,
-        getWorkingDir: vi.fn().mockReturnValue('/proj/sub'),
-      });
-
-      const result = await resolvePromptMemory(config);
-
-      // Derived aggregation and ordering: global first, working-directory JIT
-      // second, joined by the two-newline separator.
-      expect(result.userMemory?.split('\n\n')).toStrictEqual([
-        'GLOBAL_MEMORY',
-        'JIT_SUBDIRECTORY',
-      ]);
+      const {
+        sourcesUserMemoryFromGlobalPlusJITMemoryForTheWorkingDirectoryObservation1,
+      } =
+        await observeSourcesUserMemoryFromGlobalPlusJITMemoryForTheWorkingDirectory();
+      expect(
+        sourcesUserMemoryFromGlobalPlusJITMemoryForTheWorkingDirectoryObservation1,
+      ).toStrictEqual(['GLOBAL_MEMORY', 'JIT_SUBDIRECTORY']);
     });
+
+    const observeSourcesUserMemoryFromGlobalPlusJITMemoryForTheWorkingDirectory =
+      async () => {
+        // The JIT lookup is keyed by directory: only the working directory's
+        // memory may reach the output, so a mis-forwarded path shows up as the
+        // wrong JIT content in the assertion below.
+        const getJitMemoryForPath = vi.fn(async (lookupPath: string) =>
+          lookupPath === '/proj/sub' ? 'JIT_SUBDIRECTORY' : 'JIT_ELSEWHERE',
+        );
+        const config = makeConfig({
+          isJitContextEnabled: vi.fn().mockReturnValue(true),
+          getGlobalMemory: vi.fn().mockReturnValue('GLOBAL_MEMORY'),
+          getJitMemoryForPath,
+          getWorkingDir: vi.fn().mockReturnValue('/proj/sub'),
+        });
+
+        const result = await resolvePromptMemory(config);
+
+        // Derived aggregation and ordering: global first, working-directory JIT
+        // second, joined by the two-newline separator.
+
+        const sourcesUserMemoryFromGlobalPlusJITMemoryForTheWorkingDirectoryObservation1 =
+          result.userMemory?.split('\n\n');
+        return {
+          sourcesUserMemoryFromGlobalPlusJITMemoryForTheWorkingDirectoryObservation1,
+        };
+      };
 
     it('does not consult getUserMemory when JIT is enabled', async () => {
       // getUserMemory returns a sentinel that must NOT appear in the output.
@@ -104,46 +117,61 @@ describe('resolvePromptMemory (issue #3173)', () => {
     });
 
     it('produces JIT-only user memory when global memory is empty', async () => {
-      // Key-sensitive JIT: a mis-forwarded working-directory path would
-      // deliver JIT_WRONG instead of JIT_CORRECT. The global leak sentinel
-      // catches a fallback-to-global regression.
-      const getJitMemoryForPath = vi.fn(async (lookupPath: string) =>
-        lookupPath === '/workspace' ? 'JIT_CORRECT' : 'JIT_WRONG',
-      );
-      const config = makeConfig({
-        isJitContextEnabled: vi.fn().mockReturnValue(true),
-        getGlobalMemory: vi.fn().mockReturnValue(''),
-        getJitMemoryForPath,
-      });
-
-      const result = await resolvePromptMemory(config);
-
-      // The implementation joins global+JIT with a two-newline separator
-      // when both are non-empty. With an empty global, the result is
-      // JIT_CORRECT directly (no separator). A wrong-path lookup would
-      // produce JIT_WRONG.
+      const { result } =
+        await observeProducesJITOnlyUserMemoryWhenGlobalMemoryIsEmpty();
       expect(result.userMemory).toBe('JIT_CORRECT');
       expect(result.userMemory).not.toContain('JIT_WRONG');
     });
 
+    const observeProducesJITOnlyUserMemoryWhenGlobalMemoryIsEmpty =
+      async () => {
+        // Key-sensitive JIT: a mis-forwarded working-directory path would
+        // deliver JIT_WRONG instead of JIT_CORRECT. The global leak sentinel
+        // catches a fallback-to-global regression.
+        const getJitMemoryForPath = vi.fn(async (lookupPath: string) =>
+          lookupPath === '/workspace' ? 'JIT_CORRECT' : 'JIT_WRONG',
+        );
+        const config = makeConfig({
+          isJitContextEnabled: vi.fn().mockReturnValue(true),
+          getGlobalMemory: vi.fn().mockReturnValue(''),
+          getJitMemoryForPath,
+        });
+
+        const result = await resolvePromptMemory(config);
+
+        // The implementation joins global+JIT with a two-newline separator
+        // when both are non-empty. With an empty global, the result is
+        // JIT_CORRECT directly (no separator). A wrong-path lookup would
+        // produce JIT_WRONG.
+
+        return { result };
+      };
+
     it('produces global-only user memory when JIT memory is empty', async () => {
-      // Key-sensitive JIT: the working directory's lookup returns '', but a
-      // wrong path would return 'JIT_WRONG'. If the policy forwarded the
-      // wrong path's result, the assertion would fail.
-      const getJitMemoryForPath = vi.fn(async (lookupPath: string) =>
-        lookupPath === '/workspace' ? '' : 'JIT_WRONG',
-      );
-      const config = makeConfig({
-        isJitContextEnabled: vi.fn().mockReturnValue(true),
-        getGlobalMemory: vi.fn().mockReturnValue('GLOBAL_ONLY'),
-        getJitMemoryForPath,
-      });
-
-      const result = await resolvePromptMemory(config);
-
+      const { result } =
+        await observeProducesGlobalOnlyUserMemoryWhenJITMemoryIsEmpty();
       expect(result.userMemory).toBe('GLOBAL_ONLY');
       expect(result.userMemory).not.toContain('JIT_WRONG');
     });
+
+    const observeProducesGlobalOnlyUserMemoryWhenJITMemoryIsEmpty =
+      async () => {
+        // Key-sensitive JIT: the working directory's lookup returns '', but a
+        // wrong path would return 'JIT_WRONG'. If the policy forwarded the
+        // wrong path's result, the assertion would fail.
+        const getJitMemoryForPath = vi.fn(async (lookupPath: string) =>
+          lookupPath === '/workspace' ? '' : 'JIT_WRONG',
+        );
+        const config = makeConfig({
+          isJitContextEnabled: vi.fn().mockReturnValue(true),
+          getGlobalMemory: vi.fn().mockReturnValue('GLOBAL_ONLY'),
+          getJitMemoryForPath,
+        });
+
+        const result = await resolvePromptMemory(config);
+
+        return { result };
+      };
 
     it('produces no synthetic whitespace when both global and JIT are empty', async () => {
       const config = makeConfig({
@@ -162,6 +190,14 @@ describe('resolvePromptMemory (issue #3173)', () => {
 
   describe('JIT disabled', () => {
     it('sources user memory from getUserMemory unchanged', async () => {
+      const { result } =
+        await observeSourcesUserMemoryFromGetUserMemoryUnchanged();
+      expect(result.userMemory).toBe('USER_VALUE');
+      expect(result.userMemory).not.toContain('GLOBAL_LEAK');
+      expect(result.userMemory).not.toContain('JIT_LEAK');
+    });
+
+    const observeSourcesUserMemoryFromGetUserMemoryUnchanged = async () => {
       // The global leak sentinel proves the disabled path uses getUserMemory,
       // not getGlobalMemory. The JIT lookup returns '' for the working dir
       // (as it does in production when JIT is disabled) so nothing is
@@ -178,12 +214,16 @@ describe('resolvePromptMemory (issue #3173)', () => {
 
       const result = await resolvePromptMemory(config);
 
+      return { result };
+    };
+
+    it('adds no JIT subdirectory memory', async () => {
+      const { result } = await observeAddsNoJITSubdirectoryMemory();
       expect(result.userMemory).toBe('USER_VALUE');
-      expect(result.userMemory).not.toContain('GLOBAL_LEAK');
       expect(result.userMemory).not.toContain('JIT_LEAK');
     });
 
-    it('adds no JIT subdirectory memory', async () => {
+    const observeAddsNoJITSubdirectoryMemory = async () => {
       // The JIT lookup is key-sensitive: a wrong path returns JIT_LEAK,
       // the correct path returns ''. resolvePromptMemory calls
       // getJitMemoryForPath unconditionally and appends truthy results;
@@ -201,9 +241,8 @@ describe('resolvePromptMemory (issue #3173)', () => {
 
       const result = await resolvePromptMemory(config);
 
-      expect(result.userMemory).toBe('USER_VALUE');
-      expect(result.userMemory).not.toContain('JIT_LEAK');
-    });
+      return { result };
+    };
 
     it('preserves core memory and MCP instructions', async () => {
       // Disjoint sentinels per channel so cross-source contamination is

@@ -309,6 +309,29 @@ describe('CoreToolScheduler same-path mutation ordering', () => {
   });
 
   it('does not start a waiting mutation after the batch aborts', async () => {
+    const {
+      firstStartedBeforeAbort,
+      eventsAfterAbort,
+      terminalStatuses,
+      followUpSucceededDuringWait,
+      finalEvents,
+      publication,
+    } = await observeDoesNotStartAWaitingMutationAfterTheBatchAborts();
+    expect(firstStartedBeforeAbort).toBe(true);
+    expect(eventsAfterAbort).toStrictEqual(['start:m1', 'end:m1']);
+    expect(terminalStatuses['m1']).toBe('cancelled');
+    expect(terminalStatuses['m2']).toBe('cancelled');
+    expect(followUpSucceededDuringWait).toBe(true);
+    expect(finalEvents).toStrictEqual([
+      'start:m1',
+      'end:m1',
+      'start:n1',
+      'end:n1',
+    ]);
+    expect(publication.order).toStrictEqual(['n1']);
+  });
+
+  const observeDoesNotStartAWaitingMutationAfterTheBatchAborts = async () => {
     const events: string[] = [];
     const gates = new Map<string, Deferred<void>>();
     gates.set('m1', deferred<void>());
@@ -350,18 +373,20 @@ describe('CoreToolScheduler same-path mutation ordering', () => {
     );
 
     await waitFor(() => {
-      expect(events).toContain('start:m1');
+      if (!events.includes('start:m1')) {
+        throw new Error('Waiting for the first mutation to start');
+      }
     });
+    const firstStartedBeforeAbort = events.includes('start:m1');
     abortController.abort();
     gates.get('m1')?.resolve();
 
     await schedulePromise;
     await nextMacrotask();
     // The waiting mutation never begins side effects after the abort.
-    expect(events).toStrictEqual(['start:m1', 'end:m1']);
+    const eventsAfterAbort = [...events];
+
     // Both calls still reach a terminal state.
-    expect(terminalStatuses['m1']).toBe('cancelled');
-    expect(terminalStatuses['m2']).toBe('cancelled');
 
     // The aborted batch must not corrupt the scheduler's ordered-result
     // bookkeeping: the same scheduler still publishes a later batch's
@@ -376,79 +401,118 @@ describe('CoreToolScheduler same-path mutation ordering', () => {
       new AbortController().signal,
     );
     await waitFor(() => {
-      expect(terminalStatuses['n1']).toBe('success');
+      if (terminalStatuses['n1'] !== 'success') {
+        throw new Error('Waiting for the follow-up mutation to succeed');
+      }
     });
+    const followUpSucceededDuringWait = terminalStatuses['n1'] === 'success';
     await followUpPromise;
-    expect(events).toStrictEqual(['start:m1', 'end:m1', 'start:n1', 'end:n1']);
-    expect(publication.order).toStrictEqual(['n1']);
-  });
+    const finalEvents = [...events];
+
+    return {
+      firstStartedBeforeAbort,
+      eventsAfterAbort,
+      terminalStatuses,
+      followUpSucceededDuringWait,
+      finalEvents,
+      publication,
+    };
+  };
 
   it('still executes and publishes a later same-path call after an earlier failure', async () => {
-    const events: string[] = [];
-    const gates = new Map<string, Deferred<void>>();
-    gates.set('m1', deferred<void>());
-    gates.set('m2', deferred<void>());
-    const failingTool = new PathControlledTool(
-      'controlledFailingEdit',
-      Kind.Edit,
-      failingJournalExecute(events, gates),
-    );
-    const succeedingTool = new PathControlledTool(
-      'controlledSucceedingEdit',
-      Kind.Edit,
-      gatedJournalExecute(events, gates),
-    );
-    const publication = trackPublicationOrder();
-    const terminalStatuses: Record<string, ToolCall['status']> = {};
-    const scheduler = buildScheduler(
-      buildRegistry([failingTool, succeedingTool]),
-      {
-        onToolCallsUpdate: (calls) => {
-          publication.onToolCallsUpdate(calls);
-          for (const call of calls) {
-            if (
-              call.status === 'success' ||
-              call.status === 'error' ||
-              call.status === 'cancelled'
-            ) {
-              terminalStatuses[call.request.callId] = call.status;
-            }
-          }
-        },
-      },
-    );
-
-    const schedulePromise = scheduler.schedule(
-      [
-        toolRequest('m1', 'controlledFailingEdit', {
-          call: 'm1',
-          paths: ['/workspace/failure.txt'],
-        }),
-        toolRequest('m2', 'controlledSucceedingEdit', {
-          call: 'm2',
-          paths: ['/workspace/failure.txt'],
-        }),
-      ],
-      new AbortController().signal,
-    );
-
-    await waitFor(() => {
-      expect(events).toContain('start:m1');
-    });
-    await nextMacrotask();
-    expect(events).not.toContain('start:m2');
-
-    gates.get('m1')?.resolve();
-    await waitFor(() => {
-      expect(events).toContain('start:m2');
-    });
-    gates.get('m2')?.resolve();
-    await schedulePromise;
-
+    const {
+      firstStartedDuringWait,
+      secondStartedBeforeFailure,
+      secondStartedAfterFailure,
+      terminalStatuses,
+      publication,
+    } =
+      await observeStillExecutesAndPublishesALaterSamePathCallAfterAnEarlier();
+    expect(firstStartedDuringWait).toBe(true);
+    expect(secondStartedBeforeFailure).toBe(false);
+    expect(secondStartedAfterFailure).toBe(true);
     expect(terminalStatuses['m1']).toBe('error');
     expect(terminalStatuses['m2']).toBe('success');
     expect(publication.order).toStrictEqual(['m1', 'm2']);
   });
+
+  const observeStillExecutesAndPublishesALaterSamePathCallAfterAnEarlier =
+    async () => {
+      const events: string[] = [];
+      const gates = new Map<string, Deferred<void>>();
+      gates.set('m1', deferred<void>());
+      gates.set('m2', deferred<void>());
+      const failingTool = new PathControlledTool(
+        'controlledFailingEdit',
+        Kind.Edit,
+        failingJournalExecute(events, gates),
+      );
+      const succeedingTool = new PathControlledTool(
+        'controlledSucceedingEdit',
+        Kind.Edit,
+        gatedJournalExecute(events, gates),
+      );
+      const publication = trackPublicationOrder();
+      const terminalStatuses: Record<string, ToolCall['status']> = {};
+      const scheduler = buildScheduler(
+        buildRegistry([failingTool, succeedingTool]),
+        {
+          onToolCallsUpdate: (calls) => {
+            publication.onToolCallsUpdate(calls);
+            for (const call of calls) {
+              if (
+                call.status === 'success' ||
+                call.status === 'error' ||
+                call.status === 'cancelled'
+              ) {
+                terminalStatuses[call.request.callId] = call.status;
+              }
+            }
+          },
+        },
+      );
+
+      const schedulePromise = scheduler.schedule(
+        [
+          toolRequest('m1', 'controlledFailingEdit', {
+            call: 'm1',
+            paths: ['/workspace/failure.txt'],
+          }),
+          toolRequest('m2', 'controlledSucceedingEdit', {
+            call: 'm2',
+            paths: ['/workspace/failure.txt'],
+          }),
+        ],
+        new AbortController().signal,
+      );
+
+      await waitFor(() => {
+        if (!events.includes('start:m1')) {
+          throw new Error('Waiting for the first mutation to start');
+        }
+      });
+      const firstStartedDuringWait = events.includes('start:m1');
+      await nextMacrotask();
+      const secondStartedBeforeFailure = events.includes('start:m2');
+
+      gates.get('m1')?.resolve();
+      await waitFor(() => {
+        if (!events.includes('start:m2')) {
+          throw new Error('Waiting for the second mutation to start');
+        }
+      });
+      const secondStartedAfterFailure = events.includes('start:m2');
+      gates.get('m2')?.resolve();
+      await schedulePromise;
+
+      return {
+        firstStartedDuringWait,
+        secondStartedBeforeFailure,
+        secondStartedAfterFailure,
+        terminalStatuses,
+        publication,
+      };
+    };
 
   it('keeps read-kind calls concurrent with a same-path mutation', async () => {
     const events: string[] = [];

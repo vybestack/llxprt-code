@@ -13,7 +13,6 @@ import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js'
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import { type ToolConfirmationPayload } from '@vybestack/llxprt-code-tools';
-import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core/config/models.js';
 import { MockModifiableTool } from '@vybestack/llxprt-code-core/test-utils/tools.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
@@ -66,7 +65,7 @@ describe('CoreToolScheduler with payload', () => {
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
       getEnableHooks: () => false,
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-      getModel: () => DEFAULT_GEMINI_MODEL,
+      getModel: () => 'gemini-2.5-pro',
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -177,7 +176,7 @@ describe('CoreToolScheduler with payload', () => {
       getToolRegistry: () => toolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-      getModel: () => DEFAULT_GEMINI_MODEL,
+      getModel: () => 'gemini-2.5-pro',
       getShellExecutionConfig: () => ({
         terminalWidth: 80,
         terminalHeight: 24,

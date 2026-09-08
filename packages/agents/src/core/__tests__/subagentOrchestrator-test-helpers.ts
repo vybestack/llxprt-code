@@ -20,6 +20,7 @@ import {
 } from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import type { RunConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import { type SubAgentScope as SubAgentScopeInstance } from '../subagent.js';
 
@@ -98,6 +99,7 @@ export function createOrchestratorForTurns(options: {
     foregroundConfig: options.foregroundConfig ?? makeForegroundConfig(),
     scopeFactory: factory,
     runtimeLoader,
+    messageBus: new MessageBus(),
   });
 
   return { orchestrator, factory };

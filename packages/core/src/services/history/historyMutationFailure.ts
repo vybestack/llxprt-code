@@ -14,9 +14,20 @@
  * limitations under the License.
  */
 
+import type { PreparedHistoryBatchEffect } from './HistoryServiceCore.js';
+
 export type MutationFailure =
   | { failed: false }
   | { failed: true; error: unknown };
+
+export type QueuedHistoryMutation =
+  | { kind: 'synchronous'; execute: () => void }
+  | {
+      kind: 'asynchronous';
+      execute: () => Promise<void>;
+      resolve: () => void;
+      reject: (error: unknown) => void;
+    };
 
 export function combineMutationFailures(
   primary: MutationFailure,
@@ -31,4 +42,26 @@ export function combineMutationFailures(
       'Multiple history mutations failed',
     ),
   };
+}
+
+/**
+ * Runs every prepared effect's finalizer, collecting failures so one bad
+ * finalizer cannot hide the others.
+ */
+export async function finalizeMutationEffects(
+  effects: readonly PreparedHistoryBatchEffect[],
+): Promise<void> {
+  const failures: unknown[] = [];
+  for (const effect of effects) {
+    if (effect.finalize === undefined) continue;
+    try {
+      await effect.finalize();
+    } catch (error: unknown) {
+      failures.push(error);
+    }
+  }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) {
+    throw new AggregateError(failures, 'History mutation finalization failed');
+  }
 }

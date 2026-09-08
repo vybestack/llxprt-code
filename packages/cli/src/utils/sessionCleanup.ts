@@ -67,10 +67,12 @@ export async function cleanupExpiredSessions(
   const currentSessionId = config.getSessionId();
 
   try {
+    const activeHistory = await config.getAgentClient().getHistory();
     const result = await runSessionCleanup({
       globalTempDir,
       currentSessionId,
       config: resolvedConfig,
+      activeHistory,
     });
 
     if (config.getDebugMode() && !result.disabled) {

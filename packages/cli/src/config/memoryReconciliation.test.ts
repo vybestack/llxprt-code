@@ -114,31 +114,35 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
 
   // On most systems root can still read mode-000 files, so this error-path
   // contract is only enforceable as real filesystem behavior under non-root.
-  it.skipIf(os.userInfo().uid === 0 || process.platform === 'win32')(
-    'returns error and no marker when source is unreadable, and leaves the source untouched',
-    async () => {
-      const dataFile = path.join(dataDir, 'LLXPRT.md');
-      await fs.promises.writeFile(dataFile, 'content');
-      await fs.promises.chmod(dataFile, 0o000);
+  describe.skipIf(os.userInfo().uid === 0 || process.platform === 'win32')(
+    'with enforceable unreadable-file permissions',
+    () => {
+      it('returns error and no marker when source is unreadable, and leaves the source untouched', async () => {
+        const dataFile = path.join(dataDir, 'LLXPRT.md');
+        await fs.promises.writeFile(dataFile, 'content');
+        await fs.promises.chmod(dataFile, 0o000);
 
-      try {
-        const result = reconcileGlobalMemory(destinations);
-        expect(result.error).toBe(true);
-        await expect(
-          fs.promises.access(path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE)),
-        ).rejects.toThrow('ENOENT');
-        // The error path must not rename or delete the source — it remains at
-        // its original path with its original content.
-        await fs.promises.chmod(dataFile, 0o644);
-        expect(await fs.promises.readFile(dataFile, 'utf8')).toBe('content');
-        // No archive file was created on the error path.
-        await expect(
-          fs.promises.access(dataFile + '.migrated-to-config'),
-        ).rejects.toThrow('ENOENT');
-      } finally {
-        // restore for cleanup
-        await fs.promises.chmod(dataFile, 0o644);
-      }
+        try {
+          const result = reconcileGlobalMemory(destinations);
+          expect(result.error).toBe(true);
+          await expect(
+            fs.promises.access(
+              path.join(dataDir, MEMORY_RECONCILE_MARKER_FILE),
+            ),
+          ).rejects.toThrow('ENOENT');
+          // The error path must not rename or delete the source — it remains at
+          // its original path with its original content.
+          await fs.promises.chmod(dataFile, 0o644);
+          expect(await fs.promises.readFile(dataFile, 'utf8')).toBe('content');
+          // No archive file was created on the error path.
+          await expect(
+            fs.promises.access(dataFile + '.migrated-to-config'),
+          ).rejects.toThrow('ENOENT');
+        } finally {
+          // restore for cleanup
+          await fs.promises.chmod(dataFile, 0o644);
+        }
+      });
     },
   );
 
@@ -887,12 +891,13 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
       );
       // A unique backup exists with the new source content.
       const entries = await fs.promises.readdir(dataDir);
-      const backups = entries.filter(
-        (f) =>
-          f === 'LLXPRT.md.migrated-to-config' ||
-          /^LLXPRT\.md\.migrated-to-config\.\d+$/.test(f),
+      const backups = entries.filter((fileName) =>
+        [
+          fileName === 'LLXPRT.md.migrated-to-config',
+          /^LLXPRT\.md\.migrated-to-config\.\d+$/.test(fileName),
+        ].includes(true),
       );
-      expect(backups.length).toBe(2);
+      expect(backups).toHaveLength(2);
       const newBackup = backups.find(
         (b) => b !== 'LLXPRT.md.migrated-to-config',
       );

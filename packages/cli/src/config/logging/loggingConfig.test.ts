@@ -175,6 +175,10 @@ class MockExtendedConfig implements ExtendedConfig {
   }
 }
 
+function configuredHomeDirectory(home: string | undefined): string {
+  return home ?? '';
+}
+
 describe('Conversation Logging Configuration', () => {
   let originalEnv: NodeJS.ProcessEnv;
   let config: ExtendedConfig;
@@ -285,7 +289,8 @@ describe('Conversation Logging Configuration', () => {
       },
     });
 
-    const expectedPath = (process.env.HOME ?? '') + '/logs/conversations';
+    const expectedPath =
+      configuredHomeDirectory(process.env.HOME) + '/logs/conversations';
     expect(config.getConversationLogPath()).toBe(expectedPath);
   });
 

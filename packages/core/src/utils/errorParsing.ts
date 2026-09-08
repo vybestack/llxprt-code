@@ -12,51 +12,31 @@ import {
   type ApiError,
 } from './quotaErrorDetection.js';
 import type { StructuredError } from '../core/turn.js';
-import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
-import { UserTierId } from '../code_assist/types.js';
 import { getErrorStatus, STREAM_INTERRUPTED_ERROR_CODE } from './retry.js';
 
-// Shared quota/auth guidance strings
-const AUTH_QUOTA_DOC_URL =
+const QUOTA_DOC_URL =
   'https://github.com/vybestack/llxprt-code/blob/main/docs/getting-started.md';
-const AI_STUDIO_KEY_URL = 'https://aistudio.google.com/apikey';
-const FREE_TIER_GUIDANCE = `For more information about authentication and quota limits, see ${AUTH_QUOTA_DOC_URL}, or use /auth to switch to using a paid API key from AI Studio at ${AI_STUDIO_KEY_URL}`;
-const PAID_TIER_THANKS =
-  'We appreciate you for choosing Gemini Code Assist and the Gemini CLI.';
-const PAID_TIER_AUTH_HINT = `consider using /auth to switch to using a paid API key from AI Studio at ${AI_STUDIO_KEY_URL}`;
+const QUOTA_GUIDANCE = `For more information about quota limits, see ${QUOTA_DOC_URL}`;
 
 // Provider-neutral rate limit message (used when no Google-specific quota detector matches)
 const GENERIC_RATE_LIMIT_MESSAGE =
   '\nRate limit exceeded. Please wait a moment and retry, or use /model to switch to a different model.';
 
-const getRateLimitErrorMessageAnthropicFree = () =>
-  '\nAnthropic rate limit exceeded. LLxprt Code retries rate-limited requests with backoff when possible. Please wait before retrying manually.';
-
-const getRateLimitErrorMessageAnthropicPaid = () =>
+const getRateLimitErrorMessageAnthropic = () =>
   '\nAnthropic rate limit exceeded. LLxprt Code retries rate-limited requests with backoff when possible. Please wait before retrying manually or check your Anthropic plan limits.';
 
 const getRateLimitErrorMessageGeneric = () =>
   '\nRate limit exceeded. LLxprt Code retries rate-limited requests with backoff when possible. Please wait before retrying manually.';
 
-// Google Free Tier message functions
-const getRateLimitErrorMessageGoogleProQuotaFree = (
-  currentModel: string = DEFAULT_GEMINI_MODEL,
-) =>
-  `\nYou have reached your daily ${currentModel} quota limit. ${FREE_TIER_GUIDANCE}`;
+const getRateLimitErrorMessageGoogleProQuota = (
+  currentModel: string | undefined,
+) => {
+  const model = currentModel ? `${currentModel} ` : '';
+  return `\nYou have reached your daily ${model}quota limit. ${QUOTA_GUIDANCE}`;
+};
 
-const getRateLimitErrorMessageGoogleGenericQuotaFree = () =>
-  `\nYou have reached your daily quota limit. ${FREE_TIER_GUIDANCE}`;
-
-// Google Legacy/Standard Tier message functions
-const getRateLimitErrorMessageGoogleProQuotaPaid = (
-  currentModel: string = DEFAULT_GEMINI_MODEL,
-) =>
-  `\nYou have reached your daily ${currentModel} quota limit. ${PAID_TIER_THANKS} To continue accessing the ${currentModel} model today, ${PAID_TIER_AUTH_HINT}`;
-
-const getRateLimitErrorMessageGoogleGenericQuotaPaid = (
-  currentModel: string = DEFAULT_GEMINI_MODEL,
-) =>
-  `\nYou have reached your daily quota limit. ${PAID_TIER_THANKS} To continue accessing the ${currentModel} model today, ${PAID_TIER_AUTH_HINT}`;
+const getRateLimitErrorMessageGoogleGenericQuota = () =>
+  `\nYou have reached your daily quota limit. ${QUOTA_GUIDANCE}`;
 
 function buildStatusSuffix(status?: number, statusLabel?: string): string {
   const parts: string[] = [];
@@ -173,40 +153,25 @@ function getProviderFamily(
 
 function getRateLimitMessage(
   error?: unknown,
-  userTier?: UserTierId,
   currentModel?: string,
   providerName?: string,
 ): string {
-  // Determine if user is on a paid tier (Legacy or Standard) - default to FREE if not specified
-  const isPaidTier =
-    userTier === UserTierId.LEGACY || userTier === UserTierId.STANDARD;
   const providerFamily = getProviderFamily(providerName, currentModel);
 
   if (providerFamily === 'anthropic') {
-    return isPaidTier
-      ? getRateLimitErrorMessageAnthropicPaid()
-      : getRateLimitErrorMessageAnthropicFree();
+    return getRateLimitErrorMessageAnthropic();
   }
 
   if (providerFamily !== undefined && providerFamily !== 'gemini') {
     return getRateLimitErrorMessageGeneric();
   }
 
-  const effectiveModel =
-    currentModel === undefined || currentModel === ''
-      ? DEFAULT_GEMINI_MODEL
-      : currentModel;
-
   if (isProQuotaExceededError(error)) {
-    return isPaidTier
-      ? getRateLimitErrorMessageGoogleProQuotaPaid(effectiveModel)
-      : getRateLimitErrorMessageGoogleProQuotaFree(effectiveModel);
+    return getRateLimitErrorMessageGoogleProQuota(currentModel);
   }
 
   if (isGenericQuotaExceededError(error)) {
-    return isPaidTier
-      ? getRateLimitErrorMessageGoogleGenericQuotaPaid(effectiveModel)
-      : getRateLimitErrorMessageGoogleGenericQuotaFree();
+    return getRateLimitErrorMessageGoogleGenericQuota();
   }
 
   return GENERIC_RATE_LIMIT_MESSAGE;
@@ -226,21 +191,19 @@ function formatStreamInterruptedError(error: unknown): string {
 
 function formatStructuredApiError(
   error: StructuredError,
-  userTier?: UserTierId,
   currentModel?: string,
   providerName?: string,
 ): string {
   const status = getErrorStatus(error);
   let text = `[API Error: ${formatErrorMessageWithStatus(error.message, status)}]`;
   if (status === 429) {
-    text += getRateLimitMessage(error, userTier, currentModel, providerName);
+    text += getRateLimitMessage(error, currentModel, providerName);
   }
   return text;
 }
 
 function formatStringApiError(
   error: string,
-  userTier?: UserTierId,
   currentModel?: string,
   providerName?: string,
 ): string {
@@ -251,7 +214,6 @@ function formatStringApiError(
 
   const parsedMessage = formatEmbeddedJsonApiError(
     error.substring(jsonStart),
-    userTier,
     currentModel,
     providerName,
   );
@@ -260,7 +222,6 @@ function formatStringApiError(
 
 function formatEmbeddedJsonApiError(
   jsonString: string,
-  userTier?: UserTierId,
   currentModel?: string,
   providerName?: string,
 ): string | undefined {
@@ -280,12 +241,7 @@ function formatEmbeddedJsonApiError(
   );
   let text = `[API Error: ${finalMessage}${statusSuffix}]`;
   if (isRateLimitApiError(parsedError)) {
-    text += getRateLimitMessage(
-      parsedError,
-      userTier,
-      currentModel,
-      providerName,
-    );
+    text += getRateLimitMessage(parsedError, currentModel, providerName);
   }
   return text;
 }
@@ -325,7 +281,6 @@ function extractNestedApiErrorMessage(message: string): string {
 
 export function parseAndFormatApiError(
   error: unknown,
-  userTier?: UserTierId,
   currentModel?: string,
   providerName?: string,
 ): string {
@@ -335,16 +290,11 @@ export function parseAndFormatApiError(
   }
 
   if (isStructuredError(error)) {
-    return formatStructuredApiError(
-      error,
-      userTier,
-      currentModel,
-      providerName,
-    );
+    return formatStructuredApiError(error, currentModel, providerName);
   }
 
   if (typeof error === 'string') {
-    return formatStringApiError(error, userTier, currentModel, providerName);
+    return formatStringApiError(error, currentModel, providerName);
   }
 
   const fallbackStatus = getErrorStatus(error);
@@ -352,7 +302,7 @@ export function parseAndFormatApiError(
   if (fallbackStatusSuffix) {
     let text = `[API Error: An unknown error occurred.${fallbackStatusSuffix}]`;
     if (fallbackStatus === 429) {
-      text += getRateLimitMessage(error, userTier, currentModel, providerName);
+      text += getRateLimitMessage(error, currentModel, providerName);
     }
     return text;
   }

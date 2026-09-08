@@ -39,6 +39,25 @@ const value = (
   options,
 });
 
+function firstPrecedesSecondWhenBothExist(
+  firstIndex: number,
+  secondIndex: number,
+): boolean {
+  const bothExist = firstIndex !== -1 && secondIndex !== -1;
+  return bothExist ? firstIndex < secondIndex : true;
+}
+
+function firstPrecedesSecondWhenPresent(
+  firstIndex: number,
+  secondIndex: number,
+): boolean {
+  return firstIndex === -1 || secondIndex === -1 || firstIndex < secondIndex;
+}
+
+function atLeastOneMatch(first: boolean, second: boolean): boolean {
+  return first || second;
+}
+
 describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
   describe('Flattened path search', () => {
     it('finds single-level matches and prioritizes them first @requirement:REQ-001', async () => {
@@ -70,8 +89,9 @@ describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
       );
 
       // If both exist, teatime should come first
-      const bothExist = teatimeIndex !== -1 && nestedIndex !== -1;
-      expect(bothExist ? teatimeIndex < nestedIndex : true).toBe(true);
+      expect(firstPrecedesSecondWhenBothExist(teatimeIndex, nestedIndex)).toBe(
+        true,
+      );
     });
 
     it('finds nested paths when partial matches them @requirement:REQ-002', async () => {
@@ -126,14 +146,14 @@ describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
       );
 
       // Single-level matches (tea, testing) should appear before nested paths
-      const teaBeforeTemp =
-        teaIndex === -1 ||
-        temperatureIndex === -1 ||
-        teaIndex < temperatureIndex;
-      const testingBeforeTemp =
-        testingIndex === -1 ||
-        temperatureIndex === -1 ||
-        testingIndex < temperatureIndex;
+      const teaBeforeTemp = firstPrecedesSecondWhenPresent(
+        teaIndex,
+        temperatureIndex,
+      );
+      const testingBeforeTemp = firstPrecedesSecondWhenPresent(
+        testingIndex,
+        temperatureIndex,
+      );
 
       expect(teaBeforeTemp).toBe(true);
       expect(testingBeforeTemp).toBe(true);
@@ -293,7 +313,7 @@ describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
 
       // We should have exactly one 'modelparam temperature' suggestion
       // even though the schema has duplicate 'temperature' options
-      expect(temperatureSuggestions.length).toBe(1);
+      expect(temperatureSuggestions).toHaveLength(1);
       expect(temperatureSuggestions[0]?.value).toBe('modelparam temperature');
     });
 
@@ -360,7 +380,7 @@ describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
         s.value.includes('top_k'),
       );
 
-      expect(hasTopP || hasTopK).toBe(true);
+      expect(atLeastOneMatch(hasTopP, hasTopK)).toBe(true);
     });
   });
 });

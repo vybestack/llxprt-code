@@ -196,6 +196,13 @@ function makeImageToolCall(
 
 describe('buildToolResponses image budget enforcement', () => {
   it('passes through all images when under budget', () => {
+    const { images, passesThroughAllImagesWhenUnderBudgetObservation1 } =
+      observePassesThroughAllImagesWhenUnderBudget();
+    expect(images).toHaveLength(2);
+    expect(passesThroughAllImagesWhenUnderBudgetObservation1).toBe(false);
+  });
+
+  const observePassesThroughAllImagesWhenUnderBudget = () => {
     const tools = [
       makeImageToolCall('call-1', 'A'.repeat(1000)),
       makeImageToolCall('call-2', 'B'.repeat(1000)),
@@ -204,13 +211,34 @@ describe('buildToolResponses image budget enforcement', () => {
     const blocks = buildToolResponses(tools, 100_000);
 
     const images = blocks.filter((b) => b.type === 'media');
-    expect(images).toHaveLength(2);
-    expect(
-      blocks.some((b) => b.type === 'text' && b.text.includes('omitted')),
-    ).toBe(false);
-  });
+
+    const passesThroughAllImagesWhenUnderBudgetObservation1 = blocks.some(
+      (b) => b.type === 'text' && b.text.includes('omitted'),
+    );
+    return {
+      images,
+      passesThroughAllImagesWhenUnderBudgetObservation1,
+    };
+  };
 
   it('omits images that exceed the cumulative budget', () => {
+    const {
+      images,
+      feedbackBlock,
+      omitsImagesThatExceedTheCumulativeBudgetObservation1,
+      omitsImagesThatExceedTheCumulativeBudgetObservation2,
+    } = observeOmitsImagesThatExceedTheCumulativeBudget();
+    expect(images).toHaveLength(2);
+    expect(feedbackBlock).toBeDefined();
+    expect(omitsImagesThatExceedTheCumulativeBudgetObservation1).toContain(
+      '1 image(s)',
+    );
+    expect(omitsImagesThatExceedTheCumulativeBudgetObservation2).toContain(
+      'read_file',
+    );
+  });
+
+  const observeOmitsImagesThatExceedTheCumulativeBudget = () => {
     const tools = [
       makeImageToolCall('call-1', 'A'.repeat(5000)),
       makeImageToolCall('call-2', 'B'.repeat(5000)),
@@ -220,18 +248,22 @@ describe('buildToolResponses image budget enforcement', () => {
     const blocks = buildToolResponses(tools, 11_000);
 
     const images = blocks.filter((b) => b.type === 'media');
-    expect(images).toHaveLength(2);
+
     const feedbackBlock = blocks.find(
       (b) => b.type === 'text' && b.text.includes('omitted'),
     );
-    expect(feedbackBlock).toBeDefined();
-    expect(feedbackBlock!.type === 'text' && feedbackBlock.text).toContain(
-      '1 image(s)',
-    );
-    expect(feedbackBlock!.type === 'text' && feedbackBlock.text).toContain(
-      'read_file',
-    );
-  });
+
+    const omitsImagesThatExceedTheCumulativeBudgetObservation1 =
+      feedbackBlock!.type === 'text' && feedbackBlock.text;
+    const omitsImagesThatExceedTheCumulativeBudgetObservation2 =
+      feedbackBlock!.type === 'text' && feedbackBlock.text;
+    return {
+      images,
+      feedbackBlock,
+      omitsImagesThatExceedTheCumulativeBudgetObservation1,
+      omitsImagesThatExceedTheCumulativeBudgetObservation2,
+    };
+  };
 
   it('retains all tool_response blocks even when images are omitted', () => {
     const tools = [

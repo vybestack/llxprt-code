@@ -225,6 +225,19 @@ function renderWithRegistry(
   );
 }
 
+async function countOperationRecords(perfDir: string): Promise<number> {
+  const names = await readdir(perfDir);
+  let recordCount = 0;
+  for (const name of names) {
+    if (!name.endsWith('.jsonl')) continue;
+    const fileResult = await readPerfRecords(join(perfDir, name));
+    recordCount += fileResult.records.filter(
+      (record) => record.record_type === 'operation',
+    ).length;
+  }
+  return recordCount;
+}
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('useSubmitQuery — D8 fail-fast + dual-failure AggregateError (AC-4, AC-8)', () => {
@@ -265,12 +278,6 @@ describe('useSubmitQuery — D8 fail-fast + dual-failure AggregateError (AC-4, A
       throw new AggregateError(errors, 'failing-sink cleanup failed');
     }
   });
-
-  // -------------------------------------------------------------------------
-  // D8: finalisation is awaited; internal instrumentation errors fail-fast
-  // rather than being silently debug-logged (AC-8). Only genuinely external
-  // filesystem errno errors fail-open inside PerfSink/retention.
-  // -------------------------------------------------------------------------
 
   it('rejects (fail-fast) when sink throws a non-errno internal error on the completed path', async () => {
     const {
@@ -317,15 +324,7 @@ describe('useSubmitQuery — D8 fail-fast + dual-failure AggregateError (AC-4, A
     await expect(disposePromise).rejects.toThrow(INTERNAL_ERROR_MESSAGE);
     failCtx.bodyDisposed = true;
 
-    const names = await readdir(failDir);
-    let recordCount = 0;
-    for (const name of names) {
-      if (!name.endsWith('.jsonl')) continue;
-      const fileResult = await readPerfRecords(join(failDir, name));
-      recordCount += fileResult.records.filter(
-        (r) => r.record_type === 'operation',
-      ).length;
-    }
+    const recordCount = await countOperationRecords(failDir);
     expect(recordCount).toBe(0);
   });
 
@@ -628,7 +627,7 @@ describe('useSubmitQuery — D8 fail-fast + dual-failure AggregateError (AC-4, A
     expect(aggregate.errors).toHaveLength(2);
     expect(aggregate.errors[0]).toBe(setupError);
     expect((aggregate.errors[1] as Error).message).toBe(INTERNAL_ERROR_MESSAGE);
-    expect(deps.setIsRespondingCalls).toEqual([true, false]);
+    expect(deps.setIsRespondingCalls).toStrictEqual([true, false]);
     expect(runStream).not.toHaveBeenCalled();
 
     await expect(failSink.dispose()).rejects.toThrow(INTERNAL_ERROR_MESSAGE);

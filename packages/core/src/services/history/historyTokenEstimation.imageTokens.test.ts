@@ -97,6 +97,27 @@ describe('estimateContentTokens — image media blocks', () => {
     expect(total).toBeGreaterThan(Math.ceil(caption.length / 4));
   });
 
+  it('falls back to declared dimensions when inline image bytes cannot be parsed', async () => {
+    const content: IContent = {
+      speaker: 'human',
+      blocks: [
+        mediaBlock({
+          data: Buffer.from('not an image').toString('base64'),
+          dimensions: { width: 200, height: 200 },
+        }),
+      ],
+    };
+
+    const total = await estimateContentTokens(
+      content,
+      'claude-sonnet',
+      providerWith('anthropic'),
+      noopLogger,
+    );
+
+    expect(total).toBe(54);
+  });
+
   it('produces different totals for openai vs gemini for the same image', async () => {
     const b64 = buildPngBase64(1024, 1024);
     const content: IContent = {

@@ -143,17 +143,20 @@ describe('BoundedCombinedCollector - multibyte and chunk patterns', () => {
     expect(collector.getStdoutText()).toContain('世');
   });
 
-  it('handles many tiny interleaved chunks', () => {
+  const observeHandlesManyTinyInterleavedChunksAt146 = () => {
     const collector = new BoundedCombinedCollector({
       budget: createByteBudget(1024),
     });
-
     for (let i = 0; i < 2000; i++) {
       const source = i % 2 === 0 ? 'stdout' : 'stderr';
       collector.append(Buffer.from([65 + (i % 26)]), source);
     }
-
     const result = collector.getResult();
+    return { result };
+  };
+
+  it('handles many tiny interleaved chunks', () => {
+    const { result } = observeHandlesManyTinyInterleavedChunksAt146();
     expect(result.metadata.truncated).toBe(true);
     expect(result.metadata.observedBytes).toBe(2000);
   });
@@ -275,19 +278,23 @@ describe('BoundedCombinedCollector - byte-copy isolation', () => {
 });
 
 describe('BoundedCombinedCollector - 50k tiny chunks (ring correctness)', () => {
+  const observeHandles50kTinyInterleavedChunksWithCorrectTailContentAt278 =
+    () => {
+      const budget = createByteBudget(2048);
+      const collector = new BoundedCombinedCollector({ budget });
+      for (let i = 0; i < 50_000; i++) {
+        const source = i % 3 === 0 ? 'stderr' : 'stdout';
+        collector.append(Buffer.from([48 + (i % 10)]), source);
+      }
+      const result = collector.getResult();
+      return { result };
+    };
+
   it('handles 50k tiny interleaved chunks with correct tail content', () => {
-    const budget = createByteBudget(2048);
-    const collector = new BoundedCombinedCollector({ budget });
-
-    for (let i = 0; i < 50_000; i++) {
-      const source = i % 3 === 0 ? 'stderr' : 'stdout';
-      collector.append(Buffer.from([48 + (i % 10)]), source);
-    }
-
-    const result = collector.getResult();
+    const { result } =
+      observeHandles50kTinyInterleavedChunksWithCorrectTailContentAt278();
     expect(result.metadata.observedBytes).toBe(50_000);
     expect(result.metadata.retainedBytes).toBeLessThanOrEqual(2048);
-    // Last written char: i=49999 → 48 + (49999 % 10) = 48 + 9 = '9'.
     expect(result.text.endsWith('9')).toBe(true);
     expect(result.text).not.toContain('\uFFFD');
   });
@@ -382,19 +389,23 @@ describe('BoundedCombinedCollector - independent per-source decoders (issue #320
 });
 
 describe('BoundedCombinedCollector - structural / peak allocation bounds (issue #3200 finding 5)', () => {
+  const observePeakRetainedBytesNeverExceedTheBudgetUnderMassiveSourceSwitchingAt385 =
+    () => {
+      const budget = createByteBudget(2048);
+      const collector = new BoundedCombinedCollector({ budget });
+      for (let i = 0; i < 524_288; i++) {
+        collector.append(
+          Buffer.from([65 + (i % 26)]),
+          i % 2 === 0 ? 'stdout' : 'stderr',
+        );
+      }
+      const result = collector.getResult();
+      return { budget, collector, result };
+    };
+
   it('peak retained bytes never exceed the budget under massive source switching', () => {
-    // The run-based design retains only the budget regardless of source-switch
-    // count; the old per-byte-tag design would allocate a tag array as large as
-    // the observed bytes.
-    const budget = createByteBudget(2048);
-    const collector = new BoundedCombinedCollector({ budget });
-    for (let i = 0; i < 524_288; i++) {
-      collector.append(
-        Buffer.from([65 + (i % 26)]),
-        i % 2 === 0 ? 'stdout' : 'stderr',
-      );
-    }
-    const result = collector.getResult();
+    const { budget, collector, result } =
+      observePeakRetainedBytesNeverExceedTheBudgetUnderMassiveSourceSwitchingAt385();
     expect(result.metadata.retainedBytes).toBeLessThanOrEqual(budget.bytes);
     expect(result.metadata.observedBytes).toBe(524_288);
     expect(collector.getBoundedRawBuffer().length).toBeLessThanOrEqual(

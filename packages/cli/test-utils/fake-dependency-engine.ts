@@ -773,9 +773,10 @@ function main(): void {
 // exe (this module is its entry); the argv[1] name check covers a compiled
 // copy invoked under a different entry shape. A test-runner import sets
 // neither.
+const moduleMetadata: ImportMeta & { readonly main?: boolean } = import.meta;
 const invokedPath = process.argv[1];
 const invokedAsScript =
-  import.meta.main === true ||
+  moduleMetadata.main === true ||
   (invokedPath !== undefined &&
     ['docker', 'podman'].includes(path.parse(invokedPath).name));
 if (invokedAsScript) {

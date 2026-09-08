@@ -93,6 +93,7 @@ describe('release package derivation', () => {
       '@vybestack/llxprt-code-lsp',
       '@vybestack/llxprt-code-providers',
       '@vybestack/llxprt-code-agents',
+      '@vybestack/llxprt-code-zed-acp',
       '@vybestack/llxprt-code',
     ]);
   });
@@ -109,6 +110,14 @@ describe('release package derivation', () => {
     expect(toolsIndex).toBeLessThan(coreIndex);
     expect(toolsIndex).toBeLessThan(providersIndex);
     expect(toolsIndex).toBeLessThan(cliIndex);
+  });
+
+  it('publishes the ACP client before the CLI that depends on it', () => {
+    const packages = npmReleasePackages();
+    const zedAcpIndex = packages.indexOf('@vybestack/llxprt-code-zed-acp');
+    const cliIndex = packages.indexOf('@vybestack/llxprt-code');
+    expect(zedAcpIndex).toBeGreaterThan(-1);
+    expect(zedAcpIndex).toBeLessThan(cliIndex);
   });
 
   it('keeps VS Code extension versioned but outside npm package publishing', () => {
@@ -402,6 +411,13 @@ describe('scripts/build_sandbox.ts', () => {
   it('temporarily binds and restores workspace dependencies for local sandbox packing', () => {
     expect(buildSandbox).toContain('bind-release-deps.ts --backup');
     expect(buildSandbox).toContain('bind-release-deps.ts --restore');
+  });
+
+  it('clears stale dist tarballs by enumerating dist entries instead of a glob rmSync (#3334)', () => {
+    // rmSync does not expand globs, so any literal `-*.tgz` path is a silent
+    // no-op that leaves stale tarballs for the Dockerfile COPY glob.
+    expect(buildSandbox).toMatch(/removeTarballs\(/);
+    expect(buildSandbox).not.toMatch(/-\*\.tgz/);
   });
 });
 

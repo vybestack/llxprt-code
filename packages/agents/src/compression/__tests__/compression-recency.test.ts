@@ -202,48 +202,55 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
   });
 
   it('returns true when fallback succeeds after primary transient failure', async () => {
-    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
-
-    const primaryCompress = vi.fn().mockRejectedValue(makeHttpError(500));
-    const fallbackCompress = vi.fn().mockResolvedValue({
-      newHistory: [
-        { speaker: 'human', blocks: [{ type: 'text', text: 'truncated' }] },
-      ],
-      metadata: {
-        originalMessageCount: 10,
-        compressedMessageCount: 2,
-        strategyUsed: 'top-down-truncation' as const,
-        llmCallMade: false,
-      },
-    });
-
-    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
-      (name) => {
-        if (name === 'top-down-truncation') {
-          return {
-            name: 'top-down-truncation' as const,
-            requiresLLM: false,
-            trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-            compress: fallbackCompress,
-          };
-        }
-
-        return {
-          name: 'middle-out' as const,
-          requiresLLM: true,
-          trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-          compress: primaryCompress,
-        };
-      },
-    );
-
-    const result = await chat.performCompression('test-prompt');
-
+    const { result, primaryCompress, fallbackCompress, chat } =
+      await observeReturnsTrueWhenFallbackSucceedsAfterPrimaryTransientFailure();
     expect(result).toBe(PerformCompressionResult.COMPRESSED);
     expect(primaryCompress).toHaveBeenCalled();
     expect(fallbackCompress).toHaveBeenCalled();
     expect(chat.wasRecentlyCompressed()).toBe(true);
   });
+
+  const observeReturnsTrueWhenFallbackSucceedsAfterPrimaryTransientFailure =
+    async () => {
+      const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
+
+      const primaryCompress = vi.fn().mockRejectedValue(makeHttpError(500));
+      const fallbackCompress = vi.fn().mockResolvedValue({
+        newHistory: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'truncated' }] },
+        ],
+        metadata: {
+          originalMessageCount: 10,
+          compressedMessageCount: 2,
+          strategyUsed: 'top-down-truncation' as const,
+          llmCallMade: false,
+        },
+      });
+
+      vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+        (name) => {
+          if (name === 'top-down-truncation') {
+            return {
+              name: 'top-down-truncation' as const,
+              requiresLLM: false,
+              trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+              compress: fallbackCompress,
+            };
+          }
+
+          return {
+            name: 'middle-out' as const,
+            requiresLLM: true,
+            trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+            compress: primaryCompress,
+          };
+        },
+      );
+
+      const result = await chat.performCompression('test-prompt');
+
+      return { result, primaryCompress, fallbackCompress, chat };
+    };
 });
 
 describe('CompressionHandler performCompression result (issue #1792)', () => {
@@ -331,43 +338,51 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
   });
 
   it('returns COMPRESSED when fallback succeeds after primary failure', async () => {
-    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
-
-    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
-      (name) => {
-        if (name === 'top-down-truncation') {
-          return {
-            name: 'top-down-truncation' as const,
-            requiresLLM: false,
-            trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-            compress: vi.fn().mockResolvedValue({
-              newHistory: [
-                {
-                  speaker: 'human',
-                  blocks: [{ type: 'text', text: 'truncated' }],
-                },
-              ],
-              metadata: {
-                originalMessageCount: 10,
-                compressedMessageCount: 2,
-                strategyUsed: 'top-down-truncation' as const,
-                llmCallMade: false,
-              },
-            }),
-          };
-        }
-        return {
-          name: 'middle-out' as const,
-          requiresLLM: true,
-          trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-          compress: vi.fn().mockRejectedValue(makeHttpError(500)),
-        };
-      },
-    );
-
-    const result = await chat.performCompression('test-prompt');
+    const { result } =
+      await observeReturnsCOMPRESSEDWhenFallbackSucceedsAfterPrimaryFailure();
     expect(result).toBe(PerformCompressionResult.COMPRESSED);
   });
+
+  const observeReturnsCOMPRESSEDWhenFallbackSucceedsAfterPrimaryFailure =
+    async () => {
+      const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
+
+      vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+        (name) => {
+          if (name === 'top-down-truncation') {
+            return {
+              name: 'top-down-truncation' as const,
+              requiresLLM: false,
+              trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+              compress: vi.fn().mockResolvedValue({
+                newHistory: [
+                  {
+                    speaker: 'human',
+                    blocks: [{ type: 'text', text: 'truncated' }],
+                  },
+                ],
+                metadata: {
+                  originalMessageCount: 10,
+                  compressedMessageCount: 2,
+                  strategyUsed: 'top-down-truncation' as const,
+                  llmCallMade: false,
+                },
+              }),
+            };
+          }
+          return {
+            name: 'middle-out' as const,
+            requiresLLM: true,
+            trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+            compress: vi.fn().mockRejectedValue(makeHttpError(500)),
+          };
+        },
+      );
+
+      const result = await chat.performCompression('test-prompt');
+
+      return { result };
+    };
 
   it('returns FAILED when both primary and fallback strategies fail', async () => {
     const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);

@@ -21,6 +21,8 @@ import * as os from 'os';
 import { existsSync } from 'fs';
 import { createHash } from 'node:crypto';
 
+const bunIt = it;
+
 function isDigit(ch: string): boolean {
   return ch >= '0' && ch <= '9';
 }
@@ -685,9 +687,9 @@ describe('PromptInstaller backup & hash tracking', () => {
       expect(tempResidue).toHaveLength(0);
     });
 
-    it.skipIf(isWindows())(
-      'should clean up temp files on write failure - Unix',
-      async () => {
+    {
+      const it = isWindows() ? bunIt.skip : bunIt;
+      it('should clean up temp files on write failure - Unix', async () => {
         // Make directory read-only after creation
         await fs.mkdir(testBaseDir, { recursive: true });
 
@@ -707,7 +709,7 @@ describe('PromptInstaller backup & hash tracking', () => {
         const contents = await fs.readdir(testBaseDir);
         const tempFiles = contents.filter((f) => f.includes('.tmp'));
         expect(tempFiles).toHaveLength(0);
-      },
-    );
+      });
+    }
   });
 });

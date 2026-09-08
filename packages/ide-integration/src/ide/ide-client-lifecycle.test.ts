@@ -166,6 +166,46 @@ function flushAsync(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function createBlockingCloseDiffHandler(
+  firstCloseDiffGate: Promise<unknown>,
+): (request: { readonly name?: string } | undefined) => Promise<unknown> {
+  let closeDiffCallCount = 0;
+  return (request) => {
+    if (request?.name === 'closeDiff') {
+      closeDiffCallCount++;
+      if (closeDiffCallCount === 1) {
+        return firstCloseDiffGate;
+      }
+    }
+    return Promise.resolve({
+      content: [{ type: 'text', text: 'closed' }],
+    });
+  };
+}
+
+function createRejectingFirstCloseDiffHandler(): {
+  readonly handle: (
+    request: { readonly name?: string } | undefined,
+  ) => Promise<unknown>;
+  readonly callCount: () => number;
+} {
+  let closeDiffCallCount = 0;
+  return {
+    handle: (request) => {
+      if (request?.name === 'closeDiff') {
+        closeDiffCallCount++;
+        if (closeDiffCallCount === 1) {
+          return Promise.reject(new Error('closeDiff exploded'));
+        }
+      }
+      return Promise.resolve({
+        content: [{ type: 'text', text: 'closed' }],
+      });
+    },
+    callCount: () => closeDiffCallCount,
+  };
+}
+
 describe('IdeClient connection lifecycle isolation', () => {
   let transportMock: { close: ReturnType<typeof vi.fn> };
   let ideClient: IdeClient;
@@ -627,23 +667,11 @@ describe('IdeClient connection lifecycle isolation', () => {
     const firstCloseDiffGate = new Promise<unknown>((resolve) => {
       resolveFirstCloseDiff = resolve;
     });
-    let closeDiffCallCount = 0;
-    fake1.client.callTool = vi.fn().mockImplementation((request) => {
-      const name = request?.name;
-      if (name === 'closeDiff') {
-        closeDiffCallCount++;
-        if (closeDiffCallCount === 1) {
-          return firstCloseDiffGate;
-        }
-        return Promise.resolve({
-          content: [{ type: 'text', text: 'closed' }],
-        });
-      }
-      // Non-closeDiff calls (e.g. openDiff) resolve normally.
-      return Promise.resolve({
-        content: [{ type: 'text', text: 'closed' }],
-      });
-    }) as unknown as typeof fake1.client.callTool;
+    fake1.client.callTool = vi
+      .fn()
+      .mockImplementation(
+        createBlockingCloseDiffHandler(firstCloseDiffGate),
+      ) as unknown as typeof fake1.client.callTool;
 
     // openDiff registers pending resolvers keyed by filePath.
     const diffA = ideClient.openDiff('/test/workspace/oldA.ts', 'newA');
@@ -750,22 +778,12 @@ describe('IdeClient connection lifecycle isolation', () => {
     );
 
     // Open two diffs. Make the first closeDiff reject and the second resolve.
-    let closeDiffCallCount = 0;
-    fake1.client.callTool = vi.fn().mockImplementation((request) => {
-      const name = request?.name;
-      if (name === 'closeDiff') {
-        closeDiffCallCount++;
-        if (closeDiffCallCount === 1) {
-          return Promise.reject(new Error('closeDiff exploded'));
-        }
-        return Promise.resolve({
-          content: [{ type: 'text', text: 'closed' }],
-        });
-      }
-      return Promise.resolve({
-        content: [{ type: 'text', text: 'closed' }],
-      });
-    }) as unknown as typeof fake1.client.callTool;
+    const closeDiff = createRejectingFirstCloseDiffHandler();
+    fake1.client.callTool = vi
+      .fn()
+      .mockImplementation(
+        closeDiff.handle,
+      ) as unknown as typeof fake1.client.callTool;
 
     void ideClient.openDiff('/test/workspace/first.ts', 'first');
     void ideClient.openDiff('/test/workspace/second.ts', 'second');
@@ -775,7 +793,7 @@ describe('IdeClient connection lifecycle isolation', () => {
     // throwing closeDiff. Both closeDiff calls should have been attempted.
     await ideClient.disconnect();
 
-    expect(closeDiffCallCount).toBe(2);
+    expect(closeDiff.callCount()).toBe(2);
     expect(ideClient.getConnectionStatus().status).toBe(
       IDEConnectionStatus.Disconnected,
     );

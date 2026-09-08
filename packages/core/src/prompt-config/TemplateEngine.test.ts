@@ -40,7 +40,6 @@ describe('TemplateEngine', () => {
           workspaceName: 'workspace-project',
           workspaceRoot: '/tmp/workspace-project',
           workspaceDirectories: ['/tmp/workspace-project', '/tmp/secondary'],
-          folderStructure: 'mock structure',
         },
       };
 

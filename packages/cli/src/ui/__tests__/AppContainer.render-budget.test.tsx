@@ -58,7 +58,6 @@ function createMockConfig(): MockConfig {
     getDebugMode: vi.fn(() => false),
     getSessionId: vi.fn(() => 'test-session-id'),
     getAgentClient: vi.fn(() => ({
-      getUserTier: vi.fn(),
       hasChatInitialized: vi.fn(() => false),
       getHistoryService: vi.fn(),
     })),
@@ -302,8 +301,8 @@ void vi.mock('../hooks/useTerminalSize.js', () => ({
   useTerminalSize: vi.fn(() => ({ rows: 24, columns: 120 })),
 }));
 
-void vi.mock('../hooks/useGitBranchName.js', () => ({
-  useGitBranchName: vi.fn(() => null),
+void vi.mock('../hooks/useGitBranchInfo.js', () => ({
+  useGitBranchInfo: vi.fn(() => ({ branchName: null, isDirty: false })),
 }));
 
 void vi.mock('../hooks/useLoadingIndicator.js', () => ({

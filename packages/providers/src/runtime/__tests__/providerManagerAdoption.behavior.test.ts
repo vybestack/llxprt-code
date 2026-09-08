@@ -60,11 +60,14 @@ class StubAdoptedProvider implements IProvider {
   async *generateChatCompletion(): AsyncIterableIterator<never> {
     // intentionally empty — never driven in these tests
   }
-  getServerTools(): string[] {
-    return [];
-  }
-  async invokeServerTool(): Promise<unknown> {
-    return undefined;
+}
+
+async function cleanupIfNotCaptured(
+  captured: { providerManager: unknown } | undefined,
+  handle: IsolatedRuntimeContextHandle,
+): Promise<void> {
+  if (captured === undefined) {
+    await handle.cleanup().catch(() => undefined);
   }
 }
 
@@ -330,9 +333,7 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
       expect(disposeAfter).toBeUndefined();
     } finally {
       // ensure cleanup ran even if an assertion threw
-      if (captured === undefined) {
-        await handle.cleanup().catch(() => undefined);
-      }
+      await cleanupIfNotCaptured(captured, handle);
     }
   });
 

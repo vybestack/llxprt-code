@@ -106,12 +106,17 @@ async function downloadFiles({
   targetDir,
   proxy,
   abortController,
+  signal,
 }: {
   paths: string[];
   releaseTag: string;
   targetDir: string;
   proxy: string | undefined;
+  /** Shared per-batch controller; aborted once the batch settles so the
+   * outstanding fetch timeouts are released. */
   abortController: AbortController;
+  /** The command invocation's cancellation signal (Esc / process abort). */
+  signal: AbortSignal;
 }): Promise<void> {
   const downloads = [];
   for (const fileBasename of paths) {
@@ -124,6 +129,7 @@ async function downloadFiles({
           signal: AbortSignal.any([
             AbortSignal.timeout(30_000),
             abortController.signal,
+            signal,
           ]),
         } as RequestInit);
 
@@ -177,10 +183,12 @@ async function downloadSetupFiles({
   configs,
   releaseTag,
   proxy,
+  signal,
 }: {
   configs: Array<{ paths: string[]; targetDir: string }>;
   releaseTag: string;
   proxy: string | undefined;
+  signal: AbortSignal;
 }): Promise<void> {
   try {
     await Promise.all(
@@ -192,6 +200,7 @@ async function downloadSetupFiles({
           targetDir,
           proxy,
           abortController,
+          signal,
         });
       }),
     );
@@ -247,6 +256,7 @@ export const setupGithubCommand: SlashCommand = {
       ],
       releaseTag,
       proxy,
+      signal: context.signal,
     });
 
     // Add entries to .gitignore file

@@ -145,4 +145,25 @@ describe('reportNonInteractiveError', () => {
     expect(() => reportNonInteractiveError(config, error)).not.toThrow();
     expect(writeToStderr).toHaveBeenCalledTimes(1);
   });
+
+  it('interpolates the configured model into a Gemini Pro quota message (#2627)', () => {
+    const config: Pick<Config, 'getOutputFormat'> & {
+      getModel(): string;
+      getProvider(): string | undefined;
+    } = {
+      getOutputFormat: () => OutputFormat.TEXT,
+      getProvider: () => 'gemini',
+      getModel: () => 'gemini-2.5-pro-configured-here',
+    };
+    const errorMessage = `got status: 429 Too Many Requests. {"error":{"code":429,"message":"Quota exceeded for quota metric 'Gemini 2.5 Pro Requests' and limit 'RequestsPerDay' of service 'generativelanguage.googleapis.com' for consumer 'project_number:123456789'.","status":"RESOURCE_EXHAUSTED"}}`;
+
+    reportNonInteractiveError(config, errorMessage);
+
+    expect(writeToStderr).toHaveBeenCalledTimes(1);
+    const message = String(writeToStderr.mock.calls[0][0]);
+    expect(message).toContain(
+      'You have reached your daily gemini-2.5-pro-configured-here quota limit',
+    );
+    expect(message).not.toContain('daily  quota');
+  });
 });

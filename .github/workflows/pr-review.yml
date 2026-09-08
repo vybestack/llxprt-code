@@ -446,30 +446,47 @@ jobs:
               core.info('No issue/PR number in context; skipping comment post.');
               return;
             }
-            const comments = await github.paginate(
-              github.rest.issues.listComments,
-              {
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: number,
-                per_page: 100,
-              },
-            );
-            const existing = comments.find((c) => c.body && c.body.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-              core.info(`Updated comment ${existing.id}.`);
-            } else {
-              const { data: created } = await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: number,
-                body,
-              });
-              core.info(`Created comment ${created.id}.`);
+            try {
+              const comments = await github.paginate(
+                github.rest.issues.listComments,
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: number,
+                  per_page: 100,
+                },
+              );
+              const existing = comments.find((c) => c.body && c.body.includes(marker));
+              if (existing) {
+                try {
+                  await github.rest.issues.updateComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: existing.id,
+                    body,
+                  });
+                  core.info(`Updated comment ${existing.id}.`);
+                } catch (error) {
+                  if (error.status !== 404) {
+                    throw error;
+                  }
+                  const { data: recreated } = await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: number,
+                    body,
+                  });
+                  core.info(`Comment ${existing.id} disappeared (404); recreated as ${recreated.id}.`);
+                }
+              } else {
+                const { data: created } = await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: number,
+                  body,
+                });
+                core.info(`Created comment ${created.id}.`);
+              }
+            } catch (error) {
+              core.setFailed(`Failed to post walkthrough comment: ${error.message || error}`);
             }

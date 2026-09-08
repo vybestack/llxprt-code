@@ -32,6 +32,10 @@ import type { Settings } from '../config/settings.js';
 import { setupObservation } from '../cliSessionBootstrap.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 
+function listeningPort(address: ReturnType<http.Server['address']>): number {
+  return typeof address === 'object' && address !== null ? address.port : 0;
+}
+
 const validBootstrapJson = {
   schema: 1,
   protocol: 'jsp/1',
@@ -294,7 +298,7 @@ describe('augmentArgvWithInternalEnvPath — argv transport (Findings 2 & 3)', (
 
   it('undefined envPath returns argv unchanged', () => {
     const argv = ['cli.js', '--prompt', 'hello'];
-    expect(augmentArgvWithInternalEnvPath(argv, undefined)).toEqual(argv);
+    expect(augmentArgvWithInternalEnvPath(argv, undefined)).toStrictEqual(argv);
   });
 
   it('normal positional prompt round-trips through parser with transport', async () => {
@@ -532,9 +536,7 @@ describe('setupObservation seam — cliSessionBootstrap → observation wiring (
         resolve();
       });
     });
-    const address = server.address();
-    const port =
-      typeof address === 'object' && address !== null ? address.port : 0;
+    const port = listeningPort(server.address());
 
     const file = await writeTempFile(
       'ac15.json',

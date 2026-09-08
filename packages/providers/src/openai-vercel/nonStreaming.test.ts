@@ -27,6 +27,12 @@ import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderToolset } from '../IProvider.js';
 
+function hasTextBlock(content: IContent): boolean {
+  return (
+    content.speaker === 'ai' && content.blocks.some((b) => b.type === 'text')
+  );
+}
+
 // Mock the 'ai' module
 void vi.mock('ai', () => ({
   generateText: vi.fn(),
@@ -203,9 +209,7 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
       const results = await collectResults(iterator);
 
       // Find the text block in results
-      const textContent = results.find(
-        (r) => r.speaker === 'ai' && r.blocks.some((b) => b.type === 'text'),
-      );
+      const textContent = results.find(hasTextBlock);
       expect(textContent).toBeDefined();
     });
 

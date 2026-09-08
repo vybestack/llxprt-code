@@ -568,19 +568,24 @@ describe('performMigration — edge cases', () => {
     await fs.promises.rm(destBase, { recursive: true, force: true });
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'preserves file permissions on copied files',
+  describe.skipIf(process.platform === 'win32')(
+    'on non-Windows systems',
     () => {
-      const srcFile = path.join(legacyDir, 'script.sh');
-      fs.writeFileSync(srcFile, '#!/bin/bash');
-      fs.chmodSync(srcFile, 0o755);
+      it('preserves file permissions on copied files', () => {
+        const srcFile = path.join(legacyDir, 'script.sh');
+        fs.writeFileSync(srcFile, '#!/bin/bash');
+        fs.chmodSync(srcFile, 0o755);
 
-      const result: MigrationResult = performMigration(legacyDir, destinations);
+        const result: MigrationResult = performMigration(
+          legacyDir,
+          destinations,
+        );
 
-      expect(result.migrated).toBe(true);
-      const destFile = path.join(destinations.dataDir, 'script.sh');
-      const stat = fs.statSync(destFile);
-      expect(stat.mode & 0o111).not.toBe(0);
+        expect(result.migrated).toBe(true);
+        const destFile = path.join(destinations.dataDir, 'script.sh');
+        const stat = fs.statSync(destFile);
+        expect(stat.mode & 0o111).not.toBe(0);
+      });
     },
   );
 
@@ -601,34 +606,36 @@ describe('performMigration — edge cases', () => {
   // must report error:true so runStartupMigration does not stamp the marker —
   // otherwise the failed categories would be permanently stranded. root can
   // read 0o000 dirs, so skip when running as root.
-  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
-    'reports error:true when an entry cannot be read (does not silently succeed)',
+  describe.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'with enforceable unreadable-directory permissions',
     () => {
-      // A readable entry that should still be copied...
-      writeFiles(legacyDir, { 'settings.json': '{}' });
-      // ...and an unreadable subagents/ dir that will fail to copy.
-      const unreadable = path.join(legacyDir, 'subagents');
-      fs.mkdirSync(unreadable, { recursive: true });
-      fs.writeFileSync(path.join(unreadable, 'a.json'), '{}');
-      fs.chmodSync(unreadable, 0o000);
+      it('reports error:true when an entry cannot be read (does not silently succeed)', () => {
+        // A readable entry that should still be copied...
+        writeFiles(legacyDir, { 'settings.json': '{}' });
+        // ...and an unreadable subagents/ dir that will fail to copy.
+        const unreadable = path.join(legacyDir, 'subagents');
+        fs.mkdirSync(unreadable, { recursive: true });
+        fs.writeFileSync(path.join(unreadable, 'a.json'), '{}');
+        fs.chmodSync(unreadable, 0o000);
 
-      try {
-        const result = performMigration(legacyDir, destinations);
+        try {
+          const result = performMigration(legacyDir, destinations);
 
-        expect(result.error).toBe(true);
-        // A partial failure must NOT be reported as a completed migration,
-        // otherwise logMigrationStatus prints success and cli.tsx skips the
-        // legacy-dir fallback for the stranded categories.
-        expect(result.migrated).toBe(false);
-        // The readable entry was still migrated (best-effort copy continues).
-        expect(result.filesCopied).toBeGreaterThanOrEqual(1);
-        expect(
-          fs.existsSync(path.join(destinations.configDir, 'settings.json')),
-        ).toBe(true);
-      } finally {
-        // Restore perms so afterEach cleanup can remove the tree.
-        fs.chmodSync(unreadable, 0o755);
-      }
+          expect(result.error).toBe(true);
+          // A partial failure must NOT be reported as a completed migration,
+          // otherwise logMigrationStatus prints success and cli.tsx skips the
+          // legacy-dir fallback for the stranded categories.
+          expect(result.migrated).toBe(false);
+          // The readable entry was still migrated (best-effort copy continues).
+          expect(result.filesCopied).toBeGreaterThanOrEqual(1);
+          expect(
+            fs.existsSync(path.join(destinations.configDir, 'settings.json')),
+          ).toBe(true);
+        } finally {
+          // Restore perms so afterEach cleanup can remove the tree.
+          fs.chmodSync(unreadable, 0o755);
+        }
+      });
     },
   );
 });
@@ -763,104 +770,106 @@ describe('performMigration — #2237 pre-seeded config dir backfill', () => {
   });
 });
 
-describe.skipIf(process.platform === 'win32')(
-  'performMigration — symlinks',
-  () => {
-    let legacyDir: string;
-    let destBase: string;
-    let destinations: MigrationDestinations;
+describe('performMigration — symlinks', () => {
+  describe.skipIf(process.platform === 'win32')(
+    'on non-Windows systems',
+    () => {
+      let legacyDir: string;
+      let destBase: string;
+      let destinations: MigrationDestinations;
 
-    beforeEach(async () => {
-      legacyDir = await makeTempDir();
-      destBase = await makeTempDir();
-      await fs.promises.rm(destBase, { recursive: true, force: true });
-      destinations = makeDestinations(destBase);
-    });
+      beforeEach(async () => {
+        legacyDir = await makeTempDir();
+        destBase = await makeTempDir();
+        await fs.promises.rm(destBase, { recursive: true, force: true });
+        destinations = makeDestinations(destBase);
+      });
 
-    afterEach(async () => {
-      await fs.promises.rm(legacyDir, { recursive: true, force: true });
-      await fs.promises.rm(destBase, { recursive: true, force: true });
-    });
+      afterEach(async () => {
+        await fs.promises.rm(legacyDir, { recursive: true, force: true });
+        await fs.promises.rm(destBase, { recursive: true, force: true });
+      });
 
-    it('copies absolute symlinks correctly', () => {
-      const realTarget = path.join(legacyDir, 'real-config.json');
-      fs.writeFileSync(realTarget, '{"data": true}');
-      fs.symlinkSync(realTarget, path.join(legacyDir, 'link.json'));
+      it('copies absolute symlinks correctly', () => {
+        const realTarget = path.join(legacyDir, 'real-config.json');
+        fs.writeFileSync(realTarget, '{"data": true}');
+        fs.symlinkSync(realTarget, path.join(legacyDir, 'link.json'));
 
-      const result = performMigration(legacyDir, destinations);
+        const result = performMigration(legacyDir, destinations);
 
-      expect(result.migrated).toBe(true);
-      const linkPath = path.join(destinations.dataDir, 'link.json');
-      expect(fs.lstatSync(linkPath).isSymbolicLink()).toBe(true);
-      expect(fs.readlinkSync(linkPath)).toBe(
-        path.join(destinations.dataDir, 'real-config.json'),
-      );
-      expect(fs.readFileSync(linkPath, 'utf-8')).toBe('{"data": true}');
-    });
+        expect(result.migrated).toBe(true);
+        const linkPath = path.join(destinations.dataDir, 'link.json');
+        expect(fs.lstatSync(linkPath).isSymbolicLink()).toBe(true);
+        expect(fs.readlinkSync(linkPath)).toBe(
+          path.join(destinations.dataDir, 'real-config.json'),
+        );
+        expect(fs.readFileSync(linkPath, 'utf-8')).toBe('{"data": true}');
+      });
 
-    it('rebases relative symlinks so they resolve from the new location', () => {
-      const subDir = path.join(legacyDir, 'sub');
-      fs.mkdirSync(subDir, { recursive: true });
-      fs.writeFileSync(path.join(subDir, 'target.txt'), 'hello');
-      fs.symlinkSync('./target.txt', path.join(subDir, 'link.txt'));
+      it('rebases relative symlinks so they resolve from the new location', () => {
+        const subDir = path.join(legacyDir, 'sub');
+        fs.mkdirSync(subDir, { recursive: true });
+        fs.writeFileSync(path.join(subDir, 'target.txt'), 'hello');
+        fs.symlinkSync('./target.txt', path.join(subDir, 'link.txt'));
 
-      const result = performMigration(legacyDir, destinations);
+        const result = performMigration(legacyDir, destinations);
 
-      expect(result.migrated).toBe(true);
-      const newLink = path.join(destinations.dataDir, 'sub', 'link.txt');
-      expect(fs.lstatSync(newLink).isSymbolicLink()).toBe(true);
-      expect(fs.readFileSync(newLink, 'utf-8')).toBe('hello');
-    });
+        expect(result.migrated).toBe(true);
+        const newLink = path.join(destinations.dataDir, 'sub', 'link.txt');
+        expect(fs.lstatSync(newLink).isSymbolicLink()).toBe(true);
+        expect(fs.readFileSync(newLink, 'utf-8')).toBe('hello');
+      });
 
-    it('rebases parent-traversing relative symlinks correctly', () => {
-      const subDir = path.join(legacyDir, 'sub');
-      fs.mkdirSync(subDir, { recursive: true });
-      fs.writeFileSync(path.join(legacyDir, 'shared.txt'), 'shared-data');
-      fs.symlinkSync('../shared.txt', path.join(subDir, 'link.txt'));
+      it('rebases parent-traversing relative symlinks correctly', () => {
+        const subDir = path.join(legacyDir, 'sub');
+        fs.mkdirSync(subDir, { recursive: true });
+        fs.writeFileSync(path.join(legacyDir, 'shared.txt'), 'shared-data');
+        fs.symlinkSync('../shared.txt', path.join(subDir, 'link.txt'));
 
-      const result = performMigration(legacyDir, destinations);
+        const result = performMigration(legacyDir, destinations);
 
-      expect(result.migrated).toBe(true);
-      const newLink = path.join(destinations.dataDir, 'sub', 'link.txt');
-      expect(fs.lstatSync(newLink).isSymbolicLink()).toBe(true);
-      expect(fs.readFileSync(newLink, 'utf-8')).toBe('shared-data');
-    });
+        expect(result.migrated).toBe(true);
+        const newLink = path.join(destinations.dataDir, 'sub', 'link.txt');
+        expect(fs.lstatSync(newLink).isSymbolicLink()).toBe(true);
+        expect(fs.readFileSync(newLink, 'utf-8')).toBe('shared-data');
+      });
 
-    it('clones directory symlinks without following them (no infinite recursion)', () => {
-      const dirA = path.join(legacyDir, 'dirA');
-      const dirB = path.join(legacyDir, 'dirB');
-      fs.mkdirSync(dirA, { recursive: true });
-      fs.mkdirSync(dirB, { recursive: true });
-      fs.symlinkSync(dirB, path.join(dirA, 'linkB'));
-      fs.symlinkSync(dirA, path.join(dirB, 'linkA'));
-      fs.writeFileSync(path.join(dirA, 'file.txt'), 'a');
-      fs.writeFileSync(path.join(dirB, 'file.txt'), 'b');
+      it('clones directory symlinks without following them (no infinite recursion)', () => {
+        const dirA = path.join(legacyDir, 'dirA');
+        const dirB = path.join(legacyDir, 'dirB');
+        fs.mkdirSync(dirA, { recursive: true });
+        fs.mkdirSync(dirB, { recursive: true });
+        fs.symlinkSync(dirB, path.join(dirA, 'linkB'));
+        fs.symlinkSync(dirA, path.join(dirB, 'linkA'));
+        fs.writeFileSync(path.join(dirA, 'file.txt'), 'a');
+        fs.writeFileSync(path.join(dirB, 'file.txt'), 'b');
 
-      const result = performMigration(legacyDir, destinations);
+        const result = performMigration(legacyDir, destinations);
 
-      expect(result.migrated).toBe(true);
-      expect(
-        fs.readFileSync(
-          path.join(destinations.dataDir, 'dirA', 'file.txt'),
-          'utf-8',
-        ),
-      ).toBe('a');
-      expect(
-        fs.readFileSync(
-          path.join(destinations.dataDir, 'dirB', 'file.txt'),
-          'utf-8',
-        ),
-      ).toBe('b');
-      expect(
-        fs
-          .lstatSync(path.join(destinations.dataDir, 'dirA', 'linkB'))
-          .isSymbolicLink(),
-      ).toBe(true);
-      expect(
-        fs
-          .lstatSync(path.join(destinations.dataDir, 'dirB', 'linkA'))
-          .isSymbolicLink(),
-      ).toBe(true);
-    });
-  },
-);
+        expect(result.migrated).toBe(true);
+        expect(
+          fs.readFileSync(
+            path.join(destinations.dataDir, 'dirA', 'file.txt'),
+            'utf-8',
+          ),
+        ).toBe('a');
+        expect(
+          fs.readFileSync(
+            path.join(destinations.dataDir, 'dirB', 'file.txt'),
+            'utf-8',
+          ),
+        ).toBe('b');
+        expect(
+          fs
+            .lstatSync(path.join(destinations.dataDir, 'dirA', 'linkB'))
+            .isSymbolicLink(),
+        ).toBe(true);
+        expect(
+          fs
+            .lstatSync(path.join(destinations.dataDir, 'dirB', 'linkA'))
+            .isSymbolicLink(),
+        ).toBe(true);
+      });
+    },
+  );
+});

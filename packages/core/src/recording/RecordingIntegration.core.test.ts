@@ -29,6 +29,7 @@
  * These tests are expected to fail against the Phase 12 stub implementation.
  */
 
+import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -38,8 +39,13 @@ import type { EventEmitter } from 'node:events';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { type IContent } from '../services/history/IContent.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
+import { replaySession } from './ReplayEngine.js';
+import { assertReplayOk } from './replay-test-helpers.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
-import { type SessionRecordingServiceConfig } from './types.js';
+import {
+  type ContentPayload,
+  type SessionRecordingServiceConfig,
+} from './types.js';
 
 const PROJECT_HASH = 'project-hash-recording-integration';
 
@@ -135,6 +141,36 @@ async function flushAndRead(
   return readRecordedEvents(recordingService);
 }
 
+function recordedContent(event: JsonlEvent): IContent {
+  if (event.type !== 'content' || !isRecordedContentPayload(event.payload)) {
+    throw new Error(`Recorded event has no content payload: ${event.type}`);
+  }
+  return event.payload.content;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isSpeaker(value: unknown): value is IContent['speaker'] {
+  return value === 'human' || value === 'ai' || value === 'tool';
+}
+
+function isContent(value: unknown): value is IContent {
+  return (
+    isRecord(value) && isSpeaker(value.speaker) && Array.isArray(value.blocks)
+  );
+}
+
+function isRecordedContentPayload(payload: unknown): payload is ContentPayload {
+  return isRecord(payload) && isContent(payload.content);
+}
+
+function firstText(content: IContent): string {
+  const block = content.blocks[0];
+  return block.type === 'text' ? block.text : `<${block.type}>`;
+}
+
 describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => {
   let tempDir: string;
   let chatsDir: string;
@@ -155,7 +191,7 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
   });
 
   afterEach(async () => {
-    integration.dispose();
+    await integration.dispose();
     await recordingService.dispose();
     await fs.rm(tempDir, { recursive: true, force: true });
   });
@@ -389,7 +425,7 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
       ).toHaveLength(0);
     });
 
-    it('records applied compression with an argless-queued add still suppressed', async () => {
+    it('records content queued during a summary-bearing compression window after the compressed record', async () => {
       integration.subscribeToHistory(historyService);
       historyService.add(textContent('before'));
       historyService.startCompression();
@@ -400,6 +436,20 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
       historyService.add(textContent('after'));
 
       const events = await flushAndRead(integration, recordingService);
+      const contentOrCompressed = events
+        .filter(
+          (event) => event.type === 'content' || event.type === 'compressed',
+        )
+        .map((event) => event.type);
+      // 'during' was queued in the window and never recorded before the
+      // flush, so its record must follow the compressed record for replay
+      // to keep it (#3264).
+      expect(contentOrCompressed).toStrictEqual([
+        'content',
+        'compressed',
+        'content',
+        'content',
+      ]);
       const contentTexts = events
         .filter((event) => event.type === 'content')
         .map((event) => {
@@ -407,7 +457,7 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
           return (payload.content.blocks[0] as { type: 'text'; text: string })
             .text;
         });
-      expect(contentTexts).toStrictEqual(['before', 'after']);
+      expect(contentTexts).toStrictEqual(['before', 'during', 'after']);
       expect(
         events.filter((event) => event.type === 'compressed'),
       ).toHaveLength(1);
@@ -426,122 +476,131 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
         events.filter((event) => event.type === 'compressed'),
       ).toHaveLength(2);
     });
-  });
 
-  describe('Delegate methods @requirement:REQ-INT-003 @plan:PLAN-20260211-SESSIONRECORDING.P13', () => {
-    it('recordProviderSwitch delegates to SessionRecordingService', async () => {
+    it('records mid-compression streaming content after the compressed event and replays it (#3264)', async () => {
       integration.subscribeToHistory(historyService);
-      integration.recordProviderSwitch('openai', 'gpt-5');
-      emitter.emit('contentAdded', textContent('materialize content'));
+      historyService.add(textContent('original question'));
+      const retained = historyService.getCurated();
 
-      const events = await flushAndRead(integration, recordingService);
-      expect(events.some((event) => event.type === 'provider_switch')).toBe(
-        true,
-      );
-    });
-
-    it('recordDirectoriesChanged delegates to SessionRecordingService', async () => {
-      integration.subscribeToHistory(historyService);
-      integration.recordDirectoriesChanged(['/a', '/b', '/c']);
-      emitter.emit('contentAdded', textContent('materialize content'));
-
-      const events = await flushAndRead(integration, recordingService);
-      expect(events.some((event) => event.type === 'directories_changed')).toBe(
-        true,
-      );
-    });
-
-    it('recordSessionEvent delegates to SessionRecordingService', async () => {
-      integration.subscribeToHistory(historyService);
-      integration.recordSessionEvent('warning', 'Disk pressure');
-      emitter.emit('contentAdded', textContent('materialize content'));
-
-      const events = await flushAndRead(integration, recordingService);
-      expect(events.some((event) => event.type === 'session_event')).toBe(true);
-    });
-  });
-
-  describe('Flush / dispose / replacement behavior @requirement:REQ-INT-004,REQ-INT-005,REQ-INT-006 @plan:PLAN-20260211-SESSIONRECORDING.P13', () => {
-    it('flushAtTurnBoundary persists pending events', async () => {
-      integration.subscribeToHistory(historyService);
-      emitter.emit('contentAdded', textContent('flush-boundary'));
-
-      const events = await flushAndRead(integration, recordingService);
-      expect(events.filter((event) => event.type === 'content')).toHaveLength(
-        1,
-      );
-    });
-
-    it('flushAtTurnBoundary with no activity does not create file', async () => {
-      await integration.flushAtTurnBoundary();
-      expect(recordingService.getFilePath()).toBeNull();
-    });
-
-    it('dispose prevents future event recording while keeping prior events', async () => {
-      integration.subscribeToHistory(historyService);
-      emitter.emit('contentAdded', textContent('before-dispose'));
-      await integration.flushAtTurnBoundary();
-
-      integration.dispose();
-      emitter.emit('contentAdded', textContent('after-dispose'));
-      const events = await readRecordedEvents(recordingService);
-      expect(events.filter((event) => event.type === 'content')).toHaveLength(
-        1,
-      );
-    });
-
-    it('dispose is idempotent', async () => {
-      integration.dispose();
-      integration.dispose();
-      expect(true).toBe(true);
-    });
-
-    it('onHistoryServiceReplaced switches subscription to new instance', async () => {
-      const secondHistory = new HistoryService();
-      const secondEmitter = historyEmitter(secondHistory);
-
-      integration.subscribeToHistory(historyService);
-      integration.onHistoryServiceReplaced(secondHistory);
-      secondEmitter.emit('contentAdded', textContent('from-new-service'));
-
-      const events = await flushAndRead(integration, recordingService);
-      expect(events.filter((event) => event.type === 'content')).toHaveLength(
-        1,
-      );
-    });
-
-    it('after replacement, old history events are ignored', async () => {
-      const secondHistory = new HistoryService();
-      const secondEmitter = historyEmitter(secondHistory);
-
-      integration.subscribeToHistory(historyService);
-      integration.onHistoryServiceReplaced(secondHistory);
-
-      emitter.emit('contentAdded', textContent('from-old-service'));
-      secondEmitter.emit('contentAdded', textContent('from-new-service'));
-
-      const events = await flushAndRead(integration, recordingService);
-      const contentEvents = events.filter((event) => event.type === 'content');
-      expect(contentEvents).toHaveLength(1);
-      const text = (
-        (contentEvents[0].payload as { content: IContent }).content
-          .blocks[0] as {
-          type: 'text';
-          text: string;
+      historyService.startCompression();
+      historyService.add(toolCallContent('mid'));
+      historyService.rebuildWith(() => {
+        historyService.clear();
+        for (const content of retained) {
+          // The rebuild re-adds retained entries through the same queue.
+          historyService.add(content);
         }
-      ).text;
-      expect(text).toBe('from-new-service');
-    });
-
-    it('replacement with same HistoryService instance is safe', async () => {
-      integration.subscribeToHistory(historyService);
-      integration.onHistoryServiceReplaced(historyService);
-      emitter.emit('contentAdded', textContent('same-instance'));
+      });
+      historyService.endCompression(textContent('summary', 'ai'), 1);
 
       const events = await flushAndRead(integration, recordingService);
-      expect(events.filter((event) => event.type === 'content')).toHaveLength(
-        1,
+      const contentOrCompressed = events
+        .filter(
+          (event) => event.type === 'content' || event.type === 'compressed',
+        )
+        .map((event) => event.type);
+      // Exactly one pre-compression content record, one compressed record for
+      // the rebuild (rebuilt entries must not duplicate content records —
+      // #3132), then one record for the mid-compression streaming entry.
+      expect(contentOrCompressed).toStrictEqual([
+        'content',
+        'compressed',
+        'content',
+      ]);
+
+      const recordedContents = events
+        .filter((event) => event.type === 'content')
+        .map((event) => (event.payload as { content: IContent }).content);
+      const originalRecords = recordedContents.filter(
+        (content) =>
+          content.blocks[0].type === 'text' &&
+          content.blocks[0].text === 'original question',
       );
+      expect(originalRecords).toHaveLength(1);
+      const midRecords = recordedContents.filter((content) =>
+        content.blocks.some(
+          (block) => block.type === 'tool_call' && block.id === 'call_mid',
+        ),
+      );
+      expect(midRecords).toHaveLength(1);
+
+      // Recoverability: replaying the session file keeps the mid entry.
+      const filePath = recordingService.getFilePath();
+      expect(filePath).not.toBeNull();
+      const result = await replaySession(filePath!, PROJECT_HASH);
+      assertReplayOk(result);
+      expect(result.history).toHaveLength(2);
+      expect(result.history[0].blocks[0]).toStrictEqual({
+        type: 'text',
+        text: 'summary',
+      });
+      expect(result.history[1].speaker).toBe('ai');
+      expect(
+        result.history[1].blocks.some(
+          (block) => block.type === 'tool_call' && block.id === 'call_mid',
+        ),
+      ).toBe(true);
+    });
+  });
+
+  describe('Compression-aware recording of a late streaming add after an explicit rebuild (#3338)', () => {
+    it('records [content, compressed, content] and replays [summary, late entry]', async () => {
+      integration.subscribeToHistory(historyService);
+      historyService.add(textContent('original question'));
+      const retained = historyService.getCurated();
+      const lateEntry = toolCallContent('late');
+
+      historyService.startCompression();
+      historyService.rebuildWith(() => {
+        historyService.clear();
+        for (const content of retained) {
+          historyService.add(content);
+        }
+      });
+      historyService.add(lateEntry);
+      historyService.endCompression(textContent('summary', 'ai'), 1);
+
+      const events = await flushAndRead(integration, recordingService);
+      const contentOrCompressed = events
+        .filter(
+          (event) => event.type === 'content' || event.type === 'compressed',
+        )
+        .map((event) => event.type);
+      expect(contentOrCompressed).toStrictEqual([
+        'content',
+        'compressed',
+        'content',
+      ]);
+
+      const recordedContents = events
+        .filter((event) => event.type === 'content')
+        .map((event) => recordedContent(event));
+      const originalRecords = recordedContents.filter(
+        (content) => firstText(content) === 'original question',
+      );
+      expect(originalRecords).toHaveLength(1);
+      const lateRecords = recordedContents.filter((content) =>
+        content.blocks.some(
+          (block) => block.type === 'tool_call' && block.id === 'call_late',
+        ),
+      );
+      expect(lateRecords).toHaveLength(1);
+
+      const filePath = recordingService.getFilePath();
+      assertNotNull(filePath, 'Expected a session file after recorded events');
+      const result = await replaySession(filePath, PROJECT_HASH);
+      assertReplayOk(result);
+      expect(result.history).toHaveLength(2);
+      expect(result.history[0].blocks[0]).toStrictEqual({
+        type: 'text',
+        text: 'summary',
+      });
+      expect(result.history[1].speaker).toBe('ai');
+      expect(
+        result.history[1].blocks.some(
+          (block) => block.type === 'tool_call' && block.id === 'call_late',
+        ),
+      ).toBe(true);
     });
   });
 });

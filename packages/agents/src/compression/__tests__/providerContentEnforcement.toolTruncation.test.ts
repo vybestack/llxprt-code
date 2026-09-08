@@ -244,53 +244,81 @@ describe('ProviderContentEnforcer last-resort tool-response truncation (issue #1
   });
 
   it('preserves provider tool-call/response pairing IDs and names after truncation', async () => {
-    const harness = buildEnforcerHarness({
-      compressionThreshold: 0.01,
-      contextLimit: 15000,
-      generationConfig: { maxOutputTokens: 100 },
-      performCompressionResult: PerformCompressionResult.FAILED,
-      performFallbackCompressionResult: false,
-    });
-    const { historyService } = harness;
-
-    historyService.add(textContent('human', 'question'));
-    historyService.add(makeToolCallEntry('call-1', 'read_file'));
-    historyService.add(
-      makeToolResponseEntry('call-1', 'read_file', 'x'.repeat(100000)),
-    );
-
-    const pending = textContent('human', 'pending');
-    const envelope = buildEnvelope([...historyService.getCurated()], [pending]);
-
-    const result = await harness.enforcer.enforce(envelope, 'prompt-pairing');
-
-    // Every tool call in the payload must have a matching tool response.
-    const toolCalls = result
-      .flatMap((c) => c.blocks)
-      .filter((b): b is ToolCallBlock => b.type === 'tool_call');
-    const toolResponses = result
-      .flatMap((c) => c.blocks)
-      .filter((b): b is ToolResponseBlock => b.type === 'tool_response');
-
-    for (const tc of toolCalls) {
-      const matching = toolResponses.find(
-        (tr) => tr.callId === tc.id || tr.callId === `hist_${tc.id}`,
-      );
-      expect(matching).toBeDefined();
-    }
-
-    // The stubbed response preserves callId and toolName.
-    const rawResponses = historyService
-      .getRawHistory()
-      .flatMap((e) => e.blocks)
-      .filter((b): b is ToolResponseBlock => b.type === 'tool_response');
-    const stubbed = rawResponses.find(
-      (b) => b.providerMetadata?.[CONTEXT_TRUNCATION_MARKER] === true,
-    );
+    const {
+      stubbed,
+      callIdObservation,
+      toolNameObservation,
+      unmatchedToolCallIds,
+    } =
+      await observePreservesProviderToolCallResponsePairingIDsAndNamesAfterTruncation();
+    expect(unmatchedToolCallIds).toStrictEqual([]);
     expect(stubbed).toBeDefined();
-    expect(stubbed?.callId).toBe('call-1');
-    expect(stubbed?.toolName).toBe('read_file');
+    expect(callIdObservation).toBe('call-1');
+    expect(toolNameObservation).toBe('read_file');
   });
+
+  const observePreservesProviderToolCallResponsePairingIDsAndNamesAfterTruncation =
+    async () => {
+      const harness = buildEnforcerHarness({
+        compressionThreshold: 0.01,
+        contextLimit: 15000,
+        generationConfig: { maxOutputTokens: 100 },
+        performCompressionResult: PerformCompressionResult.FAILED,
+        performFallbackCompressionResult: false,
+      });
+      const { historyService } = harness;
+
+      historyService.add(textContent('human', 'question'));
+      historyService.add(makeToolCallEntry('call-1', 'read_file'));
+      historyService.add(
+        makeToolResponseEntry('call-1', 'read_file', 'x'.repeat(100000)),
+      );
+
+      const pending = textContent('human', 'pending');
+      const envelope = buildEnvelope(
+        [...historyService.getCurated()],
+        [pending],
+      );
+
+      const result = await harness.enforcer.enforce(envelope, 'prompt-pairing');
+
+      // Every tool call in the payload must have a matching tool response.
+      const toolCalls = result
+        .flatMap((c) => c.blocks)
+        .filter((b): b is ToolCallBlock => b.type === 'tool_call');
+      const toolResponses = result
+        .flatMap((c) => c.blocks)
+        .filter((b): b is ToolResponseBlock => b.type === 'tool_response');
+
+      const unmatchedToolCallIds = toolCalls
+        .filter(
+          (call) =>
+            !toolResponses.some(
+              (response) =>
+                response.callId === call.id ||
+                response.callId === `hist_${call.id}`,
+            ),
+        )
+        .map((call) => call.id);
+
+      // The stubbed response preserves callId and toolName.
+      const rawResponses = historyService
+        .getRawHistory()
+        .flatMap((e) => e.blocks)
+        .filter((b): b is ToolResponseBlock => b.type === 'tool_response');
+      const stubbed = rawResponses.find(
+        (b) => b.providerMetadata?.[CONTEXT_TRUNCATION_MARKER] === true,
+      );
+
+      const callIdObservation = stubbed?.callId;
+      const toolNameObservation = stubbed?.toolName;
+      return {
+        stubbed,
+        callIdObservation,
+        toolNameObservation,
+        unmatchedToolCallIds,
+      };
+    };
 
   it('asserts minimal replacements: only the fattest candidate is stubbed', async () => {
     const harness = buildEnforcerHarness({
@@ -387,6 +415,16 @@ describe('ProviderContentEnforcer last-resort tool-response truncation (issue #1
   });
 
   it('metadata-only stub does not leak original payload content', async () => {
+    const { stubbed, stubResult, secretPayload, resultLeaks, errorLeaks } =
+      await observeMetadataOnlyStubDoesNotLeakOriginalPayloadContent();
+    expect(resultLeaks).toStrictEqual([]);
+    expect(errorLeaks).toStrictEqual([]);
+    expect(stubbed).toBeDefined();
+    expect(stubResult.length).toBeLessThan(secretPayload.length);
+    expect(stubResult.length).toBeLessThan(500);
+  });
+
+  const observeMetadataOnlyStubDoesNotLeakOriginalPayloadContent = async () => {
     const harness = buildEnforcerHarness({
       compressionThreshold: 0.01,
       contextLimit: 15000,
@@ -412,12 +450,18 @@ describe('ProviderContentEnforcer last-resort tool-response truncation (issue #1
       .flatMap((c) => c.blocks)
       .filter((b): b is ToolResponseBlock => b.type === 'tool_response');
 
-    for (const tr of allToolResponses) {
-      const resultStr = typeof tr.result === 'string' ? tr.result : '';
-      const errorStr = tr.error ?? '';
-      expect(resultStr).not.toContain('TOP_SECRET_LEAK_CONTENT');
-      expect(errorStr).not.toContain('TOP_SECRET_LEAK_CONTENT');
-    }
+    const resultLeaks = allToolResponses
+      .filter(
+        (response) =>
+          typeof response.result === 'string' &&
+          response.result.includes('TOP_SECRET_LEAK_CONTENT'),
+      )
+      .map((response) => response.callId);
+    const errorLeaks = allToolResponses
+      .filter((response) =>
+        (response.error ?? '').includes('TOP_SECRET_LEAK_CONTENT'),
+      )
+      .map((response) => response.callId);
 
     // The stub remains bounded.
     const rawResponses = historyService
@@ -427,52 +471,67 @@ describe('ProviderContentEnforcer last-resort tool-response truncation (issue #1
     const stubbed = rawResponses.find(
       (b) => b.providerMetadata?.[CONTEXT_TRUNCATION_MARKER] === true,
     );
-    expect(stubbed).toBeDefined();
+
     const stubResult =
       typeof stubbed?.result === 'string' ? stubbed.result : '';
-    expect(stubResult.length).toBeLessThan(secretPayload.length);
-    expect(stubResult.length).toBeLessThan(500);
-  });
+
+    return {
+      stubbed,
+      stubResult,
+      secretPayload,
+      resultLeaks,
+      errorLeaks,
+    };
+  };
 
   it('truncates pending tool-response candidates (empty-history turn-1)', async () => {
-    // This is the key test for finding (1): when history is empty and
-    // the oversized tool response is in pendingContents, the enforcer
-    // should still truncate it.
-    const harness = buildEnforcerHarness({
-      compressionThreshold: 0.01,
-      contextLimit: 15000,
-      generationConfig: { maxOutputTokens: 100 },
-      performCompressionResult: PerformCompressionResult.FAILED,
-      performFallbackCompressionResult: false,
-    });
-
-    // Empty history — oversized response is only in pending.
-    const pending: IContent[] = [
-      makeToolCallEntry('call-pending', 'read_file'),
-      makeToolResponseEntry('call-pending', 'read_file', 'x'.repeat(100000)),
-    ];
-    const envelope = buildEnvelope([...pending], pending);
-
-    const result = await harness.enforcer.enforce(envelope, 'prompt-turn1');
-
+    const { result, stubbed, callIdObservation, toolNameObservation } =
+      await observeTruncatesPendingToolResponseCandidatesEmptyHistoryTurn1();
     expect(result).toBeDefined();
-
-    // The pending tool response should have been truncated.
-    const toolResponses = result
-      .flatMap((c) => c.blocks)
-      .filter((b): b is ToolResponseBlock => b.type === 'tool_response');
-
-    // buildProviderContent deep-clones and strips providerMetadata, so
-    // we check for the canonical truncation stub message which contains
-    // both "truncated" and "successfully" (the success-path stub pattern).
-    const stubbed = toolResponses.find((tr) => {
-      const r = typeof tr.result === 'string' ? tr.result : '';
-      return r.includes('truncated') && r.includes('successfully');
-    });
     expect(stubbed).toBeDefined();
-    expect(stubbed?.callId).toBe('call-pending');
-    expect(stubbed?.toolName).toBe('read_file');
+    expect(callIdObservation).toBe('call-pending');
+    expect(toolNameObservation).toBe('read_file');
   });
+
+  const observeTruncatesPendingToolResponseCandidatesEmptyHistoryTurn1 =
+    async () => {
+      // This is the key test for finding (1): when history is empty and
+      // the oversized tool response is in pendingContents, the enforcer
+      // should still truncate it.
+      const harness = buildEnforcerHarness({
+        compressionThreshold: 0.01,
+        contextLimit: 15000,
+        generationConfig: { maxOutputTokens: 100 },
+        performCompressionResult: PerformCompressionResult.FAILED,
+        performFallbackCompressionResult: false,
+      });
+
+      // Empty history — oversized response is only in pending.
+      const pending: IContent[] = [
+        makeToolCallEntry('call-pending', 'read_file'),
+        makeToolResponseEntry('call-pending', 'read_file', 'x'.repeat(100000)),
+      ];
+      const envelope = buildEnvelope([...pending], pending);
+
+      const result = await harness.enforcer.enforce(envelope, 'prompt-turn1');
+
+      // The pending tool response should have been truncated.
+      const toolResponses = result
+        .flatMap((c) => c.blocks)
+        .filter((b): b is ToolResponseBlock => b.type === 'tool_response');
+
+      // buildProviderContent deep-clones and strips providerMetadata, so
+      // we check for the canonical truncation stub message which contains
+      // both "truncated" and "successfully" (the success-path stub pattern).
+      const stubbed = toolResponses.find((tr) => {
+        const r = typeof tr.result === 'string' ? tr.result : '';
+        return r.includes('truncated') && r.includes('successfully');
+      });
+
+      const callIdObservation = stubbed?.callId;
+      const toolNameObservation = stubbed?.toolName;
+      return { result, stubbed, callIdObservation, toolNameObservation };
+    };
 
   it('final budget is under the limit after successful truncation', async () => {
     const harness = buildEnforcerHarness({

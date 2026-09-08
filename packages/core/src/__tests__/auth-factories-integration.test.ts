@@ -37,6 +37,8 @@ import type {
 } from '@vybestack/llxprt-code-auth';
 import { KeyringTokenStore } from '@vybestack/llxprt-code-auth';
 
+const bunIt = it;
+
 // ─── Compile-time contract helpers ──────────────────────────────────────────
 
 /**
@@ -75,18 +77,12 @@ describe('Core auth-factories integration', () => {
   describe('core index re-exports factory functions', () => {
     it('createAuthPrecedenceResolver is reachable from core main index', async () => {
       const coreIndex = await import('../index.js');
-      expect(
-        'createAuthPrecedenceResolver' in coreIndex,
-        'core index must re-export createAuthPrecedenceResolver',
-      ).toBe(true);
+      expect('createAuthPrecedenceResolver' in coreIndex).toBe(true);
     });
 
     it('createKeyringTokenStore is reachable from core main index', async () => {
       const coreIndex = await import('../index.js');
-      expect(
-        'createKeyringTokenStore' in coreIndex,
-        'core index must re-export createKeyringTokenStore',
-      ).toBe(true);
+      expect('createKeyringTokenStore' in coreIndex).toBe(true);
     });
   });
 
@@ -124,9 +120,12 @@ describe('Core auth-factories integration', () => {
       expect(typeof store.removeToken).toBe('function');
     });
 
-    it.skipIf(process.platform === 'linux' && process.env.CI === 'true')(
-      'createKeyringTokenStore can save and load tokens',
-      async () => {
+    {
+      const it =
+        process.platform === 'linux' && process.env.CI === 'true'
+          ? bunIt.skip
+          : bunIt;
+      it('createKeyringTokenStore can save and load tokens', async () => {
         const store = createKeyringTokenStore(async () => null);
         const testToken = {
           access_token: 'test-access-token-p17',
@@ -143,8 +142,8 @@ describe('Core auth-factories integration', () => {
         } finally {
           await store.removeToken('p17-test-provider');
         }
-      },
-    );
+      });
+    }
 
     it('createAuthPrecedenceResolver returns an AuthPrecedenceResolver that resolves auth', async () => {
       const config: AuthPrecedenceConfig = {

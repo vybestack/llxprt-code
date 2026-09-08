@@ -275,9 +275,16 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
         sessionId: oldSessionId,
         contents: [makeContent('old content')],
       });
-      const oldLock = await SessionLockManager.acquire(chatsDir, oldSessionId);
-
-      await oldLock.release();
+      const acquiredOldLock = await SessionLockManager.acquire(
+        chatsDir,
+        oldSessionId,
+      );
+      await acquiredOldLock.release();
+      const oldLock: LockHandle = {
+        lockPath: acquiredOldLock.lockPath,
+        ownsLock: () => Promise.resolve(true),
+        release: () => Promise.reject(new Error('old lock cleanup failed')),
+      };
 
       const targetId = 'target-release-fail-test';
       await createTestSession(chatsDir, {
@@ -294,6 +301,9 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
 
       expect(result.ok).toBe(true);
       assertResumeOk(result);
+      expect(result.warnings).toContain(
+        'Session transition committed but prior-session cleanup failed: old lock cleanup failed',
+      );
       const newRecording = context.recordingCallbacks.getCurrentRecording();
       expect(newRecording).not.toBeNull();
       expect(newRecording!.isActive()).toBe(true);
@@ -303,7 +313,7 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
       collectLock(lockHandles, newLock);
     });
 
-    it('restores exact prior history when a replacement listener throws', async () => {
+    async function verifyRestoresExactPriorHistoryWhenAReplacementListenerThrows() {
       const targetId = 'target-for-listener-failure';
       await createTestSession(chatsDir, {
         sessionId: targetId,
@@ -330,12 +340,23 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
 
       const result = await performResume(targetId, context);
 
-      expect(result).toStrictEqual({
+      return { result, historyService, previousHistory, targetId };
+    }
+
+    it('restores exact prior history when a replacement listener throws', async () => {
+      const behaviorResult =
+        await verifyRestoresExactPriorHistoryWhenAReplacementListenerThrows();
+
+      expect(behaviorResult.result).toStrictEqual({
         ok: false,
         error: 'Failed to commit session transition: history listener failed',
       });
-      expect(historyService.getAll()).toStrictEqual(previousHistory);
-      expect(await SessionLockManager.isLocked(chatsDir, targetId)).toBe(false);
+      expect(behaviorResult.historyService.getAll()).toStrictEqual(
+        behaviorResult.previousHistory,
+      );
+      expect(
+        await SessionLockManager.isLocked(chatsDir, behaviorResult.targetId),
+      ).toBe(false);
     });
 
     it('continues rollback when prepared disposal and session ID restoration fail', async () => {
@@ -372,7 +393,8 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
 
         expect(result).toStrictEqual({
           ok: false,
-          error: 'Failed to commit session transition: commit failed',
+          error:
+            'Failed to commit session transition: commit failed; rollback failed: prepared disposal failed; restore session ID failed',
         });
         // Compare the conversation payload only: every history item also
         // carries a client-side chronology marker (#1721) that this rollback
@@ -392,7 +414,7 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
       }
     });
 
-    it('cleans the prepared recording when rollback history restoration throws', async () => {
+    async function verifyCleansThePreparedRecordingWhenRollbackHistoryRestorationThrows() {
       const targetId = 'target-for-rollback-cleanup';
       await createTestSession(chatsDir, {
         sessionId: targetId,
@@ -415,20 +437,30 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
       };
 
       const result = await performResume(targetId, context);
-      expect(result).toStrictEqual({
+
+      return { result, historyService, targetId };
+    }
+
+    it('cleans the prepared recording when rollback history restoration throws', async () => {
+      const behaviorResult =
+        await verifyCleansThePreparedRecordingWhenRollbackHistoryRestorationThrows();
+
+      expect(behaviorResult.result).toStrictEqual({
         ok: false,
         error:
-          'Failed to commit session transition: commit failed; failed to restore prior history: rollback restore failed',
+          'Failed to commit session transition: commit failed; rollback failed: rollback restore failed',
       });
       // Compare the conversation payload only: every history item also
       // carries a client-side chronology marker (#1721) that this assertion
       // is not about.
       expect(
-        historyService
+        behaviorResult.historyService
           .getAll()
           .map(({ speaker, blocks }) => ({ speaker, blocks })),
       ).toStrictEqual([makeContent('replacement history')]);
-      expect(await SessionLockManager.isLocked(chatsDir, targetId)).toBe(false);
+      expect(
+        await SessionLockManager.isLocked(chatsDir, behaviorResult.targetId),
+      ).toBe(false);
     });
   });
 

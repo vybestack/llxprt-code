@@ -179,6 +179,7 @@ export {
   type ImageTokenEstimateInput,
   estimateImageTokens,
   estimateNonTextPartTokens,
+  isGpt52OrNewer,
 } from './utils/imageTokenEstimation.js';
 export {
   DEFAULT_DIFF_OPTIONS,

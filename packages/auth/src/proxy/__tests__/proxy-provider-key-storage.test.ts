@@ -64,6 +64,26 @@ function listenAsync(server: net.Server, socketPath: string): Promise<void> {
   return new Promise<void>((resolve) => server.listen(socketPath, resolve));
 }
 
+function serveProviderKey(socket: net.Socket): void {
+  const decoder = new FrameDecoder();
+  socket.on('data', (chunk) => {
+    const frames = decoder.feed(chunk);
+    for (const msg of frames) {
+      if (msg.op === 'handshake') {
+        socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+      } else {
+        socket.write(
+          encodeFrame({
+            ok: true,
+            id: msg.id,
+            data: { key: 'test-key' },
+          }),
+        );
+      }
+    }
+  });
+}
+
 describe('ProxyProviderKeyStorage', () => {
   let socketPath: string;
   let server: net.Server;
@@ -122,6 +142,21 @@ describe('ProxyProviderKeyStorage', () => {
     expect(receivedOp).toBe('get_api_key');
     expect(receivedPayload).toStrictEqual({ name: 'anthropic' });
     expect(result).toBe('sk-ant-abc123');
+  });
+
+  /** @requirement R-2197 @scenario getKey rejects malformed key data */
+  it('rejects malformed key data with the stable proxy payload error', async () => {
+    server = createTestServer(socketPath, () => ({
+      ok: true,
+      data: { key: 42 },
+    }));
+    await listenAsync(server, socketPath);
+
+    client = new ProxySocketClient(socketPath);
+    storage = new ProxyProviderKeyStorage(client);
+    await expect(storage.getKey('anthropic')).rejects.toThrow(
+      /PROXY_PAYLOAD_ERROR/,
+    );
   });
 
   /**
@@ -184,6 +219,19 @@ describe('ProxyProviderKeyStorage', () => {
     expect(keys).toStrictEqual([]);
   });
 
+  it('rejects a key list containing non-string entries', async () => {
+    server = createTestServer(socketPath, () => ({
+      ok: true,
+      data: { keys: ['anthropic', 42] },
+    }));
+    await listenAsync(server, socketPath);
+
+    client = new ProxySocketClient(socketPath);
+    storage = new ProxyProviderKeyStorage(client);
+
+    await expect(storage.listKeys()).rejects.toThrow(/PROXY_PAYLOAD_ERROR/);
+  });
+
   // ─── hasKey ─────────────────────────────────────────────────────────────
 
   /**
@@ -226,6 +274,21 @@ describe('ProxyProviderKeyStorage', () => {
     const result = await storage.hasKey('nonexistent');
 
     expect(result).toBe(false);
+  });
+
+  it('rejects a non-boolean key-existence payload', async () => {
+    server = createTestServer(socketPath, () => ({
+      ok: true,
+      data: { exists: 'yes' },
+    }));
+    await listenAsync(server, socketPath);
+
+    client = new ProxySocketClient(socketPath);
+    storage = new ProxyProviderKeyStorage(client);
+
+    await expect(storage.hasKey('anthropic')).rejects.toThrow(
+      /PROXY_PAYLOAD_ERROR/,
+    );
   });
 
   // ─── Write operations (blocked) ────────────────────────────────────────
@@ -327,24 +390,7 @@ describe('ProxyProviderKeyStorage', () => {
 
     server = net.createServer((socket) => {
       connectionCount++;
-      const decoder = new FrameDecoder();
-      socket.on('data', (chunk) => {
-        const frames = decoder.feed(chunk);
-        for (const frame of frames) {
-          const msg = frame;
-          if (msg.op === 'handshake') {
-            socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
-          } else {
-            socket.write(
-              encodeFrame({
-                ok: true,
-                id: msg.id,
-                data: { key: 'test-key' },
-              }),
-            );
-          }
-        }
-      });
+      serveProviderKey(socket);
     });
     await listenAsync(server, socketPath);
 

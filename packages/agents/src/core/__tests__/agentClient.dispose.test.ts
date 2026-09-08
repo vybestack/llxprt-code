@@ -4,28 +4,34 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import { AgentClient } from '../client.js';
 
 describe('AgentClient.dispose', () => {
-  it('calls unsubscribe and clears _unsubscribe, ignoring repeated calls', () => {
+  it('calls unsubscribe and clears _unsubscribe, ignoring repeated calls', async () => {
     const client = Object.create(AgentClient.prototype) as AgentClient & {
       _unsubscribe?: () => void;
       handleModelChanged?: () => void;
       handleModelProfileChanged?: () => void;
     };
-    const unsubscribe = vi.fn();
-    const handleModelChanged = vi.fn();
-    const handleModelProfileChanged = vi.fn();
-    client['_unsubscribe'] = unsubscribe;
-    client['handleModelChanged'] = handleModelChanged;
-    client['handleModelProfileChanged'] = handleModelProfileChanged;
+    let unsubscribeCount = 0;
+    client['_unsubscribe'] = () => {
+      unsubscribeCount += 1;
+    };
+    client['handleModelChanged'] = () => undefined;
+    client['handleModelProfileChanged'] = () => undefined;
+    Object.defineProperty(client, 'historyAdmissions', {
+      value: {
+        all: [],
+        release: async () => [],
+      },
+    });
 
-    client.dispose();
-    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    await client.dispose();
+    expect(unsubscribeCount).toBe(1);
     expect(client['_unsubscribe']).toBeUndefined();
 
-    client.dispose();
-    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    await client.dispose();
+    expect(unsubscribeCount).toBeLessThan(2);
   });
 });

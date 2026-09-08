@@ -18,8 +18,6 @@ function createMockProvider(name: string): IProvider {
     getModels: vi.fn().mockResolvedValue([]),
     getDefaultModel: vi.fn().mockReturnValue('test-model'),
     generateChatCompletion: vi.fn(),
-    getServerTools: vi.fn().mockReturnValue([]),
-    invokeServerTool: vi.fn().mockRejectedValue(new Error('Not implemented')),
   } as unknown as IProvider;
 }
 

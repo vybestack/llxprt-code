@@ -14,12 +14,14 @@ import {
   ListResourcesResultSchema,
   type Tool as McpTool,
 } from '@modelcontextprotocol/sdk/types.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { MCPServerConfig } from '../config/mcpServerConfig.js';
+import type {
+  McpPromptRegistry,
+  McpTrustConfig,
+} from '../host/hostInterfaces.js';
+import type { IToolMessageBus } from '@vybestack/llxprt-code-tools';
+import { getErrorMessage } from '@vybestack/llxprt-code-tools/utils/errors.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { DiscoveredMCPTool } from './mcp-tool.js';
 import { McpCallableTool } from './mcp-callable-tool.js';
 import { isEnabled } from './mcp-discovery-helpers.js';
@@ -75,8 +77,8 @@ export async function discoverTools(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   mcpClient: Client,
-  cliConfig: Config,
-  messageBus: MessageBus | undefined,
+  cliConfig: McpTrustConfig,
+  messageBus: IToolMessageBus | undefined,
   options: {
     timeout?: number;
     signal?: AbortSignal;
@@ -145,7 +147,7 @@ function processToolDefinition(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   mcpClient: Client,
-  cliConfig: Config,
+  cliConfig: McpTrustConfig,
   debug: DebugLogger,
   isAuthorized: () => boolean,
 ): DiscoveredMCPTool | undefined {
@@ -290,7 +292,7 @@ export async function discoverPrompts(
 export function registerMcpPrompts(
   mcpServerName: string,
   mcpClient: Client,
-  promptRegistry: PromptRegistry,
+  promptRegistry: McpPromptRegistry,
   prompts: readonly Prompt[],
   isAuthorized: () => boolean,
 ): boolean {

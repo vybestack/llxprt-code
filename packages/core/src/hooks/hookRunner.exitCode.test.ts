@@ -11,6 +11,7 @@ import {
   HookEventName,
   HookType,
   type HookInput,
+  type HookOutput,
 } from './types.js';
 import type { Config } from '../config/config.js';
 
@@ -31,6 +32,10 @@ async function execute(command: string) {
     HookEventName.BeforeTool,
     input,
   );
+}
+
+function isBlockingDecision(output: HookOutput | undefined): boolean {
+  return new DefaultHookOutput(output ?? {}).isBlockingDecision();
 }
 
 describe('HookRunner exit code semantics', () => {
@@ -77,9 +82,7 @@ describe('HookRunner exit code semantics', () => {
       decision: 'allow',
       systemMessage: 'Warning: hook broke',
     });
-    expect(
-      new DefaultHookOutput(result.output ?? {}).isBlockingDecision(),
-    ).toBe(false);
+    expect(isBlockingDecision(result.output)).toBe(false);
   });
 
   it('produces no output when a hook exits 0 without writing anything', async () => {

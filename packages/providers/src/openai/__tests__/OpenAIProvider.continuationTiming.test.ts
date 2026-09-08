@@ -30,6 +30,7 @@ import {
   ATTEMPT_LIFECYCLE_KEY,
   type AttemptLifecycleObserver,
 } from '../../logging/attemptLifecycle.js';
+import { createOpenAIRawPostTestAdapter } from '../../test-utils/rawPostTestAdapters.js';
 
 const mockChatCompletionsCreate = vi.fn();
 
@@ -38,6 +39,8 @@ void vi.mock('openai', () => ({
     readonly chat = {
       completions: { create: mockChatCompletionsCreate },
     };
+    readonly post = createOpenAIRawPostTestAdapter(mockChatCompletionsCreate)
+      .post;
   },
 }));
 

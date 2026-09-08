@@ -47,9 +47,11 @@ export interface OAuthProvider {
   /**
    * Initiate OAuth authentication flow.
    * This starts the device flow or opens browser for auth.
+   * @plan PLAN-20260827-ISSUE2562.P02
+   * @requirement REQ-2562-2
    * @returns The OAuth token obtained from the authentication flow
    */
-  initiateAuth(): Promise<OAuthToken>;
+  initiateAuth(signal?: AbortSignal): Promise<OAuthToken>;
 
   /**
    * Get current OAuth token for this provider.
@@ -109,6 +111,7 @@ export interface OAuthProvider {
  */
 export interface AuthCompletionOptions {
   signalAuthCompletion?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface AuthenticatorInterface {

@@ -28,6 +28,20 @@ async function makeTempDir(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), 'llxprt-storage-test-'));
 }
 
+function platformConfigPathExpectation(): {
+  readonly basename: string;
+  readonly parent: string;
+} {
+  const parents: Readonly<Record<string, string>> = {
+    darwin: 'Preferences',
+    win32: 'llxprt-code',
+  };
+  return {
+    basename: process.platform === 'win32' ? 'Config' : 'llxprt-code',
+    parent: parents[process.platform] ?? '.config',
+  };
+}
+
 describe('Storage — static path methods', () => {
   const originalConfigHome = process.env['LLXPRT_CONFIG_HOME'];
   const originalDataHome = process.env['LLXPRT_DATA_HOME'];
@@ -68,15 +82,9 @@ describe('Storage — static path methods', () => {
     const result = Storage.getGlobalConfigDir();
     // The app-name segment is always the basename; the parent identifies the
     // category (Preferences on macOS, Config on Windows, .config on Linux).
-    const expectedBasename =
-      process.platform === 'win32' ? 'Config' : 'llxprt-code';
-    expect(path.basename(result)).toBe(expectedBasename);
-    const PLATFORM_PARENTS: Record<string, string> = {
-      darwin: 'Preferences',
-      win32: 'llxprt-code',
-    };
-    const expectedParent = PLATFORM_PARENTS[process.platform] ?? '.config';
-    expect(result).toContain(expectedParent);
+    const expected = platformConfigPathExpectation();
+    expect(path.basename(result)).toBe(expected.basename);
+    expect(result).toContain(expected.parent);
   });
 
   it('getGlobalConfigDir respects the LLXPRT_CONFIG_HOME override', () => {

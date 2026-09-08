@@ -69,6 +69,60 @@ void vi.mock('../runtimeSettings.js', () => ({
 
 const { applyProfileWithGuards } = await import('../profileApplication.js');
 
+function recordProviderAuthSetting(
+  operationOrder: string[],
+  originalSetProviderSetting: (
+    providerName: string,
+    key: string,
+    value: unknown,
+  ) => void,
+  providerName: string,
+  key: string,
+  value: unknown,
+): void {
+  if (key === 'auth-key' || key === 'apiKey') {
+    operationOrder.push(`settingsService.setProviderSetting:${key}`);
+  }
+  originalSetProviderSetting(providerName, key, value);
+}
+
+function applyEphemeralAndRecord(
+  operationOrder: string[],
+  observedKey: string,
+  key: string,
+  value: unknown,
+): void {
+  if (key === observedKey) {
+    operationOrder.push(`setEphemeralSetting:${key}`);
+  }
+  configStub.setEphemeralSetting(key, value);
+}
+
+async function switchWithMissingAuthAudit(
+  oauthCalls: string[],
+  providerName: string,
+): Promise<{ infoMessages: string[]; changed: boolean }> {
+  const authKey = configStub.getEphemeralSetting('auth-key');
+  if (authKey === undefined) {
+    oauthCalls.push('OAuth triggered during switch');
+  }
+  providerManagerStub.activeProviderName = providerName;
+  return { infoMessages: [], changed: true };
+}
+
+function applyEphemeralWithOperation(
+  operationOrder: string[],
+  key: string,
+  value: unknown,
+): void {
+  if (value === undefined) {
+    operationOrder.push(`clear:${key}`);
+  } else {
+    operationOrder.push(`set:${key}`);
+  }
+  configStub.setEphemeralSetting(key, value);
+}
+
 describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
   let savedGcpProject: string | undefined;
   let savedGcpLocation: string | undefined;
@@ -91,18 +145,18 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
       settingsServiceStub.setProviderSetting.bind(settingsServiceStub);
     settingsServiceStub.setProviderSetting = vi.fn(
       (providerName: string, key: string, value: unknown) => {
-        if (key === 'auth-key' || key === 'apiKey') {
-          operationOrder.push(`settingsService.setProviderSetting:${key}`);
-        }
-        originalSetProviderSetting(providerName, key, value);
+        recordProviderAuthSetting(
+          operationOrder,
+          originalSetProviderSetting,
+          providerName,
+          key,
+          value,
+        );
       },
     );
 
     setEphemeralSettingMock.mockImplementation((key, value) => {
-      if (key === 'auth-key') {
-        operationOrder.push(`setEphemeralSetting:auth-key`);
-      }
-      configStub.setEphemeralSetting(key, value);
+      applyEphemeralAndRecord(operationOrder, 'auth-key', key, value);
     });
 
     switchActiveProviderMock.mockImplementation(
@@ -160,10 +214,7 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
     );
 
     setEphemeralSettingMock.mockImplementation((key, value) => {
-      if (key === 'auth-key') {
-        operationOrder.push(`setEphemeralSetting:auth-key`);
-      }
-      configStub.setEphemeralSetting(key, value);
+      applyEphemeralAndRecord(operationOrder, 'auth-key', key, value);
     });
 
     switchActiveProviderMock.mockImplementation(
@@ -216,10 +267,7 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
     const operationOrder: string[] = [];
 
     setEphemeralSettingMock.mockImplementation((key, value) => {
-      if (key === 'base-url') {
-        operationOrder.push(`setEphemeralSetting:base-url`);
-      }
-      configStub.setEphemeralSetting(key, value);
+      applyEphemeralAndRecord(operationOrder, 'base-url', key, value);
     });
 
     switchActiveProviderMock.mockImplementation(
@@ -395,20 +443,8 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
 
     const oauthCalls: string[] = [];
 
-    switchActiveProviderMock.mockImplementation(
-      async (providerName: string) => {
-        const authKey = configStub.getEphemeralSetting('auth-key');
-
-        if (authKey === undefined) {
-          oauthCalls.push('OAuth triggered during switch');
-        }
-
-        providerManagerStub.activeProviderName = providerName;
-        return {
-          infoMessages: [],
-          changed: true,
-        };
-      },
+    switchActiveProviderMock.mockImplementation((providerName: string) =>
+      switchWithMissingAuthAudit(oauthCalls, providerName),
     );
 
     providerManagerStub.available = ['anthropic'];
@@ -440,12 +476,7 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
     const operationOrder: string[] = [];
 
     setEphemeralSettingMock.mockImplementation((key, value) => {
-      if (value === undefined) {
-        operationOrder.push(`clear:${key}`);
-      } else {
-        operationOrder.push(`set:${key}`);
-      }
-      configStub.setEphemeralSetting(key, value);
+      applyEphemeralWithOperation(operationOrder, key, value);
     });
 
     switchActiveProviderMock.mockImplementation(

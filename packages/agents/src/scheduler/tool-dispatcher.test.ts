@@ -21,7 +21,6 @@ import {
 } from '@vybestack/llxprt-code-tools/tools/tools.js';
 import {
   type ToolCallConfirmationDetails,
-  type ToolContext,
   type ToolInvocation,
   type ToolResult,
 } from '@vybestack/llxprt-code-tools';
@@ -32,7 +31,6 @@ import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js'
 import type { ContextAwareTool } from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core/config/models.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -71,7 +69,7 @@ function createMockConfig(overrides: Partial<Config> = {}): Config {
     }),
     getEnableHooks: () => false,
     getHookSystem: () => null,
-    getModel: () => DEFAULT_GEMINI_MODEL,
+    getModel: () => 'gemini-2.5-pro',
     isInteractive: () => false,
   };
   return { ...defaults, ...overrides } as unknown as Config;
@@ -157,12 +155,7 @@ function makeGovernance(
 
 function makeMockRegistry(tool?: MockTool | null) {
   return {
-    getTool: vi.fn((_name: string, context?: ToolContext) => {
-      if (tool instanceof ContextAwareMockTool && context) {
-        tool.context = context;
-      }
-      return tool ?? null;
-    }),
+    getTool: vi.fn((_name: string) => tool ?? null),
     getAllToolNames: vi.fn().mockReturnValue(tool ? [tool.name] : []),
   };
 }
@@ -305,30 +298,8 @@ describe('ToolDispatcher', () => {
     });
 
     it('drops requests blocked by hookRestrictedAllowed before validation', () => {
-      const allowedTool = new MockTool('read_file');
-      const disallowedTool = new MockTool('run_shell_command');
-      const tools = new Map([
-        ['read_file', allowedTool],
-        ['run_shell_command', disallowedTool],
-      ]);
-      const registry = {
-        getTool: vi.fn((name: string) => tools.get(name) ?? null),
-        getAllToolNames: vi
-          .fn()
-          .mockReturnValue(['read_file', 'run_shell_command']),
-      };
-      const dispatcher = new ToolDispatcher(registry as never, config);
-      const governance = makeGovernance();
-
-      const results = dispatcher.resolveAndValidate(
-        [
-          makeRequest('read_file', 'c-allowed', ['read_file']),
-          makeRequest('run_shell_command', 'c-blocked', ['read_file']),
-        ],
-        governance,
-        false,
-      );
-
+      const { results, registry } =
+        observeDropsRequestsBlockedByHookRestrictedAllowedBeforeValidation();
       expect(results).toHaveLength(1);
       expect(results[0].status).toBe('validating');
       expect(registry.getTool).toHaveBeenCalledTimes(1);
@@ -338,6 +309,35 @@ describe('ToolDispatcher', () => {
         interactiveMode: false,
       });
     });
+
+    const observeDropsRequestsBlockedByHookRestrictedAllowedBeforeValidation =
+      () => {
+        const allowedTool = new MockTool('read_file');
+        const disallowedTool = new MockTool('run_shell_command');
+        const tools = new Map([
+          ['read_file', allowedTool],
+          ['run_shell_command', disallowedTool],
+        ]);
+        const registry = {
+          getTool: vi.fn((name: string) => tools.get(name) ?? null),
+          getAllToolNames: vi
+            .fn()
+            .mockReturnValue(['read_file', 'run_shell_command']),
+        };
+        const dispatcher = new ToolDispatcher(registry as never, config);
+        const governance = makeGovernance();
+
+        const results = dispatcher.resolveAndValidate(
+          [
+            makeRequest('read_file', 'c-allowed', ['read_file']),
+            makeRequest('run_shell_command', 'c-blocked', ['read_file']),
+          ],
+          governance,
+          false,
+        );
+
+        return { results, registry };
+      };
 
     it('drops all requests when hookRestrictedAllowed is empty', () => {
       const tool = new MockTool('read_file');
@@ -374,6 +374,13 @@ describe('ToolDispatcher', () => {
 
     it('sets context on ContextAwareTool during resolveAndValidate', () => {
       const tool = new ContextAwareMockTool('context_tool');
+      // Pre-set a stale context to prove the dispatcher (not the registry
+      // mock) overwrites it; keeps the assertion order-independent.
+      tool.context = {
+        sessionId: 'stale-session',
+        agentId: 'stale-agent',
+        interactiveMode: false,
+      };
       const registry = makeMockRegistry(tool);
       const dispatcher = new ToolDispatcher(registry as never, config);
 
@@ -384,9 +391,9 @@ describe('ToolDispatcher', () => {
       );
 
       expect(tool.context).toBeDefined();
-      expect(tool.context?.sessionId).toBe('test-session-id');
-      expect(tool.context?.agentId).toBe('primary');
-      expect(tool.context?.interactiveMode).toBe(true);
+      expect(tool.context.sessionId).toBe('test-session-id');
+      expect(tool.context.agentId).toBe('primary');
+      expect(tool.context.interactiveMode).toBe(true);
     });
 
     it('returns ValidatingToolCall for a successfully resolved tool', () => {
@@ -409,6 +416,13 @@ describe('ToolDispatcher', () => {
     });
 
     it('handles multiple requests mixing success and error', () => {
+      const { results } = observeHandlesMultipleRequestsMixingSuccessAndError();
+      expect(results).toHaveLength(2);
+      expect(results[0].status).toBe('validating');
+      expect(results[1].status).toBe('error');
+    });
+
+    const observeHandlesMultipleRequestsMixingSuccessAndError = () => {
       const goodTool = new MockTool('good_tool');
       const registry = {
         getTool: vi.fn((name: string) =>
@@ -424,10 +438,8 @@ describe('ToolDispatcher', () => {
         false,
       );
 
-      expect(results).toHaveLength(2);
-      expect(results[0].status).toBe('validating');
-      expect(results[1].status).toBe('error');
-    });
+      return { results };
+    };
   });
 
   // ── getToolSuggestion ──────────────────────────────────────────────────────

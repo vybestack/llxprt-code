@@ -5,17 +5,17 @@
  */
 
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import type { MCPServerConfig } from '../config/mcpServerConfig.js';
 import {
   getErrorMessage,
   is404Error,
   UnauthorizedError,
-} from '@vybestack/llxprt-code-core/utils/errors.js';
+} from '@vybestack/llxprt-code-tools/utils/errors.js';
 import { MCPOAuthProvider } from '../auth/oauth-provider.js';
 import { MCPOAuthTokenStorage } from '../auth/oauth-token-storage.js';
 import { OAuthUtils } from '../auth/oauth-utils.js';
-import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { emitHostFeedback } from '../host/hostServices.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import {
   createSSETransportWithAuth,
   createTransportWithOAuth,
@@ -354,7 +354,7 @@ export async function showAuthRequiredMessage(
   } else {
     message = `Server '${serverName}' requires OAuth authentication. Please authenticate using: /mcp auth ${serverName}`;
   }
-  coreEvents.emitFeedback('error', message);
+  emitHostFeedback('error', message);
   throw new UnauthorizedError(message);
 }
 

@@ -189,6 +189,25 @@ function serializeBody(body: Record<string, unknown>): string {
   return JSON.stringify(body);
 }
 
+function isSyntheticAgentsRead(item: ResponsesInputItem): boolean {
+  if (!('type' in item) || item.type !== 'function_call') return false;
+  if (item.name !== 'read_file') return false;
+  return item.arguments.includes('AGENTS.md');
+}
+
+function hasSyntheticCallId(item: ResponsesInputItem): boolean {
+  if (!('call_id' in item)) return false;
+  return (
+    typeof item.call_id === 'string' &&
+    item.call_id.startsWith('call_synthetic_')
+  );
+}
+
+function inputItemType(item: ResponsesInputItem): string | undefined {
+  if ('type' in item) return item.type;
+  return `role:${item.role}`;
+}
+
 function basicCodexContents(): IContent[] {
   return [
     {
@@ -245,21 +264,10 @@ describe('OpenAIResponsesProvider Codex mode does not inject synthetic AGENTS.md
     );
     const items = inputItems(body);
 
-    const syntheticReadCalls = items.filter((item) => {
-      if (!('type' in item) || item.type !== 'function_call') return false;
-      if (item.name !== 'read_file') return false;
-      return item.arguments.includes('AGENTS.md');
-    });
+    const syntheticReadCalls = items.filter(isSyntheticAgentsRead);
     expect(syntheticReadCalls).toHaveLength(0);
 
-    const syntheticPrefix = 'call_synthetic_';
-    const syntheticCallIds = items.filter((item) => {
-      if (!('call_id' in item)) return false;
-      return (
-        typeof item.call_id === 'string' &&
-        item.call_id.startsWith(syntheticPrefix)
-      );
-    });
+    const syntheticCallIds = items.filter(hasSyntheticCallId);
     expect(syntheticCallIds).toHaveLength(0);
   });
 
@@ -369,12 +377,12 @@ describe('OpenAIResponsesProvider Codex mode does not inject synthetic AGENTS.md
 
     // AC4: the leading input item is identical across consecutive turns of
     // the same session.
-    expect(turn2Items[0]).toEqual(turn1Items[0]);
+    expect(turn2Items[0]).toStrictEqual(turn1Items[0]);
 
     // Turn N+1 must strictly extend turn N (append-only). This invariant is
     // what issue #3134 (Codex WebSocket incremental input delta) depends on
     // to reuse a delta rather than resending the full history each turn.
-    expect(turn2Items.slice(0, turn1Items.length)).toEqual(turn1Items);
+    expect(turn2Items.slice(0, turn1Items.length)).toStrictEqual(turn1Items);
   });
 });
 
@@ -420,9 +428,7 @@ describe('OpenAIResponsesProvider non-Codex mode is unchanged by Codex-only inpu
     const body = await captureRequestBody(provider, contents, settings);
     const items = inputItems(body);
 
-    const types = items.map((item) =>
-      'type' in item ? item.type : `role:${(item as { role?: string }).role}`,
-    );
+    const types = items.map(inputItemType);
 
     // The reasoning item must NOT be hoisted to the front; the first item is
     // the first user message, preserving natural conversation order.

@@ -68,6 +68,14 @@ const ISSUE_NODE_REPLY: [string, unknown] = [
   { data: { repository: { issue: { id: 'I_kwDO123' } } } },
 ];
 
+function isIssueEditCall(call: readonly string[]): boolean {
+  return call[0] === 'issue' && call[1] === 'edit';
+}
+
+function isRepoViewCall(call: readonly string[]): boolean {
+  return call[0] === 'repo' && call[1] === 'view';
+}
+
 describe('issue.edit (multi-step)', () => {
   /**
    * @plan PLAN-20260731-GHBROKER.P11
@@ -133,7 +141,7 @@ describe('issue.edit (multi-step)', () => {
   it('skips gh issue edit when only type is supplied', async () => {
     const { run, calls } = makeRunner([ISSUE_TYPES_REPLY, ISSUE_NODE_REPLY]);
     await executeIssueEdit({ number: 7, type: 'Feature', repo: 'o/n' }, run);
-    expect(calls.some((c) => c[0] === 'issue' && c[1] === 'edit')).toBe(false);
+    expect(calls.some(isIssueEditCall)).toBe(false);
     expect(calls.some((c) => c.join(' ').includes('updateIssue'))).toBe(true);
   });
 
@@ -195,7 +203,7 @@ describe('issue.edit (multi-step)', () => {
       ISSUE_NODE_REPLY,
     ]);
     await executeIssueEdit({ number: 7, type: 'Bug' }, run);
-    expect(calls.some((c) => c[0] === 'repo' && c[1] === 'view')).toBe(true);
+    expect(calls.some(isRepoViewCall)).toBe(true);
     const typesCall = calls.find((c) => c.join(' ').includes('issueTypes'));
     expect(typesCall!.join(' ')).toContain('owner=acoliver');
   });

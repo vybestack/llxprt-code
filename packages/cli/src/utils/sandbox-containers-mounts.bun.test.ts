@@ -10,12 +10,12 @@ import { parseCustomMount } from './sandbox-containers.js';
 
 describe('parseCustomMount', () => {
   it('preserves Windows drive letters in source and target paths', () => {
-    expect(parseCustomMount('C:\\source:D:\\target:rw')).toEqual([
+    expect(parseCustomMount('C:\\source:D:\\target:rw')).toStrictEqual([
       'C:\\source',
       'D:\\target',
       'rw',
     ]);
-    expect(parseCustomMount('C:\\source:D:\\target:ro')).toEqual([
+    expect(parseCustomMount('C:\\source:D:\\target:ro')).toStrictEqual([
       'C:\\source',
       'D:\\target',
       'ro',

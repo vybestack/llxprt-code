@@ -13,11 +13,10 @@ import {
   formatKimiCodeUsage,
 } from './usageInfo.js';
 
-afterEach(() => {
-  restoreGlobals();
-});
-
 describe('kimiUsageInfo', () => {
+  afterEach(() => {
+    restoreGlobals();
+  });
   describe('fetchKimiUsage', () => {
     let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -405,11 +404,10 @@ describe('kimiUsageInfo', () => {
 
       const result = formatKimiCodeUsage(usage);
       expect(
-        result.some(
-          (l) =>
-            l.includes('Weekly quota') &&
-            l.includes('15/100 used') &&
-            l.includes('85 remaining'),
+        result.some((l) =>
+          ['Weekly quota', '15/100 used', '85 remaining'].every((fragment) =>
+            l.includes(fragment),
+          ),
         ),
       ).toBe(true);
     });
@@ -462,11 +460,10 @@ describe('kimiUsageInfo', () => {
 
       const result = formatKimiCodeUsage(usage);
       expect(
-        result.some(
-          (l) =>
-            l.includes('5h limit') &&
-            l.includes('5/100 used') &&
-            l.includes('95 remaining'),
+        result.some((l) =>
+          ['5h limit', '5/100 used', '95 remaining'].every((fragment) =>
+            l.includes(fragment),
+          ),
         ),
       ).toBe(true);
     });
@@ -514,7 +511,9 @@ describe('kimiUsageInfo', () => {
 
       const result = formatKimiCodeUsage(usage);
       expect(
-        result.some((l) => l.includes('Weekly quota') && l.includes('50/100')),
+        result.some((l) =>
+          ['Weekly quota', '50/100'].every((fragment) => l.includes(fragment)),
+        ),
       ).toBe(true);
     });
 

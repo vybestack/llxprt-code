@@ -20,14 +20,14 @@ describe('yargs help text is category-neutral (no legacy ~/.llxprt)', () => {
   it('sandbox-profile-load description does not name ~/.llxprt', () => {
     const opt = innerCommandOptions['sandbox-profile-load'];
     expect(opt).toBeDefined();
-    const description = opt.description ?? '';
+    const description = opt.description!;
     expect(description).not.toContain('~/.llxprt');
   });
 
   it('dumponerror description does not name ~/.llxprt', () => {
     const opt = innerCommandOptions['dumponerror'];
     expect(opt).toBeDefined();
-    const description = opt.description ?? '';
+    const description = opt.description!;
     expect(description).not.toContain('~/.llxprt');
   });
 

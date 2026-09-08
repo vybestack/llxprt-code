@@ -11,6 +11,18 @@ import {
   makeToken,
 } from './BucketFailoverHandlerImpl.test-helpers.js';
 
+type BucketFixture = ReturnType<typeof createBucketFailoverFixture>;
+
+function createBucketBAuthentication(
+  tokenStore: BucketFixture['tokenStore'],
+): (provider: string, bucket?: string) => Promise<void> {
+  return async (_provider: string, bucket?: string): Promise<void> => {
+    if (bucket === 'bucket-b') {
+      await tokenStore.saveToken('anthropic', makeToken('reauth-b'), bucket);
+    }
+  };
+}
+
 describe('BucketFailoverHandlerImpl #33', () => {
   /**
    * @requirement REQ-1598-FL08
@@ -30,17 +42,7 @@ describe('BucketFailoverHandlerImpl #33', () => {
     );
 
     // Mock authenticate to succeed and save token
-    oauthManager.authenticate = vi.fn(
-      async (provider: string, bucket?: string) => {
-        if (bucket === 'bucket-b') {
-          await tokenStore.saveToken(
-            'anthropic',
-            makeToken('reauth-b'),
-            bucket,
-          );
-        }
-      },
-    );
+    oauthManager.authenticate = vi.fn(createBucketBAuthentication(tokenStore));
 
     // Act: Trigger failover
     const result = await handler.tryFailover();

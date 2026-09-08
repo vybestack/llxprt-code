@@ -74,6 +74,20 @@ function makeContent(
 }
 
 /**
+ * Alternating human/ai speaker for index-based content generation.
+ */
+function alternatingSpeaker(i: number): 'human' | 'ai' {
+  return i % 2 === 0 ? 'human' : 'ai';
+}
+
+/**
+ * True when the warning describes a JSON/parse problem.
+ */
+function isParseWarning(w: string): boolean {
+  return w.includes('parse') || w.includes('JSON');
+}
+
+/**
  * Create a real session file using SessionRecordingService, flush it,
  * and return its file path and sessionId.
  */
@@ -725,10 +739,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
       const okResult = expectOk(result);
       lockHandles.push(okResult.lockHandle);
       expect(okResult.warnings.length).toBeGreaterThan(0);
-      const hasParseWarning = okResult.warnings.some(
-        (w) => w.includes('parse') || w.includes('JSON'),
-      );
-      expect(hasParseWarning).toBe(true);
+      expect(okResult.warnings.some(isParseWarning)).toBe(true);
       await okResult.recording.dispose();
     });
   });
@@ -1045,9 +1056,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
             try {
               const contents: IContent[] = [];
               for (let i = 0; i < contentCount; i++) {
-                contents.push(
-                  makeContent(`msg-${i}`, i % 2 === 0 ? 'human' : 'ai'),
-                );
+                contents.push(makeContent(`msg-${i}`, alternatingSpeaker(i)));
               }
 
               await createTestSession(localChatsDir, {

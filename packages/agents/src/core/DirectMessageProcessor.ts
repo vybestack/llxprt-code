@@ -182,7 +182,17 @@ export class DirectMessageProcessor {
       throw new Error('No active provider configured');
     }
 
-    const userIContents = this._convertUserInput(params.message, prompt_id);
+    const convertedUserContents = this._convertUserInput(
+      params.message,
+      prompt_id,
+    );
+    const userIContents =
+      this.runtimeContext.mediaAdmission === undefined
+        ? convertedUserContents
+        : await this.runtimeContext.mediaAdmission.admitContents(
+            convertedUserContents,
+            { turnId: prompt_id, source: 'direct-user-input' },
+          );
 
     // #2410: when the user message converts to zero IContent turns (e.g.
     // empty array), skip the provider call entirely — never submit a
@@ -414,6 +424,7 @@ export class DirectMessageProcessor {
     params: SendMessageParams,
     userIContents: IContent[],
   ): Promise<ModelOutput> {
+    params.config?.abortSignal?.throwIfAborted();
     const {
       effectiveToolsFromConfig,
       contentsForApi,
@@ -920,7 +931,6 @@ export class DirectMessageProcessor {
    */
   private _extractDirectGeminiOverrides(config?: AgentClientGenerateConfig):
     | {
-        serverTools?: unknown;
         toolConfig?: unknown;
       }
     | undefined {
@@ -929,14 +939,10 @@ export class DirectMessageProcessor {
     }
 
     const overrides: {
-      serverTools?: unknown;
       toolConfig?: unknown;
     } = {};
 
     const rawConfig = config as Record<string, unknown>;
-    if ('serverTools' in rawConfig) {
-      overrides.serverTools = rawConfig.serverTools;
-    }
     if ('toolConfig' in rawConfig) {
       overrides.toolConfig = rawConfig.toolConfig;
     }

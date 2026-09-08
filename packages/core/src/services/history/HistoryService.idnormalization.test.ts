@@ -210,11 +210,12 @@ describe('HistoryService - Behavioral Tests', () => {
           'gpt-4',
         );
 
-        // Simulate queued work and tokenizer cache entries
-        (service as unknown as { isCompressing: boolean }).isCompressing = true;
-        (
-          service as unknown as { pendingOperations: Array<() => void> }
-        ).pendingOperations.push(() => {});
+        // Queue real work through the public API and seed the tokenizer cache
+        service.startCompression();
+        service.add(
+          { speaker: 'human', blocks: [{ type: 'text', text: 'queued' }] },
+          'gpt-4',
+        );
         (
           service as unknown as { tokenizerCache: Map<string, unknown> }
         ).tokenizerCache.set('gpt-4', {} as unknown);
@@ -223,16 +224,15 @@ describe('HistoryService - Behavioral Tests', () => {
 
         service.dispose();
 
+        // Releasing the lock after dispose must not resurrect queued content.
+        service.endCompression();
+
         expect(service.getAll()).toHaveLength(0);
         expect(service.getTotalTokens()).toBe(0);
         expect(service.listenerCount('tokensUpdated')).toBe(0);
         expect(
           (service as unknown as { tokenizerCache: Map<string, unknown> })
             .tokenizerCache.size,
-        ).toBe(0);
-        expect(
-          (service as unknown as { pendingOperations: Array<() => void> })
-            .pendingOperations.length,
         ).toBe(0);
         expect(
           (service as unknown as { baseTokenOffset: number }).baseTokenOffset,
@@ -303,7 +303,7 @@ describe('HistoryService - Behavioral Tests', () => {
         expect(syntheticToolMessage.speaker).toBe('tool');
         expect(syntheticToolMessage.metadata?.synthetic).toBe(true);
         expect(syntheticToolMessage.metadata?.reason).toBe(
-          'reordered_tool_responses',
+          'orphaned_tool_call',
         );
       });
 
@@ -347,6 +347,8 @@ describe('HistoryService - Behavioral Tests', () => {
           ),
         );
         expect(toolResponses).toHaveLength(1);
+        expect(curated[2].metadata?.synthetic).toBeUndefined();
+        expect(curated[2].metadata?.reason).toBeUndefined();
       });
 
       it('should preserve MediaBlocks alongside tool_response in getCuratedForProvider', () => {

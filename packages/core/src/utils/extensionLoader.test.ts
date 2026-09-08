@@ -21,6 +21,19 @@ describe('SimpleExtensionLoader', () => {
     contextFiles: [],
     id: '123',
   };
+
+  function expectedStartCallsFor(reloadingEnabled: boolean): number {
+    return reloadingEnabled ? 1 : 0;
+  }
+
+  function expectedStopCallsFor(reloadingEnabled: boolean): number {
+    return reloadingEnabled ? 1 : 0;
+  }
+
+  function expectedCallArgumentsFor(reloadingEnabled: boolean): unknown[][] {
+    return reloadingEnabled ? [[activeExtension]] : [];
+  }
+
   const inactiveExtension = {
     name: 'test-extension',
     isActive: false,
@@ -97,30 +110,25 @@ describe('SimpleExtensionLoader', () => {
         await loader.start(mockConfig);
         expect(mockMcpClientManager.startExtension).not.toHaveBeenCalled();
         await loader.loadExtension(activeExtension);
-        const expectedStartCalls = reloadingEnabled ? 1 : 0;
-        const expectedStopCalls = reloadingEnabled ? 1 : 0;
 
         await loader.unloadExtension(activeExtension);
 
         expect(mockMcpClientManager.startExtension).toHaveBeenCalledTimes(
-          expectedStartCalls,
+          expectedStartCallsFor(reloadingEnabled),
         );
         expect(mockMcpClientManager.stopExtension).toHaveBeenCalledTimes(
-          expectedStopCalls,
+          expectedStopCallsFor(reloadingEnabled),
         );
 
         const actualStartCalls = mockMcpClientManager.startExtension.mock.calls;
         const actualStopCalls = mockMcpClientManager.stopExtension.mock.calls;
 
-        const expectedStartCallArguments = reloadingEnabled
-          ? [[activeExtension]]
-          : [];
-        const expectedStopCallArguments = reloadingEnabled
-          ? [[activeExtension]]
-          : [];
-
-        expect(actualStartCalls).toStrictEqual(expectedStartCallArguments);
-        expect(actualStopCalls).toStrictEqual(expectedStopCallArguments);
+        expect(actualStartCalls).toStrictEqual(
+          expectedCallArgumentsFor(reloadingEnabled),
+        );
+        expect(actualStopCalls).toStrictEqual(
+          expectedCallArgumentsFor(reloadingEnabled),
+        );
       },
     );
   });

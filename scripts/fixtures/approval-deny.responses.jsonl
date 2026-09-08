@@ -1,0 +1,1 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_deny_1","name":"activate_skill","parameters":{"name":"pr-creator"}}]}]}

@@ -11,6 +11,11 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { IModel } from '../IModel.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import {
+  generateAbortAwareResponse,
+  generatePartialThenInterruptedResponse,
+  generateTimeoutThenSuccess,
+} from './retryOrchestratorBasicTestHelpers.test.js';
 
 /**
  * Test helper: Creates a fake provider that behaves according to provided scenarios
@@ -57,12 +62,6 @@ function createTestProvider(config: {
     },
     getDefaultModel(): string {
       return 'test-model';
-    },
-    getServerTools(): string[] {
-      return [];
-    },
-    async invokeServerTool(): Promise<unknown> {
-      return null;
     },
   };
 }
@@ -606,35 +605,13 @@ describe('RetryOrchestrator', () => {
 
       const provider: IProvider = {
         name: 'streaming-test-provider',
-        async *generateChatCompletion(_options: GenerateChatOptions) {
-          attemptCount++;
-
-          if (attemptCount === 1) {
-            // First attempt - yield one chunk then error
-            yield {
-              speaker: 'ai',
-              blocks: [{ type: 'text', text: 'partial' }],
-            } as IContent;
-            throw createNetworkError('STREAM_INTERRUPTED');
-          } else {
-            // Second attempt - should never be reached
-            yield {
-              speaker: 'ai',
-              blocks: [{ type: 'text', text: 'complete' }],
-            } as IContent;
-          }
-        },
+        generateChatCompletion: (_options: GenerateChatOptions) =>
+          generatePartialThenInterruptedResponse(() => ++attemptCount),
         async getModels(): Promise<IModel[]> {
           return [];
         },
         getDefaultModel(): string {
           return 'test-model';
-        },
-        getServerTools(): string[] {
-          return [];
-        },
-        async invokeServerTool(): Promise<unknown> {
-          return null;
         },
       };
 
@@ -691,12 +668,6 @@ describe('RetryOrchestrator', () => {
         getDefaultModel(): string {
           return 'test-model';
         },
-        getServerTools(): string[] {
-          return [];
-        },
-        async invokeServerTool(): Promise<unknown> {
-          return null;
-        },
       };
 
       const orchestrator = new RetryOrchestrator(provider, {
@@ -718,35 +689,13 @@ describe('RetryOrchestrator', () => {
 
       const provider: IProvider = {
         name: 'timeout-failover-provider',
-        async *generateChatCompletion(_options: GenerateChatOptions) {
-          attemptCount++;
-
-          if (attemptCount === 1) {
-            // First attempt times out (slow)
-            await delay(200);
-            yield {
-              speaker: 'ai',
-              blocks: [{ type: 'text', text: 'too slow' }],
-            } as IContent;
-          } else {
-            // Second attempt succeeds quickly
-            yield {
-              speaker: 'ai',
-              blocks: [{ type: 'text', text: 'success' }],
-            } as IContent;
-          }
-        },
+        generateChatCompletion: (_options: GenerateChatOptions) =>
+          generateTimeoutThenSuccess(() => ++attemptCount),
         async getModels(): Promise<IModel[]> {
           return [];
         },
         getDefaultModel(): string {
           return 'test-model';
-        },
-        getServerTools(): string[] {
-          return [];
-        },
-        async invokeServerTool(): Promise<unknown> {
-          return null;
         },
       };
 
@@ -908,33 +857,21 @@ describe('RetryOrchestrator', () => {
 
       const provider: IProvider = {
         name: 'abort-test-provider',
-        async *generateChatCompletion(options: GenerateChatOptions) {
-          providerCalls++;
-          providerReceivedOptions = options;
-
-          // Simulate provider checking signal
-          await delay(50);
-
-          if (options.invocation?.signal?.aborted === true) {
-            throw new DOMException('Aborted', 'AbortError');
-          }
-
-          yield {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'test' }],
-          } as IContent;
-        },
+        generateChatCompletion: (options: GenerateChatOptions) =>
+          generateAbortAwareResponse(
+            options,
+            () => {
+              providerCalls++;
+            },
+            (receivedOptions) => {
+              providerReceivedOptions = receivedOptions;
+            },
+          ),
         async getModels(): Promise<IModel[]> {
           return [];
         },
         getDefaultModel(): string {
           return 'test-model';
-        },
-        getServerTools(): string[] {
-          return [];
-        },
-        async invokeServerTool(): Promise<unknown> {
-          return null;
         },
       };
 
@@ -997,5 +934,30 @@ describe('RetryOrchestrator', () => {
       name: 'RetriesExhaustedError',
     });
     expect(calls).toBe(3);
+  });
+
+  // #2626: ProviderManager.setActiveProvider's uniform switch-away state
+  // clear must propagate through this wrapper to the underlying provider.
+  // clearState is an optional member outside IProvider, so the forwarding
+  // is structural — pinned here for both branches (present and absent).
+  it('forwards clearState to the wrapped provider (#2626)', () => {
+    const clearStateCalls: string[] = [];
+    const provider = createTestProvider({});
+    (provider as { clearState?: () => void }).clearState = () => {
+      clearStateCalls.push('wrapped');
+    };
+    const orchestrator = new RetryOrchestrator(provider);
+
+    orchestrator.clearState?.();
+
+    expect(clearStateCalls).toStrictEqual(['wrapped']);
+  });
+
+  it('clearState is a no-op when the wrapped provider lacks the member (#2626)', () => {
+    const provider = createTestProvider({});
+    expect('clearState' in provider).toBe(false);
+    const orchestrator = new RetryOrchestrator(provider);
+
+    expect(() => orchestrator.clearState?.()).not.toThrow();
   });
 });

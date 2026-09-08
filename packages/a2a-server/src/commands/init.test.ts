@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2026 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -8,22 +8,29 @@ import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { InitCommand } from './init.js';
 import * as path from 'node:path';
 import { CoderAgentEvent } from '../types.js';
-import type { ExecutionEventBus } from '@a2a-js/sdk/server';
-import type { TaskStatusUpdateEvent } from '@a2a-js/sdk';
-import { createMockConfig } from '../utils/testing_utils.js';
+import type {
+  ExecutionEventBus,
+  AgentExecutionEvent,
+} from '@a2a-js/sdk/server';
 import type { CommandContext } from './types.js';
-import type { Config } from '@vybestack/llxprt-code-core';
 
 describe('InitCommand', () => {
   const mockExistsSync = vi.fn();
   const mockWriteFileSync = vi.fn();
-  const mockLogInfo = vi.fn();
   let eventBus: ExecutionEventBus;
-  let command: InitCommand;
   let context: CommandContext;
-  let publishSpy: ReturnType<typeof vi.spyOn>;
   let mockExecute: ReturnType<typeof vi.fn>;
   const mockWorkspacePath = path.resolve('/tmp');
+
+  function streamedEvents(): AgentExecutionEvent[] {
+    const events: AgentExecutionEvent[] = [];
+    const original = eventBus.publish.bind(eventBus);
+    eventBus.publish = (event: AgentExecutionEvent) => {
+      events.push(event);
+      original(event);
+    };
+    return events;
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -31,61 +38,64 @@ describe('InitCommand', () => {
     eventBus = {
       publish: vi.fn(),
     } as unknown as ExecutionEventBus;
-    command = new InitCommand({
-      existsSync: mockExistsSync,
-      writeFileSync: mockWriteFileSync,
-      createId: () => 'test-id',
-      logInfo: mockLogInfo,
-    });
-    const mockConfig = createMockConfig({
-      getModel: () => 'gemini-pro',
-    });
     const mockExecutorInstance = {
       execute: vi.fn(),
       cancelTask: vi.fn(),
     };
     context = {
-      config: mockConfig as unknown as Config,
+      extensions: [],
+      model: 'test-model',
+      checkpointing: {
+        enabled: false,
+        getProjectTempCheckpointsDir: () => '/tmp/test-checkpoints',
+      },
       agentExecutor: mockExecutorInstance,
       eventBus,
     } as CommandContext;
-    publishSpy = vi.spyOn(eventBus, 'publish');
     mockExecute = vi.fn();
     mockExecutorInstance.execute.mockImplementation(mockExecute);
   });
 
+  function makeCommand(): InitCommand {
+    return new InitCommand({
+      existsSync: mockExistsSync,
+      writeFileSync: mockWriteFileSync,
+      createId: () => 'test-id',
+      logInfo: vi.fn(),
+    });
+  }
+
   it('has requiresWorkspace set to true', () => {
+    const command = makeCommand();
     expect(command.requiresWorkspace).toBe(true);
   });
 
   it('has streaming set to true', () => {
+    const command = makeCommand();
     expect(command.streaming).toBe(true);
   });
 
   describe('execute', () => {
     it('handles info when LLXPRT.md already exists', async () => {
       mockExistsSync.mockReturnValue(true);
+      const events = streamedEvents();
+      const command = makeCommand();
 
       await command.execute(context, []);
 
-      // Check that publish was called with the right event
-      expect(publishSpy).toHaveBeenCalled();
-      const publishCall = publishSpy.mock.calls[0][0];
-      const event = publishCall as TaskStatusUpdateEvent;
+      const event = events[0];
+      // Fail with a clear assertion rather than an undefined dereference
+      // if the command ever stops publishing its status event.
+      expect(event).toBeDefined();
       expect(event.kind).toBe('status-update');
+      if (event.kind !== 'status-update') {
+        throw new Error('expected a status-update event');
+      }
       expect(event.status.state).toBe('completed');
       const message = event.status.message!;
       const firstPart = message.parts[0] as { text: string };
       expect(firstPart.text).toContain('LLXPRT.md');
       expect(firstPart.text).toContain('already exists');
-
-      // Verify logger was also called
-      expect(mockLogInfo).toHaveBeenCalledWith(
-        '[EventBus event]: ',
-        expect.objectContaining({
-          kind: 'status-update',
-        }),
-      );
     });
 
     describe('when LLXPRT.md does not exist', () => {
@@ -94,7 +104,7 @@ describe('InitCommand', () => {
       });
 
       it('writes the file and executes the agent', async () => {
-        await command.execute(context, []);
+        await makeCommand().execute(context, []);
 
         expect(mockWriteFileSync).toHaveBeenCalledWith(
           path.join(mockWorkspacePath, 'LLXPRT.md'),
@@ -105,7 +115,7 @@ describe('InitCommand', () => {
       });
 
       it('passes autoExecute: true to the agent executor', async () => {
-        await command.execute(context, []);
+        await makeCommand().execute(context, []);
 
         expect(mockExecute).toHaveBeenCalledWith(
           expect.objectContaining({

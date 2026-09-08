@@ -31,6 +31,18 @@ const startLocalOAuthCallbackMock = startLocalOAuthCallback as Mock<
 >;
 const openBrowserArgs: string[] = [];
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function oauthErrorType(error: unknown): string {
+  return error instanceof OAuthError ? error.type : String(error);
+}
+
+function oauthErrorMessage(error: unknown): string {
+  return error instanceof OAuthError ? error.message : String(error);
+}
+
 describe('AnthropicOAuthProvider local callback flow', () => {
   let provider: AnthropicOAuthProvider;
   let tokenStore: TokenStore;
@@ -205,11 +217,7 @@ describe('AnthropicOAuthProvider local callback flow', () => {
     internals.pendingAuthPromise = oldManualEntryPromise;
     const authResult = internals
       .raceCallbackVsManualEntry('attempt-1', localCallback)
-      .then(
-        () => 'resolved',
-        (error: unknown) =>
-          error instanceof Error ? error.message : String(error),
-      );
+      .then(() => 'resolved', errorMessage);
 
     internals.currentAuthAttemptId = 'attempt-2';
     internals.pendingAuthPromise = new Promise<string>(() => {});
@@ -233,11 +241,9 @@ describe('AnthropicOAuthProvider local callback flow', () => {
     );
     shouldLaunchBrowserSpy.mockReturnValue(true);
 
-    const firstAttempt = provider.initiateAuth().then(
-      () => 'resolved',
-      (error: unknown) =>
-        error instanceof OAuthError ? error.type : String(error),
-    );
+    const firstAttempt = provider
+      .initiateAuth()
+      .then(() => 'resolved', oauthErrorType);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     (
@@ -280,11 +286,9 @@ describe('AnthropicOAuthProvider local callback flow', () => {
       );
     });
 
-    const result = provider.initiateAuth().then(
-      () => 'resolved',
-      (error: unknown) =>
-        error instanceof OAuthError ? error.message : String(error),
-    );
+    const result = provider
+      .initiateAuth()
+      .then(() => 'resolved', oauthErrorMessage);
 
     await expect(
       Promise.race([

@@ -458,7 +458,11 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     );
   });
 
-  it('recomputes the winning rule after persisting a direct override', async () => {
+  const observeDirectOverrideResolution = async (): Promise<{
+    readonly wasParentTrusted: boolean;
+    readonly isParentTrusted: boolean;
+    readonly effectiveLocalTrustLevel: TrustLevel | undefined;
+  }> => {
     mockedUserConfig.value = {
       [WORKSPACE_ROOT]: TrustLevel.TRUST_FOLDER,
     };
@@ -487,15 +491,24 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
       setTrustedFolderLive: vi.fn(),
     };
     const { result } = renderHook(() => usePermissionsModifyTrust(config));
-
-    expect(result.current.isParentTrusted).toBe(true);
+    const wasParentTrusted = result.current.isParentTrusted;
 
     await act(async () => {
       await result.current.commitTrustLevel(TrustLevel.DO_NOT_TRUST);
     });
 
-    expect(result.current.isParentTrusted).toBe(false);
-    expect(result.current.effectiveLocalTrustLevel).toBe(
+    return {
+      wasParentTrusted,
+      isParentTrusted: result.current.isParentTrusted,
+      effectiveLocalTrustLevel: result.current.effectiveLocalTrustLevel,
+    };
+  };
+
+  it('recomputes the winning rule after persisting a direct override', async () => {
+    const trustResolution = await observeDirectOverrideResolution();
+    expect(trustResolution.wasParentTrusted).toBe(true);
+    expect(trustResolution.isParentTrusted).toBe(false);
+    expect(trustResolution.effectiveLocalTrustLevel).toBe(
       TrustLevel.DO_NOT_TRUST,
     );
   });

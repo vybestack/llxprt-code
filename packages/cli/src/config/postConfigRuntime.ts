@@ -42,6 +42,7 @@ import {
   resolveForegroundRuntimeId,
   type BootstrapRuntimeState,
   type BootstrapProfileArgs,
+  type CliRuntimeOverrides,
 } from './profileBootstrap.js';
 import type { CliArgs } from './cliArgParser.js';
 import type { Settings } from './settings.js';
@@ -62,7 +63,7 @@ export interface PostConfigInput {
   readonly profileLoadResult: ProfileLoadResult;
   readonly providerModelResult: ProviderModelResult;
   readonly defaultDisabledTools: readonly string[];
-  readonly runtimeOverrides: { settingsService?: SettingsService };
+  readonly runtimeOverrides: CliRuntimeOverrides;
   readonly approvalMode: ApprovalMode;
   readonly interactive: boolean;
 }
@@ -283,12 +284,14 @@ async function setupRuntimeContext(
   const { assembleCliProviderRuntime } = await import(
     '@vybestack/llxprt-code-providers/runtime.js'
   );
+  const providerContributions = input.runtimeOverrides.providerContributions;
   const finalRuntime = assembleCliProviderRuntime({
     settingsService,
     config,
     runtimeId: bootstrapRuntimeId,
     metadata: baseBootstrapMetadata,
     oauthSettings: createOAuthSettingsAdapter(),
+    ...(providerContributions !== undefined ? { providerContributions } : {}),
   });
   runtimeState.providerManager =
     finalRuntime.providerManager as ProviderManager;

@@ -20,6 +20,12 @@ import type {
   ChronologyReplacedSpan,
 } from './IContent.js';
 
+export interface ChronologyState {
+  readonly nextSeq: number;
+  readonly currentUserTurn: number;
+  readonly nextStep: number;
+}
+
 /**
  * Stamps and reconciles {@link ChronologyMarker}s onto {@link IContent}.
  *
@@ -45,6 +51,20 @@ export class ChronologyStamper {
   private nextStep = 1;
 
   constructor(private readonly now: () => number = Date.now) {}
+
+  snapshot(): ChronologyState {
+    return {
+      nextSeq: this.nextSeq,
+      currentUserTurn: this.currentUserTurn,
+      nextStep: this.nextStep,
+    };
+  }
+
+  restore(state: ChronologyState): void {
+    this.nextSeq = state.nextSeq;
+    this.currentUserTurn = state.currentUserTurn;
+    this.nextStep = state.nextStep;
+  }
 
   /**
    * Attach a chronology marker to `content` and return it.
@@ -145,6 +165,35 @@ function collectSeqs(history: readonly IContent[]): Set<number> {
   return seqs;
 }
 
+function transferSemanticMediaPurgeFrontier(
+  previousHistory: readonly IContent[],
+  newHistory: readonly IContent[],
+): IContent[] {
+  const frontier = previousHistory.find(
+    (content) => content.metadata?.semanticMediaPurgeFrontier !== undefined,
+  )?.metadata?.semanticMediaPurgeFrontier;
+  if (
+    frontier === undefined ||
+    newHistory.length === 0 ||
+    newHistory.some(
+      (content) => content.metadata?.semanticMediaPurgeFrontier !== undefined,
+    )
+  ) {
+    return [...newHistory];
+  }
+  const first = newHistory[0];
+  return [
+    {
+      ...first,
+      metadata: {
+        ...first.metadata,
+        semanticMediaPurgeFrontier: frontier,
+      },
+    },
+    ...newHistory.slice(1),
+  ];
+}
+
 /**
  * Annotate summary entries in `newHistory` with the span of chronology seqs
  * destroyed by the compression that produced it.
@@ -180,7 +229,7 @@ export function annotateCompressionSpan(
   }
 
   if (destroyed.size === 0) {
-    return [...newHistory];
+    return transferSemanticMediaPurgeFrontier(previousHistory, newHistory);
   }
 
   // Iterative min/max: spreading a Set into Math.min/Math.max puts every
@@ -205,10 +254,10 @@ export function annotateCompressionSpan(
     (item) => item.metadata?.isSummary === true,
   );
   if (!hasSummary) {
-    return [...newHistory];
+    return transferSemanticMediaPurgeFrontier(previousHistory, newHistory);
   }
 
-  return newHistory.map((item) => {
+  const annotated = newHistory.map((item) => {
     if (
       item.metadata?.isSummary === true &&
       item.metadata.chronologyReplaced === undefined
@@ -223,6 +272,7 @@ export function annotateCompressionSpan(
     }
     return item;
   });
+  return transferSemanticMediaPurgeFrontier(previousHistory, annotated);
 }
 
 /**

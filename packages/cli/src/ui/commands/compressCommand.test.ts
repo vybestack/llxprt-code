@@ -58,6 +58,17 @@ function findErrorItem(
   return items.find((i): i is HistoryItemError => i.type === MessageType.ERROR);
 }
 
+function sequentialTokenCounts(
+  first: number,
+  subsequent: number,
+): () => number {
+  let callCount = 0;
+  return () => {
+    callCount++;
+    return callCount === 1 ? first : subsequent;
+  };
+}
+
 describe('compressCommand', () => {
   let context: CommandContext;
   let state: CapturedState;
@@ -87,11 +98,7 @@ describe('compressCommand', () => {
 
   it('uses COMPRESSED when token count decreases after compression', async () => {
     const performCompression = async () => PerformCompressionResult.COMPRESSED;
-    let tokenCall = 0;
-    const getTotalTokens = () => {
-      tokenCall++;
-      return tokenCall === 1 ? 1200 : 800;
-    };
+    const getTotalTokens = sequentialTokenCounts(1200, 800);
 
     const chat = {
       performCompression,
@@ -327,11 +334,7 @@ describe('compressCommand', () => {
 
   it('uses COMPRESSION_FAILED_INFLATED_TOKEN_COUNT when core reports COMPRESSED but token count increases', async () => {
     const performCompression = async () => PerformCompressionResult.COMPRESSED;
-    let tokenCall = 0;
-    const getTotalTokens = () => {
-      tokenCall++;
-      return tokenCall === 1 ? 1000 : 1200;
-    };
+    const getTotalTokens = sequentialTokenCounts(1000, 1200);
 
     const chat = {
       performCompression,
@@ -460,11 +463,7 @@ describe('compressCommand', () => {
 
   it('uses COMPRESSION_FAILED when result is FAILED even if tokens decreased', async () => {
     const performCompression = async () => PerformCompressionResult.FAILED;
-    let tokenCall = 0;
-    const getTotalTokens = () => {
-      tokenCall++;
-      return tokenCall === 1 ? 1000 : 700;
-    };
+    const getTotalTokens = sequentialTokenCounts(1000, 700);
 
     const chat = {
       performCompression,

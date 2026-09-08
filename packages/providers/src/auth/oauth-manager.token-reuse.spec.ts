@@ -171,6 +171,24 @@ class MockTokenStore implements TokenStore {
   }
 }
 
+interface ConcurrentTokenReadState {
+  calls: number;
+}
+
+async function readTokenWithConcurrentWrite(
+  state: ConcurrentTokenReadState,
+  tokenStore: MockTokenStore,
+  originalGetToken: MockTokenStore['getToken'],
+  provider: string,
+  bucket?: string,
+): Promise<OAuthToken | null> {
+  state.calls += 1;
+  if (state.calls === 2) {
+    tokenStore.simulateExternalToken(provider, bucket);
+  }
+  return originalGetToken(provider, bucket);
+}
+
 function createLoadedSettings(
   overrides: {
     oauthEnabledProviders?: Record<string, boolean>;
@@ -418,19 +436,14 @@ describe('OAuth Token Reuse (Issues #1262 and #1195)', () => {
 
       // Simulate: first call starts OAuth, which takes time
       // During that time, another process writes a token
-      let getTokenCallCount = 0;
+      const tokenReadState: ConcurrentTokenReadState = { calls: 0 };
       const originalGetToken = tokenStore.getToken.bind(tokenStore);
-      tokenStore.getToken = async (
-        provider: string,
-        bucket?: string,
-      ): Promise<OAuthToken | null> => {
-        getTokenCallCount++;
-        // On second call (after lock acquisition), simulate another process wrote a token
-        if (getTokenCallCount === 2) {
-          tokenStore.simulateExternalToken(provider, bucket);
-        }
-        return originalGetToken(provider, bucket);
-      };
+      tokenStore.getToken = readTokenWithConcurrentWrite.bind(
+        undefined,
+        tokenReadState,
+        tokenStore,
+        originalGetToken,
+      );
 
       // The actual behavior depends on how the locking is implemented
       // This test documents the expected behavior

@@ -232,7 +232,7 @@ describe('#3470 dependency-volume startup recovery', () => {
         startupResult,
         containers: fakeEngine.containerNames().sort(),
         volumes: fakeEngine.volumeNames().sort(),
-      }).toEqual({
+      }).toStrictEqual({
         startupResult: expect.stringContaining(
           "Sandbox image 'llxprt-code-sandbox' is missing",
         ),
@@ -327,7 +327,7 @@ describe('#3470 dependency-volume startup recovery', () => {
       expect({
         containers: fakeEngine.containerNames().sort(),
         volumes: fakeEngine.volumeNames().sort(),
-      }).toEqual({
+      }).toStrictEqual({
         containers: ['user-custom-container'],
         volumes: [
           attachedVolume,

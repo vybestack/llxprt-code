@@ -6,7 +6,25 @@
 
 import { describe, expect, it } from 'bun:test';
 import { computeModelDefaults } from '../runtime/providerMutations.js';
-import { loadProviderAliasEntries } from './providerAliases.js';
+import {
+  loadProviderAliasEntries,
+  type ModelDefaultRule,
+  type ProviderAliasEntry,
+} from './providerAliases.js';
+
+function configuredModelDefaults(
+  entry: ProviderAliasEntry | undefined,
+): ModelDefaultRule[] {
+  return entry?.config.modelDefaults ?? [];
+}
+
+function configuredStaticModels(entry: ProviderAliasEntry | undefined) {
+  return entry?.config.staticModels ?? [];
+}
+
+function configuredPattern(rule: ModelDefaultRule | undefined): string {
+  return rule?.pattern ?? '';
+}
 
 describe('builtin kimi provider alias', () => {
   it('ships kimi with defaultModel + required ephemerals', () => {
@@ -37,7 +55,7 @@ describe('builtin kimi provider alias', () => {
 
     // The shared rule MUST come before the model-family rules so
     // array-order precedence lets the specific keys win for those models.
-    const patterns = (entry?.config.modelDefaults ?? []).map((r) => r.pattern);
+    const patterns = configuredModelDefaults(entry).map((rule) => rule.pattern);
     expect(patterns.indexOf('^kimi|^k3-256k$')).toBeLessThan(
       patterns.indexOf('^kimi-for-coding(?:-highspeed)?$'),
     );
@@ -118,7 +136,7 @@ describe('builtin kimi provider alias', () => {
     const entries = loadProviderAliasEntries();
     const entry = entries.find((candidate) => candidate.alias === 'kimi');
 
-    const ids = (entry?.config.staticModels ?? []).map((model) => model.id);
+    const ids = configuredStaticModels(entry).map((model) => model.id);
     expect(ids).toStrictEqual(
       expect.arrayContaining(['kimi-for-coding', 'kimi-k3', 'k3-256k']),
     );
@@ -144,7 +162,7 @@ describe('builtin kimi provider alias', () => {
     );
     expect(k3Rule).toBeDefined();
     // The pattern, used as a RegExp per modelDefaults semantics, matches kimi-k3.
-    expect(new RegExp(k3Rule?.pattern ?? '').test('kimi-k3')).toBe(true);
+    expect(new RegExp(configuredPattern(k3Rule)).test('kimi-k3')).toBe(true);
 
     const k3Defaults = k3Rule?.ephemeralSettings;
     // K3 accepts only low | high | max (no medium) — default is max.
@@ -178,7 +196,7 @@ describe('builtin kimi provider alias', () => {
       'image-resize.maxPixels': 8_847_360,
     };
     expect(broadRule?.ephemeralSettings).toMatchObject(imageLimits);
-    const rules = entry?.config.modelDefaults ?? [];
+    const rules = configuredModelDefaults(entry);
     expect(computeModelDefaults('kimi-k3', rules)).toMatchObject(imageLimits);
     expect(computeModelDefaults('k3-256k', rules)).toMatchObject(imageLimits);
     expect(computeModelDefaults('custom-model', rules)).not.toHaveProperty(

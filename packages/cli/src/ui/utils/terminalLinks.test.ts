@@ -31,6 +31,32 @@ function extractOsc8Label(link: string): string {
   return link.slice(urlEnd + 1, closeStart);
 }
 
+function extractNullableOsc8Label(link: string | null): string {
+  return extractOsc8Label(link ?? '');
+}
+
+function nullableLinkEndsWith(link: string | null, suffix: string): boolean {
+  return link?.endsWith(suffix) ?? false;
+}
+
+function nullableLinkWidth(link: string | null): number {
+  return stringWidth(link ?? '');
+}
+
+function escapeIndexes(link: string | null): {
+  readonly first: number | undefined;
+  readonly last: number | undefined;
+} {
+  return {
+    first: link?.indexOf('\u001b'),
+    last: link?.lastIndexOf('\u001b'),
+  };
+}
+
+function closingEscapeIndex(link: string | null): number {
+  return (link?.length ?? 0) - `\u001b]8;;\u0007`.length;
+}
+
 describe('createOsc8Link', () => {
   it('uses BEL terminators (not ST) for OSC-8 links', () => {
     const link = createOsc8Link('Click', 'https://example.com');
@@ -99,7 +125,7 @@ describe('createFilePathLink', () => {
 
     expect(link).not.toBeNull();
     const resolved = path.resolve(tempDir, 'src/index.ts');
-    expect(extractOsc8Label(link ?? '')).toBe('src/index.ts');
+    expect(extractNullableOsc8Label(link)).toBe('src/index.ts');
     expect(link).toContain(pathToFileURL(resolved).href);
   });
 
@@ -122,7 +148,7 @@ describe('createFilePathLink', () => {
     const link = createFilePathLink('config.yaml', [tempDir, otherDir]);
 
     expect(link).not.toBeNull();
-    expect(extractOsc8Label(link ?? '')).toBe('config.yaml');
+    expect(extractNullableOsc8Label(link)).toBe('config.yaml');
     expect(link).toContain(pathToFileURL(nested).href);
   });
 
@@ -133,7 +159,7 @@ describe('createFilePathLink', () => {
     expect(link).not.toBeNull();
     // The visible label (between the escape sequences) must be the original
     // relative candidate, NOT the absolute resolved path.
-    const label = extractOsc8Label(link ?? '');
+    const label = extractNullableOsc8Label(link);
     expect(label).toBe('src/index.ts');
   });
 });
@@ -145,8 +171,8 @@ describe('isLinkableHttpUrl', () => {
     ['https://claude.ai/oauth/authorize?client_id=abc&redirect_uri=xyz', true],
     ['http://localhost:3000/path', true],
     ['https://example.test/path_(disambiguation)', true],
-  ])('accepts %s as linkable', (candidate, expected) => {
-    expect(isLinkableHttpUrl(candidate)).toBe(expected);
+  ])('accepts %s as linkable', (candidate, linkable) => {
+    expect(isLinkableHttpUrl(candidate)).toBe(linkable);
   });
 
   it.each([
@@ -210,7 +236,7 @@ describe('createUrlLink', () => {
     expect(link).not.toContain(ST);
     // Ends with the closing OSC 8 sequence terminated by BEL
     const closingOsc8 = '\x1b]8;;\x07';
-    expect(link?.endsWith(closingOsc8)).toBe(true);
+    expect(nullableLinkEndsWith(link, closingOsc8)).toBe(true);
   });
 
   it('contains the full URL as both the target and the default label', () => {
@@ -220,7 +246,7 @@ describe('createUrlLink', () => {
     expect(link).not.toBeNull();
     expect(link).toContain(url);
     // The label (between first BEL and closing OSC 8) must be the URL
-    const label = extractOsc8Label(link ?? '');
+    const label = extractNullableOsc8Label(link);
     expect(label).toBe(url);
   });
 
@@ -230,7 +256,7 @@ describe('createUrlLink', () => {
 
     expect(link).not.toBeNull();
     expect(link).toContain(url);
-    const label = extractOsc8Label(link ?? '');
+    const label = extractNullableOsc8Label(link);
     expect(label).toBe('Click here');
   });
 
@@ -239,7 +265,7 @@ describe('createUrlLink', () => {
     const link = createUrlLink(LONG_OAUTH_URL);
 
     expect(link).not.toBeNull();
-    expect(stringWidth(link ?? '')).toBe(LONG_OAUTH_URL.length);
+    expect(nullableLinkWidth(link)).toBe(LONG_OAUTH_URL.length);
   });
 
   it('adds no display width beyond a custom label (AC-7)', () => {
@@ -247,7 +273,7 @@ describe('createUrlLink', () => {
     const link = createUrlLink(url, 'Click here');
 
     expect(link).not.toBeNull();
-    expect(stringWidth(link ?? '')).toBe('Click here'.length);
+    expect(nullableLinkWidth(link)).toBe('Click here'.length);
   });
 
   it('rejects URLs carrying userinfo, which enables authority confusion (AC-3)', () => {
@@ -276,10 +302,9 @@ describe('createUrlLink', () => {
     const link = createUrlLink(url);
     expect(link).not.toBeNull();
     expect(link).toContain('%1B');
-    expect(link?.indexOf('\u001b')).toBe(0);
-    expect(link?.lastIndexOf('\u001b')).toBe(
-      (link?.length ?? 0) - `\u001b]8;;\u0007`.length,
-    );
+    const indexes = escapeIndexes(link);
+    expect(indexes.first).toBe(0);
+    expect(indexes.last).toBe(closingEscapeIndex(link));
   });
 
   it('strips control characters from text that failed validation', () => {
@@ -301,7 +326,7 @@ describe('createUrlLink', () => {
   it('falls back to the URL when the label is empty, so the link is never invisible', () => {
     const url = 'https://example.com/some/path';
 
-    expect(extractOsc8Label(createUrlLink(url, '') ?? '')).toBe(url);
+    expect(extractNullableOsc8Label(createUrlLink(url, ''))).toBe(url);
     expect(createUrlLink(url, '')).toBe(createUrlLink(url));
   });
 

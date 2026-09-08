@@ -9,11 +9,40 @@ import {
   shouldDump,
   dumpRequestContext,
   dumpResponseContext,
+  type DumpRequest,
   type DumpRequestResult,
 } from './dumpContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 const logger = new DebugLogger('llxprt:core:dumpSDKContext');
+
+/**
+ * Transport that carried the SDK request being dumped (#3159). The shared
+ * helper synthesizes HTTP-like defaults when no real transport is observed, so an
+ * explicit WebSocket marker is the only way a dump can say "this was a Codex
+ * WebSocket frame, not an HTTP POST".
+ */
+type RequestDumpTransport =
+  | { type: 'http' }
+  | { type: 'websocket'; frameType: string };
+
+/** Optional observed request metadata recorded verbatim (credentials redacted on write). */
+export interface RequestDumpMetadata {
+  headers?: Record<string, string>;
+  transport?: RequestDumpTransport;
+}
+
+function resolveDumpHeaders(
+  metadata: RequestDumpMetadata | undefined,
+): Record<string, string> {
+  if (metadata?.headers !== undefined) {
+    return metadata.headers;
+  }
+  return {
+    'Content-Type': 'application/json',
+    'User-Agent': 'llxprt-code',
+  };
+}
 
 function buildSDKDumpUrl(
   providerName: string,
@@ -61,6 +90,26 @@ export async function bestEffortDump<T>(
 }
 
 /**
+ * Builds the request envelope shared by both dump writers (#3159): the
+ * transport decides the method (WebSocket frames are SEND, HTTP is POST) and
+ * the header map; keeping this in one builder stops the two paths from
+ * drifting apart.
+ */
+function buildSDKDumpRequest(
+  url: string,
+  requestParams: unknown,
+  metadata: RequestDumpMetadata | undefined,
+): DumpRequest {
+  return {
+    url,
+    method: metadata?.transport?.type === 'websocket' ? 'SEND' : 'POST',
+    headers: resolveDumpHeaders(metadata),
+    ...(metadata?.transport ? { transport: metadata.transport } : {}),
+    body: requestParams,
+  };
+}
+
+/**
  * Dumps SDK-level request/response data by synthesizing HTTP-like structure
  * This captures the actual SDK parameters and responses, which is more useful
  * for debugging than raw HTTP dumps.
@@ -73,18 +122,11 @@ export async function dumpSDKContext(
   response: unknown,
   isError: boolean,
   baseURL?: string,
+  metadata?: RequestDumpMetadata,
 ): Promise<string> {
   const url = buildSDKDumpUrl(providerName, endpoint, baseURL);
 
-  const request = {
-    url,
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': 'llxprt-code',
-    },
-    body: requestParams,
-  };
+  const request = buildSDKDumpRequest(url, requestParams, metadata);
 
   const dumpResponse = {
     status: isError ? 500 : 200,
@@ -115,18 +157,11 @@ export async function dumpSDKRequestContext(
   endpoint: string,
   requestParams: unknown,
   baseURL?: string,
+  metadata?: RequestDumpMetadata,
 ): Promise<DumpRequestResult> {
   const url = buildSDKDumpUrl(providerName, endpoint, baseURL);
 
-  const request = {
-    url,
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': 'llxprt-code',
-    },
-    body: requestParams,
-  };
+  const request = buildSDKDumpRequest(url, requestParams, metadata);
 
   logger.debug(
     () =>
@@ -251,9 +286,10 @@ export async function dumpSDKErrorRequestResponse(
   baseURL?: string,
   dumpRequest: typeof dumpSDKRequestContext = dumpSDKRequestContext,
   dumpResponse: typeof dumpSDKResponseContext = dumpSDKResponseContext,
+  metadata?: RequestDumpMetadata,
 ): Promise<void> {
   const reqResult = await bestEffortDump('error-request', providerName, () =>
-    dumpRequest(providerName, endpoint, requestParams, baseURL),
+    dumpRequest(providerName, endpoint, requestParams, baseURL, metadata),
   );
 
   await bestEffortDump('error-response', providerName, () =>
@@ -274,6 +310,7 @@ export function wrapStreamWithSDKErrorDump<T>(
   baseURL: string | undefined,
   dumpRequest: typeof dumpSDKRequestContext = dumpSDKRequestContext,
   dumpResponse: typeof dumpSDKResponseContext = dumpSDKResponseContext,
+  metadata?: RequestDumpMetadata,
 ): AsyncIterable<T> {
   const accumulated: T[] = [];
 
@@ -297,6 +334,7 @@ export function wrapStreamWithSDKErrorDump<T>(
         baseURL,
         dumpRequest,
         dumpResponse,
+        metadata,
       );
       throw error;
     }

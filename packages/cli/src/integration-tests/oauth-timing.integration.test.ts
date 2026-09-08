@@ -587,7 +587,7 @@ describe('OAuth Timing Integration Tests', () => {
   });
 
   describe('Multiple Provider Scenarios', () => {
-    it('should maintain separate OAuth state per provider', async () => {
+    async function observeCodexTokenForSeparateProviderOAuthState() {
       // Mock different tokens for different providers
       oauthSpies.getToken.mockImplementation(async (provider: string) => {
         if (provider === 'codex') return 'codex-oauth-token';
@@ -612,10 +612,14 @@ describe('OAuth Timing Integration Tests', () => {
         },
       );
 
-      const codexToken = await codexResolver.resolveAuthentication({
+      return codexResolver.resolveAuthentication({
         settingsService,
         includeOAuth: true,
       });
+    }
+
+    it('should maintain separate OAuth state per provider', async () => {
+      const codexToken = await observeCodexTokenForSeparateProviderOAuthState();
 
       expect(codexToken).toBe('codex-oauth-token');
 

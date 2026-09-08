@@ -26,6 +26,20 @@ const hasImportMetaResolve = (() => {
   }
 })();
 
+function findPackageEntry(packagePath: string): string {
+  let packageRoot = dirname(packagePath);
+  while (packageRoot !== dirname(packageRoot)) {
+    if (existsSync(join(packageRoot, 'package.json'))) {
+      break;
+    }
+    packageRoot = dirname(packageRoot);
+  }
+
+  const sourceEntry = join(packageRoot, 'src', 'main.ts');
+  const distributionEntry = join(packageRoot, 'dist', 'main.js');
+  return existsSync(sourceEntry) ? sourceEntry : distributionEntry;
+}
+
 describe('LSP entry path resolution', () => {
   const moduleDir = dirname(fileURLToPath(import.meta.url));
   const lspEntry = join(moduleDir, '../../../../lsp/src/main.ts');
@@ -45,9 +59,8 @@ describe('LSP entry path resolution', () => {
     expect(existsSync(brokenPath)).toBe(false);
   });
 
-  it.skipIf(!hasImportMetaResolve)(
-    'resolves via import.meta.resolve when package is installed',
-    () => {
+  describe.skipIf(!hasImportMetaResolve)(() => {
+    it('resolves via import.meta.resolve when package is installed', () => {
       // Call through `import.meta` rather than detaching `resolve` into a
       // local: some runtimes require the method stay bound to its
       // `import.meta` receiver.
@@ -60,18 +73,8 @@ describe('LSP entry path resolution', () => {
       expect(packagePath).toBeTruthy();
       expect(existsSync(packagePath)).toBe(true);
 
-      let pkgRoot = dirname(packagePath);
-      while (pkgRoot !== dirname(pkgRoot)) {
-        if (existsSync(join(pkgRoot, 'package.json'))) {
-          break;
-        }
-        pkgRoot = dirname(pkgRoot);
-      }
-
-      const srcEntry = join(pkgRoot, 'src', 'main.ts');
-      const distEntry = join(pkgRoot, 'dist', 'main.js');
-      const entryPath = existsSync(srcEntry) ? srcEntry : distEntry;
+      const entryPath = findPackageEntry(packagePath);
       expect(existsSync(entryPath)).toBe(true);
-    },
-  );
+    });
+  });
 });

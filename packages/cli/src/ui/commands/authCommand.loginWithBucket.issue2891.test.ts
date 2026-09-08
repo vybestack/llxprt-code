@@ -232,6 +232,16 @@ function cachedProviderIds(runtimeId: string): string[] {
 
 // ─── Test ───────────────────────────────────────────────────────────────────
 
+async function completeInitiateAuth(
+  shouldSucceed: boolean,
+  token: OAuthToken,
+): Promise<OAuthToken> {
+  if (!shouldSucceed) {
+    throw new Error('test: browser flow not triggered / not completed');
+  }
+  return token;
+}
+
 describe('Issue #2891 (b) (characterization) — /auth claudecode login makes the token visible WITHOUT restart, through the REAL command path', () => {
   let tempDir: string | undefined;
 
@@ -264,12 +274,8 @@ describe('Issue #2891 (b) (characterization) — /auth claudecode login makes th
 
     let initiateAuthShouldSucceed = false;
     const validToken = makeValidToken();
-    oauthProvider.initiateAuth = async (): Promise<OAuthToken> => {
-      if (!initiateAuthShouldSucceed) {
-        throw new Error('test: browser flow not triggered / not completed');
-      }
-      return validToken;
-    };
+    oauthProvider.initiateAuth = async (): Promise<OAuthToken> =>
+      completeInitiateAuth(initiateAuthShouldSucceed, validToken);
 
     // Mirror `/auth claudecode enable` so the provider's OAuth resolution path
     // is active (the reporter had already enabled OAuth before login).

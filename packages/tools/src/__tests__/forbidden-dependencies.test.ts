@@ -54,29 +54,29 @@ function collectAllDepNames(pkg: PackageJson): string[] {
   ];
 }
 
+function dependencyNames(field: 'dependencies' | 'devDependencies'): string[] {
+  return Object.keys(loadPackageJson()[field] ?? {});
+}
+
 describe('Forbidden Dependencies Test @plan:PLAN-20260608-ISSUE1585.P07', () => {
   describe('dependencies must not include core, providers, or cli', () => {
     it('has no @vybestack/llxprt-code-core in dependencies', () => {
-      const pkg = loadPackageJson();
-      const deps = Object.keys(pkg.dependencies ?? {});
+      const deps = dependencyNames('dependencies');
       expect(deps).not.toContain('@vybestack/llxprt-code-core');
     });
 
     it('has no @vybestack/llxprt-code-providers in dependencies', () => {
-      const pkg = loadPackageJson();
-      const deps = Object.keys(pkg.dependencies ?? {});
+      const deps = dependencyNames('dependencies');
       expect(deps).not.toContain('@vybestack/llxprt-code-providers');
     });
 
     it('has no @vybestack/llxprt-code (cli) in dependencies', () => {
-      const pkg = loadPackageJson();
-      const deps = Object.keys(pkg.dependencies ?? {});
+      const deps = dependencyNames('dependencies');
       expect(deps).not.toContain('@vybestack/llxprt-code');
     });
 
     it('dependencies contains only external packages (no monorepo deps)', () => {
-      const pkg = loadPackageJson();
-      const deps = Object.keys(pkg.dependencies ?? {});
+      const deps = dependencyNames('dependencies');
       for (const forbidden of FORBIDDEN_IN_ALL) {
         expect(deps).not.toContain(forbidden);
       }
@@ -85,26 +85,22 @@ describe('Forbidden Dependencies Test @plan:PLAN-20260608-ISSUE1585.P07', () => 
 
   describe('devDependencies must not include core or providers', () => {
     it('has no @vybestack/llxprt-code-core in devDependencies', () => {
-      const pkg = loadPackageJson();
-      const devDeps = Object.keys(pkg.devDependencies ?? {});
+      const devDeps = dependencyNames('devDependencies');
       expect(devDeps).not.toContain('@vybestack/llxprt-code-core');
     });
 
     it('has no @vybestack/llxprt-code-providers in devDependencies', () => {
-      const pkg = loadPackageJson();
-      const devDeps = Object.keys(pkg.devDependencies ?? {});
+      const devDeps = dependencyNames('devDependencies');
       expect(devDeps).not.toContain('@vybestack/llxprt-code-providers');
     });
 
     it('has no @vybestack/llxprt-code (cli) in devDependencies', () => {
-      const pkg = loadPackageJson();
-      const devDeps = Object.keys(pkg.devDependencies ?? {});
+      const devDeps = dependencyNames('devDependencies');
       expect(devDeps).not.toContain('@vybestack/llxprt-code');
     });
 
     it('test-utils is acceptable in devDependencies', () => {
-      const pkg = loadPackageJson();
-      const devDeps = Object.keys(pkg.devDependencies ?? {});
+      const devDeps = dependencyNames('devDependencies');
       expect(devDeps).toContain('@vybestack/llxprt-code-test-utils');
     });
   });

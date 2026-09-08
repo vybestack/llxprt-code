@@ -101,6 +101,10 @@ void vi.mock('./messages/DiffRenderer.js', () => ({
   DiffRenderer: vi.fn(() => null),
 }));
 
+function themeDialogFrameOrEmpty(frame: string | undefined): string {
+  return frame ?? '';
+}
+
 // Mock semantic colors
 void vi.mock('../semantic-colors.js', () => ({
   theme: {
@@ -372,7 +376,7 @@ describe('ThemeDialog', () => {
   it('should sort compatible themes before incompatible ones', () => {
     // Dark terminal should sort dark themes first
     const { lastFrame } = renderThemeDialog('#1E1E2E');
-    const output = lastFrame() ?? '';
+    const output = themeDialogFrameOrEmpty(lastFrame());
 
     // Find positions of themes in output
     const greenScreenPos = output.indexOf('Green Screen');
@@ -405,7 +409,7 @@ describe('ThemeDialog', () => {
   it('should pre-select theme based on terminal background', () => {
     // Dark terminal should pre-select a dark theme via pickDefaultThemeName
     const { lastFrame } = renderThemeDialog('#1E1E2E');
-    const output = lastFrame() ?? '';
+    const output = themeDialogFrameOrEmpty(lastFrame());
 
     // With a dark background, pickDefaultThemeName should pick a dark theme.
     // The default dark theme "Green Screen" should be pre-selected and

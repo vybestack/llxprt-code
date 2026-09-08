@@ -199,7 +199,42 @@ describe('agent.tools.keys — built-in tool-key control (REQ-007)', () => {
 
   // PROP — mask no-leak for length>8 keys.
   it('mask never leaks the raw key for length>8 keys (property)', async () => {
-    await fc.assert(
+    const {
+      maskNeverLeaksTheRawKeyForLength8KeysPropertyProperty,
+      observations,
+    } = await observeMaskNeverLeaksTheRawKeyForLength8KeysProperty();
+    await fc.assert(maskNeverLeaksTheRawKeyForLength8KeysPropertyProperty, {
+      numRuns: 8,
+    });
+    expect(
+      observations.map(({ maskedKey }) => maskedKey?.length),
+    ).toStrictEqual(observations.map(({ key }) => key.length));
+    expect(
+      observations.map(({ key, maskedKey }) =>
+        maskedKey?.startsWith(key.slice(0, 2)),
+      ),
+    ).toStrictEqual(observations.map(() => true));
+    expect(
+      observations.map(({ key, maskedKey }) =>
+        maskedKey?.endsWith(key.slice(-2)),
+      ),
+    ).toStrictEqual(observations.map(() => true));
+    expect(
+      observations.filter(({ key, maskedKey }) => maskedKey === key),
+    ).toStrictEqual([]);
+    expect(
+      observations.filter(
+        ({ key, maskedKey }) => maskedKey?.includes(key) === true,
+      ),
+    ).toStrictEqual([]);
+  });
+
+  const observeMaskNeverLeaksTheRawKeyForLength8KeysProperty = async () => {
+    const observations: Array<{
+      key: string;
+      maskedKey: string | undefined;
+    }> = [];
+    const maskNeverLeaksTheRawKeyForLength8KeysPropertyProperty =
       fc.asyncProperty(
         fc
           .string({ minLength: 9, maxLength: 40 })
@@ -208,18 +243,23 @@ describe('agent.tools.keys — built-in tool-key control (REQ-007)', () => {
           const { keys, dir: d } = await makeKeys();
           await keys.save('exa', key);
           const status = await keys.status('exa');
-          expect(status.maskedKey?.length).toBe(key.length);
-          expect(status.maskedKey?.startsWith(key.slice(0, 2))).toBe(true);
-          expect(status.maskedKey?.endsWith(key.slice(-2))).toBe(true);
-          expect(status.maskedKey).not.toBe(key);
-          // The raw key must not appear within the masked value.
-          expect(status.maskedKey).not.toContain(key);
           await fs.rm(d, { recursive: true, force: true });
+          const maskedKey = status.maskedKey;
+          observations.push({ key, maskedKey });
+          const lengthMatches = maskedKey?.length === key.length;
+          const preservesAffixes =
+            maskedKey?.startsWith(key.slice(0, 2)) === true &&
+            maskedKey.endsWith(key.slice(-2));
+          const masksRawKey =
+            maskedKey !== key && maskedKey?.includes(key) === false;
+          return lengthMatches && preservesAffixes && masksRawKey;
         },
-      ),
-      { numRuns: 8 },
-    );
-  });
+      );
+    return {
+      maskNeverLeaksTheRawKeyForLength8KeysPropertyProperty,
+      observations,
+    };
+  };
 
   // PROP — mask fully masks length<=8 keys.
   it('mask fully masks length<=8 keys (property)', async () => {

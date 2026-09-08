@@ -8,6 +8,8 @@ import { describe, it, expect, vi } from 'bun:test';
 import { getPty, loadNodePty, type PtyModule } from './getPty.js';
 import { isBunPosix } from './runtime.js';
 
+const bunIt = it;
+
 const PTY_BACKENDS = ['lydell-node-pty', 'node-pty'] as const;
 
 function requirePty<T>(pty: T | null, backend: string): T {
@@ -74,27 +76,25 @@ describe('getPty', () => {
   });
 
   describe('getPty runtime selection (Bun)', () => {
-    it.skipIf(!isBunPosix())(
-      'returns the bun-pty backend under Bun',
-      async () => {
+    {
+      const it = !isBunPosix() ? bunIt.skip : bunIt;
+      it('returns the bun-pty backend under Bun', async () => {
         const pty = requirePty(await getPty(), 'bun-pty');
         expect(pty.name).toBe('bun-pty');
         expect(pty.supportsBackpressure).toBe(false);
         expect(typeof pty.module.spawn).toBe('function');
-      },
-    );
+      });
+    }
   });
 
   describe('getPty runtime selection (Node)', () => {
-    // No loaders: this exercises the real installed backends through the
-    // default loaders, so it still proves the genuine selection path.
-    it.skipIf(isBunPosix())(
-      'returns a node-pty backend outside Bun POSIX',
-      async () => {
+    {
+      const it = isBunPosix() ? bunIt.skip : bunIt;
+      it('returns a node-pty backend outside Bun POSIX', async () => {
         const pty = requirePty(await getPty(), 'node-pty');
         expect(PTY_BACKENDS).toContain(pty.name);
         expect(typeof pty.module.spawn).toBe('function');
-      },
-    );
+      });
+    }
   });
 });

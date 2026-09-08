@@ -21,6 +21,29 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { AnthropicRequestBody } from './test-utils/anthropicTestUtils.js';
 
+function countToolUseMessagesWithoutThinking(
+  request: AnthropicRequestBody,
+): number {
+  let count = 0;
+  const assistantMessages = request.messages.filter(
+    (message) => message.role === 'assistant',
+  );
+  for (const message of assistantMessages) {
+    if (Array.isArray(message.content)) {
+      const hasToolUse = message.content.some(
+        (block) => block.type === 'tool_use',
+      );
+      const hasThinking = message.content.some(
+        (block) =>
+          block.type === 'thinking' || block.type === 'redacted_thinking',
+      );
+      if (hasToolUse && !hasThinking) {
+        count++;
+      }
+    }
+  }
+  return count;
+}
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(
     async () => "You are Claude Code, Anthropic's official CLI for Claude.",
@@ -33,10 +56,13 @@ void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   isNetworkTransientError: vi.fn(() => false),
 }));
 
+import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+
 const mockMessagesCreate = vi.fn();
 
 void vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
+    ...createAnthropicRawPostTestAdapter(mockMessagesCreate),
     messages: {
       create: mockMessagesCreate,
     },
@@ -484,21 +510,7 @@ describe('AnthropicProvider Issue #1150 Reproduction: Edge cases causing thinkin
 
     expect(request.thinking).toBeDefined();
 
-    const assistantMessages = request.messages.filter(
-      (m) => m.role === 'assistant',
-    );
-    let missingThinkingCount = 0;
-    for (const msg of assistantMessages) {
-      if (Array.isArray(msg.content)) {
-        const hasToolUse = msg.content.some((b) => b.type === 'tool_use');
-        const hasThinking = msg.content.some(
-          (b) => b.type === 'thinking' || b.type === 'redacted_thinking',
-        );
-        if (hasToolUse && !hasThinking) {
-          missingThinkingCount++;
-        }
-      }
-    }
+    const missingThinkingCount = countToolUseMessagesWithoutThinking(request);
 
     expect(missingThinkingCount).toBe(0);
   });

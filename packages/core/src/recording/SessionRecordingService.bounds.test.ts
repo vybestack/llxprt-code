@@ -12,7 +12,7 @@
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { SessionRecordingService } from './SessionRecordingService.js';
@@ -127,5 +127,194 @@ describe('SessionRecordingService queue retention', () => {
       (record) => record.type === 'provider_switch',
     );
     expect(switches).toHaveLength(5_000);
+  });
+
+  it('rejects a zero-byte queue bound before retaining the session header', () => {
+    const chatsDir = mkdtempSync(path.join(tmpdir(), 'llxprt-recording-zero-'));
+    created.push(chatsDir);
+
+    expect(
+      () =>
+        new SessionRecordingService({
+          sessionId: 'zero-bound',
+          projectHash: 'project',
+          chatsDir,
+          workspaceDirs: [chatsDir],
+          provider: 'test',
+          model: 'test',
+          maxQueueBytes: 0,
+        }),
+    ).toThrow(/queue byte limit/);
+  });
+
+  it('accepts an exact queue-byte reservation and rejects one byte over without dropping retained records', async () => {
+    const probeDir = mkdtempSync(
+      path.join(tmpdir(), 'llxprt-recording-probe-'),
+    );
+    created.push(probeDir);
+    const probe = new SessionRecordingService({
+      sessionId: 'bounded-recording',
+      projectHash: 'project',
+      chatsDir: probeDir,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+    });
+    probe.recordProviderSwitch('bounded-provider', 'bounded-model');
+    const exactBytes = probe.getPendingByteCount();
+    await probe.dispose();
+
+    const exactDir = mkdtempSync(
+      path.join(tmpdir(), 'llxprt-recording-exact-'),
+    );
+    created.push(exactDir);
+    const exact = new SessionRecordingService({
+      sessionId: 'bounded-recording',
+      projectHash: 'project',
+      chatsDir: exactDir,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+      maxQueueBytes: exactBytes,
+    });
+    services.push(exact);
+    exact.recordProviderSwitch('bounded-provider', 'bounded-model');
+
+    const overDir = mkdtempSync(path.join(tmpdir(), 'llxprt-recording-over-'));
+    created.push(overDir);
+    const over = new SessionRecordingService({
+      sessionId: 'bounded-recording',
+      projectHash: 'project',
+      chatsDir: overDir,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+      maxQueueBytes: exactBytes - 1,
+    });
+    services.push(over);
+
+    expect(() =>
+      over.recordProviderSwitch('bounded-provider', 'bounded-model'),
+    ).toThrow(/queue byte limit/);
+    expect(over.getPendingRecordCount()).toBe(1);
+    expect(exact.getPendingByteCount()).toBe(exactBytes);
+  });
+
+  it('rejects a materializing record before creating a file or watcher state', async () => {
+    const probeDir = mkdtempSync(
+      path.join(tmpdir(), 'llxprt-recording-materialize-probe-'),
+    );
+    created.push(probeDir);
+    const probeChats = path.join(probeDir, 'chats');
+    const probe = new SessionRecordingService({
+      sessionId: 'materialize-bound',
+      projectHash: 'project',
+      chatsDir: probeChats,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+    });
+    const headerBytes = probe.getPendingByteCount();
+    await probe.dispose();
+
+    const boundedDir = mkdtempSync(
+      path.join(tmpdir(), 'llxprt-recording-materialize-bounded-'),
+    );
+    created.push(boundedDir);
+    const boundedChats = path.join(boundedDir, 'chats');
+    const bounded = new SessionRecordingService({
+      sessionId: 'materialize-bound',
+      projectHash: 'project',
+      chatsDir: boundedChats,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+      maxQueueBytes: headerBytes,
+    });
+    services.push(bounded);
+
+    expect(() =>
+      bounded.recordContent({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'over the retained header bound' }],
+      }),
+    ).toThrow(/queue byte limit/);
+    expect(bounded.getFilePath()).toBeNull();
+    expect(existsSync(boundedChats)).toBe(false);
+    expect(bounded.getPendingByteCount()).toBe(headerBytes);
+  });
+
+  it('preflights the complete content batch before changing recording state', () => {
+    const probe = createService();
+    const contents = [
+      {
+        speaker: 'human' as const,
+        blocks: [{ type: 'text' as const, text: 'first batch item' }],
+      },
+      {
+        speaker: 'ai' as const,
+        blocks: [{ type: 'text' as const, text: 'second batch item' }],
+      },
+    ];
+    const probeHeaderBytes = probe.getPendingByteCount();
+    const prepared = probe.prepareContentBatch(contents);
+    prepared.publish();
+    const batchBytes = probe.getPendingByteCount() - probeHeaderBytes;
+    prepared.rollback();
+
+    const chatsDir = mkdtempSync(path.join(tmpdir(), 'llxprt-batch-bound-'));
+    created.push(chatsDir);
+    const headerProbe = new SessionRecordingService({
+      sessionId: 'bounded-recording',
+      projectHash: 'project',
+      chatsDir,
+      workspaceDirs: [chatsDir],
+      provider: 'test',
+      model: 'test',
+    });
+    services.push(headerProbe);
+    const headerBytes = headerProbe.getPendingByteCount();
+    const bounded = new SessionRecordingService({
+      sessionId: 'bounded-recording',
+      projectHash: 'project',
+      chatsDir,
+      workspaceDirs: [chatsDir],
+      provider: 'test',
+      model: 'test',
+      maxQueueBytes: headerBytes + batchBytes - 1,
+    });
+    services.push(bounded);
+
+    expect(() => bounded.prepareContentBatch(contents)).toThrow(
+      /queue byte limit/,
+    );
+    expect({
+      filePath: bounded.getFilePath(),
+      records: bounded.getPendingRecordCount(),
+      bytes: bounded.getPendingByteCount(),
+    }).toStrictEqual({ filePath: null, records: 1, bytes: headerBytes });
+  });
+
+  it('surfaces a background write failure after releasing every queued byte', async () => {
+    const root = mkdtempSync(
+      path.join(tmpdir(), 'llxprt-recording-write-fail-'),
+    );
+
+    created.push(root);
+    const service = new SessionRecordingService({
+      sessionId: 'write-failure',
+      projectHash: 'project',
+      chatsDir: root,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+    });
+    services.push(service);
+    service.initializeForResume(root, 0);
+    service.recordProviderSwitch('next-provider', 'next-model');
+
+    await expect(service.flush()).rejects.toBeInstanceOf(Error);
+    expect(service.getPendingByteCount()).toBe(0);
+    expect(service.getPendingRecordCount()).toBe(0);
   });
 });

@@ -78,14 +78,25 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
   });
 
   it('T15 ide.status() reports current, detected, and modeEnabled @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', async () => {
+    const {
+      status,
+      t15IdeStatusReportsCurrentDetectedAndModeEnabledObservation1,
+    } = await observeT15IdeStatusReportsCurrentDetectedAndModeEnabled();
+    expect(typeof status.modeEnabled).toBe('boolean');
+    expect(status.modeEnabled).toBe(true);
+    expect(Array.isArray(status.detected)).toBe(true);
+    expect(t15IdeStatusReportsCurrentDetectedAndModeEnabledObservation1).toBe(
+      true,
+    );
+  });
+
+  const observeT15IdeStatusReportsCurrentDetectedAndModeEnabled = async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
       ide: { mode: true },
     });
     try {
       const status = agent.ide.status();
-      expect(typeof status.modeEnabled).toBe('boolean');
-      expect(status.modeEnabled).toBe(true);
-      expect(Array.isArray(status.detected)).toBe(true);
+
       // current is null or an IdeInfo; assert the structural type without a
       // conditional expect — the field is either null or an object with a name.
       const current = status.current;
@@ -95,11 +106,17 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
         typeof current === 'object' &&
         typeof current.name === 'string' &&
         typeof current.trusted === 'boolean';
-      expect(isNull || isInfo).toBe(true);
+
+      const t15IdeStatusReportsCurrentDetectedAndModeEnabledObservation1 =
+        isNull || isInfo;
+      return {
+        status,
+        t15IdeStatusReportsCurrentDetectedAndModeEnabledObservation1,
+      };
     } finally {
       await cleanup();
     }
-  });
+  };
 
   it('T15 ide.trust() marks a detected IDE as trusted; subsequent current/detected reflect it @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', async () => {
     const fakeEnv: FakeIdeEnvironment = createFakeIdeEnvironment();

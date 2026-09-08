@@ -44,6 +44,20 @@ const isLinux = process.platform === 'linux';
 const isMacOS = process.platform === 'darwin';
 const isWindows = process.platform === 'win32';
 
+function resolvesMacOsTmpDir(
+  rawTmpDir: string,
+  resolvedTmpDir: string,
+): boolean {
+  if (rawTmpDir.startsWith('/var')) {
+    return resolvedTmpDir.startsWith('/private/var');
+  }
+  return fs.existsSync(resolvedTmpDir);
+}
+
+function getWorstCaseUid(): number {
+  return process.getuid?.() ?? 99999;
+}
+
 class InMemoryTokenStore {
   private readonly tokens = new Map<string, OAuthToken>();
 
@@ -159,7 +173,7 @@ describe('Platform Matrix Tests (Phase 38)', () => {
   // Unix Socket Creation
   // ─────────────────────────────────────────────────────────────────────────
 
-  describe('Unix socket creation', () => {
+  describe.skipIf(isWindows)('Unix socket creation', () => {
     /**
      * @requirement R3.1
      * @scenario Socket created with correct permissions
@@ -167,34 +181,31 @@ describe('Platform Matrix Tests (Phase 38)', () => {
      * @when The socket file is created
      * @then Socket file has mode 0o600 (owner read/write only)
      */
-    it.skipIf(isWindows)(
-      'creates socket with correct permissions (0o600)',
-      async () => {
-        const tokenStore = new InMemoryTokenStore();
-        const keyStorage = new InMemoryProviderKeyStorage();
-        server = new CredentialProxyServer({
-          tokenStore,
-          providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
-          socketDir: tmpDir,
-        });
+    it('creates socket with correct permissions (0o600)', async () => {
+      const tokenStore = new InMemoryTokenStore();
+      const keyStorage = new InMemoryProviderKeyStorage();
+      server = new CredentialProxyServer({
+        tokenStore,
+        providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
+        socketDir: tmpDir,
+      });
 
-        const socketPath = await server.start();
-        const stat = fs.statSync(socketPath);
+      const socketPath = await server.start();
+      const stat = fs.statSync(socketPath);
 
-        expect(stat.isSocket()).toBe(true);
-        expect(socketPath.endsWith('.sock')).toBe(true);
-        // Verify socket file permissions (owner read/write only)
-        const mode = stat.mode & 0o777;
-        expect(mode).toBe(0o600);
-      },
-    );
+      expect(stat.isSocket()).toBe(true);
+      expect(socketPath.endsWith('.sock')).toBe(true);
+      // Verify socket file permissions (owner read/write only)
+      const mode = stat.mode & 0o777;
+      expect(mode).toBe(0o600);
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
   // Subdirectory Permissions
   // ─────────────────────────────────────────────────────────────────────────
 
-  describe('Subdirectory permissions', () => {
+  describe.skipIf(isWindows)('Subdirectory permissions', () => {
     /**
      * @requirement R3.2
      * @scenario Per-user directory created with correct permissions
@@ -202,27 +213,24 @@ describe('Platform Matrix Tests (Phase 38)', () => {
      * @when The socket directory is created
      * @then Directory has mode 0o700 (owner only)
      */
-    it.skipIf(isWindows)(
-      'creates per-user directory with correct permissions (0o700)',
-      async () => {
-        const tokenStore = new InMemoryTokenStore();
-        const keyStorage = new InMemoryProviderKeyStorage();
-        server = new CredentialProxyServer({
-          tokenStore,
-          providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
-          socketDir: tmpDir,
-        });
+    it('creates per-user directory with correct permissions (0o700)', async () => {
+      const tokenStore = new InMemoryTokenStore();
+      const keyStorage = new InMemoryProviderKeyStorage();
+      server = new CredentialProxyServer({
+        tokenStore,
+        providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
+        socketDir: tmpDir,
+      });
 
-        const socketPath = await server.start();
-        const dir = path.dirname(socketPath);
-        const stat = fs.statSync(dir);
+      const socketPath = await server.start();
+      const dir = path.dirname(socketPath);
+      const stat = fs.statSync(dir);
 
-        expect(stat.isDirectory()).toBe(true);
-        // Check that directory has restricted permissions (owner only)
-        const mode = stat.mode & 0o777;
-        expect(mode).toBe(0o700);
-      },
-    );
+      expect(stat.isDirectory()).toBe(true);
+      // Check that directory has restricted permissions (owner only)
+      const mode = stat.mode & 0o777;
+      expect(mode).toBe(0o700);
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -230,37 +238,33 @@ describe('Platform Matrix Tests (Phase 38)', () => {
   // ─────────────────────────────────────────────────────────────────────────
 
   describe('Realpath resolution', () => {
-    /**
-     * @requirement R3.4
-     * @scenario macOS /var → /private/var resolved correctly
-     * @given Running on macOS where /var is symlink to /private/var
-     * @when tmpdir is used for socket path
-     * @then The resolved realpath is used
-     */
-    it.skipIf(!isMacOS)(
-      'macOS: resolves /var → /private/var symlink correctly',
-      () => {
+    describe.skipIf(!isMacOS)('macOS behavior', () => {
+      /**
+       * @requirement R3.4
+       * @scenario macOS /var → /private/var resolved correctly
+       * @given Running on macOS where /var is symlink to /private/var
+       * @when tmpdir is used for socket path
+       * @then The resolved realpath is used
+       */
+      it('macOS: resolves /var → /private/var symlink correctly', () => {
         const rawTmpdir = os.tmpdir();
         const resolvedTmpdir = fs.realpathSync(rawTmpdir);
 
         // On macOS, /var is typically a symlink to /private/var
-        const expectResolved = rawTmpdir.startsWith('/var')
-          ? resolvedTmpdir.startsWith('/private/var')
-          : fs.existsSync(resolvedTmpdir);
+        const expectResolved = resolvesMacOsTmpDir(rawTmpdir, resolvedTmpdir);
         expect(expectResolved).toBe(true);
-      },
-    );
+      });
+    });
 
-    /**
-     * @requirement R3.4
-     * @scenario Socket path uses resolved realpath
-     * @given A CredentialProxyServer on any platform
-     * @when Socket path is generated
-     * @then Path uses fs.realpathSync(os.tmpdir())
-     */
-    it.skipIf(isWindows)(
-      'socket path uses resolved tmpdir (fs.realpathSync)',
-      async () => {
+    describe.skipIf(isWindows)('non-Windows behavior', () => {
+      /**
+       * @requirement R3.4
+       * @scenario Socket path uses resolved realpath
+       * @given A CredentialProxyServer on any platform
+       * @when Socket path is generated
+       * @then Path uses fs.realpathSync(os.tmpdir())
+       */
+      it('socket path uses resolved tmpdir (fs.realpathSync)', async () => {
         const tokenStore = new InMemoryTokenStore();
         const keyStorage = new InMemoryProviderKeyStorage();
 
@@ -277,15 +281,15 @@ describe('Platform Matrix Tests (Phase 38)', () => {
 
         // Socket path should start with the resolved system tmpdir
         expect(socketPath.startsWith(resolvedSystemTmpDir)).toBe(true);
-      },
-    );
+      });
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
   // Peer Credential Verification — Linux
   // ─────────────────────────────────────────────────────────────────────────
 
-  describe('Peer credential verification — Linux', () => {
+  describe.skipIf(!isLinux)('Peer credential verification — Linux', () => {
     /**
      * @requirement R4.1
      * @scenario SO_PEERCRED returns correct UID on Linux
@@ -297,36 +301,33 @@ describe('Platform Matrix Tests (Phase 38)', () => {
      * connection works; actual SO_PEERCRED verification happens in the
      * server implementation (not directly testable without native bindings).
      */
-    it.skipIf(!isLinux)(
-      'Linux: socket connection works with peer credentials available',
-      async () => {
-        const tokenStore = new InMemoryTokenStore();
-        const keyStorage = new InMemoryProviderKeyStorage();
-        server = new CredentialProxyServer({
-          tokenStore,
-          providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
-          socketDir: tmpDir,
-        });
+    it('Linux: socket connection works with peer credentials available', async () => {
+      const tokenStore = new InMemoryTokenStore();
+      const keyStorage = new InMemoryProviderKeyStorage();
+      server = new CredentialProxyServer({
+        tokenStore,
+        providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
+        socketDir: tmpDir,
+      });
 
-        const socketPath = await server.start();
+      const socketPath = await server.start();
 
-        // Create a raw socket connection to verify connectivity
-        const socket = await new Promise<net.Socket>((resolve, reject) => {
-          const s = net.createConnection(socketPath, () => resolve(s));
-          s.once('error', reject);
-        });
+      // Create a raw socket connection to verify connectivity
+      const socket = await new Promise<net.Socket>((resolve, reject) => {
+        const s = net.createConnection(socketPath, () => resolve(s));
+        s.once('error', reject);
+      });
 
-        expect(socket).toBeInstanceOf(net.Socket);
-        socket.destroy();
-      },
-    );
+      expect(socket).toBeInstanceOf(net.Socket);
+      socket.destroy();
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
   // Peer Credential Verification — macOS
   // ─────────────────────────────────────────────────────────────────────────
 
-  describe('Peer credential verification — macOS', () => {
+  describe.skipIf(!isMacOS)('Peer credential verification — macOS', () => {
     /**
      * @requirement R4.2
      * @scenario LOCAL_PEERPID returns PID on macOS (best-effort)
@@ -334,36 +335,33 @@ describe('Platform Matrix Tests (Phase 38)', () => {
      * @when A client connects to the server
      * @then Connection succeeds (PID verification is best-effort logging)
      */
-    it.skipIf(!isMacOS)(
-      'macOS: socket connection works (LOCAL_PEERPID is best-effort)',
-      async () => {
-        const tokenStore = new InMemoryTokenStore();
-        const keyStorage = new InMemoryProviderKeyStorage();
-        server = new CredentialProxyServer({
-          tokenStore,
-          providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
-          socketDir: tmpDir,
-        });
+    it('macOS: socket connection works (LOCAL_PEERPID is best-effort)', async () => {
+      const tokenStore = new InMemoryTokenStore();
+      const keyStorage = new InMemoryProviderKeyStorage();
+      server = new CredentialProxyServer({
+        tokenStore,
+        providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
+        socketDir: tmpDir,
+      });
 
-        const socketPath = await server.start();
+      const socketPath = await server.start();
 
-        // Verify connection works on macOS
-        const socket = await new Promise<net.Socket>((resolve, reject) => {
-          const s = net.createConnection(socketPath, () => resolve(s));
-          s.once('error', reject);
-        });
+      // Verify connection works on macOS
+      const socket = await new Promise<net.Socket>((resolve, reject) => {
+        const s = net.createConnection(socketPath, () => resolve(s));
+        s.once('error', reject);
+      });
 
-        expect(socket).toBeInstanceOf(net.Socket);
-        socket.destroy();
-      },
-    );
+      expect(socket).toBeInstanceOf(net.Socket);
+      socket.destroy();
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
   // Peer Credential Verification — Fallback
   // ─────────────────────────────────────────────────────────────────────────
 
-  describe('Peer credential verification — fallback', () => {
+  describe.skipIf(isWindows)('Peer credential verification — fallback', () => {
     /**
      * @requirement R4.3
      * @scenario Fallback when neither SO_PEERCRED nor LOCAL_PEERPID available
@@ -371,29 +369,26 @@ describe('Platform Matrix Tests (Phase 38)', () => {
      * @when A client connects to the server
      * @then Connection succeeds (socket permissions + nonce are primary defense)
      */
-    it.skipIf(isWindows)(
-      'connection succeeds even without peer credential support',
-      async () => {
-        const tokenStore = new InMemoryTokenStore();
-        const keyStorage = new InMemoryProviderKeyStorage();
-        server = new CredentialProxyServer({
-          tokenStore,
-          providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
-          socketDir: tmpDir,
-        });
+    it('connection succeeds even without peer credential support', async () => {
+      const tokenStore = new InMemoryTokenStore();
+      const keyStorage = new InMemoryProviderKeyStorage();
+      server = new CredentialProxyServer({
+        tokenStore,
+        providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
+        socketDir: tmpDir,
+      });
 
-        const socketPath = await server.start();
+      const socketPath = await server.start();
 
-        // Use ProxySocketClient to verify full handshake works
-        const client = new ProxySocketClient(socketPath);
-        await client.ensureConnected();
+      // Use ProxySocketClient to verify full handshake works
+      const client = new ProxySocketClient(socketPath);
+      await client.ensureConnected();
 
-        const response = await client.request('list_providers', {});
-        expect(response.ok).toBe(true);
+      const response = await client.request('list_providers', {});
+      expect(response.ok).toBe(true);
 
-        client.close();
-      },
-    );
+      client.close();
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -401,16 +396,15 @@ describe('Platform Matrix Tests (Phase 38)', () => {
   // ─────────────────────────────────────────────────────────────────────────
 
   describe('Socket path length', () => {
-    /**
-     * @requirement R3.1
-     * @scenario Socket path fits within platform limits
-     * @given The maximum socket path generated by the server
-     * @when Path length is measured
-     * @then Path length is less than ~104 chars (macOS limit)
-     */
-    it.skipIf(isWindows)(
-      'socket path fits within platform socket path limits',
-      async () => {
+    describe.skipIf(isWindows)('non-Windows behavior', () => {
+      /**
+       * @requirement R3.1
+       * @scenario Socket path fits within platform limits
+       * @given The maximum socket path generated by the server
+       * @when Path length is measured
+       * @then Path length is less than ~104 chars (macOS limit)
+       */
+      it('socket path fits within platform socket path limits', async () => {
         const tokenStore = new InMemoryTokenStore();
         const keyStorage = new InMemoryProviderKeyStorage();
         server = new CredentialProxyServer({
@@ -424,8 +418,8 @@ describe('Platform Matrix Tests (Phase 38)', () => {
         // macOS has ~104 char limit, Linux typically ~108
         // Our generated path should be well under this
         expect(socketPath.length).toBeLessThan(104);
-      },
-    );
+      });
+    });
 
     /**
      * @requirement R3.1
@@ -437,7 +431,7 @@ describe('Platform Matrix Tests (Phase 38)', () => {
     it('calculates worst-case socket path length', () => {
       // Simulate worst-case path calculation
       const resolvedTmpdir = fs.realpathSync(os.tmpdir());
-      const uid = process.getuid?.() ?? 99999;
+      const uid = getWorstCaseUid();
       const maxPid = 99999;
       // 128-bit nonce in base64url = 22 chars
       const nonce = 'AAAAAAAAAAAAAAAAAAAAAA';
@@ -458,7 +452,7 @@ describe('Platform Matrix Tests (Phase 38)', () => {
   // Stale Socket Cleanup
   // ─────────────────────────────────────────────────────────────────────────
 
-  describe('Stale socket cleanup', () => {
+  describe.skipIf(isWindows)('Stale socket cleanup', () => {
     /**
      * @requirement R25.1
      * @scenario Server can start in directory with existing files
@@ -466,47 +460,44 @@ describe('Platform Matrix Tests (Phase 38)', () => {
      * @when Server attempts to start
      * @then Server generates unique path and starts successfully
      */
-    it.skipIf(isWindows)(
-      'starts successfully in directory with existing socket files',
-      async () => {
-        const tokenStore = new InMemoryTokenStore();
-        const keyStorage = new InMemoryProviderKeyStorage();
+    it('starts successfully in directory with existing socket files', async () => {
+      const tokenStore = new InMemoryTokenStore();
+      const keyStorage = new InMemoryProviderKeyStorage();
 
-        // Create a file to simulate a stale socket (regular file, not actual socket)
-        // This tests that the server can start in a directory with existing files
-        const staleFilePath = path.join(
-          tmpDir,
-          `${process.pid}-stale1234567890123456.sock`,
-        );
-        fs.writeFileSync(staleFilePath, 'stale socket placeholder');
+      // Create a file to simulate a stale socket (regular file, not actual socket)
+      // This tests that the server can start in a directory with existing files
+      const staleFilePath = path.join(
+        tmpDir,
+        `${process.pid}-stale1234567890123456.sock`,
+      );
+      fs.writeFileSync(staleFilePath, 'stale socket placeholder');
 
-        // Verify the file exists
-        expect(fs.existsSync(staleFilePath)).toBe(true);
+      // Verify the file exists
+      expect(fs.existsSync(staleFilePath)).toBe(true);
 
-        // Create a CredentialProxyServer - it generates unique paths with random nonces
-        // so it won't conflict with existing files
-        server = new CredentialProxyServer({
-          tokenStore,
-          providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
-          socketDir: tmpDir,
-        });
+      // Create a CredentialProxyServer - it generates unique paths with random nonces
+      // so it won't conflict with existing files
+      server = new CredentialProxyServer({
+        tokenStore,
+        providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
+        socketDir: tmpDir,
+      });
 
-        // Should start successfully
-        const socketPath = await server.start();
-        expect(fs.existsSync(socketPath)).toBe(true);
-        expect(socketPath).not.toBe(staleFilePath); // Different path due to random nonce
+      // Should start successfully
+      const socketPath = await server.start();
+      expect(fs.existsSync(socketPath)).toBe(true);
+      expect(socketPath).not.toBe(staleFilePath); // Different path due to random nonce
 
-        // Original file should still exist (server doesn't clean up other files)
-        expect(fs.existsSync(staleFilePath)).toBe(true);
-      },
-    );
+      // Original file should still exist (server doesn't clean up other files)
+      expect(fs.existsSync(staleFilePath)).toBe(true);
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
   // Concurrent Socket Operations
   // ─────────────────────────────────────────────────────────────────────────
 
-  describe('Concurrent socket operations', () => {
+  describe.skipIf(isWindows)('Concurrent socket operations', () => {
     /**
      * @requirement R25.5
      * @scenario Multiple requests over single socket handled correctly
@@ -514,62 +505,59 @@ describe('Platform Matrix Tests (Phase 38)', () => {
      * @when Multiple concurrent requests are sent
      * @then All requests receive correct responses
      */
-    it.skipIf(isWindows)(
-      'handles multiple concurrent requests over single socket',
-      async () => {
-        const tokenStore = new InMemoryTokenStore();
-        const keyStorage = new InMemoryProviderKeyStorage();
+    it('handles multiple concurrent requests over single socket', async () => {
+      const tokenStore = new InMemoryTokenStore();
+      const keyStorage = new InMemoryProviderKeyStorage();
 
-        // Pre-populate some tokens
-        await tokenStore.saveToken(
-          'anthropic',
-          {
-            access_token: 'test-anthropic',
-            expiry: Math.floor(Date.now() / 1000) + 3600,
-            token_type: 'Bearer',
-          },
-          'default',
-        );
-        await tokenStore.saveToken(
-          'openai',
-          {
-            access_token: 'test-openai',
-            expiry: Math.floor(Date.now() / 1000) + 3600,
-            token_type: 'Bearer',
-          },
-          'default',
-        );
+      // Pre-populate some tokens
+      await tokenStore.saveToken(
+        'anthropic',
+        {
+          access_token: 'test-anthropic',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer',
+        },
+        'default',
+      );
+      await tokenStore.saveToken(
+        'openai',
+        {
+          access_token: 'test-openai',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer',
+        },
+        'default',
+      );
 
-        server = new CredentialProxyServer({
-          tokenStore,
-          providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
-          socketDir: tmpDir,
-        });
+      server = new CredentialProxyServer({
+        tokenStore,
+        providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
+        socketDir: tmpDir,
+      });
 
-        const socketPath = await server.start();
-        const client = new ProxySocketClient(socketPath);
+      const socketPath = await server.start();
+      const client = new ProxySocketClient(socketPath);
 
-        // Send multiple concurrent requests
-        const requests = [
-          client.request('list_providers', {}),
-          client.request('get_token', { provider: 'anthropic' }),
-          client.request('get_token', { provider: 'openai' }),
-          client.request('list_providers', {}),
-        ];
+      // Send multiple concurrent requests
+      const requests = [
+        client.request('list_providers', {}),
+        client.request('get_token', { provider: 'anthropic' }),
+        client.request('get_token', { provider: 'openai' }),
+        client.request('list_providers', {}),
+      ];
 
-        const results = await Promise.all(requests);
+      const results = await Promise.all(requests);
 
-        // Verify all requests succeeded
-        expect(results[0].ok).toBe(true);
-        expect(results[1].ok).toBe(true);
-        expect(results[1].data?.access_token).toBe('test-anthropic');
-        expect(results[2].ok).toBe(true);
-        expect(results[2].data?.access_token).toBe('test-openai');
-        expect(results[3].ok).toBe(true);
+      // Verify all requests succeeded
+      expect(results[0].ok).toBe(true);
+      expect(results[1].ok).toBe(true);
+      expect(results[1].data?.access_token).toBe('test-anthropic');
+      expect(results[2].ok).toBe(true);
+      expect(results[2].data?.access_token).toBe('test-openai');
+      expect(results[3].ok).toBe(true);
 
-        client.close();
-      },
-    );
+      client.close();
+    });
 
     /**
      * @requirement R25.5
@@ -578,63 +566,60 @@ describe('Platform Matrix Tests (Phase 38)', () => {
      * @when Multiple clients connect simultaneously
      * @then All clients receive correct responses
      */
-    it.skipIf(isWindows)(
-      'handles multiple simultaneous client connections',
-      async () => {
-        const tokenStore = new InMemoryTokenStore();
-        const keyStorage = new InMemoryProviderKeyStorage();
+    it('handles multiple simultaneous client connections', async () => {
+      const tokenStore = new InMemoryTokenStore();
+      const keyStorage = new InMemoryProviderKeyStorage();
 
-        await tokenStore.saveToken(
-          'gemini',
-          {
-            access_token: 'test-gemini',
-            expiry: Math.floor(Date.now() / 1000) + 3600,
-            token_type: 'Bearer',
-          },
-          'default',
-        );
+      await tokenStore.saveToken(
+        'gemini',
+        {
+          access_token: 'test-gemini',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer',
+        },
+        'default',
+      );
 
-        server = new CredentialProxyServer({
-          tokenStore,
-          providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
-          socketDir: tmpDir,
-        });
+      server = new CredentialProxyServer({
+        tokenStore,
+        providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
+        socketDir: tmpDir,
+      });
 
-        const socketPath = await server.start();
+      const socketPath = await server.start();
 
-        // Create multiple clients
-        const clients = [
-          new ProxySocketClient(socketPath),
-          new ProxySocketClient(socketPath),
-          new ProxySocketClient(socketPath),
-        ];
+      // Create multiple clients
+      const clients = [
+        new ProxySocketClient(socketPath),
+        new ProxySocketClient(socketPath),
+        new ProxySocketClient(socketPath),
+      ];
 
-        // Each client makes a request
-        const results = await Promise.all(
-          clients.map((client) =>
-            client.request('get_token', { provider: 'gemini' }),
-          ),
-        );
+      // Each client makes a request
+      const results = await Promise.all(
+        clients.map((client) =>
+          client.request('get_token', { provider: 'gemini' }),
+        ),
+      );
 
-        // All should succeed
-        for (const result of results) {
-          expect(result.ok).toBe(true);
-          expect(result.data?.access_token).toBe('test-gemini');
-        }
+      // All should succeed
+      for (const result of results) {
+        expect(result.ok).toBe(true);
+        expect(result.data?.access_token).toBe('test-gemini');
+      }
 
-        // Clean up
-        for (const client of clients) {
-          client.close();
-        }
-      },
-    );
+      // Clean up
+      for (const client of clients) {
+        client.close();
+      }
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
   // Windows Named Pipe Transport
   // ─────────────────────────────────────────────────────────────────────────
 
-  describe('Windows named pipe transport', () => {
+  describe.skipIf(!isWindows)('Windows named pipe transport', () => {
     /**
      * @requirement R3.1 (Windows)
      * @scenario start() returns a named-pipe endpoint on win32
@@ -642,24 +627,21 @@ describe('Platform Matrix Tests (Phase 38)', () => {
      * @when start() is called
      * @then The returned path is a `\\.\pipe\lxcp-...` pipe name (not a .sock file)
      */
-    it.skipIf(!isWindows)(
-      'win32: start() returns a \\\\.\\pipe\\ endpoint with lxcp- prefix',
-      async () => {
-        const tokenStore = new InMemoryTokenStore();
-        const keyStorage = new InMemoryProviderKeyStorage();
-        server = new CredentialProxyServer({
-          tokenStore,
-          providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
-          // socketDir is intentionally passed and must be IGNORED on Windows
-          socketDir: tmpDir,
-        });
+    it('win32: start() returns a \\\\.\\pipe\\ endpoint with lxcp- prefix', async () => {
+      const tokenStore = new InMemoryTokenStore();
+      const keyStorage = new InMemoryProviderKeyStorage();
+      server = new CredentialProxyServer({
+        tokenStore,
+        providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
+        // socketDir is intentionally passed and must be IGNORED on Windows
+        socketDir: tmpDir,
+      });
 
-        const pipePath = await server.start();
+      const pipePath = await server.start();
 
-        expect(pipePath.startsWith('\\\\.\\pipe\\lxcp-')).toBe(true);
-        expect(pipePath.endsWith('.sock')).toBe(false);
-      },
-    );
+      expect(pipePath.startsWith('\\\\.\\pipe\\lxcp-')).toBe(true);
+      expect(pipePath.endsWith('.sock')).toBe(false);
+    });
 
     /**
      * @requirement R2.1, R3.3 (Windows)
@@ -668,47 +650,44 @@ describe('Platform Matrix Tests (Phase 38)', () => {
      * @when A ProxySocketClient connects and requests the token
      * @then The full handshake + request + response succeeds
      */
-    it.skipIf(!isWindows)(
-      'win32: ProxySocketClient round-trips a request over the named pipe',
-      async () => {
-        const tokenStore = new InMemoryTokenStore();
-        const keyStorage = new InMemoryProviderKeyStorage();
+    it('win32: ProxySocketClient round-trips a request over the named pipe', async () => {
+      const tokenStore = new InMemoryTokenStore();
+      const keyStorage = new InMemoryProviderKeyStorage();
 
-        await tokenStore.saveToken(
-          'anthropic',
-          {
-            access_token: 'win-pipe-token',
-            expiry: Math.floor(Date.now() / 1000) + 3600,
-            token_type: 'Bearer',
-          },
-          'default',
-        );
+      await tokenStore.saveToken(
+        'anthropic',
+        {
+          access_token: 'win-pipe-token',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer',
+        },
+        'default',
+      );
 
-        server = new CredentialProxyServer({
-          tokenStore,
-          providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
-          socketDir: tmpDir,
+      server = new CredentialProxyServer({
+        tokenStore,
+        providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
+        socketDir: tmpDir,
+      });
+
+      const pipePath = await server.start();
+      const client = new ProxySocketClient(pipePath);
+      try {
+        await client.ensureConnected();
+
+        const res = await client.request('get_token', {
+          provider: 'anthropic',
         });
+        expect(res.ok).toBe(true);
+        expect(res.data?.access_token).toBe('win-pipe-token');
 
-        const pipePath = await server.start();
-        const client = new ProxySocketClient(pipePath);
-        try {
-          await client.ensureConnected();
-
-          const res = await client.request('get_token', {
-            provider: 'anthropic',
-          });
-          expect(res.ok).toBe(true);
-          expect(res.data?.access_token).toBe('win-pipe-token');
-
-          const listRes = await client.request('list_providers', {});
-          expect(listRes.ok).toBe(true);
-          expect(listRes.data?.providers).toContain('anthropic');
-        } finally {
-          client.close();
-        }
-      },
-    );
+        const listRes = await client.request('list_providers', {});
+        expect(listRes.ok).toBe(true);
+        expect(listRes.data?.providers).toContain('anthropic');
+      } finally {
+        client.close();
+      }
+    });
 
     /**
      * @requirement R3.2 (Windows)
@@ -718,50 +697,47 @@ describe('Platform Matrix Tests (Phase 38)', () => {
      * @then The POSIX-only fs calls (mkdirSync/chmodSync/unlinkSync) are never
      *   invoked, and no file materializes at the pipe path
      */
-    it.skipIf(!isWindows)(
-      'win32: start()/stop() invoke no mkdirSync/chmodSync/unlinkSync for the pipe',
-      async () => {
-        const tokenStore = new InMemoryTokenStore();
-        const keyStorage = new InMemoryProviderKeyStorage();
-        server = new CredentialProxyServer({
-          tokenStore,
-          providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
-          socketDir: tmpDir,
-        });
+    it('win32: start()/stop() invoke no mkdirSync/chmodSync/unlinkSync for the pipe', async () => {
+      const tokenStore = new InMemoryTokenStore();
+      const keyStorage = new InMemoryProviderKeyStorage();
+      server = new CredentialProxyServer({
+        tokenStore,
+        providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
+        socketDir: tmpDir,
+      });
 
-        const mkdirSpy = vi.spyOn(fs, 'mkdirSync');
-        const chmodSpy = vi.spyOn(fs, 'chmodSync');
-        const unlinkSpy = vi.spyOn(fs, 'unlinkSync');
+      const mkdirSpy = vi.spyOn(fs, 'mkdirSync');
+      const chmodSpy = vi.spyOn(fs, 'chmodSync');
+      const unlinkSpy = vi.spyOn(fs, 'unlinkSync');
 
-        // Confirm the spies were actually installed before relying on
-        // not.toHaveBeenCalled(); otherwise a silently failed spy would make
-        // the guard assertions meaningless.
-        expect(fs.mkdirSync).toHaveProperty('mock');
-        expect(fs.chmodSync).toHaveProperty('mock');
-        expect(fs.unlinkSync).toHaveProperty('mock');
+      // Confirm the spies were actually installed before relying on
+      // not.toHaveBeenCalled(); otherwise a silently failed spy would make
+      // the guard assertions meaningless.
+      expect(fs.mkdirSync).toHaveProperty('mock');
+      expect(fs.chmodSync).toHaveProperty('mock');
+      expect(fs.unlinkSync).toHaveProperty('mock');
 
-        try {
-          const pipePath = await server.start();
+      try {
+        const pipePath = await server.start();
 
-          // The spy assertions are the authoritative guard that no POSIX-only
-          // fs/permission call ran. We deliberately do not assert
-          // fs.existsSync(pipePath) while the pipe is live: on Windows an
-          // active named pipe can resolve as an existing system object, so
-          // that check is unreliable until the server is stopped.
-          expect(mkdirSpy).not.toHaveBeenCalled();
-          expect(chmodSpy).not.toHaveBeenCalled();
+        // The spy assertions are the authoritative guard that no POSIX-only
+        // fs/permission call ran. We deliberately do not assert
+        // fs.existsSync(pipePath) while the pipe is live: on Windows an
+        // active named pipe can resolve as an existing system object, so
+        // that check is unreliable until the server is stopped.
+        expect(mkdirSpy).not.toHaveBeenCalled();
+        expect(chmodSpy).not.toHaveBeenCalled();
 
-          await server.stop();
+        await server.stop();
 
-          expect(unlinkSpy).not.toHaveBeenCalled();
-          // After stop the pipe is released; no on-disk file was ever created.
-          expect(fs.existsSync(pipePath)).toBe(false);
-        } finally {
-          mkdirSpy.mockRestore();
-          chmodSpy.mockRestore();
-          unlinkSpy.mockRestore();
-        }
-      },
-    );
+        expect(unlinkSpy).not.toHaveBeenCalled();
+        // After stop the pipe is released; no on-disk file was ever created.
+        expect(fs.existsSync(pipePath)).toBe(false);
+      } finally {
+        mkdirSpy.mockRestore();
+        chmodSpy.mockRestore();
+        unlinkSpy.mockRestore();
+      }
+    });
   });
 });

@@ -181,8 +181,7 @@ describe('Multi-root continuation despite verbose stderr (finding 3)', () => {
     cleanup();
   });
 
-  it(
-    'searches all roots and returns complete results when no semantic exhaustion',
+  const observeSearchesAllRootsAndReturnsCompleteResultsWhenNoSemanticExhaustionAt184 =
     async () => {
       const dirs: string[] = [];
       for (let i = 0; i < 3; i++) {
@@ -191,18 +190,23 @@ describe('Multi-root continuation despite verbose stderr (finding 3)', () => {
         writeFileSync(join(dir, `f${i}.txt`), `uniquematch_${i}\n`);
         dirs.push(dir);
       }
-
       const host: IToolHost = {
         ...createToolHost(tempDir),
         getWorkspaceRoots: () => dirs,
       };
-
       const result = await executeRipgrep(host, {
         pattern: 'uniquematch',
       });
-
       const text =
         typeof result.llmContent === 'string' ? result.llmContent : '';
+      return { text };
+    };
+
+  it(
+    'searches all roots and returns complete results when no semantic exhaustion',
+    async () => {
+      const { text } =
+        await observeSearchesAllRootsAndReturnsCompleteResultsWhenNoSemanticExhaustionAt184();
       expect(text).not.toMatch(/incomplete|showing/i);
       expect(text).toContain('uniquematch_0');
       expect(text).toContain('uniquematch_1');

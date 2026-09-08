@@ -164,7 +164,7 @@ describe('AuthPrecedenceResolver DI behavioral tests', () => {
 
         const result = await resolver.resolveAuthenticationResult();
 
-        expect(result).toEqual({
+        expect(result).toStrictEqual({
           token: 'env-key-after-keyfile-failure',
         });
       } finally {

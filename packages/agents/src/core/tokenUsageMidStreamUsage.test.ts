@@ -42,7 +42,7 @@ describe('mid-stream usage preservation (issue #3130)', () => {
       withUsage,
     );
 
-    expect(afterwards.metadata?.usage).toEqual(USAGE);
+    expect(afterwards.metadata?.usage).toStrictEqual(USAGE);
   });
 
   it('prefers the newest reported usage over an older one', () => {
@@ -60,7 +60,7 @@ describe('mid-stream usage preservation (issue #3130)', () => {
       older,
     );
 
-    expect(newer.metadata?.usage).toEqual(newerUsage);
+    expect(newer.metadata?.usage).toStrictEqual(newerUsage);
   });
 
   it('reports no usage when the provider never sent any', () => {
@@ -80,6 +80,6 @@ describe('mid-stream usage preservation (issue #3130)', () => {
       withUsage,
     );
 
-    expect(afterwards.blocks).toEqual([{ type: 'text', text: 'second' }]);
+    expect(afterwards.blocks).toStrictEqual([{ type: 'text', text: 'second' }]);
   });
 });

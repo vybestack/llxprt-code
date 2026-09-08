@@ -73,22 +73,22 @@ async function recordTurnWithTiming(
 
 let logFilePath: string;
 
-function useTempLogFile(): void {
-  beforeEach(() => {
-    logFilePath = makeTempLogPath();
-  });
-  afterEach(() => {
-    const dir = path.dirname(logFilePath);
-    try {
-      fs.rmSync(dir, { recursive: true, force: true });
-    } catch (error) {
-      // Temp dir cleanup is best-effort; failure here does not affect outcomes
-      process.stderr.write(`Failed to clean up temp dir: ${String(error)}\n`);
-    }
-  });
-}
-
 describe('TokenUsageLogger turn-record timing (issue #3257)', () => {
+  function useTempLogFile(): void {
+    beforeEach(() => {
+      logFilePath = makeTempLogPath();
+    });
+    afterEach(() => {
+      const dir = path.dirname(logFilePath);
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+      } catch (error) {
+        // Temp dir cleanup is best-effort; failure here does not affect outcomes
+        process.stderr.write(`Failed to clean up temp dir: ${String(error)}\n`);
+      }
+    });
+  }
+
   useTempLogFile();
 
   it('serializes attached timing as ttft_ms, generation_ms, provider_request_ms, chunk_count', async () => {
@@ -209,40 +209,49 @@ describe('TokenUsageLogger turn-record timing (issue #3257)', () => {
   });
 
   it('parseTokenUsageLogRecord round-trips timing fields and still parses legacy records', () => {
-    const legacyRecord: Record<string, unknown> = {
-      record_type: 'turn',
-      schema_version: 1,
-      ts: '2026-08-20T00:00:00.000Z',
-      prompt_id: 'legacy-prompt',
-      provider: 'openai',
-      model: 'gpt-4',
-      estimated_tokens: 100,
-      estimator: 'openai-tiktoken',
-      tiktoken_tokens: 90,
-      tiktoken_estimation_failed: false,
-      actual_prompt_tokens: 120,
-      cached_tokens: 0,
-      effective_actual_tokens: 120,
-    };
-    const parsedLegacy = parseTokenUsageLogRecord(legacyRecord);
+    const { parsedLegacy, parsedTimed, record_typeObservation } =
+      observeParseTokenUsageLogRecordRoundTripsTimingFieldsAndStillParsesLegacyRecords();
     expect(parsedLegacy).not.toBeNull();
-    expect(parsedLegacy?.record_type).toBe('turn');
-
-    const timedRecord = {
-      ...legacyRecord,
-      prompt_id: 'timed-prompt',
-      ttft_ms: 200,
-      generation_ms: 1000,
-      provider_request_ms: 1500,
-      chunk_count: 10,
-    };
-    const parsedTimed = parseTokenUsageLogRecord(timedRecord);
-    if (parsedTimed === null || parsedTimed.record_type !== 'turn') {
-      throw new Error('expected a parseable turn record with timing fields');
-    }
+    expect(record_typeObservation).toBe('turn');
     expect(parsedTimed.ttft_ms).toBe(200);
     expect(parsedTimed.generation_ms).toBe(1000);
     expect(parsedTimed.provider_request_ms).toBe(1500);
     expect(parsedTimed.chunk_count).toBe(10);
   });
+
+  const observeParseTokenUsageLogRecordRoundTripsTimingFieldsAndStillParsesLegacyRecords =
+    () => {
+      const legacyRecord: Record<string, unknown> = {
+        record_type: 'turn',
+        schema_version: 1,
+        ts: '2026-08-20T00:00:00.000Z',
+        prompt_id: 'legacy-prompt',
+        provider: 'openai',
+        model: 'gpt-4',
+        estimated_tokens: 100,
+        estimator: 'openai-tiktoken',
+        tiktoken_tokens: 90,
+        tiktoken_estimation_failed: false,
+        actual_prompt_tokens: 120,
+        cached_tokens: 0,
+        effective_actual_tokens: 120,
+      };
+      const parsedLegacy = parseTokenUsageLogRecord(legacyRecord);
+
+      const timedRecord = {
+        ...legacyRecord,
+        prompt_id: 'timed-prompt',
+        ttft_ms: 200,
+        generation_ms: 1000,
+        provider_request_ms: 1500,
+        chunk_count: 10,
+      };
+      const parsedTimed = parseTokenUsageLogRecord(timedRecord);
+      if (parsedTimed === null || parsedTimed.record_type !== 'turn') {
+        throw new Error('expected a parseable turn record with timing fields');
+      }
+
+      const record_typeObservation = parsedLegacy?.record_type;
+      return { parsedLegacy, parsedTimed, record_typeObservation };
+    };
 });

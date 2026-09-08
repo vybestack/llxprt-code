@@ -9,14 +9,14 @@ import * as crypto from 'node:crypto';
 import type * as net from 'node:net';
 import { URL } from 'node:url';
 import type { EventEmitter } from 'node:events';
-import { openBrowserSecurely } from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
+import { openHostBrowser } from '../host/hostServices.js';
 import {
   type MCPOAuthToken,
   MCPOAuthTokenStorage,
 } from './oauth-token-storage.js';
-import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
+import { getErrorMessage } from '@vybestack/llxprt-code-tools/utils/errors.js';
 import { OAuthUtils, ResourceMismatchError } from './oauth-utils.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import {
   type OAuthTokenResponse,
   parseTokenResponse,
@@ -826,7 +826,7 @@ TIP: Triple-click to select the entire URL, then copy and paste it into your bro
 WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.`);
 
     try {
-      await openBrowserSecurely(authUrl);
+      await openHostBrowser(authUrl);
     } catch (error) {
       debugLogger.warn(
         'Failed to open browser automatically:',

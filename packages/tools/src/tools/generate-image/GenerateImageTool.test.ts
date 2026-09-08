@@ -16,6 +16,17 @@ import type {
 const VALID_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
+function hasInlineData(
+  value: unknown,
+): value is { inlineData: { mimeType?: string; data?: string } } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'inlineData' in value &&
+    value.inlineData !== undefined
+  );
+}
+
 function makeRunnerResult(
   overrides: Partial<ImageOperationRunnerResult> = {},
 ): ImageOperationRunnerResult {
@@ -110,14 +121,8 @@ describe('GenerateImageTool', () => {
     expect(runImageCalls[0]?.output_path).toBe('cat.png');
 
     const parts = result.llmContent as unknown[];
-    const inlinePart = parts.find(
-      (p): p is { inlineData?: { mimeType?: string; data?: string } } =>
-        typeof p === 'object' &&
-        p !== null &&
-        'inlineData' in p &&
-        p.inlineData !== undefined,
-    );
-    expect(inlinePart?.inlineData?.mimeType).toBe('image/png');
+    const inlinePart = parts.find(hasInlineData);
+    expect(inlinePart?.inlineData.mimeType).toBe('image/png');
 
     const textPart = parts.find((p): p is string => typeof p === 'string');
     expect(textPart).toContain('/workspace/cat.png');
@@ -136,7 +141,7 @@ describe('GenerateImageTool', () => {
 
     expect(result.error).toBeUndefined();
     expect(runImageCalls).toHaveLength(1);
-    expect(runImageCalls[0]?.input_paths).toEqual(['in.png']);
+    expect(runImageCalls[0]?.input_paths).toStrictEqual(['in.png']);
   });
 
   it('maps a capability runner error to TOOL_DISABLED and calls the runner exactly once', async () => {

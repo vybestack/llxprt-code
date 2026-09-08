@@ -24,7 +24,6 @@ import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime
 export class TestRuntimeProviderManager implements RuntimeProviderManager {
   private readonly providers = new Map<string, RuntimeProvider>();
   private activeProviderName: string | undefined;
-  private serverToolsProvider: RuntimeProvider | null | undefined;
   private runtimeContext: ProviderRuntimeContext | undefined;
 
   constructor(runtimeContext?: ProviderRuntimeContext) {
@@ -86,14 +85,6 @@ export class TestRuntimeProviderManager implements RuntimeProviderManager {
       thought: 0,
       total: 0,
     };
-  }
-
-  getServerToolsProvider(): RuntimeProvider | null | undefined {
-    return this.serverToolsProvider;
-  }
-
-  setServerToolsProvider(provider: RuntimeProvider | null): void {
-    this.serverToolsProvider = provider;
   }
 
   setConfig(_config: Config): void {}

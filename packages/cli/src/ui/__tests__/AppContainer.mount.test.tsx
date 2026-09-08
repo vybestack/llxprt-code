@@ -243,8 +243,8 @@ void vi.mock('../hooks/useTerminalSize.js', () => ({
   useTerminalSize: vi.fn(() => ({ rows: 24, columns: 120 })),
 }));
 
-void vi.mock('../hooks/useGitBranchName.js', () => ({
-  useGitBranchName: vi.fn(() => null),
+void vi.mock('../hooks/useGitBranchInfo.js', () => ({
+  useGitBranchInfo: vi.fn(() => ({ branchName: null, isDirty: false })),
 }));
 
 void vi.mock('../hooks/useLoadingIndicator.js', () => ({
@@ -400,7 +400,6 @@ import {
 // Type for the mock config
 interface MockConfig {
   getAgentClient: () => {
-    getUserTier: () => Promise<undefined>;
     hasChatInitialized?: () => boolean;
   };
   getModel: () => string;
@@ -436,7 +435,6 @@ interface MockConfig {
 function createMockConfig(overrides: Partial<MockConfig> = {}): MockConfig {
   return {
     getAgentClient: () => ({
-      getUserTier: vi.fn().mockResolvedValue(undefined),
       hasChatInitialized: () => false,
     }),
     getModel: () => 'test-model',

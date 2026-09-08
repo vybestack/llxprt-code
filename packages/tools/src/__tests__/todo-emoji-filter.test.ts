@@ -131,8 +131,7 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const stored = service.getStoredTodos();
       const subtask = stored[0].subtasks;
       expect(subtask).toBeDefined();
-      if (!subtask) return;
-      expect(subtask[0].content).toBe(CLEAN_SUBTASK_ITEM);
+      expect(subtask?.[0]?.content).toBe(CLEAN_SUBTASK_ITEM);
     });
 
     it('auto mode does not include warning feedback in output', async () => {
@@ -179,11 +178,10 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       expect(result.llmContent).toContain('avoid using emojis');
     });
 
-    it('filters emojis from subtask content too', async () => {
+    const observeFiltersEmojisFromSubtaskContentTooAt182 = async () => {
       const service = createFakeTodoService();
       const host = createToolHostWithEmojiMode('warn');
       const tool = new TodoWriteTool(service, host);
-
       await executeToolForBehavioralAssertion(tool, {
         todos: [
           {
@@ -194,10 +192,15 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
           },
         ],
       });
-
       const stored = service.getStoredTodos();
       const subtask = stored[0].subtasks;
       if (!subtask) throw new Error('Expected subtasks');
+      return { subtask };
+    };
+
+    it('filters emojis from subtask content too', async () => {
+      const { subtask } =
+        await observeFiltersEmojisFromSubtaskContentTooAt182();
       expect(subtask[0].content).toBe(CLEAN_SUBTASK_ITEM);
     });
   });
@@ -213,8 +216,7 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       });
 
       expect(result.error).toBeDefined();
-      if (!result.error) throw new Error('Expected error');
-      expect(result.error.message.toLowerCase()).toContain('emoji');
+      expect(result.error?.message.toLowerCase()).toContain('emoji');
     });
 
     it('does not store emoji content in error mode', async () => {
@@ -281,11 +283,10 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       expect(result.llmContent).toContain(EMOJI_TODO_ITEM);
     });
 
-    it('leaves subtask emojis intact', async () => {
+    const observeLeavesSubtaskEmojisIntactAt284 = async () => {
       const service = createFakeTodoService();
       const host = createToolHostWithEmojiMode('allowed');
       const tool = new TodoWriteTool(service, host);
-
       await executeToolForBehavioralAssertion(tool, {
         todos: [
           {
@@ -296,10 +297,14 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
           },
         ],
       });
-
       const stored = service.getStoredTodos();
       const subtask = stored[0].subtasks;
       if (!subtask) throw new Error('Expected subtasks');
+      return { subtask };
+    };
+
+    it('leaves subtask emojis intact', async () => {
+      const { subtask } = await observeLeavesSubtaskEmojisIntactAt284();
       expect(subtask[0].content).toBe(EMOJI_SUBTASK_ITEM);
     });
 
@@ -411,9 +416,8 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
 
       expect(result.error).toBeUndefined();
       expect(typeof result.returnDisplay).toBe('string');
-      if (typeof result.returnDisplay !== 'string') return;
-      expect(result.returnDisplay).not.toContain('system-reminder');
-      expect(result.returnDisplay).toContain(CLEAN_TODO_ITEM);
+      expect(String(result.returnDisplay)).not.toContain('system-reminder');
+      expect(String(result.returnDisplay)).toContain(CLEAN_TODO_ITEM);
     });
   });
 
@@ -443,8 +447,7 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       expect(parent.content).toBe('Clean parent task');
       const subtasks = parent.subtasks;
       expect(subtasks).toBeDefined();
-      if (!subtasks) return;
-      expect(subtasks[0].content).toBe(CLEAN_SUBTASK_ITEM);
+      expect(subtasks?.[0]?.content).toBe(CLEAN_SUBTASK_ITEM);
     });
   });
 
@@ -528,9 +531,8 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
         const stored = service.getStoredTodos();
         const subtasks = stored[0].subtasks;
         expect(subtasks).toBeDefined();
-        if (!subtasks) return;
-        expect(subtasks.length).toBe(1);
-        expect(subtasks[0].content).toBe('Child task');
+        expect(subtasks?.length).toBe(1);
+        expect(subtasks?.[0]?.content).toBe('Child task');
       });
 
       it('todo without subtasks has no own subtasks property in warn mode', async () => {
@@ -581,8 +583,7 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
         const feedbackPattern = /avoid using emojis/g;
         const matches = String(result.llmContent).match(feedbackPattern);
         expect(matches).not.toBeNull();
-        if (matches === null) return;
-        expect(matches.length).toBe(1);
+        expect(matches?.length).toBe(1);
       });
     });
 
@@ -625,18 +626,16 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
         expect(stored[0].content).toContain('[OK]');
         const subtasks = stored[0].subtasks;
         expect(subtasks).toBeDefined();
-        if (!subtasks) return;
-        const subtask = subtasks[0];
-        expect(subtask.content).not.toContain(MEMO_EMOJI);
-        const toolCalls = subtask.toolCalls;
+        const subtask = subtasks?.[0];
+        expect(subtask?.content).not.toContain(MEMO_EMOJI);
+        const toolCalls = subtask?.toolCalls;
         expect(toolCalls).toBeDefined();
-        if (!toolCalls) return;
-        expect(toolCalls[0].name).toBe('write_file');
-        expect(toolCalls[0].parameters.file_path).toBe('/some/path');
-        expect(toolCalls[0].parameters.content).toBe(
+        expect(toolCalls?.[0]?.name).toBe('write_file');
+        expect(toolCalls?.[0]?.parameters.file_path).toBe('/some/path');
+        expect(toolCalls?.[0]?.parameters.content).toBe(
           CHECK_MARK_EMOJI + ' emoji in params',
         );
-        expect(toolCalls[0].parameters.description).toBe(
+        expect(toolCalls?.[0]?.parameters.description).toBe(
           STAR_EMOJI + ' emoji in description',
         );
       });
@@ -674,13 +673,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
         const stored = service.getStoredTodos();
         const subtasks = stored[0].subtasks;
         expect(subtasks).toBeDefined();
-        if (!subtasks) return;
-        const subtask = subtasks[0];
-        expect(subtask.content).not.toContain(CHECK_MARK_EMOJI);
-        const toolCalls = subtask.toolCalls;
+        const subtask = subtasks?.[0];
+        expect(subtask?.content).not.toContain(CHECK_MARK_EMOJI);
+        const toolCalls = subtask?.toolCalls;
         expect(toolCalls).toBeDefined();
-        if (!toolCalls) return;
-        expect(toolCalls[0].parameters.command).toBe('echo ' + ROCKET_EMOJI);
+        expect(toolCalls?.[0]?.parameters.command).toBe('echo ' + ROCKET_EMOJI);
       });
 
       it('error mode does not block based on emoji in toolCalls parameters', async () => {
@@ -717,11 +714,9 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
         expect(stored.length).toBe(1);
         const subtasks = stored[0].subtasks;
         expect(subtasks).toBeDefined();
-        if (!subtasks) return;
-        const toolCalls = subtasks[0].toolCalls;
+        const toolCalls = subtasks?.[0]?.toolCalls;
         expect(toolCalls).toBeDefined();
-        if (!toolCalls) return;
-        expect(toolCalls[0].parameters.command).toBe('echo ' + ROCKET_EMOJI);
+        expect(toolCalls?.[0]?.parameters.command).toBe('echo ' + ROCKET_EMOJI);
       });
     });
   });

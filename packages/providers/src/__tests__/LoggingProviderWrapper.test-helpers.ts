@@ -31,18 +31,6 @@ export class StubProvider {
     return 'stub-model';
   }
 
-  getServerTools(): string[] {
-    return [];
-  }
-
-  async invokeServerTool(
-    _toolName: string,
-    _params: unknown,
-    _config?: unknown,
-  ): Promise<unknown> {
-    return {};
-  }
-
   async *generateChatCompletion(
     options: GenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
@@ -70,18 +58,6 @@ export class FinishReasonProvider {
     return 'stub-model';
   }
 
-  getServerTools(): string[] {
-    return [];
-  }
-
-  async invokeServerTool(
-    _toolName: string,
-    _params: unknown,
-    _config?: unknown,
-  ): Promise<unknown> {
-    return {};
-  }
-
   async *generateChatCompletion(
     options: GenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
@@ -106,18 +82,6 @@ export class ErrorProvider {
 
   getDefaultModel(): string {
     return 'error-model';
-  }
-
-  getServerTools(): string[] {
-    return [];
-  }
-
-  async invokeServerTool(
-    _toolName: string,
-    _params: unknown,
-    _config?: unknown,
-  ): Promise<unknown> {
-    return {};
   }
 
   /**

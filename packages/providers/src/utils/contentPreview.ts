@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import { sanitizeDiagnosticData } from './mediaDiagnostics.js';
+
 /**
  * Get a short preview of a message's content for debug logging.
  *
@@ -46,7 +48,7 @@ export function getContentPreview(
         return (part as { text?: string }).text ?? '';
       }
       try {
-        return JSON.stringify(part);
+        return JSON.stringify(sanitizeDiagnosticData(part));
       } catch {
         return '[unserializable part]';
       }
@@ -59,7 +61,7 @@ export function getContentPreview(
   }
 
   try {
-    const serialized = JSON.stringify(content);
+    const serialized = JSON.stringify(sanitizeDiagnosticData(content));
     if (serialized.length <= maxLength) {
       return serialized;
     }

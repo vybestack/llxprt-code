@@ -30,7 +30,7 @@
     {
       "type": "waitFor",
       "scope": "screen",
-      "contains": "Yes, allow once",
+      "contains": "Allow once",
       "timeoutMs": 120000
     },
     { "type": "key", "key": "d" },

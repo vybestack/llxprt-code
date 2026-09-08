@@ -137,12 +137,6 @@ export class SuccessProvider implements IProvider {
   getDefaultModel(): string {
     return 'success-model';
   }
-  getServerTools(): string[] {
-    return [];
-  }
-  async invokeServerTool(): Promise<unknown> {
-    return {};
-  }
   generateChatCompletion(
     _options: GenerateChatOptions | IContent[],
   ): AsyncIterableIterator<IContent> {
@@ -168,12 +162,6 @@ export class SyncThrowProvider implements IProvider {
   }
   getDefaultModel(): string {
     return 'sync-throw-model';
-  }
-  getServerTools(): string[] {
-    return [];
-  }
-  async invokeServerTool(): Promise<unknown> {
-    return {};
   }
   generateChatCompletion(
     _options: GenerateChatOptions | IContent[],
@@ -209,12 +197,6 @@ export class FailThenSucceedProvider implements IProvider {
   }
   getDefaultModel(): string {
     return 'retry-model';
-  }
-  getServerTools(): string[] {
-    return [];
-  }
-  async invokeServerTool(): Promise<unknown> {
-    return {};
   }
   generateChatCompletion(
     _options: GenerateChatOptions | IContent[],
@@ -260,12 +242,6 @@ export class AlwaysFailProvider implements IProvider {
   getDefaultModel(): string {
     return 'error-model';
   }
-  getServerTools(): string[] {
-    return [];
-  }
-  async invokeServerTool(): Promise<unknown> {
-    return {};
-  }
   generateChatCompletion(
     _options: GenerateChatOptions | IContent[],
   ): AsyncIterableIterator<IContent> {
@@ -301,12 +277,6 @@ export class ConsumerAbortedProvider implements IProvider {
   getDefaultModel(): string {
     return 'abort-model';
   }
-  getServerTools(): string[] {
-    return [];
-  }
-  async invokeServerTool(): Promise<unknown> {
-    return {};
-  }
   generateChatCompletion(
     _options: GenerateChatOptions | IContent[],
   ): AsyncIterableIterator<IContent> {
@@ -334,12 +304,6 @@ export class MetadataOnlyProvider implements IProvider {
   }
   getDefaultModel(): string {
     return 'metadata-model';
-  }
-  getServerTools(): string[] {
-    return [];
-  }
-  async invokeServerTool(): Promise<unknown> {
-    return {};
   }
   generateChatCompletion(
     _options: GenerateChatOptions | IContent[],

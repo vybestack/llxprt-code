@@ -211,9 +211,7 @@ describe('OpenAIResponsesInputBuilder PDF @issue:2608', () => {
       );
       const notice = textsFrom(input)[0].text.toLowerCase();
       expect(notice).toContain('report.pdf');
-      expect(notice.includes('extract') || notice.includes('render')).toBe(
-        true,
-      );
+      expect(notice).toMatch(/extract|render/);
     });
 
     it('retains valid tool-call / tool-response pairing', () => {

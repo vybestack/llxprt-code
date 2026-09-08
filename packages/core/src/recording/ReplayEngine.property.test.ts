@@ -10,6 +10,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { replaySession } from './ReplayEngine.js';
+import { SessionRecordingService } from './SessionRecordingService.js';
 import {
   assertReplayOk,
   PROJECT_HASH,
@@ -36,6 +37,156 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
   afterEach(async () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
+
+  interface ReplayPairObservation {
+    readonly firstOk: boolean;
+    readonly secondOk: boolean;
+    readonly firstHistory: unknown;
+    readonly secondHistory: unknown;
+    readonly firstLastSeq: number | undefined;
+    readonly secondLastSeq: number | undefined;
+    readonly firstEventCount: number | undefined;
+    readonly secondEventCount: number | undefined;
+    readonly firstWarnings: unknown;
+    readonly secondWarnings: unknown;
+  }
+
+  function observeReplayPair(
+    first: Awaited<ReturnType<typeof replaySession>>,
+    second: Awaited<ReturnType<typeof replaySession>>,
+  ): ReplayPairObservation {
+    if (!first.ok || !second.ok) {
+      return {
+        firstOk: first.ok,
+        secondOk: second.ok,
+        firstHistory: undefined,
+        secondHistory: undefined,
+        firstLastSeq: undefined,
+        secondLastSeq: undefined,
+        firstEventCount: undefined,
+        secondEventCount: undefined,
+        firstWarnings: undefined,
+        secondWarnings: undefined,
+      };
+    }
+    return {
+      firstOk: true,
+      secondOk: true,
+      firstHistory: first.history,
+      secondHistory: second.history,
+      firstLastSeq: first.lastSeq,
+      secondLastSeq: second.lastSeq,
+      firstEventCount: first.eventCount,
+      secondEventCount: second.eventCount,
+      firstWarnings: first.warnings,
+      secondWarnings: second.warnings,
+    };
+  }
+
+  /**
+   * Record a single synthetic event on the given recording service, switching
+   * over the arbitrary event type space used by property Test 47.
+   */
+  function applySessionEvent(
+    svc: SessionRecordingService,
+    eventType:
+      | 'content'
+      | 'provider_switch'
+      | 'session_event'
+      | 'directories_changed',
+  ): void {
+    switch (eventType) {
+      case 'content':
+        svc.recordContent(makeContent('test', 'ai'));
+        break;
+      case 'provider_switch':
+        svc.recordProviderSwitch('test-provider', 'test-model');
+        break;
+      case 'session_event':
+        svc.recordSessionEvent('info', 'test event');
+        break;
+      case 'directories_changed':
+        svc.recordDirectoriesChanged(['/test']);
+        break;
+      default:
+        break;
+    }
+  }
+
+  /**
+   * Build lines for the eventCount property test: contentCount valid content
+   * events, optionally followed by a truncated final line that the parser must
+   * discard with no effect on eventCount.
+   */
+  function buildEventCountLines(
+    contentCount: number,
+    hasCorruptLastLine: boolean,
+  ): string[] {
+    const lines: string[] = [sessionStartLine(1)];
+    for (let i = 0; i < contentCount; i++) {
+      lines.push(contentLine(i + 2, makeContent(`msg ${i}`, 'human')));
+    }
+    if (hasCorruptLastLine) {
+      lines.push(
+        '{"v":1,"seq":999,"type":"content","payload":{"content":{"spea',
+      );
+    }
+    return lines;
+  }
+
+  /**
+   * Build the JSONL line for one interleaved event (property Test 53).
+   * Every supported event type in the arbitrary space maps to exactly one line.
+   */
+  function interleaveLine(
+    seq: number,
+    eventType: 'content' | 'compressed' | 'rewind',
+  ): string {
+    switch (eventType) {
+      case 'content':
+        return contentLine(seq, makeContent(`msg-${seq}`, 'human'));
+      case 'compressed':
+        return compressedLine(seq, makeContent('summary', 'ai'), 1);
+      case 'rewind':
+        return rewindLine(seq, 1);
+      default:
+        return '';
+    }
+  }
+
+  /**
+   * Alternating human/ai speaker for index-based content generation.
+   */
+  function alternatingSpeaker(i: number): 'human' | 'ai' {
+    return i % 2 === 0 ? 'human' : 'ai';
+  }
+
+  /**
+   * Append one resume segment (optional session_resumed event followed by content
+   * events) to the given line list for a shared seq counter.  Returns the
+   * updated next seq.
+   */
+  function pushResumeSegment(
+    lines: string[],
+    segmentIndex: number,
+    nextSeq: number,
+    turnsPerSegment: number,
+  ): number {
+    let seq = nextSeq;
+    if (segmentIndex > 0) {
+      seq++;
+      lines.push(
+        sessionEventLine(seq, 'info', `Session resumed at T${segmentIndex}`),
+      );
+    }
+    for (let t = 0; t < turnsPerSegment; t++) {
+      seq++;
+      lines.push(
+        contentLine(seq, makeContent(`r${segmentIndex}-t${t}`, 'human')),
+      );
+    }
+    return seq;
+  }
 
   // =========================================================================
   // Property-Based Tests (≥30% of total — 12 property tests out of ~42 total)
@@ -192,14 +343,19 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
               const result1 = await replaySession(filePath, PROJECT_HASH);
               const result2 = await replaySession(filePath, PROJECT_HASH);
 
-              expect(result1.ok).toBe(true);
-              expect(result2.ok).toBe(true);
-              if (!result1.ok || !result2.ok) return;
-
-              expect(result1.history).toStrictEqual(result2.history);
-              expect(result1.lastSeq).toBe(result2.lastSeq);
-              expect(result1.eventCount).toBe(result2.eventCount);
-              expect(result1.warnings).toStrictEqual(result2.warnings);
+              const observation = observeReplayPair(result1, result2);
+              expect(observation.firstOk).toBe(true);
+              expect(observation.secondOk).toBe(true);
+              expect(observation.firstHistory).toStrictEqual(
+                observation.secondHistory,
+              );
+              expect(observation.firstLastSeq).toBe(observation.secondLastSeq);
+              expect(observation.firstEventCount).toBe(
+                observation.secondEventCount,
+              );
+              expect(observation.firstWarnings).toStrictEqual(
+                observation.secondWarnings,
+              );
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
             }
@@ -236,22 +392,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
                 // Ensure at least one content event for materialization
                 svc.recordContent(makeContent('trigger', 'human'));
                 for (const eventType of eventTypes) {
-                  switch (eventType) {
-                    case 'content':
-                      svc.recordContent(makeContent('test', 'ai'));
-                      break;
-                    case 'provider_switch':
-                      svc.recordProviderSwitch('test-provider', 'test-model');
-                      break;
-                    case 'session_event':
-                      svc.recordSessionEvent('info', 'test event');
-                      break;
-                    case 'directories_changed':
-                      svc.recordDirectoriesChanged(['/test']);
-                      break;
-                    default:
-                      break;
-                  }
+                  applySessionEvent(svc, eventType);
                 }
               });
 
@@ -288,7 +429,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
               const filePath = await createValidFile(localChatsDir, (svc) => {
                 for (let i = 0; i < eventCount; i++) {
                   svc.recordContent(
-                    makeContent(`msg ${i}`, i % 2 === 0 ? 'human' : 'ai'),
+                    makeContent(`msg ${i}`, alternatingSpeaker(i)),
                   );
                 }
               });
@@ -323,17 +464,10 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
             await fs.mkdir(localChatsDir, { recursive: true });
 
             try {
-              const lines: string[] = [sessionStartLine(1)];
-              for (let i = 0; i < contentCount; i++) {
-                lines.push(
-                  contentLine(i + 2, makeContent(`msg ${i}`, 'human')),
-                );
-              }
-              if (hasCorruptLastLine) {
-                lines.push(
-                  '{"v":1,"seq":999,"type":"content","payload":{"content":{"spea',
-                );
-              }
+              const lines = buildEventCountLines(
+                contentCount,
+                hasCorruptLastLine,
+              );
               const filePath = path.join(
                 localChatsDir,
                 `evcount-${contentCount}.jsonl`,
@@ -458,18 +592,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
               const lines: string[] = [sessionStartLine(seq)];
 
               for (let r = 0; r <= resumeCount; r++) {
-                if (r > 0) {
-                  seq++;
-                  lines.push(
-                    sessionEventLine(seq, 'info', `Session resumed at T${r}`),
-                  );
-                }
-                for (let t = 0; t < turnsPerSegment; t++) {
-                  seq++;
-                  lines.push(
-                    contentLine(seq, makeContent(`r${r}-t${t}`, 'human')),
-                  );
-                }
+                seq = pushResumeSegment(lines, r, seq, turnsPerSegment);
               }
 
               const filePath = path.join(
@@ -530,23 +653,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
 
               for (const eventType of eventTypes) {
                 seq++;
-                switch (eventType) {
-                  case 'content':
-                    lines.push(
-                      contentLine(seq, makeContent(`msg-${seq}`, 'human')),
-                    );
-                    break;
-                  case 'compressed':
-                    lines.push(
-                      compressedLine(seq, makeContent('summary', 'ai'), 1),
-                    );
-                    break;
-                  case 'rewind':
-                    lines.push(rewindLine(seq, 1));
-                    break;
-                  default:
-                    break;
-                }
+                lines.push(interleaveLine(seq, eventType));
               }
 
               const filePath = path.join(localChatsDir, 'interleave.jsonl');

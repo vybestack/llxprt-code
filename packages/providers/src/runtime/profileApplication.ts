@@ -71,44 +71,6 @@ const logger = new DebugLogger('llxprt:runtime:profile');
 const lbLogger = new DebugLogger('llxprt:loadbalancer');
 
 /**
- * Get load balancer stats for a specific LB profile
- * @param _lbName The name of the load balancer profile
- * @returns Stats or undefined if not an LB profile
- * @deprecated Stats are now tracked by LoadBalancingProvider directly
- */
-export function getLoadBalancerStats(_lbName: string) {
-  // Stats are now tracked by LoadBalancingProvider directly
-  // This function is kept for backward compatibility but returns undefined
-  // Use the LoadBalancingProvider.getStats() method directly instead
-  return undefined;
-}
-
-/**
- * Get the last selected profile from a load balancer
- * @param _lbName The name of the load balancer profile
- * @returns The last selected profile name or null
- * @deprecated Stats are now tracked by LoadBalancingProvider directly
- */
-export function getLoadBalancerLastSelected(_lbName: string): string | null {
-  // Stats are now tracked by LoadBalancingProvider directly
-  // This function is kept for backward compatibility but returns null
-  // Use the LoadBalancingProvider.getStats() method directly instead
-  return null;
-}
-
-/**
- * Get stats for all load balancers
- * @returns Map of LB name to stats
- * @deprecated Stats are now tracked by LoadBalancingProvider directly
- */
-export function getAllLoadBalancerStats() {
-  // Stats are now tracked by LoadBalancingProvider directly
-  // This function is kept for backward compatibility but returns empty Map
-  // Use the LoadBalancingProvider.getStats() method directly instead
-  return new Map();
-}
-
-/**
  * @plan PLAN-20251020-STATELESSPROVIDER3.P09
  * @requirement REQ-SP3-002
  * @pseudocode profile-application.md lines 1-22

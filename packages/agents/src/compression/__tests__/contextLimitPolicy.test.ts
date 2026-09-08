@@ -66,10 +66,7 @@ describe('computeMarginAdjustedLimit — tiny / degenerate limits (pending seman
     // safety-adjusted value floors to 0 and the cushion adds nothing.
     for (const limit of [1, 100, 500, 999, 1_000]) {
       const result = computeMarginAdjustedLimit(limit);
-      expect(
-        result,
-        `expected marginAdjustedLimit 0 for limit=${limit}, got ${result}`,
-      ).toBe(0);
+      expect(result).toBe(0);
     }
   });
 

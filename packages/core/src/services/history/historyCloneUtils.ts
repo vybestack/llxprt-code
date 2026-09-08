@@ -14,19 +14,18 @@
  * limitations under the License.
  */
 
-import type {
-  IContent,
-  ContentBlock,
-  ToolCallBlock,
-  ToolResponseBlock,
-} from './IContent.js';
+import type { IContent, ContentBlock } from './IContent.js';
 import type { DebugLogger } from '../../debug/index.js';
 
 /**
- * Deep clone content arrays and remove circular references so the result is
- * safe to serialize and send to providers.
+ * Sanitize provider history for serialization while cloning its top-level data.
+ * The copy isolates content and block references because getCurated() returns
+ * stored contents directly and in-process BeforeModel hooks may mutate them.
+ * Metadata retains its existing shallow-copy behavior.
  */
-export function deepCloneWithoutCircularRefs(contents: IContent[]): IContent[] {
+export function sanitizeProviderHistoryForSerialization(
+  contents: IContent[],
+): IContent[] {
   return contents.map((content) => ({
     speaker: content.speaker,
     blocks: content.blocks.map(cloneBlock),
@@ -37,24 +36,30 @@ export function deepCloneWithoutCircularRefs(contents: IContent[]): IContent[] {
 /** Clone a single block, sanitizing tool_call/tool_response payloads. */
 function cloneBlock(block: ContentBlock): ContentBlock {
   if (block.type === 'tool_call') {
-    const cloned: ToolCallBlock = {
-      type: 'tool_call',
-      id: block.id,
-      name: block.name,
+    return {
+      ...block,
       parameters: sanitizeParams(block.parameters),
+      ...(block.providerMetadata === undefined
+        ? {}
+        : { providerMetadata: structuredClone(block.providerMetadata) }),
     };
-    return cloned;
   }
   if (block.type === 'tool_response') {
-    const cloned: ToolResponseBlock = {
-      type: 'tool_response',
-      callId: block.callId,
-      toolName: block.toolName,
+    return {
+      ...block,
       result: sanitizeParams(block.result),
-      error: block.error,
-      isComplete: block.isComplete,
+      ...(block.providerMetadata === undefined
+        ? {}
+        : { providerMetadata: structuredClone(block.providerMetadata) }),
     };
-    return cloned;
+  }
+  if (block.type === 'media') {
+    return {
+      ...block,
+      ...(block.providerMetadata !== undefined
+        ? { providerMetadata: structuredClone(block.providerMetadata) }
+        : {}),
+    };
   }
   return cloneGenericBlock(block);
 }
@@ -101,7 +106,6 @@ export function sanitizeParams(params: unknown): unknown {
   }
 }
 
-/** Sanitize and log on error (for callers that want logging). */
 export function sanitizeParamsWithLogger(
   params: unknown,
   logger: DebugLogger,

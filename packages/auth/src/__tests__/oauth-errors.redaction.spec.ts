@@ -197,7 +197,7 @@ describe('OAuthError.toLogEntry() security redaction', () => {
  * Addresses CodeQL alert 154.
  */
 describe('RetryHandler sanitized delay logging', () => {
-  it('must log a finite numeric delay, not a direct tainted property read', async () => {
+  it('must log the exact provider-supplied retryAfterMs, not a direct tainted property read', async () => {
     const captured: string[] = [];
     const fakeLogger: OAuthLogger = {
       debug: (...args: unknown[]) => {
@@ -226,7 +226,7 @@ describe('RetryHandler sanitized delay logging', () => {
           OAuthErrorType.NETWORK_ERROR,
           'test-provider',
           'Network failed',
-          { retryAfterMs: 250 },
+          { retryAfterMs: 25 },
         );
       }
       return 'success';
@@ -235,10 +235,62 @@ describe('RetryHandler sanitized delay logging', () => {
     const result = await handler.executeWithRetry(operation, 'test-provider');
 
     expect(result).toBe('success');
-    expect(captured.length).toBeGreaterThanOrEqual(1);
+    expect(captured.length).toBe(1);
 
-    // The debug message must match the sanitized numeric pattern
-    expect(captured[0]).toMatch(/retrying in \d+ms/);
+    // The provider figure overrides the zero configuration; an exact match on
+    // the honored value fails if the retryAfterMs is discarded.
+    expect(captured[0]).toBe(
+      'test-provider operation failed (attempt 1/3), retrying in 25ms...',
+    );
+    // Must NOT contain any non-numeric or sensitive artifact in the delay position
+    expect(captured[0]).not.toMatch(/retrying in NaN/);
+    expect(captured[0]).not.toMatch(/retrying in undefined/);
+  });
+
+  it('must log the configured zero delay when retryAfterMs is absent', async () => {
+    const captured: string[] = [];
+    const fakeLogger: OAuthLogger = {
+      debug: (...args: unknown[]) => {
+        captured.push(args.map(String).join(' '));
+      },
+      error: () => {},
+    };
+
+    const handler = new RetryHandler(
+      {
+        maxAttempts: 3,
+        baseDelayMs: 0,
+        backoffMultiplier: 1,
+        maxDelayMs: 0,
+        jitter: false,
+      },
+      fakeLogger,
+    );
+
+    let attempt = 0;
+    const operation = async (): Promise<string> => {
+      attempt++;
+      if (attempt < 2) {
+        // No retryAfterMs option, so the zero configuration applies.
+        throw new OAuthError(
+          OAuthErrorType.NETWORK_ERROR,
+          'test-provider',
+          'Network failed',
+        );
+      }
+      return 'success';
+    };
+
+    const result = await handler.executeWithRetry(operation, 'test-provider');
+
+    expect(result).toBe('success');
+    expect(captured.length).toBe(1);
+
+    // The configured base delay of 0ms is genuinely honored. Fails loudly
+    // if a default delay sneaks into the computed figure.
+    expect(captured[0]).toBe(
+      'test-provider operation failed (attempt 1/3), retrying in 0ms...',
+    );
     // Must NOT contain any non-numeric or sensitive artifact in the delay position
     expect(captured[0]).not.toMatch(/retrying in NaN/);
     expect(captured[0]).not.toMatch(/retrying in undefined/);

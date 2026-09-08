@@ -221,7 +221,16 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
     expect(result.current.targetPath).toBe(path.resolve(MOCK_HOME, 'projects'));
   });
 
-  it('B3: effectiveLocalTrustLevel, isParentTrusted and parentFolderName derive from the current targetPath', () => {
+  const observeTargetPathTrustDerivation = (): {
+    readonly initialTargetPath: string;
+    readonly initialParentTrusted: boolean;
+    readonly initialLocalTrustLevel: TrustLevel | undefined;
+    readonly initialParentFolderName: string;
+    readonly changedTargetPath: string;
+    readonly changedParentTrusted: boolean;
+    readonly changedLocalTrustLevel: TrustLevel | undefined;
+    readonly changedParentFolderName: string;
+  } => {
     mockedUserConfig.value = {
       [WORKSPACE_ROOT]: TrustLevel.TRUST_FOLDER,
     };
@@ -242,21 +251,37 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
     const config = createRuntime({ workingDir: WORKSPACE_PROJECT });
     const { result } = renderHook(() => usePermissionsModifyTrust(config));
 
-    expect(result.current.targetPath).toBe(WORKSPACE_PROJECT);
-    expect(result.current.isParentTrusted).toBe(true);
-    expect(result.current.effectiveLocalTrustLevel).toBe(
-      TrustLevel.TRUST_FOLDER,
-    );
-    expect(result.current.parentFolderName).toBe(path.basename(WORKSPACE_ROOT));
+    const initialTargetPath = result.current.targetPath;
+    const initialParentTrusted = result.current.isParentTrusted;
+    const initialLocalTrustLevel = result.current.effectiveLocalTrustLevel;
+    const initialParentFolderName = result.current.parentFolderName;
 
     act(() => {
       result.current.setTargetPath(OTHER_FOLDER);
     });
 
-    expect(result.current.targetPath).toBe(OTHER_FOLDER);
-    expect(result.current.isParentTrusted).toBe(false);
-    expect(result.current.effectiveLocalTrustLevel).toBeUndefined();
-    expect(result.current.parentFolderName).toBe(
+    return {
+      initialTargetPath,
+      initialParentTrusted,
+      initialLocalTrustLevel,
+      initialParentFolderName,
+      changedTargetPath: result.current.targetPath,
+      changedParentTrusted: result.current.isParentTrusted,
+      changedLocalTrustLevel: result.current.effectiveLocalTrustLevel,
+      changedParentFolderName: result.current.parentFolderName,
+    };
+  };
+
+  it('B3: effectiveLocalTrustLevel, isParentTrusted and parentFolderName derive from the current targetPath', () => {
+    const trust = observeTargetPathTrustDerivation();
+    expect(trust.initialTargetPath).toBe(WORKSPACE_PROJECT);
+    expect(trust.initialParentTrusted).toBe(true);
+    expect(trust.initialLocalTrustLevel).toBe(TrustLevel.TRUST_FOLDER);
+    expect(trust.initialParentFolderName).toBe(path.basename(WORKSPACE_ROOT));
+    expect(trust.changedTargetPath).toBe(OTHER_FOLDER);
+    expect(trust.changedParentTrusted).toBe(false);
+    expect(trust.changedLocalTrustLevel).toBeUndefined();
+    expect(trust.changedParentFolderName).toBe(
       path.basename(path.dirname(OTHER_FOLDER)),
     );
   });
@@ -332,7 +357,11 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
     expect(result.current.effectiveTrust).toBe(false);
   });
 
-  it('B5: committing TRUST_FOLDER on an ANCESTOR of the cwd updates live session trust', async () => {
+  const observeAncestorTrustCommit = async (): Promise<{
+    readonly persistedRule: ReturnType<typeof vi.fn>;
+    readonly effectiveTrust: boolean | undefined;
+    readonly liveTrustUpdate: ReturnType<typeof vi.fn>;
+  }> => {
     let liveTrust = false;
     const setTrustedFolderLive = vi.fn(async (trusted: boolean) => {
       liveTrust = trusted;
@@ -372,14 +401,21 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
       await result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
     });
 
-    expect(mockedSetValue).toHaveBeenCalledWith(
+    return {
+      persistedRule: mockedSetValue,
+      effectiveTrust: result.current.effectiveTrust,
+      liveTrustUpdate: setTrustedFolderLive,
+    };
+  };
+
+  it('B5: committing TRUST_FOLDER on an ANCESTOR of the cwd updates live session trust', async () => {
+    const commit = await observeAncestorTrustCommit();
+    expect(commit.persistedRule).toHaveBeenCalledWith(
       ANCESTOR_OF_CWD,
       TrustLevel.TRUST_FOLDER,
     );
-    // The live trust is resolved from the cwd, which is now a descendant of the
-    // newly-trusted ancestor, so the session becomes trusted.
-    expect(result.current.effectiveTrust).toBe(true);
-    expect(setTrustedFolderLive).toHaveBeenLastCalledWith(true);
+    expect(commit.effectiveTrust).toBe(true);
+    expect(commit.liveTrustUpdate).toHaveBeenLastCalledWith(true);
   });
 
   it('B6: exposes the current rule list refreshed after a successful set', async () => {
@@ -518,7 +554,12 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
     expect(result.current.trustRules).toStrictEqual([]);
   });
 
-  it('B8: preserves live rollback when setTrustedFolderLive throws for an ancestor commit', async () => {
+  const observeAncestorLiveTrustRetry = async (): Promise<{
+    readonly firstResult: unknown;
+    readonly restoreSnapshot: ReturnType<typeof vi.fn>;
+    readonly committedLevelAfterFailure: TrustLevel | undefined;
+    readonly committedLevelAfterRetry: TrustLevel | undefined;
+  }> => {
     let liveTrust = false;
     mockedUserConfig.value = {};
     mockedResolvePathTrust.mockImplementation((folderPath: string) => {
@@ -574,15 +615,26 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
       );
     });
 
-    expect(firstResult).toMatchObject({ success: false, phase: 'live' });
-    expect(mockedRestoreSnapshot).toHaveBeenCalledOnce();
-    expect(result.current.committedTrustLevel).toBeUndefined();
+    const committedLevelAfterFailure = result.current.committedTrustLevel;
 
     // Retry succeeds.
     await act(async () => {
       await result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
     });
-    expect(result.current.committedTrustLevel).toBe(TrustLevel.TRUST_FOLDER);
+    return {
+      firstResult,
+      restoreSnapshot: mockedRestoreSnapshot,
+      committedLevelAfterFailure,
+      committedLevelAfterRetry: result.current.committedTrustLevel,
+    };
+  };
+
+  it('B8: preserves live rollback when setTrustedFolderLive throws for an ancestor commit', async () => {
+    const retry = await observeAncestorLiveTrustRetry();
+    expect(retry.firstResult).toMatchObject({ success: false, phase: 'live' });
+    expect(retry.restoreSnapshot).toHaveBeenCalledOnce();
+    expect(retry.committedLevelAfterFailure).toBeUndefined();
+    expect(retry.committedLevelAfterRetry).toBe(TrustLevel.TRUST_FOLDER);
   });
 
   it('B9: isTargetCwd reflects whether the active target is the working directory', () => {
@@ -643,7 +695,9 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
     expect(result.current.isIdeTrusted).toBe(false);
   });
 
-  it('B9: a non-cwd target reports inherited provenance from its own rule even while IDE trust governs the cwd', () => {
+  const observeNonCwdInheritedTrust = (): {
+    readonly isParentTrusted: boolean;
+  } => {
     mockedIdeTrust.value = true;
     mockedResolvePathTrust.mockImplementation((folderPath: string) =>
       folderPath === OTHER_FOLDER
@@ -658,17 +712,28 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
           }
         : undefined,
     );
-    const config = createRuntime({ workingDir: CWD_PROJECT, isTrusted: true });
+    const config = createRuntime({
+      workingDir: CWD_PROJECT,
+      isTrusted: true,
+    });
     const { result } = renderHook(() => usePermissionsModifyTrust(config));
 
     act(() => {
       result.current.setTargetPath(OTHER_FOLDER);
     });
 
-    expect(result.current.isParentTrusted).toBe(true);
+    return { isParentTrusted: result.current.isParentTrusted };
+  };
+
+  it('B9: a non-cwd target reports inherited provenance from its own rule even while IDE trust governs the cwd', () => {
+    const trust = observeNonCwdInheritedTrust();
+    expect(trust.isParentTrusted).toBe(true);
   });
 
-  it('B9: the displayed trust state of a non-cwd target comes from its own rule, not the live session', () => {
+  const observeNonCwdDisplayedTrust = (): {
+    readonly localTrustLevel: TrustLevel | undefined;
+    readonly effectiveTrust: boolean | undefined;
+  } => {
     mockedResolvePathTrust.mockImplementation((folderPath: string) =>
       folderPath === OTHER_FOLDER
         ? {
@@ -690,10 +755,15 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
       result.current.setTargetPath(OTHER_FOLDER);
     });
 
-    // ...but the untrusted target folder must not be shown as trusted.
-    expect(result.current.effectiveLocalTrustLevel).toBe(
-      TrustLevel.DO_NOT_TRUST,
-    );
-    expect(result.current.effectiveTrust).toBe(false);
+    return {
+      localTrustLevel: result.current.effectiveLocalTrustLevel,
+      effectiveTrust: result.current.effectiveTrust,
+    };
+  };
+
+  it('B9: the displayed trust state of a non-cwd target comes from its own rule, not the live session', () => {
+    const trust = observeNonCwdDisplayedTrust();
+    expect(trust.localTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
+    expect(trust.effectiveTrust).toBe(false);
   });
 });

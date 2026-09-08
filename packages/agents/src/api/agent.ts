@@ -5,7 +5,6 @@
  */
 
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
   ApprovalMode,
@@ -135,14 +134,35 @@ export interface ProviderInfo {
  * OAuth UI event shape surfaced during a control-plane provider switch (#2374).
  * Structurally compatible with the auth package's OAuthUIEvent so the agent
  * facade does not couple to the auth package for a callback type.
+ *
+ * @plan PLAN-20260827-ISSUE2562.P05
+ * @requirement REQ-2562-4
  */
-export interface AgentOAuthUIEvent {
-  readonly type: 'info' | 'warning' | 'error' | 'oauth_url';
-  readonly text: string;
-  readonly url?: string;
-  readonly icon?: string;
-  readonly color?: string;
-}
+export type AgentOAuthUIEvent =
+  | {
+      readonly type: 'info' | 'warning' | 'error' | 'oauth_url';
+      readonly text: string;
+      readonly url?: string;
+      readonly icon?: string;
+      readonly color?: string;
+    }
+  | {
+      readonly type: 'oauth_waiting';
+      readonly provider: string;
+      readonly bucket?: string;
+      readonly requesterRuntimeKind: string;
+      readonly correlationId: string;
+      readonly waiterCount: number;
+    }
+  | {
+      readonly type: 'oauth_settled';
+      readonly provider: string;
+      readonly bucket?: string;
+      readonly requesterRuntimeKind: string;
+      readonly correlationId: string;
+      readonly waiterCount: number;
+      readonly kind: 'succeeded' | 'cancelled' | 'failed' | 'timed_out';
+    };
 
 /**
  * Options for a control-plane provider switch through the Agent facade (#2374).
@@ -154,8 +174,8 @@ export interface AgentProviderSwitchOptions {
   /** When true, initiate OAuth automatically for providers that require it. */
   readonly autoOAuth?: boolean;
   /**
-   * OAuth UI callback used to surface OAuth events (info/warning/error/
-   * oauth_url) to the interactive UI during an autoOAuth switch.
+   * OAuth UI callback used to surface OAuth messages, URLs, and interactive
+   * authentication state to the UI during an autoOAuth switch.
    */
   readonly addItem?: (
     event: AgentOAuthUIEvent,
@@ -701,6 +721,10 @@ export interface AgentSessionControl {
   listSessions(): Promise<readonly SessionInfo[]>;
   /** Deletes a non-active session when no live checkpoint references block it. */
   deleteSession(ref: string): Promise<void>;
+  /** Exports a living session and every reachable media object to a portable package. */
+  exportSession(ref: string, destination: string): Promise<void>;
+  /** Imports a portable session package and activates the imported session. */
+  importSession(packageDirectory: string): Promise<SessionInfo>;
   setRecording(state: SessionRecordingState): Promise<void>;
   getRecording(): SessionRecordingState;
 }
@@ -994,7 +1018,6 @@ export interface Agent {
   getModelParams(): Readonly<Record<string, unknown>>;
   setModelParam(key: string, value: unknown): void;
   clearModelParam(key: string): void;
-  getUserTier(): UserTierId | undefined;
 
   readonly profiles: AgentProfileControl;
   readonly tools: AgentToolControl;

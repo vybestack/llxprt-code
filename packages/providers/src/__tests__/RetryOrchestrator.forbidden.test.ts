@@ -64,12 +64,6 @@ function createTestProvider(config: {
     getDefaultModel(): string {
       return 'test-model';
     },
-    getServerTools(): string[] {
-      return [];
-    },
-    async invokeServerTool(): Promise<unknown> {
-      return null;
-    },
   };
 }
 
@@ -100,6 +94,21 @@ async function consumeStream(
     chunks.push(chunk);
   }
   return chunks;
+}
+
+async function advanceForbiddenBucket(
+  buckets: readonly string[],
+  bucketIndex: number,
+  updateState: (nextIndex: number, nextBucket: string) => void,
+): Promise<boolean> {
+  const nextIndex = bucketIndex + 1;
+  if (nextIndex >= buckets.length) return false;
+  updateState(nextIndex, buckets[nextIndex]);
+  return true;
+}
+
+function surfacedErrorMessage(thrown: unknown): string {
+  return thrown instanceof Error ? thrown.message : String(thrown);
 }
 
 describe('RetryOrchestrator forbidden (403) handling — issue #2917', () => {
@@ -195,12 +204,16 @@ describe('RetryOrchestrator forbidden (403) handling — issue #2917', () => {
             getBucketFailoverHandler: () => ({
               getBuckets: () => buckets,
               getCurrentBucket: () => currentBucket,
-              tryFailover: async () => {
+              tryFailover: () => {
                 failoverCalls++;
-                bucketIndex++;
-                if (bucketIndex >= buckets.length) return false;
-                currentBucket = buckets[bucketIndex];
-                return true;
+                return advanceForbiddenBucket(
+                  buckets,
+                  bucketIndex,
+                  (nextIndex, nextBucket) => {
+                    bucketIndex = nextIndex;
+                    currentBucket = nextBucket;
+                  },
+                );
               },
               isEnabled: () => true,
             }),
@@ -238,7 +251,7 @@ describe('RetryOrchestrator forbidden (403) handling — issue #2917', () => {
 
     expect(thrown).toBeDefined();
     expect((thrown as { status?: number }).status).toBe(403);
-    const message = thrown instanceof Error ? thrown.message : String(thrown);
+    const message = surfacedErrorMessage(thrown);
     expect(message).toContain(
       "Request blocked: parameter 'reasoning' is not allowed",
     );

@@ -193,7 +193,7 @@ describe('profileBootstrap helpers', () => {
     });
     // @pseudocode bootstrap-order.md lines 1-9
     expect(bootstrapResult.runtime.metadata).toMatchObject(
-      parsed.runtimeMetadata.metadata ?? {},
+      Object.assign({}, parsed.runtimeMetadata.metadata),
     );
   });
 

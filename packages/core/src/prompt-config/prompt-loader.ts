@@ -294,17 +294,16 @@ export class PromptLoader {
    * Load multiple files and return a map of path to content
    */
   async loadAllFiles(
-    baseDir: string,
-    fileList: string[],
+    baseDir: string | null | undefined,
+    fileList: string[] | null | undefined,
     shouldCompress: boolean,
   ): Promise<Map<string, string>> {
     // Step 1: Validate inputs
-    if (
-      (baseDir as unknown) == null ||
-      baseDir === '' ||
-      (fileList as unknown) == null ||
-      fileList.length === 0
-    ) {
+    if (baseDir === null || baseDir === undefined || baseDir === '') {
+      return new Map();
+    }
+
+    if (fileList === null || fileList === undefined || fileList.length === 0) {
       return new Map();
     }
 

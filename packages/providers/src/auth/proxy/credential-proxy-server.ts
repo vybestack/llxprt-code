@@ -20,7 +20,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
-import type { TokenStore, OAuthToken } from '@vybestack/llxprt-code-auth';
+import {
+  BucketStatsDataSchema,
+  OAuthTokenDataSchema,
+  type TokenStore,
+} from '@vybestack/llxprt-code-auth';
 import {
   FrameDecoder,
   encodeFrame,
@@ -34,6 +38,7 @@ import {
   type OAuthFlowInterface,
 } from './credential-proxy-oauth-handler.js';
 import type { RefreshCoordinator } from './refresh-coordinator.js';
+import * as Request from './credential-request-validation.js';
 import { ConcurrentDispatchRegistry } from './concurrent-dispatch-registry.js';
 import { auditLog } from './audit-log.js';
 import { ResponseWriter } from './response-writer.js';
@@ -86,6 +91,20 @@ export interface CredentialProxyServerOptions {
    * (non-sandbox / legacy backward compatibility).
    */
   capabilityToken?: string;
+  /**
+   * Notification that a connection has authenticated as a sandbox.
+   * Fired on EVERY handshake that presents a valid capability token,
+   * so a consumer must be idempotent (the intended one — releasing
+   * the capability env file that delivered the token into the
+   * container — already tolerates repeated cleanup). Never fired for
+   * unauthorized handshakes or for servers constructed without a
+   * capabilityToken (non-sandbox connections never authenticate as
+   * sandbox). Invoked on the connection's frame-processing path: a
+   * throw does not reach the caller but surfaces as a connection
+   * error (`process_frames_error`) that destroys that socket, so the
+   * callback must not throw — consumers handle their own failures.
+   */
+  onSandboxHandshake?: () => void;
   /**
    * Extra request handlers merged into the server's requestHandlers at
    * construction. If any key collides with a built-in op name, the
@@ -419,6 +438,12 @@ export class CredentialProxyServer {
         return false;
       }
       state.isSandboxConnection = true;
+      // Each authenticated sandbox handshake proves the capability token
+      // reached the process inside the container. Runs on the frame-
+      // processing path: a throw surfaces as a connection error that
+      // destroys this socket, so the callback must not throw and must be
+      // idempotent (see the option docs).
+      this.options.onSandboxHandshake?.();
     }
 
     this.auditLog('INFO', state.id, 'handshake_ok', {
@@ -714,12 +739,11 @@ export class CredentialProxyServer {
     payload: Record<string, unknown>,
     state: ConnectionState,
   ): Promise<void> {
-    const provider = payload.provider as string | undefined;
-    if (!provider) {
-      this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
-      return;
-    }
-    const bucket = payload.bucket as string | undefined;
+    const parsedPayload =
+      Request.ProviderBucketRequestSchema.safeParse(payload);
+    if (!parsedPayload.success)
+      return this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
+    const { provider, bucket } = parsedPayload.data;
 
     const token = await this.options.tokenStore.getToken(provider, bucket);
     if (token === null) {
@@ -741,7 +765,7 @@ export class CredentialProxyServer {
           `No token found for provider: ${provider}`,
         );
       }
-      return;
+      return undefined;
     }
     this.auditLog('INFO', state.id, 'get_token', {
       provider,
@@ -749,7 +773,7 @@ export class CredentialProxyServer {
       status: 'ok',
     });
     const sanitized = sanitizeTokenForProxy(token);
-    this.sendOk(socket, id, sanitized as unknown as Record<string, unknown>);
+    return this.sendOk(socket, id, sanitized);
   }
 
   private async handleSaveToken(
@@ -767,31 +791,25 @@ export class CredentialProxyServer {
         'Sandbox connections cannot modify tokens',
       )
     )
-      return;
-    const provider = payload.provider as string | undefined;
-    const tokenData = payload.token as Record<string, unknown> | undefined;
-    const bucket = payload.bucket as string | undefined;
-    if (!provider || !tokenData) {
-      this.sendError(
+      return undefined;
+    const parsedPayload = Request.SaveTokenRequestSchema.safeParse(payload);
+    if (!parsedPayload.success)
+      return this.sendError(
         socket,
         id,
         'INVALID_REQUEST',
         'Missing provider or token',
       );
-      return;
-    }
 
-    // Strip refresh_token from incoming token and preserve existing host-side
-    // refresh_token when sandbox payload omits it.
-    const { refresh_token: _stripped, ...safeToken } = tokenData;
+    const { provider, bucket, token } = parsedPayload.data;
     const existingToken = await this.options.tokenStore.getToken(
       provider,
       bucket,
     );
-    const mergedToken = mergeRefreshedToken(
-      (existingToken ?? {}) as OAuthToken,
-      safeToken as OAuthToken,
-    );
+    const mergedToken =
+      existingToken === null
+        ? token
+        : mergeRefreshedToken(OAuthTokenDataSchema.parse(existingToken), token);
 
     await this.options.tokenStore.saveToken(provider, mergedToken, bucket);
     this.auditLog('INFO', state.id, 'save_token', {
@@ -799,7 +817,7 @@ export class CredentialProxyServer {
       bucket: bucket ?? 'default',
       status: 'ok',
     });
-    this.sendOk(socket, id, {});
+    return this.sendOk(socket, id, {});
   }
 
   private async handleRemoveToken(
@@ -817,13 +835,12 @@ export class CredentialProxyServer {
         'Sandbox connections cannot remove tokens',
       )
     )
-      return;
-    const provider = payload.provider as string | undefined;
-    if (!provider) {
-      this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
-      return;
-    }
-    const bucket = payload.bucket as string | undefined;
+      return undefined;
+    const parsedPayload =
+      Request.ProviderBucketRequestSchema.safeParse(payload);
+    if (!parsedPayload.success)
+      return this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
+    const { provider, bucket } = parsedPayload.data;
 
     await this.options.tokenStore.removeToken(provider, bucket);
     this.auditLog('INFO', state.id, 'remove_token', {
@@ -831,7 +848,7 @@ export class CredentialProxyServer {
       bucket: bucket ?? 'default',
       status: 'ok',
     });
-    this.sendOk(socket, id, {});
+    return this.sendOk(socket, id, {});
   }
 
   private async handleListProviders(
@@ -860,13 +877,12 @@ export class CredentialProxyServer {
     state: ConnectionState,
   ): Promise<void> {
     if (this.emptyIfSandbox(socket, id, state, 'list_buckets', { buckets: [] }))
-      return;
+      return undefined;
 
-    const provider = payload.provider as string | undefined;
-    if (!provider) {
-      this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
-      return;
-    }
+    const parsedPayload = Request.ProviderRequestSchema.safeParse(payload);
+    if (!parsedPayload.success)
+      return this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
+    const { provider } = parsedPayload.data;
 
     const buckets = await this.options.tokenStore.listBuckets(provider);
     this.auditLog('INFO', state.id, 'list_buckets', {
@@ -874,7 +890,7 @@ export class CredentialProxyServer {
       status: 'ok',
       count: buckets.length,
     });
-    this.sendOk(socket, id, { buckets });
+    return this.sendOk(socket, id, { buckets });
   }
 
   // Intentionally allowed for sandbox connections: the sandbox process needs
@@ -887,11 +903,10 @@ export class CredentialProxyServer {
     payload: Record<string, unknown>,
     state: ConnectionState,
   ): Promise<void> {
-    const name = payload.name as string | undefined;
-    if (!name) {
-      this.sendError(socket, id, 'INVALID_REQUEST', 'Missing name');
-      return;
-    }
+    const parsedPayload = Request.NameRequestSchema.safeParse(payload);
+    if (!parsedPayload.success)
+      return this.sendError(socket, id, 'INVALID_REQUEST', 'Missing name');
+    const { name } = parsedPayload.data;
 
     const key = await this.options.providerKeyStorage.getKey(name);
     if (key === null) {
@@ -912,10 +927,10 @@ export class CredentialProxyServer {
           `No API key found for: ${name}`,
         );
       }
-      return;
+      return undefined;
     }
     this.auditLog('INFO', state.id, 'get_api_key', { name, status: 'ok' });
-    this.sendOk(socket, id, { key });
+    return this.sendOk(socket, id, { key });
   }
 
   private async handleListApiKeys(
@@ -952,16 +967,15 @@ export class CredentialProxyServer {
         'Sandbox connections cannot check key existence',
       )
     )
-      return;
-    const name = payload.name as string | undefined;
-    if (!name) {
-      this.sendError(socket, id, 'INVALID_REQUEST', 'Missing name');
-      return;
-    }
+      return undefined;
+    const parsedPayload = Request.NameRequestSchema.safeParse(payload);
+    if (!parsedPayload.success)
+      return this.sendError(socket, id, 'INVALID_REQUEST', 'Missing name');
+    const { name } = parsedPayload.data;
 
     const exists = await this.options.providerKeyStorage.hasKey(name);
     this.auditLog('INFO', state.id, 'has_api_key', { name, exists });
-    this.sendOk(socket, id, { exists });
+    return this.sendOk(socket, id, { exists });
   }
 
   private async handleGetBucketStats(
@@ -970,7 +984,9 @@ export class CredentialProxyServer {
     payload: Record<string, unknown>,
     state: ConnectionState,
   ): Promise<void> {
-    const requestedBucket = (payload.bucket as string | undefined) ?? 'default';
+    const bucketValue = payload.bucket;
+    const requestedBucket =
+      typeof bucketValue === 'string' ? bucketValue : 'default';
     if (
       this.emptyIfSandbox(socket, id, state, 'get_bucket_stats', {
         bucket: requestedBucket,
@@ -978,14 +994,14 @@ export class CredentialProxyServer {
         percentage: 0,
       })
     )
-      return;
+      return undefined;
 
-    const provider = payload.provider as string | undefined;
-    const bucket = payload.bucket as string | undefined;
-    if (!provider) {
-      this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
-      return;
-    }
+    const parsedPayload =
+      Request.ProviderBucketRequestSchema.safeParse(payload);
+    if (!parsedPayload.success)
+      return this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
+    const { provider, bucket } = parsedPayload.data;
+
     const stats = await this.options.tokenStore.getBucketStats(
       provider,
       bucket ?? 'default',
@@ -1002,14 +1018,14 @@ export class CredentialProxyServer {
         'NOT_FOUND',
         `No stats found for ${provider}/${bucket ?? 'default'}`,
       );
-      return;
+      return undefined;
     }
     this.auditLog('INFO', state.id, 'get_bucket_stats', {
       provider,
       bucket: bucket ?? 'default',
       status: 'ok',
     });
-    this.sendOk(socket, id, stats as unknown as Record<string, unknown>);
+    return this.sendOk(socket, id, BucketStatsDataSchema.parse(stats));
   }
 
   /**

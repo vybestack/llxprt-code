@@ -432,6 +432,34 @@ describe('agent.mcp projection of real persisted OAuth status @plan:PLAN-2026062
   });
 
   it('PROP-A for any oauthStatus in the 4 states x session in {true,false}: authenticated===(status==="authenticated"), oauthStatus===status, sessionAuthenticated===session @requirement:REQ-INT-002 @scenario:prop-derive-independent', async () => {
+    const {
+      pROPAForAnyOauthStatusInThe4StatesXSessionInProperty,
+      observations,
+    } = await observePROPAForAnyOauthStatusInThe4StatesXSessionIn();
+    await fc.assert(pROPAForAnyOauthStatusInThe4StatesXSessionInProperty);
+    expect(observations.map(({ actualStatus }) => actualStatus)).toStrictEqual(
+      observations.map(({ expectedStatus }) => expectedStatus),
+    );
+    expect(
+      observations.map(({ actualSession }) => actualSession),
+    ).toStrictEqual(observations.map(({ expectedSession }) => expectedSession));
+    expect(
+      observations.map(({ authenticated }) => authenticated),
+    ).toStrictEqual(
+      observations.map(
+        ({ expectedStatus }) => expectedStatus === 'authenticated',
+      ),
+    );
+  });
+
+  const observePROPAForAnyOauthStatusInThe4StatesXSessionIn = async () => {
+    const observations: Array<{
+      actualStatus: McpOAuthStatus;
+      expectedStatus: McpOAuthStatus;
+      actualSession: boolean;
+      expectedSession: boolean;
+      authenticated: boolean;
+    }> = [];
     const statusArb = fc.constantFrom(
       'authenticated',
       'expired',
@@ -439,7 +467,8 @@ describe('agent.mcp projection of real persisted OAuth status @plan:PLAN-2026062
       'not-required',
     );
     const sessionArb = fc.boolean();
-    await fc.assert(
+
+    const pROPAForAnyOauthStatusInThe4StatesXSessionInProperty =
       fc.asyncProperty(statusArb, sessionArb, async (oauthStatus, session) => {
         const callLog: string[] = [];
         const deps = buildProjectionDeps(callLog, {
@@ -449,12 +478,24 @@ describe('agent.mcp projection of real persisted OAuth status @plan:PLAN-2026062
         });
         const control = new McpControl(deps);
         const result = await control.auth('srv');
-        expect(result.oauthStatus).toBe(oauthStatus);
-        expect(result.sessionAuthenticated).toBe(session);
-        expect(result.authenticated).toBe(oauthStatus === 'authenticated');
-      }),
-    );
-  });
+        observations.push({
+          actualStatus: result.oauthStatus,
+          expectedStatus: oauthStatus,
+          actualSession: result.sessionAuthenticated,
+          expectedSession: session,
+          authenticated: result.authenticated,
+        });
+        return (
+          result.oauthStatus === oauthStatus &&
+          result.sessionAuthenticated === session &&
+          result.authenticated === (oauthStatus === 'authenticated')
+        );
+      });
+    return {
+      pROPAForAnyOauthStatusInThe4StatesXSessionInProperty,
+      observations,
+    };
+  };
 
   it('PROP-B for any requiresAuth in {true,false}: auth(srv).requiresAuth===r (real pass-through, never hardcoded) @requirement:REQ-003 @scenario:prop-requires', async () => {
     const requiresArb = fc.boolean();
@@ -474,69 +515,126 @@ describe('agent.mcp projection of real persisted OAuth status @plan:PLAN-2026062
   });
 
   it('PROP-C engine<->agents parity: seeding the REAL token store drives the projection to match getMcpServerOAuthStatus across all 4 states @requirement:REQ-INT-001 @scenario:prop-engine-agents-parity', async () => {
-    const store = new MockTokenStorage();
-    MCPOAuthTokenStorage.setTokenStore(
-      store as unknown as Parameters<
-        typeof MCPOAuthTokenStorage.setTokenStore
-      >[0],
-    );
-
-    const now = Date.now();
-    // authenticated: non-expired token (well beyond the 5min buffer).
-    await seedToken(store, 'srv-valid', now + 60 * 60 * 1000);
-    // expired: token within the expiry buffer.
-    await seedToken(store, 'srv-expired', now + 60_000);
-
-    type CaseSpec = {
-      label: string;
-      server: string;
-      opts: { requiresOAuth: boolean };
-    };
-    const cases: CaseSpec[] = [
-      {
-        label: 'authenticated',
-        server: 'srv-valid',
-        opts: { requiresOAuth: true },
-      },
-      {
-        label: 'expired',
-        server: 'srv-expired',
-        opts: { requiresOAuth: true },
-      },
-      { label: 'none', server: 'srv-nocreds', opts: { requiresOAuth: true } },
-      {
-        label: 'not-required',
-        server: 'srv-valid',
-        opts: { requiresOAuth: false },
-      },
-    ];
-
+    const {
+      pROPCEngineAgentsParitySeedingTheREALTokenStoreDrivesTheProperty,
+      observations,
+    } = await observePROPCEngineAgentsParitySeedingTheREALTokenStoreDrivesThe();
     await fc.assert(
-      fc.asyncProperty(
-        fc.constantFrom(...cases),
-        fc.boolean(),
-        async (spec, session) => {
-          const callLog: string[] = [];
-          const deps = buildProjectionDeps(callLog, {
-            getOAuthStatusReal: (s: string) =>
-              getMcpServerOAuthStatus(s, spec.opts),
-            requiresAuthByServer: { [spec.server]: spec.opts.requiresOAuth },
-            authenticated: session ? [spec.server] : [],
-          });
-          const control = new McpControl(deps);
-          const result = await control.auth(spec.server);
-          const expected = await getMcpServerOAuthStatus(
-            spec.server,
-            spec.opts,
-          );
-          expect(result.oauthStatus).toBe(expected);
-          expect(result.authenticated).toBe(expected === 'authenticated');
-        },
+      pROPCEngineAgentsParitySeedingTheREALTokenStoreDrivesTheProperty,
+    );
+    expect(observations.map(({ actualStatus }) => actualStatus)).toStrictEqual(
+      observations.map(({ expectedStatus }) => expectedStatus),
+    );
+    expect(
+      observations.map(({ authenticated }) => authenticated),
+    ).toStrictEqual(
+      observations.map(
+        ({ expectedStatus }) => expectedStatus === 'authenticated',
       ),
     );
   });
 
+  const observePROPCEngineAgentsParitySeedingTheREALTokenStoreDrivesThe =
+    async () => {
+      const observations: Array<{
+        actualStatus: McpOAuthStatus;
+        expectedStatus: McpOAuthStatus;
+        authenticated: boolean;
+      }> = [];
+      const store = new MockTokenStorage();
+      MCPOAuthTokenStorage.setTokenStore(
+        store as unknown as Parameters<
+          typeof MCPOAuthTokenStorage.setTokenStore
+        >[0],
+      );
+
+      const now = Date.now();
+      // authenticated: non-expired token (well beyond the 5min buffer).
+      await seedToken(store, 'srv-valid', now + 60 * 60 * 1000);
+      // expired: token within the expiry buffer.
+      await seedToken(store, 'srv-expired', now + 60_000);
+
+      type CaseSpec = {
+        label: string;
+        server: string;
+        opts: { requiresOAuth: boolean };
+      };
+      const cases: CaseSpec[] = [
+        {
+          label: 'authenticated',
+          server: 'srv-valid',
+          opts: { requiresOAuth: true },
+        },
+        {
+          label: 'expired',
+          server: 'srv-expired',
+          opts: { requiresOAuth: true },
+        },
+        { label: 'none', server: 'srv-nocreds', opts: { requiresOAuth: true } },
+        {
+          label: 'not-required',
+          server: 'srv-valid',
+          opts: { requiresOAuth: false },
+        },
+      ];
+
+      const pROPCEngineAgentsParitySeedingTheREALTokenStoreDrivesTheProperty =
+        fc.asyncProperty(
+          fc.constantFrom(...cases),
+          fc.boolean(),
+          async (spec, session) => {
+            const callLog: string[] = [];
+            const deps = buildProjectionDeps(callLog, {
+              getOAuthStatusReal: (s: string) =>
+                getMcpServerOAuthStatus(s, spec.opts),
+              requiresAuthByServer: { [spec.server]: spec.opts.requiresOAuth },
+              authenticated: session ? [spec.server] : [],
+            });
+            const control = new McpControl(deps);
+            const result = await control.auth(spec.server);
+            const expected = await getMcpServerOAuthStatus(
+              spec.server,
+              spec.opts,
+            );
+            observations.push({
+              actualStatus: result.oauthStatus,
+              expectedStatus: expected,
+              authenticated: result.authenticated,
+            });
+            return (
+              result.oauthStatus === expected &&
+              result.authenticated === (expected === 'authenticated')
+            );
+          },
+        );
+      return {
+        pROPCEngineAgentsParitySeedingTheREALTokenStoreDrivesTheProperty,
+        observations,
+      };
+    };
+
   it('PROP-D for a generated 1..4-server config map with per-server statuses: details().servers length === key count and every srv.oauthStatus === seeded status for srv.name @requirement:REQ-INT-001 @scenario:prop-details-parity', async () => {
+    const { pROPDForAGenerated14ServerConfigMapWithPerProperty, observations } =
+      await observePROPDForAGenerated14ServerConfigMapWithPer();
+    await fc.assert(pROPDForAGenerated14ServerConfigMapWithPerProperty);
+    expect(observations.map(({ actualCount }) => actualCount)).toStrictEqual(
+      observations.map(({ expectedCount }) => expectedCount),
+    );
+    expect(
+      observations.flatMap(({ actualStatuses }) => actualStatuses),
+    ).toStrictEqual(
+      observations.flatMap(({ expectedStatuses }) => expectedStatuses),
+    );
+    expect(
+      observations.flatMap(({ statusTypes }) => statusTypes),
+    ).toStrictEqual(
+      observations.flatMap(({ statusTypes }) =>
+        statusTypes.map(() => 'string'),
+      ),
+    );
+  });
+
+  const observePROPDForAGenerated14ServerConfigMapWithPer = async () => {
     const nameArb = fc.string({ minLength: 1, maxLength: 10 }).filter((k) => {
       const protoNames = new Set(Object.getOwnPropertyNames(Object.prototype));
       return k.length > 0 && !protoNames.has(k);
@@ -562,8 +660,17 @@ describe('agent.mcp projection of real persisted OAuth status @plan:PLAN-2026062
         }
         return { servers, oauthStatusByServer };
       });
-    await fc.assert(
-      fc.asyncProperty(configArb, async ({ servers, oauthStatusByServer }) => {
+
+    const observations: Array<{
+      actualCount: number;
+      expectedCount: number;
+      actualStatuses: McpOAuthStatus[];
+      expectedStatuses: McpOAuthStatus[];
+      statusTypes: string[];
+    }> = [];
+    const pROPDForAGenerated14ServerConfigMapWithPerProperty = fc.asyncProperty(
+      configArb,
+      async ({ servers, oauthStatusByServer }) => {
         const callLog: string[] = [];
         const requiresAuthByServer: Record<string, boolean> = {};
         for (const name of Object.keys(servers)) {
@@ -578,12 +685,30 @@ describe('agent.mcp projection of real persisted OAuth status @plan:PLAN-2026062
         const control = new McpControl(deps);
         const detail = await control.details();
         const keys = Object.keys(servers);
-        expect(detail.servers).toHaveLength(keys.length);
-        for (const srv of detail.servers) {
-          expect(srv.oauthStatus).toBe(oauthStatusByServer[srv.name]);
-          expect(typeof srv.oauthStatus).toBe('string');
-        }
-      }),
+        observations.push({
+          actualCount: detail.servers.length,
+          expectedCount: keys.length,
+          actualStatuses: detail.servers.map(({ oauthStatus }) => oauthStatus),
+          expectedStatuses: detail.servers.map(
+            ({ name }) => oauthStatusByServer[name],
+          ),
+          statusTypes: detail.servers.map(
+            ({ oauthStatus }) => typeof oauthStatus,
+          ),
+        });
+        return (
+          detail.servers.length === keys.length &&
+          detail.servers.every(
+            (server) =>
+              server.oauthStatus === oauthStatusByServer[server.name] &&
+              typeof server.oauthStatus === 'string',
+          )
+        );
+      },
     );
-  });
+    return {
+      pROPDForAGenerated14ServerConfigMapWithPerProperty,
+      observations,
+    };
+  };
 });

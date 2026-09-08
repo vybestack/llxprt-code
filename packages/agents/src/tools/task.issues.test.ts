@@ -12,6 +12,7 @@
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { TaskTool, type TaskToolParams } from './task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import {
   ContextState,
@@ -66,6 +67,7 @@ describe('TaskTool', () => {
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => false,
       });
@@ -134,6 +136,7 @@ describe('TaskTool', () => {
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => true,
       });
@@ -181,6 +184,7 @@ describe('TaskTool', () => {
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => false,
       });
@@ -226,6 +230,7 @@ describe('TaskTool', () => {
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => false,
       });
@@ -277,6 +282,7 @@ describe('TaskTool', () => {
         dispose: vi.fn().mockResolvedValue(undefined),
       });
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
         getAsyncTaskManager: () =>
@@ -356,6 +362,7 @@ describe('TaskTool', () => {
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => false,
       });
@@ -417,6 +424,7 @@ describe('TaskTool', () => {
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => false,
       });
@@ -466,6 +474,7 @@ describe('TaskTool', () => {
       } as unknown as Config;
 
       const tool = new TaskTool(configNoRegistry, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => true,
       });
@@ -524,6 +533,7 @@ describe('TaskTool', () => {
       } as unknown as Config;
 
       const tool = new TaskTool(configWithRegistry, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => true,
       });
@@ -576,6 +586,7 @@ describe('TaskTool', () => {
       } as unknown as Config;
 
       const tool = new TaskTool(configNoRegistry, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => true,
       });
@@ -624,6 +635,7 @@ describe('TaskTool', () => {
       } as unknown as Config;
 
       const tool = new TaskTool(configNoRegistry, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => true,
       });
@@ -688,6 +700,7 @@ describe('TaskTool', () => {
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithRegistry, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => true,
       });

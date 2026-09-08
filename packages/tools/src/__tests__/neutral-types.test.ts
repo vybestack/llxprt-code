@@ -99,7 +99,7 @@ describe('wire types are usable as ToolResult.llmContent', () => {
 
   it('a ContentPart is assignable to ContentPartUnion', () => {
     const part: ContentPartUnion = { text: 'hello' } satisfies ContentPart;
-    expect(part).toEqual({ text: 'hello' });
+    expect(part).toStrictEqual({ text: 'hello' });
   });
 
   it('a ToolCallRequest shape is structurally compatible', () => {

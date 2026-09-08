@@ -80,7 +80,6 @@ Prompt files use `{{VARIABLE_NAME}}` syntax. Available variables:
 | `{{IS_SANDBOXED}}`            | `true` or `false`                                      |
 | `{{SANDBOX_TYPE}}`            | `macos-seatbelt`, `generic`, or `none`                 |
 | `{{HAS_IDE}}`                 | `true` or `false`                                      |
-| `{{FOLDER_STRUCTURE}}`        | Summarized folder tree (if enabled)                    |
 | `{{SESSION_STARTED_AT}}`      | Timestamp of session start                             |
 | `{{CURRENT_DATE}}`            | Current date                                           |
 | `{{CURRENT_TIME}}`            | Current time                                           |

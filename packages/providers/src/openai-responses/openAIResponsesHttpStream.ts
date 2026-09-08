@@ -39,13 +39,26 @@ import { tryConsumeTransportAttempt } from '../transportAttemptBudget.js';
 import { getDelayDuration, hasRetryAfterHeader } from '../retryDelayPolicy.js';
 import {
   shouldDumpSDKContext,
+  dumpSDKRequestContext,
   dumpSDKResponseContext,
   dumpSDKErrorRequestResponse,
   bestEffortDump,
+  type RequestDumpMetadata,
 } from '../utils/dumpSDKContext.js';
 import { redactSensitiveHeaders, type DumpMode } from '../utils/dumpContext.js';
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
+import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import {
+  BoundedJsonBody,
+  DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
+  DEFAULT_STREAMING_JSON_CHUNK_BYTES,
+} from '../utils/boundedJsonBody.js';
+
+export {
+  DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
+  DEFAULT_STREAMING_JSON_CHUNK_BYTES,
+} from '../utils/boundedJsonBody.js';
 
 /** Per-request context shared by the executor and the HTTP stream path. */
 export interface StreamResponsesParams {
@@ -66,6 +79,7 @@ export interface StreamResponsesParams {
   request: OpenAIResponsesRequest;
   includeThinkingInResponse: boolean;
   responsesStored: boolean;
+  mediaRequest: ResolvedMediaRequest;
   abortSignal?: AbortSignal;
   maxStreamingAttempts: number;
   streamRetryInitialDelayMs: number;
@@ -77,7 +91,7 @@ export interface StreamResponsesParams {
 interface FetchStreamParams {
   responsesURL: string;
   headers: Record<string, string>;
-  bodyBlob: Blob;
+  body: BoundedJsonBody;
   abortSignal?: AbortSignal;
   includeThinkingInResponse: boolean;
   responsesStored: boolean;
@@ -87,41 +101,123 @@ interface FetchStreamParams {
   onStreamLiveness?: NormalizedGenerateChatOptions['onStreamLiveness'];
 }
 
+function resolveResponsesContentType(params: { isCodex: boolean }): string {
+  return params.isCodex
+    ? 'application/json'
+    : 'application/json; charset=utf-8';
+}
+
+/**
+ * HTTP dump metadata shared by the pre-transport seam dump and the
+ * WebSocket-fallback dump (#3159): both record the same physical HTTP send
+ * shape, so both call sites must build headers identically.
+ */
+export async function buildHttpDumpMetadata(
+  params: Pick<
+    StreamResponsesParams,
+    'apiKey' | 'isCodex' | 'normalizedOptions'
+  >,
+  deps: ResponsesExecutorDeps,
+): Promise<RequestDumpMetadata> {
+  return {
+    headers: await buildResponsesHeaders(
+      params.apiKey,
+      resolveResponsesContentType(params),
+      params.isCodex,
+      params.normalizedOptions,
+      deps,
+    ),
+    transport: { type: 'http' },
+  };
+}
+
+function flattenTransportErrors(error: unknown): readonly unknown[] {
+  return error instanceof AggregateError
+    ? error.errors.flatMap((nested) => flattenTransportErrors(nested))
+    : [error];
+}
+
+function transportCleanupError(
+  transportError: unknown,
+  disposalError: unknown,
+  message: string,
+): AggregateError {
+  return new AggregateError(
+    [
+      ...new Set([
+        ...flattenTransportErrors(transportError),
+        ...flattenTransportErrors(disposalError),
+      ]),
+    ],
+    message,
+  );
+}
+
 export async function* streamOverHttp(
   params: StreamResponsesParams,
   deps: ResponsesExecutorDeps,
 ): AsyncIterableIterator<IContent> {
-  const contentType = params.isCodex
-    ? 'application/json'
-    : 'application/json; charset=utf-8';
-  const bodyBlob = new Blob([JSON.stringify(params.request)], {
-    type: contentType,
+  const contentType = resolveResponsesContentType(params);
+  const body = new BoundedJsonBody(params.request, {
+    maxChunkBytes: DEFAULT_STREAMING_JSON_CHUNK_BYTES,
+    maxEnvelopeBytes: DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
   });
-  const headers = await buildResponsesHeaders(
-    params.apiKey,
-    contentType,
-    params.isCodex,
-    params.normalizedOptions,
-    deps,
+  const headers = {
+    ...(await buildResponsesHeaders(
+      params.apiKey,
+      contentType,
+      params.isCodex,
+      params.normalizedOptions,
+      deps,
+    )),
+    'Content-Length': String(body.byteLength),
+  };
+  deps.logger.debug(
+    () =>
+      `Request body transport: streaming-json, envelopeBytes=${body.byteLength}`,
   );
   deps.logger.debug(
     () => `Request body keys: ${JSON.stringify(Object.keys(params.request))}`,
   );
+  let transportError: unknown;
+  let disposalFailed = false;
+  let disposalError: unknown;
   try {
-    yield* fetchStreamWithRetries(
-      {
-        ...params,
-        responsesURL: `${params.baseURL}/responses`,
-        headers,
-        bodyBlob,
-        onStreamLiveness: params.normalizedOptions.onStreamLiveness,
-      },
-      deps,
-    );
+    try {
+      yield* fetchStreamWithRetries(
+        {
+          ...params,
+          responsesURL: `${params.baseURL}/responses`,
+          headers,
+          body,
+          onStreamLiveness: params.normalizedOptions.onStreamLiveness,
+        },
+        deps,
+      );
+    } catch (error) {
+      transportError = error;
+      await dumpErrorOnFailure(error, params, deps, headers);
+      throw error;
+    } finally {
+      try {
+        await body.dispose(transportError);
+      } catch (error) {
+        disposalFailed = true;
+        disposalError = error;
+      }
+    }
   } catch (error) {
-    await dumpErrorOnFailure(error, params, deps);
+    await dumpErrorOnFailure(error, params, deps, headers);
+    if (disposalFailed) {
+      throw transportCleanupError(
+        error,
+        disposalError,
+        'OpenAI Responses HTTP transport and request cleanup failed',
+      );
+    }
     throw error;
   }
+  if (disposalFailed) throw disposalError;
 }
 
 export async function buildResponsesHeaders(
@@ -219,15 +315,31 @@ async function* fetchStreamWithRetries(
 async function fetchResponse(params: {
   responsesURL: string;
   headers: Record<string, string>;
-  bodyBlob: Blob;
+  body: BoundedJsonBody;
   abortSignal?: AbortSignal;
 }): Promise<Response> {
-  return fetch(params.responsesURL, {
+  const requestBody = params.body.createStreamHandle();
+  const requestInit: RequestInit & { duplex: 'half' } = {
     method: 'POST',
     headers: params.headers,
-    body: params.bodyBlob,
+    body: requestBody.stream,
     signal: params.abortSignal,
-  });
+    duplex: 'half',
+  };
+  try {
+    return await fetch(params.responsesURL, requestInit);
+  } catch (error) {
+    try {
+      await requestBody.dispose(error);
+    } catch (disposalError) {
+      throw transportCleanupError(
+        error,
+        disposalError,
+        'OpenAI Responses fetch and request cleanup failed',
+      );
+    }
+    throw error;
+  }
 }
 
 async function* parseSuccessfulResponse(
@@ -361,6 +473,7 @@ async function dumpErrorOnFailure(
   error: unknown,
   params: StreamResponsesParams,
   deps: ResponsesExecutorDeps,
+  headers: Record<string, string>,
 ): Promise<void> {
   // A user cancellation is not a request failure; dumping it would write a
   // full-prompt request file on every abort without diagnostic value.
@@ -375,14 +488,44 @@ async function dumpErrorOnFailure(
         payload,
         true,
       );
-    } else {
-      await dumpSDKErrorRequestResponse(
-        deps.providerName,
-        '/responses',
-        params.request,
-        payload,
-        params.baseURL,
-      );
+      return;
     }
+    await dumpSDKErrorRequestResponse(
+      deps.providerName,
+      '/responses',
+      params.request,
+      payload,
+      params.baseURL,
+      dumpSDKRequestContext,
+      dumpSDKResponseContext,
+      { headers, transport: { type: 'http' } },
+    );
   });
+}
+
+/**
+ * Records the physical HTTP send when the WebSocket transport falls back
+ * mid-turn (#3159). The pre-transport dump already recorded the WebSocket
+ * attempt; this best-effort dump makes the fallback visible with the real
+ * HTTP headers and the body actually carried. Gated to success-dump mode:
+ * error mode already writes an honest HTTP error dump via dumpErrorOnFailure.
+ * Returns the dump base id so response/error dumps link to the HTTP request.
+ */
+export async function dumpFallbackHttpRequest(
+  params: StreamResponsesParams,
+  deps: ResponsesExecutorDeps,
+): Promise<string | undefined> {
+  if (!shouldDumpSDKContext(params.dumpMode, false)) {
+    return undefined;
+  }
+  const result = await bestEffortDump('request', deps.providerName, async () =>
+    dumpSDKRequestContext(
+      deps.providerName,
+      '/responses',
+      params.request,
+      params.baseURL,
+      await buildHttpDumpMetadata(params, deps),
+    ),
+  );
+  return result?.baseId;
 }

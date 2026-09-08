@@ -41,6 +41,18 @@ async function writeFile(
   }
 }
 
+async function statWithReadOnlyFailure(
+  filePath: string,
+): Promise<{ readonly size: number; readonly mtimeMs: number }> {
+  if (filePath.endsWith('perf-20260101-old.jsonl')) {
+    const error = new Error('read-only file system') as NodeJS.ErrnoException;
+    error.code = 'EROFS';
+    throw error;
+  }
+  const stat = await fs.stat(filePath);
+  return { size: stat.size, mtimeMs: stat.mtimeMs };
+}
+
 describe('PerfDelete (P11, AC-9, D3)', () => {
   let dir: string;
   const now = Date.parse('2026-01-15T12:00:00.000Z');
@@ -326,17 +338,7 @@ describe('PerfDelete (P11, AC-9, D3)', () => {
 
     const failingFs: PerfDeleteFilesystem = {
       readdir: async (d: string) => fs.readdir(d),
-      stat: async (p: string) => {
-        if (p.endsWith('perf-20260101-old.jsonl')) {
-          const err = new Error(
-            'read-only file system',
-          ) as NodeJS.ErrnoException;
-          err.code = 'EROFS';
-          throw err;
-        }
-        const s = await fs.stat(p);
-        return { size: s.size, mtimeMs: s.mtimeMs };
-      },
+      stat: statWithReadOnlyFailure,
       unlink: async (p: string) => fs.unlink(p),
     };
 

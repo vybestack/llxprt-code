@@ -45,6 +45,7 @@ function areFooterStablePropsEqual(
     'model',
     'targetDir',
     'branchName',
+    'branchIsDirty',
     'debugMode',
     'debugMessage',
     'errorCount',
@@ -69,6 +70,7 @@ interface FooterProps {
   model: string;
   targetDir: string;
   branchName?: string;
+  branchIsDirty: boolean;
   debugMode: boolean;
   debugMessage: string;
   errorCount: number;
@@ -297,24 +299,34 @@ ResponsiveTimestamp.displayName = 'ResponsiveTimestamp';
 // Branch display sub-component
 interface BranchDisplayProps {
   branchName: string;
+  isDirty: boolean;
   nightly: boolean;
   maxBranchLength: number;
 }
 
 const BranchDisplay = React.memo(
-  ({ branchName, nightly, maxBranchLength }: BranchDisplayProps) => {
+  ({ branchName, isDirty, nightly, maxBranchLength }: BranchDisplayProps) => {
     const displayBranch =
       branchName.length > maxBranchLength
         ? truncateMiddle(branchName, maxBranchLength)
         : branchName;
+    const suffix = isDirty ? '*' : '';
     if (nightly) {
       return (
         <ThemedGradient colors={Colors.GradientColors}>
-          <Text color={Colors.Foreground}>({displayBranch}*)</Text>
+          <Text color={Colors.Foreground}>
+            ({displayBranch}
+            {suffix})
+          </Text>
         </ThemedGradient>
       );
     }
-    return <Text color={SemanticColors.text.accent}>({displayBranch}*)</Text>;
+    return (
+      <Text color={SemanticColors.text.accent}>
+        ({displayBranch}
+        {suffix})
+      </Text>
+    );
   },
 );
 BranchDisplay.displayName = 'BranchDisplay';
@@ -494,6 +506,7 @@ FooterMetricsRow.displayName = 'FooterMetricsRow';
 // Footer first line: Branch (left) | Memory | Context | Time (right)
 interface FooterFirstLineProps {
   branchName?: string;
+  branchIsDirty: boolean;
   nightly: boolean;
   isTrustedFolder?: boolean;
   debugMode: boolean;
@@ -516,6 +529,7 @@ interface FooterFirstLineProps {
 const FooterFirstLine = React.memo((props: FooterFirstLineProps) => {
   const {
     branchName,
+    branchIsDirty,
     nightly,
     isTrustedFolder,
     debugMode,
@@ -540,6 +554,7 @@ const FooterFirstLine = React.memo((props: FooterFirstLineProps) => {
         {branchName && (
           <BranchDisplay
             branchName={branchName}
+            isDirty={branchIsDirty}
             nightly={nightly}
             maxBranchLength={maxBranchLength}
           />
@@ -671,6 +686,7 @@ export const Footer = React.memo(
     model,
     targetDir,
     branchName,
+    branchIsDirty,
     debugMode,
     debugMessage,
     errorCount,
@@ -702,6 +718,7 @@ export const Footer = React.memo(
       <Box flexDirection="column" width="100%">
         <FooterFirstLine
           branchName={branchName}
+          branchIsDirty={branchIsDirty}
           nightly={nightly}
           isTrustedFolder={isTrustedFolder}
           debugMode={debugMode}

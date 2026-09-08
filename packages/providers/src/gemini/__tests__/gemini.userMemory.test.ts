@@ -32,7 +32,11 @@ const googleGenAIState = {
   streamPlans: [] as Array<Array<Record<string, unknown>>>,
 };
 
-void vi.mock('@google/genai', () => {
+import type { CreateGeminiApiClient } from '../GeminiProvider.js';
+// Injected into GeminiProvider rather than module-mocked. `vi.mock` registers
+// process-wide and bun hoists it ahead of the whole run, so this stub used to
+// leak into every suite loaded alongside this one.
+const injectedClientFactory = (() => {
   class FakeGoogleGenAI {
     readonly models: {
       generateContentStream: ReturnType<typeof vi.fn>;
@@ -67,10 +71,15 @@ void vi.mock('@google/genai', () => {
     }
   }
 
-  const Type = { OBJECT: 'object' };
+  // Mirrors the real Gemini schema-type constant, which is uppercase.
+  const Type = { OBJECT: 'OBJECT' };
 
-  return { GoogleGenAI: FakeGoogleGenAI, Type };
-});
+  return {
+    createGeminiApiClient: async (opts: Record<string, unknown>) =>
+      new FakeGoogleGenAI(opts),
+    Type,
+  };
+})().createGeminiApiClient as unknown as CreateGeminiApiClient;
 
 const queueGoogleStream = (responses: Array<Record<string, unknown>>): void => {
   googleGenAIState.streamPlans.push(responses);
@@ -125,6 +134,7 @@ ${TEST_USER_MEMORY}`;
       process.env.GEMINI_API_KEY,
       undefined,
       config,
+      injectedClientFactory,
     );
 
     // Create call options with runtime context
@@ -193,6 +203,7 @@ ${TEST_USER_MEMORY}`;
       process.env.GEMINI_API_KEY,
       undefined,
       config,
+      injectedClientFactory,
     );
 
     const runtime1 = createProviderRuntimeContext({
@@ -256,6 +267,7 @@ ${TEST_USER_MEMORY}`;
       'different-api-key',
       undefined,
       config, // Same config instance with userMemory
+      injectedClientFactory,
     );
 
     const runtime2 = createProviderRuntimeContext({

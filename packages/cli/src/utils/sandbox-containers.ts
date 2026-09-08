@@ -18,11 +18,7 @@ import type {
   CredentialProxyBridgeResult,
   SshAgentResult,
 } from './sandbox-ssh.js';
-import {
-  containerMountSources,
-  createHostOnlyCapabilityEnvFile,
-  runCapabilityCleanupStep,
-} from './sandbox-capability.js';
+import { containerMountSources } from './sandbox-capability.js';
 import {
   getContainerPath,
   mountGitConfigFiles,
@@ -35,33 +31,24 @@ import {
   sandboxPorts,
   resolveDebugPort,
 } from './sandbox-env.js';
-import {
-  setupCredentialProxyDockerMacOS,
-  SSH_TUNNEL_POLL_TIMEOUT_MS,
-} from './sandbox-ssh.js';
 import { canonicalizeExistingPath } from './sandbox-path-canonicalization.js';
 import { addSandboxOwnershipLabels } from './sandbox-owner-labels.js';
-import { setupCredentialProxyPodmanMacOS } from './sandbox-podman.js';
-import {
-  createAndStartProxy,
-  stopProxy,
-  getProxySocketPath,
-  getProxyCapabilityToken,
-} from '@vybestack/llxprt-code-providers/auth.js';
+import { stopProxy } from '@vybestack/llxprt-code-providers/auth.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import type { DependencyVolumeLifecycle } from './sandbox-node-modules.js';
 import type { SandboxLaunchLifecycle } from './sandbox-lifecycle.js';
 import {
-  cleanupCredentialSocketRuntime,
-  createCredentialSocketRuntime,
-} from './sandbox-credential-runtime.js';
+  setupCredentialProxy,
+  type CredentialProxyBridgeCleanup,
+} from './sandbox-credential-proxy.js';
 import {
   awaitSandboxProxyReady,
   resolveSandboxProxyPort,
   resolveSandboxProxyUrl,
 } from './sandbox-network-proxy.js';
 
-export { containerMountSources };
+export { containerMountSources, setupCredentialProxy };
+export type { CredentialProxyBridgeCleanup };
 
 const execAsync = promisify(exec);
 
@@ -80,7 +67,7 @@ export interface ContainerSandboxPrepared {
   workdir: string;
   portForwardingResult: PortForwardingResult | undefined;
   credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
-  credentialProxyBridgeCleanup: (() => void) | undefined;
+  credentialProxyBridgeCleanup: CredentialProxyBridgeCleanup | undefined;
   dependencyVolumeLifecycle: DependencyVolumeLifecycle;
   reservedTunnelPorts: Set<number>;
   sshResult: SshAgentResult;
@@ -105,24 +92,6 @@ const BASE_CONTAINER_HARDENING_FLAGS = [
   '--security-opt',
   'no-new-privileges',
 ] as const;
-
-/** Composes cleanup callbacks and surfaces failures after attempting each one. */
-function composeCleanups(
-  a: (() => void) | undefined,
-  b: (() => void) | undefined,
-  c: (() => void) | undefined,
-): (() => void) | undefined {
-  if (a === undefined && b === undefined && c === undefined) return undefined;
-  return () => {
-    const errors: unknown[] = [];
-    runCapabilityCleanupStep(() => a?.(), errors);
-    runCapabilityCleanupStep(() => b?.(), errors);
-    runCapabilityCleanupStep(() => c?.(), errors);
-    if (errors.length > 0) {
-      throw new AggregateError(errors, 'Credential proxy cleanup failed');
-    }
-  };
-}
 
 /** Rewrites the loopback hostname of a proxy URL to the sandbox proxy name. */
 function rewriteProxyHostname(proxyUrl: string): string {
@@ -578,184 +547,6 @@ export async function setupContainerUser(
   return userFlag;
 }
 
-/** Sets up the macOS credential proxy bridge based on container command. */
-async function setupMacOSCredProxyBridge(
-  args: string[],
-  config: SandboxConfig,
-  socketPath: string,
-  reservedTunnelPorts: Set<number>,
-): Promise<CredentialProxyBridgeResult | undefined> {
-  switch (config.command) {
-    case 'podman':
-      return setupCredentialProxyPodmanMacOS(
-        args,
-        socketPath,
-        SSH_TUNNEL_POLL_TIMEOUT_MS,
-        {
-          reserveTunnelPort: (port: number) => {
-            reservedTunnelPorts.add(port);
-          },
-          excludedTunnelPorts: reservedTunnelPorts,
-        },
-      );
-    case 'docker':
-      return setupCredentialProxyDockerMacOS(args, socketPath);
-    case 'sandbox-exec':
-    default:
-      return undefined;
-  }
-}
-
-/** Starts credential proxy and sets up bridge for Podman/Docker macOS. */
-async function failOnMissingSocketPath(
-  sessionTmpdirCleanup: () => void,
-): Promise<Error> {
-  const invariantError = new FatalSandboxError(
-    'Credential proxy started but did not produce a socket path',
-  );
-  const errors: unknown[] = [invariantError];
-  try {
-    await stopProxy();
-  } catch (stopErr) {
-    errors.push(stopErr);
-  }
-  runCapabilityCleanupStep(sessionTmpdirCleanup, errors);
-  return errors.length === 1
-    ? invariantError
-    : new AggregateError(errors, 'Credential proxy setup failed');
-}
-
-function throwCredentialProxySetupError(
-  error: unknown,
-  sessionTmpdirCleanup: () => void,
-  errors: unknown[] = [error],
-): never {
-  runCapabilityCleanupStep(sessionTmpdirCleanup, errors);
-  throw errors.length === 1
-    ? error
-    : new AggregateError(errors, 'Credential proxy setup failed');
-}
-
-function assertSupportedCredentialNetwork(config: SandboxConfig): void {
-  const networkMode =
-    process.env.LLXPRT_SANDBOX_NETWORK ?? process.env.SANDBOX_NETWORK;
-  if (
-    os.platform() === 'darwin' &&
-    (config.command === 'docker' || config.command === 'podman') &&
-    networkMode === 'off'
-  ) {
-    throw new FatalSandboxError(
-      'macOS credential bridge requires container networking; enable networking or use Linux for network-off sandboxing.',
-    );
-  }
-}
-
-async function startCredentialProxyForSandbox(
-  config: SandboxConfig,
-  socketRuntimePath: string,
-  sessionTmpdirCleanup: () => void,
-): Promise<string> {
-  try {
-    assertSupportedCredentialNetwork(config);
-  } catch (error) {
-    throwCredentialProxySetupError(error, sessionTmpdirCleanup);
-  }
-  try {
-    await createAndStartProxy({ socketPath: socketRuntimePath });
-  } catch (error) {
-    throwCredentialProxySetupError(
-      new FatalSandboxError(
-        `Failed to start credential proxy: ${error instanceof Error ? error.message : String(error)}`,
-      ),
-      sessionTmpdirCleanup,
-    );
-  }
-  const socketPath = getProxySocketPath();
-  if (socketPath === undefined) {
-    throw await failOnMissingSocketPath(sessionTmpdirCleanup);
-  }
-  return socketPath;
-}
-
-export async function setupCredentialProxy(
-  args: string[],
-  config: SandboxConfig,
-  sessionTmpdir: string,
-  reservedTunnelPorts: Set<number>,
-  entrypointPrefixes: string[],
-): Promise<{
-  credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
-  credentialProxyBridgeCleanup: (() => void) | undefined;
-}> {
-  const socketRuntime = createCredentialSocketRuntime(config, sessionTmpdir);
-  const sessionTmpdirCleanup = (): void =>
-    cleanupCredentialSocketRuntime(socketRuntime, sessionTmpdir);
-  // @plan:PLAN-20250214-CREDPROXY.P34 R25.1: Start credential proxy BEFORE spawning container
-  let socketPath: string;
-  try {
-    socketPath = await startCredentialProxyForSandbox(
-      config,
-      socketRuntime.path,
-      sessionTmpdirCleanup,
-    );
-  } catch (error) {
-    throwCredentialProxySetupError(error, sessionTmpdirCleanup);
-  }
-  let credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
-  let credentialProxyBridgeCleanup: (() => void) | undefined;
-  let envFileCleanup: (() => void) | undefined;
-
-  // @plan:PLAN-20250214-CREDPROXY.P34 R3.6: Pass socket path to container via env var
-  const isDarwin = os.platform() === 'darwin';
-  try {
-    if (isDarwin) {
-      credentialProxyBridgeResult = await setupMacOSCredProxyBridge(
-        args,
-        config,
-        socketPath,
-        reservedTunnelPorts,
-      );
-    }
-    const effectiveSocketPath =
-      credentialProxyBridgeResult?.containerSocketPath ?? socketPath;
-    args.push('--env', `LLXPRT_CREDENTIAL_SOCKET=${effectiveSocketPath}`);
-
-    if (credentialProxyBridgeResult !== undefined && isDarwin) {
-      credentialProxyBridgeCleanup = credentialProxyBridgeResult.cleanup;
-      const prefix = credentialProxyBridgeResult.entrypointPrefix;
-      if (prefix !== undefined) entrypointPrefixes.push(prefix);
-    }
-    // @plan project-plans/issue-1954-sandbox-hardening.md (AC1): host-only env file.
-    const envFileResult = createHostOnlyCapabilityEnvFile(
-      getProxyCapabilityToken(),
-      containerMountSources(args),
-    );
-    if (envFileResult !== undefined) {
-      args.push(...envFileResult.args);
-      envFileCleanup = envFileResult.cleanup;
-    }
-  } catch (err) {
-    const errors: unknown[] = [err];
-    runCapabilityCleanupStep(() => envFileCleanup?.(), errors);
-    runCapabilityCleanupStep(() => credentialProxyBridgeCleanup?.(), errors);
-    try {
-      await stopProxy();
-    } catch (stopErr) {
-      errors.push(stopErr);
-    }
-    throwCredentialProxySetupError(err, sessionTmpdirCleanup, errors);
-  }
-
-  return {
-    credentialProxyBridgeResult,
-    credentialProxyBridgeCleanup: composeCleanups(
-      credentialProxyBridgeCleanup,
-      envFileCleanup,
-      sessionTmpdirCleanup,
-    ),
-  };
-}
-
 /** Spawns proxy container and waits for it to be ready. */
 export async function startProxyContainer(
   config: SandboxConfig,
@@ -863,7 +654,7 @@ export function wireCleanupHandlers(
   _cliConfig: Config | undefined,
   sshResult: SshAgentResult,
   portForwardingResult: PortForwardingResult | undefined,
-  credentialProxyBridgeCleanup: (() => void) | undefined,
+  credentialProxyBridgeCleanup: CredentialProxyBridgeCleanup | undefined,
   setCredentialProxyBridgeCleanup: (c: (() => void) | undefined) => void,
 ): void {
   sandboxProcess.on('error', (err) => {
@@ -883,6 +674,10 @@ export function wireCleanupHandlers(
   }
 
   if (credentialProxyBridgeCleanup !== undefined) {
+    // #3524: wireCleanupHandlers runs immediately after the sandbox process
+    // has spawned, so this is where the no-handshake fallback countdown
+    // starts — before the spawn the runtime cannot have read --env-file.
+    credentialProxyBridgeCleanup.armCapabilityEnvFileFallback?.();
     let bridgeCleanedUp = false;
     const runBridgeCleanup = (): void => {
       if (bridgeCleanedUp) return;

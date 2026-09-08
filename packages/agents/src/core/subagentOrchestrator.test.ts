@@ -114,6 +114,7 @@ describe('SubagentOrchestrator - token-usage identity (issue #3130)', () => {
       foregroundConfig,
       scopeFactory: factory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     await orchestrator.launch({ name: subagentConfig.name });
@@ -151,6 +152,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       foregroundConfig,
       scopeFactory: factory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     await expect(
@@ -185,6 +187,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       foregroundConfig,
       scopeFactory: factory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     await expect(
@@ -226,6 +229,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       foregroundConfig,
       scopeFactory: factory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     const extraPrompt = 'Prioritize API surface summaries before examples.';
@@ -292,6 +296,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       foregroundConfig,
       scopeFactory: factory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     await orchestrator.launch({ name: subagentConfig.name });
@@ -337,6 +342,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       foregroundConfig,
       scopeFactory: factory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     await orchestrator.launch({ name: subagentConfig.name });
@@ -399,6 +405,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       foregroundConfig: configWithParentTurns,
       scopeFactory: factory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     await orchestrator.launch({ name: subagentConfig.name });
@@ -447,6 +454,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       foregroundConfig: configWithDynamicTurns,
       scopeFactory: factory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     await orchestrator.launch({ name: subagentConfig.name });
@@ -501,6 +509,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       foregroundConfig: configWithParentTurns,
       scopeFactory: factory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     await orchestrator.launch({
@@ -559,6 +568,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       foregroundConfig: configWithParentTurns,
       scopeFactory: factory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     await orchestrator.launch({ name: subagentConfig.name });
@@ -606,6 +616,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       foregroundConfig: configWithUnlimitedParentTurns,
       scopeFactory: factory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     await orchestrator.launch({ name: subagentConfig.name });
@@ -723,6 +734,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       foregroundConfig,
       scopeFactory: factory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     const controller = new AbortController();
@@ -765,27 +777,5 @@ describe('SubagentOrchestrator - MessageBus threading (Issue #2312)', () => {
     const overridesArg = factoryCall[7];
     expect(overridesArg).toBeDefined();
     expect(overridesArg?.messageBus).toBe(sessionMessageBus);
-  });
-
-  it('leaves overrides.messageBus undefined when no messageBus is configured', async () => {
-    const { subagentManager, profileManager } = buildMessageBusManagers();
-    const { factory } = createScopeFactory();
-    const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
-
-    const orchestrator = new SubagentOrchestrator({
-      subagentManager,
-      profileManager,
-      foregroundConfig,
-      scopeFactory: factory,
-      runtimeLoader,
-    });
-
-    await orchestrator.launch({ name: messageBusSubagentConfig.name });
-
-    expect(factory).toHaveBeenCalledTimes(1);
-    const factoryCall = factory.mock.calls[0];
-    const overridesArg = factoryCall[7];
-    expect(overridesArg).toBeDefined();
-    expect(overridesArg?.messageBus).toBeUndefined();
   });
 });

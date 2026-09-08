@@ -27,6 +27,7 @@ import {
   loadProviderAliasEntries,
   type ModelDefaultRule,
 } from './providerAliases.js';
+import { loadWithTempConfig } from './providerAliases.test-helpers.js';
 
 function expectNoImageResizeDefaults(
   defaults: Readonly<Record<string, unknown>>,
@@ -36,32 +37,23 @@ function expectNoImageResizeDefaults(
   expect(defaults).not.toHaveProperty('image-resize.maxPixels');
 }
 
-/**
- * Helper to load entries from a temp user alias dir via Storage mock.
- * Shared across multiple test suites to avoid sonarjs/no-identical-functions.
- */
-async function loadWithTempConfig(
-  tmpDir: string,
-  filename: string,
-  config: Record<string, unknown>,
-) {
-  const { Storage } = await import('@vybestack/llxprt-code-settings');
-  const fakeLlxprtDir = path.join(tmpDir, '.llxprt');
-  const fakeProvidersDir = path.join(fakeLlxprtDir, 'providers');
-  fs.mkdirSync(fakeProvidersDir, { recursive: true });
+function isNonObjectModelDefaultsWarning(call: unknown[]): boolean {
+  return (
+    typeof call[0] === 'string' &&
+    call[0].includes('Skipping non-object modelDefaults entry')
+  );
+}
 
-  const configPath = path.join(fakeProvidersDir, filename);
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+function findBuiltinAliasEntry(alias: string) {
+  return loadProviderAliasEntries().find(
+    (candidate) => candidate.alias === alias && candidate.source === 'builtin',
+  );
+}
 
-  vi.spyOn(Storage, 'getGlobalDataDir').mockReturnValue(fakeLlxprtDir);
-
-  try {
-    return loadProviderAliasEntries();
-  } finally {
-    (
-      Storage.getGlobalDataDir as Mock<typeof Storage.getGlobalDataDir>
-    ).mockRestore();
-  }
+function configuredModelDefaultRules(
+  entry: ReturnType<typeof loadProviderAliasEntries>[number] | undefined,
+): ModelDefaultRule[] {
+  return entry?.config.modelDefaults ?? [];
 }
 
 describe('providerAliases modelDefaults parsing (Phase 01)', () => {
@@ -303,9 +295,7 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
       // One warning per non-object entry
       const nonObjectWarnings = warnSpy.mock.calls.filter(
-        (call) =>
-          typeof call[0] === 'string' &&
-          call[0].includes('Skipping non-object modelDefaults entry'),
+        isNonObjectModelDefaultsWarning,
       );
       expect(nonObjectWarnings).toHaveLength(3);
     });
@@ -689,12 +679,9 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
   });
 
   it('anthropic applies image-resize limits to Opus and Sonnet families only', () => {
-    const entry = loadProviderAliasEntries().find(
-      (candidate) =>
-        candidate.alias === 'anthropic' && candidate.source === 'builtin',
-    );
+    const entry = findBuiltinAliasEntry('anthropic');
     expect(entry).toBeDefined();
-    const rules = entry?.config.modelDefaults ?? [];
+    const rules = configuredModelDefaultRules(entry);
     for (const model of [
       'claude-opus-4-5-20251101',
       'claude-opus-5',
@@ -719,12 +706,9 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
   });
 
   it('claudecode applies max-image-dimension to Opus 5, Opus 4.8, and Sonnet 5 only @issue:3216', () => {
-    const entry = loadProviderAliasEntries().find(
-      (candidate) =>
-        candidate.alias === 'claudecode' && candidate.source === 'builtin',
-    );
+    const entry = findBuiltinAliasEntry('claudecode');
     expect(entry).toBeDefined();
-    const rules = entry?.config.modelDefaults ?? [];
+    const rules = configuredModelDefaultRules(entry);
     for (const model of [
       'claude-opus-5',
       'claude-opus-4-8',
@@ -774,18 +758,61 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
   it.each(['openai', 'openai-responses', 'openai-vercel', 'codex'])(
     '%s applies image limits to every gpt- family model',
     (alias) => {
-      const entry = loadProviderAliasEntries().find(
-        (candidate) =>
-          candidate.alias === alias && candidate.source === 'builtin',
-      );
+      const entry = findBuiltinAliasEntry(alias);
       expect(entry).toBeDefined();
-      const rules = entry?.config.modelDefaults ?? [];
+      const rules = configuredModelDefaultRules(entry);
       expect(computeMatchedDefaults('gpt-future-vision', rules)).toMatchObject({
         'image-resize.maxLongEdge': 2048,
         'image-resize.maxShortEdge': 2048,
         'image-resize.maxPixels': 1_572_864,
       });
+      // o4-mini is not a gpt- model so it does not match ^gpt-
       expectNoImageResizeDefaults(computeMatchedDefaults('o4-mini', rules));
+    },
+  );
+
+  // Multi-digit minors (gpt-5.10) and majors (gpt-10), plus named/dated
+  // variants, must all land on the 2000px rule.
+  const GPT_52_PLUS_MODELS = [
+    ...[2, 3, 4, 5, 6, 10].map((minor) => `gpt-5.${minor}`),
+    'gpt-5.6-sol',
+    'gpt-5.10-sol',
+    'gpt-5.6-luna',
+    'gpt-5.2-20260101',
+    'gpt-6',
+    'gpt-6.1',
+    'gpt-10',
+  ];
+
+  it.each(['openai', 'openai-responses', 'openai-vercel', 'codex'])(
+    '%s applies 2000px image resize to GPT-5.2+ models @issue:3477',
+    (alias) => {
+      const entry = findBuiltinAliasEntry(alias);
+      expect(entry).toBeDefined();
+      const rules = configuredModelDefaultRules(entry);
+      for (const model of GPT_52_PLUS_MODELS) {
+        const defaults = computeMatchedDefaults(model, rules);
+        expect(defaults['image-resize.maxLongEdge']).toBe(2000);
+        expect(defaults['image-resize.maxShortEdge']).toBe(2000);
+        // maxPixels comes from the broad ^gpt- rule and survives the
+        // 2000px override via stacked-rule merge.
+        expect(defaults['image-resize.maxPixels']).toBe(1_572_864);
+      }
+    },
+  );
+
+  it.each(['openai', 'openai-responses', 'openai-vercel', 'codex'])(
+    '%s keeps 2048px image resize for pre-5.2 GPT models @issue:3477',
+    (alias) => {
+      const entry = findBuiltinAliasEntry(alias);
+      expect(entry).toBeDefined();
+      const rules = configuredModelDefaultRules(entry);
+      for (const model of ['gpt-5.0', 'gpt-5.1', 'gpt-4o', 'gpt-4.1']) {
+        const defaults = computeMatchedDefaults(model, rules);
+        expect(defaults['image-resize.maxLongEdge']).toBe(2048);
+        expect(defaults['image-resize.maxShortEdge']).toBe(2048);
+        expect(defaults['image-resize.maxPixels']).toBe(1_572_864);
+      }
     },
   );
   it('user anthropic.config with different modelDefaults shadows the builtin', async () => {
@@ -843,74 +870,5 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
         Storage.getGlobalDataDir as Mock<typeof Storage.getGlobalDataDir>
       ).mockRestore();
     }
-  });
-});
-
-describe('providerAliases sandbox field validation', () => {
-  let tmpDir: string;
-  let warnSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alias-sandbox-test-'));
-    warnSpy = vi
-      .spyOn(DebugLogger.prototype, 'warn')
-      .mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    warnSpy.mockRestore();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  it('preserves valid sandbox-base-url string', async () => {
-    const entries = await loadWithTempConfig(tmpDir, 'sandbox-valid.config', {
-      name: 'sandbox-valid',
-      baseProvider: 'openai',
-      'sandbox-base-url': 'http://host.docker.internal:1234',
-    });
-    const entry = entries.find((e) => e.alias === 'sandbox-valid');
-    expect(entry).toBeDefined();
-    expect(entry?.config['sandbox-base-url']).toBe(
-      'http://host.docker.internal:1234',
-    );
-  });
-
-  it('drops non-string sandbox-base-url and warns', async () => {
-    const entries = await loadWithTempConfig(tmpDir, 'sandbox-bad-url.config', {
-      name: 'sandbox-bad-url',
-      baseProvider: 'openai',
-      'sandbox-base-url': 12345,
-    });
-    const entry = entries.find((e) => e.alias === 'sandbox-bad-url');
-    expect(entry).toBeDefined();
-    expect(entry?.config['sandbox-base-url']).toBeUndefined();
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('non-string sandbox-base-url'),
-    );
-  });
-
-  it('preserves valid requires-auth boolean', async () => {
-    const entries = await loadWithTempConfig(tmpDir, 'auth-valid.config', {
-      name: 'auth-valid',
-      baseProvider: 'openai',
-      'requires-auth': false,
-    });
-    const entry = entries.find((e) => e.alias === 'auth-valid');
-    expect(entry).toBeDefined();
-    expect(entry?.config['requires-auth']).toBe(false);
-  });
-
-  it('drops non-boolean requires-auth and warns', async () => {
-    const entries = await loadWithTempConfig(tmpDir, 'auth-bad.config', {
-      name: 'auth-bad',
-      baseProvider: 'openai',
-      'requires-auth': 'yes',
-    });
-    const entry = entries.find((e) => e.alias === 'auth-bad');
-    expect(entry).toBeDefined();
-    expect(entry?.config['requires-auth']).toBeUndefined();
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('non-boolean requires-auth'),
-    );
   });
 });

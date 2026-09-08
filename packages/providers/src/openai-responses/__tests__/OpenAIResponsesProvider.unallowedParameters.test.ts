@@ -48,7 +48,7 @@ function findCodexAlias(): ProviderAliasEntry {
 function createCodexProvider(
   entry: ProviderAliasEntry = findCodexAlias(),
 ): OpenAIResponsesProvider {
-  const provider = createOpenAIResponsesAliasProvider(
+  return createOpenAIResponsesAliasProvider(
     entry,
     'unused-api-key',
     undefined,
@@ -56,10 +56,6 @@ function createCodexProvider(
     CODEX_OAUTH_MANAGER,
     false,
   );
-  if (provider === null) {
-    throw new Error('codex alias provider was not created');
-  }
-  return provider;
 }
 
 function streamingResponse(): Response {

@@ -110,10 +110,7 @@ export {
   hasInteractiveSubagentScheduler,
 } from './core/subagentTypes.js';
 export { buildContinuationDirective } from './core/compression/continuationDirective.js';
-
-export * from './code_assist/codeAssist.js';
-export * from './code_assist/server.js';
-export * from './code_assist/types.js';
+export { buildTranscriptPathNotice } from './core/compression/transcriptPathNotice.js';
 
 // Export utilities
 export * from './utils/paths.js';
@@ -125,7 +122,6 @@ export * from './utils/checkpointUtils.js';
 export * from './utils/output-format.js';
 export * from './utils/exitCodes.js';
 export * from './utils/refusalNotice.js';
-export * from './utils/getFolderStructure.js';
 export * from './utils/memoryDiscovery.js';
 export * from './utils/gitIgnoreParser.js';
 export * from './utils/gitUtils.js';
@@ -169,7 +165,6 @@ export {
 export * from './utils/browser-profile-discovery.js';
 export * from './utils/errorParsing.js';
 export * from './utils/ignorePatterns.js';
-export { INITIAL_HISTORY_LENGTH } from './utils/environmentContext.js';
 export * from './utils/partUtils.js';
 export * from './utils/ide-trust.js';
 export * from './utils/thoughtUtils.js';
@@ -251,6 +246,11 @@ export {
   getProviderKeyStorage,
   resetProviderKeyStorage,
 } from './storage/provider-key-storage.js';
+export * from './storage/local-media-store.js';
+export * from './storage/SessionPersistenceService.js';
+export * from './storage/media-admission-service.js';
+export * from './storage/request-media-resolver.js';
+export * from './storage/media-lifecycle-metrics.js';
 
 // Export services
 export * from './services/fileDiscoveryService.js';
@@ -505,7 +505,6 @@ export {
   MCPOAuthProvider,
   MCPOAuthTokenStorage,
   BaseTokenStore,
-  FileTokenStore,
   OAuthUtils,
   getMcpServerOAuthStatus,
 } from '@vybestack/llxprt-code-mcp';
@@ -528,6 +527,7 @@ export * from './telemetry/uiTelemetry.js';
 export { sessionId } from './utils/session.js';
 // Export content interfaces
 export * from './services/history/IContent.js';
+export * from './services/history/semantic-media-purge.js';
 export { ContentConverters } from './services/history/ContentConverters.js';
 // Chronology trace shape (#1721) is part of the public surface so consumers
 // (e.g. the CLI /dumpcontext command) can type the trace without deep-importing.

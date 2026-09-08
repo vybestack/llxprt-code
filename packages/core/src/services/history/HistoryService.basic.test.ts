@@ -515,12 +515,28 @@ describe('HistoryService - Behavioral Tests', () => {
 
       const toolMessage = history.find((c) => c.speaker === 'tool');
       expect(toolMessage).toBeDefined();
-      expect(
-        toolMessage?.blocks.some(
-          (b) => b.type === 'tool_response' && b.callId === 'hist_tool_orphan1',
-        ),
-      ).toBe(true);
+      expect(blocksMatch(toolMessage, 'hist_tool_orphan1')).toBe(true);
     });
+
+    function curatedResponseAfter(
+      curated: IContent[],
+      id: string,
+    ): IContent | undefined {
+      const idx = curated.findIndex(
+        (cc) =>
+          cc.speaker === 'ai' &&
+          cc.blocks.some((b) => b.type === 'tool_call' && b.id === id),
+      );
+      return idx >= 0 ? curated[idx + 1] : undefined;
+    }
+
+    function blocksMatch(content: IContent | undefined, id: string): boolean {
+      return (
+        content?.blocks.some(
+          (b) => b.type === 'tool_response' && b.callId === id,
+        ) ?? false
+      );
+    }
 
     it('should synthesize tool responses for provider payloads without mutating stored history', () => {
       service.add(createUserMessage('Question'));
@@ -541,20 +557,10 @@ describe('HistoryService - Behavioral Tests', () => {
       expect(service.getAll()).toHaveLength(3);
 
       const curated = service.getCuratedForProvider();
-      const toolCallIndex = curated.findIndex(
-        (c) =>
-          c.speaker === 'ai' &&
-          c.blocks.some(
-            (b) => b.type === 'tool_call' && b.id === 'hist_tool_orphan1',
-          ),
-      );
-      expect(toolCallIndex).toBeGreaterThanOrEqual(0);
-      expect(curated[toolCallIndex + 1]?.speaker).toBe('tool');
-      expect(
-        curated[toolCallIndex + 1]?.blocks.some(
-          (b) => b.type === 'tool_response' && b.callId === 'hist_tool_orphan1',
-        ),
-      ).toBe(true);
+      const nextBlock = curatedResponseAfter(curated, 'hist_tool_orphan1');
+      expect(nextBlock).toBeDefined();
+      expect(nextBlock?.speaker).toBe('tool');
+      expect(blocksMatch(nextBlock, 'hist_tool_orphan1')).toBe(true);
 
       // Still no mutation after reading provider view.
       expect(service.getAll()).toHaveLength(3);
@@ -580,21 +586,10 @@ describe('HistoryService - Behavioral Tests', () => {
       const tail = [createUserMessage('Next question')];
       const curated = service.getCuratedForProvider(tail);
 
-      const toolCallIndex = curated.findIndex(
-        (c) =>
-          c.speaker === 'ai' &&
-          c.blocks.some(
-            (b) => b.type === 'tool_call' && b.id === 'hist_tool_orphan_tail',
-          ),
-      );
-      expect(toolCallIndex).toBeGreaterThanOrEqual(0);
-      expect(curated[toolCallIndex + 1]?.speaker).toBe('tool');
-      expect(
-        curated[toolCallIndex + 1]?.blocks.some(
-          (b) =>
-            b.type === 'tool_response' && b.callId === 'hist_tool_orphan_tail',
-        ),
-      ).toBe(true);
+      const nextBlock = curatedResponseAfter(curated, 'hist_tool_orphan_tail');
+      expect(nextBlock).toBeDefined();
+      expect(nextBlock?.speaker).toBe('tool');
+      expect(blocksMatch(nextBlock, 'hist_tool_orphan_tail')).toBe(true);
 
       // Tail user message should still be present (provider-safe transcript includes it).
       expect(curated.some((c) => c.speaker === 'human')).toBe(true);

@@ -12,11 +12,9 @@ interface HttpError extends Error {
 }
 
 describe('retryWithBackoff - server error failover (issue #1726)', () => {
-  it('should call onPersistent429 callback on persistent HTTP 5xx errors', async () => {
-    vi.useFakeTimers();
+  function server500OnFirstAttempt(): () => Promise<string> {
     let attempt = 0;
-
-    const mockFn = vi.fn(async () => {
+    return async () => {
       attempt++;
       if (attempt <= 1) {
         const error: HttpError = new Error('Internal server error');
@@ -24,7 +22,35 @@ describe('retryWithBackoff - server error failover (issue #1726)', () => {
         throw error;
       }
       return 'success after bucket switch';
-    });
+    };
+  }
+
+  function apiErrorOnFirstAttempt(): () => Promise<string> {
+    let attempt = 0;
+    return async () => {
+      attempt++;
+      if (attempt <= 1) {
+        const error: HttpError & {
+          error?: { type?: string; error?: { type?: string } };
+        } = new Error('Internal server error');
+        error.status = undefined;
+        error.error = {
+          type: 'error',
+          error: {
+            type: 'api_error',
+            message: 'Internal server error',
+          },
+        };
+        throw error;
+      }
+      return 'success after bucket switch';
+    };
+  }
+
+  it('should call onPersistent429 callback on persistent HTTP 5xx errors', async () => {
+    vi.useFakeTimers();
+
+    const mockFn = vi.fn(server500OnFirstAttempt());
 
     const failoverCallback = vi.fn(async () => true);
 
@@ -42,26 +68,8 @@ describe('retryWithBackoff - server error failover (issue #1726)', () => {
 
   it('should call onPersistent429 callback on persistent Anthropic api_error', async () => {
     vi.useFakeTimers();
-    let attempt = 0;
 
-    const mockFn = vi.fn(async () => {
-      attempt++;
-      if (attempt <= 1) {
-        const error: HttpError & {
-          error?: { type?: string; error?: { type?: string } };
-        } = new Error('Internal server error');
-        error.status = undefined;
-        error.error = {
-          type: 'error',
-          error: {
-            type: 'api_error',
-            message: 'Internal server error',
-          },
-        };
-        throw error;
-      }
-      return 'success after bucket switch';
-    });
+    const mockFn = vi.fn(apiErrorOnFirstAttempt());
 
     const failoverCallback = vi.fn(async () => true);
 

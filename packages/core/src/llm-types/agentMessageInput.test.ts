@@ -56,6 +56,61 @@ function hasNoGoogleKeys(obj: unknown): boolean {
   return GOOGLE_KEYS.every((k) => !(k in obj));
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isSingleHumanText(result: unknown, text: string): boolean {
+  if (!Array.isArray(result) || result.length !== 1) return false;
+  const item: unknown = result[0];
+  if (!isRecord(item) || item['speaker'] !== 'human') return false;
+  const blocks = item['blocks'];
+  if (!Array.isArray(blocks) || blocks.length !== 1) return false;
+  const block: unknown = blocks[0];
+  return isRecord(block) && block['type'] === 'text' && block['text'] === text;
+}
+
+function allItemsHaveNoGoogleKeys(result: unknown): boolean {
+  return Array.isArray(result) && result.every((item) => hasNoGoogleKeys(item));
+}
+
+function textPartsPreserved(
+  result: ReturnType<typeof iContentFromLegacyInput>,
+  parts: ReadonlyArray<{ readonly text: string }>,
+): boolean {
+  if (!result.ok) return false;
+  const blocks = result.value.flatMap((item) => item.blocks);
+  if (blocks.length !== parts.length) return false;
+  return blocks.every(
+    (block, index) =>
+      block.type === 'text' && block.text === parts[index]?.text,
+  );
+}
+
+function thinkingSignaturePreserved(
+  result: ReturnType<typeof iContentFromLegacyInput>,
+  thought: string,
+  thoughtSignature: string,
+): boolean {
+  if (!result.ok) return false;
+  const blocks = result.value.flatMap((item) => item.blocks);
+  const thinking = blocks.find(
+    (block): block is ThinkingBlock => block.type === 'thinking',
+  );
+  return (
+    thinking?.thought === thought && thinking.signature === thoughtSignature
+  );
+}
+
+function iContentFromBlocksShape(
+  result: IContent,
+  blocks: ContentBlock[],
+): boolean {
+  const keys = Object.keys(result).sort();
+  if (keys.join(',') !== 'blocks,speaker') return false;
+  return JSON.stringify(result.blocks) === JSON.stringify(blocks);
+}
+
 // ---------------------------------------------------------------------------
 // iContentFromAgentMessageInput — behavioral (REQ-001.1)
 // ---------------------------------------------------------------------------
@@ -195,24 +250,16 @@ describe('iContentFromAgentMessageInput', () => {
 describe('iContentFromAgentMessageInput property-based', () => {
   it('for ANY non-empty string, exactly one human IContent with one TextBlock whose text === input', () =>
     fc.assert(
-      fc.property(fc.string({ minLength: 1, maxLength: 100 }), (text) => {
-        const result = iContentFromAgentMessageInput(text);
-        if (!Array.isArray(result) || result.length !== 1) return false;
-        const item = result[0];
-        if (item.speaker !== 'human') return false;
-        if (item.blocks.length !== 1) return false;
-        const block = item.blocks[0];
-        return block.type === 'text' && block.text === text;
-      }),
+      fc.property(fc.string({ minLength: 1, maxLength: 100 }), (text) =>
+        isSingleHumanText(iContentFromAgentMessageInput(text), text),
+      ),
     ));
 
   it('result content has no Google-shaped keys for any string input', () =>
     fc.assert(
-      fc.property(fc.string({ minLength: 1, maxLength: 50 }), (text) => {
-        const result = iContentFromAgentMessageInput(text);
-        if (!Array.isArray(result)) return false;
-        return result.every((item) => hasNoGoogleKeys(item));
-      }),
+      fc.property(fc.string({ minLength: 1, maxLength: 50 }), (text) =>
+        allItemsHaveNoGoogleKeys(iContentFromAgentMessageInput(text)),
+      ),
     ));
 });
 
@@ -415,16 +462,7 @@ describe('iContentFromLegacyInput property-based', () => {
           }),
           { minLength: 1, maxLength: 10 },
         ),
-        (parts) => {
-          const result = iContentFromLegacyInput(parts);
-          if (!result.ok) return false;
-          const items = result.value;
-          const blocks = items.flatMap((i) => i.blocks);
-          if (blocks.length !== parts.length) return false;
-          return blocks.every(
-            (b, i) => b.type === 'text' && b.text === parts[i].text,
-          );
-        },
+        (parts) => textPartsPreserved(iContentFromLegacyInput(parts), parts),
       ),
     ));
 
@@ -435,20 +473,12 @@ describe('iContentFromLegacyInput property-based', () => {
           thought: fc.string({ minLength: 1, maxLength: 80 }),
           thoughtSignature: fc.string({ minLength: 1, maxLength: 40 }),
         }),
-        ({ thought, thoughtSignature }) => {
-          const result = iContentFromLegacyInput({ thought, thoughtSignature });
-          if (!result.ok) return false;
-          const items = result.value;
-          const blocks = items.flatMap((i) => i.blocks);
-          const thinking = blocks.find(
-            (b): b is ThinkingBlock => b.type === 'thinking',
-          );
-          if (!thinking) return false;
-          return (
-            thinking.thought === thought &&
-            thinking.signature === thoughtSignature
-          );
-        },
+        ({ thought, thoughtSignature }) =>
+          thinkingSignaturePreserved(
+            iContentFromLegacyInput({ thought, thoughtSignature }),
+            thought,
+            thoughtSignature,
+          ),
       ),
     ));
 });
@@ -525,12 +555,7 @@ describe('iContentFromBlocks property-based', () => {
           }),
           { minLength: 0, maxLength: 8 },
         ),
-        (blocks) => {
-          const result = iContentFromBlocks(blocks);
-          const keys = Object.keys(result).sort();
-          if (keys.join(',') !== 'blocks,speaker') return false;
-          return JSON.stringify(result.blocks) === JSON.stringify(blocks);
-        },
+        (blocks) => iContentFromBlocksShape(iContentFromBlocks(blocks), blocks),
       ),
     ));
 

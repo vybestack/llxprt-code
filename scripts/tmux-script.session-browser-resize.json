@@ -1,0 +1,68 @@
+{
+  "tmux": {
+    "cols": 110,
+    "rows": 40,
+    "historyLimit": 20000,
+    "scrollbackLines": 3000,
+    "initialWaitMs": 6000
+  },
+  "startCommand": [
+    "sh -c 'rm -rf \"$LLXPRT_TMUX_ARTIFACT_DIR/storage\" && mkdir -p \"$LLXPRT_TMUX_ARTIFACT_DIR/storage\" && export CI=0 CONTINUOUS_INTEGRATION=0 NODE_OPTIONS= NO_COLOR=1 LLXPRT_CODE_NO_RELAUNCH=true LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION=true LLXPRT_CODE_BUILTIN_COMMANDS_ONLY=true LLXPRT_CODE_SUPPRESS_STATIC_HEADER=true LLXPRT_CONFIG_HOME=\"$LLXPRT_TMUX_ARTIFACT_DIR/storage/config\" LLXPRT_DATA_HOME=\"$LLXPRT_TMUX_ARTIFACT_DIR/storage/data\" LLXPRT_CACHE_HOME=\"$LLXPRT_TMUX_ARTIFACT_DIR/storage/cache\" LLXPRT_LOG_HOME=\"$LLXPRT_TMUX_ARTIFACT_DIR/storage/log\" LLXPRT_SYSTEM_SETTINGS_PATH=scripts/system-settings.interactive-ui.json LLXPRT_FAKE_RESPONSES=scripts/fixtures/approval-ui.responses.jsonl && ${bun} scripts/seed-session-browser-resize.ts && exec ${bun} packages/cli/index.ts --provider fake --model fake-model'"
+  ],
+  "yolo": false,
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 30000
+    },
+    { "type": "line", "text": "/continue", "submitKeys": ["Enter"] },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Session Browser",
+      "timeoutMs": 15000
+    },
+    { "type": "waitFor", "scope": "screen", "contains": "1 target found" },
+    { "type": "waitFor", "scope": "screen", "contains": "Sort:" },
+    { "type": "capture", "label": "resize-standard-before" },
+    { "type": "resize", "cols": 58, "rows": 40 },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Sessions",
+      "timeoutMs": 5000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "Sort:",
+      "timeoutMs": 5000
+    },
+    { "type": "capture", "label": "resize-narrow" },
+    { "type": "resize", "cols": 110, "rows": 40 },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Session Browser",
+      "timeoutMs": 5000
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Sort:",
+      "timeoutMs": 5000
+    },
+    { "type": "capture", "label": "resize-standard-restored" },
+    { "type": "key", "key": "Escape" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 5000
+    },
+    { "type": "line", "text": "/quit", "submitKeys": ["Enter"] },
+    { "type": "waitForExit", "timeoutMs": 15000 }
+  ]
+}

@@ -39,8 +39,8 @@ function liveContextLimitSettings(config: Config): ReadonlySettingsSnapshot {
 }
 
 describe('Codex effective context limit runtime integration', () => {
-  afterEach(() => {
-    disposeCliRuntime(RUNTIME_ID);
+  afterEach(async () => {
+    await disposeCliRuntime(RUNTIME_ID);
     resetProviderManager();
   });
 

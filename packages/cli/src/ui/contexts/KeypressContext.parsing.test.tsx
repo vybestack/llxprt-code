@@ -46,6 +46,73 @@ class MockStdin extends EventEmitter {
   }
 }
 
+interface AltKeyCase {
+  readonly terminal: string;
+  readonly key: string;
+  readonly chunk: string;
+  readonly expected: Partial<Key>;
+  readonly kitty?: boolean;
+}
+
+function createAltKeyCase(
+  terminal: string,
+  key: string,
+  keycode: number,
+  accentedChar: string,
+): AltKeyCase {
+  if (terminal === 'Ghostty') {
+    return {
+      terminal,
+      key,
+      chunk: `\x1b[${keycode};3u`,
+      expected: {
+        name: key,
+        ctrl: false,
+        meta: true,
+        shift: false,
+      },
+    };
+  }
+  if (terminal === 'MacTerminal') {
+    return {
+      terminal,
+      key,
+      kitty: false,
+      chunk: `\x1b${key}`,
+      expected: {
+        sequence: `\x1b${key}`,
+        name: key,
+        ctrl: false,
+        meta: true,
+        shift: false,
+      },
+    };
+  }
+  return {
+    terminal,
+    key,
+    chunk: accentedChar,
+    expected: {
+      name: key,
+      ctrl: false,
+      meta: true,
+      shift: false,
+      sequence: accentedChar,
+    },
+  };
+}
+
+function createAltKeyCases(
+  terminals: readonly string[],
+  keys: Readonly<Record<string, readonly [number, string]>>,
+): AltKeyCase[] {
+  return terminals.flatMap((terminal) =>
+    Object.entries(keys).map(([key, [keycode, accentedChar]]) =>
+      createAltKeyCase(terminal, key, keycode, accentedChar),
+    ),
+  );
+}
+
 // Helper function to setup keypress test with standard configuration
 const setupKeypressTest = () => {
   const keyHandler = vi.fn();
@@ -146,56 +213,7 @@ describe('Kitty Sequence Parsing', () => {
       m: [109, '\u00B5'],
     };
 
-    it.each(
-      terminals.flatMap((terminal) =>
-        Object.entries(keys).map(([key, [keycode, accentedChar]]) => {
-          if (terminal === 'Ghostty') {
-            // Ghostty uses kitty protocol sequences
-            return {
-              terminal,
-              key,
-              chunk: `\x1b[${keycode};3u`,
-              expected: {
-                name: key,
-                ctrl: false,
-                meta: true,
-                shift: false,
-              },
-            };
-          } else if (terminal === 'MacTerminal') {
-            // Mac Terminal sends ESC + letter
-            return {
-              terminal,
-              key,
-              kitty: false,
-              chunk: `\x1b${key}`,
-              expected: {
-                sequence: `\x1b${key}`,
-                name: key,
-                ctrl: false,
-                meta: true,
-                shift: false,
-              },
-            };
-          }
-          // iTerm2 and VSCode send accented characters (å, ø, µ)
-          // Note: µ (mu) is sent with meta:false on iTerm2/VSCode but
-          // gets converted to m with meta:true
-          return {
-            terminal,
-            key,
-            chunk: accentedChar,
-            expected: {
-              name: key,
-              ctrl: false,
-              meta: true, // Always expect meta:true after conversion
-              shift: false,
-              sequence: accentedChar,
-            },
-          };
-        }),
-      ),
-    )(
+    it.each(createAltKeyCases(terminals, keys))(
       'should handle Alt+$key in $terminal',
       ({ chunk, expected }: { chunk: string; expected: Partial<Key> }) => {
         const keyHandler = vi.fn();
@@ -239,6 +257,87 @@ describe('Kitty Sequence Parsing', () => {
         expect.objectContaining({
           sequence: '\\',
           meta: false,
+        }),
+      );
+    });
+  });
+
+  describe('SS3 sequence parsing', () => {
+    // key.sequence must be the exact bytes consumed for an SS3 (ESC O ...)
+    // sequence, since paste content is reassembled by concatenating key.sequence.
+    it('should keep the O in the sequence for plain arrow keys', () => {
+      const { keyHandler } = setupKeypressTest();
+
+      act(() => stdin.write('\x1bOA'));
+
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'up',
+          shift: false,
+          meta: false,
+          ctrl: false,
+          sequence: '\x1bOA',
+        }),
+      );
+    });
+
+    it('should keep the O and modifier in the sequence for modified arrow keys', () => {
+      const { keyHandler } = setupKeypressTest();
+
+      act(() => stdin.write('\x1bO2A'));
+
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'up',
+          shift: true,
+          sequence: '\x1bO2A',
+        }),
+      );
+    });
+
+    it('should preserve SS3 bytes inside bracketed paste payloads', async () => {
+      const { keyHandler } = setupKeypressTest();
+
+      act(() => stdin.write('\x1b[200~'));
+      act(() => stdin.write('before\x1bOAafter'));
+      act(() => stdin.write('\x1b[201~'));
+
+      await act(() => vi.runAllTimers());
+
+      // Paste fidelity contract: the payload is reassembled from key.sequence, so
+      // every consumed byte (including the O) must round-trip or the text corrupts.
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'paste',
+          sequence: 'before\x1bOAafter',
+        }),
+      );
+    });
+
+    it('should leave CSI bracket sequences unchanged', () => {
+      const { keyHandler } = setupKeypressTest();
+
+      act(() => stdin.write('\x1b[A'));
+
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'up',
+          sequence: '\x1b[A',
+        }),
+      );
+    });
+
+    it('should emit the consumed bytes when an SS3 sequence is flushed by timeout', () => {
+      const { keyHandler } = setupKeypressTest();
+
+      act(() => stdin.write('\x1bO'));
+
+      // Wait for the ESC timeout to flush the incomplete sequence.
+      void act(() => vi.advanceTimersByTime(ESC_TIMEOUT + 10));
+
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sequence: '\x1bO',
         }),
       );
     });

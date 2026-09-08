@@ -24,7 +24,6 @@ import {
   loadServerHierarchicalMemory,
   loadJitSubdirectoryMemory,
 } from '../utils/memoryDiscovery.js';
-import { DEFAULT_GEMINI_FLASH_MODEL } from './models.js';
 import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 import {
@@ -38,10 +37,9 @@ import { ConfigBase } from './configBase.js';
 import {
   buildNewContentGeneratorConfig,
   createDetachedAgentClient,
-  disposePreviousAgentClient,
   extractExistingState,
+  prepareAgentClientReplacement,
   requireAgentClientFactory,
-  transferHistoryToNewClient,
 } from './agentClientLifecycle.js';
 import { syncActivateMcpServerTool } from './mcp-lazy-tool-sync.js';
 import { syncSkillActivationTool } from './skill-tool-sync.js';
@@ -81,7 +79,7 @@ export {
   normalizeShellReplacement,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
-  MCPServerConfig,
+  type MCPServerConfig,
   AuthProviderType,
   type SandboxConfig,
   type ActiveExtension,
@@ -253,7 +251,7 @@ export class Config extends ConfigBase {
     // @requirement REQ-INV-001
     this.agentClient = clientFactory(this, this.runtimeState);
 
-    if (this.getJitContextEnabled()) {
+    if (this.isJitContextEnabled()) {
       this.contextManager = new ContextManager(this);
       await this.contextManager.refresh();
     }
@@ -278,8 +276,8 @@ export class Config extends ConfigBase {
    * from the session's primary agent client and with its tool set cleared.
    * Used for one-shot operations such as subagent auto-prompt generation.
    */
-  createDetachedAgentClient(runtimeId?: string): AgentClientContract {
-    return createDetachedAgentClient(this, runtimeId);
+  async createDetachedAgentClient(id?: string): Promise<AgentClientContract> {
+    return createDetachedAgentClient(this, id);
   }
 
   private registerSubagents(): void {
@@ -336,20 +334,18 @@ export class Config extends ConfigBase {
     );
     const newAgentClient = clientFactory(this, this.runtimeState);
 
-    transferHistoryToNewClient(
+    await prepareAgentClientReplacement(
       logger,
       newAgentClient,
+      previousAgentClient,
       existingHistory,
       existingHistoryService,
       newContentGeneratorConfig,
       this.getContentGeneratorConfig()?.vertexai,
     );
-
-    await newAgentClient.initialize(newContentGeneratorConfig);
     logger.debug('New client initialized');
 
     this.contentGeneratorConfig = newContentGeneratorConfig;
-    disposePreviousAgentClient(logger, previousAgentClient);
     this.agentClient = newAgentClient;
 
     const newHistory = await this.agentClient.getHistory();
@@ -517,7 +513,7 @@ export class Config extends ConfigBase {
   }
 
   getUserMemory(): string {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.isJitContextEnabled() && this.contextManager) {
       return [
         this.contextManager.getGlobalMemory(),
         this.contextManager.getEnvironmentMemory(),
@@ -695,22 +691,13 @@ export class Config extends ConfigBase {
     };
   }
 
-  getJitContextEnabled(): boolean {
-    // Check settings service first, then fall back to instance value
-    const settingsValue = this.settingsService.get('jitContextEnabled');
-    if (settingsValue !== undefined) {
-      return settingsValue as boolean;
-    }
-    return this.jitContextEnabled ?? false;
-  }
-
   /**
    * Lazily loads JIT subdirectory memory for a given path.
    * Returns formatted memory content from LLXPRT.md files found between
    * the target path and the trusted root, excluding already-loaded paths.
    */
   async getJitMemoryForPath(targetPath: string): Promise<string> {
-    if (!this.getJitContextEnabled()) {
+    if (!this.isJitContextEnabled()) {
       return '';
     }
 
@@ -805,7 +792,7 @@ export class Config extends ConfigBase {
     fileCount: number;
     filePaths: string[];
   }> {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.isJitContextEnabled() && this.contextManager) {
       await this.contextManager.refresh();
       const memoryContent = this.getUserMemory();
       const fileCount = this.getLlxprtMdFileCount();
@@ -979,7 +966,7 @@ export class Config extends ConfigBase {
     const client = this.agentClient as AgentClientContract | undefined;
     if (client !== undefined) {
       try {
-        client.dispose();
+        await client.dispose();
       } catch (error) {
         failures.push(error);
       }
@@ -1026,5 +1013,3 @@ function throwFailures(failures: unknown[]): void {
 
 // Re-export scheduler types for external use
 export { type SchedulerCallbacks, type SchedulerOptions };
-// Export model constants for use in CLI
-export { DEFAULT_GEMINI_FLASH_MODEL };

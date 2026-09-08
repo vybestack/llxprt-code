@@ -12,16 +12,19 @@ const TURN_REPORT_HISTORY_TAIL = 8;
  * @plan PLAN-20260807-ISSUE3113.P06
  * @requirement REQ-3113-1.1
  * @pseudocode lines 300-322
+ * Adds endpoint diagnostics for error reports (@issue #2231).
  */
 export function buildErrorReportContext(
   // Accepts the read-only view getHistory() now returns (#3109). Only
   // `.slice()` and `.length` are used, both of which are readonly-safe.
   history: readonly IContent[],
   request: string | object | readonly unknown[],
+  baseUrl?: string,
 ): Record<string, unknown> {
   return {
     request,
     recentHistory: history.slice(-TURN_REPORT_HISTORY_TAIL),
     omittedHistoryCount: Math.max(0, history.length - TURN_REPORT_HISTORY_TAIL),
+    ...(baseUrl === undefined ? {} : { baseUrl }),
   };
 }

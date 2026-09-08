@@ -92,3 +92,10 @@ export {
   type SessionCleanupResult,
   type UserRetentionSettings,
 } from './SessionJanitor.js';
+export {
+  exportSessionMediaPackage,
+  importSessionMediaPackage,
+  validateSessionMediaPackage,
+  type ImportedSessionMediaPackage,
+  type ValidatedSessionMediaPackage,
+} from './session-media-package.js';

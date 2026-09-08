@@ -18,6 +18,7 @@ import type {
   ProviderContext,
   ProviderComparison,
 } from './types.js';
+import { conservativeMediaTransportCapabilities } from './providerMediaTransportCapabilities.js';
 
 const PROVIDER_CAPABILITY_HINTS: Record<
   string,
@@ -71,7 +72,6 @@ export class ProviderCapabilitiesService {
 
     return {
       supportsStreaming: true, // All current providers support streaming
-      supportsTools: provider.getServerTools().length > 0,
       supportsVision: this.detectVisionSupport(
         provider,
         settingsService,
@@ -83,6 +83,9 @@ export class ProviderCapabilitiesService {
       hasApiKeyConfig: hints.hasApiKeyConfig ?? true,
       hasBaseUrlConfig: hints.hasBaseUrlConfig ?? true,
       supportsPaidMode: typeof provider.isPaidMode === 'function',
+      mediaTransport:
+        provider.getMediaTransportCapabilities?.() ??
+        conservativeMediaTransportCapabilities(),
     };
   }
 
@@ -243,9 +246,6 @@ export class ProviderCapabilitiesService {
   ): number {
     let score = 0;
     let totalChecks = 0;
-
-    totalChecks++;
-    if (from.supportsTools === to.supportsTools) score++;
 
     totalChecks++;
     if (from.supportsVision === to.supportsVision) score++;

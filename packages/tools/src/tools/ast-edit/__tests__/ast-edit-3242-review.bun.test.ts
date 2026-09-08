@@ -52,6 +52,18 @@ import type { ToolResult } from '../../tools.js';
 import { ToolErrorType } from '../../../types/tool-error.js';
 import { createFakeToolHost, useTempDir } from './test-helpers.js';
 
+function numberOrZero(value: number | undefined): number {
+  return value ?? 0;
+}
+
+function textOrEmpty(value: string | null | undefined): string {
+  return value ?? '';
+}
+
+function countMatches(value: string, pattern: RegExp): number {
+  return (value.match(pattern) ?? []).length;
+}
+
 const PREVIEW_LLM_MAX_BYTES = 256 * 1024;
 const PREVIEW_MAX_DECLARATIONS = 128;
 const PREVIEW_MAX_SNIPPETS = ASTConfig.PREVIEW_MAX_SNIPPETS;
@@ -133,25 +145,25 @@ describe('Blocker-Fix: preview byte budget under diagnostic-dense validation', (
     const astErrorsLine = previewLine(output, '- AST errors: ');
     expect(astErrorsLine).toBeDefined();
     const marker = /\(\+(\d+) more errors omitted; (\d+) total\)$/.exec(
-      astErrorsLine ?? '',
+      textOrEmpty(astErrorsLine),
     );
     expect(marker).not.toBeNull();
     const omitted = Number(marker?.[1]);
     const total = Number(marker?.[2]);
-    const shownText = (astErrorsLine ?? '').slice(
+    const shownText = textOrEmpty(astErrorsLine).slice(
       '- AST errors: '.length,
-      (astErrorsLine?.length ?? 0) - (marker?.[0].length ?? 0),
+      numberOrZero(astErrorsLine?.length) - numberOrZero(marker?.[0].length),
     );
     // Each diagnostic in this fixture is one "Syntax error ..." message
     // (which itself contains ", " between line and column), so count
     // messages rather than splitting on the item separator.
-    const shown = (shownText.match(/Syntax error/g) ?? []).length;
+    const shown = countMatches(shownText, /Syntax error/g);
     expect(shown + omitted).toBe(total);
     expect(total).toBe(DENSE_LINES - 1);
     expect(shown).toBeGreaterThan(0);
 
     // The line itself never claims to carry the full diagnostic list.
-    expect(utf8Bytes(astErrorsLine ?? '')).toBeLessThanOrEqual(
+    expect(utf8Bytes(textOrEmpty(astErrorsLine))).toBeLessThanOrEqual(
       PREVIEW_LLM_MAX_BYTES,
     );
   });
@@ -299,7 +311,7 @@ describe('Blocker-Fix: preview byte budget under diagnostic-dense validation', (
     );
     expect(astErrorsLine).toBeDefined();
     const marker = /\(\+(\d+) more errors omitted; (\d+) total\)$/.exec(
-      astErrorsLine ?? '',
+      textOrEmpty(astErrorsLine),
     );
     expect(marker).not.toBeNull();
     expect(Number(marker?.[2])).toBe(50_000);
@@ -668,40 +680,43 @@ describe('In-scope-Fix: preview context retains the bounded snippet collection',
       { collectWorkingSet: false, collectRepositoryContext: false },
     );
     expect(uncapped.relevantSnippets).toHaveLength(77);
-    expect(context.relevantSnippets.map((snippet) => snippet.text)).toEqual(
+    expect(
+      context.relevantSnippets.map((snippet) => snippet.text),
+    ).toStrictEqual(
       uncapped.relevantSnippets
         .slice(0, PREVIEW_MAX_SNIPPETS)
         .map((snippet) => snippet.text),
     );
   });
 
-  it('reports the retained snippet count with the truthful capped-from total', async () => {
-    const { target, content } = writeSnippetFixture();
+  const observeReportsTheRetainedSnippetCountWithTheTruthfulCappedFromTotalAt680 =
+    async () => {
+      const { target, content } = writeSnippetFixture();
+      const collector = new ASTContextCollector();
+      const context = await collector.collectEnhancedContext(
+        target,
+        content,
+        ctx.tempDir,
+        {
+          collectWorkingSet: false,
+          collectRepositoryContext: false,
+          previewSnippetItemCap: PREVIEW_MAX_SNIPPETS,
+        },
+      );
+      const retained = context.relevantSnippets.length;
+      const total = context.relevantSnippetTotal ?? retained;
+      return { target, retained, total };
+    };
 
-    // The shown count must be the count the preview context actually
-    // retains, taken from the same real preview-shaped collector path the
-    // tool uses, so the report and retention cannot silently diverge.
-    const collector = new ASTContextCollector();
-    const context = await collector.collectEnhancedContext(
-      target,
-      content,
-      ctx.tempDir,
-      {
-        collectWorkingSet: false,
-        collectRepositoryContext: false,
-        previewSnippetItemCap: PREVIEW_MAX_SNIPPETS,
-      },
-    );
-    const retained = context.relevantSnippets.length;
-    const total = context.relevantSnippetTotal ?? retained;
+  it('reports the retained snippet count with the truthful capped-from total', async () => {
+    const { target, retained, total } =
+      await observeReportsTheRetainedSnippetCountWithTheTruthfulCappedFromTotalAt680();
     expect(retained).toBe(PREVIEW_MAX_SNIPPETS);
     expect(total).toBe(77);
-
     const result = await runPreview(ctx.tempDir, target, {
       oldString: 'function f0(): void {}',
       newString: 'function f0(): number { return 1; }',
     });
-
     expect(result.error).toBeUndefined();
     const output = String(result.llmContent);
     expect(previewLine(output, '- Relevant snippets: ')).toBe(

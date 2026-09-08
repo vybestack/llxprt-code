@@ -267,33 +267,41 @@ describe('Issue #1150: ChatSession thinking block integration', () => {
      * equals 'thinking'.
      */
     it('block must have type: "thinking" to be recognized as a thinking block', () => {
-      function isThinkingBlock(block: ContentBlock | undefined): boolean {
-        return Boolean(block && block.type === 'thinking');
-      }
-
-      // Valid thinking block
-      const validThinking: ThinkingBlock = {
-        type: 'thinking',
-        thought: 'thinking...',
-        sourceField: 'thinking',
-      };
+      const { isThinkingBlock, validThinking, invalidText, invalidToolCall } =
+        observeBlockMustHaveTypeThinkingToBeRecognizedAsAThinkingBlock();
       expect(isThinkingBlock(validThinking)).toBe(true);
-
-      // Invalid: text block
-      const invalidText: TextBlock = { type: 'text', text: 'just text' };
       expect(isThinkingBlock(invalidText)).toBe(false);
-
-      // Invalid: tool_call block
-      const invalidToolCall: ToolCallBlock = {
-        type: 'tool_call',
-        id: 'call_1',
-        name: 'read_file',
-        parameters: {},
-      };
       expect(isThinkingBlock(invalidToolCall)).toBe(false);
-
-      // Invalid: undefined
       expect(isThinkingBlock(undefined)).toBe(false);
     });
+
+    const observeBlockMustHaveTypeThinkingToBeRecognizedAsAThinkingBlock =
+      () => {
+        function isThinkingBlock(block: ContentBlock | undefined): boolean {
+          return Boolean(block && block.type === 'thinking');
+        }
+
+        // Valid thinking block
+        const validThinking: ThinkingBlock = {
+          type: 'thinking',
+          thought: 'thinking...',
+          sourceField: 'thinking',
+        };
+
+        // Invalid: text block
+        const invalidText: TextBlock = { type: 'text', text: 'just text' };
+
+        // Invalid: tool_call block
+        const invalidToolCall: ToolCallBlock = {
+          type: 'tool_call',
+          id: 'call_1',
+          name: 'read_file',
+          parameters: {},
+        };
+
+        // Invalid: undefined
+
+        return { isThinkingBlock, validThinking, invalidText, invalidToolCall };
+      };
   });
 });

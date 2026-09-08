@@ -358,28 +358,7 @@ describe('IContent providerMetadata property-based', () => {
   it('UsageStats with new fields round-trips through JSON unchanged', () =>
     fc.assert(
       fc.property(
-        fc
-          .record({
-            promptTokens: fc.nat({ max: 100000 }),
-            completionTokens: fc.nat({ max: 100000 }),
-            totalTokens: fc.nat({ max: 200000 }),
-            reasoningTokens: fc.option(fc.nat({ max: 50000 })),
-            toolTokens: fc.option(fc.nat({ max: 50000 })),
-          })
-          .map((v): UsageStats => {
-            const stats: UsageStats = {
-              promptTokens: v.promptTokens,
-              completionTokens: v.completionTokens,
-              totalTokens: v.totalTokens,
-            };
-            if (v.reasoningTokens !== null) {
-              stats.reasoningTokens = v.reasoningTokens;
-            }
-            if (v.toolTokens !== null) {
-              stats.toolTokens = v.toolTokens;
-            }
-            return stats;
-          }),
+        fc.record(usageStatsWithOptionalTokens()).map(toUsageStats),
         (stats: UsageStats) => {
           const roundTripped: UsageStats = JSON.parse(JSON.stringify(stats));
           return JSON.stringify(roundTripped) === JSON.stringify(stats);
@@ -387,3 +366,34 @@ describe('IContent providerMetadata property-based', () => {
       ),
     ));
 });
+
+function usageStatsWithOptionalTokens() {
+  return {
+    promptTokens: fc.nat({ max: 100000 }),
+    completionTokens: fc.nat({ max: 100000 }),
+    totalTokens: fc.nat({ max: 200000 }),
+    reasoningTokens: fc.option(fc.nat({ max: 50000 })),
+    toolTokens: fc.option(fc.nat({ max: 50000 })),
+  };
+}
+
+function toUsageStats(v: {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  reasoningTokens: number | null;
+  toolTokens: number | null;
+}): UsageStats {
+  const stats: UsageStats = {
+    promptTokens: v.promptTokens,
+    completionTokens: v.completionTokens,
+    totalTokens: v.totalTokens,
+  };
+  if (v.reasoningTokens !== null) {
+    stats.reasoningTokens = v.reasoningTokens;
+  }
+  if (v.toolTokens !== null) {
+    stats.toolTokens = v.toolTokens;
+  }
+  return stats;
+}

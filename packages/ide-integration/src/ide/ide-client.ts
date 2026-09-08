@@ -274,7 +274,7 @@ export class IdeClient {
   }
 
   static resetInstance(): void {
-    IdeClient.instance = undefined as unknown as IdeClient;
+    IdeClient.instance = undefined;
   }
 
   addStatusChangeListener(listener: (state: IDEConnectionState) => void) {

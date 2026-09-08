@@ -61,6 +61,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function hasTodoArray(value: unknown): boolean {
+  return isRecord(value) && Array.isArray(value.todos);
+}
+
+function todoIds(value: unknown): string[] {
+  if (!isRecord(value) || !Array.isArray(value.todos)) {
+    return ['invalid-todo-file'];
+  }
+  return value.todos.filter(isRecord).map((todo) => String(todo['id']));
+}
+
+function isPaused(value: unknown): boolean {
+  return isRecord(value) && value.paused === true;
+}
+
 describe('TodoStore queue keying across alias-spelled data directories', () => {
   let root = '';
 
@@ -104,12 +119,8 @@ describe('TodoStore queue keying across alias-spelled data directories', () => {
         'utf-8',
       ),
     );
-    expect(isRecord(raw) && Array.isArray(raw.todos)).toBe(true);
-    const todoIds =
-      isRecord(raw) && Array.isArray(raw.todos)
-        ? raw.todos.filter(isRecord).map((todo) => String(todo['id']))
-        : ['invalid-todo-file'];
-    expect(todoIds).toEqual(['one']);
-    expect(isRecord(raw) && raw.paused === true).toBe(true);
+    expect(hasTodoArray(raw)).toBe(true);
+    expect(todoIds(raw)).toStrictEqual(['one']);
+    expect(isPaused(raw)).toBe(true);
   });
 });

@@ -1,34 +1,20 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import type { Config } from '../config/config.js';
-import { getFolderStructure } from './getFolderStructure.js';
-
-export const INITIAL_HISTORY_LENGTH = 1;
 
 /**
- * Generates a string describing the current workspace directories and their structures.
- * @param {Config} config - The runtime configuration and services.
- * @returns {Promise<string>} A promise that resolves to the directory context string.
+ * Returns the working-directory preamble for the environment context: a single
+ * directory line, or a bulleted list for multiple directories. Folder-tree
+ * listing is removed (issue #3072); this only names the working directories.
  */
 export async function getDirectoryContextString(
   config: Config,
 ): Promise<string> {
-  const workspaceContext = config.getWorkspaceContext();
-  const workspaceDirectories = workspaceContext.getDirectories();
-
-  const folderStructures = await Promise.all(
-    workspaceDirectories.map((dir) =>
-      getFolderStructure(dir, {
-        fileService: config.getFileService(),
-      }),
-    ),
-  );
-
-  const folderStructure = folderStructures.join('\n');
+  const workspaceDirectories = config.getWorkspaceContext().getDirectories();
 
   let workingDirPreamble: string;
   if (workspaceDirectories.length === 1) {
@@ -38,18 +24,15 @@ export async function getDirectoryContextString(
     workingDirPreamble = `I'm currently working in the following directories:\n${dirList}`;
   }
 
-  return `${workingDirPreamble}
-Here is the folder structure of the current working directories:
-
-${folderStructure}`;
+  return workingDirPreamble;
 }
 
 /**
- * Retrieves environment-related information to be included in the chat context.
- * This includes the current working directory, date, operating system, and folder structure.
- * Optionally, it can also include the full file context if enabled.
+ * Retrieves environment-related information to be included in the chat context:
+ * program identity, locale date, platform, working-directory preamble, and
+ * environment memory. No folder-tree listing is produced.
  * @param {Config} config - The runtime configuration and services.
- * @returns A promise that resolves to an array of text parts containing environment information.
+ * @returns A promise that resolves to a single text part with the environment info.
  */
 export async function getEnvironmentContext(
   config: Config,
@@ -73,7 +56,5 @@ ${directoryContext}
 ${environmentMemory}
         `.trim();
 
-  const initialParts: Array<{ text: string }> = [{ text: context }];
-
-  return initialParts;
+  return [{ text: context }];
 }

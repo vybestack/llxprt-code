@@ -21,6 +21,10 @@ import {
 } from '../streamLimits.js';
 import { ToolCallCollector } from './ToolCallCollector.js';
 
+function parseCollectedArguments(args: string | undefined): unknown {
+  return JSON.parse(args ?? '');
+}
+
 describe('ToolCallCollector', () => {
   let collector: ToolCallCollector;
 
@@ -87,7 +91,7 @@ describe('ToolCallCollector', () => {
       );
 
       // Verify it's valid JSON
-      const parsedArgs = JSON.parse(completeCalls[0].args ?? '');
+      const parsedArgs = parseCollectedArguments(completeCalls[0].args);
       expect(parsedArgs).toStrictEqual({
         param1: 'value1',
         param2: 'value2',

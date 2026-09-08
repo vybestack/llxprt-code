@@ -107,6 +107,15 @@ function grepFiles(
 /**
  * Filter out allowed paths from grep results.
  */
+function findAuthExportStart(lines: readonly string[], end: number): number {
+  for (let index = end; index >= 0; index--) {
+    if (lines[index].trim() === 'export {') {
+      return index;
+    }
+  }
+  return -1;
+}
+
 function filterMatches(matches: string[], allowedPaths: string[]): string[] {
   return matches.filter((match) => {
     // Always allow test files
@@ -288,13 +297,7 @@ describe('Deprecation Guards (P36)', () => {
       const authExportEnd = lines.findIndex((line: string) =>
         line.includes("} from '@vybestack/llxprt-code-auth';"),
       );
-      let authExportStart = -1;
-      for (let index = authExportEnd; index >= 0; index--) {
-        if (lines[index].trim() === 'export {') {
-          authExportStart = index;
-          break;
-        }
-      }
+      const authExportStart = findAuthExportStart(lines, authExportEnd);
       const authExportBlock = lines
         .slice(authExportStart, authExportEnd + 1)
         .join('\n');

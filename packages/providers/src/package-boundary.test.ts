@@ -60,6 +60,38 @@ interface TsconfigJson {
   exclude?: string[];
 }
 
+function packageDependencies(pkg: PackageJson): Record<string, string> {
+  return pkg.dependencies ?? {};
+}
+
+function packageScripts(pkg: PackageJson): Record<string, string> {
+  return pkg.scripts ?? {};
+}
+
+function packageWorkspaces(pkg: PackageJson): string[] {
+  return pkg.workspaces ?? [];
+}
+
+function tsconfigReferences(tsconfig: TsconfigJson): Array<{ path: string }> {
+  return tsconfig.references ?? [];
+}
+
+function tsconfigExcludes(tsconfig: TsconfigJson): string[] {
+  return tsconfig.exclude ?? [];
+}
+
+function isNotBoundaryGuardTest(filePath: string, coreSrc: string): boolean {
+  const relativePath = path.relative(coreSrc, filePath);
+  return [
+    !relativePath.includes('boundary-guards.test.ts'),
+    !relativePath.includes('package-boundary.test.ts'),
+  ].every(Boolean);
+}
+
+function isTestExcludePattern(pattern: string): boolean {
+  return ['.test.ts', '.spec.ts'].some((suffix) => pattern.includes(suffix));
+}
+
 /**
  * Helper: recursively collect .ts files in a directory, optionally excluding tests.
  */
@@ -153,7 +185,7 @@ describe('Provider package metadata constraints', () => {
    */
   it('providers package.json has core dependency as file:../core', () => {
     const pkg = readJson<PackageJson>(path.join(PROVIDERS_DIR, 'package.json'));
-    const deps = pkg.dependencies ?? {};
+    const deps = packageDependencies(pkg);
     expect(deps['@vybestack/llxprt-code-core']).toBe('file:../core');
   });
 
@@ -163,7 +195,7 @@ describe('Provider package metadata constraints', () => {
    */
   it('providers package.json does not depend on CLI package', () => {
     const pkg = readJson<PackageJson>(path.join(PROVIDERS_DIR, 'package.json'));
-    const deps = pkg.dependencies ?? {};
+    const deps = packageDependencies(pkg);
     expect(deps['@vybestack/llxprt-code']).toBeUndefined();
   });
 
@@ -200,7 +232,7 @@ describe('Provider package metadata constraints', () => {
    */
   it('providers package.json has build, test, typecheck, and lint scripts', () => {
     const pkg = readJson<PackageJson>(path.join(PROVIDERS_DIR, 'package.json'));
-    const scripts = pkg.scripts ?? {};
+    const scripts = packageScripts(pkg);
     expect(scripts['build']).toBeDefined();
     expect(scripts['test']).toBeDefined();
     expect(scripts['typecheck']).toBeDefined();
@@ -219,7 +251,7 @@ describe('Workspace membership constraints', () => {
    */
   it('root package.json includes packages/providers in workspaces', () => {
     const pkg = readJson<PackageJson>(path.join(ROOT_DIR, 'package.json'));
-    const workspaces = pkg.workspaces ?? [];
+    const workspaces = packageWorkspaces(pkg);
     expect(workspaces).toContain('packages/providers');
   });
 });
@@ -235,7 +267,7 @@ describe('Core must not depend on providers package', () => {
    */
   it('core package.json has no providers dependency', () => {
     const pkg = readJson<PackageJson>(path.join(CORE_DIR, 'package.json'));
-    const deps = pkg.dependencies ?? {};
+    const deps = packageDependencies(pkg);
     expect(deps['@vybestack/llxprt-code-providers']).toBeUndefined();
   });
 
@@ -247,7 +279,7 @@ describe('Core must not depend on providers package', () => {
     const tsconfigPath = path.join(CORE_DIR, 'tsconfig.json');
     expect(fs.existsSync(tsconfigPath)).toBe(true);
     const tsconfig = readJson<TsconfigJson>(tsconfigPath);
-    const references = tsconfig.references ?? [];
+    const references = tsconfigReferences(tsconfig);
     const hasProvidersRef = references.some((ref) =>
       ref.path.includes('providers'),
     );
@@ -296,7 +328,7 @@ describe('CLI dependency constraints (P11 — providers dependency present)', ()
    */
   it('CLI package.json depends on providers after provider move wiring', () => {
     const pkg = readJson<PackageJson>(path.join(CLI_DIR, 'package.json'));
-    const deps = pkg.dependencies ?? {};
+    const deps = packageDependencies(pkg);
     expect(deps['@vybestack/llxprt-code-providers']).toBe('file:../providers');
   });
 });
@@ -389,13 +421,7 @@ describe('Anti-shim: core must not add compatibility re-exports from providers',
     const coreSrc = path.join(CORE_DIR, 'src');
     const allTsFiles = collectTsFiles(coreSrc, false); // include test files for completeness
     const violations = allTsFiles
-      .filter((filePath) => {
-        const rel = path.relative(coreSrc, filePath);
-        return (
-          !rel.includes('boundary-guards.test.ts') &&
-          !rel.includes('package-boundary.test.ts')
-        );
-      })
+      .filter((filePath) => isNotBoundaryGuardTest(filePath, coreSrc))
       .filter((filePath) => hasForbiddenSuffix(path.basename(filePath, '.ts')))
       .map(
         (filePath) =>
@@ -460,10 +486,8 @@ describe('TypeScript configuration constraints', () => {
     const tsconfig = readJson<TsconfigJson>(
       path.join(PROVIDERS_DIR, 'tsconfig.json'),
     );
-    const excludes = tsconfig.exclude ?? [];
-    const hasTestExclude = excludes.some(
-      (e: string) => e.includes('.test.ts') || e.includes('.spec.ts'),
-    );
+    const excludes = tsconfigExcludes(tsconfig);
+    const hasTestExclude = excludes.some(isTestExcludePattern);
     expect(hasTestExclude).toBe(true);
   });
 });

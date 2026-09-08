@@ -43,6 +43,16 @@ import { OAuthManager } from './oauth-manager.js';
 import type { OAuthProvider } from './types.js';
 import type { TokenStore } from '@vybestack/llxprt-code-auth';
 
+async function listProviderBuckets(provider: string): Promise<string[]> {
+  if (provider === 'device-code-test') {
+    return ['default', 'bucket-a'];
+  }
+  if (provider === 'anthropic') {
+    return ['default', 'bucket-b'];
+  }
+  return [];
+}
+
 describe('OAuthManager.logout runtime cache handling', () => {
   beforeEach(() => {
     flushMockRef.current?.mockClear();
@@ -214,15 +224,7 @@ describe('OAuthManager.logout runtime cache handling', () => {
       listProviders: vi
         .fn()
         .mockResolvedValue(['device-code-test', 'anthropic']),
-      listBuckets: vi.fn(async (provider: string) => {
-        if (provider === 'device-code-test') {
-          return ['default', 'bucket-a'];
-        }
-        if (provider === 'anthropic') {
-          return ['default', 'bucket-b'];
-        }
-        return [];
-      }),
+      listBuckets: vi.fn(listProviderBuckets),
       getBucketStats: vi.fn().mockResolvedValue(null),
       acquireRefreshLock: vi.fn().mockResolvedValue(true),
       releaseRefreshLock: vi.fn().mockResolvedValue(undefined),

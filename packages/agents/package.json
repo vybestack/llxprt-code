@@ -39,7 +39,7 @@
     "pretest": "bun ../../scripts/check-agents-api-surface.ts",
     "test": "bun run-bun-tests.ts && bun ../../scripts/run_bun_tests.ts --workspace agents",
     "test:ci": "bun run-bun-tests.ts && bun ../../scripts/run_bun_tests.ts --workspace agents",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit -p tsconfig.noemit.json && tsc --noEmit -p tsconfig.test-bun.json"
   },
   "files": [
     "index.ts",
@@ -56,6 +56,7 @@
     "@vybestack/llxprt-code-auth": "file:../auth",
     "@vybestack/llxprt-code-core": "file:../core",
     "@vybestack/llxprt-code-ide-integration": "file:../ide-integration",
+    "@vybestack/llxprt-code-mcp": "file:../mcp",
     "@vybestack/llxprt-code-policy": "file:../policy",
     "@vybestack/llxprt-code-providers": "file:../providers",
     "@vybestack/llxprt-code-settings": "file:../settings",

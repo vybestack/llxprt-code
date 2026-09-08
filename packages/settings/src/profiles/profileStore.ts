@@ -9,7 +9,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { channel } from 'node:diagnostics_channel';
-
+import { parseProfileJson } from '../settings/validation.js';
 /**
  * diagnostics_channel name published exactly once per async lock acquisition
  * when the first EEXIST is observed. The payload is `{ lockPath: string }`.
@@ -209,13 +209,11 @@ async function readLockToken(lockPath: string): Promise<string | null> {
  * assertion. Uses structural narrowing on the parsed value.
  */
 function extractTokenFromMetadata(raw: string): string | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
+  const parsed = parseProfileJson(raw);
+  if (parsed.kind !== 'parsed') {
     return null;
   }
-  return readTokenField(parsed);
+  return readTokenField(parsed.value);
 }
 
 /**

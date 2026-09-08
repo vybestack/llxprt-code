@@ -202,6 +202,11 @@ describe('FileExclusions', () => {
 });
 
 describe('BINARY_EXTENSIONS', () => {
+  /** Return the subset of extensions that still contain an unexpanded brace character. */
+  function braceFormExtensions(extensions: readonly string[]): string[] {
+    return extensions.filter((ext) => ext.includes('{') || ext.includes('}'));
+  }
+
   it.each([
     ['common binary file extensions', ['.exe', '.dll', '.jar', '.zip']],
     ['additional binary extensions', ['.dat', '.obj', '.wasm']],
@@ -219,9 +224,7 @@ describe('BINARY_EXTENSIONS', () => {
 
   it('should not contain invalid extensions from brace patterns', () => {
     // If brace expansion was not handled correctly, we would see invalid extensions like '.{jpg,png}'
-    const invalidExtensions = BINARY_EXTENSIONS.filter(
-      (ext) => ext.includes('{') || ext.includes('}'),
-    );
+    const invalidExtensions = braceFormExtensions(BINARY_EXTENSIONS);
     expect(invalidExtensions).toHaveLength(0);
   });
 });

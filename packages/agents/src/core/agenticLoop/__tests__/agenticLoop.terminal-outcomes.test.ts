@@ -129,6 +129,14 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
   );
 
   it('emits the final empty tool update before tools_complete', async () => {
+    const { emptyUpdateIndex, completeIndex, displaySizes } =
+      await observeEmitsTheFinalEmptyToolUpdateBeforeToolsComplete();
+    expect(emptyUpdateIndex).toBeGreaterThanOrEqual(0);
+    expect(completeIndex).toBeGreaterThan(emptyUpdateIndex);
+    expect(displaySizes.at(-1)).toBe(0);
+  });
+
+  const observeEmitsTheFinalEmptyToolUpdateBeforeToolsComplete = async () => {
     const tool = new MockTool({ name: 'clear_tool' });
     const toolRegistry = createToolRegistryForTest([tool]);
     const messageBus = new MessageBus(createAllowPolicyEngine(), false);
@@ -166,10 +174,8 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
     );
     const completeIndex = eventKinds.indexOf('tools_complete');
 
-    expect(emptyUpdateIndex).toBeGreaterThanOrEqual(0);
-    expect(completeIndex).toBeGreaterThan(emptyUpdateIndex);
-    expect(displaySizes.at(-1)).toBe(0);
-  });
+    return { emptyUpdateIndex, completeIndex, displaySizes };
+  };
 
   it('does not execute ASK_USER tools in non-interactive mode without approvalHandler', async () => {
     let executed = false;
@@ -264,51 +270,58 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
   });
 
   it('approvalHandler ignores confirmation requests for tool calls owned by another scheduler', async () => {
-    const tool = new MockTool({ name: 'owned_tool' });
-    tool.shouldConfirm = true;
-    const toolRegistry = createToolRegistryForTest([tool]);
-    const messageBus = new MessageBus(createAskPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAskPolicyEngine(),
-      interactive: true,
-      approvalMode: ApprovalMode.DEFAULT,
-    });
-
-    let approvalCount = 0;
-    const approvalHandler: ApprovalHandler = async () => {
-      approvalCount += 1;
-      return { outcome: ToolConfirmationOutcome.ProceedOnce };
-    };
-    const { client } = createScriptedAgentClient([
-      [toolCallRequestEvent('owned_tool', 'owned-call'), finishedEvent()],
-      [contentEvent('done'), finishedEvent()],
-    ]);
-    const loop = new AgenticLoop({
-      agentClient: client,
-      config,
-      messageBus,
-      approvalHandler,
-    });
-
-    const events: AgenticLoopEvent[] = [];
-    for await (const event of loop.run('go', new AbortController().signal)) {
-      events.push(event);
-      if (event.kind === 'awaiting_approval') {
-        messageBus.publish({
-          type: MessageBusType.TOOL_CONFIRMATION_REQUEST,
-          correlationId: 'unowned-correlation',
-          toolCall: {
-            id: 'unowned-call',
-            name: 'owned_tool',
-            args: {},
-          },
-        });
-      }
-    }
-
+    const { events, approvalCount } =
+      await observeApprovalHandlerIgnoresConfirmationRequestsForToolCallsOwnedByAnotherScheduler();
     expect(events.some(isToolsComplete)).toBe(true);
     expect(approvalCount).toBe(1);
   });
+
+  const observeApprovalHandlerIgnoresConfirmationRequestsForToolCallsOwnedByAnotherScheduler =
+    async () => {
+      const tool = new MockTool({ name: 'owned_tool' });
+      tool.shouldConfirm = true;
+      const toolRegistry = createToolRegistryForTest([tool]);
+      const messageBus = new MessageBus(createAskPolicyEngine(), false);
+      const config = createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAskPolicyEngine(),
+        interactive: true,
+        approvalMode: ApprovalMode.DEFAULT,
+      });
+
+      let approvalCount = 0;
+      const approvalHandler: ApprovalHandler = async () => {
+        approvalCount += 1;
+        return { outcome: ToolConfirmationOutcome.ProceedOnce };
+      };
+      const { client } = createScriptedAgentClient([
+        [toolCallRequestEvent('owned_tool', 'owned-call'), finishedEvent()],
+        [contentEvent('done'), finishedEvent()],
+      ]);
+      const loop = new AgenticLoop({
+        agentClient: client,
+        config,
+        messageBus,
+        approvalHandler,
+      });
+
+      const events: AgenticLoopEvent[] = [];
+      for await (const event of loop.run('go', new AbortController().signal)) {
+        events.push(event);
+        if (event.kind === 'awaiting_approval') {
+          messageBus.publish({
+            type: MessageBusType.TOOL_CONFIRMATION_REQUEST,
+            correlationId: 'unowned-correlation',
+            toolCall: {
+              id: 'unowned-call',
+              name: 'owned_tool',
+              args: {},
+            },
+          });
+        }
+      }
+
+      return { events, approvalCount };
+    };
 });

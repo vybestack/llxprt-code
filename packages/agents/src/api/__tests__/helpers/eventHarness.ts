@@ -96,10 +96,10 @@ export function streamCitation(citation: string): ServerAgentStreamEvent {
 }
 
 export function streamUsage(usage: {
-  promptTokenCount?: number;
-  candidatesTokenCount?: number;
+  inputTokenCount?: number;
+  outputTokenCount?: number;
   totalTokenCount?: number;
-  cachedContentTokenCount?: number;
+  cachedTokenCount?: number;
 }): ServerAgentStreamEvent {
   return { type: AgentEventType.UsageMetadata, value: usage };
 }

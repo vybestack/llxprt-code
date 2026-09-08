@@ -6,7 +6,7 @@
 
 import type { Mock } from 'bun:test';
 import { vi, describe, beforeEach, it, expect } from 'bun:test';
-import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import type { MCPServerConfig } from '../config/mcpServerConfig.js';
 
 const { MockGoogleAuth } = (() => {
   class MockGoogleAuth {

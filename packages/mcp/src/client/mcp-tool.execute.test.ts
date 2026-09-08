@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { safeJsonStringify } from '@vybestack/llxprt-code-core/utils/safeJsonStringify.js';
+import { safeJsonStringify } from '@vybestack/llxprt-code-telemetry/utils/safeJsonStringify.js';
 import {
   DiscoveredMCPTool,
   generateValidName,

@@ -83,25 +83,59 @@ describe('agent.memory control @plan:PLAN-20260626-RUNTIMEBOUNDARY.P02', () => {
   });
 
   it('getCoreMemory returns undefined or a string @scenario:core-memory @given:an agent built normally @when:agent.memory.getCoreMemory() @then:the result is undefined or a string', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    try {
-      const core = agent.memory.getCoreMemory();
-      expect(core === undefined || typeof core === 'string').toBe(true);
-    } finally {
-      await cleanup();
-    }
+    const {
+      getCoreMemoryReturnsUndefinedOrAStringScenarioCoreMemoryGivenAnAgentObservation1,
+    } =
+      await observeGetCoreMemoryReturnsUndefinedOrAStringScenarioCoreMemoryGivenAnAgent();
+    expect(
+      getCoreMemoryReturnsUndefinedOrAStringScenarioCoreMemoryGivenAnAgentObservation1,
+    ).toBe(true);
   });
 
+  const observeGetCoreMemoryReturnsUndefinedOrAStringScenarioCoreMemoryGivenAnAgent =
+    async () => {
+      const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+      try {
+        const core = agent.memory.getCoreMemory();
+
+        const getCoreMemoryReturnsUndefinedOrAStringScenarioCoreMemoryGivenAnAgentObservation1 =
+          core === undefined || typeof core === 'string';
+        return {
+          getCoreMemoryReturnsUndefinedOrAStringScenarioCoreMemoryGivenAnAgentObservation1,
+        };
+      } finally {
+        await cleanup();
+      }
+    };
+
   it('setCoreMemory delegates without throwing @scenario:core-memory-set @given:an agent built normally @when:agent.memory.setCoreMemory("core-content") @then:the core memory projection remains a safe optional string', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    try {
-      expect(() => agent.memory.setCoreMemory('core-content')).not.toThrow();
-      const core = agent.memory.getCoreMemory();
-      expect(core === undefined || typeof core === 'string').toBe(true);
-    } finally {
-      await cleanup();
-    }
+    const {
+      agent,
+      setCoreMemoryDelegatesWithoutThrowingScenarioCoreMemorySetGivenAnAgentBuiltObservation1,
+    } =
+      await observeSetCoreMemoryDelegatesWithoutThrowingScenarioCoreMemorySetGivenAnAgentBuilt();
+    expect(() => agent.memory.setCoreMemory('core-content')).not.toThrow();
+    expect(
+      setCoreMemoryDelegatesWithoutThrowingScenarioCoreMemorySetGivenAnAgentBuiltObservation1,
+    ).toBe(true);
   });
+
+  const observeSetCoreMemoryDelegatesWithoutThrowingScenarioCoreMemorySetGivenAnAgentBuilt =
+    async () => {
+      const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+      try {
+        const core = agent.memory.getCoreMemory();
+
+        const setCoreMemoryDelegatesWithoutThrowingScenarioCoreMemorySetGivenAnAgentBuiltObservation1 =
+          core === undefined || typeof core === 'string';
+        return {
+          agent,
+          setCoreMemoryDelegatesWithoutThrowingScenarioCoreMemorySetGivenAnAgentBuiltObservation1,
+        };
+      } finally {
+        await cleanup();
+      }
+    };
 
   it('refresh resolves without throwing @scenario:refresh @given:an agent built normally @when:agent.memory.refresh() @then:the promise resolves (no throw)', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');

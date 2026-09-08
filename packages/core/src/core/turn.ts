@@ -259,10 +259,10 @@ export type ServerChatCompressedEvent = {
 export type ServerUsageMetadataEvent = {
   type: AgentEventType.UsageMetadata;
   value: {
-    promptTokenCount?: number;
-    candidatesTokenCount?: number;
+    inputTokenCount?: number;
+    outputTokenCount?: number;
     totalTokenCount?: number;
-    cachedContentTokenCount?: number;
+    cachedTokenCount?: number;
   };
 };
 

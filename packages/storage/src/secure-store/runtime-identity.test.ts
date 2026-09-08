@@ -178,14 +178,13 @@ describe('runtime-identity edge cases', () => {
     expect(isRuntimeReplaced()).toBe(false);
   });
 
-  it.skipIf(process.platform === 'darwin')(
-    'non-darwin reports healthy (default detector always returns false)',
-    () => {
+  describe.skipIf(process.platform === 'darwin')(() => {
+    it('non-darwin reports healthy (default detector always returns false)', () => {
       setRuntimeReplacedDetectorForTesting(null);
       // On non-darwin the default detector is `() => false`.
       expect(isRuntimeReplaced()).toBe(false);
-    },
-  );
+    });
+  });
 });
 
 // ─── Terminal memoisation is genuinely exercised ─────────────────────────────

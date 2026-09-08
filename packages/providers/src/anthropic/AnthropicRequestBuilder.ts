@@ -88,6 +88,16 @@ type CacheableContentBlock = AnthropicMessageBlock & {
  * permissive spread of unexpected keys.
  * @issue #1414
  */
+function preserveInternalBlockTags<T extends CachedAnthropicBlock>(
+  source: AnthropicMessageBlock,
+  target: T,
+): T {
+  for (const symbol of Object.getOwnPropertySymbols(source)) {
+    Reflect.set(target, symbol, Reflect.get(source, symbol));
+  }
+  return target;
+}
+
 export function sanitizeBlockForCacheControl(
   block: AnthropicMessageBlock,
   ttl: '5m' | '1h',
@@ -96,15 +106,19 @@ export function sanitizeBlockForCacheControl(
 
   switch (block.type) {
     case 'text':
-      return { type: 'text', text: block.text, cache_control: cacheControl };
+      return preserveInternalBlockTags(block, {
+        type: 'text',
+        text: block.text,
+        cache_control: cacheControl,
+      });
     case 'tool_use':
-      return {
+      return preserveInternalBlockTags(block, {
         type: 'tool_use',
         id: block.id,
         name: block.name,
         input: block.input,
         cache_control: cacheControl,
-      };
+      });
     case 'tool_result': {
       const result: CachedAnthropicBlock & { type: 'tool_result' } = {
         type: 'tool_result',
@@ -115,29 +129,29 @@ export function sanitizeBlockForCacheControl(
       if (block.is_error !== undefined) {
         result.is_error = block.is_error;
       }
-      return result;
+      return preserveInternalBlockTags(block, result);
     }
     case 'thinking':
-      return {
+      return preserveInternalBlockTags(block, {
         type: 'thinking',
         thinking: block.thinking,
         ...(block.signature !== undefined
           ? { signature: block.signature }
           : {}),
         cache_control: cacheControl,
-      };
+      });
     case 'redacted_thinking':
-      return {
+      return preserveInternalBlockTags(block, {
         type: 'redacted_thinking',
         data: block.data,
         cache_control: cacheControl,
-      };
+      });
     case 'image':
-      return {
+      return preserveInternalBlockTags(block, {
         type: 'image',
         source: block.source,
         cache_control: cacheControl,
-      };
+      });
     case 'document': {
       const doc: CachedAnthropicBlock & { type: 'document' } = {
         type: 'document',
@@ -147,15 +161,15 @@ export function sanitizeBlockForCacheControl(
       if (block.title !== undefined) {
         doc.title = block.title;
       }
-      return doc;
+      return preserveInternalBlockTags(block, doc);
     }
     default: {
       const unknown = block as { type: string };
-      return {
+      return preserveInternalBlockTags(block, {
         type: 'text',
         text: `[unsupported block type: ${unknown.type}]`,
         cache_control: cacheControl,
-      };
+      });
     }
   }
 }

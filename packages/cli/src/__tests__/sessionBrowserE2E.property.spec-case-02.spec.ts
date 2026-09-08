@@ -31,6 +31,13 @@ import {
   SessionBrowserTestState,
 } from './sessionBrowserE2E.helpers.js';
 
+async function releaseCurrentLock(
+  context: ReturnType<typeof makeResumeContext>,
+): Promise<void> {
+  const newLock = context.recordingCallbacks.getCurrentLockHandle();
+  if (newLock) await newLock.release();
+}
+
 describe('Property-based tests #2', () => {
   let state: SessionBrowserTestState;
 
@@ -83,8 +90,7 @@ describe('Property-based tests #2', () => {
             assertTruthy(result.ok);
             expect(result.metadata.sessionId).toBe(sessionId);
 
-            const newLock = context.recordingCallbacks.getCurrentLockHandle();
-            if (newLock) await newLock.release();
+            await releaseCurrentLock(context);
           } finally {
             await fs.rm(localTempDir, { recursive: true, force: true });
           }

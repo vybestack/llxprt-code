@@ -97,8 +97,6 @@ function createCapturingProvider(
     name: 'capturing-provider',
     getModels: async () => [],
     getDefaultModel: () => 'test-model',
-    getServerTools: () => [],
-    invokeServerTool: async () => ({}),
     async *generateChatCompletion(opts: RuntimeGenerateChatOptions) {
       captured.push(opts);
       yield {

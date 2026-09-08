@@ -45,6 +45,12 @@ const {
   MEMORY_RECONCILE_LOCK_FILE,
 } = await import('./reconcileLock.js');
 import type { MigrationDestinations } from './migrationTypes.js';
+function getAggregateErrorMessages(error: unknown): string[] {
+  if (error instanceof AggregateError) {
+    return error.errors.map(String);
+  }
+  return [];
+}
 
 describe('reconcileLock write-failure cleanup', () => {
   let root: string;
@@ -123,8 +129,7 @@ describe('reconcileLock write-failure cleanup', () => {
 
     const error = captureAcquireError();
     expect(error).toBeInstanceOf(AggregateError);
-    const errors =
-      error instanceof AggregateError ? error.errors.map(String) : [];
+    const errors = getAggregateErrorMessages(error);
     expect(errors).toStrictEqual([
       'Error: simulated disk full',
       'Error: simulated cleanup I/O',

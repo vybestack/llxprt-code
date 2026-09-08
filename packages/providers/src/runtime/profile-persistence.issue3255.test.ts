@@ -18,6 +18,11 @@ const runtimeEphemerals = {
   'reasoning.enabledWireFormat': 'thinking',
   'reasoning.effortMap': { low: 2048, high: 8192, max: null },
   'reasoning.enabledMap': { true: 'enabled', false: null },
+  'media.semantic-purge': 'summary',
+  'image-payload-budget-bytes': 12_000_000,
+  'media-store-quota-bytes': 3_000_000_000,
+  'session-recording-queue-max-bytes': 8_000_000,
+  'session-persistence-queue-max-bytes': 7_000_000,
 } satisfies ProfileEphemeralSettings;
 
 void vi.mock('./runtimeAccessors.js', () => ({

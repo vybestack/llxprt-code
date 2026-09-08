@@ -38,6 +38,12 @@ import {
 const tempDirs: string[] = [];
 const services: SessionRecordingService[] = [];
 
+function assertString(value: unknown): asserts value is string {
+  if (typeof value !== 'string') {
+    throw new TypeError('Expected a string value');
+  }
+}
+
 describe('session_metadata recording (issue #1611)', () => {
   afterEach(async () => {
     await Promise.allSettled(
@@ -314,7 +320,8 @@ describe('session_metadata recording (issue #1611)', () => {
       const createdAt = sessions[0].createdAt;
       expect(createdAt).toBeDefined();
       expect(typeof createdAt).toBe('string');
-      expect(Number.isNaN(Date.parse(createdAt ?? ''))).toBe(false);
+      assertString(createdAt);
+      expect(Number.isNaN(Date.parse(createdAt))).toBe(false);
     });
   });
 });

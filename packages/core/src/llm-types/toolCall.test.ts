@@ -9,6 +9,10 @@ import {
   toolResultContentFromLegacyPartListUnion,
   type ToolCallRequest,
 } from './toolCall.js';
+import type {
+  MediaBlock,
+  ToolResponseBlock,
+} from '../services/history/IContent.js';
 
 describe('toolResultContentFromLegacyPartListUnion - string input', () => {
   it('returns string directly for string input', () => {
@@ -396,6 +400,131 @@ describe('ToolCallRequest type usage', () => {
 // Property-based tests
 // ============================================================================
 
+type ToolResultConversion = ReturnType<
+  typeof toolResultContentFromLegacyPartListUnion
+>;
+type TextPart = { readonly text: string };
+type TextOrStringPart = TextPart | string;
+
+type FileDataInput = {
+  readonly fileData: {
+    readonly fileUri: string;
+    readonly mimeType: string | null;
+  };
+};
+
+type FunctionResponseInput = {
+  readonly functionResponse: {
+    readonly name: string;
+    readonly id?: string | null;
+    readonly response?: string | null;
+  };
+};
+
+function isOkWithValue(
+  result: ToolResultConversion,
+  expected: string,
+): boolean {
+  return result.ok && result.value === expected;
+}
+
+function isErrorWithMessage(result: ToolResultConversion): boolean {
+  return !result.ok && result.error.length > 0;
+}
+
+function conversionValueIsArray(result: ToolResultConversion): boolean {
+  return result.ok && Array.isArray(result.value);
+}
+
+function textPartsPreservedAsBlocks(
+  result: ToolResultConversion,
+  parts: readonly TextPart[],
+): boolean {
+  if (!result.ok || !Array.isArray(result.value)) return false;
+  const blocks = result.value;
+  return (
+    blocks.length === parts.length &&
+    parts.every((part, index) => {
+      const block = blocks[index];
+      return block.type === 'text' && block.text === part.text;
+    })
+  );
+}
+
+function textPartsOrStringsPreservedAsBlocks(
+  result: ToolResultConversion,
+  parts: readonly TextOrStringPart[],
+): boolean {
+  if (!result.ok || !Array.isArray(result.value)) return false;
+  const blocks = result.value;
+  return (
+    blocks.length === parts.length &&
+    parts.every((part, index) => {
+      const block = blocks[index];
+      const expectedText = typeof part === 'string' ? part : part.text;
+      return block.type === 'text' && block.text === expectedText;
+    })
+  );
+}
+
+function requireSingleMediaBlock(result: ToolResultConversion): MediaBlock {
+  if (!result.ok || !Array.isArray(result.value)) {
+    throw new TypeError('Expected a successful block conversion');
+  }
+  const block = result.value[0];
+  if (result.value.length !== 1 || block.type !== 'media') {
+    throw new TypeError('Expected exactly one media block');
+  }
+  return block;
+}
+
+function requireSingleToolResponseBlock(
+  result: ToolResultConversion,
+): ToolResponseBlock {
+  if (!result.ok || !Array.isArray(result.value)) {
+    throw new TypeError('Expected a successful block conversion');
+  }
+  const block = result.value[0];
+  if (result.value.length !== 1 || block.type !== 'tool_response') {
+    throw new TypeError('Expected exactly one tool response block');
+  }
+  return block;
+}
+
+function mediaBlockMatchesFileData(
+  block: MediaBlock,
+  input: FileDataInput,
+): boolean {
+  return (
+    block.encoding === 'url' &&
+    block.mimeType ===
+      (input.fileData.mimeType ?? 'application/octet-stream') &&
+    block.data === input.fileData.fileUri
+  );
+}
+
+function fileDataPreservedAsMediaBlock(
+  result: ToolResultConversion,
+  input: FileDataInput,
+): boolean {
+  if (!result.ok || !Array.isArray(result.value)) return false;
+  const block = result.value[0];
+  if (block.type !== 'media') return false;
+  return mediaBlockMatchesFileData(block, input);
+}
+
+function expectedFunctionResponse(input: FunctionResponseInput): unknown {
+  return 'response' in input.functionResponse
+    ? input.functionResponse.response
+    : {};
+}
+
+function expectedFunctionCallId(input: FunctionResponseInput): string {
+  return typeof input.functionResponse.id === 'string'
+    ? input.functionResponse.id
+    : '';
+}
+
 describe('toolCall property-based', () => {
   it('array of {text: string} yields TextBlocks preserving order and content', () =>
     fc.assert(
@@ -404,27 +533,19 @@ describe('toolCall property-based', () => {
           minLength: 0,
           maxLength: 10,
         }),
-        (parts) => {
-          const result = toolResultContentFromLegacyPartListUnion(parts);
-          if (!result.ok) return false;
-          if (!Array.isArray(result.value)) return false;
-          return (
-            result.value.length === parts.length &&
-            parts.every((p, i) => {
-              const block = result.value[i];
-              return block.type === 'text' && block.text === p.text;
-            })
-          );
-        },
+        (parts) =>
+          textPartsPreservedAsBlocks(
+            toolResultContentFromLegacyPartListUnion(parts),
+            parts,
+          ),
       ),
     ));
 
   it('any string input yields ok with value === input', () =>
     fc.assert(
-      fc.property(fc.string({ maxLength: 100 }), (s: string) => {
-        const result = toolResultContentFromLegacyPartListUnion(s);
-        return result.ok && result.value === s;
-      }),
+      fc.property(fc.string({ maxLength: 100 }), (s: string) =>
+        isOkWithValue(toolResultContentFromLegacyPartListUnion(s), s),
+      ),
     ));
 
   it('unsupported shape always returns {ok:false} with non-empty error string', () =>
@@ -438,10 +559,8 @@ describe('toolCall property-based', () => {
           fc.constant({ mystery: 42 }),
           fc.record({ executableCode: fc.record({ code: fc.string() }) }),
         ),
-        (input: unknown) => {
-          const result = toolResultContentFromLegacyPartListUnion(input);
-          return !result.ok && result.error.length > 0;
-        },
+        (input: unknown) =>
+          isErrorWithMessage(toolResultContentFromLegacyPartListUnion(input)),
       ),
     ));
 
@@ -457,12 +576,9 @@ describe('toolCall property-based', () => {
         (input) => {
           const result = toolResultContentFromLegacyPartListUnion(input);
           expect(result.ok).toBe(true);
-          if (!result.ok) return false;
-          expect(Array.isArray(result.value)).toBe(true);
-          if (!Array.isArray(result.value)) return false;
-          const block = result.value[0];
+          expect(conversionValueIsArray(result)).toBe(true);
+          const block = requireSingleMediaBlock(result);
           expect(block.type).toBe('media');
-          if (block.type !== 'media') return false;
           expect(block.encoding).toBe('base64');
           expect(block.mimeType).toBe(input.inlineData.mimeType);
           expect(block.data).toBe(input.inlineData.data);
@@ -480,19 +596,11 @@ describe('toolCall property-based', () => {
             mimeType: fc.option(fc.string({ minLength: 1, maxLength: 30 })),
           }),
         }),
-        (input) => {
-          const result = toolResultContentFromLegacyPartListUnion(input);
-          if (!result.ok || !Array.isArray(result.value)) return false;
-          const block = result.value[0];
-          const expectedMime =
-            input.fileData.mimeType ?? 'application/octet-stream';
-          return (
-            block.type === 'media' &&
-            block.encoding === 'url' &&
-            block.mimeType === expectedMime &&
-            block.data === input.fileData.fileUri
-          );
-        },
+        (input) =>
+          fileDataPreservedAsMediaBlock(
+            toolResultContentFromLegacyPartListUnion(input),
+            input,
+          ),
       ),
     ));
 
@@ -521,17 +629,12 @@ describe('toolCall property-based', () => {
           )
           .map((fnResp) => ({ functionResponse: fnResp })),
         (input) => {
-          const result = toolResultContentFromLegacyPartListUnion(input);
-          if (!result.ok || !Array.isArray(result.value)) return false;
-          const block = result.value[0];
-          if (block.type !== 'tool_response') return false;
-          const fnResp = input.functionResponse;
-          const expectedResult = 'response' in fnResp ? fnResp['response'] : {};
-          expect(block.toolName).toBe(fnResp.name);
-          expect(block.callId).toBe(
-            typeof fnResp.id === 'string' ? fnResp.id : '',
+          const block = requireSingleToolResponseBlock(
+            toolResultContentFromLegacyPartListUnion(input),
           );
-          expect(block.result).toStrictEqual(expectedResult);
+          expect(block.toolName).toBe(input.functionResponse.name);
+          expect(block.callId).toBe(expectedFunctionCallId(input));
+          expect(block.result).toStrictEqual(expectedFunctionResponse(input));
           return true;
         },
       ),
@@ -547,20 +650,11 @@ describe('toolCall property-based', () => {
           ),
           { minLength: 0, maxLength: 5 },
         ),
-        (parts) => {
-          const result = toolResultContentFromLegacyPartListUnion(parts);
-          if (!result.ok || !Array.isArray(result.value)) return false;
-          return (
-            result.value.length === parts.length &&
-            parts.every((p, i) => {
-              const block = result.value[i];
-              return (
-                block.type === 'text' &&
-                block.text === (typeof p === 'string' ? p : p.text)
-              );
-            })
-          );
-        },
+        (parts) =>
+          textPartsOrStringsPreservedAsBlocks(
+            toolResultContentFromLegacyPartListUnion(parts),
+            parts,
+          ),
       ),
     ));
 });

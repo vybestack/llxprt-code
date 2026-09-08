@@ -150,7 +150,11 @@ export function resolveModelCallParams(
   const stopSetting = modelParams['stop'] as string | string[] | undefined;
   const stopSequences = resolveStopSequences(stopSetting);
   const seed = modelParams['seed'] as number | undefined;
-  const maxRetries = (ephemerals['retries'] as number | undefined) ?? 2;
+  // SDK-level retries would multiply HTTP attempts outside the shared
+  // transport-attempt budget (issue #2532). Retry ownership stays with the
+  // RetryOrchestrator, which honors the `retries` ephemeral under the
+  // aggregate budget.
+  const maxRetries = 0;
   void provider;
   return {
     maxOutputTokens,

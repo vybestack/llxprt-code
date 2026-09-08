@@ -26,6 +26,13 @@ let keyStorage: KeyStorageController = {
   entries: new Map(),
 };
 
+function authKeyNameSetting(
+  omit: boolean,
+  nameValue: unknown,
+): Record<string, unknown> {
+  return omit ? {} : { 'auth-key-name': nameValue };
+}
+
 let tempDir: string | null = null;
 
 function createProviderKeyStorageDouble() {
@@ -417,7 +424,7 @@ describe('issue #2916: unresolved auth-key-name rejects profile application', ()
         model: 'gpt-4o',
         modelParams: {},
         ephemeralSettings: {
-          ...(omit ? {} : { 'auth-key-name': nameValue }),
+          ...authKeyNameSetting(omit, nameValue),
           'auth-key': 'inline-direct-key',
         },
       };

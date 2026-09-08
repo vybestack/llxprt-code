@@ -182,16 +182,38 @@ describe('LoopDetectionService', () => {
       expect(loggers.logLoopDetected).not.toHaveBeenCalled();
     });
 
+    function feedUntilLoop(
+      service: LoopDetectionService,
+      pattern: string,
+      maxIterations: number,
+    ): boolean {
+      let isLoop = false;
+      for (let i = 0; i < maxIterations; i++) {
+        isLoop = service.addAndCheck(createContentEvent(pattern));
+        if (isLoop) break;
+      }
+      return isLoop;
+    }
+
+    function loopDetectionConfig(threshold: number) {
+      mockConfig.getEphemeralSetting = vi
+        .fn()
+        .mockImplementation((key: string) => {
+          if (key === 'contentLoopThreshold') return threshold;
+          return undefined;
+        });
+    }
+
     it('should detect a loop with longer repeating patterns (e.g. ~150 chars)', () => {
       service.reset('');
       const longPattern = createRepetitiveContent(1, 150);
       expect(longPattern.length).toBe(150);
 
-      let isLoop = false;
-      for (let i = 0; i < DEFAULT_CONTENT_LOOP_THRESHOLD + 2; i++) {
-        isLoop = service.addAndCheck(createContentEvent(longPattern));
-        if (isLoop) break;
-      }
+      const isLoop = feedUntilLoop(
+        service,
+        longPattern,
+        DEFAULT_CONTENT_LOOP_THRESHOLD + 2,
+      );
       expect(isLoop).toBe(true);
       expect(loggers.logLoopDetected).toHaveBeenCalledTimes(1);
     });
@@ -201,12 +223,7 @@ describe('LoopDetectionService', () => {
       // within the maxAllowedDistance window (CONTENT_CHUNK_SIZE * 5 = 250).
       // With threshold=3, we need 3 matching 50-char chunks; a 143-char repeating
       // pattern produces average chunk distance ~143 which is <= 250.
-      mockConfig.getEphemeralSetting = vi
-        .fn()
-        .mockImplementation((key: string) => {
-          if (key === 'contentLoopThreshold') return 3;
-          return undefined;
-        });
+      loopDetectionConfig(3);
       service = new LoopDetectionService(mockConfig);
       service.reset('');
       const userPattern = `I will not output any text.
@@ -216,11 +233,7 @@ describe('LoopDetectionService', () => {
   I will wait for the user's next command.
 `;
 
-      let isLoop = false;
-      for (let i = 0; i < 20; i++) {
-        isLoop = service.addAndCheck(createContentEvent(userPattern));
-        if (isLoop) break;
-      }
+      const isLoop = feedUntilLoop(service, userPattern, 20);
       expect(isLoop).toBe(true);
       expect(loggers.logLoopDetected).toHaveBeenCalledTimes(1);
     });
@@ -229,22 +242,13 @@ describe('LoopDetectionService', () => {
       // Use a low threshold so that the longer pattern (~100 chars) is detected
       // within the maxAllowedDistance window (CONTENT_CHUNK_SIZE * 5 = 250).
       // With threshold=3, average chunk distance ~103 which is <= 250.
-      mockConfig.getEphemeralSetting = vi
-        .fn()
-        .mockImplementation((key: string) => {
-          if (key === 'contentLoopThreshold') return 3;
-          return undefined;
-        });
+      loopDetectionConfig(3);
       service = new LoopDetectionService(mockConfig);
       service.reset('');
       const userPattern =
         'I have added all the requested logs and verified the test file. I will now mark the task as complete.\n  ';
 
-      let isLoop = false;
-      for (let i = 0; i < 20; i++) {
-        isLoop = service.addAndCheck(createContentEvent(userPattern));
-        if (isLoop) break;
-      }
+      const isLoop = feedUntilLoop(service, userPattern, 20);
       expect(isLoop).toBe(true);
       expect(loggers.logLoopDetected).toHaveBeenCalledTimes(1);
     });
@@ -253,13 +257,13 @@ describe('LoopDetectionService', () => {
       service.reset('');
       const alternatingPattern = 'Thinking... Done. ';
 
-      let isLoop = false;
       // Needs more iterations because the pattern is short relative to chunk size,
       // so it takes a few slides of the window to find the exact alignment.
-      for (let i = 0; i < DEFAULT_CONTENT_LOOP_THRESHOLD * 3; i++) {
-        isLoop = service.addAndCheck(createContentEvent(alternatingPattern));
-        if (isLoop) break;
-      }
+      const isLoop = feedUntilLoop(
+        service,
+        alternatingPattern,
+        DEFAULT_CONTENT_LOOP_THRESHOLD * 3,
+      );
       expect(isLoop).toBe(true);
       expect(loggers.logLoopDetected).toHaveBeenCalledTimes(1);
     });
@@ -269,11 +273,11 @@ describe('LoopDetectionService', () => {
       const thoughtPattern =
         'I need to check the file. The file does not exist. I will create the file. ';
 
-      let isLoop = false;
-      for (let i = 0; i < DEFAULT_CONTENT_LOOP_THRESHOLD + 5; i++) {
-        isLoop = service.addAndCheck(createContentEvent(thoughtPattern));
-        if (isLoop) break;
-      }
+      const isLoop = feedUntilLoop(
+        service,
+        thoughtPattern,
+        DEFAULT_CONTENT_LOOP_THRESHOLD + 5,
+      );
       expect(isLoop).toBe(true);
       expect(loggers.logLoopDetected).toHaveBeenCalledTimes(1);
     });
@@ -799,12 +803,7 @@ describe('LoopDetectionService Max Turns Detection', () => {
 
   it('should not interfere with other loop detection mechanisms', async () => {
     // Set high max turns so it doesn't trigger, but let other settings use defaults
-    mockConfig.getEphemeralSetting = vi
-      .fn()
-      .mockImplementation((key: string) => {
-        if (key === 'maxTurnsPerPrompt') return 1000;
-        return undefined; // Use defaults for other settings
-      });
+    setMaxTurnsConfigForTest(mockConfig);
 
     // Trigger a tool call loop instead with default threshold of 50
     const toolCall = { name: 'test_tool', args: { param: 'value' } };
@@ -817,10 +816,21 @@ describe('LoopDetectionService Max Turns Detection', () => {
 
     expect(loggers.logLoopDetected).toHaveBeenCalledWith(
       mockConfig,
-      expect.objectContaining({
-        'event.name': 'loop_detected',
-        loop_type: LoopType.CONSECUTIVE_IDENTICAL_TOOL_CALLS,
-      }),
+      expectToolCallLoopPayload(),
     );
   });
 });
+
+function expectToolCallLoopPayload() {
+  return expect.objectContaining({
+    'event.name': 'loop_detected',
+    loop_type: LoopType.CONSECUTIVE_IDENTICAL_TOOL_CALLS,
+  });
+}
+
+function setMaxTurnsConfigForTest(config: Config): void {
+  config.getEphemeralSetting = vi.fn().mockImplementation((key: string) => {
+    if (key === 'maxTurnsPerPrompt') return 1000;
+    return undefined; // Use defaults for other settings
+  });
+}

@@ -146,15 +146,21 @@ describe('StreamingSanitizer', () => {
     }).toStrictEqual({ cleanBlocked: false, dirtyBlocked: true });
   });
 
-  it('emits warn-mode feedback once per turn rather than once per delta', () => {
+  const collectWarnModeFeedbackAcrossDeltas = (): readonly string[] => {
     const sanitizer = new StreamingSanitizer(new EmojiFilter({ mode: 'warn' }));
     const feedbacks: string[] = [];
-    for (const piece of ['first ✅ ', 'second ✅ ', 'third ✅ ']) {
+    for (const piece of ['first \u2705 ', 'second \u2705 ', 'third \u2705 ']) {
       const result = sanitizer.push(piece);
       if (result.feedback !== undefined) {
         feedbacks.push(result.feedback);
       }
     }
+    return feedbacks;
+  };
+
+  it('emits warn-mode feedback once per turn rather than once per delta', () => {
+    const feedbacks = collectWarnModeFeedbackAcrossDeltas();
+
     expect(feedbacks).toHaveLength(1);
   });
 

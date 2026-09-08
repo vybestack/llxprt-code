@@ -396,6 +396,17 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
   });
 
   it('T13 partial teardown failure surfaces an AggregateDisposeError carrying the induced failure @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', async () => {
+    const observation = await observePartialTeardownFailure();
+    expect(observation.toolCallCount).toBeGreaterThanOrEqual(1);
+    expect(observation.disposeRejected).toBe(true);
+    expect(observation.isAggregateError).toBe(true);
+    expect(observation.foundInduced).toBe(true);
+    expect(observation.summary).toContain(`${observation.errorCount} error(s)`);
+    expect(observation.summary).toContain(observation.inducedFailureMessage);
+    expect(observation.summary).toContain('Agent dispose failed');
+  });
+
+  const observePartialTeardownFailure = async () => {
     // Induce a partial-teardown failure by injecting a toolSchedulerFactory
     // whose created handle's dispose() REJECTS. dispose.md line 101 says
     // dispose() must throw AggregateDisposeError(errors) when any teardown step
@@ -416,32 +427,28 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
       // before any scheduling → natural fail. At GREEN the facade creates and
       // holds the failing handle.
       const events = await drain(agent.stream('run a tool turn'));
-      expect(countType(events, 'tool-call')).toBeGreaterThanOrEqual(1);
+      const toolCallCount = countType(events, 'tool-call');
 
       // dispose() should REJECT with an AggregateDisposeError whose `errors`
       // array contains the induced scheduler-dispose failure.
       let captured: unknown = undefined;
       try {
         await agent.dispose();
-        // dispose() must NOT resolve successfully when a teardown step failed.
-        expect.fail(
-          'dispose() should have rejected with AggregateDisposeError but resolved',
-        );
       } catch (e: unknown) {
         captured = e;
       }
+      const disposeRejected = captured !== undefined;
 
       // Structural assertion (AggregateDisposeError does not exist yet at P13 —
       // it is created at P24). The predicate checks name + errors shape without
       // importing the class.
-      expect(isAggregateDisposeError(captured)).toBe(true);
+      const isAggregateError = isAggregateDisposeError(captured);
 
       // The induced failure appears in the aggregate's errors array.
       const errors = aggregateErrors(captured);
       const foundInduced = errors.some(
         (err) => err instanceof Error && err.message === inducedFailureMessage,
       );
-      expect(foundInduced).toBe(true);
 
       // The aggregate's summary message reports the error COUNT and embeds the
       // induced failure's text via the `${errors.length} error(s): ${details}`
@@ -449,12 +456,18 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
       // the join, the map projection, or the template string would not produce
       // this exact summary.
       const summary = aggregateMessage(captured);
-      expect(summary).toContain(`${errors.length} error(s)`);
-      expect(summary).toContain(inducedFailureMessage);
-      expect(summary).toContain('Agent dispose failed');
+      return {
+        toolCallCount,
+        disposeRejected,
+        isAggregateError,
+        foundInduced,
+        summary,
+        errorCount: errors.length,
+        inducedFailureMessage,
+      };
     } finally {
       responder.unsubscribe();
       await cleanup();
     }
-  });
+  };
 });

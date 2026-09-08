@@ -322,9 +322,8 @@ describe('historyExportUtils', () => {
       await unlink(result2.filePath).catch(() => {});
     });
 
-    it.skipIf(process.platform === 'win32')(
-      'should set owner-only permissions on exported transcripts',
-      async () => {
+    describe.skipIf(process.platform === 'win32')('on POSIX platforms', () => {
+      it('should set owner-only permissions on exported transcripts', async () => {
         const history: IContent[] = [
           {
             speaker: 'human',
@@ -337,8 +336,8 @@ describe('historyExportUtils', () => {
 
         const mode = (await stat(result.filePath)).mode & 0o777;
         expect(mode).toBe(0o600);
-      },
-    );
+      });
+    });
 
     it('should retry when the exporter candidate path already exists', async () => {
       const actualCrypto = realNodeCryptoModule;

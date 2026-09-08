@@ -18,6 +18,14 @@ import { formatSessionSection } from '../formatSessionSection.js';
 import type { SessionRecordingMetadata } from '../../types/SessionRecordingMetadata.js';
 import { testRegex } from '../../../test-utils/regex.js';
 
+function resumedLabel(isResumed: boolean): 'yes' | 'no' {
+  return isResumed ? 'yes' : 'no';
+}
+
+function isSafeMetadataString(value: string): boolean {
+  return !/[\n\r\t]/.test(value) && value.trim().length > 0;
+}
+
 describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
   let tempDir: string;
   let tempFilePath: string;
@@ -268,7 +276,7 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
           const result = await formatSessionSection(metadata);
           const joinedOutput = result.join('\n').toLowerCase();
 
-          const expectedLabel = isResumed ? 'yes' : 'no';
+          const expectedLabel = resumedLabel(isResumed);
           expect(joinedOutput).toMatch(
             testRegex(`resumed:\\s*${expectedLabel}`, ''),
           );
@@ -287,7 +295,7 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
       const metadataArb = fc.record({
         sessionId: fc
           .string({ minLength: 1, maxLength: 50 })
-          .filter((s) => !/[\n\r\t]/.test(s) && s.trim().length > 0),
+          .filter(isSafeMetadataString),
         filePath: fc.oneof(
           fc.constant(tempFilePath), // Existing file
           fc.constant(null), // Null

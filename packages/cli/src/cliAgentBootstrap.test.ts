@@ -20,7 +20,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  MessageBus,
+  PolicyDecision,
+  PolicyEngine,
+} from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';
+import { MessageBusType } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 
 const { fromConfigMock } = {
@@ -43,6 +49,7 @@ interface FakeAgent {
   getConfig: () => Config;
   getProvider: () => string | undefined;
   getModel: () => string;
+  getMessageBus: () => MessageBus;
 }
 
 function makeConfig(
@@ -51,10 +58,12 @@ function makeConfig(
     model?: string;
     ephemerals?: Record<string, unknown>;
   } = {},
-): Config {
+): Fixture {
   const ephemerals = { ...(overrides.ephemerals ?? {}) };
-  return {
-    getPolicyEngine: () => null,
+  const engine = new PolicyEngine({});
+  const bus = new MessageBus(engine);
+  const config = {
+    getPolicyEngine: () => engine,
     getDebugMode: () => false,
     getProvider: () => overrides.provider,
     getModel: () => overrides.model ?? 'gemini-2.5-pro',
@@ -63,23 +72,41 @@ function makeConfig(
       ephemerals[key] = value;
     },
   } as unknown as Config;
+  return { config, engine, bus };
+}
+
+interface Fixture {
+  config: Config;
+  engine: PolicyEngine;
+  bus: MessageBus;
+}
+
+function makeFakeAgent(config: Config, bus: MessageBus): FakeAgent {
+  return {
+    dispose: vi.fn().mockResolvedValue(undefined),
+    getConfig: () => config,
+    getProvider: () => 'gemini',
+    getModel: () => 'gemini-2.5-pro',
+    getMessageBus: () => bus,
+  };
 }
 
 describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:REQ-2378-001', () => {
   let config: Config;
+  let engine: PolicyEngine;
+  let bus: MessageBus;
   let fakeAgent: FakeAgent;
+
+  function useFixture(overrides: Parameters<typeof makeConfig>[0] = {}): void {
+    ({ config, engine, bus } = makeConfig(overrides));
+    fakeAgent = makeFakeAgent(config, bus);
+    fromConfigMock.mockResolvedValue(fakeAgent as unknown as Agent);
+  }
 
   beforeEach(() => {
     __resetCleanupStateForTesting();
     fromConfigMock.mockReset();
-    config = makeConfig();
-    fakeAgent = {
-      dispose: vi.fn().mockResolvedValue(undefined),
-      getConfig: () => config,
-      getProvider: () => 'gemini',
-      getModel: () => 'gemini-2.5-pro',
-    };
-    fromConfigMock.mockResolvedValue(fakeAgent as unknown as Agent);
+    useFixture();
   });
 
   afterEach(() => {
@@ -162,7 +189,7 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
   });
 
   it('declares the configured provider and model in the activation intent', async () => {
-    config = makeConfig({ provider: 'glm', model: 'glm-4' });
+    useFixture({ provider: 'glm', model: 'glm-4' });
     await createForegroundAgent({ config });
 
     const options = fromConfigMock.mock.calls[0][0] as {
@@ -176,7 +203,7 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
   });
 
   it('omits the model from the intent when the config model is the placeholder', async () => {
-    config = makeConfig({ provider: 'glm', model: 'placeholder-model' });
+    useFixture({ provider: 'glm', model: 'placeholder-model' });
     await createForegroundAgent({ config });
 
     const options = fromConfigMock.mock.calls[0][0] as {
@@ -187,5 +214,29 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
       authMode: 'auto',
     });
     expect(options.activation).not.toHaveProperty('model');
+  });
+
+  it('applies session policy updates from the Agent-owned bus to the Config policy engine', async () => {
+    bus.publish({
+      type: MessageBusType.UPDATE_POLICY,
+      toolName: 'activate_skill',
+      persist: false,
+    });
+    expect(engine.evaluate('activate_skill', { name: 'pr-creator' })).toBe(
+      PolicyDecision.ASK_USER,
+    );
+
+    await createForegroundAgent({ config });
+
+    bus.publish({
+      type: MessageBusType.UPDATE_POLICY,
+      toolName: 'activate_skill',
+      persist: false,
+    });
+
+    expect(engine.evaluate('activate_skill', { name: 'pr-creator' })).toBe(
+      PolicyDecision.ALLOW,
+    );
+    expect(engine.evaluate('ast_edit', {})).toBe(PolicyDecision.ASK_USER);
   });
 });

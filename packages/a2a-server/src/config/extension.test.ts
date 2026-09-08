@@ -85,6 +85,32 @@ function writeExtensionFile(
   );
 }
 
+function loggerErrorLoggedContaining(substring: string): boolean {
+  return loggerErrorSpy.mock.calls.some(
+    (call) => typeof call[0] === 'string' && call[0].includes(substring),
+  );
+}
+
+/**
+ * A caller for the vanished-primary-metadata scenario: reads the file normally
+ * except for the primary metadata path, which throws an ENOENT error the
+ * first time it is requested (simulating the primary disappearing).
+ */
+function readTextFileWithDisappearingPrimary(
+  primaryPath: string,
+): (filePath: string, encoding: BufferEncoding) => string {
+  let primaryHit = false;
+  return (filePath: string, encoding: BufferEncoding) => {
+    if (filePath === primaryPath && !primaryHit) {
+      primaryHit = true;
+      const error = new Error('metadata disappeared');
+      Object.defineProperty(error, 'code', { value: 'ENOENT' });
+      throw error;
+    }
+    return fs.readFileSync(filePath, encoding);
+  };
+}
+
 describe('A2A extension loader', () => {
   let harness: Harness;
   let fakeHome: string;
@@ -349,15 +375,7 @@ describe('A2A extension loader', () => {
         { source: 'https://fallback.example.git', type: 'git' },
       );
       const primaryPath = path.join(extDir, INSTALL_METADATA_FILENAME);
-      const readTextFile = (filePath: string, encoding: 'utf-8'): string => {
-        if (filePath === primaryPath) {
-          const error = new Error('metadata disappeared');
-          Object.defineProperty(error, 'code', { value: 'ENOENT' });
-          throw error;
-        }
-        return fs.readFileSync(filePath, encoding);
-      };
-
+      const readTextFile = readTextFileWithDisappearingPrimary(primaryPath);
       const metadata = loadInstallMetadata(extDir, readTextFile);
 
       expect(metadata).toMatchObject({
@@ -395,13 +413,7 @@ describe('A2A extension loader', () => {
       });
       // Extension should not load due to malformed primary metadata
       expect(extensions).toHaveLength(0);
-      expect(
-        loggerErrorSpy.mock.calls.some(
-          (call) =>
-            typeof call[0] === 'string' &&
-            call[0].includes(INSTALL_METADATA_FILENAME),
-        ),
-      ).toBe(true);
+      expect(loggerErrorLoggedContaining(INSTALL_METADATA_FILENAME)).toBe(true);
     });
 
     it('rejects metadata with a structurally invalid shape and isolates the entry', () => {
@@ -436,13 +448,7 @@ describe('A2A extension loader', () => {
       expect(extensions.map((extension) => extension.name)).toStrictEqual([
         'valid-neighbor',
       ]);
-      expect(
-        loggerErrorSpy.mock.calls.some(
-          (call) =>
-            typeof call[0] === 'string' &&
-            call[0].includes(INSTALL_METADATA_FILENAME),
-        ),
-      ).toBe(true);
+      expect(loggerErrorLoggedContaining(INSTALL_METADATA_FILENAME)).toBe(true);
     });
   });
 
@@ -463,11 +469,7 @@ describe('A2A extension loader', () => {
       });
       expect(extensions).toHaveLength(0);
       expect(
-        loggerErrorSpy.mock.calls.some(
-          (call) =>
-            typeof call[0] === 'string' &&
-            call[0].includes(EXTENSIONS_CONFIG_FILENAME_FALLBACK),
-        ),
+        loggerErrorLoggedContaining(EXTENSIONS_CONFIG_FILENAME_FALLBACK),
       ).toBe(true);
     });
   });

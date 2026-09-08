@@ -15,6 +15,8 @@ import {
   type BrowserLauncherDependencies,
 } from './secure-browser-launcher-internal.js';
 
+const bunIt = it;
+
 const mockExecFile = vi.fn<BrowserLauncherDependencies['execute']>();
 const mockStat = vi.fn<BrowserLauncherDependencies['stat']>();
 const mockPlatform = vi.fn<BrowserLauncherDependencies['platform']>();
@@ -24,6 +26,15 @@ const { openBrowserSecurely, shouldLaunchBrowser } = createBrowserLauncher({
   platform: mockPlatform,
   isBrowserLaunchDisabledDuringTests: () => false,
 });
+
+function completeExecutedFile(
+  error: Error | null,
+  resolve: () => void,
+  reject: (reason?: unknown) => void,
+): void {
+  if (error === null) return resolve();
+  reject(error);
+}
 
 describe('secure-browser-launcher', () => {
   let originalProgramFiles: string | undefined;
@@ -49,14 +60,14 @@ describe('secure-browser-launcher', () => {
     mockPlatform.mockReturnValue(platform);
   }
 
-  function requireWindowsDirectory(
-    windowsDirectory: string | undefined,
-  ): asserts windowsDirectory is string {
+  function windowsSystemDirectory(): string {
+    const windowsDirectory = process.env.SystemRoot ?? process.env.windir;
     if (windowsDirectory === undefined) {
       throw new Error(
         'Windows integration test requires SystemRoot or windir to locate System32\\where.exe.',
       );
     }
+    return windowsDirectory;
   }
 
   interface BrowserGuardProbeResult {
@@ -321,18 +332,20 @@ describe('secure-browser-launcher', () => {
         },
       );
 
-      const args = mockExecFile.mock.calls[0]?.[1] ?? [];
-      expect(args.join(' ')).not.toContain(url);
-      expect(args.join(' ')).not.toContain('-WindowStyle');
-      expect(args.join(' ')).not.toContain('Hidden');
+      const calledArgs = mockExecFile.mock.calls[0][1];
+      expect(calledArgs.join(' ')).not.toContain(url);
+      expect(calledArgs.join(' ')).not.toContain('-WindowStyle');
+      expect(calledArgs.join(' ')).not.toContain('Hidden');
     });
 
-    it.skipIf(process.platform !== 'win32')(
-      'executes the production PowerShell launch with where.exe and remains usable afterward',
-      async () => {
-        const windowsDirectory = process.env.SystemRoot ?? process.env.windir;
-        requireWindowsDirectory(windowsDirectory);
-        const harmlessTarget = join(windowsDirectory, 'System32', 'where.exe');
+    {
+      const it = process.platform !== 'win32' ? bunIt.skip : bunIt;
+      it('executes the production PowerShell launch with where.exe and remains usable afterward', async () => {
+        const harmlessTarget = join(
+          windowsSystemDirectory(),
+          'System32',
+          'where.exe',
+        );
         const directory = await mkdtemp(
           join(tmpdir(), 'llxprt-browser-launch-'),
         );
@@ -351,13 +364,7 @@ describe('secure-browser-launcher', () => {
                   LLXPRT_BROWSER_URL: harmlessTarget,
                 },
               },
-              (error) => {
-                if (error) {
-                  reject(error);
-                  return;
-                }
-                resolve();
-              },
+              (error) => completeExecutedFile(error, resolve, reject),
             );
           });
           return { stdout: '', stderr: '' };
@@ -375,13 +382,11 @@ describe('secure-browser-launcher', () => {
         } finally {
           await rm(directory, { recursive: true, force: true });
         }
-      },
-      10_000,
-    );
+      }, 10_000);
+    }
 
     it('should handle URLs with special shell characters safely', async () => {
       setPlatform('darwin');
-
       const urlsWithSpecialChars = [
         'http://example.com/path?param=value&other=$value',
         'http://example.com/path#fragment;command',
@@ -393,7 +398,6 @@ describe('secure-browser-launcher', () => {
 
       for (const url of urlsWithSpecialChars) {
         await openBrowserSecurely(url);
-        // Verify the URL is passed as an argument, not interpreted by shell
         expect(mockExecFile).toHaveBeenCalledWith(
           'open',
           [url],
@@ -873,8 +877,8 @@ describe('secure-browser-launcher', () => {
         ['-a', 'Google Chrome', 'https://example.com'],
         expect.any(Object),
       );
-      const args = mockExecFile.mock.calls[0]?.[1] ?? [];
-      expect(args).not.toContain('--args');
+      const calledArgs = mockExecFile.mock.calls[0][1];
+      expect(calledArgs).not.toContain('--args');
     });
 
     it('launches Firefox without a profile on macOS', async () => {
@@ -888,8 +892,8 @@ describe('secure-browser-launcher', () => {
         ['-a', 'Firefox', 'https://example.com'],
         expect.any(Object),
       );
-      const args = mockExecFile.mock.calls[0]?.[1] ?? [];
-      expect(args).not.toContain('--args');
+      const calledArgs = mockExecFile.mock.calls[0][1];
+      expect(calledArgs).not.toContain('--args');
     });
 
     it('rejects an explicitly empty profile directory instead of defaulting silently', async () => {

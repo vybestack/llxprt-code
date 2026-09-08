@@ -47,6 +47,50 @@ function withImage(): IContent[] {
   ];
 }
 
+function withReference(
+  mimeType: string,
+  normalizedBase64Length: number,
+  dimensions?: { readonly width: number; readonly height: number },
+): IContent[] {
+  const contentId =
+    'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const byteLength = Math.floor((normalizedBase64Length * 3) / 4);
+  const object = {
+    contentId,
+    mimeType,
+    byteLength,
+    normalizedBase64Length,
+    ...(dimensions === undefined ? {} : { dimensions }),
+  };
+  return [
+    {
+      speaker: 'human',
+      blocks: [
+        { type: 'text', text: 'describe this' },
+        {
+          type: 'media',
+          mimeType,
+          encoding: 'reference',
+          contentId,
+          originalContentId: contentId,
+          selectedContentId: contentId,
+          originalObject: object,
+          selectedObject: object,
+          transformation: {
+            policyId: 'identity',
+            policyVersion: 1,
+            parameters: {},
+          },
+          byteLength,
+          normalizedBase64Length,
+          semanticMetadata: {},
+          ...(dimensions === undefined ? {} : { dimensions }),
+        },
+      ],
+    },
+  ];
+}
+
 describe('estimateRequestTokens image accounting', () => {
   it('charges the selected provider formula for an image', async () => {
     const baseline = await estimateRequestTokens(
@@ -90,5 +134,74 @@ describe('estimateRequestTokens image accounting', () => {
     expect(openai.tokens - baseline.tokens).toBe(765);
     // An unrecognised provider falls back to the flat default estimate.
     expect(unknown.tokens - baseline.tokens).toBe(1000);
+  });
+
+  it('uses reference dimensions for image cost without reading media bytes', async () => {
+    const baseline = await estimateRequestTokens(
+      textOnly(),
+      'anthropic',
+      'claude-sonnet-4-20250514',
+      {},
+    );
+    const referenced = await estimateRequestTokens(
+      withReference('image/png', 16_000, { width: 1092, height: 1092 }),
+      'anthropic',
+      'claude-sonnet-4-20250514',
+      {},
+    );
+
+    expect(referenced.tokens - baseline.tokens).toBe(1590);
+  });
+
+  it('retains normalized encoded-size charge for an image reference without usable dimensions', async () => {
+    const baseline = await estimateRequestTokens(
+      textOnly(),
+      'anthropic',
+      'claude-sonnet-4-20250514',
+      {},
+    );
+    const referenced = await estimateRequestTokens(
+      withReference('image/png', 16_000),
+      'anthropic',
+      'claude-sonnet-4-20250514',
+      {},
+    );
+
+    expect(referenced.tokens - baseline.tokens).toBeGreaterThan(1590);
+    expect(referenced.source).toContain('generic');
+  });
+
+  it('retains normalized encoded-size charge for non-image references with dimensions', async () => {
+    const small = await estimateRequestTokens(
+      withReference('application/pdf', 12, { width: 612, height: 792 }),
+      'stepfun',
+      'step-3.7-flash',
+      {},
+    );
+    const large = await estimateRequestTokens(
+      withReference('application/pdf', 9_000, { width: 612, height: 792 }),
+      'stepfun',
+      'step-3.7-flash',
+      {},
+    );
+
+    expect(large.tokens).toBeGreaterThan(small.tokens);
+  });
+
+  it('uses normalized encoded length when reference dimensions do not define a media charge', async () => {
+    const small = await estimateRequestTokens(
+      withReference('application/pdf', 12),
+      'stepfun',
+      'step-3.7-flash',
+      {},
+    );
+    const large = await estimateRequestTokens(
+      withReference('application/pdf', 9_000),
+      'stepfun',
+      'step-3.7-flash',
+      {},
+    );
+
+    expect(large.tokens).toBeGreaterThan(small.tokens);
   });
 });

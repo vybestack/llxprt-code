@@ -72,7 +72,11 @@ describe('@issue/@pr pattern recognition', () => {
    */
   it('does not match partial or unrelated text', () => {
     for (const text of ['i', 'iss', 'issue', 'p', 'src/index.ts', '']) {
-      expect(parseGitHubAtPattern(text), `${text} must not match`).toBeNull();
+      try {
+        expect(parseGitHubAtPattern(text)).toBeNull();
+      } catch (error) {
+        throw new Error(`${text} must not match`, { cause: error });
+      }
     }
   });
 

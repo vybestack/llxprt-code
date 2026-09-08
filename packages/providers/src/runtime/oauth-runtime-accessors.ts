@@ -10,7 +10,10 @@ import {
   getCliRuntimeContext,
   getCliRuntimeServices,
 } from './runtimeAccessors.js';
-import { oauthRuntimeBridge } from '../auth/index.js';
+import {
+  DEFAULT_INTERACTIVE_AUTH_TIMEOUT_MS,
+  oauthRuntimeBridge,
+} from '../auth/index.js';
 import type { OAuthRuntimeAccessors } from '../auth/index.js';
 import { getBrowserProfileAssociationStore } from './browser-profile-association-store-instance.js';
 
@@ -62,6 +65,20 @@ export function buildOAuthRuntimeAccessors(): OAuthRuntimeAccessors {
           : ((settingsService.get('currentProfile') as string | null) ?? null);
       } catch {
         return null;
+      }
+    },
+
+    // @plan PLAN-20260827-ISSUE2562.P03
+    // @requirement REQ-2562-4
+    getInteractiveAuthTimeoutMs: () => {
+      try {
+        const { settingsService } = getCliRuntimeServices();
+        const value = settingsService.get('auth.interactiveTimeoutMs');
+        return typeof value === 'number'
+          ? value
+          : DEFAULT_INTERACTIVE_AUTH_TIMEOUT_MS;
+      } catch {
+        return DEFAULT_INTERACTIVE_AUTH_TIMEOUT_MS;
       }
     },
 

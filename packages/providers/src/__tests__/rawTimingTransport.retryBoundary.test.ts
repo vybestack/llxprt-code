@@ -138,8 +138,6 @@ function makeRawTimingProvider(
     name,
     getModels: async () => [],
     getDefaultModel: () => 'test-model',
-    getServerTools: () => [],
-    invokeServerTool: async () => ({ content: [] }),
     generateChatCompletion(
       contentOrOptions: GenerateChatOptions | IContent[],
     ): AsyncGenerator<IContent, void, unknown> {

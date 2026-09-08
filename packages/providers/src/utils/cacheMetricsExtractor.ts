@@ -29,28 +29,23 @@ export function extractCacheMetrics(
   const legacyFallback = (val: number, fallback: number): number =>
     val !== 0 && !Number.isNaN(val) ? val : fallback;
 
-  const cachedTokens = legacyFallback(
-    legacyFallback(
-      legacyFallback(
-        legacyFallback(
-          hasProperty(usage, 'prompt_tokens_details') &&
-            hasProperty(usage.prompt_tokens_details, 'cached_tokens')
-            ? toNumber(usage.prompt_tokens_details.cached_tokens)
-            : 0,
-          hasProperty(usage, 'cache_read_input_tokens')
-            ? toNumber(usage.cache_read_input_tokens)
-            : 0,
-        ),
-        hasProperty(usage, 'prompt_cache_hit_tokens')
-          ? toNumber(usage.prompt_cache_hit_tokens)
-          : 0,
-      ),
+  const cachedTokens =
+    [
+      hasProperty(usage, 'prompt_tokens_details') &&
+      hasProperty(usage.prompt_tokens_details, 'cached_tokens')
+        ? toNumber(usage.prompt_tokens_details.cached_tokens)
+        : 0,
+      hasProperty(usage, 'cached_tokens') ? toNumber(usage.cached_tokens) : 0,
+      hasProperty(usage, 'cache_read_input_tokens')
+        ? toNumber(usage.cache_read_input_tokens)
+        : 0,
+      hasProperty(usage, 'prompt_cache_hit_tokens')
+        ? toNumber(usage.prompt_cache_hit_tokens)
+        : 0,
       headers !== undefined
         ? toNumber(headers.get('fireworks-cached-prompt-tokens'))
         : 0,
-    ),
-    0,
-  );
+    ].find((value) => value !== 0 && !Number.isNaN(value)) ?? 0;
 
   const cacheCreationTokens = legacyFallback(
     hasProperty(usage, 'cache_creation_input_tokens')

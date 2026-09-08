@@ -1,0 +1,81 @@
+{
+  // Issue #3387: the file set `tsc --noEmit` verifies for this package.
+  //
+  // tsconfig.json is what typescript-eslint resolves source files against, so
+  // it must not exclude a file that lives in this package. An excluded file
+  // belongs to no package project and falls back to the root tsconfig.json,
+  // which declares no `include` and therefore spans the whole repository.
+  // Building that program cost ~7 GB and ~40 s per ESLint process, and one
+  // such file was enough to pay it in full.
+  //
+  // tsconfig.json therefore keeps only node_modules, dist, and entries that
+  // point outside this package; this file carries the complete list and is
+  // what `tsc` reads. The overlap is deliberate, because `extends` replaces
+  // `exclude` wholesale rather than merging it.
+  // scripts/tests/tsconfig-project-coverage.test.ts holds both halves to that.
+  "extends": "./tsconfig.json",
+  // Set here as well as on the command line so a direct
+  // `tsc -p tsconfig.noemit.json` cannot emit build output into the sources.
+  "compilerOptions": { "noEmit": true },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "../tools/src/__tests__/apply-patch-ax.bun.test.ts",
+    "../tools/src/__tests__/apply-patch.test.ts",
+    "../tools/src/__tests__/edit-ast-tools.test.ts",
+    "../tools/src/__tests__/filesystem-tools.test.ts",
+    "../tools/src/__tests__/glob-filtering.test.ts",
+    "../tools/src/__tests__/interface-contracts.test.ts",
+    "../tools/src/__tests__/memory-tool.test.ts",
+    "../tools/src/__tests__/neutral-types.test.ts",
+    "../tools/src/__tests__/registry-contract.test.ts",
+    "../tools/src/__tests__/removed-google-tools.test.ts",
+    "../tools/src/__tests__/shell-timeout-bounds.test.ts",
+    "../tools/src/__tests__/shell-tool.test.ts",
+    "../tools/src/__tests__/todo-emoji-filter.test.ts",
+    "../tools/src/__tests__/todo-tools.test.ts",
+    "../tools/src/__tests__/tool-key-storage.test.ts",
+    "../tools/src/__tests__/tool-registry-mcp-lazy.test.ts",
+    "../tools/src/tools/activate-skill.test.ts",
+    "../tools/src/tools/ast-edit/__tests__/ast-edit-concurrency.test.ts",
+    "../tools/src/tools/ast-edit/__tests__/ast-edit-edge-cases.test.ts",
+    "../tools/src/tools/ast-edit/__tests__/ast-edit-force-flag.test.ts",
+    "../tools/src/tools/ast-edit/__tests__/ast-edit-issue-3035-review.test.ts",
+    "../tools/src/tools/ast-edit/__tests__/ast-edit-preview-gaps.test.ts",
+    "../tools/src/tools/ast-edit/__tests__/ast-edit-preview.test.ts",
+    "../tools/src/tools/codesearch-endpoint.bun.test.ts",
+    "../tools/src/tools/direct-web-fetch.test.ts",
+    "../tools/src/tools/generate-image/GenerateImageTool.test.ts",
+    "../tools/src/tools/github-ops.test.ts",
+    "../tools/src/tools/line-range-tools-issue3036.bun.test.ts",
+    "../tools/src/tools/memoryTool.test.ts",
+    "../tools/src/tools/structural-analysis/structural-analysis-modes.bun.test.ts",
+    "../tools/src/tools/todo-store-injection.test.ts",
+    "../tools/src/tools/tools.test.ts",
+    "../tools/src/utils/fileUtils.test.ts",
+    "src/auth/google-auth-provider.test.ts",
+    "src/auth/oauth-provider.authenticate.test.ts",
+    "src/auth/oauth-provider.token.test.ts",
+    "src/auth/token-storage/base-token-storage.test.ts",
+    "src/client/mcp-client-manager.partial-failure.test.ts",
+    "src/client/mcp-client-manager.restart.test.ts",
+    "src/client/mcp-client-manager.status-failure.test.ts",
+    "src/client/mcp-client-manager.test.ts",
+    "src/client/mcp-client-manager.trust.test.ts",
+    "src/client/mcp-client.disconnect-cleanup.test.ts",
+    "src/client/mcp-client.discover-rollback.test.ts",
+    "src/client/mcp-client.discovery.test.ts",
+    "src/client/mcp-client.lifecycle.test.ts",
+    "src/client/mcp-client.oauth.test.ts",
+    "src/client/mcp-client.resource-refresh.test.ts",
+    "src/client/mcp-client.stale-error.test.ts",
+    "src/client/mcp-client.tools.test.ts",
+    "src/client/mcp-client.transport.test.ts",
+    "src/client/mcp-discovery.authorization.test.ts",
+    "src/client/mcp-oauth-helpers.test.ts",
+    "src/client/mcp-public-api.test.ts",
+    "src/client/mcp-tool.confirm.test.ts",
+    "src/client/neutral-types.test.ts",
+    "src/client/retryable-client-disconnections.test.ts"
+  ]
+}

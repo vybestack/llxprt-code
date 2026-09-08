@@ -40,6 +40,7 @@ import { getProviderConfigKeys } from '@vybestack/llxprt-code-settings/settings/
 import { type OAuthManager } from '../auth/index.js';
 import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
 import { getCurrentRuntimeScope } from './runtimeContextFactory.js';
+import { getActiveRuntimeKind as readActiveRuntimeKind } from './active-runtime-identity.js';
 import {
   runtimeRegistry,
   resolveActiveRuntimeIdentity,
@@ -380,12 +381,7 @@ export function maybeGetCliOAuthManager(): OAuthManager | null {
  * agent/subagent runtimes. Never throws.
  */
 export function getActiveRuntimeKind(): RuntimeKind | undefined {
-  try {
-    const { runtimeId } = resolveActiveRuntimeIdentity();
-    return runtimeRegistry.get(runtimeId)?.runtimeKind;
-  } catch {
-    return undefined;
-  }
+  return readActiveRuntimeKind();
 }
 
 const RESERVED_PROVIDER_SETTING_KEYS = new Set(getProviderConfigKeys());

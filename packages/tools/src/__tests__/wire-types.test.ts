@@ -50,7 +50,7 @@ describe('provider-neutral wire types', () => {
 
     it('a ContentPart is assignable to ContentPartUnion', () => {
       const part: ContentPartUnion = { text: 'hello' } satisfies ContentPart;
-      expect(part).toEqual({ text: 'hello' });
+      expect(part).toStrictEqual({ text: 'hello' });
     });
 
     it('an array of parts is assignable to ContentPartListUnion', () => {
@@ -60,7 +60,7 @@ describe('provider-neutral wire types', () => {
 
     it('a single part is assignable to ContentPartListUnion', () => {
       const part: ContentPartListUnion = { text: 'single' };
-      expect(part).toEqual({ text: 'single' });
+      expect(part).toStrictEqual({ text: 'single' });
     });
 
     it('a string is assignable to ContentPartListUnion', () => {
@@ -106,7 +106,7 @@ describe('provider-neutral wire types', () => {
         parametersJsonSchema: { type: 'OBJECT' },
       };
       expect(decl.name).toBe('read_file');
-      expect(decl.parametersJsonSchema).toEqual({ type: 'OBJECT' });
+      expect(decl.parametersJsonSchema).toStrictEqual({ type: 'OBJECT' });
     });
   });
 
@@ -128,10 +128,12 @@ describe('provider-neutral wire types', () => {
         callTool: async () => [{ text: 'result' }],
       };
 
-      await expect(fake.tool()).resolves.toEqual({
+      await expect(fake.tool()).resolves.toStrictEqual({
         functionDeclarations: [{ name: 'x' }],
       });
-      await expect(fake.callTool([])).resolves.toEqual([{ text: 'result' }]);
+      await expect(fake.callTool([])).resolves.toStrictEqual([
+        { text: 'result' },
+      ]);
     });
   });
 

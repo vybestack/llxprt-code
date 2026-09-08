@@ -39,6 +39,10 @@ const profiles: ProfileListItem[] = [
   { name: 'gamma', type: 'loadbalancer' },
 ];
 
+function profileListFrameOrEmpty(frame: string | undefined): string {
+  return frame ?? '';
+}
+
 function renderList(
   overrides: {
     onDelete?: ReturnType<typeof vi.fn>;
@@ -79,7 +83,7 @@ describe('ProfileListDialog direct delete (issue #2494)', () => {
 
   it('advertises the delete key in wide controls', () => {
     const { lastFrame } = renderList();
-    expect(lastFrame() ?? '').toContain('[d] Delete');
+    expect(profileListFrameOrEmpty(lastFrame())).toContain('[d] Delete');
   });
 
   it('deletes from the list after confirmation without opening details', async () => {
@@ -92,7 +96,9 @@ describe('ProfileListDialog direct delete (issue #2494)', () => {
       stdin.write('d');
     });
 
-    expect(lastFrame() ?? '').toMatch(/Delete profile 'alpha'/);
+    expect(profileListFrameOrEmpty(lastFrame())).toMatch(
+      /Delete profile 'alpha'/,
+    );
     expect(onDelete).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -117,7 +123,7 @@ describe('ProfileListDialog direct delete (issue #2494)', () => {
     });
 
     expect(onDelete).not.toHaveBeenCalled();
-    expect(lastFrame() ?? '').not.toMatch(/Delete profile/);
+    expect(profileListFrameOrEmpty(lastFrame())).not.toMatch(/Delete profile/);
   });
 
   it('cancels delete confirmation with Esc without closing the dialog', async () => {
@@ -135,7 +141,7 @@ describe('ProfileListDialog direct delete (issue #2494)', () => {
 
     expect(onDelete).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
-    expect(lastFrame() ?? '').toContain('Profile List');
+    expect(profileListFrameOrEmpty(lastFrame())).toContain('Profile List');
   });
 
   it('mentions active/default in the confirmation copy', async () => {
@@ -151,8 +157,8 @@ describe('ProfileListDialog direct delete (issue #2494)', () => {
       stdin.write('d');
     });
 
-    expect(lastFrame() ?? '').toMatch(/active/);
-    expect(lastFrame() ?? '').toMatch(/default/);
+    expect(profileListFrameOrEmpty(lastFrame())).toMatch(/active/);
+    expect(profileListFrameOrEmpty(lastFrame())).toMatch(/default/);
   });
 
   it('keeps delete reachable in narrow layout via Tab then d', async () => {
@@ -166,7 +172,9 @@ describe('ProfileListDialog direct delete (issue #2494)', () => {
       stdin.write('d');
     });
 
-    expect(lastFrame() ?? '').toMatch(/Delete profile 'alpha'/);
+    expect(profileListFrameOrEmpty(lastFrame())).toMatch(
+      /Delete profile 'alpha'/,
+    );
 
     await act(async () => {
       stdin.write('y');
@@ -191,7 +199,7 @@ describe('ProfileListDialog direct delete (issue #2494)', () => {
       stdin.write('\u001B[C');
     });
 
-    expect(lastFrame() ?? '').toContain('Selected: gamma');
+    expect(profileListFrameOrEmpty(lastFrame())).toContain('Selected: gamma');
 
     await act(async () => {
       rerender(
@@ -208,6 +216,6 @@ describe('ProfileListDialog direct delete (issue #2494)', () => {
     });
 
     // Index should clamp to last remaining item (beta at index 1).
-    expect(lastFrame() ?? '').toContain('Selected: beta');
+    expect(profileListFrameOrEmpty(lastFrame())).toContain('Selected: beta');
   });
 });

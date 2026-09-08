@@ -425,7 +425,7 @@ describe('runStartupMigrationWithPath — marker write failure scenarios', () =>
 
     const writes: string[] = [];
     const captureWrite = (chunk: string | Uint8Array): boolean => {
-      writes.push(typeof chunk === 'string' ? chunk : String(chunk));
+      writes.push(String(chunk));
       return true;
     };
     const spy = vi
@@ -473,7 +473,7 @@ describe('runStartupMigrationWithPath — marker write failure scenarios', () =>
 
     const writes: string[] = [];
     const captureWrite = (chunk: string | Uint8Array): boolean => {
-      writes.push(typeof chunk === 'string' ? chunk : String(chunk));
+      writes.push(String(chunk));
       return true;
     };
     const spy = vi
@@ -507,7 +507,7 @@ describe('runStartupMigrationWithPath — marker write failure scenarios', () =>
     const spy = vi
       .spyOn(process.stderr, 'write')
       .mockImplementation((chunk: string | Uint8Array) => {
-        writes.push(typeof chunk === 'string' ? chunk : String(chunk));
+        writes.push(String(chunk));
         return true;
       });
     try {

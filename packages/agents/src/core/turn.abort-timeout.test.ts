@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import {
+  advanceTimersByTimeAsync,
+  assertDefined,
+} from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { ServerAgentStreamEvent } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
@@ -69,6 +72,7 @@ describe('Turn run - abort and idle timeout', () => {
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
       getConfig: () => undefined,
+      getResolvedBaseUrl: () => undefined,
     };
     turn = new Turn(
       mockChatInstance as unknown as ChatSession,
@@ -127,6 +131,7 @@ describe('Turn run - abort and idle timeout', () => {
         sendMessageStream: mockSendMessageStream,
         getHistory: mockGetHistory,
         getConfig: () => ({
+          getSettingsService: () => ({ get: () => undefined }),
           getEphemeralSetting: (key: string) => {
             if (key === 'stream-idle-timeout-ms') {
               return 30_000;
@@ -134,6 +139,7 @@ describe('Turn run - abort and idle timeout', () => {
             return undefined;
           },
         }),
+        getResolvedBaseUrl: () => undefined,
       };
       turn = new Turn(
         mockChatInstance as unknown as ChatSession,
@@ -312,6 +318,7 @@ describe('Turn run - abort and idle timeout', () => {
         sendMessageStream: mockSendMessageStream,
         getHistory: mockGetHistory,
         getConfig: () => ({
+          getSettingsService: () => ({ get: () => undefined }),
           getEphemeralSetting: (key: string) => {
             if (key === 'stream-idle-timeout-ms') {
               return testTimeoutMs;
@@ -319,6 +326,7 @@ describe('Turn run - abort and idle timeout', () => {
             return undefined;
           },
         }),
+        getResolvedBaseUrl: () => undefined,
       };
       turn = new Turn(
         mockChatInstance as unknown as ChatSession,
@@ -332,9 +340,7 @@ describe('Turn run - abort and idle timeout', () => {
           config?: { abortSignal?: AbortSignal };
         };
         const providerSignal = config.config?.abortSignal;
-        if (providerSignal === undefined) {
-          throw new Error('Provider abort signal is required');
-        }
+        assertDefined(providerSignal, 'Provider abort signal is required');
         abortSignals.push(providerSignal);
         return (async function* () {
           yield {
@@ -544,7 +550,13 @@ function makeTurnWithConfig(
     sendMessageStream: mockSendMessageStream,
     getHistory: mockGetHistory,
     getConfig: () =>
-      getEphemeralSetting === undefined ? undefined : { getEphemeralSetting },
+      getEphemeralSetting === undefined
+        ? undefined
+        : {
+            getEphemeralSetting,
+            getSettingsService: () => ({ get: () => undefined }),
+          },
+    getResolvedBaseUrl: () => undefined,
   };
   return new Turn(
     chatInstance as unknown as ChatSession,

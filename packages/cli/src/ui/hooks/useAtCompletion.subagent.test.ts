@@ -78,7 +78,7 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       const subagentSuggestions = result.current.suggestions.filter(
         (s) => s.description === 'subagent',
       );
-      expect(subagentSuggestions.length).toBe(3);
+      expect(subagentSuggestions).toHaveLength(3);
       expect(subagentSuggestions.map((s) => s.value)).toStrictEqual(
         expect.arrayContaining([
           'codeanalyzer',
@@ -109,7 +109,7 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       const subagentSuggestions = result.current.suggestions.filter(
         (s) => s.description === 'subagent',
       );
-      expect(subagentSuggestions.length).toBe(1);
+      expect(subagentSuggestions).toHaveLength(1);
       expect(subagentSuggestions[0].kind).toBe(CommandKind.SUBAGENT);
     });
 
@@ -144,7 +144,7 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       const subagentSuggestions = result.current.suggestions.filter(
         (s) => s.description === 'subagent',
       );
-      expect(subagentSuggestions.length).toBe(1);
+      expect(subagentSuggestions).toHaveLength(1);
       expect(subagentSuggestions[0].value).toBe('deepthinker');
     });
 
@@ -200,7 +200,7 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       const subagentSuggestions = result.current.suggestions.filter(
         (s) => s.description === 'subagent',
       );
-      expect(subagentSuggestions.length).toBe(0);
+      expect(subagentSuggestions).toHaveLength(0);
     });
 
     it('should handle gracefully when listSubagents() rejects', async () => {
@@ -235,7 +235,7 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       const subagentSuggestions = result.current.suggestions.filter(
         (s) => s.description === 'subagent',
       );
-      expect(subagentSuggestions.length).toBe(0);
+      expect(subagentSuggestions).toHaveLength(0);
     });
   });
 
@@ -389,7 +389,11 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       // this file and 28 in useAtCompletion.test.ts.
     });
 
-    it('should not publish stale results while the next pattern is debounced', async () => {
+    const observeDebouncedSearchPublication = async (): Promise<{
+      readonly search: ReturnType<typeof vi.fn>;
+      readonly staleSuggestions: readonly string[];
+      readonly publishCurrentResults: () => Promise<readonly string[]>;
+    }> => {
       testRootDir = await createTmpDir({});
       let resolveA = (_value: string[]): void => {
         throw new Error('Expected the a search promise to be initialized');
@@ -425,7 +429,9 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       );
 
       await waitFor(() => {
-        expect(searchSpy).toHaveBeenCalledWith('a', expect.any(Object));
+        if (searchSpy.mock.calls.length === 0) {
+          throw new Error('Expected the initial search to start');
+        }
       });
 
       vi.useFakeTimers();
@@ -438,27 +444,47 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
         await Promise.resolve();
       });
 
-      expect(result.current.suggestions.map((s) => s.value)).not.toContain(
-        'a-stale.txt',
+      const staleSuggestions = result.current.suggestions.map((s) => s.value);
+      const publishCurrentResults = async (): Promise<readonly string[]> => {
+        act(() => {
+          vi.advanceTimersByTime(150);
+        });
+
+        await act(async () => {
+          resolveB(['b-current.txt']);
+          await Promise.resolve();
+        });
+        vi.useRealTimers();
+
+        await waitFor(() => {
+          const suggestions = result.current.suggestions.map((s) => s.value);
+          if (suggestions.length !== 1 || suggestions[0] !== 'b-current.txt') {
+            throw new Error(
+              'Expected the current search result to be published',
+            );
+          }
+        });
+        return result.current.suggestions.map((s) => s.value);
+      };
+      return {
+        search: searchSpy,
+        staleSuggestions,
+        publishCurrentResults,
+      };
+    };
+
+    it('should not publish stale results while the next pattern is debounced', async () => {
+      const publication = await observeDebouncedSearchPublication();
+      expect(publication.search).toHaveBeenCalledWith('a', expect.any(Object));
+      expect(publication.staleSuggestions).not.toContain('a-stale.txt');
+      expect(publication.search).not.toHaveBeenCalledWith(
+        'b',
+        expect.any(Object),
       );
-      expect(searchSpy).not.toHaveBeenCalledWith('b', expect.any(Object));
 
-      act(() => {
-        vi.advanceTimersByTime(150);
-      });
-      expect(searchSpy).toHaveBeenCalledWith('b', expect.any(Object));
-
-      await act(async () => {
-        resolveB(['b-current.txt']);
-        await Promise.resolve();
-      });
-      vi.useRealTimers();
-
-      await waitFor(() => {
-        expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
-          'b-current.txt',
-        ]);
-      });
+      const currentSuggestions = await publication.publishCurrentResults();
+      expect(publication.search).toHaveBeenCalledWith('b', expect.any(Object));
+      expect(currentSuggestions).toStrictEqual(['b-current.txt']);
     });
 
     it('should not publish results after search timeout aborts during enrichment', async () => {

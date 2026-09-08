@@ -8,8 +8,14 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const REPO_ROOT = resolve(dirname(import.meta.dir), '..', '..');
+const REPO_ROOT = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  '..',
+);
 const CLI_ENTRY = join(REPO_ROOT, 'packages', 'cli', 'index.ts');
 
 const AUTH_KEY_NAME = 'issue2916-ghost-key';
@@ -26,6 +32,55 @@ const KEYFILE_SECRET = 'issue2916-keyfile-fallback-secret';
 
 /** Grace period allowed for a SIGTERM to land before escalating to SIGKILL. */
 const SIGKILL_GRACE_MS = 5_000;
+
+/**
+ * Minimal runtime shapes of the `Bun` APIs this subprocess test uses. Defined
+ * locally because the CLI TypeScript config loads `bun-types/test` (the
+ * `bun:test` module) but NOT the global `Bun` namespace, so the bare global
+ * `Bun.*` symbols are unavailable to the type-checker. We reach the real,
+ * runtime `Bun` through `globalThis` — the same approach used by
+ * `packages/cli/src/observation/jspBootstrapStartup.test.ts`.
+ */
+interface CliSubprocessLike {
+  readonly pid: number;
+  readonly stdout: ReadableStream<Uint8Array> | null;
+  readonly stderr: ReadableStream<Uint8Array> | null;
+  readonly exited: Promise<number>;
+  kill(signal?: 'SIGKILL' | 'SIGTERM'): void;
+}
+
+interface CliTrapServerLike {
+  readonly port: number;
+  stop(): void;
+}
+
+interface CliBunRuntimeLike {
+  spawn(options: {
+    cmd: string[];
+    cwd: string;
+    env: NodeJS.ProcessEnv;
+    stdout: 'pipe';
+    stderr: 'pipe';
+  }): CliSubprocessLike;
+  sleep(ms: number): Promise<void>;
+  serve(options: {
+    port: number;
+    hostname: string;
+    fetch(request: Request): Response | Promise<Response>;
+  }): CliTrapServerLike;
+}
+
+function getCliBunRuntime(): CliBunRuntimeLike {
+  const bun = (globalThis as { Bun?: unknown }).Bun;
+  if (bun === undefined) {
+    throw new Error(
+      'Bun global is unavailable; issue-2916 CLI tests must run under bun:test',
+    );
+  }
+  return bun as CliBunRuntimeLike;
+}
+
+const bunRuntime = getCliBunRuntime();
 
 // Essential executable/platform variables, copied individually (never spread
 // from process.env) so no ambient keyring, proxy, provider credential,
@@ -59,7 +114,7 @@ async function runCli(
   cwd: string,
   timeoutMs: number,
 ): Promise<CliRunResult> {
-  const proc = Bun.spawn({
+  const proc = bunRuntime.spawn({
     cmd: [process.execPath, CLI_ENTRY, ...args],
     cwd,
     env,
@@ -106,7 +161,7 @@ async function runCli(
       // cannot be caught, after a short grace period.
       const reaped = await Promise.race([
         proc.exited.then(() => true),
-        Bun.sleep(SIGKILL_GRACE_MS).then(() => false),
+        bunRuntime.sleep(SIGKILL_GRACE_MS).then(() => false),
       ]);
       if (!reaped) {
         try {
@@ -119,7 +174,7 @@ async function runCli(
         // unbounded await here would hang the runner rather than fail it.
         const killed = await Promise.race([
           proc.exited.then(() => true),
-          Bun.sleep(SIGKILL_GRACE_MS).then(() => false),
+          bunRuntime.sleep(SIGKILL_GRACE_MS).then(() => false),
         ]);
         // Recorded rather than thrown here: a throw inside finally would
         // discard whatever exception was already propagating.
@@ -140,7 +195,7 @@ async function runCli(
 
 describe('issue #2916 CLI subprocess: unresolved auth-key-name fails fast', () => {
   let tempRoot: string | null = null;
-  let trapServer: ReturnType<typeof Bun.serve> | null = null;
+  let trapServer: CliTrapServerLike | null = null;
 
   afterEach(() => {
     if (trapServer !== null) {
@@ -179,7 +234,7 @@ describe('issue #2916 CLI subprocess: unresolved auth-key-name fails fast', () =
     // unresolved named key fails before any provider call — and that no
     // external OpenAI endpoint is ever contacted.
     const trap = { requestCount: 0 };
-    trapServer = Bun.serve({
+    trapServer = bunRuntime.serve({
       port: 0,
       hostname: '127.0.0.1',
       fetch() {

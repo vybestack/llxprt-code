@@ -8,11 +8,10 @@ import { setGlobal, restoreGlobals } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { fetchSyntheticUsage, formatSyntheticUsage } from './usageInfo.js';
 
-afterEach(() => {
-  restoreGlobals();
-});
-
 describe('syntheticUsageInfo', () => {
+  afterEach(() => {
+    restoreGlobals();
+  });
   describe('fetchSyntheticUsage', () => {
     let fetchMock: ReturnType<typeof vi.fn>;
 

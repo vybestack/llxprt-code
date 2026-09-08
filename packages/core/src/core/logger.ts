@@ -9,9 +9,27 @@ import { promises as fs } from 'node:fs';
 import { ensureDir } from '../utils/paths.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '../utils/debugLogger.js';
+import { delay } from '../utils/delay.js';
 
 const LOG_FILE_NAME = 'logs.json';
 const BACKUP_RETENTION_DAYS = 30;
+// Guard files are inert the moment a rename race loses, so they only need a
+// cutoff comfortably beyond any conceivable forensic interest.
+const GUARD_RETENTION_MS = 24 * 60 * 60 * 1000;
+// Advisory inter-process locking via an O_EXCL lockfile (fs.open 'wx'). Keep the
+// file-mutating sequences serialized across processes; the lock file is deleted on
+// release and recovered when its mtime proves the holder crashed.
+const LOCK_FILE_SUFFIX = '.lock';
+const LOCK_STALE_MS = 30_000;
+const LOCK_BACKOFF_MS = 25;
+// Lease refresh while holding: the holder re-stamps its own lock mtime so a long
+// critical section (large legacy migration, slow FS) cannot age past the staleness
+// threshold and get broken by a waiter.
+const LOCK_HEARTBEAT_MS = 10_000;
+const DEFAULT_LOCK_TIMEOUT_MS = 5_000;
+// Monotonic per-process counter keeps transition-guard names unique inside one
+// millisecond so two mutations in this process can never target the same guard file.
+let lockMutationCounter = 0;
 
 export enum MessageSenderType {
   USER = 'user',
@@ -45,6 +63,9 @@ export class Logger {
   private sessionId: string | undefined;
   private messageId = 0; // Instance-specific counter for the next messageId
   private initialized = false;
+  // Set by close(): a closed logger must stay dead instead of lazily
+  // re-initializing on the next logMessage.
+  private _closed = false;
   private logs: LogEntry[] = []; // In-memory cache, ideally reflects the last known state of the file
   private _formatMigrated = false; // True once legacy format check/migration has run
   private _diskIsLegacy = false; // True when the on-disk file is still legacy JSON-array at load
@@ -53,12 +74,239 @@ export class Logger {
   // cannot interleave at an await and reuse the same messageId (the old sync
   // write path was implicitly serialized because it never yielded).
   private _writeQueue: Promise<unknown> = Promise.resolve();
+  // In-flight initialize() so close() can drain it before clearing state —
+  // otherwise a late commit could resurrect a closed logger.
+  private _initPromise: Promise<void> | undefined;
 
   constructor(
     sessionId: string,
     private readonly storage: Storage,
   ) {
     this.sessionId = sessionId;
+  }
+
+  /**
+   * Acquisition deadline for the advisory log-file lock. The
+   * `LLXPRT_LOG_LOCK_TIMEOUT_MS` override is deliberately gated to test runs
+   * (bun sets NODE_ENV=test): as an undocumented production knob it could
+   * silently degrade every contended append, so production always uses the
+   * default.
+   */
+  private _lockTimeoutMs(): number {
+    if (process.env['NODE_ENV'] !== 'test') {
+      return DEFAULT_LOCK_TIMEOUT_MS;
+    }
+    const raw = process.env['LLXPRT_LOG_LOCK_TIMEOUT_MS'];
+    if (raw !== undefined && raw.trim().length > 0) {
+      const parsed = Number(raw);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+    return DEFAULT_LOCK_TIMEOUT_MS;
+  }
+
+  private _lockFilePath(): string {
+    if (!this.logFilePath) {
+      throw new Error('Log file path not set during lock operation.');
+    }
+    return `${this.logFilePath}${LOCK_FILE_SUFFIX}`;
+  }
+
+  /**
+   * Acquire the per-log-file lock via the O_EXCL pattern (`fs.open 'wx'`).
+   * Retries with a small fixed backoff until it either wins the race, recovers a
+   * stale lock (via an atomic rename-guard claim, so a stale break can never
+   * bare-unlink a successor's live lock), or hits the acquisition deadline.
+   * The exclusive descriptor stays open for the whole critical section: it pins
+   * the lock file's inode so ownership can later be verified by inode identity
+   * without reading any file content.
+   */
+  private async _acquireLogLock(lockPath: string): Promise<fs.FileHandle> {
+    const deadline = Date.now() + this._lockTimeoutMs();
+    for (;;) {
+      // Deadline first, so no branch below can bypass it: a persistently
+      // failing stale-break (e.g. a dangling symlink at the lock path, or a
+      // non-writable directory) must time out like any other contention,
+      // never hot-loop and wedge the caller's write queue and close().
+      if (Date.now() >= deadline) {
+        throw new Error(`Timed out waiting for log lock ${lockPath}`);
+      }
+      const handle = await this._tryAcquireLogLock(lockPath);
+      if (handle !== null) {
+        return handle;
+      }
+      await this._tryBreakStaleLock(lockPath);
+      // Always back off between attempts — including after a confirmed break —
+      // so a persistent failure can never spin hot.
+      await delay(LOCK_BACKOFF_MS);
+    }
+  }
+
+  /**
+   * Create the lock file, write a diagnostic payload ({pid, timestamp}), and
+   * keep the descriptor open as the ownership proof. Returns the handle when
+   * this process now owns the lock, null when another process holds it (EEXIST).
+   * If the exclusive create won but finalizing failed, the just-created lock
+   * file has no owner and must not be left behind for waiters to trip on.
+   */
+  private async _tryAcquireLogLock(
+    lockPath: string,
+  ): Promise<fs.FileHandle | null> {
+    let handle: fs.FileHandle | undefined;
+    try {
+      handle = await fs.open(lockPath, 'wx');
+      await handle.writeFile(
+        JSON.stringify({ pid: process.pid, timestamp: Date.now() }),
+        'utf-8',
+      );
+      return handle;
+    } catch (error) {
+      if (handle !== undefined) {
+        await handle.close().catch(() => {});
+        await fs.unlink(lockPath).catch(() => {});
+      }
+      const nodeError = error as NodeJS.ErrnoException;
+      if (nodeError.code !== 'EEXIST') {
+        throw error;
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Try to break a lock whose mtime is past the staleness threshold without ever
+   * bare-unlinking the live lock path (POSIX rename overwrites, so a blind unlink
+   * could delete a successor's fresh lock). The live name is atomically moved to a
+   * unique guard — only one contender can win the rename — then re-verified as
+   * stale. A fresh file that was moved by mistake is restored with a hard link
+   * (link fails EEXIST rather than overwriting) rather than deleted.
+   */
+  private async _tryBreakStaleLock(lockPath: string): Promise<boolean> {
+    let lockStat: Awaited<ReturnType<typeof fs.stat>>;
+    try {
+      lockStat = await fs.stat(lockPath);
+    } catch {
+      // The lock vanished between our failed open and this stat — retry the open.
+      return true;
+    }
+    if (Date.now() - lockStat.mtimeMs <= LOCK_STALE_MS) {
+      return false;
+    }
+    const guardPath = this._guardPath(lockPath, 'brk');
+    try {
+      await fs.rename(lockPath, guardPath);
+    } catch {
+      // Another waiter claimed the stale lock first — retry the open.
+      return true;
+    }
+    try {
+      const guardStat = await fs.stat(guardPath);
+      if (Date.now() - guardStat.mtimeMs > LOCK_STALE_MS) {
+        await fs.unlink(guardPath).catch(() => {});
+        return true;
+      }
+    } catch {
+      // The moved guard file vanished — retry the open.
+      return true;
+    }
+    // The renamed file is younger than the threshold: the holder refreshed it or a
+    // successor acquired between our stat and rename. Restore it without clobbering
+    // a lock that may have been re-created at the live path in the meantime.
+    try {
+      await fs.link(guardPath, lockPath);
+      await fs.unlink(guardPath);
+    } catch {
+      debugLogger.debug(
+        `Lock replaced while breaking stale lock; inert guard left behind: ${guardPath}`,
+      );
+    }
+    return false;
+  }
+
+  /**
+   * Run `fn` while this process owns `logFilePath`'s advisory lock and release it
+   * in `finally`, so reader/writer sequences cannot interleave with other processes.
+   * A heartbeat re-stamps the held descriptor's inode (not the lock path, so a
+   * broken holder can never refresh a successor's lock) to keep the lease alive
+   * during long critical sections such as a slow legacy migration. Never nested:
+   * no code inside the wrapped callbacks acquires again.
+   */
+  private async _withLogLock<T>(fn: () => Promise<T>): Promise<T> {
+    const lockPath = this._lockFilePath();
+    const handle = await this._acquireLogLock(lockPath);
+    const heartbeat = setInterval(() => {
+      const now = new Date();
+      // Best-effort lease refresh: futimes on our own descriptor touches only
+      // the inode we pinned, even if the lock path has since been taken over.
+      void handle.utimes(now, now).catch(() => {});
+    }, LOCK_HEARTBEAT_MS);
+    heartbeat.unref();
+    try {
+      return await fn();
+    } finally {
+      clearInterval(heartbeat);
+      await this._releaseLogLock(lockPath, handle);
+    }
+  }
+
+  /**
+   * Release the lock without a bare unlink and without reading any file
+   * content (steady-state appends must stay read-free). The live name is moved
+   * to a unique guard; the guard's inode is compared against the descriptor we
+   * have pinned since acquisition, which proves ownership race-free. Only our
+   * own inode is ever unlinked — a mismatched guard (our lock was broken and a
+   * successor owns the path) is restored via a hard link, which fails EEXIST
+   * rather than clobbering a newer lock.
+   */
+  private async _releaseLogLock(
+    lockPath: string,
+    handle: fs.FileHandle,
+  ): Promise<void> {
+    const guardPath = this._guardPath(lockPath, 'rel');
+    try {
+      await fs.rename(lockPath, guardPath);
+    } catch (error) {
+      // ENOENT: the lock was already broken or removed — nothing to release.
+      // Any other errno abandons the path on purpose: a blind unlink could
+      // delete a successor's live lock. Waiters recover via staleness.
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        debugLogger.debug(
+          `Failed to claim log lock for release (${(error as NodeJS.ErrnoException).code}); leaving it for stale recovery:`,
+          error,
+        );
+      }
+      await handle.close().catch(() => {});
+      return;
+    }
+    try {
+      const [guardStat, ownStat] = await Promise.all([
+        fs.stat(guardPath),
+        handle.stat(),
+      ]);
+      if (guardStat.ino === ownStat.ino && guardStat.dev === ownStat.dev) {
+        await fs.unlink(guardPath).catch((error: unknown) => {
+          debugLogger.debug('Failed to remove log lock file:', error);
+        });
+        return;
+      }
+      // Not our inode: we were broken mid-hold and renamed away a successor's
+      // live lock. Restore it without clobbering a lock that may already have
+      // been re-created at the live path.
+      await fs.link(guardPath, lockPath);
+      await fs.unlink(guardPath);
+    } catch {
+      debugLogger.debug(
+        `Lock replaced during release; inert guard left behind: ${guardPath}`,
+      );
+    } finally {
+      await handle.close().catch(() => {});
+    }
+  }
+
+  private _guardPath(lockPath: string, kind: 'brk' | 'rel'): string {
+    lockMutationCounter++;
+    return `${lockPath}.${kind}.${process.pid}.${Date.now()}.${lockMutationCounter}`;
   }
 
   private _parseLegacyJsonArray(trimmed: string): LogEntry[] | null {
@@ -214,6 +462,26 @@ export class Logger {
       return;
     }
     if (this._diskIsLegacy) {
+      if (this.initialized) {
+        // Append-time retry: initialize's eager migration failed and was
+        // swallowed, so this.logs may be a stale snapshot — another process
+        // may have migrated the file and appended since. Re-read inside this
+        // same lock hold so the rewrite below cannot destroy those entries.
+        // Never reached in steady state (only while migration is pending) and
+        // never during initialize's eager pass (initialized is still false).
+        const { entries, legacy } = await this._loadFromDisk();
+        this.logs = entries;
+        this._diskIsLegacy = legacy;
+        // Disk state changed under us, so the counter carried over from
+        // initialize may already be taken by a foreign entry: recompute from
+        // the freshly loaded entries before the append assigns an id.
+        this._recomputeMessageId();
+        if (!legacy) {
+          // Another process already migrated the file — nothing to rewrite.
+          this._formatMigrated = true;
+          return;
+        }
+      }
       const backedUp = await this._backupCorruptedLogFile('pre_migration');
       if (!backedUp) {
         // Fail fast: never append JSONL onto a still-legacy file, which would
@@ -381,28 +649,33 @@ export class Logger {
       throw new Error('Log file path not set during update attempt.');
     }
 
-    await this._ensureJsonlFormat();
+    // Hold the cross-process lock across the whole mutate sequence (format-ensure,
+    // id assignment, duplicate check, newline-fix + append) so it cannot
+    // interleave with another process's append or legacy migration rewrite.
+    return this._withLogLock(async () => {
+      await this._ensureJsonlFormat();
 
-    entryToAppend.messageId = this.messageId;
+      entryToAppend.messageId = this.messageId;
 
-    const entryExists = this.logs.some(
-      (e) =>
-        e.sessionId === entryToAppend.sessionId &&
-        e.messageId === entryToAppend.messageId &&
-        e.timestamp === entryToAppend.timestamp &&
-        e.message === entryToAppend.message,
-    );
-
-    if (entryExists) {
-      debugLogger.debug(
-        `Duplicate log entry detected and skipped: session ${entryToAppend.sessionId}, messageId ${entryToAppend.messageId}`,
+      const entryExists = this.logs.some(
+        (e) =>
+          e.sessionId === entryToAppend.sessionId &&
+          e.messageId === entryToAppend.messageId &&
+          e.timestamp === entryToAppend.timestamp &&
+          e.message === entryToAppend.message,
       );
-      return null;
-    }
 
-    await this._appendJsonl(entryToAppend);
-    this.logs.push(entryToAppend);
-    return entryToAppend;
+      if (entryExists) {
+        debugLogger.debug(
+          `Duplicate log entry detected and skipped: session ${entryToAppend.sessionId}, messageId ${entryToAppend.messageId}`,
+        );
+        return null;
+      }
+
+      await this._appendJsonl(entryToAppend);
+      this.logs.push(entryToAppend);
+      return entryToAppend;
+    });
   }
 
   private async _pruneOldBackups(): Promise<void> {
@@ -430,6 +703,13 @@ export class Logger {
         const match = entry.match(/\.(\d+)\.tmp$/);
         return match !== null && Number(match[1]) < cutoffMs;
       }
+      // Inert guard files left by lost rename-guard races: they never sit at
+      // the live .lock path, but prune them so they cannot accumulate.
+      // logs.json.lock.<brk|rel>.<pid>.<ts>.<counter>
+      const guardMatch = entry.match(/\.lock\.(?:brk|rel)\.\d+\.(\d+)\.\d+$/);
+      if (guardMatch !== null) {
+        return Number(guardMatch[1]) < Date.now() - GUARD_RETENTION_MS;
+      }
       return false;
     });
     for (const file of staleFiles) {
@@ -446,7 +726,25 @@ export class Logger {
     if (this.initialized) {
       return;
     }
+    // Deduplicate concurrent callers and let close() drain the in-flight
+    // initialization before it clears state.
+    const inFlight = this._initPromise;
+    if (inFlight) {
+      await inFlight;
+      return;
+    }
+    const run = this._doInitialize();
+    this._initPromise = run;
+    try {
+      await run;
+    } finally {
+      if (this._initPromise === run) {
+        this._initPromise = undefined;
+      }
+    }
+  }
 
+  private async _doInitialize(): Promise<void> {
     ensureDir(Storage.getGlobalLogDir());
     const llxprtDir = this.storage.getProjectTempDir();
     this.logFilePath = path.join(llxprtDir, LOG_FILE_NAME);
@@ -464,31 +762,43 @@ export class Logger {
     await this._pruneOldBackups();
 
     try {
-      const { entries, legacy } = await this._loadFromDisk();
-      this.logs = entries;
-      this._diskIsLegacy = legacy;
-      // Eagerly migrate a legacy file to JSONL so the write path stays O(1)
-      // (no read). Migration failure here is non-fatal: writes will retry.
-      try {
-        await this._ensureJsonlFormat();
-      } catch (err) {
-        debugLogger.debug(
-          'Non-fatal legacy migration failure during init:',
-          err,
-        );
-      }
-      const sessionLogs = this.logs.filter(
-        (entry) => entry.sessionId === this.sessionId,
-      );
-      this.messageId =
-        sessionLogs.length > 0
-          ? Math.max(...sessionLogs.map((entry) => entry.messageId)) + 1
-          : 0;
-      this.initialized = true;
+      await this._withLogLock(async () => {
+        const { entries, legacy } = await this._loadFromDisk();
+        this.logs = entries;
+        this._diskIsLegacy = legacy;
+        // Eagerly migrate a legacy file to JSONL so the write path stays O(1)
+        // (no read). Migration failure here is non-fatal: writes will retry.
+        try {
+          await this._ensureJsonlFormat();
+        } catch (err) {
+          debugLogger.debug(
+            'Non-fatal legacy migration failure during init:',
+            err,
+          );
+        }
+        this._recomputeMessageId();
+        this.initialized = true;
+      });
     } catch (err) {
       debugLogger.error('Failed to initialize logger:', err);
       this.initialized = false;
     }
+  }
+
+  /**
+   * Reset the instance's next-id counter to one past the highest id already
+   * on disk for this session. Called whenever `this.logs` is (re)populated
+   * from disk, so a foreign writer that appended while we held a stale
+   * snapshot cannot collide with our next append.
+   */
+  private _recomputeMessageId(): void {
+    const sessionLogs = this.logs.filter(
+      (entry) => entry.sessionId === this.sessionId,
+    );
+    this.messageId =
+      sessionLogs.length > 0
+        ? Math.max(...sessionLogs.map((entry) => entry.messageId)) + 1
+        : 0;
   }
 
   async getPreviousUserMessages(): Promise<string[]> {
@@ -507,6 +817,21 @@ export class Logger {
   }
 
   async logMessage(type: MessageSenderType, message: string): Promise<void> {
+    // A lock timeout during initialize() must not wedge logging for the whole
+    // session: the blocking lock becomes breakable once it ages past the
+    // staleness threshold, so an uninitialized (but not closed) logger lazily
+    // retries initialization here.
+    if (this._closed) {
+      // Closed loggers must stay dead; same message as below keeps the
+      // observable contract for post-close callers unchanged.
+      debugLogger.debug(
+        'Logger not initialized or session ID missing. Cannot log message.',
+      );
+      return;
+    }
+    if (!this.initialized) {
+      await this.initialize();
+    }
     if (!this.initialized || this.sessionId === undefined) {
       debugLogger.debug(
         'Logger not initialized or session ID missing. Cannot log message.',
@@ -537,6 +862,12 @@ export class Logger {
   }
 
   async close(): Promise<void> {
+    // Mark closed first so logMessage calls arriving during the drain do not
+    // lazily re-initialize the logger.
+    this._closed = true;
+    // An in-flight initialize() must commit (or fail) before state is
+    // cleared, or its late commit would resurrect the closed logger.
+    await this._initPromise?.catch(() => {});
     // Drain pending writes until the queue reference stops changing. A single
     // `await this._writeQueue` would miss a write chained onto a newer queue
     // during the await; that write would resume after state is cleared and

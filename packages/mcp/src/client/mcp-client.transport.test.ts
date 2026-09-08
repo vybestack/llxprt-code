@@ -9,7 +9,7 @@ import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'bun:test';
-import { AuthProviderType } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import { AuthProviderType } from '@vybestack/llxprt-code-auth/mcp-auth-provider-type.js';
 import { GoogleCredentialProvider } from '../auth/google-auth-provider.js';
 
 import {
@@ -21,6 +21,11 @@ import {
   getTransportAuthProvider,
   getTransportHeaders,
 } from './mcpClientTestHelpers.js';
+import { registerMcpHostServices } from '../host/hostServices.js';
+
+// Exercises the real host seam instead of mocking a module (#3305).
+const mockEmitFeedback = vi.fn();
+registerMcpHostServices({ emitFeedback: mockEmitFeedback });
 
 const realStdioModule = {
   ...(await import('@modelcontextprotocol/sdk/client/stdio.js')),
@@ -59,12 +64,6 @@ const { MockGoogleAuth } = (() => {
 })();
 void vi.mock('google-auth-library', () => ({
   GoogleAuth: MockGoogleAuth,
-}));
-
-void vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
-  coreEvents: {
-    emitFeedback: vi.fn(),
-  },
 }));
 
 describe('mcp-client', () => {

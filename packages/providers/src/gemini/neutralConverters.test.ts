@@ -20,16 +20,15 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import {
-  ApiError,
-  Outcome,
-  Language,
-  type Content,
-  type Part,
-  type GenerateContentResponseUsageMetadata,
-  type GroundingMetadata,
-  type UrlMetadata,
-} from '@google/genai';
+import type {
+  Content,
+  GenerateContentResponseUsageMetadata,
+  GroundingMetadata,
+  Part,
+  UrlMetadata,
+} from './geminiWireTypes.js';
+import { ApiError } from './geminiWireTypes.js';
+import { Language, Outcome } from './geminiWireTypes.js';
 import {
   geminiPartToBlock,
   geminiPartsToBlocks,

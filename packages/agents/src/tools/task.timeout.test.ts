@@ -13,6 +13,7 @@ import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { TaskTool } from './task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import {
   ContextState,
@@ -67,6 +68,7 @@ describe('TaskTool', () => {
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithSettings, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
       });
 
@@ -124,6 +126,7 @@ describe('TaskTool', () => {
       } as unknown as Config;
 
       const tool = new TaskTool(configWithSettings, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
       });
 
@@ -191,6 +194,7 @@ describe('TaskTool', () => {
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithSettings, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
       });
 
@@ -250,6 +254,7 @@ describe('TaskTool', () => {
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithSettings, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
       });
 
@@ -317,6 +322,7 @@ describe('TaskTool', () => {
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithSettings, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => true,
       });
@@ -381,6 +387,7 @@ describe('TaskTool', () => {
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithSettings, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
       });
 
@@ -405,6 +412,7 @@ describe('TaskTool', () => {
 
   it('validates required parameters', () => {
     const tool = new TaskTool(config, {
+      messageBus: new MessageBus(),
       orchestratorFactory: () => {
         throw new Error('should not be called');
       },

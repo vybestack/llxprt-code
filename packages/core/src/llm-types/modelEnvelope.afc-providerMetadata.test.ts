@@ -34,6 +34,17 @@ function afcTurn(text: string): IContent {
   return { speaker: 'tool', blocks: [textBlock(text)] };
 }
 
+/**
+ * The providerMetadata object carried on a chunk, defaulting to an empty object
+ * when the chunk does not carry one. Keeps the nullish fallback outside of the
+ * test callback AST.
+ */
+function providerMetadataEntries(
+  chunk: ModelStreamChunk,
+): Array<[string, unknown]> {
+  return Object.entries(chunk.providerMetadata ?? {});
+}
+
 // ---------------------------------------------------------------------------
 // afcHistory on ModelOutput — behavioral (REQ-001.4)
 // ---------------------------------------------------------------------------
@@ -249,7 +260,7 @@ describe('toModelStreamChunk providerMetadata property-based', () => {
             metadata: { providerMetadata: providerMeta },
           };
           const chunk = toModelStreamChunk(ic);
-          expect(Object.entries(chunk.providerMetadata ?? {})).toStrictEqual(
+          expect(providerMetadataEntries(chunk)).toStrictEqual(
             Object.entries(providerMeta),
           );
         },

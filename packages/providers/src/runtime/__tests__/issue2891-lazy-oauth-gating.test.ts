@@ -167,19 +167,13 @@ describe('Issue #2891 FIX 1 — readConfigInteractive contract', () => {
   // config object must satisfy, using the same shape production relies on.
   it('a config with isInteractive()=true is treated as interactive', () => {
     const config = makeInteractiveConfig(true);
-    const interactive =
-      typeof config.isInteractive === 'function'
-        ? config.isInteractive()
-        : false;
+    const interactive = config.isInteractive();
     expect(interactive).toBe(true);
   });
 
   it('a config with isInteractive()=false is treated as non-interactive', () => {
     const config = makeInteractiveConfig(false);
-    const interactive =
-      typeof config.isInteractive === 'function'
-        ? config.isInteractive()
-        : false;
+    const interactive = config.isInteractive();
     expect(interactive).toBe(false);
   });
 });

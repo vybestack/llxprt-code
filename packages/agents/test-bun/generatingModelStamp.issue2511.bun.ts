@@ -93,9 +93,6 @@ function buildConversationManager(
     getModels: async () => [],
     getDefaultModel: () => runtimeModel,
     generateChatCompletion: async function* () {},
-    getServerTools: () => [],
-    invokeServerTool: async () => undefined,
-    getAuthToken: async () => 'stub-auth-token',
   };
   if (liveProvider?.liveModel === 'throw') {
     provider.getCurrentModel = (): string => {
@@ -141,7 +138,9 @@ function buildConversationManager(
   return { conversationManager, historyService };
 }
 
-function recordSimpleAiTurn(conversationManager: ConversationManager): void {
+async function recordSimpleAiTurn(
+  conversationManager: ConversationManager,
+): Promise<void> {
   const userInput: IContent = {
     speaker: 'human',
     blocks: [{ type: 'text', text: 'Write a haiku' }],
@@ -149,50 +148,50 @@ function recordSimpleAiTurn(conversationManager: ConversationManager): void {
   const modelOutput: IContent[] = [
     { speaker: 'ai', blocks: [{ type: 'text', text: 'Quiet morning dew' }] },
   ];
-  conversationManager.recordHistory(userInput, modelOutput);
+  await conversationManager.recordHistory(userInput, modelOutput);
 }
 
 describe('ConversationManager stamps the live provider model, not the stale snapshot (issue #2511)', () => {
-  it('AC1/AC2: stamps the live provider model when the runtime-state snapshot is stale', () => {
+  it('AC1/AC2: stamps the live provider model when the runtime-state snapshot is stale', async () => {
     const { conversationManager, historyService } = buildConversationManager(
       STALE_SNAPSHOT_MODEL,
       GENERATING_BASE_URL,
       { liveModel: LIVE_PROVIDER_MODEL },
     );
 
-    recordSimpleAiTurn(conversationManager);
+    await recordSimpleAiTurn(conversationManager);
 
     const ai = historyService.getAll().find((c) => c.speaker === 'ai');
     expect(ai?.metadata?.model).toBe(LIVE_PROVIDER_MODEL);
   });
 
-  it('AC3: falls back to the runtime-state model when the live accessor returns a blank string', () => {
+  it('AC3: falls back to the runtime-state model when the live accessor returns a blank string', async () => {
     const { conversationManager, historyService } = buildConversationManager(
       STALE_SNAPSHOT_MODEL,
       GENERATING_BASE_URL,
       { liveModel: '' },
     );
 
-    recordSimpleAiTurn(conversationManager);
+    await recordSimpleAiTurn(conversationManager);
 
     const ai = historyService.getAll().find((c) => c.speaker === 'ai');
     expect(ai?.metadata?.model).toBe(STALE_SNAPSHOT_MODEL);
   });
 
-  it('AC3: falls back to the runtime-state model when the live accessor throws', () => {
+  it('AC3: falls back to the runtime-state model when the live accessor throws', async () => {
     const { conversationManager, historyService } = buildConversationManager(
       STALE_SNAPSHOT_MODEL,
       GENERATING_BASE_URL,
       { liveModel: 'throw' },
     );
 
-    recordSimpleAiTurn(conversationManager);
+    await recordSimpleAiTurn(conversationManager);
 
     const ai = historyService.getAll().find((c) => c.speaker === 'ai');
     expect(ai?.metadata?.model).toBe(STALE_SNAPSHOT_MODEL);
   });
 
-  it('AC3: falls back to the runtime-state model when the provider omits getCurrentModel entirely', () => {
+  it('AC3: falls back to the runtime-state model when the provider omits getCurrentModel entirely', async () => {
     // `RuntimeProvider.getCurrentModel` is optional in the contract, so a
     // provider may not implement it at all. Recording must fall back rather
     // than calling a non-function.
@@ -201,7 +200,7 @@ describe('ConversationManager stamps the live provider model, not the stale snap
       GENERATING_BASE_URL,
     );
 
-    recordSimpleAiTurn(conversationManager);
+    await recordSimpleAiTurn(conversationManager);
 
     const ai = historyService.getAll().find((c) => c.speaker === 'ai');
     expect(ai?.metadata?.model).toBe(STALE_SNAPSHOT_MODEL);
@@ -244,9 +243,6 @@ function buildChatSessionWithLiveProvider(
         blocks: [{ type: 'text', text: 'Quiet morning dew.' }],
       } satisfies IContent;
     },
-    getServerTools: () => [],
-    invokeServerTool: async () => undefined,
-    getAuthToken: async () => 'stub-auth-token',
   };
   if (liveProvider?.liveModel !== undefined) {
     if (liveProvider.liveModel === 'throw') {
@@ -287,7 +283,11 @@ function buildChatSessionWithLiveProvider(
     view,
     {
       generateContent: async () => emptyModelOutput(),
-      generateContentStream: async function* () {},
+      // Intentionally yields nothing; these tests exercise the non-streaming
+      // commit path only. The IIFE is needed because the contract expects a
+      // function returning Promise<AsyncGenerator>, not an async generator
+      // function itself.
+      generateContentStream: async () => (async function* () {})(),
       countTokens: async () => ({ totalTokens: 100 }),
       embedContent: async () => ({ embeddings: [] }),
     },
@@ -306,7 +306,7 @@ describe('TurnProcessor._commitSendResult stamps the live provider model (issue 
     );
 
     await chat.sendMessage(
-      { message: [{ text: 'Write a haiku' }] },
+      { message: [{ type: 'text', text: 'Write a haiku' }] },
       'test-prompt-id',
     );
 
@@ -321,7 +321,7 @@ describe('TurnProcessor._commitSendResult stamps the live provider model (issue 
     );
 
     await chat.sendMessage(
-      { message: [{ text: 'Write a haiku' }] },
+      { message: [{ type: 'text', text: 'Write a haiku' }] },
       'test-prompt-id',
     );
 
@@ -334,7 +334,7 @@ describe('TurnProcessor._commitSendResult stamps the live provider model (issue 
       buildChatSessionWithLiveProvider(STALE_SNAPSHOT_MODEL);
 
     await chat.sendMessage(
-      { message: [{ text: 'Write a haiku' }] },
+      { message: [{ type: 'text', text: 'Write a haiku' }] },
       'test-prompt-id',
     );
 

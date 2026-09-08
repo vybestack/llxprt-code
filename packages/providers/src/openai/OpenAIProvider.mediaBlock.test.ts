@@ -18,6 +18,7 @@ import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createOpenAIRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
 
 const realLlxprtCodeSettingsModule = {
   ...(await import('@vybestack/llxprt-code-settings')),
@@ -25,7 +26,22 @@ const realLlxprtCodeSettingsModule = {
 
 const mockChatCompletionsCreate = vi.fn();
 
+function isImagesFromToolResponsePart(part: unknown): boolean {
+  if (typeof part !== 'object' || part === null) return false;
+  if (!('type' in part) || part.type !== 'text') return false;
+  if (!('text' in part) || typeof part.text !== 'string') return false;
+  return part.text.includes('Images from tool response');
+}
+
+function isSyntheticToolImageMessage(message: unknown): boolean {
+  if (typeof message !== 'object' || message === null) return false;
+  if (!('role' in message) || message.role !== 'user') return false;
+  if (!('content' in message) || !Array.isArray(message.content)) return false;
+  return message.content.some(isImagesFromToolResponsePart);
+}
+
 const mockOpenAIConstructor = vi.fn().mockImplementation(() => ({
+  ...createOpenAIRawPostTestAdapter(mockChatCompletionsCreate),
   chat: {
     completions: {
       create: mockChatCompletionsCreate,
@@ -39,10 +55,6 @@ void vi.mock('openai', () => ({
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
-}));
-
-void vi.mock('@vybestack/llxprt-code-core/code_assist/codeAssist.js', () => ({
-  createCodeAssistContentGenerator: vi.fn(),
 }));
 
 const mockSettingsService = {
@@ -217,14 +229,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
 
     // Synthetic user message should contain the image
     const syntheticUserMessage = callArgs.messages.find(
-      (m: { role: string; content?: unknown }) =>
-        m.role === 'user' &&
-        Array.isArray(m.content) &&
-        m.content.some(
-          (c: { type: string; text?: string }) =>
-            c.type === 'text' &&
-            c.text?.includes('Images from tool response') === true,
-        ),
+      isSyntheticToolImageMessage,
     );
     expect(syntheticUserMessage).toBeDefined();
     expect(syntheticUserMessage.content).toHaveLength(2);
@@ -622,14 +627,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
         (m: { role: string }) => m.role === 'tool',
       );
       const syntheticUserMessage = callArgs.messages.find(
-        (m: { role: string; content?: unknown }) =>
-          m.role === 'user' &&
-          Array.isArray(m.content) &&
-          m.content.some(
-            (c: { type: string; text?: string }) =>
-              c.type === 'text' &&
-              (c.text?.includes('Images from tool response') ?? false),
-          ),
+        isSyntheticToolImageMessage,
       );
 
       // Tool message should NOT contain image placeholder
@@ -806,14 +804,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
         (m: { role: string }) => m.role === 'tool',
       );
       const syntheticUserMessage = callArgs.messages.find(
-        (m: { role: string; content?: unknown }) =>
-          m.role === 'user' &&
-          Array.isArray(m.content) &&
-          m.content.some(
-            (c: { type: string; text?: string }) =>
-              c.type === 'text' &&
-              (c.text?.includes('Images from tool response') ?? false),
-          ),
+        isSyntheticToolImageMessage,
       );
 
       // Tool message should only contain video placeholder (non-image media)

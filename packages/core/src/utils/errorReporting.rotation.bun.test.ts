@@ -75,6 +75,36 @@ describe('errorReport rotation (issue 3113)', () => {
     await fs.rm(testDir, { recursive: true, force: true });
   });
 
+  function mtimeForIndex(
+    i: number,
+    oldestMtime: Date,
+    tiedMtime: Date,
+    newerMtime: Date,
+  ): Date {
+    if (i === 19) {
+      return oldestMtime;
+    }
+    if (i <= 1) {
+      return tiedMtime;
+    }
+    return newerMtime;
+  }
+
+  async function regularReportNames(dir: string): Promise<string[]> {
+    const entries = await fs.readdir(dir);
+    const regularReports: string[] = [];
+    for (const name of entries) {
+      if (!REPORT_FILE_PATTERN.test(name)) {
+        continue;
+      }
+      const stat = await fs.stat(path.join(dir, name));
+      if (stat.isFile()) {
+        regularReports.push(name);
+      }
+    }
+    return regularReports;
+  }
+
   // R1: 20 files + 1 more -> exactly 20 remain
   it('R1: caps matching file count at MAX_REPORT_FILES after one more write', async () => {
     for (let i = 0; i < 20; i++) {
@@ -99,12 +129,7 @@ describe('errorReport rotation (issue 3113)', () => {
     const newerMtime = new Date('2026-08-06T00:00:00.000Z');
     for (let i = 0; i < 21; i++) {
       const seededPath = await seedReport(testDir, i, `seed-${i}`);
-      let mtime = newerMtime;
-      if (i === 19) {
-        mtime = oldestMtime;
-      } else if (i <= 1) {
-        mtime = tiedMtime;
-      }
+      const mtime = mtimeForIndex(i, oldestMtime, tiedMtime, newerMtime);
       await fs.utimes(seededPath, mtime, mtime);
     }
 
@@ -197,13 +222,7 @@ describe('errorReport rotation (issue 3113)', () => {
       testDir,
     );
 
-    const allEntries = await fs.readdir(testDir);
-    const matchingRegularFiles: string[] = [];
-    for (const name of allEntries) {
-      if (!REPORT_FILE_PATTERN.test(name)) continue;
-      const stat = await fs.stat(path.join(testDir, name));
-      if (stat.isFile()) matchingRegularFiles.push(name);
-    }
+    const matchingRegularFiles = await regularReportNames(testDir);
     expect(matchingRegularFiles.length).toBe(MAX_REPORT_FILES);
     // All non-matching entries survive
     expect(await fs.stat(path.join(testDir, 'unrelated.json'))).toBeDefined();
@@ -254,13 +273,7 @@ describe('errorReport rotation (issue 3113)', () => {
 
     const files = await listMatchingFiles(testDir);
     expect(files.length).toBe(26);
-    const regularReports = [];
-    for (const name of files) {
-      const stat = await fs.stat(path.join(testDir, name));
-      if (stat.isFile()) {
-        regularReports.push(name);
-      }
-    }
+    const regularReports = await regularReportNames(testDir);
     expect(regularReports.length).toBe(25);
     const stderr = stderrCalls.join('');
     expect(stderr).toContain(
@@ -303,7 +316,6 @@ describe('errorReport rotation (issue 3113)', () => {
         concurrentFiles.some((name) =>
           name.startsWith(`llxprt-client-error-${type}-`),
         ),
-        `${type} should survive every overlapping rotation`,
       ).toBe(true);
     }
     expect(await sumMatchingBytes(testDir)).toBeGreaterThan(

@@ -129,14 +129,18 @@ function platformHonorsXdg(): boolean {
   return process.platform === 'linux';
 }
 
+function childDataDir(result: ChildResult): string {
+  return result.dataDir ?? '';
+}
+
 describe('SecureStore — fallback resolves platform data path with XDG_DATA_HOME set', () => {
   it('child process resolves fallbackDir with LLXPRT overrides cleared and XDG_DATA_HOME set', () => {
     const result = spawnIsolatedChild();
-    expect(result.ok, `child failed: ${result.error ?? 'unknown'}`).toBe(true);
+    expect(result.ok).toBe(true);
     expect(result.dataDir).toBeDefined();
     expect(typeof result.dataDir).toBe('string');
 
-    const dir = result.dataDir ?? '';
+    const dir = childDataDir(result);
     const containsXdg = dir.includes(CUSTOM_XDG);
 
     // On Linux, XDG_DATA_HOME is honored and the path must contain it.

@@ -47,6 +47,7 @@ export interface PromptEnvelopeProjection {
   readonly finalizedProjection: unknown;
   readonly legacyEstimate: () => Promise<number>;
   readonly accounting?: PromptEnvelopeAccountingProjection;
+  readonly releaseIfUnsent?: () => Promise<void>;
 }
 
 export interface PromptEnvelopeEstimate {

@@ -54,6 +54,21 @@ function warningText(event: OAuthUIEvent): string {
   return event.type === 'warning' ? event.text : '';
 }
 
+function messageText(event: OAuthUIEvent): string {
+  switch (event.type) {
+    case 'info':
+    case 'warning':
+    case 'error':
+    case 'oauth_url':
+      return event.text;
+    case 'oauth_waiting':
+    case 'oauth_settled':
+      return '';
+    default:
+      return '';
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -237,7 +252,7 @@ describe('OAuthUIBridge buffering', () => {
     let callCount = 0;
     oauthUIBridge.setCallback(((event: OAuthUIEvent, _ts?: number) => {
       callCount++;
-      const text = event.text;
+      const text = messageText(event);
       deliveryOrder.push(text);
 
       // During flush of buffered-1, emit a reentrant event
@@ -285,7 +300,7 @@ describe('OAuthUIBridge buffering', () => {
 
     const received: Array<{ text: string; ts?: number }> = [];
     oauthUIBridge.setCallback(((event: OAuthUIEvent, ts?: number) => {
-      received.push({ text: event.text, ts });
+      received.push({ text: messageText(event), ts });
       return received.length;
     }) satisfies OAuthUICallback);
 

@@ -21,6 +21,7 @@ import {
   ExtensionStorage,
   annotateActiveExtensions,
   installOrUpdateExtension,
+  type ExtensionConfig,
 } from './extension.js';
 import {
   type LlxprtExtension,
@@ -32,6 +33,15 @@ import { execSync } from 'node:child_process';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { createExtension } from '../test-utils/createExtension.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
+
+function normalizePreviousExtensionConfig(
+  extensionConfig: ExtensionConfig | null | undefined,
+): ExtensionConfig | undefined {
+  if (extensionConfig === null) {
+    return undefined;
+  }
+  return extensionConfig;
+}
 
 const mockGit = {
   clone: vi.fn(),
@@ -60,9 +70,9 @@ void vi.mock('os', () => ({
   homedir: vi.fn(),
 }));
 
-const actual = { ...(await import('./trustedFolders.js')) };
+const trustedFoldersModule = { ...(await import('./trustedFolders.js')) };
 void vi.mock('./trustedFolders.js', () => ({
-  ...actual,
+  ...trustedFoldersModule,
   isWorkspaceTrusted: vi.fn(),
 }));
 
@@ -291,9 +301,7 @@ describe('extension tests', () => {
           ),
         );
         expect(
-          activeExtensions.every(
-            (e) => (e.installMetadata?.autoUpdate ?? false) === false,
-          ),
+          activeExtensions.every((e) => e.installMetadata?.autoUpdate !== true),
         ).toBe(true);
       });
 
@@ -626,12 +634,14 @@ describe('extension tests', () => {
         { source: sourceExtDir, type: 'local' },
         mockConsent,
         process.cwd(),
-        (await import('./extension.js').then((m) =>
-          m.loadExtensionConfig({
-            extensionDir: path.join(userExtensionsDir, 'update-hooks-ext'),
-            workspaceDir: process.cwd(),
-          }),
-        )) ?? undefined,
+        normalizePreviousExtensionConfig(
+          await import('./extension.js').then((m) =>
+            m.loadExtensionConfig({
+              extensionDir: path.join(userExtensionsDir, 'update-hooks-ext'),
+              workspaceDir: process.cwd(),
+            }),
+          ),
+        ),
       );
 
       expect(mockConsent).toHaveBeenCalled();
@@ -670,12 +680,14 @@ describe('extension tests', () => {
           { source: sourceExtDir, type: 'local' },
           mockConsent,
           process.cwd(),
-          (await import('./extension.js').then((m) =>
-            m.loadExtensionConfig({
-              extensionDir: path.join(userExtensionsDir, 'rollback-ext'),
-              workspaceDir: process.cwd(),
-            }),
-          )) ?? undefined,
+          normalizePreviousExtensionConfig(
+            await import('./extension.js').then((m) =>
+              m.loadExtensionConfig({
+                extensionDir: path.join(userExtensionsDir, 'rollback-ext'),
+                workspaceDir: process.cwd(),
+              }),
+            ),
+          ),
         ),
       ).rejects.toThrow(/declined|cancelled/);
 

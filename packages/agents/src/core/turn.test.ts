@@ -36,6 +36,7 @@ describe('Turn', () => {
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
       getConfig: () => undefined,
+      getResolvedBaseUrl: () => undefined,
     };
     turn = new Turn(
       mockChatInstance as unknown as ChatSession,

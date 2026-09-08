@@ -11,22 +11,21 @@
  * @issue #1572 - Decomposing AnthropicProvider (Step 4 - Part A)
  */
 
-import type {
-  IContent,
-  ContentBlock,
-  ToolCallBlock,
-  ToolResponseBlock,
-  TextBlock,
-  ThinkingBlock,
-  CodeBlock,
-  MediaBlock,
+import {
+  type IContent,
+  type ContentBlock,
+  type ToolCallBlock,
+  type ToolResponseBlock,
+  type TextBlock,
+  type ThinkingBlock,
+  type CodeBlock,
+  type MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { normalizeToAnthropicToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
 import {
   classifyMediaBlock,
   buildUnsupportedMediaPlaceholder,
-  detectImageMimeTypeFromBase64,
 } from '../utils/mediaUtils.js';
 import {
   validateToolResults,
@@ -36,6 +35,18 @@ import {
 } from './AnthropicMessageValidator.js';
 import { stripCrossModelThinking } from './crossModelThinkingStrip.js';
 import { tagAnchorMessage } from './AnthropicAnchorCache.js';
+import {
+  tagMediaPurgeBoundary,
+  tagMediaPurgeBoundaryBlock,
+  tagWholeMessagePurgeBoundary,
+} from './AnthropicMediaPurgeCache.js';
+import type { AnthropicMessageConversionOptions } from './AnthropicMessageConversionOptions.js';
+import {
+  convertHumanMessageWithMedia,
+  mediaBlockToAnthropicDocument,
+  mediaBlockToAnthropicImage,
+} from './AnthropicHumanMessageConverter.js';
+export { mediaBlockToAnthropicDocument, mediaBlockToAnthropicImage };
 
 // Type definitions moved from AnthropicProvider.ts
 
@@ -84,63 +95,6 @@ export type AnthropicMessage = {
   role: 'user' | 'assistant';
   content: AnthropicMessageContent;
 };
-
-// Helper functions moved from AnthropicProvider.ts
-
-export function mediaBlockToAnthropicImage(
-  media: MediaBlock,
-): AnthropicImageBlock {
-  if (media.encoding === 'url') {
-    return {
-      type: 'image',
-      source: { type: 'url', url: media.data },
-    };
-  }
-
-  const rawData =
-    media.data.startsWith('data:') && media.data.includes(';base64,')
-      ? media.data.split(';base64,')[1]
-      : media.data;
-
-  const detected = detectImageMimeTypeFromBase64(rawData);
-  const media_type = detected ?? (media.mimeType || 'image/png');
-
-  return {
-    type: 'image',
-    source: {
-      type: 'base64',
-      media_type,
-      data: rawData,
-    },
-  };
-}
-
-export function mediaBlockToAnthropicDocument(
-  media: MediaBlock,
-): AnthropicDocumentBlock {
-  if (media.encoding === 'url') {
-    return {
-      type: 'document',
-      source: { type: 'url', url: media.data },
-      ...(media.filename ? { title: media.filename } : {}),
-    };
-  }
-
-  const rawData =
-    media.data.startsWith('data:') && media.data.includes(';base64,')
-      ? media.data.split(';base64,')[1]
-      : media.data;
-
-  return {
-    type: 'document',
-    source: {
-      type: 'base64',
-      media_type: media.mimeType || 'application/pdf',
-      data: rawData,
-    },
-    ...(media.filename ? { title: media.filename } : {}),
-  };
-}
 
 // Conversion sub-functions (all under 80 lines)
 
@@ -417,7 +371,7 @@ function buildToolResults(
   toolResponseBlocks: ToolResponseBlock[],
   nonToolResponseBlocks: ContentBlock[],
   options: {
-    config: unknown;
+    config?: unknown;
     logger: { debug: (fn: () => string) => void };
   },
 ): AnthropicToolResultBlock[] {
@@ -450,6 +404,44 @@ function buildToolResults(
   return results;
 }
 
+function buildTaggedToolResults(
+  source: IContent,
+  toolResponses: ToolResponseBlock[],
+  otherBlocks: ContentBlock[],
+  options: AnthropicMessageConversionOptions,
+): AnthropicToolResultBlock[] {
+  const results = buildToolResults(source, toolResponses, otherBlocks, options);
+  const boundary = source.metadata?.semanticMediaPurgeBoundary;
+  const boundaryBlock =
+    boundary === undefined ? undefined : source.blocks[boundary.blockIndex];
+  if (boundary !== undefined && boundaryBlock?.type === 'tool_response') {
+    tagMediaPurgeBoundaryBlock(
+      results[toolResponses.indexOf(boundaryBlock)],
+      boundary.boundaryId,
+    );
+  }
+  return results;
+}
+
+function tagHumanMediaPurgeBoundary(
+  source: IContent,
+  message: AnthropicMessage,
+  providerPartBySourceBlock?: ReadonlyArray<number | undefined>,
+): void {
+  const tag = source.metadata?.semanticMediaPurgeBoundary;
+  if (tag === undefined) return;
+  if (typeof message.content === 'string') {
+    if (tag.blockIndex === source.blocks.length - 1) {
+      tagMediaPurgeBoundary(message, 0, tag.boundaryId);
+    }
+    return;
+  }
+  const providerPartIndex = providerPartBySourceBlock?.[tag.blockIndex];
+  if (providerPartIndex !== undefined) {
+    tagMediaPurgeBoundary(message, providerPartIndex, tag.boundaryId);
+  }
+}
+
 function processHumanContent(
   c: IContent,
   blocks: ContentBlock[],
@@ -457,13 +449,24 @@ function processHumanContent(
   const hasMedia = blocks.some((b) => b.type === 'media');
 
   if (hasMedia) {
-    const parts = convertHumanMessageWithMedia(blocks);
-    if (parts.length > 0) {
-      return { role: 'user', content: parts };
+    const converted = convertHumanMessageWithMedia(blocks);
+    if (converted.parts.length > 0) {
+      const message: AnthropicMessage = {
+        role: 'user',
+        content: converted.parts,
+      };
+      tagHumanMediaPurgeBoundary(
+        c,
+        message,
+        converted.providerPartBySourceBlock,
+      );
+      return message;
     }
   } else {
     const text = concatenateTextAndCodeBlocks(blocks);
-    return { role: 'user', content: text };
+    const message: AnthropicMessage = { role: 'user', content: text };
+    tagHumanMediaPurgeBoundary(c, message);
+    return message;
   }
 
   return undefined;
@@ -495,13 +498,7 @@ function pushHumanMessageIfPresent(
 function convertContentToMessages(
   contents: IContent[],
   redactedIndices: Set<number>,
-  options: {
-    isOAuth: boolean;
-    reasoningEnabled: boolean;
-    config: unknown;
-    unprefixToolName: (name: string, isOAuth: boolean) => string;
-    logger: { debug: (fn: () => string) => void };
-  },
+  options: AnthropicMessageConversionOptions,
 ): AnthropicMessage[] {
   const messages: AnthropicMessage[] = [];
   let pendingToolResults: AnthropicToolResultBlock[] = [];
@@ -541,7 +538,7 @@ function convertContentToMessages(
 
     if (toolResponseBlocks.length > 0) {
       pendingToolResults.push(
-        ...buildToolResults(
+        ...buildTaggedToolResults(
           c,
           toolResponseBlocks,
           nonToolResponseBlocks,
@@ -566,6 +563,9 @@ function convertContentToMessages(
       const before = messages.length;
       convertAIMessage(c, contentIndex, redactedIndices, messages, options);
       tagIfAnchored(anchored, before);
+      if (messages.length === before + 1) {
+        tagWholeMessagePurgeBoundary(c, messages[before]);
+      }
     } else {
       if (speaker !== 'tool') {
         throw new Error(`Unknown speaker type: ${speaker}`);
@@ -596,55 +596,12 @@ function concatenateTextAndCodeBlocks(blocks: ContentBlock[]): string {
   return segments.join('') || '';
 }
 
-function convertHumanMessageWithMedia(
-  blocks: ContentBlock[],
-): Array<
-  { type: 'text'; text: string } | AnthropicImageBlock | AnthropicDocumentBlock
-> {
-  const parts: Array<
-    | { type: 'text'; text: string }
-    | AnthropicImageBlock
-    | AnthropicDocumentBlock
-  > = [];
-
-  for (const block of blocks) {
-    if (block.type === 'text' && block.text) {
-      parts.push({ type: 'text', text: block.text });
-    } else if (block.type === 'code') {
-      const language = block.language ?? '';
-      parts.push({
-        type: 'text',
-        text: `\n\n\`\`\`${language}\n${block.code}\n\`\`\`\n`,
-      });
-    } else if (block.type === 'media') {
-      const category = classifyMediaBlock(block);
-      if (category === 'image') {
-        parts.push(mediaBlockToAnthropicImage(block));
-      } else if (category === 'pdf') {
-        parts.push(mediaBlockToAnthropicDocument(block));
-      } else {
-        parts.push({
-          type: 'text',
-          text: buildUnsupportedMediaPlaceholder(block, 'Anthropic'),
-        });
-      }
-    }
-  }
-
-  return parts;
-}
-
 function convertAIMessage(
   c: IContent,
   contentIndex: number,
   redactedIndices: Set<number>,
   messages: AnthropicMessage[],
-  options: {
-    isOAuth: boolean;
-    reasoningEnabled: boolean;
-    unprefixToolName: (name: string, isOAuth: boolean) => string;
-    logger: { debug: (fn: () => string) => void };
-  },
+  options: AnthropicMessageConversionOptions,
 ): void {
   const toolCallBlocks = c.blocks.filter((b) => b.type === 'tool_call');
   const thinkingBlocks = c.blocks.filter((b) => b.type === 'thinking');

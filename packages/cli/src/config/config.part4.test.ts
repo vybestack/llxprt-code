@@ -119,6 +119,9 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
       setActiveProvider: vi.fn(),
       getActiveProvider: vi.fn(() => undefined),
       getAvailableModels: vi.fn(async () => []),
+      getProviderByName: vi.fn(() => ({
+        getDefaultModel: () => 'gemini-2.5-pro',
+      })),
     } as unknown as ServerConfig.RuntimeProviderManager);
 
   return {
@@ -222,9 +225,6 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
     setActiveToolFormatOverride: vi.fn(),
     getActiveProviderMetrics: vi.fn(() => undefined),
     getSessionTokenUsage: vi.fn(() => undefined),
-    getLoadBalancerStats: vi.fn(() => undefined),
-    getLoadBalancerLastSelected: vi.fn(() => undefined),
-    getAllLoadBalancerStats: vi.fn(() => ({})),
     assembleCliProviderRuntime: vi.fn(
       (input: {
         settingsService: unknown;
@@ -287,6 +287,20 @@ function resetRuntimeSettingsState(): void {
   runtimeSettingsState.context = null;
   runtimeSettingsState.providerManager = null;
   runtimeSettingsState.oauthManager = null;
+}
+
+function hasNoDisabledTools(value: unknown): boolean {
+  return (
+    value === undefined ||
+    value === null ||
+    (Array.isArray(value) && value.length === 0)
+  );
+}
+
+function normalizeDisabledTools(
+  value: readonly string[] | undefined,
+): readonly string[] {
+  return value ?? [];
 }
 
 describe('defaultDisabledTools', () => {
@@ -361,9 +375,9 @@ describe('defaultDisabledTools', () => {
       'test-session',
       argv,
     );
-    const currentDisabled =
-      (config.getEphemeralSetting('tools.disabled') as string[] | undefined) ??
-      [];
+    const currentDisabled = config.getEphemeralSetting('tools.disabled') as
+      | string[]
+      | undefined;
     expect(currentDisabled).toStrictEqual(
       expect.arrayContaining(['glob', 'read_file']),
     );
@@ -413,11 +427,7 @@ describe('defaultDisabledTools', () => {
     );
     const disabled = config.getEphemeralSetting('tools.disabled');
     // Should be either undefined, null, or empty array
-    expect(
-      disabled === undefined ||
-        disabled === null ||
-        (Array.isArray(disabled) && disabled.length === 0),
-    ).toBe(true);
+    expect(hasNoDisabledTools(disabled)).toBe(true);
   });
 
   it('should not seed tools.disabled when defaultDisabledTools is undefined', async () => {
@@ -438,11 +448,7 @@ describe('defaultDisabledTools', () => {
     );
     const disabled = config.getEphemeralSetting('tools.disabled');
     // Should be either undefined, null, or empty array
-    expect(
-      disabled === undefined ||
-        disabled === null ||
-        (Array.isArray(disabled) && disabled.length === 0),
-    ).toBe(true);
+    expect(hasNoDisabledTools(disabled)).toBe(true);
   });
 
   it('should not affect excludeTools (tool remains discoverable)', async () => {
@@ -493,7 +499,7 @@ describe('defaultDisabledTools', () => {
       | string[]
       | undefined;
     // read_file is in tools.allowed, so it must NOT be added to tools.disabled
-    expect(disabled ?? []).not.toContain('read_file');
+    expect(normalizeDisabledTools(disabled)).not.toContain('read_file');
   });
 });
 

@@ -9,6 +9,14 @@ import { AfterAgentHookOutput, DefaultHookOutput } from '../../hooks/types.js';
 import { AgentEventType } from '../turn.js';
 import type { ServerAgentStreamEvent } from '../turn.js';
 
+function isClearContextEvent(e: ServerAgentStreamEvent): boolean {
+  return (
+    e.type === AgentEventType.AgentExecutionStopped &&
+    'contextCleared' in e &&
+    (e as { contextCleared?: boolean }).contextCleared === true
+  );
+}
+
 /**
  * These tests validate the clearContext behavior at the unit level
  * for each layer of the runtime stack.
@@ -110,12 +118,7 @@ describe('clearContext end-to-end contract', () => {
         },
       ];
 
-      const clearEvent = events.find(
-        (e) =>
-          e.type === AgentEventType.AgentExecutionStopped &&
-          'contextCleared' in e &&
-          (e as { contextCleared?: boolean }).contextCleared === true,
-      );
+      const clearEvent = events.find(isClearContextEvent);
 
       // Content should come before clearContext event
       const contentIndex = events.findIndex(

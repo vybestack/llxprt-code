@@ -231,7 +231,7 @@ describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:
       // Authoritative post-activation manager state ('fake'/'fake-model')
       // reached readiness — NOT the stale Config provider
       // ('stale-config-provider').
-      expect(readinessTarget).toEqual({
+      expect(readinessTarget).toStrictEqual({
         provider: 'fake',
         model: 'fake-model',
       });
@@ -242,7 +242,7 @@ describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:
         ),
       ).toThrow(/runtime registration|runtime.*not/i);
     } finally {
-      disposeCliRuntime(runtimeId);
+      await disposeCliRuntime(runtimeId);
       await built.cleanup();
     }
   });

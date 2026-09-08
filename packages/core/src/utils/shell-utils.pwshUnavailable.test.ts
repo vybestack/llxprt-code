@@ -87,57 +87,59 @@ function decide(
 
 const HARD_DENIAL = { allAllowed: false, isHardDenial: true };
 
-describePwsh('PowerShell permission behavior when parser unavailable', () => {
-  beforeAll(() => {
-    resetParser();
-  });
+describe('PowerShell unavailable-parser behavior', () => {
+  describePwsh('PowerShell permission behavior when parser unavailable', () => {
+    beforeAll(() => {
+      resetParser();
+    });
 
-  afterAll(() => restoreParsers('unavailable-state tests'));
+    afterAll(() => restoreParsers('unavailable-state tests'));
 
-  it('allowlist mode hard-denies one-line PowerShell with truthful diagnostic', () => {
-    const result = decide('Get-Process', 'allowlist', [
-      'run_shell_command(Get-Process)',
-    ]);
-    expect(result).toMatchObject(HARD_DENIAL);
-    expect(result.blockReason).toContain('PowerShell');
-    expect(result.blockReason).toContain('structural parser');
-    expect(result.blockReason).not.toContain('could not be parsed safely');
-  });
+    it('allowlist mode hard-denies one-line PowerShell with truthful diagnostic', () => {
+      const result = decide('Get-Process', 'allowlist', [
+        'run_shell_command(Get-Process)',
+      ]);
+      expect(result).toMatchObject(HARD_DENIAL);
+      expect(result.blockReason).toContain('PowerShell');
+      expect(result.blockReason).toContain('structural parser');
+      expect(result.blockReason).not.toContain('could not be parsed safely');
+    });
 
-  it('allowlist mode hard-denies multiline PowerShell with parser-required diagnostic', () => {
-    const result = decide('Get-Process\nWrite-Host done', 'allowlist');
-    expect(result).toMatchObject(HARD_DENIAL);
-    expect(result.blockReason).toContain('PowerShell');
-    expect(result.blockReason).toContain('parser');
-  });
+    it('allowlist mode hard-denies multiline PowerShell with parser-required diagnostic', () => {
+      const result = decide('Get-Process\nWrite-Host done', 'allowlist');
+      expect(result).toMatchObject(HARD_DENIAL);
+      expect(result.blockReason).toContain('PowerShell');
+      expect(result.blockReason).toContain('parser');
+    });
 
-  it('none mode hard-denies one-line PowerShell with $() substitution', () => {
-    const result = decide('$(Get-Date)', 'none');
-    expect(result).toMatchObject(HARD_DENIAL);
-    expect(result.blockReason).toContain('substitution');
-  });
+    it('none mode hard-denies one-line PowerShell with $() substitution', () => {
+      const result = decide('$(Get-Date)', 'none');
+      expect(result).toMatchObject(HARD_DENIAL);
+      expect(result.blockReason).toContain('substitution');
+    });
 
-  it('none mode hard-denies one-line PowerShell even without substitution (parser unavailable fail-closed)', () => {
-    // Without the parser, detectCommandSubstitution returns true for PowerShell
-    // (fail closed). So even a plain command is denied in none mode.
-    const result = decide('Get-Process', 'none');
-    expect(result).toMatchObject(HARD_DENIAL);
-  });
+    it('none mode hard-denies one-line PowerShell even without substitution (parser unavailable fail-closed)', () => {
+      // Without the parser, detectCommandSubstitution returns true for PowerShell
+      // (fail closed). So even a plain command is denied in none mode.
+      const result = decide('Get-Process', 'none');
+      expect(result).toMatchObject(HARD_DENIAL);
+    });
 
-  it('all mode does NOT hard-deny solely because the parser is unavailable', () => {
-    const result = decide('Get-Process', 'all');
-    expect(result.isHardDenial).toBe(false);
-  });
+    it('all mode does NOT hard-deny solely because the parser is unavailable', () => {
+      const result = decide('Get-Process', 'all');
+      expect(result.isHardDenial).toBe(false);
+    });
 
-  it('all mode still enforces blocklist when parser unavailable', () => {
-    const result = decide('rm -rf /tmp', 'all', [], ['ShellTool(rm)']);
-    expect(result).toMatchObject(HARD_DENIAL);
-  });
+    it('all mode still enforces blocklist when parser unavailable', () => {
+      const result = decide('rm -rf /tmp', 'all', [], ['ShellTool(rm)']);
+      expect(result).toMatchObject(HARD_DENIAL);
+    });
 
-  it('none mode blocks multiline input with PowerShell-specific reason', () => {
-    const result = decide('Get-Process\nWrite-Host', 'none');
-    expect(result).toMatchObject(HARD_DENIAL);
-    expect(result.blockReason).toContain('PowerShell');
+    it('none mode blocks multiline input with PowerShell-specific reason', () => {
+      const result = decide('Get-Process\nWrite-Host', 'none');
+      expect(result).toMatchObject(HARD_DENIAL);
+      expect(result.blockReason).toContain('PowerShell');
+    });
   });
 });
 
@@ -146,34 +148,39 @@ describePwsh('PowerShell permission behavior when parser unavailable', () => {
  * initialization produces a consistent state, and that concurrent
  * initializeParser calls are de-duplicated.
  */
-describePwsh('parser reset/init lifecycle consistency', () => {
-  afterAll(() => restoreParsers('lifecycle tests'));
+describe('parser reset/init lifecycle consistency', () => {
+  describePwsh(
+    'parser reset/init lifecycle consistency (unconditional wrapper)',
+    () => {
+      afterAll(() => restoreParsers('lifecycle tests'));
 
-  it('concurrent initializeParser calls return the same promise', async () => {
-    resetParser();
-    const p1 = initializeParser();
-    const p2 = initializeParser();
-    expect(p1).toBe(p2);
-    const result = await p1;
-    expect(result).toBe(true);
-    expect(isParserAvailable('powershell')).toBe(true);
-  });
+      it('concurrent initializeParser calls return the same promise', async () => {
+        resetParser();
+        const p1 = initializeParser();
+        const p2 = initializeParser();
+        expect(p1).toBe(p2);
+        const result = await p1;
+        expect(result).toBe(true);
+        expect(isParserAvailable('powershell')).toBe(true);
+      });
 
-  it('resetParser after init clears both parsers', async () => {
-    await initializeParser();
-    expect(isParserAvailable('powershell')).toBe(true);
-    expect(isParserAvailable('bash')).toBe(true);
-    resetParser();
-    expect(isParserAvailable('powershell')).toBe(false);
-    expect(isParserAvailable('bash')).toBe(false);
-  });
+      it('resetParser after init clears both parsers', async () => {
+        await initializeParser();
+        expect(isParserAvailable('powershell')).toBe(true);
+        expect(isParserAvailable('bash')).toBe(true);
+        resetParser();
+        expect(isParserAvailable('powershell')).toBe(false);
+        expect(isParserAvailable('bash')).toBe(false);
+      });
 
-  it('re-initialize after reset restores parser availability', async () => {
-    resetParser();
-    expect(isParserAvailable('powershell')).toBe(false);
-    const ok = await initializeParser();
-    expect(ok).toBe(true);
-    expect(isParserAvailable('powershell')).toBe(true);
-    expect(isParserAvailable('bash')).toBe(true);
-  });
+      it('re-initialize after reset restores parser availability', async () => {
+        resetParser();
+        expect(isParserAvailable('powershell')).toBe(false);
+        const ok = await initializeParser();
+        expect(ok).toBe(true);
+        expect(isParserAvailable('powershell')).toBe(true);
+        expect(isParserAvailable('bash')).toBe(true);
+      });
+    },
+  );
 });

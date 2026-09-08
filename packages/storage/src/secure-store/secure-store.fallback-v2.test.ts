@@ -46,6 +46,26 @@ function nullSecretProvider(): {
   };
 }
 
+function isSecureRejectionCode(code: SecureStoreError['code']): boolean {
+  return code === 'CORRUPT' || code === 'UNAVAILABLE';
+}
+
+function createUnreadableEnvelopeRead(
+  filePath: string,
+  readFailure: NodeJS.ErrnoException,
+  originalReadFile: typeof fs.readFile,
+): typeof fs.readFile {
+  return (async (
+    target: Parameters<typeof fs.readFile>[0],
+    options?: Parameters<typeof fs.readFile>[1],
+  ) => {
+    if (target === filePath) {
+      throw readFailure;
+    }
+    return originalReadFile(target, options);
+  }) as typeof fs.readFile;
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('SecureStore — Fallback Envelope v:2 (machine secret)', () => {
@@ -268,7 +288,7 @@ describe('SecureStore — No v:2 downgrade on overwrite with unavailable secret'
     // Must be CORRUPT or UNAVAILABLE — a secure rejection, never a silent
     // overwrite.
     const code = (err as SecureStoreError).code;
-    expect(code === 'CORRUPT' || code === 'UNAVAILABLE').toBe(true);
+    expect(isSecureRejectionCode(code)).toBe(true);
 
     // The on-disk file must still be v:2 and byte-identical (not overwritten).
     const afterContent = await fs.readFile(filePath, 'utf8');
@@ -304,15 +324,11 @@ describe('SecureStore — No v:2 downgrade on overwrite with unavailable secret'
     const readFailure = new Error('permission denied') as NodeJS.ErrnoException;
     readFailure.code = 'EACCES';
     const originalReadFile = fs.readFile.bind(fs);
-    const readFileSpy = vi.spyOn(fs, 'readFile').mockImplementation((async (
-      target: Parameters<typeof fs.readFile>[0],
-      options?: Parameters<typeof fs.readFile>[1],
-    ) => {
-      if (target === filePath) {
-        throw readFailure;
-      }
-      return originalReadFile(target, options);
-    }) as typeof fs.readFile);
+    const readFileSpy = vi
+      .spyOn(fs, 'readFile')
+      .mockImplementation(
+        createUnreadableEnvelopeRead(filePath, readFailure, originalReadFile),
+      );
 
     try {
       const degradedWriter = new SecureStore('test-service', {
@@ -334,6 +350,7 @@ describe('SecureStore — No v:2 downgrade on overwrite with unavailable secret'
     const afterContent = await fs.readFile(filePath, 'utf8');
     expect(afterContent).toBe(beforeContent);
   });
+
   it('new file with unavailable secret still writes v:1 (no existing v:2 to protect)', async () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,

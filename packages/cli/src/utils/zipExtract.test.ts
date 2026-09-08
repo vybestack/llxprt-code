@@ -21,14 +21,6 @@ interface ArchiveEntry {
 
 let workspace: string;
 
-beforeEach(async () => {
-  workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'zip-extract-test-'));
-});
-
-afterEach(async () => {
-  await fs.rm(workspace, { recursive: true, force: true });
-});
-
 async function buildArchive(entries: ArchiveEntry[]): Promise<string> {
   const archivePath = path.join(workspace, 'archive.zip');
   await new Promise<void>((resolve, reject) => {
@@ -166,23 +158,60 @@ async function exists(target: string): Promise<boolean> {
   }
 }
 
-async function noStagingDirsRemain(destDir: string): Promise<void> {
+async function findStagingDirs(destDir: string): Promise<string[]> {
   let entries: string[];
   try {
     entries = await fs.readdir(destDir);
   } catch (error) {
-    if (isErrno(error) && error.code === 'ENOENT') return;
+    if (isErrno(error) && error.code === 'ENOENT') return [];
     throw error;
   }
-  const leftovers = entries.filter((name) =>
-    name.startsWith('.llxprt-zip-stage-'),
-  );
-  expect(leftovers).toEqual([]);
+  return entries.filter((name) => name.startsWith('.llxprt-zip-stage-'));
 }
 
-const posixIt = process.platform === 'win32' ? it.skip : it;
+async function blockPublicationOfSecondRoot(
+  name: string,
+  target: string,
+): Promise<void> {
+  if (name === 'b') await fs.writeFile(target, 'keep');
+}
+
+function requirePublishedFile(files: readonly string[]): string {
+  const publishedFile = files.at(0);
+  if (publishedFile === undefined) {
+    throw new Error('expected one published file');
+  }
+  return publishedFile;
+}
+
+function requireAggregateError(error: unknown): AggregateError {
+  if (!isAggregateError(error)) {
+    throw new Error('expected AggregateError');
+  }
+  return error;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function reopenReadonlyDirectory(dest: string): Promise<void> {
+  await fs.chmod(path.join(dest, 'readonly'), 0o700).catch((error: unknown) => {
+    if (!(isErrno(error) && error.code === 'ENOENT')) throw error;
+  });
+}
+
+const describePosix = process.platform === 'win32' ? describe.skip : describe;
 
 describe('extractZipSafe', () => {
+  beforeEach(async () => {
+    workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'zip-extract-test-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(workspace, { recursive: true, force: true });
+  });
+
   it('extracts files and nested directories', async () => {
     const archive = await buildArchive([
       { name: 'root.txt', content: 'hello' },
@@ -260,7 +289,7 @@ describe('extractZipSafe', () => {
     expect(
       await fs.readFile(path.join(dest, '..valid', 'file.txt'), 'utf8'),
     ).toBe('dotdot');
-    expect(result.files).toEqual([
+    expect(result.files).toStrictEqual([
       path.join(path.resolve(dest), '..valid', 'file.txt'),
     ]);
   });
@@ -294,7 +323,7 @@ describe('extractZipSafe', () => {
     );
     expect(await exists(path.join(dest, 'good.txt'))).toBe(false);
     expect(await exists(path.join(workspace, 'escape.txt'))).toBe(false);
-    await noStagingDirsRemain(dest);
+    expect(await findStagingDirs(dest)).toStrictEqual([]);
   });
 
   it('removes a destination it created when nothing is published', async () => {
@@ -346,7 +375,7 @@ describe('extractZipSafe', () => {
     expect(await fs.readFile(path.join(dest, 'keep.txt'), 'utf8')).toBe(
       'preexisting',
     );
-    await noStagingDirsRemain(dest);
+    expect(await findStagingDirs(dest)).toStrictEqual([]);
   });
 
   it('rejects a case-insensitive collision with a preexisting entry without replacing it', async () => {
@@ -364,8 +393,8 @@ describe('extractZipSafe', () => {
     expect(await fs.readFile(path.join(dest, 'README.md'), 'utf8')).toBe(
       'keep',
     );
-    expect(await fs.readdir(dest)).toEqual(['README.md']);
-    await noStagingDirsRemain(dest);
+    expect(await fs.readdir(dest)).toStrictEqual(['README.md']);
+    expect(await findStagingDirs(dest)).toStrictEqual([]);
   });
 
   it('rejects two archive roots that collide only case-insensitively and publishes neither', async () => {
@@ -381,7 +410,7 @@ describe('extractZipSafe', () => {
 
     expect(await exists(path.join(dest, 'Doc.txt'))).toBe(false);
     expect(await exists(path.join(dest, 'doc.txt'))).toBe(false);
-    await noStagingDirsRemain(dest);
+    expect(await findStagingDirs(dest)).toStrictEqual([]);
   });
 
   it('rejects a nested case-only collision inside a directory and publishes none of it', async () => {
@@ -396,7 +425,7 @@ describe('extractZipSafe', () => {
     );
 
     expect(await exists(path.join(dest, 'root'))).toBe(false);
-    await noStagingDirsRemain(dest);
+    expect(await findStagingDirs(dest)).toStrictEqual([]);
   });
 
   it('rejects an exact duplicate path within a directory and publishes none of it', async () => {
@@ -411,7 +440,7 @@ describe('extractZipSafe', () => {
     );
 
     expect(await exists(path.join(dest, 'root'))).toBe(false);
-    await noStagingDirsRemain(dest);
+    expect(await findStagingDirs(dest)).toStrictEqual([]);
   });
 
   it('rejects path aliases that normalize to an existing archive target', async () => {
@@ -428,7 +457,7 @@ describe('extractZipSafe', () => {
         /duplicate archive path/i,
       );
       expect(await exists(path.join(dest, 'root'))).toBe(false);
-      await noStagingDirsRemain(dest);
+      expect(await findStagingDirs(dest)).toStrictEqual([]);
     }
   });
 
@@ -444,7 +473,7 @@ describe('extractZipSafe', () => {
     );
 
     expect(await exists(path.join(dest, 'root'))).toBe(false);
-    await noStagingDirsRemain(dest);
+    expect(await findStagingDirs(dest)).toStrictEqual([]);
   });
 
   it('publishes none of the earlier valid entries when a later entry is malicious', async () => {
@@ -469,9 +498,7 @@ describe('extractZipSafe', () => {
     const dest = path.join(workspace, 'out');
     await fs.mkdir(dest);
     const options: ZipExtractOptions = {
-      beforePublish: async (name, target) => {
-        if (name === 'b') await fs.writeFile(target, 'keep');
-      },
+      beforePublish: blockPublicationOfSecondRoot,
     };
 
     await expect(extractZipSafe(archivePath, dest, options)).rejects.toThrow(
@@ -480,7 +507,7 @@ describe('extractZipSafe', () => {
 
     expect(await exists(path.join(dest, 'a'))).toBe(false);
     expect(await fs.readFile(path.join(dest, 'b'), 'utf8')).toBe('keep');
-    await noStagingDirsRemain(dest);
+    expect(await findStagingDirs(dest)).toStrictEqual([]);
   });
 
   it('preserves an unrelated sentinel on successful extraction', async () => {
@@ -496,7 +523,9 @@ describe('extractZipSafe', () => {
       'keep',
     );
     expect(await fs.readFile(path.join(dest, 'new.txt'), 'utf8')).toBe('fresh');
-    expect(result.files).toEqual([path.join(path.resolve(dest), 'new.txt')]);
+    expect(result.files).toStrictEqual([
+      path.join(path.resolve(dest), 'new.txt'),
+    ]);
   });
 
   it('returns absolute published paths even when destDir is relative', async () => {
@@ -509,9 +538,10 @@ describe('extractZipSafe', () => {
       const relDest = path.relative(base, dest);
       process.chdir(base);
       const result = await extractZipSafe(archive, relDest);
-      expect(path.isAbsolute(result.files[0] ?? '')).toBe(true);
+      const publishedFile = requirePublishedFile(result.files);
+      expect(path.isAbsolute(publishedFile)).toBe(true);
       const expected = path.join(path.resolve(dest), 'rel.txt');
-      expect(await fs.realpath(result.files[0] ?? '')).toBe(
+      expect(await fs.realpath(publishedFile)).toBe(
         await fs.realpath(expected),
       );
     } finally {
@@ -530,11 +560,13 @@ describe('extractZipSafe', () => {
 
       const dirStat = await fs.stat(path.join(dest, 'empty-dir'));
       expect(dirStat.isDirectory()).toBe(true);
-      expect(await fs.readdir(path.join(dest, 'empty-dir'))).toEqual([]);
-      expect(result.files).toEqual([]);
+      expect(await fs.readdir(path.join(dest, 'empty-dir'))).toStrictEqual([]);
+      expect(result.files).toStrictEqual([]);
     });
+  });
 
-    posixIt('preserves a nested empty directory with a safe mode', async () => {
+  describePosix('explicit empty directories', () => {
+    it('preserves a nested empty directory with a safe mode', async () => {
       const archivePath = await writeZip('nested-empty.zip', [
         { name: 'outer/inner/deep/', directory: true, mode: 0o40755 },
       ]);
@@ -546,7 +578,7 @@ describe('extractZipSafe', () => {
       expect(deep.isDirectory()).toBe(true);
       expect(
         await fs.readdir(path.join(dest, 'outer', 'inner', 'deep')),
-      ).toEqual([]);
+      ).toStrictEqual([]);
       expect(deep.mode & 0o700).toBe(0o700);
     });
   });
@@ -565,7 +597,7 @@ describe('extractZipSafe', () => {
       ).rejects.toThrow(/more than 2 entries/);
 
       expect(await exists(path.join(dest, 'f1.txt'))).toBe(false);
-      await noStagingDirsRemain(dest);
+      expect(await findStagingDirs(dest)).toStrictEqual([]);
     });
 
     it('rejects an entry whose name exceeds the length limit and cleans up', async () => {
@@ -583,7 +615,7 @@ describe('extractZipSafe', () => {
       expect(await exists(path.join(dest, 'this-name-is-too-long.txt'))).toBe(
         false,
       );
-      await noStagingDirsRemain(dest);
+      expect(await findStagingDirs(dest)).toStrictEqual([]);
     });
 
     it('rejects an entry that declares more bytes than the per-entry limit before writing it', async () => {
@@ -599,7 +631,7 @@ describe('extractZipSafe', () => {
       ).rejects.toThrow(/declares .*bytes.*limit|limit.*bytes/i);
 
       expect(await exists(path.join(dest, 'big.bin'))).toBe(false);
-      await noStagingDirsRemain(dest);
+      expect(await findStagingDirs(dest)).toStrictEqual([]);
     });
 
     it('rejects declared cumulative bytes beyond the total limit', async () => {
@@ -619,7 +651,7 @@ describe('extractZipSafe', () => {
       ).rejects.toThrow(/cumulative.*limit|total.*limit|limit/i);
 
       expect(await exists(path.join(dest, 'a.txt'))).toBe(false);
-      await noStagingDirsRemain(dest);
+      expect(await findStagingDirs(dest)).toStrictEqual([]);
     });
 
     it('rejects an entry that streams more bytes than the per-entry limit despite a lying declared size', async () => {
@@ -640,7 +672,7 @@ describe('extractZipSafe', () => {
       ).rejects.toThrow(/streamed .*bytes.*limit|limit/i);
 
       expect(await exists(path.join(dest, 'bomb.bin'))).toBe(false);
-      await noStagingDirsRemain(dest);
+      expect(await findStagingDirs(dest)).toStrictEqual([]);
     });
 
     it('rejects an entry whose streamed bytes differ from its declared size', async () => {
@@ -659,7 +691,7 @@ describe('extractZipSafe', () => {
       );
 
       expect(await exists(path.join(dest, 'mismatch.bin'))).toBe(false);
-      await noStagingDirsRemain(dest);
+      expect(await findStagingDirs(dest)).toStrictEqual([]);
     });
 
     it('rejects cumulative stream bytes beyond the total limit despite lying declared sizes', async () => {
@@ -689,7 +721,7 @@ describe('extractZipSafe', () => {
       ).rejects.toThrow(/streamed .*bytes.*limit|limit/i);
 
       expect(await exists(path.join(dest, 'b1.bin'))).toBe(false);
-      await noStagingDirsRemain(dest);
+      expect(await findStagingDirs(dest)).toStrictEqual([]);
     });
   });
 
@@ -703,9 +735,7 @@ describe('extractZipSafe', () => {
       await fs.mkdir(dest);
 
       const options: ZipExtractOptions = {
-        beforePublish: async (name, target) => {
-          if (name === 'b') await fs.writeFile(target, 'keep');
-        },
+        beforePublish: blockPublicationOfSecondRoot,
         remove: async () => {
           throw new Error('injected remove failure');
         },
@@ -715,13 +745,9 @@ describe('extractZipSafe', () => {
         (error: unknown) => error,
       );
 
-      expect(isAggregateError(outcome)).toBe(true);
-      if (!isAggregateError(outcome)) {
-        throw new Error('expected AggregateError');
-      }
-      const messages = outcome.errors.map((item: unknown) =>
-        item instanceof Error ? item.message : String(item),
-      );
+      expect(outcome).toBeInstanceOf(AggregateError);
+      const aggregateError = requireAggregateError(outcome);
+      const messages = aggregateError.errors.map(errorMessage);
       expect(messages.some((m) => /already contains: b/.test(m))).toBe(true);
       expect(
         messages.filter((message) =>
@@ -735,8 +761,8 @@ describe('extractZipSafe', () => {
     });
   });
 
-  describe('archive permissions', () => {
-    posixIt('preserves safe executable bits on regular files', async () => {
+  describePosix('archive permissions', () => {
+    it('preserves safe executable bits on regular files', async () => {
       const archivePath = await writeZip('exec.zip', [
         { name: 'run.sh', content: '#!/bin/sh\necho hi\n', mode: 0o755 },
       ]);
@@ -746,60 +772,52 @@ describe('extractZipSafe', () => {
 
       const stat = await fs.stat(path.join(dest, 'run.sh'));
       expect(stat.mode & 0o777).toBe(0o755);
-      expect(result.files).toEqual([path.join(path.resolve(dest), 'run.sh')]);
+      expect(result.files).toStrictEqual([
+        path.join(path.resolve(dest), 'run.sh'),
+      ]);
     });
 
-    posixIt(
-      'defaults regular files to 0644 and strips special bits',
-      async () => {
-        const archivePath = await writeZip('special.zip', [
-          { name: 'plain.txt', content: 'text' },
-          { name: 'setuid.sh', content: '#!/bin/sh\n', mode: 0o4755 },
+    it('defaults regular files to 0644 and strips special bits', async () => {
+      const archivePath = await writeZip('special.zip', [
+        { name: 'plain.txt', content: 'text' },
+        { name: 'setuid.sh', content: '#!/bin/sh\n', mode: 0o4755 },
+      ]);
+      const dest = path.join(workspace, 'out');
+
+      await extractZipSafe(archivePath, dest);
+
+      const plain = await fs.stat(path.join(dest, 'plain.txt'));
+      expect(plain.mode & 0o777).toBe(0o644);
+      const setuid = await fs.stat(path.join(dest, 'setuid.sh'));
+      expect(setuid.mode & 0o777).toBe(0o755);
+      expect(setuid.mode & 0o7777).toBe(0o755);
+    });
+
+    it('stages files beneath a readonly directory declared with mode 0555', async () => {
+      const archivePath = await writeZip('readonly.zip', [
+        { name: 'readonly/', directory: true, mode: 0o40555 },
+        { name: 'readonly/file.txt', content: 'inside' },
+      ]);
+      const dest = path.join(workspace, 'out');
+
+      try {
+        const result = await extractZipSafe(archivePath, dest);
+
+        expect(
+          await fs.readFile(path.join(dest, 'readonly', 'file.txt'), 'utf8'),
+        ).toBe('inside');
+        expect(result.files).toStrictEqual([
+          path.join(path.resolve(dest), 'readonly', 'file.txt'),
         ]);
-        const dest = path.join(workspace, 'out');
+        const dirStat = await fs.stat(path.join(dest, 'readonly'));
+        expect(dirStat.mode & 0o777).toBe(0o555);
+      } finally {
+        // Re-open the archived mode so the shared workspace can be removed.
+        await reopenReadonlyDirectory(dest);
+      }
+    });
 
-        await extractZipSafe(archivePath, dest);
-
-        const plain = await fs.stat(path.join(dest, 'plain.txt'));
-        expect(plain.mode & 0o777).toBe(0o644);
-        const setuid = await fs.stat(path.join(dest, 'setuid.sh'));
-        expect(setuid.mode & 0o777).toBe(0o755);
-        expect(setuid.mode & 0o7777).toBe(0o755);
-      },
-    );
-
-    posixIt(
-      'stages files beneath a readonly directory declared with mode 0555',
-      async () => {
-        const archivePath = await writeZip('readonly.zip', [
-          { name: 'readonly/', directory: true, mode: 0o40555 },
-          { name: 'readonly/file.txt', content: 'inside' },
-        ]);
-        const dest = path.join(workspace, 'out');
-
-        try {
-          const result = await extractZipSafe(archivePath, dest);
-
-          expect(
-            await fs.readFile(path.join(dest, 'readonly', 'file.txt'), 'utf8'),
-          ).toBe('inside');
-          expect(result.files).toEqual([
-            path.join(path.resolve(dest), 'readonly', 'file.txt'),
-          ]);
-          const dirStat = await fs.stat(path.join(dest, 'readonly'));
-          expect(dirStat.mode & 0o777).toBe(0o555);
-        } finally {
-          // Re-open the archived mode so the shared workspace can be removed.
-          await fs
-            .chmod(path.join(dest, 'readonly'), 0o700)
-            .catch((error: unknown) => {
-              if (!(isErrno(error) && error.code === 'ENOENT')) throw error;
-            });
-        }
-      },
-    );
-
-    posixIt('preserves safe directory modes', async () => {
+    it('preserves safe directory modes', async () => {
       const archivePath = await writeZip('dirmode.zip', [
         { name: 'writable/', directory: true, mode: 0o40755 },
         { name: 'restricted/', directory: true, mode: 0o40700 },

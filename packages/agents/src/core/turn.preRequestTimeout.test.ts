@@ -7,6 +7,7 @@
 import {
   advanceTimersByTimeAsync,
   runAllTimersAsync,
+  assertInstanceOf,
 } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { ServerAgentStreamEvent, StructuredError } from './turn.js';
@@ -65,6 +66,7 @@ function buildTurn(
   mockChatInstance: MockedChatInstance;
 } {
   const mockGetConfig = vi.fn().mockReturnValue({
+    getSettingsService: () => ({ get: () => undefined }),
     getEphemeralSetting: (key: string) => {
       if (key === 'stream-first-response-timeout-ms') {
         return firstResponseMs;
@@ -80,6 +82,7 @@ function buildTurn(
     sendMessageStream: mockSendMessageStream,
     getHistory: mockGetHistory,
     getConfig: mockGetConfig,
+    getResolvedBaseUrl: () => undefined,
   } as unknown as MockedChatInstance;
 
   const turn = new Turn(
@@ -397,8 +400,6 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       },
       getModels: async () => [],
       getDefaultModel: () => 'model',
-      getServerTools: () => [],
-      invokeServerTool: async () => undefined,
     };
     providerManager.registerProvider(delegate);
     const lb = new LoadBalancingProvider(
@@ -804,11 +805,11 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     mockSendMessageStream.mockImplementation(
       (params: { config: { abortSignal: AbortSignal } }) => {
         const providerSignal = params.config.abortSignal;
-        if (!(providerSignal instanceof AbortSignal)) {
-          throw new Error(
-            'Test setup error: sendMessageStream did not receive config.abortSignal',
-          );
-        }
+        assertInstanceOf(
+          providerSignal,
+          AbortSignal,
+          'Test setup error: sendMessageStream did not receive config.abortSignal',
+        );
         const stream = (async function* () {
           await new Promise<void>((_resolve, reject) => {
             if (providerSignal.aborted) {

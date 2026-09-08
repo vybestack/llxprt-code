@@ -236,6 +236,62 @@ function createAmplifyingPromptTokenizerFactory(): RuntimeTokenizerFactory {
   };
 }
 
+type StatefulPromptEstimate = PromptEnvelopeEstimate & {
+  readonly incrementalTokens: number;
+  readonly transmittedTokens: number;
+  readonly retainedBaselineTokens: number;
+};
+
+function recordPreparedEstimate(
+  prepared: { readonly estimate: PromptEnvelopeEstimate | null },
+  estimates: PromptEnvelopeEstimate[],
+): number {
+  if (prepared.estimate === null) {
+    throw new Error('Responses projection did not produce an estimate');
+  }
+  estimates.push(prepared.estimate);
+  return prepared.estimate.estimatedPromptTokens;
+}
+
+function requireStatefulEstimate(
+  estimates: readonly PromptEnvelopeEstimate[],
+): StatefulPromptEstimate {
+  const estimate = estimates.find(
+    (candidate) => candidate.statefulParentUsed === true,
+  );
+  if (estimate === undefined) {
+    throw new Error('Expected a stateful Responses estimate');
+  }
+  const { incrementalTokens, transmittedTokens, retainedBaselineTokens } =
+    estimate;
+  if (
+    incrementalTokens === undefined ||
+    transmittedTokens === undefined ||
+    retainedBaselineTokens === undefined
+  ) {
+    throw new Error('Expected complete stateful Responses accounting');
+  }
+  return {
+    ...estimate,
+    incrementalTokens,
+    transmittedTokens,
+    retainedBaselineTokens,
+  };
+}
+
+function requireLastEstimate(
+  estimates: readonly PromptEnvelopeEstimate[],
+): PromptEnvelopeEstimate {
+  return estimates[estimates.length - 1];
+}
+
+function requireContextOverflow(error: unknown): ContextOverflowError {
+  if (!(error instanceof ContextOverflowError)) {
+    throw new Error('Expected structured local context overflow');
+  }
+  return error;
+}
+
 // ---------------------------------------------------------------------------
 // REQ-005.5c — providerContentEnforcement observable behavior
 // ---------------------------------------------------------------------------
@@ -353,11 +409,7 @@ describe('P26: providerContentEnforcement characterization', () => {
             ephemerals: { 'responses-stateful': true },
           }),
         );
-        if (prepared.estimate === null) {
-          throw new Error('Responses projection did not produce an estimate');
-        }
-        effectiveEstimates.push(prepared.estimate);
-        return prepared.estimate.estimatedPromptTokens;
+        return recordPreparedEstimate(prepared, effectiveEstimates);
       };
       harness.deps.estimateFinalizedPromptTokens = estimateAtSendSeam;
       harness.performCompression.mockImplementation(async () => {
@@ -376,19 +428,8 @@ describe('P26: providerContentEnforcement characterization', () => {
         provider,
       );
 
-      const initialStateful = effectiveEstimates.find(
-        (estimate) => estimate.statefulParentUsed === true,
-      );
-      if (
-        initialStateful?.incrementalTokens === undefined ||
-        initialStateful.transmittedTokens === undefined
-      ) {
-        throw new Error('Expected a stateful Responses estimate');
-      }
-      if (initialStateful.retainedBaselineTokens === undefined) {
-        throw new Error('Expected retained stateful context');
-      }
-      const finalEstimate = effectiveEstimates[effectiveEstimates.length - 1];
+      const initialStateful = requireStatefulEstimate(effectiveEstimates);
+      const finalEstimate = requireLastEstimate(effectiveEstimates);
 
       expect(initialStateful.transmittedTokens).toBeLessThan(10_000);
       expect(initialStateful).toMatchObject({
@@ -482,11 +523,7 @@ describe('P26: providerContentEnforcement characterization', () => {
             ephemerals: { 'responses-stateful': true },
           }),
         );
-        if (prepared.estimate === null) {
-          throw new Error('Responses projection did not produce an estimate');
-        }
-        estimates.push(prepared.estimate);
-        return prepared.estimate.estimatedPromptTokens;
+        return recordPreparedEstimate(prepared, estimates);
       };
       harness.performCompression.mockResolvedValue(
         PerformCompressionResult.COMPRESSED,
@@ -508,15 +545,13 @@ describe('P26: providerContentEnforcement characterization', () => {
       }
 
       expect(overflow).toBeInstanceOf(ContextOverflowError);
-      if (!(overflow instanceof ContextOverflowError)) {
-        throw new Error('Expected structured local context overflow');
-      }
-      const finalEstimate = estimates[estimates.length - 1];
-      expect(overflow.estimatedRequestTokenCount).toBe(
+      const contextOverflow = requireContextOverflow(overflow);
+      const finalEstimate = requireLastEstimate(estimates);
+      expect(contextOverflow.estimatedRequestTokenCount).toBe(
         finalEstimate.estimatedPromptTokens,
       );
-      expect(overflow.remainingTokenCount).toBe(905);
-      expect(overflow.message).toContain(
+      expect(contextOverflow.remainingTokenCount).toBe(905);
+      expect(contextOverflow.message).toContain(
         'Last-resort tool-response truncation replaced 0 response(s)',
       );
     } finally {
@@ -770,10 +805,8 @@ describe('P26: compressionBudgeting characterization', () => {
   });
 
   it('getCompletionBudget prefers the live settingsService maxOutputTokens over all other sources', () => {
-    const settingsService = {
-      get: (key: string) => (key === 'maxOutputTokens' ? 32768 : undefined),
-    };
-    const cfg = { maxOutputTokens: 8192 } as Record<string, unknown>;
+    const { cfg, settingsService } =
+      observeGetCompletionBudgetPrefersTheLiveSettingsServiceMaxOutputTokensOverAllOtherSources();
     expect(
       getCompletionBudget(
         cfg as never,
@@ -785,6 +818,16 @@ describe('P26: compressionBudgeting characterization', () => {
     ).toBe(32768);
   });
 
+  const observeGetCompletionBudgetPrefersTheLiveSettingsServiceMaxOutputTokensOverAllOtherSources =
+    () => {
+      const settingsService = {
+        get: (key: string) => (key === 'maxOutputTokens' ? 32768 : undefined),
+      };
+      const cfg = { maxOutputTokens: 8192 } as Record<string, unknown>;
+
+      return { cfg, settingsService };
+    };
+
   it('getCompletionBudget rejects a non-positive context limit', () => {
     expect(() => getCompletionBudget({}, 'm', undefined, undefined, 0)).toThrow(
       RangeError,
@@ -792,13 +835,21 @@ describe('P26: compressionBudgeting characterization', () => {
   });
 
   it('getCompletionBudget rejects a live budget that consumes the context', () => {
-    const settingsService = {
-      get: (key: string) => (key === 'maxOutputTokens' ? 131_072 : undefined),
-    };
+    const { settingsService } =
+      observeGetCompletionBudgetRejectsALiveBudgetThatConsumesTheContext();
     expect(() =>
       getCompletionBudget({}, 'm', undefined, settingsService, 131_072),
     ).toThrow(InvalidContextBudgetError);
   });
+
+  const observeGetCompletionBudgetRejectsALiveBudgetThatConsumesTheContext =
+    () => {
+      const settingsService = {
+        get: (key: string) => (key === 'maxOutputTokens' ? 131_072 : undefined),
+      };
+
+      return { settingsService };
+    };
 
   it('getCompletionBudget rejects a generation budget that consumes the context', () => {
     const cfg = { maxOutputTokens: 131_072 } as Record<string, unknown>;

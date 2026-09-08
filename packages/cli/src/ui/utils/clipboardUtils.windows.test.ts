@@ -27,6 +27,21 @@ const { mockSpawn } = {
   mockSpawn: vi.fn(),
 };
 
+function emitStdoutData(event: string, callback: (data: Buffer) => void): void {
+  if (event === 'data') {
+    setTimeout(() => callback(Buffer.from('success')), 0);
+  }
+}
+
+function emitSuccessfulClose(
+  event: string,
+  callback: (code: number) => void,
+): void {
+  if (event === 'close') {
+    setTimeout(() => callback(0), 0);
+  }
+}
+
 // Must use a synchronous factory — async factories with importOriginal cause
 // the module under test to capture the real spawn before the mock resolves.
 // We also provide a promisify-compatible exec to keep secure-browser-launcher
@@ -69,11 +84,7 @@ describe('saveClipboardImage Windows Path Escaping', () => {
   it('should escape single quotes in path for PowerShell script', async () => {
     // Mock spawn to simulate successful PowerShell execution
     const mockStdout = {
-      on: vi.fn((event: string, callback: (data: Buffer) => void) => {
-        if (event === 'data') {
-          setTimeout(() => callback(Buffer.from('success')), 0);
-        }
-      }),
+      on: vi.fn(emitStdoutData),
     };
 
     const mockStderr = {
@@ -83,11 +94,7 @@ describe('saveClipboardImage Windows Path Escaping', () => {
     const mockProc = {
       stdout: mockStdout,
       stderr: mockStderr,
-      on: vi.fn((event: string, callback: (code: number) => void) => {
-        if (event === 'close') {
-          setTimeout(() => callback(0), 0);
-        }
-      }),
+      on: vi.fn(emitSuccessfulClose),
     };
 
     mockSpawn.mockReturnValue(mockProc);

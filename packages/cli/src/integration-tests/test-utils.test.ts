@@ -107,9 +107,8 @@ describe('Test Utilities', () => {
   });
 
   describe('createTempKeyfile', () => {
-    it.skipIf(process.platform === 'win32')(
-      'should create a keyfile with correct permissions on Unix',
-      async () => {
+    describe.skipIf(process.platform === 'win32')('POSIX behavior', () => {
+      it('should create a keyfile with correct permissions on Unix', async () => {
         const dir = await createTempDirectory();
         tempDirs.push(dir);
 
@@ -124,12 +123,11 @@ describe('Test Utilities', () => {
         const stats = await fs.stat(keyfilePath);
         // Check that only owner can read/write (600)
         expect(stats.mode & 0o777).toBe(0o600);
-      },
-    );
+      });
+    });
 
-    it.skipIf(process.platform !== 'win32')(
-      'should create a keyfile with correct permissions on Windows',
-      async () => {
+    describe.skipIf(process.platform !== 'win32')('Windows behavior', () => {
+      it('should create a keyfile with correct permissions on Windows', async () => {
         const dir = await createTempDirectory();
         tempDirs.push(dir);
 
@@ -144,8 +142,8 @@ describe('Test Utilities', () => {
         const stats = await fs.stat(keyfilePath);
         // On Windows, permissions work differently
         expect(stats.mode & 0o777).toBe(0o666);
-      },
-    );
+      });
+    });
   });
 
   describe('readSettingsFile', () => {

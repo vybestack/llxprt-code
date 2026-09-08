@@ -111,20 +111,41 @@ describe('buildRipgrepArgs', () => {
     expectedExcludes.forEach((ex) => expect(globValues).toContain(ex));
   });
 
+  const observeIncludesTheIncludeGlobWhenAnIncludePatternIsProvidedAt114 =
+    () => {
+      const args = buildRipgrepArgs(PATTERN, ABS_PATH, '*.ts', defaultIgnore);
+      const positiveGlobs = args.filter(
+        (_value, idx) =>
+          args[idx - 1] === '--glob' && !args[idx].startsWith('!'),
+      );
+      return { positiveGlobs };
+    };
+
   it('includes the include glob when an include pattern is provided', () => {
-    const args = buildRipgrepArgs(PATTERN, ABS_PATH, '*.ts', defaultIgnore);
-    const positiveGlobs = args.filter(
-      (_value, idx) => args[idx - 1] === '--glob' && !args[idx].startsWith('!'),
-    );
+    const { positiveGlobs } =
+      observeIncludesTheIncludeGlobWhenAnIncludePatternIsProvidedAt114();
     expect(positiveGlobs).toContain('*.ts');
   });
 
+  const observeDoesNotAddAPositiveIncludeGlobWhenIncludeIsUndefinedAt122 =
+    () => {
+      const args = buildRipgrepArgs(
+        PATTERN,
+        ABS_PATH,
+        undefined,
+        defaultIgnore,
+      );
+      const positiveGlobs = args.filter(
+        (_value, idx) =>
+          args[idx - 1] === '--glob' && !args[idx].startsWith('!'),
+      );
+      return { positiveGlobs };
+    };
+
   it('does not add a positive include glob when include is undefined', () => {
-    const args = buildRipgrepArgs(PATTERN, ABS_PATH, undefined, defaultIgnore);
-    const positiveGlobs = args.filter(
-      (_value, idx) => args[idx - 1] === '--glob' && !args[idx].startsWith('!'),
-    );
-    expect(positiveGlobs).toEqual([]);
+    const { positiveGlobs } =
+      observeDoesNotAddAPositiveIncludeGlobWhenIncludeIsUndefinedAt122();
+    expect(positiveGlobs).toStrictEqual([]);
   });
 
   it('places the pattern after --regexp', () => {
@@ -144,19 +165,21 @@ describe('buildRipgrepArgs', () => {
 });
 
 describe('parseRipgrepLine', () => {
-  it.skipIf(process.platform !== 'win32')(
-    'parses null-delimited Windows drive-letter paths',
+  describe.skipIf(process.platform !== 'win32')(
+    'Windows drive-letter paths',
     () => {
-      const basePath = 'C:\\repo';
-      const match = parseRipgrepLine(
-        `C:\\repo\\src\\keep.ts${String.fromCharCode(0)}1:needle found`,
-        basePath,
-      );
+      it('parses null-delimited Windows drive-letter paths', () => {
+        const basePath = 'C:\\repo';
+        const match = parseRipgrepLine(
+          `C:\\repo\\src\\keep.ts${String.fromCharCode(0)}1:needle found`,
+          basePath,
+        );
 
-      expect(match).toEqual({
-        filePath: 'src\\keep.ts',
-        lineNumber: 1,
-        line: 'needle found',
+        expect(match).toStrictEqual({
+          filePath: 'src\\keep.ts',
+          lineNumber: 1,
+          line: 'needle found',
+        });
       });
     },
   );
@@ -167,7 +190,7 @@ describe('parseRipgrepLine', () => {
       '/tmp/search-root',
     );
 
-    expect(match).toEqual({
+    expect(match).toStrictEqual({
       filePath: 'keep.ts',
       lineNumber: 3,
       line: 'value: with: colons',

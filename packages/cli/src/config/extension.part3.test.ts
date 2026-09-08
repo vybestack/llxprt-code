@@ -24,6 +24,7 @@ import {
   loadExtensionConfig,
   loadExtensions,
   uninstallExtension,
+  type ExtensionConfig,
 } from './extension.js';
 import { __setLoadSettingsForTesting } from './extensionLoaderSettingsRef.js';
 import {
@@ -35,6 +36,15 @@ import { execSync } from 'node:child_process';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { createExtension } from '../test-utils/createExtension.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
+
+function normalizePreviousExtensionConfig(
+  extensionConfig: ExtensionConfig | null,
+): ExtensionConfig | undefined {
+  if (extensionConfig === null) {
+    return undefined;
+  }
+  return extensionConfig;
+}
 
 const mockGit = {
   clone: vi.fn(),
@@ -63,9 +73,9 @@ void vi.mock('os', () => ({
   homedir: vi.fn(),
 }));
 
-const actual = { ...(await import('./trustedFolders.js')) };
+const trustedFoldersModule = { ...(await import('./trustedFolders.js')) };
 void vi.mock('./trustedFolders.js', () => ({
-  ...actual,
+  ...trustedFoldersModule,
   isWorkspaceTrusted: vi.fn(),
 }));
 
@@ -505,10 +515,12 @@ This extension will run the following MCP servers:
           mockRequestConsent,
           process.cwd(),
           // Provide its own existing config as the previous config.
-          (await loadExtensionConfig({
-            extensionDir: sourceExtDir,
-            workspaceDir: process.cwd(),
-          })) ?? undefined,
+          normalizePreviousExtensionConfig(
+            await loadExtensionConfig({
+              extensionDir: sourceExtDir,
+              workspaceDir: process.cwd(),
+            }),
+          ),
         ),
       ).resolves.toBe('my-local-extension');
 

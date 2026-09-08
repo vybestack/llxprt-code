@@ -339,13 +339,7 @@ describe('MediaBlockContracts', () => {
    * @requirement:REQ-TEST-001
    */
   it('can classify media types by mimeType without importing providers', () => {
-    function classifyMediaType(mimeType: string): MediaBlockType {
-      if (mimeType.startsWith('image/')) return 'image';
-      if (mimeType === 'application/pdf') return 'pdf';
-      if (mimeType.startsWith('audio/')) return 'audio';
-      if (mimeType.startsWith('video/')) return 'video';
-      return 'unknown';
-    }
+    const classifyMediaType = classifyMediaTypeStandalone;
 
     expect(classifyMediaType('image/png')).toBe('image');
     expect(classifyMediaType('application/pdf')).toBe('pdf');
@@ -360,27 +354,7 @@ describe('MediaBlockContracts', () => {
    */
   it('can produce ClassifiedMediaBlock from raw media without importing classifyMediaBlock', () => {
     // Simulates provider mapping raw media data to core ClassifiedMediaBlock.
-    function toClassifiedMediaBlock(rawMedia: {
-      mimeType: string;
-      data: string;
-      filename?: string;
-    }): ClassifiedMediaBlock {
-      let mediaType: MediaBlockType;
-      if (rawMedia.mimeType.startsWith('image/')) {
-        mediaType = 'image';
-      } else if (rawMedia.mimeType === 'application/pdf') {
-        mediaType = 'pdf';
-      } else {
-        mediaType = 'unknown';
-      }
-
-      return {
-        mimeType: rawMedia.mimeType,
-        data: rawMedia.data,
-        mediaType,
-        ...(rawMedia.filename ? { filename: rawMedia.filename } : {}),
-      };
-    }
+    const toClassifiedMediaBlock = toClassifiedMediaStandalone;
 
     const block = toClassifiedMediaBlock({
       mimeType: 'image/jpeg',
@@ -393,3 +367,33 @@ describe('MediaBlockContracts', () => {
     expect(block.filename).toBe('photo.jpg');
   });
 });
+
+function classifyMediaTypeStandalone(mimeType: string): MediaBlockType {
+  if (mimeType.startsWith('image/')) return 'image';
+  if (mimeType === 'application/pdf') return 'pdf';
+  if (mimeType.startsWith('audio/')) return 'audio';
+  if (mimeType.startsWith('video/')) return 'video';
+  return 'unknown';
+}
+
+function toClassifiedMediaStandalone(rawMedia: {
+  mimeType: string;
+  data: string;
+  filename?: string;
+}): ClassifiedMediaBlock {
+  let mediaType: MediaBlockType;
+  if (rawMedia.mimeType.startsWith('image/')) {
+    mediaType = 'image';
+  } else if (rawMedia.mimeType === 'application/pdf') {
+    mediaType = 'pdf';
+  } else {
+    mediaType = 'unknown';
+  }
+
+  return {
+    mimeType: rawMedia.mimeType,
+    data: rawMedia.data,
+    mediaType,
+    ...(rawMedia.filename ? { filename: rawMedia.filename } : {}),
+  };
+}

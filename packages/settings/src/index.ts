@@ -26,6 +26,8 @@ export {
   getProtectedSettingKeys,
   getProviderConfigKeys,
   getDirectSettingSpecs,
+  getApplicationOwnedKeys,
+  isApplicationOwnedKey,
   getInternalSettingKeys,
   isInternalSettingKey,
   isSessionScopedSettingKey,
@@ -72,7 +74,11 @@ export type {
   CanonicalRepairOutcome,
   CanonicalRepairResult,
 } from './profiles/canonicalProfileRepair.js';
-export { parseProfile } from './settings/validation.js';
+export {
+  parseProfile,
+  parseProfileJson,
+  MIN_LOAD_BALANCER_MEMBERS,
+} from './settings/validation.js';
 export type {
   Profile,
   StandardProfile,

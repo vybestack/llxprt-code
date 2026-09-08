@@ -13,9 +13,10 @@
  */
 
 import { describe, it, expect, vi, type Mock } from 'bun:test';
-import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core';
 import { resolveProviderAndModel } from '../providerModelResolver.js';
 import { loadProviderAliasEntries } from '@vybestack/llxprt-code-providers/composition.js';
+
+const TEST_DEFAULT_MODEL = 'gemini-2.5-pro';
 
 void vi.mock('@vybestack/llxprt-code-providers/composition.js', () => ({
   loadProviderAliasEntries: vi.fn(() => []),
@@ -124,7 +125,39 @@ describe('resolveProviderAndModel: explicit provider precedence (#2481)', () => 
 });
 
 describe('resolveProviderAndModel: explicit Gemini unchanged (#2481)', () => {
-  it('resolves gemini when set via CLI with DEFAULT_GEMINI_MODEL', () => {
+  it('resolves gemini when set via CLI, defaulted from the provider', () => {
+    const result = resolveProviderAndModel({
+      cliProvider: 'gemini',
+      profileProvider: undefined,
+      envDefaultProvider: undefined,
+      cliModel: undefined,
+      profileModel: undefined,
+      settingsModel: undefined,
+      envDefaultModel: undefined,
+      envGeminiModel: undefined,
+      providerDefaultModel: TEST_DEFAULT_MODEL,
+    });
+    expect(result.provider).toBe('gemini');
+    expect(result.model).toBe(TEST_DEFAULT_MODEL);
+  });
+
+  it('resolves gemini when set via env, defaulted from the provider', () => {
+    const result = resolveProviderAndModel({
+      cliProvider: undefined,
+      profileProvider: undefined,
+      envDefaultProvider: 'gemini',
+      cliModel: undefined,
+      profileModel: undefined,
+      settingsModel: undefined,
+      envDefaultModel: undefined,
+      envGeminiModel: undefined,
+      providerDefaultModel: TEST_DEFAULT_MODEL,
+    });
+    expect(result.provider).toBe('gemini');
+    expect(result.model).toBe(TEST_DEFAULT_MODEL);
+  });
+
+  it('resolves gemini with no provider default to empty model', () => {
     const result = resolveProviderAndModel({
       cliProvider: 'gemini',
       profileProvider: undefined,
@@ -136,22 +169,55 @@ describe('resolveProviderAndModel: explicit Gemini unchanged (#2481)', () => {
       envGeminiModel: undefined,
     });
     expect(result.provider).toBe('gemini');
-    expect(result.model).toBe(DEFAULT_GEMINI_MODEL);
+    expect(result.model).toBe('');
   });
 
-  it('resolves gemini when set via env', () => {
+  it('treats a whitespace-only provider default as absent (empty model)', () => {
     const result = resolveProviderAndModel({
-      cliProvider: undefined,
+      cliProvider: 'gemini',
       profileProvider: undefined,
-      envDefaultProvider: 'gemini',
+      envDefaultProvider: undefined,
       cliModel: undefined,
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
       envGeminiModel: undefined,
+      providerDefaultModel: '   ',
     });
     expect(result.provider).toBe('gemini');
-    expect(result.model).toBe(DEFAULT_GEMINI_MODEL);
+    expect(result.model).toBe('');
+  });
+
+  it('does NOT consult the provider default when the provider is openai', () => {
+    const result = resolveProviderAndModel({
+      cliProvider: 'openai',
+      profileProvider: undefined,
+      envDefaultProvider: undefined,
+      cliModel: undefined,
+      profileModel: undefined,
+      settingsModel: undefined,
+      envDefaultModel: undefined,
+      envGeminiModel: undefined,
+      providerDefaultModel: TEST_DEFAULT_MODEL,
+    });
+    expect(result.provider).toBe('openai');
+    expect(result.model).toBe('');
+  });
+
+  it('does NOT consult the provider default when there is no provider', () => {
+    const result = resolveProviderAndModel({
+      cliProvider: undefined,
+      profileProvider: undefined,
+      envDefaultProvider: undefined,
+      cliModel: undefined,
+      profileModel: undefined,
+      settingsModel: undefined,
+      envDefaultModel: undefined,
+      envGeminiModel: undefined,
+      providerDefaultModel: TEST_DEFAULT_MODEL,
+    });
+    expect(result.provider).toBeUndefined();
+    expect(result.model).toBe('');
   });
 
   it('resolves GEMINI_MODEL env when gemini provider is explicit', () => {
@@ -164,6 +230,7 @@ describe('resolveProviderAndModel: explicit Gemini unchanged (#2481)', () => {
       settingsModel: undefined,
       envDefaultModel: undefined,
       envGeminiModel: 'gemini-2.5-flash',
+      providerDefaultModel: TEST_DEFAULT_MODEL,
     });
     expect(result.provider).toBe('gemini');
     expect(result.model).toBe('gemini-2.5-flash');
@@ -363,9 +430,10 @@ describe('resolveProviderAndModel: whitespace model sources treated as absent (#
       settingsModel: undefined,
       envDefaultModel: undefined,
       envGeminiModel: undefined,
+      providerDefaultModel: TEST_DEFAULT_MODEL,
     });
     expect(result.provider).toBe('gemini');
-    expect(result.model).toBe(DEFAULT_GEMINI_MODEL);
+    expect(result.model).toBe(TEST_DEFAULT_MODEL);
   });
 
   it('treats whitespace-only profileModel as absent', () => {
@@ -378,9 +446,10 @@ describe('resolveProviderAndModel: whitespace model sources treated as absent (#
       settingsModel: undefined,
       envDefaultModel: undefined,
       envGeminiModel: undefined,
+      providerDefaultModel: TEST_DEFAULT_MODEL,
     });
     expect(result.provider).toBe('gemini');
-    expect(result.model).toBe(DEFAULT_GEMINI_MODEL);
+    expect(result.model).toBe(TEST_DEFAULT_MODEL);
   });
 
   it('treats whitespace-only settingsModel as absent', () => {
@@ -393,9 +462,10 @@ describe('resolveProviderAndModel: whitespace model sources treated as absent (#
       settingsModel: '   ',
       envDefaultModel: undefined,
       envGeminiModel: undefined,
+      providerDefaultModel: TEST_DEFAULT_MODEL,
     });
     expect(result.provider).toBe('gemini');
-    expect(result.model).toBe(DEFAULT_GEMINI_MODEL);
+    expect(result.model).toBe(TEST_DEFAULT_MODEL);
   });
 });
 
@@ -466,7 +536,7 @@ describe('resolveProviderAndModel: alias default model preserved (#2481)', () =>
         alias: 'gemini',
         config: {
           baseProvider: 'gemini',
-          defaultModel: DEFAULT_GEMINI_MODEL,
+          defaultModel: TEST_DEFAULT_MODEL,
         },
         filePath: '/test/providers/gemini.json',
         source: 'builtin',

@@ -32,6 +32,9 @@ const SECURE_STORE_PATH_ENV_KEYS = [
   'XDG_DATA_HOME',
 ] as const;
 
+const shouldSkipLinuxDefaultDataPath =
+  process.platform !== 'linux' || process.env.XDG_DATA_HOME !== undefined;
+
 // ─── Test Helpers ────────────────────────────────────────────────────────────
 
 /**
@@ -70,6 +73,100 @@ function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
 async function createTempFallbackDir(): Promise<string> {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'secure-store-test-'));
   return tmpDir;
+}
+
+function createUnavailableGetAdapter(): KeyringAdapter {
+  return {
+    getPassword: async () => {
+      throw new Error('Keyring daemon unavailable');
+    },
+    setPassword: async () => {},
+    deletePassword: async () => true,
+  };
+}
+
+function createTransientRecoveryAdapter(
+  mockKeyring: KeyringAdapter,
+  shouldFail: () => boolean,
+): KeyringAdapter {
+  const failWhenUnavailable = (): void => {
+    if (shouldFail()) {
+      throw new Error('The keyring operation timed out');
+    }
+  };
+  return {
+    getPassword: async (service, account) => {
+      failWhenUnavailable();
+      return mockKeyring.getPassword(service, account);
+    },
+    setPassword: async (service, account, password) => {
+      failWhenUnavailable();
+      return mockKeyring.setPassword(service, account, password);
+    },
+    deletePassword: async (service, account) => {
+      failWhenUnavailable();
+      return mockKeyring.deletePassword(service, account);
+    },
+  };
+}
+
+function createCountingProbeAdapter(
+  probeStore: Map<string, string>,
+  shouldFail: () => boolean,
+  recordProbe: () => void,
+): KeyringAdapter {
+  const beginProbe = (): void => {
+    if (shouldFail()) {
+      throw new Error('Keyring unavailable');
+    }
+    recordProbe();
+  };
+  return {
+    getPassword: async (_service, account) => {
+      beginProbe();
+      return probeStore.get(account) ?? null;
+    },
+    setPassword: async (_service, account, password) => {
+      beginProbe();
+      probeStore.set(account, password);
+    },
+    deletePassword: async (_service, account) => {
+      beginProbe();
+      return probeStore.delete(account);
+    },
+  };
+}
+
+function createFaultingKeyringAdapter(
+  store: Map<string, string>,
+  failed: () => boolean,
+): KeyringAdapter {
+  const failWhenCrashed = (): void => {
+    if (failed()) {
+      throw new Error('Keyring crashed');
+    }
+  };
+  return {
+    getPassword: async (_service, account) => {
+      failWhenCrashed();
+      return store.get(account) ?? null;
+    },
+    setPassword: async (_service, account, password) => {
+      failWhenCrashed();
+      store.set(account, password);
+    },
+    deletePassword: async (_service, account) => {
+      failWhenCrashed();
+      return store.delete(account);
+    },
+  };
+}
+
+function isCompleteConcurrentValue(result: string | null): boolean {
+  return (
+    result !== null &&
+    ['value-from-writer-1', 'value-from-writer-2'].includes(result)
+  );
 }
 
 // ─── Keyring Access (R1) ─────────────────────────────────────────────────────
@@ -219,18 +316,7 @@ describe('SecureStore — Probe Cache Invalidation', () => {
    * @requirement R2.3
    */
   it('probe cache invalidated after N consecutive keyring failures', async () => {
-    let failCount = 0;
-    const adapter: KeyringAdapter = {
-      getPassword: async () => {
-        failCount++;
-        if (failCount >= 1) throw new Error('Keyring daemon unavailable');
-        return null;
-      },
-      setPassword: async (_s, _a, _p) => {
-        // probe set succeeds initially
-      },
-      deletePassword: async () => true,
-    };
+    const adapter = createUnavailableGetAdapter();
 
     const store = new SecureStore('test-service', {
       keyringLoader: async () => adapter,
@@ -271,21 +357,10 @@ describe('SecureStore — Probe Cache Invalidation', () => {
     // whole process. This test exercises the transient consecutive-failure +
     // recovery path, so it uses a non-latching TIMEOUT error rather than a
     // "locked" one (which would latch and make recovery unreachable).
-    const transientMessage = 'The keyring operation timed out';
-    const adapter: KeyringAdapter = {
-      getPassword: async (service, account) => {
-        if (shouldFail) throw new Error(transientMessage);
-        return mockKeyring.getPassword(service, account);
-      },
-      setPassword: async (service, account, password) => {
-        if (shouldFail) throw new Error(transientMessage);
-        return mockKeyring.setPassword(service, account, password);
-      },
-      deletePassword: async (service, account) => {
-        if (shouldFail) throw new Error(transientMessage);
-        return mockKeyring.deletePassword(service, account);
-      },
-    };
+    const adapter = createTransientRecoveryAdapter(
+      mockKeyring,
+      () => shouldFail,
+    );
 
     const store = new SecureStore('test-service', {
       keyringLoader: async () => adapter,
@@ -338,23 +413,11 @@ describe('SecureStore — Probe Cache Invalidation', () => {
     let probeCallCount = 0;
     let shouldFail = false;
     const probeStore = new Map<string, string>();
-    const adapter: KeyringAdapter = {
-      getPassword: async (_svc: string, acct: string) => {
-        if (shouldFail) throw new Error('Keyring unavailable');
-        probeCallCount++;
-        return probeStore.get(acct) ?? null;
-      },
-      setPassword: async (_svc: string, acct: string, pw: string) => {
-        if (shouldFail) throw new Error('Keyring unavailable');
-        probeCallCount++;
-        probeStore.set(acct, pw);
-      },
-      deletePassword: async (_svc: string, acct: string) => {
-        if (shouldFail) throw new Error('Keyring unavailable');
-        probeCallCount++;
-        return probeStore.delete(acct);
-      },
-    };
+    const adapter = createCountingProbeAdapter(
+      probeStore,
+      () => shouldFail,
+      () => probeCallCount++,
+    );
 
     const store = new SecureStore('test-service', {
       keyringLoader: async () => adapter,
@@ -437,20 +500,10 @@ describe('SecureStore — Fault Injection', () => {
   it('keyring error after successful fallback write does not lose data', async () => {
     let keyringFailed = false;
     const faultStore = new Map<string, string>();
-    const adapter: KeyringAdapter = {
-      getPassword: async (_svc: string, acct: string) => {
-        if (keyringFailed) throw new Error('Keyring crashed');
-        return faultStore.get(acct) ?? null;
-      },
-      setPassword: async (_svc: string, acct: string, pw: string) => {
-        if (keyringFailed) throw new Error('Keyring crashed');
-        faultStore.set(acct, pw);
-      },
-      deletePassword: async (_svc: string, acct: string) => {
-        if (keyringFailed) throw new Error('Keyring crashed');
-        return faultStore.delete(acct);
-      },
-    };
+    const adapter = createFaultingKeyringAdapter(
+      faultStore,
+      () => keyringFailed,
+    );
 
     const store = new SecureStore('test-service', {
       keyringLoader: async () => adapter,
@@ -506,8 +559,7 @@ describe('SecureStore — Fault Injection', () => {
     const result = await readStore.get('concurrent-key');
 
     // Result must be one of the two values — not corrupt or partial
-    const validValues = ['value-from-writer-1', 'value-from-writer-2'];
-    expect(result !== null && validValues.includes(result)).toBe(true);
+    expect(isCompleteConcurrentValue(result)).toBe(true);
   });
 });
 
@@ -583,9 +635,8 @@ describe('SecureStore — Fallback Permissions', () => {
    * @plan PLAN-20260211-SECURESTORE.P05
    * @requirement R4.8
    */
-  it.skipIf(process.platform === 'win32')(
-    'fallback directory created with 0o700 permissions',
-    async () => {
+  describe.skipIf(process.platform === 'win32')(() => {
+    it('fallback directory created with 0o700 permissions', async () => {
       const nestedDir = path.join(tempDir, 'nested', 'secure');
       const store = new SecureStore('test-service', {
         keyringLoader: async () => null,
@@ -598,16 +649,15 @@ describe('SecureStore — Fallback Permissions', () => {
 
       const stat = await fs.stat(nestedDir);
       expect(stat.mode & 0o777).toBe(0o700);
-    },
-  );
+    });
+  });
 
   /**
    * @plan PLAN-20260211-SECURESTORE.P05
    * @requirement R4.7
    */
-  it.skipIf(process.platform === 'win32')(
-    'fallback file permissions are 0o600',
-    async () => {
+  describe.skipIf(process.platform === 'win32')(() => {
+    it('fallback file permissions are 0o600', async () => {
       const store = new SecureStore('test-service', {
         keyringLoader: async () => null,
         fallbackDir: tempDir,
@@ -619,8 +669,8 @@ describe('SecureStore — Fallback Permissions', () => {
 
       const stat = await fs.stat(path.join(tempDir, 'perm-key.enc'));
       expect(stat.mode & 0o777).toBe(0o600);
-    },
-  );
+    });
+  });
 });
 
 // ─── Cross-Instance Consistency ──────────────────────────────────────────────
@@ -887,39 +937,36 @@ describe('SecureStore — Default Path Uses Platform Standards', () => {
     expect(fallbackDir).toContain('test-service');
   });
 
-  it.skipIf(process.platform !== 'darwin')(
-    'default fallbackDir uses macOS Application Support path',
-    () => {
+  describe.skipIf(process.platform !== 'darwin')(() => {
+    it('default fallbackDir uses macOS Application Support path', () => {
       const store = new SecureStore('test-service', {
         keyringLoader: async () => null,
         fallbackPolicy: 'allow',
       });
       const fallbackDir = getFallbackDir(store);
       expect(fallbackDir).toContain('Library/Application Support');
-    },
-  );
+    });
+  });
 
-  it.skipIf(process.platform !== 'win32')(
-    'default fallbackDir uses Windows AppData path',
-    () => {
+  describe.skipIf(process.platform !== 'win32')(() => {
+    it('default fallbackDir uses Windows AppData path', () => {
       const store = new SecureStore('test-service', {
         keyringLoader: async () => null,
         fallbackPolicy: 'allow',
       });
       const fallbackDir = getFallbackDir(store);
       expect(fallbackDir.toLowerCase()).toMatch(/appdata|localappdata/i);
-    },
-  );
+    });
+  });
 
-  it.skipIf(!(process.platform === 'linux' && !process.env.XDG_DATA_HOME))(
-    'default fallbackDir uses Linux XDG data path default',
-    () => {
+  describe.skipIf(shouldSkipLinuxDefaultDataPath)(() => {
+    it('default fallbackDir uses Linux XDG data path default', () => {
       const store = new SecureStore('test-service', {
         keyringLoader: async () => null,
         fallbackPolicy: 'allow',
       });
       const fallbackDir = getFallbackDir(store);
       expect(fallbackDir).toContain('.local/share');
-    },
-  );
+    });
+  });
 });

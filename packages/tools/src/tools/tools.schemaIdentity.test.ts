@@ -60,7 +60,7 @@ describe('BaseDeclarativeTool schema identity', () => {
     >;
 
     expect(parameters['requireOne']).toBeUndefined();
-    expect(parameters['required']).toEqual(['path']);
+    expect(parameters['required']).toStrictEqual(['path']);
     // The source schema must not be mutated by the derivation.
     expect(
       (PARAMETER_SCHEMA as Record<string, unknown>)['requireOne'],

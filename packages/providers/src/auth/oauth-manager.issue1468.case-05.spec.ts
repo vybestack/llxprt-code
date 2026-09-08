@@ -13,34 +13,28 @@ import {
   mockLoadProfile,
 } from './oauth-manager.issue1468.test-helpers.js';
 
+async function loadCaseFiveProfile(profileName: string) {
+  if (profileName === 'foreground-profile') {
+    return {
+      provider: 'anthropic',
+      auth: { type: 'oauth', buckets: ['foreground-bucket'] },
+    };
+  }
+  if (profileName === 'subagent-single') {
+    return {
+      provider: 'anthropic',
+      auth: { type: 'oauth', buckets: ['subagent-bucket'] },
+    };
+  }
+  throw new Error(`Unexpected profile lookup: ${profileName}`);
+}
+
 describe('Issue #1468 getProfileBuckets case 5', () => {
   it('establishes a request-scoped default session bucket for single-bucket profiles', async () => {
     const { manager } = createIssue1468Fixture();
 
     mockGetCurrentProfileName.mockReturnValue('foreground-profile');
-    mockLoadProfile.mockImplementation(async (profileName: string) => {
-      if (profileName === 'foreground-profile') {
-        return {
-          provider: 'anthropic',
-          auth: {
-            type: 'oauth',
-            buckets: ['foreground-bucket'],
-          },
-        };
-      }
-
-      if (profileName === 'subagent-single') {
-        return {
-          provider: 'anthropic',
-          auth: {
-            type: 'oauth',
-            buckets: ['subagent-bucket'],
-          },
-        };
-      }
-
-      throw new Error(`Unexpected profile lookup: ${profileName}`);
-    });
+    mockLoadProfile.mockImplementation(loadCaseFiveProfile);
 
     const provider: OAuthProvider = {
       name: 'anthropic',

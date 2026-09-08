@@ -80,21 +80,60 @@ const SAMPLE_ERROR: StructuredError = {
   status: 503,
 };
 
+function commandPartText(part: unknown): string {
+  if (
+    typeof part === 'object' &&
+    part !== null &&
+    'text' in part &&
+    typeof part.text === 'string'
+  ) {
+    return part.text;
+  }
+  return '';
+}
+
+function commandText(command: unknown): string {
+  if (typeof command === 'string') return command;
+  if (Array.isArray(command)) return command.map(commandPartText).join('');
+  return '';
+}
+
+function streamPromiseForCall(
+  callCount: number,
+  first: Promise<void>,
+  second: Promise<void>,
+): Promise<void> {
+  return callCount === 1 ? first : second;
+}
+
+function renderItem(dispatchThrowing: boolean): number {
+  if (dispatchThrowing) throw new Error('rendering explosion');
+  return 1;
+}
+
+function sessionIdForCall(callCount: number): string {
+  if (callCount === 1) throw new Error('session init explosion');
+  return 'test-session';
+}
+
 function terminalEvents(): Array<{
   label: string;
   event: AgentEvent;
-  clearQueue: boolean;
+  queueSemanticsVerb: 'clears' | 'preserves';
+  queueLengthAfterTerminalEvent: 0 | 2;
 }> {
   return [
     {
       label: 'error',
       event: { type: 'error', error: SAMPLE_ERROR },
-      clearQueue: true,
+      queueSemanticsVerb: 'clears',
+      queueLengthAfterTerminalEvent: 0,
     },
     {
       label: 'idle-timeout',
       event: { type: 'idle-timeout', error: SAMPLE_ERROR },
-      clearQueue: false,
+      queueSemanticsVerb: 'preserves',
+      queueLengthAfterTerminalEvent: 2,
     },
   ];
 }
@@ -245,7 +284,7 @@ async function startTurnAndRouteTerminalEvent(
 describe('useSubmitQuery — terminal error release (issue #2954)', () => {
   describe.each(terminalEvents())(
     'terminal $label event',
-    ({ event, clearQueue }) => {
+    ({ event, queueSemanticsVerb, queueLengthAfterTerminalEvent }) => {
       it('synchronously releases responding state at the terminal boundary (AC1)', async () => {
         const turnDeferred = createDeferred<void>();
         const deps = createDeps({
@@ -267,28 +306,9 @@ describe('useSubmitQuery — terminal error release (issue #2954)', () => {
       it('allows a slash command to execute immediately rather than queuing (AC2)', async () => {
         const turnDeferred = createDeferred<void>();
         const commandEffect: string[] = [];
-        const extractText = (cmd: unknown): string => {
-          if (typeof cmd === 'string') return cmd;
-          if (Array.isArray(cmd)) {
-            return cmd
-              .map((p) => {
-                if (
-                  typeof p === 'object' &&
-                  p !== null &&
-                  'text' in p &&
-                  typeof (p as { text: unknown }).text === 'string'
-                ) {
-                  return (p as { text: string }).text;
-                }
-                return '';
-              })
-              .join('');
-          }
-          return '';
-        };
         const handleSlashCommand = vi.fn(
           async (cmd: unknown): Promise<SlashCommandProcessorResult> => {
-            commandEffect.push(`executed:${extractText(cmd)}`);
+            commandEffect.push(`executed:${commandText(cmd)}`);
             return { type: 'handled' };
           },
         );
@@ -313,9 +333,8 @@ describe('useSubmitQuery — terminal error release (issue #2954)', () => {
 
         expect(commandEffect).toContain('executed:/profile load opus5');
         expect(
-          (deps.runStreamRef.current as ReturnType<typeof vi.fn>).mock.calls
-            .length,
-        ).toBe(1);
+          (deps.runStreamRef.current as ReturnType<typeof vi.fn>).mock.calls,
+        ).toHaveLength(1);
         expect(queuedSubmissionsRef.current).toHaveLength(0);
 
         await act(async () => {
@@ -330,9 +349,11 @@ describe('useSubmitQuery — terminal error release (issue #2954)', () => {
         const runStreamRef = {
           current: vi.fn(() => {
             runStreamCallCount += 1;
-            return runStreamCallCount === 1
-              ? turnDeferred.promise
-              : secondTurnDeferred.promise;
+            return streamPromiseForCall(
+              runStreamCallCount,
+              turnDeferred.promise,
+              secondTurnDeferred.promise,
+            );
           }),
         };
         const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
@@ -361,7 +382,7 @@ describe('useSubmitQuery — terminal error release (issue #2954)', () => {
         });
       });
 
-      it(`${clearQueue ? 'clears' : 'preserves'} the queue per existing semantics (AC6)`, async () => {
+      const observeQueueAfterTerminalEvent = async () => {
         const turnDeferred = createDeferred<void>();
         const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
         const queueOperations = createQueueOperations(queuedSubmissionsRef);
@@ -391,12 +412,22 @@ describe('useSubmitQuery — terminal error release (issue #2954)', () => {
           result.current.processAgentEvent(event, Date.now(), activeSignal);
         });
 
-        const expectedLength = clearQueue ? 0 : 2;
-        expect(queuedSubmissionsRef.current).toHaveLength(expectedLength);
+        return {
+          queuedSubmissions: queuedSubmissionsRef.current,
+          turnDeferred,
+          turnPromise: turn1Promise,
+        };
+      };
+
+      it(`${queueSemanticsVerb} the queue per existing semantics (AC6)`, async () => {
+        const { queuedSubmissions, turnDeferred, turnPromise } =
+          await observeQueueAfterTerminalEvent();
+
+        expect(queuedSubmissions).toHaveLength(queueLengthAfterTerminalEvent);
 
         await act(async () => {
           turnDeferred.resolve();
-          await turn1Promise;
+          await turnPromise;
         });
       });
     },
@@ -441,9 +472,11 @@ describe('useSubmitQuery — terminal error release (issue #2954)', () => {
     const runStreamRef = {
       current: vi.fn(() => {
         runStreamCallCount += 1;
-        return runStreamCallCount === 1
-          ? firstTurnDeferred.promise
-          : secondTurnDeferred.promise;
+        return streamPromiseForCall(
+          runStreamCallCount,
+          firstTurnDeferred.promise,
+          secondTurnDeferred.promise,
+        );
       }),
     };
     const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
@@ -510,12 +543,7 @@ describe('useSubmitQuery — terminal error release (issue #2954)', () => {
   it('releases the gate before fallible dispatch so a rendering throw cannot lock it (Finding 1)', async () => {
     const turnDeferred = createDeferred<void>();
     let dispatchThrowing = false;
-    const throwingAddItem = vi.fn(() => {
-      if (dispatchThrowing) {
-        throw new Error('rendering explosion');
-      }
-      return 1;
-    });
+    const throwingAddItem = vi.fn(() => renderItem(dispatchThrowing));
     const deps = createDeps({
       runStreamRef: { current: vi.fn(() => turnDeferred.promise) },
     });
@@ -575,10 +603,7 @@ describe('useSubmitQuery — terminal error release (issue #2954)', () => {
       session: {
         getSessionId: () => {
           getSessionIdCallCount += 1;
-          if (getSessionIdCallCount === 1) {
-            throw new Error('session init explosion');
-          }
-          return 'test-session';
+          return sessionIdForCall(getSessionIdCallCount);
         },
       },
     };
@@ -610,7 +635,7 @@ describe('useSubmitQuery — terminal error release (issue #2954)', () => {
           throw new Error('Expected session initialization to reject');
         },
         (error: unknown) =>
-          expect(error).toEqual(new Error('session init explosion')),
+          expect(error).toStrictEqual(new Error('session init explosion')),
       );
     });
 

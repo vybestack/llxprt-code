@@ -129,7 +129,7 @@ describe('stripTelemetryFromStdout', () => {
       '}',
     ].join('\n');
 
-    expect(JSON.parse(stripTelemetryFromStdout(inspected))).toEqual({
+    expect(JSON.parse(stripTelemetryFromStdout(inspected))).toStrictEqual({
       response: '$blue$',
     });
   });

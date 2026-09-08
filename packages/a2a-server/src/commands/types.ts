@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config, GitService } from '@vybestack/llxprt-code-core';
+import type { GitService, LlxprtExtension } from '@vybestack/llxprt-code-core';
 import type { AgentExecutor, ExecutionEventBus } from '@a2a-js/sdk/server';
 
 export interface CommandArgument {
@@ -13,8 +13,19 @@ export interface CommandArgument {
   readonly isRequired?: boolean;
 }
 
+/**
+ * Interface-neutral command context (#3221): commands render host-owned state
+ * (loaded extensions, startup model, checkpoint storage) instead of reaching
+ * into a runtime Config. The A2A server supplies these fields from the same
+ * settings/extensions input it uses to build task Agents.
+ */
 export interface CommandContext {
-  config: Config;
+  extensions: readonly LlxprtExtension[];
+  model: string;
+  checkpointing: {
+    enabled: boolean;
+    getProjectTempCheckpointsDir(): string;
+  };
   git?: GitService;
   agentExecutor?: AgentExecutor;
   eventBus?: ExecutionEventBus;

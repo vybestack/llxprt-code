@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import type { Part } from '@google/genai';
+import type { Part } from '../geminiWireTypes.js';
 import {
   ensureActiveLoopHasThoughtSignatures,
   stripThoughtsFromHistory,

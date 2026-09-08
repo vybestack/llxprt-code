@@ -393,7 +393,9 @@ describe('useAgentStream', () => {
     expect(mockSendMessageStream).not.toHaveBeenCalled(); // submitQuery uses this
   });
 
-  it('should not call sendMessageStream when all primary tool calls complete (continuation owned by Agent loop)', async () => {
+  const completePrimaryToolCalls = async (): Promise<{
+    readonly sendMessageStream: ReturnType<typeof vi.fn>;
+  }> => {
     const toolCall1ResponseParts: ContractPart[] = [
       { text: 'tool 1 final response' },
     ];
@@ -498,10 +500,17 @@ describe('useAgentStream', () => {
     await act(async () => {
       await new Promise((r) => setTimeout(r, 50));
     });
-    expect(mockSendMessageStream).not.toHaveBeenCalled();
+    return { sendMessageStream: mockSendMessageStream };
+  };
+
+  it('should not call sendMessageStream when all primary tool calls complete (continuation owned by Agent loop)', async () => {
+    const completion = await completePrimaryToolCalls();
+    expect(completion.sendMessageStream).not.toHaveBeenCalled();
   });
 
-  it('should not call sendMessageStream for completed tool calls with functionResponse parts (continuation owned by Agent loop)', async () => {
+  const completeToolCallsWithFunctionResponses = async (): Promise<{
+    readonly sendMessageStream: ReturnType<typeof vi.fn>;
+  }> => {
     const functionResponseParts: ContractPart[] = [
       {
         functionResponse: {
@@ -590,6 +599,11 @@ describe('useAgentStream', () => {
     await act(async () => {
       await new Promise((r) => setTimeout(r, 50));
     });
-    expect(mockSendMessageStream).not.toHaveBeenCalled();
+    return { sendMessageStream: mockSendMessageStream };
+  };
+
+  it('should not call sendMessageStream for completed tool calls with functionResponse parts (continuation owned by Agent loop)', async () => {
+    const completion = await completeToolCallsWithFunctionResponses();
+    expect(completion.sendMessageStream).not.toHaveBeenCalled();
   });
 });

@@ -52,6 +52,18 @@ async function pathDoesNotExist(p: string): Promise<boolean> {
   return false;
 }
 
+/** Polls until predicate succeeds, then resolves. */
+async function pollUntil(
+  predicate: () => Promise<boolean>,
+  timeoutMs: number,
+  intervalMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline && !(await predicate())) {
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+}
+
 describe('createKeyringTokenStore lock/fallback path resolution (P8/P7)', () => {
   let root: string;
   let logHome: string;
@@ -98,10 +110,7 @@ describe('createKeyringTokenStore lock/fallback path resolution (P8/P7)', () => 
         return false;
       }
     };
-    const deadline = Date.now() + 1000;
-    while (Date.now() < deadline && !(await lockExists())) {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
+    await pollUntil(lockExists, 1000, 20);
     expect(await lockExists()).toBe(true);
 
     await tokenStore.releaseRefreshLock('codex');

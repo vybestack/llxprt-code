@@ -19,6 +19,7 @@
  * @issue 3019
  */
 
+import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect } from 'bun:test';
 import { GithubTool, type GitHubBrokerClient } from './github.js';
 import { validateGithubOpParams } from './github-ops.js';
@@ -52,10 +53,15 @@ function declaresOwn<K extends string>(
  * properties only, no type assertions, no `any`. Returns null when the
  * property is absent or the schema shape is unexpected.
  */
+interface PropertyDescription {
+  readonly type: unknown;
+  readonly description: string;
+}
+
 function propertyTypeAndDescription(
   tool: GithubTool,
   name: string,
-): { type: unknown; description: string } | null {
+): PropertyDescription | null {
   const schema: unknown = tool.parameterSchema;
   if (typeof schema !== 'object' || schema === null) return null;
   if (!declaresOwn(schema, 'properties')) return null;
@@ -72,6 +78,13 @@ function propertyTypeAndDescription(
   return { type, description };
 }
 
+function requirePropertyDescription(
+  property: PropertyDescription | null,
+): PropertyDescription {
+  assertNotNull(property, 'expected a declared schema property');
+  return property;
+}
+
 describe('issue #3019 (AB2): github tool documents per-operation params', () => {
   /**
    * Structural: `threadId` must be a declared property with `type: 'string'`,
@@ -83,13 +96,14 @@ describe('issue #3019 (AB2): github tool documents per-operation params', () => 
    * @requirement AB2
    * @issue 3019
    */
+
   it('declares threadId as a string property sourced from pr.reviews', () => {
     const tool = new GithubTool(stubClient());
     const threadId = propertyTypeAndDescription(tool, 'threadId');
     expect(threadId).not.toBeNull();
-    if (threadId === null) return;
-    expect(threadId.type).toBe('string');
-    expect(threadId.description).toContain('pr.reviews');
+    const declaredThreadId = requirePropertyDescription(threadId);
+    expect(declaredThreadId.type).toBe('string');
+    expect(declaredThreadId.description).toContain('pr.reviews');
   });
 
   /**
@@ -102,13 +116,14 @@ describe('issue #3019 (AB2): github tool documents per-operation params', () => 
    * @requirement AB2
    * @issue 3019
    */
+
   it('number schema description names pr.resolve-thread as not taking number', () => {
     const tool = new GithubTool(stubClient());
     const numberProp = propertyTypeAndDescription(tool, 'number');
     expect(numberProp).not.toBeNull();
-    if (numberProp === null) return;
-    expect(numberProp.description.length).toBeGreaterThan(0);
-    expect(numberProp.description).toContain('pr.resolve-thread');
+    const declaredNumber = requirePropertyDescription(numberProp);
+    expect(declaredNumber.description.length).toBeGreaterThan(0);
+    expect(declaredNumber.description).toContain('pr.resolve-thread');
   });
 
   /**

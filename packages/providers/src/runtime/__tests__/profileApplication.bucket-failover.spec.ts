@@ -28,6 +28,79 @@ import {
   type MockRequest,
 } from '../bucketFailover.js';
 
+async function executeFirstBucketOnly(
+  _request: MockRequest,
+  bucket: string,
+): Promise<{ content: string }> {
+  if (bucket === 'work@company.com') {
+    return { content: 'success from work bucket' };
+  }
+  throw new Error('Should not call other buckets');
+}
+
+function createRateLimitedWorkExecutor(
+  recordCall: () => void,
+): (request: MockRequest, bucket: string) => Promise<{ content: string }> {
+  return async (_request, bucket) => {
+    recordCall();
+    if (bucket === 'work@company.com') {
+      throw new Error('Request failed with status code 429');
+    }
+    if (bucket === 'personal@gmail.com') {
+      return { content: 'success from personal bucket' };
+    }
+    throw new Error('Unexpected bucket: ' + bucket);
+  };
+}
+
+async function executeQuotaThenSuccess(
+  _request: MockRequest,
+  bucket: string,
+): Promise<{ content: string }> {
+  if (bucket === 'bucket1') {
+    throw new Error('Quota exceeded for this resource');
+  }
+  return { content: 'success from bucket2' };
+}
+
+function createSequentialFailoverExecutor(
+  calledBuckets: string[],
+): (request: MockRequest, bucket: string) => Promise<{ content: string }> {
+  return async (_request, bucket) => {
+    calledBuckets.push(bucket);
+    if (bucket === 'bucket1') {
+      throw new Error('Rate limit exceeded');
+    }
+    if (bucket === 'bucket2') {
+      throw new Error('Quota exceeded');
+    }
+    if (bucket === 'bucket3') {
+      return { content: 'success from bucket3' };
+    }
+    throw new Error('Unexpected bucket');
+  };
+}
+
+async function getWorkBucketToken(
+  _provider: string,
+  bucket: string,
+): Promise<MockToken | null> {
+  if (bucket === 'work@company.com') {
+    return { access_token: 'valid', expiry: Date.now() / 1000 + 3600 };
+  }
+  return null;
+}
+
+async function getDefaultBucketToken(
+  _provider: string,
+  bucket: string,
+): Promise<MockToken | null> {
+  if (bucket === 'default') {
+    return { access_token: 'valid', expiry: Date.now() / 1000 + 3600 };
+  }
+  return null;
+}
+
 describe('shouldFailover - failover triggers', () => {
   it('should return true for 429 rate limit errors', () => {
     const error = new Error('Request failed with status code 429');
@@ -131,12 +204,7 @@ describe('executeWithBucketFailover - failover execution', () => {
   it('should use first bucket initially', async () => {
     const request = { prompt: 'test' };
     const buckets = ['work@company.com', 'personal@gmail.com'];
-    const executor = async (_req: MockRequest, bucket: string) => {
-      if (bucket === 'work@company.com') {
-        return { content: 'success from work bucket' };
-      }
-      throw new Error('Should not call other buckets');
-    };
+    const executor = executeFirstBucketOnly;
 
     const result = await executeWithBucketFailover(request, buckets, executor);
     expect(result.content).toBe('success from work bucket');
@@ -147,16 +215,9 @@ describe('executeWithBucketFailover - failover execution', () => {
     const buckets = ['work@company.com', 'personal@gmail.com'];
     let callCount = 0;
 
-    const executor = async (_req: MockRequest, bucket: string) => {
+    const executor = createRateLimitedWorkExecutor(() => {
       callCount++;
-      if (bucket === 'work@company.com') {
-        throw new Error('Request failed with status code 429');
-      }
-      if (bucket === 'personal@gmail.com') {
-        return { content: 'success from personal bucket' };
-      }
-      throw new Error('Unexpected bucket: ' + bucket);
-    };
+    });
 
     const result = await executeWithBucketFailover(request, buckets, executor);
     expect(result.content).toBe('success from personal bucket');
@@ -166,12 +227,7 @@ describe('executeWithBucketFailover - failover execution', () => {
   it('should failover to next bucket on quota exceeded error', async () => {
     const request = { prompt: 'test' };
     const buckets = ['bucket1', 'bucket2'];
-    const executor = async (_req: MockRequest, bucket: string) => {
-      if (bucket === 'bucket1') {
-        throw new Error('Quota exceeded for this resource');
-      }
-      return { content: 'success from bucket2' };
-    };
+    const executor = executeQuotaThenSuccess;
 
     const result = await executeWithBucketFailover(request, buckets, executor);
     expect(result.content).toBe('success from bucket2');
@@ -182,20 +238,7 @@ describe('executeWithBucketFailover - failover execution', () => {
     const buckets = ['bucket1', 'bucket2', 'bucket3'];
     const calledBuckets: string[] = [];
 
-    const executor = async (_req: MockRequest, bucket: string) => {
-      calledBuckets.push(bucket);
-
-      if (bucket === 'bucket1') {
-        throw new Error('Rate limit exceeded');
-      }
-      if (bucket === 'bucket2') {
-        throw new Error('Quota exceeded');
-      }
-      if (bucket === 'bucket3') {
-        return { content: 'success from bucket3' };
-      }
-      throw new Error('Unexpected bucket');
-    };
+    const executor = createSequentialFailoverExecutor(calledBuckets);
 
     const result = await executeWithBucketFailover(request, buckets, executor);
     expect(result.content).toBe('success from bucket3');
@@ -394,12 +437,7 @@ describe('integration: profile loading with bucket failover', () => {
     };
 
     const tokenStore: MockTokenStore = {
-      getToken: async (_provider: string, bucket: string) => {
-        if (bucket === 'work@company.com') {
-          return { access_token: 'valid', expiry: Date.now() / 1000 + 3600 };
-        }
-        return null; // Missing bucket
-      },
+      getToken: getWorkBucketToken,
     };
 
     const result = await validateProfileBucketsExist(profile, tokenStore);
@@ -437,12 +475,7 @@ describe('integration: profile loading with bucket failover', () => {
     };
 
     const tokenStore: MockTokenStore = {
-      getToken: async (_provider: string, bucket: string) => {
-        if (bucket === 'default') {
-          return { access_token: 'valid', expiry: Date.now() / 1000 + 3600 };
-        }
-        return null;
-      },
+      getToken: getDefaultBucketToken,
     };
 
     const result = await validateProfileBucketsExist(profile, tokenStore);

@@ -6,6 +6,8 @@
  */
 
 // Re-export unified provider interfaces with public package names.
+import type { ProviderMediaTransportCapabilities } from './providerMediaTransportCapabilities.js';
+
 export type { IContent as ProviderMessage } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 export type { ITool as ProviderTool } from './ITool.js';
 export type { IProvider as Provider } from './IProvider.js';
@@ -24,7 +26,6 @@ export interface ProviderToolCall {
 // Enhanced provider capability types
 export interface ProviderCapabilities {
   supportsStreaming: boolean;
-  supportsTools: boolean;
   supportsVision: boolean;
   maxTokens: number;
   supportedFormats: string[];
@@ -32,6 +33,7 @@ export interface ProviderCapabilities {
   hasApiKeyConfig?: boolean;
   hasBaseUrlConfig?: boolean;
   supportsPaidMode?: boolean;
+  mediaTransport: ProviderMediaTransportCapabilities;
 }
 
 export interface ProviderContext {

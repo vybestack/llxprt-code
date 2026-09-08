@@ -33,7 +33,7 @@ wiring assertions).
 | packages/agents (test-bun)    | 6                | Bun (shared runner)               |
 | packages/auth                 | 43               | Bun (`run-bun-tests.ts`)          |
 | packages/cli                  | 680              | Bun (`run-bun-tests.ts`)          |
-| packages/core                 | 363              | Bun (`run-bun-tests.ts`)          |
+| packages/core                 | 394              | Bun (`run-bun-tests.ts`)          |
 | packages/ide-integration      | 10               | Bun (shared runner)               |
 | packages/lsp                  | 13               | Bun (shared runner)               |
 | packages/mcp                  | 43               | Bun (shared runner)               |
@@ -162,7 +162,7 @@ CI job.
 
 **Command:** `bun run-bun-tests.ts`
 
-All 363 core test files are Bun-native. The workspace `test`/`test:ci` scripts
+All 394 core test files are Bun-native. The workspace `test`/`test:ci` scripts
 use `bun run-bun-tests.ts`, which discovers every `*.{test,spec}.{ts,tsx}`
 file under `src` and `test`. A `bunfig.toml` preloads a workspace-specific
 `bun-preload.ts` that replicates the
@@ -172,6 +172,10 @@ Migration changes:
 
 - 5 files refactored to remove `vi.resetModules()` (Bun does not support module
   resetting; refactored to test-reset exports or module-level imports)
+- `shell-parser.missing-language-export.test.ts` added (issue #2918). Bun's
+  `mock.module` registry is process-wide and the core runner gives every file its
+  own process, so the file declares a process-wide `web-tree-sitter` mock and
+  still isolates it from the parser's real tests.
 - 8 files refactored to remove `resolves.not.toThrow()` (broken in Bun —
   rewritten to direct `await` calls)
 - 27 files migrated from `@fast-check/vitest` to bare `fast-check` with
@@ -199,9 +203,15 @@ Migration changes:
 - 1 file refactored to remove `resolves.not.toThrow()`
 - `proxy-socket-client.test.ts` refactored: removed `if (server)` conditionals
   (lint), added socket tracking for cleanup, replaced fake-timer-dependent
-  idle timeout test with direct `gracefulClose()` call
-- `oauth-errors.spec.ts` un-skipped 2 tests (removed `vi.useFakeTimers`,
-  replaced with zero-delay async waits)
+  idle timeout tests with direct `gracefulClose()` calls
+- Issue #2918 restored timer-driven boundary coverage in
+  `proxy-socket-client.test.ts`: fake timers are activated before the client is
+  constructed so the idle timer lands on the faked clock, and the tests now
+  advance past the deadline and observe the real server, so the earlier
+  `gracefulClose()` simulation no longer stands in for the timer.
+- Weak retry-timing tests in `oauth-errors.test.ts` were replaced with
+  deterministic fake-timer coverage of exponential backoff, delay caps,
+  `retryAfterMs`, and jitter.
 
 ### packages/lsp
 
@@ -381,6 +391,43 @@ bun scripts/run_bun_tests.ts --workspace telemetry
 # List what would run without executing (--dry-run):
 bun scripts/run_bun_tests.ts --dry-run
 ```
+
+## Bun test constraints recorded where test authors will look
+
+These are the Bun-driven patterns that look like a weakened test at first
+glance. Each is correct for Bun, and each says why the obvious
+Vitest-shaped alternative does not apply. They were measured and recorded for
+issue #2918 so the patterns are not "corrected" back later.
+
+- **Partial module mocks use synchronous factories.** Bun's `mock.module` does
+  not drain microtasks in an async factory, so a partial mock pre-imports the
+  actual value and returns it from a synchronous factory.
+  `packages/core/src/config/config.includeDirectories.test.ts` and
+  `config.initializeBoundary.test.ts` both use this shape; the old
+  async-factory concern is already addressed. No live `importOriginal()` calls
+  remain in `packages/`; the remaining references are explanatory comments.
+- **`vi.clearAllMocks()` resets call history and preserves implementations.**
+  Per-test implementation overrides therefore persist. The `beforeEach` in
+  `packages/core/src/skills/skillManager.test.ts` restores the baseline
+  implementations before each test, while `vi.clearAllMocks()` clears the call
+  history after each test.
+- **There is no `describe.sequential`.** Bun runs a file's tests sequentially
+  by default, so per-suite mutable trackers such as
+  `keyring-token-store.di.test.ts`'s `LockDirTracker` are race-free with
+  plain `describe`.
+- **Successful Bun `fs.access()` resolutions use circumstance-specific
+  assertions.** The named recording tests,
+  `packages/core/src/recording/integration.advanced.test.ts` and
+  `integration.basic.test.ts`, intentionally use `resolves.toBeFalsy()` for
+  successful access checks. This wording does not apply to unrelated falsy
+  assertions elsewhere in the repository.
+- **Module mocks are process-wide, and per-file processes are the isolation
+  mechanism.** A mock that must break a shared dependency belongs in its own
+  file, as `shell-parser.missing-language-export.test.ts` does. This
+  replaces the assumption that `vi.resetModules()` has no substitute.
+- **Fake timers must be installed before the code under test schedules its
+  timer, and `Date.now()` is frozen while they are installed.** Restore real
+  timers before waiting on real I/O.
 
 ## Test API
 

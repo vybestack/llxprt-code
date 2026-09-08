@@ -21,7 +21,44 @@ type StdoutWriteArgs =
       callback?: StdoutWriteCallback,
     ];
 
+type StdoutWrite = (...args: StdoutWriteArgs) => boolean;
+
 const noopUnderlying = (..._args: StdoutWriteArgs): boolean => true;
+
+/** Underlying that invokes the trailing callback when one is supplied. */
+function invokeLastCallbackUnderlying(...args: StdoutWriteArgs): boolean {
+  const maybeCb = args[args.length - 1];
+  if (typeof maybeCb === 'function') {
+    maybeCb();
+  }
+  return true;
+}
+
+/** Return the second argument only when it is a BufferEncoding string. */
+function encodingFromArgs(args: StdoutWriteArgs): BufferEncoding | undefined {
+  const maybeEnc = args[1];
+  if (typeof maybeEnc === 'string') {
+    return maybeEnc;
+  }
+  return undefined;
+}
+
+/** Underlying that records the encoding and invokes the trailing callback. */
+function captureEncodingUnderlying(
+  onEncoding: (encoding: BufferEncoding) => void,
+): StdoutWrite {
+  return (...args) => {
+    const encoding = encodingFromArgs(args);
+    if (encoding !== undefined) {
+      onEncoding(encoding);
+    }
+    const maybeCb = args[args.length - 1];
+    if (typeof maybeCb === 'function') {
+      maybeCb();
+    }
+    return true;
+  };
+}
 
 const capturingObserver = (): {
   observer: StdoutWriteObserver;
@@ -98,13 +135,7 @@ describe('createObservedStdoutWrite — backpressure + callback passthrough', ()
 
   it('preserves the (chunk, callback) overload by forwarding to underlying', () => {
     let cbInvoked = false;
-    const underlying = (...args: StdoutWriteArgs): boolean => {
-      const maybeCb = args[args.length - 1];
-      if (typeof maybeCb === 'function') {
-        maybeCb();
-      }
-      return true;
-    };
+    const underlying = invokeLastCallbackUnderlying;
     const observed = createObservedStdoutWrite(underlying, {
       onWrite: () => {},
     });
@@ -117,17 +148,9 @@ describe('createObservedStdoutWrite — backpressure + callback passthrough', ()
   it('preserves the (chunk, encoding, callback) overload', () => {
     let receivedEncoding: string | undefined;
     let cbInvoked = false;
-    const underlying = (...args: StdoutWriteArgs): boolean => {
-      const maybeEnc = args[1];
-      if (typeof maybeEnc === 'string') {
-        receivedEncoding = maybeEnc;
-      }
-      const maybeCb = args[args.length - 1];
-      if (typeof maybeCb === 'function') {
-        maybeCb();
-      }
-      return true;
-    };
+    const underlying = captureEncodingUnderlying((encoding) => {
+      receivedEncoding = encoding;
+    });
     const observed = createObservedStdoutWrite(underlying, {
       onWrite: () => {},
     });

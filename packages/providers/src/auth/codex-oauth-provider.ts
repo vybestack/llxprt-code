@@ -73,6 +73,18 @@ function waitForAbort<T>(
   });
 }
 /**
+ * Shared per-bucket auth flight with participant-counted cancellation
+ * ownership: the underlying flow is aborted only when no live participant
+ * remains.
+ */
+interface AuthFlightState {
+  readonly promise: Promise<CodexOAuthToken>;
+  readonly controller: AbortController;
+  participants: number;
+  settled: boolean;
+}
+
+/**
  * Codex OAuth Provider Implementation
  * Implements OAuth 2.0 PKCE flow for Codex authentication
  */
@@ -84,8 +96,7 @@ export class CodexOAuthProvider implements OAuthProvider {
   private tokenStore: TokenStore;
   private addItem?: OAuthUICallback;
   private initGuard: InitializationGuard;
-  private authInProgressByBucket: Map<string, Promise<CodexOAuthToken>> =
-    new Map();
+  private authInProgressByBucket: Map<string, AuthFlightState> = new Map();
   private currentAuthBucket?: string;
 
   constructor(tokenStore: TokenStore, addItem?: OAuthUICallback) {
@@ -133,9 +144,15 @@ export class CodexOAuthProvider implements OAuthProvider {
   /**
    * Initiate Codex OAuth authentication flow
    * Starts local callback server and opens browser for authentication
+   * @plan PLAN-20260827-ISSUE2562.P02
+   * @requirement REQ-2562-2
    * @returns The OAuth token obtained from the authentication flow
    */
-  async initiateAuth(): Promise<OAuthToken> {
+  async initiateAuth(externalSignal?: AbortSignal): Promise<OAuthToken> {
+    if (externalSignal?.aborted === true) {
+      throw externalSignal.reason;
+    }
+
     // Capture the bucket at entry so concurrent named-bucket flows cannot
     // cross-select browser profiles via the mutable currentAuthBucket.
     const requestBucket: string = this.currentAuthBucket ?? 'default';
@@ -149,30 +166,48 @@ export class CodexOAuthProvider implements OAuthProvider {
         () =>
           `[FLOW] OAuth already in progress for bucket=${requestBucket}, waiting...`,
       );
-      const token = await existing;
-      this.logger.debug(
-        () =>
-          `[FLOW] Finished waiting for existing auth flow for bucket=${requestBucket}`,
-      );
-      return token;
+      existing.participants += 1;
+      try {
+        const token = await this.awaitAuthFlight(existing, externalSignal);
+        this.logger.debug(
+          () =>
+            `[FLOW] Finished waiting for existing auth flow for bucket=${requestBucket}`,
+        );
+        return token;
+      } finally {
+        this.releaseAuthFlightParticipant(
+          requestBucket,
+          existing,
+          externalSignal,
+        );
+      }
     }
 
     this.logger.debug(
       () =>
         `[FLOW] Starting new auth flow for bucket=${requestBucket} via performAuth()`,
     );
+    // The flight owns the controller; cancellation ownership is
+    // participant-counted so a departing signal-bearing caller only aborts
+    // the shared flow when no other participant still needs it.
     const controller = new AbortController();
     const timeout = setTimeout(
       () => controller.abort(new Error('Codex OAuth flow timed out')),
       AUTH_TIMEOUT_MS,
     );
-    const authPromise = waitForAbort(
-      this.performAuth(requestBucket, controller.signal),
-      controller.signal,
-    );
-    this.authInProgressByBucket.set(requestBucket, authPromise);
+    const flight: AuthFlightState = {
+      promise: waitForAbort(
+        this.performAuth(requestBucket, controller.signal),
+        controller.signal,
+      ),
+      controller,
+      participants: 1,
+      settled: false,
+    };
+    this.authInProgressByBucket.set(requestBucket, flight);
+    this.wireAuthFlightSettlement(requestBucket, flight, timeout);
     try {
-      const token = await authPromise;
+      const token = await this.awaitAuthFlight(flight, externalSignal);
       this.logger.debug(
         () =>
           `[FLOW] performAuth() completed successfully for bucket=${requestBucket}`,
@@ -185,8 +220,7 @@ export class CodexOAuthProvider implements OAuthProvider {
       );
       throw error;
     } finally {
-      clearTimeout(timeout);
-      this.authInProgressByBucket.delete(requestBucket);
+      this.releaseAuthFlightParticipant(requestBucket, flight, externalSignal);
       this.logger.debug(
         () => `[FLOW] authInProgress cleared for bucket=${requestBucket}`,
       );
@@ -194,9 +228,110 @@ export class CodexOAuthProvider implements OAuthProvider {
   }
 
   /**
+   * Awaits a shared provider auth flight. Signal-less callers wait for the
+   * whole flight; signal-bearing callers detach with their own abort reason
+   * while the flight continues for any remaining participants.
+   *
+   * @plan PLAN-20260827-ISSUE2562.P02
+   * @requirement REQ-2562-2
+   */
+  private async awaitAuthFlight(
+    flight: AuthFlightState,
+    signal: AbortSignal | undefined,
+  ): Promise<CodexOAuthToken> {
+    if (signal === undefined) {
+      return flight.promise;
+    }
+    if (signal.aborted) {
+      throw signal.reason;
+    }
+    let abortReject: ((_reason: unknown) => void) | undefined;
+    const abortPromise = new Promise<never>((_resolve, reject) => {
+      abortReject = reject;
+    });
+    const abortListener = () => {
+      // Sole participant: abort the shared flow immediately so
+      // callback servers, polling, and timers preempt downstream
+      // work (including device-code fallback). With other live
+      // participants, only this caller detaches; the release path
+      // aborts the flight if it becomes orphaned.
+      if (flight.participants <= 1) {
+        flight.controller.abort(signal.reason);
+      }
+      abortReject?.(signal.reason);
+    };
+    signal.addEventListener('abort', abortListener, { once: true });
+    // Mark the abort branch handled so a late abort after the flight settles
+    // cannot surface as an unhandled rejection.
+    void abortPromise.catch(() => undefined);
+    try {
+      return await Promise.race([flight.promise, abortPromise]);
+    } finally {
+      // The caller's signal can outlive this flight (session/task-level
+      // signals are reused across authenticate() calls); never retain the
+      // listener past settlement.
+      signal.removeEventListener('abort', abortListener);
+    }
+  }
+
+  private releaseAuthFlightParticipant(
+    requestBucket: string,
+    flight: AuthFlightState,
+    signal: AbortSignal | undefined,
+  ): void {
+    flight.participants -= 1;
+    if (flight.participants > 0) {
+      return;
+    }
+    if (flight.settled) {
+      this.deleteAuthFlightIfOwned(requestBucket, flight);
+      return;
+    }
+    // Last live participant left while the attempt is still running: abort
+    // the orphaned attempt with the departing reason.
+    flight.controller.abort(
+      signal?.reason ??
+        new DOMException(
+          'Shared authentication attempt has no live participants',
+          'AbortError',
+        ),
+    );
+  }
+
+  private wireAuthFlightSettlement(
+    requestBucket: string,
+    flight: AuthFlightState,
+    timeout: ReturnType<typeof setTimeout>,
+  ): void {
+    void flight.promise
+      .catch(() => undefined)
+      .then(() => {
+        // The timeout backstop belongs to the flight's lifetime: the
+        // creator may detach while other participants still await the
+        // shared flow, so only settlement may disarm it.
+        clearTimeout(timeout);
+        flight.settled = true;
+        if (flight.participants <= 0) {
+          this.deleteAuthFlightIfOwned(requestBucket, flight);
+        }
+      });
+  }
+
+  private deleteAuthFlightIfOwned(
+    requestBucket: string,
+    flight: AuthFlightState,
+  ): void {
+    if (this.authInProgressByBucket.get(requestBucket) === flight) {
+      this.authInProgressByBucket.delete(requestBucket);
+    }
+  }
+
+  /**
    * Perform the actual OAuth authentication flow.
    * The requestBucket is captured at initiateAuth entry and threaded
    * through all helpers so concurrent flows cannot cross-select.
+   * @plan PLAN-20260827-ISSUE2562.P02
+   * @requirement REQ-2562-2
    * @returns The OAuth token obtained from the authentication flow
    */
   private async performAuth(
@@ -262,6 +397,9 @@ export class CodexOAuthProvider implements OAuthProvider {
       );
       if (!browserOpened) {
         await localCallback.shutdown().catch(() => undefined);
+        if (signal.aborted) {
+          throw signal.reason;
+        }
         this.logger.debug(
           () => '[FLOW] Browser launch failed, falling back to device auth',
         );

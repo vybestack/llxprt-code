@@ -30,10 +30,9 @@
  * Additionally, it detects new exported identifiers containing "Gemini"
  * (case-insensitive) outside the documented allowlist.
  *
- * Manifest enforcement: inspects root and all packages-level manifests to ensure
- * `@google/genai` appears ONLY in the exact sanctioned workspaces
- * (packages/core, packages/providers) at exactly the allowed version, and
- * nowhere else (root, all other packages). Scans dependencies,
+ * Manifest enforcement: inspects the root and all package manifests to ensure
+ * `@google/genai` appears only in the configured root packaging bridge and
+ * providers workspace at the allowed version, and nowhere else. Scans dependencies,
  * devDependencies, peerDependencies, AND optionalDependencies. Fails closed
  * on malformed/unreadable manifests or packages-dir discovery failure.
  *
@@ -44,7 +43,6 @@
  *
  * Enclaves:
  *   - packages/providers/src/gemini/** — Gemini provider implementation
- *   - packages/core/src/code_assist/** — code_assist (needs the SDK)
  *
  * Usage:
  *   scripts/check-genai-enclave.ts
@@ -58,11 +56,12 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import {
   isInGenaiImportEnclave,
+  isSanctionedDynamicLoader,
   isInGeminiNameEnclave,
   isExplicitlyAllowedGeminiName,
   isTestFile,
   isRuntimeExportSurface,
-  getGenaiDependencyWorkspaceDirs,
+  REQUIRED_MANIFEST_WORKSPACE_DIRS,
 } from './genai-enclave/config.ts';
 import { discoverScannableFiles } from './genai-enclave/file-discovery.ts';
 import {
@@ -225,7 +224,7 @@ function readRawManifest(filePath: string): RawManifest {
  * must fail closed (F4).
  */
 const REQUIRED_MANIFEST_DIRS: ReadonlySet<string> = new Set(
-  getGenaiDependencyWorkspaceDirs(),
+  REQUIRED_MANIFEST_WORKSPACE_DIRS,
 );
 
 function checkManifest(
@@ -249,7 +248,7 @@ function checkManifest(
       'code' in e &&
       (e as { code?: string }).code === 'ENOENT'
     ) {
-      // F4: a required manifest (root/core/providers) being absent is an
+      // F4: a required manifest (root/providers) being absent is an
       // operational failure — the guard cannot verify the dependency
       // invariant without it.
       if (REQUIRED_MANIFEST_DIRS.has(workspaceDir)) {
@@ -367,8 +366,7 @@ function formatViolation(v: Violation): string {
   if (v.kind === 'genai-import') {
     return (
       `  ${v.file}:${v.line}: ${v.importForm} '${v.specifier}' — ` +
-      '@google/genai imports are only allowed in packages/providers/src/gemini/** ' +
-      'and packages/core/src/code_assist/**'
+      '@google/genai imports are only allowed in packages/providers/src/gemini/**'
     );
   }
   if (v.kind === 'computed-import') {
@@ -384,7 +382,7 @@ function formatViolation(v: Violation): string {
     return (
       `  ${v.file}:${v.line}: ${v.exportForm} '${v.exportName}' — ` +
       'exported identifiers containing "Gemini" are only allowed in ' +
-      'packages/providers/src/gemini/** and packages/core/src/code_assist/** ' +
+      'packages/providers/src/gemini/** ' +
       '(or the explicit allowlist in scripts/genai-enclave/config.ts)'
     );
   }
@@ -419,12 +417,133 @@ interface FileScanResult {
   readonly errors: string[];
 }
 
+/**
+ * Fragments that must not appear anywhere in a sanctioned loader.
+ *
+ * A contiguous `@google/` check is not enough: `'@' + 'google/genai'` contains
+ * no such substring. Screening the distinctive words instead means a specifier
+ * can only be assembled by splitting a word itself (`'gen' + 'ai'`), which no
+ * accidental or drive-by edit produces. This is a tripwire against drift, not
+ * a defence against a determined author, and no static check can be the
+ * latter.
+ */
+const LOADER_FORBIDDEN_FRAGMENTS = ['genai', 'google'] as const;
+
+/**
+ * A sanctioned dynamic module loader must contain no genai reference at all,
+ * not merely no genai *import*.
+ *
+ * This is half of what makes the loader's exemption earned rather than
+ * granted; {@link computedImportsAreParameterSourced} is the other half. If the
+ * file ever gains a genai reference, the exemption stops applying.
+ */
+function assertLoaderIsGenaiFree(
+  content: string,
+  relPath: string,
+): Violation[] {
+  const haystack = content.toLowerCase();
+  for (const fragment of LOADER_FORBIDDEN_FRAGMENTS) {
+    const index = haystack.indexOf(fragment);
+    if (index === -1) {
+      continue;
+    }
+    return [
+      {
+        kind: 'genai-import',
+        file: relPath,
+        line: content.slice(0, index).split('\n').length,
+        importForm: 'sanctioned dynamic loader references',
+        specifier: fragment,
+      },
+    ];
+  }
+  return [];
+}
+
+/** The nearest function-like ancestor of `node`, if any. */
+function enclosingFunction(node: ts.Node): ts.SignatureDeclaration | undefined {
+  let current: ts.Node | undefined = node.parent;
+  while (current !== undefined) {
+    if (
+      ts.isFunctionDeclaration(current) ||
+      ts.isFunctionExpression(current) ||
+      ts.isArrowFunction(current) ||
+      ts.isMethodDeclaration(current)
+    ) {
+      return current;
+    }
+    current = current.parent;
+  }
+  return undefined;
+}
+
+/**
+ * Every computed `import()` in a sanctioned loader must take a bare identifier
+ * that is a parameter of its own enclosing function.
+ *
+ * This is the structural half of the exemption. A parameter is supplied by the
+ * caller and is opaque here by construction, which is exactly the legitimate
+ * case: resolving a package the user installed. Anything else, a concatenation,
+ * a module-scope constant, a property access, is rejected, so the loader cannot
+ * compute a specifier of its own choosing.
+ */
+function computedImportsAreParameterSourced(
+  sourceFile: ts.SourceFile,
+): boolean {
+  let allParameterSourced = true;
+
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword
+    ) {
+      const arg = node.arguments[0];
+      // A string literal is already readable by the scanner and is checked
+      // by the ordinary genai rules, so only computed specifiers matter here.
+      if (arg !== undefined && !ts.isStringLiteralLike(arg)) {
+        const fn = arg !== undefined ? enclosingFunction(node) : undefined;
+        const isParameter =
+          ts.isIdentifier(arg) &&
+          fn !== undefined &&
+          fn.parameters.some(
+            (parameter) =>
+              ts.isIdentifier(parameter.name) &&
+              parameter.name.text === arg.text,
+          );
+        if (!isParameter) {
+          allParameterSourced = false;
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+
+  visit(sourceFile);
+  return allParameterSourced;
+}
+
 function collectGenaiImportViolations(
   sourceFile: ReturnType<typeof parseSourceFile>,
   relPath: string,
+  content: string,
 ): Violation[] {
   if (isInGenaiImportEnclave(relPath)) return [];
-  return scanGenaiImports(sourceFile, relPath);
+  const violations = scanGenaiImports(sourceFile, relPath);
+  if (!isSanctionedDynamicLoader(relPath)) {
+    return violations;
+  }
+  // The loader keeps every genai check. The unreadable-specifier complaint is
+  // waived only when BOTH properties hold: the file names nothing genai-like,
+  // and every computed specifier is a parameter of its own function rather
+  // than a value the loader chose.
+  const genaiFree = assertLoaderIsGenaiFree(content, relPath);
+  if (genaiFree.length > 0) {
+    return [...genaiFree, ...violations];
+  }
+  if (!computedImportsAreParameterSourced(sourceFile)) {
+    return violations;
+  }
+  return violations.filter((v) => v.kind !== 'computed-import');
 }
 
 function scanFile(filePath: string): FileScanResult {
@@ -464,7 +583,7 @@ function scanFile(filePath: string): FileScanResult {
   }
 
   const violations = [
-    ...collectGenaiImportViolations(sourceFile, relPath),
+    ...collectGenaiImportViolations(sourceFile, relPath, content),
     ...collectGeminiExportViolations(sourceFile, relPath),
   ].map(formatViolation);
   return { violations, errors: [] };

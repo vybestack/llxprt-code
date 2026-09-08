@@ -38,6 +38,34 @@ const TestComponent = () => {
   );
 };
 
+function setRequiredFooterHeight(
+  setter: ((height: number) => void) | null,
+  height: number,
+): void {
+  setter?.(height);
+}
+
+class ErrorCatcher extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  override render() {
+    if (this.state.error) {
+      return React.createElement(Text, null, this.state.error.message);
+    }
+    return this.props.children;
+  }
+}
+
 describe('LayoutManager', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -83,7 +111,7 @@ describe('LayoutManager', () => {
 
     // Update footer height
     act(() => {
-      setFooterHeight?.(5);
+      setRequiredFooterHeight(setFooterHeight, 5);
     });
 
     expect(lastFrame()).toContain('footerHeight: 5');
@@ -153,25 +181,6 @@ describe('LayoutManager', () => {
   it('throws error when useLayout is called outside of LayoutManager', () => {
     // Ink's error boundary catches render errors, so we use a custom
     // error boundary to capture the thrown error and re-throw it.
-    class ErrorCatcher extends React.Component<
-      { children: React.ReactNode },
-      { error: Error | null }
-    > {
-      constructor(props: { children: React.ReactNode }) {
-        super(props);
-        this.state = { error: null };
-      }
-      static getDerivedStateFromError(error: Error) {
-        return { error };
-      }
-      override render() {
-        if (this.state.error) {
-          return React.createElement(Text, null, this.state.error.message);
-        }
-        return this.props.children;
-      }
-    }
-
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const { lastFrame } = render(

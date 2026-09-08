@@ -18,6 +18,7 @@ import {
   normalizeTaskParams,
 } from './taskToolGovernance.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 
@@ -227,6 +228,7 @@ describe('Issue #2255: TaskTool output parameter naming', () => {
 
     it('exposes expected_outputs as a schema property', () => {
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => ({}) as unknown as SubagentOrchestrator,
       });
       const prop = getSchemaProperties(tool)?.['expected_outputs'];
@@ -238,6 +240,7 @@ describe('Issue #2255: TaskTool output parameter naming', () => {
 
     it('retains output_spec as a deprecated alias in the schema', () => {
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => ({}) as unknown as SubagentOrchestrator,
       });
       const prop = getSchemaProperties(tool)?.['output_spec'];
@@ -252,6 +255,7 @@ describe('Issue #2255: TaskTool output parameter naming', () => {
   describe('TaskTool validateToolParamValues', () => {
     it('rejects JSON-Schema-shaped expected_outputs at schema validation time', () => {
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => ({}) as unknown as SubagentOrchestrator,
       });
       const params: TaskToolParams = {
@@ -272,6 +276,7 @@ describe('Issue #2255: TaskTool output parameter naming', () => {
 
     it('rejects JSON-Schema-shaped output_spec alias at schema validation time', () => {
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => ({}) as unknown as SubagentOrchestrator,
       });
       const params: TaskToolParams = {
@@ -288,6 +293,7 @@ describe('Issue #2255: TaskTool output parameter naming', () => {
 
     it('validateToolParamValues rejects non-string expected_outputs values that bypass schema', () => {
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => ({}) as unknown as SubagentOrchestrator,
       });
       // validateToolParamValues is a second line of defense for callers that
@@ -310,6 +316,7 @@ describe('Issue #2255: TaskTool output parameter naming', () => {
 
     it('validateToolParamValues rejects non-string output_spec values that bypass schema', () => {
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => ({}) as unknown as SubagentOrchestrator,
       });
       const error = (
@@ -330,6 +337,7 @@ describe('Issue #2255: TaskTool output parameter naming', () => {
 
     it('accepts valid string-valued expected_outputs', () => {
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => ({}) as unknown as SubagentOrchestrator,
       });
       const params: TaskToolParams = {
@@ -343,6 +351,7 @@ describe('Issue #2255: TaskTool output parameter naming', () => {
 
     it('accepts valid string-valued output_spec alias', () => {
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => ({}) as unknown as SubagentOrchestrator,
       });
       const params: TaskToolParams = {
@@ -359,6 +368,7 @@ describe('Issue #2255: TaskTool output parameter naming', () => {
     it('passes expected_outputs into launchRequest.outputConfig', async () => {
       const { launch, orchestrator } = createMockLaunch();
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => true,
       });
@@ -382,6 +392,7 @@ describe('Issue #2255: TaskTool output parameter naming', () => {
     it('passes output_spec alias into launchRequest.outputConfig', async () => {
       const { launch, orchestrator } = createMockLaunch();
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => true,
       });
@@ -405,6 +416,7 @@ describe('Issue #2255: TaskTool output parameter naming', () => {
     it('prefers expected_outputs over output_spec when both are provided at runtime', async () => {
       const { launch, orchestrator } = createMockLaunch();
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => true,
       });

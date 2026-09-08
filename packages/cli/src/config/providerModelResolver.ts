@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { loadProviderAliasEntries } from '@vybestack/llxprt-code-providers/composition.js';
 import { firstNonEmptyString } from '../utils/coalesce.js';
@@ -32,6 +31,14 @@ export interface ProviderModelInput {
   settingsModel: string | undefined;
   envDefaultModel: string | undefined;
   envGeminiModel: string | undefined;
+  /**
+   * Base-provider default model (level-6 fallback), sourced from the
+   * provider registry by the caller (e.g. the registered gemini
+   * provider's getDefaultModel()). Undefined or empty means "no provider
+   * default" and resolves to an empty model string; the resolver never
+   * substitutes a hardcoded model name.
+   */
+  providerDefaultModel?: string;
 }
 
 export interface ProviderModelResult {
@@ -100,7 +107,9 @@ export function resolveProviderAndModel(
     provider !== undefined ? getAliasDefaultModel(provider) : undefined;
 
   const providerDefault =
-    provider === 'gemini' ? DEFAULT_GEMINI_MODEL : (aliasDefaultModel ?? '');
+    provider === 'gemini'
+      ? (trimIfString(input.providerDefaultModel) ?? '')
+      : (aliasDefaultModel ?? '');
   const configuredModel = firstNonEmptyString(
     trimIfString(cliModel),
     trimIfString(profileModel),

@@ -62,6 +62,14 @@ function createErrorWithCode(message: string, code: string): Error {
   return Object.assign(new Error(message), { code });
 }
 
+function resolvePathUnlessDenied(location: fs.PathLike): string {
+  const resolved = location.toString();
+  if (resolved === '/secret') {
+    throw new Error('permission denied');
+  }
+  return resolved;
+}
+
 const TRUSTED_FOLDERS_FILE_MODE = 0o600;
 
 const actualFs = { ...(await import('fs')) };
@@ -81,6 +89,15 @@ void vi.mock('fs', () => ({
 void vi.mock('strip-json-comments', () => ({
   default: vi.fn((content) => content),
 }));
+
+type SettingsContentEntry = readonly [fs.PathOrFileDescriptor, string];
+
+function settingsContentForPath(
+  filePath: fs.PathOrFileDescriptor,
+  entries: readonly SettingsContentEntry[],
+): string {
+  return entries.find(([candidate]) => candidate === filePath)?.[1] ?? '{}';
+}
 
 describe('Trusted Folders Loading', () => {
   let mockFsExistsSync: Mock<typeof fs.existsSync>;
@@ -218,13 +235,7 @@ describe('Trusted Folders Loading', () => {
       });
       (
         fs.realpathSync as unknown as Mock<(location: fs.PathLike) => string>
-      ).mockImplementation((location) => {
-        const resolved = location.toString();
-        if (resolved === '/secret') {
-          throw new Error('permission denied');
-        }
-        return resolved;
-      });
+      ).mockImplementation(resolvePathUnlessDenied);
 
       expect(folders.isPathTrusted('/secret/file')).toBe(false);
     });
@@ -240,10 +251,9 @@ describe('Trusted Folders Loading', () => {
     };
     (
       fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
-    ).mockImplementation((p) => {
-      if (p === userPath) return JSON.stringify(userContent);
-      return '{}';
-    });
+    ).mockImplementation((p) =>
+      settingsContentForPath(p, [[userPath, JSON.stringify(userContent)]]),
+    );
 
     const { rules, errors } = loadTrustedFolders();
     expect(rules).toStrictEqual([
@@ -259,14 +269,13 @@ describe('Trusted Folders Loading', () => {
     ).mockImplementation((p) => p === userPath);
     (
       fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
-    ).mockImplementation((p) => {
-      if (p === userPath) return 'invalid json';
-      return '{}';
-    });
+    ).mockImplementation((p) =>
+      settingsContentForPath(p, [[userPath, 'invalid json']]),
+    );
 
     const { rules, errors } = loadTrustedFolders();
     expect(rules).toStrictEqual([]);
-    expect(errors.length).toBe(1);
+    expect(errors).toHaveLength(1);
     expect(errors[0].path).toBe(userPath);
     // V8 reports "Unexpected token ..." and JavaScriptCore reports
     // "Unexpected identifier ..."; both describe the same parse failure.
@@ -285,10 +294,9 @@ describe('Trusted Folders Loading', () => {
     };
     (
       fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
-    ).mockImplementation((p) => {
-      if (p === customPath) return JSON.stringify(userContent);
-      return '{}';
-    });
+    ).mockImplementation((p) =>
+      settingsContentForPath(p, [[customPath, JSON.stringify(userContent)]]),
+    );
 
     const { rules, errors } = loadTrustedFolders();
     expect(rules).toStrictEqual([
@@ -579,12 +587,9 @@ describe('isWorkspaceTrusted', () => {
       vi.spyOn(fs, 'readFileSync') as unknown as Mock<
         (p: fs.PathOrFileDescriptor) => string
       >
-    ).mockImplementation((p) => {
-      if (p === getTrustedFoldersPath()) {
-        return '{"foo": "bar",}'; // Malformed JSON with trailing comma
-      }
-      return '{}';
-    });
+    ).mockImplementation((p) =>
+      settingsContentForPath(p, [[getTrustedFoldersPath(), '{"foo": "bar",}']]),
+    );
     expect(() => isWorkspaceTrusted(mockSettings)).toThrow(FatalConfigError);
     expect(() => isWorkspaceTrusted(mockSettings)).toThrow(
       /Please fix the configuration file/,
@@ -597,12 +602,9 @@ describe('isWorkspaceTrusted', () => {
       vi.spyOn(fs, 'readFileSync') as unknown as Mock<
         (p: fs.PathOrFileDescriptor) => string
       >
-    ).mockImplementation((p) => {
-      if (p === getTrustedFoldersPath()) {
-        return 'null';
-      }
-      return '{}';
-    });
+    ).mockImplementation((p) =>
+      settingsContentForPath(p, [[getTrustedFoldersPath(), 'null']]),
+    );
     expect(() => isWorkspaceTrusted(mockSettings)).toThrow(FatalConfigError);
     expect(() => isWorkspaceTrusted(mockSettings)).toThrow(
       /not a valid JSON object/,
@@ -781,7 +783,7 @@ describe('invalid trust levels', () => {
 
     const { errors } = loadTrustedFolders();
     const possibleValues = Object.values(TrustLevel).join(', ');
-    expect(errors.length).toBe(1);
+    expect(errors).toHaveLength(1);
     expect(errors[0].message).toBe(
       `Invalid trust level "INVALID_TRUST_LEVEL" for path "${mockCwd}". Possible values are: ${possibleValues}.`,
     );

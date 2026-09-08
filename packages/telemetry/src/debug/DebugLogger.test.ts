@@ -7,6 +7,26 @@ import * as fc from 'fast-check';
 import { DebugLogger } from './DebugLogger.js';
 import { ConfigurationManager } from './ConfigurationManager.js';
 
+function writeAtLevel(
+  logger: DebugLogger,
+  level: 'debug' | 'log' | 'error',
+  message: string,
+): void {
+  if (level === 'debug') {
+    logger.debug(message);
+  } else if (level === 'log') {
+    logger.log(message);
+  } else {
+    logger.error(message);
+  }
+}
+
+function collectGarbageIfAvailable(): void {
+  if (global.gc) {
+    global.gc();
+  }
+}
+
 describe('DebugLogger', () => {
   const configManager = ConfigurationManager.getInstance();
 
@@ -605,13 +625,7 @@ describe('DebugLogger', () => {
 
           const writeSpy = vi.spyOn(logger.fileOutput, 'write');
 
-          if (level === 'debug') {
-            logger.debug(message);
-          } else if (level === 'log') {
-            logger.log(message);
-          } else {
-            logger.error(message);
-          }
+          writeAtLevel(logger, level, message);
 
           expect(writeSpy.mock.calls.length).toBeGreaterThan(0);
           const logEntry = writeSpy.mock.calls[0][0];
@@ -638,9 +652,7 @@ describe('DebugLogger', () => {
           logger.enabled = false;
 
           // Force garbage collection before measurement (if available)
-          if (global.gc) {
-            global.gc();
-          }
+          collectGarbageIfAvailable();
 
           const initialMemory = process.memoryUsage().heapUsed;
 

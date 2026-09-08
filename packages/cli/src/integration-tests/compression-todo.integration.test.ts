@@ -55,6 +55,14 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
     return [...inProgress, ...pending];
   };
 
+  const firstInProgressTodoContent = (todos: readonly Todo[]): string => {
+    const todo = todos.at(0);
+    if (todo === undefined) {
+      throw new Error('Expected one in-progress todo');
+    }
+    return todo.content;
+  };
+
   beforeEach(async () => {
     originalHome = process.env.HOME;
     tempDir = await fs.mkdtemp(
@@ -87,7 +95,7 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
   });
 
   describe('ActiveTodos Compression Context', () => {
-    it('@requirement REQ-HD-011.5 should include active todos in compression context', async () => {
+    async function verifyRequirementREQHD0115ShouldIncludeActiveTodosInCompressionContext() {
       // Given: A task list with multiple active items
       const todos = [
         createTodo('1', 'Analyze project structure', 'in_progress'),
@@ -100,13 +108,17 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
       await todoStore.writeTodos(todos);
 
       // Verify todos are stored
-      const storedTodos = await todoStore.readTodos();
+      return todoStore.readTodos();
+    }
+
+    it('@requirement REQ-HD-011.5 should include active todos in compression context', async () => {
+      const storedTodos =
+        await verifyRequirementREQHD0115ShouldIncludeActiveTodosInCompressionContext();
+
       expect(storedTodos).toHaveLength(5);
 
       // Verify active todos are filterable (same logic as client.ts)
-      const activeTodos = storedTodos.filter(
-        (todo) => todo.status === 'in_progress' || todo.status === 'pending',
-      );
+      const activeTodos = getActiveTodos(storedTodos);
       expect(activeTodos).toHaveLength(4);
 
       // Verify in_progress todos are prioritized
@@ -114,7 +126,9 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
         (todo) => todo.status === 'in_progress',
       );
       expect(inProgressTodos).toHaveLength(1);
-      expect(inProgressTodos[0].content).toBe('Analyze project structure');
+      expect(firstInProgressTodoContent(inProgressTodos)).toBe(
+        'Analyze project structure',
+      );
 
       // Format active todos for compression context (matches client.ts implementation)
       const formattedActiveTodos = activeTodos
@@ -169,11 +183,26 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
       expect(formatted).not.toContain('Completed task');
     });
 
-    it('@requirement REQ-HD-012.3 should handle empty todo list gracefully', async () => {
+    async function verifyRequirementREQHD0123ShouldHandleEmptyTodoListGracefully() {
       // Given: Empty task list
       await todoStore.writeTodos([]);
 
-      const storedTodos = await todoStore.readTodos();
+      return todoStore.readTodos();
+    }
+
+    async function provideActiveTodosForCompression(): Promise<
+      string | undefined
+    > {
+      const todos = await todoStore.readTodos();
+      const active = getActiveTodos(todos);
+      if (active.length === 0) return undefined;
+      return active.map((t) => `- [${t.status}] ${t.content}`).join('\n');
+    }
+
+    it('@requirement REQ-HD-012.3 should handle empty todo list gracefully', async () => {
+      const storedTodos =
+        await verifyRequirementREQHD0123ShouldHandleEmptyTodoListGracefully();
+
       expect(storedTodos).toHaveLength(0);
 
       // When: Getting active todos
@@ -181,14 +210,7 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
       expect(active).toHaveLength(0);
 
       // Then: Provider should return undefined (no active todos)
-      const provider = async (): Promise<string | undefined> => {
-        const todos = await todoStore.readTodos();
-        const active = getActiveTodos(todos);
-        if (active.length === 0) return undefined;
-        return active.map((t) => `- [${t.status}] ${t.content}`).join('\n');
-      };
-
-      const result = await provider();
+      const result = await provideActiveTodosForCompression();
       expect(result).toBeUndefined();
     });
 
@@ -263,7 +285,7 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
   });
 
   describe('End-to-End Integration', () => {
-    it('@requirement REQ-HD-011.5, REQ-HD-012.3 should wire todos through compression pipeline', async () => {
+    async function verifyRequirementREQHD0115REQHD0123ShouldWireTodosThroughCompressionPipeline() {
       // Given: A realistic multi-task scenario
       const projectTasks = [
         createTodo('1', 'Read existing project files', 'in_progress'),
@@ -293,7 +315,13 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
       };
 
       // Step 2: Provider returns formatted todos
-      const formattedTodos = await activeTodosProvider();
+      return activeTodosProvider();
+    }
+
+    it('@requirement REQ-HD-011.5, REQ-HD-012.3 should wire todos through compression pipeline', async () => {
+      const formattedTodos =
+        await verifyRequirementREQHD0115REQHD0123ShouldWireTodosThroughCompressionPipeline();
+
       expect(formattedTodos).toBeDefined();
       expect(formattedTodos).toContain('Read existing project files');
       expect(formattedTodos).toContain('Analyze code structure');
@@ -347,7 +375,7 @@ Status: In Progress
       expect(tmpDir).toContain(`${path.sep}tmp`);
     });
 
-    it('@requirement REQ-HD-011.5 should handle todo updates during session', async () => {
+    async function verifyRequirementREQHD0115ShouldHandleTodoUpdatesDuringSession() {
       // Given: Initial todos
       const initialTodos = [
         createTodo('1', 'First task', 'in_progress'),
@@ -357,9 +385,10 @@ Status: In Progress
       await todoStore.writeTodos(initialTodos);
 
       // When: First check
-      let storedTodos = await todoStore.readTodos();
-      expect(storedTodos).toHaveLength(2);
+      return todoStore.readTodos();
+    }
 
+    async function advanceTodosDuringSession(): Promise<Todo[]> {
       // Simulate task progression
       const updatedTodos = [
         createTodo('1', 'First task', 'completed'),
@@ -370,21 +399,35 @@ Status: In Progress
       await todoStore.writeTodos(updatedTodos);
 
       // Then: Updated state
-      storedTodos = await todoStore.readTodos();
+      return todoStore.readTodos();
+    }
+
+    function inProgressTodosAfterSessionUpdate(todos: readonly Todo[]): Todo[] {
+      return todos.filter((todo) => todo.status === 'in_progress');
+    }
+
+    function formattedActiveTodosAfterSessionUpdate(
+      todos: readonly Todo[],
+    ): string {
+      return getActiveTodos([...todos])
+        .map((todo) => `- [${todo.status}] ${todo.content}`)
+        .join('\n');
+    }
+
+    it('@requirement REQ-HD-011.5 should handle todo updates during session', async () => {
+      const initialStoredTodos =
+        await verifyRequirementREQHD0115ShouldHandleTodoUpdatesDuringSession();
+
+      expect(initialStoredTodos).toHaveLength(2);
+
+      const storedTodos = await advanceTodosDuringSession();
       expect(storedTodos).toHaveLength(3);
 
-      const inProgress = storedTodos.filter((t) => t.status === 'in_progress');
+      const inProgress = inProgressTodosAfterSessionUpdate(storedTodos);
       expect(inProgress).toHaveLength(1);
-      expect(inProgress[0].content).toBe('Second task');
+      expect(firstInProgressTodoContent(inProgress)).toBe('Second task');
 
-      // Provider should reflect new state
-      const active = storedTodos.filter(
-        (todo) => todo.status === 'in_progress' || todo.status === 'pending',
-      );
-      const formatted = active
-        .map((t) => `- [${t.status}] ${t.content}`)
-        .join('\n');
-
+      const formatted = formattedActiveTodosAfterSessionUpdate(storedTodos);
       expect(formatted).toContain('- [in_progress] Second task');
       expect(formatted).not.toContain('- [in_progress] First task'); // Now completed
       expect(formatted).toContain('- [pending] Third task');

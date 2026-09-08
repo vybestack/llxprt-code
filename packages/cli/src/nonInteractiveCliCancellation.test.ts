@@ -133,6 +133,13 @@ function setupTtyStdin(): {
   };
 }
 
+function keypressName(key: {
+  readonly name?: string;
+  readonly ctrl?: boolean;
+}): string {
+  return key.name ?? '';
+}
+
 describe('createStdinCancellation', () => {
   let abortController: AbortController;
   let stderrWriteSpy: ReturnType<typeof vi.spyOn>;
@@ -287,7 +294,7 @@ describe('createStdinCancellation', () => {
         const keypressRemovals = removeListenerCalls.filter(
           (c) => c.event === 'keypress',
         );
-        expect(keypressRemovals.length).toBe(1);
+        expect(keypressRemovals).toHaveLength(1);
 
         expect(getRemoveAllListenersCalls()).toBe(0);
       } finally {
@@ -304,7 +311,7 @@ describe('createStdinCancellation', () => {
           _str: string,
           key: { name?: string; ctrl?: boolean },
         ): void => {
-          unrelatedCalls.push(key.name ?? '');
+          unrelatedCalls.push(keypressName(key));
         };
 
         // Add an unrelated keypress listener before setup
@@ -328,7 +335,7 @@ describe('createStdinCancellation', () => {
         const keypressRemovals = removeListenerCalls.filter(
           (c) => c.event === 'keypress',
         );
-        expect(keypressRemovals.length).toBe(1);
+        expect(keypressRemovals).toHaveLength(1);
         // The removed listener should NOT be our unrelated one
         expect(keypressRemovals[0].listener).not.toBe(unrelatedListener);
 

@@ -21,10 +21,6 @@ import { createMockCommandContext } from '../../test-utils/mockCommandContext.js
 import { MessageType } from '../types.js';
 import { formatDuration } from '../utils/formatters.js';
 
-afterEach(() => {
-  restoreGlobals();
-});
-
 const getCliOAuthManagerMock = vi.fn();
 const getEphemeralSettingMock = vi.fn();
 const getActiveProviderNameMock = vi.fn();
@@ -39,7 +35,39 @@ void vi.mock('../contexts/RuntimeContext.js', () => ({
   }),
 }));
 
+function createEphemeralSettings(
+  settings: Readonly<Record<string, string | undefined>>,
+): (key: string) => string | undefined {
+  return (key: string): string | undefined => settings[key];
+}
+
+async function chutesFetchResponse(url: string): Promise<Response> {
+  if (String(url).includes('/quotas')) {
+    return {
+      ok: true,
+      json: async () => [
+        {
+          chute_id: null,
+          is_default: true,
+          quota: { usd_cents_per_hour: 500, usd_cents_per_day: 5000 },
+        },
+      ],
+    } as Response;
+  }
+  return {
+    ok: true,
+    json: async () => ({
+      username: 'testuser',
+      balance: 42.5,
+    }),
+  } as Response;
+}
+
 describe('statsCommand', () => {
+  afterEach(() => {
+    restoreGlobals();
+  });
+
   let mockContext: CommandContext;
   const startTime = new Date('2025-07-14T10:00:00.000Z');
   const endTime = new Date('2025-07-14T10:00:30.000Z');
@@ -233,12 +261,12 @@ describe('statsCommand', () => {
     getCliOAuthManagerMock.mockReturnValue(null);
 
     // Simulate Z.ai base URL with an API key
-    getEphemeralSettingMock.mockImplementation((key: string) => {
-      if (key === 'base-url') return 'https://api.z.ai/v1';
-      if (key === 'auth-keyfile') return undefined;
-      if (key === 'auth-key') return 'test-zai-key';
-      return undefined;
-    });
+    getEphemeralSettingMock.mockImplementation(
+      createEphemeralSettings({
+        'base-url': 'https://api.z.ai/v1',
+        'auth-key': 'test-zai-key',
+      }),
+    );
 
     // Mock fetch to return a valid Z.ai response
     const fetchMock = vi.fn().mockResolvedValue({
@@ -330,11 +358,12 @@ describe('statsCommand', () => {
     getCliOAuthManagerMock.mockReturnValue(oauthManager);
 
     // Also set up an API-key provider (Z.ai)
-    getEphemeralSettingMock.mockImplementation((key: string) => {
-      if (key === 'base-url') return 'https://api.z.ai/v1';
-      if (key === 'auth-key') return 'test-zai-key';
-      return undefined;
-    });
+    getEphemeralSettingMock.mockImplementation(
+      createEphemeralSettings({
+        'base-url': 'https://api.z.ai/v1',
+        'auth-key': 'test-zai-key',
+      }),
+    );
 
     // Mock fetch for Z.ai quota
     const fetchMock = vi.fn().mockResolvedValue({
@@ -383,11 +412,12 @@ describe('statsCommand', () => {
 
   it('should show Synthetic quota when base-url matches synthetic.new', async () => {
     getCliOAuthManagerMock.mockReturnValue(null);
-    getEphemeralSettingMock.mockImplementation((key: string) => {
-      if (key === 'base-url') return 'https://api.synthetic.new/v2';
-      if (key === 'auth-key') return 'test-synthetic-key';
-      return undefined;
-    });
+    getEphemeralSettingMock.mockImplementation(
+      createEphemeralSettings({
+        'base-url': 'https://api.synthetic.new/v2',
+        'auth-key': 'test-synthetic-key',
+      }),
+    );
 
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -422,35 +452,15 @@ describe('statsCommand', () => {
 
   it('should show Chutes quota when base-url matches chutes.ai', async () => {
     getCliOAuthManagerMock.mockReturnValue(null);
-    getEphemeralSettingMock.mockImplementation((key: string) => {
-      if (key === 'base-url') return 'https://api.chutes.ai/v1';
-      if (key === 'auth-key') return 'test-chutes-key';
-      return undefined;
-    });
+    getEphemeralSettingMock.mockImplementation(
+      createEphemeralSettings({
+        'base-url': 'https://api.chutes.ai/v1',
+        'auth-key': 'test-chutes-key',
+      }),
+    );
 
     // Chutes makes 2 parallel fetch calls: quotas + user
-    const fetchMock = vi.fn().mockImplementation((url: string) => {
-      if (String(url).includes('/quotas')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => [
-            {
-              chute_id: null,
-              is_default: true,
-              quota: { usd_cents_per_hour: 500, usd_cents_per_day: 5000 },
-            },
-          ],
-        } as Response);
-      }
-      // /users/me
-      return Promise.resolve({
-        ok: true,
-        json: async () => ({
-          username: 'testuser',
-          balance: 42.5,
-        }),
-      } as Response);
-    });
+    const fetchMock = vi.fn().mockImplementation(chutesFetchResponse);
     setGlobal('fetch', fetchMock);
 
     const quotaSubCommand = statsCommand.subCommands?.find(
@@ -476,11 +486,12 @@ describe('statsCommand', () => {
 
   it('should gracefully handle API-key fetch failure with no OAuth', async () => {
     getCliOAuthManagerMock.mockReturnValue(null);
-    getEphemeralSettingMock.mockImplementation((key: string) => {
-      if (key === 'base-url') return 'https://api.z.ai/v1';
-      if (key === 'auth-key') return 'test-key';
-      return undefined;
-    });
+    getEphemeralSettingMock.mockImplementation(
+      createEphemeralSettings({
+        'base-url': 'https://api.z.ai/v1',
+        'auth-key': 'test-key',
+      }),
+    );
 
     // Mock fetch to return an error
     const fetchMock = vi.fn().mockResolvedValue({
@@ -522,11 +533,12 @@ describe('statsCommand', () => {
       getCliOAuthManagerMock.mockReturnValue(null);
 
       // Set up ephemeral base-url pointing to Z.ai
-      getEphemeralSettingMock.mockImplementation((key: string) => {
-        if (key === 'base-url') return 'https://api.z.ai/v1';
-        if (key === 'auth-key') return 'test-key';
-        return undefined;
-      });
+      getEphemeralSettingMock.mockImplementation(
+        createEphemeralSettings({
+          'base-url': 'https://api.z.ai/v1',
+          'auth-key': 'test-key',
+        }),
+      );
 
       // Set up provider config with different URL (should be ignored)
       const mockProvider = {
@@ -584,10 +596,9 @@ describe('statsCommand', () => {
       getCliOAuthManagerMock.mockReturnValue(null);
 
       // No ephemeral base-url
-      getEphemeralSettingMock.mockImplementation((key: string) => {
-        if (key === 'auth-key') return 'test-key';
-        return undefined;
-      });
+      getEphemeralSettingMock.mockImplementation(
+        createEphemeralSettings({ 'auth-key': 'test-key' }),
+      );
 
       // Provider config has Synthetic base URL
       const mockProvider = {
@@ -630,10 +641,9 @@ describe('statsCommand', () => {
     it('should use baseProviderConfig when providerConfig has no base URL', async () => {
       getCliOAuthManagerMock.mockReturnValue(null);
 
-      getEphemeralSettingMock.mockImplementation((key: string) => {
-        if (key === 'auth-key') return 'test-key';
-        return undefined;
-      });
+      getEphemeralSettingMock.mockImplementation(
+        createEphemeralSettings({ 'auth-key': 'test-key' }),
+      );
 
       // Provider has baseProviderConfig with Kimi URL
       const mockProvider = {
@@ -677,10 +687,9 @@ describe('statsCommand', () => {
     it('should fall back to provider name detection only when no config URLs', async () => {
       getCliOAuthManagerMock.mockReturnValue(null);
 
-      getEphemeralSettingMock.mockImplementation((key: string) => {
-        if (key === 'auth-key') return 'test-key';
-        return undefined;
-      });
+      getEphemeralSettingMock.mockImplementation(
+        createEphemeralSettings({ 'auth-key': 'test-key' }),
+      );
 
       // Provider has no config URLs, name-based detection should work
       const mockProvider = {
@@ -723,10 +732,9 @@ describe('statsCommand', () => {
     it('should handle alias-loaded synthetic provider with baseProviderConfig', async () => {
       getCliOAuthManagerMock.mockReturnValue(null);
 
-      getEphemeralSettingMock.mockImplementation((key: string) => {
-        if (key === 'auth-key') return 'test-key';
-        return undefined;
-      });
+      getEphemeralSettingMock.mockImplementation(
+        createEphemeralSettings({ 'auth-key': 'test-key' }),
+      );
 
       // Real-world scenario: alias "synthetic" pointing to baseProviderConfig
       const mockProvider = {
@@ -770,10 +778,9 @@ describe('statsCommand', () => {
     it('should handle alias-loaded kimi provider with baseProviderConfig', async () => {
       getCliOAuthManagerMock.mockReturnValue(null);
 
-      getEphemeralSettingMock.mockImplementation((key: string) => {
-        if (key === 'auth-key') return 'test-key';
-        return undefined;
-      });
+      getEphemeralSettingMock.mockImplementation(
+        createEphemeralSettings({ 'auth-key': 'test-key' }),
+      );
 
       // Real-world scenario: alias "kimi" pointing to baseProviderConfig
       const mockProvider = {
@@ -817,10 +824,9 @@ describe('statsCommand', () => {
     it('should detect provider from kebab-case base-url in providerConfig (issue #1828)', async () => {
       getCliOAuthManagerMock.mockReturnValue(null);
 
-      getEphemeralSettingMock.mockImplementation((key: string) => {
-        if (key === 'auth-key') return 'test-key';
-        return undefined;
-      });
+      getEphemeralSettingMock.mockImplementation(
+        createEphemeralSettings({ 'auth-key': 'test-key' }),
+      );
 
       // Use non-detectable provider name to ensure URL-based detection is tested
       const mockProvider = {
@@ -876,10 +882,9 @@ describe('statsCommand', () => {
     it('should detect provider from kebab-case base-url in baseProviderConfig (issue #1828)', async () => {
       getCliOAuthManagerMock.mockReturnValue(null);
 
-      getEphemeralSettingMock.mockImplementation((key: string) => {
-        if (key === 'auth-key') return 'test-key';
-        return undefined;
-      });
+      getEphemeralSettingMock.mockImplementation(
+        createEphemeralSettings({ 'auth-key': 'test-key' }),
+      );
 
       // Use non-detectable provider name to ensure URL-based detection is tested
       const mockProvider = {

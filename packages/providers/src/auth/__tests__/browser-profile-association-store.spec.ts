@@ -206,28 +206,30 @@ describe('BrowserProfileAssociationStore', () => {
       expectNoTempFiles(fs);
     });
 
-    it.skipIf(process.platform === 'win32')(
-      'unlinks the temp file and rethrows when chmod fails',
+    describe.skipIf(process.platform === 'win32')(
+      'chmod failure cleanup on POSIX',
       () => {
-        const fs = createInMemoryFs();
-        const chmodError = new Error('chmod failed');
-        const { unlinked, unlink } = recordUnlinks(fs);
-        const store = createStore(fs, {
-          chmod: () => {
-            throw chmodError;
-          },
-          unlink,
-        });
+        it('unlinks the temp file and rethrows when chmod fails', () => {
+          const fs = createInMemoryFs();
+          const chmodError = new Error('chmod failed');
+          const { unlinked, unlink } = recordUnlinks(fs);
+          const store = createStore(fs, {
+            chmod: () => {
+              throw chmodError;
+            },
+            unlink,
+          });
 
-        expect(() =>
-          store.setAssociation('anthropic', 'default', {
-            browser: 'chrome',
-            profileDirectory: 'Default',
-          }),
-        ).toThrow(chmodError);
-        expectSingleTempUnlink(unlinked);
-        expect(fs.files.has(path)).toBe(false);
-        expectNoTempFiles(fs);
+          expect(() =>
+            store.setAssociation('anthropic', 'default', {
+              browser: 'chrome',
+              profileDirectory: 'Default',
+            }),
+          ).toThrow(chmodError);
+          expectSingleTempUnlink(unlinked);
+          expect(fs.files.has(path)).toBe(false);
+          expectNoTempFiles(fs);
+        });
       },
     );
 

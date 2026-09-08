@@ -13,6 +13,45 @@ import { CodexOAuthProvider } from './codex-oauth-provider.js';
 import type { TokenStore } from '@vybestack/llxprt-code-core';
 import * as secureBrowserLauncher from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
 
+interface ConcurrentAuthState {
+  firstStarted: boolean;
+  firstCompleted: boolean;
+  secondStarted: boolean;
+}
+
+async function performFirstAuthOnly(state: ConcurrentAuthState): Promise<void> {
+  if (!state.firstStarted) {
+    state.firstStarted = true;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    state.firstCompleted = true;
+  } else {
+    state.secondStarted = true;
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function completeDeviceAuthForRedirect(
+  _authCode: string,
+  _codeVerifier: string,
+  redirectUri: string,
+) {
+  if (
+    redirectUri === 'https://auth.openai.com/api/accounts/deviceauth/callback'
+  ) {
+    throw new Error('Token exchange failed: 400 token_exchange_user_error');
+  }
+  return {
+    access_token: 'test-token',
+    refresh_token: 'test-refresh',
+    expiry: Math.floor(Date.now() / 1000) + 3600,
+    token_type: 'Bearer' as const,
+    account_id: 'test-account',
+  };
+}
+
 describe('CodexOAuthProvider - Concurrency and State Management', () => {
   let provider: CodexOAuthProvider;
   let mockTokenStore: TokenStore;
@@ -41,24 +80,18 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
 
   describe('Concurrent initiateAuth Prevention', () => {
     it('should prevent concurrent initiateAuth calls from starting multiple flows', async () => {
-      let firstCallStarted = false;
-      let secondCallStarted = false;
-      let firstCallCompleted = false;
+      const authState: ConcurrentAuthState = {
+        firstStarted: false,
+        firstCompleted: false,
+        secondStarted: false,
+      };
 
       const performAuthSpy = vi
         .spyOn(
           provider as unknown as { performAuth: () => Promise<void> },
           'performAuth',
         )
-        .mockImplementation(async () => {
-          if (!firstCallStarted) {
-            firstCallStarted = true;
-            await new Promise((resolve) => setTimeout(resolve, 100));
-            firstCallCompleted = true;
-          } else {
-            secondCallStarted = true;
-          }
-        });
+        .mockImplementation(() => performFirstAuthOnly(authState));
 
       const promise1 = provider.initiateAuth();
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -66,9 +99,9 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
 
       await Promise.all([promise1, promise2]);
 
-      expect(firstCallStarted).toBe(true);
-      expect(firstCallCompleted).toBe(true);
-      expect(secondCallStarted).toBe(false);
+      expect(authState.firstStarted).toBe(true);
+      expect(authState.firstCompleted).toBe(true);
+      expect(authState.secondStarted).toBe(false);
 
       performAuthSpy.mockRestore();
     });
@@ -95,26 +128,20 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
     });
 
     it('should allow retry after failed initiateAuth', async () => {
-      let callCount = 0;
-
       const performAuthSpy = vi
         .spyOn(
           provider as unknown as { performAuth: () => Promise<void> },
           'performAuth',
         )
-        .mockImplementation(async () => {
-          callCount++;
-          if (callCount === 1) {
-            throw new Error('First call failed');
-          }
-        });
+        .mockRejectedValueOnce(new Error('First call failed'))
+        .mockResolvedValue(undefined);
 
       await expect(provider.initiateAuth()).rejects.toThrow(
         'First call failed',
       );
       await provider.initiateAuth();
 
-      expect(callCount).toBe(2);
+      expect(performAuthSpy).toHaveBeenCalledTimes(2);
 
       performAuthSpy.mockRestore();
     });
@@ -135,11 +162,7 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
       ).mockReturnValue(pendingAuth.promise);
 
       const authentication = provider.initiateAuth();
-      const rejection = authentication.then(
-        () => 'resolved',
-        (error: unknown) =>
-          error instanceof Error ? error.message : String(error),
-      );
+      const rejection = authentication.then(() => 'resolved', errorMessage);
       await advanceTimersByTimeAsync(20 * 60 * 1000);
       expect(await rejection).toBe('Codex OAuth flow timed out');
 
@@ -202,19 +225,13 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
     });
 
     it('should allow retry after failed initialization', async () => {
-      let callCount = 0;
-
       const initTokenSpy = vi
         .spyOn(
           provider as unknown as { initializeToken: () => Promise<void> },
           'initializeToken',
         )
-        .mockImplementation(async () => {
-          callCount++;
-          if (callCount === 1) {
-            throw new Error('Init failed');
-          }
-        });
+        .mockRejectedValueOnce(new Error('Init failed'))
+        .mockResolvedValue(undefined);
 
       await expect(
         (provider as unknown as { ensureInitialized: () => Promise<void> })[
@@ -226,7 +243,7 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
         'ensureInitialized'
       ]();
 
-      expect(callCount).toBe(2);
+      expect(initTokenSpy).toHaveBeenCalledTimes(2);
 
       initTokenSpy.mockRestore();
     });
@@ -358,28 +375,7 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
       // Set up the deviceFlow spy to capture the redirectUri passed to completeDeviceAuth
       mockDeviceFlow.completeDeviceAuth = vi
         .fn()
-        .mockImplementation(
-          (_authCode: string, _codeVerifier: string, redirectUri: string) => {
-            // Simulate the 400 error that happens with wrong redirect URI
-            if (
-              redirectUri ===
-              'https://auth.openai.com/api/accounts/deviceauth/callback'
-            ) {
-              return Promise.reject(
-                new Error(
-                  'Token exchange failed: 400 token_exchange_user_error',
-                ),
-              );
-            }
-            return Promise.resolve({
-              access_token: 'test-token',
-              refresh_token: 'test-refresh',
-              expiry: Math.floor(Date.now() / 1000) + 3600,
-              token_type: 'Bearer' as const,
-              account_id: 'test-account',
-            });
-          },
-        );
+        .mockImplementation(completeDeviceAuthForRedirect);
 
       (
         provider as unknown as { deviceFlow: typeof mockDeviceFlow }

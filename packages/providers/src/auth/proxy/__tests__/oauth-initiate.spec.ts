@@ -438,8 +438,8 @@ describe('oauth_initiate handler', () => {
       // The PKCE verifier (device_code in our flow) must NOT be returned to client
       expect(response.data?.code_verifier).toBeUndefined();
       expect(response.data?.pkce_verifier).toBeUndefined();
-      expect('code_verifier' in (response.data ?? {})).toBe(false);
-      expect('pkce_verifier' in (response.data ?? {})).toBe(false);
+      expect(response.data).not.toHaveProperty('code_verifier');
+      expect(response.data).not.toHaveProperty('pkce_verifier');
     });
 
     /**
@@ -457,7 +457,7 @@ describe('oauth_initiate handler', () => {
       expect(response.ok).toBe(true);
       expect(response.data?.flowInstance).toBeUndefined();
       expect(response.data?.pkceState).toBeUndefined();
-      expect('flowInstance' in (response.data ?? {})).toBe(false);
+      expect(response.data).not.toHaveProperty('flowInstance');
     });
   });
 
@@ -515,6 +515,41 @@ describe('oauth_initiate handler', () => {
 
       expect(response.ok).toBe(false);
       expect(response.code).toBe('INVALID_REQUEST');
+    });
+
+    it('rejects a wrong-typed provider with the provider message', async () => {
+      const response = await client.request('oauth_initiate', {
+        provider: 42,
+      });
+      expect(response).toMatchObject({
+        ok: false,
+        code: 'INVALID_REQUEST',
+        error: 'Missing provider',
+      });
+    });
+
+    it('rejects a wrong-typed bucket with the provider message', async () => {
+      const response = await client.request('oauth_initiate', {
+        provider: 'anthropic',
+        bucket: ['work'],
+      });
+      expect(response).toMatchObject({
+        ok: false,
+        code: 'INVALID_REQUEST',
+        error: 'Missing provider',
+      });
+    });
+
+    it('rejects a wrong-typed redirect_uri with the provider message', async () => {
+      const response = await client.request('oauth_initiate', {
+        provider: 'anthropic',
+        redirect_uri: { url: 'https://example.com' },
+      });
+      expect(response).toMatchObject({
+        ok: false,
+        code: 'INVALID_REQUEST',
+        error: 'Missing provider',
+      });
     });
 
     /**

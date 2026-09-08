@@ -20,6 +20,7 @@ import type {
   OAuthToken,
   BucketStats,
 } from '@vybestack/llxprt-code-core';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { RefreshCoordinator } from '../refresh-coordinator.js';
 
 // ─── In-Memory Test Double: TokenStore ───────────────────────────────────────
@@ -107,6 +108,24 @@ class InMemoryTokenStore implements TokenStore {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+interface RetryRefreshState {
+  attempts: number;
+}
+
+async function failFirstRefreshThenSucceed(
+  state: RetryRefreshState,
+  _provider: string,
+  _currentToken: OAuthToken,
+): Promise<OAuthToken> {
+  state.attempts += 1;
+  if (state.attempts === 1) {
+    throw Object.assign(new Error('ECONNREFUSED'), {
+      code: 'ECONNREFUSED',
+    });
+  }
+  return makeToken({ access_token: 'retry-success' });
+}
 
 function makeToken(overrides: Partial<OAuthToken> = {}): OAuthToken {
   return {
@@ -497,21 +516,10 @@ describe('RefreshCoordinator', () => {
       vi.useRealTimers();
       await tokenStore.saveToken('anthropic', makeToken());
 
-      let attemptCount = 0;
+      const retryState: RetryRefreshState = { attempts: 0 };
       const retryCoordinator = new RefreshCoordinator({
         tokenStore,
-        refreshFn: async (
-          _provider: string,
-          _currentToken: OAuthToken,
-        ): Promise<OAuthToken> => {
-          attemptCount++;
-          if (attemptCount === 1) {
-            throw Object.assign(new Error('ECONNREFUSED'), {
-              code: 'ECONNREFUSED',
-            });
-          }
-          return makeToken({ access_token: 'retry-success' });
-        },
+        refreshFn: failFirstRefreshThenSucceed.bind(undefined, retryState),
         cooldownMs: 30_000,
       });
 
@@ -519,7 +527,7 @@ describe('RefreshCoordinator', () => {
 
       expect(result.status).toBe('ok');
       expect(result.token!.access_token).toBe('retry-success');
-      expect(attemptCount).toBe(2);
+      expect(retryState.attempts).toBe(2);
     });
   });
 
@@ -556,6 +564,78 @@ describe('RefreshCoordinator', () => {
       // refresh_token must not be present in the returned token
       const keys = Object.keys(result.token!);
       expect(keys).not.toContain('refresh_token');
+    });
+
+    /**
+     * @requirement R-2197
+     * @scenario A refresh result extension is preserved in the stored merged token and the sanitized response
+     * @given A stored token and a refreshFn result carrying a fresh provider extension field
+     * @when refresh succeeds
+     * @then The merged token persisted to the store keeps the extension and the sanitized successful response keeps it
+     */
+    it('preserves a fresh extension from refreshFn in the stored merged token and the sanitized response', async () => {
+      await tokenStore.saveToken(
+        'anthropic',
+        makeToken({
+          access_token: 'old-access',
+          refresh_token: 'secret-rt',
+        }),
+      );
+
+      const extensionValue = 'ext-' + Math.random().toString(36).slice(2);
+      const extended = makeToken({
+        access_token: 'new-access-ext',
+        refresh_token: 'new-secret-rt',
+      });
+      Reflect.set(extended, 'extension_field', extensionValue);
+      refreshFn.setNextResult(extended);
+
+      const result = await coordinator.refresh('anthropic');
+
+      expect(result.status).toBe('ok');
+      expect(Reflect.get(result.token ?? {}, 'extension_field')).toBe(
+        extensionValue,
+      );
+      expect('refresh_token' in (result.token ?? {})).toBe(false);
+
+      const saved = await tokenStore.getToken('anthropic');
+      expect(saved).not.toBeNull();
+      expect(Reflect.get(saved ?? {}, 'extension_field')).toBe(extensionValue);
+      expect(saved!.access_token).toBe('new-access-ext');
+      expect(saved!.refresh_token).toBe('new-secret-rt');
+    });
+
+    it('does not set the cooldown when refreshFn returns a malformed token', async () => {
+      await tokenStore.saveToken(
+        'anthropic',
+        makeToken({
+          access_token: 'old-access',
+          refresh_token: 'secret-rt',
+        }),
+      );
+
+      const malformed = makeToken({ access_token: 'malformed-access' });
+      Reflect.set(malformed, 'expiry', 'not-a-timestamp');
+      refreshFn.setNextResult(malformed);
+
+      const firstRefresh = coordinator.refresh('anthropic');
+      await advanceTimersByTimeAsync(0);
+      await advanceTimersByTimeAsync(4_000);
+      const firstResult = await firstRefresh;
+      expect(firstResult.status).toBe('error');
+
+      refreshFn.setNextResult(
+        makeToken({
+          access_token: 'valid-after-malformed',
+          refresh_token: 'new-secret-rt',
+        }),
+      );
+      const secondResult = await coordinator.refresh('anthropic');
+
+      expect(secondResult.status).toBe('ok');
+      expect((await tokenStore.getToken('anthropic'))?.access_token).toBe(
+        'valid-after-malformed',
+      );
     });
 
     /**

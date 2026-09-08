@@ -164,6 +164,7 @@ export const DOMAIN_CANDIDATE_SUFFIXES: readonly string[] = [
 /** Patterns requiring enclosing-function/schema-name match. */
 export const H_FUNCTION_BODY_PATTERNS: ReadonlySet<string> = new Set([
   'usageStatsToPublicUsageMetadata',
+  'internalUsageToPublic',
   'usageFromHookResponse',
   'UsageMetadataValueSchema',
 ]);

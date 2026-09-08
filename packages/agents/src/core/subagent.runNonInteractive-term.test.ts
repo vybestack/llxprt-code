@@ -148,6 +148,7 @@ describe('subagent.ts', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -260,83 +261,90 @@ describe('subagent.ts', () => {
     });
 
     it('should actively abort a stalled non-interactive response stream before the overall run timeout expires', async () => {
-      vi.useFakeTimers();
-
-      const { config } = await createMockConfig();
-      const testTimeoutMs = 30_000; // 30 second timeout for this test
-      config.setEphemeralSetting('stream-idle-timeout-ms', testTimeoutMs);
-
-      const runConfig: RunConfig = { max_time_minutes: 5, max_turns: 100 };
-      let capturedSignal: AbortSignal | undefined;
-
-      mockSendMessageStream.mockImplementation(
-        async ({ config: messageConfig }) => {
-          capturedSignal = messageConfig.abortSignal;
-          return (async function* () {
-            yield {
-              type: StreamEventType.CHUNK,
-              value: mockChunk({ text: 'partial output' }),
-            };
-
-            await new Promise<void>((resolve) => {
-              if (!capturedSignal) {
-                throw new Error('Abort signal was not provided');
-              }
-              if (capturedSignal.aborted) {
-                throw createAbortError();
-              }
-              capturedSignal.addEventListener(
-                'abort',
-                () => {
-                  resolve();
-                },
-                { once: true },
-              );
-            });
-            throw createAbortError();
-          })();
-        },
-      );
-
-      const { overrides } = createRuntimeOverrides();
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        runConfig,
-        undefined,
-        undefined,
-        overrides,
-      );
-
-      const runPromise = scope.runNonInteractive(new ContextState());
-      const runRejection = runPromise.then(
-        () => {
-          throw new Error('Expected stalled subagent stream to abort');
-        },
-        (error) => {
-          expect(error).toMatchObject({
-            name: 'AbortError',
-          });
-        },
-      );
-
-      // Wait for the executor's async setup chain to register the
-      // stream-idle-timeout timer before advancing fake time.
-      expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
-        true,
-      );
-      await advanceTimersByTimeAsync(testTimeoutMs + 1_000);
-
-      await runRejection;
-
+      const { signalObserved, scope, abortedObservation, abortError } =
+        await observeActivelyAbortAStalledNonInteractiveResponseStreamBeforeTheOverallRun();
+      expect(signalObserved).toBe(true);
+      expect(abortError).toMatchObject({ name: 'AbortError' });
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);
-      expect(capturedSignal?.aborted).toBe(true);
+      expect(abortedObservation).toBe(true);
       expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
-
-      vi.useRealTimers();
     });
+
+    const observeActivelyAbortAStalledNonInteractiveResponseStreamBeforeTheOverallRun =
+      async () => {
+        vi.useFakeTimers();
+
+        const { config } = await createMockConfig();
+        const testTimeoutMs = 30_000; // 30 second timeout for this test
+        config.setEphemeralSetting('stream-idle-timeout-ms', testTimeoutMs);
+
+        const runConfig: RunConfig = { max_time_minutes: 5, max_turns: 100 };
+        let capturedSignal: AbortSignal | undefined;
+
+        mockSendMessageStream.mockImplementation(
+          async ({ config: messageConfig }) => {
+            capturedSignal = messageConfig.abortSignal;
+            return (async function* () {
+              yield {
+                type: StreamEventType.CHUNK,
+                value: mockChunk({ text: 'partial output' }),
+              };
+
+              await new Promise<void>((resolve) => {
+                if (!capturedSignal) {
+                  throw new Error('Abort signal was not provided');
+                }
+                if (capturedSignal.aborted) {
+                  throw createAbortError();
+                }
+                capturedSignal.addEventListener(
+                  'abort',
+                  () => {
+                    resolve();
+                  },
+                  { once: true },
+                );
+              });
+              throw createAbortError();
+            })();
+          },
+        );
+
+        const { overrides } = createRuntimeOverrides();
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          runConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        const runPromise = scope.runNonInteractive(new ContextState());
+        const runRejection = runPromise.then(
+          () => {
+            throw new Error('Expected stalled subagent stream to abort');
+          },
+          (error: unknown) => error,
+        );
+
+        // Wait for the executor's async setup chain to register the
+        // stream-idle-timeout timer before advancing fake time.
+        const signalObserved = await waitForCondition(
+          () => capturedSignal !== undefined,
+        );
+
+        await advanceTimersByTimeAsync(testTimeoutMs + 1_000);
+
+        const abortError = await runRejection;
+
+        vi.useRealTimers();
+
+        const abortedObservation = capturedSignal?.aborted;
+        return { signalObserved, scope, abortedObservation, abortError };
+      };
 
     it('should terminate with ERROR if the model call throws', async () => {
       const { config } = await createMockConfig();
@@ -361,77 +369,83 @@ describe('subagent.ts', () => {
     });
 
     it('should actively abort a hung non-interactive model call when the time limit expires', async () => {
-      vi.useFakeTimers();
-
-      const { config } = await createMockConfig();
-      const runConfig: RunConfig = {
-        max_time_minutes: 0.001,
-        max_turns: 100,
-      };
-      let capturedSignal: AbortSignal | undefined;
-
-      mockSendMessageStream.mockImplementation(
-        async ({ config: messageConfig }) => {
-          capturedSignal = messageConfig.abortSignal;
-          const stall = async function* () {
-            await new Promise<void>((resolve) => {
-              if (!capturedSignal) {
-                throw new Error('Abort signal was not provided');
-              }
-              if (capturedSignal.aborted) {
-                throw createAbortError();
-              }
-              capturedSignal.addEventListener(
-                'abort',
-                () => {
-                  resolve();
-                },
-                { once: true },
-              );
-            });
-            yield* [];
-            throw createAbortError();
-          };
-          return stall();
-        },
-      );
-
-      const { overrides } = createRuntimeOverrides();
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        runConfig,
-        undefined,
-        undefined,
-        overrides,
-      );
-
-      const runPromise = scope.runNonInteractive(new ContextState());
-      const runRejection = runPromise.then(
-        () => {
-          throw new Error('Expected timed out subagent run to abort');
-        },
-        (error) => {
-          expect(error).toMatchObject({
-            name: 'AbortError',
-          });
-        },
-      );
-
-      expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
-        true,
-      );
-      await advanceTimersByTimeAsync(100);
-
-      await runRejection;
-
+      const { signalObserved, scope, abortedObservation, abortError } =
+        await observeActivelyAbortAHungNonInteractiveModelCallWhenTheTimeLimit();
+      expect(signalObserved).toBe(true);
+      expect(abortError).toMatchObject({ name: 'AbortError' });
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);
-      expect(capturedSignal?.aborted).toBe(true);
-
-      vi.useRealTimers();
+      expect(abortedObservation).toBe(true);
     });
+
+    const observeActivelyAbortAHungNonInteractiveModelCallWhenTheTimeLimit =
+      async () => {
+        vi.useFakeTimers();
+
+        const { config } = await createMockConfig();
+        const runConfig: RunConfig = {
+          max_time_minutes: 0.001,
+          max_turns: 100,
+        };
+        let capturedSignal: AbortSignal | undefined;
+
+        mockSendMessageStream.mockImplementation(
+          async ({ config: messageConfig }) => {
+            capturedSignal = messageConfig.abortSignal;
+            const stall = async function* () {
+              await new Promise<void>((resolve) => {
+                if (!capturedSignal) {
+                  throw new Error('Abort signal was not provided');
+                }
+                if (capturedSignal.aborted) {
+                  throw createAbortError();
+                }
+                capturedSignal.addEventListener(
+                  'abort',
+                  () => {
+                    resolve();
+                  },
+                  { once: true },
+                );
+              });
+              yield* [];
+              throw createAbortError();
+            };
+            return stall();
+          },
+        );
+
+        const { overrides } = createRuntimeOverrides();
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          runConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        const runPromise = scope.runNonInteractive(new ContextState());
+        const runRejection = runPromise.then(
+          () => {
+            throw new Error('Expected timed out subagent run to abort');
+          },
+          (error: unknown) => error,
+        );
+
+        const signalObserved = await waitForCondition(
+          () => capturedSignal !== undefined,
+        );
+        await advanceTimersByTimeAsync(100);
+
+        const abortError = await runRejection;
+
+        vi.useRealTimers();
+
+        const abortedObservation = capturedSignal?.aborted;
+        return { signalObserved, scope, abortedObservation, abortError };
+      };
   });
 
   describe('runInteractive - Termination and Recovery', () => {
@@ -614,120 +628,125 @@ describe('subagent.ts', () => {
 
   describe('interactive tool scheduling timeout', () => {
     it('should time out when scheduler.schedule() never resolves after emitting a tool call (#1872)', async () => {
-      vi.useFakeTimers();
+      const { modelCallObserved, scope, abortError } =
+        await observeTimeOutWhenSchedulerScheduleNeverResolvesAfterEmittingAToolCall();
+      expect(modelCallObserved).toBe(true);
+      expect(abortError).toMatchObject({ name: 'AbortError' });
+      expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);
+    });
 
-      const { config } = await createMockConfig();
-      const runConfig: RunConfig = {
-        max_time_minutes: 0.001, // 0.06 seconds
-        max_turns: 100,
-      };
+    const observeTimeOutWhenSchedulerScheduleNeverResolvesAfterEmittingAToolCall =
+      async () => {
+        vi.useFakeTimers();
 
-      // schedule() hangs until the AbortSignal fires — matching real
-      // scheduler where attemptExecutionOfScheduledCalls propagates abort.
-      // awaitCompletedCalls returns a forever-pending promise; since
-      // schedule() throws first the completion promise is never awaited.
-      const abortAwareHang = (_req: unknown, signal: AbortSignal) =>
-        new Promise<never>((_resolve, reject) => {
-          const abort = () => {
-            const err = new Error('Aborted');
-            err.name = 'AbortError';
-            reject(err);
-          };
-          if (signal.aborted) {
-            abort();
-            return;
-          }
-          signal.addEventListener('abort', abort, { once: true });
-        });
-      const schedulerFactory = vi.fn(() => ({
-        schedule: vi.fn().mockImplementation(abortAwareHang),
-        awaitCompletedCalls: vi
-          .fn()
-          .mockImplementation((signal?: AbortSignal) => {
-            if (signal?.aborted === true) {
+        const { config } = await createMockConfig();
+        const runConfig: RunConfig = {
+          max_time_minutes: 0.001, // 0.06 seconds
+          max_turns: 100,
+        };
+
+        // schedule() hangs until the AbortSignal fires — matching real
+        // scheduler where attemptExecutionOfScheduledCalls propagates abort.
+        // awaitCompletedCalls returns a forever-pending promise; since
+        // schedule() throws first the completion promise is never awaited.
+        const abortAwareHang = (_req: unknown, signal: AbortSignal) =>
+          new Promise<never>((_resolve, reject) => {
+            const abort = () => {
               const err = new Error('Aborted');
               err.name = 'AbortError';
-              return Promise.reject(err);
+              reject(err);
+            };
+            if (signal.aborted) {
+              abort();
+              return;
             }
-            return new Promise<never>((_resolve, reject) => {
-              signal?.addEventListener(
-                'abort',
-                () => {
-                  const err = new Error('Aborted');
-                  err.name = 'AbortError';
-                  reject(err);
-                },
-                { once: true },
-              );
-            });
-          }),
-      }));
-
-      const runtimeBundle = createStatelessRuntimeBundle({
-        toolsView: {
-          listToolNames: () => ['hanging_tool'],
-          getToolMetadata: () => ({
-            name: 'hanging_tool',
-            description: 'A tool that triggers a hanging scheduler',
-            parameterSchema: { type: 'object', properties: {} },
-          }),
-        },
-      });
-      const { overrides } = createRuntimeOverrides({ runtimeBundle });
-
-      const scope = await SubAgentScope.create(
-        'hanging-scheduler-agent',
-        config,
-        { systemPrompt: 'Execute task.' },
-        defaultModelConfig,
-        runConfig,
-        { tools: ['hanging_tool'] },
-        undefined,
-        overrides,
-      );
-
-      // Stream yields a tool call then ends
-      const interactiveResponseStream = (async function* () {
-        yield {
-          type: StreamEventType.CHUNK,
-          value: mockChunk({
-            toolCalls: [{ id: 'call-hang', name: 'hanging_tool', args: {} }],
-          }),
-        };
-      })();
-      mockSendMessageStream.mockResolvedValue(interactiveResponseStream);
-
-      const runPromise = scope.runInteractive(new ContextState(), {
-        schedulerFactory,
-      });
-
-      const runRejection = runPromise.then(
-        () => {
-          throw new Error(
-            'Expected subagent to abort when scheduler.schedule() hangs',
-          );
-        },
-        (error) => {
-          expect(error).toMatchObject({
-            name: 'AbortError',
+            signal.addEventListener('abort', abort, { once: true });
           });
-        },
-      );
+        const schedulerFactory = vi.fn(() => ({
+          schedule: vi.fn().mockImplementation(abortAwareHang),
+          awaitCompletedCalls: vi
+            .fn()
+            .mockImplementation((signal?: AbortSignal) => {
+              if (signal?.aborted === true) {
+                const err = new Error('Aborted');
+                err.name = 'AbortError';
+                return Promise.reject(err);
+              }
+              return new Promise<never>((_resolve, reject) => {
+                signal?.addEventListener(
+                  'abort',
+                  () => {
+                    const err = new Error('Aborted');
+                    err.name = 'AbortError';
+                    reject(err);
+                  },
+                  { once: true },
+                );
+              });
+            }),
+        }));
 
-      // Wait for the interactive run to enter the hanging scheduler before
-      // advancing time past the timeout.
-      expect(
-        await waitForCondition(
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolsView: {
+            listToolNames: () => ['hanging_tool'],
+            getToolMetadata: () => ({
+              name: 'hanging_tool',
+              description: 'A tool that triggers a hanging scheduler',
+              parameterSchema: { type: 'object', properties: {} },
+            }),
+          },
+        });
+        const { overrides } = createRuntimeOverrides({ runtimeBundle });
+
+        const scope = await SubAgentScope.create(
+          'hanging-scheduler-agent',
+          config,
+          { systemPrompt: 'Execute task.' },
+          defaultModelConfig,
+          runConfig,
+          { tools: ['hanging_tool'] },
+          undefined,
+          overrides,
+        );
+
+        // Stream yields a tool call then ends
+        const interactiveResponseStream = (async function* () {
+          yield {
+            type: StreamEventType.CHUNK,
+            value: mockChunk({
+              toolCalls: [{ id: 'call-hang', name: 'hanging_tool', args: {} }],
+            }),
+          };
+        })();
+        mockSendMessageStream.mockResolvedValue(interactiveResponseStream);
+
+        const runPromise = scope.runInteractive(new ContextState(), {
+          schedulerFactory,
+        });
+
+        const runRejection = runPromise.then(
+          () => {
+            throw new Error(
+              'Expected subagent to abort when scheduler.schedule() hangs',
+            );
+          },
+          (error: unknown) => error,
+        );
+
+        // Wait for the interactive run to enter the hanging scheduler before
+        // advancing time past the timeout.
+        const modelCallObserved = await waitForCondition(
           () => mockSendMessageStream.mock.calls.length > 0,
-        ),
-      ).toBe(true);
-      await advanceTimersByTimeAsync(100);
+        );
 
-      await runRejection;
-      expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);
+        await advanceTimersByTimeAsync(100);
 
-      vi.useRealTimers();
-    });
+        const abortError = await runRejection;
+
+        vi.useRealTimers();
+
+        return { modelCallObserved, scope, abortError };
+      };
   });
 
   describe('dispose', () => {

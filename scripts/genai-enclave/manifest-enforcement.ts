@@ -27,7 +27,7 @@
  * - **F9**: rejects duplicate declarations across sections — the SDK appearing
  *   in `dependencies` AND `devDependencies` (or any other pair) creates
  *   ambiguity at install time and allows per-section version drift.
- * - **F10**: requires the exact configured root/core/providers dependency
+ * - **F10**: requires the exact configured root/providers dependency
  *   declarations. The sanctioned workspaces must declare the SDK at the exact
  *   version in `dependencies`; non-sanctioned workspaces must not declare it
  *   at all; and sanctioned workspaces must declare it (missing = violation).
@@ -67,7 +67,7 @@ export type DependencySection = Record<string, string>;
  * Input for manifest dependency validation.
  */
 export interface ManifestValidationInput {
-  /** Workspace directory relative to repo root (e.g. '.', 'packages/core'). */
+  /** Workspace directory relative to repo root (e.g. '.', 'packages/providers'). */
   readonly workspaceDir: string;
   /** The raw parsed manifest value. */
   readonly manifest: RawManifest;

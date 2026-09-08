@@ -19,7 +19,9 @@ import * as canonical from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.j
 
 describe('DebugLogger core shim re-export contract', () => {
   it('exposes exactly the canonical telemetry module export surface', () => {
-    expect(Object.keys(shim).sort()).toEqual(Object.keys(canonical).sort());
+    expect(Object.keys(shim).sort()).toStrictEqual(
+      Object.keys(canonical).sort(),
+    );
   });
 
   it('re-exports the canonical DebugLogger symbol unchanged (===)', () => {

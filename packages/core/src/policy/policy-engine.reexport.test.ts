@@ -20,7 +20,7 @@ import * as canonical from '@vybestack/llxprt-code-policy';
 
 describe('PolicyEngine core shim re-export contract', () => {
   it('exposes exactly the intended shim export surface', () => {
-    expect(Object.keys(shim).sort()).toEqual(['PolicyEngine']);
+    expect(Object.keys(shim).sort()).toStrictEqual(['PolicyEngine']);
   });
 
   it('re-exports the canonical policy package PolicyEngine symbol unchanged (===)', () => {

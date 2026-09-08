@@ -329,6 +329,32 @@ function pendingText(item: HistoryItemWithoutId | null): string | undefined {
   return undefined;
 }
 
+function retractedIds(calls: RemoveItemsRecorder['calls']): readonly number[] {
+  return calls[0]?.ids ?? [];
+}
+
+function isStableSegmentCall(call: AddItemRecorder['calls'][number]): boolean {
+  return (
+    typeof call.item.text === 'string' && call.item.text.includes('para one')
+  );
+}
+
+function requireStableSegmentCall(
+  calls: AddItemRecorder['calls'],
+  errorMessage: string,
+): AddItemRecorder['calls'][number] {
+  const committedCall = calls.find(isStableSegmentCall);
+  if (!committedCall) throw new Error(errorMessage);
+  return committedCall;
+}
+
+function errorMessage(value: unknown): string {
+  if (!(value instanceof Error)) {
+    throw new Error(`Expected Error, received ${String(value)}`);
+  }
+  return value.message;
+}
+
 const THINKING_EVENT: AgentEvent = {
   type: 'thinking',
   thought: { subject: 'reasoning', description: 'about the answer' },
@@ -350,7 +376,9 @@ describe('useSubmitQuery — discard-and-restart (issue #3048, REQ-3048-008)', (
     );
   });
 
-  it('does not commit the abandoned pending item to history', async () => {
+  const observeAbandonedPendingHistoryCommits = async (): Promise<{
+    readonly abandonedCommits: ReadonlyArray<AddItemRecorder['calls'][number]>;
+  }> => {
     const deps = createRetryDiscardDeps();
     const { result, rerender } = renderUseSubmitQuery(deps);
 
@@ -365,6 +393,12 @@ describe('useSubmitQuery — discard-and-restart (issue #3048, REQ-3048-008)', (
         typeof call.item.text === 'string' &&
         call.item.text.includes('abandoned partial'),
     );
+    return { abandonedCommits };
+  };
+
+  it('does not commit the abandoned pending item to history', async () => {
+    const { abandonedCommits } = await observeAbandonedPendingHistoryCommits();
+
     expect(abandonedCommits).toStrictEqual([]);
   });
 
@@ -390,7 +424,7 @@ describe('useSubmitQuery — discard-and-restart (issue #3048, REQ-3048-008)', (
     const signal = await startActiveTurn(result, rerender, deps);
 
     await route(result, THINKING_EVENT, signal);
-    expect(deps.coordinated.thinkingBlocksRef.current.length).toBe(1);
+    expect(deps.coordinated.thinkingBlocksRef.current).toHaveLength(1);
     expect(deps.coordinated.thoughtRef.current).not.toBe(null);
 
     await route(result, { type: 'retry' }, signal);
@@ -457,24 +491,20 @@ describe('useSubmitQuery — committed segment retraction (issue #3048, REQ-3048
     await route(result, { type: 'text', text: 'para one\n\npara two' }, signal);
 
     const committedTexts = deps.addItemRecorder.calls
-      .filter((c) => typeof c.item.text === 'string')
-      .map((c) => c.item.text)
-      .filter((text): text is string => text?.includes('para one') === true);
-    expect(committedTexts.length).toBe(1);
+      .filter(isStableSegmentCall)
+      .map((call) => call.item.text);
+    expect(committedTexts).toHaveLength(1);
 
     await route(result, { type: 'retry' }, signal);
 
-    expect(deps.removeItemsRecorder.calls.length).toBe(1);
-    const retracted = deps.removeItemsRecorder.calls[0]?.ids ?? [];
-    expect(retracted.length).toBe(1);
+    expect(deps.removeItemsRecorder.calls).toHaveLength(1);
+    const retracted = retractedIds(deps.removeItemsRecorder.calls);
+    expect(retracted).toHaveLength(1);
     // The retracted id must be the one addItem returned for the committed segment
-    const committedSegmentCall = deps.addItemRecorder.calls.find(
-      (c) =>
-        typeof c.item.text === 'string' && c.item.text.includes('para one'),
+    const committedSegmentCall = requireStableSegmentCall(
+      deps.addItemRecorder.calls,
+      'Expected the stable segment to be committed',
     );
-    if (committedSegmentCall === undefined) {
-      throw new Error('Expected the stable segment to be committed');
-    }
     expect(retracted[0]).toBe(committedSegmentCall.id);
   });
 
@@ -496,9 +526,9 @@ describe('useSubmitQuery — committed segment retraction (issue #3048, REQ-3048
 
     // The removeItems call should only target the committed segment id,
     // not any earlier items
-    expect(deps.removeItemsRecorder.calls.length).toBe(1);
-    const retracted = deps.removeItemsRecorder.calls[0]?.ids ?? [];
-    expect(retracted.length).toBe(1);
+    expect(deps.removeItemsRecorder.calls).toHaveLength(1);
+    const retracted = retractedIds(deps.removeItemsRecorder.calls);
+    expect(retracted).toHaveLength(1);
     // The earlier history item's id must be absent from the retraction set.
     expect(retracted).not.toContain(earlierItemId);
   });
@@ -513,11 +543,11 @@ describe('useSubmitQuery — committed segment retraction (issue #3048, REQ-3048
     await route(result, { type: 'retry' }, signal);
 
     // First retry retracts the committed segment
-    expect(deps.removeItemsRecorder.calls.length).toBe(1);
+    expect(deps.removeItemsRecorder.calls).toHaveLength(1);
 
     // Second retry: the ledger was drained, so nothing to retract
     await route(result, { type: 'retry' }, signal);
-    expect(deps.removeItemsRecorder.calls.length).toBe(1);
+    expect(deps.removeItemsRecorder.calls).toHaveLength(1);
   });
 
   it('fails fast without losing ledger ids when retraction is unwired', async () => {
@@ -536,13 +566,10 @@ describe('useSubmitQuery — committed segment retraction (issue #3048, REQ-3048
       signal,
     );
 
-    const committedCall = deps.addItemRecorder.calls.find(
-      (c) =>
-        typeof c.item.text === 'string' && c.item.text.includes('para one'),
+    const committedCall = requireStableSegmentCall(
+      deps.addItemRecorder.calls,
+      'Expected a committed stable segment',
     );
-    if (committedCall === undefined) {
-      throw new Error('Expected a committed stable segment');
-    }
     const committedId = committedCall.id;
 
     // With retraction unwired (removeItems undefined), routing the retry must
@@ -555,8 +582,7 @@ describe('useSubmitQuery — committed segment retraction (issue #3048, REQ-3048
     }
     expect(caught instanceof Error).toBe(true);
     expect(
-      caught instanceof Error &&
-        caught.message.includes('History retraction is required'),
+      errorMessage(caught).includes('History retraction is required'),
     ).toBe(true);
 
     // The ledger was not drained: the committed id survives for a later,
@@ -639,16 +665,6 @@ describe('useSubmitQuery — committed segment retraction (issue #3048, REQ-3048
   }
 
   describe('useSubmitQuery — committed segment ledger lifecycle across turns (issue #3048 review)', () => {
-    /**
-     * @requirement REQ-3048-009 (review finding: ledger lifecycle)
-     * @scenario A completed turn's committed segment must survive a later turn
-     *   that emits thinking/tool output then Retry before any Content.
-     * @given turn A streams a multi-paragraph message that commits a stable
-     *   segment, then completes via `done`.
-     * @when turn B emits a thinking event then Retry before any Content.
-     * @then turn A's history is retracted by nothing; only current-attempt ids
-     *   can be drained.
-     */
     it('preserves a completed turn history when a later turn retries before content', async () => {
       const deps = createRetryDiscardDeps();
       const { result, rerender } = renderUseSubmitQuery(deps);
@@ -660,11 +676,9 @@ describe('useSubmitQuery — committed segment retraction (issue #3048, REQ-3048
       ]);
 
       // Turn A committed exactly one stable segment to history.
-      const turnACommitted = deps.addItemRecorder.calls.filter((entry) => {
-        const text = entry.item.text;
-        return typeof text === 'string' && text.includes('para one');
-      });
-      expect(turnACommitted.length).toBe(1);
+      const turnACommitted =
+        deps.addItemRecorder.calls.filter(isStableSegmentCall);
+      expect(turnACommitted).toHaveLength(1);
       // No retraction happened during turn A.
       expect(deps.removeItemsRecorder.calls).toStrictEqual([]);
 

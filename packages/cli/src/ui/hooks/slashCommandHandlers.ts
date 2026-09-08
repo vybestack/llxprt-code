@@ -14,6 +14,7 @@ import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import {
   getProjectHash,
+  importSessionMediaPackage,
   ToolConfirmationOutcome,
 } from '@vybestack/llxprt-code-core';
 import {
@@ -23,15 +24,22 @@ import {
 import { join } from 'node:path';
 import { parseSlashCommand } from '../../utils/commands.js';
 import { secureInputHandler } from '../utils/secureInputHandler.js';
-import { iContentToHistoryItems } from '../utils/iContentToHistoryItems.js';
+import {
+  createEmojiFilter,
+  filterHistoryItems,
+  iContentToHistoryItems,
+  resolveEmojiFilterMode,
+} from '../utils/iContentToHistoryItems.js';
 import type {
   CommandContext,
   ModelsDialogData,
+  PerformResumeActionReturn,
   SlashCommand,
   SubagentDialogData,
 } from '../commands/types.js';
 import { performResume } from '../../services/performResume.js';
 import type {
+  PerformResumeResult,
   RecordingSwapCallbacks,
   ResumeContext,
 } from '../../services/performResume.js';
@@ -54,6 +62,12 @@ export interface SlashCommandHandlerDeps {
   setIsProcessing: (isProcessing: boolean) => void;
   setLocalIsProcessing: (isProcessing: boolean) => void;
   setPendingItem: (item: HistoryItemWithoutId | null) => void;
+  /**
+   * Test seam for performSessionResume: bun's vi.mock is not scoped per
+   * test file, so tests inject a stub here instead of mocking the module
+   * (which would leak into unrelated suites).
+   */
+  performResumeFn?: typeof performResume;
   setSessionShellAllowlist: (
     updater: (prev: Set<string>) => Set<string>,
   ) => void;
@@ -67,6 +81,10 @@ export interface SlashCommandHandlerDeps {
   recordingSwapCallbacks?: RecordingSwapCallbacks;
   confirmationLogger: DebugLogger;
   slashCommandLogger: DebugLogger;
+  /** Registers the action about to be awaited and returns its controller. */
+  beginSlashCommandAction: () => AbortController;
+  /** Deregisters an action once it has settled. */
+  endSlashCommandAction: (controller: AbortController) => void;
 }
 
 interface ParsedCommandState {
@@ -150,15 +168,22 @@ async function executeParsedCommand(
 ): Promise<SlashCommandProcessorResult | false> {
   const { commandToExecute } = parsed;
   if (commandToExecute?.action) {
-    const context = buildInvocationContext(
-      deps.commandContext,
+    const outcome = await runCommandAction(
+      deps,
+      commandToExecute.action,
       parsed,
-      oneTimeShellAllowlist,
-      overwriteConfirmed,
+      (signal) =>
+        buildInvocationContext(
+          deps.commandContext,
+          parsed,
+          oneTimeShellAllowlist,
+          overwriteConfirmed,
+          signal,
+        ),
     );
-    const result = await commandToExecute.action(context, parsed.args);
-    return result
-      ? handleActionResult(deps, context, result)
+    if (outcome.cancelled) return { type: 'handled' };
+    return outcome.result
+      ? handleActionResult(deps, outcome.context, outcome.result)
       : { type: 'handled' };
   }
   if (commandToExecute?.subCommands) {
@@ -169,14 +194,81 @@ async function executeParsedCommand(
   return { type: 'handled' };
 }
 
+type CommandAction = NonNullable<SlashCommand['action']>;
+
+type CommandActionOutcome =
+  | { cancelled: true; context?: undefined; result?: undefined }
+  | {
+      cancelled: false;
+      context: CommandContext;
+      result: Awaited<ReturnType<CommandAction>>;
+    };
+
+/**
+ * Awaits the action while it is registered as cancellable.
+ *
+ * Once the invocation is aborted its outcome is discarded either way. A
+ * rejection is the expected shape of "the user pressed Esc" and must not also
+ * surface as a command error; a resolution is a command that noticed the abort
+ * and unwound cleanly, and acting on its result would carry out work the user
+ * just cancelled (for example submitting a prompt built from a shell injection
+ * that was killed mid-flight).
+ *
+ * Context construction happens inside the try so that every registration has a
+ * matching deregistration even if building it throws.
+ */
+async function runCommandAction(
+  deps: SlashCommandHandlerDeps,
+  action: CommandAction,
+  parsed: ParsedCommandState,
+  buildContext: (signal: AbortSignal) => CommandContext,
+): Promise<CommandActionOutcome> {
+  const controller = deps.beginSlashCommandAction();
+  try {
+    const context = buildContext(controller.signal);
+    const result = await action(context, parsed.args);
+    if (controller.signal.aborted) {
+      logDiscarded(deps, parsed, 'result', undefined);
+      return { cancelled: true };
+    }
+    return { cancelled: false, context, result };
+  } catch (error) {
+    if (!controller.signal.aborted) throw error;
+    // The discard is intentional, but an unrelated failure can land in the same
+    // window, so leave a trace rather than losing it entirely.
+    logDiscarded(deps, parsed, 'error', error);
+    return { cancelled: true };
+  } finally {
+    deps.endSlashCommandAction(controller);
+  }
+}
+
+function logDiscarded(
+  deps: SlashCommandHandlerDeps,
+  parsed: ParsedCommandState,
+  kind: 'result' | 'error',
+  error: unknown,
+): void {
+  deps.slashCommandLogger.debug(() => {
+    const detail = kind === 'error' ? `: ${describeError(error)}` : '';
+    return `discarded ${kind} from cancelled ${parsed.trimmed}${detail}`;
+  });
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function buildInvocationContext(
   baseContext: CommandContext,
   parsed: ParsedCommandState,
   oneTimeShellAllowlist: Set<string> | undefined,
   overwriteConfirmed: boolean | undefined,
+  signal: AbortSignal,
 ): CommandContext {
   const fullCommandContext: CommandContext = {
     ...baseContext,
+    signal,
     invocation: {
       raw: parsed.trimmed,
       name: parsed.commandToExecute?.name ?? '',
@@ -232,7 +324,7 @@ async function handleActionResult(
     case 'confirm_action':
       return confirmAction(deps, result);
     case 'perform_resume':
-      return performSessionResume(deps, context, result.sessionRef);
+      return performSessionResume(deps, context, result);
     default: {
       const unhandled: never = result;
       throw new Error(`Unhandled slash command result: ${unhandled}`);
@@ -368,15 +460,20 @@ function openSubagentDialog(
   );
 }
 
-function handleLoadHistoryResult(
+async function handleLoadHistoryResult(
   context: CommandContext,
   result: Extract<ActionResult, { type: 'load_history' }>,
-): SlashCommandProcessorResult {
-  void context.services.config
+): Promise<SlashCommandProcessorResult> {
+  await context.services.config
     ?.getAgentClient()
     .setHistory(result.clientHistory);
+  // Display-only: replayed model text passes the same emoji filter as live
+  // output (issue #2888); clientHistory keeps the recorded text verbatim.
+  const emojiFilter = createEmojiFilter(
+    resolveEmojiFilterMode(context.services.config),
+  );
   context.ui.clear();
-  result.history.forEach((item, index) => {
+  filterHistoryItems(result.history, emojiFilter).forEach((item, index) => {
     context.ui.addItem(item, index);
   });
   return { type: 'handled' };
@@ -532,7 +629,7 @@ async function confirmAction(
 async function performSessionResume(
   deps: SlashCommandHandlerDeps,
   context: CommandContext,
-  sessionRef: string,
+  action: PerformResumeActionReturn,
 ): Promise<SlashCommandProcessorResult> {
   if (!deps.config) {
     deps.addMessage({
@@ -551,10 +648,32 @@ async function performSessionResume(
     return { type: 'handled' };
   }
 
-  const resumeResult = await performResume(
-    sessionRef,
-    buildResumeContext(deps, deps.config),
-  );
+  const resume = deps.performResumeFn ?? performResume;
+  const resumeContext = buildResumeContext(deps, deps.config);
+  let resumeResult: PerformResumeResult;
+  try {
+    resumeResult =
+      action.sessionPackage === undefined
+        ? await resume(action.sessionRef, resumeContext)
+        : await importSessionMediaPackage(
+            action.sessionPackage,
+            resumeContext.chatsDir,
+            resumeContext.projectHash,
+            deps.config.getLocalMediaStore(),
+            async (imported) => {
+              const result = await resume(imported.sessionId, resumeContext);
+              if (!result.ok) throw new Error(result.error);
+              return result;
+            },
+          );
+  } catch (error: unknown) {
+    deps.addMessage({
+      type: MessageType.ERROR,
+      content: error instanceof Error ? error.message : String(error),
+      timestamp: new Date(),
+    });
+    return { type: 'handled' };
+  }
   if (!resumeResult.ok) {
     deps.addMessage({
       type: MessageType.ERROR,
@@ -571,7 +690,10 @@ async function performSessionResume(
       timestamp: new Date(),
     });
   }
-  const uiHistory = iContentToHistoryItems(resumeResult.history);
+  const uiHistory = iContentToHistoryItems(
+    resumeResult.history,
+    resolveEmojiFilterMode(deps.config),
+  );
   context.ui.clear();
   uiHistory.forEach((item, index) => {
     context.ui.addItem(item, index);
@@ -590,6 +712,10 @@ function buildResumeContext(
     currentProvider: config.getProvider() ?? 'unknown',
     currentModel: config.getModel(),
     workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
+    mediaStore: config.getLocalMediaStore(),
+    maxQueueBytes: config.getSessionRecordingQueueByteLimit(),
+    persistenceFactory: (sessionId) =>
+      config.createSessionPersistenceService(sessionId),
     recordingCallbacks: deps.recordingSwapCallbacks!,
     historyService: config.getAgentClient().getHistoryService(),
     adoptSessionId: (sessionId) => config.adoptSessionId(sessionId),

@@ -10,6 +10,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { replaySession, readSessionHeader } from './ReplayEngine.js';
+import { SessionRecordingService } from './SessionRecordingService.js';
 import {
   assertReplayOk,
   PROJECT_HASH,
@@ -33,6 +34,31 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
   afterEach(async () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
+
+  /**
+   * First session line with an optional leading BOM (property Test 59).
+   */
+  function firstLineWithBom(hasBom: boolean): string {
+    const firstLine = sessionStartLine(1);
+    return hasBom ? '\uFEFF' + firstLine : firstLine;
+  }
+
+  /**
+   * Record contentCount messages interleaved with one session_event per
+   * message for the first eventCount messages (property Test 58).
+   */
+  function recordWithInterleavedEvents(
+    svc: SessionRecordingService,
+    contentCount: number,
+    eventCount: number,
+  ): void {
+    for (let i = 0; i < contentCount; i++) {
+      svc.recordContent(makeContent(`msg ${i}`, 'human'));
+      if (i < eventCount) {
+        svc.recordSessionEvent('info', `event ${i}`);
+      }
+    }
+  }
 
   // Property-Based Tests (continued)
   describe('Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
@@ -245,12 +271,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
 
             try {
               const filePath = await createValidFile(localChatsDir, (svc) => {
-                for (let i = 0; i < contentCount; i++) {
-                  svc.recordContent(makeContent(`msg ${i}`, 'human'));
-                  if (i < eventCount) {
-                    svc.recordSessionEvent('info', `event ${i}`);
-                  }
-                }
+                recordWithInterleavedEvents(svc, contentCount, eventCount);
               });
 
               const result = await replaySession(filePath, PROJECT_HASH);
@@ -287,8 +308,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
 
             try {
               const lines: string[] = [];
-              const firstLine = sessionStartLine(1);
-              lines.push(hasBom ? '\uFEFF' + firstLine : firstLine);
+              lines.push(firstLineWithBom(hasBom));
               for (let i = 0; i < contentCount; i++) {
                 lines.push(
                   contentLine(i + 2, makeContent(`msg ${i}`, 'human')),

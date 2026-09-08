@@ -15,7 +15,7 @@ import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
  * These tests assert the real resolved value through the thin cli wrapper.
  */
 describe('contextLimit helper (cli wrapper)', () => {
-  it('resolves the configured context-limit for the overflow guidance token limit', () => {
+  const resolveOverflowGuidanceLimitWithConfiguredContext = (): number => {
     const configWithContextLimit = {
       getModel: vi.fn(() => 'gemini-2.5-pro'),
       getEphemeralSetting: vi.fn((key: string) =>
@@ -24,9 +24,13 @@ describe('contextLimit helper (cli wrapper)', () => {
       getContentGeneratorConfig: vi.fn(() => undefined),
     };
 
-    const limit = getTokenLimitForConfiguredContext(
+    return getTokenLimitForConfiguredContext(
       createStreamRuntimeForTest(configWithContextLimit),
     );
+  };
+
+  it('resolves the configured context-limit for the overflow guidance token limit', () => {
+    const limit = resolveOverflowGuidanceLimitWithConfiguredContext();
 
     expect(limit).toBe(200_000);
   });

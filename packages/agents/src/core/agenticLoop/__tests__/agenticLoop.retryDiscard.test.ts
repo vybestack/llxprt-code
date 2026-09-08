@@ -101,7 +101,7 @@ describe('AgenticLoop discards abandoned tool-call requests on Retry (issue 3048
       new AbortController().signal,
     );
 
-    expect(completedCallIds(events)).toEqual(['kept']);
+    expect(completedCallIds(events)).toStrictEqual(['kept']);
   });
 
   /**
@@ -133,6 +133,14 @@ describe('AgenticLoop discards abandoned tool-call requests on Retry (issue 3048
    * @scenario forwards the Retry event to consumers before discarding
    */
   it('forwards the Retry event to consumers before discarding', async () => {
+    const { retryIndex, keptIndex } =
+      await observeForwardsTheRetryEventToConsumersBeforeDiscarding();
+    expect(retryIndex).toBeGreaterThanOrEqual(0);
+    expect(keptIndex).toBeGreaterThanOrEqual(0);
+    expect(retryIndex).toBeLessThan(keptIndex);
+  });
+
+  const observeForwardsTheRetryEventToConsumersBeforeDiscarding = async () => {
     const { loop } = buildLoop([
       [
         toolCallRequestEvent('echo', 'abandoned'),
@@ -158,10 +166,9 @@ describe('AgenticLoop discards abandoned tool-call requests on Retry (issue 3048
         e.event.type === AgentEventType.ToolCallRequest &&
         e.event.value.callId === 'kept',
     );
-    expect(retryIndex).toBeGreaterThanOrEqual(0);
-    expect(keptIndex).toBeGreaterThanOrEqual(0);
-    expect(retryIndex).toBeLessThan(keptIndex);
-  });
+
+    return { retryIndex, keptIndex };
+  };
 
   /**
    * @plan PLAN-20260806-ISSUE3048.P05

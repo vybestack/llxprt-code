@@ -15,6 +15,7 @@ import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createOpenAIRawPostTestAdapter } from '../../test-utils/rawPostTestAdapters.js';
 import { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
 
 void vi.mock('openai', () => {
@@ -59,6 +60,7 @@ void vi.mock('openai', () => {
         })),
       },
     };
+    post = createOpenAIRawPostTestAdapter(this.chat.completions.create).post;
   }
 
   return { default: FakeOpenAI };

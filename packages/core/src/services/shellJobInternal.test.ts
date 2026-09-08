@@ -66,72 +66,85 @@ function reapGroup(pgid: number): void {
 // killProcessGroupSafe — POSIX-only (production behavior is POSIX-gated)
 // ---------------------------------------------------------------------------
 
-describe.skipIf(isWindows)(
-  'killProcessGroupSafe pid validation (POSIX)',
-  () => {
-    it('pid 0 is a no-op: a same-group sibling survives and the test process survives', async () => {
-      // killProcessGroupSafe computes process.kill(-pid, signal). For pid 0
-      // that is process.kill(0), which signals the CALLER's own process group.
-      // A sibling child spawned into the caller's group must survive.
-      const sibling = spawnSibling();
-      expect(sibling.pid).toBeGreaterThan(0);
-      try {
-        killProcessGroupSafe(0, 'SIGTERM');
-        // Rejects the moment a (buggy) group signal reaches the sibling;
-        // otherwise settles after the grace window with the sibling alive.
-        await expectSurvivesFor(sibling, 500);
-        // Reaching this line also proves the test runner itself survived.
-      } finally {
-        // The sibling shares this process's group and is NOT a group leader,
-        // so it must be reaped through its own handle, not as a group.
-        sibling.kill('SIGKILL');
-      }
-    });
+function requiredSpawnedPid(pid: number | undefined): number {
+  if (pid === undefined)
+    throw new Error('Expected spawned process to have a pid');
+  return pid;
+}
 
-    it('pid -1 / NaN / Infinity are no-ops and do not throw', async () => {
-      const sibling = spawnSibling();
-      expect(sibling.pid).toBeGreaterThan(0);
-      try {
-        expect(() => killProcessGroupSafe(-1, 'SIGTERM')).not.toThrow();
-        expect(() => killProcessGroupSafe(Number.NaN, 'SIGTERM')).not.toThrow();
-        expect(() =>
-          killProcessGroupSafe(Number.POSITIVE_INFINITY, 'SIGTERM'),
-        ).not.toThrow();
-        await expectSurvivesFor(sibling, 500);
-      } finally {
-        sibling.kill('SIGKILL');
-      }
-    });
-
-    it('a valid pid still terminates that process group', async () => {
-      const child = spawn('sleep', ['30'], { detached: true, stdio: 'ignore' });
-      child.unref();
-      child.on('error', () => {});
-      const childPid = child.pid ?? 0;
-      expect(childPid).toBeGreaterThan(0);
-      // Observe the exit via the child handle rather than a signal-0 probe and
-      // a fixed sleep: this process is the child's parent, so between the
-      // signal and the runtime's SIGCHLD reap the pid is a zombie for which
-      // `process.kill(pid, 0)` still SUCCEEDS.
-      const exited = new Promise<NodeJS.Signals | null>((resolve) => {
-        child.once('exit', (_code, signal) => resolve(signal));
+describe('killProcessGroupSafe behavior', () => {
+  describe.skipIf(isWindows)(
+    'killProcessGroupSafe pid validation (POSIX)',
+    () => {
+      it('pid 0 is a no-op: a same-group sibling survives and the test process survives', async () => {
+        // killProcessGroupSafe computes process.kill(-pid, signal). For pid 0
+        // that is process.kill(0), which signals the CALLER's own process group.
+        // A sibling child spawned into the caller's group must survive.
+        const sibling = spawnSibling();
+        expect(sibling.pid).toBeGreaterThan(0);
+        try {
+          killProcessGroupSafe(0, 'SIGTERM');
+          // Rejects the moment a (buggy) group signal reaches the sibling;
+          // otherwise settles after the grace window with the sibling alive.
+          await expectSurvivesFor(sibling, 500);
+          // Reaching this line also proves the test runner itself survived.
+        } finally {
+          // The sibling shares this process's group and is NOT a group leader,
+          // so it must be reaped through its own handle, not as a group.
+          sibling.kill('SIGKILL');
+        }
       });
-      try {
-        killProcessGroupSafe(childPid, 'SIGTERM');
-        const signal = await Promise.race([
-          exited,
-          new Promise<never>((_, reject) =>
-            setTimeout(
-              () => reject(new Error(`pid ${childPid} was not terminated`)),
-              8000,
+
+      it('pid -1 / NaN / Infinity are no-ops and do not throw', async () => {
+        const sibling = spawnSibling();
+        expect(sibling.pid).toBeGreaterThan(0);
+        try {
+          expect(() => killProcessGroupSafe(-1, 'SIGTERM')).not.toThrow();
+          expect(() =>
+            killProcessGroupSafe(Number.NaN, 'SIGTERM'),
+          ).not.toThrow();
+          expect(() =>
+            killProcessGroupSafe(Number.POSITIVE_INFINITY, 'SIGTERM'),
+          ).not.toThrow();
+          await expectSurvivesFor(sibling, 500);
+        } finally {
+          sibling.kill('SIGKILL');
+        }
+      });
+
+      it('a valid pid still terminates that process group', async () => {
+        const child = spawn('sleep', ['30'], {
+          detached: true,
+          stdio: 'ignore',
+        });
+        child.unref();
+        child.on('error', () => {});
+        const childPid = requiredSpawnedPid(child.pid);
+        expect(childPid).toBeGreaterThan(0);
+        // Observe the exit via the child handle rather than a signal-0 probe and
+        // a fixed sleep: this process is the child's parent, so between the
+        // signal and the runtime's SIGCHLD reap the pid is a zombie for which
+        // `process.kill(pid, 0)` still SUCCEEDS.
+        const exited = new Promise<NodeJS.Signals | null>((resolve) => {
+          child.once('exit', (_code, signal) => resolve(signal));
+        });
+        try {
+          killProcessGroupSafe(childPid, 'SIGTERM');
+          const signal = await Promise.race([
+            exited,
+            new Promise<never>((_, reject) =>
+              setTimeout(
+                () => reject(new Error(`pid ${childPid} was not terminated`)),
+                8000,
+              ),
             ),
-          ),
-        ]);
-        // The guard must not have suppressed delivery for a legitimate pid.
-        expect(signal).toBe('SIGTERM');
-      } finally {
-        reapGroup(childPid);
-      }
-    }, 20000);
-  },
-);
+          ]);
+          // The guard must not have suppressed delivery for a legitimate pid.
+          expect(signal).toBe('SIGTERM');
+        } finally {
+          reapGroup(childPid);
+        }
+      }, 20000);
+    },
+  );
+});

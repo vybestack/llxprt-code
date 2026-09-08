@@ -25,6 +25,56 @@ function makeSubmission(text: string): QueuedSubmission {
   return { query: textQuery(text) };
 }
 
+type QueuedMessagesPanelView = ReturnType<
+  typeof prepareQueuedMessagesPanelView
+>;
+
+type ExpandedQueuedMessage = Extract<
+  QueuedMessagesPanelView,
+  { kind: 'expanded' }
+>['messages'][number];
+
+function expandedMessagesOrEmpty(
+  view: QueuedMessagesPanelView,
+): readonly ExpandedQueuedMessage[] {
+  return view.kind === 'expanded' ? view.messages : [];
+}
+
+function expandedMessageOrUndefined(
+  view: QueuedMessagesPanelView,
+  index: number,
+): ExpandedQueuedMessage | undefined {
+  return view.kind === 'expanded' ? view.messages[index] : undefined;
+}
+
+function expandedPreviewOrEmpty(
+  view: QueuedMessagesPanelView,
+  index: number,
+): string {
+  return view.kind === 'expanded' ? view.messages[index].preview : '';
+}
+
+function expandedKeyOrEmpty(
+  view: QueuedMessagesPanelView,
+  index: number,
+): string {
+  return view.kind === 'expanded' ? view.messages[index].key : '';
+}
+
+function prepareExpandedKeys(
+  messages: readonly QueuedSubmission[],
+): readonly string[] {
+  const view = prepareQueuedMessagesPanelView({
+    width: 80,
+    messages,
+    columns: 80,
+    rows: 40,
+  });
+  return view.kind === 'expanded'
+    ? view.messages.map((message) => message.key)
+    : [];
+}
+
 describe('QueuedMessagesPanel content preparation', () => {
   describe('preview text extraction', () => {
     it('returns the string directly when query is a string', () => {
@@ -185,10 +235,11 @@ describe('QueuedMessagesPanel content preparation', () => {
       });
 
       expect(view).toMatchObject({ kind: 'expanded', moreCount: 0 });
-      expect(view.kind === 'expanded' ? view.messages : []).toHaveLength(3);
-      expect(
-        view.kind === 'expanded' ? view.messages[2] : undefined,
-      ).toMatchObject({ number: 3, preview: 'three' });
+      expect(expandedMessagesOrEmpty(view)).toHaveLength(3);
+      expect(expandedMessageOrUndefined(view, 2)).toMatchObject({
+        number: 3,
+        preview: 'three',
+      });
     });
 
     it('prepares a compact count-and-message summary for a one-row panel', () => {
@@ -251,9 +302,7 @@ describe('QueuedMessagesPanel content preparation', () => {
         rows: 20,
       });
 
-      expect(view.kind === 'expanded' ? view.messages[0].preview : '').toBe(
-        'This queued ...',
-      );
+      expect(expandedPreviewOrEmpty(view, 0)).toBe('This queued ...');
     });
 
     it('accounts for shell padding and each numbered prefix when truncating', () => {
@@ -267,12 +316,8 @@ describe('QueuedMessagesPanel content preparation', () => {
         rows: 510,
       });
 
-      expect(view.kind === 'expanded' ? view.messages[0].preview : '').toBe(
-        'abcdefghijkl...',
-      );
-      expect(view.kind === 'expanded' ? view.messages[99].preview : '').toBe(
-        'abcdefghij...',
-      );
+      expect(expandedPreviewOrEmpty(view, 0)).toBe('abcdefghijkl...');
+      expect(expandedPreviewOrEmpty(view, 99)).toBe('abcdefghij...');
     });
 
     it('reserves the final row for the remaining-message indicator', () => {
@@ -293,7 +338,7 @@ describe('QueuedMessagesPanel content preparation', () => {
         moreCount: 3,
         showMoreIndicator: true,
       });
-      expect(view.kind === 'expanded' ? view.messages : []).toHaveLength(1);
+      expect(expandedMessagesOrEmpty(view)).toHaveLength(1);
     });
   });
 
@@ -342,23 +387,11 @@ describe('QueuedMessagesPanel content preparation', () => {
         query: textQuery('same preview'),
         queueId: 42,
       };
-      const prepareKeys = (messages: readonly QueuedSubmission[]) => {
-        const view = prepareQueuedMessagesPanelView({
-          width: 80,
-          messages,
-          columns: 80,
-          rows: 40,
-        });
-        return view.kind === 'expanded'
-          ? view.messages.map((message) => message.key)
-          : [];
-      };
-
-      expect(prepareKeys([first, second])).toStrictEqual([
+      expect(prepareExpandedKeys([first, second])).toStrictEqual([
         'queued-41',
         'queued-42',
       ]);
-      expect(prepareKeys([second, first])).toStrictEqual([
+      expect(prepareExpandedKeys([second, first])).toStrictEqual([
         'queued-42',
         'queued-41',
       ]);
@@ -377,9 +410,7 @@ describe('QueuedMessagesPanel content preparation', () => {
       });
 
       expect(view.kind).toBe('expanded');
-      expect(view.kind === 'expanded' ? view.messages[0].key : '').toBe(
-        'queued-0-hello',
-      );
+      expect(expandedKeyOrEmpty(view, 0)).toBe('queued-0-hello');
     });
 
     it('uses the promptId for the key when it is a non-empty string', () => {
@@ -395,9 +426,7 @@ describe('QueuedMessagesPanel content preparation', () => {
       });
 
       expect(view.kind).toBe('expanded');
-      expect(view.kind === 'expanded' ? view.messages[0].key : '').toBe(
-        'queued-abc-123-0',
-      );
+      expect(expandedKeyOrEmpty(view, 0)).toBe('queued-abc-123-0');
     });
 
     it('falls back to index-based key when promptId is undefined', () => {
@@ -409,9 +438,7 @@ describe('QueuedMessagesPanel content preparation', () => {
       });
 
       expect(view.kind).toBe('expanded');
-      expect(view.kind === 'expanded' ? view.messages[0].key : '').toBe(
-        'queued-0-hello',
-      );
+      expect(expandedKeyOrEmpty(view, 0)).toBe('queued-0-hello');
     });
   });
 });

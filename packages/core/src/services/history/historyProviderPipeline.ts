@@ -17,7 +17,7 @@
 import type { IContent } from './IContent.js';
 import type { DebugLogger } from '../../debug/index.js';
 import { HistoryToolNormalization } from './historyToolNormalization.js';
-import { deepCloneWithoutCircularRefs } from './historyCloneUtils.js';
+import { sanitizeProviderHistoryForSerialization } from './historyCloneUtils.js';
 
 /**
  * Build a provider-ready content array from curated history and optional tail
@@ -26,7 +26,7 @@ import { deepCloneWithoutCircularRefs } from './historyCloneUtils.js';
  *   2. Ensure every tool response has a matching tool call.
  *   3. Ensure every tool call has a matching tool response.
  *   4. Ensure tool responses are adjacent to their tool calls.
- *   5. Deep clone to remove circular references.
+ *   5. Sanitize provider history for serialization.
  */
 export function buildProviderContent(
   curated: IContent[],
@@ -65,9 +65,23 @@ export function buildProviderContent(
     logger,
   );
 
-  // Deep clone to avoid circular references in tool call parameters
-  // We need a clean copy that can be serialized
-  return deepCloneWithoutCircularRefs(ordered);
+  // Sanitize cyclic tool payloads while isolating prepared provider contents
+  // from the stored history references.
+  const sanitized = sanitizeProviderHistoryForSerialization(ordered);
+  const inputAnchorIndexes = combined.flatMap((content, index) =>
+    content.metadata?.cacheAnchor === true ? [index] : [],
+  );
+  const outputHasAnchor = sanitized.some(
+    (content) => content.metadata?.cacheAnchor === true,
+  );
+  if (inputAnchorIndexes.length > 0 && !outputHasAnchor) {
+    logger.warn('Provider history normalization removed a cache anchor', {
+      inputAnchorIndexes,
+      inputContentCount: combined.length,
+      outputContentCount: sanitized.length,
+    });
+  }
+  return sanitized;
 }
 
 /**

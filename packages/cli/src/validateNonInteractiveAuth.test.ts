@@ -11,7 +11,7 @@ import { type Config, OutputFormat } from '@vybestack/llxprt-code-core';
  * Minimal structural contract the validator observes on its Config.
  * validateNonInteractiveAuth is a GATE ONLY — it delegates the unconfigured
  * exit to guardUnconfiguredProvider (report + cleanup + exit 52), applies
- * compression settings, and wires the serverToolsProvider. The auth-env-var
+ * compression settings. The auth-env-var
  * branch (hasAuthEnvVars) was removed because it was unreachable:
  * isProviderConfigured returning false already exits before the env-var check
  * runs.
@@ -78,7 +78,6 @@ describe('validateNonInteractiveAuth (gate-only)', () => {
       getProvider: () => provider,
       getProviderManager: () => ({
         hasActiveProvider: () => hasActive,
-        getServerToolsProvider: () => null,
       }),
       getEphemeralSetting: () => undefined,
       setEphemeralSetting: () => {},
@@ -114,7 +113,6 @@ describe('validateNonInteractiveAuth (gate-only)', () => {
       getProvider: () => undefined,
       getProviderManager: () => ({
         hasActiveProvider: () => false,
-        getServerToolsProvider: () => null,
       }),
       getEphemeralSetting: () => undefined,
       setEphemeralSetting: () => {},
@@ -138,7 +136,6 @@ describe('validateNonInteractiveAuth (gate-only)', () => {
       getProvider: () => undefined,
       getProviderManager: () => ({
         hasActiveProvider: () => false,
-        getServerToolsProvider: () => null,
       }),
       getEphemeralSetting: () => undefined,
       setEphemeralSetting: () => {},
@@ -201,7 +198,6 @@ describe('validateNonInteractiveAuth (gate-only)', () => {
       getProvider: () => 'gemini',
       getProviderManager: () => ({
         hasActiveProvider: () => true,
-        getServerToolsProvider: () => null,
       }),
       getEphemeralSetting: () => undefined,
       setEphemeralSetting: setEphemeralSpy,
@@ -225,7 +221,6 @@ describe('validateNonInteractiveAuth (gate-only)', () => {
       getProvider: () => 'gemini',
       getProviderManager: () => ({
         hasActiveProvider: () => true,
-        getServerToolsProvider: () => null,
       }),
       getEphemeralSetting: () => undefined,
       setEphemeralSetting: setEphemeralSpy,
@@ -236,31 +231,6 @@ describe('validateNonInteractiveAuth (gate-only)', () => {
     await validateNonInteractiveAuth(undefined, nonInteractiveConfig);
 
     expect(setEphemeralSpy).not.toHaveBeenCalled();
-  });
-
-  // ─── serverToolsProvider wiring ─────────────────────────────────────────
-
-  it('wires serverToolsProvider.setConfig when a gemini provider manager is present', async () => {
-    const setConfigSpy = vi.fn();
-    const providerManager = {
-      hasActiveProvider: () => true,
-      getServerToolsProvider: () => ({
-        name: 'gemini',
-        setConfig: setConfigSpy,
-      }),
-    };
-    const nonInteractiveConfig: NonInteractiveConfig = {
-      getProvider: () => 'gemini',
-      getProviderManager: () => providerManager,
-      getEphemeralSetting: () => undefined,
-      setEphemeralSetting: () => {},
-      getOutputFormat: () => OutputFormat.TEXT,
-      isInteractive: () => false,
-    };
-
-    await validateNonInteractiveAuth(undefined, nonInteractiveConfig);
-
-    expect(setConfigSpy).toHaveBeenCalledWith(nonInteractiveConfig);
   });
 
   it('exits with FATAL_CONFIG_ERROR (52) when provider manager is undefined', async () => {

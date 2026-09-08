@@ -24,6 +24,17 @@ function asRecord(value: unknown): Record<string, unknown> {
   return {};
 }
 
+function isSafeDistinctPropertyPair([a, b]: [string, string]): boolean {
+  return (
+    a !== b &&
+    // Prototype-polluting keys are intentionally DROPPED by
+    // cleanPropertiesObject (security guard) — excluded here and
+    // covered by the dedicated example test below.
+    !['__proto__', 'constructor', 'prototype'].includes(a) &&
+    !['__proto__', 'constructor', 'prototype'].includes(b)
+  );
+}
+
 describe('cleanGeminiSchema — cycle safety (REQ-011.2)', () => {
   it('terminates on a self-referential (cyclic) object schema', () => {
     // Build a cyclic schema: s.properties.self === s
@@ -334,15 +345,7 @@ describe('property-based — cleanGeminiSchema invariants', () => {
         childArb,
         fc
           .tuple(fc.string({ minLength: 1 }), fc.string({ minLength: 1 }))
-          .filter(
-            ([a, b]) =>
-              a !== b &&
-              // Prototype-polluting keys are intentionally DROPPED by
-              // cleanPropertiesObject (security guard) — excluded here and
-              // covered by the dedicated example test below.
-              !['__proto__', 'constructor', 'prototype'].includes(a) &&
-              !['__proto__', 'constructor', 'prototype'].includes(b),
-          ),
+          .filter(isSafeDistinctPropertyPair),
         (child, [keyA, keyB]) => {
           const schema = {
             type: 'object',

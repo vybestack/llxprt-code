@@ -13,8 +13,17 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import type { Dirent } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { repoRoot } from './doc-guard-helpers.ts';
 import { extractHeadingSlugs } from '../doc-links/heading-slugger.ts';
@@ -79,24 +88,41 @@ function dirContains(dir: string, name: string): boolean {
 }
 
 /**
- * Recursively search the repository for Markdown files containing a marker
- * string. Only `.md` files are inspected. Excludes node_modules, .git, dist,
- * bundle, coverage, .integration-tests, project-plans, and research snapshots.
+ * Directory names the marker walk must never descend into. Gitignored
+ * locations (`tmp`, `.worktrees`) routinely hold complete nested checkouts of
+ * this very repository, so scanning them would count the nested copies' own
+ * `docs/keyboard-shortcuts.md` and turn the single-target assertion into a
+ * false failure on developer machines. `scripts/bun-test-roots.ts` excludes
+ * `tmp` for the same reason.
  */
-function searchRepoForMarker(marker: string): string[] {
-  const excludeDirs = new Set([
-    'node_modules',
-    '.git',
-    'dist',
-    'bundle',
-    'coverage',
-    '.integration-tests',
-    'project-plans',
-    'research',
-  ]);
+const NESTED_CHECKOUT_EXCLUDE_DIRS: ReadonlySet<string> = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  'bundle',
+  'coverage',
+  '.integration-tests',
+  'project-plans',
+  'research',
+  // Complete nested checkouts of this repo live under gitignored roots;
+  // their marker-bearing docs must not be counted (issue #3387).
+  'tmp',
+  '.worktrees',
+]);
+
+/**
+ * Recursively search for Markdown files containing a marker string, starting
+ * at `root` (the repository root by default). Only `.md` files are inspected.
+ * Returns paths relative to `root`. See NESTED_CHECKOUT_EXCLUDE_DIRS for the
+ * exclusion set and its rationale.
+ */
+function searchRepoForMarker(
+  marker: string,
+  root: string = repoRoot,
+): string[] {
   const results: string[] = [];
-  collectFilesWithMarker(repoRoot, marker, excludeDirs, results);
-  return results;
+  collectFilesWithMarker(root, marker, NESTED_CHECKOUT_EXCLUDE_DIRS, results);
+  return results.map((p) => relative(root, p));
 }
 
 function isBenignFsError(error: unknown): boolean {
@@ -107,7 +133,7 @@ function processMarkerEntry(
   entry: { name: string; isDirectory(): boolean; isFile(): boolean },
   dir: string,
   marker: string,
-  excludeDirs: Set<string>,
+  excludeDirs: ReadonlySet<string>,
   results: string[],
 ): void {
   if (excludeDirs.has(entry.name)) return;
@@ -124,7 +150,7 @@ function processMarkerEntry(
 function collectFilesWithMarker(
   dir: string,
   marker: string,
-  excludeDirs: Set<string>,
+  excludeDirs: ReadonlySet<string>,
   results: string[],
 ): void {
   let entries: Dirent[];
@@ -150,7 +176,7 @@ function checkFileForMarker(
   try {
     const content = readFileSync(full, 'utf8');
     if (content.includes(marker)) {
-      results.push(relative(repoRoot, full));
+      results.push(full);
     }
   } catch (error) {
     // An unread file is an unchecked file, which would silently weaken the
@@ -272,6 +298,46 @@ describe('doc-tree invariants (real repo state)', () => {
       expect(found.map((p) => p.replaceAll('\\', '/'))).toEqual([
         'docs/keyboard-shortcuts.md',
       ]);
+    });
+
+    it('ignores nested checkouts living under excluded gitignored directories', () => {
+      // Gitignored roots (tmp/, .worktrees/) routinely contain complete
+      // nested copies of this repository. A scan that descends into them
+      // counts the copies' own marker-bearing docs and turns the
+      // single-target invariant into a false failure on developer
+      // machines (issue #3387). Mimic such a nested checkout against a
+      // temporary root and assert the walk does not count it.
+      const marker = 'KEYBINDINGS-AUTOGEN:START';
+      let root = '';
+      try {
+        root = mkdtempSync(join(tmpdir(), 'doc-marker-walk-'));
+        const nestedMarkerDoc = (excludedDir: string): string => {
+          const dir = join(root, excludedDir, 'pr-9999', 'docs');
+          mkdirSync(dir, { recursive: true });
+          const file = join(dir, 'keyboard-shortcuts.md');
+          writeFileSync(file, `<!-- ${marker} -->\n`);
+          return relative(root, file);
+        };
+        // Mimic a nested checkout whose own docs carry the marker. Also
+        // plant a non-excluded sibling to prove the walk is not simply
+        // returning nothing for the temporary root.
+        const tmpCopy = nestedMarkerDoc('tmp');
+        const worktreeCopy = nestedMarkerDoc('.worktrees');
+        const trackedDir = join(root, 'docs');
+        mkdirSync(trackedDir, { recursive: true });
+        const trackedFile = join(trackedDir, 'tracked.md');
+        writeFileSync(trackedFile, `<!-- ${marker} -->\n`);
+
+        const found = searchRepoForMarker(marker, root);
+
+        expect(found).not.toContain(tmpCopy);
+        expect(found).not.toContain(worktreeCopy);
+        expect(found).toEqual(['docs/tracked.md']);
+      } finally {
+        if (root) {
+          rmSync(root, { recursive: true, force: true });
+        }
+      }
     });
   });
 

@@ -270,10 +270,15 @@ describe('useAgentStream subagent isolation', () => {
       .mockReturnValue((async function* () {})());
   });
 
-  it('subagent completions should not reach Gemini submission pipeline', async () => {
-    const client = new MockedAgentClientClass(
-      mockConfig,
-    ) as unknown as Parameters<typeof useAgentStream>[0];
+  const completeSubagentTool = async (): Promise<{
+    readonly markToolsAsDisplayCleared: ReturnType<typeof vi.fn>;
+    readonly sendMessageStream: ReturnType<typeof vi.fn>;
+    readonly addHistory: ReturnType<typeof vi.fn>;
+  }> => {
+    const mockedClient = new MockedAgentClientClass(mockConfig);
+    const client = mockedClient as unknown as Parameters<
+      typeof useAgentStream
+    >[0];
 
     let capturedOnComplete:
       | ((
@@ -356,12 +361,24 @@ describe('useAgentStream subagent isolation', () => {
     });
 
     await waitFor(() => {
-      expect(mockMarkToolsAsDisplayCleared).toHaveBeenCalledWith([
-        'subagent-call',
-      ]);
-      expect(mockSendMessageStream).not.toHaveBeenCalled();
-      expect(client.addHistory).not.toHaveBeenCalled();
+      if (mockMarkToolsAsDisplayCleared.mock.calls.length === 0) {
+        throw new Error('Completed subagent tool has not been display-cleared');
+      }
     });
+    return {
+      markToolsAsDisplayCleared: mockMarkToolsAsDisplayCleared,
+      sendMessageStream: mockSendMessageStream,
+      addHistory: mockedClient.addHistory,
+    };
+  };
+
+  it('subagent completions should not reach Gemini submission pipeline', async () => {
+    const completion = await completeSubagentTool();
+    expect(completion.markToolsAsDisplayCleared).toHaveBeenCalledWith([
+      'subagent-call',
+    ]);
+    expect(completion.sendMessageStream).not.toHaveBeenCalled();
+    expect(completion.addHistory).not.toHaveBeenCalled();
   });
 
   it('marks a terminal subagent tool as outstanding until displayCleared transitions it out of Responding', () => {
@@ -507,7 +524,11 @@ describe('useAgentStream subagent isolation', () => {
     expect(mockSendMessageStream).not.toHaveBeenCalled();
   });
 
-  it('renders a completed client-initiated tool to display without resubmitting to the model or marking it display-cleared', async () => {
+  const observeClientInitiatedToolCompletion = async (): Promise<{
+    readonly addItem: ReturnType<typeof vi.fn>;
+    readonly sendMessageStream: ReturnType<typeof vi.fn>;
+    readonly markToolsAsDisplayCleared: ReturnType<typeof vi.fn>;
+  }> => {
     const client = new MockedAgentClientClass(
       mockConfig,
     ) as unknown as Parameters<typeof useAgentStream>[0];
@@ -596,14 +617,22 @@ describe('useAgentStream subagent isolation', () => {
     });
 
     await waitFor(() => {
-      expect(mockAddItem).toHaveBeenCalled();
+      if (mockAddItem.mock.calls.length === 0) {
+        throw new Error('Expected the completed tool to be rendered');
+      }
     });
 
-    // Completing a client-initiated tool does NOT resubmit to the model.
-    expect(mockSendMessageStream).not.toHaveBeenCalled();
-    // A client-initiated PRIMARY tool is cleared by the scheduler emptying its
-    // list, NOT via the displayCleared flag, so markToolsAsDisplayCleared is
-    // never called for it.
-    expect(mockMarkToolsAsDisplayCleared).not.toHaveBeenCalled();
+    return {
+      addItem: mockAddItem,
+      sendMessageStream: mockSendMessageStream,
+      markToolsAsDisplayCleared: mockMarkToolsAsDisplayCleared,
+    };
+  };
+
+  it('renders a completed client-initiated tool to display without resubmitting to the model or marking it display-cleared', async () => {
+    const completion = await observeClientInitiatedToolCompletion();
+    expect(completion.addItem).toHaveBeenCalled();
+    expect(completion.sendMessageStream).not.toHaveBeenCalled();
+    expect(completion.markToolsAsDisplayCleared).not.toHaveBeenCalled();
   });
 });

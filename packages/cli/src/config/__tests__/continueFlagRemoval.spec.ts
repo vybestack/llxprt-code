@@ -19,6 +19,10 @@ import * as fc from 'fast-check';
 import { parseArguments } from '../cliArgParser.js';
 import type { Settings } from '../settings.js';
 
+function isBareContinueValue(value: string | boolean | undefined): boolean {
+  return value === '' || value === true;
+}
+
 describe('CLI --resume flag removal', () => {
   /**
    * @plan PLAN-20260214-SESSIONBROWSER.P28 Tests for --resume flag removal
@@ -126,7 +130,7 @@ describe('CLI --resume flag removal', () => {
       const result = await parseArguments({} as Settings);
 
       // --continue with no value should produce true or empty string
-      expect(result.continue === '' || result.continue === true).toBe(true);
+      expect(isBareContinueValue(result.continue)).toBe(true);
       expect(result.continue).not.toBe('true'); // Should not be string "true"
     });
 
@@ -142,7 +146,7 @@ describe('CLI --resume flag removal', () => {
       const result = await parseArguments({} as Settings);
 
       // -C with no value should produce true or empty string
-      expect(result.continue === '' || result.continue === true).toBe(true);
+      expect(isBareContinueValue(result.continue)).toBe(true);
     });
 
     /**
@@ -201,7 +205,7 @@ describe('CLI --resume flag removal', () => {
       const result = await parseArguments({} as Settings);
 
       // --continue should be true/empty, not "--debug"
-      expect(result.continue === '' || result.continue === true).toBe(true);
+      expect(isBareContinueValue(result.continue)).toBe(true);
       expect(result.debug).toBe(true);
     });
   });

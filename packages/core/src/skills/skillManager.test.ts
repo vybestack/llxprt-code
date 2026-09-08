@@ -182,12 +182,9 @@ description: project-desc
       source: 'builtin',
     };
 
-    mockLoadSkillsFromDir.mockImplementation(async (dir, source) => {
-      if (source === 'builtin') {
-        return [{ ...mockBuiltinSkill }];
-      }
-      return [];
-    });
+    mockLoadSkillsFromDir.mockImplementation(async (dir, source) =>
+      builtinSkillsForSource(source, mockBuiltinSkill),
+    );
 
     const storage = new Storage('/dummy');
     vi.spyOn(storage, 'getProjectSkillsDir').mockReturnValue('/non-existent');
@@ -515,3 +512,25 @@ description: user-desc
     });
   });
 });
+
+function builtinSkillsForSource(
+  source: string,
+  mockBuiltinSkill: {
+    name: string;
+    description: string;
+    location: string;
+    body: string;
+    source: string;
+  },
+): Array<{
+  name: string;
+  description: string;
+  location: string;
+  body: string;
+  source: string;
+}> {
+  if (source === 'builtin') {
+    return [{ ...mockBuiltinSkill }];
+  }
+  return [];
+}

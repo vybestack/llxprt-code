@@ -19,6 +19,16 @@ const { aliasEntries } = {
   aliasEntries: [] as Array<Record<string, unknown>>,
 };
 
+function getBuiltinAnthropicAlias() {
+  const builtinAnthropic = realProviderAliasesModule
+    .loadProviderAliasEntries()
+    .find((entry) => entry.source === 'builtin' && entry.alias === 'anthropic');
+  if (builtinAnthropic === undefined) {
+    throw new Error('Builtin anthropic alias entry not found');
+  }
+  return builtinAnthropic;
+}
+
 const {
   StubSettingsService: StubSettingsServiceClass,
   StubConfig: StubConfigClass,
@@ -781,15 +791,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
 
   describe('reasoning wire setting precedence', () => {
     it('resolves profile values over shipped Opus 5 alias defaults', async () => {
-      const builtinAnthropic = realProviderAliasesModule
-        .loadProviderAliasEntries()
-        .find(
-          (entry) => entry.source === 'builtin' && entry.alias === 'anthropic',
-        );
-      if (!builtinAnthropic) {
-        throw new Error('Builtin anthropic alias entry not found');
-      }
-      aliasEntries.push({ ...builtinAnthropic });
+      aliasEntries.push({ ...getBuiltinAnthropicAlias() });
       const profile: Profile = {
         version: 1,
         provider: 'anthropic',

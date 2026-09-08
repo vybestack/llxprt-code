@@ -38,7 +38,9 @@ import {
  */
 function makeBareSource(
   overrides: {
-    createDetachedAgentClient?: (runtimeId?: string) => AgentClientContract;
+    createDetachedAgentClient?: (
+      runtimeId?: string,
+    ) => Promise<AgentClientContract>;
   } = {},
 ): UiRuntimeBareSource {
   return {
@@ -54,16 +56,16 @@ function makeBareSource(
 }
 
 describe('AgentClientSource detached-client bridge (buildSlashCommandRuntime)', () => {
-  it('bridges createDetachedAgentClient to the flattened runtime when present on the source', () => {
+  it('bridges createDetachedAgentClient to the flattened runtime when present on the source', async () => {
     const expectedClient = { id: 'detached' } as unknown as AgentClientContract;
     const source = makeBareSource({
-      createDetachedAgentClient: () => expectedClient,
+      createDetachedAgentClient: async () => expectedClient,
     });
 
     const runtime = buildSlashCommandRuntime(source);
 
     expect(typeof runtime.createDetachedAgentClient).toBe('function');
-    const result = runtime.createDetachedAgentClient!();
+    const result = await runtime.createDetachedAgentClient!();
     expect(result).toBe(expectedClient);
   });
 

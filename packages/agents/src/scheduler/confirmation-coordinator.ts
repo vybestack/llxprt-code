@@ -470,7 +470,7 @@ export class ConfirmationCoordinator {
       this.pendingConfirmations.delete(response.correlationId);
       this.pendingOriginalConfirmHandlers.delete(response.correlationId);
       this.statusMutator.setOutcome(callId, ToolConfirmationOutcome.Cancel);
-      void this.handleCancellation(callId);
+      void this.handleCancellation(callId, signal);
       return;
     }
 
@@ -545,7 +545,7 @@ export class ConfirmationCoordinator {
     this.statusMutator.setOutcome(callId, outcome);
 
     if (outcome === ToolConfirmationOutcome.Cancel || signal.aborted) {
-      await this.handleCancellation(callId);
+      await this.handleCancellation(callId, signal);
     } else if (
       outcome === ToolConfirmationOutcome.ModifyWithEditor &&
       waitingToolCall
@@ -571,8 +571,12 @@ export class ConfirmationCoordinator {
 
   // ── Sub-handlers ──────────────────────────────────────────────────────────
 
-  private async handleCancellation(callId: string): Promise<void> {
+  private async handleCancellation(
+    callId: string,
+    signal: AbortSignal,
+  ): Promise<void> {
     this.statusMutator.setCancelled(callId, 'User did not allow tool call');
+    await this.schedulerAccessor.attemptExecution(signal);
   }
 
   private async handleApproval(

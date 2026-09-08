@@ -221,38 +221,39 @@ describe('strict runtime identity resolution (issue #2300)', () => {
   });
 
   describe('disposeCliRuntime clears default only if disposing current default', () => {
-    it('clears default when disposing the current default', () => {
+    it('clears default when disposing the current default', async () => {
       const runtimeId = 'dispose-default';
       upsertRuntimeEntry(runtimeId, {});
       setDefaultCliRuntimeId(runtimeId);
 
-      disposeCliRuntime(runtimeId);
+      await disposeCliRuntime(runtimeId);
       expect(getDefaultCliRuntimeId()).toBeUndefined();
     });
 
-    it('does not clear default when disposing a non-default runtime', () => {
+    it('does not clear default when disposing a non-default runtime', async () => {
       const other = 'dispose-other';
       const def = 'default-stays';
       upsertRuntimeEntry(other, {});
       upsertRuntimeEntry(def, {});
       setDefaultCliRuntimeId(def);
 
-      disposeCliRuntime(other);
+      await disposeCliRuntime(other);
       expect(getDefaultCliRuntimeId()).toBe(def);
     });
 
-    it('disposing a never-registered runtime id is a safe no-op', () => {
+    it('disposing a never-registered runtime id is a safe no-op', async () => {
       const def = 'default-survives';
       upsertRuntimeEntry(def, {});
       setDefaultCliRuntimeId(def);
 
-      expect(() => disposeCliRuntime('never-registered')).not.toThrow();
+      await disposeCliRuntime('never-registered');
+
       expect(getDefaultCliRuntimeId()).toBe(def);
     });
 
-    it('clears default when disposing a default that was set but never registered', () => {
+    it('clears default when disposing a default that was set but never registered', async () => {
       setDefaultCliRuntimeId('unregistered-default');
-      disposeCliRuntime('unregistered-default');
+      await disposeCliRuntime('unregistered-default');
       expect(getDefaultCliRuntimeId()).toBeUndefined();
     });
   });

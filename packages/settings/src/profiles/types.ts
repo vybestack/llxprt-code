@@ -132,7 +132,6 @@ export interface ProfileEphemeralSettings {
   'tools.disabled'?: string[];
   GOOGLE_CLOUD_PROJECT?: string;
   GOOGLE_CLOUD_LOCATION?: string;
-  'include-folder-structure'?: boolean;
   'prompt-caching'?: 'off' | '5m' | '1h' | '24h';
   'enable-tool-prompts'?: boolean;
   'rate-limit-throttle'?: 'on' | 'off';
@@ -185,28 +184,18 @@ export interface ProfileEphemeralSettings {
   streamFirstResponseTimeoutMs?: number;
   'stream-idle-timeout-ms'?: number;
   streamIdleTimeoutMs?: number;
+  'image-payload-budget-bytes'?: number;
+  'media-store-quota-bytes'?: number;
+  'session-recording-queue-max-bytes'?: number;
+  'session-persistence-queue-max-bytes'?: number;
+  'provider-files'?: 'off' | 'session' | 'workspace';
+  'provider-files-retention-ms'?: number;
+  'provider-files-delete'?: 'delete' | 'retain';
+  'provider-files-zdr'?: 'allow-retention' | 'require';
+  'media.semantic-purge'?: 'off' | 'remove' | 'summary';
 }
 
 export type EphemeralSettings = ProfileEphemeralSettings;
-
-/**
- * Sub-profile configuration for load balancing
- */
-export interface LoadBalancerSubProfileConfig {
-  name: string;
-  provider: string;
-  model?: string;
-  baseURL?: string;
-  apiKey?: string;
-}
-
-/**
- * Load balancer configuration
- */
-export interface LoadBalancerConfig {
-  strategy: 'round-robin';
-  subProfiles: LoadBalancerSubProfileConfig[];
-}
 
 /**
  * Standard profile configuration (single model)
@@ -218,7 +207,6 @@ export interface StandardProfile {
   model: string;
   modelParams: ModelParams;
   ephemeralSettings: EphemeralSettings;
-  loadBalancer?: LoadBalancerConfig;
   auth?: AuthConfig;
 }
 

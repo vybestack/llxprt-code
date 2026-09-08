@@ -17,9 +17,9 @@
 import * as crypto from 'node:crypto';
 import { BaseTokenStorage } from './base-token-storage.js';
 import type { OAuthCredentials } from './types.js';
-import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
+import { emitHostFeedback } from '../../host/hostServices.js';
 import { createDefaultKeyringAdapter } from '@vybestack/llxprt-code-storage/storage/secure-store.js';
-import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry/utils/debugLogger.js';
 
 interface Keytar {
   getPassword(service: string, account: string): Promise<string | null>;
@@ -211,11 +211,7 @@ export class KeychainTokenStorage extends BaseTokenStorage {
         .filter((cred) => !cred.account.startsWith(KEYCHAIN_TEST_PREFIX))
         .map((cred: { account: string }) => cred.account);
     } catch (error) {
-      coreEvents.emitFeedback(
-        'error',
-        'Failed to list servers from keychain',
-        error,
-      );
+      emitHostFeedback('error', 'Failed to list servers from keychain', error);
       return [];
     }
   }
@@ -242,7 +238,7 @@ export class KeychainTokenStorage extends BaseTokenStorage {
           this.validateCredentials(data);
           result.set(cred.account, data);
         } catch (error) {
-          coreEvents.emitFeedback(
+          emitHostFeedback(
             'error',
             `Failed to parse credentials for ${cred.account}`,
             error,
@@ -250,7 +246,7 @@ export class KeychainTokenStorage extends BaseTokenStorage {
         }
       }
     } catch (error) {
-      coreEvents.emitFeedback(
+      emitHostFeedback(
         'error',
         'Failed to get all credentials from keychain',
         error,

@@ -7,10 +7,6 @@
 export * from './src/index.js';
 export type { HistoryService } from './src/services/history/HistoryService.js';
 export {
-  DEFAULT_GEMINI_MODEL,
-  DEFAULT_GEMINI_FLASH_MODEL,
-  DEFAULT_GEMINI_FLASH_LITE_MODEL,
-  DEFAULT_GEMINI_EMBEDDING_MODEL,
   PLACEHOLDER_MODEL,
   UNCONFIGURED_PROVIDER,
 } from './src/config/models.js';

@@ -138,15 +138,46 @@ export function compressedLine(
 
 /**
  * Build a valid JSONL line for a rewind event.
+ *
+ * `cutSeq` is the chronology `seq` of the first removed item (#2934). When it
+ * is omitted the payload carries no `cutSeq` key, matching legacy count-only
+ * rewind events.
  */
-export function rewindLine(seq: number, itemsRemoved: number): string {
+export function rewindLine(
+  seq: number,
+  itemsRemoved: number,
+  cutSeq?: number,
+): string {
   return JSON.stringify({
     v: 1,
     seq,
     ts: new Date().toISOString(),
     type: 'rewind',
-    payload: { itemsRemoved },
+    payload: cutSeq === undefined ? { itemsRemoved } : { itemsRemoved, cutSeq },
   });
+}
+
+/**
+ * Build a text content entry carrying an explicit chronology marker, as
+ * HistoryService stamps them before the entry reaches the journal (#1721).
+ */
+export function makeMarkedContent(
+  text: string,
+  speaker: IContent['speaker'],
+  chronologySeq: number,
+): IContent {
+  return {
+    speaker,
+    blocks: [{ type: 'text', text }],
+    metadata: {
+      chronology: {
+        seq: chronologySeq,
+        userTurn: 1,
+        step: chronologySeq,
+        recordedAt: 1787000000000,
+      },
+    },
+  };
 }
 
 /**

@@ -15,14 +15,14 @@ import {
 } from './mcp-client-manager.js';
 import { McpClient } from './mcp-client.js';
 import { MCPDiscoveryState } from './mcp-client.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { Config } from './test-support/mcpClientTestSupport.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
-import type { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
-import type { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
-import type { LlxprtExtension } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import type { PromptRegistry } from './test-support/mcpClientTestSupport.js';
+import type { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
+import type { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
+import type { LlxprtExtension } from './test-support/mcpClientTestSupport.js';
 import { EventEmitter } from 'node:events';
-import { CoreEvent } from '@vybestack/llxprt-code-core/utils/events.js';
+import { MCP_CLIENT_UPDATE_EVENT } from '../host/hostServices.js';
 
 void vi.mock('./mcp-client.js', () => ({
   McpClient: vi.fn(),
@@ -589,7 +589,7 @@ describe('McpClientManager', () => {
     it('should transition to COMPLETED immediately when no servers are configured', async () => {
       const { manager, eventEmitter } = createManager({});
       const events: string[] = [];
-      eventEmitter.on(CoreEvent.McpClientUpdate, () =>
+      eventEmitter.on(MCP_CLIENT_UPDATE_EVENT, () =>
         events.push('McpClientUpdate'),
       );
 
@@ -605,7 +605,7 @@ describe('McpClientManager', () => {
         'test-server': {},
       });
       const states: string[] = [];
-      eventEmitter.on(CoreEvent.McpClientUpdate, () => {
+      eventEmitter.on(MCP_CLIENT_UPDATE_EVENT, () => {
         states.push(manager.getDiscoveryState());
       });
 
@@ -625,7 +625,7 @@ describe('McpClientManager', () => {
         'test-server': {},
       });
       const payloads: unknown[] = [];
-      eventEmitter.on(CoreEvent.McpClientUpdate, (payload) => {
+      eventEmitter.on(MCP_CLIENT_UPDATE_EVENT, (payload) => {
         payloads.push(payload);
       });
 

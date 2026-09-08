@@ -61,7 +61,7 @@ class RecordingTransport implements WebSocketTransport {
     request: OpenAIResponsesRequest,
     options: StreamResponseOptions,
   ): AsyncIterableIterator<IContent> {
-    this.sentRequests.push(request);
+    this.sentRequests.push(structuredClone(request));
     this.lastOptions = options;
     yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
     yield {
@@ -94,6 +94,10 @@ class TestableCodexProvider extends OpenAIResponsesProvider {
   protected override createWebSocketTransport(): WebSocketTransport {
     return this.recordingTransport;
   }
+}
+
+function isCompletionContent(content: IContent): boolean {
+  return content.metadata !== undefined && content.blocks.length === 0;
 }
 
 function buildCodexOAuthManager(): object {
@@ -417,9 +421,7 @@ describe('OpenAIResponsesProvider Codex stateful conversations @issue:3134', () 
     expect(provider.recordingTransport.lastOptions?.responsesStored).toBe(true);
 
     // The completion IContent must carry the metadata stamp.
-    const completion = output.find(
-      (c) => c.metadata !== undefined && c.blocks.length === 0,
-    );
+    const completion = output.find(isCompletionContent);
     expect(completion).toBeDefined();
     expect(completion!.metadata!.responsesStored).toBe(true);
     expect(completion!.metadata!.id).toBe('resp_completed');

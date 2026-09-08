@@ -196,11 +196,11 @@ describe('loggers', () => {
 
     it('should log an API response with all fields', () => {
       const usageData: RuntimeUsageMetadata = {
-        promptTokenCount: 17,
-        candidatesTokenCount: 50,
-        cachedContentTokenCount: 10,
-        thoughtsTokenCount: 5,
-        toolUsePromptTokenCount: 2,
+        inputTokenCount: 17,
+        outputTokenCount: 50,
+        cachedTokenCount: 10,
+        thinkingTokenCount: 5,
+        toolUseInputTokenCount: 2,
       };
       const event = new ApiResponseEvent(
         'test-model',
@@ -259,11 +259,11 @@ describe('loggers', () => {
 
     it('should log an API response with an error', () => {
       const usageData: RuntimeUsageMetadata = {
-        promptTokenCount: 17,
-        candidatesTokenCount: 50,
-        cachedContentTokenCount: 10,
-        thoughtsTokenCount: 5,
-        toolUsePromptTokenCount: 2,
+        inputTokenCount: 17,
+        outputTokenCount: 50,
+        cachedTokenCount: 10,
+        thinkingTokenCount: 5,
+        toolUseInputTokenCount: 2,
       };
       const event = new ApiResponseEvent(
         'test-model',
@@ -324,8 +324,8 @@ describe('loggers', () => {
         100,
         'prompt-id-9',
         {
-          promptTokenCount: 17,
-          candidatesTokenCount: 50,
+          inputTokenCount: 17,
+          outputTokenCount: 50,
           totalTokenCount: 67,
         },
         'a-very-long-response-body-worth-of-text',

@@ -154,22 +154,28 @@ describe('Registry Contract Tests @plan:PLAN-20260608-ISSUE1585.P04', () => {
       expect(result.success).toBe(true);
     });
 
-    it('tool uses injected host to resolve target directory', async () => {
-      const expectedDir = '/custom/project/path';
-      const host = createFakeToolHost({ getTargetDir: () => expectedDir });
-      const shell: IShellExecutionService = {
-        execute: async (_cmd, opts) => ({
-          stdout: opts?.cwd ?? 'no-cwd',
-          stderr: '',
-          exitCode: 0,
-          aborted: false,
-        }),
-        isCommandAllowed: () => true,
+    const observeToolUsesInjectedHostToResolveTargetDirectoryAt157 =
+      async () => {
+        const expectedDir = '/custom/project/path';
+        const host = createFakeToolHost({ getTargetDir: () => expectedDir });
+        const shell: IShellExecutionService = {
+          execute: async (_cmd, opts) => ({
+            stdout: opts?.cwd ?? 'no-cwd',
+            stderr: '',
+            exitCode: 0,
+            aborted: false,
+          }),
+          isCommandAllowed: () => true,
+        };
+        const bus = createFakeMessageBus();
+        const tool = new SampleShellTool(host, shell, bus);
+        const result = await tool.execute('echo hello');
+        return { expectedDir, result };
       };
-      const bus = createFakeMessageBus();
 
-      const tool = new SampleShellTool(host, shell, bus);
-      const result = await tool.execute('echo hello');
+    it('tool uses injected host to resolve target directory', async () => {
+      const { expectedDir, result } =
+        await observeToolUsesInjectedHostToResolveTargetDirectoryAt157();
       expect(result.output).toBe(expectedDir);
     });
 
@@ -254,7 +260,7 @@ describe('Registry Contract Tests @plan:PLAN-20260608-ISSUE1585.P04', () => {
   });
 
   describe('Tool with IToolKeyStorage dependency', () => {
-    it('tool uses IToolKeyStorage to mask keys for display', () => {
+    const observeToolUsesIToolKeyStorageToMaskKeysForDisplayAt257 = () => {
       const keyStorage: IToolKeyStorage = {
         saveKey: async () => {},
         getKey: async (name: string) =>
@@ -269,27 +275,35 @@ describe('Registry Contract Tests @plan:PLAN-20260608-ISSUE1585.P04', () => {
         },
         getSupportedToolNames: () => ['codesearch'],
       };
-
       const masked = keyStorage.maskKeyForDisplay('sk-live-abc123def456');
-      // 'sk-live-abc123def456' = 20 chars → 16 stars + last 4 chars
+      return { masked };
+    };
+
+    it('tool uses IToolKeyStorage to mask keys for display', () => {
+      const { masked } =
+        observeToolUsesIToolKeyStorageToMaskKeysForDisplayAt257();
       expect(masked).toBe('****************f456');
       expect(masked).not.toContain('sk-live');
     });
   });
 
   describe('Tool with IToolRegistryHost dependency', () => {
-    it('tool queries IToolRegistryHost for core tools list', () => {
+    const observeToolQueriesIToolRegistryHostForCoreToolsListAt281 = () => {
       const registryHost: IToolRegistryHost = {
         getCoreTools: () => ['shell', 'read-file', 'write-file'],
         getExcludeTools: () => ['dangerous-tool'],
         getToolDiscoveryCommand: () => undefined,
         isToolEnabled: (name: string) => !['dangerous-tool'].includes(name),
       };
-
       const coreTools = registryHost.getCoreTools?.() ?? [];
+      return { registryHost, coreTools };
+    };
+
+    it('tool queries IToolRegistryHost for core tools list', () => {
+      const { registryHost, coreTools } =
+        observeToolQueriesIToolRegistryHostForCoreToolsListAt281();
       expect(coreTools).toContain('shell');
       expect(coreTools).toContain('read-file');
-
       expect(registryHost.isToolEnabled?.('shell')).toBe(true);
       expect(registryHost.isToolEnabled?.('dangerous-tool')).toBe(false);
     });

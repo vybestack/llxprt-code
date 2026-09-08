@@ -45,6 +45,7 @@ describe('AuthCommand Codex OAuth Integration', () => {
     executor = new AuthCommandExecutor(mockOAuthManager);
 
     mockContext = {
+      signal: new AbortController().signal,
       services: {
         config: null,
         agent: null,

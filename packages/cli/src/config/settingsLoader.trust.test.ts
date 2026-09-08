@@ -57,6 +57,24 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
 const TRUSTED_FOLDERS_PATH = '/mock/home/user/trustedFolders.json';
 const temporaryDirectories: string[] = [];
 
+function resolveMockHomeOrRealPath(location: fs.PathLike): string {
+  const resolvedLocation = String(location);
+  if (resolvedLocation === path.resolve('/mock/home/user')) {
+    return resolvedLocation;
+  }
+  return realFs.realpathSync(location);
+}
+
+function failWorkspaceCanonicalResolution(
+  workspace: string,
+  location: fs.PathLike,
+): string {
+  if (String(location) === path.resolve(workspace)) {
+    throw new Error('canonical identity unavailable');
+  }
+  return String(location);
+}
+
 describe('settingsLoader workspace trust provenance', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -155,11 +173,7 @@ describe('settingsLoader workspace trust provenance', () => {
       fs.realpathSync as unknown as Mock<
         typeof fs.realpathSync
       > as unknown as Mock<(...args: never[]) => unknown>
-    ).mockImplementation((location: fs.PathLike): string =>
-      String(location) === path.resolve('/mock/home/user')
-        ? String(location)
-        : realFs.realpathSync(location),
-    );
+    ).mockImplementation(resolveMockHomeOrRealPath);
 
     const settings = loadSettings(workspaceSymlink);
 
@@ -183,12 +197,9 @@ describe('settingsLoader workspace trust provenance', () => {
       fs.realpathSync as unknown as Mock<
         typeof fs.realpathSync
       > as unknown as Mock<(...args: never[]) => unknown>
-    ).mockImplementation((location: fs.PathLike): string => {
-      if (String(location) === path.resolve(workspace)) {
-        throw new Error('canonical identity unavailable');
-      }
-      return String(location);
-    });
+    ).mockImplementation((location: fs.PathLike): string =>
+      failWorkspaceCanonicalResolution(workspace, location),
+    );
 
     const settings = loadSettings(workspace);
 

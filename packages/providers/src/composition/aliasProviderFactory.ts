@@ -27,6 +27,17 @@ import { type IProviderConfig } from '../types/IProviderConfig.js';
 import type { OAuthManager } from '../auth/index.js';
 import type { IModel } from '../IModel.js';
 import { type ProviderAliasEntry } from './providerAliases.js';
+import { createBuiltinProviderContributionRegistry } from './runtimePlugins/registry.js';
+import type {
+  ProviderAliasFactory,
+  ProviderContributionRegistry,
+  ProviderFactoryContext,
+} from './runtimePlugins/types.js';
+import {
+  conservativeMediaTransportCapabilities,
+  copyMediaTransportCapabilities,
+  type ProviderMediaTransportCapabilities,
+} from '../providerMediaTransportCapabilities.js';
 
 /**
  * Sanitizes API keys to remove problematic characters that cause ByteString errors.
@@ -188,6 +199,26 @@ export function bindProviderAliasIdentity(
   });
 }
 
+interface AliasMediaCapabilityProvider {
+  getMediaTransportCapabilities(): ProviderMediaTransportCapabilities;
+}
+
+function bindAliasMediaTransportCapabilities(
+  provider: AliasMediaCapabilityProvider,
+  entry: ProviderAliasEntry,
+): void {
+  const registered =
+    entry.config.mediaTransportCapabilities ??
+    conservativeMediaTransportCapabilities();
+  Object.defineProperty(provider, 'getMediaTransportCapabilities', {
+    value: (): ProviderMediaTransportCapabilities =>
+      copyMediaTransportCapabilities(registered),
+    writable: false,
+    enumerable: false,
+    configurable: true,
+  });
+}
+
 /**
  * Surface a declared {@link ProviderMediaSupport} block onto a provider config's
  * `providerSpecific` map so it is reachable at request time via
@@ -270,13 +301,14 @@ export function createOpenAIAliasProvider(
   openaiBaseUrl: string | undefined,
   openaiProviderConfig: IProviderConfig,
   authOnlyEnabled: boolean,
-): OpenAIProvider | null {
+): OpenAIProvider {
   const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
   if (!resolvedBaseUrl) {
-    debugLogger.warn(
-      `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
+    throw new Error(
+      `Alias '${entry.alias}' (${entry.filePath}) has no base-url and no ` +
+        `default base URL is configured. Set 'base-url' on the alias or ` +
+        `configure a default for the openai provider.`,
     );
-    return null;
   }
 
   const aliasProviderConfig: IProviderConfig = {
@@ -308,6 +340,7 @@ export function createOpenAIAliasProvider(
   overrideStaticModels(provider, entry);
 
   bindOpenAIAliasIdentity(provider, entry.alias);
+  bindAliasMediaTransportCapabilities(provider, entry);
 
   return provider;
 }
@@ -319,13 +352,14 @@ export function createOpenAIResponsesAliasProvider(
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
   authOnlyEnabled: boolean,
-): OpenAIResponsesProvider | null {
+): OpenAIResponsesProvider {
   const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
   if (!resolvedBaseUrl) {
-    debugLogger.warn(
-      `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
+    throw new Error(
+      `Alias '${entry.alias}' (${entry.filePath}) has no base-url and no ` +
+        `default base URL is configured. Set 'base-url' on the alias or ` +
+        `configure a default for the openai provider.`,
     );
-    return null;
   }
 
   const aliasProviderConfig: IProviderConfig = {
@@ -364,6 +398,7 @@ export function createOpenAIResponsesAliasProvider(
 
   overrideAliasDefaultModel(provider, entry);
   overrideStaticModels(provider, entry);
+  bindAliasMediaTransportCapabilities(provider, entry);
 
   return provider;
 }
@@ -374,13 +409,14 @@ export function createOpenAIVercelAliasProvider(
   openaiBaseUrl: string | undefined,
   openaiProviderConfig: IProviderConfig,
   authOnlyEnabled: boolean,
-): OpenAIVercelProvider | null {
+): OpenAIVercelProvider {
   const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
   if (!resolvedBaseUrl) {
-    debugLogger.warn(
-      `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
+    throw new Error(
+      `Alias '${entry.alias}' (${entry.filePath}) has no base-url and no ` +
+        `default base URL is configured. Set 'base-url' on the alias or ` +
+        `configure a default for the openai provider.`,
     );
-    return null;
   }
 
   const aliasProviderConfig: IProviderConfig = {
@@ -411,6 +447,7 @@ export function createOpenAIVercelAliasProvider(
   overrideStaticModels(provider, entry);
 
   bindProviderAliasIdentity(provider, entry.alias);
+  bindAliasMediaTransportCapabilities(provider, entry);
 
   return provider;
 }
@@ -419,7 +456,7 @@ export function createGeminiAliasProvider(
   entry: ProviderAliasEntry,
   config: Config | undefined,
   authOnlyEnabled: boolean,
-): GeminiProvider | null {
+): GeminiProvider {
   const aliasApiKey = resolveAliasEnvApiKey(entry, authOnlyEnabled);
 
   const resolvedBaseUrl = entry.config['base-url'];
@@ -439,6 +476,7 @@ export function createGeminiAliasProvider(
   overrideAliasDefaultModel(provider, entry);
 
   bindProviderAliasIdentity(provider, entry.alias);
+  bindAliasMediaTransportCapabilities(provider, entry);
 
   return provider;
 }
@@ -447,7 +485,7 @@ export function createAnthropicAliasProvider(
   entry: ProviderAliasEntry,
   oauthManager: OAuthManager | undefined,
   authOnlyEnabled: boolean,
-): AnthropicProvider | null {
+): AnthropicProvider {
   const aliasApiKey = resolveAliasEnvApiKey(entry, authOnlyEnabled);
 
   const resolvedBaseUrl = entry.config['base-url'];
@@ -470,84 +508,67 @@ export function createAnthropicAliasProvider(
   overrideStaticModels(provider, entry);
 
   bindProviderAliasIdentity(provider, entry.alias);
+  bindAliasMediaTransportCapabilities(provider, entry);
 
   return provider;
 }
 
-/** Inputs shared by every alias factory in one registration pass. */
-interface AliasProviderContext {
-  openaiApiKey: string | undefined;
-  openaiBaseUrl: string | undefined;
-  openaiProviderConfig: IProviderConfig;
-  oauthManager: OAuthManager;
-  config: Config | undefined;
-  authOnlyEnabled: boolean;
+/** Options accepted by {@link registerAliasProviders}. */
+export interface RegisterAliasProvidersOptions {
+  /**
+   * The provider contribution registry alias construction dispatches through.
+   * Defaults to the built-ins-only registry, so built-in alias construction is
+   * unchanged for callers that load no runtime plugins. Note that an alias
+   * naming an unknown base provider now throws instead of being skipped with a
+   * warning.
+   */
+  providerContributions?: ProviderContributionRegistry;
 }
 
-type AliasProvider =
-  | OpenAIProvider
-  | OpenAIResponsesProvider
-  | OpenAIVercelProvider
-  | GeminiProvider
-  | AnthropicProvider;
-
-function createAliasProvider(
-  entry: ProviderAliasEntry,
-  context: AliasProviderContext,
-): AliasProvider | null {
-  const {
-    openaiApiKey,
-    openaiBaseUrl,
-    openaiProviderConfig,
-    oauthManager,
-    config,
-    authOnlyEnabled,
-  } = context;
-
-  switch (entry.config.baseProvider.toLowerCase()) {
-    case 'openai':
-      return createOpenAIAliasProvider(
-        entry,
-        openaiApiKey,
-        openaiBaseUrl,
-        openaiProviderConfig,
-        authOnlyEnabled,
-      );
-    case 'openai-responses':
-      return createOpenAIResponsesAliasProvider(
-        entry,
-        openaiApiKey,
-        openaiBaseUrl,
-        openaiProviderConfig,
-        oauthManager,
-        authOnlyEnabled,
-      );
-    case 'openaivercel':
-    case 'openai-vercel':
-      return createOpenAIVercelAliasProvider(
-        entry,
-        openaiApiKey,
-        openaiBaseUrl,
-        openaiProviderConfig,
-        authOnlyEnabled,
-      );
-    case 'gemini':
-      return createGeminiAliasProvider(entry, config, authOnlyEnabled);
-    case 'anthropic':
-      // Binding is by identity, not host: only the `claudecode` alias
-      // receives the Claude subscription OAuth manager/identity; the
-      // `anthropic` alias is API-key-only and must not bind OAuth.
-      return createAnthropicAliasProvider(
-        entry,
-        entry.alias === 'claudecode' ? oauthManager : undefined,
-        authOnlyEnabled,
-      );
-    default:
-      debugLogger.warn(
-        `[ProviderManager] Unsupported base provider '${entry.config.baseProvider}' for alias '${entry.alias}', skipping.`,
-      );
-      return null;
+/**
+ * Builds the plugin-sourced alias entries the registry contributes, skipping any
+ * whose name collides (case-insensitively) with a file-loaded alias. The user's
+ * own alias file is the higher-authority layer, so it always wins. This is a
+ * deterministic precedence rule, not a failure.
+ */
+function contributedAliasEntries(
+  contributions: ProviderContributionRegistry,
+  fileAliasEntries: readonly ProviderAliasEntry[],
+): ProviderAliasEntry[] {
+  const fileAliasNames = new Set(
+    fileAliasEntries.map((entry) => entry.alias.toLowerCase()),
+  );
+  const entries: ProviderAliasEntry[] = [];
+  for (const contributed of contributions.getContributedAliases()) {
+    if (fileAliasNames.has(contributed.alias.toLowerCase())) {
+      continue;
+    }
+    entries.push({
+      alias: contributed.alias,
+      config: contributed.config,
+      // A contributed alias has no file on disk; record its origin honestly
+      // rather than fabricating a path.
+      filePath: `plugin:${contributed.pluginId}`,
+      source: 'plugin',
+    });
   }
+  return entries;
+}
+
+function resolveAliasFactory(
+  contributions: ProviderContributionRegistry,
+  entry: ProviderAliasEntry,
+): ProviderAliasFactory {
+  const factory = contributions.getProviderFactory(entry.config.baseProvider);
+  if (!factory) {
+    throw new Error(
+      `Alias '${entry.alias}' (${entry.filePath}) requests base provider ` +
+        `'${entry.config.baseProvider}', which no built-in provider and no ` +
+        `loaded runtime plugin contributes. Known provider ids: ` +
+        `${contributions.listProviderIds().join(', ')}.`,
+    );
+  }
+  return factory;
 }
 
 export function registerAliasProviders(
@@ -559,18 +580,33 @@ export function registerAliasProviders(
   oauthManager: OAuthManager,
   config: Config | undefined,
   authOnlyEnabled: boolean,
+  options: RegisterAliasProvidersOptions = {},
 ): void {
-  for (const entry of aliasEntries) {
-    const provider = createAliasProvider(entry, {
-      openaiApiKey,
-      openaiBaseUrl,
-      openaiProviderConfig,
-      oauthManager,
-      config,
-      authOnlyEnabled,
-    });
-    if (provider) {
-      providerManagerInstance.registerProvider(provider as never);
-    }
+  const contributions =
+    options.providerContributions ??
+    createBuiltinProviderContributionRegistry();
+  const factoryContext: ProviderFactoryContext = {
+    openaiApiKey,
+    openaiBaseUrl,
+    openaiProviderConfig,
+    oauthManager,
+    config,
+    authOnlyEnabled,
+  };
+
+  const entries = [
+    ...aliasEntries,
+    ...contributedAliasEntries(contributions, aliasEntries),
+  ];
+
+  // Resolve every factory and construct every provider BEFORE touching the
+  // manager. `refreshAliasProviders` re-runs this against a live manager, so a
+  // single unresolvable alias must not leave half the aliases swapped out.
+  const providers = entries.map((entry) =>
+    resolveAliasFactory(contributions, entry)(entry, factoryContext),
+  );
+
+  for (const provider of providers) {
+    providerManagerInstance.registerProvider(provider as never);
   }
 }

@@ -76,12 +76,7 @@ const telemetrySystem = {
 };
 
 // Test helper functions
-function createMockProvider(
-  name: string,
-  capabilities?: { streaming?: boolean; tools?: boolean },
-): IProvider {
-  const defaultCapabilities = { streaming: true, tools: true, ...capabilities };
-
+function createMockProvider(name: string): IProvider {
   return {
     name,
     getModels: vi.fn().mockResolvedValue([
@@ -134,12 +129,6 @@ function createMockProvider(
         };
       }
     },
-    getServerTools: vi
-      .fn()
-      .mockReturnValue(defaultCapabilities.tools ? ['search', 'analyze'] : []),
-    invokeServerTool: vi
-      .fn()
-      .mockResolvedValue({ result: `Tool result from ${name}` }),
     getCurrentModel: vi.fn().mockReturnValue(`${name}-model-1`),
     getDefaultModel: vi.fn().mockReturnValue(`${name}-default`),
     getToolFormat: vi
@@ -459,8 +448,8 @@ describe('Multi-Provider Conversation Logging Integration', () => {
    * @then Tool usage is logged consistently regardless of provider format
    */
   it('should log tool usage consistently across different provider formats', async () => {
-    const openaiProvider = createMockProvider('openai', { tools: true });
-    const anthropicProvider = createMockProvider('anthropic', { tools: true });
+    const openaiProvider = createMockProvider('openai');
+    const anthropicProvider = createMockProvider('anthropic');
 
     const openaiWrapper = new MockLoggingProviderWrapper(
       openaiProvider,

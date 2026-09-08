@@ -140,6 +140,45 @@ describe('ShellExecutionService child_process fallback', () => {
     return { result, handle, abortController };
   };
 
+  const emitExpectedAbortExit = (
+    childProcess: typeof mockChildProcess,
+    expectedExit: { readonly signal?: NodeJS.Signals; readonly code?: number },
+  ): void => {
+    if (expectedExit.signal)
+      childProcess.emit('exit', null, expectedExit.signal);
+    if (typeof expectedExit.code === 'number') {
+      childProcess.emit('exit', expectedExit.code, null);
+    }
+  };
+
+  const expectedAbortMechanism = (
+    platform: string,
+    expectedSignal: string | undefined,
+    expectedCommand: string | undefined,
+  ): string | undefined =>
+    platform === 'linux' ? expectedSignal : expectedCommand;
+
+  const childProcessGroupPid = (): number => {
+    if (mockChildProcess.pid === undefined) {
+      throw new Error('Expected mock child process pid');
+    }
+    return -mockChildProcess.pid;
+  };
+
+  const linuxKillMatches = (expectedSignal: string | undefined): boolean =>
+    mockProcessKill.mock.calls.some(
+      (call) =>
+        call[0] === childProcessGroupPid() && call[1] === expectedSignal,
+    );
+
+  const windowsKillMatches = (expectedCommand: string | undefined): boolean =>
+    mockCpSpawn.mock.calls.some(
+      (call) =>
+        call[0] === expectedCommand &&
+        JSON.stringify(call[1]) ===
+          JSON.stringify(['/pid', String(mockChildProcess.pid), '/f', '/t']),
+    );
+
   describe('Successful Execution', () => {
     it('should execute a command and capture stdout and stderr', async () => {
       const { result, handle } = await simulateExecution('ls -l', (cp) => {
@@ -249,7 +288,7 @@ describe('ShellExecutionService child_process fallback', () => {
       expect(result.output.startsWith('a'.repeat(20))).toBe(true);
       expect(result.output.endsWith(finalMarker)).toBe(true);
       expect(result.output.match(/LLXPRT output truncated/g)).toHaveLength(1);
-      expect(result.outputTruncation).toEqual({
+      expect(result.outputTruncation).toStrictEqual({
         observedBytes: retentionBytes * 2 + finalMarker.length,
         retainedBytes: retentionBytes,
         omittedBytes: retentionBytes + finalMarker.length,
@@ -325,44 +364,25 @@ describe('ShellExecutionService child_process fallback', () => {
             'sleep 10',
             (cp, abortController) => {
               abortController.abort();
-              if (expectedExit.signal)
-                cp.emit('exit', null, expectedExit.signal);
-              if (typeof expectedExit.code === 'number')
-                cp.emit('exit', expectedExit.code, null);
+              emitExpectedAbortExit(cp, expectedExit);
             },
           );
 
           expect(result.aborted).toBe(true);
 
           // Verify platform-specific abort behavior
-          const isLinux = platform === 'linux';
-          expect(isLinux ? expectedSignal : expectedCommand).toBeDefined();
+          expect(
+            expectedAbortMechanism(platform, expectedSignal, expectedCommand),
+          ).toBeDefined();
 
-          // Verify the appropriate kill method was called based on platform
-          const processKillCalls = mockProcessKill.mock.calls;
-          const cpSpawnCalls = mockCpSpawn.mock.calls;
-
-          // For Linux: check process.kill was called with SIGTERM
-          const linuxKillMatches = processKillCalls.some(
-            (call) =>
-              call[0] === -mockChildProcess.pid! && call[1] === expectedSignal,
-          );
-
-          // For Windows: check taskkill was spawned
-          const windowsKillMatches = cpSpawnCalls.some(
-            (call) =>
-              call[0] === expectedCommand &&
-              JSON.stringify(call[1]) ===
-                JSON.stringify([
-                  '/pid',
-                  String(mockChildProcess.pid),
-                  '/f',
-                  '/t',
-                ]),
-          );
-
-          // Exactly one of these should be true based on platform
-          expect(isLinux ? linuxKillMatches : windowsKillMatches).toBe(true);
+          // Exactly one platform-specific kill method should match.
+          expect(
+            platformKillMatch(
+              platform,
+              linuxKillMatches(expectedSignal),
+              windowsKillMatches(expectedCommand),
+            ),
+          ).toBe(true);
         });
       },
     );
@@ -651,3 +671,11 @@ describe('ShellExecutionService child_process fallback', () => {
     });
   });
 });
+
+function platformKillMatch(
+  platform: string,
+  linux: boolean,
+  windows: boolean,
+): boolean {
+  return platform === 'linux' ? linux : windows;
+}

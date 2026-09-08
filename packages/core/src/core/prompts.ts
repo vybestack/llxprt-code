@@ -11,7 +11,6 @@ import { Storage } from '@vybestack/llxprt-code-settings';
 import { isGitRepository } from '../utils/gitUtils.js';
 import { PromptService } from '../prompt-config/prompt-service.js';
 import { getRuntimeSettingsService } from '../runtime/settingsRuntimeAdapter.js';
-import { getFolderStructure } from '../utils/getFolderStructure.js';
 import { DebugLogger } from '../debug/index.js';
 import {
   getGlobalCoreMemoryFilePath,
@@ -25,9 +24,6 @@ import type {
   PromptEnvironment,
 } from '../prompt-config/types.js';
 
-const MAX_FOLDER_STRUCTURE_LINES = 40;
-const MAX_FOLDER_STRUCTURE_CHARS = 6000;
-const MAX_FOLDER_STRUCTURE_TOP_LEVEL = 20;
 const SESSION_STARTED_AT = new Date();
 const SESSION_STARTED_AT_LABEL = SESSION_STARTED_AT.toLocaleString();
 const logger = new DebugLogger('llxprt:core:prompts');
@@ -134,81 +130,6 @@ function getToolNameMapping(): Record<string, string> {
   };
 }
 
-function extractFolderStructureHeader(lines: string[]): {
-  header: string[];
-  body: string[];
-} {
-  if (lines.length === 0) {
-    return { header: [], body: [] };
-  }
-
-  const header: string[] = [];
-  let index = 0;
-
-  header.push(lines[index++] ?? '');
-
-  if (index < lines.length && lines[index].trim() === '') {
-    header.push(lines[index++]);
-  }
-
-  if (index < lines.length) {
-    header.push(lines[index++]);
-  }
-
-  return { header, body: lines.slice(index) };
-}
-
-export function compactFolderStructureSnapshot(
-  structure?: string,
-): string | undefined {
-  if (!structure) {
-    return structure;
-  }
-
-  const normalized = structure.replace(/\r\n/g, '\n').trim();
-  if (!normalized) {
-    return undefined;
-  }
-
-  const lines = normalized.split('\n');
-  if (
-    lines.length <= MAX_FOLDER_STRUCTURE_LINES &&
-    normalized.length <= MAX_FOLDER_STRUCTURE_CHARS
-  ) {
-    return normalized;
-  }
-
-  const { header, body } = extractFolderStructureHeader(lines);
-  if (body.length === 0) {
-    return normalized.slice(0, MAX_FOLDER_STRUCTURE_CHARS);
-  }
-
-  const topLevelEntries = body.filter(
-    (line) => line.startsWith('├───') || line.startsWith('└───'),
-  );
-  const candidateLines = topLevelEntries.length > 0 ? topLevelEntries : body;
-  const limitedLines = candidateLines.slice(0, MAX_FOLDER_STRUCTURE_TOP_LEVEL);
-  const omittedCount = Math.max(candidateLines.length - limitedLines.length, 0);
-
-  const truncatedLine = `└───... ${omittedCount} more entries omitted (folder structure truncated for provider limits)`;
-  const snapshotLines = [...header, ...limitedLines, truncatedLine];
-
-  let snapshot = snapshotLines.join('\n');
-  if (snapshot.length > MAX_FOLDER_STRUCTURE_CHARS) {
-    const allowance = Math.max(
-      MAX_FOLDER_STRUCTURE_CHARS - truncatedLine.length - 1,
-      0,
-    );
-    const preserved = snapshotLines
-      .slice(0, snapshotLines.length - 1)
-      .join('\n')
-      .slice(0, allowance);
-    snapshot = preserved ? `${preserved}\n${truncatedLine}` : truncatedLine;
-  }
-
-  return snapshot;
-}
-
 /**
  * Options for getCoreSystemPromptAsync
  */
@@ -288,20 +209,12 @@ export async function loadCoreMemoryContent(cwd: string): Promise<string> {
 
   return parts.join('\n\n');
 }
-function resolveFolderStructureSettings(): {
-  includeFolderStructure: boolean;
+function resolvePromptSettings(): {
   enableToolPrompts: boolean;
 } {
-  let includeFolderStructure = false;
   let enableToolPrompts = false;
   try {
     const settingsService = getRuntimeSettingsService();
-    const folderStructureSetting = settingsService.get(
-      'include-folder-structure',
-    ) as boolean | undefined;
-    if (folderStructureSetting !== undefined) {
-      includeFolderStructure = folderStructureSetting;
-    }
     const toolPromptsSetting = settingsService.get('enable-tool-prompts') as
       | boolean
       | undefined;
@@ -311,28 +224,11 @@ function resolveFolderStructureSettings(): {
   } catch {
     // Settings unavailable; use defaults.
   }
-  return { includeFolderStructure, enableToolPrompts };
-}
-
-async function resolveFolderStructure(
-  cwd: string,
-  includeFolderStructure: boolean,
-): Promise<string | undefined> {
-  if (!includeFolderStructure) return undefined;
-  try {
-    const raw = await getFolderStructure(cwd, {
-      maxItems: 100,
-    });
-    return compactFolderStructureSnapshot(raw);
-  } catch (error) {
-    logger.debug(() => `Failed to generate folder structure: ${error}`);
-    return undefined;
-  }
+  return { enableToolPrompts };
 }
 
 function buildEnvironment(
   cwd: string,
-  folderStructure: string | undefined,
   interactionMode: CoreSystemPromptOptions['interactionMode'],
 ): PromptEnvironment {
   const environment: PromptEnvironment = {
@@ -344,7 +240,6 @@ function buildEnvironment(
     workspaceRoot: cwd,
     workspaceName: path.basename(cwd),
     workspaceDirectories: [cwd],
-    folderStructure,
     interactionMode,
   };
 
@@ -450,13 +345,8 @@ async function buildPromptContext(
     options;
   const cwd = process.cwd();
 
-  const { includeFolderStructure, enableToolPrompts } =
-    resolveFolderStructureSettings();
-  const folderStructure = await resolveFolderStructure(
-    cwd,
-    includeFolderStructure,
-  );
-  const environment = buildEnvironment(cwd, folderStructure, interactionMode);
+  const { enableToolPrompts } = resolvePromptSettings();
+  const environment = buildEnvironment(cwd, interactionMode);
   const enabledTools = resolveEnabledTools(tools);
   const resolvedProvider = resolveProvider(provider);
   const { asyncSubagentsEnabled, profileAsyncEnabled } =

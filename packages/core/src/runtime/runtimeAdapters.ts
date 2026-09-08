@@ -91,8 +91,8 @@ export function createTelemetryAdapterFromConfig(
         event.usageMetadata ??
         (event.usage !== undefined
           ? {
-              promptTokenCount: event.usage.inputTokens,
-              candidatesTokenCount: event.usage.outputTokens,
+              inputTokenCount: event.usage.inputTokens,
+              outputTokenCount: event.usage.outputTokens,
               totalTokenCount: event.usage.totalTokens,
             }
           : undefined);

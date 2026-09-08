@@ -14,6 +14,12 @@
  */
 
 import type { ProxySocketClient } from './proxy-socket-client.js';
+import {
+  ApiKeyDataSchema,
+  ApiKeysDataSchema,
+  HasApiKeyDataSchema,
+  parseSuccessPayload,
+} from './proxy-payload-schemas.js';
 
 export class ProxyProviderKeyStorage {
   private readonly client: ProxySocketClient;
@@ -28,7 +34,8 @@ export class ProxyProviderKeyStorage {
       if (response.code === 'NOT_FOUND') return null;
       throw new Error(response.error ?? 'proxy error');
     }
-    return response.data!.key as string;
+    return parseSuccessPayload(ApiKeyDataSchema, response.data, 'get_api_key')
+      .key;
   }
 
   async listKeys(): Promise<string[]> {
@@ -36,7 +43,11 @@ export class ProxyProviderKeyStorage {
     if (!response.ok) {
       throw new Error(response.error ?? 'proxy error');
     }
-    return response.data!.keys as string[];
+    return parseSuccessPayload(
+      ApiKeysDataSchema,
+      response.data,
+      'list_api_keys',
+    ).keys;
   }
 
   async hasKey(name: string): Promise<boolean> {
@@ -44,7 +55,11 @@ export class ProxyProviderKeyStorage {
     if (!response.ok) {
       throw new Error(response.error ?? 'proxy error');
     }
-    return response.data!.exists as boolean;
+    return parseSuccessPayload(
+      HasApiKeyDataSchema,
+      response.data,
+      'has_api_key',
+    ).exists;
   }
 
   async saveKey(_name: string, _apiKey: string): Promise<void> {

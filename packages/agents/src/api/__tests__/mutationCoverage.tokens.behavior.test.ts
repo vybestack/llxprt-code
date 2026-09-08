@@ -40,6 +40,10 @@ import {
 } from './helpers/agentHarness.js';
 import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 
+const MODEL_PARAM_KEY_ARBITRARY = fc
+  .string({ minLength: 1, maxLength: 30 })
+  .filter((key) => key !== '__proto__' && key !== 'constructor');
+
 // ─── getProviderStatus auth-shape divergence ────────────────────────────────
 
 describe('mutation P23.b — getProviderStatus auth-shape divergence (REQ-002)', () => {
@@ -98,7 +102,7 @@ describe('mutation P23.b — getProviderStatus auth-shape divergence (REQ-002)',
             const { agent, cleanup } = await buildAgent('plain-text.jsonl');
             try {
               const result = await agent.generate(input);
-              return typeof result === 'string';
+              expect(typeof result).toBe('string');
             } finally {
               await cleanup();
             }
@@ -120,9 +124,8 @@ describe('mutation P23.b — getProviderStatus auth-shape divergence (REQ-002)',
             try {
               await drain(agent.stream(input));
               const stats = agent.getStats();
-              return (
-                typeof stats.totalTokens === 'number' && stats.totalTokens >= 0
-              );
+              expect(typeof stats.totalTokens).toBe('number');
+              expect(stats.totalTokens).toBeGreaterThanOrEqual(0);
             } finally {
               await cleanup();
             }
@@ -264,9 +267,9 @@ describe('mutation P23.b — property cases @plan:PLAN-20260621-COREAPIREMED.P23
           try {
             await drain(agent.stream('turn one'));
             await agent.setModel(model);
-            const continuity =
-              countType(await drain(agent.stream('turn two')), 'done') === 1;
-            return agent.getModel() === model && continuity;
+            const secondTurnEvents = await drain(agent.stream('turn two'));
+            expect(agent.getModel()).toBe(model);
+            expect(countType(secondTurnEvents, 'done')).toBe(1);
           } finally {
             await cleanup();
           }
@@ -282,9 +285,7 @@ describe('mutation P23.b — property cases @plan:PLAN-20260621-COREAPIREMED.P23
     async () => {
       await fc.assert(
         fc.asyncProperty(
-          fc
-            .string({ minLength: 1, maxLength: 30 })
-            .filter((k) => k !== '__proto__' && k !== 'constructor'),
+          MODEL_PARAM_KEY_ARBITRARY,
           fc.jsonValue(),
           async (key, value) => {
             const { agent, cleanup } = await buildAgent('plain-text.jsonl');
@@ -293,10 +294,8 @@ describe('mutation P23.b — property cases @plan:PLAN-20260621-COREAPIREMED.P23
               const afterSet = agent.getModelParams()[key];
               agent.clearModelParam(key);
               const afterClear = key in agent.getModelParams();
-              // JSON values round-trip via strict equality; compare structurally.
-              const roundTripped =
-                JSON.stringify(afterSet) === JSON.stringify(value);
-              return roundTripped && !afterClear;
+              expect(afterSet).toStrictEqual(value);
+              expect(afterClear).toBe(false);
             } finally {
               await cleanup();
             }
@@ -319,11 +318,9 @@ describe('mutation P23.b — property cases @plan:PLAN-20260621-COREAPIREMED.P23
             });
             try {
               const status = agent.getProviderStatus();
-              return (
-                status.authStatus === 'authenticated' &&
-                status.keyFile === keyFile &&
-                status.keyName === undefined
-              );
+              expect(status.authStatus).toBe('authenticated');
+              expect(status.keyFile).toBe(keyFile);
+              expect(status.keyName).toBeUndefined();
             } finally {
               await cleanup();
             }
@@ -343,7 +340,7 @@ describe('mutation P23.b — property cases @plan:PLAN-20260621-COREAPIREMED.P23
           try {
             await drain(agent.stream('turn'));
             const result = await agent.compress({ promptId });
-            return result.promptId === promptId;
+            expect(result.promptId).toBe(promptId);
           } finally {
             await cleanup();
           }

@@ -86,6 +86,15 @@ describe('CoreToolScheduler cancellation edge cases', () => {
    * - checkAndNotifyCompletion never fires
    */
   it('should complete all tools when first tool is cancelled mid-batch', async () => {
+    const { finalCalls, completionCallCount, nonTerminalCallIds } =
+      await observeCompleteAllToolsWhenFirstToolIsCancelledMidBatch();
+    expect(completionCallCount).toBeGreaterThan(0);
+    expect(nonTerminalCallIds).toStrictEqual([]);
+    expect(finalCalls).toBeDefined();
+    expect(finalCalls.length).toBe(3);
+  });
+
+  const observeCompleteAllToolsWhenFirstToolIsCancelledMidBatch = async () => {
     let tool0Resolve: (() => void) | undefined;
     let tool1Resolve: (() => void) | undefined;
     let tool2Resolve: (() => void) | undefined;
@@ -183,25 +192,30 @@ describe('CoreToolScheduler cancellation edge cases', () => {
     // The scheduler should complete without hanging
     await waitFor(
       () => {
-        expect(onAllToolCallsComplete).toHaveBeenCalled();
+        if (onAllToolCallsComplete.mock.calls.length === 0) {
+          throw new Error('Waiting for all tool calls to complete');
+        }
       },
-      { timeout: 2000 },
+      {
+        timeout: 2000,
+      },
     );
 
     const finalCalls = onAllToolCallsComplete.mock.calls.at(
       -1,
     )?.[0] as ToolCall[];
-    expect(finalCalls).toBeDefined();
-    expect(finalCalls.length).toBe(3);
+    const completionCallCount = onAllToolCallsComplete.mock.calls.length;
 
     // All tools should be in a terminal state
     const terminalStates = ['success', 'error', 'cancelled'];
-    for (const call of finalCalls) {
-      expect(terminalStates).toContain(call.status);
-    }
+    const nonTerminalCallIds = finalCalls
+      .filter((call) => !terminalStates.includes(call.status))
+      .map((call) => call.request.callId);
 
     await schedulePromise;
-  });
+
+    return { finalCalls, completionCallCount, nonTerminalCallIds };
+  };
 
   /**
    * Issue #2: cancelAll() doesn't reset batch bookkeeping state
@@ -298,109 +312,125 @@ describe('CoreToolScheduler cancellation edge cases', () => {
    * Expected: All tools reach terminal state, no hang.
    */
   it('should not hang when cancelling after fast tools complete but slow tool still executing', async () => {
-    let slowToolResolve: (() => void) | undefined;
-
-    const executeFn = vi
-      .fn()
-      .mockImplementation(async (args: { id: number }) => {
-        if (args.id === 0) {
-          // Slow tool - waits for explicit resolve
-          await new Promise<void>((resolve) => {
-            slowToolResolve = resolve;
-          });
-        } else {
-          // Fast tools - complete immediately
-          await new Promise((resolve) => setTimeout(resolve, 5));
-        }
-        return {
-          llmContent: `Tool ${args.id} completed`,
-          returnDisplay: `Result ${args.id}`,
-        };
-      });
-
-    const mockTool = new MockTool({ name: 'mockTool', execute: executeFn });
-    const mockToolRegistry = createMockToolRegistry(mockTool);
-    const onAllToolCallsComplete = vi.fn();
-    const onToolCallsUpdate = vi.fn();
-    const mockPolicyEngine = createMockPolicyEngine();
-    const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
-
-    scheduler = new CoreToolScheduler({
-      config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
-      getPreferredEditor: () => 'vscode',
-      onEditorClose: vi.fn(),
-    });
-
-    const abortController = new AbortController();
-
-    const schedulePromise = scheduler.schedule(
-      [
-        {
-          callId: 'call0',
-          name: 'mockTool',
-          args: { id: 0 }, // Slow
-          isClientInitiated: false,
-          prompt_id: 'test',
-        },
-        {
-          callId: 'call1',
-          name: 'mockTool',
-          args: { id: 1 }, // Fast
-          isClientInitiated: false,
-          prompt_id: 'test',
-        },
-        {
-          callId: 'call2',
-          name: 'mockTool',
-          args: { id: 2 }, // Fast
-          isClientInitiated: false,
-          prompt_id: 'test',
-        },
-      ],
-      abortController.signal,
-    );
-
-    // Wait for all tools to start
-    await waitFor(() => {
-      const calls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
-      return calls.filter((c) => c.status === 'executing').length === 3;
-    });
-
-    // Wait for fast tools (1 and 2) to complete and buffer their results
-    // They complete quickly but can't be published until tool 0's result is ready
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    // Now abort while tool 0 is still executing
-    abortController.abort();
-
-    // Resolve the slow tool after abort
-    slowToolResolve!();
-
-    // Should complete without hanging
-    await waitFor(
-      () => {
-        expect(onAllToolCallsComplete).toHaveBeenCalled();
-      },
-      { timeout: 2000 },
-    );
-
-    const finalCalls = onAllToolCallsComplete.mock.calls.at(
-      -1,
-    )?.[0] as ToolCall[];
+    const { finalCalls, completionCallCount, nonTerminalCallIds } =
+      await observeNotHangWhenCancellingAfterFastToolsCompleteButSlowToolStill();
+    expect(completionCallCount).toBeGreaterThan(0);
+    expect(nonTerminalCallIds).toStrictEqual([]);
     expect(finalCalls).toBeDefined();
     expect(finalCalls.length).toBe(3);
-
-    // All should be in terminal states
-    for (const call of finalCalls) {
-      expect(['success', 'error', 'cancelled']).toContain(call.status);
-    }
-
-    await schedulePromise;
   });
+
+  const observeNotHangWhenCancellingAfterFastToolsCompleteButSlowToolStill =
+    async () => {
+      let slowToolResolve: (() => void) | undefined;
+
+      const executeFn = vi
+        .fn()
+        .mockImplementation(async (args: { id: number }) => {
+          if (args.id === 0) {
+            // Slow tool - waits for explicit resolve
+            await new Promise<void>((resolve) => {
+              slowToolResolve = resolve;
+            });
+          } else {
+            // Fast tools - complete immediately
+            await new Promise((resolve) => setTimeout(resolve, 5));
+          }
+          return {
+            llmContent: `Tool ${args.id} completed`,
+            returnDisplay: `Result ${args.id}`,
+          };
+        });
+
+      const mockTool = new MockTool({ name: 'mockTool', execute: executeFn });
+      const mockToolRegistry = createMockToolRegistry(mockTool);
+      const onAllToolCallsComplete = vi.fn();
+      const onToolCallsUpdate = vi.fn();
+      const mockPolicyEngine = createMockPolicyEngine();
+      const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
+
+      scheduler = new CoreToolScheduler({
+        config: mockConfig,
+        messageBus: mockConfig.getMessageBus(),
+        toolRegistry: mockConfig.getToolRegistry(),
+        onAllToolCallsComplete,
+        onToolCallsUpdate,
+        getPreferredEditor: () => 'vscode',
+        onEditorClose: vi.fn(),
+      });
+
+      const abortController = new AbortController();
+
+      const schedulePromise = scheduler.schedule(
+        [
+          {
+            callId: 'call0',
+            name: 'mockTool',
+            args: { id: 0 }, // Slow
+            isClientInitiated: false,
+            prompt_id: 'test',
+          },
+          {
+            callId: 'call1',
+            name: 'mockTool',
+            args: { id: 1 }, // Fast
+            isClientInitiated: false,
+            prompt_id: 'test',
+          },
+          {
+            callId: 'call2',
+            name: 'mockTool',
+            args: { id: 2 }, // Fast
+            isClientInitiated: false,
+            prompt_id: 'test',
+          },
+        ],
+        abortController.signal,
+      );
+
+      // Wait for all tools to start
+      await waitFor(() => {
+        const calls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
+        return calls.filter((c) => c.status === 'executing').length === 3;
+      });
+
+      // Wait for fast tools (1 and 2) to complete and buffer their results
+      // They complete quickly but can't be published until tool 0's result is ready
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Now abort while tool 0 is still executing
+      abortController.abort();
+
+      // Resolve the slow tool after abort
+      slowToolResolve!();
+
+      // Should complete without hanging
+      await waitFor(
+        () => {
+          if (onAllToolCallsComplete.mock.calls.length === 0) {
+            throw new Error('Waiting for all tool calls to complete');
+          }
+        },
+        {
+          timeout: 2000,
+        },
+      );
+
+      const finalCalls = onAllToolCallsComplete.mock.calls.at(
+        -1,
+      )?.[0] as ToolCall[];
+      const completionCallCount = onAllToolCallsComplete.mock.calls.length;
+
+      // All should be in terminal states
+      const terminalStates = ['success', 'error', 'cancelled'];
+      const nonTerminalCallIds = finalCalls
+        .filter((call) => !terminalStates.includes(call.status))
+        .map((call) => call.request.callId);
+
+      await schedulePromise;
+
+      return { finalCalls, completionCallCount, nonTerminalCallIds };
+    };
 });
 
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';

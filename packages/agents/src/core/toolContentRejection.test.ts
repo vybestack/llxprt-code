@@ -330,20 +330,29 @@ describe('toolContentRejection', () => {
     });
 
     it('truncates on code points so an astral character is never split into a lone surrogate', () => {
-      // The emoji straddles the 300-character limit: a naive UTF-16 slice
-      // would cut it in half and emit an unpaired surrogate.
-      const long = `${'a'.repeat(299)}\u{1F44D}${'b'.repeat(50)}`;
-      const advice = buildToolContentRejectionAdvice(
-        { toolNames: [], mediaDescriptors: [] },
-        long,
-      );
-
+      const { advice, loneSurrogates } =
+        observeTruncatesOnCodePointsSoAnAstralCharacterIsNeverSplitInto();
       expect(advice).toContain(`${'a'.repeat(299)}\u{1F44D}\u2026`);
-      for (const char of advice) {
-        const code = char.codePointAt(0) ?? 0;
-        expect(code >= 0xd800 && code <= 0xdfff).toBe(false);
-      }
+      expect(loneSurrogates).toStrictEqual([]);
     });
+
+    const observeTruncatesOnCodePointsSoAnAstralCharacterIsNeverSplitInto =
+      () => {
+        // The emoji straddles the 300-character limit: a naive UTF-16 slice
+        // would cut it in half and emit an unpaired surrogate.
+        const long = `${'a'.repeat(299)}\u{1F44D}${'b'.repeat(50)}`;
+        const advice = buildToolContentRejectionAdvice(
+          { toolNames: [], mediaDescriptors: [] },
+          long,
+        );
+
+        const loneSurrogates = [...advice].filter((char) => {
+          const code = char.codePointAt(0) ?? 0;
+          return code >= 0xd800 && code <= 0xdfff;
+        });
+
+        return { advice, loneSurrogates };
+      };
 
     it('drops the Provider message sentence for a blank provider message', () => {
       const advice = buildToolContentRejectionAdvice(

@@ -52,164 +52,166 @@ function waitForTerminal(
   });
 }
 
-describe.skipIf(os.platform() === 'win32')(
-  'AST-promoted background job survives on both backends (#1995 slice 6)',
-  () => {
-    let managers: ShellJobManager[] = [];
-    let baseDirs: string[] = [];
+describe('Shell background integration', () => {
+  describe.skipIf(os.platform() === 'win32')(
+    'plain & promotion via ShellJobManager',
+    () => {
+      let managers: ShellJobManager[] = [];
+      let baseDirs: string[] = [];
 
-    beforeAll(async () => {
-      await initializeParser();
-    });
-
-    afterEach(async () => {
-      for (const m of managers) {
-        await m.dispose();
-      }
-      managers = [];
-      for (const d of baseDirs) {
-        fs.rmSync(d, { recursive: true, force: true });
-      }
-      baseDirs = [];
-    });
-
-    function makeManager(): ShellJobManager {
-      const baseDir = makeTempBase();
-      baseDirs.push(baseDir);
-      const manager = new ShellJobManager({ baseDir });
-      managers.push(manager);
-      return manager;
-    }
-
-    it('promotes "sleep 1 &" via AST and the job is visible as running', () => {
-      const command = 'sleep 1 &';
-      const result = detectTrailingBackgroundOperator(command);
-      expect(result.promoted).toBe(true);
-      expect(result.command).toBe('sleep 1');
-
-      const manager = makeManager();
-      const job = manager.launch({ command: result.command, cwd: os.tmpdir() });
-
-      expect(job.state).toBe('running');
-      expect(job.id).toMatch(/^shell_/);
-      expect(job.command).toBe('sleep 1');
-    });
-
-    it('the promoted job survives past the launch and reaches completed with exit code 0 (child_process backend)', async () => {
-      const manager = makeManager();
-      const sentinel = path.join(
-        makeTempBase(),
-        'sentinel_' + process.pid.toString(),
-      );
-
-      const command = 'echo done; sleep 1; touch ' + sentinel + ' &';
-      const result = detectTrailingBackgroundOperator(command);
-      expect(result.promoted).toBe(true);
-
-      const job = manager.launch({ command: result.command, cwd: os.tmpdir() });
-      expect(job.state).toBe('running');
-
-      // Wait for the job to finish.
-      const terminal = await waitForTerminal(manager, job.id, 10000);
-      expect(terminal).toBeDefined();
-      expect(terminal?.state).toBe('completed');
-      expect(terminal?.exitCode).toBe(0);
-
-      // The sentinel must exist, proving the full command ran.
-      expect(fs.existsSync(sentinel)).toBe(true);
-
-      // The tail must contain the output.
-      const tail = manager.tailOutput(job.id);
-      expect(tail.output).toContain('done');
-
-      fs.rmSync(path.dirname(sentinel), { recursive: true, force: true });
-    });
-
-    it('a launched job is NOT cancelled when the tool call abort signal fires afterwards (#1995 slice 5)', async () => {
-      const manager = makeManager();
-      const sentinel = path.join(
-        makeTempBase(),
-        'timeout_sentinel_' + process.pid.toString(),
-      );
-
-      // Launch a job that will run for ~2 seconds.
-      const job = manager.launch({
-        command: `sleep 2; touch ${sentinel}`,
-        cwd: os.tmpdir(),
+      beforeAll(async () => {
+        await initializeParser();
       });
-      expect(job.state).toBe('running');
 
-      // Simulate the tool call's timeout/abort firing AFTER the job was
-      // successfully launched. In the real tool, the timeout/abort controller
-      // is NOT wired to the background job — we verify the job survives.
-      const abortController = new AbortController();
-      abortController.abort();
+      afterEach(async () => {
+        for (const m of managers) {
+          await m.dispose();
+        }
+        managers = [];
+        for (const d of baseDirs) {
+          fs.rmSync(d, { recursive: true, force: true });
+        }
+        baseDirs = [];
+      });
 
-      // The abort must not have cancelled the job.
-      const stillRunning = manager.get(job.id);
-      expect(stillRunning?.state).toBe('running');
+      function makeManager(): ShellJobManager {
+        const baseDir = makeTempBase();
+        baseDirs.push(baseDir);
+        const manager = new ShellJobManager({ baseDir });
+        managers.push(manager);
+        return manager;
+      }
 
-      // Wait for the job to finish naturally.
-      const terminal = await waitForTerminal(manager, job.id, 10000);
-      expect(terminal?.state).toBe('completed');
-      expect(fs.existsSync(sentinel)).toBe(true);
+      it('promotes "sleep 1 &" via AST and the job is visible as running', () => {
+        const command = 'sleep 1 &';
+        const result = detectTrailingBackgroundOperator(command);
+        expect(result.promoted).toBe(true);
+        expect(result.command).toBe('sleep 1');
 
-      fs.rmSync(path.dirname(sentinel), { recursive: true, force: true });
-    });
+        const manager = makeManager();
+        const job = manager.launch({
+          command: result.command,
+          cwd: os.tmpdir(),
+        });
 
-    it('a background job launched during one turn stays registered and running across several subsequent turns', async () => {
-      const manager = makeManager();
-      const sentinelDir = makeTempBase();
-      // Registered so afterEach removes it on failure as well as success.
-      baseDirs.push(sentinelDir);
-      const gate = path.join(sentinelDir, 'gate');
-      const completion = path.join(sentinelDir, 'completed');
+        expect(job.state).toBe('running');
+        expect(job.id).toMatch(/^shell_/);
+        expect(job.command).toBe('sleep 1');
+      });
 
-      // Turn 1: the agent backgrounds a job gated on a signal this test
-      // controls, so the still-running assertions below never depend on a
-      // fixed sleep outliving the turns on a loaded runner.
-      const command = `while [ ! -f ${gate} ]; do sleep 0.1; done; touch ${completion} &`;
-      const result = detectTrailingBackgroundOperator(command);
-      expect(result.promoted).toBe(true);
-      const job = manager.launch({ command: result.command, cwd: os.tmpdir() });
-      expect(job.state).toBe('running');
+      it('the promoted job survives past the launch and reaches completed with exit code 0 (child_process backend)', async () => {
+        const manager = makeManager();
+        const sentinel = path.join(
+          makeTempBase(),
+          'sentinel_' + process.pid.toString(),
+        );
 
-      // Several subsequent turns: other jobs run to completion and the
-      // notification pipeline between turns drains. None of that may
-      // unregister or terminate the still-running background job.
-      for (let turn = 2; turn <= 4; turn++) {
-        const foreground = manager.launch({
+        const command = 'echo done; sleep 1; touch ' + sentinel + ' &';
+        const result = detectTrailingBackgroundOperator(command);
+        expect(result.promoted).toBe(true);
+
+        const job = manager.launch({
+          command: result.command,
+          cwd: os.tmpdir(),
+        });
+        expect(job.state).toBe('running');
+
+        // Wait for the job to finish.
+        const terminal = await waitForTerminal(manager, job.id, 10000);
+        expect(terminal).toBeDefined();
+        expect(terminal?.state).toBe('completed');
+        expect(terminal?.exitCode).toBe(0);
+
+        // The sentinel must exist, proving the full command ran.
+        expect(fs.existsSync(sentinel)).toBe(true);
+
+        // The tail must contain the output.
+        const tail = manager.tailOutput(job.id);
+        expect(tail.output).toContain('done');
+
+        fs.rmSync(path.dirname(sentinel), { recursive: true, force: true });
+      });
+
+      it('a launched job is NOT cancelled when the tool call abort signal fires afterwards (#1995 slice 5)', async () => {
+        const manager = makeManager();
+        const sentinel = path.join(
+          makeTempBase(),
+          'timeout_sentinel_' + process.pid.toString(),
+        );
+
+        // Launch a job that will run for ~2 seconds.
+        const job = manager.launch({
+          command: `sleep 2; touch ${sentinel}`,
+          cwd: os.tmpdir(),
+        });
+        expect(job.state).toBe('running');
+
+        // Simulate the tool call's timeout/abort firing AFTER the job was
+        // successfully launched. In the real tool, the timeout/abort controller
+        // is NOT wired to the background job — we verify the job survives.
+        const abortController = new AbortController();
+        abortController.abort();
+
+        // The abort must not have cancelled the job.
+        const stillRunning = manager.get(job.id);
+        expect(stillRunning?.state).toBe('running');
+
+        // Wait for the job to finish naturally.
+        const terminal = await waitForTerminal(manager, job.id, 10000);
+        expect(terminal?.state).toBe('completed');
+        expect(fs.existsSync(sentinel)).toBe(true);
+
+        fs.rmSync(path.dirname(sentinel), { recursive: true, force: true });
+      });
+
+      it('a background job launched during one turn stays registered and running across several subsequent turns', async () => {
+        const manager = makeManager();
+        const sentinelDir = makeTempBase();
+        baseDirs.push(sentinelDir);
+        const gate = path.join(sentinelDir, 'gate');
+        const completion = path.join(sentinelDir, 'completed');
+
+        const command = `while [ ! -f ${gate} ]; do sleep 0.1; done; touch ${completion} &`;
+        const result = detectTrailingBackgroundOperator(command);
+        expect(result.promoted).toBe(true);
+        const job = manager.launch({
+          command: result.command,
+          cwd: os.tmpdir(),
+        });
+        expect(job.state).toBe('running');
+
+        for (let turn = 2; turn <= 4; turn++) {
+          const foreground = manager.launch({
+            command: 'true',
+            cwd: os.tmpdir(),
+          });
+          await waitForTerminal(manager, foreground.id, 10000);
+          manager.markNotified(
+            manager.getPendingNotifications().map((pending) => pending.id),
+          );
+          expect(manager.get(job.id)?.state).toBe('running');
+        }
+        expect(manager.get(job.id)?.state).toBe('running');
+
+        fs.writeFileSync(gate, '');
+        const terminal = await waitForTerminal(manager, job.id, 15000);
+        expect(terminal?.state).toBe('completed');
+        expect(fs.existsSync(completion)).toBe(true);
+      }, 20_000);
+
+      it('a fast-completing background job returns a job-shaped result immediately, not foreground-shaped', () => {
+        const manager = makeManager();
+        const job = manager.launch({
           command: 'true',
           cwd: os.tmpdir(),
         });
-        await waitForTerminal(manager, foreground.id, 10000);
-        manager.markNotified(
-          manager.getPendingNotifications().map((pending) => pending.id),
-        );
-        expect(manager.get(job.id)?.state).toBe('running');
-      }
-      expect(manager.get(job.id)?.state).toBe('running');
 
-      // Release the gate: the job ends on its own terms, proving nothing
-      // killed it mid-flight.
-      fs.writeFileSync(gate, '');
-      const terminal = await waitForTerminal(manager, job.id, 15000);
-      expect(terminal?.state).toBe('completed');
-      expect(fs.existsSync(completion)).toBe(true);
-    }, 20_000);
-
-    it('a fast-completing background job returns a job-shaped result immediately, not foreground-shaped', () => {
-      const manager = makeManager();
-      const job = manager.launch({
-        command: 'true',
-        cwd: os.tmpdir(),
+        // Even a fast-completing job is job-shaped: it has an id, command,
+        // and state. The result schema is deterministic.
+        expect(job.id).toMatch(/^shell_/);
+        expect(job.command).toBe('true');
+        expect(['running', 'completed', 'failed']).toContain(job.state);
       });
-
-      // Even a fast-completing job is job-shaped: it has an id, command,
-      // and state. The result schema is deterministic.
-      expect(job.id).toMatch(/^shell_/);
-      expect(job.command).toBe('true');
-      expect(['running', 'completed', 'failed']).toContain(job.state);
-    });
-  },
-);
+    },
+  );
+});

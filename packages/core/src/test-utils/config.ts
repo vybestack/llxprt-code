@@ -48,7 +48,7 @@ function createTestAgentChat(): AgentChatContract {
     sendMessageStream: async () => emptyChatStream(),
     generateDirectMessage: async () => emptyModelOutput(),
     getHistory: () => [],
-    setHistory: () => {},
+    setHistory: async () => {},
     clearHistory: () => {},
     getHistoryService: () => null,
     wasRecentlyCompressed: () => false,
@@ -57,7 +57,9 @@ function createTestAgentChat(): AgentChatContract {
   };
 }
 
-function createTestAgentClient(): AgentClientContract {
+export function createTestAgentClient(
+  overrides?: Partial<AgentClientContract>,
+): AgentClientContract {
   const chat = createTestAgentChat();
   return {
     initialize: async () => {},
@@ -67,8 +69,8 @@ function createTestAgentClient(): AgentClientContract {
     getHistory: async () => [],
     getHistoryService: () => null,
     storeHistoryServiceForReuse: () => {},
-    storeHistoryForLaterUse: () => {},
-    dispose: () => {},
+    storeHistoryForLaterUse: async () => {},
+    dispose: async () => {},
     setTools: async () => {},
     clearTools: () => {},
     updateSystemInstruction: async () => {},
@@ -85,8 +87,8 @@ function createTestAgentClient(): AgentClientContract {
     generateContent: async () => emptyModelOutput(),
     generateEmbedding: async (texts: string[]) => texts.map(() => []),
     sendMessageStream: () => emptyServerAgentStream(),
-    getUserTier: () => undefined,
     getCurrentSequenceModel: () => null,
+    ...overrides,
   };
 }
 

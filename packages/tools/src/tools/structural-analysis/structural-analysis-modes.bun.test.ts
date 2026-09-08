@@ -163,6 +163,16 @@ async function runTool(
   return tool.build(params).execute(new AbortController().signal);
 }
 
+function requireModeExample(description: string, mode: string): string {
+  const example = description
+    .split('\n')
+    .find((line) => line.includes(`"mode": "${mode}"`));
+  if (example === undefined) {
+    throw new Error(`No example found for mode ${mode}`);
+  }
+  return example;
+}
+
 describe('structural_analysis modes (issue #3038)', () => {
   let tempDir = '';
 
@@ -729,10 +739,9 @@ const outerArrow = (): void => {
       const cImports = imports.filter((i) => i.source === './c.js');
       expect(cImports.length).toBe(1);
       expect(cImports[0].kind).toBe('named');
-      const cDefaults = imports.filter(
-        (i) => i.source === './c.js' && i.kind === 'default',
+      expect(imports).not.toContainEqual(
+        expect.objectContaining({ source: './c.js', kind: 'default' }),
       );
-      expect(cDefaults.length).toBe(0);
     });
 
     it('classifies default imports', async () => {
@@ -747,7 +756,7 @@ const outerArrow = (): void => {
       const eImports = imports.filter((i) => i.source === './e.js');
       expect(eImports.length).toBe(2);
       const kinds = eImports.map((i) => i.kind).sort();
-      expect(kinds).toEqual(['default', 'named']);
+      expect(kinds).toStrictEqual(['default', 'named']);
     });
 
     it('classifies namespace imports', async () => {
@@ -895,21 +904,11 @@ const outerArrow = (): void => {
       ];
       const targetModes = ['dependencies', 'exports'];
       for (const mode of symbolModes) {
-        const exampleLine = description
-          .split('\n')
-          .find((l) => l.includes(`"mode": "${mode}"`));
-        if (exampleLine === undefined) {
-          throw new Error(`No example found for mode ${mode}`);
-        }
+        const exampleLine = requireModeExample(description, mode);
         expect(exampleLine).toContain('"symbol"');
       }
       for (const mode of targetModes) {
-        const exampleLine = description
-          .split('\n')
-          .find((l) => l.includes(`"mode": "${mode}"`));
-        if (exampleLine === undefined) {
-          throw new Error(`No example found for mode ${mode}`);
-        }
+        const exampleLine = requireModeExample(description, mode);
         expect(exampleLine).toContain('"target"');
       }
     });

@@ -35,7 +35,7 @@ export class ListCheckpointsCommand implements Command {
     _: string[],
   ): Promise<CommandExecutionResponse> {
     try {
-      if (!context.config.getCheckpointingEnabled()) {
+      if (!context.checkpointing.enabled) {
         return {
           name: this.name,
           data: { error: 'Checkpointing is not enabled' },
@@ -43,7 +43,7 @@ export class ListCheckpointsCommand implements Command {
       }
 
       const checkpointDir =
-        context.config.storage.getProjectTempCheckpointsDir();
+        context.checkpointing.getProjectTempCheckpointsDir();
       const files = await (this.dependencies.readdir ?? fs.readdir)(
         checkpointDir,
       );
@@ -109,7 +109,7 @@ export class RestoreCommand implements Command {
 
       // Resolve full path
       const checkpointDir =
-        context.config.storage.getProjectTempCheckpointsDir();
+        context.checkpointing.getProjectTempCheckpointsDir();
       const fullPath = path.join(checkpointDir, filename);
 
       // Check if file is a symlink

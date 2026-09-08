@@ -28,180 +28,186 @@ import {
 
 let dir: string;
 
-beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'perf-retention-'));
-});
+describe('PerfRetention scheduling behavior', () => {
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'perf-retention-'));
+  });
 
-afterEach(() => {
-  fs.rmSync(dir, { recursive: true, force: true });
-});
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 
-function writePerfFile(
-  name: string,
-  recordCount: number,
-  recordBytes = 1220,
-): void {
-  const lines: string[] = [];
-  for (let i = 0; i < recordCount; i++) {
-    const padding = '.'.repeat(
-      Math.max(0, recordBytes - 80 - String(i).length),
-    );
-    lines.push(
-      JSON.stringify({
-        schema_version: 1,
-        record_type: 'operation',
-        ts: '2026-08-08T12:00:00.000Z',
-        pad: padding,
-        idx: i,
-      }),
-    );
+  function writePerfFile(
+    name: string,
+    recordCount: number,
+    recordBytes = 1220,
+  ): void {
+    const lines: string[] = [];
+    for (let i = 0; i < recordCount; i++) {
+      const padding = '.'.repeat(
+        Math.max(0, recordBytes - 80 - String(i).length),
+      );
+      lines.push(
+        JSON.stringify({
+          schema_version: 1,
+          record_type: 'operation',
+          ts: '2026-08-08T12:00:00.000Z',
+          pad: padding,
+          idx: i,
+        }),
+      );
+    }
+    fs.writeFileSync(path.join(dir, name), lines.join('\n') + '\n');
   }
-  fs.writeFileSync(path.join(dir, name), lines.join('\n') + '\n');
-}
 
-function setMtime(name: string, mtimeMs: number): void {
-  const p = path.join(dir, name);
-  fs.utimesSync(p, new Date(mtimeMs), new Date(mtimeMs));
-}
-
-function listFiles(): string[] {
-  return fs.readdirSync(dir).sort();
-}
-
-class TestScheduler implements PerfScheduler {
-  callback: (() => Promise<void>) | null = null;
-  handle: PerfTimerHandle | null = null;
-
-  setInterval(callback: () => Promise<void>, _ms: number): PerfTimerHandle {
-    this.callback = callback;
-    this.handle = { unref: () => {}, clear: () => {} };
-    return this.handle;
+  function setMtime(name: string, mtimeMs: number): void {
+    const p = path.join(dir, name);
+    fs.utimesSync(p, new Date(mtimeMs), new Date(mtimeMs));
   }
-}
 
-describe('PerfRetention one coarse interval (AC-7, D3)', () => {
-  it('the same interval touches the claim and sweeps old files', async () => {
-    const scheduler = new TestScheduler();
-    const now = Date.now();
-    const oldNow = now - 3_600_000;
+  function listFiles(): string[] {
+    return fs.readdirSync(dir).sort();
+  }
 
-    writePerfFile('perf-20260101-old.jsonl', 3);
-    setMtime('perf-20260101-old.jsonl', oldNow);
-    writePerfFile('perf-20260102-older.jsonl', 3);
-    setMtime('perf-20260102-older.jsonl', oldNow - 3_600_000);
+  class TestScheduler implements PerfScheduler {
+    callback: (() => Promise<void>) | null = null;
+    handle: PerfTimerHandle | null = null;
 
-    const retention = new PerfRetention({
-      dir,
-      runUuid: '00000000-0000-4000-8000-000000000016',
-      scheduler,
-      maxFiles: 1,
-      maxBytes: 10_000_000,
+    setInterval(callback: () => Promise<void>, _ms: number): PerfTimerHandle {
+      this.callback = callback;
+      this.handle = { unref: () => {}, clear: () => {} };
+      return this.handle;
+    }
+  }
+
+  describe('PerfRetention one coarse interval (AC-7, D3)', () => {
+    it('the same interval touches the claim and sweeps old files', async () => {
+      const scheduler = new TestScheduler();
+      const now = Date.now();
+      const oldNow = now - 3_600_000;
+
+      writePerfFile('perf-20260101-old.jsonl', 3);
+      setMtime('perf-20260101-old.jsonl', oldNow);
+      writePerfFile('perf-20260102-older.jsonl', 3);
+      setMtime('perf-20260102-older.jsonl', oldNow - 3_600_000);
+
+      const retention = new PerfRetention({
+        dir,
+        runUuid: '00000000-0000-4000-8000-000000000016',
+        scheduler,
+        maxFiles: 1,
+        maxBytes: 10_000_000,
+      });
+      await retention.start();
+
+      expect(listFiles()).toContain(
+        '00000000-0000-4000-8000-000000000016.claim',
+      );
+
+      const beforeMtime = fs.statSync(
+        path.join(dir, '00000000-0000-4000-8000-000000000016.claim'),
+      ).mtimeMs;
+
+      await new Promise((r) => setTimeout(r, 20));
+
+      await scheduler.callback!();
+
+      expect(fs.existsSync(path.join(dir, 'perf-20260101-old.jsonl'))).toBe(
+        false,
+      );
+
+      const afterMtime = fs.statSync(
+        path.join(dir, '00000000-0000-4000-8000-000000000016.claim'),
+      ).mtimeMs;
+      expect(afterMtime).toBeGreaterThan(beforeMtime);
+
+      await retention.dispose();
     });
-    await retention.start();
 
-    expect(listFiles()).toContain('00000000-0000-4000-8000-000000000016.claim');
+    it('fires via the actual owned interval without restart', async () => {
+      const scheduler = new TestScheduler();
+      const retention = new PerfRetention({
+        dir,
+        runUuid: '00000000-0000-4000-8000-000000000017',
+        scheduler,
+      });
+      await retention.start();
 
-    const beforeMtime = fs.statSync(
-      path.join(dir, '00000000-0000-4000-8000-000000000016.claim'),
-    ).mtimeMs;
+      expect(scheduler.callback).not.toBeNull();
 
-    await new Promise((r) => setTimeout(r, 20));
+      await scheduler.callback!();
+      await scheduler.callback!();
+      await scheduler.callback!();
 
-    await scheduler.callback!();
-
-    expect(fs.existsSync(path.join(dir, 'perf-20260101-old.jsonl'))).toBe(
-      false,
-    );
-
-    const afterMtime = fs.statSync(
-      path.join(dir, '00000000-0000-4000-8000-000000000016.claim'),
-    ).mtimeMs;
-    expect(afterMtime).toBeGreaterThan(beforeMtime);
-
-    await retention.dispose();
+      expect(listFiles()).toContain(
+        '00000000-0000-4000-8000-000000000017.claim',
+      );
+      await retention.dispose();
+    });
   });
 
-  it('fires via the actual owned interval without restart', async () => {
-    const scheduler = new TestScheduler();
-    const retention = new PerfRetention({
-      dir,
-      runUuid: '00000000-0000-4000-8000-000000000017',
-      scheduler,
-    });
-    await retention.start();
+  describe('PerfRetention maybeMaintain rate-limiting', () => {
+    it('runs maintain on first call', async () => {
+      const now = Date.now();
+      const evictableName =
+        'perf-20260101-11111111-1111-4111-8111-111111111118.jsonl';
+      writePerfFile(evictableName, 3);
+      setMtime(evictableName, now - 86_400_000);
 
-    expect(scheduler.callback).not.toBeNull();
+      const retention = new PerfRetention({
+        dir,
+        runUuid: '00000000-0000-4000-8000-000000000018',
+        maxFiles: 1,
+        maxBytes: 1,
+        onDiagnostic: () => {},
+      });
+      await retention.maybeMaintain(now);
 
-    await scheduler.callback!();
-    await scheduler.callback!();
-    await scheduler.callback!();
-
-    expect(listFiles()).toContain('00000000-0000-4000-8000-000000000017.claim');
-    await retention.dispose();
-  });
-});
-
-describe('PerfRetention maybeMaintain rate-limiting', () => {
-  it('runs maintain on first call', async () => {
-    const now = Date.now();
-    const evictableName =
-      'perf-20260101-11111111-1111-4111-8111-111111111118.jsonl';
-    writePerfFile(evictableName, 3);
-    setMtime(evictableName, now - 86_400_000);
-
-    const retention = new PerfRetention({
-      dir,
-      runUuid: '00000000-0000-4000-8000-000000000018',
-      maxFiles: 1,
-      maxBytes: 1,
-      onDiagnostic: () => {},
-    });
-    await retention.maybeMaintain(now);
-
-    expect(fs.existsSync(path.join(dir, evictableName))).toBe(false);
-  });
-
-  it('skips when called within the maintenance interval', async () => {
-    const now = Date.now();
-    const evictableName =
-      'perf-20260101-11111111-1111-4111-8111-111111111119.jsonl';
-    const retention = new PerfRetention({
-      dir,
-      runUuid: '00000000-0000-4000-8000-000000000019',
-      maxFiles: 1,
-      maxBytes: 1,
-      maintenanceIntervalMs: 60_000,
-      onDiagnostic: () => {},
+      expect(fs.existsSync(path.join(dir, evictableName))).toBe(false);
     });
 
-    await retention.maybeMaintain(now);
+    it('skips when called within the maintenance interval', async () => {
+      const now = Date.now();
+      const evictableName =
+        'perf-20260101-11111111-1111-4111-8111-111111111119.jsonl';
+      const retention = new PerfRetention({
+        dir,
+        runUuid: '00000000-0000-4000-8000-000000000019',
+        maxFiles: 1,
+        maxBytes: 1,
+        maintenanceIntervalMs: 60_000,
+        onDiagnostic: () => {},
+      });
 
-    writePerfFile(evictableName, 3);
-    setMtime(evictableName, now - 86_400_000);
-    await retention.maybeMaintain(now + 1_000);
+      await retention.maybeMaintain(now);
 
-    expect(fs.existsSync(path.join(dir, evictableName))).toBe(true);
-    expect(retention.evictionCount).toBe(0);
-  });
+      writePerfFile(evictableName, 3);
+      setMtime(evictableName, now - 86_400_000);
+      await retention.maybeMaintain(now + 1_000);
 
-  it('runs again after the maintenance interval elapses', async () => {
-    const now = Date.now();
-    const evictableName =
-      'perf-20260101-11111111-1111-4111-8111-11111111111a.jsonl';
-    const retention = new PerfRetention({
-      dir,
-      runUuid: '00000000-0000-4000-8000-00000000001a',
-      maxFiles: 1,
-      maxBytes: 1,
-      maintenanceIntervalMs: 60_000,
-      onDiagnostic: () => {},
+      expect(fs.existsSync(path.join(dir, evictableName))).toBe(true);
+      expect(retention.evictionCount).toBe(0);
     });
-    await retention.maybeMaintain(now);
 
-    writePerfFile(evictableName, 3);
-    setMtime(evictableName, now - 86_400_000);
+    it('runs again after the maintenance interval elapses', async () => {
+      const now = Date.now();
+      const evictableName =
+        'perf-20260101-11111111-1111-4111-8111-11111111111a.jsonl';
+      const retention = new PerfRetention({
+        dir,
+        runUuid: '00000000-0000-4000-8000-00000000001a',
+        maxFiles: 1,
+        maxBytes: 1,
+        maintenanceIntervalMs: 60_000,
+        onDiagnostic: () => {},
+      });
+      await retention.maybeMaintain(now);
 
-    await retention.maybeMaintain(now + 61_000);
-    expect(fs.existsSync(path.join(dir, evictableName))).toBe(false);
+      writePerfFile(evictableName, 3);
+      setMtime(evictableName, now - 86_400_000);
+
+      await retention.maybeMaintain(now + 61_000);
+      expect(fs.existsSync(path.join(dir, evictableName))).toBe(false);
+    });
   });
 });

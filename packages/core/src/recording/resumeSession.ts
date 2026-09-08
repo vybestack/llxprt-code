@@ -30,6 +30,7 @@ import { SessionDiscovery } from './SessionDiscovery.js';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
 import { replaySession } from './ReplayEngine.js';
 import { RESUME_NO_SESSIONS_FOUND } from './resumeNotFoundMessages.js';
+import type { LocalMediaStore } from '../storage/local-media-store.js';
 
 /**
  * Sentinel constant for "resume most recent session".
@@ -48,6 +49,8 @@ export interface ResumeRequest {
   currentProvider: string;
   currentModel: string;
   workspaceDirs: string[];
+  mediaStore?: LocalMediaStore;
+  maxQueueBytes?: number;
 }
 
 /**
@@ -118,6 +121,12 @@ function initializeRecordingForResume(
     workspaceDirs: request.workspaceDirs,
     provider: request.currentProvider,
     model: request.currentModel,
+    ...(request.mediaStore === undefined
+      ? {}
+      : { mediaStore: request.mediaStore }),
+    ...(request.maxQueueBytes === undefined
+      ? {}
+      : { maxQueueBytes: request.maxQueueBytes }),
   });
   recording.initializeForResume(
     lockedSession.targetFilePath,
@@ -191,6 +200,7 @@ export async function resumeSession(
   const replayResult = await replaySession(
     lockedSession.targetFilePath,
     request.projectHash,
+    { mediaStore: request.mediaStore },
   );
   if (!replayResult.ok) {
     await lockedSession.lockHandle.release();

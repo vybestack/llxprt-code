@@ -162,9 +162,7 @@ void vi.mock('./turn', () => {
 void vi.mock('@vybestack/llxprt-code-core/config/config.js', () =>
   automock(realConfigModule),
 );
-void vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
-  getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
-}));
+
 void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
@@ -336,8 +334,8 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
     todoStoreWritePausedMock.mockResolvedValue(undefined);
   });
 
-  afterEach(() => {
-    client.dispose();
+  afterEach(async () => {
+    await client.dispose();
     vi.restoreAllMocks();
   });
 

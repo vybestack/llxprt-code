@@ -69,14 +69,20 @@ describe('resolveImageDimensionBudget (@issue:3216)', () => {
     const budget = resolveImageDimensionBudget({
       'max-image-dimension': 2000,
     });
-    expect(budget).toEqual({ maxDimension: 2000 });
+    expect(budget).toStrictEqual({
+      maxDimension: 2000,
+      maxPixels: undefined,
+    });
   });
 
   it('reads max-image-pixels only', () => {
     const budget = resolveImageDimensionBudget({
       'max-image-pixels': 4_000_000,
     });
-    expect(budget).toEqual({ maxPixels: 4_000_000 });
+    expect(budget).toStrictEqual({
+      maxDimension: undefined,
+      maxPixels: 4_000_000,
+    });
   });
 
   it('reads both keys together', () => {
@@ -84,7 +90,7 @@ describe('resolveImageDimensionBudget (@issue:3216)', () => {
       'max-image-dimension': 2000,
       'max-image-pixels': 4_000_000,
     });
-    expect(budget).toEqual({ maxDimension: 2000, maxPixels: 4_000_000 });
+    expect(budget).toStrictEqual({ maxDimension: 2000, maxPixels: 4_000_000 });
   });
 
   it('throws on non-positive-integer values (fail fast)', () => {
@@ -246,7 +252,7 @@ describe('checkImageDimensionBudgetFromBuffer vs base64 checker (@issue:3216)', 
       const base64 = bytes.toString('base64');
       const fromBuffer = checkImageDimensionBudgetFromBuffer(bytes, budget);
       const fromBase64 = checkImageDimensionBudget(base64, budget);
-      expect(fromBuffer).toEqual(fromBase64);
+      expect(fromBuffer).toStrictEqual(fromBase64);
     },
   );
 
@@ -280,7 +286,7 @@ describe('checkImageDimensionBudgetFromBuffer vs base64 checker (@issue:3216)', 
       bytes.toString('base64'),
       budget,
     );
-    expect(fromView).toEqual(fromBase64);
+    expect(fromView).toStrictEqual(fromBase64);
     expect(fromView).toBeDefined();
   });
 });
@@ -365,13 +371,13 @@ describe('parseJpegDimensionsFromReader — bounded JPEG SOF preflight (@issue:3
     const jpeg = buildJpegWithDelayedSof(8_298, 3_000, 3_000);
     expect(jpeg.length).toBeGreaterThan(8_192);
     const dims = await parseJpegDimensionsFromReader(readerFromBuffer(jpeg));
-    expect(dims).toEqual({ width: 3_000, height: 3_000 });
+    expect(dims).toStrictEqual({ width: 3_000, height: 3_000 });
   });
 
   it('locates SOF for a within-budget JPEG with delayed SOF', async () => {
     const jpeg = buildJpegWithDelayedSof(8_298, 1_800, 1_800);
     const dims = await parseJpegDimensionsFromReader(readerFromBuffer(jpeg));
-    expect(dims).toEqual({ width: 1_800, height: 1_800 });
+    expect(dims).toStrictEqual({ width: 1_800, height: 1_800 });
   });
 
   it('returns undefined for a non-JPEG input', async () => {
@@ -443,7 +449,7 @@ describe('parseJpegDimensionsFromReader — bounded JPEG SOF preflight (@issue:3
     const dimsFull = await parseJpegDimensionsFromReader(
       readerFromBuffer(jpeg),
     );
-    expect(dimsFull).toEqual({ width: 3_000, height: 3_000 });
+    expect(dimsFull).toStrictEqual({ width: 3_000, height: 3_000 });
   });
 
   it('finds a marker whose FF prefix is the last byte of a reader chunk', async () => {
@@ -457,7 +463,7 @@ describe('parseJpegDimensionsFromReader — bounded JPEG SOF preflight (@issue:3
       buildSofSegment(3_000, 3_000),
     ]);
     const dims = await parseJpegDimensionsFromReader(readerFromBuffer(jpeg));
-    expect(dims).toEqual({ width: 3_000, height: 3_000 });
+    expect(dims).toStrictEqual({ width: 3_000, height: 3_000 });
   });
 
   it('finds a marker after an FF fill run crossing a reader chunk boundary', async () => {
@@ -471,7 +477,7 @@ describe('parseJpegDimensionsFromReader — bounded JPEG SOF preflight (@issue:3
       buildSofSegment(1_800, 1_800),
     ]);
     const dims = await parseJpegDimensionsFromReader(readerFromBuffer(jpeg));
-    expect(dims).toEqual({ width: 1_800, height: 1_800 });
+    expect(dims).toStrictEqual({ width: 1_800, height: 1_800 });
   });
 
   it('stops within the explicit step bound on repeated standalone markers', async () => {
@@ -494,12 +500,19 @@ describe('parseJpegDimensionsFromReader — bounded JPEG SOF preflight (@issue:3
     expect(readCalls).toBeLessThanOrEqual(JPEG_SEGMENT_MAX_STEPS + 1);
   });
 
-  it('propagates reader I/O errors instead of treating them as malformed input', async () => {
-    const jpeg = buildJpegWithDelayedSof(8_298, 3_000, 3_000);
-    const failing: JpegSegmentReader = async (offset, length) => {
-      if (offset > 0) throw new Error('EIO: read failure');
-      return new Uint8Array(jpeg.subarray(offset, offset + length));
+  const observePropagatesReaderIOErrorsInsteadOfTreatingThemAsMalformedInputAt503 =
+    async () => {
+      const jpeg = buildJpegWithDelayedSof(8_298, 3_000, 3_000);
+      const failing: JpegSegmentReader = async (offset, length) => {
+        if (offset > 0) throw new Error('EIO: read failure');
+        return new Uint8Array(jpeg.subarray(offset, offset + length));
+      };
+      return { failing };
     };
+
+  it('propagates reader I/O errors instead of treating them as malformed input', async () => {
+    const { failing } =
+      await observePropagatesReaderIOErrorsInsteadOfTreatingThemAsMalformedInputAt503();
     await expect(parseJpegDimensionsFromReader(failing)).rejects.toThrow('EIO');
   });
 });

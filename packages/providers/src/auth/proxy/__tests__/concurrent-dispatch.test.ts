@@ -291,67 +291,70 @@ async function sendRawFrames(
   });
 }
 
+function isInvalidRequestResponse(response: Record<string, unknown>): boolean {
+  return response.ok === false && response.code === 'INVALID_REQUEST';
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('Concurrent dispatch (REQ-005)', () => {
-  let tokenStore: InMemoryTokenStore;
-  let keyStorage: InMemoryProviderKeyStorage;
-  let server: CredentialProxyServer;
-  let client: ProxySocketClient;
+  describe.skipIf(isWindows)('non-Windows transport behavior', () => {
+    let tokenStore: InMemoryTokenStore;
+    let keyStorage: InMemoryProviderKeyStorage;
+    let server: CredentialProxyServer;
+    let client: ProxySocketClient;
 
-  beforeEach(() => {
-    tokenStore = new InMemoryTokenStore();
-    keyStorage = new InMemoryProviderKeyStorage();
-  });
-
-  afterEach(async () => {
-    try {
-      client.close();
-    } catch {
-      // client may not be initialized
-    }
-    try {
-      await server.stop();
-    } catch {
-      // server may not be started
-    }
-  });
-
-  function createServer(
-    overrides: Partial<CredentialProxyServerOptions> = {},
-  ): CredentialProxyServer {
-    return new CredentialProxyServer({
-      tokenStore,
-      providerKeyStorage:
-        keyStorage as unknown as CredentialProxyServerOptions['providerKeyStorage'],
-      ...overrides,
+    beforeEach(() => {
+      tokenStore = new InMemoryTokenStore();
+      keyStorage = new InMemoryProviderKeyStorage();
     });
-  }
 
-  async function startAndConnect(
-    serverInstance: CredentialProxyServer,
-    capabilityToken?: string,
-  ): Promise<ProxySocketClient> {
-    const socketPath = await serverInstance.start();
-    const c = new ProxySocketClient(socketPath, capabilityToken);
-    await c.ensureConnected();
-    return c;
-  }
+    afterEach(async () => {
+      try {
+        client.close();
+      } catch {
+        // client may not be initialized
+      }
+      try {
+        await server.stop();
+      } catch {
+        // server may not be started
+      }
+    });
 
-  // ─── T1: slow op + fast op → fast returns first ───────────────────────────
+    function createServer(
+      overrides: Partial<CredentialProxyServerOptions> = {},
+    ): CredentialProxyServer {
+      return new CredentialProxyServer({
+        tokenStore,
+        providerKeyStorage:
+          keyStorage as unknown as CredentialProxyServerOptions['providerKeyStorage'],
+        ...overrides,
+      });
+    }
 
-  /**
-   * A slow get_token (gated) and a fast get_api_key are issued on the same
-   * connection. With concurrent dispatch the fast op resolves first; with the
-   * old serialized chain the fast op would wait for the slow one.
-   *
-   * @plan PLAN-20260731-GHBROKER.P03
-   * @requirement REQ-005
-   * @pseudocode 001-concurrent-dispatch.md line T1 (I3)
-   */
-  it.skipIf(isWindows)(
-    'T1: a fast op returns before a slow op on the same connection',
-    async () => {
+    async function startAndConnect(
+      serverInstance: CredentialProxyServer,
+      capabilityToken?: string,
+    ): Promise<ProxySocketClient> {
+      const socketPath = await serverInstance.start();
+      const c = new ProxySocketClient(socketPath, capabilityToken);
+      await c.ensureConnected();
+      return c;
+    }
+
+    // ─── T1: slow op + fast op → fast returns first ───────────────────────────
+
+    /**
+     * A slow get_token (gated) and a fast get_api_key are issued on the same
+     * connection. With concurrent dispatch the fast op resolves first; with the
+     * old serialized chain the fast op would wait for the slow one.
+     *
+     * @plan PLAN-20260731-GHBROKER.P03
+     * @requirement REQ-005
+     * @pseudocode 001-concurrent-dispatch.md line T1 (I3)
+     */
+    it('T1: a fast op returns before a slow op on the same connection', async () => {
       const gatedStore = new GatedTokenStore();
       await gatedStore.saveToken('slow-provider', makeToken());
       await keyStorage.saveKey('fast-key', 'sk-fast-123');
@@ -392,23 +395,20 @@ describe('Concurrent dispatch (REQ-005)', () => {
 
       // The fast op MUST complete before the slow op.
       expect(completionOrder).toStrictEqual(['fast', 'slow']);
-    },
-  );
+    });
 
-  // ─── T2: long op in flight + get_api_key → key returns immediately ────────
+    // ─── T2: long op in flight + get_api_key → key returns immediately ────────
 
-  /**
-   * A blocking get_token (gated) is in flight. A get_api_key request arrives
-   * on the same connection and must be answered immediately, without waiting
-   * for the blocking op to finish. This is the core REQ-005 scenario.
-   *
-   * @plan PLAN-20260731-GHBROKER.P03
-   * @requirement REQ-005
-   * @pseudocode 001-concurrent-dispatch.md line T2
-   */
-  it.skipIf(isWindows)(
-    'T2: get_api_key answers immediately while a long op is in flight',
-    async () => {
+    /**
+     * A blocking get_token (gated) is in flight. A get_api_key request arrives
+     * on the same connection and must be answered immediately, without waiting
+     * for the blocking op to finish. This is the core REQ-005 scenario.
+     *
+     * @plan PLAN-20260731-GHBROKER.P03
+     * @requirement REQ-005
+     * @pseudocode 001-concurrent-dispatch.md line T2
+     */
+    it('T2: get_api_key answers immediately while a long op is in flight', async () => {
       const gatedStore = new GatedTokenStore();
       await gatedStore.saveToken('blocking-provider', makeToken());
       await keyStorage.saveKey('needed-key', 'sk-needed-456');
@@ -439,31 +439,28 @@ describe('Concurrent dispatch (REQ-005)', () => {
       gatedStore.release();
       const blockingResult = await blockingPromise;
       expect(blockingResult.ok).toBe(true);
-    },
-  );
+    });
 
-  // ─── T3: high-volume interleaved responses, every frame intact ─────────────
+    // ─── T3: high-volume interleaved responses, every frame intact ─────────────
 
-  /**
-   * 200 requests are issued in waves of 16 (the concurrency cap) on one
-   * connection. Every response frame must decode intact with the correct
-   * id and data — no truncation, no interleaving of bytes across frames.
-   *
-   * Waves stay within MAX_CONCURRENT_PER_CONNECTION so the test exercises
-   * concurrent dispatch and frame integrity under load, not the cap (which
-   * T6 covers).
-   *
-   * This test guards invariant I1: every response is one complete frame.
-   * If socket.write() calls were ever to interleave mid-buffer, the
-   * FrameDecoder would produce malformed JSON and the test would fail.
-   *
-   * @plan PLAN-20260731-GHBROKER.P03
-   * @requirement REQ-005
-   * @pseudocode 001-concurrent-dispatch.md line T3 (I1)
-   */
-  it.skipIf(isWindows)(
-    'T3: 200 interleaved responses decode intact with no truncation',
-    async () => {
+    /**
+     * 200 requests are issued in waves of 16 (the concurrency cap) on one
+     * connection. Every response frame must decode intact with the correct
+     * id and data — no truncation, no interleaving of bytes across frames.
+     *
+     * Waves stay within MAX_CONCURRENT_PER_CONNECTION so the test exercises
+     * concurrent dispatch and frame integrity under load, not the cap (which
+     * T6 covers).
+     *
+     * This test guards invariant I1: every response is one complete frame.
+     * If socket.write() calls were ever to interleave mid-buffer, the
+     * FrameDecoder would produce malformed JSON and the test would fail.
+     *
+     * @plan PLAN-20260731-GHBROKER.P03
+     * @requirement REQ-005
+     * @pseudocode 001-concurrent-dispatch.md line T3 (I1)
+     */
+    it('T3: 200 interleaved responses decode intact with no truncation', async () => {
       const count = 200;
       const waveSize = 16;
       for (let i = 0; i < count; i++) {
@@ -506,25 +503,22 @@ describe('Concurrent dispatch (REQ-005)', () => {
         expect(matching).toBeDefined();
         expect(matching!.ok).toBe(true);
       }
-    },
-  );
+    });
 
-  // ─── T4: request before handshake → rejected ───────────────────────────────
+    // ─── T4: request before handshake → rejected ───────────────────────────────
 
-  /**
-   * A request frame sent before a valid handshake must not be dispatched.
-   * With a capability token configured, a bare request frame (no capability
-   * token) is treated as a handshake attempt and rejected with UNAUTHORIZED —
-   * proving the handshake path stays strictly synchronous and gates every
-   * dispatch.
-   *
-   * @plan PLAN-20260731-GHBROKER.P03
-   * @requirement REQ-005
-   * @pseudocode 001-concurrent-dispatch.md line T4 (I2)
-   */
-  it.skipIf(isWindows)(
-    'T4: a request before handshake is not dispatched',
-    async () => {
+    /**
+     * A request frame sent before a valid handshake must not be dispatched.
+     * With a capability token configured, a bare request frame (no capability
+     * token) is treated as a handshake attempt and rejected with UNAUTHORIZED —
+     * proving the handshake path stays strictly synchronous and gates every
+     * dispatch.
+     *
+     * @plan PLAN-20260731-GHBROKER.P03
+     * @requirement REQ-005
+     * @pseudocode 001-concurrent-dispatch.md line T4 (I2)
+     */
+    it('T4: a request before handshake is not dispatched', async () => {
       await keyStorage.saveKey('secret-key', 'sk-secret-value');
       server = createServer({ capabilityToken: CAPABILITY_TOKEN });
       const socketPath = await server.start();
@@ -584,23 +578,20 @@ describe('Concurrent dispatch (REQ-005)', () => {
       // a valid capability token — never dispatched.
       expect(result.ok).toBe(false);
       expect(result.code).toBe('UNAUTHORIZED');
-    },
-  );
+    });
 
-  // ─── T5: close mid-op → abort fires, pending empty ─────────────────────────
+    // ─── T5: close mid-op → abort fires, pending empty ─────────────────────────
 
-  /**
-   * A slow op is in flight when the client closes the connection. The server
-   * must abort the pending op, clear the pending map, and remain healthy.
-   * No write should occur after the socket is destroyed.
-   *
-   * @plan PLAN-20260731-GHBROKER.P03
-   * @requirement REQ-005
-   * @pseudocode 001-concurrent-dispatch.md line T5 (I4)
-   */
-  it.skipIf(isWindows)(
-    'T5: closing mid-op aborts cleanly and server stays healthy',
-    async () => {
+    /**
+     * A slow op is in flight when the client closes the connection. The server
+     * must abort the pending op, clear the pending map, and remain healthy.
+     * No write should occur after the socket is destroyed.
+     *
+     * @plan PLAN-20260731-GHBROKER.P03
+     * @requirement REQ-005
+     * @pseudocode 001-concurrent-dispatch.md line T5 (I4)
+     */
+    it('T5: closing mid-op aborts cleanly and server stays healthy', async () => {
       const gatedStore = new GatedTokenStore();
       await gatedStore.saveToken('mid-op-provider', makeToken());
 
@@ -645,22 +636,19 @@ describe('Concurrent dispatch (REQ-005)', () => {
       expect(result.ok).toBe(true);
       expect(result.data!.key).toBe('sk-post-789');
       newClient.close();
-    },
-  );
+    });
 
-  // ─── T6: 17th concurrent request → RESOURCE_EXHAUSTED ──────────────────────
+    // ─── T6: 17th concurrent request → RESOURCE_EXHAUSTED ──────────────────────
 
-  /**
-   * MAX_CONCURRENT_PER_CONNECTION is 16. When 16 ops are in flight, the 17th
-   * request must receive RESOURCE_EXHAUSTED instead of being dispatched.
-   *
-   * @plan PLAN-20260731-GHBROKER.P03
-   * @requirement REQ-005
-   * @pseudocode 001-concurrent-dispatch.md line T6 (I5), lines 34-38
-   */
-  it.skipIf(isWindows)(
-    'T6: 17th concurrent request receives RESOURCE_EXHAUSTED',
-    async () => {
+    /**
+     * MAX_CONCURRENT_PER_CONNECTION is 16. When 16 ops are in flight, the 17th
+     * request must receive RESOURCE_EXHAUSTED instead of being dispatched.
+     *
+     * @plan PLAN-20260731-GHBROKER.P03
+     * @requirement REQ-005
+     * @pseudocode 001-concurrent-dispatch.md line T6 (I5), lines 34-38
+     */
+    it('T6: 17th concurrent request receives RESOURCE_EXHAUSTED', async () => {
       const gatedStore = new GatedTokenStore();
       for (let i = 0; i < 16; i++) {
         await gatedStore.saveToken(`provider-${i}`, makeToken());
@@ -694,25 +682,22 @@ describe('Concurrent dispatch (REQ-005)', () => {
       // Release the gate so the 16 blocking ops complete.
       gatedStore.release();
       await Promise.all(blockingPromises);
-    },
-  );
+    });
 
-  // ─── T7: duplicate request id → INVALID_REQUEST ───────────────────────────
+    // ─── T7: duplicate request id → INVALID_REQUEST ───────────────────────────
 
-  /**
-   * Two frames with the same request id arrive on the same connection. The
-   * second must receive INVALID_REQUEST (fail fast, no dispatch). The
-   * INVALID_REQUEST is sent synchronously when the duplicate id is detected,
-   * before the first request's async handler completes, so we match by
-   * content rather than assuming arrival order.
-   *
-   * @plan PLAN-20260731-GHBROKER.P03
-   * @requirement REQ-005
-   * @pseudocode 001-concurrent-dispatch.md line T7, lines 24-26
-   */
-  it.skipIf(isWindows)(
-    'T7: duplicate request id receives INVALID_REQUEST',
-    async () => {
+    /**
+     * Two frames with the same request id arrive on the same connection. The
+     * second must receive INVALID_REQUEST (fail fast, no dispatch). The
+     * INVALID_REQUEST is sent synchronously when the duplicate id is detected,
+     * before the first request's async handler completes, so we match by
+     * content rather than assuming arrival order.
+     *
+     * @plan PLAN-20260731-GHBROKER.P03
+     * @requirement REQ-005
+     * @pseudocode 001-concurrent-dispatch.md line T7, lines 24-26
+     */
+    it('T7: duplicate request id receives INVALID_REQUEST', async () => {
       await keyStorage.saveKey('dup-key-a', 'sk-dup-a');
       await keyStorage.saveKey('dup-key-b', 'sk-dup-b');
 
@@ -746,30 +731,25 @@ describe('Concurrent dispatch (REQ-005)', () => {
       expect(success).toBeDefined();
       expect(success!.data!.key).toBe('sk-dup-a');
       // Exactly one response is the INVALID_REQUEST for the duplicate.
-      const rejection = responses.find(
-        (r) => r.ok === false && r.code === 'INVALID_REQUEST',
-      );
+      const rejection = responses.find(isInvalidRequestResponse);
       expect(rejection).toBeDefined();
       expect(rejection!.error).toContain('Duplicate request id');
-    },
-  );
+    });
 
-  // ─── T8: sendOk / sendError emit exactly one socket.write per frame ────────
+    // ─── T8: sendOk / sendError emit exactly one socket.write per frame ────────
 
-  /**
-   * Invariant I1 (load-bearing): every response is emitted by exactly ONE
-   * socket.write() of one complete frame. This test instruments the raw
-   * socket data stream and verifies that each response decodes as exactly one
-   * valid frame — it would fail if someone later split a response across
-   * multiple writes.
-   *
-   * @plan PLAN-20260731-GHBROKER.P03
-   * @requirement REQ-005
-   * @pseudocode 001-concurrent-dispatch.md line T3 (I1), lines 991/1001
-   */
-  it.skipIf(isWindows)(
-    'T8: each response is exactly one complete frame in the byte stream',
-    async () => {
+    /**
+     * Invariant I1 (load-bearing): every response is emitted by exactly ONE
+     * socket.write() of one complete frame. This test instruments the raw
+     * socket data stream and verifies that each response decodes as exactly one
+     * valid frame — it would fail if someone later split a response across
+     * multiple writes.
+     *
+     * @plan PLAN-20260731-GHBROKER.P03
+     * @requirement REQ-005
+     * @pseudocode 001-concurrent-dispatch.md line T3 (I1), lines 991/1001
+     */
+    it('T8: each response is exactly one complete frame in the byte stream', async () => {
       await keyStorage.saveKey('frame-key', 'sk-frame-999');
 
       server = createServer();
@@ -795,8 +775,8 @@ describe('Concurrent dispatch (REQ-005)', () => {
       expect((frames[0].data as Record<string, unknown>).key).toBe(
         'sk-frame-999',
       );
-    },
-  );
+    });
+  });
 });
 
 /**

@@ -80,6 +80,24 @@ const EXPECTED_PROVIDER_TYPE_API = EXPECTED_PROVIDER_PUBLIC_API.filter(
   (entry) => entry.kind === 'type',
 );
 
+function nextCategoryCount(current: number | undefined): number {
+  return (current ?? 0) + 1;
+}
+
+function missingRuntimeSymbols(
+  providersModule: Readonly<Record<string, unknown>>,
+): string[] {
+  return EXPECTED_PROVIDER_RUNTIME_API.filter(
+    (entry) => !(entry.name in providersModule),
+  ).map((entry) => entry.name);
+}
+
+function missingRuntimeSymbolDetail(missingSymbols: readonly string[]): string {
+  return missingSymbols.length > 0
+    ? `@vybestack/llxprt-code-providers is missing ${missingSymbols.length} expected runtime exports: ${missingSymbols.join(', ')}. These must be added during P11 migration when provider files are moved.`
+    : '';
+}
+
 describe('Provider package public API behavioral tests', () => {
   /**
    * @plan:PLAN-20260603-ISSUE1584.P10
@@ -110,15 +128,13 @@ describe('Provider package public API behavioral tests', () => {
   it('each expected category has at least one expected export', () => {
     const categoryCounts: Record<string, number> = {};
     for (const entry of EXPECTED_PROVIDER_PUBLIC_API) {
-      categoryCounts[entry.category] =
-        (categoryCounts[entry.category] ?? 0) + 1;
+      categoryCounts[entry.category] = nextCategoryCount(
+        categoryCounts[entry.category],
+      );
     }
     // Verify non-zero counts
-    for (const [category, count] of Object.entries(categoryCounts)) {
-      expect(
-        count,
-        `Category ${category} must have at least 1 export`,
-      ).toBeGreaterThan(0);
+    for (const [, count] of Object.entries(categoryCounts)) {
+      expect(count).toBeGreaterThan(0);
     }
   });
 
@@ -164,18 +180,10 @@ describe('Provider package public API behavioral tests', () => {
     }
 
     // The import succeeds but the module is a scaffold — check which symbols are missing
-    const missingSymbols: string[] = [];
-    for (const entry of EXPECTED_PROVIDER_RUNTIME_API) {
-      if (!(entry.name in providersModule)) {
-        missingSymbols.push(entry.name);
-      }
-    }
+    const missingSymbols = missingRuntimeSymbols(providersModule);
 
     // All expected runtime symbols must be present after P11 migration
-    const missingDetail =
-      missingSymbols.length > 0
-        ? `@vybestack/llxprt-code-providers is missing ${missingSymbols.length} expected runtime exports: ${missingSymbols.join(', ')}. These must be added during P11 migration when provider files are moved.`
-        : '';
+    const missingDetail = missingRuntimeSymbolDetail(missingSymbols);
     expect(missingDetail).toBe('');
     expect(missingSymbols).toStrictEqual([]);
   });

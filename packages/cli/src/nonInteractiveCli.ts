@@ -546,7 +546,6 @@ export async function runNonInteractive(
       debugLogger.error(
         parseAndFormatApiError(
           error,
-          undefined,
           getErrorFallbackModel(config, providerName),
           providerName,
         ),

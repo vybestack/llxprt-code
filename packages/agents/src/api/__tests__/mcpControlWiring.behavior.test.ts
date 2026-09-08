@@ -165,35 +165,57 @@ describe('buildMcpControlDeps requires-OAuth consistency @plan:PLAN-20260622-MCP
   // the pre-fix divergent closures (config absent + map holding `s -> false`
   // yields requiresAuth:true but oauthStatus:'not-required').
   it('keeps getRequiresAuth and getOAuthStatus consistent for any config/map state (property)', async () => {
+    const {
+      keepsGetRequiresAuthAndGetOAuthStatusConsistentForAnyConfigMapStatePropertyProperty,
+      observations,
+    } =
+      await observeKeepsGetRequiresAuthAndGetOAuthStatusConsistentForAnyConfigMapStateProperty();
     await fc.assert(
-      fc.asyncProperty(
-        fc.string({ minLength: 1 }),
-        // oauth.enabled: true | false | (no config entry)
-        fc.option(fc.boolean(), { nil: undefined }),
-        // runtime map: true | false | (key absent)
-        fc.option(fc.boolean(), { nil: undefined }),
-        async (server, configEnabled, mapValue) => {
-          mcpServerRequiresOAuth.clear();
-          if (mapValue !== undefined) {
-            mcpServerRequiresOAuth.set(server, mapValue);
-          }
-          const servers =
-            configEnabled === undefined
-              ? undefined
-              : { [server]: serverWithOAuth(configEnabled) };
-          const deps = buildDeps(servers);
-
-          const requires = deps.getRequiresAuth?.(server);
-          const status = await deps.getOAuthStatus?.(server);
-
-          // Biconditional invariant: auth is required iff the status is not
-          // 'not-required'. A single unconditional assertion captures both
-          // directions (true => never 'not-required'; false => exactly it).
-          expect(status !== 'not-required').toBe(requires === true);
-        },
-      ),
+      keepsGetRequiresAuthAndGetOAuthStatusConsistentForAnyConfigMapStatePropertyProperty,
     );
+    expect(
+      observations.map(({ status }) => status !== 'not-required'),
+    ).toStrictEqual(observations.map(({ requires }) => requires === true));
   });
+
+  const observeKeepsGetRequiresAuthAndGetOAuthStatusConsistentForAnyConfigMapStateProperty =
+    async () => {
+      const observations: Array<{
+        requires: boolean | undefined;
+        status: string | undefined;
+      }> = [];
+      const keepsGetRequiresAuthAndGetOAuthStatusConsistentForAnyConfigMapStatePropertyProperty =
+        fc.asyncProperty(
+          fc.string({ minLength: 1 }),
+          // oauth.enabled: true | false | (no config entry)
+          fc.option(fc.boolean(), { nil: undefined }),
+          // runtime map: true | false | (key absent)
+          fc.option(fc.boolean(), { nil: undefined }),
+          async (server, configEnabled, mapValue) => {
+            mcpServerRequiresOAuth.clear();
+            if (mapValue !== undefined) {
+              mcpServerRequiresOAuth.set(server, mapValue);
+            }
+            const servers =
+              configEnabled === undefined
+                ? undefined
+                : { [server]: serverWithOAuth(configEnabled) };
+            const deps = buildDeps(servers);
+
+            const requires = deps.getRequiresAuth?.(server);
+            const status = await deps.getOAuthStatus?.(server);
+            observations.push({ requires, status });
+
+            // Biconditional invariant: auth is required iff the status is not
+            // 'not-required'.
+            return (status !== 'not-required') === (requires === true);
+          },
+        );
+      return {
+        keepsGetRequiresAuthAndGetOAuthStatusConsistentForAnyConfigMapStatePropertyProperty,
+        observations,
+      };
+    };
 
   // PROP-2: the exact pre-fix adversarial subspace — for ANY server name, a
   // runtime map entry of `name -> false` with no oauth config still requires

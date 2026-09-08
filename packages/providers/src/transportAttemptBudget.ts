@@ -123,11 +123,24 @@ export function attachTransportAttemptBudget(
   };
 }
 
+/**
+ * Reads the transport budget a retry-context record carries.
+ *
+ * The record is the value stored under RETRY_REQUEST_CONTEXT_KEY; this is
+ * the typed reader for code that already holds the record (e.g. attempt
+ * telemetry snapshots) so the key stays owned by this module.
+ */
+export function readTransportAttemptBudgetFromRecord(
+  record: Record<string, unknown> | undefined,
+): TransportAttemptBudget | undefined {
+  const value = record?.[TRANSPORT_ATTEMPT_BUDGET_KEY];
+  return isTransportAttemptBudget(value) ? value : undefined;
+}
+
 export function getTransportAttemptBudget(
   options: GenerateChatOptions,
 ): TransportAttemptBudget | undefined {
-  const value = getRequestContext(options)?.[TRANSPORT_ATTEMPT_BUDGET_KEY];
-  return isTransportAttemptBudget(value) ? value : undefined;
+  return readTransportAttemptBudgetFromRecord(getRequestContext(options));
 }
 
 export function hasTransportAttemptRemaining(

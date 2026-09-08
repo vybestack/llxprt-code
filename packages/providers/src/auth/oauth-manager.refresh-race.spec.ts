@@ -19,6 +19,12 @@ import { KeyringTokenStore } from '@vybestack/llxprt-code-core';
 import { type KeyringAdapter } from '@vybestack/llxprt-code-storage';
 import { SecureStore } from '@vybestack/llxprt-code-storage';
 
+function isFulfilledOAuthToken(
+  result: PromiseSettledResult<OAuthToken | null>,
+): result is PromiseFulfilledResult<OAuthToken> {
+  return result.status === 'fulfilled' && result.value !== null;
+}
+
 function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
   const store = new Map<string, string>();
   return {
@@ -188,9 +194,7 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
       expect(refreshCallCount).toBe(1); // Lock should prevent concurrent refreshes
 
       // Count successful vs failed/timeout requests
-      const fulfilled = results.filter(
-        (r) => r.status === 'fulfilled' && r.value !== null,
-      );
+      const fulfilled = results.filter(isFulfilledOAuthToken);
 
       // At least one should succeed (the one that got the lock and refreshed)
       expect(fulfilled.length).toBeGreaterThanOrEqual(1);
@@ -285,9 +289,7 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
       ]);
 
       // Then: At least one should succeed
-      const fulfilled = results.filter(
-        (r) => r.status === 'fulfilled' && r.value !== null,
-      );
+      const fulfilled = results.filter(isFulfilledOAuthToken);
       expect(fulfilled.length).toBeGreaterThanOrEqual(1);
 
       // Each bucket should try to acquire its own lock

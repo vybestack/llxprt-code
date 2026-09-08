@@ -385,7 +385,7 @@ describe('sandbox orphan recovery startup', () => {
       startTimeMs: observedStartTimeMs,
       startTimeSource: 'observed',
     };
-    expect(recordedOwner).toEqual(expectedOwner);
+    expect(recordedOwner).toStrictEqual(expectedOwner);
 
     const statePath = engineStatePath('docker');
     const logPath = engineLogPath();
@@ -400,7 +400,7 @@ describe('sandbox orphan recovery startup', () => {
       queried: fs
         .readFileSync(logPath, 'utf8')
         .includes(`docker:ps -a --filter label=${MANAGED_LABEL}`),
-    }).toEqual({
+    }).toStrictEqual({
       startupResult: expect.stringContaining(
         `Sandbox image '${TEST_IMAGE}' is missing`,
       ),
@@ -432,7 +432,7 @@ describe('sandbox orphan recovery startup', () => {
     const owner: unknown = JSON.parse(
       ownerLabel.slice(ownerLabel.indexOf('=') + 1),
     );
-    expect(owner).toEqual(
+    expect(owner).toStrictEqual(
       expect.objectContaining({ startTimeSource: 'estimated' }),
     );
   });
@@ -459,7 +459,7 @@ describe('sandbox orphan recovery startup', () => {
       expect({
         startupResult,
         state: fs.readFileSync(statePath, 'utf8'),
-      }).toEqual({
+      }).toStrictEqual({
         startupResult: expect.stringContaining(
           `Sandbox image '${TEST_IMAGE}' is missing`,
         ),
@@ -472,7 +472,7 @@ describe('sandbox orphan recovery startup', () => {
     const startupResult = await runRecoveryStartup('sandbox-exec');
     const engineLog = fs.readFileSync(engineLogPath(), 'utf8');
 
-    expect({ startupResult, engineLog }).toEqual({
+    expect({ startupResult, engineLog }).toStrictEqual({
       startupResult: expect.stringContaining(
         `Sandbox image '${TEST_IMAGE}' is missing`,
       ),
@@ -495,7 +495,7 @@ describe('sandbox orphan recovery startup', () => {
     expect({
       startupResult,
       state: fs.readFileSync(statePath, 'utf8'),
-    }).toEqual({
+    }).toStrictEqual({
       startupResult: expect.stringContaining(
         `Sandbox image '${TEST_IMAGE}' is missing`,
       ),
@@ -518,7 +518,7 @@ describe('sandbox orphan recovery startup', () => {
     expect({
       startupResult,
       state: fs.readFileSync(statePath, 'utf8'),
-    }).toEqual({
+    }).toStrictEqual({
       startupResult: expect.stringContaining(
         `Sandbox image '${TEST_IMAGE}' is missing`,
       ),
@@ -632,7 +632,7 @@ describe('sandbox orphan recovery startup', () => {
     expect({
       startupResult,
       state: fs.readFileSync(statePath, 'utf8'),
-    }).toEqual({
+    }).toStrictEqual({
       startupResult: expect.stringContaining(
         `Sandbox image '${TEST_IMAGE}' is missing`,
       ),
@@ -655,7 +655,7 @@ describe('sandbox orphan recovery startup', () => {
     expect({
       startupResult,
       state: fs.readFileSync(statePath, 'utf8'),
-    }).toEqual({
+    }).toStrictEqual({
       startupResult: expect.stringContaining(
         `Sandbox image '${TEST_IMAGE}' is missing`,
       ),
@@ -685,7 +685,7 @@ describe('sandbox orphan recovery startup', () => {
       podmanInvoked: fs
         .readFileSync(engineLogPath(), 'utf8')
         .includes('podman:'),
-    }).toEqual({ docker: '', podman: podmanState, podmanInvoked: false });
+    }).toStrictEqual({ docker: '', podman: podmanState, podmanInvoked: false });
   });
 
   it('continues startup when the selected-engine listing fails', async () => {
@@ -698,7 +698,7 @@ describe('sandbox orphan recovery startup', () => {
     expect({
       startupResult,
       state: fs.readFileSync(statePath, 'utf8'),
-    }).toEqual({
+    }).toStrictEqual({
       startupResult: expect.stringContaining(
         `Sandbox image '${TEST_IMAGE}' is missing`,
       ),
@@ -726,7 +726,7 @@ describe('sandbox orphan recovery startup', () => {
     expect({
       startupResult,
       state: fs.readFileSync(statePath, 'utf8'),
-    }).toEqual({
+    }).toStrictEqual({
       startupResult: expect.stringContaining(
         `Sandbox image '${TEST_IMAGE}' is missing`,
       ),
@@ -767,7 +767,7 @@ describe('sandbox orphan recovery startup', () => {
     expect({
       startupResult,
       state: fs.readFileSync(statePath, 'utf8'),
-    }).toEqual({
+    }).toStrictEqual({
       startupResult: expect.stringContaining(
         `Sandbox image '${TEST_IMAGE}' is missing`,
       ),
@@ -798,7 +798,7 @@ describe('sandbox orphan recovery startup', () => {
     expect({
       startupResult,
       state: fs.readFileSync(statePath, 'utf8'),
-    }).toEqual({
+    }).toStrictEqual({
       startupResult: expect.stringContaining(
         `Sandbox image '${TEST_IMAGE}' is missing`,
       ),

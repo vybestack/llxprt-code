@@ -22,6 +22,11 @@ import {
   type MemoryImportFormat,
 } from './settingsSchema.js';
 import { getV2NamespacedSettingPath, mergeSettings } from './settingsMerge.js';
+import {
+  isSandboxLauncherEnvVar,
+  isUserGlobalEnvFile,
+  stripRuntimeInjectedLauncherVars,
+} from './sandboxEnvGuard.js';
 export { loadSettings } from './settingsLoader.js';
 export { migrateDeprecatedSettings } from './settingsMigrations.js';
 import {
@@ -382,6 +387,10 @@ export function setUpCloudShellEnvironment(envFilePath: string | null): void {
 }
 
 export function loadEnvironment(settings: Settings): void {
+  // Runs before the folder-trust gate below: an untrusted folder is exactly
+  // where a runtime-injected launcher control must not survive.
+  stripRuntimeInjectedLauncherVars(process.cwd());
+
   const envFilePath = findEnvFile(process.cwd());
 
   // Check if folder trust feature is enabled, and if so, check if workspace is trusted
@@ -416,8 +425,9 @@ export function loadEnvironment(settings: Settings): void {
         resolvedEnvPath.startsWith(configDirResolved + path.sep) ||
         resolvedEnvPath.startsWith(dataDirResolved + path.sep);
       const isProjectEnvFile = !isInLlxprtDir && !isInGlobalDir;
+      const isUserGlobal = isUserGlobalEnvFile(envFilePath);
 
-      applyParsedEnv(parsedEnv, excludedVars, isProjectEnvFile);
+      applyParsedEnv(parsedEnv, excludedVars, isProjectEnvFile, isUserGlobal);
     } catch {
       // Errors are ignored to match the behavior of `dotenv.config({ quiet: true })`.
     }
@@ -433,9 +443,18 @@ function applyParsedEnv(
   parsedEnv: Record<string, string>,
   excludedVars: string[],
   isProjectEnvFile: boolean,
+  isUserGlobal: boolean,
 ): void {
   for (const key in parsedEnv) {
-    if (!shouldLoadEnvVar(parsedEnv, key, excludedVars, isProjectEnvFile)) {
+    if (
+      !shouldLoadEnvVar(
+        parsedEnv,
+        key,
+        excludedVars,
+        isProjectEnvFile,
+        isUserGlobal,
+      )
+    ) {
       continue;
     }
     process.env[key] = parsedEnv[key];
@@ -447,8 +466,14 @@ function shouldLoadEnvVar(
   key: string,
   excludedVars: string[],
   isProjectEnvFile: boolean,
+  isUserGlobal: boolean,
 ): boolean {
   if (!Object.hasOwn(parsedEnv, key)) {
+    return false;
+  }
+  // A sandbox launcher control is never accepted from a repo-controlled env
+  // file, regardless of excludedProjectEnvVars (issue #2958).
+  if (isSandboxLauncherEnvVar(key) && !isUserGlobal) {
     return false;
   }
   // If it's a project .env file, skip loading excluded variables.

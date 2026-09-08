@@ -125,18 +125,9 @@ describe('P16: Core implementations satisfy auth DI interfaces', () => {
     it('auth package exports are re-exported from core index', async () => {
       const coreIndex = await import('@vybestack/llxprt-code-core');
       // AuthPrecedenceResolver is re-exported from core index
-      expect(
-        'AuthPrecedenceResolver' in coreIndex,
-        'core must re-export AuthPrecedenceResolver from auth',
-      ).toBe(true);
-      expect(
-        'flushRuntimeAuthScope' in coreIndex,
-        'core must re-export flushRuntimeAuthScope from auth',
-      ).toBe(true);
-      expect(
-        'KeyringTokenStore' in coreIndex,
-        'core must re-export KeyringTokenStore from auth',
-      ).toBe(true);
+      expect('AuthPrecedenceResolver' in coreIndex).toBe(true);
+      expect('flushRuntimeAuthScope' in coreIndex).toBe(true);
+      expect('KeyringTokenStore' in coreIndex).toBe(true);
     });
   });
 });

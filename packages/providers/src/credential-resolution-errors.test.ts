@@ -238,7 +238,7 @@ describe('Provider credential-resolution error surface', () => {
     expect(error.kind).toBe('credential-source-failed');
     expect(error.cause).toBe(liveCause);
     expect(error.cause).not.toBe(staleCause);
-    expect(error.diagnostics).toEqual(resolverFailure.diagnostics);
+    expect(error.diagnostics).toStrictEqual(resolverFailure.diagnostics);
   });
 
   it('preserves the resolver failure when a caller explicitly provides an undefined cause', () => {

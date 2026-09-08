@@ -104,6 +104,7 @@ async function dumpImmediateContext(
     providerName,
     undefined,
     historyService.getChronologyTrace(),
+    { media: 'raw' },
   );
   return {
     type: 'message',

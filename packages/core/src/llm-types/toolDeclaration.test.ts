@@ -227,6 +227,83 @@ describe('ToolChoice orthogonality', () => {
 // Property-based tests
 // ============================================================================
 
+/**
+ * True when the converted declaration preserves the schema byte-identically, carries the
+ * name, and mirrors the `!= null` description guard (null collapses to undefined).
+ */
+function schemaAndDescriptionPreserved(
+  result: ToolDeclaration[],
+  name: string,
+  description: string | null,
+  schema: unknown,
+): boolean {
+  if (result.length !== 1) return false;
+  if (result[0].name !== name) return false;
+  if (result[0].parametersJsonSchema !== schema) return false;
+  if (description === null) {
+    if (result[0].description !== undefined) return false;
+  } else if (result[0].description !== description) {
+    return false;
+  }
+  return true;
+}
+
+type GroupedFunctionInput = {
+  functionDeclarations: Array<{ name: string }>;
+};
+
+function groupedDeclarationsPreserved(
+  result: ToolDeclaration[],
+  toolset: GroupedFunctionInput[],
+): boolean {
+  const expectedCount = toolset.reduce(
+    (sum, g) => sum + g.functionDeclarations.length,
+    0,
+  );
+  const expectedNames = toolset.flatMap((g) =>
+    g.functionDeclarations.map((d) => d.name),
+  );
+  const actualNames = result.map((r) => r.name);
+  return (
+    result.length === expectedCount &&
+    actualNames.every((n, i) => n === expectedNames[i])
+  );
+}
+
+function legacyParametersPreserved(
+  result: ToolDeclaration[],
+  name: string,
+  description: string,
+  parameters: unknown,
+): boolean {
+  return (
+    result.length === 1 &&
+    result[0].name === name &&
+    result[0].parametersJsonSchema === parameters &&
+    result[0].description === description
+  );
+}
+
+function everyDeclarationHasEmptySchema(result: ToolDeclaration[]): boolean {
+  return result.every(
+    (r) =>
+      typeof r.parametersJsonSchema === 'object' &&
+      Object.keys(r.parametersJsonSchema).length === 0,
+  );
+}
+
+function booleanSchemaPreserved(
+  result: ToolDeclaration[],
+  description: string,
+  schema: boolean,
+): boolean {
+  return (
+    result.length === 1 &&
+    result[0].parametersJsonSchema === schema &&
+    result[0].description === description
+  );
+}
+
 describe('toolDeclaration property-based', () => {
   it('preserves parametersJsonSchema byte-identically when present and valid', () =>
     fc.assert(
@@ -244,17 +321,12 @@ describe('toolDeclaration property-based', () => {
               ],
             },
           ];
-          const result = toolDeclarationsFromLegacyToolset(toolset);
-          if (result.length !== 1) return false;
-          if (result[0].name !== name) return false;
-          if (result[0].parametersJsonSchema !== schema) return false;
-          // null is omitted by the `!= null` guard → description is undefined.
-          if (description === null) {
-            if (result[0].description !== undefined) return false;
-          } else if (result[0].description !== description) {
-            return false;
-          }
-          return true;
+          return schemaAndDescriptionPreserved(
+            toolDeclarationsFromLegacyToolset(toolset),
+            name,
+            description,
+            schema,
+          );
         },
       ),
     ));
@@ -270,21 +342,11 @@ describe('toolDeclaration property-based', () => {
           }),
           { minLength: 0, maxLength: 5 },
         ),
-        (toolset) => {
-          const expectedCount = toolset.reduce(
-            (sum, g) => sum + g.functionDeclarations.length,
-            0,
-          );
-          const result = toolDeclarationsFromLegacyToolset(toolset);
-          const expectedNames = toolset.flatMap((g) =>
-            g.functionDeclarations.map((d) => d.name),
-          );
-          const actualNames = result.map((r) => r.name);
-          return (
-            result.length === expectedCount &&
-            actualNames.every((n, i) => n === expectedNames[i])
-          );
-        },
+        (toolset) =>
+          groupedDeclarationsPreserved(
+            toolDeclarationsFromLegacyToolset(toolset),
+            toolset,
+          ),
       ),
     ));
 
@@ -300,12 +362,11 @@ describe('toolDeclaration property-based', () => {
           const toolset = [
             { functionDeclarations: [{ name, description, parameters }] },
           ];
-          const result = toolDeclarationsFromLegacyToolset(toolset);
-          return (
-            result.length === 1 &&
-            result[0].name === name &&
-            result[0].parametersJsonSchema === parameters &&
-            result[0].description === description
+          return legacyParametersPreserved(
+            toolDeclarationsFromLegacyToolset(toolset),
+            name,
+            description,
+            parameters,
           );
         },
       ),
@@ -320,11 +381,8 @@ describe('toolDeclaration property-based', () => {
         }),
         (decls) => {
           const toolset = [{ functionDeclarations: decls }];
-          const result = toolDeclarationsFromLegacyToolset(toolset);
-          return result.every(
-            (r) =>
-              typeof r.parametersJsonSchema === 'object' &&
-              Object.keys(r.parametersJsonSchema).length === 0,
+          return everyDeclarationHasEmptySchema(
+            toolDeclarationsFromLegacyToolset(toolset),
           );
         },
       ),
@@ -346,11 +404,10 @@ describe('toolDeclaration property-based', () => {
               ],
             },
           ];
-          const result = toolDeclarationsFromLegacyToolset(toolset);
-          return (
-            result.length === 1 &&
-            result[0].parametersJsonSchema === schema &&
-            result[0].description === description
+          return booleanSchemaPreserved(
+            toolDeclarationsFromLegacyToolset(toolset),
+            description,
+            schema,
           );
         },
       ),

@@ -17,6 +17,7 @@ import type {
 import type { AgentRuntimeState } from './AgentRuntimeState.js';
 import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from './contracts/RuntimeProvider.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 describe('createAgentRuntimeContext', () => {
   let mockProvider: IProvider;
@@ -75,6 +76,50 @@ describe('createAgentRuntimeContext', () => {
       compressionThreshold: 0.7,
       preserveThreshold: 0.3,
     };
+  });
+
+  describe('ephemerals.semanticMediaPurge()', () => {
+    it('keeps missing and explicit off settings behaviorally identical', () => {
+      const liveSettings = new SettingsService();
+      const context = createAgentRuntimeContext({
+        state: mockState,
+        settings,
+        provider: mockProviderAdapter,
+        telemetry: mockTelemetryAdapter,
+        tools: mockToolsView,
+        providerRuntime: {
+          ...mockProviderRuntime,
+          settingsService: liveSettings,
+        },
+      });
+
+      const resolvedModes = [context.ephemerals.semanticMediaPurge()];
+
+      liveSettings.set('media.semantic-purge', 'off');
+      resolvedModes.push(context.ephemerals.semanticMediaPurge());
+
+      expect(resolvedModes).toStrictEqual(['off', 'off']);
+    });
+
+    it('rejects malformed live profile values before request construction', () => {
+      const liveSettings = new SettingsService();
+      liveSettings.set('media.semantic-purge', 'REMOVE');
+      const context = createAgentRuntimeContext({
+        state: mockState,
+        settings,
+        provider: mockProviderAdapter,
+        telemetry: mockTelemetryAdapter,
+        tools: mockToolsView,
+        providerRuntime: {
+          ...mockProviderRuntime,
+          settingsService: liveSettings,
+        },
+      });
+
+      expect(() => context.ephemerals.semanticMediaPurge()).toThrow(
+        "Invalid media.semantic-purge setting: expected 'off', 'remove', or 'summary'",
+      );
+    });
   });
 
   describe('validation', () => {

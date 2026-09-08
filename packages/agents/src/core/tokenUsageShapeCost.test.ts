@@ -224,12 +224,10 @@ describe('request-shape measurement cost guards (issue #3130)', () => {
 
 describe('bucket attribution against the real history pipeline (issue #3130)', () => {
   it('counts a tool result as history, not as an injection', async () => {
-    // The provider pipeline rebuilds every tool turn through
-    // ensureToolResponseAdjacency and stamps synthetic:true with
-    // reason:'reordered_tool_responses' even when nothing was reordered. Reading
-    // that flag put all tool results in injected_tokens and left history_tokens
-    // excluding them. Driven through the real HistoryService so the quirk is
-    // present rather than assumed.
+    // An ordinary adjacent tool turn remains source history through
+    // ensureToolResponseAdjacency and must not be marked synthetic. Drive the
+    // attribution through the real HistoryService so the premise and token
+    // buckets cover the same provider-ready contents.
     const { HistoryService } = await import(
       '@vybestack/llxprt-code-core/services/history/HistoryService.js'
     );
@@ -276,20 +274,46 @@ describe('bucket attribution against the real history pipeline (issue #3130)', (
     );
 
     const requestContents = history.getCuratedForProvider([]);
-    // Guard the premise: the pipeline really does mark the tool turn synthetic.
-    const toolTurnIsFlagged = requestContents.some(
+    const matchingToolResponse = requestContents
+      .flatMap((content) => content.blocks)
+      .find(
+        (block) => block.type === 'tool_response' && block.callId === 'call-1',
+      );
+    const baselineRequestContents = requestContents.filter(
+      (content) =>
+        !content.blocks.some(
+          (block) =>
+            block.type === 'tool_response' && block.callId === 'call-1',
+        ),
+    );
+
+    expect(matchingToolResponse).toMatchObject({
+      type: 'tool_response',
+      callId: 'call-1',
+      result: 'FILE BODY',
+    });
+    // Guard the premise: unchanged history is not an injected synthetic turn.
+    const toolTurnIsSynthetic = requestContents.some(
       (c) => c.speaker === 'tool' && c.metadata?.synthetic === true,
     );
-    expect(toolTurnIsFlagged).toBe(true);
+    expect(toolTurnIsSynthetic).toBe(false);
 
-    const shape = computeRequestShape({
-      requestContents,
-      tools: undefined,
-      instructionsText: undefined,
-      countTokens: (t: string) => t.length,
-      previouslySentCallIds: new Set<string>(),
-    });
+    const measure = (contents: IContent[]) =>
+      computeRequestShape({
+        requestContents: contents,
+        tools: undefined,
+        instructionsText: undefined,
+        countTokens: (t: string) => t.length,
+        previouslySentCallIds: new Set<string>(),
+      });
+    const shape = measure(requestContents);
+    const baselineShape = measure(baselineRequestContents);
+    const measuredToolResponse = shape.toolCalls.find(
+      (toolCall) => toolCall.callId === 'call-1',
+    );
 
+    expect(measuredToolResponse?.resultTokens).toBeGreaterThan(0);
+    expect(shape.historyTokens).toBeGreaterThan(baselineShape.historyTokens);
     expect(shape.injectedTokens).toBe(0);
   });
 });

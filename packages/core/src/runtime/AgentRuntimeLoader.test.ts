@@ -5,6 +5,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createAgentRuntimeState } from './AgentRuntimeState.js';
 import {
   createProviderRuntimeContext,
@@ -32,6 +35,9 @@ import type {
 } from '../core/contentGenerator.js';
 import type { RuntimeContentGeneratorFactory } from './contracts/RuntimeContentGeneratorFactory.js';
 import type { RuntimeProviderManager } from './contracts/RuntimeProviderManager.js';
+import type { IContent } from '../services/history/IContent.js';
+import { LocalMediaStore } from '../storage/local-media-store.js';
+import { MediaAdmissionService } from '../storage/media-admission-service.js';
 
 function createTestConfig(): Config {
   const settingsService = new SettingsService();
@@ -201,6 +207,74 @@ describe('AgentRuntimeLoader', () => {
     expect(bundle.contentGenerator.generateContent).toBeDefined();
   });
 
+  it('idempotently establishes canonical ownership for media already present in provided history', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'runtime-loader-media-'));
+    const store = new LocalMediaStore({
+      rootDirectory: join(directory, 'media'),
+      quotaBytes: 1024 * 1024,
+    });
+    const admission = new MediaAdmissionService(store);
+    const admissionContext = {
+      turnId: 'initial-history',
+      source: 'runtime-loader-test',
+      reservationOwnerScope: 'runtime-loader-test',
+    };
+    const inlineHistory: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'media',
+            mimeType: 'image/png',
+            encoding: 'base64',
+            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=',
+          },
+        ],
+      },
+    ];
+
+    try {
+      const admittedHistory = await admission.admitContents(
+        inlineHistory,
+        admissionContext,
+      );
+      const block = admittedHistory[0].blocks[0];
+      if (block.type !== 'media' || block.encoding !== 'reference') {
+        throw new Error('Expected admitted media reference');
+      }
+      const sharedHistory = new HistoryService();
+      sharedHistory.addAll(admittedHistory);
+
+      const runtimeOptions = {
+        profile: {
+          config,
+          state: runtimeState,
+          settings: settingsSnapshot,
+          providerRuntime,
+          contentGeneratorConfig: createContentGeneratorConfig(),
+        },
+        overrides: {
+          providerAdapter,
+          telemetryAdapter,
+          toolsView,
+          historyService: sharedHistory,
+          mediaStore: store,
+          contentGenerator: createStubGenerator('media-owner'),
+        },
+      };
+      await loadAgentRuntime(runtimeOptions);
+      await loadAgentRuntime(runtimeOptions);
+      await admission.releaseContents(admittedHistory, admissionContext);
+      expect(await store.hasReservations(block.contentId)).toBe(true);
+
+      sharedHistory.clear();
+      await sharedHistory.waitForOwnershipSettlement();
+      expect(await store.hasReservations(block.contentId)).toBe(false);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it('preserves provided settings and applies snapshot to ephemerals', async () => {
     const mutableSettings: ReadonlySettingsSnapshot = {
       compressionThreshold: 0.33,
@@ -307,8 +381,6 @@ describe('AgentRuntimeLoader', () => {
         thought: 0,
         total: 0,
       }),
-      getServerToolsProvider: () => null,
-      setServerToolsProvider: vi.fn(),
       setConfig: vi.fn(),
       hasActiveProvider: () => true,
       accumulateSessionTokens: vi.fn(),
@@ -346,25 +418,25 @@ describe('AgentRuntimeLoader', () => {
     expect(factory.createContentGenerator).toHaveBeenCalledWith(fakeManager);
   });
 
-  it('succeeds without hydration when providerManager is absent', async () => {
-    const simpleConfig = createContentGeneratorConfig();
-    const bundle = await loadAgentRuntime({
-      profile: {
-        config,
-        state: runtimeState,
-        settings: settingsSnapshot,
-        providerRuntime,
-        contentGeneratorConfig: simpleConfig,
-      },
-      overrides: {
-        providerAdapter,
-        telemetryAdapter,
-        toolsView,
-      },
-    });
-
-    expect(bundle.contentGenerator).toBeDefined();
-    expect(bundle.contentGenerator.generateContent).toBeDefined();
+  it('throws when providerManager is absent', async () => {
+    await expect(
+      loadAgentRuntime({
+        profile: {
+          config,
+          state: runtimeState,
+          settings: settingsSnapshot,
+          providerRuntime,
+          contentGeneratorConfig: createContentGeneratorConfig(),
+        },
+        overrides: {
+          providerAdapter,
+          telemetryAdapter,
+          toolsView,
+        },
+      }),
+    ).rejects.toThrow(
+      'No provider runtime is composed for this Config. Compose the providers package (see packages/providers/src/composition) before creating a content generator.',
+    );
   });
 
   it('throws when providerManager is present but contentGeneratorFactory is missing and Config has no factory', async () => {
@@ -388,8 +460,6 @@ describe('AgentRuntimeLoader', () => {
         thought: 0,
         total: 0,
       }),
-      getServerToolsProvider: () => null,
-      setServerToolsProvider: vi.fn(),
       setConfig: vi.fn(),
       hasActiveProvider: () => true,
       accumulateSessionTokens: vi.fn(),

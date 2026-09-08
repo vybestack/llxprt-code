@@ -237,15 +237,21 @@ describe('GeminiIdentifierScanner fixture/mutation tests', () => {
     });
 
     it('catches identifier export assignments', () => {
+      const { catchesIdentifierExportAssignmentsObservation1 } =
+        observeCatchesIdentifierExportAssignments();
+      expect(catchesIdentifierExportAssignmentsObservation1).toBe(true);
+    });
+
+    const observeCatchesIdentifierExportAssignments = () => {
       const hits = scanSource(
         'const GeminiClient = {}; export default GeminiClient;',
       );
-      expect(
-        hits.some(
-          (hit) => hit.name === 'GeminiClient' && hit.kind === 'export-default',
-        ),
-      ).toBe(true);
-    });
+
+      const catchesIdentifierExportAssignmentsObservation1 = hits.some(
+        (hit) => hit.name === 'GeminiClient' && hit.kind === 'export-default',
+      );
+      return { catchesIdentifierExportAssignmentsObservation1 };
+    };
 
     it('catches wildcard re-export', () => {
       // export * does not introduce a named identifier at this syntax level;

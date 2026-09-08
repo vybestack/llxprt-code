@@ -101,6 +101,13 @@ function makeConfig(
 }
 
 /**
+ * Alternating human/ai speaker for index-based content generation.
+ */
+function alternatingSpeaker(i: number): 'human' | 'ai' {
+  return i % 2 === 0 ? 'human' : 'ai';
+}
+
+/**
  * Create a real session file, flush, dispose, and return file path + session ID.
  */
 async function createAndRecordSession(
@@ -293,7 +300,7 @@ describe('integration: full session recording lifecycle', () => {
 
     // Record 5 content events
     for (let i = 0; i < 5; i++) {
-      svc.recordContent(makeContent(`pre-${i}`, i % 2 === 0 ? 'human' : 'ai'));
+      svc.recordContent(makeContent(`pre-${i}`, alternatingSpeaker(i)));
     }
 
     // Compress
@@ -334,7 +341,7 @@ describe('integration: full session recording lifecycle', () => {
     );
 
     for (let i = 0; i < 5; i++) {
-      svc.recordContent(makeContent(`item-${i}`, i % 2 === 0 ? 'human' : 'ai'));
+      svc.recordContent(makeContent(`item-${i}`, alternatingSpeaker(i)));
     }
     svc.recordRewind(2);
     await svc.flush();

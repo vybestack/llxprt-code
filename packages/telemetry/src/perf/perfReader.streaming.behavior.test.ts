@@ -46,6 +46,28 @@ function cleanupFile(filePath: string): void {
   }
 }
 
+function requireOkEntry(entry: PerfStreamEntry | undefined) {
+  if (entry?.kind !== 'ok') {
+    throw new Error('expected an ok perf entry');
+  }
+  return entry;
+}
+
+async function summarizeOperationRecords(
+  filePath: string,
+): Promise<{ readonly count: number; readonly firstIndex: number }> {
+  let count = 0;
+  let firstIndex = -1;
+  for await (const entry of streamPerfRecords(filePath)) {
+    if (entry.kind !== 'ok') continue;
+    count += 1;
+    if (count === 1 && entry.record.record_type === 'operation') {
+      firstIndex = entry.record.session_operation_index;
+    }
+  }
+  return { count, firstIndex };
+}
+
 // ---------------------------------------------------------------------------
 // Valid record factory
 // ---------------------------------------------------------------------------
@@ -141,7 +163,7 @@ describe('streamPerfRecords — real file', () => {
         entries.push(entry);
       }
       const kinds = entries.map((e) => e.kind);
-      expect(kinds).toEqual(['ok', 'malformed', 'future_version', 'ok']);
+      expect(kinds).toStrictEqual(['ok', 'malformed', 'future_version', 'ok']);
     } finally {
       cleanupFile(tmpFile);
     }
@@ -168,7 +190,7 @@ describe('streamPerfRecords — real file', () => {
         entries.push(entry);
       }
 
-      expect(entries).toEqual([{ kind: 'blank' }]);
+      expect(entries).toStrictEqual([{ kind: 'blank' }]);
     } finally {
       cleanupFile(tmpFile);
     }
@@ -183,7 +205,7 @@ describe('streamPerfRecords — real file', () => {
       for await (const entry of streamPerfRecords(tmpFile)) {
         entries.push(entry);
       }
-      expect(entries.map((e) => e.kind)).toEqual(['ok', 'truncated']);
+      expect(entries.map((e) => e.kind)).toStrictEqual(['ok', 'truncated']);
     } finally {
       cleanupFile(tmpFile);
     }
@@ -207,7 +229,10 @@ describe('streamPerfRecords — final line without trailing newline classificati
       for await (const entry of streamPerfRecords(tmpFile)) {
         entries.push(entry);
       }
-      expect(entries.map((e) => e.kind)).toEqual(['ok', 'future_version']);
+      expect(entries.map((e) => e.kind)).toStrictEqual([
+        'ok',
+        'future_version',
+      ]);
     } finally {
       cleanupFile(tmpFile);
     }
@@ -224,7 +249,7 @@ describe('streamPerfRecords — final line without trailing newline classificati
       for await (const entry of streamPerfRecords(tmpFile)) {
         entries.push(entry);
       }
-      expect(entries.map((e) => e.kind)).toEqual(['ok', 'unversioned']);
+      expect(entries.map((e) => e.kind)).toStrictEqual(['ok', 'unversioned']);
     } finally {
       cleanupFile(tmpFile);
     }
@@ -241,7 +266,7 @@ describe('streamPerfRecords — final line without trailing newline classificati
       for await (const entry of streamPerfRecords(tmpFile)) {
         entries.push(entry);
       }
-      expect(entries.map((e) => e.kind)).toEqual(['ok', 'malformed']);
+      expect(entries.map((e) => e.kind)).toStrictEqual(['ok', 'malformed']);
     } finally {
       cleanupFile(tmpFile);
     }
@@ -255,7 +280,7 @@ describe('streamPerfRecords — final line without trailing newline classificati
       for await (const entry of streamPerfRecords(tmpFile)) {
         entries.push(entry);
       }
-      expect(entries.map((e) => e.kind)).toEqual(['ok', 'truncated']);
+      expect(entries.map((e) => e.kind)).toStrictEqual(['ok', 'truncated']);
     } finally {
       cleanupFile(tmpFile);
     }
@@ -284,8 +309,8 @@ describe('streamPerfFromReadable — incremental yield proof', () => {
     const first = await iter.next();
     expect(first.done).toBe(false);
     expect(first.value?.kind).toBe('ok');
-    if (first.value?.kind !== 'ok') throw new Error('unreachable');
-    expect(first.value.record.record_type).toBe('operation');
+    const firstEntry = requireOkEntry(first.value);
+    expect(firstEntry.record.record_type).toBe('operation');
 
     // NOW push the second chunk and close the stream.
     readable.push(Buffer.from(line2));
@@ -308,17 +333,9 @@ describe('streamPerfFromReadable — incremental yield proof', () => {
     }
     const filePath = makeTempFile(lines.join('\n') + '\n');
     try {
-      let count = 0;
-      let firstIndex = -1;
-      for await (const entry of streamPerfRecords(filePath)) {
-        if (entry.kind !== 'ok') continue;
-        count++;
-        if (count === 1 && entry.record.record_type === 'operation') {
-          firstIndex = entry.record.session_operation_index;
-        }
-      }
-      expect(count).toBe(N);
-      expect(firstIndex).toBe(0);
+      const summary = await summarizeOperationRecords(filePath);
+      expect(summary.count).toBe(N);
+      expect(summary.firstIndex).toBe(0);
     } finally {
       cleanupFile(filePath);
     }

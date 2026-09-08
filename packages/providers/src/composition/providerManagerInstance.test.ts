@@ -39,6 +39,10 @@ void vi.mock('strip-json-comments', () => ({
   default: (content: string) => content,
 }));
 
+function removeLeadingBom(content: string): string {
+  return content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
+}
+
 function sanitizeApiKey(key: string): string {
   const sanitized = sanitizeForByteString(key);
   if (sanitized !== key) {
@@ -98,8 +102,7 @@ describe('API key sanitization regression tests', () => {
     mockFileSystem.setMockFile('/home/user/.openai_key', bomString);
 
     // Simulate BOM removal and sanitization
-    let content = bomString;
-    content = content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
+    const content = removeLeadingBom(bomString);
     const sanitizedKey = sanitizeApiKey(content);
 
     expect(sanitizedKey).toBe('sk-validapikey123');

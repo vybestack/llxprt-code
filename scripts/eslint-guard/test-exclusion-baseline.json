@@ -3,13 +3,6 @@
   "configs": {
     "packages/a2a-server/tsconfig.json": [],
     "packages/agents/tsconfig.json": [
-      "src/agents/__tests__/executorRun.characterization.test.ts",
-      "src/agents/executor.execution.test.ts",
-      "src/agents/executor.recovery.test.ts",
-      "src/agents/executor.stream-idle-timeout.test.ts",
-      "src/agents/executor.termination-conditions.test.ts",
-      "src/agents/executor.test.ts",
-      "src/agents/invocation.test.ts",
       "src/api/__tests__/activationPreflightState.behavior.test.ts",
       "src/api/__tests__/agent-bootstrap.spec.ts",
       "src/api/__tests__/agentUnconfigured.behavior.test.ts",
@@ -542,10 +535,6 @@
       "src/__tests__/auth-interface-compat.test.ts",
       "src/__tests__/structural-compat-p16.test.ts",
       "src/auth-factories.keyring.test.ts",
-      "src/code_assist/contentGeneratorAdapters.test.ts",
-      "src/code_assist/contentGeneratorAdapters.toolFailure.test.ts",
-      "src/code_assist/server.test.ts",
-      "src/code_assist/setup.test.ts",
       "src/commands/extensions.test.ts",
       "src/commands/types.test.ts",
       "src/config/config-lsp-integration.test.ts",
@@ -678,7 +667,6 @@
       "src/utils/fileDiffUtils.test.ts",
       "src/utils/fileUtils.test.ts",
       "src/utils/getPty.test.ts",
-      "src/utils/installationManager.test.ts",
       "src/utils/memoryDiscovery.test.ts",
       "src/utils/memoryImportProcessor.issue391.test.ts",
       "src/utils/memoryImportProcessor.test.ts",
@@ -1008,6 +996,7 @@
     ],
     "packages/test-utils/tsconfig.json": [],
     "packages/tools/tsconfig.json": [],
-    "packages/vscode-ide-companion/tsconfig.json": []
+    "packages/vscode-ide-companion/tsconfig.json": [],
+    "packages/zed-acp/tsconfig.json": []
   }
 }

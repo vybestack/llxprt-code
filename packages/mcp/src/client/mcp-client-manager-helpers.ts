@@ -5,12 +5,14 @@
  */
 
 import type {
-  LlxprtExtension,
   MCPServerConfig,
-} from '@vybestack/llxprt-code-core/config/configTypes.js';
-import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
+  McpExtensionConfig,
+} from '../config/mcpServerConfig.js';
+import type {
+  McpPromptRegistry,
+  McpResourceRegistry,
+} from '../host/hostInterfaces.js';
 import type { McpClient } from './mcp-client.js';
-import type { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { isDeepStrictEqual } from 'node:util';
 import { appendFailures } from './trust-revocation-errors.js';
@@ -246,7 +248,7 @@ export async function stopMcpExtension({
   disconnect,
   refresh,
 }: {
-  extension: LlxprtExtension;
+  extension: McpExtensionConfig;
   disconnect: (name: string) => Promise<void>;
   refresh: () => Promise<void>;
 }): Promise<void> {
@@ -297,8 +299,8 @@ export function removeMcpServerState(
 export function removeMcpServerArtifacts(
   name: string,
   toolRegistry: ToolRegistry,
-  promptRegistry: PromptRegistry,
-  resourceRegistry: ResourceRegistry,
+  promptRegistry: McpPromptRegistry,
+  resourceRegistry: McpResourceRegistry,
 ): void {
   const failures: unknown[] = [];
   for (const remove of [

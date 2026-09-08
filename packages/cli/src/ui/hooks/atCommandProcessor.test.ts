@@ -42,7 +42,12 @@ describe('handleAtCommand', () => {
     await teardownAtCommandTest(setup);
   });
 
-  it('should include MCP resource content for @server:uri references', async () => {
+  const observeMcpResourceReference = async (): Promise<{
+    readonly result: Awaited<ReturnType<typeof handleAtCommand>>;
+    readonly findResourceByUri: ReturnType<typeof vi.fn>;
+    readonly readResource: ReturnType<typeof vi.fn>;
+    readonly addItem: ReturnType<typeof vi.fn>;
+  }> => {
     const serverName = 'docs';
     const resourceUri = 'file:///docs/readme.md';
     const query = `Summarize @${serverName}:${resourceUri}`;
@@ -102,21 +107,23 @@ describe('handleAtCommand', () => {
       getToolHandle,
     });
 
-    expect(findResourceByUri).toHaveBeenCalledWith(
-      `${serverName}:${resourceUri}`,
+    return {
+      result,
+      findResourceByUri,
+      readResource,
+      addItem: mockAddItem,
+    };
+  };
+
+  it('should include MCP resource content for @server:uri references', async () => {
+    const resource = await observeMcpResourceReference();
+    expect(resource.findResourceByUri).toHaveBeenCalledWith(
+      'docs:file:///docs/readme.md',
     );
-    expect(readResource).toHaveBeenCalledWith(resourceUri);
-    expect(result).toStrictEqual({
-      processedQuery: [
-        { type: 'text', text: query },
-        {
-          type: 'text',
-          text: `\nContent from @${serverName}:${resourceUri}:\n`,
-        },
-        { type: 'text', text: 'resource content from mcp' },
-      ],
-    });
-    expect(mockAddItem).toHaveBeenCalledWith(
+    expect(resource.readResource).toHaveBeenCalledWith(
+      'file:///docs/readme.md',
+    );
+    expect(resource.addItem).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'tool_group',
         agentId: 'primary',
@@ -124,6 +131,19 @@ describe('handleAtCommand', () => {
       }),
       1001,
     );
+    expect(resource.result).toStrictEqual({
+      processedQuery: [
+        {
+          type: 'text',
+          text: 'Summarize @docs:file:///docs/readme.md',
+        },
+        {
+          type: 'text',
+          text: '\nContent from @docs:file:///docs/readme.md:\n',
+        },
+        { type: 'text', text: 'resource content from mcp' },
+      ],
+    });
   });
 
   it('should pass through query if no @ command is present', async () => {
@@ -373,7 +393,18 @@ describe('handleAtCommand', () => {
     });
   });
 
-  it('should handle a mix of valid, invalid, and lone @ references', async () => {
+  const observeMixedAtReferences = async (): Promise<{
+    readonly processedQuery: unknown;
+    readonly error: string | undefined;
+    readonly firstPart: unknown;
+    readonly queryText: string;
+    readonly debugMessages: ReturnType<typeof vi.fn>;
+    readonly relativePath1: string;
+    readonly relativePath2: string;
+    readonly content1: string;
+    readonly content2: string;
+    readonly invalidFile: string;
+  }> => {
     const content1 = 'Valid content 1';
     const relativePath1 = 'valid1.txt';
     await createTestFile(path.join(testRootDir, relativePath1), content1);
@@ -393,38 +424,66 @@ describe('handleAtCommand', () => {
       getToolHandle,
     });
 
-    expect(result.processedQuery).not.toBeNull();
-    expect(result.error).toBeUndefined();
-    expect(result.processedQuery).toBeDefined();
-    const processedQuery = result.processedQuery!;
-    expect(
-      (processedQuery as Array<{ type: 'text'; text: string }>)[0],
-    ).toStrictEqual({
-      type: 'text',
-      text: `Look at @${relativePath1} then @${invalidFile} and also just @ symbol, then @${relativePath2}`,
-    });
-
-    // Check that both files are included but don't enforce order
-    const queryText = (
-      Array.isArray(processedQuery) ? processedQuery : [processedQuery]
-    )
-      .map((p: unknown) => (p as { type: 'text'; text: string }).text)
+    const processedParts = Array.isArray(result.processedQuery)
+      ? result.processedQuery
+      : [result.processedQuery];
+    const queryText = processedParts
+      .map((part: unknown) => {
+        if (
+          typeof part === 'object' &&
+          part !== null &&
+          'text' in part &&
+          typeof part.text === 'string'
+        ) {
+          return part.text;
+        }
+        return '';
+      })
       .join('');
-    expect(queryText).toContain('--- Content from referenced files ---');
-    expect(queryText).toContain(`Content from @${relativePath1}:`);
-    expect(queryText).toContain(content1);
-    expect(queryText).toContain(`Content from @${relativePath2}:`);
-    expect(queryText).toContain(content2);
-    expect(queryText).toContain('--- End of content ---');
-    expect(mockOnDebugMessage).toHaveBeenCalledWith(
-      `Path ${invalidFile} not found directly, attempting glob search.`,
+    return {
+      processedQuery: result.processedQuery,
+      error: result.error,
+      firstPart: processedParts[0],
+      queryText,
+      debugMessages: mockOnDebugMessage,
+      relativePath1,
+      relativePath2,
+      content1,
+      content2,
+      invalidFile,
+    };
+  };
+
+  it('should handle a mix of valid, invalid, and lone @ references', async () => {
+    const references = await observeMixedAtReferences();
+    expect(references.processedQuery).not.toBeNull();
+    expect(references.error).toBeUndefined();
+    expect(references.processedQuery).toBeDefined();
+    expect(references.firstPart).toStrictEqual({
+      type: 'text',
+      text: `Look at @${references.relativePath1} then @${references.invalidFile} and also just @ symbol, then @${references.relativePath2}`,
+    });
+    expect(references.queryText).toContain(
+      '--- Content from referenced files ---',
     );
-    expect(mockOnDebugMessage).toHaveBeenCalledWith(
-      `Glob search for '**/*${invalidFile}*' found no files or an error. Path ${invalidFile} will be skipped.`,
+    expect(references.queryText).toContain(
+      `Content from @${references.relativePath1}:`,
     );
-    expect(mockOnDebugMessage).toHaveBeenCalledWith(
+    expect(references.queryText).toContain(references.content1);
+    expect(references.queryText).toContain(
+      `Content from @${references.relativePath2}:`,
+    );
+    expect(references.queryText).toContain(references.content2);
+    expect(references.debugMessages).toHaveBeenCalledWith(
+      `Path ${references.invalidFile} not found directly, attempting glob search.`,
+    );
+    expect(references.debugMessages).toHaveBeenCalledWith(
+      `Glob search for '**/*${references.invalidFile}*' found no files or an error. Path ${references.invalidFile} will be skipped.`,
+    );
+    expect(references.debugMessages).toHaveBeenCalledWith(
       'Lone @ detected, will be treated as text in the modified query.',
     );
+    expect(references.queryText).toContain('--- End of content ---');
   });
 
   it('should return original query if all @paths are invalid or lone @', async () => {

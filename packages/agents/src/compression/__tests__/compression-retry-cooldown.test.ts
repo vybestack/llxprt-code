@@ -126,6 +126,13 @@ describe('ChatSession compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY
    * Cooldown resets on successful compression
    */
   it('resets failure count after successful compression', async () => {
+    const { compressionAttempts, countAtCooldown, countBeforeNewFailures } =
+      await observeResetsFailureCountAfterSuccessfulCompression();
+    expect(compressionAttempts).toBe(countAtCooldown);
+    expect(compressionAttempts).toBeGreaterThan(countBeforeNewFailures);
+  });
+
+  const observeResetsFailureCountAfterSuccessfulCompression = async () => {
     const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     let shouldFail = true;
@@ -174,7 +181,7 @@ describe('ChatSession compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY
 
     // 4th failure after reset should be skipped (cooldown active)
     await chat.performCompression('test-prompt');
-    expect(compressionAttempts).toBe(countAtCooldown);
-    expect(compressionAttempts).toBeGreaterThan(countBeforeNewFailures);
-  });
+
+    return { compressionAttempts, countAtCooldown, countBeforeNewFailures };
+  };
 });

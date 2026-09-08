@@ -112,6 +112,17 @@ describe('sanitizeTokenForProxy', () => {
     expect('refresh_token' in result).toBe(false);
   });
 
+  it('rejects a malformed token at the proxy boundary', () => {
+    const malformedToken: OAuthToken = {
+      access_token: 'will-be-replaced',
+      expiry: 1700001000,
+      token_type: 'Bearer',
+    };
+    Reflect.set(malformedToken, 'access_token', 42);
+
+    expect(() => sanitizeTokenForProxy(malformedToken)).toThrow(/access_token/);
+  });
+
   /**
    * @requirement R10.3
    * @scenario Returns a new object — does not mutate input

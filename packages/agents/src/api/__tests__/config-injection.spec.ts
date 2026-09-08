@@ -130,26 +130,32 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
   // ─── Property-based (>=30% of total) ─────────────────────────────────────
 
   it('PROP runtime reuse: for any non-empty sessionId, the adopted Config provider/model are reflected on the agent (REQ-INT-001.2)', async () => {
-    await fc.assert(
-      fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
-        const built = await buildCliStyleConfig('plain-text.jsonl');
-        try {
-          const agent: Agent = await fromConfig({
-            config: built.config,
-            sessionId,
-          });
-          return (
-            agent.getProvider() === 'fake' &&
-            agent.getModel() === 'fake-model' &&
-            agent.getProvider() === built.config.getProvider() &&
-            agent.getModel() === built.config.getModel()
-          );
-        } finally {
-          await built.cleanup();
-        }
-      }),
-    );
+    await expect(
+      fc.assert(
+        createPROPRuntimeReuseForAnyNonEmptySessionIdTheAdoptedConfigProviderProperty(),
+      ),
+    ).resolves.toBeUndefined();
   }, 30000);
+
+  function createPROPRuntimeReuseForAnyNonEmptySessionIdTheAdoptedConfigProviderProperty() {
+    return fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
+      const built = await buildCliStyleConfig('plain-text.jsonl');
+      try {
+        const agent: Agent = await fromConfig({
+          config: built.config,
+          sessionId,
+        });
+        return (
+          agent.getProvider() === 'fake' &&
+          agent.getModel() === 'fake-model' &&
+          agent.getProvider() === built.config.getProvider() &&
+          agent.getModel() === built.config.getModel()
+        );
+      } finally {
+        await built.cleanup();
+      }
+    });
+  }
 
   it('PROP adoption identity: for any non-empty sessionId, internalConfig(agent) === the caller-supplied Config (REQ-INT-001)', async () => {
     await fc.assert(

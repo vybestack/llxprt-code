@@ -8,7 +8,10 @@ import { useEffect, useRef, useState } from 'react';
 import type { IContent } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { HistoryItem } from '../../../types.js';
-import { iContentToHistoryItems } from '../../../utils/iContentToHistoryItems.js';
+import {
+  iContentToHistoryItems,
+  resolveEmojiFilterMode,
+} from '../../../utils/iContentToHistoryItems.js';
 import type { UiRuntime } from '../../../cliUiRuntime.js';
 
 /**
@@ -116,12 +119,15 @@ export function useSessionInitialization({
       return undefined;
     }
     hasSeededResumedHistory.current = true;
-    const uiItems = iContentToHistoryItems(resumedHistory);
+    const uiItems = iContentToHistoryItems(
+      resumedHistory,
+      resolveEmojiFilterMode(uiRuntime.ephemeral),
+    );
     if (uiItems.length > 0) {
       loadHistory(uiItems);
     }
     return undefined;
-  }, [loadHistory, resumedHistory]);
+  }, [loadHistory, resumedHistory, uiRuntime]);
 
   // Effect: Trigger SessionStart hook on initialization
   useEffect(() => {

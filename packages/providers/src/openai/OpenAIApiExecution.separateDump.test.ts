@@ -10,15 +10,33 @@ import {
   executeApiRequest,
   type ApiExecutionOptions,
 } from './OpenAIApiExecution.js';
+import {
+  createOpenAIRawPostTestAdapter,
+  type RawPostTestHandler,
+} from '../test-utils/rawPostTestAdapters.js';
 
-function createMockClient(response: unknown) {
+function withRawPostAdapter<
+  TClient extends {
+    readonly chat: {
+      readonly completions: { readonly create: RawPostTestHandler };
+    };
+  },
+>(client: TClient) {
   return {
+    ...client,
+    ...createOpenAIRawPostTestAdapter(client.chat.completions.create),
+  };
+}
+
+function createMockClient(response: unknown, apiKey?: string) {
+  return withRawPostAdapter({
+    apiKey,
     chat: {
       completions: {
         create: vi.fn().mockResolvedValue(response),
       },
     },
-  } as unknown as Parameters<typeof executeApiRequest>[0]['client'];
+  });
 }
 
 function createBaseOptions(
@@ -95,7 +113,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     });
 
     const mockResponse = { id: 'chatcmpl-test', choices: [] };
-    const client = {
+    const client = withRawPostAdapter({
       chat: {
         completions: {
           create: vi.fn().mockImplementation(async () => {
@@ -104,7 +122,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
           }),
         },
       },
-    } as unknown as Parameters<typeof executeApiRequest>[0]['client'];
+    });
 
     const opts = createBaseOptions({ client, streamingEnabled: false });
     await executeApiRequest(opts);
@@ -140,13 +158,13 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       }
     })();
 
-    const client = {
+    const client = withRawPostAdapter({
       chat: {
         completions: {
           create: vi.fn().mockResolvedValue(mockStream),
         },
       },
-    } as unknown as Parameters<typeof executeApiRequest>[0]['client'];
+    });
 
     const opts = createBaseOptions({ client, streamingEnabled: true });
     const result = await executeApiRequest(opts);
@@ -189,13 +207,13 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       throw new Error('Stream interrupted');
     })();
 
-    const client = {
+    const client = withRawPostAdapter({
       chat: {
         completions: {
           create: vi.fn().mockResolvedValue(mockStream),
         },
       },
-    } as unknown as Parameters<typeof executeApiRequest>[0]['client'];
+    });
 
     const opts = createBaseOptions({ client, streamingEnabled: true });
     const result = await executeApiRequest(opts);
@@ -238,7 +256,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
   it('should write separate related request and error response dumps in error mode', async () => {
     const callOrder: string[] = [];
 
-    const client = {
+    const client = withRawPostAdapter({
       chat: {
         completions: {
           create: vi.fn().mockImplementation(async () => {
@@ -247,7 +265,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
           }),
         },
       },
-    } as unknown as Parameters<typeof executeApiRequest>[0]['client'];
+    });
 
     dumpSDKRequestContextSpy.mockImplementation(async () => {
       callOrder.push('errorRequestDump');
@@ -286,13 +304,13 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
   });
 
   it('should write linked error response dump instead of legacy dump in on mode (non-streaming)', async () => {
-    const client = {
+    const client = withRawPostAdapter({
       chat: {
         completions: {
           create: vi.fn().mockRejectedValue(new Error('Rate limit')),
         },
       },
-    } as unknown as Parameters<typeof executeApiRequest>[0]['client'];
+    });
 
     const opts = createBaseOptions({
       client,
@@ -314,13 +332,13 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
   });
 
   it('should write linked error response dump instead of legacy dump in on mode when streaming request creation fails', async () => {
-    const client = {
+    const client = withRawPostAdapter({
       chat: {
         completions: {
           create: vi.fn().mockRejectedValue(new Error('Stream setup failed')),
         },
       },
-    } as unknown as Parameters<typeof executeApiRequest>[0]['client'];
+    });
 
     const opts = createBaseOptions({
       client,
@@ -347,13 +365,13 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     const apiError = new Error(
       '400 Tool is not present in the tools list: lookup_weather',
     );
-    const client = {
+    const client = withRawPostAdapter({
       chat: {
         completions: {
           create: vi.fn().mockRejectedValue(apiError),
         },
       },
-    } as unknown as Parameters<typeof executeApiRequest>[0]['client'];
+    });
 
     const opts = createBaseOptions({
       client,
@@ -384,6 +402,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       '/chat/completions',
       opts.requestBody,
       'https://api.cerebras.ai/v1',
+      { headers: undefined, transport: { type: 'http' } },
     );
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledOnce();
   });
@@ -392,13 +411,13 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     const apiError = new Error(
       '400 Tool is not present in the tools list: lookup_weather',
     );
-    const client = {
+    const client = withRawPostAdapter({
       chat: {
         completions: {
           create: vi.fn().mockRejectedValue(apiError),
         },
       },
-    } as unknown as Parameters<typeof executeApiRequest>[0]['client'];
+    });
 
     const opts = createBaseOptions({
       client,
@@ -429,6 +448,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       '/chat/completions',
       opts.requestBody,
       'https://api.cerebras.ai/v1',
+      { headers: undefined, transport: { type: 'http' } },
     );
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
@@ -444,13 +464,13 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     const apiError = new Error(
       '400 Tool is not present in the tools list: lookup_weather',
     );
-    const client = {
+    const client = withRawPostAdapter({
       chat: {
         completions: {
           create: vi.fn().mockRejectedValue(apiError),
         },
       },
-    } as unknown as Parameters<typeof executeApiRequest>[0]['client'];
+    });
 
     const opts = createBaseOptions({
       client,
@@ -481,6 +501,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       '/chat/completions',
       opts.requestBody,
       'https://api.cerebras.ai/v1',
+      { headers: undefined, transport: { type: 'http' } },
     );
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledOnce();
   });
@@ -489,9 +510,9 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     const create = vi
       .fn()
       .mockResolvedValue({ id: 'chatcmpl-test', choices: [] });
-    const client = {
+    const client = withRawPostAdapter({
       chat: { completions: { create } },
-    } as unknown as Parameters<typeof executeApiRequest>[0]['client'];
+    });
     dumpSDKRequestContextSpy.mockRejectedValueOnce(new Error('disk full'));
 
     const opts = createBaseOptions({ client, dumpMode: 'on' });
@@ -514,13 +535,13 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       yield chunks[0];
       throw new Error('Stream iteration failed');
     })();
-    const client = {
+    const client = withRawPostAdapter({
       chat: {
         completions: {
           create: vi.fn().mockResolvedValue(mockStream),
         },
       },
-    } as unknown as Parameters<typeof executeApiRequest>[0]['client'];
+    });
     const opts = createBaseOptions({
       client,
       dumpMode: 'error',
@@ -552,6 +573,57 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       true,
     );
     expect(dumpSDKContextSpy).not.toHaveBeenCalled();
+  });
+
+  it('should record the SDK-generated Authorization header name in dump metadata (value redacted on write)', async () => {
+    const client = createMockClient(
+      { id: 'chatcmpl-auth', choices: [] },
+      'sk-dump3159',
+    );
+    const opts = createBaseOptions({ client, dumpMode: 'on' });
+
+    await executeApiRequest(opts);
+
+    const metadata = dumpSDKRequestContextSpy.mock.calls[0][4];
+    expect(metadata?.headers?.['Authorization']).toBe('Bearer sk-dump3159');
+  });
+
+  it('should keep a caller-supplied Authorization header over the synthesized one (issue #3159)', async () => {
+    const client = createMockClient(
+      { id: 'chatcmpl-auth', choices: [] },
+      'sk-dump3159',
+    );
+    const opts = createBaseOptions({
+      client,
+      dumpMode: 'on',
+      mergedHeaders: { Authorization: 'Bearer caller-token' },
+    });
+
+    await executeApiRequest(opts);
+
+    const metadata = dumpSDKRequestContextSpy.mock.calls[0][4];
+    expect(metadata?.headers).toStrictEqual({
+      Authorization: 'Bearer caller-token',
+    });
+  });
+
+  it('should keep a lowercase caller-supplied authorization header over the synthesized one (issue #3159)', async () => {
+    const client = createMockClient(
+      { id: 'chatcmpl-auth', choices: [] },
+      'sk-dump3159',
+    );
+    const opts = createBaseOptions({
+      client,
+      dumpMode: 'on',
+      mergedHeaders: { authorization: 'Bearer caller-token' },
+    });
+
+    await executeApiRequest(opts);
+
+    const metadata = dumpSDKRequestContextSpy.mock.calls[0][4];
+    expect(metadata?.headers).toStrictEqual({
+      authorization: 'Bearer caller-token',
+    });
   });
 
   it('should not dump on success when mode is error', async () => {

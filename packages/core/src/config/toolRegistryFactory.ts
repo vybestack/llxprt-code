@@ -107,11 +107,11 @@ export interface TaskToolArgs {
   schedulerFactoryProvider: () => SubagentSchedulerFactory | undefined;
   getAsyncTaskManager: () => AsyncTaskManager | undefined;
   /**
-   * Session/runtime MessageBus threaded into the SubagentOrchestrator so
+   * Required session/runtime MessageBus threaded into the SubagentOrchestrator so
    * non-interactive subagent tool execution can satisfy
    * Config.getOrCreateScheduler's explicit MessageBus dependency (Issue #2312).
    */
-  messageBus: MessageBus | undefined;
+  messageBus: MessageBus;
 }
 
 /** Tool record for settings UI */

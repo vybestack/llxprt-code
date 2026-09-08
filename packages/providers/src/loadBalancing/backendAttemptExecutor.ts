@@ -28,6 +28,11 @@ import {
   requireTransportAttempt,
 } from './delegateAttempt.js';
 import { wrapWithTimeout } from './streamTimeout.js';
+import {
+  findRequestCommitState,
+  findRequestRecoveryTracking,
+} from '../retryRequestContext.js';
+import { createHash } from 'node:crypto';
 import type { CircuitBreakerManager } from './circuitBreakerManager.js';
 
 export interface BackendAttemptDeps {
@@ -55,7 +60,9 @@ export interface BackendAttemptParams {
    * generateChatCompletion invocation — so exhausted transport budgets do
    * NOT emit phantom lifecycle start events. Returns the context needed for
    * the terminal record. */
-  readonly startBackendAttempt: () => BackendAttemptContext | null;
+  readonly startBackendAttempt: (
+    resolvedOptions: GenerateChatOptions,
+  ) => BackendAttemptContext | null;
   readonly deps: BackendAttemptDeps;
 }
 
@@ -94,6 +101,18 @@ function startDelegateIterator(
   subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
   deps: BackendAttemptDeps,
 ): { attempt: DelegateAttempt; iterator: AsyncGenerator<IContent> } {
+  const tracking = findRequestRecoveryTracking(resolvedOptions);
+  tracking?.recordTarget(subProfile.name);
+  if (tracking && subProfile.authToken !== undefined) {
+    // Only an opaque digest is stored; the token itself never enters the
+    // request budget record (issue #2532 telemetry-no-secrets rule).
+    tracking.recordCredentialId(
+      createHash('sha256')
+        .update(subProfile.authToken)
+        .digest('hex')
+        .slice(0, 12),
+    );
+  }
   const attempt = createDelegateAttempt(resolvedOptions);
   const rawIterator = delegateProvider.generateChatCompletion(attempt.options);
   const iterator = wrapWithTimeout(
@@ -101,10 +120,8 @@ function startDelegateIterator(
     settings.timeoutMs,
     subProfile.name,
     deps.logger,
-    {
-      signal: attempt.linked.controller.signal,
-      cancel: () => attempt.linked.controller.abort(),
-    },
+    attempt.linked.controller,
+    findRequestCommitState(resolvedOptions),
   );
   return { attempt, iterator };
 }
@@ -160,7 +177,9 @@ export async function* executeBackendAttempt(
     delegateProvider,
     deps,
   );
-  attemptCtx = startBackendAttempt();
+  // Facts snapshot must read the resolved options: the retry context
+  // record is attached (and shared) through the delegate metadata chain.
+  attemptCtx = startBackendAttempt(prepared.resolvedOptions);
 
   try {
     const delegate = startDelegateIterator(
@@ -203,6 +222,7 @@ export async function* executeBackendAttempt(
       subProfile,
       isAbort ? 'aborted' : 'error',
       error instanceof Error ? error.message : String(error),
+      error,
     );
     terminalEmitted = true;
     throw error;

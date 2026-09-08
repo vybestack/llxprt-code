@@ -32,6 +32,7 @@ import {
   createCodexResponsesWebSocketTransport,
   type WebSocketTransport,
 } from './openAIResponsesWebSocketTransport.js';
+import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import type { IProviderConfig } from '../types/IProviderConfig.js';
 import type { ModelDefaultRule } from '../composition/providerAliases.js';
 import {
@@ -89,6 +90,10 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       resolveAuthTokenForPrompt: () => this.getAuthTokenForPrompt(),
       shouldRetryOnError: (error) => this.shouldRetryOnError(error),
       getDefaultModel: () => this.getDefaultModel(),
+      getMediaTransportCapabilities: (isCodex) =>
+        isCodex
+          ? declaredMediaTransportCapabilities('codex')
+          : this.getMediaTransportCapabilities(),
       getGlobalConfig: () => this.globalConfig,
       getUnallowedModelParameters: this.getUnallowedModelParameters,
       getWebSocketTransport: () => this.resolveWebSocketTransport(),
@@ -190,7 +195,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     const transportToken = Object.freeze({});
     this.preparedPromptEnvelopes.set(transportToken, requestContext);
     const pdfEnabled = isResponsesPdfEnabled(normalized);
-    return projectOpenAIResponsesPromptEnvelope(
+    const projection = projectOpenAIResponsesPromptEnvelope(
       requestContext.request,
       {
         transportToken,
@@ -202,5 +207,9 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       },
       requestContext.projectionContext,
     );
+    return {
+      ...projection,
+      releaseIfUnsent: requestContext.mediaRequest.release,
+    };
   }
 }

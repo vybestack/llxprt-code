@@ -8,11 +8,11 @@ import { setGlobal, restoreGlobals } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { fetchChutesUsage, formatChutesUsage } from './usageInfo.js';
 
-afterEach(() => {
-  restoreGlobals();
-});
-
 describe('chutesUsageInfo', () => {
+  afterEach(() => {
+    restoreGlobals();
+  });
+
   describe('fetchChutesUsage', () => {
     let fetchMock: ReturnType<typeof vi.fn>;
 

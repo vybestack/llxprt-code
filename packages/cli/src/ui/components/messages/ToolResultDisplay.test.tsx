@@ -34,13 +34,17 @@ void vi.mock('../AnsiOutput.js', () => ({
   },
 }));
 
+function trimmedToolResultFrame(frame: string | undefined): string {
+  return frame?.trim() ?? '';
+}
+
 describe('<ToolResultDisplay />', () => {
   it('renders nothing when resultDisplay is undefined', () => {
     const { lastFrame } = renderWithProviders(
       <ToolResultDisplay resultDisplay={undefined} terminalWidth={80} />,
     );
     // Empty or whitespace-only when no display data
-    expect(lastFrame()?.trim() ?? '').toBe('');
+    expect(trimmedToolResultFrame(lastFrame())).toBe('');
   });
 
   it('renders without crashing for plain text', () => {
@@ -169,5 +173,42 @@ describe('<ToolResultDisplay />', () => {
       terminalWidth: 80,
     });
     expect(element).toBeTruthy();
+  });
+
+  // @plan PLAN-20260824-ISSUE2021.P06 @requirement REQ-2021.6: long output truncation via MaxSizedBox
+  describe('long output truncation', () => {
+    const longResultDisplay = Array.from(
+      { length: 60 },
+      (_, i) => `line-${i}`,
+    ).join('\n');
+
+    it('renders the lines-hidden marker when content exceeds availableTerminalHeight', () => {
+      // @plan PLAN-20260824-ISSUE2021.P06 @requirement REQ-2021.6
+      const { lastFrame } = renderWithProviders(
+        <ToolResultDisplay
+          resultDisplay={longResultDisplay}
+          availableTerminalHeight={10}
+          terminalWidth={80}
+          renderOutputAsMarkdown={false}
+        />,
+      );
+
+      expect(lastFrame()).toContain('lines hidden');
+    });
+
+    it('omits the marker and keeps the last line when content fits', () => {
+      // @plan PLAN-20260824-ISSUE2021.P06 @requirement REQ-2021.6
+      const { lastFrame } = renderWithProviders(
+        <ToolResultDisplay
+          resultDisplay={longResultDisplay}
+          availableTerminalHeight={80}
+          terminalWidth={80}
+          renderOutputAsMarkdown={false}
+        />,
+      );
+
+      expect(lastFrame()).not.toContain('lines hidden');
+      expect(lastFrame()).toContain('line-59');
+    });
   });
 });

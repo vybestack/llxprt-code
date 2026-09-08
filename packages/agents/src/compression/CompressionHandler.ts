@@ -94,6 +94,7 @@ export class CompressionHandler {
   private _suppressDensityDirty: boolean = false;
   private _suppressDensityDirtyDepth: number = 0;
   private activeTodosProvider?: () => Promise<string | undefined>;
+  private transcriptPathProvider?: () => string | undefined;
   lastPromptTokenCount: number | null = null;
   tokenUsageLogger: TokenUsageLogger | null = null;
 
@@ -707,7 +708,7 @@ export class CompressionHandler {
     topPreserved: number,
   ) => Promise<void> {
     return async (newHistory, summary, topPreserved) => {
-      applyCompressionWithAnchor(
+      await applyCompressionWithAnchor(
         this.historyService,
         newHistory,
         topPreserved,
@@ -932,13 +933,9 @@ export class CompressionHandler {
       return;
     }
     // Delegate the history mutation to the caller-supplied applyResult so each
-    // caller's rewrite runs with its own contract: createApplyCallback applies
-    // the cache anchor via applyCompressionWithAnchor on the primary path,
-    // while the enforcer wrappers (executeFallbackTruncation,
-    // PendingContextWindowEnforcer) own their clear/rebuild and rely on this
-    // callback to mark history as applied (historyRestored). Every caller also
-    // clears the stale prompt-token baseline, so applying it here directly
-    // would bypass those contracts (#3070 fallback truncation propagation).
+    // caller's rewrite runs with its own contract. The primary path applies the
+    // cache anchor, while fallback paths atomically replace history and reset the
+    // stale prompt-token baseline (#3070 fallback truncation propagation).
     const summary = CompressionHandler.selectCompressionSummary(
       result.newHistory,
     );
@@ -1047,6 +1044,7 @@ export class CompressionHandler {
       this.historyService,
       (profileName?) => Promise.resolve(this.providerResolver(profileName)),
       this.activeTodosProvider,
+      this.transcriptPathProvider,
       this.logger,
       options,
     );
@@ -1072,6 +1070,17 @@ export class CompressionHandler {
    */
   setActiveTodosProvider(provider: () => Promise<string | undefined>): void {
     this.activeTodosProvider = provider;
+  }
+
+  /**
+   * Set the session-journal path provider callback.
+   *
+   * The provider is invoked on every compression so it observes the live
+   * recording service; it returns undefined whenever no file is materialized
+   * (issue #2933).
+   */
+  setTranscriptPathProvider(provider: () => string | undefined): void {
+    this.transcriptPathProvider = provider;
   }
 
   /**

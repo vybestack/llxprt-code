@@ -143,6 +143,25 @@ function makeTokenAccessCoordinator(
   } as unknown as TokenAccessCoordinator;
 }
 
+async function getDefaultBucketToken(
+  validToken: OAuthToken,
+  _provider: string,
+  bucket?: string,
+): Promise<OAuthToken | null> {
+  return bucket === 'default' ? validToken : null;
+}
+
+function getMatchingSessionBucket(
+  sessionMetadata: unknown,
+  providerName: string,
+  metadata?: unknown,
+): string | undefined {
+  return providerName === 'device-code-test' &&
+    (metadata === undefined || metadata === sessionMetadata)
+    ? 'target-bucket'
+    : undefined;
+}
+
 function makeService(
   opts: {
     tokenStore?: TokenStore;
@@ -711,9 +730,7 @@ describe('AuthStatusService.getAuthStatusWithBuckets', () => {
       listBuckets: vi.fn().mockResolvedValue(['default', 'bucket-a']),
       getToken: vi
         .fn()
-        .mockImplementation(async (_provider: string, bucket?: string) =>
-          bucket === 'default' ? validToken : null,
-        ),
+        .mockImplementation(getDefaultBucketToken.bind(undefined, validToken)),
     });
     const service = makeService({ tokenStore });
 
@@ -766,11 +783,8 @@ describe('AuthStatusService.logout session-bucket clear', () => {
     // Both scoped (with metadata) and unscoped (without) return the same bucket
     (
       bucketManager.getSessionBucket as ReturnType<typeof vi.fn>
-    ).mockImplementation((providerName: string, metadata?: unknown) =>
-      providerName === 'device-code-test' &&
-      (metadata === undefined || metadata === sessionMetadata)
-        ? 'target-bucket'
-        : undefined,
+    ).mockImplementation(
+      getMatchingSessionBucket.bind(undefined, sessionMetadata),
     );
 
     const tokenAccessCoordinator: TokenAccessCoordinator = {

@@ -80,7 +80,6 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
             parts: [{ text: 'response' }],
           } as IContent;
         },
-        getServerTools: () => [],
       };
       providerManager.registerProvider(mockProvider);
 
@@ -108,7 +107,6 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
         async *generateChatCompletion(): AsyncGenerator<IContent> {
           yield { role: 'assistant', parts: [{ text: 'success' }] } as IContent;
         },
-        getServerTools: () => [],
       };
       providerManager.registerProvider(mockProvider);
 
@@ -142,14 +140,12 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
           throw new Error('Backend failure');
           yield; // Never reached
         },
-        getServerTools: () => [],
       };
       const mockProvider2 = {
         name: 'test-provider-2',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
           yield { role: 'assistant', parts: [{ text: 'success' }] } as IContent;
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider1);
@@ -192,14 +188,12 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
             parts: [{ text: 'too late' }],
           } as IContent;
         },
-        getServerTools: () => [],
       };
       const mockProvider2 = {
         name: 'test-provider-2',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
           yield { role: 'assistant', parts: [{ text: 'success' }] } as IContent;
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider1);
@@ -234,7 +228,6 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
             },
           } as unknown as IContent;
         },
-        getServerTools: () => [],
       };
       providerManager.registerProvider(mockProvider);
 
@@ -270,7 +263,6 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
             parts: [{ text: 'response' }],
           } as IContent;
         },
-        getServerTools: () => [],
       };
       providerManager.registerProvider(mockProvider);
 
@@ -303,7 +295,6 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
             parts: [{ text: 'response' }],
           } as IContent;
         },
-        getServerTools: () => [],
       };
       providerManager.registerProvider(mockProvider);
 
@@ -339,7 +330,6 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
             },
           } as unknown as IContent;
         },
-        getServerTools: () => [],
       };
       providerManager.registerProvider(mockProvider);
 
@@ -369,7 +359,6 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
             },
           } as unknown as IContent;
         },
-        getServerTools: () => [],
       };
       providerManager.registerProvider(mockProvider);
 
@@ -399,7 +388,6 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
             },
           } as unknown as IContent;
         },
-        getServerTools: () => [],
       };
       providerManager.registerProvider(mockProvider);
 
@@ -425,7 +413,6 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
             parts: [{ text: 'response without usage info' }],
           } as IContent;
         },
-        getServerTools: () => [],
       };
       providerManager.registerProvider(mockProvider);
 
@@ -471,7 +458,6 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
             },
           } as unknown as IContent;
         },
-        getServerTools: () => [],
       };
       const mockProvider2 = {
         name: 'test-provider-2',
@@ -485,7 +471,6 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
             },
           } as unknown as IContent;
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider1);

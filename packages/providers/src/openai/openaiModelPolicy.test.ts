@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import {
+  extractOpenAIModelParams,
   isOpenAICanonicalBaseURL,
   OPENAI_TRANSPORT_SELECTOR_KEYS,
   parseOpenAIModelTransport,
@@ -23,6 +24,26 @@ describe('OPENAI_TRANSPORT_SELECTOR_KEYS @issue:2483', () => {
     expect(OPENAI_TRANSPORT_SELECTOR_KEYS.has('openaiResponsesEnabled')).toBe(
       true,
     );
+  });
+});
+
+describe('extractOpenAIModelParams provider-file controls', () => {
+  it('keeps provider-file lifecycle settings out of model parameters', () => {
+    const params = extractOpenAIModelParams({
+      temperature: 0.25,
+      'provider-files': 'session',
+      'provider-files-retention-ms': 60_000,
+      'provider-files-delete': 'delete',
+      'provider-files-zdr': 'require',
+    });
+
+    expect(params).toStrictEqual({ temperature: 0.25 });
+  });
+
+  it('returns no model parameters when only provider-file controls are configured', () => {
+    expect(
+      extractOpenAIModelParams({ 'provider-files-retention-ms': 60_000 }),
+    ).toBeUndefined();
   });
 });
 

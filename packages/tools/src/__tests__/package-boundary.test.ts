@@ -151,12 +151,19 @@ describe('Package Boundary Tests @plan:PLAN-20260608-ISSUE1585.P04', () => {
   });
 
   describe('anti-cycle verifier: forbidden monorepo packages must not appear in tools dependencies', () => {
-    it('no forbidden monorepo package in dependencies or devDependencies', () => {
-      const pkg = loadPackageJson();
-      const allDepEntries = {
-        ...((pkg.dependencies ?? {}) as Record<string, unknown>),
-        ...((pkg.devDependencies ?? {}) as Record<string, unknown>),
+    const observeNoForbiddenMonorepoPackageInDependenciesOrDevDependenciesAt154 =
+      () => {
+        const pkg = loadPackageJson();
+        const allDepEntries = {
+          ...((pkg.dependencies ?? {}) as Record<string, unknown>),
+          ...((pkg.devDependencies ?? {}) as Record<string, unknown>),
+        };
+        return { allDepEntries };
       };
+
+    it('no forbidden monorepo package in dependencies or devDependencies', () => {
+      const { allDepEntries } =
+        observeNoForbiddenMonorepoPackageInDependenciesOrDevDependenciesAt154();
       for (const forbidden of FORBIDDEN_RUNTIME_DEPS) {
         expect(allDepEntries).not.toHaveProperty(forbidden);
       }
@@ -186,21 +193,28 @@ describe('Package Boundary Tests @plan:PLAN-20260608-ISSUE1585.P04', () => {
   });
 
   describe('tsconfig path-mapping boundary rule', () => {
+    const observeTsconfigHasNoForbiddenPathMappingsToCoreProvidersOrCliAt189 =
+      () => {
+        const tsconfigPath = resolve(toolsRoot, 'tsconfig.json');
+        const raw = readFileSync(tsconfigPath, 'utf-8');
+        const tsconfig = JSON.parse(raw);
+        const paths = Object.keys(tsconfig.compilerOptions?.paths ?? {});
+        const refs = (tsconfig.references ?? []).map(
+          (r: { path: string }) => r.path,
+        );
+        const all = [...paths, ...refs];
+        const forbidden = all.filter(
+          (p: string) =>
+            p.includes('../core') ||
+            p.includes('../providers') ||
+            p.includes('../cli'),
+        );
+        return { forbidden };
+      };
+
     it('tsconfig has no forbidden path mappings to core, providers, or cli', () => {
-      const tsconfigPath = resolve(toolsRoot, 'tsconfig.json');
-      const raw = readFileSync(tsconfigPath, 'utf-8');
-      const tsconfig = JSON.parse(raw);
-      const paths = Object.keys(tsconfig.compilerOptions?.paths ?? {});
-      const refs = (tsconfig.references ?? []).map(
-        (r: { path: string }) => r.path,
-      );
-      const all = [...paths, ...refs];
-      const forbidden = all.filter(
-        (p: string) =>
-          p.includes('../core') ||
-          p.includes('../providers') ||
-          p.includes('../cli'),
-      );
+      const { forbidden } =
+        observeTsconfigHasNoForbiddenPathMappingsToCoreProvidersOrCliAt189();
       expect(forbidden).toHaveLength(0);
     });
   });

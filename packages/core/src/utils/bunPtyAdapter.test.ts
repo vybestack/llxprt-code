@@ -10,10 +10,6 @@ import { afterEach, describe, it, expect, vi } from 'bun:test';
 import { createBunPty } from './bunPtyAdapter.js';
 import { isBunPosix } from './runtime.js';
 
-afterEach(() => {
-  restoreGlobals();
-});
-
 /**
  * End-to-end behavioral tests for the Bun.Terminal PTY adapter.
  *
@@ -110,10 +106,13 @@ function stubBunSpawnWithOptions(
 }
 
 describe('Bun PTY adapter spawn options', () => {
-  afterEach(() => {
+  function verifyRealTimersAndBunSpawnAreRestored(): void {
     vi.useRealTimers();
     restoreBunSpawn();
-  });
+    restoreGlobals();
+  }
+
+  afterEach(verifyRealTimersAndBunSpawnAreRestored);
 
   it('passes cwd and sanitized environment to Bun.spawn', () => {
     const subprocess = createMockBunSubprocess(123);
@@ -586,155 +585,170 @@ describe('Bun PTY adapter spawn options', () => {
   });
 });
 
-describe.skipIf(!isBunPosix())('Bun PTY adapter (Bun.Terminal)', () => {
-  const spawned: Array<{ kill: () => void }> = [];
-
-  afterEach(() => {
-    for (const pty of spawned) {
-      try {
-        pty.kill();
-      } catch {
-        // Best-effort cleanup for failed real PTY tests.
-      }
-    }
-    spawned.length = 0;
-  });
-
-  it('emits a valid pid and streams command output via onData', async () => {
-    const pty = createBunPty('/bin/bash', ['-lc', 'echo bun-adapter-ok'], {
-      cols: 80,
-      rows: 24,
-      name: 'xterm-256color',
-    });
-    spawned.push(pty);
-
-    expect(typeof pty.pid).toBe('number');
-    expect(pty.pid).toBeGreaterThan(0);
-
-    const output = await new Promise<string>((resolve, reject) => {
-      let buf = '';
-      const timer = setTimeout(() => reject(new Error('onData timeout')), 5000);
-      pty.onData((chunk) => {
-        buf += chunk;
-      });
-      pty.onExit(() => {
+function collectWrittenEcho(
+  pty: ReturnType<typeof createBunPty>,
+): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    let output = '';
+    const timer = setTimeout(
+      () => reject(new Error('write test timeout')),
+      5000,
+    );
+    pty.onData((chunk) => {
+      output += chunk;
+      if (output.includes('back:echo-written-back')) {
         clearTimeout(timer);
-        resolve(buf);
+        resolve(output);
+      }
+    });
+    pty.onExit(() => {
+      clearTimeout(timer);
+      resolve(output);
+    });
+    pty.write('echo-written-back\n');
+  });
+}
+
+const spawnedPties: Array<{ kill: () => void }> = [];
+
+describe('Bun PTY adapter (real Bun.Terminal)', () => {
+  describe.skipIf(!isBunPosix())(
+    'Bun PTY adapter (Bun.Terminal) behavior',
+    () => {
+      afterEach(() => {
+        restoreGlobals();
+        for (const pty of spawnedPties) {
+          try {
+            pty.kill();
+          } catch {
+            // Best-effort cleanup for failed real PTY tests.
+          }
+        }
+        spawnedPties.length = 0;
       });
-    });
 
-    expect(output).toContain('bun-adapter-ok');
-  });
-
-  it('reports the real process exit code via onExit, not terminal status', async () => {
-    const pty = createBunPty('/bin/bash', ['-lc', 'exit 42'], {
-      cols: 80,
-      rows: 24,
-    });
-    spawned.push(pty);
-
-    const exit = await new Promise<{ exitCode: number; signal?: number }>(
-      (resolve, reject) => {
-        const timer = setTimeout(
-          () => reject(new Error('onExit timeout')),
-          5000,
-        );
-        pty.onExit((e) => {
-          clearTimeout(timer);
-          resolve(e);
+      it('emits a valid pid and streams command output via onData', async () => {
+        const pty = createBunPty('/bin/bash', ['-lc', 'echo bun-adapter-ok'], {
+          cols: 80,
+          rows: 24,
+          name: 'xterm-256color',
         });
-      },
-    );
+        spawnedPties.push(pty);
 
-    expect(exit.exitCode).toBe(42);
-  });
+        expect(typeof pty.pid).toBe('number');
+        expect(pty.pid).toBeGreaterThan(0);
 
-  it('allows writing input to the shell stdin', async () => {
-    const pty = createBunPty(
-      '/bin/bash',
-      ['-lc', 'IFS= read -r line; printf "back:%s\\n" "$line"'],
-      {
-        cols: 80,
-        rows: 24,
-      },
-    );
-    spawned.push(pty);
+        const output = await new Promise<string>((resolve, reject) => {
+          let buf = '';
+          const timer = setTimeout(
+            () => reject(new Error('onData timeout')),
+            5000,
+          );
+          pty.onData((chunk) => {
+            buf += chunk;
+          });
+          pty.onExit(() => {
+            clearTimeout(timer);
+            resolve(buf);
+          });
+        });
 
-    const output = await new Promise<string>((resolve, reject) => {
-      let buf = '';
-      const timer = setTimeout(
-        () => reject(new Error('write test timeout')),
-        5000,
-      );
-      pty.onData((chunk) => {
-        buf += chunk;
-        if (buf.includes('back:echo-written-back')) {
-          clearTimeout(timer);
-          resolve(buf);
+        expect(output).toContain('bun-adapter-ok');
+      });
+
+      it('reports the real process exit code via onExit, not terminal status', async () => {
+        const pty = createBunPty('/bin/bash', ['-lc', 'exit 42'], {
+          cols: 80,
+          rows: 24,
+        });
+        spawnedPties.push(pty);
+
+        const exit = await new Promise<{ exitCode: number; signal?: number }>(
+          (resolve, reject) => {
+            const timer = setTimeout(
+              () => reject(new Error('onExit timeout')),
+              5000,
+            );
+            pty.onExit((e) => {
+              clearTimeout(timer);
+              resolve(e);
+            });
+          },
+        );
+
+        expect(exit.exitCode).toBe(42);
+      });
+
+      it('allows writing input to the shell stdin', async () => {
+        const pty = createBunPty(
+          '/bin/bash',
+          ['-lc', 'IFS= read -r line; printf "back:%s\\n" "$line"'],
+          {
+            cols: 80,
+            rows: 24,
+          },
+        );
+        spawnedPties.push(pty);
+
+        const output = await collectWrittenEcho(pty);
+
+        expect(output).toContain('back:echo-written-back');
+      });
+
+      it('resizes the terminal without error', () => {
+        const pty = createBunPty('/bin/bash', ['-lc', 'sleep 0.2'], {
+          cols: 80,
+          rows: 24,
+        });
+        spawnedPties.push(pty);
+
+        expect(() => pty.resize(120, 40)).not.toThrow();
+        pty.kill();
+      });
+
+      it('supports kill to terminate the process', async () => {
+        const pty = createBunPty('/bin/bash', ['-lc', 'sleep 30'], {
+          cols: 80,
+          rows: 24,
+        });
+        spawnedPties.push(pty);
+
+        const exit = await new Promise<{ exitCode: number; signal?: number }>(
+          (resolve, reject) => {
+            const timer = setTimeout(
+              () => reject(new Error('kill did not trigger onExit')),
+              5000,
+            );
+            pty.onExit((e) => {
+              clearTimeout(timer);
+              resolve(e);
+            });
+            pty.kill('SIGKILL');
+          },
+        );
+
+        expect(exit.exitCode).toBe(137);
+        expect(exit.signal).toBe(9);
+      });
+
+      it('returns disposable subscriptions from onData and onExit', () => {
+        const pty = createBunPty('/bin/bash', ['-lc', 'sleep 0.1'], {
+          cols: 80,
+          rows: 24,
+        });
+        spawnedPties.push(pty);
+
+        const dataSub = pty.onData(() => {});
+        const exitSub = pty.onExit(() => {});
+        try {
+          expect(typeof dataSub.dispose).toBe('function');
+          expect(typeof exitSub.dispose).toBe('function');
+          expect(() => dataSub.dispose()).not.toThrow();
+          expect(() => exitSub.dispose()).not.toThrow();
+        } finally {
+          pty.kill();
         }
       });
-      pty.onExit(() => {
-        clearTimeout(timer);
-        resolve(buf);
-      });
-      pty.write('echo-written-back\n');
-    });
-
-    expect(output).toContain('back:echo-written-back');
-  });
-
-  it('resizes the terminal without error', () => {
-    const pty = createBunPty('/bin/bash', ['-lc', 'sleep 0.2'], {
-      cols: 80,
-      rows: 24,
-    });
-    spawned.push(pty);
-
-    expect(() => pty.resize(120, 40)).not.toThrow();
-    pty.kill();
-  });
-
-  it('supports kill to terminate the process', async () => {
-    const pty = createBunPty('/bin/bash', ['-lc', 'sleep 30'], {
-      cols: 80,
-      rows: 24,
-    });
-    spawned.push(pty);
-
-    const exit = await new Promise<{ exitCode: number; signal?: number }>(
-      (resolve, reject) => {
-        const timer = setTimeout(
-          () => reject(new Error('kill did not trigger onExit')),
-          5000,
-        );
-        pty.onExit((e) => {
-          clearTimeout(timer);
-          resolve(e);
-        });
-        pty.kill('SIGKILL');
-      },
-    );
-
-    expect(exit.exitCode).toBe(137);
-    expect(exit.signal).toBe(9);
-  });
-
-  it('returns disposable subscriptions from onData and onExit', () => {
-    const pty = createBunPty('/bin/bash', ['-lc', 'sleep 0.1'], {
-      cols: 80,
-      rows: 24,
-    });
-    spawned.push(pty);
-
-    const dataSub = pty.onData(() => {});
-    const exitSub = pty.onExit(() => {});
-    try {
-      expect(typeof dataSub.dispose).toBe('function');
-      expect(typeof exitSub.dispose).toBe('function');
-      expect(() => dataSub.dispose()).not.toThrow();
-      expect(() => exitSub.dispose()).not.toThrow();
-    } finally {
-      pty.kill();
-    }
-  });
+    },
+  );
 });

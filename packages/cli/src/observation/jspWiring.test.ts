@@ -664,9 +664,33 @@ describe('createObservationProducer', () => {
     producer?.stop();
   });
 
-  it('suppresses assistant message text when noContent is enabled via env', async () => {
+  function assistantMessageContent(
+    document: JspBoundDocument | undefined,
+  ): string | undefined {
+    if (
+      document?.kind !== 'event' ||
+      document.event.type !== 'assistant_message.displayed'
+    ) {
+      return undefined;
+    }
+    return document.event.content;
+  }
+
+  function assistantMessageCommittedMs(
+    document: JspBoundDocument | undefined,
+  ): number | undefined {
+    if (
+      document?.kind !== 'event' ||
+      document.event.type !== 'assistant_message.displayed'
+    ) {
+      return undefined;
+    }
+    return document.event.committed_ms;
+  }
+
+  async function verifySuppressesAssistantMessageTextWhenNoContentIsEnabledViaEnv() {
     process.env.LLXPRT_JSP_NO_CONTENT = 'true';
-    const published: unknown[] = [];
+    const published: JspBoundDocument[] = [];
     const producer = createObservationProducer(
       {
         schema: 1,
@@ -695,29 +719,43 @@ describe('createObservationProducer', () => {
         heartbeat: vi.fn(() => Promise.resolve(OK)),
       },
     );
-    expect(producer).not.toBeNull();
-    await producer?.flush();
-    producer?.observeAssistantMessageDisplayed('Secret reply', 9999);
-    await producer?.flush();
-    // With noContent on, the published assistant message event must carry an
-    // empty content while the committed_ms timestamp still publishes.
-    const messageDoc = published.find(
-      (doc) =>
-        typeof doc === 'object' &&
-        doc !== null &&
-        'event' in doc &&
-        (doc as { event: { type: string } }).event.type ===
-          'assistant_message.displayed',
-    );
+
+    return {
+      producer,
+      async publishAssistantMessage() {
+        await producer?.flush();
+        producer?.observeAssistantMessageDisplayed('Secret reply', 9999);
+        await producer?.flush();
+        // With noContent on, the published assistant message event must carry an
+        // empty content while the committed_ms timestamp still publishes.
+        return published.find(
+          (document) =>
+            document.kind === 'event' &&
+            document.event.type === 'assistant_message.displayed',
+        );
+      },
+      stop() {
+        producer?.stop();
+        delete process.env.LLXPRT_JSP_NO_CONTENT;
+      },
+    };
+  }
+
+  it('suppresses assistant message text when noContent is enabled via env', async () => {
+    const scenario =
+      await verifySuppressesAssistantMessageTextWhenNoContentIsEnabledViaEnv();
+
+    expect(scenario.producer).not.toBeNull();
+
+    const messageDoc = await scenario.publishAssistantMessage();
     expect(messageDoc).toBeDefined();
-    expect((messageDoc as { event: { content: string } }).event.content).toBe(
-      '',
-    );
-    expect(
-      (messageDoc as { event: { committed_ms: number } }).event.committed_ms,
-    ).toBe(9999);
-    producer?.stop();
-    delete process.env.LLXPRT_JSP_NO_CONTENT;
+
+    const content = assistantMessageContent(messageDoc);
+    expect(content).toBe('');
+
+    const committedMs = assistantMessageCommittedMs(messageDoc);
+    expect(committedMs).toBe(9999);
+    scenario.stop();
   });
 });
 
@@ -752,7 +790,7 @@ describe('initializeObservationProducer (AC15)', () => {
     }
   });
 
-  it('honours an explicit flag path with no env var set (real producer)', async () => {
+  async function verifyHonoursAnExplicitFlagPathWithNoEnvVarSetRealProducer() {
     // Spin up a real loopback HTTP capture server. The only way to observe
     // that initializeObservationProducer actually constructed a producer from
     // the flag path — without spying on internal module state — is to see the
@@ -789,17 +827,30 @@ describe('initializeObservationProducer (AC15)', () => {
     const selection = resolveBootstrapSelection(file, undefined, undefined);
     initializeObservationProducer(sessionContext, selection);
     // No env var was ever set, and the loader must not introduce one.
+
+    return {
+      async waitForRegistration() {
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          losingTimeout = setTimeout(
+            () => reject(new Error('registration POST did not arrive')),
+            5_000,
+          );
+        });
+        const received = await Promise.race([firstRequest, timeoutPromise]);
+        return { method: received.method, url: received.url };
+      },
+    };
+  }
+
+  it('honours an explicit flag path with no env var set (real producer)', async () => {
+    const scenario =
+      await verifyHonoursAnExplicitFlagPathWithNoEnvVarSetRealProducer();
+
     expect(process.env.LLXPRT_JSP_BOOTSTRAP_FILE).toBeUndefined();
 
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      losingTimeout = setTimeout(
-        () => reject(new Error('registration POST did not arrive')),
-        5_000,
-      );
-    });
-    const received = await Promise.race([firstRequest, timeoutPromise]);
-    expect(received.method).toBe('POST');
-    expect(received.url).toContain('/register');
+    const registration = await scenario.waitForRegistration();
+    expect(registration.method).toBe('POST');
+    expect(registration.url).toContain('/register');
   });
 });
 

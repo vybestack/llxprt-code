@@ -128,11 +128,10 @@ describe('InitializationGuard (wrap mode)', () => {
 
   it('allows retry after Failed by resetting to NotStarted', async () => {
     const guard = new InitializationGuard('wrap', 'my-provider');
-    let attempt = 0;
-    const initFn = vi.fn(async () => {
-      attempt++;
-      if (attempt === 1) throw new Error('first attempt fails');
-    });
+    const initFn = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('first attempt fails'))
+      .mockResolvedValue(undefined);
 
     // First attempt fails
     await guard.ensureInitialized(initFn).catch(() => {});
@@ -146,11 +145,9 @@ describe('InitializationGuard (wrap mode)', () => {
 
   it('clears error after retry succeeds', async () => {
     const guard = new InitializationGuard('wrap', 'my-provider');
-    let attempt = 0;
     await guard
       .ensureInitialized(async () => {
-        attempt++;
-        if (attempt === 1) throw new Error('fails');
+        throw new Error('fails');
       })
       .catch(() => {});
     await guard.ensureInitialized(async () => {});
@@ -185,11 +182,10 @@ describe('InitializationGuard (rethrow mode)', () => {
 
   it('moves to Failed then allows retry', async () => {
     const guard = new InitializationGuard('rethrow');
-    let attempt = 0;
-    const initFn = vi.fn(async () => {
-      attempt++;
-      if (attempt === 1) throw new Error('first');
-    });
+    const initFn = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('first'))
+      .mockResolvedValue(undefined);
     await guard.ensureInitialized(initFn).catch(() => {});
     expect(guard.getState()).toBe(InitializationState.Failed);
     await guard.ensureInitialized(initFn);

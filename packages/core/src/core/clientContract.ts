@@ -17,12 +17,11 @@
  * - config/config.ts (initialize, initializeContentGeneratorConfig)
  * - config/configBaseCore.ts (getAgentClient return type)
  * - utils/summarizer.ts (generateContent)
- * - utils/llm-edit-fixer.ts (generateJson)
+ * - agents/src/api/agentImpl.ts (generateJson)
  * - utils/checkpointUtils.ts (getHistory)
  * - CLI consumers (14+ files: sendMessageStream, setTools, updateSystemInstruction, etc.)
  */
 
-import type { UserTierId } from '../code_assist/types.js';
 import type { ContentGeneratorConfig } from './contentGenerator.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
@@ -93,7 +92,7 @@ export interface AgentChatContract {
     prompt_id: string,
   ): Promise<ModelOutput>;
   getHistory(): readonly IContent[];
-  setHistory(history: readonly IContent[]): void;
+  setHistory(history: readonly IContent[]): Promise<void>;
   clearHistory(): void;
   getHistoryService(): HistoryService | null;
   wasRecentlyCompressed(): boolean;
@@ -116,8 +115,8 @@ export interface AgentClientContract {
   getHistory(): Promise<readonly IContent[]>;
   getHistoryService(): HistoryService | null;
   storeHistoryServiceForReuse(service: HistoryService): void;
-  storeHistoryForLaterUse(history: readonly IContent[]): void;
-  dispose(): void;
+  storeHistoryForLaterUse(history: readonly IContent[]): Promise<void>;
+  dispose(): Promise<void>;
   setTools(): Promise<void>;
   clearTools(): void;
   updateSystemInstruction(): Promise<void>;
@@ -158,7 +157,6 @@ export interface AgentClientContract {
     isInvalidStreamRetry?: boolean,
     isPayloadRecoveryRetry?: boolean,
   ): AsyncGenerator<ServerAgentStreamEvent, unknown>;
-  getUserTier(): UserTierId | undefined;
   getCurrentSequenceModel(): string | null;
 }
 

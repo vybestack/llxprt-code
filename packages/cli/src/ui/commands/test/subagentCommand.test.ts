@@ -171,6 +171,7 @@ const createTestContext = ({
   };
 
   return {
+    signal: new AbortController().signal,
     invocation: {
       raw: '',
       name: '',
@@ -737,7 +738,6 @@ describe('subagentCommand', () => {
             mode: 'NONE',
           },
         },
-        serverTools: [],
       });
 
       // Verify success message type and content
@@ -772,7 +772,6 @@ describe('subagentCommand', () => {
                 mode: 'NONE',
               },
             },
-            serverTools: [],
           },
         }),
         expect.any(String),
@@ -804,7 +803,6 @@ describe('subagentCommand', () => {
                 mode: 'NONE',
               },
             },
-            serverTools: [],
           },
         }),
         expect.any(String),

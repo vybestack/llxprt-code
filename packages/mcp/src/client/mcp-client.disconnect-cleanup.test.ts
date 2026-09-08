@@ -21,10 +21,10 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
-import type { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
-import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
+import type { Config } from './test-support/mcpClientTestSupport.js';
+import type { PromptRegistry } from './test-support/mcpClientTestSupport.js';
+import type { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
+import { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
 import { McpClient } from './mcp-client.js';
 import {
   addMCPStatusChangeListener,
@@ -32,6 +32,11 @@ import {
   removeMCPStatusChangeListener,
 } from './mcp-status.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import { registerMcpHostServices } from '../host/hostServices.js';
+
+// Exercises the real host seam instead of mocking a module (#3305).
+const mockEmitFeedback = vi.fn();
+registerMcpHostServices({ emitFeedback: mockEmitFeedback });
 
 const realStdioModule = {
   ...(await import('@modelcontextprotocol/sdk/client/stdio.js')),
@@ -62,12 +67,6 @@ void vi.mock('../auth/oauth-token-storage.js', () =>
 void vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
 void vi.mock('google-auth-library', () => ({ GoogleAuth: vi.fn() }));
 
-void vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
-  coreEvents: {
-    emitFeedback: vi.fn(),
-  },
-}));
-
 const createMockResourceRegistry = (): ResourceRegistry =>
   ({
     setResourcesForServer: vi.fn(),
@@ -80,6 +79,38 @@ const createTrustedConfig = (): Config =>
 interface Deferred<T> {
   readonly promise: Promise<T>;
   readonly resolve: (value: T) => void;
+}
+
+function createThrowingStatusListener(
+  disconnectingFailure: Error,
+  disconnectedFailure: Error,
+): (serverName: string, status: MCPServerStatus) => void {
+  return (_serverName, status) => {
+    if (status === MCPServerStatus.DISCONNECTING) {
+      throw disconnectingFailure;
+    }
+    if (status === MCPServerStatus.DISCONNECTED) {
+      throw disconnectedFailure;
+    }
+  };
+}
+
+function createRetryingToolRegistry(): {
+  readonly registry: ToolRegistry;
+  readonly artifactPresent: () => boolean;
+} {
+  let artifactPresent = true;
+  let cleanupFailed = false;
+  const registry = {
+    removeMcpToolsByServer: () => {
+      if (!cleanupFailed) {
+        cleanupFailed = true;
+        throw new Error('transient tool cleanup failure');
+      }
+      artifactPresent = false;
+    },
+  } as unknown as ToolRegistry;
+  return { registry, artifactPresent: () => artifactPresent };
 }
 
 function createDeferred<T>(): Deferred<T> {
@@ -177,17 +208,10 @@ describe('McpClient disconnect cleanup', () => {
     await client.connect();
     const disconnectingFailure = new Error('disconnecting listener failed');
     const disconnectedFailure = new Error('disconnected listener failed');
-    const throwingStatusListener = (
-      _serverName: string,
-      status: MCPServerStatus,
-    ) => {
-      if (status === MCPServerStatus.DISCONNECTING) {
-        throw disconnectingFailure;
-      }
-      if (status === MCPServerStatus.DISCONNECTED) {
-        throw disconnectedFailure;
-      }
-    };
+    const throwingStatusListener = createThrowingStatusListener(
+      disconnectingFailure,
+      disconnectedFailure,
+    );
     addMCPStatusChangeListener(throwingStatusListener);
 
     let failure: unknown;
@@ -486,17 +510,8 @@ describe('McpClient disconnect cleanup', () => {
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
       {} as SdkClientStdioLib.StdioClientTransport,
     );
-    let toolArtifactPresent = true;
-    let cleanupFailed = false;
-    const toolRegistry = {
-      removeMcpToolsByServer: () => {
-        if (!cleanupFailed) {
-          cleanupFailed = true;
-          throw new Error('transient tool cleanup failure');
-        }
-        toolArtifactPresent = false;
-      },
-    } as unknown as ToolRegistry;
+    const toolCleanup = createRetryingToolRegistry();
+    const toolRegistry = toolCleanup.registry;
     const client = new McpClient(
       'test-server',
       { command: 'test-command' },
@@ -516,10 +531,10 @@ describe('McpClient disconnect cleanup', () => {
     errorHandler(new Error('connection lost'));
     await clientClosed.promise;
     expect(client.getStatus()).toBe('disconnected');
-    expect(toolArtifactPresent).toBe(true);
+    expect(toolCleanup.artifactPresent()).toBe(true);
 
     await client.disconnect();
 
-    expect(toolArtifactPresent).toBe(false);
+    expect(toolCleanup.artifactPresent()).toBe(false);
   });
 });

@@ -30,104 +30,118 @@ function createMockPolicyEngine() {
 
 describe('CoreToolScheduler publishing error handling', () => {
   it('should transition tool to success state after successful execution', async () => {
-    const publishOrder: number[] = [];
-
-    const executeFn = vi
-      .fn()
-      .mockImplementation(async (args: { call: number }) => {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        return {
-          llmContent: `Call ${args.call} done`,
-          returnDisplay: `Result ${args.call}`,
-        };
-      });
-
-    const mockTool = new MockTool({ name: 'mockTool', execute: executeFn });
-    const mockToolRegistry = {
-      getTool: () => mockTool,
-      getFunctionDeclarations: () => [],
-      tools: new Map(),
-      discovery: {},
-      registerTool: () => {},
-      getToolByName: () => mockTool,
-      getToolByDisplayName: () => mockTool,
-      getTools: () => [],
-      discoverTools: async () => {},
-      getAllTools: () => [],
-      getToolsByServer: () => [],
-      getAllToolNames: () => ['mockTool'],
-    } as unknown as ToolRegistry;
-
-    const onAllToolCallsComplete = vi.fn();
-    const onToolCallsUpdate = vi.fn();
-    const mockPolicyEngine = createMockPolicyEngine();
-
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      getApprovalMode: () => ApprovalMode.YOLO,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-    } as unknown as Config;
-
-    const scheduler = new CoreToolScheduler({
-      config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate: (calls) => {
-        onToolCallsUpdate(calls);
-        calls.forEach((call) => {
-          if (call.status === 'success' || call.status === 'error') {
-            const callNum = (call.request.args as { call: number }).call;
-            if (!publishOrder.includes(callNum)) {
-              publishOrder.push(callNum);
-            }
-          }
-        });
-      },
-      getPreferredEditor: () => 'vscode',
-      onEditorClose: vi.fn(),
-    });
-
-    const signal = new AbortController().signal;
-
-    await scheduler.schedule(
-      [
-        {
-          callId: 'call1',
-          name: 'mockTool',
-          args: { call: 1 },
-          isClientInitiated: false,
-          prompt_id: 'test',
-        },
-      ],
-      signal,
-    );
-
-    await waitFor(
-      () => {
-        expect(onAllToolCallsComplete).toHaveBeenCalled();
-      },
-      { timeout: 2000 },
-    );
-
-    const completedCalls = onAllToolCallsComplete.mock.calls.at(
-      -1,
-    )?.[0] as ToolCall[];
+    const { completedCalls, finalStatus, completionCallCount } =
+      await observeTransitionToolToSuccessStateAfterSuccessfulExecution();
+    expect(completionCallCount).toBeGreaterThan(0);
     expect(completedCalls).toBeDefined();
     expect(completedCalls.length).toBe(1);
-
-    const finalStatus = completedCalls[0].status;
     expect(finalStatus).toBe('success');
   });
+
+  const observeTransitionToolToSuccessStateAfterSuccessfulExecution =
+    async () => {
+      const publishOrder: number[] = [];
+
+      const executeFn = vi
+        .fn()
+        .mockImplementation(async (args: { call: number }) => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          return {
+            llmContent: `Call ${args.call} done`,
+            returnDisplay: `Result ${args.call}`,
+          };
+        });
+
+      const mockTool = new MockTool({ name: 'mockTool', execute: executeFn });
+      const mockToolRegistry = {
+        getTool: () => mockTool,
+        getFunctionDeclarations: () => [],
+        tools: new Map(),
+        discovery: {},
+        registerTool: () => {},
+        getToolByName: () => mockTool,
+        getToolByDisplayName: () => mockTool,
+        getTools: () => [],
+        discoverTools: async () => {},
+        getAllTools: () => [],
+        getToolsByServer: () => [],
+        getAllToolNames: () => ['mockTool'],
+      } as unknown as ToolRegistry;
+
+      const onAllToolCallsComplete = vi.fn();
+      const onToolCallsUpdate = vi.fn();
+      const mockPolicyEngine = createMockPolicyEngine();
+
+      const mockConfig = {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => false,
+        getApprovalMode: () => ApprovalMode.YOLO,
+        getEphemeralSettings: () => ({}),
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({
+          model: 'test-model',
+        }),
+        getToolRegistry: () => mockToolRegistry,
+        getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+        getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
+      } as unknown as Config;
+
+      const scheduler = new CoreToolScheduler({
+        config: mockConfig,
+        messageBus: mockConfig.getMessageBus(),
+        toolRegistry: mockConfig.getToolRegistry(),
+        onAllToolCallsComplete,
+        onToolCallsUpdate: (calls) => {
+          onToolCallsUpdate(calls);
+          calls.forEach((call) => {
+            if (call.status === 'success' || call.status === 'error') {
+              const callNum = (call.request.args as { call: number }).call;
+              if (!publishOrder.includes(callNum)) {
+                publishOrder.push(callNum);
+              }
+            }
+          });
+        },
+        getPreferredEditor: () => 'vscode',
+        onEditorClose: vi.fn(),
+      });
+
+      const signal = new AbortController().signal;
+
+      await scheduler.schedule(
+        [
+          {
+            callId: 'call1',
+            name: 'mockTool',
+            args: { call: 1 },
+            isClientInitiated: false,
+            prompt_id: 'test',
+          },
+        ],
+        signal,
+      );
+
+      await waitFor(
+        () => {
+          if (onAllToolCallsComplete.mock.calls.length === 0) {
+            throw new Error('Waiting for all tool calls to complete');
+          }
+        },
+        {
+          timeout: 2000,
+        },
+      );
+
+      const completedCalls = onAllToolCallsComplete.mock.calls.at(
+        -1,
+      )?.[0] as ToolCall[];
+      const completionCallCount = onAllToolCallsComplete.mock.calls.length;
+
+      const finalStatus = completedCalls[0].status;
+
+      return { completedCalls, finalStatus, completionCallCount };
+    };
 
   it('should force tool to error state if publishBufferedResults throws', async () => {
     const executeFn = vi.fn().mockImplementation(async () => {

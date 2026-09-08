@@ -54,14 +54,6 @@ process.exitCode = parseInt(process.argv[2] || '0', 10);
 process.stdout.write('LLXPRT_EXIT_FIXTURE_MARKER');
 `;
 
-// Guarded: this afterAll is file-scoped but fixtureDir is assigned in a
-// describe-scoped beforeAll, which does not run under test-name filtering.
-afterAll(() => {
-  if (fixtureDir !== '') {
-    rmSync(fixtureDir, { recursive: true, force: true });
-  }
-});
-
 function fixtureCommand(exitCode: number): string {
   const invocation = `"${process.execPath}" "${fixtureScript}" ${exitCode}`;
   // A command line beginning with a quoted string parses in expression mode in
@@ -94,6 +86,12 @@ describe('native exit code propagation through ShellExecutionService', () => {
     writeFileSync(fixtureScript, FIXTURE_CODE);
   });
 
+  afterAll(() => {
+    if (fixtureDir !== '') {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
   it('reports a native exit code of 42', async () => {
     const result = await executeAndCollect(fixtureCommand(42));
     expect(result.exitCode).toBe(42);
@@ -105,9 +103,8 @@ describe('native exit code propagation through ShellExecutionService', () => {
   });
 });
 
-describe.skipIf(process.platform !== 'win32')(
-  'PowerShell-level failures and explicit exits',
-  () => {
+describe('PowerShell-level failures and explicit exits', () => {
+  describe.skipIf(process.platform !== 'win32')(() => {
     it('reports a PowerShell-level failure (Write-Error) as exit 1', async () => {
       const result = await executeAndCollect(
         'Write-Error LLXPRT_PS_FAIL_MARKER',
@@ -119,5 +116,5 @@ describe.skipIf(process.platform !== 'win32')(
       const result = await executeAndCollect('exit 7');
       expect(result.exitCode).toBe(7);
     });
-  },
-);
+  });
+});

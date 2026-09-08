@@ -12,6 +12,47 @@
 import { describe, it, expect, vi } from 'bun:test';
 import { AsyncTaskManager } from './asyncTaskManager.js';
 
+function registerCompletedHistoryTask(
+  manager: AsyncTaskManager,
+  index: number,
+  options: { readonly notify: boolean },
+): void {
+  const taskId = `task-${index}`;
+  manager.registerTask({
+    id: taskId,
+    subagentName: 'test',
+    goalPrompt: 'goal',
+    abortController: new AbortController(),
+  });
+  manager.completeTask(taskId, {
+    emitted_vars: {},
+    terminate_reason: 'GOAL',
+  });
+  if (options.notify) manager.markNotified(taskId);
+}
+
+function registerAlternatingHistoryTask(
+  manager: AsyncTaskManager,
+  index: number,
+): void {
+  const taskId = `task-${index}`;
+  manager.registerTask({
+    id: taskId,
+    subagentName: 'test',
+    goalPrompt: 'goal',
+    abortController: new AbortController(),
+  });
+  if (index % 2 === 0) {
+    manager.completeTask(taskId, {
+      emitted_vars: {},
+      terminate_reason: 'GOAL',
+    });
+  } else {
+    manager.failTask(taskId, 'error');
+  }
+  manager.markNotified(taskId);
+}
+
 describe('AsyncTaskManager', () => {
   describe('registerTask', () => {
     /**
@@ -597,19 +638,7 @@ describe('AsyncTaskManager', () => {
 
       // Create 5 tasks, only notify first 3
       for (let i = 0; i < 5; i++) {
-        manager.registerTask({
-          id: `task-${i}`,
-          subagentName: 'test',
-          goalPrompt: 'goal',
-          abortController: new AbortController(),
-        });
-        manager.completeTask(`task-${i}`, {
-          emitted_vars: {},
-          terminate_reason: 'GOAL',
-        });
-        if (i < 3) {
-          manager.markNotified(`task-${i}`);
-        }
+        registerCompletedHistoryTask(manager, i, { notify: i < 3 });
       }
 
       const tasks = manager.getAllTasks();
@@ -623,21 +652,7 @@ describe('AsyncTaskManager', () => {
       const manager = new AsyncTaskManager(2); // limit = 4
 
       for (let i = 0; i < 5; i++) {
-        manager.registerTask({
-          id: `task-${i}`,
-          subagentName: 'test',
-          goalPrompt: 'goal',
-          abortController: new AbortController(),
-        });
-        if (i % 2 === 0) {
-          manager.completeTask(`task-${i}`, {
-            emitted_vars: {},
-            terminate_reason: 'GOAL',
-          });
-        } else {
-          manager.failTask(`task-${i}`, 'error');
-        }
-        manager.markNotified(`task-${i}`);
+        registerAlternatingHistoryTask(manager, i);
       }
 
       const tasks = manager.getAllTasks();

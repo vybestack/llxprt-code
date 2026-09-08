@@ -29,7 +29,6 @@ import {
 import {
   getCoreSystemPromptAsync,
   initializePromptSystem,
-  compactFolderStructureSnapshot,
   type CoreSystemPromptOptions,
 } from './prompts.js';
 import { __resetManifestCacheForTests } from '../prompt-config/defaults/manifest-loader.js';
@@ -78,19 +77,6 @@ describe('prompts async integration', () => {
   ): Promise<string> => {
     const options = { ...baseOptions, ...overrides };
     return getCoreSystemPromptAsync(options);
-  };
-
-  const buildLargeFolderStructure = (entryCount: number): string => {
-    const header = [
-      'Showing up to 100 items (files + folders).',
-      '',
-      '/tmp/workspace/',
-    ];
-    const entries = Array.from({ length: entryCount }, (_, index) => {
-      const connector = index === entryCount - 1 ? '└───' : '├───';
-      return `${connector}folder-${index}/`;
-    });
-    return [...header, ...entries].join('\n');
   };
 
   afterEach(() => {
@@ -217,20 +203,6 @@ describe('prompts async integration', () => {
 
       // Should have the separator before user memory
       expect(prompt).toMatch(/---\s*Custom user preferences here/);
-    });
-
-    it('truncates oversized folder structure payloads for provider safety', () => {
-      const longStructure = buildLargeFolderStructure(80);
-
-      const result = compactFolderStructureSnapshot(longStructure);
-
-      expect(result).toBeDefined();
-      expect(result).toContain(
-        'folder structure truncated for provider limits',
-      );
-      expect(result).toContain('├───folder-0/');
-      expect(result).toContain('├───folder-19/');
-      expect(result).not.toContain('├───folder-40/');
     });
   });
 

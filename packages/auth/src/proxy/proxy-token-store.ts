@@ -15,6 +15,13 @@
 
 import { type OAuthToken, type BucketStats } from '../types.js';
 import { type TokenStore } from '../token-store.js';
+import {
+  OAuthTokenDataSchema,
+  parseSuccessPayload,
+  ProvidersDataSchema,
+  BucketsDataSchema,
+  BucketStatsDataSchema,
+} from './proxy-payload-schemas.js';
 import { ProxySocketClient } from './proxy-socket-client.js';
 
 export class ProxyTokenStore implements TokenStore {
@@ -34,7 +41,11 @@ export class ProxyTokenStore implements TokenStore {
     });
     if (!response.ok && response.code === 'NOT_FOUND') return null;
     if (!response.ok) throw new Error(response.error ?? 'proxy error');
-    return response.data as unknown as OAuthToken;
+    return parseSuccessPayload(
+      OAuthTokenDataSchema,
+      response.data,
+      'get_token',
+    );
   }
 
   async saveToken(
@@ -60,14 +71,25 @@ export class ProxyTokenStore implements TokenStore {
 
   async listProviders(): Promise<string[]> {
     const response = await this.client.request('list_providers', {});
-    if (!response.ok) throw new Error(response.error ?? 'proxy error');
-    return (response.data as Record<string, unknown>).providers as string[];
+    if (!response.ok) {
+      throw new Error(response.error ?? 'proxy error');
+    }
+    return parseSuccessPayload(
+      ProvidersDataSchema,
+      response.data,
+      'list_providers',
+    ).providers;
   }
 
   async listBuckets(provider: string): Promise<string[]> {
-    const response = await this.client.request('list_buckets', { provider });
-    if (!response.ok) throw new Error(response.error ?? 'proxy error');
-    return (response.data as Record<string, unknown>).buckets as string[];
+    const response = await this.client.request('list_buckets', {
+      provider,
+    });
+    if (!response.ok) {
+      throw new Error(response.error ?? 'proxy error');
+    }
+    return parseSuccessPayload(BucketsDataSchema, response.data, 'list_buckets')
+      .buckets;
   }
 
   async getBucketStats(
@@ -80,14 +102,11 @@ export class ProxyTokenStore implements TokenStore {
     });
     if (!response.ok && response.code === 'NOT_FOUND') return null;
     if (!response.ok) throw new Error(response.error ?? 'proxy error');
-    const data = response.data as Record<string, unknown>;
-    return {
-      bucket,
-      requestCount:
-        typeof data.requestCount === 'number' ? data.requestCount : 0,
-      percentage: typeof data.percentage === 'number' ? data.percentage : 0,
-      lastUsed: data.lastUsed as number | undefined,
-    };
+    return parseSuccessPayload(
+      BucketStatsDataSchema,
+      response.data,
+      'get_bucket_stats',
+    );
   }
 
   async acquireRefreshLock(

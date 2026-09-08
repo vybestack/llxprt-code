@@ -12,26 +12,20 @@
  * for the workspace packages that need it at runtime. These tests verify:
  *
  * 1. The root package.json declares @google/genai at the exact version.
- * 2. packages/core and packages/providers declare it at the exact version.
- * 3. The version in all three manifests matches the config baseline.
+ * 2. packages/providers declares it at the exact version.
+ * 3. Both versions match the config baseline.
  *
- * No mocks — these assertions read the real package manifests. The CI Node
+ * No mocks. These assertions read the real package manifests. The CI Node
  * Consumer Smoke separately packs and installs the artifact in a clean project.
  */
 
 import { describe, expect, it } from 'bun:test';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { SANCTIONED_GENAI_VERSION } from '../genai-enclave/config.ts';
 import { REPO_ROOT } from './genai-enclave-guard-helpers.ts';
 
 const GENAI_PACKAGE = '@google/genai';
-const REQUIRED_VERSION = SANCTIONED_GENAI_VERSION;
-const REQUIRED_WORKSPACES = [
-  '.',
-  'packages/core',
-  'packages/providers',
-] as const;
+const REQUIRED_WORKSPACES = ['.', 'packages/providers'] as const;
 
 interface DependencyManifest {
   readonly dependencies?: Record<string, string>;
@@ -116,27 +110,22 @@ function getGenaiVersion(manifest: DependencyManifest): string | undefined {
 }
 
 describe('published-root packaging bridge regression (finding2)', () => {
-  describe('exact dependency declarations exist', () => {
+  describe('no dependency declarations remain', () => {
+    // The packaging bridge existed so npm would install @google/genai for the
+    // published root artifact. The Gemini provider now reaches the API through
+    // @ai-sdk/google, so the SDK is absent and must stay absent.
     for (const workspace of REQUIRED_WORKSPACES) {
       const label =
         workspace === '.' ? 'root package.json' : `${workspace}/package.json`;
 
-      it(`${label} declares ${GENAI_PACKAGE} at exactly ${REQUIRED_VERSION}`, () => {
+      it(`${label} does not declare ${GENAI_PACKAGE}`, () => {
         const manifest = readManifest(workspace);
-        const version = getGenaiVersion(manifest);
-        expect(version, `${label} must declare ${GENAI_PACKAGE}`).toBeDefined();
-        expect(version).toBe(REQUIRED_VERSION);
+        expect(
+          getGenaiVersion(manifest),
+          `${label} must not declare ${GENAI_PACKAGE}`,
+        ).toBeUndefined();
       });
     }
-
-    it('all three workspace versions are identical (no drift)', () => {
-      const versions = REQUIRED_WORKSPACES.map((ws) =>
-        getGenaiVersion(readManifest(ws)),
-      );
-      const uniqueVersions = new Set(versions);
-      expect(uniqueVersions.size).toBe(1);
-      expect([...uniqueVersions][0]).toBe(REQUIRED_VERSION);
-    });
   });
 
   describe('root packaging bridge rationale', () => {
@@ -149,10 +138,10 @@ describe('published-root packaging bridge regression (finding2)', () => {
   });
 
   describe('broad publish dependency invariant', () => {
-    // The package-tree invariant: @google/genai may appear only in core and
-    // providers. Root bridge coverage is handled by the focused checks above.
+    // The package-tree invariant: @google/genai may appear only in providers.
+    // Root bridge coverage is handled by the focused checks above.
     // The repository currently uses a flat packages/* workspace layout.
-    it('no workspace OTHER than root/core/providers declares @google/genai', () => {
+    it('no workspace other than providers declares @google/genai', () => {
       const rogueWorkspaces: string[] = [];
       const packagesDir = join(REPO_ROOT, 'packages');
       for (const entry of readdirSync(packagesDir, { withFileTypes: true })) {

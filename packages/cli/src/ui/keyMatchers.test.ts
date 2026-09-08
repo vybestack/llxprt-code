@@ -415,17 +415,25 @@ describe('keyMatchers', () => {
     testCases.forEach(({ command, positive, negative }) => {
       it(`should match ${command} correctly`, () => {
         positive.forEach((key) => {
-          expect(
-            keyMatchers[command](key),
-            `Expected ${command} to match ${JSON.stringify(key)}`,
-          ).toBe(true);
+          try {
+            expect(keyMatchers[command](key)).toBe(true);
+          } catch (error) {
+            throw new Error(
+              `Expected ${command} to match ${JSON.stringify(key)}`,
+              { cause: error },
+            );
+          }
         });
 
         negative.forEach((key) => {
-          expect(
-            keyMatchers[command](key),
-            `Expected ${command} to NOT match ${JSON.stringify(key)}`,
-          ).toBe(false);
+          try {
+            expect(keyMatchers[command](key)).toBe(false);
+          } catch (error) {
+            throw new Error(
+              `Expected ${command} to NOT match ${JSON.stringify(key)}`,
+              { cause: error },
+            );
+          }
         });
       });
     });

@@ -28,6 +28,8 @@ import type {
 } from '../types.js';
 import type { IContent } from '../../services/history/IContent.js';
 
+const bunIt = it;
+
 describe('SessionDiscovery extensions', () => {
   let tempDir: string;
 
@@ -173,6 +175,65 @@ describe('SessionDiscovery extensions', () => {
     const filePath = path.join(tempDir, filename);
     await fs.writeFile(filePath, content);
     return filePath;
+  }
+
+  /**
+   * True when the first-user-message probe returned either an empty string or
+   * null (both are acceptable answers for a truly empty user text).
+   */
+  function isEmptyOrNull(value: string | null): boolean {
+    return value === '' || value === null;
+  }
+
+  /**
+   * True for any value in the read-first-message result space (it is never a
+   * non-string non-null value), used by the property probe.
+   */
+  function isStringOrNull(value: string | null): boolean {
+    return value === null || typeof value === 'string';
+  }
+
+  /**
+   * True when a preview result is null or no longer than the length cap.
+   */
+  function isNullOrWithin(value: string | null, maxLength: number): boolean {
+    return value === null || value.length <= maxLength;
+  }
+
+  /**
+   * Append a content line exactly when the include flag selects it.
+   */
+  function pushContentWhenSelected(
+    lines: SessionRecordLine[],
+    includeContent: boolean,
+    messageText: string,
+  ): void {
+    if (includeContent) {
+      lines.push(createContentLine(2, 'human', messageText));
+    }
+  }
+
+  type ProbeFileType = 'valid' | 'empty' | 'invalid-json' | 'non-existent';
+
+  /**
+   * Write the probe file for the given arbitrary file shape and return its path.
+   */
+  async function writeProbeFile(fileType: ProbeFileType): Promise<string> {
+    switch (fileType) {
+      case 'valid':
+        return writeSession(`prop-valid-${Date.now()}.jsonl`, [
+          createSessionStartLine(1, 'sess', 'hash'),
+          createContentLine(2, 'human', 'Message'),
+        ]);
+      case 'empty':
+        return writeRawFile(`prop-empty-${Date.now()}.jsonl`, '');
+      case 'invalid-json':
+        return writeRawFile(`prop-invalid-${Date.now()}.jsonl`, 'not json');
+      case 'non-existent':
+        return path.join(tempDir, `non-existent-${Date.now()}.jsonl`);
+      default:
+        throw new Error('Unknown probe file type');
+    }
   }
 
   // =========================================================================
@@ -437,7 +498,8 @@ describe('SessionDiscovery extensions', () => {
       ]);
       const result = await SessionDiscovery.readFirstUserMessage(filePath);
       // Empty string or null are both acceptable
-      expect(result === '' || result === null).toBe(true);
+      expect(isEmptyOrNull(result)).toBe(true);
+      void result;
     });
 
     it('returns null for valid JSON with unexpected schema', async () => {
@@ -463,9 +525,10 @@ describe('SessionDiscovery extensions', () => {
     const isRootUser =
       typeof process.getuid === 'function' && process.getuid() === 0;
 
-    it.skipIf(process.platform === 'win32' || isRootUser)(
-      'returns null for file I/O error (unreadable file)',
-      async () => {
+    {
+      const it =
+        process.platform === 'win32' || isRootUser ? bunIt.skip : bunIt;
+      it('returns null for file I/O error (unreadable file)', async () => {
         const filePath = path.join(tempDir, 'unreadable.jsonl');
         await fs.writeFile(filePath, 'content');
         try {
@@ -476,8 +539,8 @@ describe('SessionDiscovery extensions', () => {
           // Restore permissions for cleanup
           await fs.chmod(filePath, 0o644);
         }
-      },
-    );
+      });
+    }
 
     it('returns null for non-existent file', async () => {
       const nonExistentPath = path.join(tempDir, 'ghost.jsonl');
@@ -569,9 +632,7 @@ describe('SessionDiscovery extensions', () => {
             const lines: SessionRecordLine[] = [
               createSessionStartLine(1, 'sess-prop', 'hash'),
             ];
-            if (includeContent) {
-              lines.push(createContentLine(2, 'human', messageText));
-            }
+            pushContentWhenSelected(lines, includeContent, messageText);
             const filePath = await writeSession(
               `idempotent-${Date.now()}-${Math.random()}.jsonl`,
               lines,
@@ -592,50 +653,18 @@ describe('SessionDiscovery extensions', () => {
     it('readFirstUserMessage returns string|null, never throws', async () => {
       await fc.assert(
         fc.asyncProperty(
-          fc.oneof(
-            fc.constant('valid'),
-            fc.constant('empty'),
-            fc.constant('invalid-json'),
-            fc.constant('non-existent'),
+          fc.constantFrom<ProbeFileType>(
+            'valid',
+            'empty',
+            'invalid-json',
+            'non-existent',
           ),
           async (fileType) => {
-            let filePath: string;
-
-            switch (fileType) {
-              case 'valid':
-                filePath = await writeSession(
-                  `prop-valid-${Date.now()}.jsonl`,
-                  [
-                    createSessionStartLine(1, 'sess', 'hash'),
-                    createContentLine(2, 'human', 'Message'),
-                  ],
-                );
-                break;
-              case 'empty':
-                filePath = await writeRawFile(
-                  `prop-empty-${Date.now()}.jsonl`,
-                  '',
-                );
-                break;
-              case 'invalid-json':
-                filePath = await writeRawFile(
-                  `prop-invalid-${Date.now()}.jsonl`,
-                  'not json',
-                );
-                break;
-              case 'non-existent':
-                filePath = path.join(
-                  tempDir,
-                  `non-existent-${Date.now()}.jsonl`,
-                );
-                break;
-              default:
-                throw new Error(`Unknown file type: ${fileType}`);
-            }
+            const filePath = await writeProbeFile(fileType);
 
             const result =
               await SessionDiscovery.readFirstUserMessage(filePath);
-            expect(result === null || typeof result === 'string').toBe(true);
+            expect(isStringOrNull(result)).toBe(true);
           },
         ),
         { numRuns: 20 },
@@ -660,7 +689,7 @@ describe('SessionDiscovery extensions', () => {
               120,
             );
 
-            expect(result === null || result.length <= 120).toBe(true);
+            expect(isNullOrWithin(result, 120)).toBe(true);
           },
         ),
         { numRuns: 25 },
@@ -738,7 +767,7 @@ describe('SessionDiscovery extensions', () => {
               await SessionDiscovery.readFirstUserMessage(filePath);
 
             // Result should either be the original (if short enough) or truncated
-            expect(result === null || typeof result === 'string').toBe(true);
+            expect(isStringOrNull(result)).toBe(true);
           },
         ),
         { numRuns: 15 },

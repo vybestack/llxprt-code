@@ -95,6 +95,10 @@ function createTokenStore(): TokenStore {
   };
 }
 
+function getClaudeCodeProvider(name: string): OAuthProvider | undefined {
+  return name === 'claudecode' ? createProvider('claudecode') : undefined;
+}
+
 function createProvider(name: string): OAuthProvider {
   return {
     name,
@@ -367,9 +371,7 @@ describe('OAuthManager wiring', () => {
       },
     ]);
 
-    providerRegistry.getProvider.mockImplementation((name: string) =>
-      name === 'claudecode' ? createProvider('claudecode') : undefined,
-    );
+    providerRegistry.getProvider.mockImplementation(getClaudeCodeProvider);
 
     wiring.getHigherPriorityAuth.mockResolvedValue('API Key');
     wiring.getAnthropicUsageInfo.mockResolvedValue({ usage: 1 });

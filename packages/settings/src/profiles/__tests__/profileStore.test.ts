@@ -30,6 +30,22 @@ async function makeTempDir(): Promise<string> {
   return fsp.mkdtemp(path.join(os.tmpdir(), 'llxprt-profilestore-test-'));
 }
 
+function profileContent(
+  result: ReturnType<typeof readProfileFileSync>,
+): string | null {
+  return result.kind === 'content' ? result.content : null;
+}
+
+function profileReadError(
+  result: ReturnType<typeof readProfileFileSync>,
+): Error | null {
+  return result.kind === 'error' ? result.error : null;
+}
+
+function lockBusyError(error: unknown): LockBusyError | null {
+  return error instanceof LockBusyError ? error : null;
+}
+
 describe('profileStore — lockPathForProfilesDir', () => {
   it('returns a deterministic lock file path in the profiles dir', () => {
     expect(lockPathForProfilesDir('/foo/profiles')).toBe(
@@ -95,13 +111,13 @@ describe('profileStore — readProfileFileSync discriminated result', () => {
     fs.writeFileSync(filePath, '{"a":1}', 'utf-8');
     const result = readProfileFileSync(filePath);
     expect(result.kind).toBe('content');
-    expect(result.kind === 'content' ? result.content : null).toBe('{"a":1}');
+    expect(profileContent(result)).toBe('{"a":1}');
   });
 
   it('returns error when the path is a directory', () => {
     const result = readProfileFileSync(tempDir);
     expect(result.kind).toBe('error');
-    expect(result.kind === 'error' ? result.error : null).toBeInstanceOf(Error);
+    expect(profileReadError(result)).toBeInstanceOf(Error);
   });
 });
 
@@ -224,7 +240,7 @@ describe('profileStore — sync lock acquisition', () => {
     }
     expect(caught).toBeInstanceOf(LockBusyError);
     expect(caught instanceof LockBusyError).toBe(true);
-    const lbe = caught instanceof LockBusyError ? caught : null;
+    const lbe = lockBusyError(caught);
     expect(lbe).not.toBeNull();
     expect(lbe?.lockPath).toBe(lockPathForProfilesDir(tempDir));
     expect(lbe?.ownerMetadata).not.toBeNull();
@@ -275,7 +291,7 @@ describe('profileStore — no automatic stale takeover', () => {
     }
     expect(caught).toBeInstanceOf(LockBusyError);
     expect(caught instanceof LockBusyError).toBe(true);
-    const lbe = caught instanceof LockBusyError ? caught : null;
+    const lbe = lockBusyError(caught);
     expect(lbe).not.toBeNull();
     // Error surfaces exact path and owner metadata for manual recovery.
     expect(lbe?.lockPath).toBe(lockPath);
@@ -386,23 +402,21 @@ describe('profileStore — writeProfileFile create mode', () => {
     );
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'applies 0600 mode to new files',
-    async () => {
+  describe.skipIf(process.platform === 'win32')(() => {
+    it('applies 0600 mode to new files', async () => {
       await writeProfileFile(tempDir, 'secure', '{"a":1}', 'create');
       const stat = fs.statSync(path.join(tempDir, 'secure.json'));
       expect(stat.mode & 0o777).toBe(0o600);
-    },
-  );
+    });
+  });
 
-  it.skipIf(process.platform === 'win32')(
-    'creates a new profiles directory with owner-only permissions',
-    async () => {
+  describe.skipIf(process.platform === 'win32')(() => {
+    it('creates a new profiles directory with owner-only permissions', async () => {
       const profilesDir = path.join(tempDir, 'profiles');
       await writeProfileFile(profilesDir, 'secure', '{"a":1}', 'create');
       expect(fs.statSync(profilesDir).mode & 0o777).toBe(0o700);
-    },
-  );
+    });
+  });
 
   it.each([
     '',

@@ -19,6 +19,10 @@ import type { OAuthToken } from '../../types.js';
 
 const PROVIDER = 'anthropic';
 
+function resolveReauthenticatedBucket(bucket: string | undefined): string {
+  return bucket ?? 'bucket-a';
+}
+
 describe('Single-bucket behavioral scenarios', () => {
   let tokenStore: MemoryTokenStore;
 
@@ -124,7 +128,7 @@ describe('Single-bucket behavioral scenarios', () => {
         await tokenStore.saveToken(
           PROVIDER,
           makeToken('reauth-token'),
-          bucket ?? 'bucket-a',
+          resolveReauthenticatedBucket(bucket),
         );
       },
     );
@@ -159,7 +163,7 @@ describe('Single-bucket behavioral scenarios', () => {
         await tokenStore.saveToken(
           PROVIDER,
           makeToken('reauth-token'),
-          bucket ?? 'bucket-a',
+          resolveReauthenticatedBucket(bucket),
         );
       },
     );

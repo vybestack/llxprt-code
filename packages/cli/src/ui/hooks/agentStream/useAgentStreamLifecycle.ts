@@ -32,6 +32,12 @@ import { useKeypress, type Key } from '../useKeypress.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 import type { StreamRuntime } from '../../cliUiRuntime.js';
 
+/**
+ * History text used when Esc aborts an in-flight slash command. Distinct from
+ * the turn-level 'Request cancelled.' so the two are tellable apart.
+ */
+export const SLASH_COMMAND_CANCELLED = 'Command cancelled.';
+
 export function useStreamingState(
   isResponding: boolean,
   toolCalls: TrackedToolCall[],
@@ -233,8 +239,21 @@ export function useCancellation(
   setShellInputFocused: (value: boolean) => void,
   drainSuppressedRef: React.MutableRefObject<boolean>,
   cancelRunningAsyncTasks: () => void = () => {},
+  cancelActiveSlashCommand: () => boolean = () => false,
 ) {
   const cancelOngoingRequest = useCallback(() => {
+    // Slash commands run outside the streaming lifecycle: they set neither
+    // isResponding nor toolCalls, so streamingState is Idle while one is in
+    // flight and the gate below would swallow the Esc (issue #2976). Hence
+    // this runs ahead of the gate. In the usual case the state IS Idle and the
+    // gate then returns, leaving turn cancellation untouched; the turn is only
+    // cancelled as well when one is genuinely in flight.
+    if (cancelActiveSlashCommand()) {
+      addItem(
+        { type: MessageType.INFO, text: SLASH_COMMAND_CANCELLED },
+        Date.now(),
+      );
+    }
     if (
       streamingState !== StreamingState.Responding &&
       streamingState !== StreamingState.WaitingForConfirmation
@@ -260,6 +279,7 @@ export function useCancellation(
     setShellInputFocused(false);
   }, [
     streamingState,
+    cancelActiveSlashCommand,
     turnCancelledRef,
     setTurnCancelled,
     drainSuppressedRef,

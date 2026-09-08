@@ -89,7 +89,6 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
           throw new Error('Test error');
           yield; // Never reached, but satisfies generator requirement
         },
-        getServerTools: () => [],
       };
       providerManager.registerProvider(mockProvider);
 
@@ -131,14 +130,12 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
           throw new Error('Backend failure');
           yield; // Never reached, but satisfies generator requirement
         },
-        getServerTools: () => [],
       };
       const mockProvider2 = {
         name: 'test-provider-2',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
           yield { role: 'assistant', parts: [{ text: 'success' }] } as IContent;
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider1);
@@ -193,14 +190,12 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
           throw new Error('Backend failure');
           yield; // Never reached, but satisfies generator requirement
         },
-        getServerTools: () => [],
       };
       const mockProvider2 = {
         name: 'test-provider-2',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
           yield { role: 'assistant', parts: [{ text: 'success' }] } as IContent;
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider1);
@@ -260,14 +255,12 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
             parts: [{ text: 'recovered' }],
           } as IContent;
         },
-        getServerTools: () => [],
       };
       const mockProvider2 = {
         name: 'test-provider-2',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
           yield { role: 'assistant', parts: [{ text: 'success' }] } as IContent;
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider1);
@@ -333,14 +326,12 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
             parts: [{ text: 'recovered' }],
           } as IContent;
         },
-        getServerTools: () => [],
       };
       const mockProvider2 = {
         name: 'test-provider-2',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
           yield { role: 'assistant', parts: [{ text: 'success' }] } as IContent;
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider1);
@@ -394,14 +385,12 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
           throw new Error('Still failing');
           yield; // Never reached, but satisfies generator requirement
         },
-        getServerTools: () => [],
       };
       const mockProvider2 = {
         name: 'test-provider-2',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
           yield { role: 'assistant', parts: [{ text: 'success' }] } as IContent;
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider1);
@@ -455,14 +444,12 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
           throw new Error('Backend failure');
           yield; // Never reached, but satisfies generator requirement
         },
-        getServerTools: () => [],
       };
       const mockProvider2 = {
         name: 'test-provider-2',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
           yield { role: 'assistant', parts: [{ text: 'success' }] } as IContent;
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider1);
@@ -520,7 +507,6 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
           throw new Error('Backend 1 failure');
           yield; // Never reached, but satisfies generator requirement
         },
-        getServerTools: () => [],
       };
       const mockProvider2 = {
         name: 'test-provider-2',
@@ -528,7 +514,6 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
           throw new Error('Backend 2 failure');
           yield; // Never reached, but satisfies generator requirement
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider1);
@@ -593,7 +578,6 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
             parts: [{ text: 'success' }],
           } as IContent;
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider1);

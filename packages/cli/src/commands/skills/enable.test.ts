@@ -57,7 +57,7 @@ describe('skills enable command', () => {
   });
 
   describe('handleEnable', () => {
-    it('should enable a disabled skill in user scope', async () => {
+    async function verifyShouldEnableADisabledSkillInUserScope() {
       const mockSettings = {
         forScope: vi.fn().mockImplementation((scope) => {
           if (scope === SettingScope.User) {
@@ -76,7 +76,14 @@ describe('skills enable command', () => {
 
       await handleEnable({ name: 'skill1' });
 
-      expect(mockSettings.setValue).toHaveBeenCalledWith(
+      return { setValue: mockSettings.setValue };
+    }
+
+    it('should enable a disabled skill in user scope', async () => {
+      const behaviorResult =
+        await verifyShouldEnableADisabledSkillInUserScope();
+
+      expect(behaviorResult.setValue).toHaveBeenCalledWith(
         SettingScope.User,
         'skills.disabled',
         [],
@@ -87,7 +94,7 @@ describe('skills enable command', () => {
       );
     });
 
-    it('should enable a skill across multiple scopes', async () => {
+    async function verifyShouldEnableASkillAcrossMultipleScopes() {
       const mockSettings = {
         forScope: vi.fn().mockImplementation((scope) => {
           if (scope === SettingScope.User) {
@@ -112,12 +119,19 @@ describe('skills enable command', () => {
 
       await handleEnable({ name: 'skill1' });
 
-      expect(mockSettings.setValue).toHaveBeenCalledWith(
+      return { setValue: mockSettings.setValue };
+    }
+
+    it('should enable a skill across multiple scopes', async () => {
+      const behaviorResult =
+        await verifyShouldEnableASkillAcrossMultipleScopes();
+
+      expect(behaviorResult.setValue).toHaveBeenCalledWith(
         SettingScope.User,
         'skills.disabled',
         [],
       );
-      expect(mockSettings.setValue).toHaveBeenCalledWith(
+      expect(behaviorResult.setValue).toHaveBeenCalledWith(
         SettingScope.Workspace,
         'skills.disabled',
         [],

@@ -425,7 +425,7 @@ describe('ast_edit C import extraction', () => {
 
     expect(imports).toHaveLength(2);
     expect(imports[0].module).toBe('stdio.h');
-    expect(imports[0].items).toEqual([]);
+    expect(imports[0].items).toStrictEqual([]);
     expect(imports[0].line).toBe(1);
     expect(imports[1].module).toBe('stdlib.h');
     expect(imports[1].line).toBe(2);
@@ -437,7 +437,7 @@ describe('ast_edit C import extraction', () => {
 
     expect(imports).toHaveLength(1);
     expect(imports[0].module).toBe('myheader.h');
-    expect(imports[0].items).toEqual([]);
+    expect(imports[0].items).toStrictEqual([]);
   });
 
   it('ignores non-include lines', () => {

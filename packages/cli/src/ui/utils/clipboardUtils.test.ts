@@ -16,34 +16,34 @@ import {
 const isClipboardPlatform =
   process.platform === 'darwin' || process.platform === 'win32';
 
+function isClipboardImageResult(result: string | null): boolean {
+  return result === null || typeof result === 'string';
+}
+
 describe('clipboardUtils', () => {
   describe('clipboardHasImage', () => {
-    it.skipIf(isClipboardPlatform)(
-      'should return false on unsupported platforms',
-      async () => {
+    describe.skipIf(isClipboardPlatform)('on unsupported platforms', () => {
+      it('should return false on unsupported platforms', async () => {
         const result = await clipboardHasImage();
         expect(result).toBe(false);
-      },
-    );
+      });
+    });
 
-    it.skipIf(!isClipboardPlatform)(
-      'should return boolean on macOS or Windows',
-      async () => {
+    describe.skipIf(!isClipboardPlatform)('on macOS or Windows', () => {
+      it('should return boolean on macOS or Windows', async () => {
         const result = await clipboardHasImage();
         expect(typeof result).toBe('boolean');
-      },
-      10000,
-    );
+      }, 10000);
+    });
   });
 
   describe('saveClipboardImage', () => {
-    it.skipIf(isClipboardPlatform)(
-      'should return null on unsupported platforms',
-      async () => {
+    describe.skipIf(isClipboardPlatform)('on unsupported platforms', () => {
+      it('should return null on unsupported platforms', async () => {
         const result = await saveClipboardImage();
         expect(result).toBe(null);
-      },
-    );
+      });
+    });
 
     it('should handle errors gracefully without throwing', async () => {
       // Test with invalid directory (should not throw); null or a string path
@@ -51,18 +51,17 @@ describe('clipboardUtils', () => {
       const result = await saveClipboardImage(
         '/invalid/path/that/does/not/exist',
       );
-      expect(result === null || typeof result === 'string').toBe(true);
+      expect(isClipboardImageResult(result)).toBe(true);
     });
 
-    it.skipIf(isClipboardPlatform)(
-      'should return null for invalid directory on unsupported platforms',
-      async () => {
+    describe.skipIf(isClipboardPlatform)('with an invalid directory', () => {
+      it('should return null for invalid directory on unsupported platforms', async () => {
         const result = await saveClipboardImage(
           '/invalid/path/that/does/not/exist',
         );
         expect(result).toBe(null);
-      },
-    );
+      });
+    });
   });
 
   describe('cleanupOldClipboardImages', () => {

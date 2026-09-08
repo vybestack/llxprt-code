@@ -35,6 +35,31 @@ function fixtureWithTool(name: string, latencyMs?: number): FakeMcpFixture {
   };
 }
 
+function abortOnSecondAuthorizationCheck(
+  controller: AbortController,
+): () => boolean {
+  let authorizationChecks = 0;
+  return () => {
+    authorizationChecks += 1;
+    if (authorizationChecks === 2) {
+      controller.abort();
+    }
+    return true;
+  };
+}
+
+function revokeOnStatus(
+  expectedServerName: string,
+  revokingStatus: MCPServerStatus,
+  revoke: () => void,
+): (serverName: string, status: MCPServerStatus) => void {
+  return (serverName, status) => {
+    if (serverName === expectedServerName && status === revokingStatus) {
+      revoke();
+    }
+  };
+}
+
 describe('applyFakeServerDiscovery authorization', () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -69,19 +94,11 @@ describe('applyFakeServerDiscovery authorization', () => {
     const name = 'latency-already-aborted';
     const registry = createToolRegistry();
     const controller = new AbortController();
-    let authorizationChecks = 0;
-
     const discovery = applyFakeServerDiscovery(
       name,
       registry,
       fixtureWithTool(name, 50),
-      () => {
-        authorizationChecks += 1;
-        if (authorizationChecks === 2) {
-          controller.abort();
-        }
-        return true;
-      },
+      abortOnSecondAuthorizationCheck(controller),
       controller.signal,
     );
     const completed = vi.fn();
@@ -192,15 +209,10 @@ describe('applyFakeServerDiscovery authorization', () => {
     const name = `status-${revokingStatus}-revocation`;
     const registry = createToolRegistry();
     let authorized = true;
-    const revokeOnStatus = (
-      serverName: string,
-      status: MCPServerStatus,
-    ): void => {
-      if (serverName === name && status === revokingStatus) {
-        authorized = false;
-      }
-    };
-    addMCPStatusChangeListener(revokeOnStatus);
+    const statusRevoker = revokeOnStatus(name, revokingStatus, () => {
+      authorized = false;
+    });
+    addMCPStatusChangeListener(statusRevoker);
 
     try {
       const outcome = await applyFakeServerDiscovery(
@@ -217,7 +229,7 @@ describe('applyFakeServerDiscovery authorization', () => {
       expect(registry.getTool(`${name}_tool`)).toBeUndefined();
       expect(getMCPServerStatus(name)).toBe(MCPServerStatus.DISCONNECTED);
     } finally {
-      removeMCPStatusChangeListener(revokeOnStatus);
+      removeMCPStatusChangeListener(statusRevoker);
     }
   });
 });

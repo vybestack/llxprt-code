@@ -5,6 +5,8 @@
  */
 
 import { vi } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import type {
   AgentClientContract,
   AsyncTaskManager,
@@ -26,6 +28,8 @@ import type {
   ToolRegistry,
   ToolSchedulerContract,
 } from '@vybestack/llxprt-code-core';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core';
+import { SessionPersistenceService } from '@vybestack/llxprt-code-core/storage/SessionPersistenceService.js';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import type { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
 import type {
@@ -158,7 +162,36 @@ function makeStorageFromSource(
 function makeSessionRuntime(
   source: LegacyRuntimeSource,
   override: StreamRuntimeTestOverrides['session'],
+  storage: Storage,
 ): StreamRuntime['session'] {
+  const fallbackMediaStore = new LocalMediaStore({
+    rootDirectory: join(
+      storage.getProjectTempDir(),
+      `stream-runtime-test-media-${randomUUID()}`,
+    ),
+    quotaBytes: 1024 * 1024,
+  });
+  const getLocalMediaStore =
+    override?.getLocalMediaStore ??
+    (() => call(source, 'getLocalMediaStore', fallbackMediaStore));
+  const getSessionRecordingQueueByteLimit =
+    override?.getSessionRecordingQueueByteLimit ??
+    (() => call(source, 'getSessionRecordingQueueByteLimit', 1024 * 1024));
+  const createSessionPersistenceService =
+    override?.createSessionPersistenceService ??
+    ((sessionId: string): SessionPersistenceService => {
+      const factory = getMember(source, 'createSessionPersistenceService');
+      if (typeof factory === 'function') {
+        return (factory as (value: string) => SessionPersistenceService).call(
+          source,
+          sessionId,
+        );
+      }
+      return new SessionPersistenceService(storage, sessionId, {
+        mediaStore: getLocalMediaStore(),
+        maxQueueBytes: getSessionRecordingQueueByteLimit(),
+      });
+    });
   return {
     getSessionId: () => call(source, 'getSessionId', 'test-session'),
     adoptSessionId: (sessionId) =>
@@ -167,6 +200,9 @@ function makeSessionRuntime(
     getProjectRoot: () => call(source, 'getProjectRoot', '/tmp'),
     getWorkingDir: () => call(source, 'getWorkingDir', '/tmp'),
     getProjectTempDir: () => call(source, 'getProjectTempDir', '/tmp'),
+    getLocalMediaStore,
+    getSessionRecordingQueueByteLimit,
+    createSessionPersistenceService,
     getLlxprtDir: () => call(source, 'getLlxprtDir', '/tmp/.llxprt'),
     ...override,
   };
@@ -474,8 +510,9 @@ export function createStreamRuntimeForTest(
   source: LegacyRuntimeSource = {},
   overrides: StreamRuntimeTestOverrides = {},
 ): StreamRuntime {
+  const storage = makeStorageFromSource(source, overrides.storage);
   return {
-    session: makeSessionRuntime(source, overrides.session),
+    session: makeSessionRuntime(source, overrides.session, storage),
     model: makeModelRuntime(source, overrides.model),
     agentClientSource: {
       getAgentClient: () => makeAgentClient(source),
@@ -517,7 +554,7 @@ export function createStreamRuntimeForTest(
       ...overrides.interactive,
     },
     ephemeral: makeEphemeralRuntime(source, overrides.ephemeral),
-    storage: makeStorageFromSource(source, overrides.storage),
+    storage,
   };
 }
 

@@ -83,12 +83,6 @@ class RecordingProvider implements IProvider {
   getDefaultModel(): string {
     return 'test-model';
   }
-  getServerTools(): string[] {
-    return [];
-  }
-  async invokeServerTool(): Promise<unknown> {
-    return undefined;
-  }
 
   async *generateChatCompletion(
     optionsOrContents: GenerateChatOptions | IContent[],
@@ -234,8 +228,6 @@ describe('LoggingProviderWrapper projection normalization parity (issue #2817)',
       name: 'plain-provider',
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
-      getServerTools: () => [],
-      invokeServerTool: async () => undefined,
       async *generateChatCompletion(): AsyncIterableIterator<IContent> {
         yield makeContent('ok');
       },

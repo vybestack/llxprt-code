@@ -12,13 +12,8 @@ import type {
   RequestContext,
   ExecutionEventBus,
 } from '@a2a-js/sdk/server';
-import type {
-  ToolCallRequestInfo,
-  CompletedToolCall,
-  Config,
-  ServerAgentStreamEvent,
-} from '@vybestack/llxprt-code-core';
-import { AgentEventType } from '@vybestack/llxprt-code-core';
+import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
+import { REFUSAL_NOTICE_MESSAGE } from '@vybestack/llxprt-code-core';
 import { v4 as uuidv4 } from 'uuid';
 
 import { logger } from '../utils/logger.js';
@@ -32,7 +27,11 @@ import {
   getPersistedState,
   setPersistedState,
 } from '../types.js';
-import { loadConfig, loadEnvironment, setTargetDir } from '../config/config.js';
+import {
+  createTaskAgent,
+  loadEnvironment,
+  setTargetDir,
+} from '../config/config.js';
 import { loadSettings } from '../config/settings.js';
 import { loadExtensions } from '../config/extension.js';
 import { Task } from './task.js';
@@ -88,7 +87,7 @@ class TaskWrapper {
  * CoderAgentExecutor implements the agent's core logic for code generation.
  */
 export interface CoderAgentExecutorDependencies {
-  loadConfig?: typeof loadConfig;
+  createTaskAgent?: typeof createTaskAgent;
   loadEnvironment?: typeof loadEnvironment;
   setTargetDir?: typeof setTargetDir;
   loadSettings?: typeof loadSettings;
@@ -106,10 +105,15 @@ export class CoderAgentExecutor implements AgentExecutor {
     private readonly dependencies: CoderAgentExecutorDependencies = {},
   ) {}
 
-  private async getConfig(
+  /**
+   * Builds the public Agent for a task from declarative interface input
+   * (env, settings, extensions). No runtime assembly happens here — the
+   * Agent owns Config construction, wiring, and activation (#3221).
+   */
+  async #createTaskAgent(
     agentSettings: AgentSettings,
     taskId: string,
-  ): Promise<Config> {
+  ): Promise<Agent> {
     const workspaceRoot = (this.dependencies.setTargetDir ?? setTargetDir)(
       agentSettings,
     );
@@ -121,7 +125,7 @@ export class CoderAgentExecutor implements AgentExecutor {
       workspaceRoot,
       { folderTrust: settings.folderTrust },
     );
-    return (this.dependencies.loadConfig ?? loadConfig)(
+    return (this.dependencies.createTaskAgent ?? createTaskAgent)(
       settings,
       extensions,
       taskId,
@@ -145,21 +149,16 @@ export class CoderAgentExecutor implements AgentExecutor {
     }
 
     const agentSettings = persistedState._agentSettings;
-    const config = await this.getConfig(agentSettings, sdkTask.id);
+    const agent = await this.#createTaskAgent(agentSettings, sdkTask.id);
     const contextId = (metadata['_contextId'] as string) || sdkTask.contextId;
     const runtimeTask = await (this.dependencies.createTask ?? Task.create)(
       sdkTask.id,
       contextId,
-      config,
+      agent,
       eventBus,
       agentSettings.autoExecute,
     );
     runtimeTask.taskState = persistedState._taskState;
-    const contentGeneratorConfig =
-      runtimeTask.config.getContentGeneratorConfig();
-    if (contentGeneratorConfig) {
-      await runtimeTask.agentClient.initialize(contentGeneratorConfig);
-    }
 
     const wrapper = new TaskWrapper(runtimeTask, agentSettings);
     this.tasks.set(sdkTask.id, wrapper);
@@ -174,19 +173,14 @@ export class CoderAgentExecutor implements AgentExecutor {
     eventBus?: ExecutionEventBus,
   ): Promise<TaskWrapper> {
     const agentSettings = agentSettingsInput ?? ({} as AgentSettings);
-    const config = await this.getConfig(agentSettings, taskId);
+    const agent = await this.#createTaskAgent(agentSettings, taskId);
     const runtimeTask = await (this.dependencies.createTask ?? Task.create)(
       taskId,
       contextId,
-      config,
+      agent,
       eventBus,
       agentSettings.autoExecute,
     );
-    const contentGeneratorConfig2 =
-      runtimeTask.config.getContentGeneratorConfig();
-    if (contentGeneratorConfig2) {
-      await runtimeTask.agentClient.initialize(contentGeneratorConfig2);
-    }
 
     const wrapper = new TaskWrapper(runtimeTask, agentSettings);
     this.tasks.set(taskId, wrapper);
@@ -315,7 +309,9 @@ export class CoderAgentExecutor implements AgentExecutor {
       logger.info(
         `[CoderAgentExecutor] Initiating cancellation for task ${taskId}.`,
       );
-      task.cancelPendingTools('Task canceled by user request.');
+      // Aborts the active Agent turn; pending tool cancellation is owned by
+      // the agent loop.
+      task.cancelTurn();
 
       const stateChange: StateChange = {
         kind: CoderAgentEvent.StateChangeEvent,
@@ -458,89 +454,58 @@ export class CoderAgentExecutor implements AgentExecutor {
     return wrapper;
   }
 
+  /**
+   * Processes one user turn against the public Agent stream.
+   *
+   * The Agent owns the full turn — LLM streaming, tool scheduling, tool
+   * result feedback, and retries — and emits public AgentEvents. This loop
+   * only maps them onto the a2a protocol.
+   *
+   * Publication semantics preserved from the legacy loop: model content is
+   * buffered per attempt and published only at commit points (a tool call
+   * commits the attempt, the end of the stream commits the turn) because the
+   * event bus has no retraction primitive; a Retry clears the buffer to drop
+   * abandoned partial output; an abort throws before publication,
+   * intentionally discarding buffered partial output for the same reason.
+   */
   async #processAgentTurnLoop(
     task: Task,
     requestContext: RequestContext,
     abortSignal: AbortSignal,
   ): Promise<void> {
-    let agentTurnActive = true;
     logger.info(`[CoderAgentExecutor] Task ${task.id}: Processing user turn.`);
-    let agentEvents: AsyncGenerator<ServerAgentStreamEvent, void, unknown> =
+    const agentEvents: AsyncGenerator<AgentEvent, void, unknown> =
       task.acceptUserMessage(requestContext, abortSignal);
 
-    while (agentTurnActive) {
-      logger.info(
-        `[CoderAgentExecutor] Task ${task.id}: Processing agent turn (LLM stream).`,
-      );
-      // Intentional full-attempt buffering: stream events are accumulated in
-      // `attemptEvents` and published to the task (and thus the event bus)
-      // only after the iteration completes, because the event bus has no
-      // retraction primitive. A transport Retry clears both buffers to drop
-      // the abandoned partial output; an abort throws before publication,
-      // intentionally discarding buffered partial output for the same reason.
-      const toolCallRequests: ToolCallRequestInfo[] = [];
-      const attemptEvents: ServerAgentStreamEvent[] = [];
-      for await (const event of agentEvents) {
-        if (abortSignal.aborted) {
-          logger.warn(
-            `[CoderAgentExecutor] Task ${task.id}: Abort signal received during agent event processing.`,
-          );
-          throw new Error('Execution aborted');
-        }
-        if (event.type === AgentEventType.ToolCallRequest) {
-          toolCallRequests.push(event.value);
-        } else if (event.type === AgentEventType.Retry) {
-          toolCallRequests.length = 0;
-          attemptEvents.length = 0;
-          await task.acceptAgentMessage(event);
-        } else {
-          attemptEvents.push(event);
-        }
-      }
+    const {
+      buffer,
+      flushBuffered,
+      discardBuffered,
+      publishWorkingOnce,
+      publishedToolStatuses,
+    } = this.#createTurnPublicationSequencer(task);
+    publishWorkingOnce();
 
-      for (const event of attemptEvents) {
-        throwIfAborted(abortSignal);
-        await task.acceptAgentMessage(event);
-      }
-
-      if (toolCallRequests.length > 0) {
-        logger.info(
-          `[CoderAgentExecutor] Task ${task.id}: Found ${toolCallRequests.length} tool call requests. Scheduling as a batch.`,
+    for await (const event of agentEvents) {
+      if (abortSignal.aborted) {
+        logger.warn(
+          `[CoderAgentExecutor] Task ${task.id}: Abort signal received during agent event processing.`,
         );
-        await task.scheduleToolCalls(toolCallRequests, abortSignal);
+        throw new Error('Execution aborted');
       }
-
-      logger.info(
-        `[CoderAgentExecutor] Task ${task.id}: Waiting for pending tools if any.`,
-      );
-      await task.waitForPendingTools();
-      logger.info(
-        `[CoderAgentExecutor] Task ${task.id}: All pending tools completed or none were pending.`,
-      );
-
-      // Check abort signal after async operation - signal state may have changed.
-      throwIfAborted(abortSignal);
-
-      const completedTools = task.getAndClearCompletedTools();
-
-      if (completedTools.length > 0) {
-        const result = await this.#processCompletedTools(
-          task,
-          completedTools,
-          abortSignal,
-        );
-        if (result === false) {
-          agentTurnActive = false;
-        } else {
-          agentEvents = result;
-        }
-      } else {
-        logger.info(
-          `[CoderAgentExecutor] Task ${task.id}: No more tool calls to process. Ending agent turn.`,
-        );
-        agentTurnActive = false;
+      const stopAtApprovalBoundary = this.#dispatchAgentEvent(task, event, {
+        buffer,
+        flushBuffered,
+        discardBuffered,
+        publishWorkingOnce,
+        publishedToolStatuses,
+      });
+      if (stopAtApprovalBoundary) {
+        return;
       }
     }
+
+    throwIfAborted(abortSignal);
 
     logger.info(
       `[CoderAgentExecutor] Task ${task.id}: Agent turn finished, setting to input-required.`,
@@ -554,16 +519,156 @@ export class CoderAgentExecutor implements AgentExecutor {
     );
   }
 
-  async #processCompletedTools(
+  /**
+   * Maps one public AgentEvent onto a2a publications. Returns true when the
+   * caller must end the request at an approval boundary.
+   */
+  #dispatchAgentEvent(
     task: Task,
-    completedTools: CompletedToolCall[],
-    abortSignal: AbortSignal,
-  ): Promise<AsyncGenerator<ServerAgentStreamEvent, void, unknown> | false> {
-    if (completedTools.every((tool) => tool.status === 'cancelled')) {
-      logger.info(
-        `[CoderAgentExecutor] Task ${task.id}: All tool calls were cancelled. Updating history and ending agent turn.`,
-      );
-      task.addToolResponsesToHistory(completedTools);
+    event: AgentEvent,
+    sequencer: {
+      buffer: (publish: () => void) => void;
+      flushBuffered: () => void;
+      discardBuffered: () => void;
+      publishWorkingOnce: () => void;
+      publishedToolStatuses: Set<string>;
+    },
+  ): boolean {
+    switch (event.type) {
+      case 'retry':
+        logger.warn(
+          `[CoderAgentExecutor] Task ${task.id}: Provider retry — discarding buffered partial output.`,
+        );
+        sequencer.discardBuffered();
+        return false;
+      case 'text':
+        sequencer.buffer(() => task.sendTextContent(event.text));
+        return false;
+      case 'thinking':
+        sequencer.buffer(() => task.sendThought(event.thought));
+        return false;
+      case 'tool-call':
+        // A tool call commits the current attempt: publish buffered model
+        // content, then mark the task working while the loop executes tools.
+        sequencer.flushBuffered();
+        sequencer.publishWorkingOnce();
+        return false;
+      case 'tool-confirmation':
+      case 'tool-status':
+        return this.#handleApprovalAndStatusEvent(
+          task,
+          event,
+          sequencer.flushBuffered,
+          sequencer.publishWorkingOnce,
+          sequencer.publishedToolStatuses,
+        );
+      case 'model-info':
+        task.handleModelInfo(event.info);
+        return false;
+      case 'idle-timeout':
+      case 'invalid-stream':
+      case 'error':
+        sequencer.flushBuffered();
+        this.#handleStreamSignal(task, event);
+        return false;
+      case 'done':
+        sequencer.flushBuffered();
+        if (event.reason === 'refusal') {
+          task.sendTextContent(`\n\n[safety notice] ${REFUSAL_NOTICE_MESSAGE}`);
+        }
+        return false;
+      default:
+        // usage, compression, context-warning, citation, loop-detected,
+        // notice, hook-blocked, tool-result: informational in the legacy
+        // loop as well; log nothing further.
+        return false;
+    }
+  }
+
+  /**
+   * Builds the per-turn publication sequencer: model content is buffered per
+   * attempt and published only at commit points (a tool call commits the
+   * attempt, the end of the stream commits the turn) because the event bus
+   * has no retraction primitive. A retry discards the buffer to drop
+   * abandoned partial output.
+   */
+  #createTurnPublicationSequencer(task: Task): {
+    buffer: (publish: () => void) => void;
+    flushBuffered: () => void;
+    discardBuffered: () => void;
+    publishWorkingOnce: () => void;
+    publishedToolStatuses: Set<string>;
+  } {
+    const bufferedPublications: Array<() => void> = [];
+    const buffer = (publish: () => void): void => {
+      bufferedPublications.push(publish);
+    };
+    const flushBuffered = (): void => {
+      for (const publish of bufferedPublications) {
+        publish();
+      }
+      bufferedPublications.length = 0;
+    };
+    const discardBuffered = (): void => {
+      bufferedPublications.length = 0;
+    };
+    // Legacy parity: the turn opens with a 'working' state change; tool
+    // scheduling re-asserts it only if it was never published.
+    let workingPublished = false;
+    const publishWorkingOnce = (): void => {
+      if (!workingPublished) {
+        task.setTaskStateAndPublishUpdate('working', {
+          kind: CoderAgentEvent.StateChangeEvent,
+        });
+        workingPublished = true;
+      }
+    };
+    // Tool status transitions published by this request; replays of an
+    // already-published (id, status) pair are dropped.
+    const publishedToolStatuses = new Set<string>();
+    return {
+      buffer,
+      flushBuffered,
+      discardBuffered,
+      publishWorkingOnce,
+      publishedToolStatuses,
+    };
+  }
+
+  /**
+   * Handles the approval- and status-relevant agent events. Returns true when
+   * the caller must end the request at an approval boundary.
+   */
+  #handleApprovalAndStatusEvent(
+    task: Task,
+    event:
+      | Extract<AgentEvent, { type: 'tool-confirmation' }>
+      | Extract<AgentEvent, { type: 'tool-status' }>,
+    flushBuffered: () => void,
+    publishWorkingOnce: () => void,
+    publishedToolStatuses: Set<string>,
+  ): boolean {
+    if (event.type === 'tool-confirmation') {
+      flushBuffered();
+      publishWorkingOnce();
+      const confirmation = event.confirmation;
+      // Stale replay guard: while a paused turn resumes, the scheduler's
+      // awaiting_approval snapshot can re-emit confirmations for calls
+      // this task already resolved. They are not new approval requests.
+      if (task.isToolCallResolved(confirmation.toolCallId)) {
+        return false;
+      }
+      if (task.shouldAutoApproveToolCalls()) {
+        task.autoApproveConfirmation(confirmation);
+        return false;
+      }
+      task.recordPendingConfirmation(confirmation);
+      task.publishToolUpdate({
+        id: confirmation.toolCallId,
+        name: confirmation.name,
+        status: 'awaiting-approval',
+        output: confirmation.details,
+      });
       task.setTaskStateAndPublishUpdate(
         'input-required',
         { kind: CoderAgentEvent.StateChangeEvent },
@@ -571,13 +676,68 @@ export class CoderAgentExecutor implements AgentExecutor {
         undefined,
         true,
       );
-      return false;
+      // End THIS request at the approval boundary (legacy parity: the
+      // awaiting response closes after the final input-required). The
+      // Task retains the paused agent stream; the confirming request
+      // resumes it and receives the continuation events on its own bus.
+      return true;
     }
 
-    logger.info(
-      `[CoderAgentExecutor] Task ${task.id}: Found ${completedTools.length} completed tool calls. Sending results back to LLM.`,
-    );
-    return task.sendCompletedToolsToLlm(completedTools, abortSignal);
+    const update = event.update;
+    // Facade contract: only incremental chunks (projectToolOutput) and
+    // final-result echoes project with an empty name; real status
+    // transitions always carry the tool name. Chunks append to the output
+    // artifact; the echo needs nothing — the terminal named status event
+    // carries the result (legacy published only chunks here).
+    if (update.name === '') {
+      if (update.status === 'executing' && typeof update.output === 'string') {
+        task.publishToolOutput(update.id, update.output);
+      }
+      return false;
+    }
+    if (update.status === 'executing') {
+      publishWorkingOnce();
+    }
+    // The tool-confirmation case is the authoritative awaiting-approval
+    // publication (it carries the confirmation details); skip the
+    // scheduler's duplicate status projection.
+    if (update.status === 'awaiting-approval') {
+      return false;
+    }
+    // Status transitions move forward; a repeat (id, status) pair is a
+    // scheduler snapshot replay of an already-published transition.
+    const statusKey = `${update.id}:${update.status}`;
+    if (publishedToolStatuses.has(statusKey)) {
+      return false;
+    }
+    publishedToolStatuses.add(statusKey);
+    task.publishToolUpdate(update);
+    return false;
+  }
+
+  /** Publishes the terminal degraded-stream signals onto the task. */
+  #handleStreamSignal(
+    task: Task,
+    event:
+      | Extract<AgentEvent, { type: 'idle-timeout' }>
+      | Extract<AgentEvent, { type: 'invalid-stream' }>
+      | Extract<AgentEvent, { type: 'error' }>,
+  ): void {
+    if (event.type === 'idle-timeout') {
+      task.handleStreamIdleTimeout(event.error, {
+        kind: CoderAgentEvent.StateChangeEvent,
+      });
+      return;
+    }
+    if (event.type === 'invalid-stream') {
+      task.handleInvalidStream({
+        kind: CoderAgentEvent.StateChangeEvent,
+      });
+      return;
+    }
+    task.handleStreamError(event.error, {
+      kind: CoderAgentEvent.StateChangeEvent,
+    });
   }
 
   #handleExecutionError(
@@ -585,9 +745,12 @@ export class CoderAgentExecutor implements AgentExecutor {
     abortSignal: AbortSignal,
     error: unknown,
   ): void {
+    // Legacy parity: both error branches first cancel whatever the turn
+    // still has pending (confirmations/streams) — the modern equivalent of
+    // the legacy cancelPendingTools calls.
+    task.cancelTurn();
     if (abortSignal.aborted) {
       logger.warn(`[CoderAgentExecutor] Task ${task.id} execution aborted.`);
-      task.cancelPendingTools('Execution aborted');
       if (task.taskState !== 'canceled' && task.taskState !== 'failed') {
         task.setTaskStateAndPublishUpdate(
           'input-required',
@@ -606,7 +769,6 @@ export class CoderAgentExecutor implements AgentExecutor {
       `[CoderAgentExecutor] Error executing agent for task ${task.id}:`,
       error,
     );
-    task.cancelPendingTools(errorMessage);
     if (task.taskState !== 'failed') {
       task.setTaskStateAndPublishUpdate(
         'failed',
@@ -682,8 +844,8 @@ export class CoderAgentExecutor implements AgentExecutor {
       logger.info(
         `[CoderAgentExecutor] Task ${taskId} has a pending execution. Processing message and yielding.`,
       );
-      currentTask.eventBus = eventBus;
-      for await (const _ of currentTask.acceptUserMessage(
+
+      for await (const _event of currentTask.acceptUserMessage(
         requestContext,
         abortController.signal,
       )) {

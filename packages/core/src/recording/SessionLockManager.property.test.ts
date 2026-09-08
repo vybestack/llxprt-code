@@ -46,6 +46,20 @@ import * as fs from 'node:fs/promises';
 
 const DEAD_PID = 999999999;
 
+/**
+ * Live PIDs refer to the current process; anything else is a dead PID.
+ */
+function pidForLiveness(useAlivePid: boolean): number {
+  return useAlivePid ? process.pid : DEAD_PID;
+}
+
+/**
+ * Node executable to use when forking the child lock helper.
+ */
+function forkExecPath(): string {
+  return process.env.npm_node_execpath ?? process.execPath;
+}
+
 async function writeFakeLock(
   lockPath: string,
   pid: number,
@@ -328,7 +342,7 @@ describe('SessionLockManager', () => {
               chatsDir,
               sessionId,
             );
-            const pid = useAlivePid ? process.pid : DEAD_PID;
+            const pid = pidForLiveness(useAlivePid);
             await writeFakeLock(lockPath, pid, sessionId);
 
             const stale = await SessionLockManager.checkStale(lockPath);
@@ -611,9 +625,8 @@ process.on('message', async (msg) => {
 `,
         'utf-8',
       );
-
       childProcess = fork(helperScript, [lockPath], {
-        execPath: process.env.npm_node_execpath ?? process.execPath,
+        execPath: forkExecPath(),
         stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
       });
 

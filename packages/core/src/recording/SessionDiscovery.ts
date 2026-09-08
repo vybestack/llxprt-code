@@ -42,6 +42,7 @@ import {
   resumeSessionNotFoundMessage,
 } from './resumeNotFoundMessages.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import type { LocalMediaStore } from '../storage/local-media-store.js';
 
 /**
  * Result of successfully resolving a session reference.
@@ -137,15 +138,30 @@ export class SessionDiscovery {
   static async listContinueTargets(
     chatsDir: string,
     projectHash: string,
+    mediaStore?: LocalMediaStore,
   ): Promise<ContinueTarget[]> {
-    return (await this.listContinueTargetsDetailed(chatsDir, projectHash))
-      .targets;
+    const detailed = await this.listContinueTargetsDetailed(
+      chatsDir,
+      projectHash,
+      mediaStore,
+    );
+    if (detailed.recordingErrors.length > 0) {
+      throw new Error(
+        `Cannot discover continue targets: ${detailed.recordingErrors.join('; ')}`,
+      );
+    }
+    return detailed.targets;
   }
 
   static async listContinueTargetsDetailed(
     chatsDir: string,
     projectHash: string,
-  ): Promise<{ targets: ContinueTarget[]; skippedCount: number }> {
+    mediaStore?: LocalMediaStore,
+  ): Promise<{
+    targets: ContinueTarget[];
+    skippedCount: number;
+    recordingErrors: readonly string[];
+  }> {
     const detailed = await this.listSessionsDetailed(chatsDir, projectHash);
     const sessionTargets: Array<ContinueTarget | null> = Array.from(
       { length: detailed.sessions.length },
@@ -155,6 +171,10 @@ export class SessionDiscovery {
       { length: detailed.sessions.length },
       () => [],
     );
+    const recordingErrors: Array<string | null> = Array.from(
+      { length: detailed.sessions.length },
+      () => null,
+    );
     let nextIndex = 0;
     let skippedCount = detailed.skippedCount;
     const worker = async (): Promise<void> => {
@@ -162,12 +182,15 @@ export class SessionDiscovery {
         const index = nextIndex;
         nextIndex += 1;
         const summary = detailed.sessions[index];
-        const replay = await replaySession(summary.filePath, projectHash);
+        const replay = await replaySession(summary.filePath, projectHash, {
+          mediaStore,
+        });
         if (!replay.ok || replay.sequenceCorrupt) {
           const detail = replay.ok ? 'non-monotonic sequences' : replay.error;
           debugLogger.debug(
             `Skipping unreadable session recording ${summary.filePath}: ${detail}`,
           );
+          recordingErrors[index] = `${summary.filePath}: ${detail}`;
           skippedCount += 1;
           continue;
         }
@@ -194,6 +217,9 @@ export class SessionDiscovery {
         ...checkpointTargets.flat(),
       ],
       skippedCount,
+      recordingErrors: recordingErrors.filter(
+        (error): error is string => error !== null,
+      ),
     };
   }
 

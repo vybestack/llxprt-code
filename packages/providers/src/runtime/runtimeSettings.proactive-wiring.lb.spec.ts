@@ -10,6 +10,22 @@ import type {
   StandardProfile,
 } from '@vybestack/llxprt-code-settings';
 
+interface ProfileAuthShape {
+  readonly auth?: {
+    readonly type?: string;
+    readonly buckets?: readonly string[];
+  };
+}
+
+function shouldProactivelyWire(profile: ProfileAuthShape): boolean {
+  const auth = profile.auth;
+  return (
+    auth?.type === 'oauth' &&
+    Array.isArray(auth.buckets) &&
+    auth.buckets.length > 1
+  );
+}
+
 /**
  * Tests for Issue 1250: Proactive failover handler wiring for LoadBalancer sub-profiles
  *
@@ -76,12 +92,9 @@ describe('RuntimeSettings - Proactive Failover Handler Wiring for LoadBalancer (
 
       // This is the same condition used in runtimeSettings.ts for StandardProfile
       // and should now also apply to sub-profiles of LoadBalancer
-      const shouldProactivelyWire =
-        authConfig?.type === 'oauth' &&
-        authConfig.buckets &&
-        authConfig.buckets.length > 1;
+      const shouldWire = shouldProactivelyWire(subProfile);
 
-      expect(shouldProactivelyWire).toBe(true);
+      expect(shouldWire).toBe(true);
       expect(authConfig?.buckets?.length).toBe(2);
     });
 
@@ -99,17 +112,10 @@ describe('RuntimeSettings - Proactive Failover Handler Wiring for LoadBalancer (
         },
       };
 
-      const authConfig = (
-        subProfile as { auth?: { type?: string; buckets?: string[] } }
-      ).auth;
-
-      const shouldProactivelyWire =
-        authConfig?.type === 'oauth' &&
-        authConfig.buckets &&
-        authConfig.buckets.length > 1;
+      const shouldWire = shouldProactivelyWire(subProfile);
 
       // Single bucket = no failover needed
-      expect(shouldProactivelyWire).toBe(false);
+      expect(shouldWire).toBe(false);
     });
 
     it('sub-profile with API-key auth should NOT qualify for wiring', () => {
@@ -128,13 +134,10 @@ describe('RuntimeSettings - Proactive Failover Handler Wiring for LoadBalancer (
         subProfile as { auth?: { type?: string; buckets?: string[] } }
       ).auth;
 
-      const shouldProactivelyWire =
-        authConfig?.type === 'oauth' &&
-        authConfig.buckets &&
-        authConfig.buckets.length > 1;
+      const shouldWire = shouldProactivelyWire(subProfile);
 
       // No OAuth auth config
-      expect(shouldProactivelyWire).toBe(false);
+      expect(shouldWire).toBe(false);
       expect(authConfig).toBeUndefined();
     });
 
@@ -172,12 +175,9 @@ describe('RuntimeSettings - Proactive Failover Handler Wiring for LoadBalancer (
         subProfile as { auth?: { type?: string; buckets?: string[] } }
       ).auth;
 
-      const shouldProactivelyWire =
-        authConfig?.type === 'oauth' &&
-        authConfig.buckets &&
-        authConfig.buckets.length > 1;
+      const shouldWire = shouldProactivelyWire(subProfile);
 
-      expect(shouldProactivelyWire).toBe(false);
+      expect(shouldWire).toBe(false);
       expect(authConfig).toBeUndefined();
     });
   });
@@ -235,16 +235,7 @@ describe('RuntimeSettings - Proactive Failover Handler Wiring for LoadBalancer (
       ];
 
       // Apply the same logic as in runtimeSettings.ts
-      const qualifyingProfiles = subProfiles.filter((subProfile) => {
-        const subProfileAuth = (
-          subProfile as { auth?: { type?: string; buckets?: string[] } }
-        ).auth;
-        return (
-          subProfileAuth?.type === 'oauth' &&
-          Array.isArray(subProfileAuth.buckets) &&
-          subProfileAuth.buckets.length > 1
-        );
-      });
+      const qualifyingProfiles = subProfiles.filter(shouldProactivelyWire);
 
       // All three sub-profiles should qualify for proactive wiring
       expect(qualifyingProfiles).toHaveLength(3);
@@ -283,16 +274,7 @@ describe('RuntimeSettings - Proactive Failover Handler Wiring for LoadBalancer (
         },
       ];
 
-      const qualifyingProfiles = subProfiles.filter((subProfile) => {
-        const subProfileAuth = (
-          subProfile as { auth?: { type?: string; buckets?: string[] } }
-        ).auth;
-        return (
-          subProfileAuth?.type === 'oauth' &&
-          Array.isArray(subProfileAuth.buckets) &&
-          subProfileAuth.buckets.length > 1
-        );
-      });
+      const qualifyingProfiles = subProfiles.filter(shouldProactivelyWire);
 
       // Only the multi-bucket profile should qualify
       expect(qualifyingProfiles).toHaveLength(1);
@@ -325,16 +307,7 @@ describe('RuntimeSettings - Proactive Failover Handler Wiring for LoadBalancer (
         },
       ];
 
-      const qualifyingProfiles = subProfiles.filter((subProfile) => {
-        const subProfileAuth = (
-          subProfile as { auth?: { type?: string; buckets?: string[] } }
-        ).auth;
-        return (
-          subProfileAuth?.type === 'oauth' &&
-          Array.isArray(subProfileAuth.buckets) &&
-          subProfileAuth.buckets.length > 1
-        );
-      });
+      const qualifyingProfiles = subProfiles.filter(shouldProactivelyWire);
 
       // Only the OAuth multi-bucket profile should qualify
       expect(qualifyingProfiles).toHaveLength(1);
@@ -400,16 +373,7 @@ describe('RuntimeSettings - Proactive Failover Handler Wiring for LoadBalancer (
         },
       ];
 
-      const qualifyingProfiles = subProfiles.filter((subProfile) => {
-        const subProfileAuth = (
-          subProfile as { auth?: { type?: string; buckets?: string[] } }
-        ).auth;
-        return (
-          subProfileAuth?.type === 'oauth' &&
-          Array.isArray(subProfileAuth.buckets) &&
-          subProfileAuth.buckets.length > 1
-        );
-      });
+      const qualifyingProfiles = subProfiles.filter(shouldProactivelyWire);
 
       // Only the two multi-bucket OAuth sub-profiles should qualify
       expect(qualifyingProfiles).toHaveLength(2);
@@ -443,12 +407,9 @@ describe('RuntimeSettings - Proactive Failover Handler Wiring for LoadBalancer (
 
       // This is the exact condition from runtimeSettings.ts lines 1094-1097 (StandardProfile)
       // and lines 1130-1135 (LoadBalancer sub-profiles)
-      const shouldProactivelyWire =
-        authConfig?.type === 'oauth' &&
-        authConfig.buckets &&
-        authConfig.buckets.length > 1;
+      const shouldWire = shouldProactivelyWire(multiOAuthProfile);
 
-      expect(shouldProactivelyWire).toBe(true);
+      expect(shouldWire).toBe(true);
       expect(authConfig?.buckets?.length).toBe(3);
 
       // Test profile: Single bucket (should NOT qualify)
@@ -465,14 +426,7 @@ describe('RuntimeSettings - Proactive Failover Handler Wiring for LoadBalancer (
         },
       };
 
-      const singleAuthConfig = (
-        singleBucketProfile as { auth?: { type?: string; buckets?: string[] } }
-      ).auth;
-
-      const shouldNotWire =
-        singleAuthConfig?.type === 'oauth' &&
-        singleAuthConfig.buckets &&
-        singleAuthConfig.buckets.length > 1;
+      const shouldNotWire = shouldProactivelyWire(singleBucketProfile);
 
       expect(shouldNotWire).toBe(false);
     });

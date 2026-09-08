@@ -22,6 +22,7 @@
 import { describe, it, expect } from 'bun:test';
 import { TaskTool } from '../src/tools/task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SubagentOrchestrator } from '../src/core/subagentOrchestrator.js';
 import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
@@ -48,6 +49,7 @@ describe('Issue #3031 — async task timeout observability', () => {
         'task-max-timeout-seconds': 120,
       }),
       {
+        messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
         getAsyncTaskManager: () =>
@@ -87,6 +89,7 @@ describe('Issue #3031 — async task timeout observability', () => {
         'task-max-timeout-seconds': 0.05, // 50ms
       }),
       {
+        messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
         getAsyncTaskManager: () => manager,
@@ -137,6 +140,7 @@ describe('Issue #3031 — async task timeout observability', () => {
         'task-max-timeout-seconds': 0.05, // 50ms
       }),
       {
+        messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
         getAsyncTaskManager: () => manager,

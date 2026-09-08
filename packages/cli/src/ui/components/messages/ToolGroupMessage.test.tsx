@@ -540,4 +540,132 @@ describe('<ToolGroupMessage />', () => {
       expect(frame).toContain('Read README');
     });
   });
+
+  // @plan PLAN-20260824-ISSUE2021.P05 @requirement REQ-2021.5: mixed-state queue behavior, no snapshots
+  describe('mixed-state queue', () => {
+    afterEach(() => {
+      mockToolMessage.mockClear();
+    });
+
+    const execConfirmationDetails = (
+      onConfirm: ToolCallConfirmationDetails['onConfirm'],
+      title = 'Confirm Execution',
+    ): ToolCallConfirmationDetails => ({
+      type: 'exec',
+      title,
+      command: 'echo "hello"',
+      rootCommand: 'echo',
+      rootCommands: ['echo'],
+      onConfirm,
+    });
+
+    it('renders exactly one confirmation with the confirming call at high emphasis and the rest at low emphasis', () => {
+      // @plan PLAN-20260824-ISSUE2021.P05 @requirement REQ-2021.5
+      const toolCalls = [
+        createToolCall({
+          callId: 'tool-confirm',
+          name: 'confirmation-tool',
+          description: 'Needs approval',
+          status: ToolCallStatus.Confirming,
+          confirmationDetails: execConfirmationDetails(vi.fn()),
+        }),
+        createToolCall({
+          callId: 'tool-pending',
+          name: 'pending-tool',
+          status: ToolCallStatus.Pending,
+        }),
+        createToolCall({
+          callId: 'tool-executing',
+          name: 'executing-tool',
+          status: ToolCallStatus.Executing,
+        }),
+        createToolCall({
+          callId: 'tool-success',
+          name: 'success-tool',
+          status: ToolCallStatus.Success,
+        }),
+        createToolCall({
+          callId: 'tool-error',
+          name: 'error-tool',
+          status: ToolCallStatus.Error,
+        }),
+      ];
+
+      const { lastFrame } = render(
+        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+      );
+
+      const frame = lastFrame() ?? '';
+      expect((frame.match(/MockConfirmation:/g) ?? []).length).toBe(1);
+      expect(frame).toContain('MockConfirmation: Confirm Execution');
+
+      // The confirming call gets the emphasis the component actually passes
+      // (the first Confirming call awaiting approval renders at 'high').
+      const confirmingCall = mockToolMessage.mock.calls.find(
+        ([props]) => props?.callId === 'tool-confirm',
+      )?.[0];
+      expect(confirmingCall?.emphasis).toBe('high');
+
+      // Every other call in the queue renders at low emphasis while approval is
+      // awaited, and status passes through unchanged.
+      const expectedByCallId = new Map(
+        toolCalls.map((call) => [call.callId, call] as const),
+      );
+      for (const callId of [
+        'tool-pending',
+        'tool-executing',
+        'tool-success',
+        'tool-error',
+      ]) {
+        const props = mockToolMessage.mock.calls.find(
+          ([recorded]) => recorded?.callId === callId,
+        )?.[0];
+        expect(props?.emphasis).toBe('low');
+        expect(props?.status).toBe(expectedByCallId.get(callId)?.status);
+      }
+    });
+
+    it('renders only the first of two confirming calls', () => {
+      // @plan PLAN-20260824-ISSUE2021.P05 @requirement REQ-2021.5
+      const toolCalls = [
+        createToolCall({
+          callId: 'tool-confirm-1',
+          name: 'confirmation-tool',
+          description: 'Needs approval',
+          status: ToolCallStatus.Confirming,
+          confirmationDetails: execConfirmationDetails(
+            vi.fn(),
+            'Confirm First Tool',
+          ),
+        }),
+        createToolCall({
+          callId: 'tool-confirm-2',
+          name: 'confirmation-tool',
+          description: 'Queued approval',
+          status: ToolCallStatus.Confirming,
+          confirmationDetails: execConfirmationDetails(
+            vi.fn(),
+            'Confirm Second Tool',
+          ),
+        }),
+      ];
+
+      const { lastFrame } = render(
+        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+      );
+
+      const frame = lastFrame() ?? '';
+      expect((frame.match(/MockConfirmation:/g) ?? []).length).toBe(1);
+      // The first call's confirmation renders; the second stays queued.
+      expect(frame).toContain('MockConfirmation: Confirm First Tool');
+      expect(frame).not.toContain('MockConfirmation: Confirm Second Tool');
+
+      const secondCall = mockToolMessage.mock.calls.find(
+        ([props]) => props?.callId === 'tool-confirm-2',
+      )?.[0];
+      expect(secondCall).toBeDefined();
+      expect(secondCall?.status).toBe(ToolCallStatus.Confirming);
+      expect(secondCall?.emphasis).toBe('low');
+    });
+  });
 });

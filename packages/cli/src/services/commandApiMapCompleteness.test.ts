@@ -155,16 +155,34 @@ describe('Command-map completeness (#2203 / REQ-021)', () => {
     expect(duplicates).toHaveLength(0);
   });
 
-  it('every subpath entry targets the pinned specifier with a named export', () => {
-    const subpathEntries = COMBINED_COMMAND_API_MAP.filter(
-      (e) => e.kind === 'subpath',
-    );
-    expect(subpathEntries.length).toBeGreaterThan(0);
-    for (const entry of subpathEntries) {
-      expect(entry.target).toBe('@vybestack/llxprt-code-agents/app-service.js');
-      expect(typeof entry.exportName).toBe('string');
-      expect((entry.exportName ?? '').length).toBeGreaterThan(0);
+  function observePinnedSubpathEntries() {
+    return COMBINED_COMMAND_API_MAP.filter((e) => e.kind === 'subpath');
+  }
+
+  function observeFirstPinnedSubpathEntry(
+    subpathEntries: ReturnType<typeof observePinnedSubpathEntries>,
+  ) {
+    const firstEntry = subpathEntries.at(0);
+    if (firstEntry === undefined) {
+      throw new Error('Expected at least one pinned subpath entry');
     }
+    return {
+      target: firstEntry.target,
+      exportNameType: typeof firstEntry.exportName,
+      exportNameLength: (firstEntry.exportName ?? '').length,
+    };
+  }
+
+  it('every subpath entry targets the pinned specifier with a named export', () => {
+    const subpathEntries = observePinnedSubpathEntries();
+
+    expect(subpathEntries.length).toBeGreaterThan(0);
+    const firstEntry = observeFirstPinnedSubpathEntry(subpathEntries);
+    expect(firstEntry.target).toBe(
+      '@vybestack/llxprt-code-agents/app-service.js',
+    );
+    expect(firstEntry.exportNameType).toBe('string');
+    expect(firstEntry.exportNameLength).toBeGreaterThan(0);
   });
 
   it('config-gated commands and their subcommands are tracked in the combined map', () => {

@@ -61,6 +61,27 @@ const mockedExecSync = childProcess.execSync as unknown as Mock<
   (command: string) => string
 >;
 
+function resolveHomebrewPrefix(command: unknown): string {
+  if (
+    typeof command === 'string' &&
+    command.includes('brew --prefix llxprt-code')
+  ) {
+    return '/opt/homebrew/opt/llxprt-code';
+  }
+  throw new Error(`Command failed: ${String(command)}`);
+}
+
+function resolveHomebrewRealPath(
+  requestedPath: fs.PathLike,
+  cliPath: string,
+): string {
+  if (requestedPath === cliPath) return cliPath;
+  if (requestedPath === '/opt/homebrew/opt/llxprt-code') {
+    return '/opt/homebrew/Cellar/llxprt-code/1.0.0';
+  }
+  return String(requestedPath);
+}
+
 describe('getInstallationInfo', () => {
   const projectRoot = '/path/to/project';
   let originalArgv: string[];
@@ -161,23 +182,11 @@ describe('getInstallationInfo', () => {
     const cliPath = '/opt/homebrew/Cellar/llxprt-code/1.0.0/bin/llxprt';
     process.argv[1] = cliPath;
 
-    mockedExecSync.mockImplementation((cmd) => {
-      if (
-        typeof cmd === 'string' &&
-        cmd.includes('brew --prefix llxprt-code')
-      ) {
-        return '/opt/homebrew/opt/llxprt-code';
-      }
-      throw new Error(`Command failed: ${cmd}`);
-    });
+    mockedExecSync.mockImplementation(resolveHomebrewPrefix);
 
-    mockedRealPathSync.mockImplementation((p) => {
-      if (p === cliPath) return cliPath;
-      if (p === '/opt/homebrew/opt/llxprt-code') {
-        return '/opt/homebrew/Cellar/llxprt-code/1.0.0';
-      }
-      return String(p);
-    });
+    mockedRealPathSync.mockImplementation((requestedPath) =>
+      resolveHomebrewRealPath(requestedPath, cliPath),
+    );
 
     const info = getInstallationInfo(projectRoot, true);
 
@@ -409,23 +418,11 @@ describe('getInstallationInfo', () => {
     process.argv[1] = cliPath;
 
     // Brew prefix succeeds but path doesn't match
-    mockedExecSync.mockImplementation((cmd) => {
-      if (
-        typeof cmd === 'string' &&
-        cmd.includes('brew --prefix llxprt-code')
-      ) {
-        return '/opt/homebrew/opt/llxprt-code';
-      }
-      throw new Error(`Command failed: ${cmd}`);
-    });
+    mockedExecSync.mockImplementation(resolveHomebrewPrefix);
 
-    mockedRealPathSync.mockImplementation((p) => {
-      if (p === cliPath) return cliPath;
-      if (p === '/opt/homebrew/opt/llxprt-code') {
-        return '/opt/homebrew/Cellar/llxprt-code/1.0.0';
-      }
-      return String(p);
-    });
+    mockedRealPathSync.mockImplementation((requestedPath) =>
+      resolveHomebrewRealPath(requestedPath, cliPath),
+    );
 
     const info = getInstallationInfo(projectRoot, false);
 

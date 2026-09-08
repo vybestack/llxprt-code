@@ -108,6 +108,27 @@ void vi.mock('strip-json-comments', () => ({
   default: vi.fn((content) => content),
 }));
 
+function parseMalformedSettingsJson(
+  text: string,
+  malformedJson: string,
+  parseError: SyntaxError,
+  originalParse: (value: string) => unknown,
+): unknown {
+  if (text === malformedJson) {
+    throw parseError;
+  }
+  return originalParse(text);
+}
+
+type SettingsContentEntry = readonly [fs.PathOrFileDescriptor, string];
+
+function settingsContentForPath(
+  filePath: fs.PathOrFileDescriptor,
+  entries: readonly SettingsContentEntry[],
+): string {
+  return entries.find(([candidate]) => candidate === filePath)?.[1] ?? '{}';
+}
+
 describe('Settings Loading and Merging', () => {
   let mockFsExistsSync: Mock<typeof fs.existsSync>;
   let mockStripJsonComments: Mock<typeof stripJsonComments>;
@@ -245,11 +266,11 @@ describe('Settings Loading and Merging', () => {
 
       (
         fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
-      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
-        if (p === USER_SETTINGS_PATH)
-          return JSON.stringify(complexSettingsContent);
-        return '{}';
-      });
+      ).mockImplementation((p: fs.PathOrFileDescriptor) =>
+        settingsContentForPath(p, [
+          [USER_SETTINGS_PATH, JSON.stringify(complexSettingsContent)],
+        ]),
+      );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
       const arbitrary = dynamicSettings(settings);
@@ -271,12 +292,9 @@ describe('Settings Loading and Merging', () => {
 
       (
         fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
-      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
-        if (p === USER_SETTINGS_PATH) {
-          return malformedJson;
-        }
-        return '{}';
-      });
+      ).mockImplementation((p: fs.PathOrFileDescriptor) =>
+        settingsContentForPath(p, [[USER_SETTINGS_PATH, malformedJson]]),
+      );
 
       // Mock JSON.parse to throw a detailed error only for the malformed JSON
       const parseError = new SyntaxError(
@@ -286,12 +304,12 @@ describe('Settings Loading and Merging', () => {
       const originalParse = JSON.parse;
       vi.spyOn(JSON, 'parse').mockImplementation((text: string) => {
         _parseCallCount++;
-        // Only throw on the specific malformed JSON content
-        if (text === malformedJson) {
-          throw parseError;
-        }
-        // Use original parse for other JSON calls
-        return originalParse(text);
+        return parseMalformedSettingsJson(
+          text,
+          malformedJson,
+          parseError,
+          originalParse,
+        );
       });
 
       expect(() => loadSettings(MOCK_WORKSPACE_DIR)).toThrow(FatalConfigError);
@@ -333,11 +351,11 @@ describe('Settings Loading and Merging', () => {
       ).mockImplementation((p: fs.PathLike) => p === USER_SETTINGS_PATH);
       (
         fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
-      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
-        if (p === USER_SETTINGS_PATH)
-          return JSON.stringify(userSettingsContent);
-        return '{}';
-      });
+      ).mockImplementation((p: fs.PathOrFileDescriptor) =>
+        settingsContentForPath(p, [
+          [USER_SETTINGS_PATH, JSON.stringify(userSettingsContent)],
+        ]),
+      );
 
       const arbitrary = dynamicSettings(loadSettings(MOCK_WORKSPACE_DIR));
 
@@ -385,17 +403,17 @@ describe('Settings Loading and Merging', () => {
 
       (
         fs.readFileSync as unknown as Mock<(...args: never[]) => unknown>
-      ).mockImplementation((p: fs.PathOrFileDescriptor) => {
-        if (p === getSystemDefaultsPath())
-          return JSON.stringify(systemDefaultsContent);
-        if (p === getSystemSettingsPath())
-          return JSON.stringify(systemSettingsContent);
-        if (p === USER_SETTINGS_PATH)
-          return JSON.stringify(userSettingsContent);
-        if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-          return JSON.stringify(workspaceSettingsContent);
-        return '{}';
-      });
+      ).mockImplementation((p: fs.PathOrFileDescriptor) =>
+        settingsContentForPath(p, [
+          [getSystemDefaultsPath(), JSON.stringify(systemDefaultsContent)],
+          [getSystemSettingsPath(), JSON.stringify(systemSettingsContent)],
+          [USER_SETTINGS_PATH, JSON.stringify(userSettingsContent)],
+          [
+            MOCK_WORKSPACE_SETTINGS_PATH,
+            JSON.stringify(workspaceSettingsContent),
+          ],
+        ]),
+      );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 

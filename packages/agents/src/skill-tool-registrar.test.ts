@@ -125,7 +125,7 @@ describe('registerActivateSkillTool @issue:3379 @issue:3382', () => {
 
     registerActivateSkillTool(registry, skillService, messageBus);
 
-    expect(enumeratedSkillNames(registry)).toEqual(['alpha', 'beta']);
+    expect(enumeratedSkillNames(registry)).toStrictEqual(['alpha', 'beta']);
   });
 
   it('names the available skills in the tool description', () => {
@@ -147,7 +147,7 @@ describe('registerActivateSkillTool @issue:3379 @issue:3382', () => {
     skillService.setSkills([skillInfo('alpha'), skillInfo('gamma')]);
     registerActivateSkillTool(registry, skillService, messageBus);
 
-    expect(enumeratedSkillNames(registry)).toEqual(['alpha', 'gamma']);
+    expect(enumeratedSkillNames(registry)).toStrictEqual(['alpha', 'gamma']);
     expect(activateSkillDeclaration(registry)?.description).toContain(
       "'gamma'",
     );
@@ -164,7 +164,7 @@ describe('registerActivateSkillTool @issue:3379 @issue:3382', () => {
     skillService.setSkills([skillInfo('alpha')]);
     registerActivateSkillTool(registry, skillService, messageBus);
 
-    expect(enumeratedSkillNames(registry)).toEqual(['alpha']);
+    expect(enumeratedSkillNames(registry)).toStrictEqual(['alpha']);
     expect(activateSkillDeclaration(registry)?.description).not.toContain(
       "'gamma'",
     );
@@ -199,7 +199,7 @@ describe('registerActivateSkillTool @issue:3379 @issue:3382', () => {
     skillService.setSkills([skillInfo('alpha')]);
     registerActivateSkillTool(registry, skillService, messageBus);
 
-    expect(enumeratedSkillNames(registry)).toEqual(['alpha']);
+    expect(enumeratedSkillNames(registry)).toStrictEqual(['alpha']);
   });
 
   it('keeps the previous tool registered when building the replacement fails', () => {
@@ -219,6 +219,6 @@ describe('registerActivateSkillTool @issue:3379 @issue:3382', () => {
     // Config.reloadSkills() lets this propagate and never reaches setTools(),
     // so the live chat session still advertises activate_skill. Removing it
     // here would leave the model calling a tool the registry no longer has.
-    expect(enumeratedSkillNames(registry)).toEqual(['alpha']);
+    expect(enumeratedSkillNames(registry)).toStrictEqual(['alpha']);
   });
 });

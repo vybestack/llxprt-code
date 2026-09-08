@@ -23,6 +23,8 @@ import { describe, it, expect } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+const bunIt = it;
+
 // This test file lives in packages/core/src/runtime/contracts/
 // Resolve paths relative to this file's location
 const THIS_DIR = __dirname; // packages/core/src/runtime/contracts
@@ -193,10 +195,7 @@ describe('Core contract files must not import from providers', () => {
     it(`${relativePath}: no provider imports`, () => {
       const content = fs.readFileSync(filePath, 'utf-8');
       const providerImport = detectProviderImport(content);
-      expect(
-        providerImport,
-        `Provider import found in ${relativePath}: ${providerImport ?? ''}`,
-      ).toBeNull();
+      expect(providerImport).toBeNull();
     });
   }
 });
@@ -241,10 +240,7 @@ describe('Core contracts must not use forbidden naming patterns', () => {
     const basename = path.basename(filePath, '.ts');
     it(`file ${basename} must not use forbidden naming suffix`, () => {
       for (const suffix of FORBIDDEN_SUFFIXES) {
-        expect(
-          basename.endsWith(suffix),
-          `Contract file ${basename} uses forbidden suffix "${suffix}"`,
-        ).toBe(false);
+        expect(basename.endsWith(suffix)).toBe(false);
       }
     });
   }
@@ -269,6 +265,30 @@ describe('Tool-owned toolIdNormalization must not import from providers', () => 
   });
 });
 
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null;
+}
+
+function providerReferenceChecks(tsconfigContent: string): readonly boolean[] {
+  try {
+    const parsed: unknown = JSON.parse(stripTsConfigComments(tsconfigContent));
+    if (!isRecord(parsed) || !Array.isArray(parsed.references)) return [];
+    return parsed.references.flatMap((reference) => {
+      if (!isRecord(reference) || typeof reference.path !== 'string') return [];
+      return [reference.path.includes('providers')];
+    });
+  } catch (parseError: unknown) {
+    process.stderr.write(
+      'tsconfig.json could not be parsed for provider-reference check: ' +
+        (parseError instanceof Error
+          ? parseError.message
+          : String(parseError)) +
+        '\n',
+    );
+    return [];
+  }
+}
+
 /**
  * Package metadata boundary test: verify core package.json does not
  * depend on providers package.
@@ -283,39 +303,18 @@ describe('Core package metadata must not reference providers', () => {
   it('core package.json has no providers dependency', () => {
     const content = fs.readFileSync(corePackageJsonPath, 'utf-8');
     const pkg = JSON.parse(content);
-    const deps = pkg.dependencies ?? {};
-    expect(
-      deps['@vybestack/llxprt-code-providers'],
-      'core package.json must not depend on @vybestack/llxprt-code-providers',
-    ).toBeUndefined();
+    const dependencies = pkg.dependencies;
+    expect(dependencies?.['@vybestack/llxprt-code-providers']).toBeUndefined();
   });
 
-  it.skipIf(!fs.existsSync(coreTsconfigPath))(
-    'core tsconfig.json has no providers reference',
-    () => {
+  {
+    const it = !fs.existsSync(coreTsconfigPath) ? bunIt.skip : bunIt;
+    it('core tsconfig.json has no providers reference', () => {
       const content = fs.readFileSync(coreTsconfigPath, 'utf-8');
-      // Strip comments before parsing (TypeScript tsconfig can have comments)
-      const strippedContent = stripTsConfigComments(content);
-      try {
-        const tsconfig = JSON.parse(strippedContent);
-        const references = tsconfig.references ?? [];
-        for (const ref of references) {
-          expect(
-            ref.path.includes('providers'),
-            `tsconfig.json references providers path: ${ref.path}`,
-          ).toBe(false);
-        }
-      } catch (parseError) {
-        // Surface unexpected tsconfig parse failures so real regressions
-        // are not silently masked. TS extends-format issues still skip.
-        process.stderr.write(
-          'tsconfig.json could not be parsed for provider-reference check: ' +
-            (parseError instanceof Error
-              ? parseError.message
-              : String(parseError)) +
-            '\n',
-        );
+      const providerReferences = providerReferenceChecks(content);
+      for (const includesProviders of providerReferences) {
+        expect(includesProviders).toBe(false);
       }
-    },
-  );
+    });
+  }
 });

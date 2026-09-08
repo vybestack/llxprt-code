@@ -97,8 +97,6 @@ export function createFakeProvider(
     name,
     getModels: async () => [],
     getDefaultModel: () => 'fake-model',
-    getServerTools: () => [],
-    invokeServerTool: async () => ({}),
     async *generateChatCompletion() {
       yield {
         speaker: 'ai' as const,
@@ -122,14 +120,6 @@ class CaptureProvider implements IProvider {
 
   getDefaultModel(): string {
     return 'capture-model';
-  }
-
-  getServerTools(): string[] {
-    return [];
-  }
-
-  invokeServerTool(): Promise<Record<string, never>> {
-    return Promise.resolve({});
   }
 
   generateChatCompletion(

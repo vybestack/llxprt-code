@@ -22,7 +22,10 @@ import {
   type PerformResumeResult,
   type ResumeContext,
 } from '../../services/performResume.js';
-import { iContentToHistoryItems } from '../utils/iContentToHistoryItems.js';
+import {
+  iContentToHistoryItems,
+  resolveEmojiFilterMode,
+} from '../utils/iContentToHistoryItems.js';
 // import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // NOTE: Not yet ported from upstream
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 import { WelcomeDialog } from './WelcomeOnboarding/WelcomeDialog.js';
@@ -134,7 +137,10 @@ function useSessionBrowserHandler(
       for (const warning of resumeResult.warnings) {
         addItem({ type: 'info', text: `Warning: ${warning}` });
       }
-      const uiHistory = iContentToHistoryItems(resumeResult.history);
+      const uiHistory = iContentToHistoryItems(
+        resumeResult.history,
+        resolveEmojiFilterMode(config),
+      );
       commandContext.ui.clear();
       uiHistory.forEach((item, index) => {
         commandContext.ui.addItem(item, index);
@@ -366,7 +372,7 @@ function renderProfileDetailDialogView(
     <Box flexDirection="column">
       <ProfileDetailDialog
         profileName={uiState.selectedProfileName ?? ''}
-        profile={uiState.selectedProfileData as Profile | null}
+        profile={uiState.selectedProfileData}
         onClose={uiActions.closeProfileDetailDialog}
         onLoad={uiActions.loadProfileFromDetail}
         onDelete={uiActions.deleteProfileFromDetail}
@@ -384,12 +390,13 @@ function renderProfileDetailDialogView(
 function renderProfileEditorDialogView(
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
+  profile: Profile,
 ) {
   return (
     <Box flexDirection="column">
       <ProfileInlineEditor
         profileName={uiState.selectedProfileName ?? ''}
-        profile={uiState.selectedProfileData as Profile}
+        profile={profile}
         onSave={
           uiActions.saveProfileFromEditor as (
             name: string,
@@ -423,7 +430,11 @@ function renderProfileDialogs(
     uiState.isProfileEditorDialogOpen &&
     uiState.selectedProfileData != null
   ) {
-    return renderProfileEditorDialogView(uiState, uiActions);
+    return renderProfileEditorDialogView(
+      uiState,
+      uiActions,
+      uiState.selectedProfileData,
+    );
   }
   return null;
 }
@@ -529,6 +540,7 @@ function renderSessionBrowserDialog(
         activeRecording={
           commandContext.recordingSwapCallbacks?.getCurrentRecording() ?? null
         }
+        mediaStore={config.getLocalMediaStore()}
         onSelect={handleSessionBrowserSelect}
         onClose={uiActions.closeSessionBrowserDialog}
       />

@@ -21,6 +21,7 @@ import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import * as runtimeModule from '@vybestack/llxprt-code-providers/runtime.js';
 import * as profileApplicationModule from '@vybestack/llxprt-code-providers/runtime/profileApplication.js';
 import type { SubAgentScope } from '../subagent.js';
@@ -30,10 +31,6 @@ import { createRuntimeBundle } from './subagentOrchestrator-test-helpers.js';
 // handle.activate() uses a persistent enterWith that leaks the AsyncLocalStorage
 // store across tests; reset between every test so each launch starts from a
 // clean runtime identity.
-afterEach(() => {
-  runtimeModule.resetRuntimeScopeForTesting();
-  runtimeModule.resetCliRuntimeRegistryForTesting();
-});
 
 const subagentConfig: SubagentConfig = {
   name: 'helper',
@@ -89,6 +86,7 @@ async function launchSubagent(
     foregroundConfig: makeConfigWithSettings(foregroundSettings),
     scopeFactory,
     runtimeLoader,
+    messageBus: new MessageBus(),
   });
 
   const result = await orchestrator.launch({ name: subagentConfig.name });
@@ -99,6 +97,11 @@ async function launchSubagent(
 }
 
 describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () => {
+  afterEach(() => {
+    runtimeModule.resetRuntimeScopeForTesting();
+    runtimeModule.resetCliRuntimeRegistryForTesting();
+  });
+
   it('inherits the foreground on mode in the isolated settings service', async () => {
     const foreground = new SettingsService();
     foreground.setSessionScoped('dumpcontext', 'on');
@@ -330,6 +333,7 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
         foregroundConfig: makeConfigWithSettings(foreground),
         scopeFactory,
         runtimeLoader,
+        messageBus: new MessageBus(),
       });
 
       const result = await orchestrator.launch({

@@ -62,7 +62,7 @@ export {
   buildToolResponses,
   splitPartsByRole,
 } from '../core/agenticLoop/loopHelpers.js';
-// Stream types consumed by the CLI zed-integration adapter.
+// Stream types consumed by the ACP/Zed client adapter (packages/zed-acp).
 export {
   StreamEventType,
   type StreamEvent,

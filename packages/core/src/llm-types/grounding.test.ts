@@ -74,6 +74,65 @@ describe('UrlAccessInfo shape', () => {
 // Property-based tests
 // ============================================================================
 
+type OptionalSourceFields = {
+  title: string | null;
+  url: string | null;
+  snippet: string | null;
+};
+
+type OptionalSegmentFields = {
+  startIndex: number | null;
+  endIndex: number | null;
+  text: string | null;
+  sourceIndices: number[] | null;
+};
+
+/** Builds a GroundingSource, omitting the fields fast-check yielded as null. */
+function toGroundingSource(s: OptionalSourceFields): GroundingSource {
+  const out: GroundingSource = {};
+  if (s.title !== null) out.title = s.title;
+  if (s.url !== null) out.url = s.url;
+  if (s.snippet !== null) out.snippet = s.snippet;
+  return out;
+}
+
+/** Builds a GroundingSegment, omitting the fields fast-check yielded as null. */
+function toGroundingSegment(s: OptionalSegmentFields): GroundingSegment {
+  const out: GroundingSegment = {};
+  if (s.startIndex !== null) out.startIndex = s.startIndex;
+  if (s.endIndex !== null) out.endIndex = s.endIndex;
+  if (s.text !== null) out.text = s.text;
+  if (s.sourceIndices !== null) out.sourceIndices = s.sourceIndices;
+  return out;
+}
+
+/**
+ * True when a round-tripped GroundingInfo preserves every source and has no segments
+ * key at all.
+ */
+function sourcesPreservedRoundTrip(
+  roundTripped: GroundingInfo,
+  cleanedSources: GroundingSource[],
+): boolean {
+  return (
+    roundTripped.sources.length === cleanedSources.length &&
+    roundTripped.segments === undefined &&
+    roundTripped.sources.every(
+      (src, i) =>
+        src.title === cleanedSources[i].title &&
+        src.url === cleanedSources[i].url &&
+        src.snippet === cleanedSources[i].snippet,
+    )
+  );
+}
+
+function urlAccessPreserved(
+  roundTripped: UrlAccessInfo,
+  info: UrlAccessInfo,
+): boolean {
+  return roundTripped.url === info.url && roundTripped.status === info.status;
+}
+
 describe('grounding property-based', () => {
   it('GroundingInfo preserves all source data through JSON round-trip', () =>
     fc.assert(
@@ -87,25 +146,11 @@ describe('grounding property-based', () => {
           { minLength: 0, maxLength: 10 },
         ),
         (sources) => {
-          const cleanedSources: GroundingSource[] = sources.map((s) => {
-            const out: GroundingSource = {};
-            if (s.title !== null) out.title = s.title;
-            if (s.url !== null) out.url = s.url;
-            if (s.snippet !== null) out.snippet = s.snippet;
-            return out;
-          });
+          const cleanedSources: GroundingSource[] =
+            sources.map(toGroundingSource);
           const info: GroundingInfo = { sources: cleanedSources };
           const roundTripped: GroundingInfo = JSON.parse(JSON.stringify(info));
-          return (
-            roundTripped.sources.length === cleanedSources.length &&
-            roundTripped.segments === undefined &&
-            roundTripped.sources.every(
-              (src, i) =>
-                src.title === cleanedSources[i].title &&
-                src.url === cleanedSources[i].url &&
-                src.snippet === cleanedSources[i].snippet,
-            )
-          );
+          return sourcesPreservedRoundTrip(roundTripped, cleanedSources);
         },
       ),
     ));
@@ -120,9 +165,7 @@ describe('grounding property-based', () => {
         (input) => {
           const info: UrlAccessInfo = { url: input.url, status: input.status };
           const roundTripped: UrlAccessInfo = JSON.parse(JSON.stringify(info));
-          return (
-            roundTripped.url === info.url && roundTripped.status === info.status
-          );
+          return urlAccessPreserved(roundTripped, info);
         },
       ),
     ));
@@ -140,14 +183,7 @@ describe('grounding property-based', () => {
           { minLength: 0, maxLength: 8 },
         ),
         (segments) => {
-          const cleaned: GroundingSegment[] = segments.map((s) => {
-            const out: GroundingSegment = {};
-            if (s.startIndex !== null) out.startIndex = s.startIndex;
-            if (s.endIndex !== null) out.endIndex = s.endIndex;
-            if (s.text !== null) out.text = s.text;
-            if (s.sourceIndices !== null) out.sourceIndices = s.sourceIndices;
-            return out;
-          });
+          const cleaned: GroundingSegment[] = segments.map(toGroundingSegment);
           const roundTripped: GroundingSegment[] = JSON.parse(
             JSON.stringify(cleaned),
           );
@@ -179,23 +215,10 @@ describe('grounding property-based', () => {
           ),
         }),
         (input) => {
-          const cleanedSources: GroundingSource[] = input.sources.map((s) => {
-            const out: GroundingSource = {};
-            if (s.title !== null) out.title = s.title;
-            if (s.url !== null) out.url = s.url;
-            if (s.snippet !== null) out.snippet = s.snippet;
-            return out;
-          });
-          const cleanedSegments: GroundingSegment[] = input.segments.map(
-            (s) => {
-              const out: GroundingSegment = {};
-              if (s.startIndex !== null) out.startIndex = s.startIndex;
-              if (s.endIndex !== null) out.endIndex = s.endIndex;
-              if (s.text !== null) out.text = s.text;
-              if (s.sourceIndices !== null) out.sourceIndices = s.sourceIndices;
-              return out;
-            },
-          );
+          const cleanedSources: GroundingSource[] =
+            input.sources.map(toGroundingSource);
+          const cleanedSegments: GroundingSegment[] =
+            input.segments.map(toGroundingSegment);
           const info: GroundingInfo = {
             sources: cleanedSources,
             segments: cleanedSegments,

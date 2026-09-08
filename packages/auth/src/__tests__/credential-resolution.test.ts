@@ -261,7 +261,7 @@ describe('Credential resolution diagnostics', () => {
       CAPABILITY_SECRET,
       KEY_MATERIAL_SECRET,
     ]);
-    expect(failure.diagnostics).toEqual({
+    expect(failure.diagnostics).toStrictEqual({
       provider: 'test-provider',
       profile: 'no-profile',
       runtimeId: 'runtime-unconfigured',
@@ -331,7 +331,7 @@ describe('Credential resolution diagnostics', () => {
       CAPABILITY_SECRET,
       KEY_MATERIAL_SECRET,
     ]);
-    expect(failure.diagnostics.attemptedMechanisms).toEqual([
+    expect(failure.diagnostics.attemptedMechanisms).toStrictEqual([
       'provider-auth-key',
       'provider-auth-keyfile',
       'constructor-api-key',

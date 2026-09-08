@@ -10,10 +10,6 @@ import { LoadedSettingsOAuthAdapter } from './oauth-settings-adapter.js';
 import { LoadedSettings } from '../config/settings.js';
 import type { Settings } from '../config/settings.js';
 
-afterEach(() => {
-  restoreEnv();
-});
-
 function createLoadedSettings(userOverrides: Partial<Settings> = {}): {
   settings: LoadedSettings;
   userSettings: Settings;
@@ -31,6 +27,10 @@ function createLoadedSettings(userOverrides: Partial<Settings> = {}): {
 }
 
 describe('LoadedSettingsOAuthAdapter', () => {
+  afterEach(() => {
+    restoreEnv();
+  });
+
   let adapter: LoadedSettingsOAuthAdapter;
   let settings: LoadedSettings;
 

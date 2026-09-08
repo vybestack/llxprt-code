@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { RestoreCommand, ListCheckpointsCommand } from './restore.js';
-import type { Config, GitService } from '@vybestack/llxprt-code-core';
+import type { GitService } from '@vybestack/llxprt-code-core';
 import type { CommandContext } from './types.js';
 import type { Stats } from 'node:fs';
 import * as path from 'node:path';
@@ -24,24 +24,25 @@ const dependencies = {
   readFile: mockReadFile,
 };
 
+const checkpointDir = '/mock/checkpoint/dir';
+
+function baseContext(): CommandContext {
+  return {
+    extensions: [],
+    model: 'test-model',
+    checkpointing: {
+      enabled: true,
+      getProjectTempCheckpointsDir: () => checkpointDir,
+    },
+  };
+}
+
 describe('ListCheckpointsCommand', () => {
-  let mockConfig: Config;
   let context: CommandContext;
-  let getCheckpointingEnabled: ReturnType<typeof vi.fn<() => boolean>>;
-  const checkpointDir = '/mock/checkpoint/dir';
 
   beforeEach(() => {
     vi.clearAllMocks();
-
-    getCheckpointingEnabled = vi.fn();
-    mockConfig = {
-      getCheckpointingEnabled,
-      storage: {
-        getProjectTempCheckpointsDir: vi.fn().mockReturnValue(checkpointDir),
-      },
-    } as unknown as Config;
-
-    context = { config: mockConfig };
+    context = baseContext();
   });
 
   it('should have the correct name', () => {
@@ -51,7 +52,13 @@ describe('ListCheckpointsCommand', () => {
 
   it('should return error when checkpointing is disabled', async () => {
     const command = new ListCheckpointsCommand(dependencies);
-    getCheckpointingEnabled.mockReturnValue(false);
+    context = {
+      ...context,
+      checkpointing: {
+        enabled: false,
+        getProjectTempCheckpointsDir: () => checkpointDir,
+      },
+    };
 
     const result = await command.execute(context, []);
 
@@ -63,7 +70,6 @@ describe('ListCheckpointsCommand', () => {
 
   it('should return "No checkpoints found." for empty directory', async () => {
     const command = new ListCheckpointsCommand(dependencies);
-    getCheckpointingEnabled.mockReturnValue(true);
     mockReaddir.mockResolvedValue([]);
     mockFormatCheckpointDisplayList.mockReturnValue('');
 
@@ -77,8 +83,6 @@ describe('ListCheckpointsCommand', () => {
 
   it('should return formatted list for directory with .json files', async () => {
     const command = new ListCheckpointsCommand(dependencies);
-    getCheckpointingEnabled.mockReturnValue(true);
-    // readdir returns string[] when called without options
     mockReaddir.mockResolvedValue([
       'checkpoint1.json',
       'checkpoint2.json',
@@ -100,26 +104,15 @@ describe('ListCheckpointsCommand', () => {
 });
 
 describe('RestoreCommand', () => {
-  let mockConfig: Config;
   let mockGit: GitService;
   let context: CommandContext;
-  const checkpointDir = '/mock/checkpoint/dir';
 
   beforeEach(() => {
     vi.clearAllMocks();
-
-    mockConfig = {
-      getCheckpointingEnabled: vi.fn().mockReturnValue(true),
-      storage: {
-        getProjectTempCheckpointsDir: vi.fn().mockReturnValue(checkpointDir),
-      },
-    } as unknown as Config;
-
     mockGit = {
       restoreProjectFromSnapshot: vi.fn(),
     } as unknown as GitService;
-
-    context = { config: mockConfig, git: mockGit };
+    context = { ...baseContext(), git: mockGit };
   });
 
   it('should have the correct name', () => {
@@ -248,7 +241,6 @@ describe('RestoreCommand', () => {
 
   it('should return error when commitHash present but no git service', async () => {
     const command = new RestoreCommand(dependencies);
-    const contextNoGit = { config: mockConfig };
     const validData = {
       commitHash: 'abc123',
       toolCall: {
@@ -257,6 +249,7 @@ describe('RestoreCommand', () => {
       },
     };
 
+    const noGitContext: CommandContext = { ...context, git: undefined };
     mockLstat.mockResolvedValue({
       isSymbolicLink: () => false,
     } as Stats);
@@ -267,7 +260,7 @@ describe('RestoreCommand', () => {
     };
     mockGetToolCallDataSchema.mockReturnValue(mockSchema);
 
-    const result = await command.execute(contextNoGit, ['valid.json']);
+    const result = await command.execute(noGitContext, ['valid.json']);
 
     expect(result.name).toStrictEqual('restore');
     expect(result.data).toHaveProperty('error');
@@ -276,7 +269,6 @@ describe('RestoreCommand', () => {
 
   it('should succeed for valid checkpoint without commitHash (no git needed)', async () => {
     const command = new RestoreCommand(dependencies);
-    const contextNoGit = { config: mockConfig };
     const validData = {
       toolCall: {
         name: 'test_tool',
@@ -294,7 +286,7 @@ describe('RestoreCommand', () => {
     };
     mockGetToolCallDataSchema.mockReturnValue(mockSchema);
 
-    const result = await command.execute(contextNoGit, ['valid.json']);
+    const result = await command.execute(context, ['valid.json']);
 
     expect(result).toStrictEqual({
       name: 'restore',

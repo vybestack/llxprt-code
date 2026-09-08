@@ -57,6 +57,11 @@ function callsIncludeAnnotation(
   );
 }
 
+function formatQuotaCaseLabel(input: string): string {
+  const label = input.slice(0, 48);
+  return label.length > 0 ? label : '(empty)';
+}
+
 /**
  * Return the first `::error ...::` workflow-command line written to the stdout
  * spy, or `null` when none was emitted. Used to assert on the exact escaped
@@ -71,6 +76,10 @@ function findAnnotationLine(
     }
   }
   return null;
+}
+
+function annotationOrEmpty(annotation: string | null): string {
+  return annotation ?? '';
 }
 
 describe('quota-guard', () => {
@@ -135,7 +144,7 @@ describe('quota-guard', () => {
     ];
 
     for (const input of negativeCases) {
-      it(`ignores non-quota output: ${input.slice(0, 48) || '(empty)'}`, () => {
+      it(`ignores non-quota output: ${formatQuotaCaseLabel(input)}`, () => {
         expect(detectQuotaSignal(input)).toBeNull();
       });
     }
@@ -423,7 +432,7 @@ describe('quota-guard', () => {
       spy.mockRestore();
 
       expect(annotation).not.toBeNull();
-      const line = annotation ?? '';
+      const line = annotationOrEmpty(annotation);
       // The single workflow command must be one physical line: the special
       // characters are percent-encoded, so only the writer's trailing newline
       // remains raw.

@@ -9,6 +9,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  LocalMediaStore,
   SessionRecordingService,
   replaySession,
   type IContent,
@@ -26,10 +27,15 @@ function content(speaker: 'human' | 'ai', text: string): IContent {
   return { speaker, blocks: [{ type: 'text', text }] };
 }
 
+function recordingPath(recording: SessionRecordingService): string {
+  return recording.getFilePath() ?? '';
+}
+
 describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625', () => {
   let root: string;
   let chatsDir: string;
   let recording: SessionRecordingService;
+  let mediaStore: LocalMediaStore;
   let context: CommandContext;
 
   const command = (name: string): SlashCommand => {
@@ -61,6 +67,10 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'chat-command-'));
     chatsDir = join(root, 'chats');
+    mediaStore = new LocalMediaStore({
+      rootDirectory: join(root, 'media'),
+      quotaBytes: 1024 * 1024,
+    });
     recording = await SessionRecordingService.createLocked({
       sessionId: crypto.randomUUID(),
       projectHash: PROJECT_HASH,
@@ -81,6 +91,7 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
     assertDefined(context.services.config);
     Object.assign(context.services.config, {
       getProjectRoot: () => root,
+      getLocalMediaStore: () => mediaStore,
     });
   });
 
@@ -115,10 +126,7 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
       messageType: 'info',
     });
 
-    const replay = await replaySession(
-      recording.getFilePath() ?? '',
-      PROJECT_HASH,
-    );
+    const replay = await replaySession(recordingPath(recording), PROJECT_HASH);
     expect(replay).toMatchObject({
       ok: true,
       checkpoints: [
@@ -143,10 +151,7 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
       type: 'message',
       messageType: 'info',
     });
-    const replay = await replaySession(
-      recording.getFilePath() ?? '',
-      PROJECT_HASH,
-    );
+    const replay = await replaySession(recordingPath(recording), PROJECT_HASH);
     expect(replay.ok).toBe(true);
     expect(replay.sessionName).toBe('living-branch');
     expect(replay.metadata).toStrictEqual(
@@ -213,10 +218,7 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
     context.overwriteConfirmed = true;
 
     const result = await command('save').action?.(context, 'dupe');
-    const replay = await replaySession(
-      recording.getFilePath() ?? '',
-      PROJECT_HASH,
-    );
+    const replay = await replaySession(recordingPath(recording), PROJECT_HASH);
 
     expect({
       result,
@@ -300,13 +302,54 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
       ],
       clientHistory: history.slice(0, 2),
     });
-    const replay = await replaySession(
-      recording.getFilePath() ?? '',
-      PROJECT_HASH,
-    );
+    const replay = await replaySession(recordingPath(recording), PROJECT_HASH);
     expect(replay).toMatchObject({
       ok: true,
       history: [content('human', 'A'), content('ai', 'B')],
+    });
+  });
+
+  it('restore payload carries model thinking blocks through to replay (#2888)', async () => {
+    const aiTurn: IContent = {
+      speaker: 'ai',
+      blocks: [
+        { type: 'thinking', thought: 'pondering \u2705' },
+        { type: 'text', text: 'B' },
+      ],
+    };
+    const history = [
+      content('human', 'A'),
+      aiTurn,
+      content('human', 'C'),
+      content('ai', 'D'),
+    ];
+    Object.assign(context.services.config, {
+      getAgentClient: () => ({
+        hasChatInitialized: () => true,
+        getChat: () => ({
+          getHistory: () => history,
+        }),
+      }),
+    });
+    recording.recordContent(content('human', 'C'));
+    recording.recordContent(content('ai', 'D'));
+    await recording.flush();
+
+    const result = await command('restore').action?.(context, '1');
+
+    // The display payload keeps raw thinking blocks; the load_history
+    // handler filters them with the same emoji rule as the text.
+    expect(result).toStrictEqual({
+      type: 'load_history',
+      history: [
+        { type: MessageType.USER, text: 'A' },
+        {
+          type: MessageType.AI,
+          text: 'B',
+          thinkingBlocks: [{ type: 'thinking', thought: 'pondering \u2705' }],
+        },
+      ],
+      clientHistory: history.slice(0, 2),
     });
   });
 

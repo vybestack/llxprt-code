@@ -1,118 +1,261 @@
 {
   "tmux": {
     "cols": 120,
-    "rows": 30,
-    "historyLimit": 50000,
-    "scrollbackLines": 5000,
+    "rows": 40,
+    "historyLimit": 20000,
+    "scrollbackLines": 3000,
     "initialWaitMs": 6000
   },
-  "startCommand": ["bun", "scripts/start.ts"],
-  "yolo": true,
-  "macros": {
-    "loadSynthetic": [
-      { "type": "line", "text": "/profile load synthetic" },
-      {
-        "type": "waitFor",
-        "scope": "screen",
-        "contains": "Profile 'synthetic' loaded",
-        "timeoutMs": 15000
-      }
-    ],
-    "openSessionBrowser": [
-      { "type": "line", "text": "/continue", "submitKeys": ["Enter"] },
-      {
-        "type": "waitFor",
-        "scope": "screen",
-        "contains": "Session Browser",
-        "timeoutMs": 10000
-      }
-    ],
-    "closeSessionBrowser": [
-      { "type": "key", "key": "Escape" },
-      {
-        "type": "waitForNot",
-        "scope": "screen",
-        "contains": "Session Browser",
-        "timeoutMs": 5000
-      }
-    ],
-    "quit": [
-      { "type": "line", "text": "/quit" },
-      { "type": "waitForExit", "timeoutMs": 15000 }
-    ]
-  },
+  "startCommand": [
+    "env CI=0 CONTINUOUS_INTEGRATION=0 NODE_OPTIONS= LLXPRT_CODE_NO_RELAUNCH=true LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION=true LLXPRT_CODE_BUILTIN_COMMANDS_ONLY=true LLXPRT_CODE_SUPPRESS_STATIC_HEADER=true LLXPRT_CODE_WELCOME_CONFIG_PATH=scripts/fixtures/welcome-completed.json LLXPRT_SYSTEM_SETTINGS_PATH=scripts/system-settings.interactive-ui.json LLXPRT_FAKE_RESPONSES=scripts/fixtures/session-browser.responses.jsonl sh -c 'SBSMOKE_HOME=$(mktemp -d \"${TMPDIR:-/tmp}/llxprt-sbsmoke.XXXXXX\") && export LLXPRT_CONFIG_HOME=\"$SBSMOKE_HOME\" LLXPRT_DATA_HOME=\"$SBSMOKE_HOME\" && cp scripts/fixtures/session-browser-settings.json \"$SBSMOKE_HOME/settings.json\" && ${bun} packages/cli/index.ts --provider fake --model fake-model --yolo; clear; echo SBSMOKE_PHASE2_READY; exec ${bun} packages/cli/index.ts --provider fake --model fake-model --yolo'"
+  ],
+  "yolo": false,
   "steps": [
     {
       "type": "waitFor",
       "scope": "screen",
       "contains": "Type your message",
-      "timeoutMs": 30000
+      "timeoutMs": 60000
     },
-    { "type": "capture", "label": "start", "scope": "screen" },
-
-    { "type": "macro", "name": "loadSynthetic" },
-
-    { "type": "line", "text": "say hello" },
+    {
+      "type": "capture",
+      "label": "phase1-start",
+      "scope": "screen"
+    },
+    {
+      "type": "line",
+      "text": "record a turn for the session browser smoke",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 1000
+    },
     {
       "type": "waitFor",
       "scope": "screen",
-      "contains": "",
+      "contains": "SBSMOKE_SEED_REPLY",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "capture",
+      "label": "phase1-seeded",
+      "scope": "screen"
+    },
+    {
+      "type": "line",
+      "text": "/quit",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "SBSMOKE_PHASE2_READY",
       "timeoutMs": 30000
     },
-    { "type": "wait", "ms": 1000 },
-    { "type": "capture", "label": "after-first-message", "scope": "screen" },
-
-    { "type": "macro", "name": "openSessionBrowser" },
-    { "type": "capture", "label": "browser-open", "scope": "screen" },
-
-    { "type": "expect", "scope": "screen", "contains": "Session Browser" },
-    { "type": "expect", "scope": "screen", "contains": "Search:" },
-    { "type": "expect", "scope": "screen", "contains": "sessions found" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "capture",
+      "label": "phase2-start",
+      "scope": "screen"
+    },
+    {
+      "type": "line",
+      "text": "/continue",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Search:",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "capture",
+      "label": "browser-open",
+      "scope": "screen"
+    },
     {
       "type": "expect",
       "scope": "screen",
-      "regex": "\\[newest\\]|\\[oldest\\]|\\[size\\]"
+      "contains": "Session Browser"
     },
-
-    { "type": "key", "key": "Down" },
-    { "type": "wait", "ms": 200 },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "[newest]"
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "Controls:"
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "Selected:"
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "regex": "\u25cf #1 session "
+    },
+    {
+      "type": "key",
+      "key": "Tab"
+    },
+    {
+      "type": "wait",
+      "ms": 500
+    },
     {
       "type": "capture",
-      "label": "browser-selection-moved",
+      "label": "browser-nav-mode",
       "scope": "screen"
     },
-
-    { "type": "key", "key": "Tab" },
-    { "type": "wait", "ms": 200 },
-    { "type": "capture", "label": "browser-nav-mode", "scope": "screen" },
-
-    { "type": "key", "key": "s" },
-    { "type": "wait", "ms": 200 },
-    { "type": "capture", "label": "browser-sort-changed", "scope": "screen" },
-
-    { "type": "key", "key": "Tab" },
-    { "type": "wait", "ms": 200 },
-
-    { "type": "keys", "keys": ["t", "e", "s", "t"] },
-    { "type": "wait", "ms": 300 },
-    { "type": "capture", "label": "browser-search-typed", "scope": "screen" },
-    { "type": "expect", "scope": "screen", "contains": "test" },
-
-    { "type": "key", "key": "BSpace" },
-    { "type": "key", "key": "BSpace" },
-    { "type": "key", "key": "BSpace" },
-    { "type": "key", "key": "BSpace" },
-    { "type": "wait", "ms": 200 },
-
-    { "type": "macro", "name": "closeSessionBrowser" },
-    { "type": "capture", "label": "browser-closed", "scope": "screen" },
+    {
+      "type": "key",
+      "key": "Down"
+    },
+    {
+      "type": "wait",
+      "ms": 400
+    },
+    {
+      "type": "key",
+      "key": "Up"
+    },
+    {
+      "type": "wait",
+      "ms": 400
+    },
+    {
+      "type": "capture",
+      "label": "browser-navigated",
+      "scope": "screen"
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "regex": "\u25cf #1 session "
+    },
+    {
+      "type": "key",
+      "key": "s"
+    },
+    {
+      "type": "wait",
+      "ms": 500
+    },
+    {
+      "type": "capture",
+      "label": "browser-sorted",
+      "scope": "screen"
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "[oldest]"
+    },
+    {
+      "type": "key",
+      "key": "s"
+    },
+    {
+      "type": "wait",
+      "ms": 500
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "[size]"
+    },
+    {
+      "type": "key",
+      "key": "Tab"
+    },
+    {
+      "type": "wait",
+      "ms": 500
+    },
+    {
+      "type": "keys",
+      "keys": ["z", "z", "q", "q"]
+    },
+    {
+      "type": "wait",
+      "ms": 1000
+    },
+    {
+      "type": "capture",
+      "label": "browser-search-nomatch",
+      "scope": "screen"
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "(0 targets found)"
+    },
     {
       "type": "expectCount",
       "scope": "screen",
-      "contains": "Session Browser",
+      "regex": "\u25cf #1 session ",
       "equals": 0
     },
-
-    { "type": "macro", "name": "quit" }
+    {
+      "type": "key",
+      "key": "Escape"
+    },
+    {
+      "type": "wait",
+      "ms": 1000
+    },
+    {
+      "type": "capture",
+      "label": "browser-search-cleared",
+      "scope": "screen"
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "Session Browser"
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "regex": "\u25cf #1 session "
+    },
+    {
+      "type": "key",
+      "key": "Escape"
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "Session Browser",
+      "timeoutMs": 15000
+    },
+    {
+      "type": "capture",
+      "label": "browser-closed",
+      "scope": "screen"
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 15000
+    },
+    {
+      "type": "line",
+      "text": "/quit",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitForExit",
+      "timeoutMs": 30000
+    }
   ]
 }

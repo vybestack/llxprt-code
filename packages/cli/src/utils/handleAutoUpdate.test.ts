@@ -17,6 +17,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+function platformCleanupCommand(platform: NodeJS.Platform): string {
+  return platform === 'win32' ? 'rmdir /s /q' : 'rm -rf';
+}
+
 const realInstallationInfoModule = {
   ...(await import('./installationInfo.js')),
 };
@@ -25,27 +29,27 @@ const realUpdateEventEmitterModule = {
 };
 
 void vi.mock('./installationInfo.js', () => {
-  const actual = realInstallationInfoModule;
+  const importedModule = realInstallationInfoModule;
   return {
-    ...actual,
+    ...importedModule,
     getInstallationInfo: vi.fn(),
   };
 });
 
 void vi.mock('./updateEventEmitter.js', () => {
-  const actual = realUpdateEventEmitterModule;
+  const importedModule = realUpdateEventEmitterModule;
   return {
-    ...actual,
+    ...importedModule,
     updateEventEmitter: {
-      ...actual.updateEventEmitter,
+      ...importedModule.updateEventEmitter,
       emit: vi.fn(),
     },
   };
 });
 
-const actual = { ...(await import('node:fs')) };
+const importedModule = { ...(await import('node:fs')) };
 void vi.mock('node:fs', () => ({
-  ...actual,
+  ...importedModule,
   existsSync: vi.fn(),
   readFileSync: vi.fn(),
   writeFileSync: vi.fn(),
@@ -56,7 +60,7 @@ void vi.mock('node:fs', () => ({
   unlinkSync: vi.fn(),
   readdirSync: vi.fn(),
   realpathSync: vi.fn(),
-  constants: actual.constants,
+  constants: importedModule.constants,
 }));
 
 const actualActual = { ...(await import('node:os')) };
@@ -561,8 +565,7 @@ describe('handleAutoUpdate', () => {
       handleAutoUpdate(mockUpdateInfo, mockSettings, '/root', mockSpawn);
 
       // Platform-appropriate cleanup command (rm -rf for Unix, rmdir /s /q for Windows)
-      const expectedCommand =
-        process.platform === 'win32' ? 'rmdir /s /q' : 'rm -rf';
+      const expectedCommand = platformCleanupCommand(process.platform);
       expect(mockUpdateEventEmitter.emit).toHaveBeenCalledWith('update-info', {
         message: expect.stringContaining(expectedCommand),
       });

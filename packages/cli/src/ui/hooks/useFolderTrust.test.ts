@@ -483,44 +483,49 @@ describe('useFolderTrust', () => {
     }
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'persists a symlinked workspace canonically before updating live Config trust',
-    async () => {
-      const directory = fs.mkdtempSync(
-        path.join(os.tmpdir(), 'llxprt-live-folder-trust-'),
-      );
-      temporaryDirectories.push(directory);
-      const target = path.join(directory, 'target');
-      const workspaceLink = path.join(directory, 'workspace-link');
-      const trustedFoldersPath = path.join(directory, 'trustedFolders.json');
-      fs.mkdirSync(target);
-      fs.symlinkSync(target, workspaceLink, 'dir');
-      const canonicalTarget = fs.realpathSync(target);
-      const liveTrustedFolders = new trustedFolders.LoadedTrustedFolders(
-        { path: trustedFoldersPath, config: {} },
-        [],
-      );
-      loadTrustedFoldersSpy.mockReturnValue(liveTrustedFolders);
-      isWorkspaceTrustedSpy.mockReturnValue(undefined);
-      mockConfig.getWorkingDir = () => workspaceLink;
-
-      const { result } = renderHook(() =>
-        useFolderTrust(mockSettings, addItem, mockConfig),
-      );
-      await act(async () => {
-        await result.current.handleFolderTrustSelect(
-          FolderTrustChoice.TRUST_FOLDER,
+  describe.skipIf(process.platform === 'win32')(
+    'symlinked workspace trust',
+    () => {
+      it('persists a symlinked workspace canonically before updating live Config trust', async () => {
+        const directory = fs.mkdtempSync(
+          path.join(os.tmpdir(), 'llxprt-live-folder-trust-'),
         );
-      });
+        temporaryDirectories.push(directory);
+        const target = path.join(directory, 'target');
+        const workspaceLink = path.join(directory, 'workspace-link');
+        const trustedFoldersPath = path.join(directory, 'trustedFolders.json');
+        fs.mkdirSync(target);
+        fs.symlinkSync(target, workspaceLink, 'dir');
+        const canonicalTarget = fs.realpathSync(target);
+        const liveTrustedFolders = new trustedFolders.LoadedTrustedFolders(
+          { path: trustedFoldersPath, config: {} },
+          [],
+        );
+        loadTrustedFoldersSpy.mockReturnValue(liveTrustedFolders);
+        isWorkspaceTrustedSpy.mockReturnValue(undefined);
+        mockConfig.getWorkingDir = () => workspaceLink;
 
-      expect(liveTrustedFolders.user.config).toStrictEqual({
-        [canonicalTarget]: TrustLevel.TRUST_FOLDER,
+        const { result } = renderHook(() =>
+          useFolderTrust(mockSettings, addItem, mockConfig),
+        );
+        await act(async () => {
+          await result.current.handleFolderTrustSelect(
+            FolderTrustChoice.TRUST_FOLDER,
+          );
+        });
+
+        expect(liveTrustedFolders.user.config).toStrictEqual({
+          [canonicalTarget]: TrustLevel.TRUST_FOLDER,
+        });
+        expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(true);
       });
-      expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(true);
     },
   );
 
-  it('uses the configured working directory when it differs from process cwd', async () => {
+  const observeConfiguredWorkingDirectoryTrust = async (): Promise<{
+    readonly isDialogOpen: boolean;
+    readonly persistedTrust: ReturnType<typeof vi.fn>;
+  }> => {
     const configuredWorkingDirectory = '/workspace/from-config';
     mockedCwd.mockReturnValue('/unrelated/process-cwd');
     mockConfig.getWorkingDir = () => configuredWorkingDirectory;
@@ -530,8 +535,7 @@ describe('useFolderTrust', () => {
     const { result } = renderHook(() =>
       useFolderTrust(mockSettings, addItem, mockConfig),
     );
-
-    expect(result.current.isFolderTrustDialogOpen).toBe(true);
+    const isDialogOpen = result.current.isFolderTrustDialogOpen;
 
     await act(async () => {
       await result.current.handleFolderTrustSelect(
@@ -539,9 +543,15 @@ describe('useFolderTrust', () => {
       );
     });
 
-    expect(mockTrustedFolders.setValue).toHaveBeenCalledWith(
-      configuredWorkingDirectory,
+    return { isDialogOpen, persistedTrust: mockTrustedFolders.setValue };
+  };
+
+  it('uses the configured working directory when it differs from process cwd', async () => {
+    const trust = await observeConfiguredWorkingDirectoryTrust();
+    expect(trust.persistedTrust).toHaveBeenCalledWith(
+      '/workspace/from-config',
       TrustLevel.TRUST_FOLDER,
     );
+    expect(trust.isDialogOpen).toBe(true);
   });
 });

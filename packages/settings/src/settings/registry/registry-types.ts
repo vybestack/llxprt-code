@@ -11,6 +11,36 @@ export type SettingCategory =
   | 'model-param'
   | 'custom-header';
 
+/**
+ * Owner of a settings key: which component's state the value belongs to.
+ * - `application`: LLxprt-application behavior (UI, dumps, emoji filter).
+ * - `provider-connection`: how the CLI connects to a provider (auth,
+ *   endpoint, socket, headers).
+ * - `model`: model behavior/choice (reasoning, compression, context limits).
+ * - `agent-policy`: how the agent executes (tools, shell, loops, timeouts,
+ *   task-list continuation).
+ */
+export type SettingOwner =
+  | 'application'
+  | 'provider-connection'
+  | 'model'
+  | 'agent-policy';
+
+/**
+ * How a change to this setting reaches running state.
+ * - `render-immediate`: takes effect for the next rendered output.
+ * - `next-turn`: takes effect at the next turn boundary.
+ * - `service-reconfigure`: requires a service reconfiguration.
+ * - `profile-transition`: applies when a profile is loaded/unloaded.
+ * - `restart-required`: only takes effect on restart.
+ */
+export type SettingPropagation =
+  | 'render-immediate'
+  | 'next-turn'
+  | 'service-reconfigure'
+  | 'profile-transition'
+  | 'restart-required';
+
 export interface ValidationResult {
   success: boolean;
   value?: unknown;
@@ -21,6 +51,8 @@ export interface SettingSpec {
   key: string;
   aliases?: readonly string[];
   category: SettingCategory;
+  owner: SettingOwner;
+  propagation: SettingPropagation;
   providers?: readonly string[];
   description: string;
   hint?: string;

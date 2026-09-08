@@ -240,19 +240,19 @@ describe('claudecode OAuth registration with environment key', () => {
     // that happens to be registered first, and not the ones that declare
     // their own `apiKeyEnv` (openai, openai-responses, openai-vercel, gemini).
     expect(openaiCtor).toHaveBeenCalled();
-    expect(apiKeysPassedTo(openaiCtor)).toEqual([]);
+    expect(apiKeysPassedTo(openaiCtor)).toStrictEqual([]);
 
     expect(openaiResponsesCtor).toHaveBeenCalled();
-    expect(apiKeysPassedTo(openaiResponsesCtor)).toEqual([]);
+    expect(apiKeysPassedTo(openaiResponsesCtor)).toStrictEqual([]);
 
     expect(openaivercelCtor).toHaveBeenCalled();
-    expect(apiKeysPassedTo(openaivercelCtor)).toEqual([]);
+    expect(apiKeysPassedTo(openaivercelCtor)).toStrictEqual([]);
 
     expect(anthropicCtor).toHaveBeenCalled();
-    expect(apiKeysPassedTo(anthropicCtor)).toEqual([]);
+    expect(apiKeysPassedTo(anthropicCtor)).toStrictEqual([]);
 
     expect(geminiCtor).toHaveBeenCalled();
-    expect(apiKeysPassedTo(geminiCtor)).toEqual([]);
+    expect(apiKeysPassedTo(geminiCtor)).toStrictEqual([]);
   });
 
   it('still binds alias environment keys when authOnly is disabled', async () => {

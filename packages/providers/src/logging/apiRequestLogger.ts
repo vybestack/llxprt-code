@@ -9,6 +9,7 @@ import { logApiRequest } from '@vybestack/llxprt-code-core/telemetry/loggers.js'
 import { ApiRequestEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { sanitizeDiagnosticData } from '../utils/mediaDiagnostics.js';
 
 /**
  * Log API request telemetry event. The entire telemetry block is wrapped
@@ -24,7 +25,9 @@ export function logApiRequestTelemetry(
 ): void {
   debug.log(() => `Before API request telemetry section`);
   try {
-    const requestText = JSON.stringify(normalizedOptions.contents);
+    const requestText = JSON.stringify(
+      sanitizeDiagnosticData(normalizedOptions.contents),
+    );
     debug.log(
       () => `After JSON.stringify: requestText length=${requestText.length}`,
     );

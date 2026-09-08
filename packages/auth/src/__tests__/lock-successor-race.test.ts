@@ -60,6 +60,15 @@ async function liveSuccessor(): Promise<LockOwnerMetadata> {
   };
 }
 
+async function releaseAuthLockWhenAcquired(
+  store: KeyringTokenStore,
+  acquired: boolean,
+): Promise<void> {
+  if (acquired) {
+    await store.releaseAuthLock('codex', 'default');
+  }
+}
+
 describe('auth lock recovery successor races', () => {
   let tempDir: string;
   let lockDir: string;
@@ -317,9 +326,7 @@ describe('auth lock recovery successor races', () => {
         acquired: true,
       });
     } finally {
-      if (acquired) {
-        await store.releaseAuthLock('codex', 'default');
-      }
+      await releaseAuthLockWhenAcquired(store, acquired);
     }
   });
 });

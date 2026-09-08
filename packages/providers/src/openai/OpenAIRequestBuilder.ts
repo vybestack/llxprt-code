@@ -21,6 +21,7 @@ import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js'
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import {
+  requireInlineMediaBlock,
   type ToolCallBlock,
   type TextBlock,
   type ToolResponseBlock,
@@ -156,7 +157,7 @@ function convertBlockToPart(block: ContentBlock): ExtendedContentPart | null {
   if (isForwardableKimiVideo(block)) {
     return {
       type: 'video_url',
-      video_url: { url: block.data },
+      video_url: { url: requireInlineMediaBlock(block).data },
     };
   }
   if (category === 'pdf') {

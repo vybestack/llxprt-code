@@ -165,6 +165,21 @@ describe('subagent schema resolver integration @plan:PLAN-20250214-AUTOCOMPLETE.
 const getSubCommand = (subName: string) =>
   subagentCommand.subCommands?.find((cmd) => cmd.name === subName);
 
+function nullableSubcommand(
+  subcommand: ReturnType<typeof getSubCommand>,
+): NonNullable<ReturnType<typeof getSubCommand>> | null {
+  return subcommand ?? null;
+}
+
+async function loadSubagentWithBrokenEntry(
+  name: string,
+): Promise<{ profile: string; source: string }> {
+  if (name === 'broken') {
+    throw new Error('corrupted file');
+  }
+  return { profile: 'default', source: 'user' };
+}
+
 const invokeSub = async (
   subName: string,
   fullLine: string,
@@ -272,12 +287,7 @@ describe('subagent name completer edge cases @issue:1115', () => {
       services: {
         subagentManager: {
           listSubagents: vi.fn(async () => ['good', 'broken']),
-          loadSubagent: vi.fn(async (name: string) => {
-            if (name === 'broken') {
-              throw new Error('corrupted file');
-            }
-            return { profile: 'default', source: 'user' };
-          }),
+          loadSubagent: vi.fn(loadSubagentWithBrokenEntry),
         },
       },
     });
@@ -310,7 +320,7 @@ describe.each(['edit', 'show', 'delete'])(
       const result = parseCommandArguments(
         [],
         true,
-        sub ?? null,
+        nullableSubcommand(sub),
         subagentCommand.subCommands,
       );
 
@@ -323,7 +333,7 @@ describe.each(['edit', 'show', 'delete'])(
       const result = parseCommandArguments(
         ['ag'],
         false,
-        sub ?? null,
+        nullableSubcommand(sub),
         subagentCommand.subCommands,
       );
 

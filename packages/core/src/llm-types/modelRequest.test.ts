@@ -159,6 +159,44 @@ describe('ModelGenerationSettings additive fields', () => {
 // Property-based
 // ---------------------------------------------------------------------------
 
+/**
+ * Deep-equality check for the optional nested fields of two settings objects whose
+ * generated input fields are guaranteed to be the same. Keeps the optional-chain
+ * comparisons out of the test callback AST.
+ */
+function optionalSettingFieldsMatch(
+  rt: ModelGenerationSettings,
+  original: ModelGenerationSettings,
+): boolean {
+  return (
+    rt.reasoning?.budgetTokens === original.reasoning?.budgetTokens &&
+    rt.toolChoice?.mode === original.toolChoice?.mode &&
+    JSON.stringify(rt.toolChoice?.allowedToolNames) ===
+      JSON.stringify(original.toolChoice?.allowedToolNames)
+  );
+}
+
+function coreSettingFieldsMatch(
+  rt: ModelGenerationSettings,
+  original: ModelGenerationSettings,
+): boolean {
+  return (
+    rt.temperature === original.temperature &&
+    rt.maxOutputTokens === original.maxOutputTokens &&
+    rt.systemInstruction === original.systemInstruction
+  );
+}
+
+function settingFieldsSurviveRoundTrip(
+  rt: ModelGenerationSettings,
+  original: ModelGenerationSettings,
+): boolean {
+  return (
+    coreSettingFieldsMatch(rt, original) &&
+    optionalSettingFieldsMatch(rt, original)
+  );
+}
+
 describe('modelRequest property-based', () => {
   it('ReasoningConfig budgetTokens round-trips through JSON', () =>
     fc.assert(
@@ -198,17 +236,7 @@ describe('modelRequest property-based', () => {
           const rt: ModelGenerationSettings = JSON.parse(
             JSON.stringify(settings),
           );
-          const coreMatches =
-            rt.temperature === fields.temperature &&
-            rt.maxOutputTokens === fields.maxOutputTokens &&
-            rt.systemInstruction === fields.systemInstruction;
-          return (
-            coreMatches &&
-            rt.reasoning?.budgetTokens === fields.reasoning?.budgetTokens &&
-            rt.toolChoice?.mode === fields.toolChoice?.mode &&
-            JSON.stringify(rt.toolChoice?.allowedToolNames) ===
-              JSON.stringify(fields.toolChoice?.allowedToolNames)
-          );
+          return settingFieldsSurviveRoundTrip(rt, fields);
         },
       ),
     ));

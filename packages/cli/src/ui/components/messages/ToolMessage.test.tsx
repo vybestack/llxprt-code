@@ -11,8 +11,14 @@ import { ToolMessage } from './ToolMessage.js';
 import { StreamingState, ToolCallStatus } from '../../types.js';
 import { Text } from 'ink';
 import { StreamingContext } from '../../contexts/StreamingContext.js';
+import { ShellCommandDisplayProvider } from '../../contexts/ShellCommandDisplayContext.js';
+import { KeypressProvider } from '../../contexts/KeypressContext.js';
+import { MouseProvider } from '../../contexts/MouseContext.js';
+import { SettingsContext } from '../../contexts/SettingsContext.js';
+import { UIStateContext, type UIState } from '../../contexts/UIStateContext.js';
 import {
   createMockSettings,
+  render as actRender,
   renderWithProviders,
 } from '../../../test-utils/render.js';
 import { Colors } from '../../colors.js';
@@ -449,6 +455,85 @@ describe('<ToolMessage />', () => {
         StreamingState.Idle,
       );
       expect(lastFrame()).toContain('MockShellInput');
+    });
+  });
+
+  // @plan PLAN-20260824-ISSUE2021.P05 @requirement REQ-2021.5: status transitions on rerender of the same instance
+  describe('status transitions on rerender', () => {
+    it('updates the status glyph when the same call rerenders through terminal states', () => {
+      // @plan PLAN-20260824-ISSUE2021.P05 @requirement REQ-2021.5
+      const transitionProps: ToolMessageProps = {
+        ...baseProps,
+        name: 'read_file',
+        description: 'Read a file',
+        status: ToolCallStatus.Confirming,
+        resultDisplay: 'output',
+        emphasis: 'high',
+      };
+
+      const settings = createMockSettings({
+        ui: { alwaysDisplayFullShellCommand: true },
+      });
+      const uiState: Partial<UIState> = { renderMarkdown: true };
+      // The provider stack must be identical across initial render and every
+      // rerender so React reconciles in place instead of remounting the tree.
+      const wrapWithStatus = (status: ToolCallStatus) => (
+        <SettingsContext.Provider value={settings}>
+          <UIStateContext.Provider value={uiState as UIState}>
+            <KeypressProvider>
+              <MouseProvider mouseEventsEnabled={false}>
+                <ShellCommandDisplayProvider
+                  alwaysDisplayFullShellCommand={true}
+                >
+                  <StreamingContext.Provider value={StreamingState.Idle}>
+                    <ToolMessage {...transitionProps} status={status} />
+                  </StreamingContext.Provider>
+                </ShellCommandDisplayProvider>
+              </MouseProvider>
+            </KeypressProvider>
+          </UIStateContext.Provider>
+        </SettingsContext.Provider>
+      );
+
+      const { lastFrame, rerender } = actRender(
+        wrapWithStatus(ToolCallStatus.Confirming),
+      );
+      expect(lastFrame()).toContain(TOOL_STATUS.CONFIRMING);
+      expect(lastFrame()).not.toContain(TOOL_STATUS.SUCCESS);
+
+      rerender(wrapWithStatus(ToolCallStatus.Success));
+      expect(lastFrame()).toContain(TOOL_STATUS.SUCCESS);
+      expect(lastFrame()).not.toContain(TOOL_STATUS.CONFIRMING);
+
+      rerender(wrapWithStatus(ToolCallStatus.Error));
+      expect(lastFrame()).toContain(TOOL_STATUS.ERROR);
+      expect(lastFrame()).not.toContain(TOOL_STATUS.SUCCESS);
+
+      rerender(wrapWithStatus(ToolCallStatus.Canceled));
+      expect(lastFrame()).toContain(TOOL_STATUS.CANCELED);
+      expect(lastFrame()).not.toContain(TOOL_STATUS.ERROR);
+    });
+
+    it('renders different indicators for error vs canceled calls', () => {
+      // @plan PLAN-20260824-ISSUE2021.P05 @requirement REQ-2021.5
+      const renderWithStatus = (status: ToolCallStatus) =>
+        renderWithContext(
+          <ToolMessage
+            {...baseProps}
+            name="web_fetch"
+            status={status}
+            resultDisplay="payload"
+          />,
+          StreamingState.Idle,
+        ).lastFrame();
+
+      const errorFrame = renderWithStatus(ToolCallStatus.Error);
+      const canceledFrame = renderWithStatus(ToolCallStatus.Canceled);
+
+      expect(errorFrame).toContain(TOOL_STATUS.ERROR);
+      expect(canceledFrame).toContain(TOOL_STATUS.CANCELED);
+      expect(canceledFrame).not.toContain(TOOL_STATUS.ERROR);
+      expect(errorFrame).not.toContain(TOOL_STATUS.CANCELED);
     });
   });
 });

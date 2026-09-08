@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 const realHistoryServiceModule = {
   ...(await import(
@@ -23,13 +24,16 @@ void vi.mock('./clientToolGovernance.js', () => ({
   buildToolDeclarationsFromView: vi.fn().mockReturnValue([]),
 }));
 
+const environmentContextMock = vi.fn(async (): Promise<never[]> => []);
+
 void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () => ({
-  getEnvironmentContext: vi.fn().mockResolvedValue([]),
+  getEnvironmentContext: environmentContextMock,
 }));
 
 void vi.mock('./chatSession.js', () => ({
   ChatSession: vi.fn().mockImplementation(() => ({
     setActiveTodosProvider: vi.fn(),
+    setTranscriptPathProvider: vi.fn(),
     getHistoryService: vi.fn().mockReturnValue(null),
   })),
 }));
@@ -61,6 +65,7 @@ void vi.mock(
   () => ({
     HistoryService: vi.fn().mockImplementation(() => ({
       add: vi.fn(),
+      addBatch: vi.fn().mockResolvedValue(undefined),
       generateTurnKey: vi.fn().mockReturnValue('turn-1'),
       setBaseTokenOffset: vi.fn(),
       estimateTokensForText: vi.fn().mockResolvedValue(100),
@@ -98,18 +103,23 @@ import {
   resolveModelForSystemPrompt,
 } from './ChatSessionFactory.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { ChatSession } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { withChatSessionFactoryMediaFixture } from './chatSessionFactoryMediaTestHelper.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
 
-function makeConfig(overrides: Partial<Config> = {}): Config {
+function makeConfig(
+  overrides: Partial<Config> = {},
+  ephemeralSettings: Readonly<Record<string, unknown>> = {},
+): Config {
   return {
-    getEphemeralSetting: vi.fn().mockReturnValue(undefined),
+    getEphemeralSetting: vi
+      .fn()
+      .mockImplementation((key: string) => ephemeralSettings[key]),
     isJitContextEnabled: vi.fn().mockReturnValue(false),
     getGlobalMemory: vi.fn().mockReturnValue(undefined),
     getUserMemory: vi.fn().mockReturnValue('user memory text'),
@@ -154,63 +164,63 @@ function makeContentGenerator(): ContentGenerator {
   return {} as unknown as ContentGenerator;
 }
 
+function createTestChatSession(
+  config: Config,
+  runtimeState: AgentRuntimeState,
+  extraHistory?: IContent[],
+): ReturnType<typeof createChatSession> {
+  return createChatSession({
+    config,
+    runtimeState,
+    contentGenerator: makeContentGenerator(),
+    storedHistoryService: undefined,
+    clearStoredHistoryService: vi.fn(),
+    extraHistory,
+    generateContentConfig: {},
+    todoContinuationService: makeTodoContinuationService(),
+    toolRegistry: undefined,
+  });
+}
+
 describe('buildSettingsSnapshot', () => {
+  const observeSettings = (settings: Readonly<Record<string, unknown>>) =>
+    buildSettingsSnapshot(makeConfig({}, settings));
+
   it('assembles compression settings from config ephemerals', () => {
-    const config = makeConfig({
-      getEphemeralSetting: vi.fn().mockImplementation((key: string) => {
-        if (key === 'compression-threshold') return 0.9;
-        if (key === 'compression-preserve-threshold') return 0.3;
-        if (key === 'context-limit') return 50000;
-        return undefined;
-      }),
+    const snapshot = observeSettings({
+      'compression-threshold': 0.9,
+      'compression-preserve-threshold': 0.3,
+      'context-limit': 50000,
     });
-
-    const snapshot = buildSettingsSnapshot(config);
-
     expect(snapshot.compressionThreshold).toBe(0.9);
     expect(snapshot.preserveThreshold).toBe(0.3);
     expect(snapshot.contextLimit).toBe(50000);
   });
 
   it('uses defaults when ephemerals are not set', () => {
-    const config = makeConfig();
-
-    const snapshot = buildSettingsSnapshot(config);
-
+    const snapshot = buildSettingsSnapshot(makeConfig());
     expect(snapshot.compressionThreshold).toBe(0.85);
     expect(snapshot.preserveThreshold).toBe(0.2);
     expect(snapshot.contextLimit).toBeUndefined();
   });
 
   it('falls back to defaults when thresholds are NaN or Infinity', () => {
-    const config = makeConfig({
-      getEphemeralSetting: vi.fn().mockImplementation((key: string) => {
-        if (key === 'compression-threshold') return NaN;
-        if (key === 'compression-preserve-threshold') return Infinity;
-        if (key === 'context-limit') return -Infinity;
-        return undefined;
-      }),
+    const snapshot = observeSettings({
+      'compression-threshold': NaN,
+      'compression-preserve-threshold': Infinity,
+      'context-limit': -Infinity,
     });
-
-    const snapshot = buildSettingsSnapshot(config);
-
     expect(snapshot.compressionThreshold).toBe(0.85);
     expect(snapshot.preserveThreshold).toBe(0.2);
     expect(snapshot.contextLimit).toBeUndefined();
   });
 
   it('includes reasoning settings from ephemerals', () => {
-    const config = makeConfig({
-      getEphemeralSetting: vi.fn().mockImplementation((key: string) => {
-        if (key === 'reasoning.enabled') return true;
-        if (key === 'reasoning.effort') return 'max';
-        if (key === 'reasoning.maxTokens') return 8192;
-        return undefined;
-      }),
+    const snapshot = observeSettings({
+      'reasoning.enabled': true,
+      'reasoning.effort': 'max',
+      'reasoning.maxTokens': 8192,
     });
-
-    const snapshot = buildSettingsSnapshot(config);
-
     expect(snapshot['reasoning.enabled']).toBe(true);
     expect(snapshot['reasoning.effort']).toBe('max');
     expect(snapshot['reasoning.maxTokens']).toBe(8192);
@@ -358,9 +368,7 @@ describe('createChatSession', () => {
     (
       getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
     ).mockResolvedValue('system prompt');
-    (
-      getEnvironmentContext as Mock<typeof getEnvironmentContext>
-    ).mockResolvedValue([]);
+    environmentContextMock.mockResolvedValue([]);
     (loadAgentRuntime as Mock<typeof loadAgentRuntime>).mockResolvedValue({
       runtimeContext: {},
       contentGenerator: {},
@@ -445,6 +453,18 @@ describe('createChatSession', () => {
   });
 
   it('does not fold extraHistory into a non-empty reused HistoryService', async () => {
+    const { historyState, clearStoredHistoryService } =
+      await observeReusedHistory();
+    expect(historyState).toStrictEqual({
+      wasInitiallyNonEmpty: true,
+      isEmptyAfterReuse: false,
+      historyLength: 1,
+      retainedLiveTurn: true,
+    });
+    expect(clearStoredHistoryService).toHaveBeenCalledTimes(1);
+  });
+
+  const observeReusedHistory = async () => {
     // A mid-session provider switch stores the live (non-empty) HistoryService;
     // setupHistoryService must reuse it as-is and NOT also load extraHistory,
     // or the conversation would be duplicated. This pins the isEmpty()
@@ -459,7 +479,7 @@ describe('createChatSession', () => {
       },
       'model-x',
     );
-    expect(storedHistoryService.isEmpty()).toBe(false);
+    const wasInitiallyNonEmpty = !storedHistoryService.isEmpty();
 
     const config = makeConfig();
     const runtimeState = makeRuntimeState();
@@ -488,18 +508,40 @@ describe('createChatSession', () => {
     // The stored service keeps exactly its one live turn; extraHistory was
     // ignored, not appended.
     const after = storedHistoryService.getAll();
-    expect(after.length).toBe(1);
-    expect(
-      after[0].blocks.some(
-        (b) => b.type === 'text' && b.text === 'live turn before switch',
-      ),
-    ).toBe(true);
+
     // Reusing the stored service must still hand ownership to the chat session
     // (the stored reference is cleared on the client so it cannot be reused).
-    expect(clearStoredHistoryService).toHaveBeenCalledTimes(1);
-  });
+
+    const retainedLiveTurn = after[0].blocks.some(
+      (b) => b.type === 'text' && b.text === 'live turn before switch',
+    );
+    return {
+      clearStoredHistoryService,
+      historyState: {
+        wasInitiallyNonEmpty,
+        isEmptyAfterReuse: storedHistoryService.isEmpty(),
+        historyLength: after.length,
+        retainedLiveTurn,
+      },
+    };
+  };
 
   it('passes profile context-limit into the rebuilt runtime settings', async () => {
+    await configureProfileContextLimit();
+    expect(
+      loadAgentRuntime as Mock<typeof loadAgentRuntime>,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profile: expect.objectContaining({
+          settings: expect.objectContaining({
+            contextLimit: 200000,
+          }),
+        }),
+      }),
+    );
+  });
+
+  const configureProfileContextLimit = async () => {
     const config = makeConfig({
       getEphemeralSetting: vi.fn().mockImplementation((key: string) => {
         if (key === 'context-limit') return 200000;
@@ -522,19 +564,7 @@ describe('createChatSession', () => {
       todoContinuationService,
       toolRegistry: undefined,
     });
-
-    expect(
-      loadAgentRuntime as Mock<typeof loadAgentRuntime>,
-    ).toHaveBeenCalledWith(
-      expect.objectContaining({
-        profile: expect.objectContaining({
-          settings: expect.objectContaining({
-            contextLimit: 200000,
-          }),
-        }),
-      }),
-    );
-  });
+  };
 
   it('creates a new HistoryService when none is stored', async () => {
     const config = makeConfig();
@@ -563,8 +593,12 @@ describe('createChatSession', () => {
     const config = makeConfig();
     const runtimeState = makeRuntimeState();
     const todoContinuationService = makeTodoContinuationService();
+    let recordedHistory: IContent[] = [];
     const mockHistoryInstance = {
       add: vi.fn(),
+      addBatch: async (contents: readonly IContent[]): Promise<void> => {
+        recordedHistory = [...recordedHistory, ...contents];
+      },
       generateTurnKey: vi.fn().mockReturnValue('turn-1'),
       setBaseTokenOffset: vi.fn(),
       estimateTokensForText: vi.fn().mockResolvedValue(100),
@@ -594,7 +628,12 @@ describe('createChatSession', () => {
       toolRegistry: undefined,
     });
 
-    expect(mockHistoryInstance.add).toHaveBeenCalled();
+    expect(recordedHistory).toStrictEqual([
+      {
+        ...extraHistory[0],
+        metadata: { turnId: 'turn-1' },
+      },
+    ]);
   });
 
   it('configures thinking for supported models', async () => {
@@ -657,6 +696,7 @@ describe('createChatSession', () => {
     const todoContinuationService = makeTodoContinuationService();
     const mockChat = {
       setActiveTodosProvider: vi.fn(),
+      setTranscriptPathProvider: vi.fn(),
       getHistoryService: vi.fn().mockReturnValue(null),
     };
     (
@@ -717,9 +757,7 @@ describe('createChatSessionSafe', () => {
     (
       getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
     ).mockResolvedValue('system prompt');
-    (
-      getEnvironmentContext as Mock<typeof getEnvironmentContext>
-    ).mockResolvedValue([]);
+    environmentContextMock.mockResolvedValue([]);
   });
 
   it('wraps errors and throws with descriptive message', async () => {
@@ -788,9 +826,7 @@ describe('createChatSession: model identity in system prompt (issue #3138)', () 
     (
       getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
     ).mockResolvedValue('core system prompt');
-    (
-      getEnvironmentContext as Mock<typeof getEnvironmentContext>
-    ).mockResolvedValue([]);
+    environmentContextMock.mockResolvedValue([]);
   });
 
   it('uses config.getModel() for the system prompt, not the stale runtimeState snapshot', async () => {
@@ -801,18 +837,7 @@ describe('createChatSession: model identity in system prompt (issue #3138)', () 
       model: 'gpt-5.5',
       provider: 'openai',
     });
-    const todoContinuationService = makeTodoContinuationService();
-
-    await createChatSession({
-      config,
-      runtimeState,
-      contentGenerator: makeContentGenerator(),
-      storedHistoryService: undefined,
-      clearStoredHistoryService: vi.fn(),
-      generateContentConfig: {},
-      todoContinuationService,
-      toolRegistry: undefined,
-    });
+    await createTestChatSession(config, runtimeState);
 
     expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
       expect.objectContaining({ model: 'glm-5.2' }),
@@ -827,10 +852,9 @@ describe('createChatSession: model identity in system prompt (issue #3138)', () 
       model: 'stale-default',
       provider: 'openai',
     });
-    const todoContinuationService = makeTodoContinuationService();
-
     const mockHistoryInstance = {
       add: vi.fn(),
+      addBatch: vi.fn().mockResolvedValue(undefined),
       generateTurnKey: vi.fn().mockReturnValue('turn-1'),
       setBaseTokenOffset: vi.fn(),
       estimateTokensForText: vi.fn().mockResolvedValue(42),
@@ -844,16 +868,7 @@ describe('createChatSession: model identity in system prompt (issue #3138)', () 
       HistoryService as unknown as Mock<(...args: never[]) => unknown>
     ).mockImplementation(() => mockHistoryInstance);
 
-    await createChatSession({
-      config,
-      runtimeState,
-      contentGenerator: makeContentGenerator(),
-      storedHistoryService: undefined,
-      clearStoredHistoryService: vi.fn(),
-      generateContentConfig: {},
-      todoContinuationService,
-      toolRegistry: undefined,
-    });
+    await createTestChatSession(config, runtimeState);
 
     expect(
       mockHistoryInstance.setActiveTokenizationTarget,
@@ -868,18 +883,7 @@ describe('createChatSession: model identity in system prompt (issue #3138)', () 
       model: 'gpt-5.5',
       provider: 'openai',
     });
-    const todoContinuationService = makeTodoContinuationService();
-
-    await createChatSession({
-      config,
-      runtimeState,
-      contentGenerator: makeContentGenerator(),
-      storedHistoryService: undefined,
-      clearStoredHistoryService: vi.fn(),
-      generateContentConfig: {},
-      todoContinuationService,
-      toolRegistry: undefined,
-    });
+    await createTestChatSession(config, runtimeState);
 
     expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -897,19 +901,32 @@ describe('createChatSession: model identity in system prompt (issue #3138)', () 
       model: 'gpt-5.5',
       provider: 'openai',
     });
-    const todoContinuationService = makeTodoContinuationService();
+    await expect(createTestChatSession(config, runtimeState)).rejects.toThrow(
+      /no model identity/i,
+    );
+  });
 
-    await expect(
-      createChatSession({
-        config,
-        runtimeState,
-        contentGenerator: makeContentGenerator(),
-        storedHistoryService: undefined,
-        clearStoredHistoryService: vi.fn(),
-        generateContentConfig: {},
-        todoContinuationService,
-        toolRegistry: undefined,
-      }),
-    ).rejects.toThrow(/no model identity/i);
+  it('releases chat-session-factory media admission when post-admission setup fails', async () => {
+    await withChatSessionFactoryMediaFixture(async (fixture) => {
+      const config = makeConfig({ getLocalMediaStore: () => fixture.store });
+      environmentContextMock.mockRejectedValueOnce(
+        new Error('environment setup failed'),
+      );
+
+      await expect(
+        createTestChatSession(config, makeRuntimeState(), fixture.history),
+      ).rejects.toThrow('environment setup failed');
+      expect(await fixture.hasReservationsAfterProbe()).toBe(false);
+    });
+  });
+
+  it('releases temporary initial media admission after successful setup', async () => {
+    await withChatSessionFactoryMediaFixture(async (fixture) => {
+      const config = makeConfig({ getLocalMediaStore: () => fixture.store });
+
+      await createTestChatSession(config, makeRuntimeState(), fixture.history);
+
+      expect(await fixture.hasReservationsAfterProbe()).toBe(false);
+    });
   });
 });

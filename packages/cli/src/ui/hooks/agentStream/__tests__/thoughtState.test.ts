@@ -182,7 +182,10 @@ describe('applyThoughtToState identity-aware streaming updates', () => {
     ).toStrictEqual(['Plan', 'Plan the answer']);
   });
 
-  it('updates pending item with accumulated thinking and current content-prefix identity', () => {
+  const observePendingItemAfterIncrementalThinking = (): {
+    readonly profileName: string | undefined;
+    readonly thinkingBlocks: readonly ThinkingBlock[] | undefined;
+  } => {
     const identities = ['profile:old', 'profile:new'];
     const args = createArgs({
       getContentPrefixIdentity: () => identities.shift() ?? null,
@@ -202,9 +205,17 @@ describe('applyThoughtToState identity-aware streaming updates', () => {
     });
 
     const result = pendingResult(args, 1, null);
+    return {
+      profileName: result?.profileName,
+      thinkingBlocks: result?.thinkingBlocks,
+    };
+  };
 
-    expect(result?.profileName).toBe('profile:new');
-    expect(result?.thinkingBlocks).toStrictEqual([
+  it('updates pending item with accumulated thinking and current content-prefix identity', () => {
+    const pendingItem = observePendingItemAfterIncrementalThinking();
+
+    expect(pendingItem.profileName).toBe('profile:new');
+    expect(pendingItem.thinkingBlocks).toStrictEqual([
       {
         type: 'thinking',
         thought: 'Start thinking',

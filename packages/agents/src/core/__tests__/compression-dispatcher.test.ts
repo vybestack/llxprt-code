@@ -160,104 +160,130 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
   describe('strategy delegation (REQ-CS-006.1)', () => {
     it('should use top-down-truncation when compressionStrategy is "top-down-truncation"', async () => {
-      const runtimeContext = buildRuntimeContext(historyService, {
-        compressionStrategy: 'top-down-truncation',
-      });
-
-      populateHistory(historyService);
-      const messageCountBefore = historyService.getCurated().length;
-
-      const chat = new ChatSession(
-        runtimeContext,
-        mockContentGenerator,
-        {},
-        [],
-      );
-
-      // top-down-truncation needs currentTokenCount above the target threshold
-      // to actually truncate. Mock getTotalTokens to simulate token pressure.
-      vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(100_000);
-
-      const mockProvider = buildMockProvider('should-not-appear');
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        mockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
-
-      await chat.performCompression('test-prompt-id');
-
-      const finalHistory = historyService.getCurated();
-
-      // Top-down truncation should NOT produce any state_snapshot summary
-      const hasSummary = finalHistory.some((msg) =>
-        msg.blocks.some(
-          (b) => b.type === 'text' && b.text.includes('state_snapshot'),
-        ),
-      );
+      const { hasSummary, finalHistory, messageCountBefore, hasAck } =
+        await observeUseTopDownTruncationWhenCompressionStrategyIsTopDownTruncation();
       expect(hasSummary).toBe(false);
-
-      // History should be shorter (messages were truncated from the top)
       expect(finalHistory.length).toBeLessThan(messageCountBefore);
-
-      // All surviving messages should be originals (no synthetic ack message)
-      const hasAck = finalHistory.some((msg) =>
-        msg.blocks.some(
-          (b) =>
-            b.type === 'text' &&
-            b.text.includes('Understood.') &&
-            b.text.includes('Continuing with the current task.'),
-        ),
-      );
       expect(hasAck).toBe(false);
     });
 
+    const observeUseTopDownTruncationWhenCompressionStrategyIsTopDownTruncation =
+      async () => {
+        const runtimeContext = buildRuntimeContext(historyService, {
+          compressionStrategy: 'top-down-truncation',
+        });
+
+        populateHistory(historyService);
+        const messageCountBefore = historyService.getCurated().length;
+
+        const chat = new ChatSession(
+          runtimeContext,
+          mockContentGenerator,
+          {},
+          [],
+        );
+
+        // top-down-truncation needs currentTokenCount above the target threshold
+        // to actually truncate. Mock getTotalTokens to simulate token pressure.
+        vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(100_000);
+
+        const mockProvider = buildMockProvider('should-not-appear');
+        vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
+          mockProvider as never,
+        );
+        vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(
+          true,
+        );
+
+        await chat.performCompression('test-prompt-id');
+
+        const finalHistory = historyService.getCurated();
+
+        // Top-down truncation should NOT produce any state_snapshot summary
+        const hasSummary = finalHistory.some((msg) =>
+          msg.blocks.some(
+            (b) => b.type === 'text' && b.text.includes('state_snapshot'),
+          ),
+        );
+
+        // History should be shorter (messages were truncated from the top)
+
+        // All surviving messages should be originals (no synthetic ack message)
+        const hasAck = finalHistory.some((msg) =>
+          msg.blocks.some(
+            (b) =>
+              b.type === 'text' &&
+              b.text.includes('Understood.') &&
+              b.text.includes('Continuing with the current task.'),
+          ),
+        );
+
+        return { hasSummary, finalHistory, messageCountBefore, hasAck };
+      };
+
     it('should use middle-out (default) when compressionStrategy is "middle-out"', async () => {
-      const runtimeContext = buildRuntimeContext(historyService, {
-        compressionStrategy: 'middle-out',
-      });
-
-      populateHistory(historyService);
-
-      const chat = new ChatSession(
-        runtimeContext,
-        mockContentGenerator,
-        {},
-        [],
-      );
-
-      const summaryText =
-        '<state_snapshot><overall_goal>Test goal</overall_goal></state_snapshot>';
-      const mockProvider = buildMockProvider(summaryText);
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        mockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
-
-      await chat.performCompression('test-prompt-id');
-
-      const finalHistory = historyService.getCurated();
-
-      // Middle-out SHOULD produce a state_snapshot summary
-      const hasSummary = finalHistory.some((msg) =>
-        msg.blocks.some(
-          (b) => b.type === 'text' && b.text.includes('state_snapshot'),
-        ),
-      );
+      const { hasSummary, hasAck } =
+        await observeUseMiddleOutDefaultWhenCompressionStrategyIsMiddleOut();
       expect(hasSummary).toBe(true);
-
-      // Should have the acknowledgment message
-      const hasAck = finalHistory.some((msg) =>
-        msg.blocks.some(
-          (b) =>
-            b.type === 'text' &&
-            b.text.includes('Understood.') &&
-            b.text.includes('Continuing with the current task.'),
-        ),
-      );
       expect(hasAck).toBe(true);
     });
 
+    const observeUseMiddleOutDefaultWhenCompressionStrategyIsMiddleOut =
+      async () => {
+        const runtimeContext = buildRuntimeContext(historyService, {
+          compressionStrategy: 'middle-out',
+        });
+
+        populateHistory(historyService);
+
+        const chat = new ChatSession(
+          runtimeContext,
+          mockContentGenerator,
+          {},
+          [],
+        );
+
+        const summaryText =
+          '<state_snapshot><overall_goal>Test goal</overall_goal></state_snapshot>';
+        const mockProvider = buildMockProvider(summaryText);
+        vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
+          mockProvider as never,
+        );
+        vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(
+          true,
+        );
+
+        await chat.performCompression('test-prompt-id');
+
+        const finalHistory = historyService.getCurated();
+
+        // Middle-out SHOULD produce a state_snapshot summary
+        const hasSummary = finalHistory.some((msg) =>
+          msg.blocks.some(
+            (b) => b.type === 'text' && b.text.includes('state_snapshot'),
+          ),
+        );
+
+        // Should have the acknowledgment message
+        const hasAck = finalHistory.some((msg) =>
+          msg.blocks.some(
+            (b) =>
+              b.type === 'text' &&
+              b.text.includes('Understood.') &&
+              b.text.includes('Continuing with the current task.'),
+          ),
+        );
+
+        return { hasSummary, hasAck };
+      };
+
     it('should default to middle-out when no strategy is explicitly set', async () => {
+      const { hasSummary } =
+        await observeDefaultToMiddleOutWhenNoStrategyIsExplicitlySet();
+      expect(hasSummary).toBe(true);
+    });
+
+    const observeDefaultToMiddleOutWhenNoStrategyIsExplicitlySet = async () => {
       // No compressionStrategy override — relies on registry default
       const runtimeContext = buildRuntimeContext(historyService);
 
@@ -288,59 +314,70 @@ describe('Compression Dispatcher Integration (P13)', () => {
           (b) => b.type === 'text' && b.text.includes('state_snapshot'),
         ),
       );
-      expect(hasSummary).toBe(true);
-    });
+
+      return { hasSummary };
+    };
   });
 
   describe('result application (REQ-CS-006.2)', () => {
     it('should rebuild history with messages in correct order after compression', async () => {
-      const runtimeContext = buildRuntimeContext(historyService, {
-        compressionStrategy: 'middle-out',
-      });
-
-      populateHistory(historyService);
-
-      const chat = new ChatSession(
-        runtimeContext,
-        mockContentGenerator,
-        {},
-        [],
-      );
-
-      const summaryText =
-        '<state_snapshot><overall_goal>Ordered result</overall_goal></state_snapshot>';
-      const mockProvider = buildMockProvider(summaryText);
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        mockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
-
-      await chat.performCompression('test-prompt-id');
-
-      const finalHistory = historyService.getCurated();
-
-      // History should have content (not be empty)
+      const { finalHistory, summaryIndex, firstMsg, lastMsg } =
+        await observeRebuildHistoryWithMessagesInCorrectOrderAfterCompression();
       expect(finalHistory.length).toBeGreaterThan(0);
-
-      // Find the summary message index
-      const summaryIndex = finalHistory.findIndex((msg) =>
-        msg.blocks.some(
-          (b) => b.type === 'text' && b.text.includes('state_snapshot'),
-        ),
-      );
       expect(summaryIndex).toBeGreaterThanOrEqual(0);
-
-      // Messages before summary should be preserved top messages (user/ai originals)
-      // Messages after summary+ack should be preserved bottom messages
-      // The first message should still be from the original conversation
-      const firstMsg = finalHistory[0];
       expect(firstMsg.speaker).toBe('human');
       expect(firstMsg.blocks[0].type).toBe('text');
-
-      // The last message should be from the original conversation bottom
-      const lastMsg = finalHistory[finalHistory.length - 1];
       expect(lastMsg.blocks[0].type).toBe('text');
     });
+
+    const observeRebuildHistoryWithMessagesInCorrectOrderAfterCompression =
+      async () => {
+        const runtimeContext = buildRuntimeContext(historyService, {
+          compressionStrategy: 'middle-out',
+        });
+
+        populateHistory(historyService);
+
+        const chat = new ChatSession(
+          runtimeContext,
+          mockContentGenerator,
+          {},
+          [],
+        );
+
+        const summaryText =
+          '<state_snapshot><overall_goal>Ordered result</overall_goal></state_snapshot>';
+        const mockProvider = buildMockProvider(summaryText);
+        vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
+          mockProvider as never,
+        );
+        vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(
+          true,
+        );
+
+        await chat.performCompression('test-prompt-id');
+
+        const finalHistory = historyService.getCurated();
+
+        // History should have content (not be empty)
+
+        // Find the summary message index
+        const summaryIndex = finalHistory.findIndex((msg) =>
+          msg.blocks.some(
+            (b) => b.type === 'text' && b.text.includes('state_snapshot'),
+          ),
+        );
+
+        // Messages before summary should be preserved top messages (user/ai originals)
+        // Messages after summary+ack should be preserved bottom messages
+        // The first message should still be from the original conversation
+        const firstMsg = finalHistory[0];
+
+        // The last message should be from the original conversation bottom
+        const lastMsg = finalHistory[finalHistory.length - 1];
+
+        return { finalHistory, summaryIndex, firstMsg, lastMsg };
+      };
   });
 
   describe('error propagation (REQ-CS-006.3)', () => {

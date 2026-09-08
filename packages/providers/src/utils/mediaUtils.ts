@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-import type {
-  IContent,
-  MediaBlock,
+import {
+  requireInlineMediaBlock,
+  type IContent,
+  type MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { UnsupportedMediaEntry } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 
@@ -128,21 +129,22 @@ function getMediaLabel(category: string): string {
  * Handles both URL-encoded and base64-encoded media.
  */
 export function normalizeMediaToDataUri(media: MediaBlock): string {
+  const inlineMedia = requireInlineMediaBlock(media);
   // Already a data URI
-  if (media.data.startsWith('data:')) {
-    return media.data;
+  if (inlineMedia.data.startsWith('data:')) {
+    return inlineMedia.data;
   }
 
   // URL encoding (e.g., https://example.com/image.png)
-  if (media.encoding === 'url') {
-    return media.data;
+  if (inlineMedia.encoding === 'url') {
+    return inlineMedia.data;
   }
 
   // Base64 encoding - construct data URI
-  const prefix = media.mimeType
-    ? `data:${media.mimeType};base64,`
+  const prefix = inlineMedia.mimeType
+    ? `data:${inlineMedia.mimeType};base64,`
     : 'data:image/*;base64,';
-  return `${prefix}${media.data}`;
+  return `${prefix}${inlineMedia.data}`;
 }
 
 export const PDF_DEFAULT_FILENAME = 'document.pdf';

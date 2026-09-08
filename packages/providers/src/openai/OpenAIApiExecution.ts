@@ -24,12 +24,30 @@ import {
   wrapStreamWithSDKErrorDump,
   bestEffortDump,
   dumpSDKErrorRequestResponse,
+  type RequestDumpMetadata,
 } from '../utils/dumpSDKContext.js';
 import { type DumpMode } from '../utils/dumpContext.js';
 import { type OpenAITool } from './schemaConverter.js';
+import { withBoundedJsonHttpBody } from '../utils/boundedJsonBody.js';
+
+interface OpenAIRawPostOptions {
+  readonly body: unknown;
+  readonly headers: Record<string, string>;
+  readonly signal?: AbortSignal;
+  readonly stream: boolean;
+}
+
+export interface OpenAIRawPostClient {
+  post(path: string, options: OpenAIRawPostOptions): Promise<unknown>;
+  /**
+   * #3159 synthesizes the Authorization header for dumps from the client key,
+   * which the narrowed raw-post surface would otherwise hide.
+   */
+  readonly apiKey?: string | undefined;
+}
 
 export interface ApiExecutionOptions {
-  client: OpenAI;
+  client: OpenAIRawPostClient;
   requestBody: OpenAI.Chat.ChatCompletionCreateParams;
   abortSignal: AbortSignal | undefined;
   mergedHeaders: Record<string, string> | undefined;
@@ -42,11 +60,42 @@ export interface ApiExecutionOptions {
   getBaseURL: () => string | undefined;
 }
 
+/** #3159: the OpenAI SDK sends Authorization from the client api key; record
+ * the header NAME in dump metadata (shared redaction replaces the value).
+ */
+function hasHeaderName(headers: Record<string, string>, name: string): boolean {
+  const target = name.toLowerCase();
+  return Object.keys(headers).some((key) => key.toLowerCase() === target);
+}
+
+function chatDumpMetadata(
+  mergedHeaders: Record<string, string> | undefined,
+  apiKey: string | undefined,
+): RequestDumpMetadata {
+  // The SDK sends Authorization from the client api key; synthesize the
+  // header for the dump unless the caller already supplied one (#3159).
+  // A null/empty key means the SDK sends no Authorization header, so the
+  // dump must not invent one.
+  if (
+    !apiKey ||
+    (mergedHeaders !== undefined &&
+      hasHeaderName(mergedHeaders, 'Authorization'))
+  ) {
+    return { headers: mergedHeaders, transport: { type: 'http' } };
+  }
+  return {
+    headers: { ...mergedHeaders, Authorization: `Bearer ${apiKey}` },
+    transport: { type: 'http' },
+  };
+}
+
 interface ErrorContext {
   requestBody: OpenAI.Chat.ChatCompletionCreateParams;
   shouldDumpError: boolean;
   requestBaseId: string | undefined;
   baseURL: string | undefined;
+  mergedHeaders: Record<string, string> | undefined;
+  apiKey: string | undefined;
   model: string;
   formattedTools: OpenAITool[] | undefined;
   streamingEnabled: boolean;
@@ -86,6 +135,7 @@ async function dumpOpenAIErrorContext(
       resolvedBaseURL ?? 'https://api.openai.com/v1',
       dumpSDKRequestContext,
       dumpSDKResponseContext,
+      chatDumpMetadata(ctx.mergedHeaders, ctx.apiKey),
     );
   }
 }
@@ -167,6 +217,79 @@ async function handleApiError(
   throw error;
 }
 
+function boundedJsonHeaders(
+  byteLength: number,
+  customHeaders: Record<string, string> | undefined,
+): Record<string, string> {
+  return {
+    ...(customHeaders ?? {}),
+    'content-type': 'application/json',
+    'content-length': String(byteLength),
+  };
+}
+
+function isAsyncChatCompletionStream(
+  value: unknown,
+): value is AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Symbol.asyncIterator in value &&
+    typeof value[Symbol.asyncIterator] === 'function'
+  );
+}
+
+function isChatCompletion(
+  value: unknown,
+): value is OpenAI.Chat.Completions.ChatCompletion {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'choices' in value &&
+    Array.isArray(value.choices)
+  );
+}
+
+export async function executeBoundedStreamingChatRequest(
+  client: OpenAIRawPostClient,
+  requestBody: OpenAI.Chat.ChatCompletionCreateParams,
+  abortSignal: AbortSignal | undefined,
+  mergedHeaders: Record<string, string> | undefined,
+): Promise<AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>> {
+  const response = await withBoundedJsonHttpBody(requestBody, (body) =>
+    client.post('/chat/completions', {
+      body: body.stream,
+      headers: boundedJsonHeaders(body.byteLength, mergedHeaders),
+      stream: true,
+      ...(abortSignal === undefined ? {} : { signal: abortSignal }),
+    }),
+  );
+  if (!isAsyncChatCompletionStream(response)) {
+    throw new TypeError('OpenAI streaming response is not async iterable');
+  }
+  return response;
+}
+
+async function executeBoundedNonStreamingChatRequest(
+  client: OpenAIRawPostClient,
+  requestBody: OpenAI.Chat.ChatCompletionCreateParams,
+  abortSignal: AbortSignal | undefined,
+  mergedHeaders: Record<string, string> | undefined,
+): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  const response = await withBoundedJsonHttpBody(requestBody, (body) =>
+    client.post('/chat/completions', {
+      body: body.stream,
+      headers: boundedJsonHeaders(body.byteLength, mergedHeaders),
+      stream: false,
+      ...(abortSignal === undefined ? {} : { signal: abortSignal }),
+    }),
+  );
+  if (!isChatCompletion(response)) {
+    throw new TypeError('OpenAI response does not contain a choices array');
+  }
+  return response;
+}
+
 /**
  * Execute streaming API request with dump and error handling.
  */
@@ -189,6 +312,7 @@ async function executeStreamingRequest(
           '/chat/completions',
           requestBody,
           baseURL ?? 'https://api.openai.com/v1',
+          chatDumpMetadata(mergedHeaders, client.apiKey),
         ),
       opts.logger,
     );
@@ -196,10 +320,12 @@ async function executeStreamingRequest(
   }
 
   try {
-    const response = (await client.chat.completions.create(requestBody, {
-      ...(abortSignal ? { signal: abortSignal } : {}),
-      ...(mergedHeaders ? { headers: mergedHeaders } : {}),
-    })) as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
+    const response = await executeBoundedStreamingChatRequest(
+      client,
+      requestBody,
+      abortSignal,
+      mergedHeaders,
+    );
 
     if (shouldDumpSuccess && requestBaseId) {
       return wrapStreamWithDump(
@@ -219,6 +345,7 @@ async function executeStreamingRequest(
         baseURL ?? 'https://api.openai.com/v1',
         dumpSDKRequestContext,
         dumpSDKResponseContext,
+        chatDumpMetadata(mergedHeaders, client.apiKey),
       );
     }
 
@@ -232,6 +359,8 @@ async function executeStreamingRequest(
       shouldDumpError,
       requestBaseId,
       baseURL,
+      mergedHeaders: opts.mergedHeaders,
+      apiKey: opts.client.apiKey,
       model: opts.model,
       formattedTools: opts.formattedTools,
       streamingEnabled: opts.streamingEnabled,
@@ -277,6 +406,7 @@ async function executeNonStreamingRequest(
           '/chat/completions',
           requestBody,
           baseURL ?? 'https://api.openai.com/v1',
+          chatDumpMetadata(mergedHeaders, client.apiKey),
         ),
       opts.logger,
     );
@@ -284,10 +414,12 @@ async function executeNonStreamingRequest(
   }
 
   try {
-    const response = (await client.chat.completions.create(requestBody, {
-      ...(abortSignal ? { signal: abortSignal } : {}),
-      ...(mergedHeaders ? { headers: mergedHeaders } : {}),
-    })) as OpenAI.Chat.Completions.ChatCompletion;
+    const response = await executeBoundedNonStreamingChatRequest(
+      client,
+      requestBody,
+      abortSignal,
+      mergedHeaders,
+    );
 
     if (shouldDumpSuccess && requestBaseId) {
       await bestEffortDump(
@@ -318,6 +450,8 @@ async function executeNonStreamingRequest(
       shouldDumpError,
       requestBaseId,
       baseURL,
+      mergedHeaders: opts.mergedHeaders,
+      apiKey: opts.client.apiKey,
       model: opts.model,
       formattedTools: opts.formattedTools,
       streamingEnabled: opts.streamingEnabled,

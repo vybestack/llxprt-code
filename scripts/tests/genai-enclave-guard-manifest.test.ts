@@ -47,7 +47,9 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
     // reaches the manifest check and fails specifically on the manifest
     // violation (not on "no scannable files found").
     describe('manifest violations', () => {
-      it('allows the root packaging bridge at the sanctioned version', async () => {
+      it('FAILS when the root declares the SDK (no workspace is sanctioned)', async () => {
+        // The dependency allowlist is empty: @google/genai was removed, so a
+        // declaration anywhere is a reappearance and must be rejected.
         const { code } = await withFixture(({ root, write }) => {
           write(
             'package.json',
@@ -56,25 +58,17 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
               dependencies: { '@google/genai': '1.30.0' },
             }) + '\n',
           );
-          // F4: all required (sanctioned) manifests must be present
-          write(
-            'packages/core/package.json',
-            JSON.stringify({
-              name: '@vybestack/llxprt-code-core',
-              dependencies: { '@google/genai': '1.30.0' },
-            }) + '\n',
-          );
           write(
             'packages/providers/package.json',
             JSON.stringify({
               name: '@vybestack/llxprt-code-providers',
-              dependencies: { '@google/genai': '1.30.0' },
             }) + '\n',
           );
           write('packages/cli/src/index.ts', 'export const x = 1;\n');
-          return runScript(root, 0);
+          write('packages/providers/src/index.ts', 'export const x = 1;\n');
+          return runScript(root, 1);
         });
-        expect(code).toBe(0);
+        expect(code).toBe(1);
       });
 
       it('FAILS when packages/cli declares @google/genai', async () => {
@@ -113,23 +107,25 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('@google/genai');
       });
 
-      it('FAILS when packages/core declares wrong version of @google/genai', async () => {
+      it('FAILS when packages/core declares any version of @google/genai', async () => {
         const { code, stdout } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
-          // Overwrite packages/core with the wrong version
+          // Core is no longer a sanctioned workspace, so any SDK declaration
+          // there must fail.
           write(
             'packages/core/package.json',
             JSON.stringify({
               name: '@vybestack/llxprt-code-core',
-              dependencies: { '@google/genai': '1.29.0' },
+              dependencies: { '@google/genai': '1.30.0' },
             }) + '\n',
           );
           write('packages/core/src/index.ts', 'export const x = 1;\n');
           return runScript(root, 1);
         });
         expect(code).toBe(1);
-        expect(stdout).toContain('does not match');
-        expect(stdout).toContain('1.30.0');
+        expect(stdout).toContain('allowlist');
+        expect(stdout).toContain('packages/core');
+        expect(stdout).toContain('@google/genai');
       });
 
       it('FAILS when packages/cli declares @google/genai in optionalDependencies', async () => {
@@ -165,51 +161,11 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('fail-closed');
       });
 
-      it('allows packages/core to declare @google/genai at 1.30.0', async () => {
+      it('FAILS when packages/providers declares @google/genai', async () => {
+        // Previously the sanctioned home for the SDK. The provider now reaches
+        // the API through @ai-sdk/google, so this declaration is a regression.
         const { code } = await withFixture(({ root, write }) => {
-          write(
-            'package.json',
-            JSON.stringify({
-              name: 'test-root',
-              dependencies: { '@google/genai': '1.30.0' },
-            }) + '\n',
-          );
-          write(
-            'packages/core/package.json',
-            JSON.stringify({
-              name: '@vybestack/llxprt-code-core',
-              dependencies: { '@google/genai': '1.30.0' },
-            }) + '\n',
-          );
-          write(
-            'packages/providers/package.json',
-            JSON.stringify({
-              name: '@vybestack/llxprt-code-providers',
-              dependencies: { '@google/genai': '1.30.0' },
-            }) + '\n',
-          );
-          write('packages/core/src/index.ts', 'export const x = 1;\n');
-          return runScript(root, 0);
-        });
-        expect(code).toBe(0);
-      });
-
-      it('allows packages/providers to declare @google/genai at 1.30.0', async () => {
-        const { code } = await withFixture(({ root, write }) => {
-          write(
-            'package.json',
-            JSON.stringify({
-              name: 'test-root',
-              dependencies: { '@google/genai': '1.30.0' },
-            }) + '\n',
-          );
-          write(
-            'packages/core/package.json',
-            JSON.stringify({
-              name: '@vybestack/llxprt-code-core',
-              dependencies: { '@google/genai': '1.30.0' },
-            }) + '\n',
-          );
+          write('package.json', JSON.stringify({ name: 'test-root' }) + '\n');
           write(
             'packages/providers/package.json',
             JSON.stringify({
@@ -218,9 +174,9 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
             }) + '\n',
           );
           write('packages/providers/src/index.ts', 'export const x = 1;\n');
-          return runScript(root, 0);
+          return runScript(root, 1);
         });
-        expect(code).toBe(0);
+        expect(code).toBe(1);
       });
 
       it('FAILS when a dependency section is an array instead of an object (fail-closed)', async () => {
@@ -245,15 +201,15 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       it('FAILS when a dependency section is a string instead of an object (fail-closed)', async () => {
         const { code, stdout } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
-          // Overwrite core with string deps
+          // Overwrite root with string deps
           write(
-            'packages/core/package.json',
+            'package.json',
             JSON.stringify({
               name: 'bad-shape-pkg',
               dependencies: '@google/genai',
             }) + '\n',
           );
-          write('packages/core/src/index.ts', 'export const x = 1;\n');
+          write('packages/providers/src/index.ts', 'export const x = 1;\n');
           return runScript(root, 1);
         });
         expect(code).toBe(1);
@@ -319,16 +275,16 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       it('FAILS when SDK declared in both dependencies and devDependencies (F9)', async () => {
         const { code, stdout } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
-          // Overwrite core with duplicate sections
+          // Overwrite providers with duplicate sections
           write(
-            'packages/core/package.json',
+            'packages/providers/package.json',
             JSON.stringify({
               name: 'dup-section-pkg',
               dependencies: { '@google/genai': '1.30.0' },
               devDependencies: { '@google/genai': '1.30.0' },
             }) + '\n',
           );
-          write('packages/core/src/index.ts', 'export const x = 1;\n');
+          write('packages/providers/src/index.ts', 'export const x = 1;\n');
           return runScript(root, 1);
         });
         expect(code).toBe(1);
@@ -357,16 +313,16 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       it('FAILS when SDK declared in dependencies and optionalDependencies (F9)', async () => {
         const { code, stdout } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
-          // Overwrite core with duplicate deps + optionalDependencies
+          // Overwrite providers with duplicate deps + optionalDependencies
           write(
-            'packages/core/package.json',
+            'packages/providers/package.json',
             JSON.stringify({
               name: 'dup-opt-pkg',
               dependencies: { '@google/genai': '1.30.0' },
               optionalDependencies: { '@google/genai': '1.30.0' },
             }) + '\n',
           );
-          write('packages/core/src/index.ts', 'export const x = 1;\n');
+          write('packages/providers/src/index.ts', 'export const x = 1;\n');
           return runScript(root, 1);
         });
         expect(code).toBe(1);
@@ -374,22 +330,22 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('optionalDependencies');
       });
 
-      it('FAILS when a sanctioned workspace omits the SDK from dependencies (F10)', async () => {
-        const { code, stdout } = await withFixture(({ root, write }) => {
+      it('PASSES when no workspace declares the SDK (the post-removal state)', async () => {
+        // Omitting @google/genai was a violation while the allowlist named
+        // sanctioned workspaces. It is now the required state.
+        const { code } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
-          // Overwrite core with a manifest that omits the SDK
           write(
-            'packages/core/package.json',
+            'packages/providers/package.json',
             JSON.stringify({
-              name: 'missing-sdk-pkg',
+              name: 'no-sdk-pkg',
               dependencies: { chalk: '^4.0.0' },
             }) + '\n',
           );
-          write('packages/core/src/index.ts', 'export const x = 1;\n');
-          return runScript(root, 1);
+          write('packages/providers/src/index.ts', 'export const x = 1;\n');
+          return runScript(root, 0);
         });
-        expect(code).toBe(1);
-        expect(stdout).toContain('missing');
+        expect(code).toBe(0);
       });
 
       it('FAILS when a dependency value is not a string (F6 fail-closed)', async () => {
@@ -421,31 +377,6 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('package.json');
       });
 
-      it('FAILS when packages/core manifest is absent (F4 fail-closed)', async () => {
-        const { code, stdout } = await withFixture(({ root, write }) => {
-          write(
-            'package.json',
-            JSON.stringify({
-              name: 'test-root',
-              dependencies: { '@google/genai': '1.30.0' },
-            }) + '\n',
-          );
-          // providers manifest is present so the failure isolates to core
-          write(
-            'packages/providers/package.json',
-            JSON.stringify({
-              name: '@vybestack/llxprt-code-providers',
-              dependencies: { '@google/genai': '1.30.0' },
-            }) + '\n',
-          );
-          write('packages/core/src/index.ts', 'export const x = 1;\n');
-          return runScript(root, 1);
-        });
-        expect(code).toBe(1);
-        expect(stdout).toContain('fail-closed');
-        expect(stdout).toContain('packages/core');
-      });
-
       it('FAILS when packages/providers manifest is absent (F4 fail-closed)', async () => {
         const { code, stdout } = await withFixture(({ root, write }) => {
           write(
@@ -455,19 +386,15 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
               dependencies: { '@google/genai': '1.30.0' },
             }) + '\n',
           );
-          write(
-            'packages/core/package.json',
-            JSON.stringify({
-              name: '@vybestack/llxprt-code-core',
-              dependencies: { '@google/genai': '1.30.0' },
-            }) + '\n',
-          );
+          // core manifest is absent (not sanctioned), so the failure isolates
+          // to providers.
           write('packages/core/src/index.ts', 'export const x = 1;\n');
           write('packages/providers/src/index.ts', 'export const x = 1;\n');
           return runScript(root, 1);
         });
         expect(code).toBe(1);
         expect(stdout).toContain('fail-closed');
+        expect(stdout).toContain('packages/providers');
       });
     });
 
@@ -527,29 +454,25 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         }
       });
 
-      it('GENAI_DEPENDENCY_MANIFESTS includes the packaging bridge and implementation workspaces', async () => {
-        const { GENAI_DEPENDENCY_MANIFESTS } = await import(
-          '../genai-enclave/config.ts'
-        );
-        const dirs = GENAI_DEPENDENCY_MANIFESTS.map(
-          (e) => e.workspaceDir,
-        ).sort();
-        expect(dirs).toEqual(['.', 'packages/core', 'packages/providers']);
-        for (const entry of GENAI_DEPENDENCY_MANIFESTS) {
-          expect(entry.version).toBe('1.30.0');
-          expect(entry.justification.length).toBeGreaterThan(0);
-        }
+      it('GENAI_DEPENDENCY_MANIFESTS is empty: no workspace may declare the SDK', async () => {
+        // @google/genai was removed, so the guard enforces elimination rather
+        // than containment. The manifests that must remain READABLE are listed
+        // separately in REQUIRED_MANIFEST_WORKSPACE_DIRS.
+        const { GENAI_DEPENDENCY_MANIFESTS, REQUIRED_MANIFEST_WORKSPACE_DIRS } =
+          await import('../genai-enclave/config.ts');
+        expect(GENAI_DEPENDENCY_MANIFESTS).toEqual([]);
+        expect([...REQUIRED_MANIFEST_WORKSPACE_DIRS].sort()).toEqual([
+          '.',
+          'packages/providers',
+        ]);
       });
 
-      it('GENAI_IMPORT_ENCLAVES has exactly gemini and code_assist with justifications', async () => {
+      it('GENAI_IMPORT_ENCLAVES has exactly the gemini enclave with justification', async () => {
         const { GENAI_IMPORT_ENCLAVES } = await import(
           '../genai-enclave/config.ts'
         );
         const prefixes = GENAI_IMPORT_ENCLAVES.map((e) => e.prefix).sort();
-        expect(prefixes).toEqual([
-          'packages/core/src/code_assist/',
-          'packages/providers/src/gemini/',
-        ]);
+        expect(prefixes).toEqual(['packages/providers/src/gemini/']);
         for (const entry of GENAI_IMPORT_ENCLAVES) {
           expect(entry.justification.length).toBeGreaterThan(0);
         }

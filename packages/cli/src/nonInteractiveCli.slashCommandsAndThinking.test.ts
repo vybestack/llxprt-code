@@ -612,21 +612,24 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       prompt_id: 'test-prompt-id',
     });
 
-    const thinkingOutputs = processStdoutSpy.mock.calls.filter(
-      (output: unknown[]) => (output[0] as string).includes('<think>'),
+    const thinkingOutputs = bufferedThinkingOutputs(
+      processStdoutSpy.mock.calls,
     );
 
     // Both thought events should be buffered and flushed as a single <think> block
     expect(thinkingOutputs).toHaveLength(1);
-    const thinkingText = thinkingOutputs[0][0] as string;
+    const thinkingText = thinkingTextFromSingleOutput(thinkingOutputs);
     // Code formats thoughts as "subject: description" when both present
     expect(thinkingText).toContain('First: thought');
     expect(thinkingText).toContain('Second: thought');
   });
 
-  it('should NOT emit pyramid-style repeated prefixes in non-interactive CLI', async () => {
+  async function verifyShouldNOTEmitPyramidStyleRepeatedPrefixesInNonInteractiveCLI() {
     agentState.events = [
-      { type: 'thinking', thought: { subject: 'Analyzing', description: '' } },
+      {
+        type: 'thinking',
+        thought: { subject: 'Analyzing', description: '' },
+      },
       { type: 'thinking', thought: { subject: 'request', description: '' } },
       { type: 'text', text: 'Response' },
       { type: 'done', reason: 'stop' },
@@ -639,19 +642,54 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       prompt_id: 'test-prompt-id',
     });
 
-    const thinkingOutputs = processStdoutSpy.mock.calls.filter(
-      (output: unknown[]) => (output[0] as string).includes('<think>'),
+    return bufferedThinkingOutputs(processStdoutSpy.mock.calls);
+  }
+
+  function bufferedThinkingOutputs(
+    stdoutCalls: readonly unknown[][],
+  ): Array<[string, ...unknown[]]> {
+    return stdoutCalls.filter(
+      (output): output is [string, ...unknown[]] =>
+        typeof output[0] === 'string' && output[0].includes('<think>'),
     );
+  }
+
+  function thinkingTextFromSingleOutput(
+    thinkingOutputs: Array<[string, ...unknown[]]>,
+  ): string {
+    const thinkingOutput = thinkingOutputs.at(0);
+    if (thinkingOutput === undefined) {
+      throw new Error('Expected one buffered thinking output');
+    }
+    return thinkingOutput[0];
+  }
+
+  function thinkingTextFromDefinedOutput(
+    thinkOutput: [string, ...unknown[]] | undefined,
+  ): string {
+    if (thinkOutput === undefined) {
+      throw new Error('Expected a thinking output');
+    }
+    return thinkOutput[0];
+  }
+
+  function analyzingThoughtCount(thinkingText: string): number {
+    return (thinkingText.match(/Analyzing/g) ?? []).length;
+  }
+
+  it('should NOT emit pyramid-style repeated prefixes in non-interactive CLI', async () => {
+    const thinkingOutputs =
+      await verifyShouldNOTEmitPyramidStyleRepeatedPrefixesInNonInteractiveCLI();
 
     // All thoughts should be buffered into one <think> block (no pyramid repetition)
     expect(thinkingOutputs).toHaveLength(1);
-    const thinkingText = thinkingOutputs[0][0] as string;
+    const thinkingText = thinkingTextFromSingleOutput(thinkingOutputs);
     // "Analyzing" should appear exactly once — not repeated for each subsequent thought
-    const thoughtCount = (thinkingText.match(/Analyzing/g) ?? []).length;
+    const thoughtCount = analyzingThoughtCount(thinkingText);
     expect(thoughtCount).toBe(1);
   });
 
-  it('should filter emojis from thinking blocks in auto mode', async () => {
+  async function verifyShouldFilterEmojisFromThinkingBlocksInAutoMode() {
     const mockGetEphemeralSetting = vi.fn((key: string) => {
       if (key === 'emojifilter') return 'auto';
       if (key === 'reasoning.includeInResponse') return true;
@@ -682,11 +720,21 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       prompt_id: 'prompt-id-emoji-think',
     });
 
-    const thinkOutput = processStdoutSpy.mock.calls.find((value: unknown[]) =>
-      (value[0] as string).includes('<think>'),
+    const stdoutCalls: unknown[][] = processStdoutSpy.mock.calls;
+    const thinkOutput = stdoutCalls.find(
+      (value): value is [string, ...unknown[]] =>
+        typeof value[0] === 'string' && value[0].includes('<think>'),
     );
+
+    return thinkOutput;
+  }
+
+  it('should filter emojis from thinking blocks in auto mode', async () => {
+    const thinkOutput =
+      await verifyShouldFilterEmojisFromThinkingBlocksInAutoMode();
+
     expect(thinkOutput).toBeDefined();
-    const thinkText = thinkOutput?.[0] as unknown as string;
+    const thinkText = thinkingTextFromDefinedOutput(thinkOutput);
     expect(thinkText).not.toContain('\u{1F914}');
     expect(thinkText).not.toContain('\u{1F4AD}');
     expect(thinkText).toContain('Planning');
@@ -695,7 +743,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     expect(thinkText).toContain('carefully');
   });
 
-  it('should suppress thinking blocks with emojis in error mode', async () => {
+  async function verifyShouldSuppressThinkingBlocksWithEmojisInErrorMode() {
     const mockGetEphemeralSetting = vi.fn((key: string) => {
       if (key === 'emojifilter') return 'error';
       if (key === 'reasoning.includeInResponse') return true;
@@ -706,7 +754,6 @@ describe('runNonInteractive - slash commands and thinking output', () => {
         typeof mockConfig.getEphemeralSetting
       >
     ).mockImplementation(mockGetEphemeralSetting);
-
     agentState.events = [
       {
         type: 'thinking',
@@ -718,21 +765,28 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       { type: 'text', text: 'Here is my answer' },
       { type: 'done', reason: 'stop' },
     ];
-
     await runNonInteractive({
       config: mockConfig,
       settings: mockSettings,
       input: 'Test input',
       prompt_id: 'prompt-id-emoji-error',
     });
-
-    const thinkOutput = processStdoutSpy.mock.calls.find((value: unknown[]) =>
-      (value[0] as string).includes('<think>'),
+    const stdoutCalls: unknown[][] = processStdoutSpy.mock.calls;
+    const thinkOutput = stdoutCalls.find(
+      (value): value is [string, ...unknown[]] =>
+        typeof value[0] === 'string' && value[0].includes('<think>'),
     );
+
+    return thinkOutput;
+  }
+
+  it('should suppress thinking blocks with emojis in error mode', async () => {
+    const thinkOutput =
+      await verifyShouldSuppressThinkingBlocksWithEmojisInErrorMode();
     expect(thinkOutput).toBeUndefined();
   });
 
-  it('should pass through thinking blocks when emojifilter is allowed', async () => {
+  async function verifyShouldPassThroughThinkingBlocksWhenEmojifilterIsAllowed() {
     const mockGetEphemeralSetting = vi.fn((key: string) => {
       if (key === 'emojifilter') return 'allowed';
       if (key === 'reasoning.includeInResponse') return true;
@@ -763,11 +817,21 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       prompt_id: 'prompt-id-emoji-allowed',
     });
 
-    const thinkOutput = processStdoutSpy.mock.calls.find((value: unknown[]) =>
-      (value[0] as string).includes('<think>'),
+    const stdoutCalls: unknown[][] = processStdoutSpy.mock.calls;
+    const thinkOutput = stdoutCalls.find(
+      (value): value is [string, ...unknown[]] =>
+        typeof value[0] === 'string' && value[0].includes('<think>'),
     );
+
+    return thinkOutput;
+  }
+
+  it('should pass through thinking blocks when emojifilter is allowed', async () => {
+    const thinkOutput =
+      await verifyShouldPassThroughThinkingBlocksWhenEmojifilterIsAllowed();
+
     expect(thinkOutput).toBeDefined();
-    const thinkText = thinkOutput?.[0] as unknown as string;
+    const thinkText = thinkingTextFromDefinedOutput(thinkOutput);
     expect(thinkText).toContain('\u{1F914}');
     expect(thinkText).toContain('\u{1F4AD}');
   });

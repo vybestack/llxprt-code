@@ -6,7 +6,6 @@
 
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type {
-  GetPromptResult,
   Prompt,
   ReadResourceResult,
   Resource,
@@ -16,15 +15,17 @@ import {
   ResourceListChangedNotificationSchema,
   ToolListChangedNotificationSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
-import type { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
+import type { MCPServerConfig } from '../config/mcpServerConfig.js';
+import type {
+  McpPromptRegistry,
+  McpResourceRegistry,
+  McpTrustConfig,
+  McpWorkspaceContext,
+} from '../host/hostInterfaces.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import type { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
-import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
-import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { getErrorMessage } from '@vybestack/llxprt-code-tools/utils/errors.js';
+import { emitHostFeedback } from '../host/hostServices.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import type { DiscoveredMCPTool } from './mcp-tool.js';
 
 import {
@@ -78,10 +79,7 @@ export {
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
 
-export type DiscoveredMCPPrompt = Prompt & {
-  serverName: string;
-  invoke: (params: Record<string, unknown>) => Promise<GetPromptResult>;
-};
+export type { DiscoveredMCPPrompt } from '../host/hostInterfaces.js';
 
 /**
  * The `McpClient` class manages a single MCP server connection lifecycle.
@@ -105,10 +103,10 @@ export class McpClient {
     private readonly serverName: string,
     private readonly serverConfig: MCPServerConfig,
     private readonly toolRegistry: ToolRegistry,
-    private readonly promptRegistry: PromptRegistry,
-    private readonly resourceRegistry: ResourceRegistry,
-    private readonly workspaceContext: WorkspaceContext,
-    private readonly cliConfig: Config,
+    private readonly promptRegistry: McpPromptRegistry,
+    private readonly resourceRegistry: McpResourceRegistry,
+    private readonly workspaceContext: McpWorkspaceContext,
+    private readonly cliConfig: McpTrustConfig,
     private readonly debugMode: boolean,
     private readonly clientVersion: string,
     private readonly onToolsUpdated?: (signal?: AbortSignal) => Promise<void>,
@@ -249,7 +247,7 @@ export class McpClient {
   }
 
   async discover(
-    cliConfig: Config,
+    cliConfig: McpTrustConfig,
     mayPublish: () => boolean = () => true,
   ): Promise<void> {
     this.assertConnected();
@@ -483,7 +481,7 @@ export class McpClient {
   }
 
   private async discoverTools(
-    cliConfig: Config,
+    cliConfig: McpTrustConfig,
     options?: { timeout?: number; signal?: AbortSignal },
   ): Promise<DiscoveredMCPTool[]> {
     const client = this.getConnectedClient();
@@ -756,10 +754,7 @@ export class McpClient {
         }
       }
 
-      coreEvents.emitFeedback(
-        'info',
-        `Tools updated for server: ${this.serverName}`,
-      );
+      emitHostFeedback('info', `Tools updated for server: ${this.serverName}`);
       return true;
     } finally {
       clearTimeout(timeoutId);
@@ -850,7 +845,7 @@ export class McpClient {
         return false;
       }
 
-      coreEvents.emitFeedback(
+      emitHostFeedback(
         'info',
         `Resources updated for server: ${this.serverName}`,
       );

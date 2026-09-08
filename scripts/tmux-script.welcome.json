@@ -1,0 +1,56 @@
+{
+  "tmux": {
+    "cols": 110,
+    "rows": 40,
+    "historyLimit": 20000,
+    "scrollbackLines": 3000,
+    "initialWaitMs": 6000
+  },
+  "startCommand": [
+    "env CI=0 CONTINUOUS_INTEGRATION=0 NODE_OPTIONS= NO_COLOR=1 LLXPRT_CODE_NO_RELAUNCH=true LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION=true LLXPRT_CODE_BUILTIN_COMMANDS_ONLY=true LLXPRT_CODE_SUPPRESS_STATIC_HEADER=true LLXPRT_SYSTEM_SETTINGS_PATH=scripts/system-settings.interactive-ui.json LLXPRT_FAKE_RESPONSES=scripts/fixtures/approval-ui.responses.jsonl ${bun} packages/cli/index.ts"
+  ],
+  "yolo": false,
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Welcome to llxprt!",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "Set up now (recommended)"
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "Skip setup (I know what I'm doing)"
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "Use ↑↓ to navigate, Enter to select, Esc to skip"
+    },
+    { "type": "capture", "label": "welcome-options" },
+    { "type": "key", "key": "Down" },
+    { "type": "key", "key": "Enter" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Setup skipped",
+      "timeoutMs": 5000
+    },
+    { "type": "capture", "label": "welcome-skipped" },
+    { "type": "key", "key": "Enter" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 15000
+    },
+    { "type": "capture", "label": "welcome-composer" },
+    { "type": "line", "text": "/quit", "submitKeys": ["Enter"] },
+    { "type": "waitForExit", "timeoutMs": 15000 }
+  ]
+}

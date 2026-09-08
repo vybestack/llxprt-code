@@ -128,72 +128,46 @@ describe('ChatSession hook execution control', () => {
 
   describe('BeforeModel hook stop', () => {
     it('should emit stopped event and terminate when BeforeModel hook stops execution', async () => {
-      // Mock BeforeModel hook to return stop
-      mockHookSystem.fireBeforeModelEvent.mockResolvedValueOnce(
-        new BeforeModelHookOutput({
-          continue: false,
-          stopReason: 'BeforeModel stopped execution',
-        }),
-      );
-
-      const events: Array<{ type: string; reason?: string }> = [];
-      const stream = await chat.sendMessageStream(
-        { message: 'test message' },
-        'test-prompt',
-      );
-
-      for await (const event of stream) {
-        events.push({
-          type: event.type,
-          reason: 'reason' in event ? event.reason : undefined,
-        });
-      }
-
+      const { events } =
+        await observeEmitStoppedEventAndTerminateWhenBeforeModelHookStopsExecution();
       expect(events).toHaveLength(1);
       expect(events[0]).toStrictEqual({
         type: StreamEventType.AGENT_EXECUTION_STOPPED,
         reason: 'BeforeModel stopped execution',
       });
     });
+
+    const observeEmitStoppedEventAndTerminateWhenBeforeModelHookStopsExecution =
+      async () => {
+        // Mock BeforeModel hook to return stop
+        mockHookSystem.fireBeforeModelEvent.mockResolvedValueOnce(
+          new BeforeModelHookOutput({
+            continue: false,
+            stopReason: 'BeforeModel stopped execution',
+          }),
+        );
+
+        const events: Array<{ type: string; reason?: string }> = [];
+        const stream = await chat.sendMessageStream(
+          { message: 'test message' },
+          'test-prompt',
+        );
+
+        for await (const event of stream) {
+          events.push({
+            type: event.type,
+            reason: 'reason' in event ? event.reason : undefined,
+          });
+        }
+
+        return { events };
+      };
   });
 
   describe('BeforeModel hook block', () => {
     it('should emit blocked event then chunk when BeforeModel hook blocks with synthetic response', async () => {
-      mockHookSystem.fireBeforeModelEvent.mockResolvedValueOnce(
-        new BeforeModelHookOutput({
-          decision: 'block',
-          reason: 'BeforeModel blocked execution',
-          hookSpecificOutput: {
-            llm_response: {
-              candidates: [
-                {
-                  content: {
-                    role: 'model' as const,
-                    parts: [{ text: 'Synthetic blocked response' }],
-                  },
-                  finishReason: 'STOP' as const,
-                },
-              ],
-            },
-          },
-        }),
-      );
-
-      const events: Array<{ type: string; reason?: string; value?: unknown }> =
-        [];
-      const stream = await chat.sendMessageStream(
-        { message: 'test message' },
-        'test-prompt',
-      );
-
-      for await (const event of stream) {
-        events.push({
-          type: event.type,
-          reason: 'reason' in event ? event.reason : undefined,
-          value: 'value' in event ? event.value : undefined,
-        });
-      }
-
+      const { events } =
+        await observeEmitBlockedEventThenChunkWhenBeforeModelHookBlocksWithSyntheticResponse();
       expect(events).toHaveLength(2);
       expect(events[0]).toStrictEqual({
         type: StreamEventType.AGENT_EXECUTION_BLOCKED,
@@ -203,90 +177,152 @@ describe('ChatSession hook execution control', () => {
       expect(events[1].type).toBe(StreamEventType.CHUNK);
       expect(events[1].value).toBeDefined();
     });
+
+    const observeEmitBlockedEventThenChunkWhenBeforeModelHookBlocksWithSyntheticResponse =
+      async () => {
+        mockHookSystem.fireBeforeModelEvent.mockResolvedValueOnce(
+          new BeforeModelHookOutput({
+            decision: 'block',
+            reason: 'BeforeModel blocked execution',
+            hookSpecificOutput: {
+              llm_response: {
+                candidates: [
+                  {
+                    content: {
+                      role: 'model' as const,
+                      parts: [{ text: 'Synthetic blocked response' }],
+                    },
+                    finishReason: 'STOP' as const,
+                  },
+                ],
+              },
+            },
+          }),
+        );
+
+        const events: Array<{
+          type: string;
+          reason?: string;
+          value?: unknown;
+        }> = [];
+        const stream = await chat.sendMessageStream(
+          { message: 'test message' },
+          'test-prompt',
+        );
+
+        for await (const event of stream) {
+          events.push({
+            type: event.type,
+            reason: 'reason' in event ? event.reason : undefined,
+            value: 'value' in event ? event.value : undefined,
+          });
+        }
+
+        return { events };
+      };
   });
 
   describe('AfterModel hook stop', () => {
     it('should emit stopped event when AfterModel hook stops execution', async () => {
-      // Mock provider to return a simple response
-      (
-        mockProvider.generateChatCompletion as ReturnType<typeof vi.fn>
-      ).mockImplementation(async function* () {
-        yield {
-          role: 'model',
-          blocks: [{ type: 'text', text: 'Model response' }],
-        };
-      });
-
-      // Mock AfterModel hook to return stop
-      mockHookSystem.fireAfterModelEvent.mockResolvedValue(
-        new AfterModelHookOutput({
-          continue: false,
-          stopReason: 'AfterModel stopped execution',
-        }),
-      );
-
-      const events: Array<{ type: string; reason?: string }> = [];
-      const stream = await chat.sendMessageStream(
-        { message: 'test message' },
-        'test-prompt',
-      );
-
-      for await (const event of stream) {
-        events.push({
-          type: event.type,
-          reason: 'reason' in event ? event.reason : undefined,
-        });
-      }
-
+      const { events } =
+        await observeEmitStoppedEventWhenAfterModelHookStopsExecution();
       expect(events).toContainEqual({
         type: StreamEventType.AGENT_EXECUTION_STOPPED,
         reason: 'AfterModel stopped execution',
       });
     });
+
+    const observeEmitStoppedEventWhenAfterModelHookStopsExecution =
+      async () => {
+        // Mock provider to return a simple response
+        (
+          mockProvider.generateChatCompletion as ReturnType<typeof vi.fn>
+        ).mockImplementation(async function* () {
+          yield {
+            role: 'model',
+            blocks: [{ type: 'text', text: 'Model response' }],
+          };
+        });
+
+        // Mock AfterModel hook to return stop
+        mockHookSystem.fireAfterModelEvent.mockResolvedValue(
+          new AfterModelHookOutput({
+            continue: false,
+            stopReason: 'AfterModel stopped execution',
+          }),
+        );
+
+        const events: Array<{ type: string; reason?: string }> = [];
+        const stream = await chat.sendMessageStream(
+          { message: 'test message' },
+          'test-prompt',
+        );
+
+        for await (const event of stream) {
+          events.push({
+            type: event.type,
+            reason: 'reason' in event ? event.reason : undefined,
+          });
+        }
+
+        return { events };
+      };
   });
 
   describe('AfterModel hook block', () => {
     it('should emit blocked event then chunk when AfterModel hook blocks execution', async () => {
-      // Mock provider to return a simple response
-      (
-        mockProvider.generateChatCompletion as ReturnType<typeof vi.fn>
-      ).mockImplementation(async function* () {
-        yield {
-          role: 'model',
-          blocks: [{ type: 'text', text: 'Model response' }],
-        };
-      });
-
-      // Mock AfterModel hook to return block
-      mockHookSystem.fireAfterModelEvent.mockResolvedValue(
-        new AfterModelHookOutput({
-          decision: 'block',
-          reason: 'AfterModel blocked execution',
-        }),
-      );
-
-      const events: Array<{ type: string; reason?: string; value?: unknown }> =
-        [];
-      const stream = await chat.sendMessageStream(
-        { message: 'test message' },
-        'test-prompt',
-      );
-
-      for await (const event of stream) {
-        events.push({
-          type: event.type,
-          reason: 'reason' in event ? event.reason : undefined,
-          value: 'value' in event ? event.value : undefined,
-        });
-      }
-
-      // Should have blocked event followed by chunk (current converted response)
-      const blockedEvent = events.find(
-        (e) => e.type === StreamEventType.AGENT_EXECUTION_BLOCKED,
-      );
+      const { blockedEvent, reasonObservation } =
+        await observeEmitBlockedEventThenChunkWhenAfterModelHookBlocksExecution();
       expect(blockedEvent).toBeDefined();
-      expect(blockedEvent?.reason).toBe('AfterModel blocked execution');
+      expect(reasonObservation).toBe('AfterModel blocked execution');
     });
+
+    const observeEmitBlockedEventThenChunkWhenAfterModelHookBlocksExecution =
+      async () => {
+        // Mock provider to return a simple response
+        (
+          mockProvider.generateChatCompletion as ReturnType<typeof vi.fn>
+        ).mockImplementation(async function* () {
+          yield {
+            role: 'model',
+            blocks: [{ type: 'text', text: 'Model response' }],
+          };
+        });
+
+        // Mock AfterModel hook to return block
+        mockHookSystem.fireAfterModelEvent.mockResolvedValue(
+          new AfterModelHookOutput({
+            decision: 'block',
+            reason: 'AfterModel blocked execution',
+          }),
+        );
+
+        const events: Array<{
+          type: string;
+          reason?: string;
+          value?: unknown;
+        }> = [];
+        const stream = await chat.sendMessageStream(
+          { message: 'test message' },
+          'test-prompt',
+        );
+
+        for await (const event of stream) {
+          events.push({
+            type: event.type,
+            reason: 'reason' in event ? event.reason : undefined,
+            value: 'value' in event ? event.value : undefined,
+          });
+        }
+
+        // Should have blocked event followed by chunk (current converted response)
+        const blockedEvent = events.find(
+          (e) => e.type === StreamEventType.AGENT_EXECUTION_BLOCKED,
+        );
+
+        const reasonObservation = blockedEvent?.reason;
+        return { blockedEvent, reasonObservation };
+      };
   });
 
   it('emits a neutral blocked chunk carrying the reason when BeforeModel blocks (no tool calls leak)', async () => {

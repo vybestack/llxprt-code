@@ -188,7 +188,7 @@ describe('Claude Opus 5 calibrated prompt estimator', () => {
       OPUS_SPEC,
       { loadModule: load },
     );
-    expect(encodeCalls()).toEqual([promptText]);
+    expect(encodeCalls()).toStrictEqual([promptText]);
   });
 
   it.each(Object.entries(CONTENT_SHAPES))(
@@ -204,7 +204,7 @@ describe('Claude Opus 5 calibrated prompt estimator', () => {
         OPUS_SPEC,
         { extractFeatures: countingExtractor },
       );
-      expect(scanned).toEqual([promptText]);
+      expect(scanned).toStrictEqual([promptText]);
     },
   );
 
@@ -225,8 +225,8 @@ describe('Claude Opus 5 calibrated prompt estimator', () => {
     );
     const encoder = tiktoken.get_encoding('o200k_base');
     const baseTokens = encoder.encode(promptText, [], []).length;
-    expect(encodeCalls()).toEqual([promptText]);
-    expect(scanned).toEqual([promptText]);
+    expect(encodeCalls()).toStrictEqual([promptText]);
+    expect(scanned).toStrictEqual([promptText]);
     expect(result.count).toBe(expectedCount(promptText, baseTokens));
   });
 
@@ -258,7 +258,7 @@ describe('Claude Opus 5 calibrated prompt estimator', () => {
         OPUS_SPEC,
         { loadModule: load },
       );
-      expect(encodeCalls()).toEqual([promptText]);
+      expect(encodeCalls()).toStrictEqual([promptText]);
       results.push(result);
     }
     expect(new Set(results.map((r) => r.count)).size).toBe(1);
@@ -504,7 +504,7 @@ describe('Claude 5 registry composition', () => {
   it('registers exactly the models whose calibration cleared its own gate', () => {
     expect(
       CLAUDE_5_PROMPT_ESTIMATOR_REGISTRATIONS.map((r) => r.family).sort(),
-    ).toEqual(
+    ).toStrictEqual(
       [CLAUDE_FABLE_5_ESTIMATOR_FAMILY, CLAUDE_OPUS_5_ESTIMATOR_FAMILY].sort(),
     );
   });
@@ -513,9 +513,9 @@ describe('Claude 5 registry composition', () => {
     const registrations = CLAUDE_5_FAMILY_SPECS.filter(
       (spec) => spec.canonicalModelFamily !== 'claude-fable-5',
     );
-    expect(registrations.map((spec) => spec.canonicalModelFamily)).toEqual([
-      'claude-opus-5',
-    ]);
+    expect(
+      registrations.map((spec) => spec.canonicalModelFamily),
+    ).toStrictEqual(['claude-opus-5']);
   });
 
   it('claims sanctioned Opus 5 aliases and snapshots', () => {

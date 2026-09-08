@@ -189,6 +189,17 @@ describe('Defect 5: prefix-destroying compression resets the anchor and next com
   });
 
   it('after a truncation-style result that preserves no head, the anchor resets and the next compression succeeds', async () => {
+    const { resetAnchor, result, anchorAfter } =
+      await observeCompressionAfterPrefixDestruction();
+    expect(resetAnchor).toBe(0);
+    expect([
+      PerformCompressionResult.COMPRESSED,
+      PerformCompressionResult.NOOP,
+    ]).toContain(result);
+    expect(anchorAfter).toBeGreaterThanOrEqual(0);
+  }, 30_000);
+
+  async function observeCompressionAfterPrefixDestruction() {
     const historyService = new HistoryService();
     const capturedRequests: IContent[] = [];
     const handler = buildHandler({ historyService, capturedRequests });
@@ -208,8 +219,7 @@ describe('Defect 5: prefix-destroying compression resets the anchor and next com
     // and resetting the anchor (as TopDownTruncationStrategy path would do)
     historyService.clear();
     historyService.resetCacheAnchorSeq();
-
-    expect(historyService.getCacheAnchorSeq()).toBe(0);
+    const resetAnchor = historyService.getCacheAnchorSeq();
 
     // Re-add a small history and confirm a new compression can proceed
     for (let i = 0; i < 20; i++) {
@@ -221,16 +231,10 @@ describe('Defect 5: prefix-destroying compression resets the anchor and next com
       trigger: 'manual',
     });
 
-    // Must not be wedged — compression applies or no-ops cleanly
-    expect([
-      PerformCompressionResult.COMPRESSED,
-      PerformCompressionResult.NOOP,
-    ]).toContain(result);
-
     // Anchor must be in a valid state (either 0 or advanced, not stale)
     const anchorAfter = historyService.getCacheAnchorSeq();
-    expect(anchorAfter).toBeGreaterThanOrEqual(0);
-  }, 30_000);
+    return { resetAnchor, result, anchorAfter };
+  }
 });
 
 // ---------------------------------------------------------------------------

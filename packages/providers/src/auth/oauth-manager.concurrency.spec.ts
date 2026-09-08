@@ -16,6 +16,45 @@ import type {
   Config,
 } from '@vybestack/llxprt-code-core';
 
+async function getBucketAToken(
+  _provider: string,
+  bucket?: string,
+): Promise<OAuthToken | null> {
+  if (bucket === 'bucket-a') {
+    return makeToken('token-bucket-a');
+  }
+  return null;
+}
+
+interface BucketResolutionState {
+  inProgress: boolean;
+}
+
+async function resolveBucketsSerially(
+  state: BucketResolutionState,
+): Promise<string[]> {
+  if (state.inProgress) {
+    throw new Error('getProfileBuckets called concurrently');
+  }
+  state.inProgress = true;
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  state.inProgress = false;
+  return ['bucket-a', 'bucket-b'];
+}
+
+interface TokenReadSequenceState {
+  calls: number;
+}
+
+async function readTokenSequence(
+  state: TokenReadSequenceState,
+  firstToken: OAuthToken,
+  subsequentToken: OAuthToken,
+): Promise<OAuthToken> {
+  state.calls += 1;
+  return state.calls === 1 ? firstToken : subsequentToken;
+}
+
 function makeToken(accessToken: string, expiryOffset = 3600): OAuthToken {
   return {
     access_token: accessToken,
@@ -30,12 +69,7 @@ describe('OAuthManager concurrency', () => {
   it('serializes bucket resolution for concurrent getOAuthToken calls (same provider)', async () => {
     const tokenStore: TokenStore = {
       saveToken: vi.fn(),
-      getToken: vi.fn(async (_provider: string, bucket?: string) => {
-        if (bucket === 'bucket-a') {
-          return makeToken('token-bucket-a');
-        }
-        return null;
-      }),
+      getToken: vi.fn(getBucketAToken),
       removeToken: vi.fn(),
       listProviders: vi.fn(async () => []),
       listBuckets: vi.fn(async () => ['bucket-a', 'bucket-b']),
@@ -61,19 +95,11 @@ describe('OAuthManager concurrency', () => {
     };
     oauthManager.registerProvider(provider);
 
-    let inProgress = false;
+    const bucketResolutionState: BucketResolutionState = { inProgress: false };
     vi.spyOn(
       oauthManager as unknown as { getProfileBuckets: () => unknown },
       'getProfileBuckets',
-    ).mockImplementation(async () => {
-      if (inProgress) {
-        throw new Error('getProfileBuckets called concurrently');
-      }
-      inProgress = true;
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      inProgress = false;
-      return ['bucket-a', 'bucket-b'];
-    });
+    ).mockImplementation(() => resolveBucketsSerially(bucketResolutionState));
 
     let storedFailoverHandler: unknown;
     const config: Pick<
@@ -156,15 +182,16 @@ describe('OAuthManager concurrency', () => {
       const expiredToken = makeToken('expired-token', -10);
       const alreadyRefreshedToken = makeToken('already-refreshed-token');
 
-      let getTokenCallCount = 0;
+      const tokenReadState: TokenReadSequenceState = { calls: 0 };
       const tokenStore: TokenStore = {
         saveToken: vi.fn(),
-        getToken: vi.fn(async () => {
-          getTokenCallCount++;
-          // First call returns expired token
-          // Second call (after lock) returns already-refreshed token
-          return getTokenCallCount === 1 ? expiredToken : alreadyRefreshedToken;
-        }),
+        getToken: vi.fn(() =>
+          readTokenSequence(
+            tokenReadState,
+            expiredToken,
+            alreadyRefreshedToken,
+          ),
+        ),
         removeToken: vi.fn(),
         listProviders: vi.fn(async () => []),
         listBuckets: vi.fn(async () => []),
@@ -196,7 +223,7 @@ describe('OAuthManager concurrency', () => {
       const result = await oauthManager.getOAuthToken('anthropic');
 
       // Then: Should re-read token after acquiring lock
-      expect(getTokenCallCount).toBe(2);
+      expect(tokenReadState.calls).toBe(2);
 
       // And: Should use already-refreshed token without calling refreshToken
       expect(result?.access_token).toBe('already-refreshed-token');
@@ -208,15 +235,12 @@ describe('OAuthManager concurrency', () => {
       const soonToExpireToken = makeToken('soon-to-expire', 20);
       const validToken = makeToken('valid-token', 3600);
 
-      let getTokenCallCount = 0;
+      const tokenReadState: TokenReadSequenceState = { calls: 0 };
       const tokenStore: TokenStore = {
         saveToken: vi.fn(),
-        getToken: vi.fn(async () => {
-          getTokenCallCount++;
-          // First call returns token expiring soon
-          // Second call (after lock) returns freshly refreshed valid token
-          return getTokenCallCount === 1 ? soonToExpireToken : validToken;
-        }),
+        getToken: vi.fn(() =>
+          readTokenSequence(tokenReadState, soonToExpireToken, validToken),
+        ),
         removeToken: vi.fn(),
         listProviders: vi.fn(async () => []),
         listBuckets: vi.fn(async () => []),
@@ -304,17 +328,16 @@ describe('OAuthManager concurrency', () => {
       const expiredToken = makeToken('expired-token', -10);
       const refreshedByOtherProcess = makeToken('refreshed-by-other', 3600);
 
-      let getTokenCallCount = 0;
+      const tokenReadState: TokenReadSequenceState = { calls: 0 };
       const tokenStore: TokenStore = {
         saveToken: vi.fn(),
-        getToken: vi.fn(async () => {
-          getTokenCallCount++;
-          // First call returns expired token
-          // Second call (after lock timeout) returns token refreshed by other process
-          return getTokenCallCount === 1
-            ? expiredToken
-            : refreshedByOtherProcess;
-        }),
+        getToken: vi.fn(() =>
+          readTokenSequence(
+            tokenReadState,
+            expiredToken,
+            refreshedByOtherProcess,
+          ),
+        ),
         removeToken: vi.fn(),
         listProviders: vi.fn(async () => []),
         listBuckets: vi.fn(async () => []),
@@ -346,7 +369,7 @@ describe('OAuthManager concurrency', () => {
       const result = await oauthManager.getOAuthToken('anthropic');
 
       // Then: Should re-read token from disk after lock timeout
-      expect(getTokenCallCount).toBe(2);
+      expect(tokenReadState.calls).toBe(2);
 
       // And: Should return token refreshed by other process
       expect(result?.access_token).toBe('refreshed-by-other');

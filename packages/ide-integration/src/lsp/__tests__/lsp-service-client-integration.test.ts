@@ -105,6 +105,10 @@ const repoRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
 const createClient = (command: string, workspaceRoot = repoRoot) =>
   new LspServiceClient(createConfig(command), workspaceRoot);
 
+function locatorCommand(): 'where' | 'which' {
+  return process.platform === 'win32' ? 'where' : 'which';
+}
+
 describe('LspServiceClient integration contract', () => {
   beforeEach(() => {
     spawnMock.mockReset();
@@ -200,7 +204,7 @@ describe('LspServiceClient integration contract', () => {
 
     await client.start();
 
-    const locator = process.platform === 'win32' ? 'where' : 'which';
+    const locator = locatorCommand();
     expect(spawnMock).toHaveBeenCalledTimes(2);
     expect(spawnMock.mock.calls.some((call) => call[0] === locator)).toBe(true);
     expect(createMessageConnectionMock).toHaveBeenCalledTimes(1);

@@ -59,6 +59,72 @@ void vi.mock('../runtimeSettings.js', () => ({
 
 const { applyProfileWithGuards } = await import('../profileApplication.js');
 
+async function loadDetectedProfile(profileName: string): Promise<Profile> {
+  if (profileName === 'syntheticglm46') {
+    return {
+      version: 1,
+      provider: 'gemini',
+      model: 'glm-4-flash',
+      modelParams: {},
+      ephemeralSettings: {
+        'auth-key': 'test-key-glm46',
+        'base-url': 'https://api.glm46.example.com',
+      },
+    };
+  }
+  if (profileName === 'syntheticm2maxstreaming') {
+    return {
+      version: 1,
+      provider: 'openai',
+      model: 'm2-max',
+      modelParams: {},
+      ephemeralSettings: {
+        'auth-key': 'test-key-m2max',
+        'base-url': 'https://api.m2max.example.com',
+      },
+    };
+  }
+  throw new Error(`Profile '${profileName}' not found`);
+}
+
+async function loadExistingProfile(profileName: string): Promise<Profile> {
+  if (profileName === 'existingProfile') {
+    return {
+      version: 1,
+      provider: 'gemini',
+      model: 'test-model',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+  }
+  throw new Error(`Profile '${profileName}' not found`);
+}
+
+async function loadResolvedSubProfile(profileName: string): Promise<Profile> {
+  if (profileName === 'sub1') {
+    return {
+      version: 1,
+      provider: 'gemini',
+      model: 'gemini-flash',
+      modelParams: {},
+      ephemeralSettings: {
+        'auth-key': 'key-sub1',
+        'base-url': 'https://sub1.example.com',
+      },
+    };
+  }
+  return {
+    version: 1,
+    provider: 'openai',
+    model: 'gpt-4o-mini',
+    modelParams: {},
+    ephemeralSettings: {
+      'auth-key': 'key-sub2',
+      'base-url': 'https://sub2.example.com',
+    },
+  };
+}
+
 describe('Phase 2: Load Balancing Profile Detection (type: loadbalancer format)', () => {
   beforeEach(() => {
     resetLbProfileApplicationStubs();
@@ -77,35 +143,7 @@ describe('Phase 2: Load Balancing Profile Detection (type: loadbalancer format)'
         },
       );
 
-      const mockLoadProfile = vi.fn(
-        async (profileName: string): Promise<Profile> => {
-          if (profileName === 'syntheticglm46') {
-            return {
-              version: 1,
-              provider: 'gemini',
-              model: 'glm-4-flash',
-              modelParams: {},
-              ephemeralSettings: {
-                'auth-key': 'test-key-glm46',
-                'base-url': 'https://api.glm46.example.com',
-              },
-            };
-          }
-          if (profileName === 'syntheticm2maxstreaming') {
-            return {
-              version: 1,
-              provider: 'openai',
-              model: 'm2-max',
-              modelParams: {},
-              ephemeralSettings: {
-                'auth-key': 'test-key-m2max',
-                'base-url': 'https://api.m2max.example.com',
-              },
-            };
-          }
-          throw new Error(`Profile '${profileName}' not found`);
-        },
-      );
+      const mockLoadProfile = vi.fn(loadDetectedProfile);
       profileManagerStub.loadProfile = mockLoadProfile;
 
       const { getLBProvider } = wrapRegisterProviderToCaptureLB();
@@ -201,20 +239,7 @@ describe('Phase 2: Load Balancing Profile Detection (type: loadbalancer format)'
     it('should fail-fast when referenced profile does not exist @plan:PLAN-20251211issue486c @phase:2', async () => {
       const lbProfile = makeLbProfile(['existingProfile', 'nonexistent']);
 
-      const mockLoadProfile = vi.fn(
-        async (profileName: string): Promise<Profile> => {
-          if (profileName === 'existingProfile') {
-            return {
-              version: 1,
-              provider: 'gemini',
-              model: 'test-model',
-              modelParams: {},
-              ephemeralSettings: {},
-            };
-          }
-          throw new Error(`Profile '${profileName}' not found`);
-        },
-      );
+      const mockLoadProfile = vi.fn(loadExistingProfile);
       profileManagerStub.loadProfile = mockLoadProfile;
 
       await expect(
@@ -277,32 +302,7 @@ describe('Phase 2: Load Balancing Profile Detection (type: loadbalancer format)'
     it('should create LoadBalancingProvider with resolved sub-profile configs @plan:PLAN-20251211issue486c @phase:2', async () => {
       const lbProfile = makeLbProfile(['sub1', 'sub2']);
 
-      const mockLoadProfile = vi.fn(
-        async (profileName: string): Promise<Profile> => {
-          if (profileName === 'sub1') {
-            return {
-              version: 1,
-              provider: 'gemini',
-              model: 'gemini-flash',
-              modelParams: {},
-              ephemeralSettings: {
-                'auth-key': 'key-sub1',
-                'base-url': 'https://sub1.example.com',
-              },
-            };
-          }
-          return {
-            version: 1,
-            provider: 'openai',
-            model: 'gpt-4o-mini',
-            modelParams: {},
-            ephemeralSettings: {
-              'auth-key': 'key-sub2',
-              'base-url': 'https://sub2.example.com',
-            },
-          };
-        },
-      );
+      const mockLoadProfile = vi.fn(loadResolvedSubProfile);
       profileManagerStub.loadProfile = mockLoadProfile;
 
       const { getLBProvider } = wrapRegisterProviderToCaptureLB();

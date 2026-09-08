@@ -15,6 +15,7 @@ import {
   enableMouseEvents,
 } from '../../../utils/mouse.js';
 import { MessageType } from '../../../types.js';
+import type { IdeContext } from '@vybestack/llxprt-code-core';
 import { ShellExecutionService } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
@@ -71,7 +72,7 @@ export interface CopyModeDeps {
 
 export interface IdeContextDeps {
   getIdeMode: () => boolean;
-  ideContextState: unknown;
+  ideContextState: IdeContext | undefined;
 }
 
 export interface McpDeps {
@@ -224,8 +225,7 @@ function handleIdeAndShellKeys(
   if (
     keyMatchers[Command.SHOW_IDE_CONTEXT_DETAIL](key) &&
     ideContext.getIdeMode() &&
-    ideContext.ideContextState !== undefined &&
-    ideContext.ideContextState !== null
+    ideContext.ideContextState !== undefined
   ) {
     // Show IDE status when in IDE mode and context is available.
     // Note: handleSlashCommand is called directly in the main handler for this
@@ -302,8 +302,7 @@ export function useKeybindings(params: UseKeybindingsParams): void {
     if (
       keyMatchers[Command.SHOW_IDE_CONTEXT_DETAIL](key) &&
       ideContext.getIdeMode() &&
-      ideContext.ideContextState !== undefined &&
-      ideContext.ideContextState !== null
+      ideContext.ideContextState !== undefined
     ) {
       void display.handleSlashCommand('/ide status');
     }

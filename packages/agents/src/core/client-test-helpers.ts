@@ -12,12 +12,14 @@
  * exercises AgentClient must declare its own vi.mock() calls and the mock fns
  * they reference at the top of the file, before the module under test is
  * imported. The setup function below receives those mock fns as arguments so
- * it can wire them into the shared Config/GoogleGenAI mock.
+ * it can wire them into the shared Config and content-generator mocks.
  */
 
 import { vi, type Mock } from 'bun:test';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
+import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
+import { buildMockContentGenerator } from './__tests__/chatSession-density-helpers.js';
 import type { ChatSession } from './chatSession.js';
 import type { MessageStreamDeps } from './MessageStreamOrchestrator.js';
 import { AgentClient } from './client.js';
@@ -114,17 +116,8 @@ function resetAndApplyServiceMocks(): void {
   setSimulate429(false);
 }
 
-/**
- * Previously wired the GoogleGenAI constructor mock to the provided mock fns.
- * The production code no longer uses GoogleGenAI (it uses createContentGenerator),
- * so this is now a no-op retained for API compatibility with callers.
- */
-function setupGoogleGenAIMock(_mockFns: ClientMockFns): void {
-  // No-op — embedding/generation mocks are wired via vi.mock in individual test files.
-}
-
 /** Build and register the mock Config implementation. */
-function setupConfigMock(): ContentGeneratorConfig {
+function setupConfigMock(mockFns: ClientMockFns): ContentGeneratorConfig {
   const mockToolRegistry = {
     getFunctionDeclarations: vi.fn().mockReturnValue([]),
     getTool: vi.fn().mockReturnValue(null),
@@ -132,10 +125,17 @@ function setupConfigMock(): ContentGeneratorConfig {
   };
   const fileService = new FileDiscoveryService('/test/dir');
   const MockedConfig = Config as unknown as Mock<(...args: never[]) => unknown>;
+  const contentGenerator = buildMockContentGenerator();
+  contentGenerator.generateContent = mockFns.mockGenerateContentFn;
+  contentGenerator.embedContent = mockFns.mockEmbedContentFn;
   const contentGeneratorConfig: ContentGeneratorConfig = {
     model: 'test-model',
     apiKey: 'test-key',
     vertexai: false,
+    providerManager: new TestRuntimeProviderManager(),
+    contentGeneratorFactory: {
+      createContentGenerator: () => contentGenerator,
+    },
   };
   const mockConfigObject = {
     getContentGeneratorConfig: vi.fn().mockReturnValue(contentGeneratorConfig),
@@ -249,8 +249,7 @@ export async function setupAgentClient(
   mockFns: ClientMockFns,
 ): Promise<ClientTestContext> {
   resetAndApplyServiceMocks();
-  setupGoogleGenAIMock(mockFns);
-  const contentGeneratorConfig = setupConfigMock();
+  const contentGeneratorConfig = setupConfigMock(mockFns);
   const client = await createAndInitClient(
     contentGeneratorConfig,
     mockFns.createTurn,

@@ -49,6 +49,24 @@ void vi.mock('../extension.js', () => ({
   loadExtension: mockLoadExtension,
 }));
 
+async function waitForFileRemoval(
+  filePath: string,
+  deadline: number,
+): Promise<boolean> {
+  let fileExists = true;
+  while (Date.now() < deadline) {
+    fileExists = await fs
+      .access(filePath)
+      .then(() => true)
+      .catch(() => false);
+    if (!fileExists) {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return fileExists;
+}
+
 describe('git extension helpers', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -644,9 +662,13 @@ describe('git extension helpers', () => {
             .fn()
             .mockImplementation(
               (event: string, handler: (error: Error) => void) => {
-                if (event === 'error') {
-                  setImmediate(() => handler(new Error('Network error')));
-                }
+                new Map<string, () => void>([
+                  [
+                    'error',
+                    () =>
+                      setImmediate(() => handler(new Error('Network error'))),
+                  ],
+                ]).get(event)?.();
                 return request;
               },
             ),
@@ -707,20 +729,7 @@ describe('git extension helpers', () => {
       ).rejects.toThrow('Stream error');
 
       // Allow cleanup to complete under heavy CI load.
-      const deadline = Date.now() + 5000;
-      let fileExists = true;
-      while (Date.now() < deadline) {
-        fileExists = await fs
-          .access(destPath)
-          .then(() => true)
-          .catch(() => false);
-
-        if (!fileExists) {
-          break;
-        }
-
-        await new Promise((r) => setTimeout(r, 50));
-      }
+      const fileExists = await waitForFileRemoval(destPath, Date.now() + 5000);
 
       expect(fileExists).toBe(false);
     });

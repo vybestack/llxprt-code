@@ -120,6 +120,9 @@ void vi.mock('../profileBootstrap.js', () => {
         setActiveProvider: vi.fn(),
         getActiveProvider: vi.fn(() => undefined),
         getAvailableModels: vi.fn(async () => []),
+        getProviderByName: vi.fn(() => ({
+          getDefaultModel: () => 'gemini-2.5-pro',
+        })),
       },
       oauthManager: undefined,
     })),
@@ -271,6 +274,9 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
       setActiveProvider: vi.fn(),
       getActiveProvider: vi.fn(() => undefined),
       getAvailableModels: vi.fn(async () => []),
+      getProviderByName: vi.fn(() => ({
+        getDefaultModel: () => 'gemini-2.5-pro',
+      })),
     } as unknown as ProviderManager);
 
   return {
@@ -386,9 +392,6 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
     setActiveToolFormatOverride: vi.fn(),
     getActiveProviderMetrics: vi.fn(() => undefined),
     getSessionTokenUsage: vi.fn(() => undefined),
-    getLoadBalancerStats: vi.fn(() => undefined),
-    getLoadBalancerLastSelected: vi.fn(() => undefined),
-    getAllLoadBalancerStats: vi.fn(() => ({})),
     assembleCliProviderRuntime: vi.fn(
       (input: {
         settingsService: unknown;

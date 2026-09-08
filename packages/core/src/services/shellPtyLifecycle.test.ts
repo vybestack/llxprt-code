@@ -152,7 +152,7 @@ describe('ptyAbortAction pid validation', () => {
     // Before the fix the `=== 0` check let NaN pass; process.kill(-NaN) threw
     // synchronously and the catch fallback invoked ptyProcess.kill. After the
     // fix the isKillablePid guard short-circuits before any signal attempt.
-    expect(killSignals).toEqual([]);
+    expect(killSignals).toStrictEqual([]);
   });
 
   it('does not signal an Infinity pid', async () => {
@@ -166,7 +166,7 @@ describe('ptyAbortAction pid validation', () => {
     await ptyAbortAction(state, () => undefined);
     clearFinalizeTimer(state);
 
-    expect(killSignals).toEqual([]);
+    expect(killSignals).toStrictEqual([]);
   });
 
   it('does not signal a negative pid', async () => {
@@ -180,7 +180,7 @@ describe('ptyAbortAction pid validation', () => {
     await ptyAbortAction(state, () => undefined);
     clearFinalizeTimer(state);
 
-    expect(killSignals).toEqual([]);
+    expect(killSignals).toStrictEqual([]);
   });
 
   it('does not signal pid 0 (would signal the caller process group)', async () => {
@@ -198,7 +198,7 @@ describe('ptyAbortAction pid validation', () => {
     // regression guard rather than a red test: it pins the single most
     // dangerous value, for which process.kill(-0) === process.kill(0)
     // signals every process in llxprt's own process group.
-    expect(killSignals).toEqual([]);
+    expect(killSignals).toStrictEqual([]);
   });
 
   it('still signals a valid positive pid (guard is not over-broad)', async () => {
@@ -245,7 +245,7 @@ describe('ptyInactivityAbortAction pid validation', () => {
     // Before the fix NaN slipped past `=== 0`; process.kill(-NaN) threw, the
     // catch escalated to ptyProcess.kill('SIGKILL'). After the fix no kill is
     // attempted.
-    expect(killSignals).toEqual([]);
+    expect(killSignals).toStrictEqual([]);
   });
 
   it('does not signal pid 0 (would signal the caller process group)', async () => {
@@ -259,7 +259,7 @@ describe('ptyInactivityAbortAction pid validation', () => {
     await ptyInactivityAbortAction(state, () => undefined);
     clearFinalizeTimer(state);
 
-    expect(killSignals).toEqual([]);
+    expect(killSignals).toStrictEqual([]);
   });
 
   it('still signals a valid positive pid (guard is not over-broad)', async () => {

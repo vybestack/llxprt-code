@@ -9,11 +9,14 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
-import { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
-import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
-import { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { Config } from './test-support/mcpClientTestSupport.js';
+import { PromptRegistry } from './test-support/mcpClientTestSupport.js';
+import { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
+import { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
+import {
+  ToolRegistry,
+  type IToolRegistryHost,
+} from '@vybestack/llxprt-code-tools';
 import { McpClientManager } from './mcp-client-manager.js';
 import {
   getMCPServerStatus,
@@ -67,9 +70,12 @@ describe('McpClientManager fake discovery lifecycle', () => {
       getExtensions: () => [],
       refreshMcpContext: async () => {},
     } as unknown as Config;
-    const toolRegistry = new ToolRegistry(config, {
-      requestConfirmation: async () => false,
-    });
+    const toolRegistry = new ToolRegistry(
+      config as unknown as IToolRegistryHost,
+      {
+        requestConfirmation: async () => false,
+      },
+    );
     return {
       manager: new McpClientManager('0.0.1', toolRegistry, config),
       toolRegistry,

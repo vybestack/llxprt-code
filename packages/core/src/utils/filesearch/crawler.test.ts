@@ -23,6 +23,11 @@ describe('crawler', () => {
     vi.restoreAllMocks();
   });
 
+  /** Filter the file entries out of crawled paths, dropping the root and directory markers. */
+  function regularFilePaths(paths: string[]): string[] {
+    return paths.filter((p) => p !== '.' && !p.endsWith('/'));
+  }
+
   it('should use .geminiignore rules', async () => {
     tmpDir = await createTmpDir({
       '.geminiignore': 'dist/',
@@ -599,7 +604,7 @@ describe('crawler', () => {
     // fdir returns files and directories.
     // In our filter, we only increment fileCount for files.
     // So we should have 2 files + some directories.
-    const files = paths.filter((p) => p !== '.' && !p.endsWith('/'));
+    const files = regularFilePaths(paths);
     expect(files.length).toBe(2);
   });
 
@@ -627,15 +632,13 @@ describe('crawler', () => {
 
     // First crawl with maxFiles: 2 — results are truncated, should NOT be cached.
     const firstResult = await crawl({ ...baseOptions, maxFiles: 2 });
-    const firstFiles = firstResult.filter((p) => p !== '.' && !p.endsWith('/'));
+    const firstFiles = regularFilePaths(firstResult);
     expect(firstFiles.length).toBe(2);
 
     // Second crawl with maxFiles: 3 — if truncated result was cached, we'd still
     // get only 2 files. Getting 3 proves the cache was skipped.
     const secondResult = await crawl({ ...baseOptions, maxFiles: 3 });
-    const secondFiles = secondResult.filter(
-      (p) => p !== '.' && !p.endsWith('/'),
-    );
+    const secondFiles = regularFilePaths(secondResult);
     expect(secondFiles.length).toBe(3);
   });
 });

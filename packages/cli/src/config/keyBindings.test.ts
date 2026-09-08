@@ -28,6 +28,10 @@ function hasNonEmptyBindingTarget(binding: {
   return binding.paste === true;
 }
 
+function isBooleanOrUndefined(value: unknown): boolean {
+  return typeof value === 'undefined' || typeof value === 'boolean';
+}
+
 describe('keyBindings config', () => {
   describe('defaultKeyBindings', () => {
     it('should have bindings for all commands', () => {
@@ -47,19 +51,10 @@ describe('keyBindings config', () => {
           expect(hasNonEmptyBindingTarget(binding)).toBe(true);
 
           // Modifier properties should be boolean or undefined
-          expect(
-            binding.ctrl === undefined || typeof binding.ctrl === 'boolean',
-          ).toBe(true);
-          expect(
-            binding.shift === undefined || typeof binding.shift === 'boolean',
-          ).toBe(true);
-          expect(
-            binding.command === undefined ||
-              typeof binding.command === 'boolean',
-          ).toBe(true);
-          expect(
-            binding.paste === undefined || typeof binding.paste === 'boolean',
-          ).toBe(true);
+          expect(isBooleanOrUndefined(binding.ctrl)).toBe(true);
+          expect(isBooleanOrUndefined(binding.shift)).toBe(true);
+          expect(isBooleanOrUndefined(binding.command)).toBe(true);
+          expect(isBooleanOrUndefined(binding.paste)).toBe(true);
         }
       }
     });

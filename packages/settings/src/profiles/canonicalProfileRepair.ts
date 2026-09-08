@@ -8,7 +8,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Profile } from './types.js';
 import { isLoadBalancerProfile } from './types.js';
-import { parseProfile } from '../settings/validation.js';
+import { parseProfile, parseProfileJson } from '../settings/validation.js';
 import {
   hasErrnoCode,
   acquireProfilesLockSync,
@@ -160,12 +160,18 @@ function readAndParseProfile(filePath: string):
   if (result.kind === 'error') {
     return { kind: 'error', error: result.error };
   }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(result.content);
-  } catch {
+  const parsedJson = parseProfileJson(result.content);
+  // Only malformed JSON blocks inspection. A document carrying dangerous keys
+  // is still INSPECTED here, because repair is the mechanism that recognises
+  // and replaces such a file — refusing to look at it would strand the user
+  // with the bad profile forever. Reading is safe: JSON.parse materialises
+  // `__proto__` as an own property rather than invoking the setter, and
+  // nothing here writes the parsed object back out. The write boundary
+  // (validateReplacementFile) still refuses to install an unsafe replacement.
+  if (parsedJson.kind === 'invalid-json') {
     return { kind: 'invalid-json' };
   }
+  const parsed: unknown = parsedJson.value;
   let profile: Profile;
   try {
     profile = parseProfile(parsed);
@@ -206,12 +212,14 @@ function validateLegacyReplacement(legacyPath: string): string | null {
     return null;
   }
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(result.content);
-  } catch {
+  const parsedJson = parseProfileJson(result.content);
+  // Both 'invalid-json' and 'unsafe' disqualify a REPLACEMENT. Unlike the
+  // inspection path above, this document is about to be installed as the
+  // canonical profile, so a dangerous-key document must never be promoted.
+  if (parsedJson.kind !== 'parsed') {
     return null;
   }
+  const parsed = parsedJson.value;
 
   if (!isRawObject(parsed)) {
     return null;
@@ -459,7 +467,16 @@ function cleanupTemp(tmpPath: string): void {
 
 function validateReplacementFile(filePath: string): void {
   const content = fs.readFileSync(filePath, 'utf-8');
-  const parsed: unknown = JSON.parse(content);
+  const parsedJson = parseProfileJson(content);
+  if (parsedJson.kind !== 'parsed') {
+    // Distinguish malformed JSON from a prototype-pollution rejection; both
+    // block the repair but a user needs to know which one they hit.
+    throw new Error(
+      `replacement file is not valid profile JSON (${parsedJson.kind}): ${parsedJson.error.message}`,
+      { cause: parsedJson.error },
+    );
+  }
+  const parsed = parsedJson.value;
   // The replacement must not still match the corrupt structural signature.
   if (isCorruptStandardProfileFromRaw(parsed)) {
     throw new Error('replacement file still has the corrupt defect signature');

@@ -297,6 +297,10 @@ async function connectAndCollect(
   };
 }
 
+function isConnectionClosingError(error: unknown): boolean {
+  return error instanceof Error && /connection closing/i.test(error.message);
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('Frame capacity, per-op timeout, cancellation', () => {
@@ -345,20 +349,19 @@ describe('Frame capacity, per-op timeout, cancellation', () => {
     return c;
   }
 
-  // ─── T1: large payloads round-trip intact ─────────────────────────────────
+  describe.skipIf(isWindows)('non-Windows transport behavior', () => {
+    // ─── T1: large payloads round-trip intact ───────────────────────────────
 
-  /**
-   * @plan PLAN-20260731-GHBROKER.P05
-   * @requirement REQ-006
-   * @pseudocode 002-frame-and-cancel.md lines 01-11, T1
-   * @scenario 50 KB and 500 KB payloads round-trip intact through the real
-   *           server over real Unix sockets. A 50 KB payload represents a
-   *           fully-commented GitHub issue; 500 KB represents a PR with a
-   *           full review thread.
-   */
-  it.skipIf(isWindows)(
-    'T1: 50 KB and 500 KB payloads round-trip intact',
-    async () => {
+    /**
+     * @plan PLAN-20260731-GHBROKER.P05
+     * @requirement REQ-006
+     * @pseudocode 002-frame-and-cancel.md lines 01-11, T1
+     * @scenario 50 KB and 500 KB payloads round-trip intact through the real
+     *           server over real Unix sockets. A 50 KB payload represents a
+     *           fully-commented GitHub issue; 500 KB represents a PR with a
+     *           full review thread.
+     */
+    it('T1: 50 KB and 500 KB payloads round-trip intact', async () => {
       await keyStorage.saveKey('big-key-50k', 'x'.repeat(50_000));
       await keyStorage.saveKey('big-key-500k', 'x'.repeat(500_000));
 
@@ -376,23 +379,20 @@ describe('Frame capacity, per-op timeout, cancellation', () => {
       });
       expect(result500k.ok).toBe(true);
       expect((result500k.data!.key as string).length).toBe(500_000);
-    },
-  );
+    });
 
-  // ─── T3: per-op timeout override survives past 30s ────────────────────────
+    // ─── T3: per-op timeout override survives past 30s ────────────────────────
 
-  /**
-   * @plan PLAN-20260731-GHBROKER.P05
-   * @requirement REQ-007
-   * @pseudocode 002-frame-and-cancel.md lines 12-20, T3
-   * @scenario An op with timeoutMs 900_000 (15 min) survives past the default
-   *           30s timeout. The server uses a gated token store so the op is
-   *           genuinely pending; with fake timers we advance to 31s and
-   *           verify the promise has NOT rejected.
-   */
-  it.skipIf(isWindows)(
-    'T3: op with timeoutMs 900000 survives past 30s',
-    async () => {
+    /**
+     * @plan PLAN-20260731-GHBROKER.P05
+     * @requirement REQ-007
+     * @pseudocode 002-frame-and-cancel.md lines 12-20, T3
+     * @scenario An op with timeoutMs 900_000 (15 min) survives past the default
+     *           30s timeout. The server uses a gated token store so the op is
+     *           genuinely pending; with fake timers we advance to 31s and
+     *           verify the promise has NOT rejected.
+     */
+    it('T3: op with timeoutMs 900000 survives past 30s', async () => {
       const gatedStore = new GatedTokenStore();
       await gatedStore.saveToken('slow-provider', makeToken());
 
@@ -429,23 +429,20 @@ describe('Frame capacity, per-op timeout, cancellation', () => {
       expect(rejected).toBe(false);
       void rejectionReason; // asserted via rejected flag
       void result;
-    },
-  );
+    });
 
-  // ─── T4: op pending past 5 min is NOT idle-closed ─────────────────────────
+    // ─── T4: op pending past 5 min is NOT idle-closed ─────────────────────────
 
-  /**
-   * @plan PLAN-20260731-GHBROKER.P05
-   * @requirement REQ-007
-   * @pseudocode 002-frame-and-cancel.md lines 21-32, T4 (I2)
-   * @scenario A long-running op is pending. The idle timer must NOT fire
-   *           because pendingRequests.size > 0. With fake timers we advance
-   *           past IDLE_TIMEOUT_MS (5 min) and verify the pending op is NOT
-   *           rejected with "Connection closing".
-   */
-  it.skipIf(isWindows)(
-    'T4: op pending past 5 min is NOT idle-closed (I2)',
-    async () => {
+    /**
+     * @plan PLAN-20260731-GHBROKER.P05
+     * @requirement REQ-007
+     * @pseudocode 002-frame-and-cancel.md lines 21-32, T4 (I2)
+     * @scenario A long-running op is pending. The idle timer must NOT fire
+     *           because pendingRequests.size > 0. With fake timers we advance
+     *           past IDLE_TIMEOUT_MS (5 min) and verify the pending op is NOT
+     *           rejected with "Connection closing".
+     */
+    it('T4: op pending past 5 min is NOT idle-closed (I2)', async () => {
       const gatedStore = new GatedTokenStore();
       await gatedStore.saveToken('long-provider', makeToken());
 
@@ -467,9 +464,7 @@ describe('Frame capacity, per-op timeout, cancellation', () => {
         .catch((err) => {
           // If the idle timer wrongly fires, gracefulClose rejects with
           // "Connection closing".
-          if (err instanceof Error && /connection closing/i.test(err.message)) {
-            idleClosed = true;
-          }
+          idleClosed = isConnectionClosingError(err);
         });
 
       // Give the op time to register in pendingRequests.
@@ -489,25 +484,22 @@ describe('Frame capacity, per-op timeout, cancellation', () => {
       const result = await pendingOp;
       expect(idleClosed).toBe(false);
       void result;
-    },
-  );
+    });
 
-  // ─── T5: idle connection with no pending IS closed at 5 min ───────────────
+    // ─── T5: idle connection with no pending IS closed at 5 min ───────────────
 
-  /**
-   * @plan PLAN-20260731-GHBROKER.P05
-   * @requirement REQ-007
-   * @pseudocode 002-frame-and-cancel.md lines 26-32, T5 (I3)
-   * @scenario A genuinely idle connection (no pending requests) IS closed at
-   *           IDLE_TIMEOUT_MS. This is security-relevant: idle connections
-   *           must still close on the existing schedule. We use fake timers
-   *           to advance past IDLE_TIMEOUT_MS and then verify that the next
-   *           request triggers a reconnection (proving the old connection
-   *           was closed by the idle timer).
-   */
-  it.skipIf(isWindows)(
-    'T5: idle connection with no pending requests IS closed at 5 min (I3)',
-    async () => {
+    /**
+     * @plan PLAN-20260731-GHBROKER.P05
+     * @requirement REQ-007
+     * @pseudocode 002-frame-and-cancel.md lines 26-32, T5 (I3)
+     * @scenario A genuinely idle connection (no pending requests) IS closed at
+     *           IDLE_TIMEOUT_MS. This is security-relevant: idle connections
+     *           must still close on the existing schedule. We use fake timers
+     *           to advance past IDLE_TIMEOUT_MS and then verify that the next
+     *           request triggers a reconnection (proving the old connection
+     *           was closed by the idle timer).
+     */
+    it('T5: idle connection with no pending requests IS closed at 5 min (I3)', async () => {
       server = createServer();
       client = await startAndConnect(server);
 
@@ -524,23 +516,20 @@ describe('Frame capacity, per-op timeout, cancellation', () => {
       // connection and handshake, and still succeed.
       const response = await client.request('list_providers', {});
       expect(response.ok).toBe(true);
-    },
-  );
+    });
 
-  // ─── T6: cancel stops a long op and original settles CANCELLED ────────────
+    // ─── T6: cancel stops a long op and original settles CANCELLED ────────────
 
-  /**
-   * @plan PLAN-20260731-GHBROKER.P05
-   * @requirement REQ-007
-   * @pseudocode 002-frame-and-cancel.md lines 33-66, T6 (I5)
-   * @scenario A long op is cancelled via AbortSignal. The client sends a
-   *           cancel frame; the server aborts the handler; the original
-   *           request settles with error code CANCELLED so the client's
-   *           pending map does not leak.
-   */
-  it.skipIf(isWindows)(
-    'T6: cancel stops a long op and the original settles CANCELLED (I5)',
-    async () => {
+    /**
+     * @plan PLAN-20260731-GHBROKER.P05
+     * @requirement REQ-007
+     * @pseudocode 002-frame-and-cancel.md lines 33-66, T6 (I5)
+     * @scenario A long op is cancelled via AbortSignal. The client sends a
+     *           cancel frame; the server aborts the handler; the original
+     *           request settles with error code CANCELLED so the client's
+     *           pending map does not leak.
+     */
+    it('T6: cancel stops a long op and the original settles CANCELLED (I5)', async () => {
       const gatedStore = new GatedTokenStore();
       await gatedStore.saveToken('cancellable-provider', makeToken());
 
@@ -577,24 +566,21 @@ describe('Frame capacity, per-op timeout, cancellation', () => {
         name: 'post-cancel-key',
       });
       expect(result.ok).toBe(true);
-    },
-  );
+    });
 
-  // ─── T7: connection A cannot cancel connection B's operation ──────────────
+    // ─── T7: connection A cannot cancel connection B's operation ──────────────
 
-  /**
-   * @plan PLAN-20260731-GHBROKER.P05
-   * @requirement REQ-007
-   * @pseudocode 002-frame-and-cancel.md lines 57-59, T7 (I4)
-   * @scenario Connection A has a long op in flight. Connection B sends a
-   *           cancel frame with connection A's request id as targetId.
-   *           The cancel must return ok { cancelled: false } (idempotent
-   *           not-found) and connection A's op must complete normally when
-   *           released. This proves the per-connection registry isolation.
-   */
-  it.skipIf(isWindows)(
-    "T7: connection A cannot cancel connection B's op (I4)",
-    async () => {
+    /**
+     * @plan PLAN-20260731-GHBROKER.P05
+     * @requirement REQ-007
+     * @pseudocode 002-frame-and-cancel.md lines 57-59, T7 (I4)
+     * @scenario Connection A has a long op in flight. Connection B sends a
+     *           cancel frame with connection A's request id as targetId.
+     *           The cancel must return ok { cancelled: false } (idempotent
+     *           not-found) and connection A's op must complete normally when
+     *           released. This proves the per-connection registry isolation.
+     */
+    it("T7: connection A cannot cancel connection B's op (I4)", async () => {
       const gatedStore = new GatedTokenStore();
       await gatedStore.saveToken('shared-provider', makeToken());
 
@@ -701,21 +687,18 @@ describe('Frame capacity, per-op timeout, cancellation', () => {
 
       socketA.destroy();
       clientA.close();
-    },
-  );
+    });
 
-  // ─── T8: cancel unknown targetId → ok cancelled:false ─────────────────────
+    // ─── T8: cancel unknown targetId → ok cancelled:false ─────────────────────
 
-  /**
-   * @plan PLAN-20260731-GHBROKER.P05
-   * @requirement REQ-007
-   * @pseudocode 002-frame-and-cancel.md line 52, T8
-   * @scenario A cancel frame with a targetId that was never registered (or
-   *           already completed) returns ok { cancelled: false } — idempotent.
-   */
-  it.skipIf(isWindows)(
-    'T8: cancel unknown targetId returns ok cancelled:false',
-    async () => {
+    /**
+     * @plan PLAN-20260731-GHBROKER.P05
+     * @requirement REQ-007
+     * @pseudocode 002-frame-and-cancel.md line 52, T8
+     * @scenario A cancel frame with a targetId that was never registered (or
+     *           already completed) returns ok { cancelled: false } — idempotent.
+     */
+    it('T8: cancel unknown targetId returns ok cancelled:false', async () => {
       server = createServer();
       const socketPath = await server.start();
 
@@ -740,24 +723,21 @@ describe('Frame capacity, per-op timeout, cancellation', () => {
       expect((response.data as Record<string, unknown>).cancelled).toBe(false);
 
       conn.close();
-    },
-  );
+    });
 
-  // ─── T9: v1 client + v2 server → RESPONSE_TOO_LARGE, connection survives ──
+    // ─── T9: v1 client + v2 server → RESPONSE_TOO_LARGE, connection survives ──
 
-  /**
-   * @plan PLAN-20260731-GHBROKER.P05
-   * @requirement REQ-006
-   * @pseudocode 002-frame-and-cancel.md lines 67-76, T9 (I6)
-   * @scenario A v1 client (negotiates v1) requests a payload whose encoded
-   *           response would exceed 64 KiB. The v2 server must NOT send an
-   *           oversized frame (which would brick the v1 client's decoder).
-   *           Instead it sends RESPONSE_TOO_LARGE, and the connection
-   *           survives for subsequent requests.
-   */
-  it.skipIf(isWindows)(
-    'T9: v1 client oversize response yields RESPONSE_TOO_LARGE, connection survives (I6)',
-    async () => {
+    /**
+     * @plan PLAN-20260731-GHBROKER.P05
+     * @requirement REQ-006
+     * @pseudocode 002-frame-and-cancel.md lines 67-76, T9 (I6)
+     * @scenario A v1 client (negotiates v1) requests a payload whose encoded
+     *           response would exceed 64 KiB. The v2 server must NOT send an
+     *           oversized frame (which would brick the v1 client's decoder).
+     *           Instead it sends RESPONSE_TOO_LARGE, and the connection
+     *           survives for subsequent requests.
+     */
+    it('T9: v1 client oversize response yields RESPONSE_TOO_LARGE, connection survives (I6)', async () => {
       // A key whose value is ~100 KB — well over the 64 KiB v1 cap.
       await keyStorage.saveKey('oversize-v1-key', 'x'.repeat(100_000));
 
@@ -801,22 +781,19 @@ describe('Frame capacity, per-op timeout, cancellation', () => {
       expect((response2.data as Record<string, unknown>).key).toBe('sk-small');
 
       conn.close();
-    },
-  );
+    });
 
-  // ─── T10: capability auth required for cancel op ──────────────────────────
+    // ─── T10: capability auth required for cancel op ──────────────────────────
 
-  /**
-   * @plan PLAN-20260731-GHBROKER.P05
-   * @requirement REQ-015
-   * @pseudocode 002-frame-and-cancel.md line T10
-   * @scenario A server configured with a capability token rejects a cancel
-   *           op from a connection that did not present the token. The
-   *           cancel must never dispatch.
-   */
-  it.skipIf(isWindows)(
-    'T10: capability auth required for every new op including cancel',
-    async () => {
+    /**
+     * @plan PLAN-20260731-GHBROKER.P05
+     * @requirement REQ-015
+     * @pseudocode 002-frame-and-cancel.md line T10
+     * @scenario A server configured with a capability token rejects a cancel
+     *           op from a connection that did not present the token. The
+     *           cancel must never dispatch.
+     */
+    it('T10: capability auth required for every new op including cancel', async () => {
       server = createServer({ capabilityToken: CAPABILITY_TOKEN });
       const socketPath = await server.start();
 
@@ -862,22 +839,19 @@ describe('Frame capacity, per-op timeout, cancellation', () => {
       // UNAUTHORIZED — capability auth is still required.
       expect(result.ok).toBe(false);
       expect(result.code).toBe('UNAUTHORIZED');
-    },
-  );
+    });
 
-  // ─── T11: list_api_keys empty, has_api_key blocked for sandbox ────────────
+    // ─── T11: list_api_keys empty, has_api_key blocked for sandbox ────────────
 
-  /**
-   * @plan PLAN-20260731-GHBROKER.P05
-   * @requirement REQ-015
-   * @pseudocode 002-frame-and-cancel.md line T11
-   * @scenario A sandbox connection (valid capability token) still gets empty
-   *           list_api_keys and FORBIDDEN has_api_key — the #2467/#2784
-   *           hardening is unchanged by the frame/cancel changes.
-   */
-  it.skipIf(isWindows)(
-    'T11: list_api_keys still empty and has_api_key still blocked for sandbox',
-    async () => {
+    /**
+     * @plan PLAN-20260731-GHBROKER.P05
+     * @requirement REQ-015
+     * @pseudocode 002-frame-and-cancel.md line T11
+     * @scenario A sandbox connection (valid capability token) still gets empty
+     *           list_api_keys and FORBIDDEN has_api_key — the #2467/#2784
+     *           hardening is unchanged by the frame/cancel changes.
+     */
+    it('T11: list_api_keys still empty and has_api_key still blocked for sandbox', async () => {
       // Seed keys that a non-sandbox connection would see.
       await keyStorage.saveKey('real-key-1', 'sk-real-1');
       await keyStorage.saveKey('real-key-2', 'sk-real-2');
@@ -896,8 +870,8 @@ describe('Frame capacity, per-op timeout, cancellation', () => {
       });
       expect(hasResult.ok).toBe(false);
       expect(hasResult.code).toBe('FORBIDDEN');
-    },
-  );
+    });
+  });
 
   /**
    * Proves the per-op timeout is genuinely applied rather than the 30s

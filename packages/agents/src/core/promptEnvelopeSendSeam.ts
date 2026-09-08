@@ -34,6 +34,7 @@ export type { PromptEnvelopeEstimate };
 export interface PreparedPromptEnvelopeSend {
   readonly estimate: PromptEnvelopeEstimate | null;
   readonly options: RuntimeGenerateChatOptions;
+  readonly releaseIfUnsent?: () => Promise<void>;
 }
 
 export function bindPreparedTransportSignal(
@@ -51,11 +52,15 @@ export function bindPreparedTransportSignal(
       invocation: { ...invocation, signal },
       metadata: { ...prepared.options.metadata, abortSignal: signal },
     },
+    ...(prepared.releaseIfUnsent === undefined
+      ? {}
+      : { releaseIfUnsent: prepared.releaseIfUnsent }),
   };
 }
 
 export interface PromptEnvelopePreparer {
   prepare(contents: IContent[]): Promise<PreparedPromptEnvelopeSend>;
+  releaseUnused(kept?: PreparedPromptEnvelopeSend): Promise<void>;
 }
 
 /**
@@ -97,10 +102,7 @@ export function createPromptEnvelopePreparer(
   provider: RuntimeProvider,
   buildOptions: (contents: IContent[]) => RuntimeGenerateChatOptions,
 ): PromptEnvelopePreparer {
-  const preparedByContents = new WeakMap<
-    IContent[],
-    PreparedPromptEnvelopeSend
-  >();
+  const preparedByContents = new Map<IContent[], PreparedPromptEnvelopeSend>();
   return {
     async prepare(contents: IContent[]): Promise<PreparedPromptEnvelopeSend> {
       const existing = preparedByContents.get(contents);
@@ -111,6 +113,23 @@ export function createPromptEnvelopePreparer(
       );
       preparedByContents.set(contents, prepared);
       return prepared;
+    },
+    async releaseUnused(kept?: PreparedPromptEnvelopeSend): Promise<void> {
+      const failures: unknown[] = [];
+      for (const [contents, prepared] of preparedByContents) {
+        if (prepared === kept) continue;
+        try {
+          await prepared.releaseIfUnsent?.();
+        } catch (error: unknown) {
+          failures.push(error);
+        } finally {
+          preparedByContents.delete(contents);
+        }
+      }
+      if (failures.length === 1) throw failures[0];
+      if (failures.length > 1) {
+        throw new AggregateError(failures, 'Prompt projection cleanup failed');
+      }
     },
   };
 }
@@ -137,14 +156,28 @@ export async function preparePromptEnvelopeAfterEnforcement(
     input.provider,
     input.buildOptions,
   );
-  const contents = await input.enforce(input.contents, async (candidate) => {
-    const prepared = await preparer.prepare(candidate);
-    return (
-      prepared.estimate?.estimatedPromptTokens ??
-      input.fallbackEstimate(candidate)
+  try {
+    const contents = await input.enforce(
+      input.contents,
+      input.fallbackEstimate,
     );
-  });
-  return { contents, prepared: await preparer.prepare(contents), preparer };
+    const prepared = await preparer.prepare(contents);
+    return { contents, prepared, preparer };
+  } catch (error: unknown) {
+    try {
+      await preparer.releaseUnused();
+    } catch (cleanupError: unknown) {
+      const cleanupFailures =
+        cleanupError instanceof AggregateError
+          ? cleanupError.errors
+          : [cleanupError];
+      throw new AggregateError(
+        [error, ...cleanupFailures],
+        'Prompt preparation failed and projection cleanup was incomplete',
+      );
+    }
+    throw error;
+  }
 }
 
 export async function enforceAndSendWithPromptEnvelopeRetries<T>(
@@ -193,7 +226,19 @@ function sendWithFreshPromptEnvelopeRetries<T>(input: {
           ? await input.preparer.prepare(input.contents)
           : await prepareAtSendSeam(input.provider, input.buildOptions());
       providerAttempt += 1;
-      return input.send(prepared, attemptIndex);
+      try {
+        return await input.send(prepared, attemptIndex);
+      } catch (error: unknown) {
+        try {
+          await prepared.releaseIfUnsent?.();
+        } catch (cleanupError: unknown) {
+          throw new AggregateError(
+            [error, cleanupError],
+            'Provider send failed and prompt projection cleanup was incomplete',
+          );
+        }
+        throw error;
+      }
     },
     {
       shouldRetryOnError: input.shouldRetryOnError,
@@ -224,27 +269,42 @@ export async function prepareAtSendSeam(
   if (projection === undefined) {
     return { estimate: null, options };
   }
-  const config = options.config ?? options.runtime?.config;
-  const getTokenizerFactory = config?.getTokenizerFactory;
-  const tokenizerFactory =
-    typeof getTokenizerFactory === 'function'
-      ? getTokenizerFactory.call(config)
-      : undefined;
-  if (tokenizerFactory === undefined) {
-    throw new Error(
-      'Prompt-envelope projection requires the configured runtime prompt estimator factory',
+  try {
+    const config = options.config ?? options.runtime?.config;
+    const getTokenizerFactory = config?.getTokenizerFactory;
+    const tokenizerFactory =
+      typeof getTokenizerFactory === 'function'
+        ? getTokenizerFactory.call(config)
+        : undefined;
+    if (tokenizerFactory === undefined) {
+      throw new Error(
+        'Prompt-envelope projection requires the configured runtime prompt estimator factory',
+      );
+    }
+    const estimate = await estimatePromptEnvelope(
+      provider.name,
+      projection,
+      tokenizerFactory,
     );
+    return {
+      estimate,
+      options: {
+        ...options,
+        promptEnvelopeTransportToken: projection.transportToken,
+      },
+      ...(projection.releaseIfUnsent === undefined
+        ? {}
+        : { releaseIfUnsent: projection.releaseIfUnsent }),
+    };
+  } catch (error: unknown) {
+    try {
+      await projection.releaseIfUnsent?.();
+    } catch (cleanupError: unknown) {
+      throw new AggregateError(
+        [error, cleanupError],
+        'Prompt projection preparation and cleanup failed',
+      );
+    }
+    throw error;
   }
-  const estimate = await estimatePromptEnvelope(
-    provider.name,
-    projection,
-    tokenizerFactory,
-  );
-  return {
-    estimate,
-    options: {
-      ...options,
-      promptEnvelopeTransportToken: projection.transportToken,
-    },
-  };
 }

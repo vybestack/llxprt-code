@@ -88,6 +88,16 @@ function writeExtensionFile(
  * file) in `sourceDir`, and only the install metadata file in the
  * registration directory. Returns both paths.
  */
+/**
+ * True when a diagnostic was logged whose first argument contains
+ * `substring`.
+ */
+function loggerErrorLoggedContaining(substring: string): boolean {
+  return loggerErrorSpy.mock.calls.some(
+    (call) => typeof call[0] === 'string' && call[0].includes(substring),
+  );
+}
+
 function writeLinkExtension(
   extensionsDir: string,
   regName: string,
@@ -373,11 +383,7 @@ describe('A2A extension loader', () => {
       // return undefined and allow loading.
       expect(extensions).toHaveLength(0);
       expect(
-        loggerErrorSpy.mock.calls.some(
-          (call) =>
-            typeof call[0] === 'string' &&
-            call[0].includes(INSTALL_METADATA_FILENAME_FALLBACK),
-        ),
+        loggerErrorLoggedContaining(INSTALL_METADATA_FILENAME_FALLBACK),
       ).toBe(true);
     });
 
@@ -400,11 +406,7 @@ describe('A2A extension loader', () => {
       // Malformed fallback metadata must skip the extension, not load it.
       expect(extensions).toHaveLength(0);
       expect(
-        loggerErrorSpy.mock.calls.some(
-          (call) =>
-            typeof call[0] === 'string' &&
-            call[0].includes(INSTALL_METADATA_FILENAME_FALLBACK),
-        ),
+        loggerErrorLoggedContaining(INSTALL_METADATA_FILENAME_FALLBACK),
       ).toBe(true);
     });
   });
@@ -438,12 +440,7 @@ describe('A2A extension loader', () => {
       // The valid extension should still load despite the broken symlink
       expect(extensions.some((e) => e.name === 'valid-ext')).toBe(true);
       // A diagnostic should be logged for the broken symlink
-      expect(
-        loggerErrorSpy.mock.calls.some(
-          (call) =>
-            typeof call[0] === 'string' && call[0].includes('broken-link'),
-        ),
-      ).toBe(true);
+      expect(loggerErrorLoggedContaining('broken-link')).toBe(true);
     });
 
     it('does not crash when extensions dir contains a non-directory entry', () => {
@@ -599,13 +596,7 @@ describe('A2A extension loader', () => {
       // The compat extension should still load despite the user root error
       expect(extensions.some((e) => e.name === 'compat-ext')).toBe(true);
       // A diagnostic should be logged for the unreadable root
-      expect(
-        loggerErrorSpy.mock.calls.some(
-          (call) =>
-            typeof call[0] === 'string' &&
-            call[0].includes('could not enumerate'),
-        ),
-      ).toBe(true);
+      expect(loggerErrorLoggedContaining('could not enumerate')).toBe(true);
 
       // Cleanup
       fs.rmSync(userRoot, { force: true });

@@ -43,6 +43,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
       getConfig: () => undefined,
+      getResolvedBaseUrl: () => undefined,
     };
     turn = new Turn(
       mockChatInstance as unknown as ChatSession,

@@ -18,6 +18,13 @@ import {
 
 const PROVIDER = 'anthropic';
 
+function findAnthropicProvider(
+  provider: ReturnType<typeof createTestProvider>,
+  name: string,
+): ReturnType<typeof createTestProvider> | undefined {
+  return name === PROVIDER ? provider : undefined;
+}
+
 describe('User entry point behavioral scenarios', () => {
   let tokenStore: MemoryTokenStore;
 
@@ -54,7 +61,7 @@ describe('User entry point behavioral scenarios', () => {
 
       proactiveManager = new ProactiveRenewalManager(
         proactiveTokenStore,
-        (name: string) => (name === PROVIDER ? provider : undefined),
+        findAnthropicProvider.bind(undefined, provider),
         () => true,
       );
 
@@ -100,7 +107,7 @@ describe('User entry point behavioral scenarios', () => {
 
       proactiveManager = new ProactiveRenewalManager(
         proactiveTokenStore,
-        (name: string) => (name === PROVIDER ? provider : undefined),
+        findAnthropicProvider.bind(undefined, provider),
         () => true,
       );
 
@@ -188,7 +195,7 @@ describe('User entry point behavioral scenarios', () => {
 
       proactiveManager = new ProactiveRenewalManager(
         proactiveTokenStore,
-        (name: string) => (name === PROVIDER ? provider : undefined),
+        findAnthropicProvider.bind(undefined, provider),
         () => true,
       );
 

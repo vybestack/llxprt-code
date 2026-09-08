@@ -2,6 +2,21 @@ import { describe, expect, it } from 'bun:test';
 
 import { executeWithBucketFailover } from './bucketFailover.js';
 
+function createPrimaryQuotaFailureExecutor(
+  seenBuckets: string[],
+): (
+  request: { prompt: string },
+  bucket: string,
+) => Promise<{ content: string }> {
+  return async (_request, bucket) => {
+    seenBuckets.push(bucket);
+    if (bucket === 'primary') {
+      throw { message: 'quota exceeded', status: 429 };
+    }
+    return { content: 'ok' };
+  };
+}
+
 describe('executeWithBucketFailover', () => {
   it('normalizes non-Error failover throws before retrying the next bucket', async () => {
     const buckets = ['primary', 'secondary'];
@@ -10,13 +25,7 @@ describe('executeWithBucketFailover', () => {
     const result = await executeWithBucketFailover(
       { prompt: 'hello' },
       buckets,
-      async (_request, bucket) => {
-        seenBuckets.push(bucket);
-        if (bucket === 'primary') {
-          throw { message: 'quota exceeded', status: 429 };
-        }
-        return { content: 'ok' };
-      },
+      createPrimaryQuotaFailureExecutor(seenBuckets),
     );
 
     expect(result).toStrictEqual({ content: 'ok' });

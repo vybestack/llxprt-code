@@ -14,7 +14,10 @@ import type {
   Profile,
   LoadBalancerProfile,
 } from '@vybestack/llxprt-code-settings';
-import { isResolvedSubProfile } from '../../loadBalancing/loadBalancerTypes.js';
+import {
+  isResolvedSubProfile,
+  type ResolvedSubProfile,
+} from '../../loadBalancing/loadBalancerTypes.js';
 import {
   switchActiveProviderMock,
   setActiveModelMock,
@@ -53,6 +56,13 @@ void vi.mock('../runtimeSettings.js', () => ({
 }));
 
 const { applyProfileWithGuards } = await import('../profileApplication.js');
+
+function requireResolvedSubProfile(profile: unknown): ResolvedSubProfile {
+  if (!isResolvedSubProfile(profile)) {
+    throw new Error('expected a resolved load balancer sub-profile');
+  }
+  return profile;
+}
 
 describe('Load balancer sub-profile context-window timeout (issue #3149)', () => {
   beforeEach(() => {
@@ -165,10 +175,7 @@ describe('Load balancer sub-profile context-window timeout (issue #3149)', () =>
     // (not a numeric fallback), proving the rejection was handled, not hidden.
     const subProfile = lbProvider!.selectNextSubProfile();
     expect(isResolvedSubProfile(subProfile)).toBe(true);
-    // Early return rather than an `if` around the assertion: the guard is
-    // already asserted above, and this keeps `expect` out of a branch for
-    // jest/no-conditional-expect while still narrowing for the compiler.
-    if (!isResolvedSubProfile(subProfile)) return;
-    expect(subProfile.contextWindow).toBeUndefined();
+    const resolvedSubProfile = requireResolvedSubProfile(subProfile);
+    expect(resolvedSubProfile.contextWindow).toBeUndefined();
   });
 });

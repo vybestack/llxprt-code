@@ -7,6 +7,13 @@
 import { describe, expect, it } from 'bun:test';
 import { loadDefaultPolicies } from '@vybestack/llxprt-code-policy';
 
+function hasPolicySource(
+  rules: Awaited<ReturnType<typeof loadDefaultPolicies>>,
+  sourceName: string,
+): boolean {
+  return rules.some((rule) => rule.source?.includes(sourceName) ?? false);
+}
+
 describe('default policy TOML loading', () => {
   it('loads bundled default policies from the source package location', async () => {
     /**
@@ -16,11 +23,7 @@ describe('default policy TOML loading', () => {
     const rules = await loadDefaultPolicies();
 
     expect(rules.length).toBeGreaterThan(0);
-    expect(
-      rules.some((rule) => rule.source?.includes('read-only.toml') ?? false),
-    ).toBe(true);
-    expect(
-      rules.some((rule) => rule.source?.includes('write.toml') ?? false),
-    ).toBe(true);
+    expect(hasPolicySource(rules, 'read-only.toml')).toBe(true);
+    expect(hasPolicySource(rules, 'write.toml')).toBe(true);
   });
 });

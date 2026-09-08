@@ -84,6 +84,14 @@ function makeTokenStore(
   } as unknown as TokenStore & { [k: string]: ReturnType<typeof vi.fn> };
 }
 
+function getBucketToken(
+  tokens: ReadonlyMap<string, OAuthToken>,
+  _provider: string,
+  bucket: string,
+): Promise<OAuthToken | null> {
+  return Promise.resolve(tokens.get(bucket) ?? null);
+}
+
 function futureExpiry(secondsFromNow = 3600): number {
   return Math.floor(Date.now() / 1000) + secondsFromNow;
 }
@@ -262,13 +270,15 @@ describe('getAllAnthropicUsageInfo', () => {
     const tokenB = makeValidAnthropicToken('bucket-b');
     const store = makeTokenStore({
       listBuckets: vi.fn().mockResolvedValue(['bucket-a', 'bucket-b']),
-      getToken: vi
-        .fn()
-        .mockImplementation((_provider: string, bucket: string) => {
-          if (bucket === 'bucket-a') return Promise.resolve(tokenA);
-          if (bucket === 'bucket-b') return Promise.resolve(tokenB);
-          return Promise.resolve(null);
-        }),
+      getToken: vi.fn().mockImplementation(
+        getBucketToken.bind(
+          undefined,
+          new Map<string, OAuthToken>([
+            ['bucket-a', tokenA],
+            ['bucket-b', tokenB],
+          ]),
+        ),
+      ),
     });
     mockFetchAnthropicUsage
       .mockResolvedValueOnce({ plan: 'max', bucket: 'bucket-a' })
@@ -292,13 +302,15 @@ describe('getAllAnthropicUsageInfo', () => {
     const tokenB = makeValidAnthropicToken('bucket-b');
     const store = makeTokenStore({
       listBuckets: vi.fn().mockResolvedValue(['bucket-a', 'bucket-b']),
-      getToken: vi
-        .fn()
-        .mockImplementation((_provider: string, bucket: string) => {
-          if (bucket === 'bucket-a') return Promise.resolve(tokenA);
-          if (bucket === 'bucket-b') return Promise.resolve(tokenB);
-          return Promise.resolve(null);
-        }),
+      getToken: vi.fn().mockImplementation(
+        getBucketToken.bind(
+          undefined,
+          new Map<string, OAuthToken>([
+            ['bucket-a', tokenA],
+            ['bucket-b', tokenB],
+          ]),
+        ),
+      ),
     });
     mockFetchAnthropicUsage
       .mockRejectedValueOnce(new Error('network error'))
@@ -469,13 +481,13 @@ describe('getAllCodexUsageInfo', () => {
   });
 
   it('continues processing remaining buckets when one fetch fails', async () => {
-    const tokenA = {
+    const tokenA: OAuthToken & { account_id: string } = {
       access_token: 'codex-token-a',
       token_type: 'Bearer',
       expiry: futureExpiry(),
       account_id: 'acct-a',
     };
-    const tokenB = {
+    const tokenB: OAuthToken & { account_id: string } = {
       access_token: 'codex-token-b',
       token_type: 'Bearer',
       expiry: futureExpiry(),
@@ -483,13 +495,15 @@ describe('getAllCodexUsageInfo', () => {
     };
     const store = makeTokenStore({
       listBuckets: vi.fn().mockResolvedValue(['bucket-a', 'bucket-b']),
-      getToken: vi
-        .fn()
-        .mockImplementation((_provider: string, bucket: string) => {
-          if (bucket === 'bucket-a') return Promise.resolve(tokenA);
-          if (bucket === 'bucket-b') return Promise.resolve(tokenB);
-          return Promise.resolve(null);
-        }),
+      getToken: vi.fn().mockImplementation(
+        getBucketToken.bind(
+          undefined,
+          new Map<string, OAuthToken>([
+            ['bucket-a', tokenA],
+            ['bucket-b', tokenB],
+          ]),
+        ),
+      ),
     });
     mockFetchCodexUsage
       .mockRejectedValueOnce(new Error('fetch failed'))
@@ -676,13 +690,13 @@ describe('getAllCodexRateLimitResetCredits', () => {
     // assuming getAllCodexRateLimitResetCredits iterates buckets sequentially
     // (for...of with await). If that ever changes to parallel iteration, key
     // the mock by access_token instead of relying on call order.
-    const tokenA = {
+    const tokenA: OAuthToken & { account_id: string } = {
       access_token: 'codex-token-a',
       token_type: 'Bearer',
       expiry: futureExpiry(),
       account_id: 'acct-a',
     };
-    const tokenB = {
+    const tokenB: OAuthToken & { account_id: string } = {
       access_token: 'codex-token-b',
       token_type: 'Bearer',
       expiry: futureExpiry(),
@@ -690,13 +704,15 @@ describe('getAllCodexRateLimitResetCredits', () => {
     };
     const store = makeTokenStore({
       listBuckets: vi.fn().mockResolvedValue(['bucket-a', 'bucket-b']),
-      getToken: vi
-        .fn()
-        .mockImplementation((_provider: string, bucket: string) => {
-          if (bucket === 'bucket-a') return Promise.resolve(tokenA);
-          if (bucket === 'bucket-b') return Promise.resolve(tokenB);
-          return Promise.resolve(null);
-        }),
+      getToken: vi.fn().mockImplementation(
+        getBucketToken.bind(
+          undefined,
+          new Map<string, OAuthToken>([
+            ['bucket-a', tokenA],
+            ['bucket-b', tokenB],
+          ]),
+        ),
+      ),
     });
     mockFetchCodexRateLimitResetCredits
       .mockRejectedValueOnce(new Error('fetch failed'))

@@ -241,7 +241,30 @@ describe('buildSystemInstruction byte-for-byte compatibility with pre-change mai
     }
   });
 
-  it.each(ROWS)('$name', async (row) => {
+  it.each(ROWS)('$name', async (row: Row) => {
+    const {
+      production,
+      legacy,
+      incorrectMcpTokenOccurrences,
+      misplacedEnvironmentTokens,
+      missingTokens,
+      unexpectedTokens,
+    } = await observeSystemInstructionByteCompatibility(row);
+    expect(production).toBe(legacy);
+    expect({
+      incorrectMcpTokenOccurrences,
+      misplacedEnvironmentTokens,
+      missingTokens,
+      unexpectedTokens,
+    }).toStrictEqual({
+      incorrectMcpTokenOccurrences: [],
+      misplacedEnvironmentTokens: [],
+      missingTokens: [],
+      unexpectedTokens: [],
+    });
+  });
+
+  const observeSystemInstructionByteCompatibility = async (row: Row) => {
     const production = await buildSystemInstruction(
       makeConfig(row),
       [],
@@ -258,28 +281,35 @@ describe('buildSystemInstruction byte-for-byte compatibility with pre-change mai
 
     // Strong byte-for-byte compatibility evidence: the centralized builder
     // must produce an identical string to the pre-change inline derivation.
-    expect(production).toBe(legacy);
 
     // MCP instructions must appear exactly once — they flow through the
     // dedicated channel, never duplicated via environment memory.
-    for (const token of row.mcpOnceTokens ?? []) {
-      const occurrences = production.split(token).length - 1;
-      expect(occurrences).toBe(1);
-    }
+    const incorrectMcpTokenOccurrences = (row.mcpOnceTokens ?? []).filter(
+      (token) => production.split(token).length - 1 !== 1,
+    );
 
     // Environment context, when present, must prefix the core prompt.
-    for (const token of row.envPrefixTokens ?? []) {
-      expect(production.startsWith(token)).toBe(true);
-    }
+    const misplacedEnvironmentTokens = (row.envPrefixTokens ?? []).filter(
+      (token) => !production.startsWith(token),
+    );
 
     // Preserve builder-level sourcing assertions: under JIT the global (not
     // user/environment) memory channel is used; under JIT-disabled the user
     // memory channel is used unchanged.
-    for (const token of row.presentTokens ?? []) {
-      expect(production).toContain(token);
-    }
-    for (const token of row.absentTokens ?? []) {
-      expect(production).not.toContain(token);
-    }
-  });
+    const missingTokens = (row.presentTokens ?? []).filter(
+      (token) => !production.includes(token),
+    );
+    const unexpectedTokens = (row.absentTokens ?? []).filter((token) =>
+      production.includes(token),
+    );
+
+    return {
+      production,
+      legacy,
+      incorrectMcpTokenOccurrences,
+      misplacedEnvironmentTokens,
+      missingTokens,
+      unexpectedTokens,
+    };
+  };
 });

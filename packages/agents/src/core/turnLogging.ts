@@ -56,7 +56,8 @@ export function logApiRequest(
  *
  * Passes neutral UsageStats via the `usage` field (neutral keys:
  * inputTokens, outputTokens, totalTokens). The telemetry adapter in core
- * maps this to the Gemini-named legacy event at the boundary, so NO
+ * maps this onto the neutral internal usage fields (inputTokenCount,
+ * outputTokenCount, totalTokenCount) at the boundary, so NO
  * Gemini-named keys appear in the agents core loop (OQ-3t).
  *
  * @plan:PLAN-20260707-AGENTNEUTRAL.P13

@@ -51,6 +51,13 @@ async function run(
   return String(result.content);
 }
 
+function requireSubcommand(subcommand: SlashCommand | undefined): SlashCommand {
+  if (subcommand === undefined) {
+    throw new Error('/perf memory subcommand is not registered');
+  }
+  return subcommand;
+}
+
 describe('/perf memory', () => {
   it('is registered as a subcommand of /perf', () => {
     expect(memorySubCommand().name).toBe('memory');
@@ -103,10 +110,7 @@ describe('/perf memory', () => {
     const command = createPerfCommand({ perfDir: '/tmp/perf-memory-test' });
     const sub = command.subCommands?.find((s) => s.name === 'memory');
     expect(sub).toBeDefined();
-    if (sub === undefined) {
-      throw new Error('/perf memory subcommand is not registered');
-    }
-    const output = await run(sub, contextWithHistory([]));
+    const output = await run(requireSubcommand(sub), contextWithHistory([]));
     expect(output).toContain('History Memory');
   });
 });

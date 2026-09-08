@@ -126,6 +126,10 @@ function makeTaskManager(): AsyncTaskManager {
   return new AsyncTaskManager(5);
 }
 
+function outputTailSection(reminderText: string): string {
+  return reminderText.split('output_tail')[1] ?? '';
+}
+
 // ---------------------------------------------------------------------------
 // Part A — shell completion formatting in the reminder pipeline
 // ---------------------------------------------------------------------------
@@ -175,7 +179,7 @@ describe('AsyncTaskReminderService — shell job notifications', () => {
     const result = svc.generateReminder();
     expect(result).not.toBeNull();
     // The text should not contain all 100 lines in the tail.
-    const tailSection = result!.text.split('output_tail')[1] ?? '';
+    const tailSection = outputTailSection(result!.text);
     expect(tailSection).not.toContain('line 0\n');
     expect(tailSection).toContain('line 99');
     expect(result!.text).toContain('truncated');
@@ -235,7 +239,7 @@ describe('AsyncTaskReminderService — shell job notifications', () => {
     ];
     expect(result!.text).toContain(expectedParts[0]);
     expect(result!.text).toContain(expectedParts[1]);
-    expect(result!.notifiedTaskIds).toEqual(['subagent-xyz']);
+    expect(result!.notifiedTaskIds).toStrictEqual(['subagent-xyz']);
     // No shell mention at all.
     expect(result!.text).not.toContain('shell');
   });
@@ -273,7 +277,7 @@ describe('AsyncTaskReminderService — shell job notifications', () => {
     expect(result!.text).toContain(
       '1 async task(s) + 2 shell job(s) completed',
     );
-    expect(result!.notifiedTaskIds).toEqual(
+    expect(result!.notifiedTaskIds).toStrictEqual(
       expect.arrayContaining(['subagent-1', 'shell_1', 'shell_2']),
     );
   });
@@ -282,6 +286,29 @@ describe('AsyncTaskReminderService — shell job notifications', () => {
 // ---------------------------------------------------------------------------
 // Part A — auto-trigger coalescing
 // ---------------------------------------------------------------------------
+
+function makeHoldingTrigger(onFire: () => void): {
+  trigger: (message: string) => Promise<void>;
+  release: () => void;
+} {
+  let count = 0;
+  let releaseHandle: (() => void) | null = null;
+  return {
+    trigger: async (): Promise<void> => {
+      onFire();
+      count++;
+      // Hold the first trigger open so a second event arrives while busy.
+      if (count === 1) {
+        await new Promise<void>((resolve) => {
+          releaseHandle = resolve;
+        });
+      }
+    },
+    release: () => {
+      releaseHandle?.();
+    },
+  };
+}
 
 describe('AsyncTaskAutoTrigger — shell coalescing', () => {
   it('delivers a single notification when multiple shell jobs complete rapidly', async () => {
@@ -335,16 +362,9 @@ describe('AsyncTaskAutoTrigger — shell coalescing', () => {
     svc.setShellNotificationSource(shell);
 
     let triggerCount = 0;
-    let resolveTrigger: (() => void) | null = null;
-    const trigger = async (_message: string): Promise<void> => {
+    const { trigger, release } = makeHoldingTrigger(() => {
       triggerCount++;
-      // Hold the first trigger open so a second event arrives while busy.
-      if (triggerCount === 1) {
-        await new Promise<void>((resolve) => {
-          resolveTrigger = resolve;
-        });
-      }
-    };
+    });
 
     const auto = new AsyncTaskAutoTrigger(mgr, svc, () => false, trigger);
     auto.setShellNotificationSource(shell);
@@ -378,7 +398,7 @@ describe('AsyncTaskAutoTrigger — shell coalescing', () => {
     expect(triggerCount).toBe(1);
 
     // Release the first trigger — the re-check should fire the second.
-    resolveTrigger?.();
+    release();
     await waitMs(200);
     await tickMicrotasks();
 

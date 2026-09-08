@@ -81,256 +81,294 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
   });
 
   it('abort during tool execution cancels in-flight tools and disposes the scheduler', async () => {
-    const tool = new MockTool({ name: 'slow_tool' });
-    tool.executeFn.mockImplementation(
-      (_params, signal: AbortSignal) =>
-        new Promise((_resolve, reject) => {
-          if (signal.aborted) {
-            reject(new Error('aborted'));
-            return;
-          }
-          signal.addEventListener('abort', () => reject(new Error('aborted')), {
-            once: true,
-          });
-        }),
-    );
-
-    const toolRegistry = createToolRegistryForTest([tool]);
-    const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: false,
-      approvalMode: ApprovalMode.YOLO,
-    });
-
-    const controller = new AbortController();
-    const { client } = createScriptedAgentClient([
-      [toolCallRequestEvent('slow_tool', 'call-slow'), finishedEvent()],
-    ]);
-
-    const loop = new AgenticLoop({
-      agentClient: client,
-      config,
-      messageBus,
-    });
-
-    async function driveAndAbortOnFirstTool(
-      loop: AgenticLoop,
-      controller: AbortController,
-    ): Promise<AgenticLoopEvent[]> {
-      const events: AgenticLoopEvent[] = [];
-      let sawTool = false;
-      for await (const event of loop.run('go', controller.signal)) {
-        events.push(event);
-        const isFirstToolUpdate = event.kind === 'tool_update' && !sawTool;
-        if (isFirstToolUpdate) {
-          sawTool = true;
-          controller.abort();
-        }
-      }
-      return events;
-    }
-
-    const events = await driveAndAbortOnFirstTool(loop, controller);
-    const toolUpdates = events.flatMap((event) =>
-      event.kind === 'tool_update' ? [event] : [],
-    );
-
+    const { toolUpdates, fresh } =
+      await observeAbortDuringToolExecutionCancelsInFlightToolsAndDisposesTheScheduler();
     expect(toolUpdates.length).toBeGreaterThan(1);
     expect(
       toolUpdates.some((event) =>
         event.toolCalls.some((call) => call.status === 'cancelled'),
       ),
     ).toBe(true);
-    const fresh = await config.getOrCreateScheduler(
-      config.getSessionId(),
-      {
-        onAllToolCallsComplete: async () => {},
-        getPreferredEditor: () => undefined,
-        onEditorClose: () => {},
-      },
-      { interactiveMode: false },
-      { messageBus, toolRegistry },
-    );
     expect(fresh).toBeDefined();
-    config.disposeScheduler(config.getSessionId());
   });
 
-  it('abort returns promptly even when a scheduled tool never settles (no hang)', async () => {
-    const tool = new MockTool({ name: 'never_tool' });
-    tool.executeFn.mockImplementation(() => new Promise<never>(() => {}));
-
-    const toolRegistry = createToolRegistryForTest([tool]);
-    const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: false,
-      approvalMode: ApprovalMode.YOLO,
-    });
-
-    const controller = new AbortController();
-    const { client } = createScriptedAgentClient([
-      [toolCallRequestEvent('never_tool', 'call-never'), finishedEvent()],
-    ]);
-
-    const loop = new AgenticLoop({
-      agentClient: client,
-      config,
-      messageBus,
-    });
-
-    let sawTool = false;
-    const run = (async () => {
-      for await (const event of loop.run('go', controller.signal)) {
-        if (event.kind === 'tool_update' && !sawTool) {
-          sawTool = true;
-          controller.abort();
-        }
-      }
-    })();
-
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_resolve, reject) => {
-      timeoutId = setTimeout(
-        () => reject(new Error('loop did not terminate')),
-        5000,
+  const observeAbortDuringToolExecutionCancelsInFlightToolsAndDisposesTheScheduler =
+    async () => {
+      const tool = new MockTool({ name: 'slow_tool' });
+      tool.executeFn.mockImplementation(
+        (_params, signal: AbortSignal) =>
+          new Promise((_resolve, reject) => {
+            if (signal.aborted) {
+              reject(new Error('aborted'));
+              return;
+            }
+            signal.addEventListener(
+              'abort',
+              () => reject(new Error('aborted')),
+              {
+                once: true,
+              },
+            );
+          }),
       );
-    });
-    try {
-      await expect(Promise.race([run, timeout])).resolves.toBeUndefined();
-    } finally {
-      if (timeoutId !== undefined) {
-        clearTimeout(timeoutId);
-      }
-    }
-    expect(sawTool).toBe(true);
 
-    const fresh = await config.getOrCreateScheduler(
-      config.getSessionId(),
-      {
-        onAllToolCallsComplete: async () => {},
-        getPreferredEditor: () => undefined,
-        onEditorClose: () => {},
-      },
-      { interactiveMode: false },
-      { messageBus, toolRegistry },
-    );
-    expect(fresh).toBeDefined();
-    config.disposeScheduler(config.getSessionId());
-  });
+      const toolRegistry = createToolRegistryForTest([tool]);
+      const messageBus = new MessageBus(createAllowPolicyEngine(), false);
+      const config = createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: false,
+        approvalMode: ApprovalMode.YOLO,
+      });
 
-  it('does not answer a delayed approval request after the loop aborts', async () => {
-    const tool = new MockTool({ name: 'approval_tool' });
-    tool.shouldConfirm = true;
-    tool.executeFn.mockResolvedValue({
-      llmContent: 'should not run',
-      returnDisplay: 'should not run',
-    });
-    const toolRegistry = createToolRegistryForTest([tool]);
-    const policyEngine = createAskPolicyEngine();
-    const messageBus = new MessageBus(policyEngine, false);
-    const respondSpy = vi.spyOn(messageBus, 'respondToConfirmation');
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine,
-      interactive: true,
-      approvalMode: ApprovalMode.DEFAULT,
-    });
-
-    let resolveApproval:
-      | ((result: { outcome: ToolConfirmationOutcome }) => void)
-      | undefined;
-    let runDone: Promise<void> | undefined;
-    const approvalStarted = new Promise<void>((resolve) => {
-      const approvalHandler: ApprovalHandler = async () => {
-        resolve();
-        return new Promise((innerResolve) => {
-          resolveApproval = innerResolve;
-        });
-      };
+      const controller = new AbortController();
       const { client } = createScriptedAgentClient([
-        [
-          toolCallRequestEvent('approval_tool', 'call-approval'),
-          finishedEvent(),
-        ],
+        [toolCallRequestEvent('slow_tool', 'call-slow'), finishedEvent()],
       ]);
+
       const loop = new AgenticLoop({
         agentClient: client,
         config,
         messageBus,
-        approvalHandler,
       });
-      const controller = new AbortController();
 
-      runDone = (async () => {
+      async function driveAndAbortOnFirstTool(
+        loop: AgenticLoop,
+        controller: AbortController,
+      ): Promise<AgenticLoopEvent[]> {
+        const events: AgenticLoopEvent[] = [];
+        let sawTool = false;
         for await (const event of loop.run('go', controller.signal)) {
-          if (event.kind === 'awaiting_approval') {
+          events.push(event);
+          const isFirstToolUpdate = event.kind === 'tool_update' && !sawTool;
+          if (isFirstToolUpdate) {
+            sawTool = true;
+            controller.abort();
+          }
+        }
+        return events;
+      }
+
+      const events = await driveAndAbortOnFirstTool(loop, controller);
+      const toolUpdates = events.flatMap((event) =>
+        event.kind === 'tool_update' ? [event] : [],
+      );
+
+      const fresh = await config.getOrCreateScheduler(
+        config.getSessionId(),
+        {
+          onAllToolCallsComplete: async () => {},
+          getPreferredEditor: () => undefined,
+          onEditorClose: () => {},
+        },
+        { interactiveMode: false },
+        { messageBus, toolRegistry },
+      );
+
+      config.disposeScheduler(config.getSessionId());
+
+      return { toolUpdates, fresh };
+    };
+
+  it('abort returns promptly even when a scheduled tool never settles (no hang)', async () => {
+    const { sawTool, fresh, termination } =
+      await observeAbortReturnsPromptlyEvenWhenAScheduledToolNeverSettlesNoHang();
+    expect(termination).toBeUndefined();
+    expect(sawTool).toBe(true);
+    expect(fresh).toBeDefined();
+  });
+
+  const observeAbortReturnsPromptlyEvenWhenAScheduledToolNeverSettlesNoHang =
+    async () => {
+      const tool = new MockTool({ name: 'never_tool' });
+      tool.executeFn.mockImplementation(() => new Promise<never>(() => {}));
+
+      const toolRegistry = createToolRegistryForTest([tool]);
+      const messageBus = new MessageBus(createAllowPolicyEngine(), false);
+      const config = createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: false,
+        approvalMode: ApprovalMode.YOLO,
+      });
+
+      const controller = new AbortController();
+      const { client } = createScriptedAgentClient([
+        [toolCallRequestEvent('never_tool', 'call-never'), finishedEvent()],
+      ]);
+
+      const loop = new AgenticLoop({
+        agentClient: client,
+        config,
+        messageBus,
+      });
+
+      let sawTool = false;
+      const run = (async () => {
+        for await (const event of loop.run('go', controller.signal)) {
+          if (event.kind === 'tool_update' && !sawTool) {
+            sawTool = true;
             controller.abort();
           }
         }
       })();
-    });
 
-    await approvalStarted;
-    await runDone;
-    resolveApproval?.({ outcome: ToolConfirmationOutcome.ProceedOnce });
-    await Promise.resolve();
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<never>((_resolve, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error('loop did not terminate')),
+          5000,
+        );
+      });
+      let termination: void;
+      try {
+        termination = await Promise.race([run, timeout]);
+      } finally {
+        if (timeoutId !== undefined) {
+          clearTimeout(timeoutId);
+        }
+      }
 
+      const fresh = await config.getOrCreateScheduler(
+        config.getSessionId(),
+        {
+          onAllToolCallsComplete: async () => {},
+          getPreferredEditor: () => undefined,
+          onEditorClose: () => {},
+        },
+        { interactiveMode: false },
+        { messageBus, toolRegistry },
+      );
+
+      config.disposeScheduler(config.getSessionId());
+
+      return { sawTool, fresh, termination };
+    };
+
+  it('does not answer a delayed approval request after the loop aborts', async () => {
+    const { respondSpy, tool } =
+      await observeDoesNotAnswerADelayedApprovalRequestAfterTheLoopAborts();
     expect(respondSpy).not.toHaveBeenCalled();
     expect(tool.executeFn).not.toHaveBeenCalled();
   });
 
+  const observeDoesNotAnswerADelayedApprovalRequestAfterTheLoopAborts =
+    async () => {
+      const tool = new MockTool({ name: 'approval_tool' });
+      tool.shouldConfirm = true;
+      tool.executeFn.mockResolvedValue({
+        llmContent: 'should not run',
+        returnDisplay: 'should not run',
+      });
+      const toolRegistry = createToolRegistryForTest([tool]);
+      const policyEngine = createAskPolicyEngine();
+      const messageBus = new MessageBus(policyEngine, false);
+      const respondSpy = vi.spyOn(messageBus, 'respondToConfirmation');
+      const config = createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine,
+        interactive: true,
+        approvalMode: ApprovalMode.DEFAULT,
+      });
+
+      let resolveApproval:
+        | ((result: { outcome: ToolConfirmationOutcome }) => void)
+        | undefined;
+      let runDone: Promise<void> | undefined;
+      const approvalStarted = new Promise<void>((resolve) => {
+        const approvalHandler: ApprovalHandler = async () => {
+          resolve();
+          return new Promise((innerResolve) => {
+            resolveApproval = innerResolve;
+          });
+        };
+        const { client } = createScriptedAgentClient([
+          [
+            toolCallRequestEvent('approval_tool', 'call-approval'),
+            finishedEvent(),
+          ],
+        ]);
+        const loop = new AgenticLoop({
+          agentClient: client,
+          config,
+          messageBus,
+          approvalHandler,
+        });
+        const controller = new AbortController();
+
+        runDone = (async () => {
+          for await (const event of loop.run('go', controller.signal)) {
+            if (event.kind === 'awaiting_approval') {
+              controller.abort();
+            }
+          }
+        })();
+      });
+
+      await approvalStarted;
+      await runDone;
+      resolveApproval?.({ outcome: ToolConfirmationOutcome.ProceedOnce });
+      await Promise.resolve();
+
+      return { respondSpy, tool };
+    };
+
   it('early generator return while a tool is running disposes the scheduler', async () => {
-    const tool = new MockTool({ name: 'early_return_tool' });
-    tool.executeFn.mockImplementation(() => new Promise<never>(() => {}));
-
-    const toolRegistry = createToolRegistryForTest([tool]);
-    const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: false,
-      approvalMode: ApprovalMode.YOLO,
-    });
-    const disposedSessionIds: string[] = [];
-    const originalDisposeScheduler = config.disposeScheduler.bind(config);
-    vi.spyOn(config, 'disposeScheduler').mockImplementation((sessionId) => {
-      disposedSessionIds.push(sessionId);
-      originalDisposeScheduler(sessionId);
-    });
-
-    const { client } = createScriptedAgentClient([
-      [
-        toolCallRequestEvent('early_return_tool', 'call-early'),
-        finishedEvent(),
-      ],
-    ]);
-    const loop = new AgenticLoop({ agentClient: client, config, messageBus });
-    const iterator = loop.run('go', new AbortController().signal);
-
-    let sawRunningTool = false;
-    let next = await iterator.next();
-    while (next.done !== true && !sawRunningTool) {
-      sawRunningTool =
-        next.value.kind === 'tool_update' &&
-        next.value.toolCalls.some((call) => call.status === 'executing');
-      if (!sawRunningTool) {
-        next = await iterator.next();
-      }
-    }
-
+    const { sawRunningTool, iterator, disposedSessionIds } =
+      await observeEarlyGeneratorReturnWhileAToolIsRunningDisposesTheScheduler();
     expect(sawRunningTool).toBe(true);
     await expect(iterator.return(undefined)).resolves.toBeDefined();
     expect(disposedSessionIds.some((id) => id.includes('#agentic-loop#'))).toBe(
       true,
     );
   });
+
+  const observeEarlyGeneratorReturnWhileAToolIsRunningDisposesTheScheduler =
+    async () => {
+      const tool = new MockTool({ name: 'early_return_tool' });
+      tool.executeFn.mockImplementation(() => new Promise<never>(() => {}));
+
+      const toolRegistry = createToolRegistryForTest([tool]);
+      const messageBus = new MessageBus(createAllowPolicyEngine(), false);
+      const config = createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: false,
+        approvalMode: ApprovalMode.YOLO,
+      });
+      const disposedSessionIds: string[] = [];
+      const originalDisposeScheduler = config.disposeScheduler.bind(config);
+      vi.spyOn(config, 'disposeScheduler').mockImplementation((sessionId) => {
+        disposedSessionIds.push(sessionId);
+        originalDisposeScheduler(sessionId);
+      });
+
+      const { client } = createScriptedAgentClient([
+        [
+          toolCallRequestEvent('early_return_tool', 'call-early'),
+          finishedEvent(),
+        ],
+      ]);
+      const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+      const iterator = loop.run('go', new AbortController().signal);
+
+      let sawRunningTool = false;
+      let next = await iterator.next();
+      while (next.done !== true && !sawRunningTool) {
+        sawRunningTool =
+          next.value.kind === 'tool_update' &&
+          next.value.toolCalls.some((call) => call.status === 'executing');
+        if (!sawRunningTool) {
+          next = await iterator.next();
+        }
+      }
+
+      return { sawRunningTool, iterator, disposedSessionIds };
+    };
 
   it('tool_output emitted just before completion is observed by the consumer', async () => {
     const tool = new MockTool({

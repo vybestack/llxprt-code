@@ -517,6 +517,54 @@ function useResetOnCwdChange(
   ]);
 }
 
+type DebounceTimerRef = React.MutableRefObject<ReturnType<
+  typeof setTimeout
+> | null>;
+
+function clearDebounceTimer(debounceTimer: DebounceTimerRef): void {
+  if (debounceTimer.current !== null) {
+    clearTimeout(debounceTimer.current);
+    debounceTimer.current = null;
+  }
+}
+
+/**
+ * Invalidates any in-flight completion work and dispatches `action` for
+ * `normalizedPattern`.
+ *
+ * An empty pattern dispatches immediately, because the user is waiting on the
+ * full listing and has typed nothing to debounce. Anything else waits out
+ * SEARCH_DEBOUNCE_MS, so a burst of keystrokes costs one unit of work rather
+ * than one per character.
+ *
+ * The attempted pattern is recorded when the action dispatches, not when it is
+ * scheduled. A debounced action can still be cancelled by the effect cleanup,
+ * and recording it early would tell the ERROR branch that a retry had already
+ * been made for a pattern that never got one.
+ */
+function startPatternWork(
+  normalizedPattern: string,
+  action: AtCompletionAction,
+  attemptedPattern: React.MutableRefObject<PatternInput>,
+  lifecycleGeneration: React.MutableRefObject<number>,
+  debounceTimer: DebounceTimerRef,
+  abortCurrentSearch: () => void,
+  dispatch: React.Dispatch<AtCompletionAction>,
+): void {
+  lifecycleGeneration.current += 1;
+  abortCurrentSearch();
+  clearDebounceTimer(debounceTimer);
+  const startWork = (): void => {
+    attemptedPattern.current = normalizedPattern;
+    dispatch(action);
+  };
+  if (normalizedPattern === '') {
+    startWork();
+    return;
+  }
+  debounceTimer.current = setTimeout(startWork, SEARCH_DEBOUNCE_MS);
+}
+
 function usePatternChangeHandler(
   enabled: boolean,
   pattern: PatternInput,
@@ -526,17 +574,17 @@ function usePatternChangeHandler(
   abortCurrentSearch: () => void,
   dispatch: React.Dispatch<AtCompletionAction>,
 ): void {
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounceTimerRef: DebounceTimerRef = useRef(null);
+  // The normalized pattern that work was last started for.
+  const attemptedPatternRef = useRef<PatternInput>(null);
 
   useEffect(() => {
     if (!enabled) {
+      attemptedPatternRef.current = null;
       lifecycleGeneration.current += 1;
       latestRequestedPattern.current = null;
       abortCurrentSearch();
-      if (debounceTimerRef.current !== null) {
-        clearTimeout(debounceTimerRef.current);
-        debounceTimerRef.current = null;
-      }
+      clearDebounceTimer(debounceTimerRef);
       if (state.status !== AtCompletionStatus.IDLE) {
         dispatch({ type: 'RESET' });
       }
@@ -545,13 +593,11 @@ function usePatternChangeHandler(
     }
 
     if (pattern === null) {
+      attemptedPatternRef.current = null;
       lifecycleGeneration.current += 1;
       latestRequestedPattern.current = null;
       abortCurrentSearch();
-      if (debounceTimerRef.current !== null) {
-        clearTimeout(debounceTimerRef.current);
-        debounceTimerRef.current = null;
-      }
+      clearDebounceTimer(debounceTimerRef);
       dispatch({ type: 'RESET' });
       return undefined;
     }
@@ -559,35 +605,48 @@ function usePatternChangeHandler(
     const normalizedPattern = pattern.toLowerCase();
     latestRequestedPattern.current = normalizedPattern;
     if (state.status === AtCompletionStatus.IDLE) {
+      attemptedPatternRef.current = normalizedPattern;
       dispatch({ type: 'INITIALIZE' });
     } else if (
       (state.status === AtCompletionStatus.READY ||
         state.status === AtCompletionStatus.SEARCHING) &&
       normalizedPattern !== state.pattern
     ) {
-      lifecycleGeneration.current += 1;
-      abortCurrentSearch();
-      if (normalizedPattern === '') {
-        if (debounceTimerRef.current !== null) {
-          clearTimeout(debounceTimerRef.current);
-          debounceTimerRef.current = null;
-        }
-        dispatch({ type: 'SEARCH', payload: normalizedPattern });
-      } else {
-        if (debounceTimerRef.current !== null) {
-          clearTimeout(debounceTimerRef.current);
-        }
-        debounceTimerRef.current = setTimeout(() => {
-          dispatch({ type: 'SEARCH', payload: normalizedPattern });
-        }, SEARCH_DEBOUNCE_MS);
-      }
+      startPatternWork(
+        normalizedPattern,
+        { type: 'SEARCH', payload: normalizedPattern },
+        attemptedPatternRef,
+        lifecycleGeneration,
+        debounceTimerRef,
+        abortCurrentSearch,
+        dispatch,
+      );
+    } else if (
+      state.status === AtCompletionStatus.ERROR &&
+      normalizedPattern !== attemptedPatternRef.current
+    ) {
+      // A failed crawl or search leaves the hook in ERROR with no way back, so
+      // typing another character would otherwise never retry. Reset instead of
+      // initializing directly: that drops the pattern the failure was recorded
+      // against, so the IDLE branch above re-enters the normal
+      // initialize-then-search path for the pattern the user actually typed.
+      //
+      // The recorded attempted pattern is the bound: one retry per distinct
+      // normalized pattern, which keeps a genuinely broken directory from
+      // re-crawling on every render and keeps a failing retry from looping.
+      startPatternWork(
+        normalizedPattern,
+        { type: 'RESET' },
+        attemptedPatternRef,
+        lifecycleGeneration,
+        debounceTimerRef,
+        abortCurrentSearch,
+        dispatch,
+      );
     }
 
     return (): void => {
-      if (debounceTimerRef.current !== null) {
-        clearTimeout(debounceTimerRef.current);
-        debounceTimerRef.current = null;
-      }
+      clearDebounceTimer(debounceTimerRef);
     };
   }, [
     enabled,

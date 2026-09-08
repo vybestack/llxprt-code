@@ -38,6 +38,21 @@ describe('pruneReadWritePairs @plan PLAN-20260211-HIGHDENSITY.P10', () => {
    * @requirement REQ-HD-005.1, REQ-HD-005.6
    */
   it('stale read is removed when a later write exists for the same file', () => {
+    const {
+      result,
+      staleReadIsRemovedWhenALaterWriteExistsForTheSameObservation1,
+    } = observeStaleReadIsRemovedWhenALaterWriteExistsForTheSame();
+    expect(staleReadIsRemovedWhenALaterWriteExistsForTheSameObservation1).toBe(
+      true,
+    );
+    expect(result.removals).not.toContain(2);
+    expect(result.removals).not.toContain(3);
+    expect(result.replacements.has(2)).toBe(false);
+    expect(result.replacements.has(3)).toBe(false);
+    expect(result.metadata.readWritePairsPruned).toBeGreaterThan(0);
+  });
+
+  const observeStaleReadIsRemovedWhenALaterWriteExistsForTheSame = () => {
     const strategy = createStrategy();
     const { entries } = makeReadWritePair('/workspace/src/a.ts');
     const history: IContent[] = [...entries];
@@ -46,13 +61,14 @@ describe('pruneReadWritePairs @plan PLAN-20260211-HIGHDENSITY.P10', () => {
     const result = strategy.optimize(history, config);
 
     const affected = allAffectedIndices(result);
-    expect(affected.has(0) || affected.has(1)).toBe(true);
-    expect(result.removals).not.toContain(2);
-    expect(result.removals).not.toContain(3);
-    expect(result.replacements.has(2)).toBe(false);
-    expect(result.replacements.has(3)).toBe(false);
-    expect(result.metadata.readWritePairsPruned).toBeGreaterThan(0);
-  });
+
+    const staleReadIsRemovedWhenALaterWriteExistsForTheSameObservation1 =
+      affected.has(0) || affected.has(1);
+    return {
+      result,
+      staleReadIsRemovedWhenALaterWriteExistsForTheSameObservation1,
+    };
+  };
 
   /**
    * @plan PLAN-20260211-HIGHDENSITY.P10
@@ -98,6 +114,12 @@ describe('pruneReadWritePairs @plan PLAN-20260211-HIGHDENSITY.P10', () => {
    * @requirement REQ-HD-005.2
    */
   it('all read tool types are recognized as stale when followed by a write', () => {
+    const { result } =
+      observeAllReadToolTypesAreRecognizedAsStaleWhenFollowedByA();
+    expect(result.metadata.readWritePairsPruned).toBeGreaterThanOrEqual(4);
+  });
+
+  const observeAllReadToolTypesAreRecognizedAsStaleWhenFollowedByA = () => {
     const strategy = createStrategy();
     const readTools = [
       'read_file',
@@ -132,8 +154,8 @@ describe('pruneReadWritePairs @plan PLAN-20260211-HIGHDENSITY.P10', () => {
     const config = defaultConfig({ fileDedupe: false, recencyPruning: false });
     const result = strategy.optimize(history, config);
 
-    expect(result.metadata.readWritePairsPruned).toBeGreaterThanOrEqual(4);
-  });
+    return { result };
+  };
 
   /**
    * @plan PLAN-20260211-HIGHDENSITY.P10
@@ -295,37 +317,59 @@ describe('pruneReadWritePairs @plan PLAN-20260211-HIGHDENSITY.P10', () => {
    * @requirement REQ-HD-005.9
    */
   it('read_many_files with all concrete paths having writes is removable', () => {
-    const strategy = createStrategy();
-
-    const readCall = makeAiToolCall('read_many_files', {
-      paths: ['/workspace/a.ts', '/workspace/b.ts'],
-    });
-    const readResp = makeToolResponse(
-      readCall.callId,
-      'read_many_files',
-      'contents',
-    );
-
-    const wc1 = makeAiToolCall('write_file', { file_path: '/workspace/a.ts' });
-    const wr1 = makeToolResponse(wc1.callId, 'write_file', 'wrote a');
-    const wc2 = makeAiToolCall('write_file', { file_path: '/workspace/b.ts' });
-    const wr2 = makeToolResponse(wc2.callId, 'write_file', 'wrote b');
-
-    const history: IContent[] = [
-      readCall.entry,
-      readResp,
-      wc1.entry,
-      wr1,
-      wc2.entry,
-      wr2,
-    ];
-    const config = defaultConfig({ fileDedupe: false, recencyPruning: false });
-
-    const result = strategy.optimize(history, config);
-
-    const affected = allAffectedIndices(result);
-    expect(affected.has(0) || affected.has(1)).toBe(true);
+    const {
+      readManyFilesWithAllConcretePathsHavingWritesIsRemovableObservation1,
+    } = observeReadManyFilesWithAllConcretePathsHavingWritesIsRemovable();
+    expect(
+      readManyFilesWithAllConcretePathsHavingWritesIsRemovableObservation1,
+    ).toBe(true);
   });
+
+  const observeReadManyFilesWithAllConcretePathsHavingWritesIsRemovable =
+    () => {
+      const strategy = createStrategy();
+
+      const readCall = makeAiToolCall('read_many_files', {
+        paths: ['/workspace/a.ts', '/workspace/b.ts'],
+      });
+      const readResp = makeToolResponse(
+        readCall.callId,
+        'read_many_files',
+        'contents',
+      );
+
+      const wc1 = makeAiToolCall('write_file', {
+        file_path: '/workspace/a.ts',
+      });
+      const wr1 = makeToolResponse(wc1.callId, 'write_file', 'wrote a');
+      const wc2 = makeAiToolCall('write_file', {
+        file_path: '/workspace/b.ts',
+      });
+      const wr2 = makeToolResponse(wc2.callId, 'write_file', 'wrote b');
+
+      const history: IContent[] = [
+        readCall.entry,
+        readResp,
+        wc1.entry,
+        wr1,
+        wc2.entry,
+        wr2,
+      ];
+      const config = defaultConfig({
+        fileDedupe: false,
+        recencyPruning: false,
+      });
+
+      const result = strategy.optimize(history, config);
+
+      const affected = allAffectedIndices(result);
+
+      const readManyFilesWithAllConcretePathsHavingWritesIsRemovableObservation1 =
+        affected.has(0) || affected.has(1);
+      return {
+        readManyFilesWithAllConcretePathsHavingWritesIsRemovableObservation1,
+      };
+    };
 
   /**
    * @plan PLAN-20260211-HIGHDENSITY.P10

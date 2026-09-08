@@ -549,7 +549,6 @@ describe('useAgentStream', () => {
       await waitFor(() => {
         expect(mockParseAndFormatApiError).toHaveBeenCalledWith(
           'Rate limit exceeded',
-          undefined,
           'gemini-2.5-pro',
           undefined,
         );

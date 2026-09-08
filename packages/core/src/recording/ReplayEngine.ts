@@ -28,7 +28,17 @@
 
 import * as fs from 'node:fs';
 import * as readline from 'node:readline';
+import {
+  appendCheckpointMetadataWarnings,
+  foldCheckpointMetadata,
+} from './replayCheckpointMetadata.js';
+export { foldCheckpointMetadata } from './replayCheckpointMetadata.js';
 import { readBoundedFirstLine } from './boundedHeaderReader.js';
+import { formatReplayDiagnostic } from './replayErrorFormatting.js';
+import {
+  isRecordWithNonNegativeIntegerPair,
+  isSemanticMediaPurgeFrontierWithinHistory,
+} from './semanticMediaPurgeReplayValidation.js';
 import {
   type ReplayResult,
   type SessionMetadata,
@@ -37,11 +47,18 @@ import {
   type ContentPayload,
   type RewindPayload,
   type ProviderSwitchPayload,
-  type CheckpointMetadataView,
   type SessionForkedPayload,
+  type SemanticMediaPurgePayload,
   type SessionRecordLine,
 } from './types.js';
-import { type IContent } from '../services/history/IContent.js';
+import {
+  invalidateResponsesStatefulChain,
+  type IContent,
+} from '../services/history/IContent.js';
+import type { LocalMediaStore } from '../storage/local-media-store.js';
+import { MediaAdmissionService } from '../storage/media-admission-service.js';
+import { verifyHistoryMedia } from '../storage/media-reference-lifecycle.js';
+const SUPPORTED_RECORDING_VERSIONS = new Set([1, 2]);
 
 // ---------------------------------------------------------------------------
 // Private replay accumulators
@@ -63,6 +80,7 @@ interface ReplayAccumulators {
   unparseableLineCount: number;
   /** Raw metadata event lines for post-replay folding. */
   rawMetadataEvents: SessionRecordLine[];
+  semanticMediaPurgeFrontier: SemanticMediaPurgePayload['frontier'] | undefined;
 }
 
 // @pseudocode line 11-17: Initialize accumulators
@@ -81,6 +99,7 @@ function createAccumulators(): ReplayAccumulators {
     _unknownEventCount: 0,
     unparseableLineCount: 0,
     rawMetadataEvents: [],
+    semanticMediaPurgeFrontier: undefined,
   };
 }
 
@@ -241,7 +260,54 @@ function handleCompressed(
   }
 }
 
-/** @pseudocode line 100-112: rewind — validate and apply rewind or record malformed. */
+/**
+ * Locate the entry the rewind cut at, identified by its chronology `seq`.
+ *
+ * The match is exact. A neighbouring marker is NOT evidence of where the cut
+ * belongs: an entry with no marker can sit on either side of it, so inferring
+ * the cut from the next marked entry mis-cuts a history whose entries are only
+ * partly marked — a session resumed from a file recorded before chronology
+ * markers existed, or one whose `compressed` summary reached the journal
+ * unmarked.
+ *
+ * Returns `null` when no entry carries the recorded seq, which happens when the
+ * cut entry predates markers or was destroyed by a `compressed` event. The
+ * caller then falls back to the recorded count.
+ *
+ * @issue #2934
+ */
+function findChronologyCutIndex(
+  history: readonly IContent[],
+  cutSeq: number,
+): number | null {
+  for (let index = 0; index < history.length; index++) {
+    // `cutSeq` is already a validated sequence number, so equality alone
+    // rejects both a missing marker and a nonsensical one.
+    if (history[index].metadata?.chronology?.seq === cutSeq) {
+      return index;
+    }
+  }
+  return null;
+}
+
+/** Legacy behaviour: drop `itemsToRemove` entries from the end. */
+function applyCountRewind(
+  acc: ReplayAccumulators,
+  itemsToRemove: number,
+): void {
+  acc.history =
+    itemsToRemove >= acc.history.length
+      ? []
+      : acc.history.slice(0, acc.history.length - itemsToRemove);
+}
+
+/**
+ * @pseudocode line 100-112: rewind — validate and apply rewind or record malformed.
+ *
+ * A resolvable `cutSeq` marker takes precedence over the item count: the count
+ * is measured against live history, which diverges from the journal whenever an
+ * unjournalled mutation (density optimization) shrinks it (#2934).
+ */
 function handleRewind(
   payload: Record<string, unknown>,
   acc: ReplayAccumulators,
@@ -254,11 +320,28 @@ function handleRewind(
     acc.warnings.push(`Line ${lineNumber}: malformed rewind event, skipping`);
     return;
   }
-  if (itemsToRemove >= acc.history.length) {
-    acc.history = [];
-  } else {
-    acc.history = acc.history.slice(0, acc.history.length - itemsToRemove);
+
+  // An unreadable cut marker does not invalidate the count beside it. Dropping
+  // the whole event would leave the removed turns in the replayed history,
+  // which is the very symptom this marker exists to prevent, so the corruption
+  // is reported and the rewind still applies by count.
+  const cutSeq = rewindPayload.cutSeq;
+  if (cutSeq !== undefined && !isValidSequence(cutSeq)) {
+    acc.malformedCount++;
+    acc.warnings.push(
+      `Line ${lineNumber}: malformed rewind cut marker, falling back to item count`,
+    );
+    applyCountRewind(acc, itemsToRemove);
+    return;
   }
+
+  const cutIndex =
+    cutSeq === undefined ? null : findChronologyCutIndex(acc.history, cutSeq);
+  if (cutIndex === null) {
+    applyCountRewind(acc, itemsToRemove);
+    return;
+  }
+  acc.history = acc.history.slice(0, cutIndex);
 }
 
 /** @pseudocode line 114-120: provider_switch — update metadata or record malformed. */
@@ -365,6 +448,32 @@ function isValidSequence(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
+function handleSemanticMediaPurge(
+  payload: Record<string, unknown>,
+  acc: ReplayAccumulators,
+  lineNumber: number,
+): void {
+  const history = payload['history'];
+  const frontier = payload['frontier'];
+  if (
+    !Array.isArray(history) ||
+    !history.every(isSpeakerContent) ||
+    !isRecordWithNonNegativeIntegerPair(frontier) ||
+    !isSemanticMediaPurgeFrontierWithinHistory(history, frontier)
+  ) {
+    acc.malformedCount++;
+    acc.warnings.push(
+      `Line ${lineNumber}: malformed semantic_media_purge event, skipping`,
+    );
+    return;
+  }
+  acc.history = [...history];
+  acc.semanticMediaPurgeFrontier = {
+    contentIndex: frontier.contentIndex,
+    blockIndex: frontier.blockIndex,
+  };
+}
+
 function applyParsedEvent(
   parsed: Record<string, unknown> | null,
   acc: ReplayAccumulators,
@@ -372,6 +481,17 @@ function applyParsedEvent(
 ): ReplayResult | undefined {
   if (parsed === null) {
     return undefined;
+  }
+  const recordingVersion = parsed.v;
+  if (
+    typeof recordingVersion !== 'number' ||
+    !SUPPORTED_RECORDING_VERSIONS.has(recordingVersion)
+  ) {
+    return {
+      ok: false,
+      error: `Unsupported recording version ${String(recordingVersion)} at line ${acc.lineNumber}`,
+      warnings: acc.warnings,
+    };
   }
   if (!isValidSequence(parsed.seq)) {
     acc.malformedCount++;
@@ -505,6 +625,9 @@ function dispatchEvent(
     case 'session_metadata':
       handleSessionMetadata(payload, acc, lineNumber);
       break;
+    case 'semantic_media_purge':
+      handleSemanticMediaPurge(payload, acc, lineNumber);
+      break;
     case 'directories_changed':
       handleDirectoriesChanged(payload, acc, lineNumber);
       break;
@@ -580,9 +703,26 @@ function finalizeReplay(acc: ReplayAccumulators): ReplayResult {
   const folded = foldCheckpointMetadata(acc.rawMetadataEvents);
   const sessionName = deriveSessionName(acc.rawMetadataEvents);
   const ancestry = deriveAncestry(acc.rawMetadataEvents);
+  // A Codex parent id is scoped to the WebSocket connection that produced it, so a
+  // `responsesStored` marker restored from a persisted session recording (or a
+  // checkpoint fork replay) points at a dead parent by construction. Strip it so the
+  // resumed session starts a fresh chain (#3160).
+  //
+  // The strip is deliberately unconditional rather than Codex-only. `responsesStored`
+  // conflates two different lifetimes — "durably stored server-side" (non-Codex,
+  // store=true) and "chainable on this socket" (Codex, store=false; see
+  // buildRequestContext in openAIResponsesExecutor.ts) — and a recording carries
+  // nothing that tells them apart, nor whether a durable parent is still inside its
+  // retention window. A parent that cannot be shown to be live is treated as dead.
+  // The cost of being wrong is one full-history request, which the next turn
+  // re-chains from; the cost of guessing wrong the other way is a refused request.
+  const history = invalidateResponsesStatefulChain(acc.history);
   return {
     ok: true,
-    history: acc.history,
+    // The helper returns `readonly IContent[]`; the spread widens it to the
+    // mutable `IContent[]` this result type declares. It is a type conversion,
+    // not a defensive copy — the entries are still shared by reference.
+    history: [...history],
     metadata: acc.metadata,
     lastSeq: acc.lastSeq,
     sequenceCorrupt: acc.sequenceCorrupt,
@@ -592,106 +732,15 @@ function finalizeReplay(acc: ReplayAccumulators): ReplayResult {
     checkpoints: folded,
     sessionName,
     ancestry,
+    ...(acc.semanticMediaPurgeFrontier === undefined
+      ? {}
+      : { semanticMediaPurgeFrontier: acc.semanticMediaPurgeFrontier }),
   };
 }
 
 // ---------------------------------------------------------------------------
 // Metadata folding helpers (checkpoint lifecycle + session name)
 // ---------------------------------------------------------------------------
-
-function appendCheckpointMetadataWarnings(
-  events: readonly SessionRecordLine[],
-  warnings: string[],
-): void {
-  const knownIds = new Set<string>();
-  const deletedIds = new Set<string>();
-  for (const line of events) {
-    const checkpointId = extractCheckpointId(line);
-    if (checkpointId === null) continue;
-    if (line.type === 'checkpoint_created') {
-      if (knownIds.has(checkpointId)) {
-        warnings.push(
-          `Sequence ${line.seq}: checkpoint_created duplicates checkpoint ${checkpointId}`,
-        );
-      } else {
-        knownIds.add(checkpointId);
-      }
-    } else if (
-      line.type === 'checkpoint_renamed' ||
-      line.type === 'checkpoint_deleted'
-    ) {
-      if (!knownIds.has(checkpointId)) {
-        warnings.push(
-          `Sequence ${line.seq}: ${line.type} references unknown checkpoint ${checkpointId}`,
-        );
-      } else if (deletedIds.has(checkpointId)) {
-        warnings.push(
-          `Sequence ${line.seq}: ${line.type} references deleted checkpoint ${checkpointId}`,
-        );
-      }
-      if (line.type === 'checkpoint_deleted') deletedIds.add(checkpointId);
-    }
-  }
-}
-
-function extractCheckpointId(line: SessionRecordLine): string | null {
-  if (typeof line.payload !== 'object' || line.payload === null) return null;
-  const checkpointId =
-    'checkpointId' in line.payload ? line.payload.checkpointId : undefined;
-  return typeof checkpointId === 'string' ? checkpointId : null;
-}
-
-/**
- * Fold checkpoint lifecycle events into a stable view ordered by sequence.
- * Each checkpoint is tracked by stable `checkpointId`. Created events set
- * the name, watermark, and createdAt; renamed events update the name;
- * deleted events set `deleted: true`.
- */
-export function foldCheckpointMetadata(
-  events: readonly SessionRecordLine[],
-): CheckpointMetadataView[] {
-  const byId = new Map<string, CheckpointMetadataView>();
-
-  for (const line of events) {
-    foldCheckpointLine(line, byId);
-  }
-
-  return Array.from(byId.values()).sort((a, b) => a.sequence - b.sequence);
-}
-
-function foldCheckpointLine(
-  line: SessionRecordLine,
-  byId: Map<string, CheckpointMetadataView>,
-): void {
-  if (typeof line.payload !== 'object' || line.payload === null) return;
-  const payload = line.payload;
-  const checkpointId =
-    'checkpointId' in payload ? payload.checkpointId : undefined;
-  if (typeof checkpointId !== 'string' || checkpointId.length === 0) return;
-  const existing = byId.get(checkpointId);
-  const name = 'name' in payload ? payload.name : undefined;
-  if (
-    line.type === 'checkpoint_created' &&
-    typeof name === 'string' &&
-    existing === undefined
-  ) {
-    byId.set(checkpointId, {
-      checkpointId,
-      name,
-      sequence: line.seq,
-      deleted: false,
-      createdAt: line.ts,
-    });
-  } else if (
-    line.type === 'checkpoint_renamed' &&
-    typeof name === 'string' &&
-    existing !== undefined
-  ) {
-    byId.set(checkpointId, { ...existing, name });
-  } else if (line.type === 'checkpoint_deleted' && existing !== undefined) {
-    byId.set(checkpointId, { ...existing, deleted: true });
-  }
-}
 
 function isSessionForkedPayload(value: unknown): value is SessionForkedPayload {
   if (typeof value !== 'object' || value === null) return false;
@@ -810,16 +859,72 @@ async function readSessionStream(
  * @param expectedProjectHash - Must match the file's projectHash
  * @returns ReplayResult discriminated union — ok: true with data, or ok: false with error
  */
+export interface ReplaySessionOptions {
+  readonly mediaStore?: LocalMediaStore;
+}
+
 export async function replaySession(
   filePath: string,
   expectedProjectHash: string,
+  options: ReplaySessionOptions = {},
 ): Promise<ReplayResult> {
-  return readSessionStream(filePath, expectedProjectHash, (rawLine, acc) => {
-    const trimmed = rawLine.trim();
-    const parsed =
-      trimmed !== '' ? parseLine(rawLine, acc.lineNumber, acc) : null;
-    return applyParsedEvent(parsed, acc, expectedProjectHash);
-  });
+  const replay = await readSessionStream(
+    filePath,
+    expectedProjectHash,
+    (rawLine, acc) => {
+      const trimmed = rawLine.trim();
+      const parsed =
+        trimmed !== '' ? parseLine(rawLine, acc.lineNumber, acc) : null;
+      return applyParsedEvent(parsed, acc, expectedProjectHash);
+    },
+  );
+  return verifyReplayMedia(replay, options);
+}
+
+async function verifyReplayMedia(
+  replay: ReplayResult,
+  options: ReplaySessionOptions,
+): Promise<ReplayResult> {
+  if (!replay.ok) {
+    return replay;
+  }
+  try {
+    const admissionContext = {
+      turnId: 'session-replay',
+      source: 'session-replay',
+      preserveLegacyMimeParameters: true,
+    };
+    const admission =
+      options.mediaStore === undefined
+        ? undefined
+        : new MediaAdmissionService(options.mediaStore);
+    const history =
+      admission === undefined
+        ? replay.history
+        : await admission.admitContents(replay.history, admissionContext);
+    try {
+      await verifyHistoryMedia(history, options.mediaStore, 'session-replay');
+    } catch (error) {
+      if (admission === undefined) throw error;
+      try {
+        await admission.releaseContents(history, admissionContext);
+      } catch (releaseError) {
+        throw new AggregateError(
+          [error, releaseError],
+          'Session replay media verification and owner release failed',
+        );
+      }
+      throw error;
+    }
+    await admission?.releaseContents(history, admissionContext);
+    return { ...replay, history };
+  } catch (error) {
+    return {
+      ok: false,
+      error: formatReplayDiagnostic(error),
+      warnings: replay.warnings,
+    };
+  }
 }
 
 function applyBoundedReplayLine(
@@ -846,10 +951,15 @@ export async function replaySessionThroughSequence(
   filePath: string,
   expectedProjectHash: string,
   maxSequence: number,
+  options: ReplaySessionOptions = {},
 ): Promise<ReplayResult> {
-  return readSessionStream(filePath, expectedProjectHash, (rawLine, acc) =>
-    applyBoundedReplayLine(rawLine, maxSequence, expectedProjectHash, acc),
+  const replay = await readSessionStream(
+    filePath,
+    expectedProjectHash,
+    (rawLine, acc) =>
+      applyBoundedReplayLine(rawLine, maxSequence, expectedProjectHash, acc),
   );
+  return verifyReplayMedia(replay, options);
 }
 
 /**

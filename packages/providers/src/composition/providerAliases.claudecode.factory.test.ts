@@ -52,6 +52,10 @@ import { AnthropicProvider } from '../anthropic/AnthropicProvider.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { ProviderAliasEntry } from './providerAliases.js';
 
+function configuredStaticModelIds(entry: ProviderAliasEntry): string[] {
+  return (entry.config.staticModels ?? []).map((model) => model.id);
+}
+
 // Literal accepted ordered static-model catalog from claudecode.config. Every
 // entry's id, contextWindow, and maxOutputTokens is asserted so any catalog
 // drift (retired models, geometry changes) is caught here.
@@ -135,9 +139,9 @@ describe('claudecode alias static models (@issue:2274)', () => {
     );
     expect(provider).not.toBeNull();
 
-    const models = await provider!.getModels();
+    const models = await provider.getModels();
 
-    const staticIds = (entry.config.staticModels ?? []).map((m) => m.id);
+    const staticIds = configuredStaticModelIds(entry);
     expect(models.map((m) => m.id)).toStrictEqual(staticIds);
   });
 
@@ -150,7 +154,7 @@ describe('claudecode alias static models (@issue:2274)', () => {
     );
     expect(provider).not.toBeNull();
 
-    const models = await provider!.getModels();
+    const models = await provider.getModels();
 
     const actualGeometry = models.map((m) => ({
       id: m.id,
@@ -171,7 +175,7 @@ describe('claudecode alias static models (@issue:2274)', () => {
       true,
     );
 
-    const models = await provider!.getModels();
+    const models = await provider.getModels();
     const ids = models.map((m) => m.id);
 
     expect(ids).toContain('claude-sonnet-4-20250514');
@@ -186,7 +190,7 @@ describe('claudecode alias static models (@issue:2274)', () => {
       true,
     );
 
-    const models = await provider!.getModels();
+    const models = await provider.getModels();
     const ids = models.map((m) => m.id);
 
     expect(ids).toContain('claude-fable-5-1');
@@ -203,7 +207,7 @@ describe('claudecode alias static models (@issue:2274)', () => {
       true,
     );
 
-    const models = await provider!.getModels();
+    const models = await provider.getModels();
     const ids = models.map((m) => m.id);
 
     expect(ids).not.toContain('claude-opus-4-1');
@@ -218,9 +222,9 @@ describe('claudecode alias static models (@issue:2274)', () => {
       true,
     );
 
-    expect(provider!.name).toBe('claudecode');
+    expect(provider.name).toBe('claudecode');
 
-    const models = await provider!.getModels();
+    const models = await provider.getModels();
     for (const model of models) {
       expect(model.provider).toBe('claudecode');
       expect(model.supportedToolFormats).toStrictEqual(['anthropic']);
@@ -247,7 +251,7 @@ describe('real alias binding/behavior: claudecode OAuth vs anthropic API-key (@i
     );
     expect(provider).toBeInstanceOf(AnthropicProvider);
 
-    const models = await provider!.getModels();
+    const models = await provider.getModels();
     const ids = models.map((m) => m.id);
 
     // Static catalog is served; the dynamic /models endpoint is never called.
@@ -277,7 +281,7 @@ describe('real alias binding/behavior: claudecode OAuth vs anthropic API-key (@i
     const apiKey = 'sk-test-anthropic-api-key';
     vi.spyOn(provider as never, 'getAuthToken').mockResolvedValue(apiKey);
 
-    const models = await provider!.getModels();
+    const models = await provider.getModels();
     const ids = models.map((m) => m.id);
 
     // The dynamic models endpoint was hit and its response mapped.

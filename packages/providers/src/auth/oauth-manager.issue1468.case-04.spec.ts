@@ -13,24 +13,22 @@ import {
   mockLoadProfile,
 } from './oauth-manager.issue1468.test-helpers.js';
 
+async function loadCaseFourProfile(profileName: string) {
+  if (profileName === 'foreground-profile') {
+    return {
+      provider: 'anthropic',
+      auth: { type: 'oauth', buckets: ['foreground-bucket'] },
+    };
+  }
+  throw new Error(`Unexpected profile lookup: ${profileName}`);
+}
+
 describe('Issue #1468 getProfileBuckets case 4', () => {
   it('does not fall back to foreground buckets when an explicit request profile cannot be loaded', async () => {
     const { tokenStore, manager } = createIssue1468Fixture();
 
     mockGetCurrentProfileName.mockReturnValue('foreground-profile');
-    mockLoadProfile.mockImplementation(async (profileName: string) => {
-      if (profileName === 'foreground-profile') {
-        return {
-          provider: 'anthropic',
-          auth: {
-            type: 'oauth',
-            buckets: ['foreground-bucket'],
-          },
-        };
-      }
-
-      throw new Error(`Unexpected profile lookup: ${profileName}`);
-    });
+    mockLoadProfile.mockImplementation(loadCaseFourProfile);
 
     const provider: OAuthProvider = {
       name: 'anthropic',

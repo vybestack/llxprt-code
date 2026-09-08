@@ -282,54 +282,73 @@ describe('P20 capability-gap integration adequacy (REQ-INT-001..004) @plan:PLAN-
   });
 
   it('PROP auth masked invariant: detailedStatus(openai) leaks no raw-secret field and no ≥20-char opaque string value', async () => {
-    built = await buildAgent(FIXTURE);
-    const agent = built.agent;
-    // A raw bearer token would leak either as a field literally named like a
-    // secret, or as a long opaque string value. The masked-only contract means
-    // neither appears in the public projection. The FakeProvider harness only
-    // registers the openai provider, so the property is driven over it.
-    const SECRET_FIELDS = new Set([
-      'token',
-      'accesstoken',
-      'refreshtoken',
-      'apikey',
-      'api_key',
-      'secret',
-      'password',
-    ]);
+    const {
+      pROPAuthMaskedInvariantDetailedStatusOpenaiLeaksNoRawSecretFieldAndProperty,
+      secretFields,
+      opaqueValues,
+    } =
+      await observePROPAuthMaskedInvariantDetailedStatusOpenaiLeaksNoRawSecretFieldAnd();
     await fc.assert(
-      fc.asyncProperty(fc.constantFrom('openai'), async (provider) => {
-        const detail = await agent.auth.detailedStatus(provider);
-        // Collect any leak signal by walking the projection WITHOUT nesting
-        // expects in conditionals (repo eslint forbids that). A raw bearer
-        // token leaks either as a secret-named field or as a ≥20-char opaque
-        // string value; the masked-only contract means neither appears.
-        const secretFields: string[] = [];
-        const opaqueValues: string[] = [];
-        const walk = (node: unknown): void => {
-          if (node !== null && typeof node === 'object') {
-            Object.entries(node as Record<string, unknown>).forEach(
-              ([k, v]) => {
-                if (SECRET_FIELDS.has(k.toLowerCase())) {
-                  secretFields.push(k);
-                }
-                if (
-                  typeof v === 'string' &&
-                  v.length >= 20 &&
-                  v.split(/\s/).join('').length === v.length &&
-                  !v.includes('*')
-                ) {
-                  opaqueValues.push(v);
-                }
-                walk(v);
-              },
-            );
-          }
-        };
-        walk(detail);
-        expect(secretFields).toStrictEqual([]);
-        expect(opaqueValues).toStrictEqual([]);
-      }),
+      pROPAuthMaskedInvariantDetailedStatusOpenaiLeaksNoRawSecretFieldAndProperty,
     );
+    expect(secretFields).toStrictEqual([]);
+    expect(opaqueValues).toStrictEqual([]);
   });
+
+  const observePROPAuthMaskedInvariantDetailedStatusOpenaiLeaksNoRawSecretFieldAnd =
+    async () => {
+      built = await buildAgent(FIXTURE);
+      const agent = built.agent;
+      // A raw bearer token would leak either as a field literally named like a
+      // secret, or as a long opaque string value. The masked-only contract means
+      // neither appears in the public projection. The FakeProvider harness only
+      // registers the openai provider, so the property is driven over it.
+      const SECRET_FIELDS = new Set([
+        'token',
+        'accesstoken',
+        'refreshtoken',
+        'apikey',
+        'api_key',
+        'secret',
+        'password',
+      ]);
+
+      const secretFields: string[] = [];
+      const opaqueValues: string[] = [];
+      const pROPAuthMaskedInvariantDetailedStatusOpenaiLeaksNoRawSecretFieldAndProperty =
+        fc.asyncProperty(fc.constantFrom('openai'), async (provider) => {
+          const detail = await agent.auth.detailedStatus(provider);
+          // Collect any leak signal by walking the projection WITHOUT nesting
+          // expects in conditionals (repo eslint forbids that). A raw bearer
+          // token leaks either as a secret-named field or as a ≥20-char opaque
+          // string value; the masked-only contract means neither appears.
+          const walk = (node: unknown): void => {
+            if (node !== null && typeof node === 'object') {
+              Object.entries(node as Record<string, unknown>).forEach(
+                ([k, v]) => {
+                  if (SECRET_FIELDS.has(k.toLowerCase())) {
+                    secretFields.push(k);
+                  }
+                  if (
+                    typeof v === 'string' &&
+                    v.length >= 20 &&
+                    v.split(/\s/).join('').length === v.length &&
+                    !v.includes('*')
+                  ) {
+                    opaqueValues.push(v);
+                  }
+                  walk(v);
+                },
+              );
+            }
+          };
+          walk(detail);
+          return secretFields.length === 0 && opaqueValues.length === 0;
+        });
+      return {
+        pROPAuthMaskedInvariantDetailedStatusOpenaiLeaksNoRawSecretFieldAndProperty,
+        secretFields,
+        opaqueValues,
+      };
+    };
 });

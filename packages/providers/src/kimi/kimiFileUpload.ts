@@ -7,9 +7,19 @@
 import type OpenAI from 'openai';
 import { toFile } from 'openai';
 import { createHash, createHmac } from 'node:crypto';
-import type { MediaBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  requireInlineMediaBlock,
+  type MediaBlock,
+  type ProviderFileReferenceMetadata,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { classifyMediaBlock } from '../utils/mediaUtils.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type {
+  ProviderFileIdentity,
+  ProviderFileLease,
+  ProviderFileLifecycle,
+  ProviderFilePolicy,
+} from '../providerFilePolicy.js';
 
 const logger = new DebugLogger('llxprt:kimi:fileUpload');
 
@@ -76,8 +86,8 @@ export function createBoundedCache<V>(maxSize: number): BoundedCache<V> {
 
 /**
  * Result of an upload attempt for a single media block.
- * On success `fileId` is populated; on failure `failed` is true and the
- * caller should fall back to the existing inline/placeholder behavior.
+ * On success `fileId` is populated. `failed` identifies blocks that were not
+ * uploadable; an attempted upload failure rejects the request.
  */
 export interface KimiFileUploadResult {
   block: MediaBlock;
@@ -103,7 +113,12 @@ const CACHE_KEY_CREDENTIAL_LABEL = 'llxprt-kimi-upload-cache-key';
  * stored or persisted. The complete payload is hashed so distinct files cannot
  * alias merely because their length and edges match.
  */
-function buildCacheKey(client: OpenAI, block: MediaBlock): string {
+function buildCacheKey(
+  client: OpenAI,
+  block: MediaBlock,
+  scopeKey: string,
+): string {
+  const inlineBlock = requireInlineMediaBlock(block);
   const hash = createHash('sha256');
   const credentialToken = createHmac('sha256', client.apiKey)
     .update(CACHE_KEY_CREDENTIAL_LABEL)
@@ -112,9 +127,11 @@ function buildCacheKey(client: OpenAI, block: MediaBlock): string {
   hash.update('\0');
   hash.update(credentialToken);
   hash.update('\0');
-  hash.update(block.mimeType);
+  hash.update(scopeKey);
   hash.update('\0');
-  hash.update(block.data);
+  hash.update(inlineBlock.mimeType);
+  hash.update('\0');
+  hash.update(inlineBlock.data);
   return hash.digest('hex');
 }
 
@@ -123,12 +140,13 @@ function buildCacheKey(client: OpenAI, block: MediaBlock): string {
  * binary Buffer, stripping any `data:...;base64,` prefix that may be present.
  */
 function decodeMediaToBuffer(block: MediaBlock): Buffer {
-  if (block.encoding === 'url') {
+  const inlineBlock = requireInlineMediaBlock(block);
+  if (inlineBlock.encoding === 'url') {
     throw new Error(
       "Cannot decode media block with encoding 'url' as base64 buffer",
     );
   }
-  const raw = block.data;
+  const raw = inlineBlock.data;
   if (raw.length === 0) {
     throw new Error('Media block data is empty');
   }
@@ -161,9 +179,7 @@ function resolveFilename(block: MediaBlock): string {
  *
  * - Reuses the already-instantiated stateless client; no separate HTTP client.
  * - De-duplicates uploads across turns via an in-memory content-hash cache.
- * - On per-block failure, marks the block as `failed` so the caller can fall
- *   back to the existing inline/placeholder behavior rather than aborting the
- *   whole request.
+ * - Rejects an attempted upload failure before provider request submission.
  *
  * @param client - The live OpenAI-compatible client (carries Kimi base URL/auth).
  * @param blocks - PDF media blocks to upload.
@@ -174,6 +190,20 @@ function resolveFilename(block: MediaBlock): string {
 export interface KimiUploadOptions {
   allowFileUpload?: boolean;
   allowVideo?: boolean;
+  scopeKey?: string;
+  lifecycle?: ProviderFileLifecycle;
+  policy?: ProviderFilePolicy;
+  identity?: ProviderFileIdentity;
+  scopeId?: string;
+  registerLease?: (lease: ProviderFileLease) => void;
+  persistReference?: (
+    contentId: string,
+    reference: ProviderFileReferenceMetadata,
+  ) => Promise<void>;
+  removePersistedReference?: (
+    contentId: string,
+    reference: ProviderFileReferenceMetadata,
+  ) => Promise<void>;
 }
 
 export function isKimiUploadable(
@@ -190,6 +220,257 @@ export function isKimiUploadable(
   );
 }
 
+async function holdLease(
+  lease: ProviderFileLease,
+  options: KimiUploadOptions,
+): Promise<void> {
+  if (options.registerLease === undefined) {
+    await lease.release();
+    return;
+  }
+  try {
+    options.registerLease(lease);
+  } catch (registrationError) {
+    try {
+      await lease.release();
+    } catch (releaseError) {
+      throw new AggregateError(
+        [registrationError, releaseError],
+        'Kimi provider file cleanup registration and lease release failed',
+      );
+    }
+    throw registrationError;
+  }
+}
+
+function matchingPersistedReference(
+  block: MediaBlock,
+  cacheKey: string,
+  options: KimiUploadOptions,
+): ProviderFileReferenceMetadata | undefined {
+  const policy = options.policy;
+  const identity = options.identity;
+  const scopeId = options.scopeId;
+  if (
+    policy?.mode !== 'enabled' ||
+    identity === undefined ||
+    scopeId === undefined
+  ) {
+    return undefined;
+  }
+  return requireInlineMediaBlock(block).providerFiles?.find((reference) =>
+    [
+      reference.cacheKey === cacheKey,
+      reference.provider === identity.provider,
+      reference.baseURL === identity.baseURL,
+      reference.credentialHash === identity.credentialHash,
+      reference.scope === policy.scope,
+      reference.scopeId === scopeId,
+      reference.deletionState === 'active',
+    ].every(Boolean),
+  );
+}
+
+async function acquireLifecycleReference(
+  block: MediaBlock,
+  cacheKey: string,
+  client: OpenAI,
+  options: KimiUploadOptions,
+): Promise<
+  { readonly fileId: string; readonly lease: ProviderFileLease } | undefined
+> {
+  if (
+    options.lifecycle === undefined ||
+    options.policy?.mode !== 'enabled' ||
+    options.identity === undefined ||
+    options.scopeId === undefined
+  ) {
+    return undefined;
+  }
+  const acquired = options.lifecycle.acquire({
+    cacheKey,
+    identity: options.identity,
+    scope: options.policy.scope,
+    scopeId: options.scopeId,
+  });
+  if (acquired !== undefined) {
+    return { fileId: acquired.reference.fileId, lease: acquired.lease };
+  }
+  const persisted = matchingPersistedReference(block, cacheKey, options);
+  if (persisted === undefined) return undefined;
+  const restored = await options.lifecycle.restore(
+    persisted,
+    cacheKey,
+    async (fileId) => {
+      await client.files.delete(fileId);
+    },
+    {
+      identity: options.identity,
+      policy: options.policy,
+      scopeId: options.scopeId,
+      removeBinding: createBindingRemoval(block, options),
+    },
+  );
+  return restored === undefined
+    ? undefined
+    : { fileId: restored.reference.fileId, lease: restored.lease };
+}
+
+type EnabledKimiLifecycleOptions = KimiUploadOptions & {
+  readonly lifecycle: ProviderFileLifecycle;
+  readonly policy: Extract<ProviderFilePolicy, { mode: 'enabled' }>;
+  readonly identity: ProviderFileIdentity;
+  readonly scopeId: string;
+};
+
+type UploadedKimiFile = Awaited<ReturnType<OpenAI['files']['create']>>;
+
+function hasLifecycleConfiguration(
+  options: KimiUploadOptions,
+): options is EnabledKimiLifecycleOptions {
+  return (
+    options.lifecycle !== undefined &&
+    options.policy?.mode === 'enabled' &&
+    options.identity !== undefined &&
+    options.scopeId !== undefined
+  );
+}
+
+function createBindingRemoval(
+  block: MediaBlock,
+  options: KimiUploadOptions,
+): ((reference: ProviderFileReferenceMetadata) => Promise<void>) | undefined {
+  const contentId = requireInlineMediaBlock(block).sourceContentId;
+  const removePersistedReference = options.removePersistedReference;
+  return contentId === undefined || removePersistedReference === undefined
+    ? undefined
+    : (reference) => removePersistedReference(contentId, reference);
+}
+
+async function rollbackUnretainedUpload(
+  client: OpenAI,
+  uploadedId: string,
+  retentionError: unknown,
+): Promise<never> {
+  try {
+    await client.files.delete(uploadedId);
+  } catch (deletionError) {
+    throw new AggregateError(
+      [retentionError, deletionError],
+      'Kimi provider file retention and rollback deletion failed',
+    );
+  }
+  throw retentionError;
+}
+
+async function retainUploadedFile(
+  client: OpenAI,
+  block: MediaBlock,
+  cacheKey: string,
+  uploaded: UploadedKimiFile,
+  cache: BoundedCache<string> | undefined,
+  options: KimiUploadOptions,
+): Promise<void> {
+  if (!hasLifecycleConfiguration(options)) {
+    cache?.set(cacheKey, uploaded.id);
+    return;
+  }
+  const retained = await options.lifecycle
+    .retain({
+      cacheKey,
+      fileId: uploaded.id,
+      bytes: uploaded.bytes,
+      identity: options.identity,
+      policy: options.policy,
+      scopeId: options.scopeId,
+      deleteRemote: async (fileId) => {
+        await client.files.delete(fileId);
+      },
+      removeBinding: createBindingRemoval(block, options),
+    })
+    .catch((error: unknown) =>
+      rollbackUnretainedUpload(client, uploaded.id, error),
+    );
+  try {
+    const contentId = requireInlineMediaBlock(block).sourceContentId;
+    if (contentId !== undefined && options.persistReference !== undefined) {
+      await options.persistReference(contentId, retained.reference);
+    }
+    await holdLease(retained.lease, options);
+  } catch (error) {
+    await retained.lease.release();
+    const rollback = await options.lifecycle.discard(retained.reference);
+    if (rollback.failed > 0 || rollback.deferred > 0) {
+      const snapshot = options.lifecycle.snapshot();
+      throw new AggregateError(
+        [
+          error,
+          new Error(
+            `Kimi retained provider file rollback failed for ${retained.reference.fileId}: ${snapshot.deletionFailures.map((failure) => failure.message).join('; ') || 'cleanup deferred'}`,
+          ),
+        ],
+        'Kimi provider file binding and rollback deletion failed',
+      );
+    }
+    throw error;
+  }
+}
+
+async function uploadKimiFile(
+  client: OpenAI,
+  block: MediaBlock,
+  cache: BoundedCache<string> | undefined,
+  options: KimiUploadOptions,
+): Promise<KimiFileUploadResult> {
+  if (!isKimiUploadable(block, options)) return { block, failed: true };
+  const category = classifyMediaBlock(block);
+  const cacheKey = buildCacheKey(
+    client,
+    block,
+    options.scopeKey ?? 'request-local',
+  );
+  const lifecycleReference = await acquireLifecycleReference(
+    block,
+    cacheKey,
+    client,
+    options,
+  );
+  if (lifecycleReference !== undefined) {
+    await holdLease(lifecycleReference.lease, options);
+    return { block, fileId: lifecycleReference.fileId, failed: false };
+  }
+  const cached = hasLifecycleConfiguration(options)
+    ? undefined
+    : cache?.get(cacheKey);
+  if (cached !== undefined) {
+    logger.debug(() => `Reusing cached Kimi file id ${cached} for block`);
+    return { block, fileId: cached, failed: false };
+  }
+
+  const filename = resolveFilename(block);
+  let uploaded: UploadedKimiFile;
+  try {
+    const file = await toFile(decodeMediaToBuffer(block), filename, {
+      type: block.mimeType,
+    });
+    const purpose =
+      category === 'video' ? KIMI_VIDEO_PURPOSE : KIMI_FILE_EXTRACT_PURPOSE;
+    uploaded = await client.files.create({ file, purpose });
+  } catch (error) {
+    throw new Error(
+      `Kimi file upload failed for ${filename} (${block.mimeType}): ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      { cause: error },
+    );
+  }
+  logger.debug(
+    () => `Uploaded Kimi file ${uploaded.id} (${uploaded.bytes} bytes)`,
+  );
+  await retainUploadedFile(client, block, cacheKey, uploaded, cache, options);
+  return { block, fileId: uploaded.id, failed: false };
+}
+
 export async function uploadKimiFiles(
   client: OpenAI,
   blocks: MediaBlock[],
@@ -197,49 +478,9 @@ export async function uploadKimiFiles(
   options: KimiUploadOptions = {},
 ): Promise<KimiFileUploadResult[]> {
   const results: KimiFileUploadResult[] = [];
-
-  // Uploads are sequential because Kimi applies Files API rate limits during
-  // peak periods. Preserving the input loop also preserves the result order.
   for (const block of blocks) {
-    const category = classifyMediaBlock(block);
-    if (!isKimiUploadable(block, options)) {
-      results.push({ block, failed: true });
-      continue;
-    }
-
-    const cacheKey = buildCacheKey(client, block);
-    const cached = cache?.get(cacheKey);
-    if (cached) {
-      logger.debug(() => `Reusing cached Kimi file id ${cached} for block`);
-      results.push({ block, fileId: cached, failed: false });
-    } else {
-      const filename = resolveFilename(block);
-      try {
-        const buffer = decodeMediaToBuffer(block);
-        const file = await toFile(buffer, filename, {
-          type: block.mimeType,
-        });
-
-        const purpose =
-          category === 'video' ? KIMI_VIDEO_PURPOSE : KIMI_FILE_EXTRACT_PURPOSE;
-        const uploaded = await client.files.create({ file, purpose });
-        logger.debug(
-          () => `Uploaded Kimi file ${uploaded.id} (${uploaded.bytes} bytes)`,
-        );
-        cache?.set(cacheKey, uploaded.id);
-        results.push({ block, fileId: uploaded.id, failed: false });
-      } catch (error) {
-        logger.warn(
-          () =>
-            `Kimi file upload failed for ${filename} (${block.mimeType}), falling back to inline behavior: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-        );
-        results.push({ block, failed: true });
-      }
-    }
+    results.push(await uploadKimiFile(client, block, cache, options));
   }
-
   return results;
 }
 

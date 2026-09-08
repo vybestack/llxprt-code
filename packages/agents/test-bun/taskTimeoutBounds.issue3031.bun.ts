@@ -20,6 +20,7 @@
 import { describe, it, expect } from 'bun:test';
 import { TaskTool } from '../src/tools/task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SubagentOrchestrator } from '../src/core/subagentOrchestrator.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
@@ -112,7 +113,7 @@ describe('Issue #3031 — task tool timeout ceiling semantics', () => {
         'task-default-timeout-seconds': 60,
         'task-max-timeout-seconds': 0.1,
       }),
-      { orchestratorFactory: () => orchestrator },
+      { messageBus: new MessageBus(), orchestratorFactory: () => orchestrator },
     );
 
     const invocation = tool.build({
@@ -143,7 +144,7 @@ describe('Issue #3031 — task tool timeout ceiling semantics', () => {
         'task-default-timeout-seconds': 60,
         'task-max-timeout-seconds': 0.1,
       }),
-      { orchestratorFactory: () => orchestrator },
+      { messageBus: new MessageBus(), orchestratorFactory: () => orchestrator },
     );
 
     const invocation = tool.build({
@@ -170,7 +171,7 @@ describe('Issue #3031 — task tool timeout ceiling semantics', () => {
         'task-default-timeout-seconds': 60,
         'task-max-timeout-seconds': 100,
       }),
-      { orchestratorFactory: () => orchestrator },
+      { messageBus: new MessageBus(), orchestratorFactory: () => orchestrator },
     );
 
     const invocation = tool.build({
@@ -196,7 +197,7 @@ describe('Issue #3031 — task tool timeout ceiling semantics', () => {
         'task-default-timeout-seconds': 60,
         'task-max-timeout-seconds': -1,
       }),
-      { orchestratorFactory: () => orchestrator },
+      { messageBus: new MessageBus(), orchestratorFactory: () => orchestrator },
     );
 
     const invocation = tool.build({
@@ -219,7 +220,7 @@ describe('Issue #3031 — task tool timeout ceiling semantics', () => {
         'task-default-timeout-seconds': 60,
         'task-max-timeout-seconds': 100,
       }),
-      { orchestratorFactory: () => orchestrator },
+      { messageBus: new MessageBus(), orchestratorFactory: () => orchestrator },
     );
     let error: unknown;
     try {
@@ -243,7 +244,7 @@ describe('Issue #3031 — task tool timeout ceiling semantics', () => {
         'task-default-timeout-seconds': 60,
         'task-max-timeout-seconds': 100,
       }),
-      { orchestratorFactory: () => orchestrator },
+      { messageBus: new MessageBus(), orchestratorFactory: () => orchestrator },
     );
     expect(() =>
       tool.build({
@@ -261,7 +262,7 @@ describe('Issue #3031 — task tool timeout ceiling semantics', () => {
         'task-default-timeout-seconds': 60,
         'task-max-timeout-seconds': 100,
       }),
-      { orchestratorFactory: () => orchestrator },
+      { messageBus: new MessageBus(), orchestratorFactory: () => orchestrator },
     );
     expect(() =>
       tool.build({

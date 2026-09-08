@@ -10,7 +10,7 @@ import type { ConfigParameters } from './config.js';
 import { Config, ApprovalMode } from './config.js';
 import type { HookDefinition } from '../hooks/types.js';
 import { HookType, HookEventName } from '../hooks/types.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import { initializeTestConfig } from '../test-utils/config.js';
 import {
@@ -297,7 +297,7 @@ describe('Config JIT context', () => {
 
   it('should return true by default when JIT context setting is not provided', () => {
     const config = new Config(baseParams);
-    expect(config.getJitContextEnabled()).toBe(true);
+    expect(config.isJitContextEnabled()).toBe(true);
   });
 
   it('should return the configured JIT context setting value', () => {
@@ -305,31 +305,37 @@ describe('Config JIT context', () => {
       ...baseParams,
       jitContextEnabled: true,
     });
-    expect(configEnabled.getJitContextEnabled()).toBe(true);
+    expect(configEnabled.isJitContextEnabled()).toBe(true);
 
     const configDisabled = new Config({
       ...baseParams,
       jitContextEnabled: false,
     });
-    expect(configDisabled.getJitContextEnabled()).toBe(false);
+    expect(configDisabled.isJitContextEnabled()).toBe(false);
   });
 
-  it('should respect the settings service value when available', async () => {
-    const mockSettingsService = {
-      get: vi.fn().mockReturnValue(false),
-      set: vi.fn(),
-      getAll: vi.fn(),
-      has: vi.fn(),
-    } as unknown as SettingsService;
+  // A `jitContextEnabled` settings-service key is inert: no production code
+  // writes it, and the predicate resolves only from the constructor-assigned
+  // field. Both directions are covered so the assertion cannot pass merely
+  // because the settings value happens to agree (issue #3135).
+  it.each([
+    { constructorValue: true, settingsValue: false },
+    { constructorValue: false, settingsValue: true },
+  ])(
+    'resolves to the constructor value $constructorValue while the settings service holds $settingsValue',
+    ({ constructorValue, settingsValue }) => {
+      const settingsService = new SettingsService();
+      settingsService.set('jitContextEnabled', settingsValue);
 
-    const config = new Config({
-      ...baseParams,
-      settingsService: mockSettingsService,
-    });
+      const config = new Config({
+        ...baseParams,
+        jitContextEnabled: constructorValue,
+        settingsService,
+      });
 
-    expect(config.getJitContextEnabled()).toBe(false);
-    expect(mockSettingsService.get).toHaveBeenCalledWith('jitContextEnabled');
-  });
+      expect(config.isJitContextEnabled()).toBe(constructorValue);
+    },
+  );
 
   describe('getJitMemoryForPath', () => {
     beforeEach(() => {

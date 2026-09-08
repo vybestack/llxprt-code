@@ -445,7 +445,7 @@ describe('useKeybindings', () => {
     renderUseKeybindings(harness, {
       ideContext: {
         getIdeMode: () => true,
-        ideContextState: { id: 'ctx' },
+        ideContextState: { workspaceState: { isTrusted: true } },
       },
     });
 
@@ -463,6 +463,32 @@ describe('useKeybindings', () => {
     });
 
     expect(harness.handleSlashCommand).toHaveBeenCalledWith('/ide status');
+  });
+
+  it('does not run /ide status command when IDE context is absent', () => {
+    const harness = createHarness();
+
+    renderUseKeybindings(harness, {
+      ideContext: {
+        getIdeMode: () => true,
+        ideContextState: undefined,
+      },
+    });
+
+    const handler = getRegisteredHandler();
+
+    act(() => {
+      handler({
+        ctrl: true,
+        meta: false,
+        shift: false,
+        paste: false,
+        name: 'g',
+        sequence: 'g',
+      } as Key);
+    });
+
+    expect(harness.handleSlashCommand).not.toHaveBeenCalledWith('/ide status');
   });
 
   describe('toggle keybindings regression', () => {

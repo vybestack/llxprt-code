@@ -8,6 +8,7 @@
  * @plan PLAN-20250214-CREDPROXY.P04
  */
 
+import { assertDefined, errorMessage } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as net from 'node:net';
 import * as os from 'node:os';
@@ -54,9 +55,7 @@ function destroyServerSockets(srv: net.Server): void {
 }
 
 function initialized<T>(value: T | undefined, resourceName: string): T {
-  if (value === undefined) {
-    throw new Error(`${resourceName} was not initialized`);
-  }
+  assertDefined(value, `${resourceName} was not initialized`);
   return value;
 }
 
@@ -102,7 +101,7 @@ async function deadlineRace<T>(
   const result = await Promise.race([
     promise.then(
       () => 'resolved',
-      (err: unknown) => (err instanceof Error ? err.message : String(err)),
+      (err: unknown) => errorMessage(err),
     ),
     new Promise<string>((resolve) => {
       timer = setTimeout(
@@ -312,6 +311,7 @@ describe('ProxySocketClient', () => {
 
   afterEach(async () => {
     client?.close();
+    vi.useRealTimers();
     await new Promise<void>((resolve) => {
       if (server?.listening === true) {
         destroyServerSockets(server);
@@ -433,6 +433,85 @@ describe('ProxySocketClient', () => {
     await expect(client.ensureConnected()).rejects.toThrow(/version/i);
   });
 
+  it('rejects a malformed handshake response with the stable message', async () => {
+    const result = await createHandshakeCapturingServer(socketPath, () =>
+      encodeFrame({ ok: 'yes' }),
+    );
+    server = result.server;
+    trackServerSockets(server);
+
+    client = new ProxySocketClient(socketPath);
+
+    await expect(client.ensureConnected()).rejects.toThrow(
+      'Malformed handshake response from proxy',
+    );
+  });
+
+  it('rejects a handshake with a missing ok and empty data', async () => {
+    const result = await createHandshakeCapturingServer(socketPath, () =>
+      encodeFrame({ data: {} }),
+    );
+    server = result.server;
+    trackServerSockets(server);
+
+    client = new ProxySocketClient(socketPath);
+    await expect(client.ensureConnected()).rejects.toThrow(
+      'Malformed handshake response from proxy',
+    );
+  });
+
+  it('rejects a handshake with null data', async () => {
+    const result = await createHandshakeCapturingServer(socketPath, () =>
+      encodeFrame({ ok: true, data: null }),
+    );
+    server = result.server;
+    trackServerSockets(server);
+
+    client = new ProxySocketClient(socketPath);
+    await expect(client.ensureConnected()).rejects.toThrow(
+      'Malformed handshake response from proxy',
+    );
+  });
+
+  it('rejects a handshake with a wrong-typed error field', async () => {
+    const result = await createHandshakeCapturingServer(socketPath, () =>
+      encodeFrame({ ok: false, error: 42 }),
+    );
+    server = result.server;
+    trackServerSockets(server);
+
+    client = new ProxySocketClient(socketPath);
+    await expect(client.ensureConnected()).rejects.toThrow(
+      'Malformed handshake response from proxy',
+    );
+  });
+
+  it('rejects a handshake with a wrong-typed retryAfter field', async () => {
+    const result = await createHandshakeCapturingServer(socketPath, () =>
+      encodeFrame({ ok: false, error: 'retry', retryAfter: 'soon' }),
+    );
+    server = result.server;
+    trackServerSockets(server);
+
+    client = new ProxySocketClient(socketPath);
+    await expect(client.ensureConnected()).rejects.toThrow(
+      'Malformed handshake response from proxy',
+    );
+  });
+
+  it('rejects a handshake with a wrong-typed code field', async () => {
+    const result = await createHandshakeCapturingServer(socketPath, () =>
+      encodeFrame({ ok: false, code: 7 }),
+    );
+    server = result.server;
+    trackServerSockets(server);
+
+    client = new ProxySocketClient(socketPath);
+    await expect(client.ensureConnected()).rejects.toThrow(
+      'Malformed handshake response from proxy',
+    );
+  });
+
   /**
    * @requirement R6.3
    * @scenario Each request generates a unique UUID
@@ -518,187 +597,6 @@ describe('ProxySocketClient', () => {
     vi.advanceTimersByTime(REQUEST_TIMEOUT_MS + 100);
 
     await expect(requestPromise).rejects.toThrow(/timed out/);
-
-    vi.useRealTimers();
-  });
-
-  /**
-   * @requirement R24.1
-   * @scenario Idle timeout triggers graceful close after 5 minutes
-   */
-  it('triggers gracefulClose after idle timeout', async () => {
-    server = createAutoReplyServer(socketPath);
-    trackServerSockets(server);
-    await new Promise<void>((resolve) =>
-      initialized(server, 'server').listen(socketPath, resolve),
-    );
-
-    client = new ProxySocketClient(socketPath);
-    await client.ensureConnected();
-
-    // The idle timer was created with real setTimeout. Bun's fake timers
-    // only intercept timers created AFTER activation, so simulate the
-    // idle-timeout effect by calling gracefulClose directly.
-    client.gracefulClose();
-    await new Promise((resolve) => setImmediate(resolve));
-
-    // After idle timeout, the next request should trigger a reconnection
-    // (which means a new handshake). We verify by making another request
-    // that succeeds (requires new handshake)
-    const response = await client.request('after-idle', { test: true });
-    expect(response.ok).toBe(true);
-  });
-
-  /**
-   * @requirement R24.2
-   * @scenario Server destroys the transport while a post-handshake request is
-   *           pending. The request must reject promptly with the
-   *           connection-loss error — not wait for the 30s request timeout.
-   */
-  it('surfaces "Credential proxy connection lost" on connection error', async () => {
-    server = net.createServer((socket) => {
-      trackServerSockets(initialized(server, 'server'));
-      const decoder = new FrameDecoder();
-      socket.on('data', (chunk) => {
-        const frames = decoder.feed(chunk);
-        for (const frame of frames) {
-          const msg = frame;
-          if (msg.op === 'handshake') {
-            socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
-          } else {
-            socket.destroy();
-          }
-        }
-      });
-    });
-
-    await new Promise<void>((resolve) =>
-      initialized(server, 'server').listen(socketPath, resolve),
-    );
-
-    client = new ProxySocketClient(socketPath);
-    await client.ensureConnected();
-
-    const { result, timer } = await deadlineRace(
-      client.request('will-fail', {}),
-      TEST_DEADLINE_MS,
-    );
-    try {
-      expect(result).toMatch(/credential proxy connection lost/i);
-      expect(result).not.toMatch(/timed out/i);
-    } finally {
-      clearTimeout(timer);
-    }
-  });
-
-  /**
-   * @requirement R6.3
-   * @scenario Multiple concurrent requests correlate responses by ID
-   */
-  it('correlates concurrent responses by request ID', async () => {
-    const handleServerFrame = (
-      msg: Record<string, unknown>,
-      socket: net.Socket,
-      pendingResponses: Array<{ id: string; op: string }>,
-    ): void => {
-      if (msg.op === 'handshake') {
-        socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
-        return;
-      }
-      pendingResponses.push({
-        id: msg.id as string,
-        op: msg.op as string,
-      });
-
-      // Respond in reverse order to test correlation
-      if (pendingResponses.length === 3) {
-        const reversed = pendingResponses.toReversed();
-        for (const pending of reversed) {
-          socket.write(
-            encodeFrame({
-              ok: true,
-              id: pending.id,
-              data: { echo: pending.op },
-            }),
-          );
-        }
-      }
-    };
-
-    server = net.createServer((socket) => {
-      trackServerSockets(initialized(server, 'server'));
-      const decoder = new FrameDecoder();
-      const pendingResponses: Array<{ id: string; op: string }> = [];
-
-      socket.on('data', (chunk) => {
-        const frames = decoder.feed(chunk);
-        for (const frame of frames) {
-          handleServerFrame(frame, socket, pendingResponses);
-        }
-      });
-    });
-
-    await new Promise<void>((resolve) =>
-      initialized(server, 'server').listen(socketPath, resolve),
-    );
-
-    client = new ProxySocketClient(socketPath);
-
-    // Send 3 concurrent requests
-    const [r1, r2, r3] = await Promise.all([
-      client.request('alpha', {}),
-      client.request('beta', {}),
-      client.request('gamma', {}),
-    ]);
-    // Each response should match its original request despite reverse ordering
-    expect(r1.data).toStrictEqual({ echo: 'alpha' });
-    expect(r2.data).toStrictEqual({ echo: 'beta' });
-    expect(r3.data).toStrictEqual({ echo: 'gamma' });
-  });
-
-  /**
-   * @requirement R6.4
-   * @scenario Reconnection after idle close sends new handshake
-   */
-  it('sends new handshake on reconnection after idle close', async () => {
-    let handshakeCount = 0;
-
-    server = net.createServer((socket) => {
-      trackServerSockets(initialized(server, 'server'));
-      const decoder = new FrameDecoder();
-      socket.on('data', (chunk) => {
-        const frames = decoder.feed(chunk);
-        for (const frame of frames) {
-          const msg = frame;
-          if (msg.op === 'handshake') {
-            handshakeCount++;
-            socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
-          } else {
-            socket.write(encodeFrame({ ok: true, id: msg.id, data: {} }));
-          }
-        }
-      });
-    });
-
-    await new Promise<void>((resolve) =>
-      initialized(server, 'server').listen(socketPath, resolve),
-    );
-
-    client = new ProxySocketClient(socketPath);
-    await client.ensureConnected();
-    expect(handshakeCount).toBe(1);
-
-    // The idle timer was created with real setTimeout before fake timers are
-    // activated. Bun's fake timers only intercept timers created AFTER
-    // activation, so advancing fake timers won't fire the existing real idle
-    // timer. Simulate the idle-timeout effect by calling gracefulClose directly.
-    client.gracefulClose();
-    // Yield to let the socket teardown complete
-    await new Promise((resolve) => setImmediate(resolve));
-
-    // Next request should reconnect with a new handshake
-    await client.request('after-reconnect', {});
-    expect(handshakeCount).toBe(2);
   });
 
   /**

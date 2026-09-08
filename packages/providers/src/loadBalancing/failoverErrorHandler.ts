@@ -42,7 +42,7 @@ export function handleFailoverError(
   maxAttempts: number,
   settings: FailoverSettings,
   errors: Array<{ profile: string; error: Error }>,
-  chunksYielded: boolean,
+  requestCommitted: boolean,
   currentIndex: number,
   numProfiles: number,
   requestOwner: symbol,
@@ -54,7 +54,7 @@ export function handleFailoverError(
   const normalizedError =
     error instanceof Error ? error : new Error(String(error));
 
-  if (chunksYielded) {
+  if (requestCommitted) {
     ctx.logger.debug(
       () =>
         `[LB:failover] ${subProfile.name} failed after yielding chunks, aborting stream`,

@@ -109,14 +109,22 @@ describe('subagentRun characterization: isFatalToolError', () => {
     expect(isFatalToolError(ToolErrorType.VALIDATION_ERROR)).toBe(false);
   });
   it('PROPERTY: only TOOL_DISABLED and TOOL_NOT_REGISTERED are fatal', () => {
-    const allTypes = Object.values(ToolErrorType);
-    for (const t of allTypes) {
-      const expected =
-        t === ToolErrorType.TOOL_DISABLED ||
-        t === ToolErrorType.TOOL_NOT_REGISTERED;
-      expect(isFatalToolError(t)).toBe(expected);
-    }
+    const mismatches = observeFatalToolErrorMismatches();
+    expect(mismatches).toStrictEqual([]);
   });
+
+  const observeFatalToolErrorMismatches = () => {
+    const mismatches: ToolErrorType[] = [];
+    for (const errorType of Object.values(ToolErrorType)) {
+      const expected =
+        errorType === ToolErrorType.TOOL_DISABLED ||
+        errorType === ToolErrorType.TOOL_NOT_REGISTERED;
+      if (isFatalToolError(errorType) !== expected) {
+        mismatches.push(errorType);
+      }
+    }
+    return mismatches;
+  };
 });
 
 // ─── extractToolDetail + buildToolUnavailableMessage ─────────────────────────

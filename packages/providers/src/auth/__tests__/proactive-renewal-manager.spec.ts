@@ -51,6 +51,28 @@ function createMockProvider(name: string): OAuthProvider {
   };
 }
 
+function findTestProvider(
+  provider: OAuthProvider,
+  name: string,
+): OAuthProvider | undefined {
+  return name === 'test-provider' ? provider : undefined;
+}
+
+function restoreCredentialSocket(originalValue: string | undefined): void {
+  if (originalValue === undefined) {
+    delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+  } else {
+    process.env.LLXPRT_CREDENTIAL_SOCKET = originalValue;
+  }
+}
+
+async function getConfiguredToken(
+  tokens: ReadonlyMap<string, OAuthToken>,
+  bucket: string | undefined,
+): Promise<OAuthToken | null> {
+  return tokens.get(bucket ?? '') ?? null;
+}
+
 function createMockTokenStore(): TokenStore {
   return {
     getToken: vi.fn().mockResolvedValue(null),
@@ -162,18 +184,14 @@ describe('ProactiveRenewalManager', () => {
         vi.advanceTimersByTime(600 * 1000);
         expect(provider.refreshToken).not.toHaveBeenCalled();
       } finally {
-        if (originalEnv === undefined) {
-          delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-        } else {
-          process.env.LLXPRT_CREDENTIAL_SOCKET = originalEnv;
-        }
+        restoreCredentialSocket(originalEnv);
       }
     });
 
     it('should skip when OAuth is disabled for the provider', () => {
       const disabledManager = new ProactiveRenewalManager(
         tokenStore,
-        (name: string) => (name === 'test-provider' ? provider : undefined),
+        findTestProvider.bind(undefined, provider),
         () => false,
       );
 
@@ -314,7 +332,7 @@ describe('ProactiveRenewalManager', () => {
     it('should clear renewal and return when OAuth disabled', async () => {
       const disabledManager = new ProactiveRenewalManager(
         tokenStore,
-        (name: string) => (name === 'test-provider' ? provider : undefined),
+        findTestProvider.bind(undefined, provider),
         () => false,
       );
 
@@ -457,13 +475,15 @@ describe('ProactiveRenewalManager', () => {
         access_token: 'token-2',
       };
 
+      const tokens = new Map([
+        ['bucket1', token1],
+        ['bucket2', token2],
+      ]);
       (
         tokenStore.getToken as Mock<typeof tokenStore.getToken>
-      ).mockImplementation(async (_providerName, bucket) => {
-        if (bucket === 'bucket1') return token1;
-        if (bucket === 'bucket2') return token2;
-        return null;
-      });
+      ).mockImplementation((_providerName, bucket) =>
+        getConfiguredToken(tokens, bucket),
+      );
 
       manager.scheduleProactiveRenewal('test-provider', 'bucket1', token1);
       manager.scheduleProactiveRenewal('test-provider', 'bucket2', token2);
@@ -520,13 +540,15 @@ describe('ProactiveRenewalManager', () => {
       const tokenBucket1 = createMockToken(nowSec + 600);
       const tokenBucket2 = createMockToken(nowSec + 600);
 
+      const tokens = new Map([
+        ['bucket1', tokenBucket1],
+        ['bucket2', tokenBucket2],
+      ]);
       (
         tokenStore.getToken as Mock<typeof tokenStore.getToken>
-      ).mockImplementation(async (_providerName, bucket) => {
-        if (bucket === 'bucket1') return tokenBucket1;
-        if (bucket === 'bucket2') return tokenBucket2;
-        return null;
-      });
+      ).mockImplementation((_providerName, bucket) =>
+        getConfiguredToken(tokens, bucket),
+      );
 
       await manager.configureProactiveRenewalsForProfile({
         provider: 'test-provider',
@@ -568,7 +590,7 @@ describe('ProactiveRenewalManager', () => {
     it('should not schedule for disabled providers', async () => {
       const disabledManager = new ProactiveRenewalManager(
         tokenStore,
-        (name: string) => (name === 'test-provider' ? provider : undefined),
+        findTestProvider.bind(undefined, provider),
         () => false,
       );
 

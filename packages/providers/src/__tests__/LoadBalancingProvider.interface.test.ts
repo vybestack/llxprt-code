@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import { ProviderManager } from '../ProviderManager.js';
@@ -34,10 +35,10 @@ describe('LoadBalancingProvider', () => {
 
   describe('IProvider interface compliance', () => {
     it('should implement IProvider interface with required name property', () => {
-      expect(
+      assertDefined(
         LoadBalancingProvider,
         'LoadBalancingProvider class not found - implement it first',
-      ).toBeDefined();
+      );
 
       const lbConfig: LoadBalancingProviderConfig = {
         profileName: 'test-lb-profile',
@@ -63,10 +64,10 @@ describe('LoadBalancingProvider', () => {
     });
 
     it('should have getModels method that returns a Promise', () => {
-      expect(
+      assertDefined(
         LoadBalancingProvider,
         'LoadBalancingProvider class not found',
-      ).toBeDefined();
+      );
 
       const lbConfig: LoadBalancingProviderConfig = {
         profileName: 'test-lb-profile',
@@ -89,10 +90,10 @@ describe('LoadBalancingProvider', () => {
     });
 
     it('should have generateChatCompletion method that returns AsyncIterableIterator', () => {
-      expect(
+      assertDefined(
         LoadBalancingProvider,
         'LoadBalancingProvider class not found',
-      ).toBeDefined();
+      );
 
       const lbConfig: LoadBalancingProviderConfig = {
         profileName: 'test-lb-profile',
@@ -112,10 +113,10 @@ describe('LoadBalancingProvider', () => {
     });
 
     it('should have getDefaultModel method that returns a string', () => {
-      expect(
+      assertDefined(
         LoadBalancingProvider,
         'LoadBalancingProvider class not found',
-      ).toBeDefined();
+      );
 
       const lbConfig: LoadBalancingProviderConfig = {
         profileName: 'test-lb-profile',
@@ -209,10 +210,6 @@ describe('LoadBalancingProvider', () => {
           this.calls += 1;
           yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
         },
-        getServerTools: () => [],
-        invokeServerTool: async () => {
-          throw new Error('unexpected server tool invocation');
-        },
       };
       providerManager.registerProvider(delegateProvider);
       const provider = new LoadBalancingProvider(
@@ -248,62 +245,13 @@ describe('LoadBalancingProvider', () => {
       await expect(iterator.next()).rejects.toThrow(/context limit exceeded/);
       expect(delegateProvider.calls).toBe(0);
     });
-
-    it('should have getServerTools method that returns an array', () => {
-      expect(
-        LoadBalancingProvider,
-        'LoadBalancingProvider class not found',
-      ).toBeDefined();
-
-      const lbConfig: LoadBalancingProviderConfig = {
-        profileName: 'test-lb-profile',
-        strategy: 'round-robin',
-        subProfiles: [
-          {
-            name: 'sub-profile-1',
-            providerName: 'gemini',
-          },
-        ],
-      };
-
-      const provider = new LoadBalancingProvider(lbConfig, providerManager);
-
-      expect(provider).toHaveProperty('getServerTools');
-      expect(typeof provider.getServerTools).toBe('function');
-
-      const result = provider.getServerTools();
-      expect(Array.isArray(result)).toBe(true);
-    });
-
-    it('should have invokeServerTool method', () => {
-      expect(
-        LoadBalancingProvider,
-        'LoadBalancingProvider class not found',
-      ).toBeDefined();
-
-      const lbConfig: LoadBalancingProviderConfig = {
-        profileName: 'test-lb-profile',
-        strategy: 'round-robin',
-        subProfiles: [
-          {
-            name: 'sub-profile-1',
-            providerName: 'gemini',
-          },
-        ],
-      };
-
-      const provider = new LoadBalancingProvider(lbConfig, providerManager);
-
-      expect(provider).toHaveProperty('invokeServerTool');
-      expect(typeof provider.invokeServerTool).toBe('function');
-    });
   });
   describe('constructor configuration acceptance', () => {
     it('should accept array of sub-profile configurations', () => {
-      expect(
+      assertDefined(
         LoadBalancingProvider,
         'LoadBalancingProvider class not found',
-      ).toBeDefined();
+      );
 
       const lbConfig: LoadBalancingProviderConfig = {
         profileName: 'multi-sub-profile',
@@ -329,10 +277,10 @@ describe('LoadBalancingProvider', () => {
     });
 
     it('should accept sub-profiles with baseURL configuration', () => {
-      expect(
+      assertDefined(
         LoadBalancingProvider,
         'LoadBalancingProvider class not found',
-      ).toBeDefined();
+      );
 
       const lbConfig: LoadBalancingProviderConfig = {
         profileName: 'multi-endpoint-profile',
@@ -359,10 +307,10 @@ describe('LoadBalancingProvider', () => {
     });
 
     it('should accept sub-profiles with authToken configuration', () => {
-      expect(
+      assertDefined(
         LoadBalancingProvider,
         'LoadBalancingProvider class not found',
-      ).toBeDefined();
+      );
 
       const lbConfig: LoadBalancingProviderConfig = {
         profileName: 'multi-auth-profile',
@@ -389,10 +337,10 @@ describe('LoadBalancingProvider', () => {
     });
 
     it('should accept profileName in configuration', () => {
-      expect(
+      assertDefined(
         LoadBalancingProvider,
         'LoadBalancingProvider class not found',
-      ).toBeDefined();
+      );
 
       const profileName = 'my-custom-load-balancer';
       const lbConfig: LoadBalancingProviderConfig = {
@@ -413,10 +361,10 @@ describe('LoadBalancingProvider', () => {
     });
 
     it('should accept strategy configuration (round-robin)', () => {
-      expect(
+      assertDefined(
         LoadBalancingProvider,
         'LoadBalancingProvider class not found',
-      ).toBeDefined();
+      );
 
       const lbConfig: LoadBalancingProviderConfig = {
         profileName: 'strategy-test',
@@ -437,10 +385,10 @@ describe('LoadBalancingProvider', () => {
   });
   describe('ProviderManager dependency injection', () => {
     it('should accept ProviderManager in constructor', () => {
-      expect(
+      assertDefined(
         LoadBalancingProvider,
         'LoadBalancingProvider class not found',
-      ).toBeDefined();
+      );
 
       const lbConfig: LoadBalancingProviderConfig = {
         profileName: 'dependency-test',
@@ -460,10 +408,10 @@ describe('LoadBalancingProvider', () => {
     });
 
     it('should require ProviderManager dependency (not optional)', () => {
-      expect(
+      assertDefined(
         LoadBalancingProvider,
         'LoadBalancingProvider class not found',
-      ).toBeDefined();
+      );
 
       const lbConfig: LoadBalancingProviderConfig = {
         profileName: 'dependency-required-test',
@@ -488,10 +436,10 @@ describe('LoadBalancingProvider', () => {
   });
   describe('provider name exposure', () => {
     it('should expose provider name as "load-balancer"', () => {
-      expect(
+      assertDefined(
         LoadBalancingProvider,
         'LoadBalancingProvider class not found',
-      ).toBeDefined();
+      );
 
       const lbConfig: LoadBalancingProviderConfig = {
         profileName: 'name-test',
@@ -510,10 +458,10 @@ describe('LoadBalancingProvider', () => {
     });
 
     it('should have consistent name across multiple instances', () => {
-      expect(
+      assertDefined(
         LoadBalancingProvider,
         'LoadBalancingProvider class not found',
-      ).toBeDefined();
+      );
 
       const config1: LoadBalancingProviderConfig = {
         profileName: 'instance-1',
@@ -537,10 +485,10 @@ describe('LoadBalancingProvider', () => {
   });
   describe('configuration validation', () => {
     it('should throw error if subProfiles array is empty', () => {
-      expect(
+      assertDefined(
         LoadBalancingProvider,
         'LoadBalancingProvider class not found',
-      ).toBeDefined();
+      );
 
       const lbConfig: LoadBalancingProviderConfig = {
         profileName: 'empty-subprofiles',
@@ -554,10 +502,10 @@ describe('LoadBalancingProvider', () => {
     });
 
     it('should throw error if subProfile lacks required name field', () => {
-      expect(
+      assertDefined(
         LoadBalancingProvider,
         'LoadBalancingProvider class not found',
-      ).toBeDefined();
+      );
 
       const lbConfig = {
         profileName: 'invalid-subprofile',
@@ -576,10 +524,10 @@ describe('LoadBalancingProvider', () => {
     });
 
     it('should throw error if subProfile lacks required providerName field', () => {
-      expect(
+      assertDefined(
         LoadBalancingProvider,
         'LoadBalancingProvider class not found',
-      ).toBeDefined();
+      );
 
       const lbConfig = {
         profileName: 'invalid-subprofile',
@@ -598,10 +546,10 @@ describe('LoadBalancingProvider', () => {
     });
 
     it('should accept minimal valid configuration', () => {
-      expect(
+      assertDefined(
         LoadBalancingProvider,
         'LoadBalancingProvider class not found',
-      ).toBeDefined();
+      );
 
       const lbConfig: LoadBalancingProviderConfig = {
         profileName: 'minimal-config',
@@ -622,10 +570,10 @@ describe('LoadBalancingProvider', () => {
   });
   describe('type safety', () => {
     it('should maintain proper TypeScript types for config', () => {
-      expect(
+      assertDefined(
         LoadBalancingProvider,
         'LoadBalancingProvider class not found',
-      ).toBeDefined();
+      );
 
       const lbConfig: LoadBalancingProviderConfig = {
         profileName: 'type-test',
@@ -649,10 +597,10 @@ describe('LoadBalancingProvider', () => {
     });
 
     it('should not accept invalid strategy values', () => {
-      expect(
+      assertDefined(
         LoadBalancingProvider,
         'LoadBalancingProvider class not found',
-      ).toBeDefined();
+      );
 
       // TypeScript should prevent this at compile time
       // We test runtime behavior here

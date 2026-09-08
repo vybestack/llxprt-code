@@ -63,18 +63,7 @@ export async function processKimiMedia(
     return { contents, fileReferenceText: '' };
   }
 
-  let uploadResults: Awaited<ReturnType<typeof uploadKimiFiles>>;
-  try {
-    uploadResults = await uploadKimiFiles(client, blocks, cache, options);
-  } catch (error) {
-    logger.warn(
-      () =>
-        `Kimi media upload unexpectedly rejected, falling back to inline: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-    );
-    return { contents, fileReferenceText: '' };
-  }
+  const uploadResults = await uploadKimiFiles(client, blocks, cache, options);
 
   const pdfFileIds: string[] = [];
   const replacements = new Map<MediaBlock, ContentBlock>();

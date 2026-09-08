@@ -14,7 +14,7 @@
  *
  * 2. **Dependency-manifest allowlist** — the exact workspace directories and
  *    version specifiers that may declare `@google/genai` as a dependency.
- *    The root packaging bridge and the core/providers enclaves are required;
+ *    The root packaging bridge and the providers enclave are required;
  *    every other workspace is forbidden.
  *
  * 3. **Gemini-name export allowlist** — exported identifiers containing
@@ -45,14 +45,61 @@ export const GENAI_IMPORT_ENCLAVES: readonly ImportEnclave[] = [
   {
     prefix: 'packages/providers/src/gemini/',
     justification:
-      'Gemini provider implementation — needs the SDK for API calls.',
-  },
-  {
-    prefix: 'packages/core/src/code_assist/',
-    justification:
-      'Code-Assist back-end — needs the SDK for OAuth + API calls.',
+      'Gemini provider implementation — owns the Gemini wire types and the ' +
+      'Gemini-named exports. No longer imports an SDK; the dependency ' +
+      'allowlist below is empty.',
   },
 ];
+
+// ─── 1b. Sanctioned dynamic module loaders ──────────────────────────────────
+
+/**
+ * A file permitted to call `import()` with a specifier that is only known at
+ * runtime.
+ *
+ * The computed-specifier ban exists so a genai import cannot hide behind a
+ * value the scanner cannot read. A module loader that resolves a
+ * user-installed package is the one legitimate case: the specifier is a
+ * parameter by definition, so no formulation of it can be a literal.
+ *
+ * This is NOT an enclave. A file listed here is still scanned for genai
+ * imports in full, and the guard additionally verifies it contains no
+ * `@google/` reference of any kind (see `assertLoaderIsGenaiFree`). The entry
+ * waives only the "I cannot read this specifier" complaint; it grants no
+ * permission to touch genai. An entry whose file stops satisfying those
+ * properties fails the guard.
+ */
+export interface DynamicModuleLoader {
+  readonly path: string;
+  readonly justification: string;
+}
+
+/**
+ * Exact repo-relative paths (not prefixes) permitted to perform a computed
+ * import. Kept exact so a sanctioned loader cannot silently extend its
+ * permission to sibling files.
+ */
+export const DYNAMIC_MODULE_LOADERS: readonly DynamicModuleLoader[] = [
+  {
+    path: 'packages/providers/src/composition/runtimePlugins/loadRuntimePlugins.ts',
+    justification:
+      'Resolves provider packages the user installed. The specifier is a ' +
+      'runtime value, so it can never be a literal. The file itself is ' +
+      'genai-free and narrows the imported module through Zod validation ' +
+      'before it reaches any other code.',
+  },
+];
+
+const DYNAMIC_MODULE_LOADER_PATHS: ReadonlySet<string> = new Set(
+  DYNAMIC_MODULE_LOADERS.map((loader) => loader.path),
+);
+
+/**
+ * Determine if `relPath` is a sanctioned dynamic module loader.
+ */
+export function isSanctionedDynamicLoader(relPath: string): boolean {
+  return DYNAMIC_MODULE_LOADER_PATHS.has(relPath);
+}
 
 /**
  * Convenience: the raw prefix strings.
@@ -73,7 +120,7 @@ const GEMINI_NAME_ENCLAVE_PREFIXES: readonly string[] = IMPORT_ENCLAVE_PREFIXES;
  * `@google/genai` at exactly the specified version.
  */
 export interface DependencyManifestAllowlistEntry {
-  /** Workspace directory relative to repo root (e.g. 'packages/core'). */
+  /** Workspace directory relative to repo root (e.g. 'packages/providers'). */
   readonly workspaceDir: string;
   /** Exact version specifier that must appear in the manifest. */
   readonly version: string;
@@ -89,29 +136,21 @@ export interface DependencyManifestAllowlistEntry {
 export const SANCTIONED_GENAI_VERSION = '1.30.0';
 
 export const GENAI_DEPENDENCY_MANIFESTS: readonly DependencyManifestAllowlistEntry[] =
-  [
-    {
-      workspaceDir: '.',
-      version: SANCTIONED_GENAI_VERSION,
-      justification:
-        'The published root artifact ships core/provider source, so npm must ' +
-        'install the SDK even though root source may not import it.',
-    },
-    {
-      workspaceDir: 'packages/core',
-      version: SANCTIONED_GENAI_VERSION,
-      justification:
-        'Code-Assist back-end (packages/core/src/code_assist/) requires the ' +
-        'SDK at runtime for OAuth and API calls.',
-    },
-    {
-      workspaceDir: 'packages/providers',
-      version: SANCTIONED_GENAI_VERSION,
-      justification:
-        'Gemini provider implementation (packages/providers/src/gemini/) ' +
-        'requires the SDK at runtime for API calls.',
-    },
-  ];
+  [];
+
+/**
+ * Workspaces whose package.json must exist and be readable.
+ *
+ * This is deliberately independent of the dependency allowlist above. That
+ * list is now empty because no workspace may declare the SDK, but the guard
+ * still has to be able to READ these manifests to prove the absence. Deriving
+ * the required set from an empty allowlist would mean a deleted manifest
+ * silently passed.
+ */
+export const REQUIRED_MANIFEST_WORKSPACE_DIRS: readonly string[] = [
+  '.',
+  'packages/providers',
+];
 
 /** The exact package name the guard checks for. */
 export const GENAI_PACKAGE = '@google/genai';
@@ -175,53 +214,6 @@ export const GEMINI_NAME_EXPLICIT_ALLOWLIST: readonly GeminiNameAllowlistEntry[]
     },
     // ── Model-ID constants (genuine env-var / default model IDs) ───────
     {
-      path: 'packages/core/index.ts',
-      name: 'DEFAULT_GEMINI_MODEL',
-      justification:
-        'Default Gemini model ID constant exported from core index.',
-    },
-    {
-      path: 'packages/core/index.ts',
-      name: 'DEFAULT_GEMINI_FLASH_MODEL',
-      justification:
-        'Default Gemini Flash model ID constant exported from core index.',
-    },
-    {
-      path: 'packages/core/index.ts',
-      name: 'DEFAULT_GEMINI_FLASH_LITE_MODEL',
-      justification:
-        'Default Gemini Flash-Lite model ID constant exported from core index.',
-    },
-    {
-      path: 'packages/core/index.ts',
-      name: 'DEFAULT_GEMINI_EMBEDDING_MODEL',
-      justification:
-        'Default Gemini embedding model ID constant exported from core index.',
-    },
-    {
-      path: 'packages/core/src/config/models.ts',
-      name: 'DEFAULT_GEMINI_MODEL',
-      justification: 'Default Gemini model ID constant in core config/models.',
-    },
-    {
-      path: 'packages/core/src/config/models.ts',
-      name: 'DEFAULT_GEMINI_FLASH_MODEL',
-      justification:
-        'Default Gemini Flash model ID constant in core config/models.',
-    },
-    {
-      path: 'packages/core/src/config/models.ts',
-      name: 'DEFAULT_GEMINI_FLASH_LITE_MODEL',
-      justification:
-        'Default Gemini Flash-Lite model ID constant in core config/models.',
-    },
-    {
-      path: 'packages/core/src/config/models.ts',
-      name: 'DEFAULT_GEMINI_EMBEDDING_MODEL',
-      justification:
-        'Default Gemini embedding model ID constant in core config/models.',
-    },
-    {
       path: 'packages/core/src/config/models.ts',
       name: 'isGemini2Model',
       justification: 'Model-ID predicate in core config/models.',
@@ -230,17 +222,6 @@ export const GEMINI_NAME_EXPLICIT_ALLOWLIST: readonly GeminiNameAllowlistEntry[]
       path: 'packages/core/src/config/models.ts',
       name: 'isGemini3Model',
       justification: 'Model-ID predicate in core config/models.',
-    },
-    {
-      path: 'packages/core/src/config/config.ts',
-      name: 'DEFAULT_GEMINI_FLASH_MODEL',
-      justification: 'Default Gemini Flash model ID re-exported from config.',
-    },
-    {
-      path: 'packages/core/src/config/index.ts',
-      name: 'DEFAULT_GEMINI_FLASH_MODEL',
-      justification:
-        'Default Gemini Flash model ID re-exported from config index.',
     },
     // ── Finish-reason mapping (genuine converter/boundary module) ─────
     {

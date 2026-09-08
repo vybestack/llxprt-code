@@ -200,49 +200,61 @@ describe('mutation P23.c — property cases @plan:PLAN-20260621-COREAPIREMED.P23
   }, 30000);
 
   it('PROP keyName precedence: for any keyName, getProviderStatus surfaces keyName not keyFile (REQ-002)', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 50 }),
-        async (keyName) => {
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-            auth: { keyName, apiKeyFile: '/tmp/competing.pem' },
-          });
-          try {
-            const status = agent.getProviderStatus();
-            return (
-              status.keyName === keyName &&
-              status.keyFile === undefined &&
-              status.authStatus === 'authenticated'
-            );
-          } finally {
-            await cleanup();
-          }
-        },
+    await expect(
+      fc.assert(
+        createPROPKeyNamePrecedenceForAnyKeyNameGetProviderStatusSurfacesKeyNameNotKeyFileREQProperty(),
       ),
-    );
+    ).resolves.toBeUndefined();
   }, 30000);
 
-  it('PROP setModelParam: for any distinct two numbers, overwrite replaces the first value (REQ-005)', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.float({ min: 0, max: 1, noNaN: true }),
-        fc.float({ min: 0, max: 1, noNaN: true }),
-        async (first, second) => {
-          if (first === second) {
-            return true; // overwrite with same value is trivially correct
-          }
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-          try {
-            agent.setModelParam('temperature', first);
-            agent.setModelParam('temperature', second);
-            return agent.getModelParams().temperature === second;
-          } finally {
-            await cleanup();
-          }
-        },
-      ),
+  function createPROPKeyNamePrecedenceForAnyKeyNameGetProviderStatusSurfacesKeyNameNotKeyFileREQProperty() {
+    return fc.asyncProperty(
+      fc.string({ minLength: 1, maxLength: 50 }),
+      async (keyName) => {
+        const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+          auth: { keyName, apiKeyFile: '/tmp/competing.pem' },
+        });
+        try {
+          const status = agent.getProviderStatus();
+          return (
+            status.keyName === keyName &&
+            status.keyFile === undefined &&
+            status.authStatus === 'authenticated'
+          );
+        } finally {
+          await cleanup();
+        }
+      },
     );
+  }
+
+  it('PROP setModelParam: for any distinct two numbers, overwrite replaces the first value (REQ-005)', async () => {
+    await expect(
+      fc.assert(
+        createPROPSetModelParamForAnyDistinctTwoNumbersOverwriteReplacesTheFirstValueProperty(),
+      ),
+    ).resolves.toBeUndefined();
   }, 30000);
+
+  function createPROPSetModelParamForAnyDistinctTwoNumbersOverwriteReplacesTheFirstValueProperty() {
+    return fc.asyncProperty(
+      fc.float({ min: 0, max: 1, noNaN: true }),
+      fc.float({ min: 0, max: 1, noNaN: true }),
+      async (first, second) => {
+        if (first === second) {
+          return true; // overwrite with same value is trivially correct
+        }
+        const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+        try {
+          agent.setModelParam('temperature', first);
+          agent.setModelParam('temperature', second);
+          return agent.getModelParams().temperature === second;
+        } finally {
+          await cleanup();
+        }
+      },
+    );
+  }
 
   it('PROP setBaseUrl: for any non-empty URL, getProviderStatus surfaces it (REQ-002)', async () => {
     await fc.assert(
@@ -415,29 +427,35 @@ describe('mutation P23.e — rebuild with approval + display callbacks (REQ-005)
   it(
     'PROP setModel: for any non-empty model string, getModel reflects it after setModel (REQ-005)',
     async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          // A model identity must be non-BLANK, not merely non-empty by
-          // length. resolveModelForSystemPrompt (ChatSessionFactory, issue
-          // #3138) fails fast when config.getModel() trims to ''. A
-          // whitespace-only string is therefore an input the system
-          // deliberately rejects, not a valid model name, and generating one
-          // made this property fail intermittently once that guard landed.
-          fc
-            .string({ minLength: 1, maxLength: 30 })
-            .filter((s) => !s.includes('__proto__') && s.trim() !== ''),
-          async (model) => {
-            const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-            try {
-              await agent.setModel(model);
-              return agent.getModel() === model;
-            } finally {
-              await cleanup();
-            }
-          },
+      await expect(
+        fc.assert(
+          createPROPSetModelForAnyNonEmptyModelStringGetModelReflectsItAfterProperty(),
         ),
-      );
+      ).resolves.toBeUndefined();
     },
     ASYNC_PROPERTY_TIMEOUT_MS,
   );
+
+  function createPROPSetModelForAnyNonEmptyModelStringGetModelReflectsItAfterProperty() {
+    return fc.asyncProperty(
+      // A model identity must be non-BLANK, not merely non-empty by
+      // length. resolveModelForSystemPrompt (ChatSessionFactory, issue
+      // #3138) fails fast when config.getModel() trims to ''. A
+      // whitespace-only string is therefore an input the system
+      // deliberately rejects, not a valid model name, and generating one
+      // made this property fail intermittently once that guard landed.
+      fc
+        .string({ minLength: 1, maxLength: 30 })
+        .filter((s) => !s.includes('__proto__') && s.trim() !== ''),
+      async (model) => {
+        const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+        try {
+          await agent.setModel(model);
+          return agent.getModel() === model;
+        } finally {
+          await cleanup();
+        }
+      },
+    );
+  }
 });

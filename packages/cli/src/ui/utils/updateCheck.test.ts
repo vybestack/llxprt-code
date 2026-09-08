@@ -10,7 +10,7 @@ import {
 } from '@vybestack/llxprt-code-test-utils';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { checkForUpdates, FETCH_TIMEOUT_MS } from './updateCheck.js';
-import type { UpdateInfo } from 'update-notifier';
+import type { Settings, UpdateInfo } from 'update-notifier';
 import type { LoadedSettings } from '../../config/settings.js';
 
 const getPackageJson = vi.fn();
@@ -26,6 +26,24 @@ const updateNotifier = vi.fn();
 void vi.mock('update-notifier', () => ({
   default: updateNotifier,
 }));
+
+function createNightlyFetchInfoMock(latestStable: string) {
+  return vi.fn(({ distTag }: Settings) => {
+    if (distTag === 'nightly') {
+      return Promise.resolve({
+        latest: '1.2.3-nightly.2',
+        current: '1.2.3-nightly.1',
+      });
+    }
+    if (distTag === 'latest') {
+      return Promise.resolve({
+        latest: latestStable,
+        current: '1.2.3-nightly.1',
+      });
+    }
+    return Promise.resolve(null);
+  });
+}
 
 describe('checkForUpdates', () => {
   let mockSettings: LoadedSettings;
@@ -179,21 +197,7 @@ describe('checkForUpdates', () => {
         version: '1.2.3-nightly.1',
       });
 
-      const fetchInfoMock = vi.fn().mockImplementation(({ distTag }) => {
-        if (distTag === 'nightly') {
-          return Promise.resolve({
-            latest: '1.2.3-nightly.2',
-            current: '1.2.3-nightly.1',
-          });
-        }
-        if (distTag === 'latest') {
-          return Promise.resolve({
-            latest: '1.2.3',
-            current: '1.2.3-nightly.1',
-          });
-        }
-        return Promise.resolve(null);
-      });
+      const fetchInfoMock = createNightlyFetchInfoMock('1.2.3');
 
       updateNotifier.mockImplementation(({ pkg, distTag }) => ({
         fetchInfo: () => fetchInfoMock({ pkg, distTag }),
@@ -210,21 +214,7 @@ describe('checkForUpdates', () => {
         version: '1.2.3-nightly.1',
       });
 
-      const fetchInfoMock = vi.fn().mockImplementation(({ distTag }) => {
-        if (distTag === 'nightly') {
-          return Promise.resolve({
-            latest: '1.2.3-nightly.2',
-            current: '1.2.3-nightly.1',
-          });
-        }
-        if (distTag === 'latest') {
-          return Promise.resolve({
-            latest: '1.3.0',
-            current: '1.2.3-nightly.1',
-          });
-        }
-        return Promise.resolve(null);
-      });
+      const fetchInfoMock = createNightlyFetchInfoMock('1.3.0');
 
       updateNotifier.mockImplementation(({ pkg, distTag }) => ({
         fetchInfo: () => fetchInfoMock({ pkg, distTag }),

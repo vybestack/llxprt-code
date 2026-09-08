@@ -21,9 +21,8 @@
  * Tests invoke the real guard script via a non-blocking async child process
  * (no mock theater).
  *
- * Per RULES.md: positive tests ISOLATE the enclave under test — they do NOT
- * write filler files from the other enclave. Negative tests verify the exact
- * file that should be flagged.
+ * Per RULES.md: positive tests isolate the permitted enclave path under test.
+ * Negative tests verify the exact file that should be flagged.
  */
 
 import { beforeAll, describe, expect, it } from 'bun:test';
@@ -89,11 +88,11 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       }, 90000);
     });
 
-    // ── Allowed enclaves (ISOLATED positive cases) ──────────────────────
-    // Each positive test writes ONLY the enclave file under test — no filler
-    // from the other enclave — so the test proves the guard allows that
-    // specific enclave path, not that it was masked by the other.
-    describe('allowed enclaves (isolated positive cases)', () => {
+    // ── Allowed enclave (isolated positive cases) ───────────────────────
+    // Each positive test writes only the permitted enclave file under test, so
+    // the test proves the guard allows that specific path without unrelated
+    // fixtures.
+    describe('allowed enclave (isolated positive cases)', () => {
       it('allows @google/genai import in packages/providers/src/gemini/', async () => {
         const { code } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
@@ -106,33 +105,12 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(code).toBe(0);
       });
 
-      it('allows @google/genai import in packages/core/src/code_assist/', async () => {
-        const { code } = await withFixture(({ root, write }) => {
-          writeRequiredManifests(write);
-          write('packages/core/src/code_assist/codeAssist.ts', GEMINI_IMPORT);
-          return runScript(root, 0);
-        });
-        expect(code).toBe(0);
-      });
-
       it('allows a Gemini-named export inside the gemini enclave', async () => {
         const { code } = await withFixture(({ root, write }) => {
           writeRequiredManifests(write);
           write(
             'packages/providers/src/gemini/GeminiProvider.ts',
             'export class GeminiProvider {}\n',
-          );
-          return runScript(root, 0);
-        });
-        expect(code).toBe(0);
-      });
-
-      it('allows a Gemini-named export in code_assist enclave', async () => {
-        const { code } = await withFixture(({ root, write }) => {
-          writeRequiredManifests(write);
-          write(
-            'packages/core/src/code_assist/GeminiCredentialHelper.ts',
-            'export class GeminiCredentialHelper {}\n',
           );
           return runScript(root, 0);
         });
@@ -168,18 +146,6 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(stdout).toContain('handler.ts');
       });
 
-      it('FAILS @google/genai in packages/core/src/code_assist-old/', async () => {
-        const { code, stdout } = await withFixture(({ root, write }) => {
-          write(
-            'packages/core/src/code_assist-old/legacy.ts',
-            "import { GoogleGenAI } from '@google/genai';\nexport const x = 1;\n",
-          );
-          return runScript(root, 1);
-        });
-        expect(code).toBe(1);
-        expect(stdout).toContain('legacy.ts');
-      });
-
       it('FAILS a Gemini-named export in packages/providers/src/gemini-backup/', async () => {
         const { code, stdout } = await withFixture(({ root, write }) => {
           write(
@@ -189,6 +155,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
           return runScript(root, 1);
         });
         expect(code).toBe(1);
+        expect(stdout).toContain('GeminiHelper.ts');
         expect(stdout).toContain('GeminiHelper');
       });
 

@@ -27,7 +27,6 @@ export interface PromptEnvironment {
   workspaceRoot?: string;
   workspaceDirectories?: string[];
   workingDirectory?: string;
-  folderStructure?: string;
   interactionMode?: 'interactive' | 'non-interactive' | 'subagent';
 }
 

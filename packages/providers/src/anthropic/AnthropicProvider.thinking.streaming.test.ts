@@ -76,6 +76,8 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
           delta: { type: 'thinking_delta', thinking: ' here' },
         };
         yield { type: 'content_block_stop', index: 0 };
+
+        yield { type: 'message_stop' };
       },
     };
 
@@ -152,6 +154,8 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
           delta: { type: 'signature_delta', signature: mockSignature },
         };
         yield { type: 'content_block_stop', index: 0 };
+
+        yield { type: 'message_stop' };
       },
     };
 
@@ -229,6 +233,8 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
           delta: { type: 'signature_delta', signature: secondSignature },
         };
         yield { type: 'content_block_stop', index: 0 };
+
+        yield { type: 'message_stop' };
       },
     };
 
@@ -307,6 +313,8 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
           delta: { type: 'thinking_delta', thinking: ' reasoning' },
         };
         yield { type: 'content_block_stop', index: 0 };
+
+        yield { type: 'message_stop' };
       },
     };
 
@@ -360,6 +368,8 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
             data: 'encrypted-reasoning',
           },
         };
+
+        yield { type: 'message_stop' };
       },
     };
 
@@ -413,6 +423,8 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
           delta: { type: 'thinking_delta', thinking: '' },
         };
         yield { type: 'content_block_stop', index: 0 };
+
+        yield { type: 'message_stop' };
       },
     };
 
@@ -456,6 +468,8 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
           delta: { type: 'signature_delta', signature: mockSignature },
         };
         yield { type: 'content_block_stop', index: 0 };
+
+        yield { type: 'message_stop' };
       },
     };
 
@@ -516,6 +530,8 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
           delta: { type: 'text_delta', text: 'world' },
         };
         yield { type: 'content_block_stop', index: 1 };
+
+        yield { type: 'message_stop' };
       },
     };
 
@@ -585,6 +601,8 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
           delta: { type: 'signature_delta', signature },
         };
         yield { type: 'content_block_stop', index: 0 };
+
+        yield { type: 'message_stop' };
       },
     });
 

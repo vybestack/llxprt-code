@@ -36,63 +36,15 @@ describe('AgenticLoop live-output acquisition bound', () => {
   });
 
   it('emits one omission notice before completion when a producer outruns the consumer', async () => {
-    const tool = new MockTool({
-      name: 'verbose_tool',
-      canUpdateOutput: true,
-    });
-    tool.executeFn.mockImplementation(
-      async (
-        _params: Record<string, unknown>,
-        _signal: AbortSignal,
-        updateOutput?: (update: LiveOutputUpdate) => void,
-      ) => {
-        for (let index = 0; index < LIVE_CHUNK_COUNT; index += 1) {
-          updateOutput?.({ mode: 'append', data: LIVE_CHUNK });
-        }
-        return { llmContent: 'done', returnDisplay: 'done' };
-      },
-    );
-
-    const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry: createToolRegistryForTest([tool]),
-      policyEngine: createAllowPolicyEngine(),
-      interactive: false,
-      approvalMode: ApprovalMode.YOLO,
-    });
-    const { client } = createScriptedAgentClient([
-      [
-        toolCallRequestEvent('verbose_tool', 'call-verbose', {}),
-        finishedEvent(),
-      ],
-      [contentEvent('final'), finishedEvent()],
-    ]);
-
-    const events = await collectEvents(
-      new AgenticLoop({ agentClient: client, config, messageBus }),
-      'go',
-      new AbortController().signal,
-    );
-    const outputEvents = events.filter((event) => event.kind === 'tool_output');
-    const notices = outputEvents.filter((event) =>
-      event.chunk.includes('LLXPRT live tool output omitted'),
-    );
-    const completionIndex = events.findIndex(
-      (event) => event.kind === 'tools_complete',
-    );
-    const noticeIndex = events.findIndex(
-      (event) =>
-        event.kind === 'tool_output' &&
-        event.chunk.includes('LLXPRT live tool output omitted'),
-    );
-
-    const retainedDataBytes = outputEvents
-      .filter(
-        (event) => !event.chunk.includes('LLXPRT live tool output omitted'),
-      )
-      .reduce((total, event) => total + Buffer.byteLength(event.chunk), 0);
-
+    const {
+      retainedDataBytes,
+      outputEvents,
+      notices,
+      completionIndex,
+      noticeIndex,
+      callIdObservation,
+    } =
+      await observeEmitsOneOmissionNoticeBeforeCompletionWhenAProducerOutrunsTheConsumer();
     expect(Buffer.byteLength(LIVE_CHUNK) * LIVE_CHUNK_COUNT).toBeGreaterThan(
       DEFAULT_ACQUISITION_BUDGET_BYTES,
     );
@@ -101,7 +53,79 @@ describe('AgenticLoop live-output acquisition bound', () => {
     );
     expect(outputEvents.length).toBeLessThan(LIVE_CHUNK_COUNT);
     expect(notices).toHaveLength(1);
-    expect(notices[0]?.callId).toBe('call-verbose');
+    expect(callIdObservation).toBe('call-verbose');
     expect(completionIndex).toBeGreaterThan(noticeIndex);
   });
+
+  const observeEmitsOneOmissionNoticeBeforeCompletionWhenAProducerOutrunsTheConsumer =
+    async () => {
+      const tool = new MockTool({
+        name: 'verbose_tool',
+        canUpdateOutput: true,
+      });
+      tool.executeFn.mockImplementation(
+        async (
+          _params: Record<string, unknown>,
+          _signal: AbortSignal,
+          updateOutput?: (update: LiveOutputUpdate) => void,
+        ) => {
+          for (let index = 0; index < LIVE_CHUNK_COUNT; index += 1) {
+            updateOutput?.({ mode: 'append', data: LIVE_CHUNK });
+          }
+          return { llmContent: 'done', returnDisplay: 'done' };
+        },
+      );
+
+      const messageBus = new MessageBus(createAllowPolicyEngine(), false);
+      const config = createTestConfig({
+        messageBus,
+        toolRegistry: createToolRegistryForTest([tool]),
+        policyEngine: createAllowPolicyEngine(),
+        interactive: false,
+        approvalMode: ApprovalMode.YOLO,
+      });
+      const { client } = createScriptedAgentClient([
+        [
+          toolCallRequestEvent('verbose_tool', 'call-verbose', {}),
+          finishedEvent(),
+        ],
+        [contentEvent('final'), finishedEvent()],
+      ]);
+
+      const events = await collectEvents(
+        new AgenticLoop({ agentClient: client, config, messageBus }),
+        'go',
+        new AbortController().signal,
+      );
+      const outputEvents = events.filter(
+        (event) => event.kind === 'tool_output',
+      );
+      const notices = outputEvents.filter((event) =>
+        event.chunk.includes('LLXPRT live tool output omitted'),
+      );
+      const completionIndex = events.findIndex(
+        (event) => event.kind === 'tools_complete',
+      );
+      const noticeIndex = events.findIndex(
+        (event) =>
+          event.kind === 'tool_output' &&
+          event.chunk.includes('LLXPRT live tool output omitted'),
+      );
+
+      const retainedDataBytes = outputEvents
+        .filter(
+          (event) => !event.chunk.includes('LLXPRT live tool output omitted'),
+        )
+        .reduce((total, event) => total + Buffer.byteLength(event.chunk), 0);
+
+      const callIdObservation = notices[0]?.callId;
+      return {
+        retainedDataBytes,
+        outputEvents,
+        notices,
+        completionIndex,
+        noticeIndex,
+        callIdObservation,
+      };
+    };
 });

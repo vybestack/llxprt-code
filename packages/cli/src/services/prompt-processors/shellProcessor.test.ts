@@ -139,6 +139,64 @@ describe('ShellProcessor', () => {
     expect(result).toBe('The current status is: On branch main');
   });
 
+  it('hands the injected shell command the live invocation signal', async () => {
+    // Before issue #2976 this was a throwaway controller, so Esc could never
+    // reach the injected process. Aborting the invocation must be observable
+    // at the shell boundary through the very signal it was handed.
+    const invocation = new AbortController();
+    const cancellableContext = createMockCommandContext({
+      signal: invocation.signal,
+      invocation: { raw: '/cmd', name: 'cmd', args: '' },
+      services: { config: mockConfig as Config },
+      session: { sessionShellAllowlist: new Set() },
+    });
+    let executionSignal: AbortSignal | undefined;
+    mockShellExecute.mockImplementation(
+      (
+        _command: string,
+        _cwd: string,
+        _onOutput: () => void,
+        signal: AbortSignal,
+      ) => {
+        executionSignal = signal;
+        return { result: Promise.resolve(SUCCESS_RESULT) };
+      },
+    );
+
+    await new ShellProcessor('test-command').process(
+      'status: !{git status}',
+      cancellableContext,
+    );
+
+    // Identity, not shape: the shell boundary must receive the very signal the
+    // framework will abort, so Esc reaches the running process.
+    expect(executionSignal).toBe(invocation.signal);
+  });
+
+  it('stops spawning later injections once the invocation is cancelled', async () => {
+    // Cancelling must not keep launching processes for the abandoned prompt.
+    const invocation = new AbortController();
+    const cancellableContext = createMockCommandContext({
+      signal: invocation.signal,
+      invocation: { raw: '/cmd', name: 'cmd', args: '' },
+      services: { config: mockConfig as Config },
+      session: { sessionShellAllowlist: new Set() },
+    });
+    const spawned: string[] = [];
+    mockShellExecute.mockImplementation((command: string) => {
+      spawned.push(command);
+      invocation.abort();
+      return { result: Promise.resolve({ ...SUCCESS_RESULT, aborted: true }) };
+    });
+
+    await new ShellProcessor('test-command').process(
+      '!{git status} then !{pwd} then !{whoami}',
+      cancellableContext,
+    );
+
+    expect(spawned).toStrictEqual(['git status']);
+  });
+
   it('should process multiple valid shell injections if all are allowed', async () => {
     const processor = new ShellProcessor('test-command');
     const prompt = '!{git status} in !{pwd}';
@@ -245,7 +303,7 @@ describe('ShellProcessor', () => {
     expect(mockShellExecute).not.toHaveBeenCalled();
   });
 
-  it('should throw ConfirmationRequiredError with multiple commands if multiple are disallowed', async () => {
+  function observeMultipleDisallowedCommandResult() {
     const processor = new ShellProcessor('test-command');
     const prompt = '!{cmd1} and !{cmd2}';
     mockCheckCommandPermissions.mockImplementation((cmd) => {
@@ -258,13 +316,23 @@ describe('ShellProcessor', () => {
       return { allAllowed: true, disallowedCommands: [] };
     });
 
-    const promise = processor.process(prompt, context);
-    await expect(promise).rejects.toBeInstanceOf(ConfirmationRequiredError);
-    const error = await promise.catch((e) => e);
+    return {
+      processDisallowedCommands: () => processor.process(prompt, context),
+    };
+  }
+
+  it('should throw ConfirmationRequiredError with multiple commands if multiple are disallowed', async () => {
+    const scenario = observeMultipleDisallowedCommandResult();
+    const processResult = scenario.processDisallowedCommands();
+
+    await expect(processResult).rejects.toBeInstanceOf(
+      ConfirmationRequiredError,
+    );
+    const error = await processResult.catch((caughtError) => caughtError);
     expect(error.commandsToConfirm).toStrictEqual(['cmd1', 'cmd2']);
   });
 
-  it('should not execute any commands if at least one requires confirmation', async () => {
+  function observeMixedCommandExecutionResult() {
     const processor = new ShellProcessor('test-command');
     const prompt = 'First: !{echo "hello"}, Second: !{rm -rf /}';
 
@@ -275,15 +343,22 @@ describe('ShellProcessor', () => {
       return { allAllowed: true, disallowedCommands: [] };
     });
 
-    await expect(processor.process(prompt, context)).rejects.toThrow(
+    return {
+      processMixedCommands: () => processor.process(prompt, context),
+    };
+  }
+
+  it('should not execute any commands if at least one requires confirmation', async () => {
+    const scenario = observeMixedCommandExecutionResult();
+
+    await expect(scenario.processMixedCommands()).rejects.toThrow(
       ConfirmationRequiredError,
     );
-
     // Ensure no commands were executed because the pipeline was halted.
     expect(mockShellExecute).not.toHaveBeenCalled();
   });
 
-  it('should only request confirmation for disallowed commands in a mixed prompt', async () => {
+  function observeDisallowedMixedCommandResult() {
     const processor = new ShellProcessor('test-command');
     const prompt = 'Allowed: !{ls -l}, Disallowed: !{rm -rf /}';
 
@@ -292,9 +367,19 @@ describe('ShellProcessor', () => {
       disallowedCommands: cmd.includes('rm') ? [cmd] : [],
     }));
 
-    const promise = processor.process(prompt, context);
-    await expect(promise).rejects.toBeInstanceOf(ConfirmationRequiredError);
-    const error = await promise.catch((e) => e);
+    return {
+      processDisallowedMixedCommands: () => processor.process(prompt, context),
+    };
+  }
+
+  it('should only request confirmation for disallowed commands in a mixed prompt', async () => {
+    const scenario = observeDisallowedMixedCommandResult();
+    const processResult = scenario.processDisallowedMixedCommands();
+
+    await expect(processResult).rejects.toBeInstanceOf(
+      ConfirmationRequiredError,
+    );
+    const error = await processResult.catch((caughtError) => caughtError);
     expect(error.commandsToConfirm).toStrictEqual(['rm -rf /']);
   });
 

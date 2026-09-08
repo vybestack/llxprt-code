@@ -33,6 +33,19 @@ function collectTypeScriptFiles(dir: string, files: string[] = []): string[] {
   return files;
 }
 
+function findEslintDirectives(files: readonly string[]): readonly string[] {
+  const violations: string[] = [];
+  for (const file of files) {
+    const lines = readFileSync(file, 'utf-8').split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      if (DIRECTIVE_PATTERN.test(lines[i])) {
+        violations.push(`${file}:${i + 1}: ${lines[i].trim()}`);
+      }
+    }
+  }
+  return violations;
+}
+
 describe('mcp module ESLint directive guard (#2118)', () => {
   it(
     'contains zero inline ' +
@@ -41,15 +54,9 @@ describe('mcp module ESLint directive guard (#2118)', () => {
       DIRECTIVE_ENABLE +
       ' directives',
     () => {
-      const violations: string[] = [];
-      for (const file of collectTypeScriptFiles(MCP_PACKAGE_DIR)) {
-        const lines = readFileSync(file, 'utf-8').split('\n');
-        for (let i = 0; i < lines.length; i++) {
-          if (DIRECTIVE_PATTERN.test(lines[i])) {
-            violations.push(`${file}:${i + 1}: ${lines[i].trim()}`);
-          }
-        }
-      }
+      const violations = findEslintDirectives(
+        collectTypeScriptFiles(MCP_PACKAGE_DIR),
+      );
       expect(violations).toStrictEqual([]);
     },
   );

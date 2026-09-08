@@ -143,9 +143,7 @@ void vi.mock('./turn', () => {
 void vi.mock('@vybestack/llxprt-code-core/config/config.js', () =>
   automock(realConfigModule),
 );
-void vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
-  getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
-}));
+
 void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
@@ -224,8 +222,8 @@ describe('Agent Client (client.ts)', () => {
     todoStoreWritePausedMock.mockResolvedValue(undefined);
   });
 
-  afterEach(() => {
-    client.dispose();
+  afterEach(async () => {
+    await client.dispose();
     vi.restoreAllMocks();
   });
 
@@ -296,83 +294,92 @@ describe('Agent Client (client.ts)', () => {
     });
 
     it('should append additional context from BeforeAgent hook to request', async () => {
-      // This test verifies Gap 1: BeforeAgent hook additional context
-      // Currently the hook result is IGNORED - this test should FAIL initially
-
-      // Import and mock the hook trigger
-      const lifecycleHookTriggers = await import(
-        '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js'
-      );
-      const mockTriggerBeforeAgentHook = vi.spyOn(
-        lifecycleHookTriggers,
-        'triggerBeforeAgentHook',
-      );
-
-      // Create a mock BeforeAgentHookOutput that provides additional context
-      const { BeforeAgentHookOutput } = await import(
-        '@vybestack/llxprt-code-core/hooks/types.js'
-      );
-      const contextOutput = new BeforeAgentHookOutput({
-        continue: true,
-        hookSpecificOutput: {
-          hookEventName: 'BeforeAgent',
-          additionalContext: 'Additional context from hook',
-        },
-      });
-
-      mockTriggerBeforeAgentHook.mockResolvedValue(contextOutput);
-
-      // Track what request was passed to turn.run
-      const capturedRequests: AgentMessageInput[] = [];
-      const mockStream = (async function* () {
-        yield { type: AgentEventType.Content, value: 'Response' };
-        yield { type: AgentEventType.Finished, value: { reason: 'STOP' } };
-      })();
-      mockTurnRunFn.mockImplementation((req: AgentMessageInput) => {
-        capturedRequests.push(req);
-        return mockStream;
-      });
-
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
-        getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
-        getContextLimit: vi.fn().mockReturnValue(1000000),
-      };
-      client['chat'] = mockChat as ChatSession;
-
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
-
-      // Disable IDE mode to simplify test
-      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
-
-      // Act
-      const stream = client.sendMessageStream(
-        [{ text: 'Original prompt' }],
-        new AbortController().signal,
-        'prompt-before-agent-context',
-      );
-      await fromAsync(stream);
-
-      // Assert
-      // The request should include the additional context
+      const { capturedRequests, hasAdditionalContext } =
+        await observeAppendAdditionalContextFromBeforeAgentHookToRequest();
       expect(capturedRequests.length).toBeGreaterThan(0);
-      const request = capturedRequests[0];
-      const requestContents = Array.isArray(request) ? request : [request];
-      const hasAdditionalContext = requestContents.some(
-        (content) =>
-          'blocks' in content &&
-          content.blocks.some(
-            (block) =>
-              block.type === 'text' &&
-              block.text === 'Additional context from hook',
-          ),
-      );
       expect(hasAdditionalContext).toBe(true);
     });
+
+    const observeAppendAdditionalContextFromBeforeAgentHookToRequest =
+      async () => {
+        // This test verifies Gap 1: BeforeAgent hook additional context
+        // Currently the hook result is IGNORED - this test should FAIL initially
+
+        // Import and mock the hook trigger
+        const lifecycleHookTriggers = await import(
+          '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js'
+        );
+        const mockTriggerBeforeAgentHook = vi.spyOn(
+          lifecycleHookTriggers,
+          'triggerBeforeAgentHook',
+        );
+
+        // Create a mock BeforeAgentHookOutput that provides additional context
+        const { BeforeAgentHookOutput } = await import(
+          '@vybestack/llxprt-code-core/hooks/types.js'
+        );
+        const contextOutput = new BeforeAgentHookOutput({
+          continue: true,
+          hookSpecificOutput: {
+            hookEventName: 'BeforeAgent',
+            additionalContext: 'Additional context from hook',
+          },
+        });
+
+        mockTriggerBeforeAgentHook.mockResolvedValue(contextOutput);
+
+        // Track what request was passed to turn.run
+        const capturedRequests: AgentMessageInput[] = [];
+        const mockStream = (async function* () {
+          yield { type: AgentEventType.Content, value: 'Response' };
+          yield { type: AgentEventType.Finished, value: { reason: 'STOP' } };
+        })();
+        mockTurnRunFn.mockImplementation((req: AgentMessageInput) => {
+          capturedRequests.push(req);
+          return mockStream;
+        });
+
+        const mockChat: Partial<ChatSession> = {
+          addHistory: vi.fn(),
+          getHistory: vi.fn().mockReturnValue([]),
+          getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+          getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
+          getContextLimit: vi.fn().mockReturnValue(1000000),
+        };
+        client['chat'] = mockChat as ChatSession;
+
+        const mockGenerator: Partial<ContentGenerator> = {
+          countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+        };
+        client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+        // Disable IDE mode to simplify test
+        vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+
+        // Act
+        const stream = client.sendMessageStream(
+          [{ text: 'Original prompt' }],
+          new AbortController().signal,
+          'prompt-before-agent-context',
+        );
+        await fromAsync(stream);
+
+        // Assert
+        // The request should include the additional context
+
+        const request = capturedRequests[0];
+        const requestContents = Array.isArray(request) ? request : [request];
+        const hasAdditionalContext = requestContents.some(
+          (content) =>
+            'blocks' in content &&
+            content.blocks.some(
+              (block) =>
+                block.type === 'text' &&
+                block.text === 'Additional context from hook',
+            ),
+        );
+
+        return { capturedRequests, hasAdditionalContext };
+      };
   });
 });

@@ -34,7 +34,6 @@ import {
 export abstract class ConfigBase extends ConfigBaseCore {
   // Abstract methods implemented by Config subclass
   abstract initializeContentGeneratorConfig: () => Promise<void>;
-  abstract getJitContextEnabled(): boolean;
   abstract getExcludeTools(): string[] | undefined;
   abstract getAsyncTaskManager(): AsyncTaskManager | undefined;
   abstract getShellJobManager(): ShellJobManager | undefined;
@@ -100,42 +99,42 @@ export abstract class ConfigBase extends ConfigBaseCore {
   }
 
   getGlobalMemory(): string {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.isJitContextEnabled() && this.contextManager) {
       return this.contextManager.getGlobalMemory();
     }
     return this.userMemory;
   }
 
   getEnvironmentMemory(): string {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.isJitContextEnabled() && this.contextManager) {
       return this.contextManager.getEnvironmentMemory();
     }
     return '';
   }
 
   getCoreMemory(): string | undefined {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.isJitContextEnabled() && this.contextManager) {
       return this.contextManager.getCoreMemory();
     }
     return undefined;
   }
 
   getLlxprtMdFileCount(): number {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.isJitContextEnabled() && this.contextManager) {
       return this.contextManager.getContextFileCount();
     }
     return this.llxprtMdFileCount;
   }
 
   getCoreMemoryFileCount(): number {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.isJitContextEnabled() && this.contextManager) {
       return this.contextManager.getCoreMemoryFileCount();
     }
     return 0;
   }
 
   getLlxprtMdFilePaths(): string[] {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.isJitContextEnabled() && this.contextManager) {
       return Array.from(this.contextManager.getLoadedPaths());
     }
     return this.llxprtMdFilePaths;
@@ -222,6 +221,46 @@ export abstract class ConfigBase extends ConfigBaseCore {
       return undefined;
     }
     return rawValue;
+  }
+
+  private resolveByteLimit(key: string, defaultValue: number): number {
+    const value = this.getEphemeralSetting(key) ?? defaultValue;
+    if (
+      typeof value !== 'number' ||
+      !Number.isSafeInteger(value) ||
+      value < 0
+    ) {
+      throw new Error(`${key} must be a non-negative safe integer`);
+    }
+    return value;
+  }
+
+  override getImagePayloadBudgetBytes(): number {
+    return this.resolveByteLimit(
+      'image-payload-budget-bytes',
+      this.imagePayloadBudgetBytes,
+    );
+  }
+
+  override getMediaStoreQuotaByteLimit(): number {
+    return this.resolveByteLimit(
+      'media-store-quota-bytes',
+      super.getMediaStoreQuotaByteLimit(),
+    );
+  }
+
+  override getSessionRecordingQueueByteLimit(): number {
+    return this.resolveByteLimit(
+      'session-recording-queue-max-bytes',
+      super.getSessionRecordingQueueByteLimit(),
+    );
+  }
+
+  override getSessionPersistenceQueueByteLimit(): number {
+    return this.resolveByteLimit(
+      'session-persistence-queue-max-bytes',
+      super.getSessionPersistenceQueueByteLimit(),
+    );
   }
 
   setEphemeralSetting(key: string, value: unknown): void {

@@ -32,7 +32,6 @@ describe('ActivateSkillTool', () => {
         instructions: 'Skill instructions content.',
         description: 'A test skill',
         location: '/path/to/test-skill/SKILL.md',
-        folderStructure: 'Mock folder structure',
         resourceDirectory: '/path/to/test-skill',
       }),
       getSkillManager: vi.fn().mockReturnValue({
@@ -49,7 +48,6 @@ describe('ActivateSkillTool', () => {
         .mockImplementation((name: string) =>
           name === 'test-skill' ? skills[0] : null,
         ),
-      getFolderStructure: vi.fn().mockResolvedValue('Mock folder structure'),
     } satisfies ISkillService;
     tool = new ActivateSkillTool(mockSkillService, mockMessageBus);
   });
@@ -76,7 +74,7 @@ describe('ActivateSkillTool', () => {
     }
     expect(details.prompt).toContain('enable the specialized agent skill');
     expect(details.prompt).toContain('A test skill');
-    expect(details.prompt).toContain('Mock folder structure');
+    expect(details.prompt).not.toContain('Mock folder structure');
   });
 
   it('should activate a valid skill and return its content in XML tags', async () => {
@@ -89,12 +87,10 @@ describe('ActivateSkillTool', () => {
     expect(result.llmContent).toContain('<instructions>');
     expect(result.llmContent).toContain('Skill instructions content.');
     expect(result.llmContent).toContain('</instructions>');
-    expect(result.llmContent).toContain('<available_resources>');
-    expect(result.llmContent).toContain('Mock folder structure');
-    expect(result.llmContent).toContain('</available_resources>');
+    expect(result.llmContent).toContain('<resource_directory>');
+    expect(result.llmContent).toContain('/path/to/test-skill');
     expect(result.llmContent).toContain('</activated_skill>');
     expect(result.returnDisplay).toContain('Skill **test-skill** activated');
-    expect(result.returnDisplay).toContain('Mock folder structure');
   });
 
   it('should throw error if skill is not in enum', async () => {
@@ -164,7 +160,7 @@ describe('ActivateSkillTool', () => {
         mockMessageBus,
       );
 
-      expect(enumeratedNames(instance)).toEqual(['alpha', 'beta']);
+      expect(enumeratedNames(instance)).toStrictEqual(['alpha', 'beta']);
       expect(instance.description).toContain("Available: 'alpha', 'beta'");
       expect(instance.build({ name: 'beta' })).toBeDefined();
     });
@@ -181,7 +177,7 @@ describe('ActivateSkillTool', () => {
         mockMessageBus,
       );
 
-      expect(enumeratedNames(after)).toEqual(['alpha', 'gamma']);
+      expect(enumeratedNames(after)).toStrictEqual(['alpha', 'gamma']);
       expect(after.build({ name: 'gamma' })).toBeDefined();
     });
 
@@ -191,7 +187,7 @@ describe('ActivateSkillTool', () => {
         mockMessageBus,
       );
 
-      expect(enumeratedNames(instance)).toEqual([]);
+      expect(enumeratedNames(instance)).toStrictEqual([]);
       expect(instance.description).not.toContain('Available:');
     });
   });

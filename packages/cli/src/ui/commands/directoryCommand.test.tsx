@@ -33,6 +33,17 @@ const mockLoadServerHierarchicalMemory = loadServerHierarchicalMemory as Mock<
   typeof loadServerHierarchicalMemory
 >;
 
+function rejectDirectory(
+  errorPath: string,
+  error: Error,
+): (path: string) => void {
+  return (candidatePath: string): void => {
+    if (candidatePath === errorPath) {
+      throw error;
+    }
+  };
+}
+
 describe('directoryCommand', () => {
   let mockContext: CommandContext;
   let mockConfig: Config;
@@ -180,11 +191,7 @@ describe('directoryCommand', () => {
         mockWorkspaceContext.addDirectory as Mock<
           typeof mockWorkspaceContext.addDirectory
         >
-      ).mockImplementation((p: string) => {
-        if (p === invalidPath) {
-          throw error;
-        }
-      });
+      ).mockImplementation(rejectDirectory(invalidPath, error));
 
       await addCommand.action!(mockContext, `${validPath},${invalidPath}`);
 

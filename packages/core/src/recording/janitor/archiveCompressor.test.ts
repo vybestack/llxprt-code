@@ -35,6 +35,8 @@ import {
   cleanupStaleTempArchives,
 } from './archiveCompressor.js';
 
+const bunIt = it;
+
 async function makeTempDir(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), 'janitor-archive-'));
 }
@@ -313,14 +315,12 @@ describe('compressToArchive — typed error results (finding E)', () => {
     expect(await fileExists(source)).toBe(true);
   });
 
-  /**
-   * OCR finding 13: if the source file disappears or becomes unreadable
-   * during the reuse hash computation, compressToArchive must return a typed
-   * ArchiveResult — not throw an unhandled rejection.
-   */
-  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
-    'returns typed source-invalid error when source becomes unreadable during reuse check',
-    async () => {
+  {
+    const it =
+      process.platform === 'win32' || process.getuid?.() === 0
+        ? bunIt.skip
+        : bunIt;
+    it('returns typed source-invalid error when source becomes unreadable during reuse check', async () => {
       const archiveDir = path.join(tempDir, 'archive');
       await fs.mkdir(archiveDir, { recursive: true });
       const source = path.join(tempDir, 'session-unreadable.jsonl');
@@ -343,8 +343,8 @@ describe('compressToArchive — typed error results (finding E)', () => {
       } finally {
         await fs.chmod(source, 0o644);
       }
-    },
-  );
+    });
+  }
 });
 
 describe('verifyArchiveIntegrity', () => {

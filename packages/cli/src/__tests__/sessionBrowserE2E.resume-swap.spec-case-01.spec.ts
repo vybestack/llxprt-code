@@ -30,6 +30,14 @@ import {
   SessionBrowserTestState,
 } from './sessionBrowserE2E.helpers.js';
 
+type ResumeLockHandle = SessionBrowserTestState['lockHandles'][number];
+
+function resumeLockHandlesForCleanup(
+  lockHandle: ResumeLockHandle | null,
+): readonly ResumeLockHandle[] {
+  return lockHandle === null ? [] : [lockHandle];
+}
+
 describe('Two-phase swap #1', () => {
   let state: SessionBrowserTestState;
 
@@ -87,6 +95,6 @@ describe('Two-phase swap #1', () => {
     state.recordingsToDispose.push(newRecording!);
 
     const newLock = context.recordingCallbacks.getCurrentLockHandle();
-    state.lockHandles.push(...(newLock === null ? [] : [newLock]));
+    state.lockHandles.push(...resumeLockHandlesForCleanup(newLock));
   });
 });

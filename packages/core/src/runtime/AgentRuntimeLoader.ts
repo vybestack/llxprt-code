@@ -5,7 +5,11 @@
  */
 
 import { HistoryService } from '../services/history/HistoryService.js';
+import { createHistoryProviderFileBindingStore } from '../services/history/provider-file-binding.js';
 import type { Config } from '../config/config.js';
+import type { LocalMediaStore } from '../storage/local-media-store.js';
+import { MediaAdmissionService } from '../storage/media-admission-service.js';
+import { RequestMediaResolver } from '../storage/request-media-resolver.js';
 import {
   hasToolSchema,
   resolveToolDescription,
@@ -48,6 +52,9 @@ export interface AgentRuntimeLoaderOverrides {
   telemetryAdapter?: AgentRuntimeTelemetryAdapter;
   toolsView?: ToolRegistryView;
   historyService?: HistoryService;
+  mediaStore?: LocalMediaStore;
+  mediaAdmission?: MediaAdmissionService;
+  mediaResolver?: RequestMediaResolver;
   contentGenerator?: ContentGenerator;
   contentGeneratorFactory?: ContentGeneratorFactory;
 }
@@ -196,16 +203,18 @@ function createFilteredToolRegistryView(
   };
 }
 
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted !== true) return;
+  const error = new Error('Runtime load aborted');
+  error.name = 'AbortError';
+  throw error;
+}
+
 export async function loadAgentRuntime(
   options: AgentRuntimeLoaderOptions,
 ): Promise<AgentRuntimeLoaderResult> {
   const { profile, overrides = {}, signal } = options;
-
-  if (signal?.aborted === true) {
-    const error = new Error('Runtime load aborted');
-    error.name = 'AbortError';
-    throw error;
-  }
+  throwIfAborted(signal);
 
   const history = overrides.historyService ?? new HistoryService();
 
@@ -226,6 +235,13 @@ export async function loadAgentRuntime(
       profile.toolRegistry ?? profile.config.getToolRegistry(),
       governance,
     );
+  const mediaStore =
+    overrides.mediaStore ?? profile.config.getLocalMediaStore();
+  const mediaAdmission =
+    overrides.mediaAdmission ?? new MediaAdmissionService(mediaStore);
+  const mediaResolver =
+    overrides.mediaResolver ?? new RequestMediaResolver(mediaStore);
+  const requestMediaBudgetBytes = profile.config.getImagePayloadBudgetBytes();
 
   const runtimeContext = createAgentRuntimeContext({
     state: profile.state,
@@ -234,9 +250,18 @@ export async function loadAgentRuntime(
     telemetry: telemetryAdapter,
     tools: toolsView,
     history,
-    providerRuntime: profile.providerRuntime,
+    providerRuntime: {
+      ...profile.providerRuntime,
+      mediaResolver,
+      requestMediaBudgetBytes,
+      providerFileBindings: createHistoryProviderFileBindingStore(history),
+    },
+    mediaStore,
+    mediaAdmission,
+    mediaResolver,
   });
 
+  await history.settleMediaOwnership();
   let contentGenerator: ContentGenerator;
   if (overrides.contentGenerator) {
     contentGenerator = overrides.contentGenerator;

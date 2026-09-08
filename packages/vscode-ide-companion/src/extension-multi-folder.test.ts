@@ -194,9 +194,8 @@ describe('activate with multiple folders', () => {
     );
   });
 
-  it.skipIf(process.platform !== 'win32')(
-    'should handle windows paths',
-    async () => {
+  describe.skipIf(process.platform !== 'win32')(() => {
+    it('should handle windows paths', async () => {
       setWorkspaceFolders([
         { uri: { fsPath: 'c:/foo/bar' } },
         { uri: { fsPath: 'd:/baz/qux' } },
@@ -210,6 +209,6 @@ describe('activate with multiple folders', () => {
         'LLXPRT_CODE_IDE_WORKSPACE_PATH',
         'c:/foo/bar;d:/baz/qux',
       );
-    },
-  );
+    });
+  });
 });

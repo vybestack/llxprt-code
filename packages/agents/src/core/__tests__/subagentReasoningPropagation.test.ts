@@ -69,31 +69,39 @@ const zaiLikeProfile: Profile = {
 
 describe('Subagent reasoning/ephemeral propagation (Issue #2410)', () => {
   it('stores reasoning.* in the subagent settings service so getAllGlobalSettings exposes them', () => {
-    const service = populate(zaiLikeProfile, 'zai');
-
-    // buildEphemeralsSnapshot (provider side) reads getAllGlobalSettings(), so
-    // the reasoning values must be reachable from there (flattened or nested).
-    const globals = service.getAllGlobalSettings();
-    const nestedReasoning = globals['reasoning'] as
-      | Record<string, unknown>
-      | undefined;
-    const effort = globals['reasoning.effort'] ?? nestedReasoning?.['effort'];
-    const strip =
-      globals['reasoning.stripFromContext'] ??
-      nestedReasoning?.['stripFromContext'];
-    const includeInResponse =
-      globals['reasoning.includeInResponse'] ??
-      nestedReasoning?.['includeInResponse'];
-    const summary =
-      globals['reasoning.summary'] ?? nestedReasoning?.['summary'];
-
+    const { effort, strip, includeInResponse, summary, globals } =
+      observeStoresReasoningInTheSubagentSettingsServiceSoGetAllGlobalSettingsExposesThem();
     expect(effort).toBe('xhigh');
     expect(strip).toBe('none');
     expect(includeInResponse).toBe(true);
     expect(summary).toBe('auto');
-    // Non-reasoning general ephemerals must also propagate.
     expect(globals['streaming']).toBe('enabled');
   });
+
+  const observeStoresReasoningInTheSubagentSettingsServiceSoGetAllGlobalSettingsExposesThem =
+    () => {
+      const service = populate(zaiLikeProfile, 'zai');
+
+      // buildEphemeralsSnapshot (provider side) reads getAllGlobalSettings(), so
+      // the reasoning values must be reachable from there (flattened or nested).
+      const globals = service.getAllGlobalSettings();
+      const nestedReasoning = globals['reasoning'] as
+        | Record<string, unknown>
+        | undefined;
+      const effort = globals['reasoning.effort'] ?? nestedReasoning?.['effort'];
+      const strip =
+        globals['reasoning.stripFromContext'] ??
+        nestedReasoning?.['stripFromContext'];
+      const includeInResponse =
+        globals['reasoning.includeInResponse'] ??
+        nestedReasoning?.['includeInResponse'];
+      const summary =
+        globals['reasoning.summary'] ?? nestedReasoning?.['summary'];
+
+      // Non-reasoning general ephemerals must also propagate.
+
+      return { effort, strip, includeInResponse, summary, globals };
+    };
 
   it('does not inject reasoning.* keys when the profile does not set them', () => {
     const service = populate(

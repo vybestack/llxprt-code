@@ -12,11 +12,11 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { Mock } from 'bun:test';
 import { McpClientManager } from './mcp-client-manager.js';
 import { McpClient, MCPDiscoveryState } from './mcp-client.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { Config } from './test-support/mcpClientTestSupport.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
-import { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
-import type { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
+import { PromptRegistry } from './test-support/mcpClientTestSupport.js';
+import { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
+import type { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
 void vi.mock('./mcp-client.js', () => ({
   McpClient: vi.fn(),
   MCPDiscoveryState: {
@@ -83,6 +83,26 @@ function createDeferred<T>(): Deferred<T> {
     resolvePromise(value);
   };
   return { promise, resolve };
+}
+
+function removeArtifactsWithServerAFailure(
+  events: string[],
+  serverName: string,
+): void {
+  events.push(`artifacts-${serverName}`);
+  if (serverName === 'server-a') {
+    throw new Error('artifact cleanup failed');
+  }
+}
+
+async function refreshWithOptionalFailure(
+  events: string[],
+  shouldFail: boolean,
+): Promise<void> {
+  if (shouldFail) {
+    events.push('refresh');
+    throw new Error('refresh failed');
+  }
 }
 
 const CLIENT_VERSION = '0.0.1';
@@ -250,12 +270,7 @@ describe('McpClientManager trust transitions', () => {
       });
       const toolRegistry = createToolRegistry(config);
       vi.spyOn(toolRegistry, 'removeMcpToolsByServer').mockImplementation(
-        (name) => {
-          events.push(`artifacts-${name}`);
-          if (name === 'server-a') {
-            throw new Error('artifact cleanup failed');
-          }
-        },
+        (name) => removeArtifactsWithServerAFailure(events, name),
       );
       const manager = new McpClientManager(
         CLIENT_VERSION,
@@ -331,12 +346,8 @@ describe('McpClientManager trust transitions', () => {
         .mockReturnValueOnce(clientB);
       let failRefresh = false;
       const config = createMockConfig({
-        refreshMcpContext: async () => {
-          if (failRefresh) {
-            events.push('refresh');
-            throw new Error('refresh failed');
-          }
-        },
+        refreshMcpContext: async () =>
+          refreshWithOptionalFailure(events, failRefresh),
       });
       const manager = createManager(config);
       await manager.startConfiguredMcpServers();
@@ -531,12 +542,7 @@ describe('McpClientManager trust transitions', () => {
       void manager.startConfiguredMcpServers();
       await waitFor(() => expect(clientA.discover).toHaveBeenCalledOnce());
       vi.spyOn(toolRegistry, 'removeMcpToolsByServer').mockImplementation(
-        (name) => {
-          events.push(`artifacts-${name}`);
-          if (name === 'server-a') {
-            throw new Error('artifact cleanup failed');
-          }
-        },
+        (name) => removeArtifactsWithServerAFailure(events, name),
       );
 
       const stop = manager.stop();

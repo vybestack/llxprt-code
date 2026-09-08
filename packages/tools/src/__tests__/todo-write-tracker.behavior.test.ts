@@ -168,7 +168,7 @@ describe('TodoWrite then TodoRead round-trips persisted toolCalls through real d
     );
 
     const reloaded = await readStore.readTodos();
-    expect(reloaded).toEqual([
+    expect(reloaded).toStrictEqual([
       {
         id: 't1',
         content: 'Investigate persistence',

@@ -375,11 +375,21 @@ describe('Provider-Agnostic Naming Regression', () => {
 
   describe('Package metadata must not expose old export subpaths', () => {
     it('packages/core/package.json must not expose ./core/geminiChat.js', () => {
+      const { hasLegacyGeminiChatExport } = observeCoreExports();
+      expect(hasLegacyGeminiChatExport).toBe(false);
+    });
+
+    const observeCoreExports = () => {
       const pkg = JSON.parse(
         readFileSync(resolve(CORE_DIR, 'package.json'), 'utf-8'),
       );
-      expect('./core/geminiChat.js' in (pkg.exports ?? {})).toBe(false);
-    });
+
+      const hasLegacyGeminiChatExport =
+        './core/geminiChat.js' in (pkg.exports ?? {});
+      return {
+        hasLegacyGeminiChatExport,
+      };
+    };
   });
 
   describe('Old import paths must not remain in source/test files', () => {
@@ -645,12 +655,18 @@ describe('Provider-Agnostic Naming Regression', () => {
     ];
     for (const { token, description } of checks) {
       it(`must not contain ${description}`, () => {
+        const { violations } = scanDisallowedToken();
+        expect(violations).toStrictEqual([]);
+      });
+
+      const scanDisallowedToken = () => {
         const violations = searchTokenInCachedFiles(fullScan, token).filter(
           (h) =>
             !isAllowedBoundary(h.file) && !isInAllowedPairFile(h.file, token),
         );
-        expect(violations).toStrictEqual([]);
-      });
+
+        return { violations };
+      };
     }
   });
 
@@ -668,6 +684,11 @@ describe('Provider-Agnostic Naming Regression', () => {
 
   describe('No provider-neutral Gemini-prefixed declared identifiers outside allowed boundaries', () => {
     it('every Gemini-prefixed declaration outside boundaries must be allowed', () => {
+      const { violations } = collectDisallowedIdentifiers();
+      expect(violations).toStrictEqual([]);
+    });
+
+    const collectDisallowedIdentifiers = () => {
       const violations: Array<{
         name: string;
         file: string;
@@ -695,8 +716,9 @@ describe('Provider-Agnostic Naming Regression', () => {
           }
         }
       }
-      expect(violations).toStrictEqual([]);
-    });
+
+      return { violations };
+    };
   });
 
   describe('No new provider-neutral Gemini source filenames outside allowed boundaries', () => {
@@ -708,6 +730,11 @@ describe('Provider-Agnostic Naming Regression', () => {
       'core/src/llm-types/finishReasons.ts',
     ]);
     it('no Gemini-named source file outside provider/allowed exact paths', () => {
+      const { violations } = collectDisallowedGeminiPaths();
+      expect(violations).toStrictEqual([]);
+    });
+
+    const collectDisallowedGeminiPaths = () => {
       const violations: string[] = [];
       for (const entry of fullScan.entries) {
         if (isAllowedBoundary(entry.relPath)) continue;
@@ -718,8 +745,9 @@ describe('Provider-Agnostic Naming Regression', () => {
           violations.push(entry.relPath);
         }
       }
-      expect(violations).toStrictEqual([]);
-    });
+
+      return { violations };
+    };
 
     // Mutation test: a same-basename file in a wrong directory must be rejected
     it('rejects a geminiContent.ts file in a non-allowed directory (mutation guard)', () => {
@@ -731,6 +759,11 @@ describe('Provider-Agnostic Naming Regression', () => {
 
   describe('Provider-neutral GEMINI_* constants must not exist outside boundaries', () => {
     it('no declared const GEMINI_* outside boundaries (except allowlisted)', () => {
+      const { violations } = collectDisallowedGeminiConstants();
+      expect(violations).toStrictEqual([]);
+    });
+
+    const collectDisallowedGeminiConstants = () => {
       const violations: Array<{
         name: string;
         file: string;
@@ -757,8 +790,9 @@ describe('Provider-Agnostic Naming Regression', () => {
           }
         }
       }
-      expect(violations).toStrictEqual([]);
-    });
+
+      return { violations };
+    };
   });
 
   describe('compatibility file boundary is exact — no blanket exemption', () => {
@@ -825,35 +859,35 @@ describe('Provider-Agnostic Naming Regression', () => {
 
   describe('exact export tuple enforcement', () => {
     it('allows only the exact re-export source and public name', () => {
-      const file = 'core/src/config/index.ts';
-      const moduleSpecifier = './models.js';
+      const file = 'providers/src/index.ts';
+      const moduleSpecifier = './gemini/GeminiProvider.js';
       expect(
         isAllowedIdentifier(
           file,
-          'DEFAULT_GEMINI_FLASH_MODEL',
+          'GeminiProvider',
           'export-source',
           moduleSpecifier,
-          'DEFAULT_GEMINI_FLASH_MODEL',
-          'DEFAULT_FLASH_MODEL',
+          'GeminiProvider',
+          'GeminiProvider',
         ),
       ).toBe(true);
       expect(
         isAllowedIdentifier(
           file,
-          'DEFAULT_GEMINI_FLASH_MODEL',
+          'GeminiProvider',
           'export-source',
           './wrong.js',
-          'DEFAULT_GEMINI_FLASH_MODEL',
-          'DEFAULT_FLASH_MODEL',
+          'GeminiProvider',
+          'GeminiProvider',
         ),
       ).toBe(false);
       expect(
         isAllowedIdentifier(
           file,
-          'DEFAULT_GEMINI_FLASH_MODEL',
+          'GeminiProvider',
           'export-source',
           moduleSpecifier,
-          'DEFAULT_GEMINI_FLASH_MODEL',
+          'GeminiProvider',
           'MISLEADING_ALIAS',
         ),
       ).toBe(false);

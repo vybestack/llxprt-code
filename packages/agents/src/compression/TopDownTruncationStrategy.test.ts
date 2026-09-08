@@ -82,10 +82,6 @@ function createThrowingProvider(): IProvider {
     name: 'throwing-provider',
     getModels: async () => [],
     getDefaultModel: () => 'fake-model',
-    getServerTools: () => [],
-    invokeServerTool: async () => {
-      throw new Error('LLM should never be called by top-down-truncation');
-    },
     async *generateChatCompletion() {
       throw new Error('LLM should never be called by top-down-truncation');
       yield undefined as never;

@@ -1,0 +1,3 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_long_1","name":"run_shell_command","parameters":{"command":"for i in $(seq 1 200); do echo \"LONGLINE-$i of approval long output test\"; done"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_long_2","name":"activate_skill","parameters":{"name":"pr-creator"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"Long output approval test complete."}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}

@@ -307,7 +307,7 @@ describe('generateDynamicToolSettings', () => {
       // If allowedTools is being used (not empty), add the tool to it
       // (In this test, allowedTools is empty, so this branch would not run)
 
-      expect(currentAllowedTools.length).toBe(0);
+      expect(currentAllowedTools).toHaveLength(0);
       expect(newExcludeTools).not.toContain('WriteFile');
       expect(newExcludeTools).toContain('Shell');
       expect(newAllowedTools).toHaveLength(0);
@@ -445,7 +445,7 @@ describe('generateDynamicToolSettings', () => {
   });
 
   describe('Settings integration', () => {
-    it('should properly get effective values for excludeTools and allowedTools', async () => {
+    async function verifyShouldProperlyGetEffectiveValuesForExcludeToolsAndAllowedTools() {
       const { getEffectiveValue } = await import('./utils/settingsUtils.js');
 
       (getEffectiveValue as Mock<typeof getEffectiveValue>).mockImplementation(
@@ -459,11 +459,18 @@ describe('generateDynamicToolSettings', () => {
       const excludeTools = getEffectiveValue('excludeTools', {}, {});
       const allowedTools = getEffectiveValue('allowedTools', {}, {});
 
-      expect(excludeTools).toStrictEqual(['Tool1', 'Tool2']);
-      expect(allowedTools).toStrictEqual(['Tool3']);
+      return { excludeTools, allowedTools };
+    }
+
+    it('should properly get effective values for excludeTools and allowedTools', async () => {
+      const behaviorResult =
+        await verifyShouldProperlyGetEffectiveValuesForExcludeToolsAndAllowedTools();
+
+      expect(behaviorResult.excludeTools).toStrictEqual(['Tool1', 'Tool2']);
+      expect(behaviorResult.allowedTools).toStrictEqual(['Tool3']);
     });
 
-    it('should handle empty arrays for excludeTools and allowedTools', async () => {
+    async function verifyShouldHandleEmptyArraysForExcludeToolsAndAllowedTools() {
       const { getEffectiveValue } = await import('./utils/settingsUtils.js');
 
       (getEffectiveValue as Mock<typeof getEffectiveValue>).mockImplementation(
@@ -477,11 +484,18 @@ describe('generateDynamicToolSettings', () => {
       const excludeTools = getEffectiveValue('excludeTools', {}, {});
       const allowedTools = getEffectiveValue('allowedTools', {}, {});
 
-      expect(excludeTools).toStrictEqual([]);
-      expect(allowedTools).toStrictEqual([]);
+      return { excludeTools, allowedTools };
+    }
+
+    it('should handle empty arrays for excludeTools and allowedTools', async () => {
+      const behaviorResult =
+        await verifyShouldHandleEmptyArraysForExcludeToolsAndAllowedTools();
+
+      expect(behaviorResult.excludeTools).toStrictEqual([]);
+      expect(behaviorResult.allowedTools).toStrictEqual([]);
     });
 
-    it('should handle undefined values for excludeTools and allowedTools', async () => {
+    async function verifyShouldHandleUndefinedValuesForExcludeToolsAndAllowedTools() {
       const { getEffectiveValue } = await import('./utils/settingsUtils.js');
 
       (getEffectiveValue as Mock<typeof getEffectiveValue>).mockImplementation(
@@ -496,8 +510,15 @@ describe('generateDynamicToolSettings', () => {
 
       const allowedTools = getEffectiveValue('allowedTools', {}, {}) ?? [];
 
-      expect(excludeTools).toStrictEqual([]);
-      expect(allowedTools).toStrictEqual([]);
+      return { excludeTools, allowedTools };
+    }
+
+    it('should handle undefined values for excludeTools and allowedTools', async () => {
+      const behaviorResult =
+        await verifyShouldHandleUndefinedValuesForExcludeToolsAndAllowedTools();
+
+      expect(behaviorResult.excludeTools).toStrictEqual([]);
+      expect(behaviorResult.allowedTools).toStrictEqual([]);
     });
   });
 });

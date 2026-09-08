@@ -13,6 +13,18 @@ const MODEL_LIST_TIMEOUT_MS = 10_000;
 export function getDefaultModelList(providerName: string): IModel[] {
   return [
     {
+      id: 'gemini-3.7-flash',
+      name: 'Gemini 3.7 Flash',
+      provider: providerName,
+      supportedToolFormats: [],
+    },
+    {
+      id: 'gemini-3.6-flash',
+      name: 'Gemini 3.6 Flash',
+      provider: providerName,
+      supportedToolFormats: [],
+    },
+    {
       id: 'gemini-2.5-pro',
       name: 'Gemini 2.5 Pro',
       provider: providerName,

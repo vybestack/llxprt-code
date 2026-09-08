@@ -158,9 +158,7 @@ void vi.mock('./turn', () => {
 void vi.mock('@vybestack/llxprt-code-core/config/config.js', () =>
   automock(realConfigModule),
 );
-void vi.mock('@vybestack/llxprt-code-core/utils/getFolderStructure.js', () => ({
-  getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
-}));
+
 void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
@@ -282,8 +280,8 @@ describe('Agent Client (client.ts)', () => {
     todoStoreWritePausedMock.mockResolvedValue(undefined);
   });
 
-  afterEach(() => {
-    client.dispose();
+  afterEach(async () => {
+    await client.dispose();
     vi.restoreAllMocks();
   });
 
@@ -635,6 +633,12 @@ describe('Agent Client (client.ts)', () => {
     });
 
     it('should return the turn instance after the stream is complete', async () => {
+      const { finalResult } =
+        await observeReturnTheTurnInstanceAfterTheStreamIsComplete();
+      expect(finalResult).toBeInstanceOf(Turn);
+    });
+
+    const observeReturnTheTurnInstanceAfterTheStreamIsComplete = async () => {
       // Arrange
       const mockStream = (async function* () {
         yield { type: 'content', value: 'Hello' };
@@ -676,8 +680,9 @@ describe('Agent Client (client.ts)', () => {
       }
 
       // Assert
-      expect(finalResult).toBeInstanceOf(Turn);
-    });
+
+      return { finalResult };
+    };
 
     it('should yield MaxSessionTurns and stop when session turn limit is reached', async () => {
       // Arrange

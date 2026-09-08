@@ -127,14 +127,8 @@ describe('CodeRabbit #3031 — cancellation vs timeout classification', () => {
     // catch saw timeoutController.signal.aborted and returned TIMEOUT.
     const parent = new AbortController();
     parent.abort();
-    const launch = async (_req: unknown, signal: AbortSignal) => {
-      if (signal.aborted) {
-        const err = new Error('Aborted');
-        err.name = 'AbortError';
-        throw err;
-      }
-      return completingLaunchResult();
-    };
+    const launch = async (_req: unknown, signal: AbortSignal) =>
+      abortOrResult(signal, completingLaunchResult);
     const adapter = buildAdapter(
       makeConfig({
         'task-default-timeout-seconds': 60,
@@ -353,3 +347,15 @@ describe('CodeRabbit #3031 — configured timeout values are validated (Finding 
     },
   );
 });
+
+async function abortOrResult<T>(
+  signal: AbortSignal,
+  result: () => T,
+): Promise<T> {
+  if (signal.aborted) {
+    const err = new Error('Aborted');
+    err.name = 'AbortError';
+    throw err;
+  }
+  return result();
+}

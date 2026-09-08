@@ -11,6 +11,19 @@ import {
   makeToken,
 } from './BucketFailoverHandlerImpl.test-helpers.js';
 
+type BucketFixture = ReturnType<typeof createBucketFailoverFixture>;
+
+function failBucketAStoreRead(
+  originalGetToken: BucketFixture['tokenStore']['getToken'],
+): BucketFixture['tokenStore']['getToken'] {
+  return async (provider, bucket) => {
+    if (bucket === 'bucket-a') {
+      throw new Error('Token store read error');
+    }
+    return originalGetToken(provider, bucket);
+  };
+}
+
 describe('BucketFailoverHandlerImpl #21', () => {
   /**
    * @requirement REQ-1598-CL04
@@ -30,12 +43,7 @@ describe('BucketFailoverHandlerImpl #21', () => {
     // This exercises the catch block in Pass 1 (lines 137-143)
     const originalStoreGetToken = tokenStore.getToken.bind(tokenStore);
     vi.spyOn(tokenStore, 'getToken').mockImplementation(
-      async (provider, bucket) => {
-        if (bucket === 'bucket-a') {
-          throw new Error('Token store read error');
-        }
-        return originalStoreGetToken(provider, bucket);
-      },
+      failBucketAStoreRead(originalStoreGetToken),
     );
 
     const handler = new BucketFailoverHandlerImpl(

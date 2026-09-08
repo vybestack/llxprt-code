@@ -805,23 +805,6 @@ export default tseslint.config(
       // 3 errors, the bun:test import produced 0). eslint-plugin-jest with
       // globalPackage: 'bun:test' restores enforcement.
       //
-      // SEVEN rules are enabled at 'error': they produce 0 violations or had
-      // a small, fixed number of violations that were fixed in the test files.
-      //
-      // FIVE rules remain 'off': eslint-plugin-jest implements them MORE
-      // strictly than @vitest/eslint-plugin did, so enabling them is net-NEW
-      // enforcement rather than preservation of the previous level. The
-      // evidence: on the tree immediately before #2969 (commit a805a219f)
-      // every test still imported 'vitest', the vitest plugin was fully live
-      // at 'error', and `npm run lint` was green at 0 warnings (therefore 0
-      // vitest-plugin violations). Running eslint-plugin-jest with
-      // globalPackage: 'vitest' over the SAME files reported 728 violations in
-      // packages/core alone (~4,183 repo-wide). Burning those down is out of
-      // scope for #2970 and is tracked as #3129. Options are preserved so
-      // re-enabling is a one-word change. Do NOT spread
-      // jest.configs['flat/recommended'].rules — it contains additional rules
-      // vitest never had.
-
       // ── Active rules (0 violations or violations fixed) ──
       'jest/no-identical-title': 'error',
       'jest/valid-describe-callback': 'error',
@@ -851,8 +834,7 @@ export default tseslint.config(
       ],
       'jest/no-conditional-expect': 'error',
 
-      // ── Rules kept at 'off' (jest is strictly stricter than vitest was;
-      //    enabling is net-NEW enforcement; burn-down tracked in #3129) ──
+      // ── Rules kept 'off' (unchanged from vitest config) ──
       'jest/no-commented-out-tests': 'off', // eslint-policy-allow-off: #2970 unchanged from vitest config
       'jest/no-disabled-tests': 'off', // eslint-policy-allow-off: #2970 unchanged from vitest config
       // fast-check's property-based testing exports both `it` and `test`,
@@ -861,7 +843,7 @@ export default tseslint.config(
       // across many test files); `itProp.prop` is the corresponding property
       // variant.
       'jest/no-standalone-expect': [
-        'off', // eslint-policy-allow-off: #2970 jest stricter than vitest; 617 violations tracked in #3129
+        'error',
         {
           additionalTestBlockFunctions: [
             'it',
@@ -870,13 +852,27 @@ export default tseslint.config(
             'it.prop',
             'testProp',
             'test.prop',
+            // Bun's conditional-skip forms. The jest plugin does not know
+            // them, so without these every assertion inside a skipIf test
+            // reads as standalone.
+            'it.skipIf',
+            'it.todoIf',
+            'test.skipIf',
+            'test.todoIf',
           ],
         },
       ],
-      'jest/no-conditional-in-test': 'off', // eslint-policy-allow-off: #2970 jest stricter than vitest; 3059 violations tracked in #3129
-      'jest/prefer-strict-equal': 'off', // eslint-policy-allow-off: #2970 jest stricter than vitest; 199 violations tracked in #3129
-      'jest/require-top-level-describe': 'off', // eslint-policy-allow-off: #2970 jest stricter than vitest; 154 violations tracked in #3129
-      'jest/valid-expect': 'off', // eslint-policy-allow-off: #2970 jest stricter than vitest; 154 violations tracked in #3129
+      // 'off' since #3489 (option 4): the 785-report measurement and the
+      // history of the warn choice live in 376bf0105 and #3489.
+      'jest/no-conditional-in-test': 'off', // eslint-policy-allow-off: #2970/#3489 harmful subset enforced by jest/no-conditional-expect at error; 781 remaining reports tracked in #3129
+      'jest/prefer-strict-equal': 'error',
+      // Hooks registered from shared lifecycle helpers are wrapped in a
+      // per-file root describe (see #3489), so the helper stays defined
+      // once and every hook is lexically inside a describe. The rule stays
+      // on so every file, including new ones, must nest hooks inside a
+      // describe.
+      'jest/require-top-level-describe': 'warn',
+      'jest/valid-expect': 'error',
       // vitest/no-import-node-test → no-restricted-imports banning node:test
       // (issue #2970: same invariant, different mechanism). bun:test is the
       // only supported test module.
@@ -962,6 +958,42 @@ export default tseslint.config(
   },
   // ============================================================================
   // End Issue #1569 S6B
+  // ============================================================================
+  // Issue #3221: A2A host boundary — fail-closed import allowlist
+  // ============================================================================
+  // packages/a2a-server is a HOST of the public Agent facade, not a co-owner
+  // of the runtime. Every import specifier in its tree must appear on an
+  // explicit allowlist (node builtins, relative paths, the test runner, the
+  // A2A transport SDK, the package's own declared host dependencies, and the
+  // ROOT public entrypoints of the runtime packages). Anything else — deep
+  // subpaths like @vybestack/llxprt-code-core/src/*, the CLI package, the
+  // providers package, provider SDKs, or any undeclared module — fails
+  // closed. New entries require explicit justification in this file.
+  {
+    files: ['packages/a2a-server/src/**/*.ts', 'packages/a2a-server/index.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              // No runtime subpath is permitted. a2a-server reaches MCP host
+              // services through the Agent facade, which wires them itself, so
+              // it needs no deep import. This must agree with
+              // ALLOWED_RUNTIME_SUBPATHS in scripts/a2a-boundary/a2aBoundary.ts
+              // (currently empty); the two are checked against each other by
+              // scripts/tests/issue-3221-a2a-import-boundary.bun.test.ts, so
+              // editing one without the other fails CI rather than silently
+              // opening a hole in a single layer.
+              regex: '^(?!node:|\\.|/|bun:test|@a2a-js/sdk(?:/server(?:/express)?)?$|@vybestack/llxprt-code-(agents|core|mcp|storage)$|@google-cloud/storage$|dotenv$|express$|fs-extra$|strip-json-comments$|supertest$|tar$|uuid$|winston$).+',
+              message:
+                'a2a-server is an Agent-facade host: only node builtins, relative paths, bun:test, the A2A SDK, declared host dependencies, and runtime-package ROOT entrypoints may be imported (issue #3221).',
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Issue #1576: Enforce strict line-limit errors on AppContainer module files.
   // These files are being decomposed; error-level rules catch regressions during
   // and after the decomposition. Test files are excluded (they already have
@@ -1493,8 +1525,6 @@ export default tseslint.config(
   },
   // Issue #2970: The packages/tools override that previously turned off
   // jest/no-conditional-expect, jest/no-conditional-in-test, and
-  // jest/prefer-strict-equal has been removed. jest/no-conditional-expect is
-  // now enabled globally and all tools violations were fixed in the test
-  // files. The other two rules remain off globally (see the deferred rules
-  // above), making a package-specific override redundant.
+  // jest/prefer-strict-equal has been removed. The rules are enabled in the
+  // package-source test block, so a package-specific override is redundant.
 );

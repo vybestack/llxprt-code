@@ -12,6 +12,10 @@ import {
 } from './ephemeralSettings.js';
 import { loadProviderAliasEntries } from '../composition/providerAliases.js';
 
+function mediaPdfHelpText(): string {
+  return ephemeralSettingHelp['media.pdf.enabled'] ?? '';
+}
+
 describe('media.pdf.enabled ephemeral setting @issue:2608', () => {
   describe('registry validation', () => {
     it('accepts media.pdf.enabled=true', () => {
@@ -37,7 +41,7 @@ describe('media.pdf.enabled ephemeral setting @issue:2608', () => {
     });
 
     it('mentions PDF in the description', () => {
-      const description = ephemeralSettingHelp['media.pdf.enabled'] ?? '';
+      const description = mediaPdfHelpText();
       expect(description.toLowerCase()).toContain('pdf');
     });
   });

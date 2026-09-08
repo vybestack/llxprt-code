@@ -19,6 +19,7 @@ import { type IContent } from '../services/history/IContent.js';
 import { replaySession, replaySessionThroughSequence } from './ReplayEngine.js';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
+import type { LocalMediaStore } from '../storage/local-media-store.js';
 import {
   type CheckpointMetadataView,
   type ContinueTarget,
@@ -46,6 +47,8 @@ interface ForkRuntime {
   provider: string;
   model: string;
   workspaceDirs: string[];
+  mediaStore?: LocalMediaStore;
+  maxQueueBytes?: number;
 }
 
 type CheckpointTarget = Extract<ContinueTarget, { kind: 'checkpoint' }>;
@@ -60,8 +63,11 @@ type HistoryResult =
 async function loadCheckpointHistory(
   target: CheckpointTarget,
   projectHash: string,
+  mediaStore: LocalMediaStore | undefined,
 ): Promise<HistoryResult> {
-  const fullReplay = await replaySession(target.source.filePath, projectHash);
+  const fullReplay = await replaySession(target.source.filePath, projectHash, {
+    mediaStore,
+  });
   if (!fullReplay.ok) {
     return {
       ok: false,
@@ -88,6 +94,7 @@ async function loadCheckpointHistory(
     target.source.filePath,
     projectHash,
     liveCheckpoint.sequence,
+    { mediaStore },
   );
   if (!boundedReplay.ok) {
     return {
@@ -115,14 +122,37 @@ async function loadCheckpointHistory(
 async function cleanupFailedChild(
   recording: SessionRecordingService | null,
   lockHandle: LockHandle | null,
-): Promise<void> {
+): Promise<unknown[]> {
+  const failures: unknown[] = [];
   const filePath = recording?.getFilePath() ?? null;
-  const ownedLock = recording?.getOwnedLockHandle() ?? lockHandle;
-  await recording?.dispose().catch(() => undefined);
-  await ownedLock?.release().catch(() => undefined);
-  if (filePath !== null) {
-    await fs.unlink(filePath).catch(() => undefined);
+  if (recording !== null) {
+    try {
+      await recording.dispose();
+    } catch (error: unknown) {
+      failures.push(error);
+    }
+  } else if (lockHandle !== null) {
+    try {
+      await lockHandle.release();
+    } catch (error: unknown) {
+      failures.push(error);
+    }
   }
+  if (filePath !== null) {
+    try {
+      await fs.rm(filePath, { recursive: true, force: true });
+    } catch (error: unknown) {
+      failures.push(error);
+    }
+  }
+  return failures;
+}
+
+function failureDetail(error: unknown): string {
+  if (error instanceof AggregateError) {
+    return error.errors.map(failureDetail).join('; ');
+  }
+  return error instanceof Error ? error.message : String(error);
 }
 
 async function materializeChild(
@@ -141,6 +171,12 @@ async function materializeChild(
       workspaceDirs: runtime.workspaceDirs,
       provider: runtime.provider,
       model: runtime.model,
+      ...(runtime.mediaStore === undefined
+        ? {}
+        : { mediaStore: runtime.mediaStore }),
+      ...(runtime.maxQueueBytes === undefined
+        ? {}
+        : { maxQueueBytes: runtime.maxQueueBytes }),
     });
     recording.recordSessionFork({
       parentSessionId: target.source.sessionId,
@@ -159,15 +195,25 @@ async function materializeChild(
     }
     await fs.access(childFilePath);
   } catch (error: unknown) {
-    await cleanupFailedChild(recording, null);
-    const detail = error instanceof Error ? error.message : String(error);
-    return { ok: false, error: `Failed to create child session: ${detail}` };
+    const cleanupFailures = await cleanupFailedChild(recording, null);
+    const failures = [error, ...cleanupFailures];
+    return {
+      ok: false,
+      error: `Failed to create child session: ${failures.map(failureDetail).join('; ')}`,
+    };
   }
 
   const lockHandle = recording.getOwnedLockHandle();
   if (lockHandle === null) {
-    await cleanupFailedChild(recording, null);
-    return { ok: false, error: 'Failed to retain child session lock' };
+    const cleanupFailures = await cleanupFailedChild(recording, null);
+    const detail = cleanupFailures.map(failureDetail).join('; ');
+    return {
+      ok: false,
+      error:
+        detail.length === 0
+          ? 'Failed to retain child session lock'
+          : `Failed to retain child session lock; cleanup failed: ${detail}`,
+    };
   }
   return {
     ok: true,
@@ -185,7 +231,14 @@ async function materializeChild(
   };
 }
 
+export interface SessionTransitionServiceOptions {
+  readonly mediaStore?: LocalMediaStore;
+  readonly maxQueueBytes?: number;
+}
+
 export class SessionTransitionService {
+  constructor(private readonly options: SessionTransitionServiceOptions = {}) {}
+
   async forkFromCheckpoint(
     target: CheckpointTarget,
     chatsDir: string,
@@ -211,7 +264,11 @@ export class SessionTransitionService {
       }
     }
     try {
-      const history = await loadCheckpointHistory(target, projectHash);
+      const history = await loadCheckpointHistory(
+        target,
+        projectHash,
+        this.options.mediaStore,
+      );
       if (!history.ok) return history;
       return await materializeChild(
         target,
@@ -223,6 +280,12 @@ export class SessionTransitionService {
           provider: currentProvider,
           model: currentModel,
           workspaceDirs,
+          ...(this.options.mediaStore === undefined
+            ? {}
+            : { mediaStore: this.options.mediaStore }),
+          ...(this.options.maxQueueBytes === undefined
+            ? {}
+            : { maxQueueBytes: this.options.maxQueueBytes }),
         },
       );
     } finally {

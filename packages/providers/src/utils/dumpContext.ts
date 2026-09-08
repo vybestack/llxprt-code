@@ -9,6 +9,10 @@ import * as path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ChronologyTraceEntry } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
+import {
+  sanitizeDiagnosticData,
+  type DiagnosticSanitizationOptions,
+} from './mediaDiagnostics.js';
 
 const logger = new DebugLogger('llxprt:core:dumpContext');
 
@@ -19,6 +23,10 @@ export interface DumpRequest {
   method: string;
   headers?: Record<string, string>;
   body?: unknown;
+  /** How the request was carried. Present only when a caller observed the real
+   * transport (for example the Codex WebSocket) rather than synthesized HTTP
+   * defaults (#3159). */
+  transport?: { type: 'http' } | { type: 'websocket'; frameType: string };
 }
 
 export interface DumpResponse {
@@ -56,6 +64,7 @@ const SENSITIVE_HEADER_NAMES = new Set([
   'api-key',
   'cookie',
   'set-cookie',
+  'chatgpt-account-id',
 ]);
 
 /**
@@ -78,10 +87,33 @@ export function redactSensitiveHeaders(
 /**
  * Redacts sensitive information from request data
  */
-export function redactSensitiveData(request: DumpRequest): DumpRequest {
+function sanitizeDumpBody(
+  body: unknown,
+  options: DiagnosticSanitizationOptions,
+): unknown {
+  if (typeof body !== 'string') return sanitizeDiagnosticData(body, options);
+  if (options.media === 'raw') return body;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch (error) {
+    throw new TypeError('ordinary diagnostic body must be valid JSON', {
+      cause: error,
+    });
+  }
+  return sanitizeDiagnosticData(parsed, options);
+}
+
+export function redactSensitiveData(
+  request: DumpRequest,
+  options: DiagnosticSanitizationOptions = {},
+): DumpRequest {
   const redacted: DumpRequest = {
     ...request,
     headers: redactSensitiveHeaders(request.headers),
+    ...(request.body === undefined
+      ? {}
+      : { body: sanitizeDumpBody(request.body, options) }),
   };
 
   // Redact key query parameter in URL
@@ -151,6 +183,7 @@ export async function dumpRequestContext(
   provider: string,
   baseId?: string,
   chronology?: readonly ChronologyTraceEntry[],
+  options: DiagnosticSanitizationOptions = {},
 ): Promise<DumpRequestResult> {
   const dumpDir = path.join(Storage.getGlobalCacheDir(), 'dumps');
   await fs.mkdir(dumpDir, { recursive: true });
@@ -159,7 +192,7 @@ export async function dumpRequestContext(
   const requestFilename = `${id}-request.json`;
   const filepath = path.join(dumpDir, requestFilename);
 
-  const redactedRequest = redactSensitiveData(request);
+  const redactedRequest = redactSensitiveData(request, options);
 
   const data: DumpData = {
     provider,
@@ -183,6 +216,7 @@ export async function dumpResponseContext(
   baseId: string | undefined,
   response: DumpResponse,
   provider: string,
+  options: DiagnosticSanitizationOptions = {},
 ): Promise<DumpResponseResult> {
   const dumpDir = path.join(Storage.getGlobalCacheDir(), 'dumps');
   await fs.mkdir(dumpDir, { recursive: true });
@@ -194,7 +228,13 @@ export async function dumpResponseContext(
   const data = {
     provider,
     timestamp: new Date().toISOString(),
-    response,
+    response: {
+      ...response,
+      headers: redactSensitiveHeaders(response.headers),
+      ...(response.body === undefined
+        ? {}
+        : { body: sanitizeDumpBody(response.body, options) }),
+    },
     ...(baseId ? { relatedRequestFile: `${baseId}-request.json` } : {}),
   };
 

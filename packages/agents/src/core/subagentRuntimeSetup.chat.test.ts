@@ -31,6 +31,12 @@ describe('getScopeLocalFuncDefs', () => {
 
 describe('buildChatSystemPrompt', () => {
   it('should template systemPrompt and add non-interactive rules', () => {
+    const { result } = observeTemplateSystemPromptAndAddNonInteractiveRules();
+    expect(result).toContain('You are a tester.');
+    expect(result).toContain('non-interactive');
+  });
+
+  const observeTemplateSystemPromptAndAddNonInteractiveRules = () => {
     const promptConfig = {
       systemPrompt: 'You are a ${role}.',
     };
@@ -40,9 +46,9 @@ describe('buildChatSystemPrompt', () => {
       set: () => {},
     };
     const result = buildChatSystemPrompt(promptConfig, undefined, context);
-    expect(result).toContain('You are a tester.');
-    expect(result).toContain('non-interactive');
-  });
+
+    return { result };
+  };
 
   it('should add output instructions when outputConfig has outputs', () => {
     const promptConfig = {

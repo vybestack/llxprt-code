@@ -24,6 +24,7 @@ import {
   type LockHandle,
 } from './SessionLockManager.js';
 import { type SessionRecordingService } from './SessionRecordingService.js';
+import type { LocalMediaStore } from '../storage/local-media-store.js';
 import {
   type CheckpointMetadataView,
   type ContinueTarget,
@@ -46,6 +47,15 @@ type NamedOperation =
   | { kind: 'session'; sessionId: string; name: string };
 
 type NamedOperationAction<T> = (name: string) => Promise<T>;
+
+interface ClosedCheckpointRename {
+  readonly filePath: string;
+  readonly projectHash: string;
+  readonly chatsDir: string;
+  readonly checkpointId: string;
+  readonly name: string;
+  readonly sessionIds: readonly string[];
+}
 
 type FileSnapshot = {
   readonly filePath: string;
@@ -126,8 +136,9 @@ async function appendEvent(
   projectHash: string,
   type: SessionRecordLine['type'],
   payload: unknown,
+  mediaStore: LocalMediaStore | undefined,
 ): Promise<void> {
-  const replay = await replaySession(filePath, projectHash);
+  const replay = await replaySession(filePath, projectHash, { mediaStore });
   if (!replay.ok) throw new Error(replay.error);
   if (replay.sequenceCorrupt) {
     throw new Error('Cannot append metadata to a sequence-corrupt recording');
@@ -143,12 +154,18 @@ async function appendEvent(
 }
 
 export class CheckpointService {
+  constructor(private readonly mediaStore?: LocalMediaStore) {}
+
   async listCheckpoints(
     filePath: string,
     projectHash: string,
   ): Promise<readonly CheckpointMetadataView[]> {
-    const result = await replaySession(filePath, projectHash);
-    if (!result.ok) return [];
+    const result = await replaySession(filePath, projectHash, {
+      mediaStore: this.mediaStore,
+    });
+    if (!result.ok) {
+      throw new Error(`Cannot list checkpoints: ${result.error}`);
+    }
     return (result.checkpoints ?? []).filter(
       (checkpoint) => !checkpoint.deleted,
     );
@@ -158,7 +175,9 @@ export class CheckpointService {
     filePath: string,
     projectHash: string,
   ): Promise<readonly CheckpointMetadataView[]> {
-    const result = await replaySession(filePath, projectHash);
+    const result = await replaySession(filePath, projectHash, {
+      mediaStore: this.mediaStore,
+    });
     if (!result.ok) {
       throw new Error(`Cannot verify checkpoint blockers: ${result.error}`);
     }
@@ -233,11 +252,72 @@ export class CheckpointService {
     const lock = await this.acquireLock(chatsDir, sourceSessionId);
     try {
       await this.requireLiveCheckpoint(filePath, projectHash, checkpointId);
-      await appendEvent(filePath, projectHash, 'checkpoint_deleted', {
-        checkpointId,
-      });
+      await appendEvent(
+        filePath,
+        projectHash,
+        'checkpoint_deleted',
+        { checkpointId },
+        this.mediaStore,
+      );
     } finally {
       await lock.release().catch(() => undefined);
+    }
+  }
+
+  private async renameCheckpointUnderSessionLocks(
+    input: ClosedCheckpointRename,
+  ): Promise<void> {
+    const operation: NamedOperation = {
+      kind: 'rename',
+      checkpointId: input.checkpointId,
+      name: input.name,
+    };
+    const locks = await this.acquireSessionLocks(
+      input.chatsDir,
+      input.sessionIds,
+    );
+    try {
+      const refreshedCollisions = (
+        await SessionDiscovery.listContinueTargets(
+          input.chatsDir,
+          input.projectHash,
+          this.mediaStore,
+        )
+      ).filter(
+        (target) =>
+          targetName(target) === input.name &&
+          !isSameReference(target, operation),
+      );
+      const lockedIds = new Set(input.sessionIds);
+      if (
+        refreshedCollisions.some(
+          (target) => !lockedIds.has(targetSessionId(target)),
+        )
+      ) {
+        throw new Error(`Name '${input.name}' changed while acquiring locks`);
+      }
+      await this.requireLiveCheckpoint(
+        input.filePath,
+        input.projectHash,
+        input.checkpointId,
+      );
+      const snapshots = await captureFiles(refreshedCollisions);
+      await runWithFileRollback(snapshots, async () => {
+        for (const collision of refreshedCollisions) {
+          await this.tombstoneClosedCollision(collision, input.projectHash);
+        }
+        await appendEvent(
+          input.filePath,
+          input.projectHash,
+          'checkpoint_renamed',
+          { checkpointId: input.checkpointId, name: input.name },
+          this.mediaStore,
+        );
+      });
+    } finally {
+      for (const lock of [...locks].reverse()) {
+        await lock.release().catch(() => undefined);
+      }
     }
   }
 
@@ -259,6 +339,7 @@ export class CheckpointService {
       const targets = await SessionDiscovery.listContinueTargets(
         chatsDir,
         projectHash,
+        this.mediaStore,
       );
       const reservedIdentity = targets.find((target) =>
         target.kind === 'session'
@@ -283,39 +364,14 @@ export class CheckpointService {
       const sessionIds = [
         ...new Set([sourceSessionId, ...collisions.map(targetSessionId)]),
       ].sort((left, right) => left.localeCompare(right));
-      const locks = await this.acquireSessionLocks(chatsDir, sessionIds);
-      try {
-        const refreshedCollisions = (
-          await SessionDiscovery.listContinueTargets(chatsDir, projectHash)
-        ).filter(
-          (target) =>
-            targetName(target) === trimmed &&
-            !isSameReference(target, operation),
-        );
-        const lockedIds = new Set(sessionIds);
-        if (
-          refreshedCollisions.some(
-            (target) => !lockedIds.has(targetSessionId(target)),
-          )
-        ) {
-          throw new Error(`Name '${trimmed}' changed while acquiring locks`);
-        }
-        await this.requireLiveCheckpoint(filePath, projectHash, checkpointId);
-        const snapshots = await captureFiles(refreshedCollisions);
-        await runWithFileRollback(snapshots, async () => {
-          for (const collision of refreshedCollisions) {
-            await this.tombstoneClosedCollision(collision, projectHash);
-          }
-          await appendEvent(filePath, projectHash, 'checkpoint_renamed', {
-            checkpointId,
-            name: trimmed,
-          });
-        });
-      } finally {
-        for (const lock of [...locks].reverse()) {
-          await lock.release().catch(() => undefined);
-        }
-      }
+      await this.renameCheckpointUnderSessionLocks({
+        filePath,
+        projectHash,
+        chatsDir,
+        checkpointId,
+        name: trimmed,
+        sessionIds,
+      });
     } finally {
       await namespaceLock.release().catch(() => undefined);
     }
@@ -337,6 +393,7 @@ export class CheckpointService {
       const targets = await SessionDiscovery.listContinueTargets(
         chatsDir,
         projectHash,
+        this.mediaStore,
       );
       const collision = targets.find(
         (target) =>
@@ -350,7 +407,9 @@ export class CheckpointService {
       }
       const lock = await this.acquireLock(chatsDir, sourceSessionId);
       try {
-        const replay = await replaySession(filePath, projectHash);
+        const replay = await replaySession(filePath, projectHash, {
+          mediaStore: this.mediaStore,
+        });
         if (!replay.ok) throw new Error(replay.error);
         if (replay.sequenceCorrupt) {
           throw new Error(
@@ -399,6 +458,7 @@ export class CheckpointService {
       const targets = await SessionDiscovery.listContinueTargets(
         chatsDir,
         projectHash,
+        this.mediaStore,
       );
       const reservedIdentity = targets.find((target) =>
         target.kind === 'session'
@@ -479,6 +539,7 @@ export class CheckpointService {
         projectHash,
         'checkpoint_deleted',
         { checkpointId: collision.checkpointId },
+        this.mediaStore,
       );
       return;
     }
@@ -486,9 +547,8 @@ export class CheckpointService {
       collision.session.filePath,
       projectHash,
       'session_named',
-      {
-        name: null,
-      },
+      { name: null },
+      this.mediaStore,
     );
   }
 
@@ -525,6 +585,7 @@ export class CheckpointService {
     const refreshed = await SessionDiscovery.listContinueTargets(
       chatsDir,
       projectHash,
+      this.mediaStore,
     );
     const collisions = refreshed.filter(
       (target) =>
@@ -561,6 +622,7 @@ export class CheckpointService {
         projectHash,
         'checkpoint_deleted',
         { checkpointId: collision.checkpointId },
+        this.mediaStore,
       );
       return;
     }
@@ -581,6 +643,7 @@ export class CheckpointService {
       projectHash,
       'session_named',
       { name: null },
+      this.mediaStore,
     );
   }
 
@@ -615,7 +678,9 @@ export class CheckpointService {
     projectHash: string,
     checkpointId: string,
   ): Promise<CheckpointMetadataView> {
-    const result = await replaySession(filePath, projectHash);
+    const result = await replaySession(filePath, projectHash, {
+      mediaStore: this.mediaStore,
+    });
     if (!result.ok) throw new Error(result.error);
     const checkpoint = result.checkpoints?.find(
       (candidate) => candidate.checkpointId === checkpointId,

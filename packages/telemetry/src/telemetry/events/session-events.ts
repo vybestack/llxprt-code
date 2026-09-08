@@ -29,7 +29,7 @@ export class StartSessionEvent {
     const generatorConfig = config.getContentGeneratorConfig();
     const mcpServers = config.getMcpServers();
 
-    const useGemini =
+    const usesApiKey =
       generatorConfig !== undefined &&
       (generatorConfig.apiKey?.length ?? 0) > 0 &&
       generatorConfig.vertexai !== true;
@@ -45,7 +45,7 @@ export class StartSessionEvent {
       typeof sandboxConfig === 'string' || Boolean(sandboxConfig);
     this.core_tools_enabled = (config.getCoreTools() ?? []).join(',');
     this.approval_mode = config.getApprovalMode();
-    this.api_key_enabled = useGemini || useVertex;
+    this.api_key_enabled = usesApiKey || useVertex;
     this.vertex_ai_enabled = useVertex;
     this.debug_enabled = config.getDebugMode();
     this.mcp_servers = mcpServers ? Object.keys(mcpServers).join(',') : '';

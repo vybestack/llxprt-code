@@ -163,13 +163,31 @@ describe('Confirmation forcing seam @plan:PLAN-20260617-COREAPI.P17 @requirement
   });
 
   it('leaves args with no alias keys structurally unchanged (no spurious absolute_path) @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006', async () => {
-    const probe = createConfirmationForcingProbe('read_file');
-    await buildAndConfirm(probe, { pattern: '*.ts', limit: 5 });
-
-    const seen = probe.lastBuildParams();
+    const {
+      seen,
+      leavesArgsWithNoAliasKeysStructurallyUnchangedNoSpuriousAbsolutePathObservation1,
+    } =
+      await observeLeavesArgsWithNoAliasKeysStructurallyUnchangedNoSpuriousAbsolutePath();
     expect(seen).toStrictEqual({ pattern: '*.ts', limit: 5 });
-    expect('absolute_path' in (seen ?? {})).toBe(false);
+    expect(
+      leavesArgsWithNoAliasKeysStructurallyUnchangedNoSpuriousAbsolutePathObservation1,
+    ).toBe(false);
   });
+
+  const observeLeavesArgsWithNoAliasKeysStructurallyUnchangedNoSpuriousAbsolutePath =
+    async () => {
+      const probe = createConfirmationForcingProbe('read_file');
+      await buildAndConfirm(probe, { pattern: '*.ts', limit: 5 });
+
+      const seen = probe.lastBuildParams();
+
+      const leavesArgsWithNoAliasKeysStructurallyUnchangedNoSpuriousAbsolutePathObservation1 =
+        'absolute_path' in (seen ?? {});
+      return {
+        seen,
+        leavesArgsWithNoAliasKeysStructurallyUnchangedNoSpuriousAbsolutePathObservation1,
+      };
+    };
 
   it('getAllTools and getEnabledTools both return confirming tools @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006', async () => {
     const probe = createConfirmationForcingProbe('read_file');

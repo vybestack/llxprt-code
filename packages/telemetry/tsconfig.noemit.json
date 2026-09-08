@@ -1,0 +1,28 @@
+{
+  // Issue #3387: the file set `tsc --noEmit` verifies for this package.
+  //
+  // tsconfig.json is what typescript-eslint resolves source files against, so
+  // it must not exclude a file that lives in this package. An excluded file
+  // belongs to no package project and falls back to the root tsconfig.json,
+  // which declares no `include` and therefore spans the whole repository.
+  // Building that program cost ~7 GB and ~40 s per ESLint process, and one
+  // such file was enough to pay it in full.
+  //
+  // tsconfig.json therefore keeps only node_modules, dist, and entries that
+  // point outside this package; this file carries the complete list and is
+  // what `tsc` reads. The overlap is deliberate, because `extends` replaces
+  // `exclude` wholesale rather than merging it.
+  // scripts/tests/tsconfig-project-coverage.test.ts holds both halves to that.
+  "extends": "./tsconfig.json",
+  // Set here as well as on the command line so a direct
+  // `tsc -p tsconfig.noemit.json` cannot emit build output into the sources.
+  "compilerOptions": { "noEmit": true },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/debug/DebugLogger.test.ts",
+    "src/debug/FileOutput.test.ts",
+    "src/telemetry/canonicalConsumer.behavior.test.ts",
+    "src/telemetry/types.test.ts"
+  ]
+}

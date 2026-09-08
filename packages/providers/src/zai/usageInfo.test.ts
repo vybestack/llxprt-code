@@ -8,11 +8,10 @@ import { setGlobal, restoreGlobals } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { fetchZaiUsage, formatZaiUsage } from './usageInfo.js';
 
-afterEach(() => {
-  restoreGlobals();
-});
-
 describe('usageInfo', () => {
+  afterEach(() => {
+    restoreGlobals();
+  });
   describe('fetchZaiUsage', () => {
     let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -371,13 +370,13 @@ describe('usageInfo', () => {
 
       const result = formatZaiUsage(usage);
       expect(
-        result.some(
-          (line) => line.includes('search-prime') && line.includes('500'),
+        result.some((line) =>
+          ['search-prime', '500'].every((fragment) => line.includes(fragment)),
         ),
       ).toBe(true);
       expect(
-        result.some(
-          (line) => line.includes('web-reader') && line.includes('1000'),
+        result.some((line) =>
+          ['web-reader', '1000'].every((fragment) => line.includes(fragment)),
         ),
       ).toBe(true);
     });

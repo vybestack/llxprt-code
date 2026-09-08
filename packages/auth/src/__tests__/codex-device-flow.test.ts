@@ -11,6 +11,24 @@ import { CodexDeviceFlow } from '../flows/codex-device-flow.js';
 import { createServer, type Server } from 'http';
 import type { AddressInfo } from 'net';
 
+function redirectTokenEndpointFetch(
+  originalFetch: typeof fetch,
+  serverPort: number,
+  grantType: string,
+  fields: Readonly<Record<string, string>>,
+): typeof fetch {
+  return (input) => {
+    const url = input.toString();
+    if (url.includes('auth.openai.com/oauth/token')) {
+      return originalFetch(`http://localhost:${serverPort}/oauth/token`, {
+        method: 'POST',
+        body: new URLSearchParams({ grant_type: grantType, ...fields }),
+      });
+    }
+    return originalFetch(input);
+  };
+}
+
 describe('CodexOAuthTokenSchema', () => {
   /**
    * @requirement REQ-160.1
@@ -268,22 +286,17 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
 
     // Mock the token endpoint to use test server
     const originalFetch = global.fetch;
-    const redirectingFetch: typeof fetch = (input) => {
-      const url = input.toString();
-      if (url.includes('auth.openai.com/oauth/token')) {
-        return originalFetch(`http://localhost:${serverPort}/oauth/token`, {
-          method: 'POST',
-          body: new URLSearchParams({
-            grant_type: 'authorization_code',
-            code: authCode,
-            redirect_uri: redirectUri,
-            client_id: 'app_EMoamEEZ73f0CkXaXp7hrann',
-            code_verifier: 'test-verifier',
-          }),
-        });
-      }
-      return originalFetch(input);
-    };
+    const redirectingFetch = redirectTokenEndpointFetch(
+      originalFetch,
+      serverPort,
+      'authorization_code',
+      {
+        code: authCode,
+        redirect_uri: redirectUri,
+        client_id: 'app_EMoamEEZ73f0CkXaXp7hrann',
+        code_verifier: 'test-verifier',
+      },
+    );
     global.fetch = vi.fn(redirectingFetch);
 
     // This should use Zod validation internally - no type assertions
@@ -339,20 +352,15 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
       });
 
       const originalFetch = global.fetch;
-      const redirectingFetch: typeof fetch = (input) => {
-        const url = input.toString();
-        if (url.includes('auth.openai.com/oauth/token')) {
-          return originalFetch(`http://localhost:${serverPort}/oauth/token`, {
-            method: 'POST',
-            body: new URLSearchParams({
-              grant_type: 'refresh_token',
-              refresh_token: refreshToken,
-              client_id: 'app_EMoamEEZ73f0CkXaXp7hrann',
-            }),
-          });
-        }
-        return originalFetch(input);
-      };
+      const redirectingFetch = redirectTokenEndpointFetch(
+        originalFetch,
+        serverPort,
+        'refresh_token',
+        {
+          refresh_token: refreshToken,
+          client_id: 'app_EMoamEEZ73f0CkXaXp7hrann',
+        },
+      );
       global.fetch = vi.fn(redirectingFetch);
 
       const newToken = await deviceFlow.refreshToken(refreshToken);

@@ -88,6 +88,24 @@ const TOKEN_USAGE_PROMPT_IDS = [
   `${INITIAL_PROMPT_ID}#continuation#3`,
 ];
 
+function requireParsedRecord(
+  record: ReturnType<typeof parsePerfRecord>,
+): NonNullable<ReturnType<typeof parsePerfRecord>> {
+  if (record === null) {
+    throw new Error('expected a parsed record');
+  }
+  return record;
+}
+
+function requireJoinedOperation(
+  record: PerfOperationRecord | undefined,
+): PerfOperationRecord {
+  if (record === undefined) {
+    throw new Error('expected one joined operation');
+  }
+  return record;
+}
+
 // ---------------------------------------------------------------------------
 // Prefix invariant (AC-3 separate behavioural test)
 // ---------------------------------------------------------------------------
@@ -98,10 +116,13 @@ describe('operation_id prefix invariant (AC-3)', () => {
   });
 
   it('every continuation prompt id derives back to the initial prompt id', () => {
-    for (const promptId of TOKEN_USAGE_PROMPT_IDS) {
-      expect(joinKeyFromPromptId(promptId)).toBe(INITIAL_PROMPT_ID);
-      expect(deriveOperationId(promptId)).toBe(INITIAL_PROMPT_ID);
-    }
+    const expectedIds = TOKEN_USAGE_PROMPT_IDS.map(() => INITIAL_PROMPT_ID);
+    expect(TOKEN_USAGE_PROMPT_IDS.map(joinKeyFromPromptId)).toStrictEqual(
+      expectedIds,
+    );
+    expect(TOKEN_USAGE_PROMPT_IDS.map(deriveOperationId)).toStrictEqual(
+      expectedIds,
+    );
   });
 });
 
@@ -111,9 +132,9 @@ describe('operation_id prefix invariant (AC-3)', () => {
 
 describe('read-time join — N continuation rows → 1 perf operation (D1)', () => {
   it('the perf operation record validates and carries no child-id arrays', () => {
-    const parsed = parsePerfRecord(PERF_OPERATION_RECORD);
-    expect(parsed).not.toBeNull();
-    if (parsed === null) throw new Error('expected a parsed record');
+    const parsedResult = parsePerfRecord(PERF_OPERATION_RECORD);
+    expect(parsedResult).not.toBeNull();
+    const parsed = requireParsedRecord(parsedResult);
     expect(parsed.record_type).toBe('operation');
     expect('prompt_ids' in parsed).toBe(false);
     expect('turn_ids' in parsed).toBe(false);
@@ -135,15 +156,12 @@ describe('read-time join — N continuation rows → 1 perf operation (D1)', () 
     });
 
     // Every token row joined to a perf operation.
-    for (const op of joinedOperations) {
-      expect(op).toBeDefined();
-    }
+    expect(joinedOperations).not.toContain(undefined);
 
     // All N rows joined to the SAME single perf operation (by identity).
     const uniqueJoined = new Set(joinedOperations);
     expect(uniqueJoined.size).toBe(1);
-    const [sole] = uniqueJoined;
-    if (sole === undefined) throw new Error('expected one joined operation');
+    const sole = requireJoinedOperation(uniqueJoined.values().next().value);
     expect(sole.operation_id).toBe(INITIAL_PROMPT_ID);
 
     // And no child id was copied into the perf record.

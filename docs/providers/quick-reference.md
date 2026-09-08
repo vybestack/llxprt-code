@@ -232,6 +232,31 @@ for models that support it; when forced to `chat`, Chat Completions is used
 unless the model requires Responses on the official OpenAI endpoint (GPT-5.6+),
 where Chat is unavailable and the override is ignored.
 
+### OpenAI Codex (ChatGPT Plus/Pro)
+
+```bash
+/auth codex enable
+/provider codex
+/model gpt-5.6-sol
+```
+
+#### WebSocket transport
+
+The Codex provider sends `Authorization`, `ChatGPT-Account-ID`,
+`originator: codex_cli_rs`, and any configured custom headers during the
+WebSocket handshake. It also sends `session-id`, `thread-id`, and
+`x-client-request-id`, each set to the session's runtime ID, plus
+`OpenAI-Beta: responses_websockets=2026-02-06`. The identity headers use the
+hyphenated forms used by the current Codex client.
+
+The WebSocket handshake times out after 15 seconds. After the connection is
+established, the stream has a five-minute idle timeout that resets on each
+valid text frame. If it expires, LLxprt closes the socket. When no output has been
+streamed, LLxprt serves that request over HTTP/SSE instead; after repeated
+consecutive pre-output WebSocket failures it stays on HTTP for the session.
+When output has already been streamed, LLxprt reports a stream interruption
+without replaying partial output.
+
 ### Qwen
 
 ```bash
@@ -265,6 +290,43 @@ the pay-per-token Moonshot API, point the alias at the raw endpoint:
 
 See [Provider Models and Limits](./models-and-limits.md) for Kimi K3 context
 windows, pricing, and multimodal support details.
+
+#### Kimi provider Files policy
+
+Kimi PDF uploads are disabled by default. Choose an explicit session or
+workspace scope before enabling them:
+
+```bash
+/set provider-files session
+/set provider-files-retention-ms 86400000
+/set provider-files-delete delete
+```
+
+Use `workspace` instead of `session` when the same credential and base URL may
+reuse file IDs across sessions in the current workspace. IDs are isolated by
+provider, base URL, credential identity, and scope. The persisted workspace
+scope is a credential-keyed identifier, not the local directory path. Moving or
+renaming the directory produces a different scope and does not reuse its prior
+file IDs. Valid IDs are written to the media reference in session history so
+replay can reuse them without uploading the same bytes again. LLxprt keeps
+dynamic IDs in message content and does not change the system instruction.
+
+The retention duration controls how long LLxprt may reuse an ID. With `delete`,
+expiry, cache eviction, and session cleanup request best-effort remote deletion.
+A failed deletion remains tracked for retry. With `retain`, LLxprt drops its
+local entry without calling the delete endpoint, and Moonshot's account
+retention rules continue to apply. Setting `provider-files` back to `off`
+prevents new uploads but does not by itself delete existing remote files.
+
+Kimi Files storage is incompatible with zero-data-retention semantics while a
+remote file remains stored. Set `provider-files-zdr require` to reject this
+mode, or leave `allow-retention` only when provider storage is acceptable.
+Memory pressure never enables Files mode.
+
+Experimental Kimi video requires both `kimi.experimental-video=true` and an
+explicit `provider-files` scope. It follows the same retention, deletion, and
+ZDR settings. Anthropic Files references are currently unsupported in this
+adapter, so Anthropic remains inline even when `provider-files` is enabled.
 
 ### Synthetic (Hugging Face models)
 

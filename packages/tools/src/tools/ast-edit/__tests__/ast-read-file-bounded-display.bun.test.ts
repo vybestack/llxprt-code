@@ -94,7 +94,7 @@ describe('REQ-3232-4: display and metadata compatibility', () => {
     const metadata = recordOf(display.metadata, 'metadata');
     // The public metadata contract is exactly these two fields — no
     // working-set accounting leaks into the display payload.
-    expect(metadata).toEqual({
+    expect(metadata).toStrictEqual({
       language: 'typescript',
       declarationsCount: 2,
     });

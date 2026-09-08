@@ -11,6 +11,7 @@ import {
   type OAuthProvider,
   type OAuthManagerRuntimeMessageBusDeps,
   type BucketFailoverOAuthManagerLike,
+  type AuthCompletionOptions,
   type OAuthTokenRequestMetadata,
   type OAuthUICallback,
 } from './types.js';
@@ -192,7 +193,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
   async authenticate(
     providerName: string,
     bucket?: string,
-    options?: { signalAuthCompletion?: boolean },
+    options?: AuthCompletionOptions,
   ): Promise<void> {
     return this.authFlowOrchestrator.authenticate(
       providerName,

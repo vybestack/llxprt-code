@@ -32,6 +32,7 @@ describe('tasksCommand', () => {
     addItemMock = vi.fn();
 
     context = {
+      signal: new AbortController().signal,
       services: {
         config: {
           getAsyncTaskManager: () => asyncTaskManager,

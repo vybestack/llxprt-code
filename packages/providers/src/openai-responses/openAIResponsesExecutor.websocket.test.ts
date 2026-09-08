@@ -4,23 +4,34 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
+import {
+  restoreGlobals,
+  setGlobal,
+  assertInstanceOf,
+} from '@vybestack/llxprt-code-test-utils';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   executeOpenAIResponsesRequest,
+  type PreparedResponsesRequestContext,
   type ResponsesExecutorDeps,
 } from './openAIResponsesExecutor.js';
+import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import type { WebSocketTransport } from './openAIResponsesWebSocketTransport.js';
-import { createCodexResponsesWebSocketTransport } from './openAIResponsesWebSocketTransport.js';
+import {
+  CODEX_WEBSOCKET_BETA_HEADER,
+  createCodexResponsesWebSocketTransport,
+} from './openAIResponsesWebSocketTransport.js';
+import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import {
   SocketHarness,
   completingScript,
+  connectionLimitScript,
   drain as drainHarness,
   userTextsOf,
 } from './openAIResponsesWebSocketTransport.test-helpers.js';
@@ -89,6 +100,10 @@ function buildDeps(
     shouldRetryOnError: () => false,
     getDefaultModel: () => 'gpt-5.6-sol',
     getGlobalConfig: () => undefined,
+    getMediaTransportCapabilities: (isCodex) =>
+      declaredMediaTransportCapabilities(
+        isCodex ? 'codex' : 'openai-responses',
+      ),
     getUnallowedModelParameters: () => new Set<string>(),
     // Codex statefulness is WS-bound; these harnesses exercise the WS path.
     isWebSocketTransportActive: () => true,
@@ -151,6 +166,23 @@ function makeRecordingTransport(behavior: 'success' | 'connect-failure'): {
   };
 }
 
+function requestWithReleaseFailure(error: Error): ResolvedMediaRequest {
+  return {
+    withContents: (consume) => consume([]),
+    registerCleanup: () => undefined,
+    accounting: () => ({
+      selectedReferenceCount: 0,
+      uniqueContentCount: 0,
+      selectedNormalizedBytes: 0,
+      materializedNormalizedBytes: 0,
+      storeReadCount: 0,
+      reservedContentCount: 0,
+      released: false,
+    }),
+    release: () => Promise.reject(error),
+  };
+}
+
 describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:2041', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -160,6 +192,39 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
   afterEach(() => {
     restoreGlobals();
     vi.restoreAllMocks();
+  });
+
+  it('preserves a transport-start failure before a media release failure', async () => {
+    const primary = new Error('responses transport start failed');
+    const cleanup = new Error('responses media release failed');
+    const prepared: PreparedResponsesRequestContext = {
+      rawBaseURL: CODEX_BASE_URL,
+      isCodex: true,
+      includeThinkingInResponse: false,
+      responsesStored: false,
+      projectionContext: {
+        statefulParentUsed: false,
+        incrementalRequest: undefined,
+      },
+      request: {
+        model: 'gpt-5.6-sol',
+        input: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+      },
+      mediaRequest: requestWithReleaseFailure(cleanup),
+    };
+    const iterator = executeOpenAIResponsesRequest(
+      buildNormalizedOptions(),
+      buildDeps({
+        resolveAuthTokenForPrompt: () => Promise.reject(primary),
+      }),
+      prepared,
+    );
+
+    const error = await iterator.next().catch((reason: unknown) => reason);
+    assertInstanceOf(error, AggregateError, 'expected an AggregateError');
+
+    expect(error.errors).toStrictEqual([primary, cleanup]);
   });
 
   it('A1: uses the WebSocket transport for Codex mode and yields its events', async () => {
@@ -230,6 +295,44 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
     ]);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(transportChecks).toBe(1);
+  });
+
+  it('awaits rejected HTTP request-body disposal and preserves both failures', async () => {
+    const transportError = new Error('responses HTTP transport failed');
+    const disposalError = new Error('responses HTTP body disposal failed');
+    const originalCancel = ReadableStreamDefaultReader.prototype.cancel;
+    ReadableStreamDefaultReader.prototype.cancel = function (): Promise<void> {
+      return Promise.reject(disposalError);
+    };
+    try {
+      setGlobal('fetch', () => Promise.reject(transportError));
+      const options = buildNormalizedOptions({
+        resolved: {
+          model: 'gpt-5',
+          baseURL: 'https://api.openai.com/v1',
+          authToken: 'test-token',
+        },
+      });
+
+      const error = await drain(
+        executeOpenAIResponsesRequest(
+          options,
+          buildDeps({
+            isCodexBaseURL: () => false,
+            getProviderBaseURL: () => 'https://api.openai.com/v1',
+          }),
+        ),
+      ).catch((reason: unknown) => reason);
+
+      assertInstanceOf(
+        error,
+        AggregateError,
+        'expected HTTP transport and disposal AggregateError',
+      );
+      expect(error.errors).toStrictEqual([transportError, disposalError]);
+    } finally {
+      ReadableStreamDefaultReader.prototype.cancel = originalCancel;
+    }
   });
 
   it('A5: falls back to HTTP once when WebSocket connect fails before events, then sticks to HTTP', async () => {
@@ -387,8 +490,137 @@ describe('executeOpenAIResponsesRequest WebSocket reconnect keeps the conversati
     const userTexts = userTextsOf(sent['input']);
     // Exact equality, not toContain: an empty array would satisfy both a
     // toContain-absent and a not.toContain assertion, hiding a total failure.
-    expect(userTexts).toEqual(['second question']);
+    expect(userTexts).toStrictEqual(['second question']);
 
     transport.close();
+  });
+});
+
+describe('executeOpenAIResponsesRequest WebSocket lifecycle-limit retry @issue:2771', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getCoreSystemPromptAsyncSpy.mockResolvedValue('system prompt');
+  });
+
+  afterEach(() => {
+    restoreGlobals();
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * The lifecycle-limit verdict is scoped to the connection, so recovering on
+   * a fresh socket inside one request must NOT demote the provider to HTTP:
+   * the retry is transport health, not a transport failure.
+   */
+  it('recovers on a fresh connection without sticky HTTP fallback and keeps WebSocket for later requests', async () => {
+    const harness = new SocketHarness([
+      connectionLimitScript(),
+      completingScript('recovered'),
+    ]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+    const fetchSpy = vi.fn();
+    setGlobal('fetch', fetchSpy);
+    const onWebSocketFallback = vi.fn();
+    const onWebSocketSuccess = vi.fn();
+
+    const deps = buildDeps({
+      getWebSocketTransport: () => transport,
+      onWebSocketFallback,
+      onWebSocketSuccess,
+    });
+
+    // Request 1: socket 1 reports the lifecycle limit, socket 2 completes.
+    const first = await drainHarness(
+      executeOpenAIResponsesRequest(buildNormalizedOptions(), deps),
+    );
+
+    expect(first[0]).toStrictEqual({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'recovered' }],
+    });
+    expect(harness.sockets).toHaveLength(2);
+    expect(harness.sockets[0].closedByClient).toBe(true);
+    // A healthy reconnect is not a fallback and must not stick to HTTP.
+    expect(onWebSocketFallback).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    // The recovered stream still reports transport success (#3034 counter).
+    expect(onWebSocketSuccess).toHaveBeenCalled();
+
+    // Request 2: the WebSocket remains the transport, reusing socket 2.
+    const second = await drainHarness(
+      executeOpenAIResponsesRequest(buildNormalizedOptions(), deps),
+    );
+
+    expect(second[0]).toStrictEqual({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'recovered' }],
+    });
+    expect(harness.sockets).toHaveLength(2);
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    transport.close();
+  });
+});
+
+describe('executeOpenAIResponsesRequest WebSocket handshake identity @issue:2772', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getCoreSystemPromptAsyncSpy.mockResolvedValue('system prompt');
+  });
+
+  afterEach(() => {
+    restoreGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('sends the current Codex handshake headers with the runtime identity', async () => {
+    const harness = new SocketHarness([completingScript()]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+
+    await drainHarness(
+      executeOpenAIResponsesRequest(
+        buildNormalizedOptions(),
+        buildDeps({ getWebSocketTransport: () => transport }),
+      ),
+    );
+
+    expect(harness.headers[0]).toStrictEqual({
+      Authorization: 'Bearer codex-token',
+      'X-Provider': 'p',
+      'ChatGPT-Account-ID': 'codex-account',
+      originator: 'codex_cli_rs',
+      'session-id': 'test-runtime',
+      'thread-id': 'test-runtime',
+      'x-client-request-id': 'test-runtime',
+      'OpenAI-Beta': CODEX_WEBSOCKET_BETA_HEADER,
+    });
+  });
+
+  it('omits every identity header when no runtime identity resolves', async () => {
+    const harness = new SocketHarness([completingScript()]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+    const defaults = buildNormalizedOptions();
+    const optionsWithoutIdentity = buildNormalizedOptions({
+      invocation: { ...defaults.invocation, runtimeId: '' },
+      runtime: undefined,
+    });
+
+    await drainHarness(
+      executeOpenAIResponsesRequest(
+        optionsWithoutIdentity,
+        buildDeps({ getWebSocketTransport: () => transport }),
+      ),
+    );
+
+    const headers = harness.headers[0];
+    expect(headers['session-id']).toBeUndefined();
+    expect(headers['thread-id']).toBeUndefined();
+    expect(headers['x-client-request-id']).toBeUndefined();
   });
 });

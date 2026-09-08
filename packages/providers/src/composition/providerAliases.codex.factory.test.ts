@@ -36,6 +36,10 @@ function buildCodexEntry(): ProviderAliasEntry {
   return codexEntry;
 }
 
+function configuredStaticModels(entry: ProviderAliasEntry) {
+  return entry.config.staticModels ?? [];
+}
+
 function buildCodexProvider() {
   const provider = createOpenAIResponsesAliasProvider(
     buildCodexEntry(),
@@ -45,9 +49,6 @@ function buildCodexProvider() {
     NULL_OAUTH_MANAGER,
     false,
   );
-  if (!provider) {
-    throw new Error('codex alias provider not created');
-  }
   return provider;
 }
 
@@ -72,7 +73,7 @@ describe('codex alias factory getModels (@issue:2272)', () => {
     const provider = buildCodexProvider();
 
     const models = await provider.getModels();
-    const staticModels = entry.config.staticModels ?? [];
+    const staticModels = configuredStaticModels(entry);
 
     expect(models.map((m) => m.id)).toStrictEqual(
       staticModels.map((m) => m.id),

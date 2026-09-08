@@ -82,18 +82,20 @@ describe('P19: ServerFinishedEvent shape @plan:PLAN-20260707-AGENTNEUTRAL.P19 @r
     expect(offenders).toStrictEqual([]);
   });
 
-  it('ServerUsageMetadataEvent.value uses Gemini-named keys (public wire boundary)', () => {
-    // ServerUsageMetadataEvent.value is the PUBLIC usage event (Gemini-named).
-    // This is distinct from ServerFinishedEvent.value.usageMetadata (neutral).
+  it('ServerUsageMetadataEvent.value uses neutral keys (#2627)', () => {
+    // The internal ServerUsageMetadataEvent value is neutral
+    // (inputTokenCount/outputTokenCount). The Gemini-named vocabulary lives
+    // only on the public agent wire (UsageMetadataValue), produced by the
+    // explicit mapping in the agents event adapter.
     const sample: ServerUsageMetadataEvent = {
       type: 'usage_metadata' as ServerUsageMetadataEvent['type'],
       value: {
-        promptTokenCount: 10,
-        candidatesTokenCount: 5,
+        inputTokenCount: 10,
+        outputTokenCount: 5,
         totalTokenCount: 15,
       },
     };
-    expect(sample.value.promptTokenCount).toBe(10);
+    expect(sample.value.inputTokenCount).toBe(10);
   });
 });
 

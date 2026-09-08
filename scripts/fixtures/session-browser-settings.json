@@ -1,0 +1,7 @@
+{
+  "ui": {
+    "theme": "Green Screen",
+    "useAlternateBuffer": false,
+    "incrementalRendering": false
+  }
+}

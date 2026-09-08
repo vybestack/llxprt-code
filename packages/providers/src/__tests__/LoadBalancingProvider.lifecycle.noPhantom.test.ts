@@ -58,8 +58,6 @@ function makeSuccessDelegate(name: string): IProvider {
     },
     getModels: async () => [],
     getDefaultModel: () => `${name}-model`,
-    getServerTools: () => [],
-    invokeServerTool: async () => null,
   };
 }
 
@@ -71,8 +69,6 @@ function makeSyncThrowDelegate(name: string, error: Error): IProvider {
     },
     getModels: async () => [],
     getDefaultModel: () => `${name}-model`,
-    getServerTools: () => [],
-    invokeServerTool: async () => null,
   };
 }
 

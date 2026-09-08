@@ -42,6 +42,20 @@ function restoreStdinSetRawMode(
   stdin.setRawMode = originalSetRawMode;
 }
 
+function createDataEventListener(
+  originalAddListener: typeof process.stdin.once,
+): typeof process.stdin.once {
+  return ((event: string | symbol, listener: (...args: unknown[]) => void) => {
+    if (event === 'data') {
+      queueMicrotask(() => {
+        listener();
+      });
+    }
+    Reflect.apply(originalAddListener, process.stdin, [event, listener]);
+    return process.stdin;
+  }) as typeof process.stdin.once;
+}
+
 /**
  * Issue 913: OAuth Bucket Prompt Mode Tests
  *
@@ -320,18 +334,9 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
         .mockImplementation(() => process.stdin);
       vi.spyOn(process.stdin, 'resume').mockImplementation(() => process.stdin);
       vi.spyOn(process.stdin, 'isPaused').mockReturnValue(false);
+      const originalOnce = process.stdin.once.bind(process.stdin);
       const onceSpy = vi.spyOn(process.stdin, 'once');
-      onceSpy.mockImplementation(((
-        event: string | symbol,
-        listener: (...args: unknown[]) => void,
-      ) => {
-        if (event === 'data') {
-          queueMicrotask(() => {
-            listener();
-          });
-        }
-        return process.stdin;
-      }) as typeof process.stdin.once);
+      onceSpy.mockImplementation(createDataEventListener(originalOnce));
 
       try {
         await manager.toggleOAuthEnabled('anthropic');

@@ -1,0 +1,65 @@
+{
+  "tmux": {
+    "cols": 100,
+    "rows": 40,
+    "historyLimit": 20000,
+    "scrollbackLines": 2000,
+    "initialWaitMs": 6000
+  },
+  "startCommand": [
+    "sh -c 'W=\"${TMPDIR:-/tmp}/llxprt-onboarding-welcome-$$.json\"; rm -f \"$W\"; env CI=0 CONTINUOUS_INTEGRATION=0 NODE_OPTIONS= LLXPRT_CODE_NO_RELAUNCH=true LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION=true LLXPRT_CODE_BUILTIN_COMMANDS_ONLY=true LLXPRT_CODE_SUPPRESS_STATIC_HEADER=true LLXPRT_CODE_WELCOME_CONFIG_PATH=\"$W\" LLXPRT_SYSTEM_SETTINGS_PATH=scripts/system-settings.interactive-ui.json ${bun} packages/cli/index.ts; status=$?; rm -f \"$W\"; exit $status'"
+  ],
+  "yolo": false,
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Welcome to llxprt!",
+      "timeoutMs": 30000
+    },
+    { "type": "capture", "label": "onboarding-welcome", "scope": "screen" },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "Set up now (recommended)",
+      "timeoutMs": 0
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "Skip setup",
+      "timeoutMs": 0
+    },
+    { "type": "key", "key": "Down" },
+    { "type": "key", "key": "Enter" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Setup skipped",
+      "timeoutMs": 15000
+    },
+    { "type": "capture", "label": "onboarding-skipped", "scope": "screen" },
+    { "type": "key", "key": "Enter" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 15000
+    },
+    {
+      "type": "expectCount",
+      "scope": "screen",
+      "contains": "Welcome to llxprt!",
+      "equals": 0
+    },
+    {
+      "type": "expectCount",
+      "scope": "screen",
+      "contains": "Setup skipped",
+      "equals": 0
+    },
+    { "type": "capture", "label": "onboarding-dismissed", "scope": "screen" },
+    { "type": "line", "text": "/quit", "submitKeys": ["Enter"] },
+    { "type": "waitForExit", "timeoutMs": 15000 }
+  ]
+}

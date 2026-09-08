@@ -22,6 +22,12 @@ import {
   validLegacyProfile,
 } from './canonicalProfileRepair.testHelpers.js';
 
+function repairedProfileCount(
+  result: ReturnType<typeof repairCanonicalProfiles>,
+): number {
+  return result.kind === 'repaired' ? result.profilesRepaired : 0;
+}
+
 // ─── No candidates / none outcome ──────────────────────────────────────────
 
 describe('repairCanonicalProfiles — no candidates / none outcome', () => {
@@ -267,7 +273,7 @@ describe('repairCanonicalProfiles — marker semantics', () => {
       env.legacyProfilesDir,
     );
     expect(second.kind).toBe('repaired');
-    expect(second.kind === 'repaired' ? second.profilesRepaired : 0).toBe(1);
+    expect(repairedProfileCount(second)).toBe(1);
   });
 });
 

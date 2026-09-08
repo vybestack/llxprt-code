@@ -22,6 +22,7 @@ import {
   getSafeProviderMessage,
   summarizeProviderLabels,
 } from './providerErrorObservation.js';
+import { getActiveRuntimeKind } from './runtime/active-runtime-identity.js';
 
 /**
  * Error thrown when authentication is required but not available
@@ -471,6 +472,26 @@ const AUTH_BUCKET_FAILURE_REASONS: ReadonlySet<BucketFailureReason> = new Set([
   'reauth-timeout',
 ]);
 
+function buildReauthenticateSuffix(
+  providerName: string,
+  hasAuthReason: boolean,
+): string {
+  if (!hasAuthReason) {
+    return '';
+  }
+
+  const runtimeKind = getActiveRuntimeKind();
+  if (
+    runtimeKind === 'agent' ||
+    runtimeKind === 'subagent' ||
+    runtimeKind === 'cli-bootstrap'
+  ) {
+    return `\nRe-authentication is required. Ask the interactive host session to authenticate (${providerName} via /auth there); this context cannot open the auth dialog.`;
+  }
+
+  return '\nPlease re-authenticate to continue. The auth dialog will open on your next message.';
+}
+
 /**
  * Returns whether a bucket failure reason requires user re-authentication.
  * AUTH_BUCKET_FAILURE_REASONS is the canonical set for UI and display decisions.
@@ -525,9 +546,10 @@ export class AllBucketsExhaustedError extends Error {
     const hasAuthReason = Object.values(storedReasons).some((r) =>
       isAuthBucketFailureReason(r),
     );
-    const reauthenticateSuffix = hasAuthReason
-      ? '\nPlease re-authenticate to continue. The auth dialog will open on your next message.'
-      : '';
+    const reauthenticateSuffix = buildReauthenticateSuffix(
+      providerName,
+      hasAuthReason,
+    );
 
     super(
       formatPublicProviderMessage(

@@ -135,6 +135,7 @@ function buildNormalizedOptions(
 function buildDeps(): ResponsesExecutorDeps {
   return {
     providerName: 'openai-responses',
+    isWebSocketTransportActive: () => false,
     logger: {
       debug: () => undefined,
     } as unknown as ResponsesExecutorDeps['logger'],
@@ -156,6 +157,12 @@ async function readJsonDump(
 ): Promise<Record<string, unknown>> {
   const content = await fs.readFile(path.join(dumpDir(), filename), 'utf-8');
   return JSON.parse(content) as Record<string, unknown>;
+}
+
+function responseHeaders(response: {
+  readonly body?: { readonly headers?: Record<string, string> };
+}): Record<string, string> {
+  return response.body?.headers ?? {};
 }
 
 /**
@@ -252,7 +259,7 @@ describe('OpenAI Responses error-response dump @issue:3140', () => {
     // Redaction: credential-bearing values must not leak, but the header
     // names must survive and diagnostic headers must be readable — capturing
     // Retry-After is a core reason the dump exists.
-    const dumpedHeaders = responseBody.body?.headers ?? {};
+    const dumpedHeaders = responseHeaders(responseBody);
     expect(dumpedHeaders['set-cookie']).toBe('[REDACTED]');
     expect(dumpedHeaders['authorization']).toBe('[REDACTED]');
     expect(JSON.stringify(dumpedHeaders)).not.toContain('secret');
@@ -275,13 +282,20 @@ describe('OpenAI Responses error-response dump @issue:3140', () => {
     expect(caught).toBeInstanceOf(Error);
 
     const written = await listDumpFiles();
-    const requestFile = written.find((f) => f.endsWith('-request.json'));
+    const requestFiles = written.filter((f) => f.endsWith('-request.json'));
     const responseFile = written.find((f) => f.endsWith('-response.json'));
-    expect(requestFile).toBeDefined();
+    if (requestFiles.length === 0) {
+      throw new Error(
+        `No -request.json dump written; dump dir contents: ${JSON.stringify(written)}`,
+      );
+    }
     expect(responseFile).toBeDefined();
 
+    // `retries: 1` means two attempts, each dumping its own request/response
+    // pair, and the dump filenames differ only by a random suffix. Pair them by
+    // the recorded link rather than by list order, which is not attempt order.
     const responseDump = await readJsonDump(responseFile!);
-    expect(responseDump['relatedRequestFile']).toBe(requestFile);
+    expect(requestFiles).toContain(responseDump['relatedRequestFile']);
     const responseBody = responseDump['response'] as {
       body?: { status?: number; body?: string };
     };

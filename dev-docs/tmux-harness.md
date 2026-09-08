@@ -64,6 +64,7 @@ Macros are the recommended place to encode **UI-specific behavior**, so scripts 
 - `line`: `{ "type": "line", "text": "...", "submitKeys": ["Escape","Enter"], "postTypeMs": 600 }`
 - `key`: `{ "type": "key", "key": "Enter" }`
 - `keys`: `{ "type": "keys", "keys": ["Down","Enter"] }`
+- `resize`: `{ "type": "resize", "cols": 58, "rows": 24, "settleMs": 600 }`
 - `waitFor`: `{ "type": "waitFor", "scope": "screen"|"scrollback", "contains": "..." | "regex": "...", "timeoutMs": 15000, "pollMs": 250 }`
 - `waitForNot`: like `waitFor`, but asserts absence until timeout.
 - `expect`: like `waitFor`, but checks immediately (no polling).
@@ -75,6 +76,23 @@ Macros are the recommended place to encode **UI-specific behavior**, so scripts 
 - `waitForExit`: `{ "type": "waitForExit", "timeoutMs": 15000 }`
 
 Keys are tmux key names (examples: `Enter`, `Escape`, `Up`, `Down`, `C-s`, `C-c`).
+
+### Resize step
+
+The `resize` step changes the real tmux terminal size so Ink receives a genuine
+resize event and reflows (standard terminal, not a mocked React width).
+
+- `cols` and `rows` must be positive integers. Non-integer, zero, negative,
+  or non-finite values fail the step before any tmux command runs.
+- `settleMs` is optional and defaults to `600`; it must be a finite
+  nonnegative number. The default covers the current resize debounce and deferred
+  refresh in the Ink UI.
+- The step targets the active window in the harness's isolated tmux session via
+  the session-only target (`<session>`), so a resize never touches other sessions.
+- Use `waitFor`/`waitForNot` after a resize to assert that the UI reflowed
+  into the new dimensions, with `capture` recording the before and after screens.
+  This is how real-terminal reflow behavior (for example the session browser
+  hiding its standard-width sort bar at narrow widths) is asserted.
 
 ## UI convenience steps
 

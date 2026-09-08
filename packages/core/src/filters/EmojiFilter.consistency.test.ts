@@ -317,9 +317,11 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
         const result = filter.filterStreamChunk(chunk);
         expect(result.filtered).toBeDefined();
 
-        fullResult +=
-          typeof result.filtered === 'string' ? result.filtered : '';
-        detectedEmojis = detectedEmojis || result.emojiDetected === true;
+        fullResult += stringPartOf(result.filtered);
+        detectedEmojis = accumulateDetected(
+          detectedEmojis,
+          result.emojiDetected,
+        );
       });
 
       // Flush any remaining content
@@ -467,3 +469,11 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
     });
   });
 });
+
+function stringPartOf(value: string | null | undefined): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function accumulateDetected(acc: boolean, value: unknown): boolean {
+  return acc || value === true;
+}

@@ -8,8 +8,6 @@
  * Licensed under the MIT License.
  */
 
-import fetch from 'node-fetch';
-
 import type {
   ISettingsService,
   IToolKeyStorage,
@@ -164,7 +162,7 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
   }
 
   private async readResponseBody(
-    response: Awaited<ReturnType<typeof fetch>>,
+    response: Response,
     signal: AbortSignal,
     cancelRequest: () => void,
   ): Promise<string> {
@@ -182,7 +180,7 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
    * the HTTP status is preserved in the thrown error message.
    */
   private async readErrorResponseBody(
-    response: Awaited<ReturnType<typeof fetch>>,
+    response: Response,
     signal: AbortSignal,
     cancelRequest: () => void,
   ): Promise<string> {

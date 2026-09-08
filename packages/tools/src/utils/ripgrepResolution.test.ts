@@ -156,336 +156,346 @@ function usePlatform(platform: NodeJS.Platform): void {
   vi.spyOn(os, 'platform').mockReturnValue(platform);
 }
 
-beforeEach(() => {
-  clearRipgrepAvailabilityCache();
-  // realpathSync because process.cwd() reports the resolved path on macOS,
-  // where os.tmpdir() is a symlink into /private.
-  tempRoot = fs.realpathSync(
-    fs.mkdtempSync(path.join(os.tmpdir(), 'rg-resolution-')),
-  );
-  // An empty directory is the default PATH so no case can see the real one,
-  // and the packaged binary is absent unless a case installs one.
-  usePath(makeDir('empty-path'));
-  usePackagedRipgrep(path.join(tempRoot, 'no-packaged-ripgrep', 'rg'));
-  delete process.env.PATHEXT;
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-  clearRipgrepAvailabilityCache();
-  delete (process as unknown as ProcessWithPkg).pkg;
-  process.chdir(ORIGINAL_CWD);
-  if (ORIGINAL_PATH === undefined) {
-    delete process.env.PATH;
-  } else {
-    process.env.PATH = ORIGINAL_PATH;
-  }
-  if (ORIGINAL_PATHEXT === undefined) {
+describe('ripgrep path resolution', () => {
+  beforeEach(() => {
+    clearRipgrepAvailabilityCache();
+    // realpathSync because process.cwd() reports the resolved path on macOS,
+    // where os.tmpdir() is a symlink into /private.
+    tempRoot = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'rg-resolution-')),
+    );
+    // An empty directory is the default PATH so no case can see the real one,
+    // and the packaged binary is absent unless a case installs one.
+    usePath(makeDir('empty-path'));
+    usePackagedRipgrep(path.join(tempRoot, 'no-packaged-ripgrep', 'rg'));
     delete process.env.PATHEXT;
-  } else {
-    process.env.PATHEXT = ORIGINAL_PATHEXT;
-  }
-  fs.rmSync(tempRoot, { recursive: true, force: true });
-});
-
-afterAll(() => {
-  if (realPackagedRgPath !== null) {
-    usePackagedRipgrep(realPackagedRgPath);
-  }
-});
-
-describe('getRipgrepPath packaged binary', () => {
-  it('returns the packaged binary when it exists', async () => {
-    const packagedRg = writeExecutable(
-      path.join(tempRoot, 'packaged', 'rg'),
-      SHELL_SCRIPT,
-    );
-    usePackagedRipgrep(packagedRg);
-
-    await expect(getRipgrepPath()).resolves.toBe(packagedRg);
   });
 
-  it('skips a packaged binary carrying an ELF header on darwin', async () => {
-    usePlatform('darwin');
-    usePackagedRipgrep(
-      writeExecutable(path.join(tempRoot, 'packaged', 'rg'), ELF_HEADER),
-    );
-    const systemBin = makeDir('system-bin');
-    const systemRg = writeExecutable(path.join(systemBin, 'rg'), SHELL_SCRIPT);
-    usePath(systemBin);
-
-    await expect(getRipgrepPath()).resolves.toBe(systemRg);
+  afterEach(() => {
+    vi.restoreAllMocks();
+    clearRipgrepAvailabilityCache();
+    delete (process as unknown as ProcessWithPkg).pkg;
+    process.chdir(ORIGINAL_CWD);
+    if (ORIGINAL_PATH === undefined) {
+      delete process.env.PATH;
+    } else {
+      process.env.PATH = ORIGINAL_PATH;
+    }
+    if (ORIGINAL_PATHEXT === undefined) {
+      delete process.env.PATHEXT;
+    } else {
+      process.env.PATHEXT = ORIGINAL_PATHEXT;
+    }
+    fs.rmSync(tempRoot, { recursive: true, force: true });
   });
 
-  it('accepts a packaged binary carrying an ELF header on linux', async () => {
-    usePlatform('linux');
-    const packagedRg = writeExecutable(
-      path.join(tempRoot, 'packaged', 'rg'),
-      ELF_HEADER,
-    );
-    usePackagedRipgrep(packagedRg);
-
-    await expect(getRipgrepPath()).resolves.toBe(packagedRg);
+  afterAll(() => {
+    if (realPackagedRgPath !== null) {
+      usePackagedRipgrep(realPackagedRgPath);
+    }
   });
 
-  it('falls through when the packaged binary path does not exist', async () => {
-    usePackagedRipgrep(path.join(tempRoot, 'packaged', 'missing-rg'));
-    const systemBin = makeDir('system-bin');
-    const systemRg = installSystemRg(systemBin);
-    usePath(systemBin);
+  describe('getRipgrepPath packaged binary', () => {
+    it('returns the packaged binary when it exists', async () => {
+      const packagedRg = writeExecutable(
+        path.join(tempRoot, 'packaged', 'rg'),
+        SHELL_SCRIPT,
+      );
+      usePackagedRipgrep(packagedRg);
 
-    await expect(getRipgrepPath()).resolves.toBe(systemRg);
-  });
-});
+      await expect(getRipgrepPath()).resolves.toBe(packagedRg);
+    });
 
-describe('getRipgrepPath system PATH lookup', () => {
-  it('returns an executable rg found on PATH when the package is absent', async () => {
-    const systemBin = makeDir('system-bin');
-    const systemRg = installSystemRg(systemBin);
-    usePath(systemBin);
-
-    await expect(getRipgrepPath()).resolves.toBe(systemRg);
-  });
-
-  // POSIX only: Windows grants X_OK to every readable file, so a
-  // non-executable candidate cannot be expressed there.
-  it.skipIf(process.platform === 'win32')(
-    'ignores a non-executable rg on PATH and uses a hardcoded Unix path',
-    async () => {
+    it('skips a packaged binary carrying an ELF header on darwin', async () => {
       usePlatform('darwin');
+      usePackagedRipgrep(
+        writeExecutable(path.join(tempRoot, 'packaged', 'rg'), ELF_HEADER),
+      );
       const systemBin = makeDir('system-bin');
-      const blocked = path.join(systemBin, 'rg');
-      fs.writeFileSync(blocked, SHELL_SCRIPT);
-      fs.chmodSync(blocked, 0o644);
+      const systemRg = writeExecutable(
+        path.join(systemBin, 'rg'),
+        SHELL_SCRIPT,
+      );
       usePath(systemBin);
+
+      await expect(getRipgrepPath()).resolves.toBe(systemRg);
+    });
+
+    it('accepts a packaged binary carrying an ELF header on linux', async () => {
+      usePlatform('linux');
+      const packagedRg = writeExecutable(
+        path.join(tempRoot, 'packaged', 'rg'),
+        ELF_HEADER,
+      );
+      usePackagedRipgrep(packagedRg);
+
+      await expect(getRipgrepPath()).resolves.toBe(packagedRg);
+    });
+
+    it('falls through when the packaged binary path does not exist', async () => {
+      usePackagedRipgrep(path.join(tempRoot, 'packaged', 'missing-rg'));
+      const systemBin = makeDir('system-bin');
+      const systemRg = installSystemRg(systemBin);
+      usePath(systemBin);
+
+      await expect(getRipgrepPath()).resolves.toBe(systemRg);
+    });
+  });
+
+  describe('getRipgrepPath system PATH lookup', () => {
+    it('returns an executable rg found on PATH when the package is absent', async () => {
+      const systemBin = makeDir('system-bin');
+      const systemRg = installSystemRg(systemBin);
+      usePath(systemBin);
+
+      await expect(getRipgrepPath()).resolves.toBe(systemRg);
+    });
+
+    describe.skipIf(process.platform === 'win32')(
+      'POSIX executable permissions',
+      () => {
+        // Windows grants X_OK to every readable file, so a non-executable
+        // candidate cannot be expressed there.
+        it('ignores a non-executable rg on PATH and uses a hardcoded Unix path', async () => {
+          usePlatform('darwin');
+          const systemBin = makeDir('system-bin');
+          const blocked = path.join(systemBin, 'rg');
+          fs.writeFileSync(blocked, SHELL_SCRIPT);
+          fs.chmodSync(blocked, 0o644);
+          usePath(systemBin);
+          mockHardcodedProbes(['/usr/local/bin/rg']);
+
+          await expect(getRipgrepPath()).resolves.toBe('/usr/local/bin/rg');
+        });
+      },
+    );
+  });
+
+  describe('getRipgrepPath hardcoded fallbacks', () => {
+    it('uses /usr/local/bin/rg on a non-Windows platform', async () => {
+      usePlatform('darwin');
       mockHardcodedProbes(['/usr/local/bin/rg']);
 
       await expect(getRipgrepPath()).resolves.toBe('/usr/local/bin/rg');
-    },
-  );
-});
-
-describe('getRipgrepPath hardcoded fallbacks', () => {
-  it('uses /usr/local/bin/rg on a non-Windows platform', async () => {
-    usePlatform('darwin');
-    mockHardcodedProbes(['/usr/local/bin/rg']);
-
-    await expect(getRipgrepPath()).resolves.toBe('/usr/local/bin/rg');
-  });
-
-  it('uses the Homebrew path on Apple Silicon when no earlier path exists', async () => {
-    usePlatform('darwin');
-    mockHardcodedProbes(['/opt/homebrew/bin/rg']);
-
-    await expect(getRipgrepPath()).resolves.toBe('/opt/homebrew/bin/rg');
-  });
-
-  it('prefers the earliest Unix candidate when several exist', async () => {
-    usePlatform('darwin');
-    mockHardcodedProbes(['/usr/bin/rg', '/opt/homebrew/bin/rg']);
-
-    await expect(getRipgrepPath()).resolves.toBe('/usr/bin/rg');
-  });
-
-  it('uses a Program Files path on win32', async () => {
-    usePlatform('win32');
-    mockHardcodedProbes([...WINDOWS_FALLBACK_PATHS]);
-
-    const resolved = await getRipgrepPath();
-
-    expect(resolved).toContain('Program Files');
-    expect(resolved.endsWith('rg.exe')).toBe(true);
-  });
-
-  it('does not use Unix paths on win32', async () => {
-    usePlatform('win32');
-    mockHardcodedProbes([...UNIX_FALLBACK_PATHS]);
-    const projectRoot = makeDir('windows-project-root');
-    makeDir('windows-project-root', 'node_modules');
-    process.chdir(projectRoot);
-
-    await expect(getRipgrepPath()).rejects.toThrow('ripgrep not found');
-  });
-});
-
-describe('getRipgrepPath bundle environment', () => {
-  it('uses the bundled binary when node_modules is absent', async () => {
-    usePlatform('darwin');
-    mockHardcodedProbes([]);
-    const bundleRoot = makeDir('bundle-root');
-    const bundledRg = writeExecutable(
-      path.join(bundleRoot, 'bundle', 'rg'),
-      SHELL_SCRIPT,
-    );
-    process.chdir(bundleRoot);
-
-    await expect(getRipgrepPath()).resolves.toBe(bundledRg);
-  });
-
-  it('uses the bundled binary when process.pkg marks a packaged build', async () => {
-    usePlatform('darwin');
-    mockHardcodedProbes([]);
-    const projectRoot = makeDir('pkg-root');
-    makeDir('pkg-root', 'node_modules');
-    const bundledRg = writeExecutable(
-      path.join(projectRoot, 'bundle', 'rg'),
-      SHELL_SCRIPT,
-    );
-    process.chdir(projectRoot);
-    usePkgEntrypoint(path.join(projectRoot, 'entry.js'));
-
-    await expect(getRipgrepPath()).resolves.toBe(bundledRg);
-  });
-
-  it('ignores the bundle directory when node_modules is present', async () => {
-    usePlatform('darwin');
-    mockHardcodedProbes([]);
-    const projectRoot = makeDir('project-root');
-    makeDir('project-root', 'node_modules');
-    writeExecutable(path.join(projectRoot, 'bundle', 'rg'), SHELL_SCRIPT);
-    process.chdir(projectRoot);
-
-    await expect(getRipgrepPath()).rejects.toThrow('ripgrep not found');
-  });
-
-  it('reports every installation option when nothing is found', async () => {
-    usePlatform('darwin');
-    mockHardcodedProbes([]);
-    const projectRoot = makeDir('bare-root');
-    makeDir('bare-root', 'node_modules');
-    process.chdir(projectRoot);
-
-    await expect(getRipgrepPath()).rejects.toThrow(
-      'ripgrep not found. Please install @lvce-editor/ripgrep or system ripgrep.',
-    );
-    await expect(getRipgrepPath()).rejects.toThrow('brew install ripgrep');
-  });
-});
-
-describe('isRipgrepAvailable', () => {
-  it('reports true when a binary resolves', async () => {
-    const systemBin = makeDir('system-bin');
-    installSystemRg(systemBin);
-    usePath(systemBin);
-
-    await expect(isRipgrepAvailable()).resolves.toBe(true);
-  });
-
-  it('reports false when nothing resolves', async () => {
-    usePlatform('darwin');
-    mockHardcodedProbes([]);
-    const projectRoot = makeDir('bare-root');
-    makeDir('bare-root', 'node_modules');
-    process.chdir(projectRoot);
-
-    await expect(isRipgrepAvailable()).resolves.toBe(false);
-  });
-
-  it('caches the positive result until the cache is cleared', async () => {
-    usePlatform('darwin');
-    mockHardcodedProbes([]);
-    const systemBin = makeDir('system-bin');
-    const systemRg = writeExecutable(path.join(systemBin, 'rg'), SHELL_SCRIPT);
-    usePath(systemBin);
-
-    expect(await isRipgrepAvailable()).toBe(true);
-
-    fs.rmSync(systemRg);
-    const projectRoot = makeDir('bare-root');
-    makeDir('bare-root', 'node_modules');
-    process.chdir(projectRoot);
-
-    expect(await isRipgrepAvailable()).toBe(true);
-
-    clearRipgrepAvailabilityCache();
-
-    expect(await isRipgrepAvailable()).toBe(false);
-  });
-
-  it('caches the negative result until the cache is cleared', async () => {
-    usePlatform('darwin');
-    mockHardcodedProbes([]);
-    const projectRoot = makeDir('bare-root');
-    makeDir('bare-root', 'node_modules');
-    process.chdir(projectRoot);
-
-    expect(await isRipgrepAvailable()).toBe(false);
-
-    const systemBin = makeDir('system-bin');
-    writeExecutable(path.join(systemBin, 'rg'), SHELL_SCRIPT);
-    usePath(systemBin);
-
-    expect(await isRipgrepAvailable()).toBe(false);
-
-    clearRipgrepAvailabilityCache();
-
-    expect(await isRipgrepAvailable()).toBe(true);
-  });
-});
-
-describe('ensureWindowsShortcut', () => {
-  it('returns false on a non-Windows platform and creates nothing', () => {
-    usePlatform('darwin');
-    const source = writeExecutable(
-      path.join(tempRoot, 'src', 'rg'),
-      SHELL_SCRIPT,
-    );
-    const target = path.join(tempRoot, 'dst', 'rg');
-
-    expect(ensureWindowsShortcut(source, target)).toBe(false);
-    expect(fs.existsSync(target)).toBe(false);
-  });
-
-  it('hard links the source into a directory it creates', () => {
-    usePlatform('win32');
-    const source = writeExecutable(
-      path.join(tempRoot, 'src', 'rg'),
-      SHELL_SCRIPT,
-    );
-    const target = path.join(tempRoot, 'dst', 'rg');
-
-    expect(ensureWindowsShortcut(source, target)).toBe(true);
-    expect(fs.readFileSync(target, 'utf8')).toBe(SHELL_SCRIPT);
-    expect(fs.statSync(target).ino).toBe(fs.statSync(source).ino);
-  });
-
-  it('copies the source when hard linking fails', () => {
-    usePlatform('win32');
-    vi.spyOn(fs, 'linkSync').mockImplementation(() => {
-      throw new Error('EPERM: hard link not permitted');
     });
-    const source = writeExecutable(
-      path.join(tempRoot, 'src', 'rg'),
-      SHELL_SCRIPT,
-    );
-    const target = path.join(tempRoot, 'dst', 'rg');
 
-    expect(ensureWindowsShortcut(source, target)).toBe(true);
-    expect(fs.readFileSync(target, 'utf8')).toBe(SHELL_SCRIPT);
-    expect(fs.statSync(target).ino).not.toBe(fs.statSync(source).ino);
+    it('uses the Homebrew path on Apple Silicon when no earlier path exists', async () => {
+      usePlatform('darwin');
+      mockHardcodedProbes(['/opt/homebrew/bin/rg']);
+
+      await expect(getRipgrepPath()).resolves.toBe('/opt/homebrew/bin/rg');
+    });
+
+    it('prefers the earliest Unix candidate when several exist', async () => {
+      usePlatform('darwin');
+      mockHardcodedProbes(['/usr/bin/rg', '/opt/homebrew/bin/rg']);
+
+      await expect(getRipgrepPath()).resolves.toBe('/usr/bin/rg');
+    });
+
+    it('uses a Program Files path on win32', async () => {
+      usePlatform('win32');
+      mockHardcodedProbes([...WINDOWS_FALLBACK_PATHS]);
+
+      const resolved = await getRipgrepPath();
+
+      expect(resolved).toContain('Program Files');
+      expect(resolved.endsWith('rg.exe')).toBe(true);
+    });
+
+    it('does not use Unix paths on win32', async () => {
+      usePlatform('win32');
+      mockHardcodedProbes([...UNIX_FALLBACK_PATHS]);
+      const projectRoot = makeDir('windows-project-root');
+      makeDir('windows-project-root', 'node_modules');
+      process.chdir(projectRoot);
+
+      await expect(getRipgrepPath()).rejects.toThrow('ripgrep not found');
+    });
   });
 
-  it('leaves an existing target untouched', () => {
-    usePlatform('win32');
-    const source = writeExecutable(
-      path.join(tempRoot, 'src', 'rg'),
-      SHELL_SCRIPT,
-    );
-    const target = writeExecutable(
-      path.join(tempRoot, 'dst', 'rg'),
-      'existing\n',
-    );
+  describe('getRipgrepPath bundle environment', () => {
+    it('uses the bundled binary when node_modules is absent', async () => {
+      usePlatform('darwin');
+      mockHardcodedProbes([]);
+      const bundleRoot = makeDir('bundle-root');
+      const bundledRg = writeExecutable(
+        path.join(bundleRoot, 'bundle', 'rg'),
+        SHELL_SCRIPT,
+      );
+      process.chdir(bundleRoot);
 
-    expect(ensureWindowsShortcut(source, target)).toBe(false);
-    expect(fs.readFileSync(target, 'utf8')).toBe('existing\n');
+      await expect(getRipgrepPath()).resolves.toBe(bundledRg);
+    });
+
+    it('uses the bundled binary when process.pkg marks a packaged build', async () => {
+      usePlatform('darwin');
+      mockHardcodedProbes([]);
+      const projectRoot = makeDir('pkg-root');
+      makeDir('pkg-root', 'node_modules');
+      const bundledRg = writeExecutable(
+        path.join(projectRoot, 'bundle', 'rg'),
+        SHELL_SCRIPT,
+      );
+      process.chdir(projectRoot);
+      usePkgEntrypoint(path.join(projectRoot, 'entry.js'));
+
+      await expect(getRipgrepPath()).resolves.toBe(bundledRg);
+    });
+
+    it('ignores the bundle directory when node_modules is present', async () => {
+      usePlatform('darwin');
+      mockHardcodedProbes([]);
+      const projectRoot = makeDir('project-root');
+      makeDir('project-root', 'node_modules');
+      writeExecutable(path.join(projectRoot, 'bundle', 'rg'), SHELL_SCRIPT);
+      process.chdir(projectRoot);
+
+      await expect(getRipgrepPath()).rejects.toThrow('ripgrep not found');
+    });
+
+    it('reports every installation option when nothing is found', async () => {
+      usePlatform('darwin');
+      mockHardcodedProbes([]);
+      const projectRoot = makeDir('bare-root');
+      makeDir('bare-root', 'node_modules');
+      process.chdir(projectRoot);
+
+      await expect(getRipgrepPath()).rejects.toThrow(
+        'ripgrep not found. Please install @lvce-editor/ripgrep or system ripgrep.',
+      );
+      await expect(getRipgrepPath()).rejects.toThrow('brew install ripgrep');
+    });
   });
 
-  it('returns false when the source does not exist', () => {
-    usePlatform('win32');
-    const source = path.join(tempRoot, 'src', 'missing-rg');
-    const target = path.join(tempRoot, 'dst', 'rg');
+  describe('isRipgrepAvailable', () => {
+    it('reports true when a binary resolves', async () => {
+      const systemBin = makeDir('system-bin');
+      installSystemRg(systemBin);
+      usePath(systemBin);
 
-    expect(ensureWindowsShortcut(source, target)).toBe(false);
-    expect(fs.existsSync(target)).toBe(false);
+      await expect(isRipgrepAvailable()).resolves.toBe(true);
+    });
+
+    it('reports false when nothing resolves', async () => {
+      usePlatform('darwin');
+      mockHardcodedProbes([]);
+      const projectRoot = makeDir('bare-root');
+      makeDir('bare-root', 'node_modules');
+      process.chdir(projectRoot);
+
+      await expect(isRipgrepAvailable()).resolves.toBe(false);
+    });
+
+    it('caches the positive result until the cache is cleared', async () => {
+      usePlatform('darwin');
+      mockHardcodedProbes([]);
+      const systemBin = makeDir('system-bin');
+      const systemRg = writeExecutable(
+        path.join(systemBin, 'rg'),
+        SHELL_SCRIPT,
+      );
+      usePath(systemBin);
+
+      expect(await isRipgrepAvailable()).toBe(true);
+
+      fs.rmSync(systemRg);
+      const projectRoot = makeDir('bare-root');
+      makeDir('bare-root', 'node_modules');
+      process.chdir(projectRoot);
+
+      expect(await isRipgrepAvailable()).toBe(true);
+
+      clearRipgrepAvailabilityCache();
+
+      expect(await isRipgrepAvailable()).toBe(false);
+    });
+
+    it('caches the negative result until the cache is cleared', async () => {
+      usePlatform('darwin');
+      mockHardcodedProbes([]);
+      const projectRoot = makeDir('bare-root');
+      makeDir('bare-root', 'node_modules');
+      process.chdir(projectRoot);
+
+      expect(await isRipgrepAvailable()).toBe(false);
+
+      const systemBin = makeDir('system-bin');
+      writeExecutable(path.join(systemBin, 'rg'), SHELL_SCRIPT);
+      usePath(systemBin);
+
+      expect(await isRipgrepAvailable()).toBe(false);
+
+      clearRipgrepAvailabilityCache();
+
+      expect(await isRipgrepAvailable()).toBe(true);
+    });
+  });
+
+  describe('ensureWindowsShortcut', () => {
+    it('returns false on a non-Windows platform and creates nothing', () => {
+      usePlatform('darwin');
+      const source = writeExecutable(
+        path.join(tempRoot, 'src', 'rg'),
+        SHELL_SCRIPT,
+      );
+      const target = path.join(tempRoot, 'dst', 'rg');
+
+      expect(ensureWindowsShortcut(source, target)).toBe(false);
+      expect(fs.existsSync(target)).toBe(false);
+    });
+
+    it('hard links the source into a directory it creates', () => {
+      usePlatform('win32');
+      const source = writeExecutable(
+        path.join(tempRoot, 'src', 'rg'),
+        SHELL_SCRIPT,
+      );
+      const target = path.join(tempRoot, 'dst', 'rg');
+
+      expect(ensureWindowsShortcut(source, target)).toBe(true);
+      expect(fs.readFileSync(target, 'utf8')).toBe(SHELL_SCRIPT);
+      expect(fs.statSync(target).ino).toBe(fs.statSync(source).ino);
+    });
+
+    it('copies the source when hard linking fails', () => {
+      usePlatform('win32');
+      vi.spyOn(fs, 'linkSync').mockImplementation(() => {
+        throw new Error('EPERM: hard link not permitted');
+      });
+      const source = writeExecutable(
+        path.join(tempRoot, 'src', 'rg'),
+        SHELL_SCRIPT,
+      );
+      const target = path.join(tempRoot, 'dst', 'rg');
+
+      expect(ensureWindowsShortcut(source, target)).toBe(true);
+      expect(fs.readFileSync(target, 'utf8')).toBe(SHELL_SCRIPT);
+      expect(fs.statSync(target).ino).not.toBe(fs.statSync(source).ino);
+    });
+
+    it('leaves an existing target untouched', () => {
+      usePlatform('win32');
+      const source = writeExecutable(
+        path.join(tempRoot, 'src', 'rg'),
+        SHELL_SCRIPT,
+      );
+      const target = writeExecutable(
+        path.join(tempRoot, 'dst', 'rg'),
+        'existing\n',
+      );
+
+      expect(ensureWindowsShortcut(source, target)).toBe(false);
+      expect(fs.readFileSync(target, 'utf8')).toBe('existing\n');
+    });
+
+    it('returns false when the source does not exist', () => {
+      usePlatform('win32');
+      const source = path.join(tempRoot, 'src', 'missing-rg');
+      const target = path.join(tempRoot, 'dst', 'rg');
+
+      expect(ensureWindowsShortcut(source, target)).toBe(false);
+      expect(fs.existsSync(target)).toBe(false);
+    });
   });
 });

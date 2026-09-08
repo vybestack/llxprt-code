@@ -545,7 +545,7 @@ describe('retained-history accounting — bounded top-N working storage', () => 
     expect(breakdown.largestToolResponses).toHaveLength(10);
     const bytes = breakdown.largestToolResponses.map((r) => r.bytes);
     const sortedDesc = [...bytes].sort((a, b) => b - a);
-    expect(bytes).toEqual(sortedDesc);
+    expect(bytes).toStrictEqual(sortedDesc);
     // Every ranked entry is at least as heavy as the heaviest unranked one:
     // the 500-response floor (100 chars + overhead) must be below the cut.
     const minRanked = Math.min(...bytes);

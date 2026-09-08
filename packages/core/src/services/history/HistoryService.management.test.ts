@@ -26,6 +26,73 @@ import { ContentConverters } from './ContentConverters.js';
 const createUserMessage = createUserMessageFromIContent;
 const createToolResponse = createToolResponseFromIContent;
 
+function toolResponseBlocksFor(
+  curated: IContent[],
+  callId: string,
+): ToolResponseBlock[] {
+  return curated
+    .flatMap((content) => content.blocks)
+    .filter(
+      (block): block is ToolResponseBlock =>
+        block.type === 'tool_response' && block.callId === callId,
+    );
+}
+
+function toolResponsesFor(
+  curated: IContent[],
+  callId: string,
+): ToolResponseBlock[] {
+  return curated
+    .filter((content) => content.speaker === 'tool')
+    .flatMap((content) =>
+      content.blocks.filter(
+        (block): block is ToolResponseBlock =>
+          block.type === 'tool_response' && block.callId === callId,
+      ),
+    );
+}
+
+function hasSyntheticReconstructedToolCall(curated: IContent[]): boolean {
+  return curated.some(
+    (content) =>
+      content.metadata?.synthetic === true &&
+      content.metadata.reason === 'reconstructed_tool_call',
+  );
+}
+
+function containsToolResponseFor(
+  content: IContent | undefined,
+  callId: string,
+): boolean {
+  return (
+    content?.blocks.some(
+      (block) => block.type === 'tool_response' && block.callId === callId,
+    ) ?? false
+  );
+}
+
+function toolCallIndexAfter(curated: IContent[], callId: string): number {
+  return curated.findIndex(
+    (content) =>
+      content.speaker === 'ai' &&
+      content.blocks.some(
+        (block) => block.type === 'tool_call' && block.id === callId,
+      ),
+  );
+}
+
+function waitingTextIndex(curated: IContent[]): number {
+  return curated.findIndex(
+    (content) =>
+      content.speaker === 'ai' &&
+      content.blocks.some(
+        (block) =>
+          block.type === 'text' &&
+          (block as { text?: string }).text === '...waiting for tool...',
+      ),
+  );
+}
+
 describe('HistoryService - Behavioral Tests', () => {
   let service: HistoryService;
 
@@ -297,23 +364,10 @@ describe('HistoryService - Behavioral Tests', () => {
       );
 
       const curated = service.getCuratedForProvider();
-      const toolResponses = curated
-        .filter((content) => content.speaker === 'tool')
-        .flatMap((content) =>
-          content.blocks.filter(
-            (block) =>
-              block.type === 'tool_response' && block.callId === callId,
-          ),
-        );
+      const toolResponses = toolResponsesFor(curated, callId);
 
       expect(toolResponses).toHaveLength(1);
-      expect(
-        curated.some(
-          (content) =>
-            content.metadata?.synthetic === true &&
-            content.metadata.reason === 'reconstructed_tool_call',
-        ),
-      ).toBe(false);
+      expect(hasSyntheticReconstructedToolCall(curated)).toBe(false);
     });
 
     it('should drop duplicate late tool_responses to keep provider tool adjacency valid', () => {
@@ -351,30 +405,15 @@ describe('HistoryService - Behavioral Tests', () => {
 
       const curated = service.getCuratedForProvider();
 
-      const toolResponsesForCallId = curated
-        .flatMap((content) => content.blocks)
-        .filter(
-          (block): block is ToolResponseBlock =>
-            block.type === 'tool_response' && block.callId === callId,
-        );
+      const toolResponsesForCallId = toolResponseBlocksFor(curated, callId);
       expect(toolResponsesForCallId).toHaveLength(1);
 
-      const toolCallIndex = curated.findIndex(
-        (content) =>
-          content.speaker === 'ai' &&
-          content.blocks.some(
-            (block) => block.type === 'tool_call' && block.id === callId,
-          ),
-      );
+      const toolCallIndex = toolCallIndexAfter(curated, callId);
       expect(toolCallIndex).toBeGreaterThanOrEqual(0);
 
       const toolResultMessage = curated[toolCallIndex + 1];
       expect(toolResultMessage.speaker).toBe('tool');
-      expect(
-        toolResultMessage.blocks.some(
-          (block) => block.type === 'tool_response' && block.callId === callId,
-        ),
-      ).toBe(true);
+      expect(containsToolResponseFor(toolResultMessage, callId)).toBe(true);
     });
 
     it('should relocate out-of-order tool_responses to immediately follow their tool_call', () => {
@@ -406,32 +445,14 @@ describe('HistoryService - Behavioral Tests', () => {
 
       const curated = service.getCuratedForProvider();
 
-      const toolCallIndex = curated.findIndex(
-        (content) =>
-          content.speaker === 'ai' &&
-          content.blocks.some(
-            (block) => block.type === 'tool_call' && block.id === callId,
-          ),
-      );
+      const toolCallIndex = toolCallIndexAfter(curated, callId);
       expect(toolCallIndex).toBeGreaterThanOrEqual(0);
 
       const toolResultMessage = curated[toolCallIndex + 1];
       expect(toolResultMessage.speaker).toBe('tool');
-      expect(
-        toolResultMessage.blocks.some(
-          (block) => block.type === 'tool_response' && block.callId === callId,
-        ),
-      ).toBe(true);
+      expect(containsToolResponseFor(toolResultMessage, callId)).toBe(true);
 
-      const waitingMessageIndex = curated.findIndex(
-        (content) =>
-          content.speaker === 'ai' &&
-          content.blocks.some(
-            (block) =>
-              block.type === 'text' &&
-              (block as { text?: string }).text === '...waiting for tool...',
-          ),
-      );
+      const waitingMessageIndex = waitingTextIndex(curated);
       expect(waitingMessageIndex).toBeGreaterThan(toolCallIndex + 1);
     });
   });

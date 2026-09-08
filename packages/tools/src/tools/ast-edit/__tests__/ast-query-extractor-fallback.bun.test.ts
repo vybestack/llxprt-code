@@ -27,6 +27,13 @@ const INDENTED_SOURCE = [
 /** C-shaped source whose declarations only exist in the C family mapping. */
 const C_SHAPED_SOURCE = 'struct Point {\n  int x;\n};\n';
 
+function isPointStruct(declaration: {
+  readonly name: string;
+  readonly type: string;
+}): boolean {
+  return declaration.name === 'Point' && declaration.type === 'struct';
+}
+
 describe('fallback declaration extraction columns', () => {
   it('computes declaration columns against the raw line so indentation is kept', async () => {
     const declarations = await extractor.extractDeclarations(
@@ -73,7 +80,10 @@ describe('bounded fallback limit validation', () => {
       INDENTED_SOURCE,
       Number.POSITIVE_INFINITY,
     );
-    expect(declarations.map((decl) => decl.name)).toEqual(['Service', 'run']);
+    expect(declarations.map((decl) => decl.name)).toStrictEqual([
+      'Service',
+      'run',
+    ]);
   });
 
   it('returns no declarations for a zero limit', async () => {
@@ -82,7 +92,7 @@ describe('bounded fallback limit validation', () => {
       INDENTED_SOURCE,
       0,
     );
-    expect(declarations).toEqual([]);
+    expect(declarations).toStrictEqual([]);
   });
 
   it('stops at the limit in document order with output identical to the unbounded scan', async () => {
@@ -100,8 +110,8 @@ describe('bounded fallback limit validation', () => {
       '/repo/dense.rb',
       source,
     );
-    expect(bounded).toEqual(unbounded.slice(0, 3));
-    expect(bounded.map((decl) => decl.name)).toEqual([
+    expect(bounded).toStrictEqual(unbounded.slice(0, 3));
+    expect(bounded.map((decl) => decl.name)).toStrictEqual([
       'method0',
       'method1',
       'method2',
@@ -117,11 +127,7 @@ describe('declaration family resolution', () => {
       '/repo/point.c',
       C_SHAPED_SOURCE,
     );
-    expect(
-      cDeclarations.some(
-        (decl) => decl.name === 'Point' && decl.type === 'struct',
-      ),
-    ).toBe(true);
+    expect(cDeclarations.some(isPointStruct)).toBe(true);
 
     // '.cpp' has an ast-grep mapping but no declaration family: the same
     // source must go through the keyword line scan (no 'struct' keyword),
@@ -130,7 +136,7 @@ describe('declaration family resolution', () => {
       '/repo/point.cpp',
       C_SHAPED_SOURCE,
     );
-    expect(cppDeclarations).toEqual([]);
+    expect(cppDeclarations).toStrictEqual([]);
   });
 
   it('uses the same family resolution in the bounded walk', async () => {
@@ -139,12 +145,12 @@ describe('declaration family resolution', () => {
       C_SHAPED_SOURCE,
       5,
     );
-    expect(cDeclarations.map((decl) => decl.name)).toEqual(['Point']);
+    expect(cDeclarations.map((decl) => decl.name)).toStrictEqual(['Point']);
     const cppDeclarations = await extractor.extractDeclarationsBounded(
       '/repo/point.cpp',
       C_SHAPED_SOURCE,
       5,
     );
-    expect(cppDeclarations).toEqual([]);
+    expect(cppDeclarations).toStrictEqual([]);
   });
 });

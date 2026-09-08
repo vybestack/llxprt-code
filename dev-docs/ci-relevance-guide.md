@@ -173,11 +173,27 @@ consumed by the test:
 - The tmux harness entry and its split helper modules.
 - The Bun test preload (`scripts/tests/test-setup.ts`).
 - The test file itself (`scripts/tests/interactive-ui.test.ts`).
-- The three executed scenario JSON files.
-- The scenario config referenced by all three scenarios
+- The seven executed scenario JSON files.
+- The deterministic session seed invoked by the resize scenario
+  (`scripts/seed-session-browser-resize.ts`).
+- The scenario config referenced by the executed scenarios
   (`scripts/fixtures/welcome-completed.json`,
   `scripts/system-settings.interactive-ui.json`).
 - The response fixture files referenced by those scenarios.
+
+The seven executed scenarios are:
+`scripts/tmux-script.slash-autocomplete.json`,
+`scripts/tmux-script.approval-ui.json`,
+`scripts/tmux-script.issue2208-newlines.fake.json`,
+`scripts/tmux-script.provider-model.json`,
+`scripts/tmux-script.welcome.json`,
+`scripts/tmux-script.session-browser-resize.json`, and
+`scripts/tmux-script.unicode-composer.json`.
+
+The provider/model, welcome, resize, and Unicode scenarios are added by issue #2017.
+Tool-approval deny/Escape and session-browser open/navigation/search journeys are
+owned by PRs #3308 and #3310 and are executed and listed by those PRs, not by
+this lane.
 
 Broad package/runtime paths remain because the job runs `npm ci`, a
 workspace-wide build, the real CLI launcher, and the real tmux UI tests.

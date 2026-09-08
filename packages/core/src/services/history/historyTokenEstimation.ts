@@ -125,13 +125,16 @@ export interface TokenizerProvider {
 function estimateMediaBlockImageTokens(
   block: MediaBlock,
   provider: string | undefined,
+  model: string | undefined,
 ): number {
   if (!block.mimeType.toLowerCase().startsWith('image/')) return 0;
-  const dimensions =
-    block.encoding === 'base64'
-      ? parseImageDimensionsFromBase64(block.data)
-      : undefined;
-  return estimateImageTokens({ provider, dimensions });
+  let dimensions: MediaBlock['dimensions'];
+  if (block.encoding === 'reference') {
+    dimensions = block.dimensions;
+  } else if (block.encoding === 'base64') {
+    dimensions = parseImageDimensionsFromBase64(block.data) ?? block.dimensions;
+  }
+  return estimateImageTokens({ provider, dimensions, model });
 }
 
 /**
@@ -151,6 +154,7 @@ export async function estimateContentTokens(
       totalTokens += estimateMediaBlockImageTokens(
         block,
         tokenizerProvider.activeProvider,
+        modelName,
       );
     }
     const blockText = blockToEstimationText(block, logger);

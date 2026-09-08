@@ -8,6 +8,7 @@ import { describe, it, expect } from 'bun:test';
 import {
   disableMouseEvents,
   enableMouseEvents,
+  getMouseEventName,
   isMouseEventsActive,
   setMouseEventsActive,
   isIncompleteMouseSequence,
@@ -16,6 +17,10 @@ import {
   parseX11MouseEvent,
 } from './mouse.js';
 import { ESC } from './input.js';
+
+function x11Sequence(buttonCode: number, col = 1, row = 1): string {
+  return `${ESC}[M${String.fromCharCode(buttonCode + 32, col + 32, row + 32)}`;
+}
 
 describe('mouse utils', () => {
   describe('enableMouseEvents/disableMouseEvents', () => {
@@ -122,6 +127,16 @@ describe('mouse utils', () => {
     });
   });
 
+  describe('getMouseEventName', () => {
+    it('maps horizontal wheel button codes to scroll-left and scroll-right (AC6.5)', () => {
+      const names = [66, 67].map((buttonCode) =>
+        getMouseEventName(buttonCode, false),
+      );
+
+      expect(names).toStrictEqual(['scroll-left', 'scroll-right']);
+    });
+  });
+
   describe('parseX11MouseEvent', () => {
     it('parses a valid X11 mouse press', () => {
       const input = `${ESC}[M !!`;
@@ -137,6 +152,56 @@ describe('mouse utils', () => {
         button: 'left',
       });
       expect(result?.length).toBe(6);
+    });
+
+    it('parses the X11 release code as left-release without a button (AC6.6)', () => {
+      const result = parseX11MouseEvent(x11Sequence(3, 12, 7));
+
+      expect(result?.event).toStrictEqual({
+        name: 'left-release',
+        col: 12,
+        row: 7,
+        shift: false,
+        meta: false,
+        ctrl: false,
+        button: 'none',
+      });
+    });
+
+    it('parses X11 motion as move (AC6.7)', () => {
+      const result = parseX11MouseEvent(x11Sequence(32, 4, 9));
+
+      expect(result?.event).toStrictEqual({
+        name: 'move',
+        col: 4,
+        row: 9,
+        shift: false,
+        meta: false,
+        ctrl: false,
+        button: 'left',
+      });
+    });
+
+    it('parses X11 vertical wheel codes as scroll-up and scroll-down (AC6.7)', () => {
+      const names = [64, 65].map(
+        (buttonCode) => parseX11MouseEvent(x11Sequence(buttonCode))?.event.name,
+      );
+
+      expect(names).toStrictEqual(['scroll-up', 'scroll-down']);
+    });
+
+    it('decodes X11 shift, meta, and ctrl modifier bits (AC6.8)', () => {
+      const result = parseX11MouseEvent(x11Sequence(4 | 8 | 16, 3, 5));
+
+      expect(result?.event).toStrictEqual({
+        name: 'left-press',
+        col: 3,
+        row: 5,
+        shift: true,
+        meta: true,
+        ctrl: true,
+        button: 'left',
+      });
     });
 
     it('returns null for incomplete X11', () => {

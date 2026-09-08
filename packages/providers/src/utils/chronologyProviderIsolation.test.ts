@@ -24,9 +24,9 @@ import { buildProviderDumpBody } from './providerRequestConversion.js';
  * human turns, issue #2410), so a leak here would break every request for the
  * affected provider.
  *
- * `deepCloneWithoutCircularRefs` copies metadata, so chronology genuinely
- * travels with IContent right up to each converter. These tests are the
- * regression guard that it stops there.
+ * `sanitizeProviderHistoryForSerialization` copies metadata, so chronology
+ * genuinely travels with IContent right up to each converter. These tests are
+ * the regression guard that it stops there.
  *
  * When a new provider wire converter is added, add it to CONVERTERS below.
  */

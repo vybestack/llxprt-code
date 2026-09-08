@@ -58,6 +58,13 @@ function createInMemorySecureStore(): ISecureStore {
   };
 }
 
+function bucketForState(
+  stateToBucket: ReadonlyMap<string, string>,
+  state: string | null,
+): string | undefined {
+  return state === null ? undefined : stateToBucket.get(state);
+}
+
 function createIdToken(accountId: string): string {
   const encode = (value: object): string =>
     Buffer.from(JSON.stringify(value)).toString('base64url');
@@ -147,17 +154,16 @@ describe('Codex per-bucket browser profile selection', () => {
       state: new URL(url).searchParams.get('state'),
       profileDirectory: options?.profileDirectory,
     }));
-    const stateToBucket = new Map(
-      (
-        startLocalOAuthCallback as Mock<typeof startLocalOAuthCallback>
-      ).mock.calls.map(([options], index) => [
-        options.state,
-        index === 0 ? 'work' : 'personal',
-      ]),
-    );
+    const callbackCalls = (
+      startLocalOAuthCallback as Mock<typeof startLocalOAuthCallback>
+    ).mock.calls;
+    const stateToBucket = new Map([
+      [callbackCalls[0][0].state, 'work'],
+      [callbackCalls[1][0].state, 'personal'],
+    ]);
     const bucketProfiles = Object.fromEntries(
       browserLaunches.map(({ state, profileDirectory }) => [
-        state ? stateToBucket.get(state) : undefined,
+        bucketForState(stateToBucket, state),
         profileDirectory,
       ]),
     );

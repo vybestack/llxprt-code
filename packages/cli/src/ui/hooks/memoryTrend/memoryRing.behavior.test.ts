@@ -32,7 +32,7 @@ function makeSample(rss: number): MemoryRingSample {
 describe('MemoryRing (AC-11)', () => {
   it('snapshot of an empty ring is empty', () => {
     const ring = new MemoryRing(4);
-    expect(ring.snapshot()).toEqual([]);
+    expect(ring.snapshot()).toStrictEqual([]);
     expect(ring.size).toBe(0);
   });
 
@@ -96,7 +96,7 @@ describe('MemoryRing (AC-11)', () => {
     const snap1 = ring.snapshot();
     const snap2 = ring.snapshot();
     expect(snap1).not.toBe(snap2);
-    expect(snap1).toEqual(snap2);
+    expect(snap1).toStrictEqual(snap2);
   });
 
   it('exposes the documented default capacity', () => {
@@ -145,7 +145,7 @@ describe('MemoryRing capacity validation (AC-11)', () => {
   it('accepts capacity 1 and overwrites on every subsequent push', () => {
     const ring = new MemoryRing(1);
     expect(ring.size).toBe(0);
-    expect(ring.snapshot()).toEqual([]);
+    expect(ring.snapshot()).toStrictEqual([]);
 
     ring.push(makeSample(10));
     expect(ring.size).toBe(1);

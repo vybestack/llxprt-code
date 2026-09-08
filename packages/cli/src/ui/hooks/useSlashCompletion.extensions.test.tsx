@@ -45,6 +45,7 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
     mockCommandContext = createMockCommandContext();
     mockConfig = {
       getEnablePromptCompletion: () => false,
+      getUtilityModel: () => undefined,
     } as unknown as Config;
   });
 

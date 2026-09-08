@@ -11,7 +11,11 @@ import {
   resetKeytarLoader,
 } from './keychain-token-storage.js';
 import type { OAuthCredentials } from './types.js';
-import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
+import { registerMcpHostServices } from '../../host/hostServices.js';
+
+// Exercises the real host seam instead of mocking a module (#3305).
+const mockEmitFeedback = vi.fn();
+registerMcpHostServices({ emitFeedback: mockEmitFeedback });
 
 // Create mock keytar functions
 const mockKeytar = {
@@ -28,12 +32,6 @@ void vi.mock('node:crypto', () => ({
   randomBytes: vi.fn(() => ({
     toString: vi.fn(() => mockCryptoRandomBytesString),
   })),
-}));
-
-void vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
-  coreEvents: {
-    emitFeedback: vi.fn(),
-  },
 }));
 
 describe('KeychainTokenStorage', () => {
@@ -272,7 +270,7 @@ describe('KeychainTokenStorage', () => {
         mockKeytar.findCredentials.mockRejectedValue(error);
         const result = await storage.listServers();
         expect(result).toStrictEqual([]);
-        expect(coreEvents.emitFeedback).toHaveBeenCalledWith(
+        expect(mockEmitFeedback).toHaveBeenCalledWith(
           'error',
           'Failed to list servers from keychain',
           error,
@@ -320,12 +318,12 @@ describe('KeychainTokenStorage', () => {
         expect(result.has('bad-server')).toBe(false);
         expect(result.has('invalid-server')).toBe(false);
 
-        expect(coreEvents.emitFeedback).toHaveBeenCalledWith(
+        expect(mockEmitFeedback).toHaveBeenCalledWith(
           'error',
           'Failed to parse credentials for bad-server',
           expect.any(SyntaxError),
         );
-        expect(coreEvents.emitFeedback).toHaveBeenCalledWith(
+        expect(mockEmitFeedback).toHaveBeenCalledWith(
           'error',
           'Failed to parse credentials for invalid-server',
           expect.any(Error),
@@ -338,7 +336,7 @@ describe('KeychainTokenStorage', () => {
 
         const result = await storage.getAllCredentials();
         expect(result.size).toBe(0);
-        expect(coreEvents.emitFeedback).toHaveBeenCalledWith(
+        expect(mockEmitFeedback).toHaveBeenCalledWith(
           'error',
           'Failed to get all credentials from keychain',
           error,

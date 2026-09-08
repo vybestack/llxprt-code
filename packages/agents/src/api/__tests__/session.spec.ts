@@ -97,14 +97,14 @@ function storageTempDirFor(workingDir: string): string {
  * disposes the agent and removes both the working dir and its derived storage
  * temp dir. Guarantees no stray checkpoint/recording artifacts survive.
  */
-async function withIsolatedAgent(
+async function withIsolatedAgent<T>(
   fixture: string,
-  fn: (agent: Agent, workingDir: string) => Promise<void>,
-): Promise<void> {
+  fn: (agent: Agent, workingDir: string) => Promise<T>,
+): Promise<T> {
   const workingDir = mkdtempSync(join(tmpdir(), 'llxprt-session-spec-'));
   const { agent, cleanup } = await buildAgent(fixture, { workingDir });
   try {
-    await fn(agent, workingDir);
+    return await fn(agent, workingDir);
   } finally {
     await cleanup();
     rmSync(workingDir, { recursive: true, force: true });
@@ -114,100 +114,141 @@ async function withIsolatedAgent(
 
 describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010', () => {
   it('creates and lists recording-native checkpoints without legacy checkpoint files @plan:2026-07-28-issue-2625', async () => {
-    await withIsolatedAgent('plain-text.jsonl', async (agent, workingDir) => {
-      const seeded = [
-        textMessage('user', 'remember the magic word: quokka'),
-        textMessage('model', 'got it, the magic word is quokka'),
-      ];
-      await agent.setHistory(seeded);
-
-      const checkpoint: CheckpointInfo =
-        await agent.session.createCheckpoint('milestone-1');
-      expect(checkpoint.name).toBe('milestone-1');
-      expect(checkpoint.sessionId.length).toBeGreaterThan(0);
-      expect(checkpoint.sequence).toBeGreaterThan(0);
-      expect(Number.isNaN(Date.parse(checkpoint.createdAt))).toBe(false);
-
-      const listed = await agent.session.listCheckpoints();
-      expect(listed).toContainEqual(checkpoint);
-      expect(
-        readFileSync(agent.session.getRecording().path ?? '', 'utf8'),
-      ).toContain('checkpoint_created');
-      expect(
-        existsSync(join(storageTempDirFor(workingDir), 'checkpoints')),
-      ).toBe(false);
-    });
+    const { checkpoint, listed, recordingRaw, legacyCheckpointDirExists } =
+      await observeCreatesAndListsRecordingNativeCheckpointsWithoutLegacyCheckpointFiles();
+    expect(checkpoint.name).toBe('milestone-1');
+    expect(checkpoint.sessionId.length).toBeGreaterThan(0);
+    expect(checkpoint.sequence).toBeGreaterThan(0);
+    expect(Number.isNaN(Date.parse(checkpoint.createdAt))).toBe(false);
+    expect(listed).toContainEqual(checkpoint);
+    expect(recordingRaw).toContain('checkpoint_created');
+    expect(legacyCheckpointDirExists).toBe(false);
   });
+
+  const observeCreatesAndListsRecordingNativeCheckpointsWithoutLegacyCheckpointFiles =
+    async () =>
+      withIsolatedAgent('plain-text.jsonl', async (agent, workingDir) => {
+        const seeded = [
+          textMessage('user', 'remember the magic word: quokka'),
+          textMessage('model', 'got it, the magic word is quokka'),
+        ];
+        await agent.setHistory(seeded);
+
+        const checkpoint: CheckpointInfo =
+          await agent.session.createCheckpoint('milestone-1');
+
+        const listed = await agent.session.listCheckpoints();
+        const recordingRaw = readFileSync(
+          agent.session.getRecording().path ?? '',
+          'utf8',
+        );
+        const legacyCheckpointDirExists = existsSync(
+          join(storageTempDirFor(workingDir), 'checkpoints'),
+        );
+
+        return {
+          checkpoint,
+          listed,
+          recordingRaw,
+          legacyCheckpointDirExists,
+        };
+      });
 
   it('forks from a checkpoint into a self-contained child while preserving resume history @plan:2026-07-28-issue-2625', async () => {
-    await withIsolatedAgent('plain-text.jsonl', async (agent) => {
-      await agent.setHistory([
-        textMessage('user', 'branch source'),
-        textMessage('model', 'source reply'),
-      ]);
-      const checkpoint = await agent.session.createCheckpoint('branch-point');
-      const parentPath = agent.session.getRecording().path ?? '';
-      await agent.restoreHistory([textMessage('user', 'source-only tail')]);
-
-      const child = await agent.session.forkFromCheckpoint(
-        checkpoint.checkpointId,
-      );
-      expect(child.id).not.toBe(checkpoint.sessionId);
-      expect(child.parentSessionId).toBe(checkpoint.sessionId);
-      expect(child.checkpointId).toBe(checkpoint.checkpointId);
-      expect(child.checkpointName).toBe('branch-point');
-      expect((await agent.getHistory()).map(messageText)).toStrictEqual([
-        'branch source',
-        'source reply',
-      ]);
-      expect(readFileSync(parentPath, 'utf8')).toContain('source-only tail');
-    });
+    const { child, checkpoint, childHistory, parentRaw } =
+      await observeForksFromACheckpointIntoASelfContainedChildWhilePreservingResume();
+    expect(child.id).not.toBe(checkpoint.sessionId);
+    expect(child.parentSessionId).toBe(checkpoint.sessionId);
+    expect(child.checkpointId).toBe(checkpoint.checkpointId);
+    expect(child.checkpointName).toBe('branch-point');
+    expect(childHistory).toStrictEqual(['branch source', 'source reply']);
+    expect(parentRaw).toContain('source-only tail');
   });
+
+  const observeForksFromACheckpointIntoASelfContainedChildWhilePreservingResume =
+    async () =>
+      withIsolatedAgent('plain-text.jsonl', async (agent) => {
+        await agent.setHistory([
+          textMessage('user', 'branch source'),
+          textMessage('model', 'source reply'),
+        ]);
+        const checkpoint = await agent.session.createCheckpoint('branch-point');
+        const parentPath = agent.session.getRecording().path ?? '';
+        await agent.restoreHistory([textMessage('user', 'source-only tail')]);
+
+        const child = await agent.session.forkFromCheckpoint(
+          checkpoint.checkpointId,
+        );
+        const childHistory = (await agent.getHistory()).map(messageText);
+        const parentRaw = readFileSync(parentPath, 'utf8');
+
+        return { child, checkpoint, childHistory, parentRaw };
+      });
 
   it('durably clears recorded history without re-recording restored entries @plan:2026-07-28-issue-2625', async () => {
-    await withIsolatedAgent('plain-text.jsonl', async (agent) => {
-      const history = [
-        textMessage('user', 'initial question'),
-        textMessage('model', 'initial answer'),
-        textMessage('user', 'later question'),
-        textMessage('model', 'later answer'),
-      ];
-      await agent.setHistory(history);
-      await agent.session.setRecording({ enabled: true });
-      const recordingPath = agent.session.getRecording().path ?? '';
-
-      await agent.resetChat();
-      expect((await agent.getHistory()).map(messageText)).toStrictEqual([
-        'initial question',
-        'initial answer',
-      ]);
-
-      await agent.session.setRecording({ enabled: false });
-      const lines = readFileSync(recordingPath, 'utf8')
-        .trim()
-        .split('\n')
-        .map((line) => JSON.parse(line) as { type: string });
-      expect(lines.filter((line) => line.type === 'rewind')).toHaveLength(1);
-      expect(lines.filter((line) => line.type === 'content')).toHaveLength(
-        history.length,
-      );
-
-      await agent.session.resume('latest');
-      expect((await agent.getHistory()).map(messageText)).toStrictEqual([
-        'initial question',
-        'initial answer',
-      ]);
-    });
+    const { lines, history, historyAfterReset, historyAfterResume } =
+      await observeDurablyClearsRecordedHistoryWithoutReRecordingRestoredEntries();
+    expect(historyAfterReset).toStrictEqual([
+      'initial question',
+      'initial answer',
+    ]);
+    expect(lines.filter((line) => line.type === 'rewind')).toHaveLength(1);
+    expect(lines.filter((line) => line.type === 'content')).toHaveLength(
+      history.length,
+    );
+    expect(historyAfterResume).toStrictEqual([
+      'initial question',
+      'initial answer',
+    ]);
   });
 
+  const observeDurablyClearsRecordedHistoryWithoutReRecordingRestoredEntries =
+    async () =>
+      withIsolatedAgent('plain-text.jsonl', async (agent) => {
+        const history = [
+          textMessage('user', 'initial question'),
+          textMessage('model', 'initial answer'),
+          textMessage('user', 'later question'),
+          textMessage('model', 'later answer'),
+        ];
+        await agent.setHistory(history);
+        await agent.session.setRecording({ enabled: true });
+        const recordingPath = agent.session.getRecording().path ?? '';
+
+        await agent.resetChat();
+        const historyAfterReset = (await agent.getHistory()).map(messageText);
+
+        await agent.session.setRecording({ enabled: false });
+        const lines = readFileSync(recordingPath, 'utf8')
+          .trim()
+          .split('\n')
+          .map((line) => JSON.parse(line) as { type: string });
+
+        await agent.session.resume('latest');
+        const historyAfterResume = (await agent.getHistory()).map(messageText);
+
+        return { lines, history, historyAfterReset, historyAfterResume };
+      });
+
   it('resets an already-empty chat while recording is enabled', async () => {
-    await withIsolatedAgent('plain-text.jsonl', async (agent) => {
+    const {
+      rewindCountAfterSecondReset,
+      rewindCountAfterFirstReset,
+      historyAfterFirstReset,
+    } = await observeResetsAnAlreadyEmptyChatWhileRecordingIsEnabled();
+    expect(historyAfterFirstReset).toStrictEqual([]);
+    expect(rewindCountAfterSecondReset).toBe(rewindCountAfterFirstReset);
+  });
+
+  const observeResetsAnAlreadyEmptyChatWhileRecordingIsEnabled = async () =>
+    withIsolatedAgent('plain-text.jsonl', async (agent) => {
       await agent.setHistory([textMessage('user', 'stale previous history')]);
       await agent.session.setRecording({ enabled: true });
       const recordingPath = agent.session.getRecording().path ?? '';
       await agent.setHistory([]);
 
       await agent.resetChat();
+      const historyAfterFirstReset = await agent.getHistory();
       const rewindCountAfterFirstReset = readFileSync(recordingPath, 'utf8')
         .trim()
         .split('\n')
@@ -221,53 +262,83 @@ describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010',
         .map((line) => JSON.parse(line) as { type: string })
         .filter((line) => line.type === 'rewind').length;
 
-      expect(await agent.getHistory()).toStrictEqual([]);
-      expect(rewindCountAfterSecondReset).toBe(rewindCountAfterFirstReset);
+      return {
+        rewindCountAfterSecondReset,
+        rewindCountAfterFirstReset,
+        historyAfterFirstReset,
+      };
     });
-  });
 
   it('setRecording(enabled:true) activates a recording with a defined path; setRecording(enabled:false) deactivates it @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010', async () => {
-    await withIsolatedAgent('plain-text.jsonl', async (agent) => {
-      // No recording before activation.
-      const before = agent.session.getRecording();
-      expect(before.enabled).toBe(false);
-
-      // Seed a turn so the activated recording materializes a file.
-      await agent.setHistory([textMessage('user', 'recorded turn')]);
-      await agent.session.setRecording({ enabled: true });
-
-      const active = agent.session.getRecording();
-      expect(active.enabled).toBe(true);
-      expect(typeof active.path).toBe('string');
-      expect(active.path?.length ?? 0).toBeGreaterThan(0);
-      expect(active.format).toBe('jsonl');
-
-      await agent.session.setRecording({ enabled: false });
-      const stopped = agent.session.getRecording();
-      expect(stopped.enabled).toBe(false);
-    });
+    const { before, active, activePathLength, stopped } =
+      await observeSetRecordingEnabledTrueActivatesARecordingWithADefinedPathSetRecordingEnabled();
+    expect(before.enabled).toBe(false);
+    expect(active.enabled).toBe(true);
+    expect(typeof active.path).toBe('string');
+    expect(activePathLength).toBeGreaterThan(0);
+    expect(active.format).toBe('jsonl');
+    expect(stopped.enabled).toBe(false);
   });
+
+  const observeSetRecordingEnabledTrueActivatesARecordingWithADefinedPathSetRecordingEnabled =
+    async () =>
+      withIsolatedAgent('plain-text.jsonl', async (agent) => {
+        // No recording before activation.
+        const before = agent.session.getRecording();
+
+        // Seed a turn so the activated recording materializes a file.
+        await agent.setHistory([textMessage('user', 'recorded turn')]);
+        await agent.session.setRecording({ enabled: true });
+
+        const active = agent.session.getRecording();
+        const activePathLength = active.path?.length ?? 0;
+
+        await agent.session.setRecording({ enabled: false });
+        const stopped = agent.session.getRecording();
+
+        return { before, active, activePathLength, stopped };
+      });
 
   it('resume(target) with no saved sessions throws a clear, non not-implemented error @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010', async () => {
-    await withIsolatedAgent('plain-text.jsonl', async (agent) => {
-      // The isolated working dir has no recorded sessions, so resume must fail
-      // with a clear typed error sourced from the core resume machinery — never
-      // a not-implemented signal.
-      let caught: unknown;
-      try {
-        await agent.session.resume('latest');
-      } catch (e: unknown) {
-        caught = e;
-      }
-      expect(caught).toBeInstanceOf(Error);
-      const message = caught instanceof Error ? caught.message : '';
-      expect(message).not.toMatch(/NotYetImplemented/i);
-      expect(message.toLowerCase()).toContain('session');
-    });
+    const { caught, message } =
+      await observeResumeTargetWithNoSavedSessionsThrowsAClearNonNotImplemented();
+    expect(caught).toBeInstanceOf(Error);
+    expect(message).not.toMatch(/NotYetImplemented/i);
+    expect(message.toLowerCase()).toContain('session');
   });
 
+  const observeResumeTargetWithNoSavedSessionsThrowsAClearNonNotImplemented =
+    async () =>
+      withIsolatedAgent('plain-text.jsonl', async (agent) => {
+        // The isolated working dir has no recorded sessions, so resume must fail
+        // with a clear typed error sourced from the core resume machinery — never
+        // a not-implemented signal.
+        let caught: unknown;
+        try {
+          await agent.session.resume('latest');
+        } catch (e: unknown) {
+          caught = e;
+        }
+
+        const message = caught instanceof Error ? caught.message : '';
+
+        return { caught, message };
+      });
+
   it('setRecording(enabled:true) materializes a real JSONL session file containing the seeded content @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010', async () => {
-    await withIsolatedAgent('plain-text.jsonl', async (agent) => {
+    const observation = await observeMaterializedRecording();
+    expect(observation.recording.enabled).toBe(true);
+    expect(typeof observation.recording.path).toBe('string');
+    expect(observation.recordingPath.length).toBeGreaterThan(0);
+    expect(observation.raw.trim().length).toBeGreaterThan(0);
+    expect(observation.lines.length).toBeGreaterThan(0);
+    expect(observation.allLinesParse).toBe(true);
+    expect(observation.raw).toContain('persist this sentinel: capybara');
+    expect(observation.raw).toContain('recorded the sentinel: capybara');
+  });
+
+  const observeMaterializedRecording = async () =>
+    withIsolatedAgent('plain-text.jsonl', async (agent) => {
       // Seed a known history, then enable recording. startRecording snapshots
       // the live history into the SessionRecordingService and flushes, so the
       // file on disk is a genuine JSONL session — not a hollow placeholder.
@@ -279,26 +350,24 @@ describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010',
       await agent.session.setRecording({ enabled: true });
 
       const recording = agent.session.getRecording();
-      expect(recording.enabled).toBe(true);
-      expect(typeof recording.path).toBe('string');
       const recordingPath = recording.path ?? '';
-      expect(recordingPath.length).toBeGreaterThan(0);
 
       // The materialized file is non-empty JSONL whose lines parse and whose
       // content events carry the seeded text — proof the swap wrote real data.
       const raw = readFileSync(recordingPath, 'utf8');
-      expect(raw.trim().length).toBeGreaterThan(0);
       const lines = raw.split(/\r?\n/).filter((line) => line.trim().length > 0);
-      expect(lines.length).toBeGreaterThan(0);
-      for (const line of lines) {
-        expect(() => JSON.parse(line)).not.toThrow();
-      }
-      expect(raw).toContain('persist this sentinel: capybara');
-      expect(raw).toContain('recorded the sentinel: capybara');
+      const allLinesParse = lines.every((line) => {
+        try {
+          JSON.parse(line);
+          return true;
+        } catch {
+          return false;
+        }
+      });
 
       await agent.session.setRecording({ enabled: false });
+      return { recording, recordingPath, raw, lines, allLinesParse };
     });
-  });
 
   it('resume("latest") restores the live history from a previously recorded session on disk @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010', async () => {
     await withIsolatedAgent('plain-text.jsonl', async (agent) => {

@@ -37,6 +37,7 @@ import type {
   RuntimeAuthTokenProvider,
 } from '../types/providerRuntime.js';
 import type { SystemPromptPlacement } from '../utils/systemPromptPlacement.js';
+import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
@@ -61,6 +62,7 @@ void vi.mock('@anthropic-ai/sdk', () => {
     readonly messages: {
       create: ReturnType<typeof vi.fn>;
     };
+    readonly post: ReturnType<typeof createAnthropicRawPostTestAdapter>['post'];
 
     constructor(opts: Record<string, unknown>) {
       this.options = opts;
@@ -68,14 +70,15 @@ void vi.mock('@anthropic-ai/sdk', () => {
       this.messages = {
         create: vi.fn(async (request: Record<string, unknown>) => {
           FakeAnthropic.requests.push({ request });
-          const req = request as { stream?: boolean };
-          if (req.stream === true) {
+          if (request['stream'] === true) {
             return {
               async *[Symbol.asyncIterator]() {
                 yield {
                   type: 'content_block_delta',
                   delta: { type: 'text_delta', text: 'ok' },
                 };
+
+                yield { type: 'message_stop' };
               },
             };
           }
@@ -85,6 +88,7 @@ void vi.mock('@anthropic-ai/sdk', () => {
           };
         }),
       };
+      this.post = createAnthropicRawPostTestAdapter(this.messages.create).post;
     }
   }
   return { default: FakeAnthropic };
@@ -134,6 +138,13 @@ class InvalidPlacementProvider extends PlacementTestProvider {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function requireSdkRequest(value: unknown): Record<string, unknown> {
+  if (!isObject(value)) {
+    throw new Error('Expected an SDK request payload');
+  }
+  return value;
 }
 
 function lastItem<T>(items: readonly T[]): T | undefined {
@@ -290,7 +301,7 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
       provide: () => Promise.resolve(API_KEY),
     };
     const runtime = await captureWirePayload(runtimeProvider);
-    expect(runtime).toEqual(direct);
+    expect(runtime).toStrictEqual(direct);
   });
 
   it('produces byte-identical SDK payloads for a direct OAuth string and a runtime provider resolving to the same token', async () => {
@@ -299,7 +310,7 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
       provide: () => Promise.resolve(OAUTH_TOKEN),
     };
     const runtime = await captureWirePayload(runtimeProvider);
-    expect(runtime).toEqual(direct);
+    expect(runtime).toStrictEqual(direct);
   });
 
   // -------------------------------------------------------------------------
@@ -313,10 +324,9 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
     )) {
       void _chunk;
     }
-    const request = lastItem(FakeAnthropicClass.requests)?.request;
-    if (!isObject(request)) {
-      throw new Error('Expected an SDK request payload');
-    }
+    const request = requireSdkRequest(
+      lastItem(FakeAnthropicClass.requests)?.request,
+    );
     // Declaration drove placement: prompt is in the context prefix.
     expect(firstMessageText(request['messages'])).toContain(
       `<system>\n${ASSEMBLED_PROMPT}\n</system>`,
@@ -389,7 +399,7 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
 
     expect(isObject(transportRequest)).toBe(true);
     expect(isObject(baselineRequest)).toBe(true);
-    expect(transportRequest).toEqual(baselineRequest);
+    expect(transportRequest).toStrictEqual(baselineRequest);
   });
 
   it('resolves the OAuth runtime provider once and transports the already-prepared exact request', async () => {
@@ -432,6 +442,6 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
 
     expect(isObject(transportRequest)).toBe(true);
     expect(isObject(baselineRequest)).toBe(true);
-    expect(transportRequest).toEqual(baselineRequest);
+    expect(transportRequest).toStrictEqual(baselineRequest);
   });
 });

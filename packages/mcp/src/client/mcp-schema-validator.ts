@@ -10,7 +10,7 @@ import type {
   JsonSchemaType,
   JsonSchemaValidator,
 } from '@modelcontextprotocol/sdk/validation/types.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 /**
  * A tolerant JSON Schema validator for MCP tool output schemas.

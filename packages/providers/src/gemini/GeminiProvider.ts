@@ -12,14 +12,18 @@ import {
   type BaseProviderConfig,
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
+import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  type GenerateContentParameters,
-  type GenerateContentResponse,
-  type GoogleGenAI,
-  type GoogleGenAIOptions,
-} from '@google/genai';
+import type {
+  GenerateContentParameters,
+  GenerateContentResponse,
+} from './geminiWireTypes.js';
+import type { GeminiApiClientOptions } from './geminiWireTypes.js';
+import { createGeminiApiClient } from './geminiApiClientFactory.js';
+
+/** The factory shape {@link GeminiProvider} depends on. */
+export type CreateGeminiApiClient = typeof createGeminiApiClient;
 import {
   getSettingOrEnv,
   getVertexAIAuthConfig,
@@ -28,13 +32,7 @@ import {
   type GeminiAuthMode,
   type VertexAIAuthConfig,
 } from './geminiAuth.js';
-import { throwIfAborted } from './geminiAbort.js';
 import { resolveModelList } from './geminiModels.js';
-import {
-  invokeWebFetch,
-  invokeWebSearch,
-  type ServerToolContext,
-} from './geminiServerTools.js';
 import {
   buildGenerationSetup,
   type GeminiGenerationSetup,
@@ -48,6 +46,11 @@ import {
   type NonOAuthContentGenerator,
 } from './geminiGenerationExecution.js';
 import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
+import {
+  finishMediaRequest,
+  type MediaRequestOutcome,
+  resolveRequestMedia,
+} from '../utils/request-media-resolution.js';
 
 /**
  * Represents the default Gemini provider.
@@ -58,24 +61,43 @@ import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacemen
  * and server-tool invocation are delegated to cohesive submodules in this
  * package to keep the provider class thin and within lint budgets.
  */
+function hasHeaderName(headers: Record<string, string>, name: string): boolean {
+  const target = name.toLowerCase();
+  return Object.keys(headers).some((key) => key.toLowerCase() === target);
+}
+
 export class GeminiProvider extends BaseProvider {
-  constructor(apiKey?: string, baseURL?: string, config?: Config) {
+  /**
+   * How this provider obtains its API client.
+   *
+   * Injected rather than imported at the call sites so tests can supply a fake
+   * without `vi.mock`. Module mocks are registered process-wide and bun hoists
+   * them ahead of every test in the run, so a mock declared in one suite leaks
+   * into every suite loaded alongside it. That made the wire tests fail as a
+   * batch while passing per file.
+   */
+  private readonly createClient: CreateGeminiApiClient;
+
+  constructor(
+    apiKey?: string,
+    baseURL?: string,
+    config?: Config,
+    createClient: CreateGeminiApiClient = createGeminiApiClient,
+  ) {
     const baseConfig: BaseProviderConfig = {
       name: 'gemini',
       apiKey,
       baseURL,
       envKeyNames: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+      mediaTransportCapabilities: declaredMediaTransportCapabilities('gemini'),
     };
 
     super(baseConfig, config);
+    this.createClient = createClient;
   }
 
   private getLogger(): DebugLogger {
     return new DebugLogger('llxprt:gemini:provider');
-  }
-
-  private getToolsLogger(): DebugLogger {
-    return new DebugLogger('llxprt:gemini:tools');
   }
 
   private getStreamingPreference(
@@ -182,7 +204,7 @@ export class GeminiProvider extends BaseProvider {
   }
 
   override getDefaultModel(): string {
-    return 'gemini-2.5-pro';
+    return 'gemini-3.7-flash';
   }
 
   override getModelParams(): Record<string, unknown> | undefined {
@@ -262,67 +284,6 @@ export class GeminiProvider extends BaseProvider {
     this.clearClientCache();
   }
 
-  override getServerTools(): string[] {
-    return ['web_search', 'web_fetch'];
-  }
-
-  override async invokeServerTool(
-    toolName: string,
-    params: unknown,
-    _config?: unknown,
-    signal?: AbortSignal,
-  ): Promise<unknown> {
-    if (toolName === 'web_search') {
-      return invokeWebSearch(
-        params,
-        signal,
-        this.getToolsLogger(),
-        this.serverToolContext,
-      );
-    }
-    if (toolName === 'web_fetch') {
-      return invokeWebFetch(
-        params,
-        signal,
-        this.getToolsLogger(),
-        this.serverToolContext,
-      );
-    }
-    throw new Error(`Unknown server tool: ${toolName}`);
-  }
-
-  private get serverToolContext(): ServerToolContext {
-    return {
-      resolveAuth: (signal) => this.resolveAuthWithAbortCheck(signal),
-      createHttpOptions: () => this.createHttpOptions(),
-      getBaseURL: () => this.getBaseURL(),
-      createGenAIClient: (token, mode, opts, baseURL) =>
-        this.createGenAIClient(token, mode, opts, baseURL),
-      globalConfig: this.globalConfig,
-    };
-  }
-
-  private async resolveAuthWithAbortCheck(
-    signal?: AbortSignal,
-  ): Promise<{ authMode: GeminiAuthMode; token: string }> {
-    throwIfAborted(signal);
-    const result = await this.determineBestAuth();
-    throwIfAborted(signal);
-    return result;
-  }
-
-  private async createGenAIClient(
-    authToken: string,
-    authMode: GeminiAuthMode,
-    httpOptions: ReturnType<typeof this.createHttpOptions>,
-    baseURL?: string,
-  ): Promise<GoogleGenAI> {
-    const { GoogleGenAI } = await import('@google/genai');
-    return new GoogleGenAI(
-      this.buildGoogleGenAIOptions(authToken, authMode, httpOptions, baseURL),
-    );
-  }
-
   private hasDirectVertexCredentials(
     settingsService: SettingsService | undefined,
   ): boolean {
@@ -340,7 +301,7 @@ export class GeminiProvider extends BaseProvider {
   private buildVertexAIOptions(
     isVertex: boolean,
     vertexConfig: VertexAIAuthConfig,
-  ): Pick<GoogleGenAIOptions, 'project' | 'location'> {
+  ): Pick<GeminiApiClientOptions, 'project' | 'location'> {
     if (!isVertex) {
       return {};
     }
@@ -355,7 +316,7 @@ export class GeminiProvider extends BaseProvider {
     authMode: GeminiAuthMode,
     httpOptions: ReturnType<typeof this.createHttpOptions>,
     baseURL?: string,
-  ): GoogleGenAIOptions {
+  ): GeminiApiClientOptions {
     const isVertex = authMode === 'vertex-ai';
     const settingsService = this.resolveSettingsServiceIfAvailable();
     const vertexConfig = getVertexAIAuthConfig(settingsService);
@@ -384,31 +345,67 @@ export class GeminiProvider extends BaseProvider {
     // silently transported as an empty prompt.
     requireAssembledSystemInstruction(options.systemInstruction);
 
-    const streamingEnabled = this.getStreamingPreference(options);
-    const setup = await buildGenerationSetup(
-      options,
-      this.globalConfig,
-      () => this.determineBestAuth(),
-      () => this.createHttpOptions(),
-      () => this.getBaseURL(),
-      this.getLogger(),
+    const mediaRequest = await resolveRequestMedia(
+      options.runtime,
+      options.contents,
+      options.invocation.signal,
     );
-    const result = await this.executeGeneration(
-      options,
-      setup,
-      streamingEnabled,
-    );
+    const effectiveOptions = {
+      ...options,
+      contents: mediaRequest.withContents((contents) => contents),
+    };
+    let outcome: MediaRequestOutcome = { status: 'succeeded' };
+    try {
+      const streamingEnabled = this.getStreamingPreference(effectiveOptions);
+      const setup = await buildGenerationSetup(
+        effectiveOptions,
+        this.globalConfig,
+        () => this.determineBestAuth(),
+        () => this.createHttpOptions(),
+        () => this.getBaseURL(),
+        this.getLogger(),
+      );
+      const result = await this.executeGeneration(
+        effectiveOptions,
+        setup,
+        streamingEnabled,
+      );
 
-    if (result.chunks !== undefined) {
-      yield* this.yieldMappedChunks(result.chunks);
-      return;
+      if (result.chunks !== undefined) {
+        yield* this.yieldMappedChunks(result.chunks);
+        return;
+      }
+      yield* consumeGeminiStream(
+        result.stream,
+        setup.mapResponseToChunks,
+        setup.reasoningConfig.includeInResponse,
+        result.emitted,
+      );
+    } catch (error) {
+      outcome = { status: 'failed', error };
+    } finally {
+      await finishMediaRequest(mediaRequest, outcome);
     }
-    yield* consumeGeminiStream(
-      result.stream,
-      setup.mapResponseToChunks,
-      setup.reasoningConfig.includeInResponse,
-      result.emitted,
-    );
+  }
+
+  /** #3159: the SDK sends the Gemini API key as x-goog-api-key; record the
+   * header NAME in dump metadata (value redacted at write time). A
+   * caller-supplied header always wins over the synthesized one.
+   */
+  private withApiKeyHeader(
+    headers: Record<string, string>,
+    authMode: GeminiAuthMode,
+    authToken: string,
+  ): Record<string, string> {
+    // Header names are case-insensitive; a caller-supplied variant spelling
+    // must win over the synthesized entry (#3159).
+    if (
+      authMode !== 'gemini-api-key' ||
+      hasHeaderName(headers, 'x-goog-api-key')
+    ) {
+      return headers;
+    }
+    return { ...headers, 'x-goog-api-key': authToken };
   }
 
   private async executeGeneration(
@@ -416,6 +413,11 @@ export class GeminiProvider extends BaseProvider {
     setup: GeminiGenerationSetup,
     streamingEnabled: boolean,
   ): Promise<GeminiGenerationResult> {
+    const dumpHeaders = this.withApiKeyHeader(
+      setup.httpOptions.headers,
+      setup.authMode,
+      setup.authToken,
+    );
     return executeNonOAuthGeneration(
       options,
       this.globalConfig,
@@ -430,6 +432,7 @@ export class GeminiProvider extends BaseProvider {
       setup.reasoningConfig.includeInResponse,
       () => this.createNonOAuthGenerator(setup),
       setup.baseURL,
+      dumpHeaders,
     );
   }
 
@@ -441,8 +444,7 @@ export class GeminiProvider extends BaseProvider {
       params: GenerateContentParameters,
     ) => Promise<AsyncIterable<GenerateContentResponse>>;
   }> {
-    const { GoogleGenAI } = await import('@google/genai');
-    const genAI = new GoogleGenAI(
+    const client = await this.createClient(
       this.buildGoogleGenAIOptions(
         setup.authToken,
         setup.authMode,
@@ -450,7 +452,7 @@ export class GeminiProvider extends BaseProvider {
         setup.baseURL,
       ),
     );
-    return genAI.models;
+    return client.models;
   }
 
   protected nonOAuthNonStreamingGenerate(
@@ -461,6 +463,7 @@ export class GeminiProvider extends BaseProvider {
     baseURL: string | undefined,
     mapResponseToChunks: GeminiGenerationSetup['mapResponseToChunks'],
     reasoningIncludeInResponse: boolean,
+    headers?: Record<string, string>,
   ): Promise<GeminiGenerationResult> {
     return executeNonOAuthNonStreamingGenerate(
       contentGenerator,
@@ -470,6 +473,7 @@ export class GeminiProvider extends BaseProvider {
       baseURL,
       mapResponseToChunks,
       reasoningIncludeInResponse,
+      headers,
     );
   }
 
@@ -479,6 +483,7 @@ export class GeminiProvider extends BaseProvider {
     shouldDumpSuccess: boolean,
     shouldDumpError: boolean,
     baseURL: string | undefined,
+    headers?: Record<string, string>,
   ): Promise<GeminiGenerationResult> {
     return executeNonOAuthStreamingGenerate(
       contentGenerator,
@@ -488,6 +493,7 @@ export class GeminiProvider extends BaseProvider {
       baseURL,
       () => [],
       false,
+      headers,
     );
   }
 

@@ -8,18 +8,20 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { GeminiProvider } from './GeminiProvider.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
+// These assertions are about the client OPTIONS the provider builds, not about
+// which SDK constructs the client. Mocking the factory keeps the assertions
+// pointed at our own code and survives the transport change.
 const googleGenAIConstructor = vi.fn();
 
-void vi.mock('@google/genai', () => ({
-  GoogleGenAI: googleGenAIConstructor,
-}));
+import type { CreateGeminiApiClient } from './GeminiProvider.js';
+// The factory is injected into GeminiProvider rather than module-mocked:
+// `vi.mock` registers process-wide and bun hoists it ahead of the whole
+// run, so the stub leaked into every suite loaded alongside this one.
+const injectedClientFactory =
+  googleGenAIConstructor as unknown as CreateGeminiApiClient;
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
-}));
-
-void vi.mock('@vybestack/llxprt-code-core/code_assist/codeAssist.js', () => ({
-  createCodeAssistContentGenerator: vi.fn(),
 }));
 
 const mockSettingsService = {
@@ -28,12 +30,12 @@ const mockSettingsService = {
 };
 
 type GeminiProviderInternals = {
-  createGenAIClient: (
+  buildGoogleGenAIOptions: (
     authToken: string,
     authMode: 'vertex-ai' | 'gemini-api-key',
     httpOptions: { headers: Record<string, string> },
     baseURL?: string,
-  ) => Promise<unknown>;
+  ) => unknown;
 };
 
 function mockVertexAISettings(
@@ -51,24 +53,57 @@ function mockVertexAISettings(
   });
 }
 
-function createGenAIClientViaProvider(
+/**
+ * Drives the option-building step and hands the result to the injected client
+ * factory, which is exactly what createNonOAuthGenerator does.
+ *
+ * The provider used to expose a createGenAIClient method that did both. #2626
+ * removed it along with the serverTools path that owned it, and #2761 replaced
+ * the construction half with the injected factory. buildGoogleGenAIOptions is
+ * the surviving half, and it is the half these tests are about: the project /
+ * location resolution and the missing-config error. Being async keeps the
+ * synchronous throw observable as a rejection.
+ */
+async function createGenAIClientViaProvider(
   provider: GeminiProvider,
   authToken: string,
   authMode: 'vertex-ai' | 'gemini-api-key',
 ): Promise<unknown> {
-  return (provider as unknown as GeminiProviderInternals).createGenAIClient(
-    authToken,
-    authMode,
-    { headers: {} },
-  );
+  const options = (
+    provider as unknown as GeminiProviderInternals
+  ).buildGoogleGenAIOptions(authToken, authMode, { headers: {} });
+  return injectedClientFactory(options as never);
 }
 
 function createProviderWithRuntimeSettings(): GeminiProvider {
-  const provider = new GeminiProvider();
+  const provider = new GeminiProvider(
+    undefined,
+    undefined,
+    undefined,
+    injectedClientFactory,
+  );
   provider.setRuntimeSettingsService(
     mockSettingsService as unknown as SettingsService,
   );
   return provider;
+}
+
+function readPreferredGeminiApiKey(key: string): string | undefined {
+  if (key === 'GEMINI_API_KEY') {
+    return 'settings-key';
+  }
+  return undefined;
+}
+
+function resolvePreferredGeminiApiKey(
+  settingsService: SettingsService,
+): string | undefined {
+  const apiKey =
+    settingsService.get('GEMINI_API_KEY') ?? process.env.GEMINI_API_KEY;
+  if (typeof apiKey !== 'string' && apiKey !== undefined) {
+    throw new Error('expected GEMINI_API_KEY to be a string');
+  }
+  return apiKey;
 }
 
 describe('GeminiProvider Authentication', () => {
@@ -289,18 +324,11 @@ describe('GeminiProvider Authentication', () => {
 
   it('should respect auth precedence (SettingsService over env var)', async () => {
     process.env.GEMINI_API_KEY = 'env-key';
-    mockSettingsService.get.mockImplementation((key: string) => {
-      if (key === 'GEMINI_API_KEY') {
-        return 'settings-key';
-      }
-      return undefined;
-    });
+    mockSettingsService.get.mockImplementation(readPreferredGeminiApiKey);
     const mockAuthResolver = {
       resolveAuthentication: vi.fn(
         ({ settingsService }: { settingsService: SettingsService }) =>
-          Promise.resolve(
-            settingsService.get('GEMINI_API_KEY') ?? process.env.GEMINI_API_KEY,
-          ),
+          Promise.resolve(resolvePreferredGeminiApiKey(settingsService)),
       ),
     };
 

@@ -12,6 +12,18 @@ import {
 } from './terminalContract.js';
 import { Readable } from 'node:stream';
 
+class BufferedStdin extends Readable {
+  readCalled = false;
+
+  override _read(): void {
+    if (!this.readCalled) {
+      this.readCalled = true;
+      this.push('\x1b[?1000l\x1b[0m');
+      this.push(null);
+    }
+  }
+}
+
 describe('terminalContract', () => {
   let mockStdout: { write: ReturnType<typeof vi.fn> };
 
@@ -93,21 +105,11 @@ describe('terminalContract', () => {
     });
 
     it('drains available data from stdin buffer', async () => {
-      let readCalled = false;
-      const mockStdin = new Readable({
-        read() {
-          if (!readCalled) {
-            readCalled = true;
-            // Simulate some garbage ANSI in the buffer
-            this.push('\x1b[?1000l\x1b[0m');
-            this.push(null);
-          }
-        },
-      });
+      const mockStdin = new BufferedStdin();
 
       await drainStdinBuffer(mockStdin, 10);
       // Should complete without error, having drained the buffer
-      expect(readCalled).toBe(true);
+      expect(mockStdin.readCalled).toBe(true);
     });
 
     it('times out after specified duration', async () => {

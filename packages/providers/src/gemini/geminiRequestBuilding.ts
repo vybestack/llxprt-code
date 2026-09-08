@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Type, type Schema, type Part } from '@google/genai';
+import type { Part, Schema } from './geminiWireTypes.js';
+import { SchemaType } from './geminiWireTypes.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { type NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { convertHistoryToGeminiFormat } from './GeminiMessageConverter.js';
@@ -58,7 +59,7 @@ export function buildGeminiTools(
       let parameters = cleanGeminiSchema(schema);
       const parametersRecord = parameters as Record<string, unknown>;
       if (!('type' in parametersRecord)) {
-        parameters = { type: Type.OBJECT, ...parameters };
+        parameters = { type: SchemaType.OBJECT, ...parameters };
       }
       return {
         name: decl.name,
@@ -79,30 +80,6 @@ export function buildGeminiTools(
   return { geminiTools, toolNamesForPrompt };
 }
 
-/** Resolve server tools from overrides or config. */
-export function resolveServerTools(
-  directOverrides: Record<string, unknown> | undefined,
-  options: NormalizedGenerateChatOptions,
-): string[] {
-  let serverToolsOverride: unknown;
-  if (directOverrides !== undefined && 'serverTools' in directOverrides) {
-    serverToolsOverride = directOverrides.serverTools;
-  } else {
-    const configServerTools = options.config as
-      | { serverTools?: unknown }
-      | undefined;
-    serverToolsOverride =
-      configServerTools !== undefined &&
-      'serverTools' in configServerTools &&
-      configServerTools.serverTools !== undefined
-        ? configServerTools.serverTools
-        : undefined;
-  }
-  return Array.isArray(serverToolsOverride)
-    ? serverToolsOverride
-    : ['web_search', 'web_fetch'];
-}
-
 /** Build request config from options, tools, and reasoning settings. */
 export function buildRequestConfig(
   options: NormalizedGenerateChatOptions,
@@ -117,7 +94,6 @@ export function buildRequestConfig(
   const directOverrides = isValidRecord(directOverridesRaw)
     ? directOverridesRaw
     : undefined;
-  const serverTools = resolveServerTools(directOverrides, options);
   const toolConfigOverride =
     directOverrides !== undefined && 'toolConfig' in directOverrides
       ? directOverrides.toolConfig
@@ -139,7 +115,6 @@ export function buildRequestConfig(
   ) {
     requestConfig['maxOutputTokens'] = genericMaxOutput;
   }
-  requestConfig.serverTools = serverTools;
   if (geminiTools !== undefined) {
     requestConfig.tools = geminiTools;
   }

@@ -98,6 +98,27 @@ function makeDebugLogger(): DebugLogger {
   } as unknown as DebugLogger;
 }
 
+function arrayOrEmptyWhenUninitialized(
+  initialize: boolean,
+  system: HookSystem,
+): boolean {
+  return !initialize || Array.isArray(system.getAllHooks());
+}
+
+function optionalBus(include: boolean): MessageBus | undefined {
+  if (include) {
+    return makeMessageBus();
+  }
+  return undefined;
+}
+
+function optionalLogger(include: boolean): DebugLogger | undefined {
+  if (include) {
+    return makeDebugLogger();
+  }
+  return undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Test Group 1: HookSystem composition (DELTA-HSYS-001)
 // ---------------------------------------------------------------------------
@@ -308,34 +329,18 @@ describe('HookSystem management APIs (DELTA-HSYS-002)', () => {
         fc.string({ minLength: 1, maxLength: 64 }),
         fc.boolean(),
         async (hookId, initialEnabled) => {
-          const hooks = system.getAllHooks();
-          if (hooks.length === 0) return; // guard: no hooks in this system instance
-
-          // Use the real hook command as id for the toggle test
-          const realHookId = hooks[0].config.command;
-
-          // Set to initial state
-          system.setHookEnabled(realHookId, initialEnabled);
-          const afterInitial = system
-            .getAllHooks()
-            .find((h) => h.config.command === realHookId);
-          expect(afterInitial!.enabled).toBe(initialEnabled);
-
-          // Toggle to opposite
-          system.setHookEnabled(realHookId, !initialEnabled);
-          // Toggle back
-          system.setHookEnabled(realHookId, initialEnabled);
-
-          const afterDouble = system
-            .getAllHooks()
-            .find((h) => h.config.command === realHookId);
-          expect(afterDouble!.enabled).toBe(initialEnabled);
-
-          // hookId is used to exercise setHookEnabled with arbitrary ids without
-          // breaking existing state (no-throw contract)
-          expect(() =>
-            system.setHookEnabled(hookId, initialEnabled),
-          ).not.toThrow();
+          const observations = observeHookToggleRoundTrip(
+            system,
+            hookId,
+            initialEnabled,
+          );
+          for (const observation of observations) {
+            expect(observation.afterInitialEnabled).toBe(initialEnabled);
+            expect(observation.afterDoubleEnabled).toBe(initialEnabled);
+            expect(observation.arbitraryToggleOutcome).toStrictEqual({
+              kind: 'completed',
+            });
+          }
         },
       ),
     ));
@@ -629,12 +634,10 @@ describe('Property-based invariants @plan:PLAN-20250218-HOOKSYSTEM.P04', () => {
     fc.assert(
       fc.asyncProperty(fc.boolean(), async (initialize) => {
         const system = new HookSystem(makeConfig());
-        if (initialize) {
-          await system.initialize();
-        }
+        await initWhenRequested(initialize, system);
         // If not initialized, getAllHooks should still return [] (stub behavior)
         // or it may throw – either is valid, but the shape when initialized is []
-        expect(!initialize || Array.isArray(system.getAllHooks())).toBe(true);
+        expect(arrayOrEmptyWhenUninitialized(initialize, system)).toBe(true);
         system.dispose();
       }),
     ));
@@ -677,8 +680,8 @@ describe('Property-based invariants @plan:PLAN-20250218-HOOKSYSTEM.P04', () => {
         fc.boolean(),
         fc.boolean(),
         async (withBus, withLogger) => {
-          const bus = withBus ? makeMessageBus() : undefined;
-          const logger = withLogger ? makeDebugLogger() : undefined;
+          const bus = optionalBus(withBus);
+          const logger = optionalLogger(withLogger);
           const system = new HookSystem(makeConfig(), bus, logger);
           await expect(system.initialize()).resolves.toBeUndefined();
           expect(system.isInitialized()).toBe(true);
@@ -687,3 +690,51 @@ describe('Property-based invariants @plan:PLAN-20250218-HOOKSYSTEM.P04', () => {
       ),
     ));
 });
+
+type HookToggleOutcome =
+  | { readonly kind: 'completed' }
+  | { readonly kind: 'threw'; readonly error: unknown };
+
+interface HookToggleObservation {
+  readonly afterInitialEnabled: boolean | undefined;
+  readonly afterDoubleEnabled: boolean | undefined;
+  readonly arbitraryToggleOutcome: HookToggleOutcome;
+}
+
+function observeHookToggleRoundTrip(
+  system: HookSystem,
+  hookId: string,
+  initialEnabled: boolean,
+): readonly HookToggleObservation[] {
+  const first = system.getAllHooks()[0];
+  if (first === undefined) return [];
+
+  const realHookId = first.config.command;
+  system.setHookEnabled(realHookId, initialEnabled);
+  const afterInitialEnabled = system
+    .getAllHooks()
+    .find((hook) => hook.config.command === realHookId)?.enabled;
+
+  system.setHookEnabled(realHookId, !initialEnabled);
+  system.setHookEnabled(realHookId, initialEnabled);
+  const afterDoubleEnabled = system
+    .getAllHooks()
+    .find((hook) => hook.config.command === realHookId)?.enabled;
+
+  let arbitraryToggleOutcome: HookToggleOutcome = { kind: 'completed' };
+  try {
+    system.setHookEnabled(hookId, initialEnabled);
+  } catch (error: unknown) {
+    arbitraryToggleOutcome = { kind: 'threw', error };
+  }
+  return [{ afterInitialEnabled, afterDoubleEnabled, arbitraryToggleOutcome }];
+}
+
+async function initWhenRequested(
+  initialize: boolean,
+  system: HookSystem,
+): Promise<void> {
+  if (initialize) {
+    await system.initialize();
+  }
+}

@@ -9,6 +9,7 @@ import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import {
   parseProfile,
+  parseProfileJson,
   isLoadBalancerProfile,
   withProfilesLockSync,
   type Profile,
@@ -297,12 +298,11 @@ function normalizeLegacyProfileBytes(legacyPath: string): string | null {
     return null;
   }
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readResult.content);
-  } catch {
+  const parsedJson = parseProfileJson(readResult.content);
+  if (parsedJson.kind !== 'parsed') {
     return null;
   }
+  const parsed = parsedJson.value;
 
   if (!isPlainObject(parsed)) {
     return null;

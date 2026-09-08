@@ -20,6 +20,15 @@ import {
   runOnlyPendingTimersAsync,
 } from './async-timers.js';
 
+function scheduleCountdown(order: number[], remaining: number): void {
+  setTimeout(() => {
+    order.push(remaining);
+    if (remaining > 1) {
+      scheduleCountdown(order, remaining - 1);
+    }
+  }, 5);
+}
+
 describe('async fake timers', () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -47,7 +56,7 @@ describe('async fake timers', () => {
 
     await advanceTimersByTimeAsync(20);
 
-    expect(order).toEqual(['first', 'second']);
+    expect(order).toStrictEqual(['first', 'second']);
   });
 
   it('runs a timer scheduled after an await inside a callback', async () => {
@@ -62,7 +71,7 @@ describe('async fake timers', () => {
 
     await advanceTimersByTimeAsync(20);
 
-    expect(order).toEqual(['first', 'after-await']);
+    expect(order).toStrictEqual(['first', 'after-await']);
   });
 
   it('moves the clock a whole millisecond for a sub-millisecond advance', async () => {
@@ -108,19 +117,11 @@ describe('async fake timers', () => {
   it('drains timers that keep scheduling more work', async () => {
     vi.useFakeTimers();
     const order: number[] = [];
-    let remaining = 3;
-    const schedule = (): void => {
-      setTimeout(() => {
-        order.push(remaining);
-        remaining -= 1;
-        if (remaining > 0) schedule();
-      }, 5);
-    };
-    schedule();
+    scheduleCountdown(order, 3);
 
     await runAllTimersAsync();
 
-    expect(order).toEqual([3, 2, 1]);
+    expect(order).toStrictEqual([3, 2, 1]);
   });
 
   it('runs only the timers pending when it was called', async () => {
@@ -133,6 +134,6 @@ describe('async fake timers', () => {
 
     await runOnlyPendingTimersAsync();
 
-    expect(order).toEqual(['pending']);
+    expect(order).toStrictEqual(['pending']);
   });
 });

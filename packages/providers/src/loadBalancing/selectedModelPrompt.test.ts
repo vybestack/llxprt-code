@@ -87,7 +87,7 @@ describe('optionsWithSelectedModelPrompt — blank systemInstruction (issue #315
       'model-a',
     );
 
-    expect(invocations).toEqual([]);
+    expect(invocations).toStrictEqual([]);
     expect(result.systemInstruction).toBe('');
   });
 
@@ -107,7 +107,7 @@ describe('optionsWithSelectedModelPrompt — blank systemInstruction (issue #315
       'model-a',
     );
 
-    expect(invocations).toEqual([]);
+    expect(invocations).toStrictEqual([]);
     expect(result.systemInstruction).toBe('   ');
   });
 });
@@ -147,6 +147,6 @@ describe('legacy whitespace modelId keeps parent prompt and model aligned (issue
     // Prompt untouched — still names the parent model.
     expect(resolved.systemInstruction).toBe('[model=parent-model]');
     // Assembler never invoked — no re-render for a whitespace modelId.
-    expect(invocations).toEqual([]);
+    expect(invocations).toStrictEqual([]);
   });
 });

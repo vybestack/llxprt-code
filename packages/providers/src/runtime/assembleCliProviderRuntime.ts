@@ -39,11 +39,11 @@ import {
   type ProviderRuntimeContext,
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { createSessionMessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import { createProviderManager } from '../composition/index.js';
+import type { ProviderContributionRegistry } from '../composition/runtimePlugins/types.js';
 import {
   createFileOAuthSettingsProvider,
   type OAuthManager,
@@ -52,9 +52,7 @@ import {
   registerCliProviderInfrastructure,
   setCliRuntimeContext,
 } from './runtimeLifecycle.js';
-import { disposeCliRuntime } from './runtimeRegistry.js';
-
-const logger = new DebugLogger('llxprt:runtime:assemble');
+import { disposeCliRuntimeRegistration } from './runtimeRegistry.js';
 
 /**
  * Declarative context the CLI supplies to the provider-runtime assembly. No
@@ -87,6 +85,13 @@ export interface AssembleCliProviderRuntimeInput {
    * `null` to force NO settings provider.
    */
   readonly oauthSettings?: IOAuthSettingsProvider | null;
+  /**
+   * The provider contribution registry produced by loading the configured
+   * runtime plugins once at CLI startup. Forwarded to the composition seam so
+   * alias construction dispatches through it. Omitted by callers that load no
+   * runtime plugins, which then get the built-ins-only registry.
+   */
+  readonly providerContributions?: ProviderContributionRegistry;
 }
 
 /**
@@ -107,7 +112,14 @@ export interface AssembledCliProviderRuntime {
 export function assembleCliProviderRuntime(
   input: AssembleCliProviderRuntimeInput,
 ): AssembledCliProviderRuntime {
-  const { settingsService, config, runtimeId, metadata, oauthSettings } = input;
+  const {
+    settingsService,
+    config,
+    runtimeId,
+    metadata,
+    oauthSettings,
+    providerContributions,
+  } = input;
 
   try {
     // 1. Bind identity BEFORE creating/registering infrastructure (issue #2300).
@@ -149,6 +161,9 @@ export function assembleCliProviderRuntime(
         ...(resolvedOAuthSettings !== undefined
           ? { oauthSettings: resolvedOAuthSettings }
           : {}),
+        ...(providerContributions !== undefined
+          ? { providerContributions }
+          : {}),
       },
     );
 
@@ -166,19 +181,7 @@ export function assembleCliProviderRuntime(
       oauthManager,
     };
   } catch (error) {
-    try {
-      disposeCliRuntime(runtimeId);
-    } catch (cleanupError) {
-      // Preserve the original assembly failure; cleanup errors are secondary.
-      logger.debug(
-        () =>
-          `[assembleCliProviderRuntime] disposeCliRuntime('${runtimeId}') failed during error recovery: ${
-            cleanupError instanceof Error
-              ? cleanupError.message
-              : String(cleanupError)
-          }`,
-      );
-    }
+    disposeCliRuntimeRegistration(runtimeId);
     throw error;
   }
 }

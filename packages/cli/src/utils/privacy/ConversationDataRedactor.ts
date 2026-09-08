@@ -372,8 +372,7 @@ export class ConversationDataRedactor {
         }
         break;
 
-      case 'web_search':
-      case 'fetch_url':
+      case 'direct_web_fetch':
         if (
           redacted.url !== null &&
           redacted.url !== undefined &&

@@ -66,12 +66,12 @@ describe('errorReport duplicate coalescing (issue 3113)', () => {
 
   function expectStderrContaining(fragment: string): void {
     const found = stderrCalls.some((c) => c.includes(fragment));
-    expect(found, `Expected stderr to contain "${fragment}"`).toBe(true);
+    expect(found).toBe(true);
   }
 
   function expectStderrNotContaining(fragment: string): void {
     const found = stderrCalls.some((c) => c.includes(fragment));
-    expect(found, `Expected stderr NOT to contain "${fragment}"`).toBe(false);
+    expect(found).toBe(false);
   }
 
   async function listMatchingFiles(dir: string = testDir): Promise<string[]> {
@@ -103,7 +103,7 @@ describe('errorReport duplicate coalescing (issue 3113)', () => {
     advanceTo(1_000);
     const firstSuppressionStart = stderrCalls.length;
     await reportError(error, 'D1 base', undefined, 'd1-type', testDir);
-    expect(stderrCalls.slice(firstSuppressionStart)).toEqual([
+    expect(stderrCalls.slice(firstSuppressionStart)).toStrictEqual([
       `D1 base Duplicate error report suppressed (1 within 60s). Previous report: ${originalPath}
 `,
     ]);
@@ -111,12 +111,12 @@ describe('errorReport duplicate coalescing (issue 3113)', () => {
     advanceTo(2_000);
     const secondSuppressionStart = stderrCalls.length;
     await reportError(error, 'D1 base', undefined, 'd1-type', testDir);
-    expect(stderrCalls.slice(secondSuppressionStart)).toEqual([
+    expect(stderrCalls.slice(secondSuppressionStart)).toStrictEqual([
       `D1 base Duplicate error report suppressed (2 within 60s). Previous report: ${originalPath}
 `,
     ]);
 
-    expect(await listMatchingFiles()).toEqual([originalName]);
+    expect(await listMatchingFiles()).toStrictEqual([originalName]);
     expect(await fs.readFile(originalPath, 'utf-8')).toBe(originalBytes);
   });
 
@@ -192,7 +192,7 @@ describe('errorReport duplicate coalescing (issue 3113)', () => {
     advanceTo(60_000);
     await reportError(error, 'D5 base', undefined, 'd5-type', testDir);
     const after60000 = await listMatchingFiles();
-    expect(after60000).toEqual([
+    expect(after60000).toStrictEqual([
       reportName('d5-type', 0),
       reportName('d5-type', 60_000),
     ]);
@@ -217,7 +217,7 @@ describe('errorReport duplicate coalescing (issue 3113)', () => {
     advanceTo(60_000);
     await reportError(error, 'D6 base', undefined, 'd6-type', testDir);
     const files = await listMatchingFiles();
-    expect(files).toEqual([t0Name, reportName('d6-type', 60_000)]);
+    expect(files).toStrictEqual([t0Name, reportName('d6-type', 60_000)]);
   });
 
   // D7: Suppressed call does not write a new file or rewrite the existing one
@@ -295,7 +295,9 @@ describe('errorReport duplicate coalescing (issue 3113)', () => {
     const newReportPath = latestFullReportPath();
     expect(path.basename(newReportPath)).toBe(reportName('d9-type', 660));
     expect(await fs.readFile(newReportPath, 'utf-8')).toContain(messages[0]);
-    expect(await listMatchingFiles()).not.toEqual(listingBeforeEvictedRetry);
+    expect(await listMatchingFiles()).not.toStrictEqual(
+      listingBeforeEvictedRetry,
+    );
   });
 
   it('D10: retains the newest fingerprint at the exact capacity boundary', async () => {
@@ -323,7 +325,7 @@ describe('errorReport duplicate coalescing (issue 3113)', () => {
       testDir,
     );
 
-    expect(stderrCalls).toEqual([
+    expect(stderrCalls).toStrictEqual([
       `D10 base Duplicate error report suppressed (1 within 60s). Previous report: ${newestPath}
 `,
     ]);
@@ -363,7 +365,7 @@ describe('errorReport duplicate coalescing (issue 3113)', () => {
       await fs.readFile(path.join(testDir, files[1]), 'utf-8'),
     ) as { error: { message: string } };
     const msgs = [report1.error.message, report2.error.message].sort();
-    expect(msgs).toEqual([messageAlpha, messageBeta].sort());
+    expect(msgs).toStrictEqual([messageAlpha, messageBeta].sort());
   });
 
   it('D12: length framing distinguishes triples that alias under NUL joining', async () => {

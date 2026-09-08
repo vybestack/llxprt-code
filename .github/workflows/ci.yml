@@ -367,10 +367,20 @@ jobs:
       - name: 'Run CLI import-boundary guard'
         run: |-
           npm run lint:cli-boundary
+          npm run lint:a2a-boundary
 
       - name: 'Run genai-enclave boundary guard'
         run: |-
           npm run lint:genai-enclave
+
+      - name: 'Run runtime-dependency declaration guard (#3305)'
+        # Fails if any published workspace package imports, at runtime, a
+        # package it does not declare in dependencies/peerDependencies/
+        # optionalDependencies. A devDependencies-only declaration is a
+        # failure: that section is never installed for a consumer, which is
+        # how the published mcp tarball shipped unable to resolve core.
+        run: |-
+          npm run lint:runtime-deps
 
       - name: 'Run legacy-global-path guard (#2606)'
         run: |-
@@ -477,8 +487,6 @@ jobs:
           key: ${{ runner.os }}-eslint-${{ hashFiles('packages/*/src/**', 'packages/*/package.json', 'packages/*/tsconfig.json', 'scripts/**', 'evals/**', 'integration-tests/**', 'eslint.config.js', 'eslint-rules/**', 'package.json', 'package-lock.json', 'bun.lock', 'tsconfig.json', 'tsconfig.scripts.json', '*.js', 'test-setup/**', '.github/workflows/**', '.github/scripts/**') }}
 
       - name: 'Run linter'
-        env:
-          NODE_OPTIONS: '--max-old-space-size=12288'
         run: |
           set -euo pipefail
           # Fail closed: if the selector did not succeed, or reported a full
@@ -498,7 +506,10 @@ jobs:
             LLXPRT_LINT_CACHE=true LLXPRT_LINT_TARGETS="$lint_targets" \
               npm run lint:runner
           else
-            # Full run: one root ESLint invocation covers integration-tests.
+            # Full run: the partitioned runner covers the whole tree,
+            # integration-tests included, one ESLint process per package
+            # plus a root slice (#3387). Both branches rely on the runner's
+            # own per-child heap, so no NODE_OPTIONS is set here.
             npm run lint:ci
           fi
 
@@ -864,7 +875,7 @@ jobs:
   # Bun-backed test orchestration smoke (issue #2463)
   #
   # Verifies that `bun scripts/test.ts` (the `test:bun` entry point) can
-  # discover all 16 workspaces, parse their test/pretest scripts, and produce
+  # discover all workspaces, parse their test/pretest scripts, and produce
   # a summary — using a dry-run mode that does not actually execute the
   # workspace test suites. This catches regressions in the orchestrator itself
   # without the cost of a full test matrix. The actual workspace tests still
@@ -1367,11 +1378,9 @@ jobs:
           EXIT_CODE=$?
           echo "$EXIT_CODE" > "${ACPLINT_DIAG_DIR}/status.txt"
           echo "acplint raw exit status: $EXIT_CODE"
-          if [ "$EXIT_CODE" -ne 0 ]; then
-            echo '::group::acplint log tail'
-            tail -n 200 "${ACPLINT_DIAG_DIR}/acplint.log"
-            echo '::endgroup::'
-          fi
+          echo '::group::acplint log tail'
+          tail -n 200 "${ACPLINT_DIAG_DIR}/acplint.log"
+          echo '::endgroup::'
           exit 0
 
       - name: 'Validate acplint report'
@@ -1648,7 +1657,7 @@ jobs:
     # full push scans routinely take 70–79 minutes, so all non-PR events retain
     # the 360-minute allowance. A timeout remains a non-success conclusion;
     # candidate CI measures the end-to-end verdict.
-    timeout-minutes: ${{ github.event_name == 'pull_request' && 9 || 360 }}
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 15 || 360 }}
     needs:
       - 'skip_check'
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}

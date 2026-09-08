@@ -165,6 +165,10 @@ function estimateBookkeepingProjection(contents: IContent[]): Promise<number> {
   return Promise.resolve(hasCommittedSnapshot ? 10 : 150_000);
 }
 
+function restoredPromptTokenBaseline(baseline: number | null): number {
+  return baseline ?? 0;
+}
+
 // ---------------------------------------------------------------------------
 // Finding 1: Provider fallback failure propagation through real wiring
 // ---------------------------------------------------------------------------
@@ -244,7 +248,7 @@ describe('Finding 1: provider fallback failure propagation through real Compress
     }
 
     expect(thrownError).toBeInstanceOf(Error);
-    expect(thrownError!.message).toContain(
+    expect(thrownError?.message).toContain(
       'Truncation fallback failed during hard-limit enforcement',
     );
     expect(thrownError!.message).toContain('truncation engine blew up');
@@ -289,10 +293,10 @@ describe('Finding 1: provider fallback failure propagation through real Compress
     }
 
     expect(thrownError).toBeInstanceOf(Error);
-    expect(thrownError!.message).toContain(
+    expect(thrownError?.message).toContain(
       'Truncation fallback failed during hard-limit enforcement',
     );
-    expect(thrownError!.message).toContain('context build exploded');
+    expect(thrownError?.message).toContain('context build exploded');
   });
 
   /**
@@ -363,6 +367,11 @@ describe('Finding 1: provider fallback failure propagation through real Compress
     );
     handler.setLastPromptTokenCount(123);
 
+    let incrementalPublications = 0;
+    historyService.on('contentAdded', () => {
+      incrementalPublications += 1;
+    });
+
     const result = await handler.enforceProviderContents(
       envelope,
       'test-prompt',
@@ -394,6 +403,7 @@ describe('Finding 1: provider fallback failure propagation through real Compress
     });
     expect(rewrittenHistory[2].metadata?.responsesStored).toBeUndefined();
     expect(handler.getLastPromptTokenCount()).toBe(0);
+    expect(incrementalPublications).toBe(0);
   });
 
   it('keeps pending fallback failure bookkeeping when candidate commit rejects', async () => {
@@ -574,7 +584,7 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
         promptTokenBaseline = 0;
       },
       restorePromptTokenBaseline: (baseline) => {
-        promptTokenBaseline = baseline ?? 0;
+        promptTokenBaseline = restoredPromptTokenBaseline(baseline);
       },
     });
     harness.deps.performCompression.mockResolvedValue(
@@ -632,7 +642,7 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
         promptTokenBaseline = 0;
       },
       restorePromptTokenBaseline: (baseline) => {
-        promptTokenBaseline = baseline ?? 0;
+        promptTokenBaseline = restoredPromptTokenBaseline(baseline);
       },
     });
     harness.deps.performCompression.mockResolvedValue(
@@ -683,7 +693,7 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
         throw new Error('prompt baseline reset failed');
       },
       restorePromptTokenBaseline: (baseline) => {
-        promptTokenBaseline = baseline ?? 0;
+        promptTokenBaseline = restoredPromptTokenBaseline(baseline);
       },
     });
     harness.deps.performCompression.mockResolvedValue(
@@ -753,8 +763,8 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
     }
 
     expect(thrownError).toBeInstanceOf(Error);
-    expect(thrownError!.message).toContain('estimation infrastructure down');
-    expect(thrownError!.message).toContain('post-compression stage');
+    expect(thrownError?.message).toContain('estimation infrastructure down');
+    expect(thrownError?.message).toContain('post-compression stage');
   });
 
   /**
@@ -798,8 +808,8 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
     }
 
     expect(thrownError).toBeInstanceOf(Error);
-    expect(thrownError!.message).toContain('estimation infrastructure down');
-    expect(thrownError!.message.toLowerCase()).toContain('retry');
+    expect(thrownError?.message).toContain('estimation infrastructure down');
+    expect(thrownError?.message.toLowerCase()).toContain('retry');
   });
 
   /**
@@ -852,8 +862,8 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
     }
 
     expect(thrownError).toBeInstanceOf(Error);
-    expect(thrownError!.message).toContain('estimation infrastructure down');
-    expect(thrownError!.message.toLowerCase()).toContain('truncation');
+    expect(thrownError?.message).toContain('estimation infrastructure down');
+    expect(thrownError?.message.toLowerCase()).toContain('truncation');
   });
 
   /**
@@ -880,8 +890,8 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
     }
 
     expect(thrownError).toBeInstanceOf(Error);
-    expect(thrownError!.message).toContain('estimation infrastructure down');
-    expect(thrownError!.message.toLowerCase()).toContain('projection');
+    expect(thrownError?.message).toContain('estimation infrastructure down');
+    expect(thrownError?.message.toLowerCase()).toContain('projection');
   });
 
   /**
@@ -932,8 +942,8 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
 
     // The original stage-aware projection error must propagate directly.
     expect(thrownError).toBeInstanceOf(Error);
-    expect(thrownError!.message).toContain('estimation infrastructure down');
-    expect(thrownError!.message.toLowerCase()).toContain('post-compression');
+    expect(thrownError?.message).toContain('estimation infrastructure down');
+    expect(thrownError?.message.toLowerCase()).toContain('post-compression');
 
     // Fallback must NOT be reached — the projection error surfaced before
     // truncation.

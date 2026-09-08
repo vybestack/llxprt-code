@@ -50,6 +50,10 @@ describe('memoryDiscovery', () => {
     return path.resolve(testRootDir, fullPath);
   }
 
+  function countOccurrences(content: string, needle: string): number {
+    return (content.match(new RegExp(needle, 'g')) ?? []).length;
+  }
+
   beforeEach(async () => {
     testRootDir = await fsPromises.mkdtemp(
       path.join(os.tmpdir(), 'folder-structure-test-'),
@@ -738,12 +742,14 @@ included directory memory
     );
 
     // Check that files are not duplicated
-    const parentOccurrences = (
-      result.memoryContent.match(/Parent content/g) ?? []
-    ).length;
-    const childOccurrences = (
-      result.memoryContent.match(/Child content/g) ?? []
-    ).length;
+    const parentOccurrences = countOccurrences(
+      result.memoryContent,
+      'Parent content',
+    );
+    const childOccurrences = countOccurrences(
+      result.memoryContent,
+      'Child content',
+    );
     expect(parentOccurrences).toBe(1);
     expect(childOccurrences).toBe(1);
   });

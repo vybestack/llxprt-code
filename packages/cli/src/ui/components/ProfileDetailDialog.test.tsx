@@ -14,6 +14,10 @@ void vi.mock('../hooks/useTerminalSize.js', () => ({
   useTerminalSize: () => ({ columns: 100, rows: 30 }),
 }));
 
+function profileDetailFrameOrEmpty(frame: string | undefined): string {
+  return frame ?? '';
+}
+
 function renderDialog(profile: Profile) {
   return render(
     <KeypressProvider>
@@ -67,7 +71,7 @@ describe('ProfileDetailDialog load balancer details', () => {
     } as Profile;
 
     const { lastFrame } = renderDialog(profile);
-    const frame = lastFrame() ?? '';
+    const frame = profileDetailFrameOrEmpty(lastFrame());
 
     expect(frame).toContain('Context Limit: 190000');
     expect(frame).toContain('Effective Minimum Context: 190000');

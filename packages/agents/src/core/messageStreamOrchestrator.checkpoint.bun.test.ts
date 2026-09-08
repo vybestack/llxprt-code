@@ -330,33 +330,41 @@ describe('MessageStreamOrchestrator — attempt checkpoint rollback (issue #3048
      *   because the abandoned attempt's detector state was rolled back.
      */
     it('forwards the replacement tool call after an abandoned identical one (threshold 2)', async () => {
-      const loopDetector = makeRealLoopDetector(2);
-      const { orchestrator } = buildHarness({
-        loopDetector,
-        streams: [
-          [
-            toolCallRequest('abandoned-a'),
-            retryEvent(),
-            toolCallRequest('replacement-a'),
-            finishedEvent(VISIBLE()),
-          ],
-        ],
-      });
-
-      const events = await drain(orchestrator);
-
-      const loopDetected = events.some(
-        (e) => e.type === AgentEventType.LoopDetected,
-      );
+      const { loopDetected, forwardedToolCalls } =
+        await observeForwardsTheReplacementToolCallAfterAnAbandonedIdenticalOneThreshold2();
       expect(loopDetected).toBe(false);
-
-      const forwardedToolCalls = events.filter(
-        (event) =>
-          event.type === AgentEventType.ToolCallRequest &&
-          event.value.callId === 'replacement-a',
-      );
       expect(forwardedToolCalls).toHaveLength(1);
     });
+
+    const observeForwardsTheReplacementToolCallAfterAnAbandonedIdenticalOneThreshold2 =
+      async () => {
+        const loopDetector = makeRealLoopDetector(2);
+        const { orchestrator } = buildHarness({
+          loopDetector,
+          streams: [
+            [
+              toolCallRequest('abandoned-a'),
+              retryEvent(),
+              toolCallRequest('replacement-a'),
+              finishedEvent(VISIBLE()),
+            ],
+          ],
+        });
+
+        const events = await drain(orchestrator);
+
+        const loopDetected = events.some(
+          (e) => e.type === AgentEventType.LoopDetected,
+        );
+
+        const forwardedToolCalls = events.filter(
+          (event) =>
+            event.type === AgentEventType.ToolCallRequest &&
+            event.value.callId === 'replacement-a',
+        );
+
+        return { loopDetected, forwardedToolCalls };
+      };
 
     /**
      * @requirement REQ-3048-007
@@ -367,33 +375,42 @@ describe('MessageStreamOrchestrator — attempt checkpoint rollback (issue #3048
      *   the replacement call is forwarded.
      */
     it('discards a loop verdict reached by the abandoned attempt before retry', async () => {
-      const loopDetector = makeRealLoopDetector(2);
-      const { orchestrator } = buildHarness({
-        loopDetector,
-        streams: [
-          [
-            toolCallRequest('abandoned-a-1'),
-            toolCallRequest('abandoned-a-2'),
-            retryEvent(),
-            toolCallRequest('replacement-a'),
-            finishedEvent(VISIBLE()),
-          ],
-        ],
+      const rollbackResult =
+        await observeDiscardsALoopVerdictReachedByTheAbandonedAttemptBeforeRetry();
+      expect(rollbackResult).toStrictEqual({
+        loopDetected: false,
+        replacementCallForwarded: true,
       });
+    });
 
-      const events = await drain(orchestrator);
+    const observeDiscardsALoopVerdictReachedByTheAbandonedAttemptBeforeRetry =
+      async () => {
+        const loopDetector = makeRealLoopDetector(2);
+        const { orchestrator } = buildHarness({
+          loopDetector,
+          streams: [
+            [
+              toolCallRequest('abandoned-a-1'),
+              toolCallRequest('abandoned-a-2'),
+              retryEvent(),
+              toolCallRequest('replacement-a'),
+              finishedEvent(VISIBLE()),
+            ],
+          ],
+        });
 
-      expect(
-        events.some((event) => event.type === AgentEventType.LoopDetected),
-      ).toBe(false);
-      expect(
-        events.some(
+        const events = await drain(orchestrator);
+        const loopDetected = events.some(
+          (event) => event.type === AgentEventType.LoopDetected,
+        );
+        const replacementCallForwarded = events.some(
           (event) =>
             event.type === AgentEventType.ToolCallRequest &&
             event.value.callId === 'replacement-a',
-        ),
-      ).toBe(true);
-    });
+        );
+
+        return { loopDetected, replacementCallForwarded };
+      };
 
     /**
      * @requirement REQ-3048-007

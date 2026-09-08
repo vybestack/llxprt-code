@@ -12,8 +12,8 @@
  */
 
 import type Anthropic from '@anthropic-ai/sdk';
-import type { MessageCreateParamsBase } from '@anthropic-ai/sdk/resources/messages/index.js';
 import type { DumpMode } from '../utils/dumpContext.js';
+import { withBoundedJsonHttpBody } from '../utils/boundedJsonBody.js';
 import {
   shouldDumpSDKContext,
   dumpSDKRequestContext,
@@ -22,6 +22,7 @@ import {
   wrapStreamWithSDKErrorDump,
   bestEffortDump,
   dumpSDKErrorRequestResponse,
+  type RequestDumpMetadata,
 } from '../utils/dumpSDKContext.js';
 import {
   type AnthropicRateLimitInfo,
@@ -99,30 +100,6 @@ export function buildAnthropicCustomHeaders(params: {
 }
 
 /**
- * The request body built by buildAnthropicRequestBody, which includes the
- * required SDK base fields (model, messages, max_tokens) plus optional
- * dynamic overrides from modelParams. The index signature preserves the
- * ability to carry dynamic fields at runtime while being assignable to
- * the SDK's create() overload that accepts MessageCreateParamsBase.
- */
-type AnthropicRequestBody = MessageCreateParamsBase & {
-  [key: string]: unknown;
-};
-
-/**
- * Narrows the dynamically-built request body to the SDK-accepted type.
- * The body is constructed by buildAnthropicRequestBody at runtime with
- * valid base fields. Since AnthropicRequestBody includes the index
- * signature, the single `as` narrowing from Record<string, unknown>
- * is structurally justified (the source carries all base fields).
- */
-function asMessageCreateParams(
-  body: Record<string, unknown>,
-): AnthropicRequestBody {
-  return body as AnthropicRequestBody;
-}
-
-/**
  * Create API call closure with response headers
  */
 export function createAnthropicApiCall(
@@ -134,37 +111,25 @@ export function createAnthropicApiCall(
   data: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
   response: Response | undefined;
 }> {
-  const params = asMessageCreateParams(requestBody);
-  return async () => {
-    const requestOptions = {
-      ...(Object.keys(customHeaders).length > 0
-        ? { headers: customHeaders }
-        : {}),
-      ...(signal !== undefined ? { signal } : {}),
-    };
-    const promise =
-      Object.keys(requestOptions).length > 0
-        ? client.messages.create(params, requestOptions)
-        : client.messages.create(params);
-    // The promise has a withResponse() method we can call
-    if (typeof promise === 'object' && 'withResponse' in promise) {
-      return (
-        promise as {
-          withResponse: () => Promise<{
-            data:
-              | Anthropic.Message
-              | AsyncIterable<Anthropic.MessageStreamEvent>;
-            response: Response;
-          }>;
-        }
-      ).withResponse();
-    }
-    // Fallback if withResponse is not available
-    return {
-      data: await Promise.resolve(promise),
-      response: undefined,
-    };
-  };
+  return async () =>
+    withBoundedJsonHttpBody(requestBody, async (body) => {
+      const headers = {
+        ...customHeaders,
+        'content-type': 'application/json',
+        'content-length': String(body.byteLength),
+      };
+      return client
+        .post<Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>>(
+          '/v1/messages',
+          {
+            body: body.stream,
+            headers,
+            stream: requestBody['stream'] === true,
+            ...(signal === undefined ? {} : { signal }),
+          },
+        )
+        .withResponse();
+    });
 }
 
 /**
@@ -179,6 +144,7 @@ export interface ApiExecutionParams {
   baseURL: string;
   requestBody: Record<string, unknown>;
   streamingEnabled: boolean;
+  headers?: Record<string, string>;
   rateLimitLogger: { debug: (fn: () => string) => void };
 }
 
@@ -189,6 +155,20 @@ export interface ApiExecutionResult {
   response: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
   responseHeaders: Headers | undefined;
   rateLimitInfo?: AnthropicRateLimitInfo;
+}
+
+/**
+ * Dump metadata for every Anthropic dump site: the request is always sent over
+ * plain HTTP with the observed header map (#3159). Kept in one helper so the
+ * transport discriminator and header shape cannot drift between sites.
+ */
+function anthropicDumpMetadata(
+  params: ApiExecutionParams,
+): RequestDumpMetadata {
+  return {
+    headers: params.headers,
+    transport: { type: 'http' },
+  };
 }
 
 async function dumpAnthropicRequest(
@@ -207,6 +187,7 @@ async function dumpAnthropicRequest(
         '/v1/messages',
         params.requestBody,
         params.baseURL,
+        anthropicDumpMetadata(params),
       ),
     params.rateLimitLogger,
   );
@@ -242,6 +223,7 @@ async function dumpAnthropicApiError(
     params.baseURL,
     dumpSDKRequestContext,
     dumpSDKResponseContext,
+    anthropicDumpMetadata(params),
   );
 }
 
@@ -278,6 +260,7 @@ async function handleAnthropicSuccessDump(
       params.baseURL,
       dumpSDKRequestContext,
       dumpSDKResponseContext,
+      anthropicDumpMetadata(params),
     );
   }
   return response;

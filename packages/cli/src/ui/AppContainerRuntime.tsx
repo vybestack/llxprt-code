@@ -303,6 +303,7 @@ function buildUIStateParamsExtra(r: HookResults) {
     coreMemoryFileCount: b.coreMemoryFileCount,
     mainAreaWidth: l.mainAreaWidth,
     branchName: l.branchName,
+    branchIsDirty: l.branchIsDirty,
     errorCount: d.errorCount,
     activeHooks: l.activeHooks,
     consoleMessages: l.filteredConsoleMessages,

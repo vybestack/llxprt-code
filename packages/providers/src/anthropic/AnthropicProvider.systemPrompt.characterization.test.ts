@@ -36,6 +36,8 @@ import {
 
 const MOCK_CORE_PROMPT = 'MOCK_CORE_PROMPT_CONTENT';
 
+import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+
 const mockMessagesCreate = vi.fn();
 
 void vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
@@ -58,6 +60,7 @@ void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
 
 void vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
+    ...createAnthropicRawPostTestAdapter(mockMessagesCreate),
     messages: { create: mockMessagesCreate },
     beta: {
       models: {

@@ -304,6 +304,54 @@ function pickAvailableSandboxCommand(): SandboxConfig['command'] | '' {
 }
 
 /**
+ * Matches the container names LLxprt generates when it launches a nested
+ * process: `<image-name-tag>-<pid>` with an optional numeric collision suffix
+ * (e.g. `sandbox-0.7.0-4242` and `sandbox-0.7.0-4242-1`).
+ */
+const NESTED_CONTAINER_NAME = /^.+-\d+(?:-\d+)?$/;
+
+/**
+ * Values LLxprt itself writes into SANDBOX when it launches a nested
+ * process: the Seatbelt launcher writes the literal `sandbox-exec`, and the
+ * container launcher writes the generated container name
+ * (`<image-name-tag>-<pid>`, plus a numeric collision suffix when needed).
+ * Any other value is foreign — a CI system, another tool, a leftover shell
+ * export — and must not be trusted as proof that this process is already
+ * sandboxed (issue #2943).
+ */
+export function isLlxprtWrittenSandboxValue(
+  value: string | undefined,
+): boolean {
+  if (value === undefined || value === '') {
+    return false;
+  }
+  return value === 'sandbox-exec' || NESTED_CONTAINER_NAME.test(value);
+}
+
+/**
+ * Names every channel that carries an explicit sandbox request, so the nested
+ * suppression warning can say which request was ignored instead of stopping blindly.
+ */
+function explicitSandboxRequestSources(
+  resolved: ResolvedSandbox,
+  cliEngine: SandboxProfileEngine | undefined,
+  profile: SandboxProfile | undefined,
+): readonly string[] {
+  const sources: string[] = [];
+  const { value, source } = resolved;
+  if (value !== undefined && value !== false) {
+    sources.push(source);
+  }
+  if (cliEngine !== undefined && cliEngine !== 'auto') {
+    sources.push('--sandbox-engine');
+  }
+  if (profile !== undefined && profile.engine !== 'none') {
+    sources.push('--sandbox-profile-load');
+  }
+  return sources;
+}
+
+/**
  * Interprets a single raw sandbox value into the normalized form the command
  * resolver consumes: `true` (auto-detect), `false` (disabled), or the raw
  * string (an explicit engine command). Mirrors the pre-existing interpretation
@@ -412,11 +460,6 @@ function pickRequestedSandboxCommand(
 function getSandboxCommand(
   resolved: ResolvedSandbox,
 ): SandboxConfig['command'] | '' {
-  // If the SANDBOX env var is set, we're already inside the sandbox.
-  if (process.env.SANDBOX) {
-    return '';
-  }
-
   const { value, source } = resolved;
   if (value === false) {
     return '';
@@ -635,6 +678,24 @@ export async function loadSandboxConfig(
   // `argv.sandbox ?? settings.sandbox`) so "flag absent" stays distinguishable
   // from "flag explicitly false" and precedence is flag > env > settings.
   const resolvedSandbox = resolveSandboxOption(argv.sandbox, settings.sandbox);
+
+  // A SANDBOX value LLxprt itself wrote means this process was launched by a
+  // previous sandbox layer: suppress every request path before any engine probing so
+  // a nested launch never throws FatalSandboxError, and warn only when a request
+  // was actually present (issue #2943).
+  if (isLlxprtWrittenSandboxValue(process.env.SANDBOX)) {
+    const sources = explicitSandboxRequestSources(
+      resolvedSandbox,
+      cliEngine,
+      sandboxProfile,
+    );
+    if (sources.length > 0) {
+      globalThis.console.warn(
+        `Sandboxing was skipped: SANDBOX=${process.env.SANDBOX} indicates this process is already running inside an LLxprt sandbox, so the sandbox request from ${sources.join(', ')} was not started.`,
+      );
+    }
+    return undefined;
+  }
 
   const baseCommand = resolveBaseSandboxCommand(
     resolvedSandbox,

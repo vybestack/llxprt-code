@@ -13,6 +13,7 @@ import { useCallback } from 'react';
 
 import type {
   ContinueTarget,
+  LocalMediaStore,
   SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
 
@@ -37,6 +38,7 @@ export interface SessionBrowserDialogProps {
   currentSessionId: string;
   hasActiveConversation: boolean;
   activeRecording?: SessionRecordingService | null;
+  mediaStore?: LocalMediaStore;
   onSelect: (target: ContinueTarget) => Promise<PerformResumeResult>;
   onClose: () => void;
 }
@@ -653,6 +655,7 @@ export function SessionBrowserDialog(
     currentSessionId,
     hasActiveConversation,
     activeRecording,
+    mediaStore,
     onSelect,
     onClose,
   } = props;
@@ -664,6 +667,7 @@ export function SessionBrowserDialog(
     currentSessionId,
     onSelect,
     activeRecording,
+    mediaStore,
     onClose,
     hasActiveConversation,
   });

@@ -172,6 +172,15 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isCheckpointRow(
+  row: ReturnType<typeof useSessionBrowser>['sessions'][number],
+  checkpointId: string,
+): boolean {
+  return (
+    row.target.kind === 'checkpoint' && row.target.checkpointId === checkpointId
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Test Suite
 // ---------------------------------------------------------------------------
@@ -226,7 +235,7 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      expect(result.current.sessions.length).toBe(2);
+      expect(result.current.sessions).toHaveLength(2);
     });
 
     /**
@@ -302,10 +311,8 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         expect(
           result.current.sessions.map((row) => row.target.kind),
         ).toStrictEqual(['session', 'checkpoint']);
-        const checkpointRowIndex = result.current.sessions.findIndex(
-          (row) =>
-            row.target.kind === 'checkpoint' &&
-            row.target.checkpointId === checkpoint.checkpointId,
+        const checkpointRowIndex = result.current.sessions.findIndex((row) =>
+          isCheckpointRow(row, checkpoint.checkpointId),
         );
         expect(checkpointRowIndex).toBeGreaterThanOrEqual(0);
         expect(result.current.sessions[checkpointRowIndex].checkpointName).toBe(
@@ -507,6 +514,96 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       // After page change, page 0 sessions should not have their previews
       // incorrectly set by delayed loads from the old page
       expect(result.current.page).toBe(1);
+    });
+    /**
+     * Test 7b: Preview resolves to none (REQ-PV-005)
+     * GIVEN: A session contains content but no human message
+     * WHEN: Preview loads
+     * THEN: previewState is 'none' and firstUserMessage is undefined
+     */
+    it('preview resolves to none when a session has no human message', async () => {
+      await createTestSession(chatsDir, {
+        sessionId: 'assistant-only-session',
+        contents: [makeContent('assistant response', 'ai')],
+      });
+
+      const props = makeHookProps(chatsDir);
+      const { result } = renderHook(() => useSessionBrowser(props));
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+        const session = result.current.sessions.find(
+          (s) => s.sessionId === 'assistant-only-session',
+        );
+        expect(session?.previewState).toBe('none');
+        expect(session?.firstUserMessage).toBeUndefined();
+      });
+      expect(result.current.error).toBeNull();
+    });
+
+    /**
+     * Test 7c: Corrupt recordings are skipped without disturbing browsing
+     * (REQ-SB-008)
+     * GIVEN: A chats dir mixes valid sessions with malformed session files
+     * WHEN: Hook loads and the user navigates
+     * THEN: Only valid sessions are listed, skippedCount accounts for the
+     * corrupt files, and navigation stays within the valid rows
+     */
+    it('browsing stays within valid sessions when corrupt files are present', async () => {
+      const validIds = ['valid-aaaa-111', 'valid-bbbb-222', 'valid-cccc-333'];
+      for (const sessionId of validIds) {
+        await createTestSession(chatsDir, { sessionId });
+        await delay(10);
+      }
+      await fs.writeFile(
+        path.join(chatsDir, 'session-corrupt-one.jsonl'),
+        '{not valid json}\n',
+        'utf-8',
+      );
+      await fs.writeFile(
+        path.join(chatsDir, 'session-corrupt-two.jsonl'),
+        'definitely not json\n',
+        'utf-8',
+      );
+
+      const { result } = renderHook(() =>
+        useSessionBrowser(makeHookProps(chatsDir)),
+      );
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+        expect(result.current.sessions).toHaveLength(3);
+      });
+
+      const validSet = new Set(validIds);
+      expect(
+        new Set(result.current.sessions.map((s) => s.sessionId)),
+      ).toStrictEqual(validSet);
+      expect(
+        new Set(result.current.pageItems.map((s) => s.sessionId)),
+      ).toStrictEqual(validSet);
+      expect(result.current.skippedCount).toBe(2);
+      const selectedId = (): string =>
+        result.current.selectedSession?.sessionId ?? '(none selected)';
+      expect(validIds).toContain(selectedId());
+      expect(result.current.error).toBeNull();
+
+      result.current.handleKeypress('', makeKey('tab'));
+      await waitFor(() => {
+        expect(result.current.isSearching).toBe(false);
+      });
+
+      const lastValidIndex = result.current.pageItems.length - 1;
+      for (let index = 0; index < lastValidIndex; index += 1) {
+        result.current.handleKeypress('', makeKey('down'));
+      }
+      expect(validIds).toContain(selectedId());
+      for (let index = 0; index < lastValidIndex; index += 1) {
+        result.current.handleKeypress('', makeKey('up'));
+      }
+      expect(selectedId()).toBe(result.current.pageItems[0].sessionId);
+      expect(validIds).toContain(selectedId());
+      expect(result.current.error).toBeNull();
     });
   });
 });

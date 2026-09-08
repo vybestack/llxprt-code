@@ -14,11 +14,15 @@
 import { describe, it, expect } from 'bun:test';
 import { resolveAnthropicImageBudget } from './AnthropicImageSanitizer.js';
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : '';
+}
+
 describe('resolveAnthropicImageBudget fail-fast validation (@issue:3216)', () => {
   it('resolves a valid dimension-only budget from profile-shaped ephemerals', () => {
     expect(
       resolveAnthropicImageBudget({ 'max-image-dimension': 2000 }),
-    ).toEqual({ maxDimension: 2000 });
+    ).toStrictEqual({ maxDimension: 2000, maxPixels: undefined });
   });
 
   it('resolves a valid combined budget from profile-shaped ephemerals', () => {
@@ -27,13 +31,13 @@ describe('resolveAnthropicImageBudget fail-fast validation (@issue:3216)', () =>
         'max-image-dimension': 2000,
         'max-image-pixels': 4_000_000,
       }),
-    ).toEqual({ maxDimension: 2000, maxPixels: 4_000_000 });
+    ).toStrictEqual({ maxDimension: 2000, maxPixels: 4_000_000 });
   });
 
   it('resolves a pixel-only budget from profile-shaped ephemerals', () => {
     expect(
       resolveAnthropicImageBudget({ 'max-image-pixels': 4_000_000 }),
-    ).toEqual({ maxPixels: 4_000_000 });
+    ).toStrictEqual({ maxDimension: undefined, maxPixels: 4_000_000 });
   });
 
   it('returns undefined when no budget keys are configured', () => {
@@ -93,7 +97,7 @@ describe('resolveAnthropicImageBudget fail-fast validation (@issue:3216)', () =>
     try {
       resolveAnthropicImageBudget({ 'max-image-dimension': '2000' });
     } catch (error) {
-      providerMessage = error instanceof Error ? error.message : '';
+      providerMessage = errorMessage(error);
     }
     expect(providerMessage).toBe(
       'Invalid image dimension budget: max-image-dimension must be a positive integer',

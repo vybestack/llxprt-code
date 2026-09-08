@@ -12,6 +12,13 @@ import { restoreEnv, setEnv } from './env-test-helpers.js';
 import { TestRig } from './test-rig.js';
 import { readLedger } from './model-request-ledger.js';
 
+function requireTestDir(testDir: string | null): string {
+  if (testDir === null) {
+    throw new Error('testDir should not be null after setup');
+  }
+  return testDir;
+}
+
 describe('TestRig setup and cleanup behavior', () => {
   const tempDirs: string[] = [];
 
@@ -100,10 +107,7 @@ describe('TestRig setup and cleanup behavior', () => {
 
     const rig = new TestRig();
     rig.setup('real-provider-ledger-test');
-    const expectedDir = rig.testDir;
-    if (expectedDir === null) {
-      throw new Error('testDir should not be null after setup');
-    }
+    const expectedDir = requireTestDir(rig.testDir);
 
     // Bun reports an unresolvable executable as "Executable not found ..."
     // while Node reports ENOENT; accept either so the test is runtime-agnostic.

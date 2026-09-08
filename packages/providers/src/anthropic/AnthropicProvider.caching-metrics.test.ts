@@ -16,6 +16,16 @@ import {
   setupAnthropicProvider,
   type AnthropicTestSetup,
 } from './test-utils/anthropicProviderTestSetup.js';
+import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+
+function cacheMetrics(content: IContent): {
+  readonly cacheRead: number;
+  readonly hitRate: number;
+} {
+  const cacheRead = content.metadata?.usage?.cache_read_input_tokens ?? 0;
+  const totalInput = content.metadata?.usage?.promptTokens ?? 1;
+  return { cacheRead, hitRate: (cacheRead / totalInput) * 100 };
+}
 
 // Shared mock instance for messages.create - using vi.hoisted so it's
 // available when vi.mock factories run.
@@ -81,6 +91,7 @@ void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
 
 void vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
+    ...createAnthropicRawPostTestAdapter(mockMessagesCreate),
     messages: { create: mockMessagesCreate },
     beta: {
       models: {
@@ -222,6 +233,8 @@ describe('AnthropicProvider', () => {
               type: 'message_delta',
               usage: { input_tokens: 100, output_tokens: 5 },
             };
+
+            yield { type: 'message_stop' };
           },
         };
 
@@ -282,6 +295,96 @@ describe('AnthropicProvider', () => {
         expect(content.metadata?.usage?.cache_read_input_tokens).toBe(0);
         expect(content.metadata?.usage?.cache_creation_input_tokens).toBe(3200);
       });
+
+      it('carries the exact prepared purge boundary on a cache-creating response', async () => {
+        settingsService.set('media.semantic-purge', 'remove');
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+        const boundaryId = Object.freeze({});
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 3200,
+          },
+        });
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'stable prefix' }],
+            metadata: {
+              semanticMediaPurgeBoundary: { blockIndex: 0, boundaryId },
+            },
+          },
+          {
+            speaker: 'human',
+            blocks: [
+              {
+                type: 'media',
+                encoding: 'base64',
+                mimeType: 'image/png',
+                data: 'aW1hZ2U=',
+              },
+            ],
+          },
+        ];
+
+        const result = await provider
+          .generateChatCompletion(buildCallOptions(messages))
+          .next();
+        if (result.done === true) throw new Error('Expected provider response');
+
+        expect(
+          result.value.metadata?.semanticMediaPurgeCacheWriteEvidence,
+        ).toStrictEqual({ boundaryId, preparation: 'added' });
+      });
+
+      it('does not report a reused breakpoint as proof of the intended cache write', async () => {
+        settingsService.set('media.semantic-purge', 'remove');
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+        const boundaryId = Object.freeze({});
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 3200,
+          },
+        });
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'stable prefix' }],
+            metadata: {
+              cacheAnchor: true,
+              semanticMediaPurgeBoundary: { blockIndex: 0, boundaryId },
+            },
+          },
+          {
+            speaker: 'human',
+            blocks: [
+              {
+                type: 'media',
+                encoding: 'base64',
+                mimeType: 'image/png',
+                data: 'aW1hZ2U=',
+              },
+            ],
+          },
+          { speaker: 'human', blocks: [{ type: 'text', text: 'tail' }] },
+        ];
+
+        const result = await provider
+          .generateChatCompletion(buildCallOptions(messages))
+          .next();
+        if (result.done === true) throw new Error('Expected provider response');
+
+        expect(
+          result.value.metadata?.semanticMediaPurgeCacheWriteEvidence,
+        ).toBeUndefined();
+      });
     });
 
     describe('Cache Hit Rate Calculation', () => {
@@ -311,9 +414,7 @@ describe('AnthropicProvider', () => {
         const result = await generator.next();
 
         const content = result.value as IContent;
-        const cacheRead = content.metadata?.usage?.cache_read_input_tokens ?? 0;
-        const totalInput = content.metadata?.usage?.promptTokens ?? 1;
-        const hitRate = (cacheRead / totalInput) * 100;
+        const { hitRate } = cacheMetrics(content);
 
         expect(hitRate).toBe(0);
       });
@@ -344,9 +445,7 @@ describe('AnthropicProvider', () => {
         const result = await generator.next();
 
         const content = result.value as IContent;
-        const cacheRead = content.metadata?.usage?.cache_read_input_tokens ?? 0;
-        const totalInput = content.metadata?.usage?.promptTokens ?? 1;
-        const hitRate = (cacheRead / totalInput) * 100;
+        const { cacheRead, hitRate } = cacheMetrics(content);
 
         expect(hitRate).toBeGreaterThan(90);
         expect(cacheRead).toBe(3200);

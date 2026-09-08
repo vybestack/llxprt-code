@@ -29,7 +29,10 @@ import {
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
-import type { AgentProviderSwitchResult } from '@vybestack/llxprt-code-agents';
+import type {
+  AgentOAuthUIEvent,
+  AgentProviderSwitchResult,
+} from '@vybestack/llxprt-code-agents';
 import { UNCONFIGURED_PROVIDER } from '@vybestack/llxprt-code-core';
 import {
   getOptionalString,
@@ -97,9 +100,7 @@ function getProviderBaseUrl(provider: IProvider): string | undefined {
  * while the UI HistoryItem expects a MessageType enum. oauth_url has no
  * MessageType counterpart and is rendered as INFO.
  */
-function mapOAuthEventType(
-  type: 'info' | 'warning' | 'error' | 'oauth_url',
-): MessageType {
+function mapOAuthEventType(type: AgentOAuthUIEvent['type']): MessageType {
   switch (type) {
     case 'warning':
       return MessageType.WARNING;
@@ -114,15 +115,29 @@ function mapOAuthEventType(
  * Formats the agent's OAuthUIEvent into a display string. For oauth_url
  * events, appends the URL to the text so the user can see and open it.
  */
-function formatOAuthText(event: {
-  type: 'info' | 'warning' | 'error' | 'oauth_url';
-  text: string;
-  url?: string;
-}): string {
-  if (event.type === 'oauth_url' && event.url !== undefined) {
-    return `${event.text}: ${event.url}`;
+function formatOAuthText(event: AgentOAuthUIEvent): string {
+  switch (event.type) {
+    case 'oauth_url':
+      return event.url === undefined
+        ? event.text
+        : `${event.text}: ${event.url}`;
+    case 'oauth_waiting':
+      return `Waiting for ${event.provider}/${event.bucket ?? 'default'} authentication (requested by ${event.requesterRuntimeKind})…`;
+    case 'oauth_settled': {
+      const outcome: Record<
+        'succeeded' | 'cancelled' | 'timed_out' | 'failed',
+        string
+      > = {
+        succeeded: 'completed',
+        cancelled: 'was cancelled',
+        timed_out: 'timed out',
+        failed: 'failed',
+      };
+      return `Authentication for ${event.provider}/${event.bucket ?? 'default'} ${outcome[event.kind]}`;
+    }
+    default:
+      return event.text;
   }
-  return event.text;
 }
 
 function buildAliasConfig(

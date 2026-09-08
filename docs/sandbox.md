@@ -751,10 +751,15 @@ is where you expect.
 
 Do **not** rely on the `SANDBOX` environment variable. LLxprt Code sets
 `SANDBOX` inside the sandboxed process to mark that it has already started one
-layer of containment, and a pre-existing `SANDBOX` value on your host causes
-sandbox startup to be skipped. That means the variable reports "sandboxed" on
-an unsandboxed host and is trivially forgeable — it cannot distinguish
-sandboxed from unsandboxed execution.
+layer of containment. Only values matching the forms LLxprt itself writes skip
+another sandbox startup: the Seatbelt launcher sets the literal
+`sandbox-exec`, and the container launcher sets the generated container name
+(for example `sandbox-0.7.0-4242`). When such a value suppresses an explicit
+sandbox request, the CLI prints a warning naming the value and the request. A
+pre-existing `SANDBOX` value that does not match those forms does not suppress
+an explicit request. The variable is still trivially forgeable and reports
+"sandboxed" on an unsandboxed host — it cannot distinguish sandboxed from
+unsandboxed execution.
 
 Instead, check for an observable property of the container environment that a
 host process does not have:
@@ -980,6 +985,20 @@ Pass additional flags to the container runtime:
 ```bash
 export SANDBOX_FLAGS="--security-opt label=disable"
 ```
+
+> **`SANDBOX_FLAGS` must come from you, not from a repository.** A project
+> `.env` file cannot set `SANDBOX_FLAGS` or any other sandbox launcher control
+> (`SANDBOX_ENV`, the mount variables, the engine, image, network, resource and
+> storage-root variables). Checking out a repository would otherwise hand it
+> control of the host container command — it could re-mount host paths or
+> forward your API keys into the container. Export the variable in your shell,
+> put it in a sandbox profile, or set it in your user-global env file
+> (`<config dir>/.env` or `~/.env`) instead.
+>
+> If a project `.env` names one of these variables, that control is dropped
+> entirely for the session, including a value you exported yourself. The
+> repository cannot choose the value, only cause the control to be unset; use a
+> sandbox profile, which is applied afterwards and is unaffected.
 
 `SANDBOX_FLAGS` are applied **after** the default hardening flags
 (`--cap-drop=ALL` and `--security-opt no-new-privileges`) and survive into the

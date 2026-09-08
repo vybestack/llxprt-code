@@ -161,30 +161,19 @@ describe('Runtime Provider Switching Integration', () => {
     expect(getActiveModelParams()).toStrictEqual({});
   });
 
-  it('does not clear server tools provider state when switching active provider', async () => {
+  it('clears gemini provider settings when switching active provider', async () => {
     const geminiProvider = createMockProvider('gemini');
-    geminiProvider.getServerTools = () => ['web-search'];
     const otherProvider = createMockProvider('other');
 
     providerManager.registerProvider(geminiProvider as never);
     providerManager.registerProvider(otherProvider);
 
-    providerManager.setServerToolsProvider(geminiProvider);
     providerManager.setActiveProvider('gemini');
-    // Align server tools provider with wrapped instance used internally
-    providerManager.setServerToolsProvider(
-      providerManager.getActiveProvider() ?? null,
-    );
     config
       .getSettingsService()
       .setProviderSetting('gemini', 'base-url', 'https://gemini.server-tools');
 
     await switchActiveProvider('other');
-    expect(
-      config.getSettingsService().getProviderSettings('gemini')['base-url'],
-    ).toBe('https://gemini.server-tools');
-
-    await switchActiveProvider('gemini');
     expect(
       config.getSettingsService().getProviderSettings('gemini')['base-url'],
     ).toBeUndefined();
@@ -331,7 +320,6 @@ describe('First provider selection from no active provider (#2481)', () => {
   it('stays closed (no active provider) before any selection', () => {
     expect(providerManager.hasActiveProvider()).toBe(false);
     expect(providerManager.getActiveProviderName()).toBeUndefined();
-    expect(providerManager.getServerToolsProvider()).toBeNull();
   });
 
   it('transitions from no active provider to an explicit selection', async () => {
@@ -398,12 +386,6 @@ function createMockProvider(name: string): IProvider & {
         speaker: 'ai' as const,
         blocks: [{ type: 'text' as const, text: 'test response' }],
       };
-    },
-    getServerTools() {
-      return [];
-    },
-    async invokeServerTool() {
-      return {};
     },
     clearState() {
       provider.apiKey = undefined;

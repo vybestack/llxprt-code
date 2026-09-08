@@ -299,68 +299,77 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
   });
 
   it('ModifyWithEditor outcome runs the editor flow and executes with editor-modified args', async () => {
-    modifyWithEditorMock.mockResolvedValue({
-      updatedParams: { newContent: 'editor-edited-content' },
-      updatedDiff: 'edited-diff',
-    });
-
-    const tool = new MockModifiableTool('editor_tool');
-    tool.executeFn.mockResolvedValue({
-      llmContent: 'edited-ok',
-      returnDisplay: 'edited-ok',
-    });
-
-    const toolRegistry = createToolRegistryForTest([tool]);
-    const messageBus = new MessageBus(createAskPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAskPolicyEngine(),
-      interactive: true,
-      approvalMode: ApprovalMode.DEFAULT,
-    });
-
-    let confirmationCount = 0;
-    const approvalHandler: ApprovalHandler = async () => {
-      confirmationCount += 1;
-      if (confirmationCount === 1) {
-        return { outcome: ToolConfirmationOutcome.ModifyWithEditor };
-      }
-      return { outcome: ToolConfirmationOutcome.ProceedOnce };
-    };
-
-    const { client } = createScriptedAgentClient([
-      [toolCallRequestEvent('editor_tool', 'call-editor'), finishedEvent()],
-      [contentEvent('done'), finishedEvent()],
-    ]);
-
-    const loop = new AgenticLoop({
-      agentClient: client,
-      config,
-      messageBus,
-      approvalHandler,
-      interactiveMode: true,
-      displayCallbacks: {
-        getPreferredEditor: () => 'vscode',
-        onEditorOpen: () => {},
-        onEditorClose: () => {},
-      },
-    });
-
-    const events = await collectEvents(
-      loop,
-      'go',
-      new AbortController().signal,
-    );
-
+    const { tool, executedArgs, completedEvents } =
+      await observeModifyWithEditorOutcomeRunsTheEditorFlowAndExecutesWithEditorModifiedArgs();
     expect(modifyWithEditorMock).toHaveBeenCalledTimes(1);
     expect(tool.executeFn).toHaveBeenCalledTimes(1);
-    const executedArgs = tool.executeFn.mock.calls[0][0];
     expect(executedArgs).toStrictEqual({ newContent: 'editor-edited-content' });
-    const completedEvents = events.filter(isToolsComplete);
     expect(completedEvents).toHaveLength(1);
     expect(completedEvents[0].completed[0].status).toBe('success');
   });
+
+  const observeModifyWithEditorOutcomeRunsTheEditorFlowAndExecutesWithEditorModifiedArgs =
+    async () => {
+      modifyWithEditorMock.mockResolvedValue({
+        updatedParams: { newContent: 'editor-edited-content' },
+        updatedDiff: 'edited-diff',
+      });
+
+      const tool = new MockModifiableTool('editor_tool');
+      tool.executeFn.mockResolvedValue({
+        llmContent: 'edited-ok',
+        returnDisplay: 'edited-ok',
+      });
+
+      const toolRegistry = createToolRegistryForTest([tool]);
+      const messageBus = new MessageBus(createAskPolicyEngine(), false);
+      const config = createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAskPolicyEngine(),
+        interactive: true,
+        approvalMode: ApprovalMode.DEFAULT,
+      });
+
+      let confirmationCount = 0;
+      const approvalHandler: ApprovalHandler = async () => {
+        confirmationCount += 1;
+        if (confirmationCount === 1) {
+          return { outcome: ToolConfirmationOutcome.ModifyWithEditor };
+        }
+        return { outcome: ToolConfirmationOutcome.ProceedOnce };
+      };
+
+      const { client } = createScriptedAgentClient([
+        [toolCallRequestEvent('editor_tool', 'call-editor'), finishedEvent()],
+        [contentEvent('done'), finishedEvent()],
+      ]);
+
+      const loop = new AgenticLoop({
+        agentClient: client,
+        config,
+        messageBus,
+        approvalHandler,
+        interactiveMode: true,
+        displayCallbacks: {
+          getPreferredEditor: () => 'vscode',
+          onEditorOpen: () => {},
+          onEditorClose: () => {},
+        },
+      });
+
+      const events = await collectEvents(
+        loop,
+        'go',
+        new AbortController().signal,
+      );
+
+      const executedArgs = tool.executeFn.mock.calls[0][0];
+
+      const completedEvents = events.filter(isToolsComplete);
+
+      return { tool, executedArgs, completedEvents };
+    };
 
   it('a rejecting approval handler denies the tool and the loop completes (no hang)', async () => {
     const tool = new MockTool({ name: 'record_tool' });

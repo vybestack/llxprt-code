@@ -44,7 +44,6 @@ describe('BaseLLMClient', () => {
       generateContentStream: vi.fn(),
       countTokens: vi.fn(),
       embedContent: vi.fn(),
-      userTier: undefined,
     };
 
     baseLlmClient = new BaseLLMClient(mockContentGenerator);

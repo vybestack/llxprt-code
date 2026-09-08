@@ -16,8 +16,8 @@ import { guardUnconfiguredProvider } from './unconfiguredProviderGuard.js';
 
 /**
  * Gate-only validation for non-interactive mode. Delegates to the
- * unconfigured-provider guard, applies compression settings, and wires the
- * serverToolsProvider. Does NOT perform authentication.
+ * unconfigured-provider guard and applies compression settings. Does NOT perform
+ * authentication.
  *
  * When no provider is configured, this delegates to
  * {@link guardUnconfiguredProvider} which reports the error, runs cleanup
@@ -47,8 +47,6 @@ export async function validateNonInteractiveAuth(
   // so this is a second line of defense for any caller that bypasses main.
   await guardUnconfiguredProvider(nonInteractiveConfig, runCleanup);
 
-  const providerManager = nonInteractiveConfig.getProviderManager();
-
   // Apply compression settings after the provider gate
   if (settings) {
     const merged = settings.merged as Record<string, unknown>;
@@ -65,19 +63,6 @@ export async function validateNonInteractiveAuth(
     }
     if (contextLimit !== undefined) {
       nonInteractiveConfig.setEphemeralSetting('context-limit', contextLimit);
-    }
-  }
-
-  // Ensure serverToolsProvider has config set if it's not the active provider
-  if (providerManager !== undefined) {
-    const serverToolsProvider = providerManager.getServerToolsProvider();
-    if (
-      serverToolsProvider != null &&
-      serverToolsProvider.name === 'gemini' &&
-      'setConfig' in serverToolsProvider &&
-      typeof serverToolsProvider.setConfig === 'function'
-    ) {
-      serverToolsProvider.setConfig(nonInteractiveConfig);
     }
   }
 

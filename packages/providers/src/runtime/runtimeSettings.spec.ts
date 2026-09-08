@@ -28,10 +28,7 @@ describe('PROFILE_EPHEMERAL_KEYS - Timeout Settings (Issue #1049)', () => {
     ];
 
     for (const key of timeoutKeys) {
-      expect(
-        PROFILE_EPHEMERAL_KEYS,
-        `${key} should be in PROFILE_EPHEMERAL_KEYS`,
-      ).toContain(key);
+      expect(PROFILE_EPHEMERAL_KEYS).toContain(key);
     }
   });
 });

@@ -22,6 +22,26 @@ import { describe, it, expect } from 'bun:test';
 import { buildResponsesRequest } from './buildResponsesRequest.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
+type FunctionCallItem = { type: string; call_id: string };
+
+function isFunctionCallItem(item: unknown): item is FunctionCallItem {
+  return (
+    typeof item === 'object' &&
+    item !== null &&
+    'type' in item &&
+    item.type === 'function_call'
+  );
+}
+
+function isFunctionCallOutputItem(item: unknown): item is FunctionCallItem {
+  return (
+    typeof item === 'object' &&
+    item !== null &&
+    'type' in item &&
+    item.type === 'function_call_output'
+  );
+}
+
 describe('buildResponsesRequest - Tool ID Normalization', () => {
   it('should normalize hist_tool IDs in function_call items', () => {
     const messages: IContent[] = [
@@ -62,20 +82,12 @@ describe('buildResponsesRequest - Tool ID Normalization', () => {
     });
 
     const functionCalls = (result.input as unknown[]).filter(
-      (item) =>
-        typeof item === 'object' &&
-        item !== null &&
-        'type' in item &&
-        (item as { type: string }).type === 'function_call',
-    ) as Array<{ type: string; call_id: string }>;
+      isFunctionCallItem,
+    );
 
     const functionCallOutputs = (result.input as unknown[]).filter(
-      (item) =>
-        typeof item === 'object' &&
-        item !== null &&
-        'type' in item &&
-        (item as { type: string }).type === 'function_call_output',
-    ) as Array<{ type: string; call_id: string }>;
+      isFunctionCallOutputItem,
+    );
 
     expect(functionCalls.length).toBe(1);
     expect(functionCalls[0].call_id).toBe('call_abc123def456');
@@ -117,20 +129,12 @@ describe('buildResponsesRequest - Tool ID Normalization', () => {
     });
 
     const functionCalls = (result.input as unknown[]).filter(
-      (item) =>
-        typeof item === 'object' &&
-        item !== null &&
-        'type' in item &&
-        (item as { type: string }).type === 'function_call',
-    ) as Array<{ type: string; call_id: string }>;
+      isFunctionCallItem,
+    );
 
     const functionCallOutputs = (result.input as unknown[]).filter(
-      (item) =>
-        typeof item === 'object' &&
-        item !== null &&
-        'type' in item &&
-        (item as { type: string }).type === 'function_call_output',
-    ) as Array<{ type: string; call_id: string }>;
+      isFunctionCallOutputItem,
+    );
 
     expect(functionCalls[0].call_id).toBe('call_unknown_xyz789');
     expect(functionCallOutputs[0].call_id).toBe('call_unknown_xyz789');
@@ -168,20 +172,12 @@ describe('buildResponsesRequest - Tool ID Normalization', () => {
     });
 
     const functionCalls = (result.input as unknown[]).filter(
-      (item) =>
-        typeof item === 'object' &&
-        item !== null &&
-        'type' in item &&
-        (item as { type: string }).type === 'function_call',
-    ) as Array<{ type: string; call_id: string }>;
+      isFunctionCallItem,
+    );
 
     const functionCallOutputs = (result.input as unknown[]).filter(
-      (item) =>
-        typeof item === 'object' &&
-        item !== null &&
-        'type' in item &&
-        (item as { type: string }).type === 'function_call_output',
-    ) as Array<{ type: string; call_id: string }>;
+      isFunctionCallOutputItem,
+    );
 
     expect(functionCalls[0].call_id).toBe('call_existing123');
     expect(functionCallOutputs[0].call_id).toBe('call_existing123');
@@ -232,20 +228,12 @@ describe('buildResponsesRequest - Tool ID Normalization', () => {
     });
 
     const functionCalls = (result.input as unknown[]).filter(
-      (item) =>
-        typeof item === 'object' &&
-        item !== null &&
-        'type' in item &&
-        (item as { type: string }).type === 'function_call',
-    ) as Array<{ type: string; call_id: string }>;
+      isFunctionCallItem,
+    );
 
     const functionCallOutputs = (result.input as unknown[]).filter(
-      (item) =>
-        typeof item === 'object' &&
-        item !== null &&
-        'type' in item &&
-        (item as { type: string }).type === 'function_call_output',
-    ) as Array<{ type: string; call_id: string }>;
+      isFunctionCallOutputItem,
+    );
 
     expect(functionCalls[0].call_id).toBe('call_cancelledXYZ789');
     expect(functionCallOutputs[0].call_id).toBe('call_cancelledXYZ789');

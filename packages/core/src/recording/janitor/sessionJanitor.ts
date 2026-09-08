@@ -47,9 +47,13 @@ import { resolveRetentionConfig } from './retentionPolicy.js';
 import { runReclamation } from './reclamationEngine.js';
 import { SessionLockManager } from '../SessionLockManager.js';
 import { debugLogger } from '../../utils/debugLogger.js';
+import { reclaimSessionMedia } from './mediaReclamation.js';
 
 /** Age threshold for recognizing stale temporary archive artifacts. */
 const STALE_TEMP_ARCHIVE_AGE_MS = 60 * 1000;
+const PORTABLE_REPLAY_TEMP_GRAMMAR =
+  /^session-.+\.jsonl\.[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.portable\.tmp$/;
+const STALE_PORTABLE_REPLAY_AGE_MS = 60 * 1000;
 
 // ---------------------------------------------------------------------------
 // Narrow fault seam for testing platform-only rmdir failures (Item 4)
@@ -189,6 +193,16 @@ async function performSweep(
     currentSessionId,
   );
 
+  let mediaCleanupErrors = 0;
+  try {
+    mediaCleanupErrors = await reclaimSessionMedia(
+      globalTempDir,
+      params.activeHistory,
+    );
+  } catch (error: unknown) {
+    mediaCleanupErrors = 1;
+    debugLogger.error('[SessionJanitor] Media reclamation failed', error);
+  }
   const cleanupErrors = await cleanupTempAndEmptyDirs(chatsDirs);
 
   return buildFinalResult(
@@ -201,7 +215,7 @@ async function performSweep(
     metrics.archiveDeleted,
     staleLocksRemoved,
     metrics.skipped,
-    metrics.failed + cleanupErrors + scanErrorCount,
+    metrics.failed + mediaCleanupErrors + cleanupErrors + scanErrorCount,
     metrics.ageCountShortfall,
     bytesBefore,
   );
@@ -227,6 +241,44 @@ async function runStaleLockCleanup(
 // Temp/empty-dir cleanup + result assembly
 // ---------------------------------------------------------------------------
 
+async function cleanupStalePortableReplayFiles(
+  chatsDir: string,
+): Promise<number> {
+  let files: string[];
+  try {
+    files = await fs.readdir(chatsDir);
+  } catch (error) {
+    return hasErrorCode(error, 'ENOENT') ? 0 : 1;
+  }
+  let errors = 0;
+  const staleBefore = Date.now() - STALE_PORTABLE_REPLAY_AGE_MS;
+  for (const file of files) {
+    if (!PORTABLE_REPLAY_TEMP_GRAMMAR.test(file)) continue;
+    const filePath = path.join(chatsDir, file);
+    try {
+      const metadata = await fs.lstat(filePath);
+      if (
+        !metadata.isSymbolicLink() &&
+        metadata.isFile() &&
+        metadata.mtimeMs < staleBefore
+      ) {
+        await fs.unlink(filePath);
+      }
+    } catch (error) {
+      if (!hasErrorCode(error, 'ENOENT')) errors += 1;
+    }
+  }
+  return errors;
+}
+
+function hasErrorCode(error: unknown, code: string): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    Reflect.get(error, 'code') === code
+  );
+}
+
 /** Clean stale temp archives and remove genuinely empty directories (AC-10).
  *  Returns the count of non-benign per-directory failures. */
 async function cleanupTempAndEmptyDirs(
@@ -234,6 +286,7 @@ async function cleanupTempAndEmptyDirs(
 ): Promise<number> {
   let errors = 0;
   for (const chatsDir of chatsDirs) {
+    errors += await cleanupStalePortableReplayFiles(chatsDir);
     const archiveDir = path.join(chatsDir, ARCHIVE_DIR_NAME);
     try {
       await cleanupStaleTempArchives(archiveDir, STALE_TEMP_ARCHIVE_AGE_MS);

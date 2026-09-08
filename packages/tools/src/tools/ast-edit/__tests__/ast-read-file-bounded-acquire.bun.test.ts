@@ -48,6 +48,14 @@ import {
 } from './ast-read-file-bounded-helpers.js';
 import type { ConnectedFile } from '../types.js';
 // ---------------------------------------------------------------------------
+function targetExclusionPath(root: string, target: string): string {
+  const targetName = target.split(pathSep).pop() ?? 'target.ts';
+  return join(
+    root,
+    hasCaseInsensitiveFilenames(root) ? targetName.toUpperCase() : targetName,
+  );
+}
+
 // REQ-3232-1: repository relationship analysis is gone from the read path.
 // ---------------------------------------------------------------------------
 
@@ -230,32 +238,20 @@ describe('REQ-3232-2: bounded working-set Git discovery', () => {
   }, 120_000); // Same 3000-file long-path fixture: seeding dominates the runtime.
 
   it('excludes the read target under case-insensitive path semantics', async () => {
-    if (!hasCaseInsensitiveFilenames(ctx.tempDir)) {
-      return;
-    }
-    // Git reports the tracked name with its literal case while the caller
-    // may hold an equivalently-spelled path with different casing. On a
-    // case-insensitive filesystem those are the same file and must exclude.
-    // The target is tracked and modified so the diff genuinely lists it.
     seedAndModify(ctx.tempDir, simpleModifiedEntries(1, 'ci'));
     const target = writeTrackedModifiedTarget(ctx.tempDir);
-    const cased = join(
-      ctx.tempDir,
-      target.split(pathSep).pop()?.toUpperCase() ?? 'TARGET.TS',
-    );
     const discovery: WorkingSetDiscoveryResult =
       await new RepositoryContextProvider().discoverWorkingSetFiles(
         ctx.tempDir,
         {
           maxCandidates: DISCOVERY_CANDIDATE_CAP,
-          excludePath: cased,
+          excludePath: targetExclusionPath(ctx.tempDir, target),
         },
       );
     expect(discovery.outcome).toBe('complete');
     expect(
       discovery.candidates.some((candidate) => candidate.endsWith('target.ts')),
     ).toBe(false);
-    // Exclusion removed only the target: the other candidate is retained.
     expect(
       discovery.candidates.some((candidate) => candidate.endsWith('ci000.ts')),
     ).toBe(true);
@@ -296,22 +292,27 @@ describe('REQ-3232-2: bounded working-set Git discovery', () => {
     expect(discovery.candidates[0]).toBe(join(ctx.tempDir, 'dd000.ts'));
   });
 
+  const observeHandlesPathsWithSpacesAndNewlinesViaNULDelimitedGitOutputAt299 =
+    async () => {
+      const weird =
+        process.platform === 'win32'
+          ? 'weird name with space.ts'
+          : 'weird\nname with space.ts';
+      seedAndModify(ctx.tempDir, [
+        {
+          name: weird,
+          seed: declarationsBody(1, 'ws_'),
+          modified: declarationsBody(2, 'wm_'),
+        },
+      ]);
+      const target = writeTarget(ctx.tempDir);
+      const acquisition = await acquireWorkingSet(target, ctx.tempDir);
+      return { weird, acquisition };
+    };
+
   it('handles paths with spaces and newlines via NUL-delimited Git output', async () => {
-    // Windows filenames cannot contain a newline, so the literal-newline half
-    // of this coverage is POSIX-only; the space-path half must run everywhere.
-    const weird =
-      process.platform === 'win32'
-        ? 'weird name with space.ts'
-        : 'weird\nname with space.ts';
-    seedAndModify(ctx.tempDir, [
-      {
-        name: weird,
-        seed: declarationsBody(1, 'ws_'),
-        modified: declarationsBody(2, 'wm_'),
-      },
-    ]);
-    const target = writeTarget(ctx.tempDir);
-    const acquisition = await acquireWorkingSet(target, ctx.tempDir);
+    const { weird, acquisition } =
+      await observeHandlesPathsWithSpacesAndNewlinesViaNULDelimitedGitOutputAt299();
     expect(
       acquisition.files.some(
         (f: ConnectedFile) => f.filePath === join(ctx.tempDir, weird),
@@ -319,28 +320,32 @@ describe('REQ-3232-2: bounded working-set Git discovery', () => {
     ).toBe(true);
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'keeps NUL-delimited discovery correct for a literal newline filename',
-    async () => {
-      // Only POSIX filesystems permit a newline inside a filename; the point
-      // of this fixture is that newline-delimited parsing would split the
-      // name in two while NUL-delimited parsing keeps it whole.
-      const withNewline = 'split\nname.ts';
-      seedAndModify(ctx.tempDir, [
-        {
-          name: withNewline,
-          seed: declarationsBody(1, 'nl_'),
-          modified: declarationsBody(2, 'nm_'),
-        },
-      ]);
-      const target = writeTarget(ctx.tempDir);
-      const discovery: WorkingSetDiscoveryResult =
-        await new RepositoryContextProvider().discoverWorkingSetFiles(
-          ctx.tempDir,
-          { maxCandidates: DISCOVERY_CANDIDATE_CAP, excludePath: target },
-        );
-      expect(discovery.outcome).toBe('complete');
-      expect(discovery.candidates).toEqual([join(ctx.tempDir, withNewline)]);
+  describe.skipIf(process.platform === 'win32')(
+    'POSIX literal-newline filenames',
+    () => {
+      it('keeps NUL-delimited discovery correct for a literal newline filename', async () => {
+        // Only POSIX filesystems permit a newline inside a filename; the point
+        // of this fixture is that newline-delimited parsing would split the
+        // name in two while NUL-delimited parsing keeps it whole.
+        const withNewline = 'split\nname.ts';
+        seedAndModify(ctx.tempDir, [
+          {
+            name: withNewline,
+            seed: declarationsBody(1, 'nl_'),
+            modified: declarationsBody(2, 'nm_'),
+          },
+        ]);
+        const target = writeTarget(ctx.tempDir);
+        const discovery: WorkingSetDiscoveryResult =
+          await new RepositoryContextProvider().discoverWorkingSetFiles(
+            ctx.tempDir,
+            { maxCandidates: DISCOVERY_CANDIDATE_CAP, excludePath: target },
+          );
+        expect(discovery.outcome).toBe('complete');
+        expect(discovery.candidates).toStrictEqual([
+          join(ctx.tempDir, withNewline),
+        ]);
+      });
     },
   );
 
@@ -562,7 +567,7 @@ describe('REQ-3232-2: bounded working-set file-count policy', () => {
     const expected = Array.from({ length: 9 }, (_, i) =>
       join(ctx.tempDir, `mc${String(i).padStart(3, '0')}.ts`),
     );
-    expect(retainedNames).toEqual(expected);
+    expect(retainedNames).toStrictEqual(expected);
   });
 });
 
@@ -922,7 +927,7 @@ describe('REQ-3232-2: bounded working-set retained-declaration policy', () => {
     expect(acquisition.status.partialReason).toBe('declarations');
     expect(acquisition.status.retainedDeclarations).toBe(0);
     expect(acquisition.status.retainedFiles).toBe(0);
-    expect(observing.boundedLengths).toEqual([
+    expect(observing.boundedLengths).toStrictEqual([
       MAX_WORKING_SET_DECLARATIONS + 1,
     ]);
     const result = await runRead(createFakeToolHost(ctx.tempDir), target);

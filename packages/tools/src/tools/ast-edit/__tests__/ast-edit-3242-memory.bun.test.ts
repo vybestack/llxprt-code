@@ -37,6 +37,10 @@ import {
   generateIssue3242Workspace,
 } from './ast-edit-3242-fixtures.js';
 
+function textOrEmpty(value: string | null | undefined): string {
+  return value ?? '';
+}
+
 const PEAK_RSS_CEILING_BYTES = 768 * 1024 * 1024; // 768 MiB
 /** Post-result tail growth must stay below this margin. */
 const POST_RESULT_TAIL_CEILING_BYTES = 64 * 1024 * 1024; // 64 MiB
@@ -116,6 +120,35 @@ function describeChildFailure(child: SpawnSyncReturns<string>): string {
   return `memory child failed (${details.join('; ')})`;
 }
 
+function requireSuccessfulChild(child: SpawnSyncReturns<string>): void {
+  if (child.status !== 0) {
+    throw new Error(describeChildFailure(child));
+  }
+}
+
+function resolveGitExecutable(): string {
+  const resolved = spawnSync('sh', ['-c', 'command -v git'], {
+    encoding: 'utf-8',
+  });
+  const realGit = resolved.stdout.trim();
+  if (resolved.status !== 0 || realGit === '') {
+    throw new Error(
+      `could not resolve real git for the shim (status=${String(resolved.status)})`,
+    );
+  }
+  return realGit;
+}
+
+function readGitInvocations(logPath: string, workspace: string): string[] {
+  if (!existsSync(logPath)) {
+    return [];
+  }
+  return readFileSync(logPath, 'utf-8')
+    .split('\n')
+    .filter((line) => line.length > 0)
+    .map((line) => stripGitDirPrefix(line, workspace));
+}
+
 /**
  * Drop the leading `-C <workspace>` argv pair from a logged Git invocation
  * so the subcommand itself is comparable. The literal known prefix is
@@ -143,9 +176,7 @@ describe('REQ-3242-4: ast_edit preview/apply memory regression', () => {
       );
       // Report the full spawn outcome before asserting so a failed child is
       // diagnosable from the test log rather than a bare "expected 0".
-      if (child.status !== 0) {
-        throw new Error(describeChildFailure(child));
-      }
+      requireSuccessfulChild(child);
       // The child must emit both markers, proving every tool result and the
       // quiet window ran.
       expect(child.stdout).toContain('AST_EDIT_TOOL_RESULT');
@@ -191,73 +222,58 @@ describe('REQ-3242-4: ast_edit preview/apply memory regression', () => {
 describe('REQ-3242-1: ast_edit preview repository wiring canary', () => {
   // Windows resolves `git` through a .cmd shim that Node cannot spawn without
   // a shell, so the PATH interception technique is POSIX-only there.
-  it.skipIf(process.platform === 'win32')(
-    'spawns no Git commands at all during real preview and apply',
+
+  describe.skipIf(process.platform === 'win32')(
+    'POSIX Git invocation interception',
     () => {
-      const { spyRoot, workspace } = generateIssue3242CanaryWorkspace();
-      const shimDir = mkdtempSync(join(tmpdir(), 'llxprt-3242-shim-'));
-      try {
-        const resolved = spawnSync('sh', ['-c', 'command -v git'], {
-          encoding: 'utf-8',
-        });
-        const realGit = resolved.stdout.trim();
-        if (resolved.status !== 0 || realGit === '') {
-          throw new Error(
-            `could not resolve real git for the shim (status=${String(
-              resolved.status,
-            )})`,
+      it('spawns no Git commands at all during real preview and apply', () => {
+        const { spyRoot, workspace } = generateIssue3242CanaryWorkspace();
+        const shimDir = mkdtempSync(join(tmpdir(), 'llxprt-3242-shim-'));
+        try {
+          const realGit = resolveGitExecutable();
+          const logPath = join(shimDir, 'git-invocations.log');
+          writeFileSync(
+            join(shimDir, 'git'),
+            [
+              '#!/bin/sh',
+              `printf '%s\\n' "$*" >> ${JSON.stringify(logPath)}`,
+              `exec ${JSON.stringify(realGit)} "$@"`,
+              '',
+            ].join('\n'),
+            { mode: 0o755 },
           );
-        }
-        const logPath = join(shimDir, 'git-invocations.log');
-        writeFileSync(
-          join(shimDir, 'git'),
-          [
-            '#!/bin/sh',
-            `printf '%s\\n' "$*" >> ${JSON.stringify(logPath)}`,
-            `exec ${JSON.stringify(realGit)} "$@"`,
-            '',
-          ].join('\n'),
-          { mode: 0o755 },
-        );
 
-        const child = spawnSync(
-          process.execPath,
-          [CHILD_SCRIPT_PATH, workspace],
-          {
-            encoding: 'utf-8',
-            stdio: 'pipe',
-            timeout: CHILD_TIMEOUT_MS,
-            maxBuffer: 16 * 1024 * 1024,
-            env: {
-              ...process.env,
-              PATH: `${shimDir}:${process.env.PATH ?? ''}`,
+          const child = spawnSync(
+            process.execPath,
+            [CHILD_SCRIPT_PATH, workspace],
+            {
+              encoding: 'utf-8',
+              stdio: 'pipe',
+              timeout: CHILD_TIMEOUT_MS,
+              maxBuffer: 16 * 1024 * 1024,
+              env: {
+                ...process.env,
+                PATH: `${shimDir}:${textOrEmpty(process.env.PATH)}`,
+              },
             },
-          },
-        );
-        if (child.status !== 0) {
-          throw new Error(describeChildFailure(child));
-        }
-        // The child exercised the full preview-then-apply success path where
-        // the old wiring would have spawned the repository phase.
-        const report = parseReport(child.stdout);
-        expect(report.ok).toBe(true);
+          );
+          requireSuccessfulChild(child);
+          // The child exercised the full preview-then-apply success path where
+          // the old wiring would have spawned the repository phase.
+          const report = parseReport(child.stdout);
+          expect(report.ok).toBe(true);
 
-        const invocations = existsSync(logPath)
-          ? readFileSync(logPath, 'utf-8')
-              .split('\n')
-              .filter((line) => line.length > 0)
-              .map((line) => stripGitDirPrefix(line, workspace))
-          : [];
-        // Zero Git invocations of any kind: preview opts out of repository
-        // relationship collection AND working-set discovery, and apply never
-        // collects enhanced context, so any logged argv — repository
-        // subcommand or working-set listing alike — is a wiring regression.
-        expect(invocations).toEqual([]);
-      } finally {
-        rmSync(spyRoot, { recursive: true, force: true });
-        rmSync(shimDir, { recursive: true, force: true });
-      }
+          const invocations = readGitInvocations(logPath, workspace);
+          // Zero Git invocations of any kind: preview opts out of repository
+          // relationship collection AND working-set discovery, and apply never
+          // collects enhanced context, so any logged argv — repository
+          // subcommand or working-set listing alike — is a wiring regression.
+          expect(invocations).toStrictEqual([]);
+        } finally {
+          rmSync(spyRoot, { recursive: true, force: true });
+          rmSync(shimDir, { recursive: true, force: true });
+        }
+      }, 240_000);
     },
-    240_000,
   );
 });

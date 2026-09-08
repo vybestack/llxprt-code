@@ -326,7 +326,11 @@ describe('useShellCommandProcessor', () => {
       vi.useRealTimers();
     });
 
-    it('should throttle pending UI updates for text streams', async () => {
+    const observeThrottledTextStream = async (): Promise<{
+      readonly callsAfterInit: number;
+      readonly firstDisplay: unknown;
+      readonly finalState: HistoryItemWithoutId | null;
+    }> => {
       const { result } = renderProcessorHook();
       await act(async () => {
         result.current.handleShellCommand(
@@ -339,7 +343,6 @@ describe('useShellCommandProcessor', () => {
 
       // After handleShellCommand starts: initial tool display + ptyId update
       const callsAfterInit = setPendingHistoryItemMock.mock.calls.length;
-      expect(callsAfterInit).toBeGreaterThanOrEqual(1);
 
       // Simulate first output with time advancement
       await act(async () => {
@@ -353,12 +356,10 @@ describe('useShellCommandProcessor', () => {
       });
 
       // With -Infinity initialization, first output triggers immediately
-      // Verify the first output was captured in state
-      expect(
-        pendingHistoryItemState &&
-          pendingHistoryItemState.type === 'tool_group' &&
-          pendingHistoryItemState.tools[0].resultDisplay,
-      ).toBe('hello');
+      const firstDisplay =
+        pendingHistoryItemState?.type === 'tool_group'
+          ? pendingHistoryItemState.tools[0].resultDisplay
+          : undefined;
 
       // Advance time past throttle window and send second output
       await act(async () => {
@@ -371,15 +372,28 @@ describe('useShellCommandProcessor', () => {
         });
       });
 
-      // Verify second output was cumulative
-      expect(pendingHistoryItemState).toStrictEqual(
+      return {
+        callsAfterInit,
+        firstDisplay,
+        finalState: pendingHistoryItemState,
+      };
+    };
+
+    it('should throttle pending UI updates for text streams', async () => {
+      const stream = await observeThrottledTextStream();
+      expect(stream.callsAfterInit).toBeGreaterThanOrEqual(1);
+      expect(stream.firstDisplay).toBe('hello');
+      expect(stream.finalState).toStrictEqual(
         expect.objectContaining({
           tools: [expect.objectContaining({ resultDisplay: 'hello world' })],
         }),
       );
     });
 
-    it('bounds direct-shell live output while preserving its head and tail', async () => {
+    const observeBoundedDirectShellOutput = async (): Promise<{
+      readonly display: unknown;
+      readonly truncationMarkers: RegExpMatchArray | null;
+    }> => {
       mockConfig.getShellExecutionConfig = () => ({
         showColor: false,
         scrollback: 600000,
@@ -411,18 +425,28 @@ describe('useShellCommandProcessor', () => {
         pendingHistoryItemState?.type === 'tool_group'
           ? pendingHistoryItemState.tools[0].resultDisplay
           : undefined;
-      expect(typeof display).toBe('string');
-      expect(display).toStartWith('H'.repeat(512));
-      expect(
-        typeof display === 'string'
-          ? display.match(/LLXPRT output truncated/g)
-          : [],
-      ).toHaveLength(1);
-      expect(display).toContain('576 bytes omitted');
-      expect(display).toEndWith('T'.repeat(512));
+      return {
+        display,
+        truncationMarkers:
+          typeof display === 'string'
+            ? display.match(/LLXPRT output truncated/g)
+            : null,
+      };
+    };
+
+    it('bounds direct-shell live output while preserving its head and tail', async () => {
+      const output = await observeBoundedDirectShellOutput();
+      expect(typeof output.display).toBe('string');
+      expect(output.display).toStartWith('H'.repeat(512));
+      expect(output.truncationMarkers).toHaveLength(1);
+      expect(output.display).toContain('576 bytes omitted');
+      expect(output.display).toEndWith('T'.repeat(512));
     });
 
-    it('caps live display below a larger shell retention budget', async () => {
+    const observeLargeRetentionLiveDisplay = async (): Promise<{
+      readonly display: unknown;
+      readonly shellExecution: ReturnType<typeof vi.fn>;
+    }> => {
       mockConfig.getShellExecutionConfig = () => ({
         showColor: false,
         scrollback: 600000,
@@ -454,9 +478,17 @@ describe('useShellCommandProcessor', () => {
         pendingHistoryItemState?.type === 'tool_group'
           ? pendingHistoryItemState.tools[0].resultDisplay
           : undefined;
-      expect(typeof display).toBe('string');
-      expect(display).toStartWith('H'.repeat(256 * 1024));
-      expect(mockShellExecutionService).toHaveBeenCalledWith(
+      return {
+        display,
+        shellExecution: mockShellExecutionService,
+      };
+    };
+
+    it('caps live display below a larger shell retention budget', async () => {
+      const output = await observeLargeRetentionLiveDisplay();
+      expect(typeof output.display).toBe('string');
+      expect(output.display).toStartWith('H'.repeat(256 * 1024));
+      expect(output.shellExecution).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(String),
         expect.any(Function),
@@ -464,8 +496,8 @@ describe('useShellCommandProcessor', () => {
         false,
         expect.objectContaining({ outputRetentionMaxBytes: 4 * 1024 * 1024 }),
       );
-      expect(display).toContain('75,712 bytes omitted');
-      expect(display).toEndWith('T'.repeat(256 * 1024));
+      expect(output.display).toContain('75,712 bytes omitted');
+      expect(output.display).toEndWith('T'.repeat(256 * 1024));
     });
 
     it('should show binary progress messages correctly', async () => {

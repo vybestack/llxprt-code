@@ -77,10 +77,12 @@ function createFakeAgentClient(): AgentClientContract {
     },
     getHistoryService: () => null,
     storeHistoryServiceForReuse: vi.fn(),
-    storeHistoryForLaterUse(storedHistory: ContractContent[]): void {
+    async storeHistoryForLaterUse(
+      storedHistory: ContractContent[],
+    ): Promise<void> {
       history.push(...storedHistory);
     },
-    dispose: vi.fn(),
+    dispose: vi.fn(async () => {}),
     setTools: vi.fn(async () => {}),
     clearTools: vi.fn(),
     updateSystemInstruction: vi.fn(async () => {}),
@@ -110,7 +112,6 @@ function createFakeAgentClient(): AgentClientContract {
     generateContent: vi.fn(async () => ({}) as ContractGenerateContentResponse),
     generateEmbedding: vi.fn(async () => []),
     sendMessageStream: vi.fn(() => emptyServerStream()),
-    getUserTier: vi.fn(() => undefined),
     getCurrentSequenceModel: vi.fn(() => null),
   };
 }
@@ -271,17 +272,34 @@ describe('P01 construction inversion contracts', () => {
         isRegistered: true,
       }),
     );
-    expect(taskRecord?.args).toStrictEqual([
-      'config-arg',
-      expect.objectContaining({ messageBus }),
-    ]);
+    expect(taskRecord?.args[0]).toBe('config-arg');
+    const recordedTaskArgs = taskRecord?.args[1];
+    if (
+      typeof recordedTaskArgs !== 'object' ||
+      recordedTaskArgs === null ||
+      !('messageBus' in recordedTaskArgs)
+    ) {
+      throw new Error(
+        'Expected registry TaskTool arguments with a MessageBus.',
+      );
+    }
+    expect(recordedTaskArgs.messageBus).toBe(messageBus);
+
     expect(registeredTools).toContainEqual(expect.any(RegisteredTaskTool));
     const registeredTaskTool = registeredTools.find(
       (tool): tool is RegisteredTaskTool => tool instanceof RegisteredTaskTool,
     );
-    expect(registeredTaskTool?.createdWith[1]).toStrictEqual(
-      expect.objectContaining({ messageBus }),
-    );
+    const createdTaskArgs = registeredTaskTool?.createdWith[1];
+    if (
+      typeof createdTaskArgs !== 'object' ||
+      createdTaskArgs === null ||
+      !('messageBus' in createdTaskArgs)
+    ) {
+      throw new Error(
+        'Expected constructed TaskTool arguments with a MessageBus.',
+      );
+    }
+    expect(createdTaskArgs.messageBus).toBe(messageBus);
   });
 
   it('records disabled TaskTool diagnostic when registration is missing', async () => {

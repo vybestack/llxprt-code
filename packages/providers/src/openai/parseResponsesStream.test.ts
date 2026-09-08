@@ -21,13 +21,15 @@ function createSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
   });
 }
 
-async function captureStreamError(chunks: string[]): Promise<unknown> {
+async function captureStreamError(
+  stream: ReadableStream<Uint8Array>,
+): Promise<Error | undefined> {
   try {
-    for await (const message of parseResponsesStream(createSSEStream(chunks))) {
-      void message;
+    for await (const _message of parseResponsesStream(stream)) {
+      void _message;
     }
   } catch (error) {
-    return error;
+    if (error instanceof Error) return error;
   }
   return undefined;
 }
@@ -357,14 +359,7 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
     ];
 
     const stream = createSSEStream(chunks);
-    let caught: Error | undefined;
-    try {
-      for await (const _message of parseResponsesStream(stream)) {
-        void _message;
-      }
-    } catch (error) {
-      if (error instanceof Error) caught = error;
-    }
+    const caught = await captureStreamError(stream);
 
     expect(caught).toBeInstanceOf(Error);
     expect(caught?.message).toBe('server overloaded');
@@ -413,14 +408,7 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
     ];
 
     const stream = createSSEStream(chunks);
-    let caught: Error | undefined;
-    try {
-      for await (const _message of parseResponsesStream(stream)) {
-        void _message;
-      }
-    } catch (error) {
-      if (error instanceof Error) caught = error;
-    }
+    const caught = await captureStreamError(stream);
 
     expect(caught).toBeInstanceOf(Error);
     expect(caught?.message).toBe('top message');
@@ -465,18 +453,20 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
       code: 'context_length_exceeded',
       param: 'input',
     };
-    const error = await captureStreamError([
-      `data: ${JSON.stringify({
-        type: 'response.failed',
-        response: {
-          id: 'resp_context',
-          object: 'response',
-          model: 'gpt-5',
-          status: 'failed',
-          error: providerError,
-        },
-      })}\n\n`,
-    ]);
+    const error = await captureStreamError(
+      createSSEStream([
+        `data: ${JSON.stringify({
+          type: 'response.failed',
+          response: {
+            id: 'resp_context',
+            object: 'response',
+            model: 'gpt-5',
+            status: 'failed',
+            error: providerError,
+          },
+        })}\n\n`,
+      ]),
+    );
 
     expect(error).toBeInstanceOf(Error);
     expect(error).toMatchObject({
@@ -499,18 +489,20 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
       code: 'invalid_prompt',
       param: 'input',
     };
-    const error = await captureStreamError([
-      `data: ${JSON.stringify({
-        type: 'response.completed',
-        response: {
-          id: 'resp_invalid',
-          object: 'response',
-          model: 'gpt-5',
-          status: 'failed',
-          error: providerError,
-        },
-      })}\n\n`,
-    ]);
+    const error = await captureStreamError(
+      createSSEStream([
+        `data: ${JSON.stringify({
+          type: 'response.completed',
+          response: {
+            id: 'resp_invalid',
+            object: 'response',
+            model: 'gpt-5',
+            status: 'failed',
+            error: providerError,
+          },
+        })}\n\n`,
+      ]),
+    );
 
     expect(error).toBeInstanceOf(Error);
     expect(error).toMatchObject({
@@ -527,15 +519,17 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
   });
 
   it('preserves documented top-level input error fields as non-retryable client input', async () => {
-    const error = await captureStreamError([
-      `data: ${JSON.stringify({
-        type: 'error',
-        code: 'invalid_prompt',
-        message: 'The input field is invalid.',
-        param: 'input',
-        sequence_number: 3,
-      })}\n\n`,
-    ]);
+    const error = await captureStreamError(
+      createSSEStream([
+        `data: ${JSON.stringify({
+          type: 'error',
+          code: 'invalid_prompt',
+          message: 'The input field is invalid.',
+          param: 'input',
+          sequence_number: 3,
+        })}\n\n`,
+      ]),
+    );
 
     expect(error).toBeInstanceOf(Error);
     expect(error).toHaveProperty('message', 'The input field is invalid.');

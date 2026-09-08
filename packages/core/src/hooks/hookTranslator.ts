@@ -5,8 +5,10 @@
  */
 
 import { z } from 'zod';
-import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { getResponseText } from '../utils/partUtils.js';
+
+// Interim literal; hook-v2 (subissue B of #2614) deletes this fallback with the versioned wire.
+const HOOK_FALLBACK_MODEL = 'gemini-2.5-flash';
 
 /**
  * Structural shapes matching the portions of the @google/genai SDK types used
@@ -335,8 +337,8 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
     return {
       model:
         sdkRequest.model === ''
-          ? DEFAULT_GEMINI_FLASH_MODEL
-          : (sdkRequest.model ?? DEFAULT_GEMINI_FLASH_MODEL),
+          ? HOOK_FALLBACK_MODEL
+          : (sdkRequest.model ?? HOOK_FALLBACK_MODEL),
       messages,
       config: {
         temperature: config?.temperature,
@@ -420,7 +422,7 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
       typeof hookRequest.model === 'string' ? hookRequest.model : undefined;
     const result: HookGenerateContentParameters = {
       ...baseRequest,
-      model: hookModel ?? baseRequest?.model ?? DEFAULT_GEMINI_FLASH_MODEL,
+      model: hookModel ?? baseRequest?.model ?? HOOK_FALLBACK_MODEL,
       contents,
     };
 

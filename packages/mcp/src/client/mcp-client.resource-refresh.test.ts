@@ -10,12 +10,17 @@ import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import * as ClientLib from '@modelcontextprotocol/sdk/client/index.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
 import { ResourceListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
-import { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
-import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
+import type { Config } from './test-support/mcpClientTestSupport.js';
+import type { PromptRegistry } from './test-support/mcpClientTestSupport.js';
+import { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
+import { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import { registerMcpHostServices } from '../host/hostServices.js';
 import { McpClient } from './mcp-client.js';
+
+// Exercises the real host seam instead of mocking a module (#3305).
+const mockEmitFeedback = vi.fn();
+registerMcpHostServices({ emitFeedback: mockEmitFeedback });
 
 const realStdioModule = {
   ...(await import('@modelcontextprotocol/sdk/client/stdio.js')),
@@ -45,12 +50,6 @@ void vi.mock('../auth/oauth-token-storage.js', () =>
 );
 void vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
 void vi.mock('google-auth-library', () => ({ GoogleAuth: vi.fn() }));
-
-void vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
-  coreEvents: {
-    emitFeedback: vi.fn(),
-  },
-}));
 
 const RESOURCE_LIST_CHANGED_METHOD = 'notifications/resources/list_changed';
 

@@ -30,7 +30,11 @@ const googleGenAIState = {
   streamPlans: [] as Array<Array<Record<string, unknown>>>,
 };
 
-void vi.mock('@google/genai', () => {
+import type { CreateGeminiApiClient } from '../GeminiProvider.js';
+// Injected into GeminiProvider rather than module-mocked. `vi.mock` registers
+// process-wide and bun hoists it ahead of the whole run, so this stub used to
+// leak into every suite loaded alongside this one.
+const injectedClientFactory = (() => {
   class FakeGoogleGenAI {
     readonly models: {
       generateContentStream: ReturnType<typeof vi.fn>;
@@ -58,14 +62,23 @@ void vi.mock('@google/genai', () => {
     }
   }
 
-  const Type = { OBJECT: 'object' };
+  // Mirrors the real Gemini schema-type constant, which is uppercase.
+  const Type = { OBJECT: 'OBJECT' };
 
-  return { GoogleGenAI: FakeGoogleGenAI, Type };
-});
+  return {
+    createGeminiApiClient: async (opts: Record<string, unknown>) =>
+      new FakeGoogleGenAI(opts),
+    Type,
+  };
+})().createGeminiApiClient as unknown as CreateGeminiApiClient;
 
 const queueGoogleStream = (responses: Array<Record<string, unknown>>): void => {
   googleGenAIState.streamPlans.push(responses);
 };
+
+function firstGoogleStreamRequest(): Record<string, unknown> {
+  return googleGenAIState.streamCalls[0]?.request ?? {};
+}
 
 function buildCallOptions(
   provider: GeminiProvider,
@@ -80,6 +93,10 @@ function buildCallOptions(
 }
 
 class TestGeminiProvider extends GeminiProvider {
+  constructor() {
+    super(undefined, undefined, undefined, injectedClientFactory);
+  }
+
   setEphemeralSettings(settings: Record<string, unknown>): void {
     const currentConfig = (
       this as unknown as { providerConfig?: IProviderConfig }
@@ -330,7 +347,7 @@ describe('Gemini provider stateless contract tests', () => {
     authMock.restore();
   });
 
-  it('includes server tool declarations for Gemini streams @plan:PLAN-20251018-STATELESSPROVIDER2.P11 @requirement:REQ-SP2-001 @pseudocode anthropic-gemini-stateless.md lines 4-6', async () => {
+  it('includes function tool declarations for Gemini streams @plan:PLAN-20251018-STATELESSPROVIDER2.P11 @requirement:REQ-SP2-001 @pseudocode anthropic-gemini-stateless.md lines 4-6', async () => {
     queueGoogleStream([
       {
         candidates: [
@@ -392,7 +409,7 @@ describe('Gemini provider stateless contract tests', () => {
     authMock.restore();
 
     expect(googleGenAIState.streamCalls).toHaveLength(1);
-    const request = googleGenAIState.streamCalls[0]?.request ?? {};
+    const request = firstGoogleStreamRequest();
     const toolConfig = request.config as Record<string, unknown>;
     expect(toolConfig.tools).toStrictEqual(
       expect.arrayContaining([
@@ -410,20 +427,11 @@ describe('Gemini provider stateless contract tests', () => {
         expect.objectContaining({
           functionDeclarations: expect.arrayContaining([
             expect.objectContaining({
-              parameters: expect.objectContaining({ type: 'object' }),
+              parameters: expect.objectContaining({ type: 'OBJECT' }),
             }),
           ]),
         }),
       ]),
-    );
-
-    const toolChunks = googleGenAIState.streamCalls[0]?.request;
-    expect(toolChunks).toStrictEqual(
-      expect.objectContaining({
-        config: expect.objectContaining({
-          serverTools: expect.arrayContaining(['web_search', 'web_fetch']),
-        }),
-      }),
     );
   });
 
@@ -487,7 +495,6 @@ describe('Gemini provider stateless contract tests', () => {
     expect(lastRequest).toBeDefined();
     expect(lastRequest?.config).toMatchObject({
       temperature: 0.23,
-      serverTools: ['web_search', 'web_fetch'],
     });
     expect(getEphemerals).not.toHaveBeenCalled();
   });

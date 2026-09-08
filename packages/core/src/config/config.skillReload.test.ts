@@ -161,7 +161,7 @@ describe('reloadSkills refreshes the model-facing skill surface @issue:3379', ()
 
     await config.reloadSkills();
 
-    expect(observations).toEqual([{ skills: ['alpha', 'beta'] }]);
+    expect(observations).toStrictEqual([{ skills: ['alpha', 'beta'] }]);
   });
 
   it('rebuilds the activation tool even when no skills remain', async () => {
@@ -184,7 +184,7 @@ describe('reloadSkills refreshes the model-facing skill surface @issue:3379', ()
 
     await config.reloadSkills();
 
-    expect(observations).toEqual([{ skills: [] }]);
+    expect(observations).toStrictEqual([{ skills: [] }]);
   });
 
   it('does not rebuild the activation tool when skills support is off', async () => {
@@ -206,7 +206,7 @@ describe('reloadSkills refreshes the model-facing skill surface @issue:3379', ()
 
     await config.reloadSkills();
 
-    expect(observations).toEqual([]);
+    expect(observations).toStrictEqual([]);
   });
 
   it('hides a skill that the reload disabled', async () => {
@@ -239,13 +239,12 @@ describe('reloadSkills refreshes the model-facing skill surface @issue:3379', ()
     // Guard: the stand-in above depends on getAllSkills exposing the live
     // store. If that ever returns a copy, the manager stays empty and the
     // assertion below would pass for the wrong reason.
-    expect(skillManager.getAllSkills().map((skill) => skill.name)).toEqual([
-      'alpha',
-      'beta',
-    ]);
+    expect(
+      skillManager.getAllSkills().map((skill) => skill.name),
+    ).toStrictEqual(['alpha', 'beta']);
     // The disabled list arrives via onReload and is applied before the tool is
     // rebuilt, so the registrar must never see the disabled skill.
-    expect(observations).toEqual([{ skills: ['alpha'] }]);
+    expect(observations).toStrictEqual([{ skills: ['alpha'] }]);
   });
 
   /**
@@ -275,7 +274,7 @@ describe('reloadSkills refreshes the model-facing skill surface @issue:3379', ()
 
     await config.reloadSkills();
 
-    expect(sequence).toEqual(['registrar', 'setTools']);
+    expect(sequence).toStrictEqual(['registrar', 'setTools']);
   });
 
   it('completes without a chat session to refresh', async () => {

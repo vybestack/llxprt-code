@@ -314,8 +314,6 @@ async function createHarness(params: {
     name: 'gemini',
     getModels: async () => [],
     getDefaultModel: () => defaultModelConfig.model,
-    getServerTools: () => [],
-    invokeServerTool: vi.fn(),
     generateChatCompletion,
   };
   const providerAdapter: AgentRuntimeProviderAdapter = {

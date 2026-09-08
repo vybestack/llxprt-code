@@ -227,9 +227,6 @@ export class TemplateEngine {
     if (env.workingDirectory) {
       variables['WORKING_DIRECTORY'] = env.workingDirectory;
     }
-    if (env.folderStructure) {
-      variables['FOLDER_STRUCTURE'] = env.folderStructure;
-    }
 
     if (env.sandboxType) {
       variables['SANDBOX_TYPE'] = env.sandboxType;

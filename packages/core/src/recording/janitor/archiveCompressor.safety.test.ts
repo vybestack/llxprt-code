@@ -34,6 +34,8 @@ import {
   cleanupStaleTempArchives,
 } from './archiveCompressor.js';
 
+const bunIt = it;
+
 async function makeTempDir(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), 'archive-safety-'));
 }
@@ -58,9 +60,9 @@ describe('compressToArchive — symlink safety (Item 1)', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'rejects a symlinked archive directory',
-    async () => {
+  {
+    const it = process.platform === 'win32' ? bunIt.skip : bunIt;
+    it('rejects a symlinked archive directory', async () => {
       const chatsDir = path.join(tempDir, 'chats');
       const archiveDir = path.join(chatsDir, 'archive');
       await fs.mkdir(chatsDir, { recursive: true });
@@ -76,12 +78,12 @@ describe('compressToArchive — symlink safety (Item 1)', () => {
       const result = await compressToArchive(sourcePath, archiveDir);
       expect(result.success).toBe(false);
       expect(result.archivePath).toBeNull();
-    },
-  );
+    });
+  }
 
-  it.skipIf(process.platform === 'win32')(
-    'rejects a symlinked source file',
-    async () => {
+  {
+    const it = process.platform === 'win32' ? bunIt.skip : bunIt;
+    it('rejects a symlinked source file', async () => {
       const chatsDir = path.join(tempDir, 'chats');
       const archiveDir = path.join(chatsDir, 'archive');
       await fs.mkdir(chatsDir, { recursive: true });
@@ -94,12 +96,12 @@ describe('compressToArchive — symlink safety (Item 1)', () => {
 
       const result = await compressToArchive(sourcePath, archiveDir);
       expect(result.success).toBe(false);
-    },
-  );
+    });
+  }
 
-  it.skipIf(process.platform === 'win32')(
-    'rejects existing-archive reuse through a symlinked archive directory',
-    async () => {
+  {
+    const it = process.platform === 'win32' ? bunIt.skip : bunIt;
+    it('rejects existing-archive reuse through a symlinked archive directory', async () => {
       const realArchiveDir = path.join(tempDir, 'real-archive');
       await fs.mkdir(realArchiveDir, { recursive: true });
 
@@ -120,8 +122,8 @@ describe('compressToArchive — symlink safety (Item 1)', () => {
       // mutated through the symlink.
       const result2 = await compressToArchive(sourcePath, symlinkArchiveDir);
       expect(result2.success).toBe(false);
-    },
-  );
+    });
+  }
 });
 
 describe('cleanupStaleTempArchives — exact grammar (Item 8)', () => {
@@ -188,9 +190,9 @@ describe('cleanupStaleTempArchives — exact grammar (Item 8)', () => {
     expect(await fileExists(youngTemp)).toBe(true);
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'uses lstat — does not follow symlinked temp files',
-    async () => {
+  {
+    const it = process.platform === 'win32' ? bunIt.skip : bunIt;
+    it('uses lstat — does not follow symlinked temp files', async () => {
       // Create a target file outside the archive dir.
       const target = path.join(tempDir, 'target.txt');
       await fs.writeFile(target, 'target');
@@ -211,8 +213,8 @@ describe('cleanupStaleTempArchives — exact grammar (Item 8)', () => {
       // Symlink temp should NOT be removed (lstat rejects it).
       expect(removed).toBe(0);
       expect(await fileExists(target)).toBe(true);
-    },
-  );
+    });
+  }
 });
 
 describe('compressToArchive — fsync directory durability (Item 6)', () => {

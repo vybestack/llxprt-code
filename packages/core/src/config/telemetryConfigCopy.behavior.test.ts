@@ -36,7 +36,7 @@ describe('Config telemetry perf copy isolation', () => {
       });
       const got = config.getTelemetrySettings();
 
-      expect(got.perf).toEqual({ enabled: true, memory: true });
+      expect(got.perf).toStrictEqual({ enabled: true, memory: true });
       // The returned perf must not be the internal reference.
       expect(got.perf).not.toBe(
         (config as unknown as { telemetrySettings: { perf?: unknown } })
@@ -53,7 +53,7 @@ describe('Config telemetry perf copy isolation', () => {
       got.perf!.memory = false;
 
       const gotAgain = config.getTelemetrySettings();
-      expect(gotAgain.perf).toEqual({ enabled: true, memory: true });
+      expect(gotAgain.perf).toStrictEqual({ enabled: true, memory: true });
     });
 
     it('two consecutive gets return independent perf objects', () => {
@@ -98,7 +98,7 @@ describe('Config telemetry perf copy isolation', () => {
       // Mutating the caller object after update has no effect.
       callerPerf.enabled = false;
       callerPerf.memory = false;
-      expect(config.getTelemetrySettings().perf).toEqual({
+      expect(config.getTelemetrySettings().perf).toStrictEqual({
         enabled: true,
         memory: true,
       });
@@ -122,7 +122,7 @@ describe('Config telemetry perf copy isolation', () => {
       });
       config.updateTelemetrySettings({ logPrompts: false });
 
-      expect(config.getTelemetrySettings().perf).toEqual({
+      expect(config.getTelemetrySettings().perf).toStrictEqual({
         enabled: true,
         memory: true,
       });
@@ -135,7 +135,9 @@ describe('Config telemetry perf copy isolation', () => {
       // New perf omits memory: shallow replacement, not a merge.
       config.updateTelemetrySettings({ perf: { enabled: true } });
 
-      expect(config.getTelemetrySettings().perf).toEqual({ enabled: true });
+      expect(config.getTelemetrySettings().perf).toStrictEqual({
+        enabled: true,
+      });
     });
   });
 });

@@ -174,10 +174,7 @@ describe('settingsRuntimeAdapter', () => {
     ];
 
     for (const pattern of forbiddenPatterns) {
-      expect(
-        source.includes(pattern),
-        `providerRuntimeContext.ts must NOT contain "${pattern}"`,
-      ).toBe(false);
+      expect(source.includes(pattern)).toBe(false);
     }
   });
 });

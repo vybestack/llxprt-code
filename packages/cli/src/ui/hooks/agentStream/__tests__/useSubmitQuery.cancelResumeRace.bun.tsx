@@ -252,6 +252,22 @@ function observedRunStreamOrder(runStream: ReturnType<typeof vi.fn>): string[] {
   );
 }
 
+function turnPromiseAt(
+  deferreds: ReadonlyArray<{ readonly promise: Promise<void> }>,
+  index: number,
+): Promise<void> {
+  const deferred = deferreds.at(index);
+  if (!deferred) throw new Error(`Unexpected turn ${index + 1} started`);
+  return deferred.promise;
+}
+
+async function executeQueuedSubmission(
+  executor: SubmissionExecutor | null,
+): Promise<SubmissionDisposition> {
+  if (!executor) throw new Error('Expected the queue executor to be available');
+  return executor('retry-item', undefined, undefined, true);
+}
+
 function assertCancelledInfoAdded(addItem: ReturnType<typeof vi.fn>): void {
   const cancelItem = addItem.mock.calls.find(
     (call) =>
@@ -359,12 +375,9 @@ describe('useSubmitQuery — cancel-resume race (issue #3169)', () => {
     // Fail fast rather than silently resolving: an extra turn would mean the
     // queue drained more times than the four expected prompts.
     const runStream = vi.fn((..._args: unknown[]) => {
-      if (started >= deferreds.length) {
-        throw new Error(`Unexpected turn ${started + 1} started`);
-      }
-      const deferred = deferreds[started];
+      const promise = turnPromiseAt(deferreds, started);
       started += 1;
-      return deferred.promise;
+      return promise;
     });
     const handles = createTestHandles(runStream);
     const { result, rerender } = renderWithRealQueue(handles);
@@ -531,9 +544,7 @@ describe('useSubmitQuery — cancel-resume race (issue #3169)', () => {
     await act(async () => {
       const executor = handles.submitQueryRef.current;
       expect(executor).not.toBeNull();
-      if (executor) {
-        disposition = await executor('retry-item', undefined, undefined, true);
-      }
+      disposition = await executeQueuedSubmission(executor);
     });
 
     // A queue-originated attempt is requeued and must neither clear

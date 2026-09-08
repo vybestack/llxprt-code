@@ -6,7 +6,7 @@
 
 import { describe, it, expect, afterAll } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -59,6 +59,19 @@ function normalizeResult(result: {
   };
 }
 
+/**
+ * The validator appends its summary to GITHUB_STEP_SUMMARY whenever that variable is
+ * set. Under GitHub Actions the runner sets it, so an inherited environment would make
+ * every spawn here append to the real job summary, including the oversized-summary
+ * case below. Each spawn therefore starts from an environment with that variable
+ * removed, and the tests that exercise it set it back explicitly.
+ */
+function baseEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  delete env['GITHUB_STEP_SUMMARY'];
+  return env;
+}
+
 function runValidator(reportJson: string, status: number): RunResult {
   return runValidatorRawStatus(reportJson, String(status));
 }
@@ -77,6 +90,7 @@ function runValidatorRawStatus(
       encoding: 'utf8',
       timeout: 15_000,
       cwd: repoRoot,
+      env: baseEnv(),
     },
   );
   return normalizeResult(result);
@@ -92,10 +106,64 @@ function runValidatorMissingFile(status: number): RunResult {
       encoding: 'utf8',
       timeout: 15_000,
       cwd: repoRoot,
+      env: baseEnv(),
     },
   );
   return normalizeResult(result);
 }
+
+function runValidatorWithEnv(
+  reportJson: string,
+  status: number,
+  envOverrides: Record<string, string>,
+  removeKeys: readonly string[] = [],
+): RunResult {
+  const dir = makeTmpDir();
+  const reportPath = join(dir, 'report.json');
+  writeFileSync(reportPath, reportJson, 'utf8');
+  const env = baseEnv();
+  for (const key of removeKeys) {
+    delete env[key];
+  }
+  const result = spawnSync(
+    process.execPath,
+    [validatorScript, reportPath, String(status)],
+    {
+      encoding: 'utf8',
+      timeout: 15_000,
+      cwd: repoRoot,
+      env: { ...env, ...envOverrides },
+    },
+  );
+  return normalizeResult(result);
+}
+
+function runValidatorArgv(
+  args: readonly string[],
+  envOverrides: Record<string, string> = {},
+): RunResult {
+  const result = spawnSync(process.execPath, [validatorScript, ...args], {
+    encoding: 'utf8',
+    timeout: 15_000,
+    cwd: repoRoot,
+    env: { ...baseEnv(), ...envOverrides },
+  });
+  return normalizeResult(result);
+}
+
+/**
+ * The exact three finding strings the selected deterministic categories produce on the
+ * pinned acplint. The U+26A0 WARNING SIGN and U+2014 EM DASH characters are
+ * written escaped so the source stays ASCII and byte-equal to the report text.
+ */
+const ALLOWED_FINDINGS = [
+  '\u26A0 No agent_thought_chunk notifications received at all',
+  "\u26A0 No available_commands_update notifications received \u2014 agent doesn't advertise commands/hooks",
+  "\u26A0 No usage_update notifications received \u2014 agent doesn't report usage",
+];
+
+const AGENT_INFO_FINDING =
+  '\u26A0 No agentInfo in initialize response \u2014 agents should identify themselves';
 
 interface ResultRow {
   name: string;
@@ -229,7 +297,7 @@ function partialSelectedRows(): ResultRow[] {
 function fullPassReport(): string {
   return JSON.stringify({
     conformance_level: 'Full Conformance',
-    agent_info: {},
+    agent_info: { name: 'llxprt-code', version: '0.0.0-test' },
     findings: [],
     results: allSelectedRows(),
     summary: buildSummary(),
@@ -239,7 +307,7 @@ function fullPassReport(): string {
 function partialReport(): string {
   return JSON.stringify({
     conformance_level: 'Partial Conformance',
-    agent_info: {},
+    agent_info: { name: 'llxprt-code', version: '0.0.0-test' },
     findings: [],
     results: partialSelectedRows(),
     summary: buildPartialSummary(),
@@ -520,5 +588,277 @@ describe('acplint report validator (issue #2564)', () => {
     const result = runValidatorMissingFile(0);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('failed to read report file');
+  });
+});
+
+describe('acplint findings gate and summary (issue #3095)', () => {
+  it('accepts a report whose findings are exactly the three allowlisted strings', () => {
+    const report = JSON.parse(fullPassReport());
+    report.findings = [...ALLOWED_FINDINGS];
+    const result = runValidator(JSON.stringify(report), 0);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('acplint report validated successfully');
+  });
+
+  it('accepts a report with an empty findings array', () => {
+    const result = runValidator(fullPassReport(), 0);
+    expect(result.status).toBe(0);
+  });
+
+  it('accepts a report with a strict subset of the allowlist', () => {
+    const report = JSON.parse(fullPassReport());
+    report.findings = [ALLOWED_FINDINGS[0], ALLOWED_FINDINGS[2]];
+    const result = runValidator(JSON.stringify(report), 0);
+    expect(result.status).toBe(0);
+  });
+
+  it('rejects a report containing the agentInfo finding and names it', () => {
+    const report = JSON.parse(fullPassReport());
+    report.findings = [AGENT_INFO_FINDING];
+    const result = runValidator(JSON.stringify(report), 0);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('unexpected acplint finding');
+    expect(result.stderr).toContain('No agentInfo in initialize response');
+  });
+
+  it('rejects a report containing an arbitrary unknown finding', () => {
+    const report = JSON.parse(fullPassReport());
+    report.findings = [ALLOWED_FINDINGS[0], 'unknown finding text'];
+    const result = runValidator(JSON.stringify(report), 0);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('unknown finding text');
+  });
+
+  it('rejects agent_info {}', () => {
+    const report = JSON.parse(fullPassReport());
+    report.agent_info = {};
+    const result = runValidator(JSON.stringify(report), 0);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'agent_info.name must be a non-empty string',
+    );
+  });
+
+  it('still emits the full summary when the agent never identified itself', () => {
+    const report = JSON.parse(fullPassReport());
+    report.agent_info = {};
+    report.findings = [ALLOWED_FINDINGS[0]];
+    const result = runValidator(JSON.stringify(report), 0);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('Agent identification: not reported');
+    expect(result.stdout).toContain('[known]');
+    expect(result.stdout).toContain('schema_validation | 4 | 0 | 0 | 0');
+    expect(result.stdout).not.toContain('unavailable');
+  });
+
+  it('rejects agent_info with an empty-string name', () => {
+    const report = JSON.parse(fullPassReport());
+    report.agent_info = { name: '', version: '0.0.0-test' };
+    const result = runValidator(JSON.stringify(report), 0);
+    expect(result.status).toBe(1);
+  });
+
+  it('rejects agent_info with an empty-string version', () => {
+    const report = JSON.parse(fullPassReport());
+    report.agent_info = { name: 'llxprt-code', version: '' };
+    const result = runValidator(JSON.stringify(report), 0);
+    expect(result.status).toBe(1);
+  });
+
+  it('rejects agent_info whose name is a non-string', () => {
+    const report = JSON.parse(fullPassReport());
+    report.agent_info = { name: 42, version: '0.0.0-test' };
+    const result = runValidator(JSON.stringify(report), 0);
+    expect(result.status).toBe(1);
+  });
+
+  it('rejects agent_info whose version is a non-string', () => {
+    const report = JSON.parse(fullPassReport());
+    report.agent_info = { name: 'llxprt-code', version: 42 };
+    const result = runValidator(JSON.stringify(report), 0);
+    expect(result.status).toBe(1);
+  });
+
+  it('accepts agent_info carrying extra unknown keys alongside name and version', () => {
+    const report = JSON.parse(fullPassReport());
+    report.agent_info = {
+      name: 'llxprt-code',
+      version: '0.0.0-test',
+      custom_field: { nested: true },
+    };
+    const result = runValidator(JSON.stringify(report), 0);
+    expect(result.status).toBe(0);
+  });
+
+  it('emits a summary to stdout on success', () => {
+    const result = runValidator(fullPassReport(), 0);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('## ACP conformance report');
+  });
+
+  it('emits a summary to stdout when the report file is unreadable', () => {
+    const result = runValidatorMissingFile(0);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('## ACP conformance report');
+    expect(result.stdout).toContain('unavailable');
+    expect(result.stdout).toContain('failed to read report file');
+  });
+
+  it('emits a summary to stdout on malformed JSON', () => {
+    const result = runValidator('{ not valid json', 0);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('## ACP conformance report');
+    expect(result.stdout).toContain('unavailable');
+  });
+
+  it('emits a summary to stdout on a rejected report', () => {
+    const result = runValidator(fullPassReport(), 1);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('## ACP conformance report');
+  });
+
+  it('summary includes the raw status, conformance level, agent info, counts, findings, and result messages', () => {
+    const report = JSON.parse(fullPassReport());
+    report.findings = [ALLOWED_FINDINGS[0], 'some unexpected finding'];
+    const row = report.results.find(
+      (r: ResultRow) => r.name === 'delete_session',
+    );
+    row.message = 'some result message text';
+    const result = runValidator(JSON.stringify(report), 0);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('Raw acplint status: `0`');
+    expect(result.stdout).toContain('Full Conformance');
+    expect(result.stdout).toContain('name=`llxprt-code` version=`0.0.0-test`');
+    expect(result.stdout).toContain('[known]');
+    expect(result.stdout).toContain('[UNEXPECTED]');
+    expect(result.stdout).toContain('some result message text');
+    expect(result.stdout).toContain('schema_validation | 4 | 0 | 0 | 0');
+  });
+
+  it('appends the same summary to GITHUB_STEP_SUMMARY preserving existing content', () => {
+    const dir = makeTmpDir();
+    const summaryPath = join(dir, 'step-summary.md');
+    const preexisting = 'preexisting summary line\n';
+    writeFileSync(summaryPath, preexisting, 'utf8');
+    const result = runValidatorWithEnv(fullPassReport(), 0, {
+      GITHUB_STEP_SUMMARY: summaryPath,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('acplint report validated successfully');
+    const summaryMarkdown = result.stdout
+      .slice(0, result.stdout.indexOf('acplint report validated successfully'))
+      .replace(/\n$/, '');
+    const content = readFileSync(summaryPath, 'utf8');
+    expect(content).toBe(`${preexisting}${summaryMarkdown}\n`);
+  });
+
+  it('emits the unavailable summary to GITHUB_STEP_SUMMARY on an unreadable report', () => {
+    const dir = makeTmpDir();
+    const summaryPath = join(dir, 'step-summary.md');
+    writeFileSync(summaryPath, 'preexisting\n', 'utf8');
+    const missingPath = join(dir, 'missing.json');
+    const result = spawnSync(
+      process.execPath,
+      [validatorScript, missingPath, '0'],
+      {
+        encoding: 'utf8',
+        timeout: 15_000,
+        cwd: repoRoot,
+        env: { ...baseEnv(), GITHUB_STEP_SUMMARY: summaryPath },
+      },
+    );
+    expect(result.status).toBe(1);
+    const content = readFileSync(summaryPath, 'utf8');
+    expect(content).toContain('preexisting');
+    expect(content).toContain('unavailable');
+  });
+
+  it('writes nothing to a summary file and still succeeds when GITHUB_STEP_SUMMARY is empty', () => {
+    const result = runValidatorWithEnv(fullPassReport(), 0, {
+      GITHUB_STEP_SUMMARY: '',
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('acplint report validated successfully');
+  });
+
+  it('succeeds when GITHUB_STEP_SUMMARY is unset', () => {
+    const result = runValidatorWithEnv(fullPassReport(), 0, {}, [
+      'GITHUB_STEP_SUMMARY',
+    ]);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('acplint report validated successfully');
+  });
+
+  it('emits an unavailable summary naming the invalid invocation on wrong argument count', () => {
+    const result = runValidatorArgv([]);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('## ACP conformance report');
+    expect(result.stdout).toContain('unavailable');
+    expect(result.stdout).toContain('invalid invocation');
+  });
+
+  it('emits an unavailable summary naming the invalid status on a non-numeric status', () => {
+    const result = runValidatorArgv(['whatever.json', 'abc']);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('## ACP conformance report');
+    expect(result.stdout).toContain('unavailable');
+    expect(result.stdout).toContain('invalid status');
+    expect(result.stdout).toContain('abc');
+  });
+
+  it('reaches GITHUB_STEP_SUMMARY on the wrong-argument-count rejection', () => {
+    const dir = makeTmpDir();
+    const summaryPath = join(dir, 'step-summary.md');
+    writeFileSync(summaryPath, 'preexisting\n', 'utf8');
+    const result = runValidatorArgv([], {
+      GITHUB_STEP_SUMMARY: summaryPath,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('invalid invocation');
+    const content = readFileSync(summaryPath, 'utf8');
+    expect(content).toContain('## ACP conformance report');
+    expect(content).toContain('invalid invocation');
+  });
+
+  it('reaches GITHUB_STEP_SUMMARY on the non-numeric-status rejection', () => {
+    const dir = makeTmpDir();
+    const summaryPath = join(dir, 'step-summary.md');
+    writeFileSync(summaryPath, 'preexisting\n', 'utf8');
+    const result = runValidatorArgv(['whatever.json', 'zz'], {
+      GITHUB_STEP_SUMMARY: summaryPath,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('invalid status');
+    const content = readFileSync(summaryPath, 'utf8');
+    expect(content).toContain('## ACP conformance report');
+    expect(content).toContain('invalid status');
+  });
+
+  it('does not truncate a summary larger than the 64 KB pipe buffer', () => {
+    const bigMessage = 'x'.repeat(2 * 1024 * 1024);
+    const report = JSON.parse(fullPassReport());
+    report.findings = [ALLOWED_FINDINGS[0], 'some unexpected finding'];
+    const row = report.results.find(
+      (r: ResultRow) => r.name === 'delete_session',
+    );
+    row.message = bigMessage;
+    const dir = makeTmpDir();
+    const reportPath = join(dir, 'report.json');
+    writeFileSync(reportPath, JSON.stringify(report), 'utf8');
+    const result = spawnSync(
+      process.execPath,
+      [validatorScript, reportPath, '0'],
+      {
+        encoding: 'utf8',
+        timeout: 15_000,
+        cwd: repoRoot,
+        maxBuffer: 16 * 1024 * 1024,
+        env: baseEnv(),
+      },
+    );
+    expect(result.status).toBe(1);
+    const lastSummaryLine =
+      '- `session_lifecycle/delete_session`: ' + bigMessage;
+    expect(result.stdout.includes(lastSummaryLine)).toBe(true);
   });
 });

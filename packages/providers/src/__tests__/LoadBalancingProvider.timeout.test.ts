@@ -22,6 +22,42 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { IProvider } from '../IProvider.js';
 import { LoadBalancerFailoverError } from '../errors.js';
 
+function extractObjectPartText(content: IContent): string {
+  const part = content.parts?.[0];
+  return part != null && typeof part === 'object' && 'text' in part
+    ? part.text
+    : '';
+}
+
+function extractPartText(content: IContent): string {
+  const part = content.parts?.[0];
+  return part != null && 'text' in part ? part.text : '';
+}
+
+async function waitForAbortSignal(
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const onAbort = () => reject(new Error('provider observed abort'));
+    signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted === true) onAbort();
+  });
+}
+
+function selectTransportFailure(
+  callCount: number,
+  primaryError: Error,
+  secondaryError: Error,
+): Error {
+  return callCount === 0 ? primaryError : secondaryError;
+}
+
+function asLoadBalancerFailure(
+  thrown: unknown,
+): LoadBalancerFailoverError | undefined {
+  return thrown instanceof LoadBalancerFailoverError ? thrown : undefined;
+}
+
 describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
   let settingsService: SettingsService;
   let runtimeConfig: Config;
@@ -82,7 +118,6 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
           yield { role: 'assistant', parts: [{ text: 'chunk1' }] } as IContent;
           yield { role: 'assistant', parts: [{ text: 'chunk2' }] } as IContent;
         },
-        getServerTools: () => [],
       };
       providerManager.registerProvider(mockProvider);
 
@@ -130,14 +165,12 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
             parts: [{ text: 'too late' }],
           } as IContent;
         },
-        getServerTools: () => [],
       };
       const mockProvider2 = {
         name: 'test-provider-2',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
           yield { role: 'assistant', parts: [{ text: 'success' }] } as IContent;
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider1);
@@ -164,12 +197,7 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
           category: 'network',
         },
       ]);
-      const text = chunks[0].parts?.[0];
-      expect(
-        text != null && typeof text === 'object' && 'text' in text
-          ? text.text
-          : '',
-      ).toBe('success');
+      expect(extractObjectPartText(chunks[0])).toBe('success');
     });
 
     it('should succeed if first chunk received before timeout', async () => {
@@ -193,7 +221,6 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
           yield { role: 'assistant', parts: [{ text: 'chunk1' }] } as IContent;
           yield { role: 'assistant', parts: [{ text: 'chunk2' }] } as IContent;
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider);
@@ -238,7 +265,6 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
           yield { role: 'assistant', parts: [{ text: 'chunk3' }] } as IContent;
           chunkOrder.push('yielded:chunk3');
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider);
@@ -249,8 +275,7 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       });
 
       for await (const chunk of gen) {
-        const text = chunk.parts?.[0];
-        const textValue = text != null && 'text' in text ? text.text : '';
+        const textValue = extractPartText(chunk);
         receivedChunks.push(textValue);
         chunkOrder.push(`received:${textValue}`);
       }
@@ -288,7 +313,6 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
             parts: [{ text: 'too late' }],
           } as IContent;
         },
-        getServerTools: () => [],
       };
       const mockProvider2 = {
         name: 'test-provider-2',
@@ -299,7 +323,6 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
             parts: [{ text: 'from backend2' }],
           } as IContent;
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider1);
@@ -317,10 +340,7 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       expect(backend1Called).toBe(true);
       expect(backend2Called).toBe(true);
       expect(chunks).toHaveLength(1);
-      const text = chunks[0].parts?.[0];
-      expect(text != null && 'text' in text ? text.text : '').toBe(
-        'from backend2',
-      );
+      expect(extractPartText(chunks[0])).toBe('from backend2');
     });
   });
 
@@ -348,14 +368,12 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
             parts: [{ text: 'too late' }],
           } as IContent;
         },
-        getServerTools: () => [],
       };
       const mockProvider2 = {
         name: 'test-provider-2',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
           yield { role: 'assistant', parts: [{ text: 'success' }] } as IContent;
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider1);
@@ -386,17 +404,11 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       async *generateChatCompletion(options): AsyncGenerator<IContent> {
         calls++;
         const signal = options.invocation?.signal;
-        await new Promise<void>((resolve, reject) => {
-          const onAbort = () => reject(new Error('provider observed abort'));
-          signal?.addEventListener('abort', onAbort, { once: true });
-          if (signal?.aborted === true) onAbort();
-        });
+        await waitForAbortSignal(signal);
         yield { speaker: 'ai', blocks: [] };
       },
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
-      getServerTools: () => [],
-      invokeServerTool: async () => null,
     };
     providerManager.registerProvider(stalledProvider);
     const lb = new LoadBalancingProvider(
@@ -446,8 +458,6 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       },
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
-      getServerTools: () => [],
-      invokeServerTool: async () => null,
     });
 
     const chunks: IContent[] = [];
@@ -478,8 +488,6 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       },
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
-      getServerTools: () => [],
-      invokeServerTool: async () => null,
     };
     providerManager.registerProvider(throwingProvider);
     const lb = new LoadBalancingProvider(
@@ -522,15 +530,17 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
     const throwingProvider: IProvider = {
       name: 'test-provider-1',
       async *generateChatCompletion(): AsyncGenerator<IContent> {
-        const failure = calls === 0 ? primaryError : secondaryError;
+        const failure = selectTransportFailure(
+          calls,
+          primaryError,
+          secondaryError,
+        );
         calls++;
         yield* noContent;
         throw failure;
       },
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
-      getServerTools: () => [],
-      invokeServerTool: async () => null,
     };
     providerManager.registerProvider(throwingProvider);
     providerManager.registerProvider({
@@ -558,8 +568,7 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       thrown = error;
     }
     expect(thrown).toBeInstanceOf(LoadBalancerFailoverError);
-    const loadBalancerFailure =
-      thrown instanceof LoadBalancerFailoverError ? thrown : undefined;
+    const loadBalancerFailure = asLoadBalancerFailure(thrown);
     expect(
       loadBalancerFailure?.failures.map((failure) => failure.error),
     ).toStrictEqual(failures);
@@ -600,7 +609,6 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
           await new Promise((resolve) => setTimeout(resolve, 250));
           yield { role: 'assistant', parts: [{ text: 'chunk3' }] } as IContent;
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider);

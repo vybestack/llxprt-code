@@ -130,6 +130,7 @@ async function buildHarness(): Promise<Harness> {
         historyService,
         () => Promise.resolve({ provider: {} as never, runtime: {} as never }),
         undefined,
+        undefined,
         logger,
         { targetTokenCount },
       ),

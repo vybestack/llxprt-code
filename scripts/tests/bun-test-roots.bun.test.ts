@@ -100,6 +100,7 @@ describe('BUN_TEST_ROOTS structural guarantees', () => {
       'vscode-ide-companion',
       'policy',
       'lsp',
+      'zed-acp',
       'scripts-tests',
       'evals',
       'integration-tests',

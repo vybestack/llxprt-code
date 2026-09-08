@@ -261,6 +261,7 @@ function buildMainControlsProps(
     currentModelLabel: uiState.currentModelLabel,
     contextLimit: uiState.contextLimit,
     branchName: uiState.branchName,
+    branchIsDirty: uiState.branchIsDirty,
     debugMessage: uiState.debugMessage,
     errorCount: uiState.errorCount,
     historyTokenCount: uiState.historyTokenCount,

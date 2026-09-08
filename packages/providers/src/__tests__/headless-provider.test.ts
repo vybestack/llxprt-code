@@ -55,6 +55,7 @@ import { createHeadlessProviderManager } from '../composition/headlessFactory.js
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IModel } from '../IModel.js';
+import { createOpenAIRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
 
 describe('headless provider-manager construction (issue #1594)', () => {
   let mockFileSystem: MockFileSystem;
@@ -171,14 +172,6 @@ describe('headless provider-manager construction (issue #1594)', () => {
       async getAuthToken(): Promise<string> {
         return 'inline-fake-token';
       }
-
-      getServerTools(): string[] {
-        return [];
-      }
-
-      async invokeServerTool(): Promise<unknown> {
-        throw new Error('InlineFakeProvider does not support server tools');
-      }
     }
 
     const { manager } = createHeadlessProviderManager({ provider: 'openai' });
@@ -253,6 +246,7 @@ describe('headless provider-manager construction (issue #1594)', () => {
         'getClient',
       )
       .mockResolvedValue({
+        ...createOpenAIRawPostTestAdapter(mockChatCreate),
         chat: { completions: { create: mockChatCreate } },
       } as unknown as OpenAI);
 

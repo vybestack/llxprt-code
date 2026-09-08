@@ -437,14 +437,15 @@ function* readOCodeSequence(): Generator<
 > {
   let ch = yield;
   let modifier = 0;
-  let sequence = '';
+  // sequence is the bytes consumed after the leading ESC, so it must include
+  // the O and any digit prefix for key.sequence to round-trip the input.
+  let sequence = 'O';
   if (ch >= '0' && ch <= '9') {
     modifier = parseInt(ch, 10) - 1;
+    sequence += ch;
     ch = yield;
-    sequence = String(ch);
-  } else {
-    sequence = String(ch);
   }
+  sequence += ch;
   return { code: 'O' + ch, modifier, sequence };
 }
 

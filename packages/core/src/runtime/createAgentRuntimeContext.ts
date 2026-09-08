@@ -13,6 +13,7 @@
  */
 
 import { HistoryService } from '../services/history/HistoryService.js';
+import { HistoryMediaOwnership } from '../storage/history-media-ownership.js';
 import type {
   AgentRuntimeContext,
   AgentRuntimeContextFactoryOptions,
@@ -25,7 +26,10 @@ import {
   resolveProviderReportedLimit,
 } from '../core/tokenLimits.js';
 /** @plan PLAN-20260211-COMPRESSION.P12 */
-import { getSettingSpec } from '@vybestack/llxprt-code-settings';
+import {
+  getSettingSpec,
+  validateSetting,
+} from '@vybestack/llxprt-code-settings';
 
 const EPHEMERAL_DEFAULTS = {
   compressionThreshold: 0.85,
@@ -123,6 +127,30 @@ function resolveProviderContextLimit(
   }
 }
 
+function resolveSemanticMediaPurgeSetting(
+  getLiveSetting: ReturnType<typeof createGetLiveSetting>,
+  options: AgentRuntimeContextFactoryOptions,
+): 'off' | 'remove' | 'summary' {
+  const value = getLiveSetting<unknown>(
+    'media.semantic-purge',
+    options.settings['media.semantic-purge'],
+  );
+  const validation = validateSetting('media.semantic-purge', value ?? 'off');
+  if (!validation.success) {
+    throw new Error(
+      "Invalid media.semantic-purge setting: expected 'off', 'remove', or 'summary'",
+    );
+  }
+  if (
+    validation.value === 'off' ||
+    validation.value === 'remove' ||
+    validation.value === 'summary'
+  ) {
+    return validation.value;
+  }
+  throw new Error('Semantic media purge validator returned an invalid value');
+}
+
 /**
  * Build compression-related ephemeral accessors.
  */
@@ -188,6 +216,8 @@ function buildCompressionEphemerals(
       );
       return typeof value === 'boolean' ? value : false;
     },
+    semanticMediaPurge: (): 'off' | 'remove' | 'summary' =>
+      resolveSemanticMediaPurgeSetting(getLiveSetting, options),
   };
 }
 
@@ -328,6 +358,9 @@ export function createAgentRuntimeContext(
   validateRequiredOptions(options);
 
   const history = options.history ?? new HistoryService();
+  if (options.mediaStore !== undefined) {
+    history.registerMediaOwner(new HistoryMediaOwnership(options.mediaStore));
+  }
 
   const getLiveSetting = createGetLiveSetting(options);
 
@@ -351,6 +384,15 @@ export function createAgentRuntimeContext(
     provider: options.provider,
     tools: options.tools,
     providerRuntime,
+    ...(options.mediaStore === undefined
+      ? {}
+      : { mediaStore: options.mediaStore }),
+    ...(options.mediaAdmission === undefined
+      ? {}
+      : { mediaAdmission: options.mediaAdmission }),
+    ...(options.mediaResolver === undefined
+      ? {}
+      : { mediaResolver: options.mediaResolver }),
   };
 
   return Object.freeze(context);

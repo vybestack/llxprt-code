@@ -46,111 +46,143 @@ describe('AgenticLoop with caller display callbacks', () => {
   });
 
   it('forwards the SAME tool-call and output data to displayCallbacks that it emits as events', async () => {
-    const tool = new MockTool({
-      name: 'streaming_tool',
-      canUpdateOutput: true,
-    });
-    tool.executeFn.mockImplementation(
-      async (
-        _params: Record<string, unknown>,
-        _signal: AbortSignal,
-        updateOutput?: (update: LiveOutputUpdate) => void,
-      ) => {
-        updateOutput?.({ mode: 'append', data: 'chunk-1' });
-        updateOutput?.({ mode: 'append', data: 'chunk-2' });
-        return { llmContent: 'done', returnDisplay: 'done' };
-      },
-    );
-
-    const toolRegistry = createToolRegistryForTest([tool]);
-    const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: false,
-      approvalMode: ApprovalMode.YOLO,
-    });
-
-    const displayToolUpdates: ToolCall[] = [];
-    const displayOutputChunks: Array<{
-      callId: string;
-      chunk: LiveOutputUpdate;
-    }> = [];
-
-    const { client } = createScriptedAgentClient([
-      [
-        toolCallRequestEvent('streaming_tool', 'call-disp', { x: 1 }),
-        finishedEvent(),
-      ],
-      [contentEvent('final'), finishedEvent()],
-    ]);
-
-    const loop = new AgenticLoop({
-      agentClient: client,
-      config,
-      messageBus,
-      displayCallbacks: {
-        onToolCallsUpdate: (toolCalls) => {
-          displayToolUpdates.push(...toolCalls);
-        },
-        outputUpdateHandler: (callId, chunk) => {
-          displayOutputChunks.push({ callId, chunk });
-        },
-        getPreferredEditor: () => undefined,
-      },
-    });
-
-    const events = await collectEvents(
-      loop,
-      'go',
-      new AbortController().signal,
-    );
-
-    const emittedToolUpdateEvents = events.filter(
-      (e): e is Extract<AgenticLoopEvent, { kind: 'tool_update' }> =>
-        e.kind === 'tool_update',
-    );
+    const {
+      emittedToolUpdateEvents,
+      displayToolUpdates,
+      emittedToolCalls,
+      dispFinal,
+      emittedOutputEvents,
+      dispStringChunks,
+      emittedOutputData,
+      completedEvents,
+      unmatchedEmittedToolCalls,
+    } =
+      await observeForwardsTheSAMEToolCallAndOutputDataToDisplayCallbacksThatIt();
+    expect(unmatchedEmittedToolCalls).toStrictEqual([]);
     expect(emittedToolUpdateEvents.length).toBeGreaterThan(0);
-    const emittedToolCalls = emittedToolUpdateEvents.flatMap(
-      (e) => e.toolCalls,
-    );
     expect(displayToolUpdates.length).toBeGreaterThanOrEqual(
       emittedToolCalls.length,
     );
-    for (const emitted of emittedToolCalls) {
-      const matched = displayToolUpdates.some(
-        (captured) =>
-          captured.request.callId === emitted.request.callId &&
-          captured.status === emitted.status,
-      );
-      expect(matched).toBe(true);
-    }
-    const dispFinal = displayToolUpdates.find(
-      (tc) => tc.request.callId === 'call-disp' && tc.status === 'success',
-    );
     expect(dispFinal).toBeDefined();
-
-    const emittedOutputEvents = events.filter(
-      (e): e is Extract<AgenticLoopEvent, { kind: 'tool_output' }> =>
-        e.kind === 'tool_output',
-    );
     expect(emittedOutputEvents).toHaveLength(2);
-    const emittedOutputData = emittedOutputEvents.map((e) => ({
-      callId: e.callId,
-      chunk: e.chunk,
-    }));
-    const dispStringChunks = displayOutputChunks.map((c) => ({
-      callId: c.callId,
-      chunk: c.chunk.data,
-    }));
     expect(dispStringChunks).toStrictEqual(emittedOutputData);
     expect(dispStringChunks.every((c) => c.callId === 'call-disp')).toBe(true);
-
-    const completedEvents = events.filter(isToolsComplete);
     expect(completedEvents).toHaveLength(1);
     expect(completedEvents[0].completed[0].status).toBe('success');
   });
+
+  const observeForwardsTheSAMEToolCallAndOutputDataToDisplayCallbacksThatIt =
+    async () => {
+      const tool = new MockTool({
+        name: 'streaming_tool',
+        canUpdateOutput: true,
+      });
+      tool.executeFn.mockImplementation(
+        async (
+          _params: Record<string, unknown>,
+          _signal: AbortSignal,
+          updateOutput?: (update: LiveOutputUpdate) => void,
+        ) => {
+          updateOutput?.({ mode: 'append', data: 'chunk-1' });
+          updateOutput?.({ mode: 'append', data: 'chunk-2' });
+          return { llmContent: 'done', returnDisplay: 'done' };
+        },
+      );
+
+      const toolRegistry = createToolRegistryForTest([tool]);
+      const messageBus = new MessageBus(createAllowPolicyEngine(), false);
+      const config = createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: false,
+        approvalMode: ApprovalMode.YOLO,
+      });
+
+      const displayToolUpdates: ToolCall[] = [];
+      const displayOutputChunks: Array<{
+        callId: string;
+        chunk: LiveOutputUpdate;
+      }> = [];
+
+      const { client } = createScriptedAgentClient([
+        [
+          toolCallRequestEvent('streaming_tool', 'call-disp', { x: 1 }),
+          finishedEvent(),
+        ],
+        [contentEvent('final'), finishedEvent()],
+      ]);
+
+      const loop = new AgenticLoop({
+        agentClient: client,
+        config,
+        messageBus,
+        displayCallbacks: {
+          onToolCallsUpdate: (toolCalls) => {
+            displayToolUpdates.push(...toolCalls);
+          },
+          outputUpdateHandler: (callId, chunk) => {
+            displayOutputChunks.push({ callId, chunk });
+          },
+          getPreferredEditor: () => undefined,
+        },
+      });
+
+      const events = await collectEvents(
+        loop,
+        'go',
+        new AbortController().signal,
+      );
+
+      const emittedToolUpdateEvents = events.filter(
+        (e): e is Extract<AgenticLoopEvent, { kind: 'tool_update' }> =>
+          e.kind === 'tool_update',
+      );
+
+      const emittedToolCalls = emittedToolUpdateEvents.flatMap(
+        (e) => e.toolCalls,
+      );
+
+      const unmatchedEmittedToolCalls = emittedToolCalls.filter(
+        (emitted) =>
+          !displayToolUpdates.some(
+            (captured) =>
+              captured.request.callId === emitted.request.callId &&
+              captured.status === emitted.status,
+          ),
+      );
+      const dispFinal = displayToolUpdates.find(
+        (tc) => tc.request.callId === 'call-disp' && tc.status === 'success',
+      );
+
+      const emittedOutputEvents = events.filter(
+        (e): e is Extract<AgenticLoopEvent, { kind: 'tool_output' }> =>
+          e.kind === 'tool_output',
+      );
+
+      const emittedOutputData = emittedOutputEvents.map((e) => ({
+        callId: e.callId,
+        chunk: e.chunk,
+      }));
+      const dispStringChunks = displayOutputChunks.map((c) => ({
+        callId: c.callId,
+        chunk: c.chunk.data,
+      }));
+
+      const completedEvents = events.filter(isToolsComplete);
+
+      return {
+        emittedToolUpdateEvents,
+        displayToolUpdates,
+        emittedToolCalls,
+        dispFinal,
+        emittedOutputEvents,
+        dispStringChunks,
+        emittedOutputData,
+        completedEvents,
+        unmatchedEmittedToolCalls,
+      };
+    };
 
   it('completes the turn correctly with interactiveMode: true (no observable interactive-only side effect is reachable headlessly)', async () => {
     const tool = new MockTool({ name: 'simple_tool' });
@@ -490,66 +522,74 @@ describe('AgenticLoop with caller display callbacks', () => {
   });
 
   it('accumulates string output chunks into liveOutput instead of replacing (fixes #2008)', async () => {
-    const tool = new MockTool({
-      name: 'delta_streaming_tool',
-      canUpdateOutput: true,
-    });
-    tool.executeFn.mockImplementation(
-      async (
-        _params: Record<string, unknown>,
-        _signal: AbortSignal,
-        updateOutput?: (update: LiveOutputUpdate) => void,
-      ) => {
-        updateOutput?.({ mode: 'append', data: 'Hello ' });
-        updateOutput?.({ mode: 'append', data: 'world' });
-        updateOutput?.({ mode: 'append', data: '!' });
-        return { llmContent: 'done', returnDisplay: 'done' };
-      },
-    );
-
-    const toolRegistry = createToolRegistryForTest([tool]);
-    const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: false,
-      approvalMode: ApprovalMode.YOLO,
-    });
-
-    const toolUpdatesByStatus: ToolCall[] = [];
-
-    const { client } = createScriptedAgentClient([
-      [
-        toolCallRequestEvent('delta_streaming_tool', 'call-acc', { x: 1 }),
-        finishedEvent(),
-      ],
-      [contentEvent('final'), finishedEvent()],
-    ]);
-
-    const loop = new AgenticLoop({
-      agentClient: client,
-      config,
-      messageBus,
-      displayCallbacks: {
-        onToolCallsUpdate: (toolCalls) => {
-          toolUpdatesByStatus.push(...toolCalls);
-        },
-        getPreferredEditor: () => undefined,
-      },
-    });
-
-    await collectEvents(loop, 'go', new AbortController().signal);
-
-    const executingUpdates = toolUpdatesByStatus.filter(
-      (tc) => tc.request.callId === 'call-acc' && tc.status === 'executing',
-    );
+    const { executingUpdates } =
+      await observeAccumulatesStringOutputChunksIntoLiveOutputInsteadOfReplacingFixes2008();
     expect(executingUpdates.length).toBeGreaterThanOrEqual(1);
-
-    // The last executing update (after all three chunks) must contain the
-    // full accumulated string, proving deltas are appended not replaced.
     expect(executingUpdates[executingUpdates.length - 1]).toMatchObject({
       liveOutput: 'Hello world!',
     });
   });
+
+  const observeAccumulatesStringOutputChunksIntoLiveOutputInsteadOfReplacingFixes2008 =
+    async () => {
+      const tool = new MockTool({
+        name: 'delta_streaming_tool',
+        canUpdateOutput: true,
+      });
+      tool.executeFn.mockImplementation(
+        async (
+          _params: Record<string, unknown>,
+          _signal: AbortSignal,
+          updateOutput?: (update: LiveOutputUpdate) => void,
+        ) => {
+          updateOutput?.({ mode: 'append', data: 'Hello ' });
+          updateOutput?.({ mode: 'append', data: 'world' });
+          updateOutput?.({ mode: 'append', data: '!' });
+          return { llmContent: 'done', returnDisplay: 'done' };
+        },
+      );
+
+      const toolRegistry = createToolRegistryForTest([tool]);
+      const messageBus = new MessageBus(createAllowPolicyEngine(), false);
+      const config = createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: false,
+        approvalMode: ApprovalMode.YOLO,
+      });
+
+      const toolUpdatesByStatus: ToolCall[] = [];
+
+      const { client } = createScriptedAgentClient([
+        [
+          toolCallRequestEvent('delta_streaming_tool', 'call-acc', { x: 1 }),
+          finishedEvent(),
+        ],
+        [contentEvent('final'), finishedEvent()],
+      ]);
+
+      const loop = new AgenticLoop({
+        agentClient: client,
+        config,
+        messageBus,
+        displayCallbacks: {
+          onToolCallsUpdate: (toolCalls) => {
+            toolUpdatesByStatus.push(...toolCalls);
+          },
+          getPreferredEditor: () => undefined,
+        },
+      });
+
+      await collectEvents(loop, 'go', new AbortController().signal);
+
+      const executingUpdates = toolUpdatesByStatus.filter(
+        (tc) => tc.request.callId === 'call-acc' && tc.status === 'executing',
+      );
+
+      // The last executing update (after all three chunks) must contain the
+      // full accumulated string, proving deltas are appended not replaced.
+
+      return { executingUpdates };
+    };
 });

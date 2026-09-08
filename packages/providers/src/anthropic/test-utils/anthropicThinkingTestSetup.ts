@@ -22,6 +22,7 @@ import {
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { setActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createAnthropicRawPostTestAdapter } from '../../test-utils/rawPostTestAdapters.js';
 
 // Mock the prompts module
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -42,6 +43,7 @@ export const mockMessagesCreate = vi.fn();
 // Mock the Anthropic SDK
 void vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
+    ...createAnthropicRawPostTestAdapter(mockMessagesCreate),
     messages: {
       create: mockMessagesCreate,
     },

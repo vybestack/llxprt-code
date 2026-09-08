@@ -23,6 +23,11 @@ import {
   type AnthropicMessage,
   type AnthropicTestSetup,
 } from './test-utils/anthropicProviderTestSetup.js';
+import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+
+function isAnthropicMessageContent(value: unknown): boolean {
+  return typeof value === 'string' || Array.isArray(value);
+}
 
 // Shared mock instance for messages.create - using vi.hoisted so it's
 // available when vi.mock factories run.
@@ -88,6 +93,7 @@ void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
 
 void vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
+    ...createAnthropicRawPostTestAdapter(mockMessagesCreate),
     messages: { create: mockMessagesCreate },
     beta: {
       models: {
@@ -210,6 +216,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'Done' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -268,6 +276,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'Success' },
           };
+
+          yield { type: 'message_stop' };
         },
       });
 
@@ -305,6 +315,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'Success' },
           };
+
+          yield { type: 'message_stop' };
         },
       });
 
@@ -345,6 +357,8 @@ describe('AnthropicProvider', () => {
               type: 'content_block_delta',
               delta: { type: 'text_delta', text: 'Fixed and working' },
             };
+
+            yield { type: 'message_stop' };
           },
         });
 
@@ -406,6 +420,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'ok' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -463,6 +479,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'ok' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -508,6 +526,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'ok' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -558,6 +578,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'ok' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -598,7 +620,7 @@ describe('AnthropicProvider', () => {
       expect(userMessages).toHaveLength(1);
       // The merged content includes text from both non-empty messages
       const content = userMessages[0].content;
-      expect(typeof content === 'string' || Array.isArray(content)).toBe(true);
+      expect(isAnthropicMessageContent(content)).toBe(true);
     });
 
     it('should sanitize empty assistant content arrays in intermediate messages', async () => {
@@ -610,6 +632,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'ok' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -667,6 +691,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'ok' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -720,6 +746,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'ok' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 

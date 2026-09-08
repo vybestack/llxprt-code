@@ -27,7 +27,6 @@ import {
   type ToolInvocation,
   type ToolResult,
 } from '@vybestack/llxprt-code-tools';
-import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core/config/models.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 
 // Test constants for tool output truncation
@@ -75,7 +74,7 @@ export function createMockConfig(overrides: Partial<Config> = {}): Config {
     getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
     getEnableHooks: () => false,
     getHookSystem: () => null,
-    getModel: () => DEFAULT_GEMINI_MODEL,
+    getModel: () => 'gemini-2.5-pro',
     isInteractive: () => false,
   };
   return { ...defaults, ...overrides } as unknown as Config;

@@ -72,8 +72,6 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       getModels: vi.fn(async () => []),
       getDefaultModel: () => 'stub-model',
       generateChatCompletion: generateChatCompletionMock,
-      getServerTools: () => [],
-      invokeServerTool: vi.fn(),
       getAuthToken: vi.fn(async () => 'stub-auth-token'),
     };
 
@@ -289,8 +287,6 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       getModels: vi.fn(async () => []),
       getDefaultModel: () => 'stub-model',
       generateChatCompletion: generateChatCompletionMock,
-      getServerTools: () => [],
-      invokeServerTool: vi.fn(),
       getAuthToken: vi.fn(async () => 'stub-auth-token'),
     };
 
@@ -459,8 +455,6 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       getModels: vi.fn(async () => []),
       getDefaultModel: () => 'stub-model',
       generateChatCompletion: generateChatCompletionMock,
-      getServerTools: () => [],
-      invokeServerTool: vi.fn(),
       getAuthToken: vi.fn(async () => 'stub-auth-token'),
     };
 
@@ -539,8 +533,6 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       getModels: vi.fn(async () => []),
       getDefaultModel: () => 'stub-model',
       generateChatCompletion: generateChatCompletionMock,
-      getServerTools: () => [],
-      invokeServerTool: vi.fn(),
       getAuthToken: vi.fn(async () => 'stub-auth-token'),
     };
 
@@ -634,8 +626,6 @@ describe('ChatSession runtime history and tool-call behavior', () => {
           blocks: [{ type: 'text', text: 'openai' }],
         };
       }),
-      getServerTools: () => [],
-      invokeServerTool: vi.fn(),
       getAuthToken: vi.fn(async () => 'openai-auth-token'),
     };
 
@@ -652,8 +642,6 @@ describe('ChatSession runtime history and tool-call behavior', () => {
           blocks: [{ type: 'text', text: 'anthropic' }],
         };
       }),
-      getServerTools: () => [],
-      invokeServerTool: vi.fn(),
       getAuthToken: vi.fn(async () => 'anthropic-auth-token'),
     };
 
@@ -731,8 +719,6 @@ describe('ChatSession runtime history and tool-call behavior', () => {
             metadata,
           };
         }),
-        getServerTools: () => [],
-        invokeServerTool: vi.fn(),
         getAuthToken: vi.fn(async () => 'stub-auth-token'),
       };
 

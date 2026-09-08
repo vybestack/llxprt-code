@@ -7,10 +7,25 @@
 import type { SettingSpec, ValidationResult } from './registry-types.js';
 import { COMPRESSION_STRATEGIES } from './registry-types.js';
 
+function validateNonNegativeByteLimit(
+  key: string,
+  value: unknown,
+): ValidationResult {
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) {
+    return { success: true, value };
+  }
+  return {
+    success: false,
+    message: `${key} must be a non-negative safe integer`,
+  };
+}
+
 export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'temperature',
     category: 'model-param',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Sampling temperature',
     type: 'number',
     persistToProfile: true,
@@ -19,6 +34,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
     key: 'max_tokens',
     aliases: ['max-tokens', 'maxTokens'],
     category: 'model-param',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Maximum tokens to generate',
     type: 'number',
     persistToProfile: true,
@@ -27,6 +44,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
     key: 'max_output_tokens',
     aliases: ['max-output-tokens'],
     category: 'model-param',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Maximum output tokens (Gemini native param)',
     type: 'number',
     persistToProfile: true,
@@ -35,6 +54,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
     key: 'maxOutputTokens',
     aliases: ['max-output'],
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Maximum output tokens (generic, translated by provider)',
     type: 'number',
     persistToProfile: true,
@@ -42,6 +63,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'top_p',
     category: 'model-param',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Nucleus sampling',
     type: 'number',
     persistToProfile: true,
@@ -49,6 +72,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'top_k',
     category: 'model-param',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Top-k sampling',
     type: 'number',
     persistToProfile: true,
@@ -56,6 +81,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'frequency_penalty',
     category: 'model-param',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Frequency penalty',
     type: 'number',
     persistToProfile: true,
@@ -63,6 +90,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'presence_penalty',
     category: 'model-param',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Presence penalty',
     type: 'number',
     persistToProfile: true,
@@ -70,6 +99,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'seed',
     category: 'model-param',
+    owner: 'model',
+    propagation: 'next-turn',
     providers: ['openai', 'openaivercel'],
     description: 'Random seed for deterministic sampling (OpenAI only)',
     type: 'number',
@@ -78,6 +109,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'stop',
     category: 'model-param',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Stop sequences',
     type: 'string-array',
     persistToProfile: true,
@@ -86,6 +119,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
     key: 'response_format',
     aliases: ['response-format', 'responseFormat'],
     category: 'model-param',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Response format (e.g., json_object)',
     type: 'json',
     persistToProfile: true,
@@ -93,6 +128,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'logit_bias',
     category: 'model-param',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Token bias',
     type: 'json',
     persistToProfile: true,
@@ -101,6 +138,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
     key: 'tool_choice',
     aliases: ['tool-choice', 'toolChoice'],
     category: 'model-param',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Tool choice strategy (auto/required/none)',
     type: 'string',
     persistToProfile: true,
@@ -108,6 +147,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'reasoning',
     category: 'model-param',
+    owner: 'model',
+    propagation: 'next-turn',
     providers: ['openai', 'openaivercel', 'openai-responses'],
     description: 'Reasoning configuration object (OpenAI)',
     type: 'json',
@@ -135,6 +176,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'custom-headers',
     category: 'custom-header',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
     description: 'Custom HTTP headers as JSON object',
     type: 'json',
     persistToProfile: true,
@@ -143,6 +186,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
     key: 'user-agent',
     aliases: ['User-Agent'],
     category: 'custom-header',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
     description: 'User-Agent header override',
     type: 'string',
     persistToProfile: true,
@@ -150,6 +195,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'GOOGLE_CLOUD_PROJECT',
     category: 'provider-config',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
     description: 'Google Cloud project ID',
     type: 'string',
     persistToProfile: true,
@@ -157,6 +204,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'GOOGLE_CLOUD_LOCATION',
     category: 'provider-config',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
     description: 'Google Cloud location/region',
     type: 'string',
     persistToProfile: true,
@@ -165,6 +214,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'tpm_threshold',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'Minimum tokens per minute before triggering failover (positive integer, load balancer only)',
     type: 'number',
@@ -182,6 +233,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'timeout_ms',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'Maximum request duration in milliseconds before timeout (positive integer, load balancer only)',
     type: 'number',
@@ -199,6 +252,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'circuit_breaker_enabled',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'Enable circuit breaker pattern for failing backends (true/false, load balancer only)',
     type: 'boolean',
@@ -216,6 +271,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'circuit_breaker_failure_threshold',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'Number of failures before opening circuit (positive integer, default: 3, load balancer only)',
     type: 'number',
@@ -233,6 +290,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'circuit_breaker_failure_window_ms',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'Time window for counting failures in milliseconds (positive integer, default: 60000, load balancer only)',
     type: 'number',
@@ -250,6 +309,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'circuit_breaker_recovery_timeout_ms',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'Cooldown period before retrying after circuit opens in milliseconds (positive integer, default: 30000, load balancer only)',
     type: 'number',
@@ -269,6 +330,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'compression.strategy',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'Compression strategy to use (middle-out or top-down-truncation)',
     type: 'enum',
@@ -280,6 +343,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'compression.profile',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Profile name for compression LLM calls',
     type: 'string',
     persistToProfile: true,
@@ -292,6 +357,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'compression.density.readWritePruning',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Enable READ→WRITE pair pruning in high-density strategy',
     type: 'boolean',
     default: true,
@@ -300,6 +367,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'compression.density.fileDedupe',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Enable duplicate @ file inclusion deduplication',
     type: 'boolean',
     default: true,
@@ -308,6 +377,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'compression.density.recencyPruning',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'Enable tool result recency pruning (keep last N per tool type)',
     type: 'boolean',
@@ -317,6 +388,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'compression.density.recencyRetention',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Number of recent results to keep per tool type',
     type: 'number',
     default: 3,
@@ -335,6 +408,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'compression.density.compressHeadroom',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'Headroom multiplier for compression target tokens (0 < value <= 1)',
     type: 'number',
@@ -354,6 +429,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'compression.density.optimizeThreshold',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'Context usage threshold (0-1) for when density optimization runs. If not set, uses the compression strategy default (e.g., 0.9 for high-density).',
     type: 'number',
@@ -376,6 +453,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'auth.noBrowser',
     category: 'cli-behavior',
+    owner: 'provider-connection',
+    propagation: 'next-turn',
     description: 'Skip automatic browser OAuth flow and use manual code entry',
     type: 'boolean',
     default: false,
@@ -392,6 +471,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
     // model-param and leaked into API request bodies. @issue #2182
     aliases: ['streamIdleTimeoutMs'],
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'Stream idle timeout in milliseconds. Disabled by default (0). Set to a positive number of milliseconds to enable the watchdog.',
     type: 'number',
@@ -414,6 +495,8 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
     // (modelParams). @issue #2607
     aliases: ['streamFirstResponseTimeoutMs'],
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'First-response (time-to-first-content) watchdog in milliseconds. Enabled by default (300000 = 5 minutes). Set to 0 or a negative number to disable; a provider liveness signal (e.g. response.created) disarms it even before semantic content arrives.',
     type: 'number',
@@ -430,8 +513,145 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
     },
   },
   {
+    key: 'image-payload-budget-bytes',
+    category: 'cli-behavior',
+    owner: 'application',
+    propagation: 'next-turn',
+    description:
+      'Maximum aggregate normalized media payload admitted to one provider request in bytes. Default: 15728640.',
+    type: 'number',
+    default: 15 * 1024 * 1024,
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult =>
+      validateNonNegativeByteLimit('image-payload-budget-bytes', value),
+  },
+  {
+    key: 'media-store-quota-bytes',
+    category: 'cli-behavior',
+    owner: 'application',
+    propagation: 'service-reconfigure',
+    description:
+      'Maximum bytes retained in the project-local content-addressed media store. Default: 4294967296.',
+    type: 'number',
+    default: 4 * 1024 * 1024 * 1024,
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult =>
+      validateNonNegativeByteLimit('media-store-quota-bytes', value),
+  },
+  {
+    key: 'session-recording-queue-max-bytes',
+    category: 'cli-behavior',
+    owner: 'application',
+    propagation: 'service-reconfigure',
+    description:
+      'Maximum bytes queued for session recording writes. Default: 16777216.',
+    type: 'number',
+    default: 16 * 1024 * 1024,
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult =>
+      validateNonNegativeByteLimit('session-recording-queue-max-bytes', value),
+  },
+  {
+    key: 'session-persistence-queue-max-bytes',
+    category: 'cli-behavior',
+    owner: 'application',
+    propagation: 'service-reconfigure',
+    description:
+      'Maximum bytes queued for persisted session-state writes. Default: 16777216.',
+    type: 'number',
+    default: 16 * 1024 * 1024,
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult =>
+      validateNonNegativeByteLimit(
+        'session-persistence-queue-max-bytes',
+        value,
+      ),
+  },
+  {
+    key: 'provider-files',
+    category: 'cli-behavior',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
+    description:
+      'Provider Files API scope. off keeps media inline; session and workspace permit supported providers to retain remote references in that scope. Default: off.',
+    type: 'enum',
+    default: 'off',
+    enumValues: ['off', 'session', 'workspace'],
+    persistToProfile: true,
+  },
+  {
+    key: 'provider-files-retention-ms',
+    category: 'cli-behavior',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
+    description:
+      'Maximum local reuse duration for explicitly enabled provider Files references in milliseconds. Default: 86400000.',
+    type: 'number',
+    default: 86_400_000,
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (
+        typeof value === 'number' &&
+        Number.isSafeInteger(value) &&
+        value > 0
+      ) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message: 'provider-files-retention-ms must be a positive safe integer',
+      };
+    },
+  },
+  {
+    key: 'provider-files-delete',
+    category: 'cli-behavior',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
+    description:
+      'Remote cleanup policy for provider Files references after local eviction, expiry, or scoped cleanup. delete requests provider deletion; retain leaves provider retention unchanged. Default: delete.',
+    type: 'enum',
+    default: 'delete',
+    enumValues: ['delete', 'retain'],
+    persistToProfile: true,
+  },
+  {
+    key: 'provider-files-zdr',
+    category: 'cli-behavior',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
+    description:
+      'ZDR requirement for provider Files. allow-retention acknowledges provider storage; require rejects providers whose Files API is incompatible with ZDR while retained. Default: allow-retention.',
+    type: 'enum',
+    default: 'allow-retention',
+    enumValues: ['allow-retention', 'require'],
+    persistToProfile: true,
+  },
+  {
+    key: 'media.semantic-purge',
+    category: 'cli-behavior',
+    owner: 'application',
+    propagation: 'next-turn',
+    description:
+      'Explicit lossy image-history purge policy. off preserves every image; remove deletes eligible images after a successful transaction; summary replaces them with caller-provided structured text. This is separate from lossless local media eviction. Default: off.',
+    type: 'enum',
+    default: 'off',
+    enumValues: ['off', 'remove', 'summary'],
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult =>
+      value === 'off' || value === 'remove' || value === 'summary'
+        ? { success: true, value }
+        : {
+            success: false,
+            message:
+              "media.semantic-purge must be exactly 'off', 'remove', or 'summary'",
+          },
+  },
+  {
     key: 'kimi.experimental-video',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'Enable Kimi experimental native video understanding. Only works with the official Moonshot API endpoint and is gated behind the kimi mediaSupport.videoSupport capability. Default: false.',
     type: 'boolean',

@@ -189,57 +189,82 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
    * @requirement REQ-HD-007.1
    */
   it('recency pruning preserves at least retention-count results per tool', () => {
-    const strategy = createStrategy();
-
+    const {
+      recencyPruningPreservesAtLeastRetentionCountResultsPerToolProperty,
+      observations,
+    } = observeRecencyPruningPreservesAtLeastRetentionCountResultsPerTool();
     fc.assert(
-      fc.property(
-        fc.integer({ min: 1, max: 10 }),
-        fc.integer({ min: 1, max: 8 }),
-        (totalResults, retention) => {
-          const history: IContent[] = [];
-          for (let i = 0; i < totalResults; i++) {
-            const rc = makeAiToolCall('read_file', {
-              file_path: `/workspace/f${i}.ts`,
-            });
-            history.push(rc.entry);
-            history.push(
-              makeToolResponse(rc.callId, 'read_file', `content ${i}`),
-            );
-          }
-
-          const config = defaultConfig({
-            readWritePruning: false,
-            fileDedupe: false,
-            recencyPruning: true,
-            recencyRetention: retention,
-          });
-
-          const result = strategy.optimize(history, config);
-
-          const prunedIndices = new Set([
-            ...result.removals,
-            ...result.replacements.keys(),
-          ]);
-          let unprunedToolResponses = 0;
-          for (let i = 0; i < history.length; i++) {
-            if (history[i].speaker !== 'tool') {
-              continue;
-            }
-            unprunedToolResponses += countUnprunedAtIndex(
-              i,
-              prunedIndices,
-              result,
-            );
-          }
-          const expectedPreserved = Math.min(retention, totalResults);
-          expect(unprunedToolResponses).toBeGreaterThanOrEqual(
-            expectedPreserved,
-          );
-        },
-      ),
+      recencyPruningPreservesAtLeastRetentionCountResultsPerToolProperty,
       { numRuns: 50 },
     );
+    expect(
+      observations.filter(
+        ({ actual, expectedMinimum }) => actual < expectedMinimum,
+      ),
+    ).toStrictEqual([]);
   });
+
+  const observeRecencyPruningPreservesAtLeastRetentionCountResultsPerTool =
+    () => {
+      const strategy = createStrategy();
+      const observations: Array<{
+        actual: number;
+        expectedMinimum: number;
+      }> = [];
+
+      const recencyPruningPreservesAtLeastRetentionCountResultsPerToolProperty =
+        fc.property(
+          fc.integer({ min: 1, max: 10 }),
+          fc.integer({ min: 1, max: 8 }),
+          (totalResults, retention) => {
+            const history: IContent[] = [];
+            for (let i = 0; i < totalResults; i++) {
+              const rc = makeAiToolCall('read_file', {
+                file_path: `/workspace/f${i}.ts`,
+              });
+              history.push(rc.entry);
+              history.push(
+                makeToolResponse(rc.callId, 'read_file', `content ${i}`),
+              );
+            }
+
+            const config = defaultConfig({
+              readWritePruning: false,
+              fileDedupe: false,
+              recencyPruning: true,
+              recencyRetention: retention,
+            });
+
+            const result = strategy.optimize(history, config);
+
+            const prunedIndices = new Set([
+              ...result.removals,
+              ...result.replacements.keys(),
+            ]);
+            let unprunedToolResponses = 0;
+            for (let i = 0; i < history.length; i++) {
+              if (history[i].speaker !== 'tool') {
+                continue;
+              }
+              unprunedToolResponses += countUnprunedAtIndex(
+                i,
+                prunedIndices,
+                result,
+              );
+            }
+            const expectedPreserved = Math.min(retention, totalResults);
+            observations.push({
+              actual: unprunedToolResponses,
+              expectedMinimum: expectedPreserved,
+            });
+            return unprunedToolResponses >= expectedPreserved;
+          },
+        );
+      return {
+        recencyPruningPreservesAtLeastRetentionCountResultsPerToolProperty,
+        observations,
+      };
+    };
 
   /**
    * @plan PLAN-20260211-HIGHDENSITY.P10
@@ -287,6 +312,12 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
    * @plan PLAN-20260211-HIGHDENSITY.P10
    */
   it('optimize is idempotent on its own output', () => {
+    const { result2 } = observeOptimizeIsIdempotentOnItsOwnOutput();
+    expect(result2.removals).toHaveLength(0);
+    expect(result2.replacements.size).toBe(0);
+  });
+
+  const observeOptimizeIsIdempotentOnItsOwnOutput = () => {
     const strategy = createStrategy();
 
     const history: IContent[] = [];
@@ -319,19 +350,39 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
 
     const result2 = strategy.optimize(newHistory, config);
 
-    expect(result2.removals).toHaveLength(0);
-    expect(result2.replacements.size).toBe(0);
-  });
+    return { result2 };
+  };
 
   /**
    * @plan PLAN-20260211-HIGHDENSITY.P10
    * @requirement REQ-HD-005.1, REQ-HD-005.6
    */
   it('stale reads are always pruned regardless of file path', () => {
-    const strategy = createStrategy();
+    const {
+      staleReadsAreAlwaysPrunedRegardlessOfFilePathProperty,
+      observations,
+    } = observeStaleReadsAreAlwaysPrunedRegardlessOfFilePath();
+    fc.assert(staleReadsAreAlwaysPrunedRegardlessOfFilePathProperty, {
+      numRuns: 50,
+    });
+    expect(
+      observations.map(({ staleReadAffected }) => staleReadAffected),
+    ).toStrictEqual(observations.map(() => true));
+    expect(
+      observations.filter(({ pairsPruned }) => pairsPruned <= 0),
+    ).toStrictEqual([]);
+  });
 
-    fc.assert(
-      fc.property(arbFilePath, (fp) => {
+  const observeStaleReadsAreAlwaysPrunedRegardlessOfFilePath = () => {
+    const strategy = createStrategy();
+    const observations: Array<{
+      staleReadAffected: boolean;
+      pairsPruned: number;
+    }> = [];
+
+    const staleReadsAreAlwaysPrunedRegardlessOfFilePathProperty = fc.property(
+      arbFilePath,
+      (fp) => {
         const { entries } = makeReadWritePair(fp);
         const history: IContent[] = [...entries];
         const config = defaultConfig({
@@ -342,12 +393,19 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
         const result = strategy.optimize(history, config);
 
         const affected = allAffectedIndices(result);
-        expect(affected.has(0) || affected.has(1)).toBe(true);
-        expect(result.metadata.readWritePairsPruned).toBeGreaterThan(0);
-      }),
-      { numRuns: 50 },
+        const staleReadAffected = affected.has(0) || affected.has(1);
+        observations.push({
+          staleReadAffected,
+          pairsPruned: result.metadata.readWritePairsPruned,
+        });
+        return staleReadAffected && result.metadata.readWritePairsPruned > 0;
+      },
     );
-  });
+    return {
+      staleReadsAreAlwaysPrunedRegardlessOfFilePathProperty,
+      observations,
+    };
+  };
 
   /**
    * @plan PLAN-20260211-HIGHDENSITY.P10

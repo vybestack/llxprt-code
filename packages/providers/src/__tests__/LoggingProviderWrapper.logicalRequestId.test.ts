@@ -34,6 +34,17 @@ import {
   USAGE_BASIC,
 } from './attemptLifecycle.helpers.test.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { GenerateChatOptions } from '../IProvider.js';
+
+function withLogicalRequestId(
+  metadata: GenerateChatOptions['metadata'],
+  logicalRequestId: string,
+): NonNullable<GenerateChatOptions['metadata']> {
+  return {
+    ...(metadata ?? {}),
+    [LOGICAL_REQUEST_ID_KEY]: logicalRequestId,
+  };
+}
 
 function capturingObserver(): {
   observer: PerfPhaseObserver;
@@ -77,10 +88,7 @@ describe('LoggingProviderWrapper logical request id threading (#3257)', () => {
       config,
     );
     const options = makeOptions(config, makeContent('Hello'));
-    options.metadata = {
-      ...(options.metadata ?? {}),
-      [LOGICAL_REQUEST_ID_KEY]: 'op-prompt-1',
-    };
+    options.metadata = withLogicalRequestId(options.metadata, 'op-prompt-1');
 
     await consumeStream(wrapper.generateChatCompletion(options));
 
@@ -128,10 +136,7 @@ describe('LoggingProviderWrapper logical request id threading (#3257)', () => {
       config,
     );
     const options = makeOptions(config, makeContent('Hello'));
-    options.metadata = {
-      ...(options.metadata ?? {}),
-      [LOGICAL_REQUEST_ID_KEY]: 'op-claude-1',
-    };
+    options.metadata = withLogicalRequestId(options.metadata, 'op-claude-1');
 
     await consumeStream(wrapper.generateChatCompletion(options));
 

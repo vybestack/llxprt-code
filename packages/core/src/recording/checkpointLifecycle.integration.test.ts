@@ -20,6 +20,7 @@
  * Uses real recording files in temp dirs.
  */
 
+import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -28,8 +29,12 @@ import { SessionRecordingService } from './SessionRecordingService.js';
 import { CheckpointService } from './CheckpointService.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import { replaySession } from './ReplayEngine.js';
-import { type SessionRecordingServiceConfig } from './types.js';
+import {
+  type CheckpointMetadataView,
+  type SessionRecordingServiceConfig,
+} from './types.js';
 import { type IContent } from '../services/history/IContent.js';
+import { LocalMediaStore } from '../storage/local-media-store.js';
 
 function requireReplaySuccess(
   result: Awaited<ReturnType<typeof replaySession>>,
@@ -80,6 +85,16 @@ function tempDirHelper(): {
   };
 }
 
+/**
+ * Checkpoints folded from a successful replay (empty when no checkpoint
+ * metadata events are present).
+ */
+function foldedCheckpoints(
+  result: Extract<Awaited<ReturnType<typeof replaySession>>, { ok: true }>,
+): readonly CheckpointMetadataView[] {
+  return result.checkpoints ?? [];
+}
+
 describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', () => {
   const tmp = tempDirHelper();
   beforeEach(tmp.setup);
@@ -108,7 +123,7 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
       const result = await replaySession(svc.getFilePath()!, PROJECT_HASH);
       requireReplaySuccess(result);
       {
-        const checkpoints = result.checkpoints ?? [];
+        const checkpoints = foldedCheckpoints(result);
         expect(checkpoints).toHaveLength(1);
         expect(checkpoints[0].checkpointId).toBe(cp.checkpointId);
         expect(checkpoints[0].name).toBe('renamed');
@@ -341,8 +356,9 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
         // History has only content items, no checkpoint events
         expect(result.history).toHaveLength(2);
         // Checkpoints are exposed separately
-        expect(result.checkpoints ?? []).toHaveLength(1);
-        expect(result.checkpoints![0].name).toBe('foo');
+        const checkpoints = foldedCheckpoints(result);
+        expect(checkpoints).toHaveLength(1);
+        expect(checkpoints[0].name).toBe('foo');
       }
     });
   });
@@ -406,7 +422,7 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
       const result = await replaySession(svc.getFilePath()!, PROJECT_HASH);
       requireReplaySuccess(result);
 
-      const cp = (result.checkpoints ?? [])[0];
+      const cp = foldedCheckpoints(result)[0];
       const cpService = new CheckpointService();
       await cpService.renameCheckpointClosed(
         svc.getFilePath()!,
@@ -435,6 +451,33 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
       const originalBytes = beforeLines.join('\n');
       expect(priorBytes).toBe(originalBytes);
     });
+  });
+
+  it('reports missing media verification context instead of hiding checkpoints', async () => {
+    const mediaStore = new LocalMediaStore({
+      rootDirectory: path.join(tmp.getDir(), 'media'),
+      quotaBytes: 1024,
+    });
+    const reference = await mediaStore.admit({
+      bytes: new Uint8Array([1, 2, 3, 4]),
+      mimeType: 'image/png',
+      semanticMetadata: {},
+    });
+    const svc = new SessionRecordingService({
+      ...makeConfig(chatsDir()),
+      mediaStore,
+    });
+    svc.recordContent({ speaker: 'human', blocks: [reference] });
+    await svc.createCheckpoint('verified-media');
+    await svc.dispose();
+    const filePath = svc.getFilePath();
+    assertNotNull(filePath, 'Expected recording path');
+    await expect(
+      new CheckpointService().listCheckpoints(filePath, PROJECT_HASH),
+    ).rejects.toThrow(/media reference validation/i);
+    await expect(
+      new CheckpointService(mediaStore).listCheckpoints(filePath, PROJECT_HASH),
+    ).resolves.toHaveLength(1);
   });
 
   it('does not append closed metadata to a sequence-corrupt recording', async () => {

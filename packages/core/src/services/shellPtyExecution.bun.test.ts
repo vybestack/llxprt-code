@@ -305,7 +305,7 @@ describe('PTY bounded processing queue', () => {
         expect(result.output).toContain('HEAD_PTY_MARKER');
         expect(result.output).toContain(finalMarker);
         expect(result.output.match(/LLXPRT output truncated/g)).toHaveLength(1);
-        expect(result.outputTruncation).toEqual({
+        expect(result.outputTruncation).toStrictEqual({
           observedBytes,
           retainedBytes: retentionBytes,
           omittedBytes: observedBytes - retentionBytes,
@@ -444,7 +444,7 @@ describe('PTY bounded processing queue', () => {
 
         const result = buildPtyResult(harness.state, 0, null, false);
         expect(result.output.match(/LLXPRT output truncated/g)).toHaveLength(1);
-        expect(result.outputTruncation).toEqual({
+        expect(result.outputTruncation).toStrictEqual({
           observedBytes: 11,
           retainedBytes: 11,
           omittedBytes: 0,

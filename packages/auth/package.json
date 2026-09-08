@@ -65,6 +65,11 @@
       "types": "./dist/src/proxy/proxy-token-store.d.ts",
       "bun": "./src/proxy/proxy-token-store.ts",
       "import": "./dist/src/proxy/proxy-token-store.js"
+    },
+    "./mcp-auth-provider-type.js": {
+      "types": "./dist/src/mcp-auth-provider-type.d.ts",
+      "bun": "./src/mcp-auth-provider-type.ts",
+      "import": "./dist/src/mcp-auth-provider-type.js"
     }
   },
   "scripts": {

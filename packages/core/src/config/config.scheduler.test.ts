@@ -130,6 +130,22 @@ describe('Config - CoreToolScheduler Singleton', () => {
     });
 
   describe('getOrCreateScheduler', () => {
+    it('rejects creation without an explicit session/runtime MessageBus', async () => {
+      const callbacks = {
+        outputUpdateHandler: vi.fn(),
+        onAllToolCallsComplete: vi.fn(),
+        onToolCallsUpdate: vi.fn(),
+        getPreferredEditor: () => undefined,
+        onEditorClose: vi.fn(),
+      };
+
+      await expect(
+        config.getOrCreateScheduler(testSessionId, callbacks),
+      ).rejects.toThrow(
+        'Config.getOrCreateScheduler requires an explicit session/runtime MessageBus dependency.',
+      );
+    });
+
     it('should create a new scheduler instance for a given sessionId if none exists', async () => {
       const callbacks = {
         outputUpdateHandler: vi.fn(),

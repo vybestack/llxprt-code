@@ -115,17 +115,4 @@ export interface IToolHost {
 
   /** Returns the git stats service used for edit metadata when enabled. */
   getGitStatsService?(): IToolHostGitStatsService | undefined;
-
-  /** Returns provider server-tools support for tools that delegate to provider-native tools. */
-  getServerToolsProvider?(): {
-    getServerTools: () => string[];
-    invokeServerTool: (
-      name: string,
-      params: { prompt: string },
-      options: { signal: AbortSignal },
-    ) => Promise<unknown>;
-  } | null;
-
-  /** Whether the host has a provider manager configured. */
-  hasProviderManager?(): boolean;
 }

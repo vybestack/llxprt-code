@@ -63,6 +63,32 @@ async function expectConsistentTokenCount(
   expect(service.getTotalTokens()).toBe(expected);
 }
 
+function createQueuedFailureListener(service: HistoryService): () => never {
+  let invocation = 0;
+  return () => {
+    invocation += 1;
+    if (invocation === 1) {
+      service.add(createUserMessage('queued first'));
+      service.add(createUserMessage('queued second'));
+      throw new Error('initial failure');
+    }
+    throw new Error(`queued failure ${invocation - 1}`);
+  };
+}
+
+function aggregateErrors(error: unknown): readonly unknown[] {
+  if (!(error instanceof AggregateError)) {
+    throw new Error('expected an AggregateError');
+  }
+  return error.errors;
+}
+
+function errorMessages(errors: readonly unknown[]): readonly string[] {
+  return errors.map((error) =>
+    error instanceof Error ? error.message : String(error),
+  );
+}
+
 describe('HistoryService replaceAll serialization', () => {
   it('applies an add after an in-flight replacement without losing its tokens', async () => {
     const service = new HistoryService();
@@ -112,16 +138,7 @@ describe('HistoryService replaceAll serialization', () => {
 
   it('reports every initial and queued listener failure', () => {
     const service = new HistoryService();
-    let invocation = 0;
-    service.on('contentAdded', () => {
-      invocation += 1;
-      if (invocation === 1) {
-        service.add(createUserMessage('queued first'));
-        service.add(createUserMessage('queued second'));
-        throw new Error('initial failure');
-      }
-      throw new Error(`queued failure ${invocation - 1}`);
-    });
+    service.on('contentAdded', createQueuedFailureListener(service));
 
     let thrown: unknown;
     try {
@@ -131,14 +148,13 @@ describe('HistoryService replaceAll serialization', () => {
     }
 
     expect(thrown).toBeInstanceOf(AggregateError);
-    const aggregate = thrown as AggregateError;
-    expect(aggregate.errors[0]).toMatchObject({ message: 'initial failure' });
-    expect(aggregate.errors[1]).toBeInstanceOf(AggregateError);
-    expect(
-      (aggregate.errors[1] as AggregateError).errors.map((error) =>
-        error instanceof Error ? error.message : String(error),
-      ),
-    ).toStrictEqual(['queued failure 1', 'queued failure 2']);
+    const errors = aggregateErrors(thrown);
+    expect(errors[0]).toMatchObject({ message: 'initial failure' });
+    expect(errors[1]).toBeInstanceOf(AggregateError);
+    expect(errorMessages(aggregateErrors(errors[1]))).toStrictEqual([
+      'queued failure 1',
+      'queued failure 2',
+    ]);
     expect(service.getAll()).toStrictEqual([]);
   });
 });

@@ -11,12 +11,14 @@ import {
   upsertRuntimeEntry,
   requireRuntimeEntry,
   disposeCliRuntime,
+  disposeCliRuntimeRegistration,
   resetCliRuntimeRegistryForTesting,
   setDefaultCliRuntimeId,
   getDefaultCliRuntimeId,
   clearDefaultCliRuntimeId,
 } from './runtimeRegistry.js';
 import { peekActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core';
+import { resolveProviderFilePolicy } from '../providerFilePolicy.js';
 
 /**
  * Test suite for runtime registry lifecycle
@@ -180,29 +182,237 @@ describe('runtimeRegistry', () => {
   });
 
   describe('disposal', () => {
-    it('should remove entry from registry', () => {
+    it('refuses direct deregistration while its provider-file lifecycle retains a file', async () => {
+      const runtimeId = 'test-direct-deregister-provider-files';
+      const entry = upsertRuntimeEntry(runtimeId, {});
+      const retained = await entry.providerFileLifecycle.retain({
+        cacheKey: 'direct-deregister-content',
+        fileId: 'direct-deregister-file',
+        bytes: 10,
+        identity: {
+          provider: 'kimi',
+          baseURL: 'https://api.kimi.test/v1',
+          credentialHash: 'direct-deregister-credential',
+        },
+        policy: resolveProviderFilePolicy({
+          configuredMode: 'session',
+          configuredRetentionMs: 60_000,
+          configuredDeletion: 'delete',
+          providerFileReferences: true,
+          zeroDataRetention: 'incompatible-while-retained',
+          zeroDataRetentionRequired: false,
+        }),
+        scopeId: runtimeId,
+        deleteRemote: async () => undefined,
+      });
+
+      expect(() => disposeCliRuntimeRegistration(runtimeId)).toThrow(
+        'provider-file lifecycle',
+      );
+      expect(runtimeRegistry.has(runtimeId)).toBe(true);
+      await retained.lease.release();
+      await entry.providerFileLifecycle.cleanupScope('session', runtimeId);
+    });
+
+    it('awaits session provider-file deletion and returns its result', async () => {
+      const runtimeId = 'test-dispose-provider-files';
+      let deletedFileId: string | undefined;
+      const entry = upsertRuntimeEntry(runtimeId, {});
+      const retained = await entry.providerFileLifecycle.retain({
+        cacheKey: 'runtime-disposal-content',
+        fileId: 'runtime-disposal-file',
+        bytes: 10,
+        identity: {
+          provider: 'kimi',
+          baseURL: 'https://api.kimi.test/v1',
+          credentialHash: 'runtime-disposal-credential',
+        },
+        policy: resolveProviderFilePolicy({
+          configuredMode: 'session',
+          configuredRetentionMs: 60_000,
+          configuredDeletion: 'delete',
+          providerFileReferences: true,
+          zeroDataRetention: 'incompatible-while-retained',
+          zeroDataRetentionRequired: false,
+        }),
+        scopeId: runtimeId,
+        deleteRemote: async (fileId) => {
+          await Promise.resolve();
+          deletedFileId = fileId;
+        },
+      });
+      await retained.lease.release();
+
+      await disposeCliRuntime(runtimeId);
+
+      expect(deletedFileId).toBe('runtime-disposal-file');
+      expect(runtimeRegistry.has(runtimeId)).toBe(false);
+    });
+
+    it('reports failed file identity and keeps its lifecycle registered for retry', async () => {
+      const runtimeId = 'test-dispose-provider-files-failure';
+      const entry = upsertRuntimeEntry(runtimeId, {});
+      const retained = await entry.providerFileLifecycle.retain({
+        cacheKey: 'runtime-failed-content',
+        fileId: 'runtime-failed-file',
+        bytes: 10,
+        identity: {
+          provider: 'kimi',
+          baseURL: 'https://api.kimi.test/v1',
+          credentialHash: 'runtime-disposal-credential',
+        },
+        policy: resolveProviderFilePolicy({
+          configuredMode: 'session',
+          configuredRetentionMs: 60_000,
+          configuredDeletion: 'delete',
+          providerFileReferences: true,
+          zeroDataRetention: 'incompatible-while-retained',
+          zeroDataRetentionRequired: false,
+        }),
+        scopeId: runtimeId,
+        deleteRemote: async () => {
+          throw new Error('provider deletion unavailable');
+        },
+      });
+      await retained.lease.release();
+
+      const disposal = disposeCliRuntime(runtimeId);
+
+      await expect(disposal).rejects.toThrow(runtimeId);
+      await expect(disposal).rejects.toThrow('runtime-failed-file');
+      expect(runtimeRegistry.has(runtimeId)).toBe(true);
+      expect(
+        requireRuntimeEntry(runtimeId).providerFileLifecycle.snapshot()
+          .deletionFailures,
+      ).toHaveLength(1);
+    });
+
+    it('waits for the last lease to delete a deferred file before unregistering', async () => {
+      const runtimeId = 'test-dispose-provider-files-deferred';
+      const entry = upsertRuntimeEntry(runtimeId, {});
+      const deleted: string[] = [];
+      const retained = await entry.providerFileLifecycle.retain({
+        cacheKey: 'runtime-deferred-content',
+        fileId: 'runtime-deferred-file',
+        bytes: 10,
+        identity: {
+          provider: 'kimi',
+          baseURL: 'https://api.kimi.test/v1',
+          credentialHash: 'runtime-disposal-credential',
+        },
+        policy: resolveProviderFilePolicy({
+          configuredMode: 'session',
+          configuredRetentionMs: 60_000,
+          configuredDeletion: 'delete',
+          providerFileReferences: true,
+          zeroDataRetention: 'incompatible-while-retained',
+          zeroDataRetentionRequired: false,
+        }),
+        scopeId: runtimeId,
+        deleteRemote: async (fileId) => {
+          deleted.push(fileId);
+        },
+      });
+
+      const disposal = disposeCliRuntime(runtimeId);
+      await retained.lease.release();
+      await disposal;
+
+      expect(deleted).toStrictEqual(['runtime-deferred-file']);
+      expect(runtimeRegistry.has(runtimeId)).toBe(false);
+    });
+
+    it('allows runtime disposal while explicitly retained workspace files remain remote', async () => {
+      const runtimeId = 'runtime-workspace-retention';
+      const entry = upsertRuntimeEntry(runtimeId, {});
+      const deleted: string[] = [];
+      const retained = await entry.providerFileLifecycle.retain({
+        cacheKey: 'workspace-content',
+        fileId: 'workspace-file',
+        bytes: 10,
+        identity: {
+          provider: 'kimi',
+          baseURL: 'https://api.kimi.test/v1',
+          credentialHash: 'workspace-credential',
+        },
+        policy: resolveProviderFilePolicy({
+          configuredMode: 'workspace',
+          configuredRetentionMs: 60_000,
+          configuredDeletion: 'retain',
+          providerFileReferences: true,
+          zeroDataRetention: 'incompatible-while-retained',
+          zeroDataRetentionRequired: false,
+        }),
+        scopeId: '/workspace/a',
+        deleteRemote: async (fileId) => {
+          deleted.push(fileId);
+        },
+      });
+      await retained.lease.release();
+
+      await disposeCliRuntime(runtimeId);
+
+      expect({
+        registered: runtimeRegistry.has(runtimeId),
+        deleted,
+      }).toStrictEqual({
+        registered: false,
+        deleted: [],
+      });
+    });
+
+    it('creates isolated provider-file lifecycle state for each runtime', async () => {
+      const first = upsertRuntimeEntry('runtime-lifecycle-a', {});
+      const second = upsertRuntimeEntry('runtime-lifecycle-b', {});
+      const retained = await first.providerFileLifecycle.retain({
+        cacheKey: 'shared-content',
+        fileId: 'runtime-a-file',
+        bytes: 10,
+        identity: {
+          provider: 'kimi',
+          baseURL: 'https://api.kimi.test/v1',
+          credentialHash: 'shared-credential',
+        },
+        policy: resolveProviderFilePolicy({
+          configuredMode: 'session',
+          configuredRetentionMs: 60_000,
+          configuredDeletion: 'delete',
+          providerFileReferences: true,
+          zeroDataRetention: 'incompatible-while-retained',
+          zeroDataRetentionRequired: false,
+        }),
+        scopeId: 'runtime-lifecycle-a',
+        deleteRemote: async () => undefined,
+      });
+
+      expect(first.providerFileLifecycle.snapshot().retainedFiles).toBe(1);
+      expect(second.providerFileLifecycle.snapshot().retainedFiles).toBe(0);
+      await retained.lease.release();
+    });
+
+    it('should remove entry from registry', async () => {
       const runtimeId = 'test-dispose-1';
       upsertRuntimeEntry(runtimeId, {});
 
-      disposeCliRuntime(runtimeId);
+      await disposeCliRuntime(runtimeId);
 
       expect(runtimeRegistry.has(runtimeId)).toBe(false);
     });
 
-    it('should throw when accessing disposed entry', () => {
+    it('should throw when accessing disposed entry', async () => {
       const runtimeId = 'test-dispose-2';
       upsertRuntimeEntry(runtimeId, {});
-      disposeCliRuntime(runtimeId);
+      await disposeCliRuntime(runtimeId);
 
       expect(() => requireRuntimeEntry(runtimeId)).toThrow(
         /runtime registration/,
       );
     });
 
-    it('should clear active context if runtimeId matches', () => {
+    it('should clear active context if runtimeId matches', async () => {
       const runtimeId = 'test-dispose-3';
       upsertRuntimeEntry(runtimeId, {});
-      disposeCliRuntime(runtimeId);
+      await disposeCliRuntime(runtimeId);
 
       // After disposal, the active context should be cleared
       const activeContext = peekActiveProviderRuntimeContext();

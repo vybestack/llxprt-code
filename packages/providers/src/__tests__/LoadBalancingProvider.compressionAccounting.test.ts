@@ -53,8 +53,6 @@ function createMockProvider(overrides: Partial<IProvider> = {}): IProvider {
       },
     getModels: overrides.getModels ?? (async () => []),
     getDefaultModel: overrides.getDefaultModel ?? (() => 'mock-model'),
-    getServerTools: overrides.getServerTools ?? (() => []),
-    invokeServerTool: overrides.invokeServerTool ?? (async () => ({})),
   };
 }
 
@@ -140,8 +138,6 @@ describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
       },
       getModels: async () => [],
       getDefaultModel: () => 'gpt-4.1',
-      getServerTools: () => [],
-      invokeServerTool: async () => ({}),
     });
     providerManager.registerProvider({
       name: 'anthropic',
@@ -157,8 +153,6 @@ describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
       },
       getModels: async () => [],
       getDefaultModel: () => 'claude-opus-4',
-      getServerTools: () => [],
-      invokeServerTool: async () => ({}),
     });
 
     const lbConfig: LoadBalancingProviderConfig = {
@@ -468,8 +462,6 @@ describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
       },
       getModels: async () => [],
       getDefaultModel: () => 'gpt-4.1',
-      getServerTools: () => [],
-      invokeServerTool: async () => ({}),
     });
     let anthropicCallCount = 0;
     providerManager.registerProvider(

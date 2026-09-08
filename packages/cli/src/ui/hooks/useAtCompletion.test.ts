@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { act } from 'react';
+import * as path from 'path';
 import type { Config, FileSearch } from '@vybestack/llxprt-code-core';
 import { FileSearchFactory } from '@vybestack/llxprt-code-core';
 import type { FileSystemStructure } from '@vybestack/llxprt-code-test-utils';
@@ -264,18 +265,22 @@ describe('useAtCompletion', () => {
       vi.useRealTimers();
     });
 
-    it('should abort the previous search when a new one starts', async () => {
+    const observeSupersededSearch = async (): Promise<{
+      readonly search: ReturnType<typeof vi.fn>;
+      readonly abort: ReturnType<typeof vi.spyOn>;
+    }> => {
       testRootDir = await createTmpDir({});
 
       const abortSpy = vi.spyOn(AbortController.prototype, 'abort');
+      const search = vi.fn().mockImplementation((pattern: string) => {
+        const delay = pattern === 'a' ? 500 : 50;
+        return new Promise((resolve) => {
+          setTimeout(() => resolve([pattern]), delay);
+        });
+      });
       const mockFileSearch: FileSearch = {
         initialize: vi.fn().mockResolvedValue(undefined),
-        search: vi.fn().mockImplementation((pattern: string) => {
-          const delay = pattern === 'a' ? 500 : 50;
-          return new Promise((resolve) => {
-            setTimeout(() => resolve([pattern]), delay);
-          });
-        }),
+        search,
       };
       vi.spyOn(FileSearchFactory, 'create').mockReturnValue(mockFileSearch);
 
@@ -286,10 +291,9 @@ describe('useAtCompletion', () => {
       );
 
       await waitFor(() => {
-        expect(mockFileSearch.search).toHaveBeenCalledWith(
-          'a',
-          expect.any(Object),
-        );
+        if (search.mock.calls.length === 0) {
+          throw new Error('Expected the initial file search to start');
+        }
       });
 
       vi.useFakeTimers();
@@ -298,7 +302,16 @@ describe('useAtCompletion', () => {
         vi.advanceTimersByTime(150);
       });
 
-      expect(abortSpy).toHaveBeenCalled();
+      return { search, abort: abortSpy };
+    };
+
+    it('should abort the previous search when a new one starts', async () => {
+      const supersededSearch = await observeSupersededSearch();
+      expect(supersededSearch.search).toHaveBeenCalledWith(
+        'a',
+        expect.any(Object),
+      );
+      expect(supersededSearch.abort).toHaveBeenCalled();
     });
   });
 
@@ -357,6 +370,67 @@ describe('useAtCompletion', () => {
       expect(result.current.suggestions).toStrictEqual([]);
     });
 
+    it('should recover from an initialization error when the cwd changes', async () => {
+      const structure: FileSystemStructure = {
+        failed: {},
+        recovered: { 'recovered.txt': '' },
+      };
+      testRootDir = await createTmpDir(structure);
+      const failedCwd = path.join(testRootDir, 'failed');
+      const recoveredCwd = path.join(testRootDir, 'recovered');
+
+      // Each fake delegates to a real searcher rooted at the projectRoot the
+      // hook actually asked for, so recovery is proven by the suggestions
+      // themselves: re-initializing against the wrong cwd yields no matches.
+      // Failure is keyed to the directory rather than to call order, so the
+      // failed root always fails however many times the hook initializes it.
+      const createRealFileSearch =
+        FileSearchFactory.create.bind(FileSearchFactory);
+      vi.spyOn(FileSearchFactory, 'create').mockImplementation(
+        (options: Parameters<typeof FileSearchFactory.create>[0]) => {
+          const realFileSearch = createRealFileSearch(options);
+          const fake: FileSearch = {
+            initialize: vi.fn(async () => {
+              if (options.projectRoot === failedCwd) {
+                throw new Error('Initialization failed');
+              }
+              return realFileSearch.initialize();
+            }),
+            search: vi.fn(async (...args) => realFileSearch.search(...args)),
+          };
+          return fake;
+        },
+      );
+
+      const { result, rerender } = renderHook(
+        ({ cwd, pattern }) =>
+          useTestHarnessForAtCompletion(true, pattern, mockConfig, cwd),
+        {
+          initialProps: {
+            cwd: failedCwd,
+            pattern: 'recovered',
+          },
+        },
+      );
+
+      expect(result.current.isLoadingSuggestions).toBe(true);
+      await waitFor(() => {
+        expect(result.current.isLoadingSuggestions).toBe(false);
+      });
+      expect(result.current.suggestions).toStrictEqual([]);
+
+      act(() => {
+        rerender({ cwd: recoveredCwd, pattern: 'recovered' });
+      });
+
+      await waitFor(() => {
+        expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
+          'recovered.txt',
+        ]);
+      });
+      expect(result.current.isLoadingSuggestions).toBe(false);
+    });
+
     it('should reset when disabled during initialization', async () => {
       testRootDir = await createTmpDir({});
       const mockFileSearch: FileSearch = {
@@ -377,6 +451,49 @@ describe('useAtCompletion', () => {
 
       expect(result.current.isLoadingSuggestions).toBe(false);
       expect(result.current.suggestions).toStrictEqual([]);
+    });
+
+    it('recovers from an initialization error when the completion root changes', async (): Promise<void> => {
+      testRootDir = await createTmpDir({ 'recovered result.txt': '' });
+      const unavailableRoot = `${testRootDir}/unavailable`;
+      const failingFileSearch: FileSearch = {
+        initialize: async (): Promise<void> => {
+          throw new Error('File search unavailable');
+        },
+        search: async (): Promise<string[]> => [],
+      };
+      const recoveredFileSearch = FileSearchFactory.create({
+        projectRoot: testRootDir,
+        ignoreDirs: [],
+        useGitignore: false,
+        useExtensionIgnore: false,
+        cache: false,
+        enableRecursiveFileSearch: true,
+        enableFuzzySearch: true,
+      });
+      vi.spyOn(FileSearchFactory, 'create')
+        .mockReturnValueOnce(failingFileSearch)
+        .mockReturnValue(recoveredFileSearch);
+
+      const { result, rerender } = renderHook(
+        ({ cwd }: { readonly cwd: string }) =>
+          useTestHarnessForAtCompletion(true, 'recovered', mockConfig, cwd),
+        { initialProps: { cwd: unavailableRoot } },
+      );
+
+      await waitFor((): void => {
+        expect(result.current.isLoadingSuggestions).toBe(false);
+        expect(result.current.suggestions).toStrictEqual([]);
+      });
+
+      rerender({ cwd: testRootDir });
+
+      await waitFor((): void => {
+        expect(
+          result.current.suggestions.map((item) => item.value),
+        ).toStrictEqual(['recovered\\ result.txt']);
+      });
+      expect(result.current.isLoadingSuggestions).toBe(false);
     });
   });
 

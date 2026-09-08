@@ -24,15 +24,13 @@
  */
 
 import type {
-  Part,
   FunctionDeclaration,
   GenerateContentResponseUsageMetadata,
   GroundingMetadata,
+  Part,
   UrlMetadata,
-  Outcome,
-  Language,
-  ApiError,
-} from '@google/genai';
+} from './geminiWireTypes.js';
+import type { ApiError, Language, Outcome } from './geminiWireTypes.js';
 import type {
   ContentBlock,
   TextBlock,

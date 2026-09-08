@@ -13,6 +13,7 @@
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
+import type { GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry/telemetry/uiTelemetry.js';
 import * as sdk from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
@@ -30,6 +31,13 @@ import {
   AlwaysFailProvider,
   SUCCESS_CHUNKS,
 } from './attemptLifecycle.helpers.test.js';
+
+function invocationWithSignal(
+  invocation: GenerateChatOptions['invocation'],
+  signal: AbortSignal,
+): NonNullable<GenerateChatOptions['invocation']> {
+  return { ...(invocation ?? {}), signal };
+}
 
 describe('#10 exact counts for all scenarios', () => {
   beforeEach(() => {
@@ -145,10 +153,10 @@ describe('#10 exact counts for all scenarios', () => {
     const controller = new AbortController();
     controller.abort();
     const options = makeOptions(config, makeContent());
-    options.invocation = {
-      ...(options.invocation ?? {}),
-      signal: controller.signal,
-    } as never;
+    options.invocation = invocationWithSignal(
+      options.invocation,
+      controller.signal,
+    ) as never;
     await expect(
       consumeStream(wrapper.generateChatCompletion(options)),
     ).rejects.toThrow(/abort/i);

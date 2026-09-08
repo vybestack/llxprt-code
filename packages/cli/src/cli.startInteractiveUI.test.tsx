@@ -219,7 +219,11 @@ describe('startInteractiveUI', () => {
     expect(checkForUpdates).toHaveBeenCalledTimes(1);
   });
 
-  it('should register exit handlers that restore terminal protocols and disable mouse state', async () => {
+  async function observeRegisteredExitCleanup(): Promise<{
+    readonly restoreProtocols: unknown;
+    readonly disableMouse: unknown;
+    readonly cleanup: () => void;
+  }> {
     const { restoreTerminalProtocolsSync } = await import(
       './ui/utils/terminalProtocolCleanup.js'
     );
@@ -266,10 +270,24 @@ describe('startInteractiveUI', () => {
         handler();
       }
 
-      expect(restoreTerminalProtocolsSync).toHaveBeenCalledTimes(1);
-      expect(disableMouseEvents).toHaveBeenCalledTimes(1);
-    } finally {
+      return {
+        restoreProtocols: restoreTerminalProtocolsSync,
+        disableMouse: disableMouseEvents,
+        cleanup: () => processOnSpy.mockRestore(),
+      };
+    } catch (error) {
       processOnSpy.mockRestore();
+      throw error;
+    }
+  }
+
+  it('should register exit handlers that restore terminal protocols and disable mouse state', async () => {
+    const exitCleanup = await observeRegisteredExitCleanup();
+    try {
+      expect(exitCleanup.restoreProtocols).toHaveBeenCalledTimes(1);
+      expect(exitCleanup.disableMouse).toHaveBeenCalledTimes(1);
+    } finally {
+      exitCleanup.cleanup();
     }
   });
 
@@ -318,7 +336,12 @@ describe('startInteractiveUI', () => {
     processOffSpy.mockRestore();
   });
 
-  it('should not write terminal escape sequences on exit when stdout is not a TTY', async () => {
+  async function observeNonTtyExitCleanup(): Promise<{
+    readonly enableMouse: unknown;
+    readonly restoreProtocols: unknown;
+    readonly disableMouse: unknown;
+    readonly cleanup: () => void;
+  }> {
     const { restoreTerminalProtocolsSync } = await import(
       './ui/utils/terminalProtocolCleanup.js'
     );
@@ -377,15 +400,36 @@ describe('startInteractiveUI', () => {
         handler();
       }
 
-      expect(enableMouseEvents).toHaveBeenCalledTimes(1);
-      expect(restoreTerminalProtocolsSync).toHaveBeenCalledTimes(1);
-      expect(disableMouseEvents).toHaveBeenCalledTimes(1);
-    } finally {
+      return {
+        enableMouse: enableMouseEvents,
+        restoreProtocols: restoreTerminalProtocolsSync,
+        disableMouse: disableMouseEvents,
+        cleanup: () => {
+          Object.defineProperty(process.stdout, 'isTTY', {
+            value: originalIsTTY,
+            configurable: true,
+          });
+          processOnSpy.mockRestore();
+        },
+      };
+    } catch (error) {
       Object.defineProperty(process.stdout, 'isTTY', {
         value: originalIsTTY,
         configurable: true,
       });
       processOnSpy.mockRestore();
+      throw error;
+    }
+  }
+
+  it('should not write terminal escape sequences on exit when stdout is not a TTY', async () => {
+    const exitCleanup = await observeNonTtyExitCleanup();
+    try {
+      expect(exitCleanup.enableMouse).toHaveBeenCalledTimes(1);
+      expect(exitCleanup.restoreProtocols).toHaveBeenCalledTimes(1);
+      expect(exitCleanup.disableMouse).toHaveBeenCalledTimes(1);
+    } finally {
+      exitCleanup.cleanup();
     }
   });
 });

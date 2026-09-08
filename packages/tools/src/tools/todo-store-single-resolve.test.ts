@@ -47,47 +47,35 @@ describe('TodoStore — single path resolution per operation', () => {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   });
 
-  it('writeTodos resolves the path exactly once and round-trips under an alternating resolver', async () => {
-    // Two distinct directories the resolver alternates between.
-    const dirA = path.join(tempRoot, 'alt-a');
-    const dirB = path.join(tempRoot, 'alt-b');
-    let callCount = 0;
-    // The resolver alternates: first call dirA, second dirB, third dirA...
-    // The construction-time call resolves dirA (call 0). Each subsequent
-    // operation must resolve exactly once. If the store resolves more than
-    // once per operation, exists/read/write will split across dirA/dirB.
-    const alternatingResolver = (): string => {
-      const dir = callCount % 2 === 0 ? dirA : dirB;
-      callCount++;
-      return dir;
+  const observeWriteTodosResolvesThePathExactlyOnceAndRoundTripsUnderAnAlternatingResolverAt50 =
+    async () => {
+      const dirA = path.join(tempRoot, 'alt-a');
+      const dirB = path.join(tempRoot, 'alt-b');
+      let callCount = 0;
+      const alternatingResolver = (): string => {
+        const dir = callCount % 2 === 0 ? dirA : dirB;
+        callCount++;
+        return dir;
+      };
+      const store = new TodoStore('sess-alt', {
+        dataDirResolver: alternatingResolver,
+      });
+      const beforeWrite = callCount;
+      await store.writeTodos([
+        { id: 'w1', content: 'write-one', status: 'pending', subtasks: [] },
+      ]);
+      const writeResolutions = callCount - beforeWrite;
+      return { dirA, dirB, writeResolutions };
     };
 
-    const store = new TodoStore('sess-alt', {
-      dataDirResolver: alternatingResolver,
-    });
-
-    // Construction consumed call 0 (dirA). writeTodos must resolve exactly
-    // once for the whole operation (read-existing + write). Record the count
-    // before/after to prove one resolution.
-    const beforeWrite = callCount;
-    await store.writeTodos([
-      { id: 'w1', content: 'write-one', status: 'pending', subtasks: [] },
-    ]);
-    const writeResolutions = callCount - beforeWrite;
-    // The operation must resolve the path exactly once. writeTodos internally
-    // does a read-existing (to preserve paused) then a write — both must use
-    // the SAME captured path, so the resolver is called exactly once.
+  it('writeTodos resolves the path exactly once and round-trips under an alternating resolver', async () => {
+    const { dirA, dirB, writeResolutions } =
+      await observeWriteTodosResolvesThePathExactlyOnceAndRoundTripsUnderAnAlternatingResolverAt50();
     expect(writeResolutions).toBe(1);
-
-    // construction=call0→dirA, write=call1→dirB. So the file is in
-    // dirB. The point is the file exists SOMEWHERE consistent and can be read
-    // back. Let's find it.
     const fileInA = path.join(dirA, 'todos', 'todo-sess-alt.json');
     const fileInB = path.join(dirB, 'todos', 'todo-sess-alt.json');
-    // Exactly one of the two should exist (the resolved path), proving no
-    // split across directories.
-    const existsInA = fs.existsSync(fileInA) ? 1 : 0;
-    const existsInB = fs.existsSync(fileInB) ? 1 : 0;
+    const existsInA = Number(fs.existsSync(fileInA));
+    const existsInB = Number(fs.existsSync(fileInB));
     expect(existsInA + existsInB).toBeGreaterThanOrEqual(1);
   });
 
@@ -143,32 +131,31 @@ describe('TodoStore — single path resolution per operation', () => {
     expect(data).toBe(true);
   });
 
+  const observeATrulyAlternatingResolverDoesNotSplitExistsReadAcrossDirectoriesAt146 =
+    async () => {
+      const dirA = path.join(tempRoot, 'split-a');
+      const dirB = path.join(tempRoot, 'split-b');
+      let toggle = false;
+      const store = new TodoStore('sess-split', {
+        dataDirResolver: () => {
+          const d = toggle ? dirB : dirA;
+          toggle = !toggle;
+          return d;
+        },
+      });
+      await store.writeTodos([
+        { id: 's1', content: 'split-test', status: 'pending', subtasks: [] },
+      ]);
+      const fileA = path.join(dirA, 'todos', 'todo-sess-split.json');
+      const fileB = path.join(dirB, 'todos', 'todo-sess-split.json');
+      const existsA = fs.existsSync(fileA);
+      const existsB = fs.existsSync(fileB);
+      return { existsA, existsB };
+    };
+
   it('a truly alternating resolver does not split exists/read across directories', async () => {
-    // This is the core hazard: if resolveFilePath() is called separately for
-    // existsSync and readFile, an alternating resolver makes exists check
-    // dirA while read targets dirB (or vice versa). With single-resolution,
-    // both use the same path and the round-trip is consistent.
-    const dirA = path.join(tempRoot, 'split-a');
-    const dirB = path.join(tempRoot, 'split-b');
-    let toggle = false;
-    const store = new TodoStore('sess-split', {
-      dataDirResolver: () => {
-        const d = toggle ? dirB : dirA;
-        toggle = !toggle;
-        return d;
-      },
-    });
-
-    // Write a todo. With single-resolution, the entire write lands in one dir.
-    await store.writeTodos([
-      { id: 's1', content: 'split-test', status: 'pending', subtasks: [] },
-    ]);
-
-    // Exactly one directory should contain the file (not both, not neither).
-    const fileA = path.join(dirA, 'todos', 'todo-sess-split.json');
-    const fileB = path.join(dirB, 'todos', 'todo-sess-split.json');
-    const existsA = fs.existsSync(fileA);
-    const existsB = fs.existsSync(fileB);
-    expect(existsA !== existsB).toBe(true); // exactly one
+    const { existsA, existsB } =
+      await observeATrulyAlternatingResolverDoesNotSplitExistsReadAcrossDirectoriesAt146();
+    expect(existsA !== existsB).toBe(true);
   });
 });

@@ -35,130 +35,159 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
   });
 
   it('injects steer text alongside tool results at the loop boundary when tools complete', async () => {
-    const tool = new MockTool({
-      name: 'record_tool',
-      execute: async () => ({
-        llmContent: 'recorded-ok',
-        returnDisplay: 'recorded-ok',
-      }),
-    });
-
-    const toolRegistry = createToolRegistryForTest([tool]);
-    const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: true,
-      approvalMode: ApprovalMode.YOLO,
-    });
-
-    const { client, turnMessages } = createScriptedAgentClient([
-      [
-        toolCallRequestEvent('record_tool', 'call-1', { x: 1 }),
-        finishedEvent(),
-      ],
-      [contentEvent('final-response'), finishedEvent()],
-    ]);
-
-    const loop = new AgenticLoop({
-      agentClient: client,
-      config,
-      messageBus,
-    });
-
-    // Start the loop — the first turn will stream a tool call and then
-    // schedule/await the tool. injectSteer must happen during tool execution
-    // (before the turn boundary), so we call it right after starting the
-    // async iteration. Since collectEvents is async and the MockTool resolves
-    // on the microtask queue, the synchronous injectSteer lands in the buffer
-    // before drainSteer runs at the top of the next iteration.
-    const eventsPromise = collectEvents(
-      loop,
-      'go',
-      new AbortController().signal,
-    );
-    loop.injectSteer('actually, please use x=2 instead');
-    const events = await eventsPromise;
-
-    // Two turns happened: tool turn + final answer turn
+    const {
+      turnMessages,
+      turn2Parts,
+      steerTextIdx,
+      fnResponseIdx,
+      lastStream,
+    } =
+      await observeInjectsSteerTextAlongsideToolResultsAtTheLoopBoundaryWhenTools();
     expect(turnMessages).toHaveLength(2);
-
-    // Turn 2 message should contain both functionResponse parts AND the steer text
-    const turn2Parts = partListUnionToParts(turnMessages[1]);
     expect(hasFunctionResponsePart(turn2Parts)).toBe(true);
     expect(textParts(turn2Parts)).toContain('actually, please use x=2 instead');
-
-    // The steer text must come AFTER the tool results (it's appended last)
-    const fnResponseIdx = turn2Parts.findIndex(
-      (p) => p.type === 'tool_response',
-    );
-    const steerTextIdx = turn2Parts.findIndex(
-      (p) => p.type === 'text' && p.text === 'actually, please use x=2 instead',
-    );
     expect(steerTextIdx).toBeGreaterThan(fnResponseIdx);
-
-    // The model should have produced a final response
-    const streamEvents = events.filter(isStream);
-    const lastStream = streamEvents.at(-1);
     expect(lastStream).toBeDefined();
   });
 
-  it('keeps budget feedback before steer text at the completed-tool boundary', async () => {
-    const tool = new MockTool({
-      name: 'image_tool',
-      execute: async () => ({
-        llmContent: [
-          {
-            inlineData: {
-              mimeType: 'image/png',
-              data: 'AA',
-            },
-          },
+  const observeInjectsSteerTextAlongsideToolResultsAtTheLoopBoundaryWhenTools =
+    async () => {
+      const tool = new MockTool({
+        name: 'record_tool',
+        execute: async () => ({
+          llmContent: 'recorded-ok',
+          returnDisplay: 'recorded-ok',
+        }),
+      });
+
+      const toolRegistry = createToolRegistryForTest([tool]);
+      const messageBus = new MessageBus(createAllowPolicyEngine(), false);
+      const config = createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: true,
+        approvalMode: ApprovalMode.YOLO,
+      });
+
+      const { client, turnMessages } = createScriptedAgentClient([
+        [
+          toolCallRequestEvent('record_tool', 'call-1', { x: 1 }),
+          finishedEvent(),
         ],
-        returnDisplay: 'image',
-      }),
-    });
+        [contentEvent('final-response'), finishedEvent()],
+      ]);
 
-    const toolRegistry = createToolRegistryForTest([tool]);
-    const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: true,
-      approvalMode: ApprovalMode.YOLO,
-      imagePayloadBudgetBytes: 1,
-    });
-    const { client, turnMessages } = createScriptedAgentClient([
-      [toolCallRequestEvent('image_tool', 'call-1'), finishedEvent()],
-      [contentEvent('final-response'), finishedEvent()],
-    ]);
-    const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+      const loop = new AgenticLoop({
+        agentClient: client,
+        config,
+        messageBus,
+      });
 
-    const eventsPromise = collectEvents(
-      loop,
-      'go',
-      new AbortController().signal,
-    );
-    loop.injectSteer('use a smaller image');
-    await eventsPromise;
+      // Start the loop — the first turn will stream a tool call and then
+      // schedule/await the tool. injectSteer must happen during tool execution
+      // (before the turn boundary), so we call it right after starting the
+      // async iteration. Since collectEvents is async and the MockTool resolves
+      // on the microtask queue, the synchronous injectSteer lands in the buffer
+      // before drainSteer runs at the top of the next iteration.
+      const eventsPromise = collectEvents(
+        loop,
+        'go',
+        new AbortController().signal,
+      );
+      loop.injectSteer('actually, please use x=2 instead');
+      const events = await eventsPromise;
 
-    const turn2Parts = partListUnionToParts(turnMessages[1]);
-    const responseIndex = turn2Parts.findIndex(
-      (p) => p.type === 'tool_response',
-    );
-    const feedbackIndex = turn2Parts.findIndex(
-      (p) => p.type === 'text' && p.text.includes('image(s) were omitted'),
-    );
-    const steerIndex = turn2Parts.findIndex(
-      (p) => p.type === 'text' && p.text === 'use a smaller image',
-    );
+      // Two turns happened: tool turn + final answer turn
+
+      // Turn 2 message should contain both functionResponse parts AND the steer text
+      const turn2Parts = partListUnionToParts(turnMessages[1]);
+
+      // The steer text must come AFTER the tool results (it's appended last)
+      const fnResponseIdx = turn2Parts.findIndex(
+        (p) => p.type === 'tool_response',
+      );
+      const steerTextIdx = turn2Parts.findIndex(
+        (p) =>
+          p.type === 'text' && p.text === 'actually, please use x=2 instead',
+      );
+
+      // The model should have produced a final response
+      const streamEvents = events.filter(isStream);
+      const lastStream = streamEvents.at(-1);
+
+      return {
+        turnMessages,
+        turn2Parts,
+        steerTextIdx,
+        fnResponseIdx,
+        lastStream,
+      };
+    };
+
+  it('keeps budget feedback before steer text at the completed-tool boundary', async () => {
+    const { turn2Parts, responseIndex, feedbackIndex, steerIndex } =
+      await observeKeepsBudgetFeedbackBeforeSteerTextAtTheCompletedToolBoundary();
     expect(turn2Parts.some((p) => p.type === 'media')).toBe(false);
     expect(responseIndex).toBeGreaterThanOrEqual(0);
     expect(feedbackIndex).toBeGreaterThan(responseIndex);
     expect(steerIndex).toBeGreaterThan(feedbackIndex);
   });
+
+  const observeKeepsBudgetFeedbackBeforeSteerTextAtTheCompletedToolBoundary =
+    async () => {
+      const tool = new MockTool({
+        name: 'image_tool',
+        execute: async () => ({
+          llmContent: [
+            {
+              inlineData: {
+                mimeType: 'image/png',
+                data: 'AA',
+              },
+            },
+          ],
+          returnDisplay: 'image',
+        }),
+      });
+
+      const toolRegistry = createToolRegistryForTest([tool]);
+      const messageBus = new MessageBus(createAllowPolicyEngine(), false);
+      const config = createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: true,
+        approvalMode: ApprovalMode.YOLO,
+        imagePayloadBudgetBytes: 1,
+      });
+      const { client, turnMessages } = createScriptedAgentClient([
+        [toolCallRequestEvent('image_tool', 'call-1'), finishedEvent()],
+        [contentEvent('final-response'), finishedEvent()],
+      ]);
+      const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+
+      const eventsPromise = collectEvents(
+        loop,
+        'go',
+        new AbortController().signal,
+      );
+      loop.injectSteer('use a smaller image');
+      await eventsPromise;
+
+      const turn2Parts = partListUnionToParts(turnMessages[1]);
+      const responseIndex = turn2Parts.findIndex(
+        (p) => p.type === 'tool_response',
+      );
+      const feedbackIndex = turn2Parts.findIndex(
+        (p) => p.type === 'text' && p.text.includes('image(s) were omitted'),
+      );
+      const steerIndex = turn2Parts.findIndex(
+        (p) => p.type === 'text' && p.text === 'use a smaller image',
+      );
+
+      return { turn2Parts, responseIndex, feedbackIndex, steerIndex };
+    };
 
   it('forces one more turn when steer arrives during a final-answer stream (no tool calls)', async () => {
     const toolRegistry = createToolRegistryForTest([]);

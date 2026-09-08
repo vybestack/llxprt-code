@@ -54,7 +54,6 @@ import {
 } from './logging/attemptLifecycle.js';
 import { AttemptRecorder } from './logging/attemptRecorder.js';
 import { isWrapperLifecycleOwner } from './logging/lifecycleOwnership.js';
-import { invokeServerToolWithLogging } from './logging/serverToolLogger.js';
 import { safeGetDefaultModel } from './utils/safeDefaultModel.js';
 
 export type { ConversationDataRedactor };
@@ -542,25 +541,6 @@ export class LoggingProviderWrapper implements IProvider {
       ).setConfig;
       candidate?.call(this.wrapped, config);
     }
-  }
-
-  getServerTools(): string[] {
-    return this.wrapped.getServerTools();
-  }
-
-  async invokeServerTool(
-    toolName: string,
-    params: unknown,
-    config?: unknown,
-  ): Promise<unknown> {
-    return invokeServerToolWithLogging(this.wrapped, toolName, params, config, {
-      providerName: this.wrapped.name,
-      conversationId: this.conversationId,
-      turnNumber: this.turnNumber,
-      generatePromptId: () => this.generatePromptId(),
-      redactor: this.redactor,
-      debug: this.debug,
-    });
   }
 
   getModelParams?(): Record<string, unknown> | undefined {

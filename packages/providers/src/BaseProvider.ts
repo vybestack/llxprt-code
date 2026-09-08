@@ -10,6 +10,11 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 import {
+  conservativeMediaTransportCapabilities,
+  copyMediaTransportCapabilities,
+  type ProviderMediaTransportCapabilities,
+} from './providerMediaTransportCapabilities.js';
+import {
   type IProvider,
   type GenerateChatOptions,
   type ProviderToolset,
@@ -74,6 +79,7 @@ export interface BaseProviderConfig {
   // createProviderKeyStorage() factory, which routes through the credential
   // proxy inside a sandbox and direct storage on the host.
   providerKeyStorage?: IProviderKeyStorage;
+  mediaTransportCapabilities?: ProviderMediaTransportCapabilities;
 }
 
 export interface NormalizedGenerateChatOptions extends GenerateChatOptions {
@@ -112,6 +118,7 @@ export abstract class BaseProvider implements IProvider {
    */
   private defaultSettingsService: SettingsService | undefined;
   private defaultConfig?: Config;
+  private readonly mediaTransportCapabilities: ProviderMediaTransportCapabilities;
   private readonly activeCallContext =
     new AsyncLocalStorage<NormalizedGenerateChatOptions>();
 
@@ -136,6 +143,10 @@ export abstract class BaseProvider implements IProvider {
     this.baseProviderConfig = config;
     this.providerConfig = providerConfig;
     this.defaultConfig = globalConfig;
+    this.mediaTransportCapabilities = copyMediaTransportCapabilities(
+      config.mediaTransportCapabilities ??
+        conservativeMediaTransportCapabilities(),
+    );
 
     const fallbackSettingsService =
       resolveRuntimeSettingsService(settingsService);
@@ -166,6 +177,9 @@ export abstract class BaseProvider implements IProvider {
       providerKeyStorage:
         config.providerKeyStorage ?? createProviderKeyStorage(),
     });
+  }
+  getMediaTransportCapabilities(): ProviderMediaTransportCapabilities {
+    return copyMediaTransportCapabilities(this.mediaTransportCapabilities);
   }
 
   /**
@@ -927,19 +941,6 @@ export abstract class BaseProvider implements IProvider {
     }
 
     this.providerConfig = config as IProviderConfig;
-  }
-  getServerTools(): string[] {
-    return [];
-  }
-  async invokeServerTool(
-    toolName: string,
-    _params: unknown,
-    _config?: unknown,
-    _signal?: AbortSignal,
-  ): Promise<unknown> {
-    throw new Error(
-      `Server tool '${toolName}' not supported by ${this.name} provider`,
-    );
   }
   getModelParams?(): Record<string, unknown> | undefined {
     return undefined;

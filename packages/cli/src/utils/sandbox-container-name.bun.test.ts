@@ -140,7 +140,7 @@ describe('assignContainerName', () => {
       }
       const ownerPayload = ownerLabel.slice(ownerLabel.indexOf('=') + 1);
       const owner: unknown = JSON.parse(ownerPayload);
-      expect({ labels, owner, nameArgs: args.slice(-4) }).toEqual({
+      expect({ labels, owner, nameArgs: args.slice(-4) }).toStrictEqual({
         labels: expect.arrayContaining([
           'com.vybestack.llxprt.sandbox-managed=true',
         ]),
@@ -183,7 +183,7 @@ describe('assignContainerName', () => {
       ownerLabel.slice(ownerLabel.indexOf('=') + 1),
     );
     const estimatedStartTimeMs = readEstimatedStartTime(owner);
-    expect(owner).toEqual(
+    expect(owner).toStrictEqual(
       expect.objectContaining({
         pid: process.pid,
         startTimeSource: 'estimated',

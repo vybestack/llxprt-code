@@ -100,18 +100,19 @@ describe('reconcileGlobalMemory: concurrent and edge cases', () => {
       // check and the publish, it must survive.
       await fs.promises.writeFile(path.join(dataDir, 'LLXPRT.md'), '');
 
-      let hookCalled = false;
+      const concurrentWrites = [
+        () => {
+          // Simulate a concurrent MemoryTool write before the empty
+          // canonical is created.
+          fs.writeFileSync(
+            path.join(configDir, 'LLXPRT.md'),
+            'concurrent non-empty content\n',
+          );
+        },
+      ];
       const result = reconcileGlobalMemory(destinations, {
         onBeforeConfigPublish: () => {
-          if (!hookCalled) {
-            hookCalled = true;
-            // Simulate a concurrent MemoryTool write before the empty
-            // canonical is created.
-            fs.writeFileSync(
-              path.join(configDir, 'LLXPRT.md'),
-              'concurrent non-empty content\n',
-            );
-          }
+          concurrentWrites.shift()?.();
         },
       });
 

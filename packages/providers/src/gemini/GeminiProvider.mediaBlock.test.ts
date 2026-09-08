@@ -14,10 +14,15 @@
  * limitations under the License.
  */
 
+import { assertInstanceOf } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { GeminiProvider } from './GeminiProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import type {
+  RequestMediaResolutionService,
+  ResolvedMediaRequest,
+} from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 
 const realLlxprtCodeSettingsModule = {
   ...(await import('@vybestack/llxprt-code-settings')),
@@ -31,10 +36,12 @@ const googleGenAIConstructor = vi.fn().mockImplementation(() => ({
   },
 }));
 
-void vi.mock('@google/genai', () => ({
-  GoogleGenAI: googleGenAIConstructor,
-  Type: { OBJECT: 'object' },
-}));
+import type { CreateGeminiApiClient } from './GeminiProvider.js';
+// The factory is injected into GeminiProvider rather than module-mocked:
+// `vi.mock` registers process-wide and bun hoists it ahead of the whole
+// run, so the stub leaked into every suite loaded alongside this one.
+const injectedClientFactory =
+  googleGenAIConstructor as unknown as CreateGeminiApiClient;
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
@@ -51,7 +58,6 @@ const mockSettingsService = {
 void vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...realLlxprtCodeSettingsModule,
   getSettingsService: vi.fn(() => mockSettingsService),
-  SETTINGS_REGISTRY: [],
 }));
 
 describe('GeminiProvider - MediaBlock support', () => {
@@ -88,7 +94,12 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = new GeminiProvider('test-key');
+    const provider = new GeminiProvider(
+      'test-key',
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -150,7 +161,12 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = new GeminiProvider('test-key');
+    const provider = new GeminiProvider(
+      'test-key',
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -221,7 +237,12 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = new GeminiProvider('test-key');
+    const provider = new GeminiProvider(
+      'test-key',
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -276,7 +297,12 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = new GeminiProvider('test-key');
+    const provider = new GeminiProvider(
+      'test-key',
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -330,7 +356,12 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = new GeminiProvider('test-key');
+    const provider = new GeminiProvider(
+      'test-key',
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -385,7 +416,12 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = new GeminiProvider('test-key');
+    const provider = new GeminiProvider(
+      'test-key',
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -440,7 +476,12 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = new GeminiProvider('test-key');
+    const provider = new GeminiProvider(
+      'test-key',
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -476,5 +517,110 @@ describe('GeminiProvider - MediaBlock support', () => {
         data: 'audiodata',
       },
     });
+  });
+
+  it('preserves stream and media-release failures in one aggregate error', async () => {
+    const contentId =
+      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const reference = {
+      type: 'media' as const,
+      mimeType: 'image/png',
+      encoding: 'reference' as const,
+      contentId,
+      originalContentId: contentId,
+      selectedContentId: contentId,
+      originalObject: {
+        contentId,
+        mimeType: 'image/png',
+        byteLength: 3,
+        normalizedBase64Length: 4,
+      },
+      selectedObject: {
+        contentId,
+        mimeType: 'image/png',
+        byteLength: 3,
+        normalizedBase64Length: 4,
+      },
+      transformation: {
+        policyId: 'identity',
+        policyVersion: 1,
+        parameters: {},
+      },
+      byteLength: 3,
+      normalizedBase64Length: 4,
+      semanticMetadata: {},
+    };
+    const materialized: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'media',
+            mimeType: 'image/png',
+            encoding: 'base64',
+            data: 'QUJD',
+          },
+        ],
+      },
+    ];
+    const request: ResolvedMediaRequest = {
+      withContents: (consume) => consume(materialized),
+      registerCleanup: () => {},
+      accounting: () => ({
+        selectedReferenceCount: 1,
+        uniqueContentCount: 1,
+        selectedNormalizedBytes: 4,
+        materializedNormalizedBytes: 4,
+        storeReadCount: 1,
+        reservedContentCount: 1,
+        released: false,
+      }),
+      release: async () => {
+        throw new Error('media release failed');
+      },
+    };
+    const mediaResolver: RequestMediaResolutionService = {
+      resolve: async () => request,
+    };
+    generateContentStreamMock.mockResolvedValueOnce({
+      [Symbol.asyncIterator]: () => ({
+        next: async () => {
+          throw new Error('stream generation failed');
+        },
+      }),
+    });
+    const provider = new GeminiProvider(
+      'test-key',
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
+    const options = createProviderCallOptions({
+      providerName: provider.name,
+      contents: [{ speaker: 'human', blocks: [reference] }],
+    });
+    const iterator = provider.generateChatCompletion({
+      ...options,
+      runtime: { ...options.runtime, mediaResolver },
+    });
+
+    let error: unknown;
+    try {
+      for await (const _content of iterator) {
+        throw new Error('Unexpected Gemini content');
+      }
+    } catch (reason) {
+      error = reason;
+    }
+
+    assertInstanceOf(
+      error,
+      AggregateError,
+      'Expected generation and release AggregateError',
+    );
+    expect(error.errors).toStrictEqual([
+      new Error('stream generation failed'),
+      new Error('media release failed'),
+    ]);
   });
 });

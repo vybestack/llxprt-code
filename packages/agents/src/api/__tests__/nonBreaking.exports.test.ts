@@ -32,7 +32,7 @@ describe('REQ-006: agents public export surface is non-breaking', () => {
     ];
     const rootKeys = new Set(Object.keys(root));
     for (const key of expectedRootKeys) {
-      expect(rootKeys.has(key), `root barrel must export "${key}"`).toBe(true);
+      expect(rootKeys.has(key)).toBe(true);
     }
   });
 
@@ -46,7 +46,6 @@ describe('REQ-006: agents public export surface is non-breaking', () => {
     // PostTurnAction is a value (enum/const) re-exported from internals.
     expect(
       Object.prototype.hasOwnProperty.call(internals, 'PostTurnAction'),
-      'internals must export PostTurnAction',
     ).toBe(true);
   });
 

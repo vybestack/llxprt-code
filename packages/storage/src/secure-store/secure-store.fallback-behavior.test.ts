@@ -17,6 +17,10 @@ function isFileSystemError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && 'code' in error;
 }
 
+function fileSystemErrorCode(error: unknown): string | number | undefined {
+  return isFileSystemError(error) ? error.code : undefined;
+}
+
 describe('SecureStore encrypted-file fallback', () => {
   let tempDir: string;
 
@@ -100,7 +104,7 @@ describe('SecureStore encrypted-file fallback', () => {
     const accessError = await fs
       .access(filePath)
       .catch((error: unknown) => error);
-    expect(isFileSystemError(accessError) && accessError.code).toBe('ENOENT');
+    expect(fileSystemErrorCode(accessError)).toBe('ENOENT');
     expect(await store.get('delete-me')).toBeNull();
   });
 

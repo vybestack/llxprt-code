@@ -611,6 +611,8 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
             type: 'content_block_stop',
             index: 0,
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -676,6 +678,8 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
             type: 'content_block_stop',
             index: 0,
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -741,6 +745,8 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
               signature: mockSignature,
             },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -808,6 +814,8 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
             type: 'content_block_stop',
             index: 1,
           };
+
+          yield { type: 'message_stop' };
         },
       };
 

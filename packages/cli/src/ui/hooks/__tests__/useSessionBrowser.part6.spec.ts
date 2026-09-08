@@ -53,36 +53,86 @@ import type { PerformResumeResult } from '../../../services/performResume.js';
 // ---
 type SortOrder = 'newest' | 'oldest' | 'size';
 
-function assertSortedPair(
-  a: { lastModified: Date; fileSize: number },
-  b: { lastModified: Date; fileSize: number },
+type SortableSession = {
+  readonly lastModified: Date;
+  readonly fileSize: number;
+};
+
+type AdjacentSortPair = {
+  readonly earlier: SortableSession;
+  readonly later: SortableSession;
+};
+
+function observeAdjacentSortPairs(
+  sessions: readonly SortableSession[],
   order: SortOrder,
-): void {
-  if (order === 'newest') {
-    expect(a.lastModified.getTime()).toBeGreaterThanOrEqual(
-      b.lastModified.getTime(),
-    );
-  } else if (order === 'oldest') {
-    expect(a.lastModified.getTime()).toBeLessThanOrEqual(
-      b.lastModified.getTime(),
-    );
-  } else {
-    expect(a.fileSize).toBeGreaterThanOrEqual(b.fileSize);
+): {
+  readonly newest: readonly AdjacentSortPair[];
+  readonly oldest: readonly AdjacentSortPair[];
+  readonly size: readonly AdjacentSortPair[];
+} {
+  const newest: AdjacentSortPair[] = [];
+  const oldest: AdjacentSortPair[] = [];
+  const size: AdjacentSortPair[] = [];
+
+  for (let i = 0; i + 1 < sessions.length; i++) {
+    const pair = { earlier: sessions[i], later: sessions[i + 1] };
+    if (order === 'newest') {
+      newest.push(pair);
+    } else if (order === 'oldest') {
+      oldest.push(pair);
+    } else {
+      size.push(pair);
+    }
   }
+
+  return { newest, oldest, size };
 }
 
-function assertEscapePriority(
-  current: { deleteConfirmIndex: number | null; searchTerm: string },
+function searchKeypressText(keyName: string): string {
+  if (keyName === 'a') {
+    return 'a';
+  }
+  return '';
+}
+
+function sortKeypressText(keyName: string): string {
+  if (keyName === 'a') {
+    return 'a';
+  }
+  if (keyName === 'tab') {
+    return '\t';
+  }
+  return 's';
+}
+
+function providerForSessionIndex(index: number): 'anthropic' | 'openai' {
+  if (index % 2 === 0) {
+    return 'anthropic';
+  }
+  return 'openai';
+}
+
+type EscapePriorityControls = {
+  readonly isSearching: boolean;
+  readonly handleKeypress: (input: string, key: Key) => void;
+};
+
+function configureEscapePriorityState(
+  current: EscapePriorityControls,
   hasDeleteConfirm: boolean,
   hasSearchTerm: boolean,
 ): void {
+  if (hasSearchTerm) {
+    // 'a' will match the session with 'apples and oranges'
+    current.handleKeypress('a', makeKey('a'));
+  }
   if (hasDeleteConfirm) {
-    expect(current.deleteConfirmIndex).toBeNull();
-    if (hasSearchTerm) {
-      expect(current.searchTerm).toBe('a');
+    // Switch to nav mode and show delete confirmation
+    if (current.isSearching) {
+      current.handleKeypress('\t', makeKey('tab'));
     }
-  } else if (hasSearchTerm) {
-    expect(current.searchTerm).toBe('');
+    current.handleKeypress('', makeKey('delete'));
   }
 }
 
@@ -254,7 +304,7 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
           (keys) => {
             for (const keyName of keys) {
               result.current.handleKeypress(
-                keyName === 'a' ? 'a' : '',
+                searchKeypressText(keyName),
                 makeKey(keyName),
               );
             }
@@ -303,7 +353,7 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
           (keys) => {
             for (const keyName of keys) {
               result.current.handleKeypress(
-                keyName === 'a' ? 'a' : '',
+                searchKeypressText(keyName),
                 makeKey(keyName),
               );
             }
@@ -325,7 +375,7 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       for (let i = 0; i < 10; i++) {
         await createTestSession(chatsDir, {
           sessionId: `session-${i.toString().padStart(2, '0')}`,
-          provider: i % 2 === 0 ? 'anthropic' : 'openai',
+          provider: providerForSessionIndex(i),
         });
         await delay(5);
       }
@@ -390,24 +440,28 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
           ),
           (keys) => {
             for (const keyName of keys) {
-              let keyChar: string;
-              if (keyName === 'a') {
-                keyChar = 'a';
-              } else if (keyName === 'tab') {
-                keyChar = '\t';
-              } else {
-                keyChar = 's';
-              }
-              result.current.handleKeypress(keyChar, makeKey(keyName));
+              result.current.handleKeypress(
+                sortKeypressText(keyName),
+                makeKey(keyName),
+              );
             }
 
-            const sessions = result.current.filteredSessions;
-            for (let i = 0; i + 1 < sessions.length; i++) {
-              assertSortedPair(
-                sessions[i],
-                sessions[i + 1],
-                result.current.sortOrder,
+            const adjacentPairs = observeAdjacentSortPairs(
+              result.current.filteredSessions,
+              result.current.sortOrder,
+            );
+            for (const { earlier, later } of adjacentPairs.newest) {
+              expect(earlier.lastModified.getTime()).toBeGreaterThanOrEqual(
+                later.lastModified.getTime(),
               );
+            }
+            for (const { earlier, later } of adjacentPairs.oldest) {
+              expect(earlier.lastModified.getTime()).toBeLessThanOrEqual(
+                later.lastModified.getTime(),
+              );
+            }
+            for (const { earlier, later } of adjacentPairs.size) {
+              expect(earlier.fileSize).toBeGreaterThanOrEqual(later.fileSize);
             }
           },
         ),
@@ -430,42 +484,45 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       const props = makeHookProps(chatsDir);
 
       // Test each combination independently with fresh hook state
-      const testCases = [
-        { hasDeleteConfirm: false, hasSearchTerm: false },
-        { hasDeleteConfirm: false, hasSearchTerm: true },
-        { hasDeleteConfirm: true, hasSearchTerm: false },
-        { hasDeleteConfirm: true, hasSearchTerm: true },
-      ];
+      const noDeleteNoSearch = renderHook(() => useSessionBrowser(props));
+      await waitFor(() => {
+        expect(noDeleteNoSearch.result.current.isLoading).toBe(false);
+      });
+      configureEscapePriorityState(
+        noDeleteNoSearch.result.current,
+        false,
+        false,
+      );
+      noDeleteNoSearch.result.current.handleKeypress('\x1b', makeKey('escape'));
+      noDeleteNoSearch.unmount();
 
-      for (const { hasDeleteConfirm, hasSearchTerm } of testCases) {
-        // Fresh hook for each case
-        const { result, unmount } = renderHook(() => useSessionBrowser(props));
+      const searchOnly = renderHook(() => useSessionBrowser(props));
+      await waitFor(() => {
+        expect(searchOnly.result.current.isLoading).toBe(false);
+      });
+      configureEscapePriorityState(searchOnly.result.current, false, true);
+      searchOnly.result.current.handleKeypress('\x1b', makeKey('escape'));
+      expect(searchOnly.result.current.searchTerm).toBe('');
+      searchOnly.unmount();
 
-        await waitFor(() => {
-          expect(result.current.isLoading).toBe(false);
-        });
+      const deleteOnly = renderHook(() => useSessionBrowser(props));
+      await waitFor(() => {
+        expect(deleteOnly.result.current.isLoading).toBe(false);
+      });
+      configureEscapePriorityState(deleteOnly.result.current, true, false);
+      deleteOnly.result.current.handleKeypress('\x1b', makeKey('escape'));
+      expect(deleteOnly.result.current.deleteConfirmIndex).toBeNull();
+      deleteOnly.unmount();
 
-        // Set up state
-        if (hasSearchTerm) {
-          // 'a' will match the session with 'apples and oranges'
-          result.current.handleKeypress('a', makeKey('a'));
-        }
-        if (hasDeleteConfirm) {
-          // Switch to nav mode and show delete confirmation
-          if (result.current.isSearching) {
-            result.current.handleKeypress('\t', makeKey('tab'));
-          }
-          result.current.handleKeypress('', makeKey('delete'));
-        }
-
-        // Press escape
-        result.current.handleKeypress('\x1b', makeKey('escape'));
-
-        // Check priority order using a helper that avoids conditional expects
-        assertEscapePriority(result.current, hasDeleteConfirm, hasSearchTerm);
-
-        unmount();
-      }
+      const deleteWithSearch = renderHook(() => useSessionBrowser(props));
+      await waitFor(() => {
+        expect(deleteWithSearch.result.current.isLoading).toBe(false);
+      });
+      configureEscapePriorityState(deleteWithSearch.result.current, true, true);
+      deleteWithSearch.result.current.handleKeypress('\x1b', makeKey('escape'));
+      expect(deleteWithSearch.result.current.deleteConfirmIndex).toBeNull();
+      expect(deleteWithSearch.result.current.searchTerm).toBe('a');
+      deleteWithSearch.unmount();
     });
 
     /**

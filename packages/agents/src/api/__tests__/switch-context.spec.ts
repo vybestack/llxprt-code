@@ -429,67 +429,123 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
   // ─── Property-based: history round-trip + identity stability for T4d ─────
 
   it('T4dp property: generated message histories round-trip and preserve the same HistoryService identity across a switch @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-005', async () => {
+    const {
+      t4dpPropertyGeneratedMessageHistoriesRoundTripAndPreserveTheSameHistoryServiceProperty,
+      observations,
+    } =
+      await observeT4dpPropertyGeneratedMessageHistoriesRoundTripAndPreserveTheSameHistoryService();
     await fc.assert(
-      fc.asyncProperty(
-        fc.array(
-          fc.record({
-            role: fc.constant('user' as const),
-            text: fc.string({ minLength: 1, maxLength: 80 }),
-          }),
-          { minLength: 1, maxLength: 5 },
-        ),
-        async (generatedTurns) => {
-          const { agent, cleanup } = await buildAgent(
-            'provider-switch-two-turn.jsonl',
-          );
-          try {
-            // seed history with generated messages via the public setHistory
-            const seeded: AgentMessage[] = generatedTurns.map((t) => ({
-              speaker: 'human' as const,
-              blocks: [{ type: 'text' as const, text: t.text }],
-            }));
-            await agent.setHistory(seeded);
-
-            const existingHistoryService = captureHistoryServiceIdentity(agent);
-
-            // switch provider
-            await agent.setProvider('openai', 'gpt-4o');
-
-            const newHistoryService = captureHistoryServiceIdentity(agent);
-
-            // identity is preserved across the switch for every generated seed.
-            // Guard both probes are REAL instances first so the compare cannot
-            // pass vacuously when both are undefined.
-            expect(existingHistoryService).toBeDefined();
-            expect(newHistoryService).toBeDefined();
-            expect(newHistoryService).toBe(existingHistoryService);
-
-            // history length is at least the seeded count (continuity)
-            const history = await agent.getHistory();
-            expect(history.length).toBeGreaterThanOrEqual(seeded.length);
-
-            // every seeded text is present in the returned history (checked
-            // via direct text-block extraction from the neutral IContent
-            // blocks, not JSON serialization, since JSON.stringify escapes
-            // backslashes and other characters making substring matching
-            // unreliable for arbitrary fc.string inputs)
-            const historyTexts = history.flatMap((m) =>
-              Array.isArray(m.blocks)
-                ? m.blocks.map((b) =>
-                    b.type === 'text' && b.text.length > 0 ? b.text : '',
-                  )
-                : [],
-            );
-            for (const t of generatedTurns) {
-              expect(historyTexts.includes(t.text)).toBe(true);
-            }
-          } finally {
-            await cleanup();
-          }
-        },
-      ),
+      t4dpPropertyGeneratedMessageHistoriesRoundTripAndPreserveTheSameHistoryServiceProperty,
     );
+    expect(
+      observations.filter(
+        ({ existingHistoryService }) => existingHistoryService === undefined,
+      ),
+    ).toStrictEqual([]);
+    expect(
+      observations.filter(
+        ({ newHistoryService }) => newHistoryService === undefined,
+      ),
+    ).toStrictEqual([]);
+    expect(
+      observations.map(({ newHistoryService }) => newHistoryService),
+    ).toStrictEqual(
+      observations.map(({ existingHistoryService }) => existingHistoryService),
+    );
+    expect(
+      observations.filter(
+        ({ historyLength, seededLength }) => historyLength < seededLength,
+      ),
+    ).toStrictEqual([]);
+    expect(
+      observations.flatMap(({ missingTexts }) => missingTexts),
+    ).toStrictEqual([]);
   });
+
+  const observeT4dpPropertyGeneratedMessageHistoriesRoundTripAndPreserveTheSameHistoryService =
+    async () => {
+      const observations: Array<{
+        existingHistoryService: ReturnType<
+          typeof captureHistoryServiceIdentity
+        >;
+        newHistoryService: ReturnType<typeof captureHistoryServiceIdentity>;
+        historyLength: number;
+        seededLength: number;
+        missingTexts: string[];
+      }> = [];
+      const t4dpPropertyGeneratedMessageHistoriesRoundTripAndPreserveTheSameHistoryServiceProperty =
+        fc.asyncProperty(
+          fc.array(
+            fc.record({
+              role: fc.constant('user' as const),
+              text: fc.string({ minLength: 1, maxLength: 80 }),
+            }),
+            { minLength: 1, maxLength: 5 },
+          ),
+          async (generatedTurns) => {
+            const { agent, cleanup } = await buildAgent(
+              'provider-switch-two-turn.jsonl',
+            );
+            try {
+              // seed history with generated messages via the public setHistory
+              const seeded: AgentMessage[] = generatedTurns.map((t) => ({
+                speaker: 'human' as const,
+                blocks: [{ type: 'text' as const, text: t.text }],
+              }));
+              await agent.setHistory(seeded);
+
+              const existingHistoryService =
+                captureHistoryServiceIdentity(agent);
+
+              // switch provider
+              await agent.setProvider('openai', 'gpt-4o');
+
+              const newHistoryService = captureHistoryServiceIdentity(agent);
+
+              // history length is at least the seeded count (continuity)
+              const history = await agent.getHistory();
+
+              // every seeded text is present in the returned history (checked
+              // via direct text-block extraction from the neutral IContent
+              // blocks, not JSON serialization, since JSON.stringify escapes
+              // backslashes and other characters making substring matching
+              // unreliable for arbitrary fc.string inputs)
+              const historyTexts = history.flatMap((message) =>
+                Array.isArray(message.blocks)
+                  ? message.blocks.map((block) =>
+                      block.type === 'text' && block.text.length > 0
+                        ? block.text
+                        : '',
+                    )
+                  : [],
+              );
+              const missingTexts = generatedTurns
+                .map(({ text }) => text)
+                .filter((text) => !historyTexts.includes(text));
+              observations.push({
+                existingHistoryService,
+                newHistoryService,
+                historyLength: history.length,
+                seededLength: seeded.length,
+                missingTexts,
+              });
+              const serviceIsPreserved =
+                existingHistoryService !== undefined &&
+                newHistoryService !== undefined &&
+                newHistoryService === existingHistoryService;
+              const historyIsPreserved =
+                history.length >= seeded.length && missingTexts.length === 0;
+              return serviceIsPreserved && historyIsPreserved;
+            } finally {
+              await cleanup();
+            }
+          },
+        );
+      return {
+        t4dpPropertyGeneratedMessageHistoriesRoundTripAndPreserveTheSameHistoryServiceProperty,
+        observations,
+      };
+    };
 
   // ─── Property-based: model-param map round-trip for T5 ──────────────────
 

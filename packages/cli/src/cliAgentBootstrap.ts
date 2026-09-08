@@ -13,6 +13,7 @@ import {
 } from '@vybestack/llxprt-code-agents';
 
 import { registerCleanup } from './utils/cleanup.js';
+import { createPolicyUpdater } from './config/policy.js';
 import {
   hasProfileAuthEphemerals,
   snapshotProfileAuthEphemerals,
@@ -73,6 +74,11 @@ export async function createForegroundAgent({
     activation: activationPreflightIntent ?? activation,
     activationPreflightToken,
   });
+
+  // Wire the session policy engine to UPDATE_POLICY bus messages ("Allow for
+  // this session/for all future sessions") against the exact Config engine
+  // and Agent bus the scheduler uses.
+  createPolicyUpdater(config.getPolicyEngine(), agent.getMessageBus());
 
   registerCleanup(async () => {
     await agent.dispose();

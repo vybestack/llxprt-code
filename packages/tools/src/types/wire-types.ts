@@ -49,6 +49,14 @@ export interface InlineData {
   mimeType?: string;
   data?: string;
   displayName?: string;
+  originalData?: string;
+  originalMimeType?: string;
+  originalDimensions?: { readonly width: number; readonly height: number };
+  transformation?: {
+    readonly policyId: string;
+    readonly policyVersion: number;
+    readonly parameters: Readonly<Record<string, number>>;
+  };
 }
 
 /**

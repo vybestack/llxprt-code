@@ -210,28 +210,9 @@ export async function reapplyBootstrapProfile(
 }
 
 /**
- * Ensure the Gemini server-tools provider has the active Config attached even
- * when it is not the active provider.
- */
-export function configureServerToolsProvider(
-  providerManager: CliProviderManager,
-  config: Config,
-): void {
-  const serverToolsProvider = providerManager.getServerToolsProvider();
-  if (
-    serverToolsProvider &&
-    serverToolsProvider.name === 'gemini' &&
-    'setConfig' in serverToolsProvider &&
-    typeof serverToolsProvider.setConfig === 'function'
-  ) {
-    serverToolsProvider.setConfig(config);
-  }
-}
-
-/**
  * Retrieve the provider manager created by loadCliConfig, re-apply the bootstrap
- * profile, initialize the git stats service when conversation logging is on,
- * configure the server-tools provider, and set the DNS resolution order.
+ * profile, initialize the git stats service when conversation logging is on, and set
+ * the DNS resolution order.
  */
 export async function configureProvidersAndServices(
   config: Config,
@@ -252,8 +233,6 @@ export async function configureProvidersAndServices(
     const gitStatsService = new GitStatsServiceImpl(config);
     setGitStatsService(gitStatsService);
   }
-
-  configureServerToolsProvider(providerManager, config);
 
   dns.setDefaultResultOrder(
     validateDnsResolutionOrder(settings.merged.dnsResolutionOrder),

@@ -22,7 +22,7 @@ function flushCollect(framer: BoundedLineFramer): string[] {
 describe('BoundedLineFramer - LF line splitting', () => {
   it('emits complete LF-terminated lines', () => {
     const framer = new BoundedLineFramer();
-    expect(feedCollect(framer, Buffer.from('hello\nworld\n'))).toEqual([
+    expect(feedCollect(framer, Buffer.from('hello\nworld\n'))).toStrictEqual([
       'hello',
       'world',
     ]);
@@ -30,45 +30,52 @@ describe('BoundedLineFramer - LF line splitting', () => {
 
   it('retains a partial line across feed calls', () => {
     const framer = new BoundedLineFramer();
-    expect(feedCollect(framer, Buffer.from('hel'))).toEqual([]);
-    expect(feedCollect(framer, Buffer.from('lo\nwor'))).toEqual(['hello']);
-    expect(feedCollect(framer, Buffer.from('ld\n'))).toEqual(['world']);
+    expect(feedCollect(framer, Buffer.from('hel'))).toStrictEqual([]);
+    expect(feedCollect(framer, Buffer.from('lo\nwor'))).toStrictEqual([
+      'hello',
+    ]);
+    expect(feedCollect(framer, Buffer.from('ld\n'))).toStrictEqual(['world']);
   });
 
   it('flushRemaining returns the unterminated partial as a final line', () => {
     const framer = new BoundedLineFramer();
     feedCollect(framer, Buffer.from('hello\nworld'));
-    expect(flushCollect(framer)).toEqual(['world']);
+    expect(flushCollect(framer)).toStrictEqual(['world']);
   });
 
   it('flushRemaining returns empty when nothing remains', () => {
     const framer = new BoundedLineFramer();
     feedCollect(framer, Buffer.from('hello\nworld\n'));
-    expect(flushCollect(framer)).toEqual([]);
+    expect(flushCollect(framer)).toStrictEqual([]);
   });
 });
 
 describe('BoundedLineFramer - LF is the sole delimiter', () => {
   it('preserves lone CR as content inside a line', () => {
     const framer = new BoundedLineFramer();
-    expect(feedCollect(framer, Buffer.from('a\rb\r\n'))).toEqual(['a\rb']);
+    expect(feedCollect(framer, Buffer.from('a\rb\r\n'))).toStrictEqual([
+      'a\rb',
+    ]);
   });
 
   it('preserves lone CR in a line with no trailing newline', () => {
     const framer = new BoundedLineFramer();
     const lines = feedCollect(framer, Buffer.from('x\ry'));
-    expect(lines).toEqual([]);
-    expect(flushCollect(framer)).toEqual(['x\ry']);
+    expect(lines).toStrictEqual([]);
+    expect(flushCollect(framer)).toStrictEqual(['x\ry']);
   });
 
   it('strips exactly one CR before LF for CRLF', () => {
     const framer = new BoundedLineFramer();
-    expect(feedCollect(framer, Buffer.from('a\r\nb\r\n'))).toEqual(['a', 'b']);
+    expect(feedCollect(framer, Buffer.from('a\r\nb\r\n'))).toStrictEqual([
+      'a',
+      'b',
+    ]);
   });
 
   it('does not strip CR when not immediately before LF', () => {
     const framer = new BoundedLineFramer();
-    expect(feedCollect(framer, Buffer.from('a\r \nb\n'))).toEqual([
+    expect(feedCollect(framer, Buffer.from('a\r \nb\n'))).toStrictEqual([
       'a\r ',
       'b',
     ]);
@@ -78,12 +85,12 @@ describe('BoundedLineFramer - LF is the sole delimiter', () => {
     const framer = new BoundedLineFramer();
     const first = feedCollect(framer, Buffer.from('hello\r'));
     const second = feedCollect(framer, Buffer.from('\nworld\r\n'));
-    expect([...first, ...second]).toEqual(['hello', 'world']);
+    expect([...first, ...second]).toStrictEqual(['hello', 'world']);
   });
 
   it('handles mixed LF and CRLF in one stream', () => {
     const framer = new BoundedLineFramer();
-    expect(feedCollect(framer, Buffer.from('a\nb\r\nc\nd\r\n'))).toEqual([
+    expect(feedCollect(framer, Buffer.from('a\nb\r\nc\nd\r\n'))).toStrictEqual([
       'a',
       'b',
       'c',
@@ -93,46 +100,44 @@ describe('BoundedLineFramer - LF is the sole delimiter', () => {
 
   it('preserves CR that appears between two LF-terminated records', () => {
     const framer = new BoundedLineFramer();
-    expect(feedCollect(framer, Buffer.from('line1\n\r\nline3\n'))).toEqual([
-      'line1',
-      '',
-      'line3',
-    ]);
+    expect(
+      feedCollect(framer, Buffer.from('line1\n\r\nline3\n')),
+    ).toStrictEqual(['line1', '', 'line3']);
   });
 
   it('CR at end of chunk followed by non-LF keeps CR as content', () => {
     const framer = new BoundedLineFramer();
     const first = feedCollect(framer, Buffer.from('hello\r'));
     const second = feedCollect(framer, Buffer.from('world\n'));
-    expect([...first, ...second]).toEqual(['hello\rworld']);
+    expect([...first, ...second]).toStrictEqual(['hello\rworld']);
   });
 
   it('preserves CR CR LF (two CR before LF strips only the last)', () => {
     const framer = new BoundedLineFramer();
-    expect(feedCollect(framer, Buffer.from('a\r\r\n'))).toEqual(['a\r']);
+    expect(feedCollect(framer, Buffer.from('a\r\r\n'))).toStrictEqual(['a\r']);
   });
 
   it('does NOT emit a lone CR as its own record', () => {
     const framer = new BoundedLineFramer();
-    expect(feedCollect(framer, Buffer.from('hello\r'))).toEqual([]);
-    expect(flushCollect(framer)).toEqual(['hello\r']);
+    expect(feedCollect(framer, Buffer.from('hello\r'))).toStrictEqual([]);
+    expect(flushCollect(framer)).toStrictEqual(['hello\r']);
   });
 });
 
 describe('BoundedLineFramer - empty records', () => {
   it('emits an empty record for consecutive LF', () => {
     const framer = new BoundedLineFramer();
-    expect(feedCollect(framer, Buffer.from('\n\n'))).toEqual(['', '']);
+    expect(feedCollect(framer, Buffer.from('\n\n'))).toStrictEqual(['', '']);
   });
 
   it('emits an empty record for empty CRLF line', () => {
     const framer = new BoundedLineFramer();
-    expect(feedCollect(framer, Buffer.from('\r\n'))).toEqual(['']);
+    expect(feedCollect(framer, Buffer.from('\r\n'))).toStrictEqual(['']);
   });
 
   it('emits empty record at the start of input', () => {
     const framer = new BoundedLineFramer();
-    expect(feedCollect(framer, Buffer.from('\nhello\n'))).toEqual([
+    expect(feedCollect(framer, Buffer.from('\nhello\n'))).toStrictEqual([
       '',
       'hello',
     ]);
@@ -144,7 +149,7 @@ describe('BoundedLineFramer - multibyte UTF-8 across chunk boundaries', () => {
     const framer = new BoundedLineFramer();
     feedCollect(framer, Buffer.from([0xe4, 0xb8]));
     const lines = feedCollect(framer, Buffer.from([0x96, 0x0a]));
-    expect(lines).toEqual(['世']);
+    expect(lines).toStrictEqual(['世']);
   });
 
   it('handles multibyte chars mixed with ASCII across chunks', () => {
@@ -154,15 +159,15 @@ describe('BoundedLineFramer - multibyte UTF-8 across chunk boundaries', () => {
       framer,
       Buffer.from([0xa9, 0x6c, 0x6c, 0x6f, 0x0a]),
     );
-    expect(lines).toEqual(['héllo']);
-    expect(flushCollect(framer)).toEqual([]);
+    expect(lines).toStrictEqual(['héllo']);
+    expect(flushCollect(framer)).toStrictEqual([]);
   });
 
   it('handles emoji (4-byte) split across chunks', () => {
     const framer = new BoundedLineFramer();
     feedCollect(framer, Buffer.from([0xf0, 0x9f]));
     const lines = feedCollect(framer, Buffer.from([0x98, 0x80, 0x0a]));
-    expect(lines).toEqual(['😀']);
+    expect(lines).toStrictEqual(['😀']);
   });
 
   it('does not emit replacement characters for valid multibyte sequences', () => {
@@ -184,7 +189,7 @@ describe('BoundedLineFramer - invalid UTF-8 fatal decoding', () => {
   it('drops an invalid UTF-8 record and sets wasLineDropped', () => {
     const framer = new BoundedLineFramer();
     const lines = feedCollect(framer, Buffer.from([0xff, 0xfe, 0x0a]));
-    expect(lines).toEqual([]);
+    expect(lines).toStrictEqual([]);
     expect(framer.wasLineDropped).toBe(true);
   });
 
@@ -195,7 +200,7 @@ describe('BoundedLineFramer - invalid UTF-8 fatal decoding', () => {
       expect(line).not.toContain('\uFFFD');
       lines.push(line);
     });
-    expect(lines).toEqual([]);
+    expect(lines).toStrictEqual([]);
     expect(framer.wasLineDropped).toBe(true);
   });
 
@@ -205,14 +210,14 @@ describe('BoundedLineFramer - invalid UTF-8 fatal decoding', () => {
       framer,
       Buffer.from([0xff, 0x0a, 0x67, 0x6f, 0x6f, 0x64, 0x0a]),
     );
-    expect(lines).toEqual(['good']);
+    expect(lines).toStrictEqual(['good']);
     expect(framer.wasLineDropped).toBe(true);
   });
 
   it('flushRemaining drops an invalid unterminated partial', () => {
     const framer = new BoundedLineFramer();
     feedCollect(framer, Buffer.from([0xff, 0xfe]));
-    expect(flushCollect(framer)).toEqual([]);
+    expect(flushCollect(framer)).toStrictEqual([]);
     expect(framer.wasLineDropped).toBe(true);
   });
 });
@@ -225,7 +230,7 @@ describe('BoundedLineFramer - oversized line discard', () => {
       framer,
       Buffer.from('phantom_match:42:data\ngenuine_line\n'),
     );
-    expect(lines).toEqual(['genuine_line']);
+    expect(lines).toStrictEqual(['genuine_line']);
     expect(lines).not.toContain('phantom_match:42:data');
     expect(framer.wasLineDropped).toBe(true);
   });
@@ -237,13 +242,13 @@ describe('BoundedLineFramer - oversized line discard', () => {
     }
     expect(framer.wasLineDropped).toBe(true);
     const lines = feedCollect(framer, Buffer.from('\nreal\n'));
-    expect(lines).toEqual(['real']);
+    expect(lines).toStrictEqual(['real']);
   });
 
   it('does not emit any suffix of an oversized record from flushRemaining', () => {
     const framer = new BoundedLineFramer({ maxLineBytes: 10 });
     feedCollect(framer, Buffer.alloc(30, 65));
-    expect(flushCollect(framer)).toEqual([]);
+    expect(flushCollect(framer)).toStrictEqual([]);
     expect(framer.wasLineDropped).toBe(true);
   });
 
@@ -251,7 +256,7 @@ describe('BoundedLineFramer - oversized line discard', () => {
     const framer = new BoundedLineFramer({ maxLineBytes: 10 });
     feedCollect(framer, Buffer.alloc(20, 65));
     const lines = feedCollect(framer, Buffer.from('\ngood\n'));
-    expect(lines).toEqual(['good']);
+    expect(lines).toStrictEqual(['good']);
     expect(framer.wasLineDropped).toBe(true);
   });
 
@@ -260,7 +265,7 @@ describe('BoundedLineFramer - oversized line discard', () => {
     feedCollect(framer, Buffer.alloc(10, 65));
     expect(framer.wasLineDropped).toBe(false);
     const lines = feedCollect(framer, Buffer.from('\n'));
-    expect(lines).toEqual([Buffer.alloc(10, 65).toString()]);
+    expect(lines).toStrictEqual([Buffer.alloc(10, 65).toString()]);
   });
 
   it('rejects maxLineBytes+1 content bytes', () => {
@@ -268,7 +273,7 @@ describe('BoundedLineFramer - oversized line discard', () => {
     feedCollect(framer, Buffer.alloc(11, 65));
     expect(framer.wasLineDropped).toBe(true);
     const lines = feedCollect(framer, Buffer.from('\ngood\n'));
-    expect(lines).toEqual(['good']);
+    expect(lines).toStrictEqual(['good']);
   });
 
   it('accepts exactly maxLineBytes content with CRLF terminator', () => {
@@ -277,7 +282,7 @@ describe('BoundedLineFramer - oversized line discard', () => {
     feedCollect(framer, content);
     expect(framer.wasLineDropped).toBe(false);
     const lines = feedCollect(framer, Buffer.from('\r\n'));
-    expect(lines).toEqual([content.toString()]);
+    expect(lines).toStrictEqual([content.toString()]);
     expect(framer.wasLineDropped).toBe(false);
   });
 
@@ -287,7 +292,7 @@ describe('BoundedLineFramer - oversized line discard', () => {
     feedCollect(framer, content);
     const first = feedCollect(framer, Buffer.from('\r'));
     const second = feedCollect(framer, Buffer.from('\n'));
-    expect([...first, ...second]).toEqual([content.toString()]);
+    expect([...first, ...second]).toStrictEqual([content.toString()]);
     expect(framer.wasLineDropped).toBe(false);
   });
 
@@ -296,7 +301,7 @@ describe('BoundedLineFramer - oversized line discard', () => {
     feedCollect(framer, Buffer.alloc(11, 65));
     expect(framer.wasLineDropped).toBe(true);
     const lines = feedCollect(framer, Buffer.from('\r\ngood\r\n'));
-    expect(lines).toEqual(['good']);
+    expect(lines).toStrictEqual(['good']);
   });
 
   it('handles multiple oversized records in sequence', () => {
@@ -305,10 +310,16 @@ describe('BoundedLineFramer - oversized line discard', () => {
     feedCollect(framer, Buffer.from('\n'));
     feedCollect(framer, Buffer.alloc(20, 66));
     const lines = feedCollect(framer, Buffer.from('\nok\n'));
-    expect(lines).toEqual(['ok']);
+    expect(lines).toStrictEqual(['ok']);
     expect(framer.wasLineDropped).toBe(true);
   });
 });
+
+function throwOnFirstCall(callCount: number): void {
+  if (callCount === 1) {
+    throw new Error('boom');
+  }
+}
 
 describe('BoundedLineFramer - callback safety', () => {
   it('resets internal state before invoking callback so reentrancy cannot corrupt', () => {
@@ -318,7 +329,7 @@ describe('BoundedLineFramer - callback safety', () => {
       seen.push(line);
       framer.feedChunk(Buffer.from('inner\n'), (rl) => seen.push(rl));
     });
-    expect(seen).toEqual(['first', 'inner', 'second', 'inner']);
+    expect(seen).toStrictEqual(['first', 'inner', 'second', 'inner']);
   });
 
   it('survives a throwing callback without corrupting state', () => {
@@ -327,12 +338,12 @@ describe('BoundedLineFramer - callback safety', () => {
     expect(() => {
       framer.feedChunk(Buffer.from('a\nb\n'), () => {
         callCount++;
-        if (callCount === 1) throw new Error('boom');
+        throwOnFirstCall(callCount);
       });
     }).toThrow('boom');
     expect(callCount).toBe(1);
     const lines = feedCollect(framer, Buffer.from('c\n'));
-    expect(lines).toEqual(['c']);
+    expect(lines).toStrictEqual(['c']);
   });
 });
 
@@ -395,7 +406,7 @@ describe('BoundedLineFramer - grep-like output', () => {
     const output = Buffer.from(
       'src/index.ts:1:const x = 1;\nsrc/util.ts:5:export function foo() {\n',
     );
-    expect(feedCollect(framer, output)).toEqual([
+    expect(feedCollect(framer, output)).toStrictEqual([
       'src/index.ts:1:const x = 1;',
       'src/util.ts:5:export function foo() {',
     ]);
@@ -454,7 +465,7 @@ describe('BoundedLineFramer - adversarial large chunks', () => {
     feedCollect(framer, huge);
     expect(framer.wasLineDropped).toBe(true);
     const lines = feedCollect(framer, Buffer.from('\nrecovered\n'));
-    expect(lines).toEqual(['recovered']);
+    expect(lines).toStrictEqual(['recovered']);
   });
 
   it('handles alternating huge and normal lines in one chunk', () => {
@@ -469,7 +480,7 @@ describe('BoundedLineFramer - adversarial large chunks', () => {
       Buffer.from('done\n'),
     ];
     const lines = feedCollect(framer, Buffer.concat(parts));
-    expect(lines).toEqual(['ok_line', 'done']);
+    expect(lines).toStrictEqual(['ok_line', 'done']);
     expect(framer.wasLineDropped).toBe(true);
   });
 

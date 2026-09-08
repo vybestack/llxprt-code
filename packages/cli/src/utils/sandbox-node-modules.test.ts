@@ -591,7 +591,7 @@ describe('#3450/#3468 private per-run dependency mounts', () => {
     // The trees were seeded by this test with known literal content, so the
     // full expectation is written out literally: preparation must not add,
     // remove, or rewrite anything the host had.
-    expect(snapshotTree(path.join(workdir, 'node_modules'))).toEqual(
+    expect(snapshotTree(path.join(workdir, 'node_modules'))).toStrictEqual(
       new Map<string, TreeEntry>([
         ['host-pkg', { kind: 'dir' }],
         [
@@ -602,7 +602,7 @@ describe('#3450/#3468 private per-run dependency mounts', () => {
     );
     expect(
       snapshotTree(path.join(workdir, 'packages', 'nested', 'node_modules')),
-    ).toEqual(
+    ).toStrictEqual(
       new Map<string, TreeEntry>([
         [
           'host-nested-marker.txt',

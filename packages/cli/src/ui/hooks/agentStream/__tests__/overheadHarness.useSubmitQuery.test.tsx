@@ -447,7 +447,7 @@ describe('overhead harness — real useSubmitQuery fixture-stream overhead (Item
     // The disabled workload must not add any new JSONL rows or artifacts:
     // diff the on-disk file set rather than inspecting a local empty array.
     const filesAfterDisabled = await readdir(perfDir);
-    expect(filesAfterDisabled.sort()).toEqual(
+    expect(filesAfterDisabled.sort()).toStrictEqual(
       [...artifactsAfterEnabled].sort(),
     );
 
@@ -473,7 +473,7 @@ DELTA    p50=${(ep50 - dp50).toFixed(4)}ms  p95=${(ep95 - dp95).toFixed(4)}ms  p
     // --- ASSERT stable invariants ---
 
     // 1. Enabled ⇒ exactly TURNS operation records on disk.
-    expect(enabledRecords.length).toBe(TURNS);
+    expect(enabledRecords).toHaveLength(TURNS);
 
     // 2. All enabled records have valid schema (status, operation_id, index).
     for (const rec of enabledRecords) {

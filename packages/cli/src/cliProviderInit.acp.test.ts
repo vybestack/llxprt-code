@@ -66,6 +66,13 @@ function makeProviderManager(
   };
 }
 
+function activationWarningMessage(): string {
+  const loggedArg = debugLoggerMock.warn.mock.calls[0][0];
+  return typeof loggedArg === 'function'
+    ? String(loggedArg())
+    : String(loggedArg);
+}
+
 describe('ensureAcpProviderActivated', () => {
   beforeEach(() => {
     debugLoggerMock.warn.mockClear();
@@ -124,10 +131,7 @@ describe('ensureAcpProviderActivated', () => {
 
     expect(() => ensureAcpProviderActivated(config)).not.toThrow();
     expect(debugLoggerMock.warn).toHaveBeenCalledTimes(1);
-    const loggedArg = debugLoggerMock.warn.mock.calls[0][0];
-    const loggedMessage =
-      typeof loggedArg === 'function' ? String(loggedArg()) : String(loggedArg);
-    expect(loggedMessage).toContain('sync activation failed');
+    expect(activationWarningMessage()).toContain('sync activation failed');
   });
 
   it('does not produce an unhandled rejection when async activation rejects', async () => {
@@ -145,10 +149,7 @@ describe('ensureAcpProviderActivated', () => {
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(debugLoggerMock.warn).toHaveBeenCalledTimes(1);
-    const loggedArg = debugLoggerMock.warn.mock.calls[0][0];
-    const loggedMessage =
-      typeof loggedArg === 'function' ? String(loggedArg()) : String(loggedArg);
-    expect(loggedMessage).toContain('async activation rejected');
+    expect(activationWarningMessage()).toContain('async activation rejected');
   });
 
   it('does not produce an unhandled rejection when async activation succeeds', async () => {

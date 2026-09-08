@@ -317,6 +317,14 @@ describe('executeToolCall', () => {
   });
 
   it('should block execution when tool is disabled in settings', async () => {
+    const { response, messageObservation } =
+      await observeBlockExecutionWhenToolIsDisabledInSettings();
+    expect(response.error).toBeInstanceOf(Error);
+    expect(messageObservation).toContain('disabled');
+    expect(response.errorType).toBe(ToolErrorType.TOOL_DISABLED);
+  });
+
+  const observeBlockExecutionWhenToolIsDisabledInSettings = async () => {
     const request: ToolCallRequestInfo = {
       callId: 'call-disabled',
       name: 'testTool',
@@ -355,10 +363,10 @@ describe('executeToolCall', () => {
     );
 
     // Behavior verified via response structure - tool was blocked
-    expect(response.error).toBeInstanceOf(Error);
-    expect(response.error?.message).toContain('disabled');
-    expect(response.errorType).toBe(ToolErrorType.TOOL_DISABLED);
-  });
+
+    const messageObservation = response.error?.message;
+    return { response, messageObservation };
+  };
 
   it('should report tool as disabled when excluded by approval policy even if not registered', async () => {
     const request: ToolCallRequestInfo = {
@@ -747,6 +755,12 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
 
   describe('abort signal propagation', () => {
     it('should handle abort signal during tool execution', async () => {
+      const { completed } = await observeHandleAbortSignalDuringToolExecution();
+      expect(completed.status).toBe('cancelled');
+      expect(getFullResponseText(completed.response)).toContain('Cancelled');
+    });
+
+    const observeHandleAbortSignalDuringToolExecution = async () => {
       const localAbortController = new AbortController();
 
       let startedResolver: (() => void) | null = null;
@@ -789,9 +803,9 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
       localAbortController.abort();
 
       const completed = await executionPromise;
-      expect(completed.status).toBe('cancelled');
-      expect(getFullResponseText(completed.response)).toContain('Cancelled');
-    });
+
+      return { completed };
+    };
   });
 
   describe('error response structure', () => {

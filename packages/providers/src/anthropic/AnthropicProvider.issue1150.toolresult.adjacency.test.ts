@@ -12,6 +12,7 @@ import type {
   ToolCallBlock,
   ToolResponseBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import {
   createProviderWithRuntime,
@@ -45,15 +46,80 @@ void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   isNetworkTransientError: vi.fn(() => false),
 }));
 
+import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+
 const mockMessagesCreate = vi.fn();
 
 void vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
+    ...createAnthropicRawPostTestAdapter(mockMessagesCreate),
     messages: {
       create: mockMessagesCreate,
     },
   })),
 }));
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object';
+}
+
+function getRequestMessages(request: unknown): unknown[] {
+  if (!isRecord(request)) {
+    throw new Error('Anthropic request did not contain messages');
+  }
+
+  const messages = request.messages;
+  if (!Array.isArray(messages)) {
+    throw new Error('Anthropic request did not contain messages');
+  }
+
+  return messages;
+}
+
+function messageContainsBlockType(
+  message: unknown,
+  role: 'assistant' | 'user',
+  blockType: 'tool_use' | 'tool_result',
+): boolean {
+  if (!isRecord(message) || message.role !== role) {
+    return false;
+  }
+
+  const content = message.content;
+  if (!Array.isArray(content)) {
+    return false;
+  }
+
+  for (const block of content) {
+    if (isRecord(block) && block.type === blockType) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasCacheableToolResult(message: unknown): boolean {
+  if (!isRecord(message)) {
+    return false;
+  }
+
+  const content = message.content;
+  if (!Array.isArray(content)) {
+    return false;
+  }
+
+  for (const block of content) {
+    if (!isRecord(block) || block.type !== 'tool_result') {
+      continue;
+    }
+    if ('cache_control' in block) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () => {
   let provider: AnthropicProvider;
@@ -168,6 +234,43 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
       )
       .map((b) => b.tool_use_id);
 
+  interface ToolUseMessageLocation {
+    readonly index: number;
+    readonly ids: string[];
+  }
+
+  const toolUseMessageLocations = (
+    request: AnthropicRequestBody,
+  ): ToolUseMessageLocation[] => {
+    const locations: ToolUseMessageLocation[] = [];
+    for (let index = 0; index < request.messages.length; index++) {
+      const message = request.messages[index];
+      if (message.role !== 'assistant' || !Array.isArray(message.content)) {
+        continue;
+      }
+      const ids = getToolUseIds(message.content);
+      if (ids.length > 0) {
+        locations.push({ index, ids });
+      }
+    }
+    return locations;
+  };
+
+  const firstToolUseMessageLocation = (
+    request: AnthropicRequestBody,
+  ): ToolUseMessageLocation => {
+    for (let index = 0; index < request.messages.length; index++) {
+      const message = request.messages[index];
+      if (message.role !== 'assistant' || !Array.isArray(message.content)) {
+        continue;
+      }
+      const ids = getToolUseIds(message.content);
+      if (ids.length > 0) {
+        return { index, ids };
+      }
+    }
+    return { index: -1, ids: [] };
+  };
   describe('Critical: Every tool_use must have tool_result in next message', () => {
     /**
      * CRITICAL TEST: This is the exact error from the bug report:
@@ -176,6 +279,7 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
      * When an assistant message has multiple tool_use blocks, ALL of them
      * must have corresponding tool_result blocks in the NEXT message.
      */
+
     it('should have tool_result for every tool_use id in the next message', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Response' }],
@@ -268,20 +372,8 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
         .calls[0][0] as AnthropicRequestBody;
 
       // Find the assistant message with tool_use blocks
-      let toolUseMessageIndex = -1;
-      let toolUseIds: string[] = [];
-
-      for (let i = 0; i < request.messages.length; i++) {
-        const msg = request.messages[i];
-        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-          const ids = getToolUseIds(msg.content);
-          if (ids.length > 0) {
-            toolUseMessageIndex = i;
-            toolUseIds = ids;
-            break;
-          }
-        }
-      }
+      const { index: toolUseMessageIndex, ids: toolUseIds } =
+        firstToolUseMessageLocation(request);
 
       expect(toolUseMessageIndex).toBeGreaterThan(-1);
       expect(toolUseIds.length).toBe(4);
@@ -311,6 +403,7 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
     /**
      * Test when tool responses come in separate IContent messages (streaming scenario)
      */
+
     it('should consolidate separate tool response IContents into single user message', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Response' }],
@@ -385,18 +478,8 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
         .calls[0][0] as AnthropicRequestBody;
 
       // Find assistant message with tool_use
-      let toolUseMessageIndex = -1;
-      for (let i = 0; i < request.messages.length; i++) {
-        const msg = request.messages[i];
-        if (
-          msg.role === 'assistant' &&
-          Array.isArray(msg.content) &&
-          msg.content.some((b) => b.type === 'tool_use')
-        ) {
-          toolUseMessageIndex = i;
-          break;
-        }
-      }
+      const { index: toolUseMessageIndex } =
+        firstToolUseMessageLocation(request);
 
       expect(toolUseMessageIndex).toBeGreaterThan(-1);
 
@@ -425,6 +508,7 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
      * Test when some tool responses are missing entirely
      * KNOWN BUG: Provider doesn't synthesize placeholder tool_results for missing responses
      */
+
     it('should detect when tool_results are missing for some tool_use ids', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Response' }],
@@ -500,18 +584,8 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
         .calls[0][0] as AnthropicRequestBody;
 
       // Find assistant message with tool_use
-      let toolUseMessageIndex = -1;
-
-      for (let i = 0; i < request.messages.length; i++) {
-        const msg = request.messages[i];
-        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-          const ids = getToolUseIds(msg.content);
-          if (ids.length > 0) {
-            toolUseMessageIndex = i;
-            break;
-          }
-        }
-      }
+      const { index: toolUseMessageIndex } =
+        firstToolUseMessageLocation(request);
 
       // Next message should have tool_results
       const nextMessage = request.messages[toolUseMessageIndex + 1];
@@ -537,6 +611,7 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
      * Test when there's content between tool_use and tool_result
      * KNOWN BUG: Provider doesn't reorder messages to ensure adjacency
      */
+
     it('should not have other messages between assistant tool_use and user tool_result', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Response' }],
@@ -598,18 +673,8 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
         .calls[0][0] as AnthropicRequestBody;
 
       // Find assistant message with tool_use
-      let toolUseMessageIndex = -1;
-      for (let i = 0; i < request.messages.length; i++) {
-        const msg = request.messages[i];
-        if (
-          msg.role === 'assistant' &&
-          Array.isArray(msg.content) &&
-          msg.content.some((b) => b.type === 'tool_use')
-        ) {
-          toolUseMessageIndex = i;
-          break;
-        }
-      }
+      const { index: toolUseMessageIndex } =
+        firstToolUseMessageLocation(request);
 
       expect(toolUseMessageIndex).toBeGreaterThan(-1);
 
@@ -630,6 +695,7 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
     /**
      * Test proper handling of interleaved tool calls and responses
      */
+
     it('should handle multiple sequential tool call/response pairs correctly', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Response' }],
@@ -717,17 +783,9 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
         .calls[0][0] as AnthropicRequestBody;
 
       // Find all assistant messages with tool_use
-      const toolUseIndices: number[] = [];
-      for (let i = 0; i < request.messages.length; i++) {
-        const msg = request.messages[i];
-        if (
-          msg.role === 'assistant' &&
-          Array.isArray(msg.content) &&
-          msg.content.some((b) => b.type === 'tool_use')
-        ) {
-          toolUseIndices.push(i);
-        }
-      }
+      const toolUseIndices = toolUseMessageLocations(request).map(
+        ({ index }) => index,
+      );
 
       // Each tool_use message must be immediately followed by tool_result
       for (const idx of toolUseIndices) {
@@ -756,6 +814,78 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
           expect(hasMatchingResult).toBe(true);
         }
       }
+    });
+
+    it('keeps curated anchored tool results adjacent and cacheable in the request', async () => {
+      settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+      const historyService = new HistoryService();
+      const contents: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Read the file' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'anchored_tool_request',
+              name: 'read_file',
+              parameters: { path: 'file.txt' },
+            },
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'anchored_tool_request',
+              toolName: 'read_file',
+              result: 'contents',
+              isComplete: true,
+            },
+          ],
+          metadata: { cacheAnchor: true },
+        },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'The file was read' }],
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Continue' }],
+        },
+      ];
+      for (const content of contents) {
+        historyService.add(content);
+      }
+      const curated = historyService.getCuratedForProvider();
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(curated),
+      );
+      await generator.next();
+
+      const requestValue: unknown = mockMessagesCreate.mock.calls[0]?.[0];
+      const requestMessages = getRequestMessages(requestValue);
+      const toolUseIndex = requestMessages.findIndex((message) =>
+        messageContainsBlockType(message, 'assistant', 'tool_use'),
+      );
+      expect(toolUseIndex).toBeGreaterThan(-1);
+
+      const resultMessage = requestMessages[toolUseIndex + 1];
+      if (!isRecord(resultMessage)) {
+        throw new Error('Anthropic request did not contain an adjacent result');
+      }
+
+      expect(resultMessage.role).toBe('user');
+      expect(hasCacheableToolResult(resultMessage)).toBe(true);
+      expect(JSON.stringify(requestValue)).not.toContain('cacheAnchor');
     });
   });
 });

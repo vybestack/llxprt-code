@@ -65,8 +65,8 @@ describe('OpenAIResponsesProvider reasoning.effort', () => {
         _input: RequestInfo | URL,
         init?: RequestInit,
       ): Promise<Response> => {
-        if (init?.body instanceof Blob) {
-          capturedBody = await init.body.text();
+        if (init?.body !== undefined && init.body !== null) {
+          capturedBody = await new Response(init.body).text();
         }
 
         const encoder = new TextEncoder();
@@ -132,8 +132,8 @@ describe('OpenAIResponsesProvider reasoning.effort', () => {
         init?: RequestInit,
       ): Promise<Response> => {
         capturedUrl = String(input);
-        if (init?.body instanceof Blob) {
-          capturedBody = await init.body.text();
+        if (init?.body !== undefined && init.body !== null) {
+          capturedBody = await new Response(init.body).text();
         }
         const encoder = new TextEncoder();
         const stream = new ReadableStream({
@@ -196,8 +196,8 @@ describe('OpenAIResponsesProvider reasoning.effort', () => {
         _input: RequestInfo | URL,
         init?: RequestInit,
       ): Promise<Response> => {
-        if (init?.body instanceof Blob) {
-          capturedBody = await init.body.text();
+        if (init?.body !== undefined && init.body !== null) {
+          capturedBody = await new Response(init.body).text();
         }
         const encoder = new TextEncoder();
         const stream = new ReadableStream({
@@ -255,8 +255,8 @@ describe('OpenAIResponsesProvider reasoning.effort', () => {
         _input: RequestInfo | URL,
         init?: RequestInit,
       ): Promise<Response> => {
-        if (init?.body instanceof Blob) {
-          capturedBody = await init.body.text();
+        if (init?.body !== undefined && init.body !== null) {
+          capturedBody = await new Response(init.body).text();
         }
         const encoder = new TextEncoder();
         const stream = new ReadableStream({

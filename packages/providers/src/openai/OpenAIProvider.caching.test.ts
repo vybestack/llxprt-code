@@ -4,6 +4,7 @@ import type OpenAI from 'openai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createOpenAIRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
 
 const realLlxprtCodeSettingsModule = {
   ...(await import('@vybestack/llxprt-code-settings')),
@@ -12,6 +13,7 @@ const realLlxprtCodeSettingsModule = {
 const { mockChatCreate, mockOpenAIConstructor } = (() => {
   const chatCreate = vi.fn();
   const openAIConstructorMock = vi.fn().mockImplementation(() => ({
+    ...createOpenAIRawPostTestAdapter(chatCreate),
     chat: {
       completions: {
         create: chatCreate,
@@ -181,6 +183,7 @@ describe('OpenAIProvider cache metrics extraction', () => {
         'getClient',
       )
       .mockResolvedValue({
+        ...createOpenAIRawPostTestAdapter(mockChatCreate),
         chat: { completions: { create: mockChatCreate } },
       } as unknown as OpenAI);
 
@@ -257,6 +260,7 @@ describe('OpenAIProvider cache metrics extraction', () => {
         'getClient',
       )
       .mockResolvedValue({
+        ...createOpenAIRawPostTestAdapter(mockChatCreate),
         chat: { completions: { create: mockChatCreate } },
       } as unknown as OpenAI);
 
@@ -334,6 +338,7 @@ describe('OpenAIProvider cache metrics extraction', () => {
         'getClient',
       )
       .mockResolvedValue({
+        ...createOpenAIRawPostTestAdapter(mockChatCreate),
         chat: { completions: { create: mockChatCreate } },
       } as unknown as OpenAI);
 

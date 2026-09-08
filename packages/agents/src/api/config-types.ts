@@ -7,8 +7,12 @@
 
 import { z } from 'zod';
 import type { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/config.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type {
+  ApprovalMode,
+  Config,
+  LlxprtExtension,
+  MCPServerConfig,
+} from '@vybestack/llxprt-code-core/config/config.js';
 import type { PolicyEngineConfig } from '@vybestack/llxprt-code-core/policy/types.js';
 import type {
   HookDefinition,
@@ -251,7 +255,11 @@ export interface AgentConfig {
   readonly auth?: AgentAuth;
   readonly tools?: readonly string[];
   readonly excludeTools?: readonly string[];
-  readonly mcpServers?: Readonly<Record<string, AgentMcpServerConfig>>;
+  /**
+   * MCP server declarations. Typed as the core shape because hosts load
+   * server configs through core's public settings/extension loaders (#3221).
+   */
+  readonly mcpServers?: Readonly<Record<string, MCPServerConfig>>;
   readonly approvalMode?: ApprovalMode;
   readonly systemPrompt?: string;
   readonly workingDir?: string;
@@ -265,7 +273,12 @@ export interface AgentConfig {
   readonly checkpointing?: boolean;
   readonly recording?: AgentRecording;
   readonly policy?: PolicyEngineConfig;
-  readonly extensions?: readonly AgentExtension[];
+  /**
+   * Extensions loaded through core's public extension loader. The full
+   * LlxprtExtension payload (installMetadata and future fields included)
+   * flows through unchanged (#3221).
+   */
+  readonly extensions?: readonly LlxprtExtension[];
   readonly ide?: AgentIde;
   readonly hooks?: AgentHooks;
   readonly memory?: string;

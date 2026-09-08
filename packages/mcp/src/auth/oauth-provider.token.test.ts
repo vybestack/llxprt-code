@@ -20,12 +20,6 @@ const mockHttpServer = {
   address: vi.fn(() => ({ address: 'localhost', family: 'IPv4', port: 7777 })),
 };
 
-void vi.mock(
-  '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js',
-  () => ({
-    openBrowserSecurely: mockOpenBrowserSecurely,
-  }),
-);
 void vi.mock('node:crypto', () => automock(realNodeCryptoModule));
 void vi.mock('node:http', () => ({
   createServer: vi.fn(() => mockHttpServer),
@@ -39,7 +33,7 @@ import {
   OAuthUtils,
   type OAuthAuthorizationServerMetadata,
 } from './oauth-utils.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import {
   mockFetch,
   createMockResponse,
@@ -48,6 +42,17 @@ import {
   mockTokenResponse,
   setupOAuthTestSpies,
 } from './oauthProviderTestSetup.js';
+import { registerMcpHostServices } from '../host/hostServices.js';
+
+// Exercises the real host seam instead of mocking a module (#3305).
+registerMcpHostServices({ openBrowser: mockOpenBrowserSecurely });
+
+function createIssuerMetadataDiscovery(
+  matchingIssuer: string,
+  metadata: OAuthAuthorizationServerMetadata,
+): typeof OAuthUtils.discoverAuthorizationServerMetadata {
+  return async (issuer) => (issuer === matchingIssuer ? metadata : null);
+}
 
 describe('MCPOAuthProvider', () => {
   let saveTokenSpy: ReturnType<typeof vi.spyOn>;
@@ -704,12 +709,12 @@ describe('MCPOAuthProvider', () => {
       vi.spyOn(
         OAuthUtils,
         'discoverAuthorizationServerMetadata',
-      ).mockImplementation(async (issuer) => {
-        if (issuer === 'http://localhost:8888/realms/my-realm') {
-          return registrationMetadata;
-        }
-        return null;
-      });
+      ).mockImplementation(
+        createIssuerMetadataDiscovery(
+          'http://localhost:8888/realms/my-realm',
+          registrationMetadata,
+        ),
+      );
 
       const result =
         await providerWithAccess.discoverAuthServerMetadataForRegistration(
@@ -756,10 +761,10 @@ describe('MCPOAuthProvider', () => {
         'discoverAuthorizationServerMetadata',
       ).mockImplementation(async (issuer) => {
         attempts.push(issuer);
-        if (issuer === 'https://auth.okta.local/oauth2/default') {
-          return oktaMetadata;
-        }
-        return null;
+        return createIssuerMetadataDiscovery(
+          'https://auth.okta.local/oauth2/default',
+          oktaMetadata,
+        )(issuer);
       });
 
       const result =

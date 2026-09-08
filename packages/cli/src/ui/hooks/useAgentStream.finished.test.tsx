@@ -357,7 +357,10 @@ describe('useAgentStream', () => {
       });
     });
 
-    it('should not add refusal notice for a normal STOP without stopReason @issue:2329', async () => {
+    const observeNormalStopMessages = async (): Promise<{
+      readonly streamingState: StreamingState;
+      readonly refusalInfoMessages: readonly unknown[];
+    }> => {
       mockSendMessageStream.mockReturnValue(
         (async function* () {
           yield {
@@ -378,7 +381,9 @@ describe('useAgentStream', () => {
       });
 
       await waitFor(() => {
-        expect(result.current.streamingState).toBe(StreamingState.Idle);
+        if (result.current.streamingState !== StreamingState.Idle) {
+          throw new Error('Expected the normal response stream to finish');
+        }
       });
 
       const refusalInfoMessages = mockAddItem.mock.calls.filter((call) => {
@@ -389,7 +394,16 @@ describe('useAgentStream', () => {
           item.text.includes('safety classifier refused')
         );
       });
-      expect(refusalInfoMessages).toHaveLength(0);
+      return {
+        streamingState: result.current.streamingState,
+        refusalInfoMessages,
+      };
+    };
+
+    it('should not add refusal notice for a normal STOP without stopReason @issue:2329', async () => {
+      const stop = await observeNormalStopMessages();
+      expect(stop.streamingState).toBe(StreamingState.Idle);
+      expect(stop.refusalInfoMessages).toHaveLength(0);
     });
 
     describe('ContextWindowWillOverflow event', () => {
@@ -497,6 +511,67 @@ describe('useAgentStream', () => {
       });
     });
 
+    type FinishReasonCase = {
+      readonly reason: 'stop' | 'safety' | 'other' | 'error';
+      readonly stopReason: string;
+      readonly shouldAddMessage?: boolean;
+      readonly message?: string;
+    };
+
+    function requiredInfoMessageCount(
+      shouldAddMessage: boolean | undefined,
+    ): number {
+      return shouldAddMessage === false ? 0 : 1;
+    }
+
+    function requiredInfoMessage(testCase: FinishReasonCase): unknown {
+      return testCase.shouldAddMessage === false
+        ? undefined
+        : { type: 'info', text: testCase.message };
+    }
+
+    const observeFinishReasonHandling = async ({
+      reason,
+      stopReason,
+    }: FinishReasonCase): Promise<{
+      readonly streamingState: StreamingState;
+      readonly infoMessages: readonly unknown[][];
+    }> => {
+      mockSendMessageStream.mockReturnValue(
+        (async function* () {
+          yield {
+            type: ServerEventType.Content,
+            value: `Response for ${stopReason}`,
+          };
+          yield {
+            type: ServerEventType.Finished,
+            value: { reason, stopReason, usageMetadata: undefined },
+          };
+        })(),
+      );
+
+      const { result } = renderHookWithDefaults();
+
+      await act(async () => {
+        await result.current.submitQuery(`Test ${stopReason}`);
+      });
+
+      // Wait for the stream to complete and state to settle
+      await waitFor(() => {
+        if (result.current.streamingState !== StreamingState.Idle) {
+          throw new Error('Expected finish-reason handling to settle');
+        }
+      });
+
+      const infoMessages = mockAddItem.mock.calls.filter(
+        (call) => call[0].type === 'info',
+      );
+      return {
+        streamingState: result.current.streamingState,
+        infoMessages,
+      };
+    };
+
     it.each([
       { reason: 'stop', stopReason: 'STOP', shouldAddMessage: false },
       {
@@ -557,47 +632,16 @@ describe('useAgentStream', () => {
       },
     ])(
       'should handle $stopReason finish reason correctly',
-      async ({ reason, stopReason, shouldAddMessage = true, message }) => {
-        mockSendMessageStream.mockReturnValue(
-          (async function* () {
-            yield {
-              type: ServerEventType.Content,
-              value: `Response for ${stopReason}`,
-            };
-            yield {
-              type: ServerEventType.Finished,
-              value: { reason, stopReason, usageMetadata: undefined },
-            };
-          })(),
+      async (testCase) => {
+        const finish = await observeFinishReasonHandling(testCase);
+        expect(finish.streamingState).toBe(StreamingState.Idle);
+        expect(
+          finish.infoMessages.length >=
+            requiredInfoMessageCount(testCase.shouldAddMessage),
+        ).toBe(true);
+        expect(finish.infoMessages[0]?.[0]).toStrictEqual(
+          requiredInfoMessage(testCase),
         );
-
-        const { result } = renderHookWithDefaults();
-
-        await act(async () => {
-          await result.current.submitQuery(`Test ${stopReason}`);
-        });
-
-        // Wait for the stream to complete and state to settle
-        await waitFor(() => {
-          expect(result.current.streamingState).toBe(StreamingState.Idle);
-        });
-
-        // Check assertions based on shouldAddMessage (outside of conditional)
-        const infoMessages = mockAddItem.mock.calls.filter(
-          (call) => call[0].type === 'info',
-        );
-
-        // Split assertions outside of conditionals to satisfy vitest/no-conditional-expect
-        // This verifies that the test result matches the expected behavior for each case
-        const expectedInfoMessageCount = shouldAddMessage ? 1 : 0;
-        expect(infoMessages.length >= expectedInfoMessageCount).toBe(true);
-
-        // When shouldAddMessage is true, verify the message content
-        // This assertion runs for all cases but only meaningfully validates when shouldAddMessage is true
-        const expectedMessage = shouldAddMessage
-          ? { type: 'info', text: message }
-          : undefined;
-        expect(infoMessages[0]?.[0]).toStrictEqual(expectedMessage);
       },
     );
   });

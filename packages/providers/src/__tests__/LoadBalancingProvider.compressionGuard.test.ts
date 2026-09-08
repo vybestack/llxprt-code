@@ -56,8 +56,6 @@ function createMockProvider(overrides: Partial<IProvider> = {}): IProvider {
       },
     getModels: overrides.getModels ?? (async () => []),
     getDefaultModel: overrides.getDefaultModel ?? (() => 'mock-model'),
-    getServerTools: overrides.getServerTools ?? (() => []),
-    invokeServerTool: overrides.invokeServerTool ?? (async () => ({})),
   };
 }
 

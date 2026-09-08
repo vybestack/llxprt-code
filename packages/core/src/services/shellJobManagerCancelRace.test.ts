@@ -71,88 +71,46 @@ async function waitForTerminal(
   }
 }
 
-describe.skipIf(os.platform() !== 'win32')(
-  'ShellJobManager cancellation ownership',
-  () => {
-    it('allows only the first cancellation to terminate the process tree', async () => {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'win-cancel-race-'));
-      const innerMarker = path.join(dir, 'inner.pid');
-      const { manager, releaseTaskkill, taskkillStarted, getKillCallCount } =
-        createBlockedTaskkillManager(dir);
-      let outerPid = 0;
-      let innerPid = 0;
-      try {
-        const job = manager.launch({
-          command: buildInnerPidMarkerCommand(innerMarker, 60),
-          cwd: os.tmpdir(),
-        });
-        outerPid = job.pid ?? 0;
-        innerPid = await readInnerPidFromMarker(innerMarker, 10_000);
+describe('shellJobManagerCancelRace', () => {
+  describe.skipIf(os.platform() !== 'win32')(
+    'ShellJobManager cancellation ownership',
+    () => {
+      it('allows only the first cancellation to terminate the process tree', async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'win-cancel-race-'));
+        const innerMarker = path.join(dir, 'inner.pid');
+        const { manager, releaseTaskkill, taskkillStarted, getKillCallCount } =
+          createBlockedTaskkillManager(dir);
+        let outerPid = 0;
+        let innerPid = 0;
+        try {
+          const job = manager.launch({
+            command: buildInnerPidMarkerCommand(innerMarker, 60),
+            cwd: os.tmpdir(),
+          });
+          outerPid = job.pid ?? 0;
+          innerPid = await readInnerPidFromMarker(innerMarker, 10_000);
 
-        const firstCancellation = manager.cancel(job.id);
-        await taskkillStarted;
-        const secondCancellation = manager.cancel(job.id);
-        expect(getKillCallCount()).toBe(1);
+          const firstCancellation = manager.cancel(job.id);
+          await taskkillStarted;
+          const secondCancellation = manager.cancel(job.id);
+          expect(getKillCallCount()).toBe(1);
 
-        releaseTaskkill();
-        expect(await firstCancellation).toBe(true);
-        expect(await secondCancellation).toBe(false);
-        expect(getKillCallCount()).toBe(1);
-        expect(manager.get(job.id)?.state).toBe('cancelled');
-      } finally {
-        releaseTaskkill();
-        await disposeAndCleanupWindowsTest(dir, manager, [outerPid, innerPid]);
-      }
-    }, 45_000);
+          releaseTaskkill();
+          expect(await firstCancellation).toBe(true);
+          expect(await secondCancellation).toBe(false);
+          expect(getKillCallCount()).toBe(1);
+          expect(manager.get(job.id)?.state).toBe('cancelled');
+        } finally {
+          releaseTaskkill();
+          await disposeAndCleanupWindowsTest(dir, manager, [
+            outerPid,
+            innerPid,
+          ]);
+        }
+      }, 45_000);
 
-    it('keeps cancellation terminal ownership when output crosses the cap afterward', async () => {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'win-cancel-cap-'));
-      const innerMarker = path.join(dir, 'inner.pid');
-      const { manager, releaseTaskkill, taskkillStarted, getKillCallCount } =
-        createBlockedTaskkillManager(dir, 1);
-      let outerPid = 0;
-      let innerPid = 0;
-      try {
-        const job = manager.launch({
-          command: buildInnerPidMarkerCommand(
-            innerMarker,
-            60,
-            "Start-Sleep -Seconds 2; Write-Output ('x' * 128)",
-          ),
-          cwd: os.tmpdir(),
-        });
-        outerPid = job.pid ?? 0;
-        innerPid = await readInnerPidFromMarker(innerMarker, 10_000);
-
-        const cancellation = manager.cancel(job.id);
-        await taskkillStarted;
-        await Bun.sleep(3000);
-        expect(getKillCallCount()).toBe(1);
-
-        releaseTaskkill();
-        expect(await cancellation).toBe(true);
-        await waitForTerminal(manager, job.id);
-        expect(manager.get(job.id)?.state).toBe('cancelled');
-        expect(getKillCallCount()).toBe(1);
-      } finally {
-        releaseTaskkill();
-        await disposeAndCleanupWindowsTest(dir, manager, [outerPid, innerPid]);
-      }
-    }, 45_000);
-
-    // Issue #3253: this test freezes Bun at native level on GitHub Actions
-    // Windows (zero output for 300s, so its timeout never fires) on every
-    // nightly since #3084. Tests 1-2 and local Windows pass; see #3323, #3321.
-    it.skipIf(
-      capRaceFreezesOnCiWindows(
-        os.platform(),
-        process.env.GITHUB_ACTIONS,
-        process.env.RUNNER_ENVIRONMENT,
-      ),
-    )(
-      'keeps cap terminal ownership when cancellation follows',
-      async () => {
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'win-cap-cancel-'));
+      it('keeps cancellation terminal ownership when output crosses the cap afterward', async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'win-cancel-cap-'));
         const innerMarker = path.join(dir, 'inner.pid');
         const { manager, releaseTaskkill, taskkillStarted, getKillCallCount } =
           createBlockedTaskkillManager(dir, 1);
@@ -163,36 +121,93 @@ describe.skipIf(os.platform() !== 'win32')(
             command: buildInnerPidMarkerCommand(
               innerMarker,
               60,
-              "Write-Output ('x' * 128)",
+              "Start-Sleep -Seconds 2; Write-Output ('x' * 128)",
             ),
             cwd: os.tmpdir(),
           });
           outerPid = job.pid ?? 0;
           innerPid = await readInnerPidFromMarker(innerMarker, 10_000);
 
-          await taskkillStarted;
           const cancellation = manager.cancel(job.id);
+          await taskkillStarted;
+          await Bun.sleep(3000);
           expect(getKillCallCount()).toBe(1);
 
           releaseTaskkill();
-          expect(await cancellation).toBe(false);
+          expect(await cancellation).toBe(true);
           await waitForTerminal(manager, job.id);
-          const terminal = manager.get(job.id);
-          expect(terminal?.state).toBe('failed');
-          expect(terminal?.failureReason).toContain('exceeded cap');
+          expect(manager.get(job.id)?.state).toBe('cancelled');
           expect(getKillCallCount()).toBe(1);
         } finally {
-          // issue #3323: reap the outer AND inner processes directly instead of
-          // going through manager.dispose(). This test's cap-owned job was
-          // force-finalised while the outer PowerShell was still WaitForExit()-
-          // ing on the inner one, and an outer-rooted tree kill can race and
-          // leave the inner PowerShell (which owns the redirected log handles)
-          // alive, keeping this test file's Bun process from exiting.
           releaseTaskkill();
-          await reapAndRemoveWindowsTestDir(dir, manager, [outerPid, innerPid]);
+          await disposeAndCleanupWindowsTest(dir, manager, [
+            outerPid,
+            innerPid,
+          ]);
         }
-      },
-      45_000,
-    );
-  },
-);
+      }, 45_000);
+
+      // Issue #3253: this test freezes Bun at native level on GitHub Actions
+      // Windows (zero output for 300s, so its timeout never fires) on every
+      // nightly since #3084. Tests 1-2 and local Windows pass; see #3323, #3321.
+      it.skipIf(
+        capRaceFreezesOnCiWindows(
+          os.platform(),
+          process.env.GITHUB_ACTIONS,
+          process.env.RUNNER_ENVIRONMENT,
+        ),
+      )(
+        'keeps cap terminal ownership when cancellation follows',
+        async () => {
+          const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'win-cap-cancel-'));
+          const innerMarker = path.join(dir, 'inner.pid');
+          const {
+            manager,
+            releaseTaskkill,
+            taskkillStarted,
+            getKillCallCount,
+          } = createBlockedTaskkillManager(dir, 1);
+          let outerPid = 0;
+          let innerPid = 0;
+          try {
+            const job = manager.launch({
+              command: buildInnerPidMarkerCommand(
+                innerMarker,
+                60,
+                "Write-Output ('x' * 128)",
+              ),
+              cwd: os.tmpdir(),
+            });
+            outerPid = job.pid ?? 0;
+            innerPid = await readInnerPidFromMarker(innerMarker, 10_000);
+
+            await taskkillStarted;
+            const cancellation = manager.cancel(job.id);
+            expect(getKillCallCount()).toBe(1);
+
+            releaseTaskkill();
+            expect(await cancellation).toBe(false);
+            await waitForTerminal(manager, job.id);
+            const terminal = manager.get(job.id);
+            expect(terminal?.state).toBe('failed');
+            expect(terminal?.failureReason).toContain('exceeded cap');
+            expect(getKillCallCount()).toBe(1);
+          } finally {
+            // issue #3323: reap the outer AND inner processes directly instead of
+            // going through manager.dispose(). This test's cap-owned job was
+            // force-finalised while the outer PowerShell was still WaitForExit()-
+            // ing on the inner one, and an outer-rooted tree kill can race and
+            // leave the inner PowerShell (which owns the redirected log handles)
+            // alive, keeping this test file's Bun process from exiting.
+            releaseTaskkill();
+            await reapAndRemoveWindowsTestDir(dir, manager, [
+              outerPid,
+              innerPid,
+            ]);
+          }
+        },
+        45_000,
+      );
+    },
+  );
+});

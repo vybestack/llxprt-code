@@ -134,11 +134,11 @@ export interface SubagentOrchestratorOptions {
   scopeFactory?: ScopeFactory;
   idFactory?: () => string;
   /**
-   * Session/runtime MessageBus threaded into the SubAgentScope so
+   * Required session/runtime MessageBus threaded into the SubAgentScope so
    * non-interactive subagent tool execution can satisfy
    * Config.getOrCreateScheduler's explicit MessageBus dependency (Issue #2312).
    */
-  messageBus?: MessageBus;
+  messageBus: MessageBus;
 }
 
 /**

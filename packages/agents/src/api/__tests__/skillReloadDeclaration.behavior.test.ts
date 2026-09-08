@@ -158,18 +158,21 @@ describe('skill reload reaches the model @issue:3379', () => {
    */
   it('offers a skill discovered at startup, with no reload @issue:3382', async () => {
     await withWorkspace(['alpha'], async ({ config }) => {
-      expect(modelVisibleSkillNames(config)).toEqual(['alpha']);
+      expect(modelVisibleSkillNames(config)).toStrictEqual(['alpha']);
     });
   });
 
   it('offers a skill added on disk after the session started', async () => {
     await withWorkspace(['alpha'], async ({ agent, config, workspace }) => {
-      expect(modelVisibleSkillNames(config)).toEqual(['alpha']);
+      expect(modelVisibleSkillNames(config)).toStrictEqual(['alpha']);
 
       writeSkill(workspace, 'beta');
       await agent.skills.reload();
 
-      expect(modelVisibleSkillNames(config).sort()).toEqual(['alpha', 'beta']);
+      expect(modelVisibleSkillNames(config).sort()).toStrictEqual([
+        'alpha',
+        'beta',
+      ]);
       expect(activateSkillDeclaration(config)?.description).toContain("'beta'");
     });
   });
@@ -178,7 +181,7 @@ describe('skill reload reaches the model @issue:3379', () => {
     await withWorkspace(
       ['alpha', 'beta'],
       async ({ agent, config, workspace }) => {
-        expect(modelVisibleSkillNames(config).sort()).toEqual([
+        expect(modelVisibleSkillNames(config).sort()).toStrictEqual([
           'alpha',
           'beta',
         ]);
@@ -186,7 +189,7 @@ describe('skill reload reaches the model @issue:3379', () => {
         removeSkill(workspace, 'beta');
         await agent.skills.reload();
 
-        expect(modelVisibleSkillNames(config)).toEqual(['alpha']);
+        expect(modelVisibleSkillNames(config)).toStrictEqual(['alpha']);
         expect(activateSkillDeclaration(config)?.description).not.toContain(
           "'beta'",
         );
@@ -201,7 +204,7 @@ describe('skill reload reaches the model @issue:3379', () => {
       writeSkill(workspace, 'alpha');
       await agent.skills.reload();
 
-      expect(modelVisibleSkillNames(config)).toEqual(['alpha']);
+      expect(modelVisibleSkillNames(config)).toStrictEqual(['alpha']);
     });
   });
 

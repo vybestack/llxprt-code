@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { DiscoveredMCPTool } from './mcp-tool.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import type { CallableTool } from '@vybestack/llxprt-code-tools';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { Config } from './test-support/mcpClientTestSupport.js';
 
 // DiscoveredMCPToolInvocation stores an allowlist on its constructor (static).
 // This type centralizes the one unavoidable internal-state access for tests.

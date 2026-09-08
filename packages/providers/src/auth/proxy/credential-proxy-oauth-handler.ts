@@ -11,8 +11,15 @@ import { firstTruthyString } from '../../utils/falsyFallback.js';
 import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-auth';
 import { encodeFrame } from '@vybestack/llxprt-code-auth/proxy/framing.js';
 import { sanitizeTokenForProxy } from '@vybestack/llxprt-code-auth/token-sanitization.js';
+import { OAuthTokenDataSchema } from '@vybestack/llxprt-code-auth';
 import { RefreshCoordinator } from './refresh-coordinator.js';
 import type { ConnectionState } from './credential-proxy-state.js';
+import {
+  OAuthExchangeRequestSchema,
+  OAuthInitiateRequestSchema,
+  OAuthSessionRequestSchema,
+  ProviderBucketRequestSchema,
+} from './credential-request-validation.js';
 
 /** Contract for an OAuth flow instance used by the credential proxy. */
 export interface OAuthFlowInterface {
@@ -184,14 +191,12 @@ export class CredentialProxyOAuthHandler {
     payload: Record<string, unknown>,
     _state: ConnectionState,
   ): Promise<void> {
-    const provider = payload.provider as string | undefined;
-    const bucket = payload.bucket as string | undefined;
-    const redirectUri = payload.redirect_uri as string | undefined;
-
-    if (!provider) {
+    const parsedPayload = OAuthInitiateRequestSchema.safeParse(payload);
+    if (!parsedPayload.success) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
       return;
     }
+    const { provider, bucket, redirect_uri: redirectUri } = parsedPayload.data;
 
     const flowFactory = this.options.flowFactories?.get(provider);
     if (!flowFactory) {
@@ -237,17 +242,20 @@ export class CredentialProxyOAuthHandler {
     payload: Record<string, unknown>,
     _state: ConnectionState,
   ): Promise<void> {
-    const sessionId = payload.session_id as string | undefined;
-    const code = payload.code as string | undefined;
-    if (!sessionId || !code) {
+    const parsedPayload = OAuthExchangeRequestSchema.safeParse(payload);
+    if (!parsedPayload.success) {
+      const sessionInvalid = parsedPayload.error.issues.some(
+        (issue) => issue.path[0] === 'session_id',
+      );
       this.sendError(
         socket,
         id,
         'INVALID_REQUEST',
-        sessionId ? 'Missing code' : 'Missing session_id',
+        sessionInvalid ? 'Missing session_id' : 'Missing code',
       );
       return;
     }
+    const { session_id: sessionId, code } = parsedPayload.data;
 
     const session = this.getActiveSession(
       socket,
@@ -261,17 +269,15 @@ export class CredentialProxyOAuthHandler {
 
     session.used = true;
     try {
-      const token = await this.exchangeCode(session, code);
+      const connectionToken = await this.exchangeCode(session, code);
+      const parsedToken = OAuthTokenDataSchema.parse(connectionToken);
+      const sanitized = sanitizeTokenForProxy(parsedToken);
       await this.options.tokenStore.saveToken(
         session.provider,
-        token,
+        parsedToken,
         session.bucket,
       );
-      this.sendOk(
-        socket,
-        id,
-        sanitizeTokenForProxy(token) as unknown as Record<string, unknown>,
-      );
+      this.sendOk(socket, id, sanitized);
       this.oauthSessions.delete(sessionId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -285,11 +291,12 @@ export class CredentialProxyOAuthHandler {
     payload: Record<string, unknown>,
     _state: ConnectionState,
   ): Promise<void> {
-    const sessionId = payload.session_id as string | undefined;
-    if (!sessionId) {
+    const parsedPayload = OAuthSessionRequestSchema.safeParse(payload);
+    if (!parsedPayload.success) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing session_id');
       return;
     }
+    const { session_id: sessionId } = parsedPayload.data;
 
     const session = this.getPollableSession(socket, id, sessionId);
     if (!session) {
@@ -309,11 +316,12 @@ export class CredentialProxyOAuthHandler {
     payload: Record<string, unknown>,
     _state: ConnectionState,
   ): void {
-    const sessionId = payload.session_id as string | undefined;
-    if (!sessionId) {
+    const parsedPayload = OAuthSessionRequestSchema.safeParse(payload);
+    if (!parsedPayload.success) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing session_id');
       return;
     }
+    const { session_id: sessionId } = parsedPayload.data;
 
     this.oauthSessions.delete(sessionId);
     this.sendOk(socket, id, {});
@@ -325,12 +333,12 @@ export class CredentialProxyOAuthHandler {
     payload: Record<string, unknown>,
     _state: ConnectionState,
   ): Promise<void> {
-    const provider = payload.provider as string | undefined;
-    const bucket = payload.bucket as string | undefined;
-    if (!provider) {
+    const parsedPayload = ProviderBucketRequestSchema.safeParse(payload);
+    if (!parsedPayload.success) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
       return;
     }
+    const { provider, bucket } = parsedPayload.data;
     if (!this.options.flowFactories?.get(provider)) {
       this.sendError(
         socket,
@@ -458,14 +466,16 @@ export class CredentialProxyOAuthHandler {
       session.deviceCode,
     );
     session.used = true;
+    const parsedToken = OAuthTokenDataSchema.parse(token);
+    const sanitized = sanitizeTokenForProxy(parsedToken);
     await this.options.tokenStore.saveToken(
       session.provider,
-      token,
+      parsedToken,
       session.bucket,
     );
     this.sendOk(socket, id, {
       status: 'complete',
-      token: sanitizeTokenForProxy(token),
+      token: sanitized,
     });
     this.oauthSessions.delete(sessionId);
   }
@@ -532,11 +542,7 @@ export class CredentialProxyOAuthHandler {
   ): void {
     switch (refreshResult.status) {
       case 'ok':
-        this.sendOk(
-          socket,
-          id,
-          refreshResult.token as unknown as Record<string, unknown>,
-        );
+        this.sendOk(socket, id, refreshResult.token);
         break;
       case 'rate_limited':
         socket.write(

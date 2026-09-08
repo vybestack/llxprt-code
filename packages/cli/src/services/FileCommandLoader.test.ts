@@ -138,13 +138,8 @@ describe('FileCommandLoader', () => {
     expect(result.content).toBe('This is a test prompt');
   });
 
-  // Symlink creation on Windows requires special permissions that are not
-  // available in the standard CI environment. Therefore, we skip these tests
-  // on Windows to prevent CI failures. The core functionality is still
-  // validated on Linux and macOS.
-  it.skipIf(process.platform === 'win32')(
-    'loads commands from a symlinked directory',
-    async () => {
+  describe.skipIf(process.platform === 'win32')('POSIX behavior', () => {
+    it('loads commands from a symlinked directory', async () => {
       const realCommandsDir = path.join(fsMock.root, 'real-commands');
       fsMock.mockAt(realCommandsDir, {
         'test.toml': 'prompt = "This is a test prompt"',
@@ -162,12 +157,11 @@ describe('FileCommandLoader', () => {
       const command = commands[0];
       expect(command).toBeDefined();
       expect(command.name).toBe('test');
-    },
-  );
+    });
+  });
 
-  it.skipIf(process.platform === 'win32')(
-    'loads commands from a symlinked subdirectory',
-    async () => {
+  describe.skipIf(process.platform === 'win32')('POSIX behavior', () => {
+    it('loads commands from a symlinked subdirectory', async () => {
       const realNamespacedDir = path.join(
         fsMock.root,
         'real-namespaced-commands',
@@ -190,8 +184,8 @@ describe('FileCommandLoader', () => {
       const command = commands[0];
       expect(command).toBeDefined();
       expect(command.name).toBe('namespaced:my-test');
-    },
-  );
+    });
+  });
 
   it('loads multiple commands', async () => {
     fsMock.mock({
@@ -366,13 +360,8 @@ describe('FileCommandLoader', () => {
     expect(command.description).toBe('My test command');
   });
 
-  // Windows cannot represent this fixture: NTFS reserves ':' in a filename for
-  // alternate data streams, so `legacy:command.toml` cannot be created and the
-  // loader can never encounter such a name on that platform. The sanitization
-  // it verifies is therefore only reachable on POSIX.
-  it.skipIf(process.platform === 'win32')(
-    'should sanitize colons in filenames to prevent namespace conflicts',
-    async () => {
+  describe.skipIf(process.platform === 'win32')('POSIX behavior', () => {
+    it('should sanitize colons in filenames to prevent namespace conflicts', async () => {
       fsMock.mock({
         'legacy:command.toml': 'prompt = "This is a legacy command"',
       });
@@ -386,8 +375,8 @@ describe('FileCommandLoader', () => {
 
       // Verify that the ':' in the filename was replaced with an '_'
       expect(command.name).toBe('legacy_command');
-    },
-  );
+    });
+  });
 
   describe('Processor Instantiation Logic', () => {
     it('instantiates only DefaultArgumentProcessor if no {{args}} or !{} are present', async () => {

@@ -131,8 +131,6 @@ function createStatelessRuntimeBundle(options?: {
             }),
             getDefaultModel: () =>
               options?.model ?? 'gemini-2.0-flash-thinking-exp',
-            getServerTools: () => [],
-            invokeServerTool: vi.fn(),
           }) as IProvider,
       ),
       setActiveProvider: vi.fn(),
@@ -834,8 +832,6 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
             generateChatCompletion: vi.fn(async function* () {
               yield { speaker: 'ai', blocks: [] };
             }),
-            getServerTools: () => [],
-            invokeServerTool: vi.fn(),
           }) as IProvider,
         setActiveProvider: vi.fn(),
       };

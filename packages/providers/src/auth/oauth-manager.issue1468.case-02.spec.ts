@@ -13,34 +13,28 @@ import {
   mockLoadProfile,
 } from './oauth-manager.issue1468.test-helpers.js';
 
+async function loadCaseTwoProfile(profileName: string) {
+  if (profileName === 'foreground-profile') {
+    return {
+      provider: 'anthropic',
+      auth: { type: 'oauth', buckets: ['foreground-bucket'] },
+    };
+  }
+  if (profileName === 'opusthinkingbucketed') {
+    return {
+      provider: 'anthropic',
+      auth: { type: 'oauth', buckets: ['bucket-a', 'bucket-b', 'bucket-c'] },
+    };
+  }
+  throw new Error(`Unexpected profile lookup: ${profileName}`);
+}
+
 describe('Issue #1468 getProfileBuckets case 2', () => {
   it('does not inherit a foreground session bucket when request metadata targets a different profile', async () => {
     const { tokenStore, manager } = createIssue1468Fixture();
 
     mockGetCurrentProfileName.mockReturnValue('foreground-profile');
-    mockLoadProfile.mockImplementation(async (profileName: string) => {
-      if (profileName === 'foreground-profile') {
-        return {
-          provider: 'anthropic',
-          auth: {
-            type: 'oauth',
-            buckets: ['foreground-bucket'],
-          },
-        };
-      }
-
-      if (profileName === 'opusthinkingbucketed') {
-        return {
-          provider: 'anthropic',
-          auth: {
-            type: 'oauth',
-            buckets: ['bucket-a', 'bucket-b', 'bucket-c'],
-          },
-        };
-      }
-
-      throw new Error(`Unexpected profile lookup: ${profileName}`);
-    });
+    mockLoadProfile.mockImplementation(loadCaseTwoProfile);
 
     const provider: OAuthProvider = {
       name: 'anthropic',

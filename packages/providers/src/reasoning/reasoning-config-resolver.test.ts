@@ -274,8 +274,7 @@ describe('reasoning enabled mapping', () => {
   >)(
     'applies the %s default for enabled=%s',
     (enabledWireFormat, enabled, expected) => {
-      const nativeAdapter =
-        enabledWireFormat === 'gemini' ? 'gemini' : 'openai-chat';
+      const nativeAdapter = nativeAdapterForEnabledFormat(enabledWireFormat);
       const result = resolve({
         nativeAdapter,
         enabledWireFormat,
@@ -292,10 +291,7 @@ describe('reasoning enabled mapping', () => {
   it.each(['openai', 'openai-responses'] satisfies ReadonlyArray<
     ReasoningResolverInput['enabledWireFormat']
   >)('requires an explicit enabled map for %s', (enabledWireFormat) => {
-    const nativeAdapter =
-      enabledWireFormat === 'openai-responses'
-        ? 'openai-responses'
-        : 'openai-chat';
+    const nativeAdapter = nativeAdapterForEnabledFormat(enabledWireFormat);
     const result = resolve({
       nativeAdapter,
       enabledWireFormat,

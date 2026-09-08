@@ -121,9 +121,7 @@ describe('PromptService', () => {
 
     it('should throw error if parent directory cannot be created', async () => {
       // Use platform-specific invalid path
-      const baseDir = isWindows()
-        ? 'Z:\\invalid-path\\that\\cannot\\be\\created\\prompts' // Non-existent drive on Windows
-        : '/invalid-path/that/cannot/be/created/prompts';
+      const baseDir = invalidBaseDirForPlatform(isWindows());
       const service = new PromptService({ baseDir });
 
       await expect(service.initialize()).rejects.toThrow(Error);
@@ -898,3 +896,9 @@ describe('PromptService', () => {
     });
   });
 });
+
+function invalidBaseDirForPlatform(windows: boolean): string {
+  return windows
+    ? 'Z:\\invalid-path\\that\\cannot\\be\\created\\prompts' // Non-existent drive on Windows
+    : '/invalid-path/that/cannot/be/created/prompts';
+}

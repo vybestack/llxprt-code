@@ -63,6 +63,18 @@ function parseJsonStdoutEvents(
     });
 }
 
+function isWarningStreamEvent(event: ParsedStreamEvent): boolean {
+  return (
+    event.type === JsonStreamEventType.ERROR && event.severity === 'warning'
+  );
+}
+
+function isAssistantMessageStreamEvent(event: ParsedStreamEvent): boolean {
+  return (
+    event.type === JsonStreamEventType.MESSAGE && event.role === 'assistant'
+  );
+}
+
 function createMockConfig(overrides?: {
   sessionId?: string;
   includeInResponse?: boolean;
@@ -191,11 +203,7 @@ describe('processAgentStream', () => {
 
     const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
     const assistantOutput = jsonEvents
-      .filter(
-        (event) =>
-          event.type === JsonStreamEventType.MESSAGE &&
-          event.role === 'assistant',
-      )
+      .filter(isAssistantMessageStreamEvent)
       .map((event) => event.content)
       .join('');
     expect(assistantOutput).toBe('LLXPRT2208_ALPHA\n\nAlpha paragraph one.');
@@ -300,6 +308,16 @@ describe('processAgentStream', () => {
     expect(output).toContain('<think>Stream A Stream B</think>');
   });
 
+  function filterSameStreamThinking(text: string): {
+    readonly filtered: string;
+    readonly blocked: false;
+  } {
+    if (text === 'filtered') {
+      return { filtered: '', blocked: false };
+    }
+    return { filtered: text, blocked: false };
+  }
+
   it('preserves same-stream thinking when a filtered update becomes empty', async () => {
     const events: AgentEvent[] = [
       {
@@ -328,10 +346,7 @@ describe('processAgentStream', () => {
       createContext({
         config: createMockConfig({ includeInResponse: true }),
         emojiFilter: {
-          filterText: (text: string) => ({
-            filtered: text === 'filtered' ? '' : text,
-            blocked: false,
-          }),
+          filterText: filterSameStreamThinking,
           flushBuffer: () => '',
         },
       }),
@@ -589,11 +604,7 @@ describe('processAgentStream', () => {
     );
 
     const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
-    const warning = jsonEvents.find(
-      (event) =>
-        event.type === JsonStreamEventType.ERROR &&
-        event.severity === 'warning',
-    );
+    const warning = jsonEvents.find(isWarningStreamEvent);
     expect(warning).toMatchObject({
       message: 'Loop detected, stopping execution',
     });
@@ -703,11 +714,7 @@ describe('processAgentStream', () => {
     );
 
     const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
-    const warning = jsonEvents.find(
-      (event) =>
-        event.type === JsonStreamEventType.ERROR &&
-        event.severity === 'warning',
-    );
+    const warning = jsonEvents.find(isWarningStreamEvent);
     expect(warning?.message).toBe(REFUSAL_NOTICE_MESSAGE);
     const result = jsonEvents.find(
       (event) => event.type === JsonStreamEventType.RESULT,

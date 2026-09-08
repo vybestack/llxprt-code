@@ -7,6 +7,18 @@
 import { describe, it, expect } from 'bun:test';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 
+function shouldProactivelyWire(profile: Profile): boolean {
+  if (!('auth' in profile)) {
+    return false;
+  }
+  const auth = profile.auth;
+  return (
+    auth?.type === 'oauth' &&
+    Array.isArray(auth.buckets) &&
+    auth.buckets.length > 1
+  );
+}
+
 /**
  * Tests for Issue 1151: Proactive failover handler wiring in applyProfileSnapshot
  *
@@ -50,12 +62,9 @@ describe('RuntimeSettings - Proactive Failover Handler Wiring (Issue 1151)', () 
       ).auth;
 
       // This is the condition checked in runtimeSettings.ts lines 1094-1097
-      const shouldProactivelyWire =
-        authConfig?.type === 'oauth' &&
-        authConfig.buckets &&
-        authConfig.buckets.length > 1;
+      const shouldWire = shouldProactivelyWire(multiBucketProfile);
 
-      expect(shouldProactivelyWire).toBe(true);
+      expect(shouldWire).toBe(true);
       expect(authConfig?.buckets?.length).toBe(3);
     });
 
@@ -73,17 +82,10 @@ describe('RuntimeSettings - Proactive Failover Handler Wiring (Issue 1151)', () 
         },
       };
 
-      const authConfig = (
-        singleBucketProfile as { auth?: { type?: string; buckets?: string[] } }
-      ).auth;
-
-      const shouldProactivelyWire =
-        authConfig?.type === 'oauth' &&
-        authConfig.buckets &&
-        authConfig.buckets.length > 1;
+      const shouldWire = shouldProactivelyWire(singleBucketProfile);
 
       // Single bucket = no failover needed = no proactive wiring
-      expect(shouldProactivelyWire).toBe(false);
+      expect(shouldWire).toBe(false);
     });
 
     it('non-OAuth profile should NOT trigger proactive wiring', () => {
@@ -102,13 +104,10 @@ describe('RuntimeSettings - Proactive Failover Handler Wiring (Issue 1151)', () 
         apiKeyProfile as { auth?: { type?: string; buckets?: string[] } }
       ).auth;
 
-      const shouldProactivelyWire =
-        authConfig?.type === 'oauth' &&
-        authConfig.buckets &&
-        authConfig.buckets.length > 1;
+      const shouldWire = shouldProactivelyWire(apiKeyProfile);
 
       // No OAuth = no proactive wiring
-      expect(shouldProactivelyWire).toBe(false);
+      expect(shouldWire).toBe(false);
       expect(authConfig).toBeUndefined();
     });
 
@@ -128,14 +127,11 @@ describe('RuntimeSettings - Proactive Failover Handler Wiring (Issue 1151)', () 
         loadBalancerProfile as { auth?: { type?: string; buckets?: string[] } }
       ).auth;
 
-      const shouldProactivelyWire =
-        authConfig?.type === 'oauth' &&
-        authConfig.buckets &&
-        authConfig.buckets.length > 1;
+      const shouldWire = shouldProactivelyWire(loadBalancerProfile);
 
       // Load balancer profiles delegate to sub-profiles for auth
       // Proactive wiring for LB sub-profiles is tracked in issue #1250
-      expect(shouldProactivelyWire).toBe(false);
+      expect(shouldWire).toBe(false);
       expect(authConfig).toBeUndefined();
     });
   });

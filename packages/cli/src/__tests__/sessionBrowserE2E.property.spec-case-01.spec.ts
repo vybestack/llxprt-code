@@ -32,6 +32,29 @@ import {
   SessionBrowserTestState,
 } from './sessionBrowserE2E.helpers.js';
 
+async function createIndexedSessions(
+  chatsDir: string,
+  sessionCount: number,
+): Promise<readonly string[]> {
+  const sessionIds: string[] = [];
+  for (let i = 0; i < sessionCount; i++) {
+    const { sessionId } = await createTestSession(chatsDir, {
+      projectHash: PROJECT_HASH,
+      messages: [{ speaker: 'user', text: `session ${i + 1}` }],
+    });
+    sessionIds.push(sessionId);
+    await delay(20);
+  }
+  return sessionIds;
+}
+
+async function releaseCurrentLock(
+  context: ReturnType<typeof makeResumeContext>,
+): Promise<void> {
+  const newLock = context.recordingCallbacks.getCurrentLockHandle();
+  if (newLock) await newLock.release();
+}
+
 describe('Property-based tests #1', () => {
   let state: SessionBrowserTestState;
 
@@ -63,15 +86,10 @@ describe('Property-based tests #1', () => {
 
         try {
           // Create N sessions
-          const sessionIds: string[] = [];
-          for (let i = 0; i < sessionCount; i++) {
-            const { sessionId } = await createTestSession(localChatsDir, {
-              projectHash: PROJECT_HASH,
-              messages: [{ speaker: 'user', text: `session ${i + 1}` }],
-            });
-            sessionIds.push(sessionId);
-            await delay(20);
-          }
+          const sessionIds = await createIndexedSessions(
+            localChatsDir,
+            sessionCount,
+          );
 
           // Pick a random valid index
           const validIndex = Math.floor(Math.random() * sessionCount) + 1;
@@ -88,8 +106,7 @@ describe('Property-based tests #1', () => {
           const expectedSessionId = sessionIds[sessionCount - validIndex];
           expect(result.metadata.sessionId).toBe(expectedSessionId);
 
-          const newLock = context.recordingCallbacks.getCurrentLockHandle();
-          if (newLock) await newLock.release();
+          await releaseCurrentLock(context);
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
         }

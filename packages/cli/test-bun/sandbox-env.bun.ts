@@ -94,7 +94,12 @@ describe('#3081 shouldUseCurrentUserInSandbox — Linux os-release auto-detect',
   });
 
   function stubOsRelease(content: string | (() => never)): void {
-    readSpy = spyOn(fs, 'readFileSync').mockImplementation((p) => {
+    // The stand-in only ever returns strings, but `fs.readFileSync`'s first
+    // overload returns a Buffer; the cast reconciles the partial mock with
+    // the full spied signature without changing behavior.
+    readSpy = spyOn(fs, 'readFileSync').mockImplementation(((
+      p: fs.PathOrFileDescriptor,
+    ) => {
       if (p === '/etc/os-release') {
         if (typeof content === 'function') {
           content();
@@ -102,7 +107,7 @@ describe('#3081 shouldUseCurrentUserInSandbox — Linux os-release auto-detect',
         return content as string;
       }
       return realReadFileSync(p);
-    });
+    }) as typeof fs.readFileSync);
   }
 
   it.each(['ID=debian', 'ID="debian"', "ID='debian'"])(

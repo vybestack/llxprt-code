@@ -66,6 +66,35 @@ async function createTempFallbackDir(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), 'provider-key-storage-test-'));
 }
 
+function createFlakyKeyring(
+  mockKeyring: KeyringAdapter,
+  shouldFail: () => boolean,
+): KeyringAdapter {
+  const failWhenUnavailable = (): void => {
+    if (shouldFail()) {
+      throw new Error('The operation timed out.');
+    }
+  };
+  return {
+    getPassword: async (service, account) => {
+      failWhenUnavailable();
+      return mockKeyring.getPassword(service, account);
+    },
+    setPassword: async (service, account, password) => {
+      failWhenUnavailable();
+      return mockKeyring.setPassword(service, account, password);
+    },
+    deletePassword: async (service, account) => {
+      failWhenUnavailable();
+      return mockKeyring.deletePassword(service, account);
+    },
+    findCredentials: async (service) => {
+      failWhenUnavailable();
+      return mockKeyring.findCredentials!(service);
+    },
+  };
+}
+
 /**
  * Creates a ProviderKeyStorage backed by a real SecureStore with
  * an in-memory mock keytar adapter and a temp fallback directory.
@@ -431,24 +460,10 @@ describe('ProviderKeyStorage — Encrypted Fallback', () => {
     // process, which would prevent the "restore keyring" phase below from
     // re-reading the keyring.
     let shouldFailKeyring = false;
-    const flakyKeyring: KeyringAdapter = {
-      getPassword: async (service, account) => {
-        if (shouldFailKeyring) throw new Error('The operation timed out.');
-        return mockKeyring.getPassword(service, account);
-      },
-      setPassword: async (service, account, password) => {
-        if (shouldFailKeyring) throw new Error('The operation timed out.');
-        return mockKeyring.setPassword(service, account, password);
-      },
-      deletePassword: async (service, account) => {
-        if (shouldFailKeyring) throw new Error('The operation timed out.');
-        return mockKeyring.deletePassword(service, account);
-      },
-      findCredentials: async (service) => {
-        if (shouldFailKeyring) throw new Error('The operation timed out.');
-        return mockKeyring.findCredentials!(service);
-      },
-    };
+    const flakyKeyring = createFlakyKeyring(
+      mockKeyring,
+      () => shouldFailKeyring,
+    );
 
     const secureStore = new SecureStore('llxprt-code-provider-keys', {
       keyringLoader: async () => flakyKeyring,

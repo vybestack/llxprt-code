@@ -225,7 +225,22 @@ interface LegacyPartLike {
     | { id?: string; name?: string; response?: unknown }
     | undefined;
   inlineData?:
-    | { mimeType?: string; data?: string; displayName?: string }
+    | {
+        mimeType?: string;
+        data?: string;
+        displayName?: string;
+        originalData?: string;
+        originalMimeType?: string;
+        originalDimensions?: {
+          readonly width: number;
+          readonly height: number;
+        };
+        transformation?: {
+          readonly policyId: string;
+          readonly policyVersion: number;
+          readonly parameters: Readonly<Record<string, number>>;
+        };
+      }
     | undefined;
   fileData?: { fileUri?: string; mimeType?: string } | undefined;
 }
@@ -318,6 +333,18 @@ function legacyPartToBlocks(part: LegacyPartLike): ContentBlock[] {
         ...(part.inlineData.displayName
           ? { filename: part.inlineData.displayName }
           : {}),
+        ...(part.inlineData.originalData === undefined
+          ? {}
+          : { originalData: part.inlineData.originalData }),
+        ...(part.inlineData.originalMimeType === undefined
+          ? {}
+          : { originalMimeType: part.inlineData.originalMimeType }),
+        ...(part.inlineData.originalDimensions === undefined
+          ? {}
+          : { originalDimensions: part.inlineData.originalDimensions }),
+        ...(part.inlineData.transformation === undefined
+          ? {}
+          : { transformation: part.inlineData.transformation }),
       },
     ];
   }

@@ -1,0 +1,42 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/zed-acp.tsbuildinfo",
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "composite": false,
+    "types": ["node", "bun-types/test", "bun-types/test-globals"],
+    "baseUrl": ".",
+    "paths": {
+      "@vybestack/llxprt-code-agents": ["../agents/index.ts"],
+      "@vybestack/llxprt-code-core": ["../core/index.ts"],
+      "@vybestack/llxprt-code-core/*": ["../core/src/*"],
+      "@vybestack/llxprt-code-providers": ["../providers/index.ts"],
+      "@vybestack/llxprt-code-providers/auth.js": [
+        "../providers/src/auth/index.ts"
+      ],
+      "@vybestack/llxprt-code-providers/composition.js": [
+        "../providers/src/composition/index.ts"
+      ],
+      "@vybestack/llxprt-code-providers/runtime.js": [
+        "../providers/src/runtime/index.ts"
+      ],
+      "@vybestack/llxprt-code-providers/*": ["../providers/src/*"],
+      "@vybestack/llxprt-code-storage": ["../storage/index.ts"],
+      "@vybestack/llxprt-code-storage/*": ["../storage/src/*"],
+      "@vybestack/llxprt-code-telemetry": ["../telemetry/index.ts"],
+      "@vybestack/llxprt-code-telemetry/*": ["../telemetry/src/*"],
+      "@vybestack/llxprt-code-tools": ["../tools/index.ts"],
+      "@vybestack/llxprt-code-tools/*": ["../tools/src/*"],
+      "@vybestack/llxprt-code-test-utils": ["../test-utils/index.ts"],
+      "@vybestack/llxprt-code-test-utils/*": ["../test-utils/src/*"]
+    }
+  },
+  "include": [
+    "../../bun-test-corrections.d.ts",
+    "index.ts",
+    "src/**/*.ts",
+    "src/**/*.json"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

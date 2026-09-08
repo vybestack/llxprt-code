@@ -11,6 +11,10 @@ import * as path from 'path';
 import { writeFileSync } from 'fs';
 import { testRegex } from '../../test-utils/regex.js';
 
+function serializeRegexGroups(match: RegExpMatchArray | null): string[] | null {
+  return match ? match.map((group) => JSON.stringify(group)) : null;
+}
+
 describe('SecureInputHandler', () => {
   let handler: SecureInputHandler;
 
@@ -301,7 +305,7 @@ describe('SecureInputHandler', () => {
       const match = afterPaste.match(testRegex('^\\/key\\s+([\\s\\S]*)', ''));
       const debug3 = {
         matched: !!match,
-        groups: match ? match.map((g) => JSON.stringify(g)) : null,
+        groups: serializeRegexGroups(match),
       };
 
       // Also test with actual line ending characters

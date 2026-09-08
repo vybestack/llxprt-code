@@ -64,21 +64,45 @@ type MockStorageInstance = {
   createBucket: Mock<(name: string) => Promise<[MockBucket]>>;
 };
 
-async function expectRejection(
-  promise: Promise<unknown>,
-  expectedMessage: string,
-): Promise<void> {
+async function captureRejection(promise: Promise<unknown>): Promise<unknown> {
   try {
     await promise;
   } catch (error: unknown) {
-    expect(error).toBeInstanceOf(Error);
-    if (error instanceof Error) {
-      expect(error.message).toContain(expectedMessage);
-    }
-    return;
+    return error;
   }
 
   throw new Error('Expected promise to reject');
+}
+
+function requireError(error: unknown): asserts error is Error {
+  if (!(error instanceof Error)) {
+    throw new Error('Expected rejection reason to be an Error');
+  }
+}
+/**
+ * A bucket-file mock that dispatches on the file path: every requested
+ * GCS object gets a fresh mock file whose `exists` and `download` are
+ * wired so `metadata.tar.gz` and `workspace.tar.gz` load distinguished
+ * payloads (used by the "should load task metadata and workspace" case).
+ */
+function metadataAndWorkspaceBucketFile(
+  baseFile: (path: string) => MockFile,
+): (path: string) => MockFile {
+  return (path: string) => {
+    const newMockFile = { ...baseFile(path) };
+    if (path.includes('metadata')) {
+      newMockFile.download = vi
+        .fn()
+        .mockResolvedValue([Buffer.from('compressed metadata')]);
+      newMockFile.exists = vi.fn().mockResolvedValue([true]);
+    } else {
+      newMockFile.download = vi
+        .fn()
+        .mockResolvedValue([Buffer.from('compressed workspace')]);
+      newMockFile.exists = vi.fn().mockResolvedValue([true]);
+    }
+    return newMockFile;
+  };
 }
 
 describe('GCSTaskStore', () => {
@@ -182,8 +206,10 @@ describe('GCSTaskStore', () => {
         new Error('Create failed'),
       );
       const store = createStore();
-      await expectRejection(
-        store['ensureBucketInitialized'](),
+      const error = await captureRejection(store['ensureBucketInitialized']());
+      expect(error).toBeInstanceOf(Error);
+      requireError(error);
+      expect(error.message).toContain(
         'Failed to create GCS bucket test-bucket: Error: Create failed',
       );
     });
@@ -217,10 +243,10 @@ describe('GCSTaskStore', () => {
           !path.includes('task-task1-workspace-test-uuid.tar.gz'),
       );
       const store = createStore();
-      await expectRejection(
-        store.save(mockTask),
-        'tar.c command failed to create',
-      );
+      const error = await captureRejection(store.save(mockTask));
+      expect(error).toBeInstanceOf(Error);
+      requireError(error);
+      expect(error.message).toContain('tar.c command failed to create');
     });
 
     it('should throw an error if taskId contains path traversal sequences', async () => {
@@ -247,8 +273,10 @@ describe('GCSTaskStore', () => {
         history: [],
         artifacts: [],
       };
-      await expectRejection(
-        store.save(maliciousTask),
+      const error = await captureRejection(store.save(maliciousTask));
+      expect(error).toBeInstanceOf(Error);
+      requireError(error);
+      expect(error.message).toContain(
         'Invalid taskId: ../../../malicious-task',
       );
     });
@@ -267,21 +295,7 @@ describe('GCSTaskStore', () => {
           }),
         ),
       );
-      mockBucket.file = vi.fn((path) => {
-        const newMockFile = { ...mockFile };
-        if (path.includes('metadata')) {
-          newMockFile.download = vi
-            .fn()
-            .mockResolvedValue([Buffer.from('compressed metadata')]);
-          newMockFile.exists = vi.fn().mockResolvedValue([true]);
-        } else {
-          newMockFile.download = vi
-            .fn()
-            .mockResolvedValue([Buffer.from('compressed workspace')]);
-          newMockFile.exists = vi.fn().mockResolvedValue([true]);
-        }
-        return newMockFile;
-      });
+      mockBucket.file = vi.fn(metadataAndWorkspaceBucketFile(mockBucket.file));
 
       const store = createStore();
       const task = await store.load('task1');
@@ -323,14 +337,12 @@ describe('GCSTaskStore', () => {
 
       mockBucket.file = vi.fn((path) => {
         const newMockFile = { ...mockFile };
-        if (path.includes('workspace.tar.gz')) {
-          newMockFile.exists = vi.fn().mockResolvedValue([false]);
-        } else {
-          newMockFile.exists = vi.fn().mockResolvedValue([true]);
-          newMockFile.download = vi
-            .fn()
-            .mockResolvedValue([Buffer.from('compressed metadata')]);
-        }
+        newMockFile.exists = vi
+          .fn()
+          .mockResolvedValue([!path.includes('workspace.tar.gz')]);
+        newMockFile.download = vi
+          .fn()
+          .mockResolvedValue([Buffer.from('compressed metadata')]);
         return newMockFile;
       });
 
@@ -345,10 +357,10 @@ describe('GCSTaskStore', () => {
   it('should throw an error if taskId contains path traversal sequences', async () => {
     const store = createStore();
     const maliciousTaskId = '../../../malicious-task';
-    await expectRejection(
-      store.load(maliciousTaskId),
-      `Invalid taskId: ${maliciousTaskId}`,
-    );
+    const error = await captureRejection(store.load(maliciousTaskId));
+    expect(error).toBeInstanceOf(Error);
+    requireError(error);
+    expect(error.message).toContain(`Invalid taskId: ${maliciousTaskId}`);
   });
 });
 

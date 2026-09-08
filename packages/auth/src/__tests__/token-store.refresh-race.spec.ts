@@ -56,6 +56,56 @@ describe('KeyringTokenStore - Token Refresh Race Condition (Issue #1159)', () =>
     scope: null,
   });
 
+  async function runConcurrentRefreshRace(originalToken: OAuthToken): Promise<{
+    readonly refreshedClientCount: number;
+    readonly refreshCallCount: number;
+    readonly allClientsHaveToken: boolean;
+  }> {
+    let refreshCallCount = 0;
+    const refresh = async (): Promise<OAuthToken> => {
+      refreshCallCount++;
+      await setTimeoutPromise(100);
+      return createToken(`refreshed-token-${refreshCallCount}`);
+    };
+
+    const clients = Array.from({ length: 5 }, async (_, client) => {
+      try {
+        const acquired = await tokenStore.acquireRefreshLock('anthropic', {
+          waitMs: 3000,
+        });
+
+        if (acquired) {
+          const recheckToken = await tokenStore.getToken('anthropic');
+          if (recheckToken?.access_token !== originalToken.access_token) {
+            await tokenStore.releaseRefreshLock('anthropic');
+            return { client, refreshed: false, token: recheckToken };
+          }
+
+          const newToken = await refresh();
+          await tokenStore.saveToken('anthropic', newToken);
+          await tokenStore.releaseRefreshLock('anthropic');
+          return { client, refreshed: true, token: newToken };
+        }
+        const updatedToken = await tokenStore.getToken('anthropic');
+        return { client, refreshed: false, token: updatedToken };
+      } catch (error) {
+        return { client, error: String(error) };
+      }
+    });
+
+    const results = await Promise.all(clients);
+    return {
+      refreshedClientCount: results.filter(
+        (result) => 'refreshed' in result && result.refreshed === true,
+      ).length,
+      refreshCallCount,
+      allClientsHaveToken: results.every(
+        (result) =>
+          'token' in result && result.token?.access_token !== undefined,
+      ),
+    };
+  }
+
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(join(tmpdir(), 'token-refresh-race-test-'));
     const lockDir = join(tempDir, 'locks');
@@ -196,50 +246,11 @@ describe('KeyringTokenStore - Token Refresh Race Condition (Issue #1159)', () =>
     const originalToken = createToken('original-token');
     await tokenStore.saveToken('anthropic', originalToken);
 
-    let refreshCallCount = 0;
-    const mockRefresh = async (): Promise<OAuthToken> => {
-      refreshCallCount++;
-      await setTimeoutPromise(100);
-      return createToken(`refreshed-token-${refreshCallCount}`);
-    };
+    const observation = await runConcurrentRefreshRace(originalToken);
 
-    const clients = Array.from({ length: 5 }, async (_, i) => {
-      try {
-        const acquired = await tokenStore.acquireRefreshLock('anthropic', {
-          waitMs: 3000,
-        });
-
-        if (acquired) {
-          const recheckToken = await tokenStore.getToken('anthropic');
-          if (recheckToken?.access_token !== originalToken.access_token) {
-            await tokenStore.releaseRefreshLock('anthropic');
-            return { client: i, refreshed: false, token: recheckToken };
-          }
-
-          const newToken = await mockRefresh();
-          await tokenStore.saveToken('anthropic', newToken);
-          await tokenStore.releaseRefreshLock('anthropic');
-          return { client: i, refreshed: true, token: newToken };
-        }
-        const updatedToken = await tokenStore.getToken('anthropic');
-        return { client: i, refreshed: false, token: updatedToken };
-      } catch (error) {
-        return { client: i, error: String(error) };
-      }
-    });
-
-    const results = await Promise.all(clients);
-    const refreshedResults = results.filter(
-      (r) => 'refreshed' in r && r.refreshed === true,
-    );
-
-    expect(refreshedResults.length).toBe(1);
-    expect(refreshCallCount).toBe(1);
-
-    const allHaveToken = results.every(
-      (r): boolean => 'token' in r && r.token?.access_token != null,
-    );
-    expect(allHaveToken).toBe(true);
+    expect(observation.refreshedClientCount).toBe(1);
+    expect(observation.refreshCallCount).toBe(1);
+    expect(observation.allClientsHaveToken).toBe(true);
   });
 
   it('should integrate lock mechanism with existing saveToken/getToken', async () => {

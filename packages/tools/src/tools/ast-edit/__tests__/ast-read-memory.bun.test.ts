@@ -35,6 +35,10 @@ import {
 import { tmpdir } from 'node:os';
 import { gitCheck, gitInit } from './ast-read-git-fixtures.js';
 
+function textOrEmpty(value: string | null | undefined): string {
+  return value ?? '';
+}
+
 const PEAK_RSS_CEILING_BYTES = 768 * 1024 * 1024; // 768 MiB
 /** Post-result tail growth must stay below this margin. */
 const POST_RESULT_TAIL_CEILING_BYTES = 64 * 1024 * 1024; // 64 MiB
@@ -191,6 +195,35 @@ function describeChildFailure(child: SpawnSyncReturns<string>): string {
   return `memory child failed (${details.join('; ')})`;
 }
 
+function requireSuccessfulChild(child: SpawnSyncReturns<string>): void {
+  if (child.status !== 0) {
+    throw new Error(describeChildFailure(child));
+  }
+}
+
+function resolveGitExecutable(): string {
+  const resolved = spawnSync('sh', ['-c', 'command -v git'], {
+    encoding: 'utf-8',
+  });
+  const realGit = resolved.stdout.trim();
+  if (resolved.status !== 0 || realGit === '') {
+    throw new Error(
+      `could not resolve real git for the shim (status=${String(resolved.status)})`,
+    );
+  }
+  return realGit;
+}
+
+function readGitInvocations(logPath: string, workspace: string): string[] {
+  if (!existsSync(logPath)) {
+    return [];
+  }
+  return readFileSync(logPath, 'utf-8')
+    .split('\n')
+    .filter((line) => line.length > 0)
+    .map((line) => stripGitDirPrefix(line, workspace));
+}
+
 /**
  * Drop the leading `-C <workspace>` argv pair from a logged Git invocation
  * so the subcommand itself is comparable. The literal known prefix is
@@ -218,9 +251,7 @@ describe('REQ-3232-5: ast_read_file memory regression', () => {
       );
       // Report the full spawn outcome before asserting so a failed child is
       // diagnosable from the test log rather than a bare "expected 0".
-      if (child.status !== 0) {
-        throw new Error(describeChildFailure(child));
-      }
+      requireSuccessfulChild(child);
       // The child must emit both markers, proving the quiet window ran.
       expect(child.stdout).toContain('AST_READ_TOOL_RESULT');
       expect(child.stdout).toContain('AST_READ_QUIET_DONE');
@@ -261,101 +292,88 @@ describe('REQ-3232-5: ast_read_file memory regression', () => {
 describe('REQ-3232-5: ast_read_file repository wiring canary', () => {
   // Windows resolves `git` through a .cmd shim that Node cannot spawn without
   // a shell, so the PATH interception technique is POSIX-only there.
-  it.skipIf(process.platform === 'win32')(
-    'spawns no repository-relationship Git commands during a real read',
+
+  describe.skipIf(process.platform === 'win32')(
+    'POSIX Git invocation interception',
     () => {
-      const spyRoot = mkdtempSync(join(tmpdir(), 'llxprt-3232-spy-'));
-      const shimDir = mkdtempSync(join(tmpdir(), 'llxprt-3232-shim-'));
-      // A workspace directory whose name contains spaces exercises the real
-      // canary against the path shape that defeats space-splitting parsers.
-      const workspace = join(spyRoot, 'work space');
-      try {
-        mkdirSync(workspace, { recursive: true });
-        gitInit(workspace);
-        writeFileSync(
-          join(workspace, 'dep.ts'),
-          'export const ref0 = Alpha.counter;\n',
-          'utf-8',
-        );
-        gitCheck(workspace, ['add', '-A']);
-        gitCheck(workspace, ['commit', '-m', 'fixture']);
-        writeFileSync(
-          join(workspace, 'ws.ts'),
-          'export const modified = true;\n',
-          'utf-8',
-        );
-        writeFileSync(
-          join(workspace, 'target.ts'),
-          'export class Alpha {\n  public static counter: number = 1;\n}\n',
-          'utf-8',
-        );
-
-        const resolved = spawnSync('sh', ['-c', 'command -v git'], {
-          encoding: 'utf-8',
-        });
-        const realGit = resolved.stdout.trim();
-        if (resolved.status !== 0 || realGit === '') {
-          throw new Error(
-            `could not resolve real git for the shim (status=${String(
-              resolved.status,
-            )})`,
+      it('spawns no repository-relationship Git commands during a real read', () => {
+        const spyRoot = mkdtempSync(join(tmpdir(), 'llxprt-3232-spy-'));
+        const shimDir = mkdtempSync(join(tmpdir(), 'llxprt-3232-shim-'));
+        // A workspace directory whose name contains spaces exercises the real
+        // canary against the path shape that defeats space-splitting parsers.
+        const workspace = join(spyRoot, 'work space');
+        try {
+          mkdirSync(workspace, { recursive: true });
+          gitInit(workspace);
+          writeFileSync(
+            join(workspace, 'dep.ts'),
+            'export const ref0 = Alpha.counter;\n',
+            'utf-8',
           );
-        }
-        const logPath = join(shimDir, 'git-invocations.log');
-        writeFileSync(
-          join(shimDir, 'git'),
-          [
-            '#!/bin/sh',
-            `printf '%s\\n' "$*" >> ${JSON.stringify(logPath)}`,
-            `exec ${JSON.stringify(realGit)} "$@"`,
-            '',
-          ].join('\n'),
-          { mode: 0o755 },
-        );
+          gitCheck(workspace, ['add', '-A']);
+          gitCheck(workspace, ['commit', '-m', 'fixture']);
+          writeFileSync(
+            join(workspace, 'ws.ts'),
+            'export const modified = true;\n',
+            'utf-8',
+          );
+          writeFileSync(
+            join(workspace, 'target.ts'),
+            'export class Alpha {\n  public static counter: number = 1;\n}\n',
+            'utf-8',
+          );
 
-        const child = spawnSync(
-          process.execPath,
-          [CHILD_SCRIPT_PATH, workspace],
-          {
-            encoding: 'utf-8',
-            stdio: 'pipe',
-            timeout: CHILD_TIMEOUT_MS,
-            maxBuffer: 16 * 1024 * 1024,
-            env: {
-              ...process.env,
-              PATH: `${shimDir}:${process.env.PATH ?? ''}`,
+          const realGit = resolveGitExecutable();
+          const logPath = join(shimDir, 'git-invocations.log');
+          writeFileSync(
+            join(shimDir, 'git'),
+            [
+              '#!/bin/sh',
+              `printf '%s\\n' "$*" >> ${JSON.stringify(logPath)}`,
+              `exec ${JSON.stringify(realGit)} "$@"`,
+              '',
+            ].join('\n'),
+            { mode: 0o755 },
+          );
+
+          const child = spawnSync(
+            process.execPath,
+            [CHILD_SCRIPT_PATH, workspace],
+            {
+              encoding: 'utf-8',
+              stdio: 'pipe',
+              timeout: CHILD_TIMEOUT_MS,
+              maxBuffer: 16 * 1024 * 1024,
+              env: {
+                ...process.env,
+                PATH: `${shimDir}:${textOrEmpty(process.env.PATH)}`,
+              },
             },
-          },
-        );
-        if (child.status !== 0) {
-          throw new Error(describeChildFailure(child));
+          );
+          requireSuccessfulChild(child);
+          const invocations = readGitInvocations(logPath, workspace);
+          // The read genuinely used Git (bounded discovery ran) ...
+          expect(invocations.length).toBeGreaterThan(0);
+          // ... and the exact `-C <workspace> ` prefix stripped cleanly even
+          // with the spaced path: the logged subcommands parse intact.
+          expect(
+            invocations.some((line) => line.startsWith('rev-parse ')),
+          ).toBe(true);
+          expect(invocations.some((line) => line.startsWith('diff '))).toBe(
+            true,
+          );
+          // ... but never the repository-relationship subcommands.
+          expect(invocations.some((line) => line.startsWith('remote '))).toBe(
+            false,
+          );
+          expect(invocations.some((line) => line.startsWith('branch '))).toBe(
+            false,
+          );
+        } finally {
+          rmSync(spyRoot, { recursive: true, force: true });
+          rmSync(shimDir, { recursive: true, force: true });
         }
-        const invocations = existsSync(logPath)
-          ? readFileSync(logPath, 'utf-8')
-              .split('\n')
-              .filter((line) => line.length > 0)
-              .map((line) => stripGitDirPrefix(line, workspace))
-          : [];
-        // The read genuinely used Git (bounded discovery ran) ...
-        expect(invocations.length).toBeGreaterThan(0);
-        // ... and the exact `-C <workspace> ` prefix stripped cleanly even
-        // with the spaced path: the logged subcommands parse intact.
-        expect(invocations.some((line) => line.startsWith('rev-parse '))).toBe(
-          true,
-        );
-        expect(invocations.some((line) => line.startsWith('diff '))).toBe(true);
-        // ... but never the repository-relationship subcommands.
-        expect(invocations.some((line) => line.startsWith('remote '))).toBe(
-          false,
-        );
-        expect(invocations.some((line) => line.startsWith('branch '))).toBe(
-          false,
-        );
-      } finally {
-        rmSync(spyRoot, { recursive: true, force: true });
-        rmSync(shimDir, { recursive: true, force: true });
-      }
+      }, 240_000);
     },
-    240_000,
   );
 });

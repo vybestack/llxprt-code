@@ -17,8 +17,6 @@
 
 import {
   type CanonicalFinishReason,
-  getCodeAssistServer,
-  UserTierId,
   UnauthorizedError,
   getErrorMessage,
   parseAndFormatApiError,
@@ -508,7 +506,6 @@ export function handleSubmissionError(
         type: MessageType.ERROR,
         text: parseAndFormatApiError(
           getErrorMessage(error) || 'Unknown error',
-          undefined,
           fallbackModel,
           providerName,
         ),
@@ -538,11 +535,10 @@ export function buildApiErrorInfo(runtime: StreamRuntime): ApiErrorRuntimeInfo {
 
 /**
  * Determines whether citations should be shown.
- * Uses a fallback precedence chain:
+ * Precedence chain:
  * 1. settingsService.get('ui.showCitations')
  * 2. settings.merged.ui.showCitations
- * 3. userTier !== FREE (tier-based default)
- * 4. false (final default)
+ * 3. false (default)
  */
 export function showCitations(
   settings: LoadedSettings,
@@ -560,14 +556,7 @@ export function showCitations(
   }
 
   const enabled = settings.merged.ui.showCitations;
-  if (enabled !== undefined) {
-    return enabled;
-  }
-
-  const server = getCodeAssistServer({
-    getAgentClient: () => runtime.agentClientSource.getAgentClient(),
-  });
-  return server != null && server.userTier !== UserTierId.FREE;
+  return enabled === true;
 }
 
 /**

@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-storage';
+import { assertCondition } from '@vybestack/llxprt-code-test-utils';
 import {
   SANDBOX_SIGNAL_CHILD_PATH,
   SANDBOX_SIGNAL_CHILD_READY_MARKER_ENV,
@@ -156,14 +157,25 @@ describe('#3450 private dependency storage lifecycle', () => {
           `Signal fixture failed before readiness: status=${String(result.status)} signal=${String(result.signal)} stdout=${result.stdout} stderr=${result.stderr}`,
         );
       }
-      expect(fs.readFileSync(storageReadyMarker, 'utf8')).toBe(
-        'PRIVATE-STORAGE-READY:1\n',
+      assertCondition(
+        fs.readFileSync(storageReadyMarker, 'utf8') ===
+          'PRIVATE-STORAGE-READY:1\n',
+        'Signal fixture did not report private storage readiness',
       );
       assertSignalDeath(result, signal);
-      expect(result.stdout).not.toContain('CONTINUED-AFTER-SIGNAL');
+      assertCondition(
+        !result.stdout.includes('CONTINUED-AFTER-SIGNAL'),
+        `Signal fixture continued after ${signal}`,
+      );
       // The signal handler released the engine-owned volumes.
-      expect(engine.volumeNames()).toStrictEqual([]);
-      expect(privateRunRoots()).toStrictEqual([]);
+      assertCondition(
+        engine.volumeNames().length === 0,
+        `Engine volumes remained after ${signal}`,
+      );
+      assertCondition(
+        privateRunRoots().length === 0,
+        `Private run roots remained after ${signal}`,
+      );
     },
   );
 

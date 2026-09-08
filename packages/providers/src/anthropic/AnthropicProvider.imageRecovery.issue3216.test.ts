@@ -33,6 +33,7 @@ import {
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import sharp from 'sharp';
+import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
 
 async function pngBase64(width: number, height: number): Promise<string> {
   const buffer = await sharp({
@@ -52,6 +53,7 @@ const mockMessagesCreate = vi.fn();
 
 void vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
+    ...createAnthropicRawPostTestAdapter(mockMessagesCreate),
     messages: {
       create: mockMessagesCreate,
     },
@@ -99,6 +101,8 @@ const createMockStream = (text: string) => ({
       type: 'content_block_delta',
       delta: { type: 'text_delta', text },
     };
+
+    yield { type: 'message_stop' };
   },
 });
 
@@ -254,6 +258,31 @@ async function consumeGenerator(
     error = e;
   }
   return { chunks, threw, error };
+}
+
+function errorMessage(error: unknown): string {
+  return String(error instanceof Error ? error.message : error);
+}
+
+function messageContentBlocks(message: { content: unknown }): unknown[] {
+  return Array.isArray(message.content) ? message.content : [];
+}
+
+function isToolResultBlock(
+  block: unknown,
+): block is { tool_use_id?: string; type: string } {
+  return (
+    typeof block === 'object' &&
+    block !== null &&
+    (block as { type?: unknown }).type === 'tool_result'
+  );
+}
+
+function appendTextChunk(chunks: string[], chunk: IContent): void {
+  const text = chunk.blocks.find((block) => block.type === 'text');
+  if (text !== undefined) {
+    chunks.push(text.text);
+  }
 }
 
 describe('AnthropicProvider image recovery (@issue:3216)', () => {
@@ -438,7 +467,6 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
     const { provider, runtimeContext, settingsService } = setupProvider({
       withImageBudget: false,
     });
-    mockMessagesCreate.mockRejectedValueOnce(make400ImageDimensionError());
 
     const messages: IContent[] = [
       {
@@ -465,7 +493,10 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
     );
     const attached = attachTransportAttemptBudget(baseOptions, 5);
     const abortController = new AbortController();
-    abortController.abort();
+    mockMessagesCreate.mockImplementationOnce(() => {
+      abortController.abort();
+      return Promise.reject(make400ImageDimensionError());
+    });
     // Preserve the narrowed options type while overriding the signal and
     // carrying the budget-bearing metadata from the attached copy.
     const abortedOptions = {
@@ -481,10 +512,7 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
 
     // Recovery was skipped: the ORIGINAL 400 propagates (nothing sanitized).
     expect(result.threw).toBe(true);
-    const errorMessage = String(
-      result.error instanceof Error ? result.error.message : result.error,
-    );
-    expect(errorMessage).toContain('image dimensions');
+    expect(errorMessage(result.error)).toContain('image dimensions');
     // The recovery retry never reached the transport.
     expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
     // No transport slot was consumed by the known-aborted recovery.
@@ -548,17 +576,10 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
     expect(JSON.stringify(retryRequest.messages)).not.toContain(big);
     // The tool_result wrapper and pairing must survive in the retry body.
     const retryMessages = retryRequest.messages as Array<{
-      content: unknown[];
+      content: unknown;
     }>;
-    const allBlocks = retryMessages.flatMap((msg) =>
-      Array.isArray(msg.content) ? msg.content : [],
-    );
-    const toolResultBlock = allBlocks.find(
-      (b): b is { tool_use_id?: string; type: string } =>
-        typeof b === 'object' &&
-        b !== null &&
-        (b as { type: string }).type === 'tool_result',
-    );
+    const allBlocks = retryMessages.flatMap(messageContentBlocks);
+    const toolResultBlock = allBlocks.find(isToolResultBlock);
     expect(toolResultBlock).toBeDefined();
     expect(toolResultBlock?.tool_use_id).toBe('toolu_abc');
   });
@@ -615,8 +636,7 @@ describe('AnthropicProvider image recovery through RetryOrchestrator (@issue:321
     try {
       const gen = orchestrator.generateChatCompletion(callOptions);
       for await (const chunk of gen) {
-        const text = chunk.blocks.find((b) => b.type === 'text');
-        if (text !== undefined) chunks.push(text.text);
+        appendTextChunk(chunks, chunk);
       }
     } catch {
       threw = true;
@@ -684,9 +704,7 @@ describe('AnthropicProvider image recovery through RetryOrchestrator (@issue:321
     // The sanitized retry's OWN error is the real outcome and must propagate
     // so the outer retry classification sees it — NOT the original 400.
     expect(caught).toBeDefined();
-    const caughtMessage = String(
-      caught instanceof Error ? caught.message : caught,
-    );
+    const caughtMessage = errorMessage(caught);
     expect(caughtMessage).toContain(
       'RETRY_MARKER_PROPAGATED_FROM_SANITIZED_RETRY',
     );
@@ -739,8 +757,7 @@ describe('AnthropicProvider image recovery through RetryOrchestrator (@issue:321
     try {
       const gen = orchestrator.generateChatCompletion(callOptions);
       for await (const chunk of gen) {
-        const text = chunk.blocks.find((b) => b.type === 'text');
-        if (text !== undefined) chunks.push(text.text);
+        appendTextChunk(chunks, chunk);
       }
     } catch {
       threw = true;

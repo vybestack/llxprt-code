@@ -27,6 +27,10 @@ import type { IToolHost } from '../interfaces/index.js';
 import { AstGrepTool } from './ast-grep.js';
 import type { ToolResult } from './tools.js';
 
+function arrayLength(value: readonly unknown[] | undefined): number {
+  return value?.length ?? 0;
+}
+
 function createToolHost(targetDir: string): IToolHost {
   return {
     getTargetDir: () => targetDir,
@@ -295,7 +299,7 @@ describe('ast_grep bounded acquisition (issue #3205)', () => {
     expect(meta.partialReason).toBe('aborted');
     // No matches materialized: the pre-aborted single-file path must not
     // read/parse the file.
-    expect((meta.matches ?? []).length).toBe(0);
+    expect(arrayLength(meta.matches)).toBe(0);
   });
 
   it('aborts DURING a real large-directory traversal and returns a partial result', async () => {
@@ -329,7 +333,7 @@ describe('ast_grep bounded acquisition (issue #3205)', () => {
       expect(meta.partialReason).toBe('aborted');
       // Bounded output: the traversal did not finish all 600 matches before
       // the abort was observed.
-      expect((meta.matches ?? []).length).toBeLessThan(600);
+      expect(arrayLength(meta.matches)).toBeLessThan(600);
     } finally {
       clearTimeout(timer);
     }
@@ -628,22 +632,24 @@ describe('ast_grep skipped-file partiality (issue #3205)', () => {
     }
   });
 
-  it.skipIf(!supportsUnreadableFixture)(
-    'marks the result inexact when a file is skipped (no exact totalMatches)',
-    async () => {
-      const host = createToolHost(tempDir);
-      const result = await runGrep(host, {
-        pattern: '$OBJ.$F($$$ARGS)',
-        language: 'typescript',
-        path: tempDir,
-        maxResults: 100,
+  describe.skipIf(!supportsUnreadableFixture)(
+    'unreadable-file partiality',
+    () => {
+      it('marks the result inexact when a file is skipped (no exact totalMatches)', async () => {
+        const host = createToolHost(tempDir);
+        const result = await runGrep(host, {
+          pattern: '$OBJ.$F($$$ARGS)',
+          language: 'typescript',
+          path: tempDir,
+          maxResults: 100,
+        });
+        const meta = metadataOf(result);
+        // The unreadable file was skipped -> at least one skip recorded.
+        expect(meta.skippedFiles).toBeGreaterThanOrEqual(1);
+        // A skipped file means the count cannot be exact: no totalMatches claimed.
+        expect(meta.totalMatches).toBeUndefined();
+        expect(meta.countInexact).toBe(true);
       });
-      const meta = metadataOf(result);
-      // The unreadable file was skipped -> at least one skip recorded.
-      expect(meta.skippedFiles).toBeGreaterThanOrEqual(1);
-      // A skipped file means the count cannot be exact: no totalMatches claimed.
-      expect(meta.totalMatches).toBeUndefined();
-      expect(meta.countInexact).toBe(true);
     },
   );
 });

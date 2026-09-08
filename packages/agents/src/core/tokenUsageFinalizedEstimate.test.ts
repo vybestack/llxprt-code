@@ -36,10 +36,6 @@ import { TokenUsageLogger } from './TokenUsageLogger.js';
 import type { SerializedTokenUsageRecord } from './TokenUsageLogger.js';
 import { recordFinalizedPromptEnvelopeEstimate } from './tokenUsageEstimateLogger.js';
 
-afterEach(() => {
-  clearActiveProviderRuntimeContext();
-});
-
 async function createLogger(): Promise<{
   logger: TokenUsageLogger;
   readRecord: () => Promise<SerializedTokenUsageRecord>;
@@ -96,7 +92,13 @@ function promptAccounting(estimate: PromptEnvelopeEstimate): PromptAccounting {
   if (effective === undefined || statefulParentUsed === undefined) {
     throw new Error('Expected finalized prompt accounting facts');
   }
-  return { transmitted, incremental, retained, effective, statefulParentUsed };
+  return {
+    transmitted,
+    incremental,
+    retained,
+    effective,
+    statefulParentUsed,
+  };
 }
 function serializedPromptAccounting(
   record: SerializedTokenUsageRecord,
@@ -116,7 +118,13 @@ function serializedPromptAccounting(
   if (effective === undefined || statefulParentUsed === undefined) {
     throw new Error('Expected serialized prompt accounting facts');
   }
-  return { transmitted, incremental, retained, effective, statefulParentUsed };
+  return {
+    transmitted,
+    incremental,
+    retained,
+    effective,
+    statefulParentUsed,
+  };
 }
 
 function createResponsesProvider(): OpenAIResponsesProvider {
@@ -155,6 +163,8 @@ async function estimateResponsesPrompt(
 }
 
 describe('recordFinalizedPromptEnvelopeEstimate (issue #2817)', () => {
+  afterEach(clearActiveProviderRuntimeContext);
+
   it('keeps an earlier tiktoken measurement while adopting the finalized token count', async () => {
     const { logger, readRecord } = await createLogger();
 
@@ -262,6 +272,8 @@ describe('recordFinalizedPromptEnvelopeEstimate (issue #2817)', () => {
 });
 
 describe('stateful Responses finalized-estimate telemetry (issue #3219 AC-6)', () => {
+  afterEach(clearActiveProviderRuntimeContext);
+
   it('serializes equal transmitted and effective context for a real stateless projection', async () => {
     const provider = createResponsesProvider();
     const estimate = await estimateResponsesPrompt(

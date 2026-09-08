@@ -36,6 +36,19 @@ void vi.mock('ink', () => ({
   getBoundingBox: vi.fn(() => ({ x: 0, y: 0, width: 10, height: 10 })),
 }));
 
+function dispatchMouseEvent(
+  callbacks: ReadonlySet<(event: MouseEvent) => void | boolean>,
+  event: MouseEvent,
+): boolean {
+  let handled = false;
+  for (const callback of callbacks) {
+    if (callback(event) === true) {
+      handled = true;
+    }
+  }
+  return handled;
+}
+
 const TestScrollable = forwardRef(
   (
     props: {
@@ -95,22 +108,15 @@ describe('ScrollProvider', () => {
         );
       });
 
-      let handled = false;
-      for (const callback of mockUseMouseCallbacks) {
-        if (
-          callback({
-            name: 'scroll-down',
-            col: 5,
-            row: 5,
-            shift: false,
-            ctrl: false,
-            meta: false,
-            button: 'none',
-          }) === true
-        ) {
-          handled = true;
-        }
-      }
+      const handled = dispatchMouseEvent(mockUseMouseCallbacks, {
+        name: 'scroll-down',
+        col: 5,
+        row: 5,
+        shift: false,
+        ctrl: false,
+        meta: false,
+        button: 'none',
+      });
       expect(handled).toBe(true);
     });
 
@@ -133,22 +139,15 @@ describe('ScrollProvider', () => {
         );
       });
 
-      let handled = false;
-      for (const callback of mockUseMouseCallbacks) {
-        if (
-          callback({
-            name: 'scroll-down',
-            col: 5,
-            row: 5,
-            shift: false,
-            ctrl: false,
-            meta: false,
-            button: 'none',
-          }) === true
-        ) {
-          handled = true;
-        }
-      }
+      const handled = dispatchMouseEvent(mockUseMouseCallbacks, {
+        name: 'scroll-down',
+        col: 5,
+        row: 5,
+        shift: false,
+        ctrl: false,
+        meta: false,
+        button: 'none',
+      });
       expect(handled).toBe(false);
     });
   });

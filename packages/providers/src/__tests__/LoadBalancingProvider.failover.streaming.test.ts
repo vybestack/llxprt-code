@@ -17,6 +17,57 @@ import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../GenerateChatOptions.js';
 
+async function* generateUniqueChunkAfterInitialFailure(
+  recordCall: () => number,
+): AsyncGenerator<IContent> {
+  if (recordCall() === 1) throw new Error('first attempt failed');
+  yield { type: 'text' as const, content: 'unique-chunk' };
+}
+
+async function* generateRateLimitedThenNumberedResponse(
+  recordCall: () => number,
+): AsyncGenerator<IContent> {
+  const callCount = recordCall();
+  if (callCount === 1) {
+    const error = new Error('Rate limited') as Error & { status: number };
+    error.status = 429;
+    throw error;
+  }
+  yield { type: 'text' as const, content: `response-${callCount}` };
+}
+
+async function* generateSuccessfulSameBackendRetry(
+  recordCall: () => number,
+): AsyncGenerator<IContent> {
+  if (recordCall() === 1) {
+    const error = new Error('Rate limited') as Error & { status: number };
+    error.status = 429;
+    throw error;
+  }
+  yield { type: 'text' as const, content: 'success' };
+}
+
+async function* generateSuccessAfterNonStatusFailure(
+  recordCall: () => number,
+): AsyncGenerator<IContent> {
+  if (recordCall() === 1) throw new Error('Backend error without status');
+  yield { type: 'text' as const, content: 'success' };
+}
+
+async function* generatePartialResponseThenRateLimit(
+  recordCall: () => number,
+): AsyncGenerator<IContent> {
+  if (recordCall() === 1) {
+    yield { type: 'text' as const, content: 'partial-response' };
+    const error = new Error('Rate limited mid-stream') as Error & {
+      status: number;
+    };
+    error.status = 429;
+    throw error;
+  }
+  yield { type: 'text' as const, content: 'backend2-response' };
+}
+
 describe('LoadBalancingProvider - Failover Strategy', () => {
   let settingsService: SettingsService;
   let config: Config;
@@ -39,8 +90,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -88,17 +137,10 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const mockProvider: IProvider = {
         name: 'test-provider',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          callCount++;
-          if (callCount === 1) {
-            throw new Error('first attempt failed');
-          }
-          yield { type: 'text' as const, content: 'unique-chunk' };
-        },
+        generateChatCompletion: () =>
+          generateUniqueChunkAfterInitialFailure(() => ++callCount),
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -151,23 +193,10 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const mockProvider: IProvider = {
         name: 'test-provider',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          callCount++;
-          // First call: throw 429 (immediate failover)
-          // Second call: succeed (on backend2)
-          if (callCount === 1) {
-            const error = new Error('Rate limited') as Error & {
-              status: number;
-            };
-            error.status = 429;
-            throw error;
-          }
-          yield { type: 'text' as const, content: `response-${callCount}` };
-        },
+        generateChatCompletion: () =>
+          generateRateLimitedThenNumberedResponse(() => ++callCount),
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -215,22 +244,10 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const mockProvider: IProvider = {
         name: 'test-provider',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          callCount++;
-          // First call fails, second succeeds on the sticky backend.
-          if (callCount === 1) {
-            const error = new Error('Rate limited') as Error & {
-              status: number;
-            };
-            error.status = 429;
-            throw error;
-          }
-          yield { type: 'text' as const, content: `response-${callCount}` };
-        },
+        generateChatCompletion: () =>
+          generateRateLimitedThenNumberedResponse(() => ++callCount),
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -276,23 +293,10 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const mockProvider: IProvider = {
         name: 'test-provider',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          callCount++;
-          // First call: throw 429 (retryable on same backend)
-          // Second call: succeed (same backend retry succeeds)
-          if (callCount === 1) {
-            const error = new Error('Rate limited') as Error & {
-              status: number;
-            };
-            error.status = 429;
-            throw error;
-          }
-          yield { type: 'text' as const, content: 'success' };
-        },
+        generateChatCompletion: () =>
+          generateSuccessfulSameBackendRetry(() => ++callCount),
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -355,19 +359,10 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const mockProvider: IProvider = {
         name: 'test-provider',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          callCount++;
-          // First call: throw error without status
-          // Second call: succeed
-          if (callCount === 1) {
-            throw new Error('Backend error without status');
-          }
-          yield { type: 'text' as const, content: 'success' };
-        },
+        generateChatCompletion: () =>
+          generateSuccessAfterNonStatusFailure(() => ++callCount),
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -418,8 +413,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -472,8 +465,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -533,24 +524,10 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const mockProvider: IProvider = {
         name: 'test-provider',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          callCount++;
-          if (callCount === 1) {
-            // Backend 1: yield a chunk, then throw 429
-            yield { type: 'text' as const, content: 'partial-response' };
-            const error = new Error('Rate limited mid-stream') as Error & {
-              status: number;
-            };
-            error.status = 429;
-            throw error;
-          }
-          // Backend 2: would succeed, but should never be called
-          yield { type: 'text' as const, content: 'backend2-response' };
-        },
+        generateChatCompletion: () =>
+          generatePartialResponseThenRateLimit(() => ++callCount),
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);

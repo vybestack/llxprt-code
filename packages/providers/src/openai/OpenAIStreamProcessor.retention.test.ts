@@ -70,6 +70,21 @@ async function collect(
   return content;
 }
 
+function retainTotalChunksReceived(
+  currentCount: number | undefined,
+  metadata: unknown,
+): number | undefined {
+  if (
+    typeof metadata === 'object' &&
+    metadata !== null &&
+    'totalChunksReceived' in metadata &&
+    typeof metadata.totalChunksReceived === 'number'
+  ) {
+    return metadata.totalChunksReceived;
+  }
+  return currentCount;
+}
+
 async function runQwenStream(
   chunks: readonly OpenAI.Chat.Completions.ChatCompletionChunk[],
 ): Promise<readonly IContent[]> {
@@ -105,14 +120,10 @@ describe('OpenAI streaming diagnostic retention', () => {
     let reportedChunkCount: number | undefined;
     const logger = new DebugLogger('llxprt:test:openai-stream-retention');
     logger.warn = (_message, metadata) => {
-      if (
-        typeof metadata === 'object' &&
-        metadata !== null &&
-        'totalChunksReceived' in metadata &&
-        typeof metadata.totalChunksReceived === 'number'
-      ) {
-        reportedChunkCount = metadata.totalChunksReceived;
-      }
+      reportedChunkCount = retainTotalChunksReceived(
+        reportedChunkCount,
+        metadata,
+      );
     };
     const deps = {
       toolCallPipeline: new ToolCallPipeline(),

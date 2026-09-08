@@ -122,47 +122,67 @@ describe('IncrementalSplitScanner', () => {
     );
   });
 
+  interface RepeatedConsumeCycleObservation {
+    readonly incrementalStates: ReadonlyArray<{
+      readonly text: string;
+      readonly splitPoint: number;
+    }>;
+    readonly batchStates: ReadonlyArray<{
+      readonly text: string;
+      readonly splitPoint: number;
+    }>;
+  }
+
+  const observeRepeatedConsumeCyclesAcrossUnterminatedFence =
+    (): RepeatedConsumeCycleObservation => {
+      const pieces = [
+        'Alpha paragraph.\n\n',
+        'Beta paragraph.\n\n',
+        '```ts\nconst value = 1;\n\n',
+        'const other = 2;\n\n',
+        '```\n\n',
+        'Gamma paragraph.\n\n',
+      ];
+      const scanner = new IncrementalSplitScanner();
+      const incrementalStates: Array<{ text: string; splitPoint: number }> = [];
+      const batchStates: Array<{ text: string; splitPoint: number }> = [];
+      let reference = '';
+
+      for (const piece of pieces) {
+        scanner.append(piece);
+        reference += piece;
+        incrementalStates.push({
+          text: scanner.getText(),
+          splitPoint: scanner.getSplitPoint(),
+        });
+        batchStates.push({
+          text: reference,
+          splitPoint: findLastSafeSplitPoint(reference),
+        });
+
+        const splitPoint = findLastSafeSplitPoint(reference);
+        const commits = splitPoint > 0 && splitPoint < reference.length ? 1 : 0;
+        reference = commits === 1 ? reference.slice(splitPoint) : reference;
+        scanner.consume(commits === 1 ? splitPoint : 0);
+        incrementalStates.push({
+          text: scanner.getText(),
+          splitPoint: scanner.getSplitPoint(),
+        });
+        batchStates.push({
+          text: reference,
+          splitPoint: findLastSafeSplitPoint(reference),
+        });
+      }
+
+      return { incrementalStates, batchStates };
+    };
+
   it('agrees after repeated consume cycles across an unterminated fence', () => {
-    const pieces = [
-      'Alpha paragraph.\n\n',
-      'Beta paragraph.\n\n',
-      '```ts\nconst value = 1;\n\n',
-      'const other = 2;\n\n',
-      '```\n\n',
-      'Gamma paragraph.\n\n',
-    ];
-    const scanner = new IncrementalSplitScanner();
-    const observed: Array<{ text: string; splitPoint: number }> = [];
-    const expected: Array<{ text: string; splitPoint: number }> = [];
-    let reference = '';
+    const consumeCycles = observeRepeatedConsumeCyclesAcrossUnterminatedFence();
 
-    for (const piece of pieces) {
-      scanner.append(piece);
-      reference += piece;
-      observed.push({
-        text: scanner.getText(),
-        splitPoint: scanner.getSplitPoint(),
-      });
-      expected.push({
-        text: reference,
-        splitPoint: findLastSafeSplitPoint(reference),
-      });
-
-      const splitPoint = findLastSafeSplitPoint(reference);
-      const commits = splitPoint > 0 && splitPoint < reference.length ? 1 : 0;
-      reference = commits === 1 ? reference.slice(splitPoint) : reference;
-      scanner.consume(commits === 1 ? splitPoint : 0);
-      observed.push({
-        text: scanner.getText(),
-        splitPoint: scanner.getSplitPoint(),
-      });
-      expected.push({
-        text: reference,
-        splitPoint: findLastSafeSplitPoint(reference),
-      });
-    }
-
-    expect(observed).toStrictEqual(expected);
+    expect(consumeCycles.incrementalStates).toStrictEqual(
+      consumeCycles.batchStates,
+    );
   });
 
   it('resets all carried state', () => {

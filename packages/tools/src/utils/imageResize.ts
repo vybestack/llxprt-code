@@ -5,11 +5,45 @@
  */
 
 import sharp, { type Metadata, type Sharp } from 'sharp';
+import { readSettingFlatOrNested } from './flatOrNestedSetting.js';
 
 export interface ImageResizePolicy {
   readonly maxLongEdge?: number;
   readonly maxShortEdge?: number;
   readonly maxPixels?: number;
+}
+
+export interface ImageResizeSourceMetadata {
+  readonly originalData: string;
+  readonly originalMimeType: string;
+  readonly transformation: {
+    readonly policyId: 'image-resize';
+    readonly policyVersion: 1;
+    readonly parameters: Readonly<Record<string, number>>;
+  };
+}
+
+export function createImageResizeSourceMetadata(
+  original: Buffer,
+  resized: Buffer,
+  mimeType: string,
+  policy: ImageResizePolicy | undefined,
+): ImageResizeSourceMetadata | undefined {
+  if (original === resized || policy === undefined) return undefined;
+  const parameters = {
+    ...(policy.maxLongEdge === undefined
+      ? {}
+      : { maxLongEdge: policy.maxLongEdge }),
+    ...(policy.maxShortEdge === undefined
+      ? {}
+      : { maxShortEdge: policy.maxShortEdge }),
+    ...(policy.maxPixels === undefined ? {} : { maxPixels: policy.maxPixels }),
+  };
+  return {
+    originalData: original.toString('base64'),
+    originalMimeType: mimeType,
+    transformation: { policyId: 'image-resize', policyVersion: 1, parameters },
+  };
 }
 
 export class ImageResizeError extends Error {
@@ -119,7 +153,9 @@ function readPositiveInteger(
   settings: Readonly<Record<string, unknown>>,
   key: string,
 ): number | undefined {
-  const value = settings[key];
+  // Dotted keys reach us both flat and nested depending on the producer of
+  // the settings map (see readSettingFlatOrNested), so never index directly.
+  const value = readSettingFlatOrNested(settings, key);
   if (value === undefined) {
     return undefined;
   }
@@ -133,25 +169,21 @@ function readPositiveInteger(
 
 export function resolveImageResizePolicy(
   settings: Readonly<Record<string, unknown>>,
-  skipImageResize = false,
 ): ImageResizePolicy | undefined {
-  if (skipImageResize) {
-    return undefined;
-  }
-  const enabled = settings['image-resize.enabled'];
+  const enabled = readSettingFlatOrNested(settings, 'image-resize.enabled');
   if (enabled !== undefined && typeof enabled !== 'boolean') {
     throw new Error(
       'Invalid image resize settings: image-resize.enabled must be a boolean',
     );
-  }
-  if (enabled === false) {
-    return undefined;
   }
   const policy: ImageResizePolicy = {
     maxLongEdge: readPositiveInteger(settings, 'image-resize.maxLongEdge'),
     maxShortEdge: readPositiveInteger(settings, 'image-resize.maxShortEdge'),
     maxPixels: readPositiveInteger(settings, 'image-resize.maxPixels'),
   };
+  if (enabled === false) {
+    return undefined;
+  }
   if (!hasLimits(policy)) {
     if (enabled === true) {
       throw new Error(

@@ -24,7 +24,7 @@ describe('resolveTelemetrySettings — perf copy isolation', () => {
       perf: { enabled: true, memory: false },
     };
     const resolved = resolveTelemetrySettings(input);
-    expect(resolved.perf).toEqual({ enabled: true, memory: false });
+    expect(resolved.perf).toStrictEqual({ enabled: true, memory: false });
     expect(resolved.perf).not.toBe(input.perf);
   });
 
@@ -58,7 +58,7 @@ describe('resolveTelemetrySettings — perf copy isolation', () => {
     };
     const snapshot = JSON.parse(JSON.stringify(input));
     resolveTelemetrySettings(input);
-    expect(input).toEqual(snapshot);
+    expect(input).toStrictEqual(snapshot);
   });
 
   it('resolves undefined perf to undefined (absent, not a fabricated object)', () => {
@@ -71,6 +71,6 @@ describe('resolveTelemetrySettings — perf copy isolation', () => {
       perf: { enabled: true, memory: true },
     };
     const resolved = resolveTelemetrySettings(input);
-    expect(resolved.perf).toEqual({ enabled: true, memory: true });
+    expect(resolved.perf).toStrictEqual({ enabled: true, memory: true });
   });
 });

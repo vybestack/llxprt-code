@@ -190,11 +190,7 @@ describe('policy config', () => {
         true,
       );
 
-      expect(
-        engineConfig.rules.filter(
-          (rule) => rule.source?.startsWith('Settings (MCP') ?? false,
-        ),
-      ).toStrictEqual([
+      expect(engineConfig.rules.filter(isSettingsMcpRule)).toStrictEqual([
         expect.objectContaining({
           toolNamePrefix: 'excluded-server__',
           source: 'Settings (MCP Excluded)',
@@ -232,9 +228,7 @@ describe('policy config', () => {
         ),
       ).toBe(false);
       expect(
-        engineConfig.rules
-          .filter((rule) => rule.source?.startsWith('Settings (MCP') ?? false)
-          .map((rule) => rule.source),
+        engineConfig.rules.filter(isSettingsMcpRule).map((rule) => rule.source),
       ).toStrictEqual(['Settings (MCP Excluded)', 'Settings (MCP Allowed)']);
     });
 
@@ -262,11 +256,11 @@ describe('policy config', () => {
       expect(engineConfig.rules.length).toBeGreaterThan(0);
 
       // Check for some expected defaults
-      const hasReadOnlyTools = engineConfig.rules.some(
-        (r) => r.toolName === 'glob' && r.priority === 1.05,
+      const hasReadOnlyTools = engineConfig.rules.some((r) =>
+        ruleMatches(r, 'glob', 1.05),
       );
-      const hasWriteTools = engineConfig.rules.some(
-        (r) => r.toolName === 'replace' && r.priority === 1.01,
+      const hasWriteTools = engineConfig.rules.some((r) =>
+        ruleMatches(r, 'replace', 1.01),
       );
 
       expect(hasReadOnlyTools).toBe(true);
@@ -442,7 +436,7 @@ describe('policy config', () => {
       // - allowed-tools rules (priority 2.3)
       expect(engineConfig.rules.length).toBeGreaterThan(10);
 
-      const priorities = engineConfig.rules.map((r) => r.priority ?? 0);
+      const priorities = engineConfig.rules.map((r) => priorityOf(r));
       expect(priorities).toContain(1.01); // write.toml
       expect(priorities).toContain(1.015); // AUTO_EDIT
       expect(priorities).toContain(1.05); // read-only.toml
@@ -487,13 +481,35 @@ describe('policy config', () => {
       ApprovalMode.DEFAULT,
     );
 
-    const discoveredRule = config.rules?.find(
-      (r) =>
-        r.toolName === 'discovered_tool_*' &&
-        r.decision === PolicyDecision.ASK_USER,
-    );
+    const discoveredRule = config.rules?.find(isDiscoveredAskRule);
     expect(discoveredRule).toBeDefined();
     // Priority 10 in default tier → 1.010
     expect(discoveredRule?.priority).toBeCloseTo(1.01, 5);
   });
 });
+
+function isSettingsMcpRule(rule: { source?: string }): boolean {
+  return rule.source?.startsWith('Settings (MCP') ?? false;
+}
+
+function ruleMatches(
+  rule: { toolName?: string; priority?: number },
+  name: string,
+  priority: number,
+): boolean {
+  return rule.toolName === name && rule.priority === priority;
+}
+
+function priorityOf(rule: { priority?: number }): number {
+  return rule.priority ?? 0;
+}
+
+function isDiscoveredAskRule(rule: {
+  toolName?: string;
+  decision?: string;
+}): boolean {
+  return (
+    rule.toolName === 'discovered_tool_*' &&
+    rule.decision === PolicyDecision.ASK_USER
+  );
+}

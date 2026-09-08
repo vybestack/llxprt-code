@@ -38,7 +38,13 @@ describe('agent processor retry boundaries', () => {
       runtimeContext: {
         state: { model: 'test-model' },
         providerRuntime: {},
-        telemetry: { logApiError: () => undefined },
+        telemetry: {
+          logApiError: () => undefined,
+          logApiRequest: () => undefined,
+        },
+      },
+      historyService: {
+        getCuratedForProvider: (contents: unknown[]) => contents,
       },
       providerRuntimeBuilder: () => ({
         config: undefined,
@@ -149,6 +155,9 @@ describe('agent processor retry boundaries', () => {
     });
     const processor = Object.create(TurnProcessor.prototype) as TurnProcessor;
     Object.assign(processor, {
+      streamProcessor: {
+        releasePromptTurnIdentity: () => undefined,
+      },
       async *_runStreamAttempt() {
         attempts++;
         releaseAttempt();
@@ -169,7 +178,16 @@ describe('agent processor retry boundaries', () => {
       [
         { message: 'test', config: { abortSignal: controller.signal } },
         'prompt-id',
-        [],
+        {
+          userContents: [],
+          userIContents: [],
+          turnId: 'turn-test',
+          admission: undefined,
+          releaseIfUncommitted: () => Promise.resolve(),
+          transferToHistory: async () => undefined,
+          isTransferredToHistory: () => false,
+        },
+        undefined,
         () => undefined,
       ],
     );

@@ -9,6 +9,38 @@ import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import { prepareRequest } from './OpenAIRequestPreparation.js';
+import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import type { ProviderMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
+import {
+  finishMediaRequest,
+  resolveRequestMedia,
+} from '../utils/request-media-resolution.js';
+
+export interface OpenAIMediaSupport {
+  readonly inlineImages?: boolean;
+  readonly fileUpload?: boolean;
+  readonly videoSupport?: boolean;
+}
+
+export function readOpenAIMediaSupport(
+  providerSpecific: unknown,
+): OpenAIMediaSupport | undefined {
+  if (typeof providerSpecific !== 'object' || providerSpecific === null) {
+    return undefined;
+  }
+  if (
+    Array.isArray(providerSpecific) ||
+    !('mediaSupport' in providerSpecific)
+  ) {
+    return undefined;
+  }
+  const mediaSupport: unknown = providerSpecific.mediaSupport;
+  if (typeof mediaSupport !== 'object' || mediaSupport === null) {
+    return undefined;
+  }
+  if (Array.isArray(mediaSupport)) return undefined;
+  return mediaSupport as OpenAIMediaSupport;
+}
 
 /**
  * Ensure projection options carry an explicit model before normalization.
@@ -51,10 +83,22 @@ interface ChatProjectionPreparationDeps {
     options: NormalizedGenerateChatOptions,
     client: OpenAI,
     logger: DebugLogger,
+    mediaRequest: ResolvedMediaRequest,
   ) => Promise<NormalizedGenerateChatOptions>;
   readonly logger: DebugLogger;
   readonly defaultModel: string;
   readonly providerName: string;
+  readonly mediaTransportCapabilities: ProviderMediaTransportCapabilities;
+}
+
+export function registerOpenAIChatRequestCleanup(
+  mediaRequest: ResolvedMediaRequest,
+  requestContext: Awaited<ReturnType<typeof prepareRequest>>,
+): void {
+  mediaRequest.registerCleanup(() => {
+    requestContext.requestBody.messages.splice(0);
+    requestContext.requestBody.tools?.splice(0);
+  });
 }
 
 export async function prepareOpenAIChatProjection(
@@ -63,33 +107,47 @@ export async function prepareOpenAIChatProjection(
 ): Promise<{
   options: NormalizedGenerateChatOptions;
   requestContext: Awaited<ReturnType<typeof prepareRequest>>;
+  mediaRequest: ResolvedMediaRequest;
 }> {
   const support = deps.readMediaSupport();
   const needsClient =
     support?.fileUpload === true || support?.videoSupport === true;
-  let preparedOptions = options;
-  if (needsClient) {
-    const client = await deps.getClient({
+  const mediaRequest = await resolveRequestMedia(
+    options.runtime,
+    options.contents,
+    options.invocation.signal,
+  );
+  try {
+    let preparedOptions = {
       ...options,
-      resolved: {
-        ...options.resolved,
-        authToken: await deps.resolveAuthToken(options),
-      },
-    });
-    preparedOptions = await deps.processMedia(
-      preparedOptions,
-      client,
-      deps.logger,
-    );
-  }
-  return {
-    options: preparedOptions,
-    requestContext: await prepareRequest(
+      contents: mediaRequest.withContents((contents) => contents),
+    };
+    if (needsClient) {
+      const client = await deps.getClient({
+        ...options,
+        resolved: {
+          ...options.resolved,
+          authToken: await deps.resolveAuthToken(options),
+        },
+      });
+      preparedOptions = await deps.processMedia(
+        preparedOptions,
+        client,
+        deps.logger,
+        mediaRequest,
+      );
+    }
+    const requestContext = await prepareRequest(
       preparedOptions,
       deps.defaultModel,
       preparedOptions.config,
       deps.logger,
       deps.providerName,
-    ),
-  };
+      deps.mediaTransportCapabilities,
+    );
+    registerOpenAIChatRequestCleanup(mediaRequest, requestContext);
+    return { options: preparedOptions, mediaRequest, requestContext };
+  } catch (error) {
+    return finishMediaRequest(mediaRequest, { status: 'failed', error });
+  }
 }

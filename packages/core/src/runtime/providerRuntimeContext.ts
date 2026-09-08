@@ -20,6 +20,19 @@
  */
 import type { Config } from '../config/config.js';
 import { MissingRuntimeProviderError } from './errors/MissingRuntimeProviderError.js';
+import type { RequestMediaResolutionService } from '../storage/request-media-resolver.js';
+import type { ProviderFileReferenceMetadata } from '../services/history/IContent.js';
+
+export interface ProviderFileBindingStore {
+  bind(
+    contentId: string,
+    reference: ProviderFileReferenceMetadata,
+  ): Promise<void>;
+  unbind(
+    contentId: string,
+    reference: ProviderFileReferenceMetadata,
+  ): Promise<void>;
+}
 
 export interface RuntimeSettingsState {
   get(key: string): unknown;
@@ -48,6 +61,9 @@ export interface ProviderRuntimeContext {
   config?: Config;
   runtimeId?: string;
   metadata?: Record<string, unknown>;
+  mediaResolver?: RequestMediaResolutionService;
+  requestMediaBudgetBytes?: number;
+  providerFileBindings?: ProviderFileBindingStore;
 }
 
 let activeContext: ProviderRuntimeContext | null = null;
@@ -63,6 +79,9 @@ export interface ProviderRuntimeContextInit {
   config?: Config;
   runtimeId?: string;
   metadata?: Record<string, unknown>;
+  mediaResolver?: RequestMediaResolutionService;
+  requestMediaBudgetBytes?: number;
+  providerFileBindings?: ProviderFileBindingStore;
 }
 
 /**
@@ -112,6 +131,9 @@ export function createProviderRuntimeContext(
     config: init.config,
     runtimeId: init.runtimeId,
     metadata: init.metadata,
+    mediaResolver: init.mediaResolver,
+    requestMediaBudgetBytes: init.requestMediaBudgetBytes,
+    providerFileBindings: init.providerFileBindings,
   };
 }
 

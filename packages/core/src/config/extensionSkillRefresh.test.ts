@@ -224,7 +224,7 @@ describe('extension load and unload refresh the skill surface @issue:3383', () =
 
     // Rediscovery is not free, so an extension with nothing to contribute must
     // not trigger one.
-    expect(observations).toEqual([]);
+    expect(observations).toStrictEqual([]);
   });
 
   it('leaves the skill available after a restart', async () => {
@@ -273,7 +273,7 @@ describe('extension load and unload refresh the skill surface @issue:3383', () =
     await expect(
       loader.loadExtension(skillExtension('pack', [extensionSkill('alpha')])),
     ).rejects.toThrow('discovery exploded');
-    expect(observations).toEqual([]);
+    expect(observations).toStrictEqual([]);
 
     await loader.loadExtension(skillExtension('other', []));
 
@@ -290,7 +290,7 @@ describe('extension load and unload refresh the skill surface @issue:3383', () =
       loader.loadExtension(skillExtension('two', [extensionSkill('beta')])),
     ]);
 
-    expect(discoveredSkillNames(config)).toEqual(['alpha', 'beta']);
+    expect(discoveredSkillNames(config)).toStrictEqual(['alpha', 'beta']);
     expect(observations).toHaveLength(1);
   });
 });

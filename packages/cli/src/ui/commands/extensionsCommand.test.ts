@@ -20,6 +20,23 @@ void vi.mock('../../config/extensions/update.js', () => ({
 
 const mockGetExtensions = vi.fn();
 
+type ScheduledUpdateAction = Extract<
+  ExtensionUpdateAction,
+  { type: 'SCHEDULE_UPDATE' }
+>;
+type ExtensionUpdateResults = Parameters<
+  ScheduledUpdateAction['payload']['onComplete']
+>[0];
+
+function completeScheduledUpdate(
+  action: ExtensionUpdateAction,
+  results: ExtensionUpdateResults,
+): void {
+  if (action.type === 'SCHEDULE_UPDATE') {
+    action.payload.onComplete(results);
+  }
+}
+
 describe('extensionsCommand', () => {
   let mockContext: CommandContext;
   const mockDispatchExtensionState = vi.fn();
@@ -92,11 +109,7 @@ describe('extensionsCommand', () => {
         { name: 'ext-one', version: '1.0.0' },
       ]);
       mockDispatchExtensionState.mockImplementationOnce(
-        (action: ExtensionUpdateAction) => {
-          if (action.type === 'SCHEDULE_UPDATE') {
-            action.payload.onComplete([]);
-          }
-        },
+        (action: ExtensionUpdateAction) => completeScheduledUpdate(action, []),
       );
 
       await updateAction(mockContext, '--all');
@@ -116,22 +129,19 @@ describe('extensionsCommand', () => {
         { name: 'ext-two', version: '2.0.0' },
       ]);
       mockDispatchExtensionState.mockImplementationOnce(
-        (action: ExtensionUpdateAction) => {
-          if (action.type === 'SCHEDULE_UPDATE') {
-            action.payload.onComplete([
-              {
-                name: 'ext-one',
-                originalVersion: '1.0.0',
-                updatedVersion: '1.0.1',
-              },
-              {
-                name: 'ext-two',
-                originalVersion: '2.0.0',
-                updatedVersion: '2.0.1',
-              },
-            ]);
-          }
-        },
+        (action: ExtensionUpdateAction) =>
+          completeScheduledUpdate(action, [
+            {
+              name: 'ext-one',
+              originalVersion: '1.0.0',
+              updatedVersion: '1.0.1',
+            },
+            {
+              name: 'ext-two',
+              originalVersion: '2.0.0',
+              updatedVersion: '2.0.1',
+            },
+          ]),
       );
       await updateAction(mockContext, '--all');
       expect(mockContext.ui.setPendingItem).toHaveBeenCalledWith({
@@ -178,17 +188,14 @@ describe('extensionsCommand', () => {
         { name: 'ext-one', version: '1.0.0' },
       ]);
       mockDispatchExtensionState.mockImplementationOnce(
-        (action: ExtensionUpdateAction) => {
-          if (action.type === 'SCHEDULE_UPDATE') {
-            action.payload.onComplete([
-              {
-                name: 'ext-one',
-                originalVersion: '1.0.0',
-                updatedVersion: '1.0.1',
-              },
-            ]);
-          }
-        },
+        (action: ExtensionUpdateAction) =>
+          completeScheduledUpdate(action, [
+            {
+              name: 'ext-one',
+              originalVersion: '1.0.0',
+              updatedVersion: '1.0.1',
+            },
+          ]),
       );
       await updateAction(mockContext, 'ext-one');
       expect(mockDispatchExtensionState).toHaveBeenCalledWith({
@@ -208,22 +215,19 @@ describe('extensionsCommand', () => {
         { name: 'ext-two', version: '1.0.0' },
       ]);
       mockDispatchExtensionState.mockImplementationOnce(
-        (action: ExtensionUpdateAction) => {
-          if (action.type === 'SCHEDULE_UPDATE') {
-            action.payload.onComplete([
-              {
-                name: 'ext-one',
-                originalVersion: '1.0.0',
-                updatedVersion: '1.0.1',
-              },
-              {
-                name: 'ext-two',
-                originalVersion: '1.0.0',
-                updatedVersion: '1.0.1',
-              },
-            ]);
-          }
-        },
+        (action: ExtensionUpdateAction) =>
+          completeScheduledUpdate(action, [
+            {
+              name: 'ext-one',
+              originalVersion: '1.0.0',
+              updatedVersion: '1.0.1',
+            },
+            {
+              name: 'ext-two',
+              originalVersion: '1.0.0',
+              updatedVersion: '1.0.1',
+            },
+          ]),
       );
       await updateAction(mockContext, 'ext-one ext-two');
       expect(mockDispatchExtensionState).toHaveBeenCalledWith({

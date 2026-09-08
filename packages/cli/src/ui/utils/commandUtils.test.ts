@@ -21,6 +21,10 @@ const ESC = '\u001B';
 const BEL = '\u0007';
 const ST = '\u001B\\';
 
+function countMatches(value: string, pattern: RegExp): number {
+  return (value.match(pattern) ?? []).length;
+}
+
 // Mock clipboardy
 void vi.mock('clipboardy', () => ({
   default: {
@@ -270,10 +274,10 @@ describe('commandUtils', () => {
       await copyToClipboard(testText);
 
       const b64 = Buffer.from(testText, 'utf8').toString('base64');
-      const expected = `${ESC}]52;c;${b64}${BEL}`;
+      const osc52Sequence = `${ESC}]52;c;${b64}${BEL}`;
 
       expect(tty.write).toHaveBeenCalledTimes(1);
-      expect(tty.write.mock.calls[0][0]).toBe(expected);
+      expect(tty.write.mock.calls[0][0]).toBe(osc52Sequence);
       expect(tty.end).toHaveBeenCalledTimes(1); // /dev/tty closed after write
       expect(mockClipboardyWrite).not.toHaveBeenCalled();
     });
@@ -291,10 +295,10 @@ describe('commandUtils', () => {
       await copyToClipboard(testText);
 
       const b64 = Buffer.from(testText, 'utf8').toString('base64');
-      const expected = `${ESC}]52;c;${b64}${BEL}`;
+      const osc52Sequence = `${ESC}]52;c;${b64}${BEL}`;
 
       expect(tty.write).toHaveBeenCalledTimes(1);
-      expect(tty.write.mock.calls[0][0]).toBe(expected);
+      expect(tty.write.mock.calls[0][0]).toBe(osc52Sequence);
       expect(tty.end).toHaveBeenCalledTimes(1);
       expect(mockClipboardyWrite).not.toHaveBeenCalled();
     });
@@ -312,10 +316,10 @@ describe('commandUtils', () => {
       await copyToClipboard(testText);
 
       const b64 = Buffer.from(testText, 'utf8').toString('base64');
-      const expected = `${ESC}]52;c;${b64}${BEL}`;
+      const osc52Sequence = `${ESC}]52;c;${b64}${BEL}`;
 
       expect(tty.write).toHaveBeenCalledTimes(1);
-      expect(tty.write.mock.calls[0][0]).toBe(expected);
+      expect(tty.write.mock.calls[0][0]).toBe(osc52Sequence);
       expect(tty.end).toHaveBeenCalledTimes(1);
       expect(mockClipboardyWrite).not.toHaveBeenCalled();
     });
@@ -339,9 +343,9 @@ describe('commandUtils', () => {
       await copyToClipboard(testText);
 
       const b64 = Buffer.from(testText, 'utf8').toString('base64');
-      const expected = `${ESC}]52;c;${b64}${BEL}`;
+      const osc52Sequence = `${ESC}]52;c;${b64}${BEL}`;
 
-      expect(stderrStream.write).toHaveBeenCalledWith(expected);
+      expect(stderrStream.write).toHaveBeenCalledWith(osc52Sequence);
       expect(mockClipboardyWrite).not.toHaveBeenCalled();
     });
 
@@ -382,8 +386,7 @@ describe('commandUtils', () => {
       await copyToClipboard(testText);
 
       const written = tty.write.mock.calls[0][0] as string;
-      const chunkStarts = (written.match(new RegExp(`${ESC}P`, 'g')) ?? [])
-        .length;
+      const chunkStarts = countMatches(written, new RegExp(`${ESC}P`, 'g'));
       const chunkEnds = written.split(ST).length - 1;
 
       expect(chunkStarts).toBeGreaterThan(1);
@@ -412,9 +415,9 @@ describe('commandUtils', () => {
       await copyToClipboard(testText);
 
       const b64 = Buffer.from(testText, 'utf8').toString('base64');
-      const expected = `${ESC}]52;c;${b64}${BEL}`;
+      const osc52Sequence = `${ESC}]52;c;${b64}${BEL}`;
 
-      expect(stderrStream.write).toHaveBeenCalledWith(expected);
+      expect(stderrStream.write).toHaveBeenCalledWith(osc52Sequence);
       expect(mockClipboardyWrite).not.toHaveBeenCalled();
     });
 
@@ -625,9 +628,9 @@ describe('commandUtils', () => {
       await copyToClipboard(testText);
 
       const b64 = Buffer.from(testText, 'utf8').toString('base64');
-      const expected = `${ESC}]52;c;${b64}${BEL}`;
+      const osc52Sequence = `${ESC}]52;c;${b64}${BEL}`;
 
-      expect(stdoutStream.write).toHaveBeenCalledWith(expected);
+      expect(stdoutStream.write).toHaveBeenCalledWith(osc52Sequence);
       expect(stderrStream.write).not.toHaveBeenCalled();
       expect(mockClipboardyWrite).not.toHaveBeenCalled();
     });
@@ -649,9 +652,9 @@ describe('commandUtils', () => {
       await copyToClipboard(testText);
 
       const b64 = Buffer.from(testText, 'utf8').toString('base64');
-      const expected = `${ESC}]52;c;${b64}${BEL}`;
+      const osc52Sequence = `${ESC}]52;c;${b64}${BEL}`;
 
-      expect(mockFs.writeSync).toHaveBeenCalledWith(1, expected);
+      expect(mockFs.writeSync).toHaveBeenCalledWith(1, osc52Sequence);
       expect(stdoutStream.write).not.toHaveBeenCalled();
       expect(mockClipboardyWrite).not.toHaveBeenCalled();
     });
@@ -678,9 +681,9 @@ describe('commandUtils', () => {
       await copyToClipboard(testText);
 
       const b64 = Buffer.from(testText, 'utf8').toString('base64');
-      const expected = `${ESC}]52;c;${b64}${BEL}`;
+      const osc52Sequence = `${ESC}]52;c;${b64}${BEL}`;
 
-      expect(mockFs.writeSync).toHaveBeenCalledWith(2, expected);
+      expect(mockFs.writeSync).toHaveBeenCalledWith(2, osc52Sequence);
       expect(stderrStream.write).not.toHaveBeenCalled();
       expect(mockClipboardyWrite).not.toHaveBeenCalled();
     });

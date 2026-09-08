@@ -59,7 +59,10 @@ function createResultHost(
       executionOptions: {},
     }),
     getTimeoutConfig: () => ({
-      timeoutSeconds: undefined,
+      // `-1` is the documented "no ceiling" value; `timeoutSeconds` is always
+      // a number per ShellTimeoutConfig, and no timeout path is exercised by
+      // these formatting assertions anyway.
+      timeoutSeconds: -1,
       defaultTimeoutSeconds: 60,
     }),
     getOutputLimits: () => ({}),

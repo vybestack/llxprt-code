@@ -18,6 +18,11 @@ import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+
+function isOptionalObject(value: unknown): boolean {
+  return value === undefined || typeof value === 'object';
+}
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
@@ -44,6 +49,7 @@ void vi.mock('@anthropic-ai/sdk', () => {
     readonly messages: {
       create: ReturnType<typeof vi.fn>;
     };
+    readonly post: ReturnType<typeof createAnthropicRawPostTestAdapter>['post'];
 
     constructor(opts: Record<string, unknown>) {
       this.instanceId = Symbol('anthropic-client');
@@ -53,11 +59,10 @@ void vi.mock('@anthropic-ai/sdk', () => {
         options: opts,
       });
       this.messages = {
-        create: vi.fn(async (request: unknown) => {
+        create: vi.fn(async (request: Record<string, unknown>) => {
           FakeAnthropic.requests.push({ request });
-          const req = request as { stream?: boolean };
 
-          if (req.stream === true) {
+          if (request['stream'] === true) {
             // Return async iterable for streaming
             return {
               async *[Symbol.asyncIterator]() {
@@ -115,6 +120,7 @@ void vi.mock('@anthropic-ai/sdk', () => {
           };
         }),
       };
+      this.post = createAnthropicRawPostTestAdapter(this.messages.create).post;
     }
   }
 
@@ -299,7 +305,7 @@ describe('Anthropic provider stateless contract tests', () => {
     const provider = new TestAnthropicProvider();
     // Should return params from SettingsService or undefined, but not throw
     const params = provider.getModelParams();
-    expect(params === undefined || typeof params === 'object').toBe(true);
+    expect(isOptionalObject(params)).toBe(true);
   });
 
   it('reads request overrides from invocation ephemerals when config is inert', async () => {

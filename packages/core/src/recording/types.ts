@@ -24,6 +24,7 @@
  */
 
 import { type IContent } from '../services/history/IContent.js';
+import type { LocalMediaStore } from '../storage/local-media-store.js';
 
 export const SESSION_TITLE_MAX_LENGTH = 120;
 
@@ -52,7 +53,8 @@ export type SessionEventType =
   | 'checkpoint_renamed'
   | 'checkpoint_deleted'
   | 'session_forked'
-  | 'session_named';
+  | 'session_named'
+  | 'semantic_media_purge';
 
 // ---------------------------------------------------------------------------
 // Event envelope
@@ -113,11 +115,28 @@ export interface CompressedPayload {
 }
 
 /**
- * Payload for the `rewind` event — removes the last N items from history.
+ * Payload for the `rewind` event — removes the tail of history from the cut
+ * point onwards.
  */
 export interface RewindPayload {
   /** Positive integer — number of items removed from the end of history. */
   itemsRemoved: number;
+
+  /**
+   * Chronology `seq` of the FIRST removed item, when that item carried a
+   * chronology marker (#1721). Replay cuts at the item whose marker `seq`
+   * EQUALS this value, which stays correct even when live history and the
+   * journal have diverged — density optimization removes items from live
+   * history without journalling anything, so `itemsRemoved` alone removes the
+   * wrong amount on replay.
+   *
+   * Absent on legacy events and whenever the cut item has no marker. Replay
+   * falls back to `itemsRemoved` whenever it is absent, unreadable, or names
+   * an item that is not in the replayed history.
+   *
+   * @issue #2934
+   */
+  cutSeq?: number;
 }
 
 /**
@@ -155,6 +174,14 @@ export interface SessionMetadataPayload {
  */
 export interface DirectoriesChangedPayload {
   directories: string[];
+}
+
+export interface SemanticMediaPurgePayload {
+  readonly history: readonly IContent[];
+  readonly frontier: {
+    readonly contentIndex: number;
+    readonly blockIndex: number;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -243,6 +270,10 @@ export interface SessionRecordingServiceConfig {
   cwd?: string;
   provider: string;
   model: string;
+  /** Hard bound for serialized records waiting for durable write. */
+  maxQueueBytes?: number;
+  /** Project-owned store used to verify referenced media during lifecycle replay. */
+  mediaStore?: LocalMediaStore;
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +325,10 @@ export type ReplayResult =
       sessionName?: string | null;
       /** Self-contained child ancestry from the `session_forked` event. */
       ancestry?: SessionForkedPayload;
+      readonly semanticMediaPurgeFrontier?: {
+        readonly contentIndex: number;
+        readonly blockIndex: number;
+      };
     }
   | {
       ok: false;
