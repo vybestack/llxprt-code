@@ -197,7 +197,7 @@ const ARRAY_PARAMS: Readonly<Record<string, string>> = {
   removeAssignee:
     'Logins to remove as assignee, as an array (use a single-element array for one). Accepted by issue.edit.',
   addProject:
-    'Project names to add, as a string or array of strings. Accepted by issue.edit.',
+    'Project names to add, as a non-empty array of strings. Accepted by issue.edit.',
 };
 
 /** Schema for boolean-kind parameters (no additional constraints). */
@@ -275,6 +275,7 @@ function paramSchemaFor(name: string): Record<string, unknown> {
   if (name in ARRAY_PARAMS) {
     return {
       type: 'array',
+      ...(name === 'addProject' ? { minItems: 1 } : {}),
       items: { type: 'string' },
       description: ARRAY_PARAMS[name],
     };

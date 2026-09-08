@@ -24,6 +24,7 @@ import {
   type GithubOpSpec,
 } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import {
+  assertNoPartialSuccess,
   brokerError,
   type BrokerErrorException,
 } from './github-broker-errors.js';
@@ -130,6 +131,7 @@ export async function verifyIssueProjectMembership(
     }
 
     const raw = await run(argv);
+    assertNoPartialSuccess(raw);
     const nodes = dig(raw, [
       'data',
       'repository',

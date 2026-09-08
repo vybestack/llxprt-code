@@ -329,6 +329,58 @@ describe('issue.edit addProject verification', () => {
   });
 
   /**
+   * A GraphQL verification read may contain both data and errors. The error
+   * must win so callers see GitHub's failure rather than a membership mismatch
+   * inferred from partial data.
+   *
+   * @plan project-plans/issue3592.md
+   * @requirement AC-1, AC-2
+   * @issue 3592
+   */
+  it('propagates a structured GraphQL error from a partial-success verification read', async () => {
+    const { run } = makeRunner([
+      [
+        'projectItems',
+        {
+          data: {
+            repository: {
+              issue: {
+                projectItems: {
+                  nodes: [],
+                  pageInfo: { hasNextPage: false, endCursor: null },
+                },
+              },
+            },
+          },
+          errors: [
+            {
+              type: 'FORBIDDEN',
+              message: 'Project membership query was denied',
+            },
+          ],
+        },
+      ],
+    ]);
+
+    const caught = await captureFailure(() =>
+      executeIssueEdit(
+        {
+          number: 3592,
+          addProject: 'LLxprt Roadmap',
+          repo: 'vybestack/llxprt-code',
+        },
+        run,
+      ),
+    );
+
+    const error = asBrokerError(caught);
+    expect(error.brokerError).toStrictEqual({
+      code: 'PERMISSION_DENIED',
+      message: 'Project membership query was denied',
+    });
+  });
+
+  /**
    * @plan project-plans/issue3592.md
    * @requirement AC-1, AC-2
    * @issue 3592

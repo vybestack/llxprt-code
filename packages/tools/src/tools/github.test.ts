@@ -24,7 +24,11 @@ import {
   renderChecks,
   type GitHubBrokerClient,
 } from './github.js';
-import { GITHUB_OP_SPECS, type GithubParamKind } from './github-ops.js';
+import {
+  GITHUB_OP_SPECS,
+  GITHUB_PARAM_KIND_HINTS,
+  type GithubParamKind,
+} from './github-ops.js';
 
 /** Records the operations dispatched to the broker. */
 function textOrEmpty(value: string | null | undefined): string {
@@ -600,7 +604,12 @@ describe('github tool', () => {
       const schema = tool.parameterSchema as {
         properties: Record<
           string,
-          { type?: unknown; items?: { type?: string } }
+          {
+            type?: unknown;
+            items?: { type?: string };
+            minItems?: number;
+            description?: string;
+          }
         >;
       };
       for (const name of [
@@ -616,6 +625,13 @@ describe('github tool', () => {
         expect(prop.type).toBe('array');
         expect(prop.items?.type).toBe('string');
       }
+      expect(schema.properties.addProject.minItems).toBe(1);
+      expect(schema.properties.addProject.description).toBe(
+        'Project names to add, as a non-empty array of strings. Accepted by issue.edit.',
+      );
+      expect(GITHUB_PARAM_KIND_HINTS.projectList).toBe(
+        'non-empty array of strings',
+      );
     });
 
     /**

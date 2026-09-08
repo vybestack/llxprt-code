@@ -310,7 +310,7 @@ export const GITHUB_PARAM_KIND_HINTS: Readonly<
   assignee: 'array of strings',
   milestone: 'string',
   project: 'string',
-  projectList: 'array of strings',
+  projectList: 'non-empty array of strings',
   branch: 'string',
 };
 
