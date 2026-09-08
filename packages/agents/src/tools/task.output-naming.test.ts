@@ -5,14 +5,16 @@
  */
 
 /**
- * TaskTool output-parameter naming tests (Issue #2255).
- * Covers the preferred `expected_outputs` parameter, the backward-compatible
- * `output_spec` alias, precedence when both are provided, and validation that
- * rejects JSON-Schema-shaped object values.
+ * TaskTool output-parameter naming tests (Issue #2533).
+ * Asserts the single canonical `expected_outputs` vocabulary: legacy
+ * `output_spec` and camelCase spellings are rejected with a validation error
+ * naming the canonical member, and `expected_outputs` values must be plain
+ * string descriptions.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { TaskTool, type TaskToolParams } from './task.js';
+import { taskToolSchema } from './taskSchema.js';
 import {
   validateOutputSpec,
   normalizeTaskParams,
@@ -22,41 +24,43 @@ import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 
-describe('Issue #2255: TaskTool output parameter naming', () => {
+const CANONICAL_TASK_PARAM_NAMES = [
+  'async',
+  'behaviour_prompts',
+  'context',
+  'expected_outputs',
+  'goal_prompt',
+  'grace_period_seconds',
+  'max_turns',
+  'subagent_name',
+  'timeout_seconds',
+  'tool_whitelist',
+];
+
+describe('Issue #2533: TaskTool single parameter vocabulary', () => {
   let config: Config;
 
   beforeEach(() => {
     config = {
-      getSessionId: () => 'session-2255',
+      getSessionId: () => 'session-2533',
     } as unknown as Config;
   });
 
-  function createMockLaunch() {
-    const dispose = vi.fn().mockResolvedValue(undefined);
-    // SubAgentScope requires runNonInteractive/onMessage even though the
-    // interactive-path tests only exercise runInteractive.
-    const scope = {
-      output: {
-        emitted_vars: {},
-        terminate_reason: SubagentTerminateMode.GOAL,
-      },
-      runInteractive: vi.fn().mockResolvedValue(undefined),
-      runNonInteractive: vi.fn(),
-      onMessage: undefined,
-    };
-    // SubagentLaunchResult requires all fields; prompt/profile/config/runtime
-    // are unused by these tests but must be present to satisfy the type.
-    const launch = vi.fn().mockResolvedValue({
-      agentId: 'agent-2255',
-      scope,
-      dispose,
-      prompt: {} as unknown,
-      profile: {} as unknown,
-      config: {} as unknown,
-      runtime: {} as unknown,
+  function createTool(
+    orchestrator: SubagentOrchestrator = {} as unknown as SubagentOrchestrator,
+  ): TaskTool {
+    return new TaskTool(config, {
+      messageBus: new MessageBus(),
+      orchestratorFactory: () => orchestrator,
     });
-    const orchestrator = { launch } as unknown as SubagentOrchestrator;
-    return { launch, orchestrator };
+  }
+
+  function buildWithExtra(extra: Record<string, unknown>): void {
+    createTool().build({
+      subagent_name: 'helper',
+      goal_prompt: 'Do work',
+      ...extra,
+    } as unknown as TaskToolParams);
   }
 
   describe('validateOutputSpec', () => {
@@ -118,66 +122,17 @@ describe('Issue #2255: TaskTool output parameter naming', () => {
     });
   });
 
-  describe('normalizeTaskParams precedence', () => {
-    it('prefers expected_outputs over output_spec when both are provided', () => {
+  describe('normalizeTaskParams', () => {
+    it('resolves expected_outputs into outputSpec', () => {
       const normalized = normalizeTaskParams({
         subagent_name: 'helper',
         goal_prompt: 'Do work',
-        expected_outputs: { result: 'from expected_outputs' },
-        output_spec: { result: 'from output_spec' },
+        expected_outputs: { result: 'The outcome' },
       });
-      expect(normalized.outputSpec).toStrictEqual({
-        result: 'from expected_outputs',
-      });
+      expect(normalized.outputSpec).toStrictEqual({ result: 'The outcome' });
     });
 
-    it('validates the output_spec alias when expected_outputs takes precedence', () => {
-      expect(() =>
-        normalizeTaskParams({
-          subagent_name: 'helper',
-          goal_prompt: 'Do work',
-          expected_outputs: { result: 'preferred' },
-          output_spec: {
-            result: { type: 'string', description: 'invalid alias' },
-          } as unknown as Record<string, string>,
-        }),
-      ).toThrow(
-        "output_spec 'result' must be a plain string description, not a JSON Schema object.",
-      );
-    });
-
-    it('falls back to output_spec alias when expected_outputs is absent', () => {
-      const normalized = normalizeTaskParams({
-        subagent_name: 'helper',
-        goal_prompt: 'Do work',
-        output_spec: { result: 'from output_spec' },
-      });
-      expect(normalized.outputSpec).toStrictEqual({
-        result: 'from output_spec',
-      });
-    });
-
-    it('resolves camelCase expectedOutputs', () => {
-      const normalized = normalizeTaskParams({
-        subagent_name: 'helper',
-        goal_prompt: 'Do work',
-        expectedOutputs: { result: 'camel' },
-      });
-      expect(normalized.outputSpec).toStrictEqual({ result: 'camel' });
-    });
-
-    it('resolves camelCase outputSpec alias', () => {
-      const normalized = normalizeTaskParams({
-        subagent_name: 'helper',
-        goal_prompt: 'Do work',
-        outputSpec: { result: 'camel legacy' },
-      });
-      expect(normalized.outputSpec).toStrictEqual({
-        result: 'camel legacy',
-      });
-    });
-
-    it('returns undefined when neither is provided', () => {
+    it('returns undefined when expected_outputs is absent', () => {
       const normalized = normalizeTaskParams({
         subagent_name: 'helper',
         goal_prompt: 'Do work',
@@ -198,106 +153,93 @@ describe('Issue #2255: TaskTool output parameter naming', () => {
         "expected_outputs 'findings' must be a plain string description, not a JSON Schema object.",
       );
     });
+  });
 
-    it('throws when output_spec alias contains JSON-Schema-shaped values', () => {
+  describe('taskToolSchema', () => {
+    it('exposes exactly the canonical property set', () => {
+      expect(Object.keys(taskToolSchema.properties).sort()).toStrictEqual(
+        CANONICAL_TASK_PARAM_NAMES,
+      );
+    });
+
+    it('rejects unknown properties', () => {
+      expect(taskToolSchema.additionalProperties).toBe(false);
+    });
+
+    it('describes expected_outputs string values', () => {
+      expect(taskToolSchema.properties.expected_outputs.description).toContain(
+        'Values must be strings, not JSON Schema objects.',
+      );
+    });
+  });
+
+  describe('TaskTool.build rejection of non-canonical spellings', () => {
+    it('rejects output_spec with an error naming expected_outputs', () => {
       expect(() =>
-        normalizeTaskParams({
+        buildWithExtra({ output_spec: { result: 'The outcome' } }),
+      ).toThrow("use the canonical 'expected_outputs'");
+    });
+
+    it.each([
+      ['subagentName', 'subagent_name'],
+      ['goalPrompt', 'goal_prompt'],
+      ['behaviourPrompts', 'behaviour_prompts'],
+      ['behavior_prompts', 'behaviour_prompts'],
+      ['behaviorPrompts', 'behaviour_prompts'],
+      ['toolWhitelist', 'tool_whitelist'],
+      ['outputSpec', 'expected_outputs'],
+      ['expectedOutputs', 'expected_outputs'],
+      ['context_vars', 'context'],
+      ['contextVars', 'context'],
+    ] as const)(
+      'rejects %s with an error naming %s',
+      (legacyName, canonicalName) => {
+        expect(() => buildWithExtra({ [legacyName]: 'value' })).toThrow(
+          `use the canonical '${canonicalName}'`,
+        );
+      },
+    );
+
+    it('rejects a completely unknown property via the schema', () => {
+      expect(() => buildWithExtra({ bogus_param: 'value' })).toThrow(
+        /must NOT have additional properties|use the canonical/,
+      );
+    });
+
+    it('requires the canonical subagent_name when only camelCase is given', () => {
+      expect(() =>
+        createTool().build({
+          subagentName: 'helper',
+          goalPrompt: 'Do work',
+        } as unknown as TaskToolParams),
+      ).toThrow("use the canonical 'subagent_name'");
+    });
+  });
+
+  describe('TaskTool.build accepts canonical input', () => {
+    it('accepts valid string-valued expected_outputs', () => {
+      const invocation = createTool().build({
+        subagent_name: 'helper',
+        goal_prompt: 'Do work',
+        expected_outputs: { findings: 'A concise summary' },
+      });
+      expect(invocation.result).toBeUndefined();
+    });
+
+    it('rejects JSON-Schema-shaped expected_outputs at schema validation time', () => {
+      expect(() =>
+        createTool().build({
           subagent_name: 'helper',
           goal_prompt: 'Do work',
-          output_spec: {
+          expected_outputs: {
             findings: { type: 'string', description: 'bad' },
           } as unknown as Record<string, string>,
         }),
-      ).toThrow(
-        "output_spec 'findings' must be a plain string description, not a JSON Schema object.",
-      );
-    });
-  });
-
-  describe('TaskTool schema', () => {
-    function getSchemaProperties(
-      tool: TaskTool,
-    ): Record<string, { description?: string }> | undefined {
-      const decl = tool.schema as unknown as {
-        parametersJsonSchema?: {
-          properties?: Record<string, { description?: string }>;
-        };
-      };
-      return decl.parametersJsonSchema?.properties;
-    }
-
-    it('exposes expected_outputs as a schema property', () => {
-      const tool = new TaskTool(config, {
-        messageBus: new MessageBus(),
-        orchestratorFactory: () => ({}) as unknown as SubagentOrchestrator,
-      });
-      const prop = getSchemaProperties(tool)?.['expected_outputs'];
-      expect(prop).toBeDefined();
-      expect(prop?.description).toContain(
-        'Values must be strings, not JSON Schema objects.',
-      );
-    });
-
-    it('retains output_spec as a deprecated alias in the schema', () => {
-      const tool = new TaskTool(config, {
-        messageBus: new MessageBus(),
-        orchestratorFactory: () => ({}) as unknown as SubagentOrchestrator,
-      });
-      const prop = getSchemaProperties(tool)?.['output_spec'];
-      expect(prop).toBeDefined();
-      expect(prop?.description).toContain('Deprecated alias');
-      expect(prop?.description).toContain(
-        'Values must be strings, not JSON Schema objects.',
-      );
-    });
-  });
-
-  describe('TaskTool validateToolParamValues', () => {
-    it('rejects JSON-Schema-shaped expected_outputs at schema validation time', () => {
-      const tool = new TaskTool(config, {
-        messageBus: new MessageBus(),
-        orchestratorFactory: () => ({}) as unknown as SubagentOrchestrator,
-      });
-      const params: TaskToolParams = {
-        subagent_name: 'helper',
-        goal_prompt: 'Do work',
-        expected_outputs: {
-          findings: { type: 'string', description: 'bad' },
-        } as unknown as Record<string, string>,
-      };
-      // The JSON Schema validator (additionalProperties: { type: "string" })
-      // rejects non-string values before our custom validateOutputSpec runs.
-      // The error message references the param path in the form
-      // "expected_outputs/findings must be string".
-      expect(() => tool.build(params)).toThrow(
-        /expected_outputs\/findings must be string/,
-      );
-    });
-
-    it('rejects JSON-Schema-shaped output_spec alias at schema validation time', () => {
-      const tool = new TaskTool(config, {
-        messageBus: new MessageBus(),
-        orchestratorFactory: () => ({}) as unknown as SubagentOrchestrator,
-      });
-      const params: TaskToolParams = {
-        subagent_name: 'helper',
-        goal_prompt: 'Do work',
-        output_spec: {
-          findings: { type: 'string', description: 'bad' },
-        } as unknown as Record<string, string>,
-      };
-      expect(() => tool.build(params)).toThrow(
-        /output_spec\/findings must be string/,
-      );
+      ).toThrow(/expected_outputs\/findings must be string/);
     });
 
     it('validateToolParamValues rejects non-string expected_outputs values that bypass schema', () => {
-      const tool = new TaskTool(config, {
-        messageBus: new MessageBus(),
-        orchestratorFactory: () => ({}) as unknown as SubagentOrchestrator,
-      });
-      // validateToolParamValues is a second line of defense for callers that
-      // construct params programmatically and bypass schema validation.
+      const tool = createTool();
       const error = (
         tool as unknown as {
           validateToolParamValues: (p: TaskToolParams) => string | null;
@@ -313,60 +255,30 @@ describe('Issue #2255: TaskTool output parameter naming', () => {
         "expected_outputs 'findings' must be a plain string description",
       );
     });
-
-    it('validateToolParamValues rejects non-string output_spec values that bypass schema', () => {
-      const tool = new TaskTool(config, {
-        messageBus: new MessageBus(),
-        orchestratorFactory: () => ({}) as unknown as SubagentOrchestrator,
-      });
-      const error = (
-        tool as unknown as {
-          validateToolParamValues: (p: TaskToolParams) => string | null;
-        }
-      ).validateToolParamValues({
-        subagent_name: 'helper',
-        goal_prompt: 'Do work',
-        output_spec: {
-          findings: { type: 'string', description: 'bad' },
-        } as unknown as Record<string, string>,
-      });
-      expect(error).toContain(
-        "output_spec 'findings' must be a plain string description",
-      );
-    });
-
-    it('accepts valid string-valued expected_outputs', () => {
-      const tool = new TaskTool(config, {
-        messageBus: new MessageBus(),
-        orchestratorFactory: () => ({}) as unknown as SubagentOrchestrator,
-      });
-      const params: TaskToolParams = {
-        subagent_name: 'helper',
-        goal_prompt: 'Do work',
-        expected_outputs: { findings: 'A concise summary' },
-      };
-      const invocation = tool.build(params);
-      expect(invocation.result).toBeUndefined();
-    });
-
-    it('accepts valid string-valued output_spec alias', () => {
-      const tool = new TaskTool(config, {
-        messageBus: new MessageBus(),
-        orchestratorFactory: () => ({}) as unknown as SubagentOrchestrator,
-      });
-      const params: TaskToolParams = {
-        subagent_name: 'helper',
-        goal_prompt: 'Do work',
-        output_spec: { findings: 'A concise summary' },
-      };
-      const invocation = tool.build(params);
-      expect(invocation.result).toBeUndefined();
-    });
   });
 
   describe('TaskTool end-to-end output config', () => {
     it('passes expected_outputs into launchRequest.outputConfig', async () => {
-      const { launch, orchestrator } = createMockLaunch();
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-2533',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {
         messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
@@ -384,55 +296,6 @@ describe('Issue #2255: TaskTool output parameter naming', () => {
       expect(launch).toHaveBeenCalledWith(
         expect.objectContaining({
           outputConfig: { outputs: { result: 'The outcome' } },
-        }),
-        expect.any(AbortSignal),
-      );
-    });
-
-    it('passes output_spec alias into launchRequest.outputConfig', async () => {
-      const { launch, orchestrator } = createMockLaunch();
-      const tool = new TaskTool(config, {
-        messageBus: new MessageBus(),
-        orchestratorFactory: () => orchestrator,
-        isInteractiveEnvironment: () => true,
-      });
-
-      const invocation = tool.build({
-        subagent_name: 'helper',
-        goal_prompt: 'Do work',
-        output_spec: { result: 'The outcome' },
-      });
-
-      await invocation.execute(new AbortController().signal, undefined);
-
-      expect(launch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          outputConfig: { outputs: { result: 'The outcome' } },
-        }),
-        expect.any(AbortSignal),
-      );
-    });
-
-    it('prefers expected_outputs over output_spec when both are provided at runtime', async () => {
-      const { launch, orchestrator } = createMockLaunch();
-      const tool = new TaskTool(config, {
-        messageBus: new MessageBus(),
-        orchestratorFactory: () => orchestrator,
-        isInteractiveEnvironment: () => true,
-      });
-
-      const invocation = tool.build({
-        subagent_name: 'helper',
-        goal_prompt: 'Do work',
-        expected_outputs: { result: 'preferred' },
-        output_spec: { result: 'legacy' },
-      });
-
-      await invocation.execute(new AbortController().signal, undefined);
-
-      expect(launch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          outputConfig: { outputs: { result: 'preferred' } },
         }),
         expect.any(AbortSignal),
       );

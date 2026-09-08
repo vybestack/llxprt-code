@@ -446,7 +446,7 @@ describe('TaskTool', () => {
     });
   });
 
-  describe('Issue #2069: toolConfig omission with output_spec', () => {
+  describe('Issue #2069: toolConfig omission with expected_outputs', () => {
     it('omits toolConfig (not empty) when no explicit whitelist and registry unavailable, so runtime uses profile defaults', async () => {
       const dispose = vi.fn().mockResolvedValue(undefined);
       const scope = {
@@ -482,7 +482,7 @@ describe('TaskTool', () => {
       const invocation = tool.build({
         subagent_name: 'rustcoder',
         goal_prompt: 'Write a function',
-        output_spec: { result: 'The implementation' },
+        expected_outputs: { result: 'The implementation' },
       });
 
       await invocation.execute(new AbortController().signal, undefined);
@@ -541,7 +541,7 @@ describe('TaskTool', () => {
       const invocation = tool.build({
         subagent_name: 'rustcoder',
         goal_prompt: 'Write a function',
-        output_spec: { result: 'The implementation' },
+        expected_outputs: { result: 'The implementation' },
       });
 
       await invocation.execute(new AbortController().signal, undefined);
@@ -708,7 +708,7 @@ describe('TaskTool', () => {
     }
 
     async function executeIssue2184Invocation(
-      params: Pick<TaskToolParams, 'tool_whitelist' | 'output_spec'>,
+      params: Pick<TaskToolParams, 'tool_whitelist' | 'expected_outputs'>,
       registryTools = ['run_shell_command'],
       ephemerals: Record<string, unknown> = {},
     ): Promise<LaunchRequest | undefined> {
@@ -849,26 +849,26 @@ describe('TaskTool', () => {
       ]);
     });
 
-    it('preserves resolved whitelist tools when output_spec is provided', async () => {
+    it('preserves resolved whitelist tools when expected_outputs is provided', async () => {
       const launchRequest = await executeIssue2184Invocation({
         tool_whitelist: ['functions.run_shell_command'],
-        output_spec: { result: 'The output' },
+        expected_outputs: { result: 'The output' },
       });
 
       expect(launchRequest).toBeDefined();
       expect(launchRequest?.toolConfig?.tools).toStrictEqual([
         'run_shell_command',
       ]);
-      // outputConfig must contain the outputs mapped from output_spec.
+      // outputConfig must contain the outputs mapped from expected_outputs.
       expect(launchRequest?.outputConfig).toStrictEqual({
         outputs: { result: 'The output' },
       });
     });
 
-    it('preserves output_spec when qualified whitelist resolution leaves zero tools', async () => {
+    it('preserves expected_outputs when qualified whitelist resolution leaves zero tools', async () => {
       const launchRequest = await executeIssue2184Invocation({
         tool_whitelist: ['functions.does_not_exist'],
-        output_spec: { result: 'The output' },
+        expected_outputs: { result: 'The output' },
       });
 
       expect(launchRequest).toBeDefined();

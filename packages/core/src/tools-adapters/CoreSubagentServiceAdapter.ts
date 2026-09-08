@@ -366,10 +366,11 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
       launchRequest.runConfig = { max_time_minutes: timeoutMs / 60_000 };
     }
 
-    const behaviourPrompts =
-      request.behaviourPrompts ?? request.behaviorPrompts;
-    if (behaviourPrompts !== undefined && behaviourPrompts.length > 0) {
-      launchRequest.behaviourPrompts = behaviourPrompts;
+    if (
+      request.behaviourPrompts !== undefined &&
+      request.behaviourPrompts.length > 0
+    ) {
+      launchRequest.behaviourPrompts = request.behaviourPrompts;
     }
 
     const config = this.requireConfig();
