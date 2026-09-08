@@ -12,6 +12,8 @@ import { truncateEnd } from '../utils/responsive.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
+const PRINTABLE_ASCII = /[\x20-\x7E]/;
+
 interface ProviderDialogProps {
   providers: string[];
   currentProvider?: string;
@@ -423,5 +425,5 @@ function isPrintableKeypress(key: {
   if (key.sequence === undefined) return false;
   if (typeof key.sequence !== 'string') return false;
   if (key.ctrl === true || key.meta === true) return false;
-  return key.sequence.length === 1;
+  return key.sequence.length === 1 && PRINTABLE_ASCII.test(key.sequence);
 }
