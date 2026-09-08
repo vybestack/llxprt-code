@@ -160,6 +160,11 @@ export const rootOptions: Record<string, Options> = {
     description:
       'If true, when refreshing memory, LLXPRT.md files should be loaded from all directories that are added. If false, LLXPRT.md files should only be loaded from the primary working directory.',
   },
+  pause: {
+    type: 'boolean',
+    description:
+      'Briefly pause before exiting on a fatal error so the message stays readable in closing terminal panes (default: on; disable with --no-pause).',
+  },
   debug: {
     alias: 'd',
     type: 'string',
@@ -339,6 +344,11 @@ export const innerCommandOptions: Record<string, Options> = {
   'screen-reader': {
     type: 'boolean',
     description: 'Enable screen reader mode for accessibility.',
+  },
+  pause: {
+    type: 'boolean',
+    description:
+      'Briefly pause before exiting on a fatal error so the message stays readable in closing terminal panes (default: on; disable with --no-pause).',
   },
   'session-summary': {
     type: 'string',

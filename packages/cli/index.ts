@@ -12,6 +12,12 @@ import {
   applyProcessMemoryHardening,
   HARDENING_FAILURE_EXIT_CODE,
 } from './src/launcher/process-memory-hardening.js';
+import {
+  appendStartupFatalLog,
+  buildStartupFatalRecord,
+  formatStartupFatalMessage,
+  pauseBeforeExitIfNeeded,
+} from './src/utils/startup-fatal-log.js';
 
 // --- Global Entry Point ---
 
@@ -39,11 +45,24 @@ process.on('uncaughtException', (error) => {
 });
 
 function writeFatalError(error: FatalError): void {
+  // Persist first (#3566): if the pane dies, the record survives in
+  // <logHome>/fatal.log. A persistence failure must not change the output.
+  const record = buildStartupFatalRecord(error, {
+    cwd: process.cwd(),
+    argv: process.argv,
+  });
+  const persistResult = appendStartupFatalLog(record);
   let errorMessage = error.message;
   if (!process.env['NO_COLOR']) {
     errorMessage = `\x1b[31m${errorMessage}\x1b[0m`;
   }
-  writeToStderr(`${errorMessage}\n`);
+  if (persistResult.ok) {
+    writeToStderr(
+      `${formatStartupFatalMessage(errorMessage, persistResult.path)}\n`,
+    );
+  } else {
+    writeToStderr(`${errorMessage}\n`);
+  }
 }
 
 function writeUnexpectedCriticalError(error: unknown): void {
@@ -68,17 +87,34 @@ async function safeRunExitCleanup(): Promise<void> {
   }
 }
 
-function writeCriticalErrorAndGetExitCode(error: unknown): number {
+function writeCriticalErrorAndGetExitCode(error: unknown): {
+  exitCode: number;
+  fatal: boolean;
+} {
   try {
     if (error instanceof FatalError) {
       writeFatalError(error);
-      return error.exitCode;
+      return { exitCode: error.exitCode, fatal: true };
     }
     writeUnexpectedCriticalError(error);
   } catch {
-    return 1;
+    return { exitCode: 1, fatal: false };
   }
-  return 1;
+  return { exitCode: 1, fatal: false };
+}
+
+/**
+ * Shared terminal path for critical errors: report, run best-effort cleanup,
+ * pause (fatals only, when stderr is a TTY and --no-pause is absent) so the
+ * message stays readable in closing panes, then exit with the original code.
+ */
+async function exitAfterCriticalError(error: unknown): Promise<never> {
+  const { exitCode, fatal } = writeCriticalErrorAndGetExitCode(error);
+  await safeRunExitCleanup();
+  if (fatal) {
+    await pauseBeforeExitIfNeeded(process.argv, process.stderr.isTTY === true);
+  }
+  process.exit(exitCode);
 }
 
 // Use writeToStderr instead of console.error so that fatal errors are always
@@ -112,19 +148,17 @@ runBunLauncherIfNeeded()
     try {
       await main();
     } catch (error) {
-      const exitCode = writeCriticalErrorAndGetExitCode(error);
-      await safeRunExitCleanup();
-      process.exit(exitCode);
+      await exitAfterCriticalError(error);
     }
   })
   .catch(async (error: unknown) => {
     // This covers launcher failures and bootstrap import failures before main()
     // starts. Cleanup is best-effort and harmless if nothing was registered.
-    let exitCode = 1;
+    // The finally guarantees process.exit always happens even if the shared
+    // helper itself throws unexpectedly.
     try {
-      exitCode = writeCriticalErrorAndGetExitCode(error);
-      await safeRunExitCleanup();
+      await exitAfterCriticalError(error);
     } finally {
-      process.exit(exitCode);
+      process.exit(1);
     }
   });
