@@ -74,15 +74,24 @@ describe('validateModelParam (issues #2896, #2831)', () => {
     '1e400',
     '-1e400',
   ])('A5: rejects %j for top_p', (raw) => {
-    expect(validateModelParam('top_p', raw).success).toBe(false);
+    expect(validateModelParam('top_p', raw)).toStrictEqual({
+      success: false,
+      message: NOT_A_NUMBER_MESSAGE,
+    });
   });
 
   it('A5: rejects a JSON object for a number-typed param', () => {
-    expect(validateModelParam('top_p', '{"a":1}').success).toBe(false);
+    expect(validateModelParam('top_p', '{"a":1}')).toStrictEqual({
+      success: false,
+      message: NOT_A_NUMBER_MESSAGE,
+    });
   });
 
   it('A5: rejects a boolean literal for a number-typed param', () => {
-    expect(validateModelParam('temperature', 'true').success).toBe(false);
+    expect(validateModelParam('temperature', 'true')).toStrictEqual({
+      success: false,
+      message: NOT_A_NUMBER_MESSAGE,
+    });
   });
 
   // A6 — the remaining number-typed dialog fields, integer and fractional
