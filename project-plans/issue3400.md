@@ -95,10 +95,15 @@ zero-match Enter scenario the issue references, live in
 - The test-audit scanner reported no MOCK_MIRROR, ALWAYS_TRUE,
   SELF_CONFIRMING, or NO_ASSERT findings on the touched test file. It reported
   one pre-existing DUP_ASSERT at line 130, outside the new tests.
-- Full `npm run test` fails in this sandbox only in environmental suites for
-  the native OS keyring, sandbox-mode editor utilities, and
-  capability-proxy/token-renewal. Those suites pass in GitHub CI on main at
-  this branch's base; LLxprt Code CI was green on 2026-09-08.
+- Full `npm run test` (completed run, log at `tmp/verify3400/test-full2.log`) failed
+  in 6 environmental files, all byte-identical to main HEAD and unrelated to this
+  change: oauthManager.proactive-renewal (token-renewal timing),
+  factory-detection-wiring (capability proxy), secure-store.native-keyring (no
+  OS keyring in container), ide-client-integration (MCP sockets in sandbox),
+  docsCommand (asserts the non-sandbox code path inside a sandbox), and
+  sandbox-node-modules-preflight (image-global bun location layout). 737/743
+  CLI test files passed. Those suites pass in GitHub CI on main at this
+  branch's base; LLxprt Code CI was green on 2026-09-08.
 - The smoke test failed during profile credential resolution with
   `Credential proxy authentication failed: Invalid or missing capability token`
   before model invocation. The sandbox credential proxy is broken; the PR's
