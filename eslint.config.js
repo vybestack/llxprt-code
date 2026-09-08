@@ -645,6 +645,18 @@ export default tseslint.config(
       'max-lines': ['error', { max: 900, skipBlankLines: true, skipComments: true }], // eslint-policy-allow-off: #3240 raised from 800 for mock-theater fix
     },
   },
+  // ============================================================================
+  // Issue #3504: the subagent termination test file was hardened with
+  // orphan-proof try/finally cleanup and a dispose regression test, growing it
+  // to 838 effective lines (past the 800 cap); max-lines is raised to 900 and
+  // splitting the file is tracked in #3613.
+  // ============================================================================
+  {
+    files: ['packages/agents/src/core/subagent.runNonInteractive-term.test.ts'],
+    rules: {
+      'max-lines': ['error', { max: 900, skipBlankLines: true, skipComments: true }], // eslint-policy-allow-off: #3504 raised from 800, split tracked in #3613
+    },
+  },
   // Issue #2605: Apply strict code-quality lint rules to eval TypeScript
   // ============================================================================
   // The eval suite (evals/**/*.ts) is real source executed by the nightly
