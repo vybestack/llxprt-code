@@ -16,10 +16,7 @@ import { TextInput } from './ProfileCreateWizard/TextInput.js';
 import { parseValue } from '../commands/setCommand.js';
 import { parseEphemeralSettingValue } from '@vybestack/llxprt-code-providers/runtime.js';
 import { getSettingSpec } from '@vybestack/llxprt-code-settings';
-import {
-  commitModelParam,
-  type CommitResult,
-} from './modelConfigParamCommit.js';
+import { validateModelParam } from './modelConfigParamCommit.js';
 
 // Pending values for one field, staged in the dialog until [Save] commits
 // them to the runtime. Cancel/Esc discards them wholesale.
@@ -382,95 +379,177 @@ function stageBooleanToggle(field: ConfigField, d: KeypressDispatch): void {
   d.setValidationError(null);
 }
 
-// Validates staged text edits, then writes every pending value into the
-// runtime. Returns true when the commit succeeded (dialog may close).
-function commitPendingEdits(d: KeypressDispatch): boolean {
-  for (const field of d.fields) {
-    if (!(field.key in d.pendingEdits)) continue;
-    const edit = d.pendingEdits[field.key];
-    const error = commitFieldEdit(field, edit, d);
-    if (error !== null) {
-      d.setValidationError(`${field.key}: ${error}`);
-      return false;
-    }
-  }
-  d.clearPendingEdits();
-  d.setValidationError(null);
-  return true;
-}
+// One runtime mutation the save path can perform, planned in phase 1 and
+// applied (or rolled back) in phase 2.
+type PlannedWrite =
+  | { kind: 'set-param'; value: unknown }
+  | { kind: 'clear-param' }
+  | { kind: 'set-ephemeral'; value: unknown };
 
-// Commits a single staged edit for a field. Returns an error message on
-// validation failure, or null when the write succeeded (or was a no-op).
-function commitFieldEdit(
-  field: ConfigField,
-  edit: PendingEdit,
-  d: KeypressDispatch,
-): string | null {
-  try {
-    return applyFieldEdit(field, edit, d);
-  } catch (e) {
-    // setEphemeralSetting/setActiveModelParam can throw (e.g. no active
-    // provider); surface the error instead of crashing the dialog.
-    return e instanceof Error ? e.message : String(e);
-  }
-}
+type FieldPlan =
+  | { kind: 'write'; write: PlannedWrite }
+  | { kind: 'skip' }
+  | { kind: 'invalid'; message: string };
 
-function applyFieldEdit(
-  field: ConfigField,
-  edit: PendingEdit,
-  d: KeypressDispatch,
-): string | null {
+// Pure: turns one staged edit into a typed write with zero runtime calls.
+function planFieldEdit(field: ConfigField, edit: PendingEdit): FieldPlan {
   if (field.editor === 'boolean') {
-    if (edit.boolValue !== null) {
-      d.runtime.setEphemeralSetting(field.key, edit.boolValue);
-    }
-    return null;
+    if (edit.boolValue === null) return { kind: 'skip' };
+    return {
+      kind: 'write',
+      write: { kind: 'set-ephemeral', value: edit.boolValue },
+    };
   }
 
   if (field.editor === 'enum') {
-    if (edit.enumIndex !== null) {
-      const value = field.enumValues?.[edit.enumIndex];
-      if (value !== undefined) {
-        d.runtime.setEphemeralSetting(field.key, value);
-      }
-    }
-    return null;
+    if (edit.enumIndex === null) return { kind: 'skip' };
+    const value = field.enumValues?.[edit.enumIndex];
+    if (value === undefined) return { kind: 'skip' };
+    return { kind: 'write', write: { kind: 'set-ephemeral', value } };
   }
 
   const raw = edit.text;
   if (raw === '') {
     if (field.kind === 'param') {
-      d.runtime.clearActiveModelParam(field.key);
-    } else {
-      d.runtime.setEphemeralSetting(field.key, undefined);
+      return { kind: 'write', write: { kind: 'clear-param' } };
     }
-    return null;
+    return {
+      kind: 'write',
+      write: { kind: 'set-ephemeral', value: undefined },
+    };
   }
 
   if (field.kind === 'param') {
-    const result = commitModelParam(field.key, raw, (value) =>
-      d.runtime.setActiveModelParam(field.key, value),
-    );
-    return result.success ? null : result.message;
+    const result = validateModelParam(field.key, raw);
+    if (!result.success) return { kind: 'invalid', message: result.message };
+    return { kind: 'write', write: { kind: 'set-param', value: result.value } };
   }
 
-  const result = commitEphemeral(field, raw, (value) =>
-    d.runtime.setEphemeralSetting(field.key, value),
-  );
-  return result.success ? null : result.message;
+  // Guarded like validateModelParam guards parseValue: a registry parse
+  // throw surfaces as the inline validation message instead of tearing
+  // down the Ink UI (the pre-refactor dialog caught these the same way).
+  try {
+    const result = parseEphemeralSettingValue(field.key, raw);
+    if (!result.success) return { kind: 'invalid', message: result.message };
+    return {
+      kind: 'write',
+      write: { kind: 'set-ephemeral', value: result.value },
+    };
+  } catch (e) {
+    return {
+      kind: 'invalid',
+      message: e instanceof Error ? e.message : String(e),
+    };
+  }
 }
 
-function commitEphemeral(
+function applyPlannedWrite(
+  d: KeypressDispatch,
   field: ConfigField,
-  raw: string,
-  setEphemeralSetting: (value: unknown) => void,
-): CommitResult {
-  const result = parseEphemeralSettingValue(field.key, raw);
-  if (!result.success) {
-    return { success: false, message: result.message };
+  write: PlannedWrite,
+): void {
+  if (write.kind === 'set-param') {
+    d.runtime.setActiveModelParam(field.key, write.value);
+    return;
   }
-  setEphemeralSetting(result.value);
-  return { success: true };
+  if (write.kind === 'clear-param') {
+    d.runtime.clearActiveModelParam(field.key);
+    return;
+  }
+  d.runtime.setEphemeralSetting(field.key, write.value);
+}
+
+// The inverse of a planned write, derived from the same store the forward
+// write targets (set-ephemeral ↔ the ephemeral map; set/clear-param ↔ the
+// params map) rather than from field.kind. Callers pass fresh pre-save
+// maps — see commitPendingEdits — because the render-time d.params and
+// d.ephemeral can be stale if the runtime changed externally.
+function priorWriteFor(
+  field: ConfigField,
+  write: PlannedWrite,
+  params: Record<string, unknown>,
+  ephemeral: Record<string, unknown>,
+): PlannedWrite {
+  if (write.kind === 'set-ephemeral') {
+    return { kind: 'set-ephemeral', value: ephemeral[field.key] };
+  }
+  if (field.key in params) {
+    return { kind: 'set-param', value: params[field.key] };
+  }
+  return { kind: 'clear-param' };
+}
+
+// Two-phase atomic save (issue #2831). Phase 1 validates every staged edit
+// with zero runtime writes; the first invalid field in field order is
+// reported and nothing is applied. Phase 2 snapshots each planned write's
+// prior value before the first write, then applies the writes in field
+// order. Returns true when the commit succeeded (dialog may close).
+function commitPendingEdits(d: KeypressDispatch): boolean {
+  const planned: Array<{ field: ConfigField; write: PlannedWrite }> = [];
+  for (const field of d.fields) {
+    if (!(field.key in d.pendingEdits)) continue;
+    const plan = planFieldEdit(field, d.pendingEdits[field.key]);
+    if (plan.kind === 'invalid') {
+      d.setValidationError(`${field.key}: ${plan.message}`);
+      return false;
+    }
+    if (plan.kind === 'write') planned.push({ field, write: plan.write });
+  }
+
+  // Snapshot the true pre-save state once, before any write: d.params and
+  // d.ephemeral are render-time reads that can be stale if the runtime
+  // changed externally since the last render, and the rollback must restore
+  // the values the runtime actually held when [s]ave fired.
+  const paramsNow = d.runtime.getActiveModelParams();
+  const ephemeralNow = d.runtime.getEphemeralSettings();
+  const priors = planned.map((entry) =>
+    priorWriteFor(entry.field, entry.write, paramsNow, ephemeralNow),
+  );
+  for (const [i, entry] of planned.entries()) {
+    try {
+      applyPlannedWrite(d, entry.field, entry.write);
+    } catch (e) {
+      // Rollback-on-throw: restore every already-applied write [0, i) to
+      // its snapshotted prior value in reverse so the runtime ends exactly
+      // where it started.
+      const failedRestores = restoreAppliedWrites(d, planned, priors, i);
+      const message = e instanceof Error ? e.message : String(e);
+      let errorText = `${entry.field.key}: ${message}`;
+      if (failedRestores.length > 0) {
+        errorText += ` (rollback incomplete: ${failedRestores.join(', ')})`;
+      }
+      d.setValidationError(errorText);
+      return false;
+    }
+  }
+
+  d.clearPendingEdits();
+  d.setValidationError(null);
+  return true;
+}
+
+// Failure-safe rollback for commitPendingEdits: restores the already-applied
+// writes [0, failIndex) in reverse to their snapshotted prior values and
+// returns the keys whose restore threw. Restores are guarded not to hedge
+// against upstream bugs but because the recovery path must surface the
+// ORIGINAL write error and finish restoring what it can; a throwing restore
+// is recorded and reported instead of masking the save failure that caused
+// it.
+function restoreAppliedWrites(
+  d: KeypressDispatch,
+  planned: Array<{ field: ConfigField; write: PlannedWrite }>,
+  priors: PlannedWrite[],
+  failIndex: number,
+): string[] {
+  const failedRestores: string[] = [];
+  for (let j = failIndex - 1; j >= 0; j--) {
+    try {
+      applyPlannedWrite(d, planned[j].field, priors[j]);
+    } catch {
+      failedRestores.push(planned[j].field.key);
+    }
+  }
+  return failedRestores;
 }
 
 function handleListKey(key: Key, d: KeypressDispatch): void {

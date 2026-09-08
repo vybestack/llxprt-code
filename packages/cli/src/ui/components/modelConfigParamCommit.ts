@@ -5,7 +5,7 @@
  */
 
 /**
- * Model-parameter commit logic for the model config dialog.
+ * Model-parameter validation logic for the model config dialog.
  *
  * Extracted from `ModelConfigDialog.tsx` so the typing contract can be
  * exercised directly: full-render Ink component tests under
@@ -19,6 +19,10 @@
  * validation message instead of being written as a raw string — that is how
  * `"top_p": ".95"` reached a profile and produced
  * `top_p: Invalid input: expected number, received string` from OpenRouter.
+ *
+ * Validation-only (issue #2831): the dialog's save is two-phase — every
+ * staged edit is validated here with zero runtime writes before any write
+ * is applied — so this helper parses and checks but never writes.
  */
 
 import { getSettingSpec } from '@vybestack/llxprt-code-settings';
@@ -28,25 +32,23 @@ import { parseValue } from '../commands/setCommand.js';
  * Discriminated so a caller cannot read `message` without first narrowing on
  * the failure branch, and so the failure branch always carries one.
  */
-export type CommitResult =
-  | { success: true }
+export type ParamValidationResult =
+  | { success: true; value: unknown }
   | { success: false; message: string };
 
 export const NOT_A_NUMBER_MESSAGE = 'must be a number';
 
 /**
- * Parse `raw` for the model parameter `key` and hand the typed value to
- * `setActiveModelParam`.
+ * Parse `raw` for the model parameter `key` and return the typed value.
  *
  * Returns `{ success: false }` when the registry declares the parameter
- * numeric and the input does not parse to a finite number, or when the
- * runtime write throws (e.g. no active provider).
+ * numeric and the input does not parse to a finite number, or when parsing
+ * throws.
  */
-export function commitModelParam(
+export function validateModelParam(
   key: string,
   raw: string,
-  setActiveModelParam: (value: unknown) => void,
-): CommitResult {
+): ParamValidationResult {
   // Parsing stays inside the guarded region, as it was before this logic was
   // extracted from the dialog: an escaping throw would tear down the Ink UI
   // instead of surfacing as the inline validation message.
@@ -55,8 +57,7 @@ export function commitModelParam(
     if (requiresNumber(key) && !isFiniteNumber(parsed)) {
       return { success: false, message: NOT_A_NUMBER_MESSAGE };
     }
-    setActiveModelParam(parsed);
-    return { success: true };
+    return { success: true, value: parsed };
   } catch (e) {
     return {
       success: false,
