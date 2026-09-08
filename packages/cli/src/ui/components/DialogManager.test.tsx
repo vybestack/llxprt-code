@@ -13,11 +13,6 @@ import {
 } from '../../test-utils/render.js';
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
 
-// Enable React's act() environment so component state updates are flushed.
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
-
 // Mock the providers runtime barrel to avoid the broken dist dependency chain.
 void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   registerAgentRuntimeFactories: vi.fn(),

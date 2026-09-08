@@ -87,6 +87,12 @@ async function typeText(
   }
 }
 
+// Root ignores directory permission bits, so chmod(profilesDir, 0o555)
+// cannot force the EACCES this test needs. process.getuid?.() is undefined
+// on Windows, so the guard also skips there, where the POSIX premise does
+// not hold.
+const canEnforceReadOnlyDir = (process.getuid?.() ?? 0) !== 0;
+
 describe('ProfileSaveStep', () => {
   let tempConfigHome: string;
   let previousConfigHome: string | undefined;
@@ -190,28 +196,31 @@ describe('ProfileSaveStep', () => {
     expect(frame).not.toContain('✗');
   });
 
-  it('renders the save error and stays on the input when the write fails', async () => {
-    // A read-only profiles directory keeps the listing readable (so the name
-    // still validates as available) but makes every write path fail with a
-    // real filesystem permission error rather than a mocked literal.
-    await fs.chmod(profilesDir, 0o555);
-    const step = renderSaveStep();
+  it.skipIf(!canEnforceReadOnlyDir)(
+    'renders the save error and stays on the input when the write fails',
+    async () => {
+      // A read-only profiles directory keeps the listing readable (so the name
+      // still validates as available) but makes every write path fail with a
+      // real filesystem permission error rather than a mocked literal.
+      await fs.chmod(profilesDir, 0o555);
+      const step = renderSaveStep();
 
-    await typeText(step.stdin, 'fresh-one');
-    expect(step.lastFrame() ?? '').toContain('✓ Name is available');
+      await typeText(step.stdin, 'fresh-one');
+      expect(step.lastFrame() ?? '').toContain('✓ Name is available');
 
-    await act(async () => {
-      step.stdin.write('\r');
-    });
+      await act(async () => {
+        step.stdin.write('\r');
+      });
 
-    await waitFor(() => {
-      const frame = step.lastFrame() ?? '';
-      expect(frame).toMatch(/✗ .*(EACCES|permission denied)/);
-    });
-    expect(step.onContinue).not.toHaveBeenCalled();
-    // Still on the name input, so the user can retry.
-    expect(step.lastFrame() ?? '').toContain('Profile name:');
-  });
+      await waitFor(() => {
+        const frame = step.lastFrame() ?? '';
+        expect(frame).toMatch(/✗ .*(EACCES|permission denied)/);
+      });
+      expect(step.onContinue).not.toHaveBeenCalled();
+      // Still on the name input, so the user can retry.
+      expect(step.lastFrame() ?? '').toContain('Profile name:');
+    },
+  );
 
   it('writes the profile through the real store and continues', async () => {
     const step = renderSaveStep();

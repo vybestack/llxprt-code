@@ -230,3 +230,16 @@ Local verification summary (this container):
   MOCK_ONLY_ORACLE on main's untouched useModelDialogHandler block).
 - Startup smoke: blocked environmentally (credential proxy cannot serve the
   stepfun key inside this sandbox); no startup-affecting files changed.
+
+## PR review triage (PR #3616, 2026-09-09)
+
+CI: first run all green (36 pass / 0 fail / 3 intentional skips), including Interactive UI (tmux), OpenCodeReview, Run LLxprt review, CodeRabbit.
+
+Findings and triage:
+- CodeRabbit Major, ProfileSaveStep.test.tsx:197 (chmod-based EACCES test times out under root): **In-scope-Fix**. Added `it.skipIf(!canEnforceReadOnlyDir)` guard with `canEnforceReadOnlyDir = (process.getuid?.() ?? 0) !== 0` (also skips on Windows where the POSIX-permission premise does not hold). Assertions unchanged; 22/22 pass, guard verified NOT to skip under uid 1000.
+- OCR inline maintainability/medium, DialogManager.test.tsx:19 (module-level `globalThis.IS_REACT_ACT_ENVIRONMENT = true` without cleanup): **In-scope-Fix**. Removed the assignment entirely; the shared render helper (`test-utils/render.tsx`) act-wraps render/stdin/unmount/rerender, making the flag redundant. 14/14 pass, zero act warnings after removal.
+- OCR other/low, ProfileSaveStep.test.tsx (hardcoded 25ms setTimeout waits in two tests; OCR explicitly "not treating it as a required finding"): **Defer**. Bounded test-only synchronization; both tests green in CI and locally. Follow-up candidate: replace with polling waits if flakiness is ever observed.
+- CodeRabbit pre-merge "Docstring Coverage 35% < 80%": **Reject**. Test-only diff; this repo's convention documents tests via describe/it behavioral names, not docstrings; production docstring coverage is untouched by this PR.
+- CodeRabbit pre-merge "Linked Issues inconclusive" (tmux scenario JSON excluded from its filtered file set): addressed by PR comment describing the scenario's multi-step cancel/resume/discard/composer-restore coverage; the file is in the diff and executed by the Interactive UI CI lane.
+
+Verification after fixes: targeted bun test 22 pass / 0 fail (86 expects) across both files; `bunx prettier --check` clean; `bun scripts/lint-scoped.ts --changed` exit 0 (all 19 groups; first attempt was sandbox-OOM-killed, retry clean).
