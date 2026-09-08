@@ -60,6 +60,31 @@ export function mapGraphQLErrorType(type: string | undefined): BrokerErrorCode {
 }
 
 /**
+ * Checks if a parsed JSON result contains both data and errors (GraphQL
+ * partial success). If so, throws so the caller surfaces an error rather
+ * than returning partial data.
+ *
+ * @plan PLAN-20260731-GHBROKER.P08
+ * @requirement REQ-004
+ * @pseudocode 003-github-broker.md lines 75-76
+ */
+export function assertNoPartialSuccess(parsed: unknown): void {
+  if (parsed === null || typeof parsed !== 'object') return;
+  const obj = parsed as Record<string, unknown>;
+  if (
+    obj.data !== undefined &&
+    Array.isArray(obj.errors) &&
+    obj.errors.length > 0
+  ) {
+    const first = obj.errors[0] as Record<string, unknown>;
+    const type = typeof first.type === 'string' ? first.type : undefined;
+    const message =
+      typeof first.message === 'string' ? first.message : 'GraphQL error';
+    throw brokerError(mapGraphQLErrorType(type), message);
+  }
+}
+
+/**
  * Classifies a gh CLI stderr string into a structured broker error code.
  *
  * This is defensive parsing of genuinely external input (gh stderr), which is

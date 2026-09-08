@@ -24,7 +24,11 @@ import {
   renderChecks,
   type GitHubBrokerClient,
 } from './github.js';
-import { GITHUB_OP_SPECS, type GithubParamKind } from './github-ops.js';
+import {
+  GITHUB_OP_SPECS,
+  GITHUB_PARAM_KIND_HINTS,
+  type GithubParamKind,
+} from './github-ops.js';
 
 /** Records the operations dispatched to the broker. */
 function textOrEmpty(value: string | null | undefined): string {
@@ -68,6 +72,7 @@ const VALID_SAMPLE_BY_KIND: Record<GithubParamKind, unknown> = {
   assignee: ['x'],
   milestone: 'x',
   project: 'x',
+  projectList: ['x'],
   branch: 'x',
 };
 
@@ -586,18 +591,25 @@ describe('github tool', () => {
     /**
      * A `type: ['string','array']` union is unprojectable: every provider's
      * `normalizeType` collapses it to `'string'`, so the model would be told
-     * arrays are invalid. The label/assignee family must declare a concrete
+     * arrays are invalid. Repeatable string parameters must declare a concrete
      * array type so a model can pass an array.
      *
      * @plan PLAN-20260731-GHBROKER.P15
-     * @requirement REQ-008
+     * @plan project-plans/issue3592.md
+     * @requirement REQ-008, AC-1
+     * @issue 3592
      */
-    it('declares label/assignee params as array<string>, never a type union', () => {
+    it('declares repeatable string params as array<string>, never a type union', () => {
       const tool = new GithubTool(stubClient());
       const schema = tool.parameterSchema as {
         properties: Record<
           string,
-          { type?: unknown; items?: { type?: string } }
+          {
+            type?: unknown;
+            items?: { type?: string };
+            minItems?: number;
+            description?: string;
+          }
         >;
       };
       for (const name of [
@@ -607,11 +619,19 @@ describe('github tool', () => {
         'assignee',
         'addAssignee',
         'removeAssignee',
+        'addProject',
       ]) {
         const prop = schema.properties[name];
         expect(prop.type).toBe('array');
         expect(prop.items?.type).toBe('string');
       }
+      expect(schema.properties.addProject.minItems).toBe(1);
+      expect(schema.properties.addProject.description).toBe(
+        'Project names to add, as a non-empty array of strings. Accepted by issue.edit.',
+      );
+      expect(GITHUB_PARAM_KIND_HINTS.projectList).toBe(
+        'non-empty array of strings',
+      );
     });
 
     /**

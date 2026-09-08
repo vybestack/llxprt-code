@@ -33,9 +33,11 @@ import {
   buildIssueCreateArgv,
   buildIssueCommentArgv,
   buildIssueCloseArgv,
+  executeIssueCreate,
   shapeCreatedUrl,
   validateIssueCreateParams,
 } from '../github-broker-issue-write-ops.js';
+import { BrokerErrorException } from '../github-broker-errors.js';
 import {
   buildPrCreateArgv,
   buildPrCommentArgv,
@@ -72,6 +74,55 @@ function hasNoRequiredParams([, descriptor]: [
   (typeof OP_REGISTRY)[string],
 ]): boolean {
   return (descriptor.requiredParams ?? []).length === 0;
+}
+
+function makeRunner(replies: Array<[string, unknown]> = []): {
+  run: (argv: readonly string[], options?: unknown) => Promise<unknown>;
+  calls: string[][];
+} {
+  const calls: string[][] = [];
+  const run = async (argv: readonly string[]): Promise<unknown> => {
+    calls.push([...argv]);
+    const joined = argv.join(' ');
+    for (const [fragment, payload] of replies) {
+      if (joined.includes(fragment)) return payload;
+    }
+    return {};
+  };
+  return { run, calls };
+}
+
+function projectItemsReply(titles: readonly string[]): unknown {
+  return {
+    data: {
+      repository: {
+        issue: {
+          projectItems: {
+            nodes: titles.map((title) => ({ project: { title } })),
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      },
+    },
+  };
+}
+
+async function captureFailure(
+  action: () => Promise<unknown>,
+): Promise<unknown> {
+  try {
+    await action();
+    return null;
+  } catch (error) {
+    return error;
+  }
+}
+
+function asBrokerError(value: unknown): BrokerErrorException {
+  if (!(value instanceof BrokerErrorException)) {
+    throw new Error('expected a BrokerErrorException');
+  }
+  return value;
 }
 
 describe('P11a write operations', () => {
@@ -269,6 +320,112 @@ describe('P11a write operations', () => {
       expect(out).toStrictEqual({ number: 1 });
       expect((await tmpBodyDirs()).length).toBe(before.length);
     });
+  });
+});
+
+/**
+ * @plan project-plans/issue3592.md
+ * @requirement AC-2, AC-5
+ * @issue 3592
+ */
+describe('issue.create project verification', () => {
+  /**
+   * @plan project-plans/issue3592.md
+   * @requirement AC-5
+   * @issue 3592
+   */
+  it('returns the created issue only after confirming project membership', async () => {
+    const url = 'https://github.com/vybestack/llxprt-code/issues/3592';
+    const { run, calls } = makeRunner([
+      ['issue create', `${url}\n`],
+      ['projectItems', projectItemsReply(['LLxprt Roadmap'])],
+    ]);
+
+    const result = await executeIssueCreate(
+      {
+        title: 'Project verification',
+        project: 'LLxprt Roadmap',
+        repo: 'vybestack/llxprt-code',
+      },
+      run,
+    );
+
+    expect(result).toStrictEqual({ url, number: 3592 });
+    expect(calls).toHaveLength(2);
+    expect(calls[0].slice(0, 2)).toStrictEqual(['issue', 'create']);
+    expect(calls[1].join(' ')).toContain('projectItems');
+  });
+
+  /**
+   * @plan project-plans/issue3592.md
+   * @requirement AC-2, AC-5
+   * @issue 3592
+   */
+  it('throws a structured error when the created issue lacks the project', async () => {
+    const url = 'https://github.com/vybestack/llxprt-code/issues/3592';
+    const { run } = makeRunner([
+      ['issue create', url],
+      ['projectItems', projectItemsReply([])],
+    ]);
+
+    const caught = await captureFailure(() =>
+      executeIssueCreate(
+        {
+          title: 'Project verification',
+          project: 'LLxprt Roadmap',
+          repo: 'vybestack/llxprt-code',
+        },
+        run,
+      ),
+    );
+
+    const error = asBrokerError(caught);
+    expect(error.brokerError.code).toBe('GITHUB_ERROR');
+    expect(error.message).toContain('"LLxprt Roadmap"');
+  });
+
+  /**
+   * @plan project-plans/issue3592.md
+   * @requirement AC-5
+   * @issue 3592
+   */
+  it('names gh output when the created issue number cannot be determined', async () => {
+    const url = 'https://github.com/vybestack/llxprt-code/issues/not-a-number';
+    const { run } = makeRunner([['issue create', url]]);
+
+    const caught = await captureFailure(() =>
+      executeIssueCreate(
+        {
+          title: 'Project verification',
+          project: 'LLxprt Roadmap',
+          repo: 'vybestack/llxprt-code',
+        },
+        run,
+      ),
+    );
+
+    const error = asBrokerError(caught);
+    expect(error.brokerError.code).toBe('GITHUB_ERROR');
+    expect(error.message).toContain(url);
+  });
+
+  /**
+   * @plan project-plans/issue3592.md
+   * @requirement AC-5
+   * @issue 3592
+   */
+  it('does not read projectItems when no project was requested', async () => {
+    const url = 'https://github.com/vybestack/llxprt-code/issues/3592';
+    const { run, calls } = makeRunner([['issue create', `${url}\n`]]);
+
+    const result = await executeIssueCreate(
+      { title: 'No project', repo: 'vybestack/llxprt-code' },
+      run,
+    );
+
+    expect(result).toStrictEqual({ url, number: 3592 });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].slice(0, 2)).toStrictEqual(['issue', 'create']);
   });
 });
 

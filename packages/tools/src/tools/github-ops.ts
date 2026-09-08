@@ -48,6 +48,7 @@ export type GithubParamKind =
   | 'assignee'
   | 'milestone'
   | 'project'
+  | 'projectList'
   | 'branch';
 
 /**
@@ -129,7 +130,7 @@ export const GITHUB_OP_SPECS: Readonly<Record<string, GithubOpSpec>> = {
       removeLabel: 'label',
       addAssignee: 'assignee',
       removeAssignee: 'assignee',
-      addProject: 'project',
+      addProject: 'projectList',
       removeProject: 'project',
       milestone: 'milestone',
       type: 'freetext',
@@ -309,6 +310,7 @@ export const GITHUB_PARAM_KIND_HINTS: Readonly<
   assignee: 'array of strings',
   milestone: 'string',
   project: 'string',
+  projectList: 'non-empty array of strings',
   branch: 'string',
 };
 
@@ -540,6 +542,20 @@ function validateStringOrArrayValue(
 }
 
 /**
+ * Validates issue.edit addProject as a string or non-empty string array.
+ *
+ * @plan project-plans/issue3592.md
+ * @requirement AC-1
+ * @issue 3592
+ */
+function validateProjectListValue(key: string, value: unknown): string | null {
+  if (Array.isArray(value) && value.length === 0) {
+    return `Parameter ${key} must be a non-empty array of strings`;
+  }
+  return validateStringOrArrayValue(key, value);
+}
+
+/**
  * Validates that `value` is a string within the allowed list, producing the
  * same two-stage messages the broker always produced (non-string vs.
  * out-of-set).
@@ -706,6 +722,7 @@ const KIND_VALIDATORS: Readonly<
   assignee: validateStringOrArrayValue,
   milestone: validateStringValue,
   project: validateStringValue,
+  projectList: validateProjectListValue,
   branch: validateStringValue,
   body: validateStringValue,
   freetext: validateStringValue,

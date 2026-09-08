@@ -17,7 +17,11 @@
  * @pseudocode 003-github-broker.md lines 38-55
  */
 
-import type { OpDescriptor, ValidationError } from './github-broker-types.js';
+import type {
+  GhRunner,
+  OpDescriptor,
+  ValidationError,
+} from './github-broker-types.js';
 import { validateParams } from './github-broker-validation.js';
 import {
   GITHUB_OP_SPECS,
@@ -25,6 +29,12 @@ import {
 } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import { extractString } from './github-broker-shaping.js';
 import { appendMulti, appendRepo, appendString } from './github-broker-argv.js';
+import { brokerError } from './github-broker-errors.js';
+import {
+  requestedProjectTitles,
+  resolveOwnerName,
+  verifyIssueProjectMembership,
+} from './github-broker-multistep-ops.js';
 
 const ISSUE_CREATE_SPEC: GithubOpSpec = GITHUB_OP_SPECS['issue.create'];
 const ISSUE_COMMENT_SPEC: GithubOpSpec = GITHUB_OP_SPECS['issue.comment'];
@@ -92,6 +102,41 @@ export function buildIssueCreateArgv(
   return argv;
 }
 
+/**
+ * Executes issue.create and verifies any requested project membership.
+ *
+ * @plan project-plans/issue3592.md
+ * @requirement AC-2, AC-5, AC-6
+ * @issue 3592
+ */
+export async function executeIssueCreate(
+  params: Record<string, unknown>,
+  run: GhRunner,
+): Promise<{ url: string; number: number | null }> {
+  const rawText = await run(buildIssueCreateArgv(params), { rawOutput: true });
+  const created = shapeCreatedUrl(rawText);
+  const projectTitles = requestedProjectTitles(params.project);
+  if (projectTitles.length === 0) return created;
+
+  if (created.number === null) {
+    throw brokerError(
+      'GITHUB_ERROR',
+      `issue.create: could not determine the created issue number from gh output: ${created.url}`,
+    );
+  }
+
+  const { owner, name } = await resolveOwnerName(run, params);
+  await verifyIssueProjectMembership(
+    run,
+    owner,
+    name,
+    created.number,
+    projectTitles,
+    'issue.create',
+  );
+  return created;
+}
+
 /** The issue.create operation descriptor. */
 export const issueCreateDescriptor: OpDescriptor = {
   name: 'issue.create',
@@ -102,6 +147,7 @@ export const issueCreateDescriptor: OpDescriptor = {
   rawOutput: true,
   buildArgv: (params) => buildIssueCreateArgv(params),
   shape: (rawText) => shapeCreatedUrl(rawText),
+  execute: (params, run) => executeIssueCreate(params, run),
 };
 
 // ─── issue.comment ───────────────────────────────────────────────────────────
