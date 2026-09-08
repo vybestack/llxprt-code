@@ -1,0 +1,297 @@
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { describe, expect, it } from 'bun:test';
+import {
+  createDialogStore,
+  selectActiveDialog,
+  DIALOG_PRIORITY,
+  type DialogKind,
+} from './dialogStore.js';
+
+function prompt(settings?: { prompt?: string } = {}) {
+  return { prompt: settings.prompt ?? 'proceed?', onConfirm: () => {} };
+}
+
+const bodyOrder: DialogKind[] = [
+  'theme',
+  'settings',
+  'auth',
+  'oauthCode',
+  'editor',
+  'provider',
+  'loadProfile',
+  'createProfile',
+  'profileList',
+  'profileDetail',
+  'profileEditor',
+  'tools',
+  'privacy',
+  'permissions',
+  'logging',
+  'subagent',
+  'models',
+  'sessionBrowser',
+  'modelConfig',
+  'policies',
+];
+
+function open(kinds: DialogKind[]) {
+  const { store, commands } = createDialogStore();
+  for (const kind of kinds) {
+    commands.openDialog({ kind, payload: {} });
+  }
+  return { store, commands };
+}
+
+describe('createDialogStore', () => {
+  it('opens a dialog and selectActiveDialog reports it', () => {
+    const { store, commands } = createDialogStore();
+    commands.openDialog({ kind: 'privacy', payload: {} });
+    expect(selectActiveDialog(store.getState())).toStrictEqual({
+      kind: 'privacy',
+      payload: {},
+    });
+  });
+
+  it('openDialog pushes distinct requests for distinct kinds', () => {
+    const { store, commands } = createDialogStore();
+    commands.openDialog({ kind: 'privacy', payload: {} });
+    commands.openDialog({ kind: 'policies', payload: {} });
+    commands.openDialog({ kind: 'models', payload: {} });
+    expect(store.getState().requests).toHaveLength(3);
+  });
+
+  it('openDialog replaces an open kind in place (no duplicate request)', () => {
+    const { store, commands } = createDialogStore();
+    commands.openDialog({
+      kind: 'workspaceMigration',
+      payload: { extensions: [] },
+    });
+    commands.openDialog({
+      kind: 'workspaceMigration',
+      payload: { extensions: [{ name: 'a' }] },
+    });
+    const state = store.getState();
+    expect(state.requests).toHaveLength(1);
+    expect(state.requests[0]).toStrictEqual({
+      kind: 'workspaceMigration',
+      payload: { extensions: [{ name: 'a' }] },
+    });
+  });
+
+  it('closeDialog removes only the targeted kind', () => {
+    const { store, commands } = createDialogStore();
+    commands.openDialog({ kind: 'privacy', payload: {} });
+    commands.openDialog({ kind: 'policies', payload: {} });
+    commands.closeDialog('privacy');
+    expect(selectActiveDialog(store.getState())).toStrictEqual({
+      kind: 'policies',
+      payload: {},
+    });
+  });
+
+  it('closeDialog on an absent kind is a no-op', () => {
+    const { store, commands } = createDialogStore();
+    commands.closeDialog('privacy');
+    const state = store.getState();
+    expect(state.requests).toHaveLength(0);
+    expect(state.confirmationRequest).toBeNull();
+  });
+
+  it('updateDialogPayload merges a partial patch over the existing payload', () => {
+    const { store, commands } = createDialogStore();
+    commands.openDialog({
+      kind: 'welcome',
+      payload: {
+        state: {
+          step: 'welcome',
+          authInProgress: false,
+          modelsLoadStatus: 'idle',
+        },
+        availableProviders: [],
+        availableModels: [],
+      },
+    });
+    commands.updateDialogPayload('welcome', {
+      state: { step: 'provider', authInProgress: false, modelsLoadStatus: 'idle' },
+    });
+    expect(store.getState().requests[0]?.payload).toStrictEqual({
+      state: { step: 'provider', authInProgress: false, modelsLoadStatus: 'idle' },
+      availableProviders: [],
+      availableModels: [],
+    });
+  });
+
+  it('updateDialogPayload on an absent kind is a no-op', () => {
+    const { store, commands } = createDialogStore();
+    commands.openDialog({ kind: 'privacy', payload: {} });
+    commands.updateDialogPayload('settings', {});
+    expect(store.getState().requests).toHaveLength(1);
+    expect(store.getState().requests[0]).toStrictEqual({
+      kind: 'privacy',
+      payload: {},
+    });
+  });
+
+  it('confirmation request uses the dedicated slot, not the requests list', () => {
+    const { store, commands } = createDialogStore();
+    commands.setConfirmationRequest({
+      kind: 'confirmation',
+      payload: prompt(),
+    });
+    expect(store.getState().requests).toHaveLength(0);
+    expect(store.getState().confirmationRequest).toStrictEqual({
+      kind: 'confirmation',
+      payload: { prompt: 'proceed?', onConfirm: expect.any(Function) },
+    });
+  });
+
+  it('openDialog (confirmation) uses the dedicated slot, not the requests list', () => {
+    const { store, commands } = createDialogStore();
+    commands.openDialog({ kind: 'confirmation', payload: prompt() });
+    expect(store.getState().requests).toHaveLength(0);
+    expect(store.getState().confirmationRequest).toStrictEqual({
+      kind: 'confirmation',
+      payload: { prompt: 'proceed?', onConfirm: expect.any(Function) },
+    });
+  });
+
+  it('setConfirmationRequest replaces the previous slot', () => {
+    const { store, commands } = createDialogStore();
+    commands.setConfirmationRequest({
+      kind: 'confirmation',
+      payload: prompt(),
+    });
+    commands.setConfirmationRequest({
+      kind: 'confirmation',
+      payload: prompt({ prompt: 'second' }),
+    });
+    expect(store.getState().confirmationRequest).toStrictEqual({
+      kind: 'confirmation',
+      payload: { prompt: 'second', onConfirm: expect.any(Function) },
+    });
+  });
+
+  it('setConfirmationRequest(null) clears the slot', () => {
+    const { store, commands } = createDialogStore();
+    commands.setConfirmationRequest({
+      kind: 'confirmation',
+      payload: prompt(),
+    });
+    commands.setConfirmationRequest(null);
+    expect(store.getState().confirmationRequest).toBeNull();
+  });
+
+  it('extension confirm requests accumulate FIFO and the head renders first', () => {
+    const { store, commands } = createDialogStore();
+    const first = prompt({ prompt: 'first' });
+    const second = prompt({ prompt: 'second' });
+    commands.addConfirmUpdateExtensionRequest({
+      kind: 'extensionUpdateConfirm',
+      payload: first,
+    });
+    commands.addConfirmUpdateExtensionRequest({
+      kind: 'extensionUpdateConfirm',
+      payload: second,
+    });
+    const state = store.getState();
+    expect(state.confirmUpdateLlxprtExtensionRequests).toHaveLength(2);
+    expect(
+      state.confirmUpdateLlxprtExtensionRequests.map(
+        (r) => r.payload.prompt,
+      ),
+    ).toStrictEqual(['first', 'second']);
+    expect(selectActiveDialog(state)).toStrictEqual({
+      kind: 'extensionUpdateConfirm',
+      payload: first,
+    });
+  });
+
+  it('openDialog (extensionUpdateConfirm) appends FIFO too', () => {
+    const { store, commands } = createDialogStore();
+    commands.openDialog({
+      kind: 'extensionUpdateConfirm',
+      payload: prompt({ prompt: 'first' }),
+    });
+    commands.openDialog({
+      kind: 'extensionUpdateConfirm',
+      payload: prompt({ prompt: 'second' }),
+    });
+    expect(
+      store
+        .getState()
+        .confirmUpdateLlxprtExtensionRequests.map((r) => r.payload.prompt),
+    ).toStrictEqual(['first', 'second']);
+  });
+
+  it('resolveConfirmUpdateExtensionRequest removes only that request', () => {
+    const { store, commands } = createDialogStore();
+    commands.addConfirmUpdateExtensionRequest({
+      kind: 'extensionUpdateConfirm',
+      payload: prompt({ prompt: 'x' }),
+    });
+    commands.addConfirmUpdateExtensionRequest({
+      kind: 'extensionUpdateConfirm',
+      payload: prompt({ prompt: 'y' }),
+    });
+    const target = store.getState().confirmUpdateLlxprtExtensionRequests[0];
+    if (!target) {
+      throw new Error('expected a request to exist');
+    }
+    commands.resolveConfirmUpdateExtensionRequest(target);
+    expect(
+      store
+        .getState()
+        .confirmUpdateLlxprtExtensionRequests.map((r) => r.payload.prompt),
+    ).toStrictEqual(['y']);
+  });
+
+  it('DIALOG_PRIORITY matches the DialogManager if-chain order', () => {
+    expect(DIALOG_PRIORITY).toStrictEqual([
+      'workspaceMigration',
+      'idePrompt',
+      'folderTrust',
+      'welcome',
+      'confirmation',
+      'extensionUpdateConfirm',
+      ...bodyOrder,
+    ]);
+  });
+
+  it('early dialogs outrank later body dialogs by DIALOG_PRIORITY', () => {
+    const { store, commands } = createDialogStore();
+    commands.setConfirmationRequest({
+      kind: 'confirmation',
+      payload: prompt(),
+    });
+    commands.openDialog({ kind: 'folderTrust', payload: {} });
+    expect(selectActiveDialog(store.getState())?.kind).toBe('folderTrust');
+
+    commands.closeDialog('folderTrust');
+    expect(selectActiveDialog(store.getState())?.kind).toBe('confirmation');
+  });
+
+  it('body dialogs resolve in DialogManager render order', () => {
+    const { store, commands } = open(bodyOrder);
+    expect(selectActiveDialog(store.getState())?.kind).toBe('theme');
+    for (const kind of bodyOrder) {
+      commands.closeDialog(kind);
+    }
+    expect(selectActiveDialog(store.getState())).toBeNull();
+  });
+
+  it('reopening a lower-ranked body dialog does not demote the active one', () => {
+    const { store, commands } = open(['theme', 'settings']);
+    commands.closeDialog('theme');
+    expect(selectActiveDialog(store.getState())?.kind).toBe('settings');
+  });
+
+  it('selectActiveDialog returns null when nothing is open', () => {
+    const { store } = createDialogStore();
+    expect(selectActiveDialog(store.getState())).toBeNull();
+  });
+});

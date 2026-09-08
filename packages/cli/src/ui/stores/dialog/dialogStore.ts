@@ -219,9 +219,15 @@ export function createDialogStore(): DialogStore {
   ): void => {
     store.setState((prev) => ({
       ...prev,
-      requests: prev.requests.map((r) =>
-        r.kind === kind ? { ...r, payload: { ...r.payload, ...patch } } : r,
-      ),
+      requests: prev.requests.map((r) => {
+        if (r.kind !== kind) {
+          return r;
+        }
+        return {
+          ...r,
+          payload: { ...r.payload, ...patch },
+        } as DialogRequest;
+      }),
     }));
   };
 
