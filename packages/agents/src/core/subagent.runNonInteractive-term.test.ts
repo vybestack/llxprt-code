@@ -123,9 +123,10 @@ describe('subagent.ts', () => {
 
   beforeEach(() => {
     // Guards against a previous test leaking fake-timer state across test
-    // boundaries; throws (rather than a lint-suppressed expect) so a leak fails
-    // the next test loudly.
+    // boundaries. Restore real timers before failing so a leak fails exactly
+    // one test instead of poisoning every later one.
     if (vi.isFakeTimers()) {
+      vi.useRealTimers();
       throw new Error(
         'subagent.ts tests: previous test leaked fake timers into this one',
       );
