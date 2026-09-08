@@ -5,8 +5,18 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { renderHook, waitFor } from '../../test-utils/render.js';
+import {
+  renderHook,
+  waitFor,
+  createMockSettings,
+  renderWithProviders,
+} from '../../test-utils/render.js';
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
+
+// Enable React's act() environment so component state updates are flushed.
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 // Mock the providers runtime barrel to avoid the broken dist dependency chain.
 void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
@@ -21,6 +31,9 @@ void vi.mock('@vybestack/llxprt-code-providers', () => ({
 }));
 
 import { useModelDialogHandler } from './modelDialogHandler.js';
+import { DialogManager } from './DialogManager.js';
+import { KeypressProvider } from '../contexts/KeypressContext.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 // --- Stateful runtime fake ---
 interface FakeRuntimeState {
@@ -34,6 +47,7 @@ interface FakeRuntimeState {
     infoMessages: string[];
   };
   providerStatus: { providerName: string | null };
+  activeProviderName: string | null;
   setActiveModelShouldFail: boolean;
   setProviderShouldFail: boolean;
 }
@@ -50,6 +64,7 @@ function createFakeRuntime(overrides: Partial<FakeRuntimeState> = {}) {
       infoMessages: [],
     },
     providerStatus: { providerName: 'openai' },
+    activeProviderName: 'openai',
     setActiveModelShouldFail: false,
     setProviderShouldFail: false,
     ...overrides,
@@ -72,6 +87,7 @@ function createFakeRuntime(overrides: Partial<FakeRuntimeState> = {}) {
       return state.setProviderResult;
     }),
     getActiveProviderStatus: vi.fn(() => state.providerStatus),
+    getActiveProviderName: vi.fn(() => state.activeProviderName),
   };
 }
 
@@ -82,6 +98,10 @@ let mockUiActions: {
 };
 let mockAddItem: ReturnType<typeof vi.fn>;
 let callSequence: string[];
+// Per-test UIState for the render-dispatch tests. The vi.mock factory is
+// hoisted above this declaration, so it must dereference the holder at CALL
+// time, never at factory-definition time.
+let mockUiState: Record<string, unknown>;
 
 void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => fakeRuntime,
@@ -92,12 +112,7 @@ void vi.mock('../contexts/UIActionsContext.js', () => ({
 }));
 
 void vi.mock('../contexts/UIStateContext.js', () => ({
-  useUIState: () => ({
-    constrainHeight: false,
-    terminalHeight: 40,
-    mainAreaWidth: 100,
-    commandContext: {},
-  }),
+  useUIState: () => mockUiState,
 }));
 
 function makeModel(provider: string, id: string): HydratedModel {
@@ -115,6 +130,12 @@ describe('useModelDialogHandler', () => {
     mockUiActions = {
       closeModelsDialog: vi.fn(),
       openModelConfigDialog: vi.fn(),
+    };
+    mockUiState = {
+      constrainHeight: false,
+      terminalHeight: 40,
+      mainAreaWidth: 100,
+      commandContext: {},
     };
     fakeRuntime = createFakeRuntime();
   });
@@ -274,5 +295,186 @@ describe('useModelDialogHandler', () => {
     expect(mockAddItem).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'info' }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Render dispatch: which dialog frame the real DialogManager paints.
+// ---------------------------------------------------------------------------
+
+// Distinctive strings each dialog paints, verified against the components.
+const FOLDER_TRUST_MARKER = 'Do you trust this folder?';
+const PROVIDER_MARKER = 'Select Provider (';
+const LOAD_PROFILE_MARKER = 'Select Profile (';
+const CREATE_PROFILE_MARKER = 'Create New Profile - Step 1 of 6';
+const TOOLS_MARKER = 'Select a tool to disable:';
+
+/**
+ * A UIActions stand-in for render tests. Every action property any dialog
+ * branch may reference resolves to a fresh vi.fn(); nothing here drives
+ * behavior, the dialogs under test never call them during a static render.
+ */
+function makeRenderUiActions(): Record<string, ReturnType<typeof vi.fn>> {
+  const store: Record<string, ReturnType<typeof vi.fn>> = {};
+  return new Proxy(store, {
+    get(target, prop: string) {
+      if (!(prop in target)) {
+        target[prop] = vi.fn();
+      }
+      return target[prop];
+    },
+  });
+}
+
+/**
+ * Baseline UIState with every dialog flag closed plus the data fields the
+ * rendered dialogs consume. Per-test flag overrides replace entries.
+ */
+function makeDialogManagerUiState(
+  flagOverrides: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    constrainHeight: false,
+    terminalHeight: 40,
+    mainAreaWidth: 100,
+    commandContext: {},
+    // Early tier.
+    showWorkspaceMigrationDialog: false,
+    shouldShowIdePrompt: false,
+    isFolderTrustDialogOpen: false,
+    isWelcomeDialogOpen: false,
+    confirmationRequest: null,
+    confirmUpdateLlxprtExtensionRequests: [],
+    // First half.
+    isThemeDialogOpen: false,
+    isSettingsDialogOpen: false,
+    isAuthDialogOpen: false,
+    isOAuthCodeDialogOpen: false,
+    isEditorDialogOpen: false,
+    isProviderDialogOpen: false,
+    // Profile tier.
+    isLoadProfileDialogOpen: false,
+    isCreateProfileDialogOpen: false,
+    isProfileListDialogOpen: false,
+    isProfileDetailDialogOpen: false,
+    isProfileEditorDialogOpen: false,
+    // Second half.
+    isToolsDialogOpen: false,
+    showPrivacyNotice: false,
+    isPermissionsDialogOpen: false,
+    isLoggingDialogOpen: false,
+    isSubagentDialogOpen: false,
+    isModelsDialogOpen: false,
+    isSessionBrowserDialogOpen: false,
+    isModelConfigDialogOpen: false,
+    isPoliciesDialogOpen: false,
+    // Data consumed by the dialogs these tests render.
+    providerOptions: ['ollama'],
+    selectedProvider: undefined,
+    profiles: ['alpha', 'beta'],
+    toolsDialogTools: [{ name: 'shell', displayName: 'Shell' }],
+    toolsDialogAction: 'disable',
+    toolsDialogDisabledTools: [],
+    ...flagOverrides,
+  };
+}
+
+function renderDialogManager(flags: Record<string, unknown>): string {
+  mockUiState = makeDialogManagerUiState(flags);
+  mockUiActions = makeRenderUiActions() as typeof mockUiActions;
+  const configStub = {
+    getWorkingDir: () => '/workspace/project',
+  } as CliUiRuntime;
+  const { lastFrame } = renderWithProviders(
+    <KeypressProvider>
+      <DialogManager
+        addItem={mockAddItem}
+        terminalWidth={100}
+        config={configStub}
+        settings={createMockSettings({})}
+      />
+    </KeypressProvider>,
+  );
+  return lastFrame() ?? '';
+}
+
+describe('DialogManager render dispatch', () => {
+  it('renders the folder-trust dialog when only its flag is set', () => {
+    const frame = renderDialogManager({ isFolderTrustDialogOpen: true });
+    expect(frame).toContain(FOLDER_TRUST_MARKER);
+    expect(frame).not.toContain(PROVIDER_MARKER);
+    expect(frame).not.toContain(LOAD_PROFILE_MARKER);
+    expect(frame).not.toContain(CREATE_PROFILE_MARKER);
+    expect(frame).not.toContain(TOOLS_MARKER);
+  });
+
+  it('renders the provider dialog when only its flag is set', () => {
+    const frame = renderDialogManager({ isProviderDialogOpen: true });
+    expect(frame).toContain(PROVIDER_MARKER);
+    expect(frame).not.toContain(FOLDER_TRUST_MARKER);
+    expect(frame).not.toContain(LOAD_PROFILE_MARKER);
+    expect(frame).not.toContain(CREATE_PROFILE_MARKER);
+    expect(frame).not.toContain(TOOLS_MARKER);
+  });
+
+  it('renders the load-profile dialog when only its flag is set', () => {
+    const frame = renderDialogManager({ isLoadProfileDialogOpen: true });
+    expect(frame).toContain(LOAD_PROFILE_MARKER);
+    expect(frame).not.toContain(FOLDER_TRUST_MARKER);
+    expect(frame).not.toContain(PROVIDER_MARKER);
+    expect(frame).not.toContain(CREATE_PROFILE_MARKER);
+    expect(frame).not.toContain(TOOLS_MARKER);
+  });
+
+  it('renders the profile-create wizard when only its flag is set', () => {
+    const frame = renderDialogManager({ isCreateProfileDialogOpen: true });
+    expect(frame).toContain(CREATE_PROFILE_MARKER);
+    expect(frame).not.toContain(FOLDER_TRUST_MARKER);
+    expect(frame).not.toContain(PROVIDER_MARKER);
+    expect(frame).not.toContain(LOAD_PROFILE_MARKER);
+    expect(frame).not.toContain(TOOLS_MARKER);
+  });
+
+  it('renders the tools dialog when only its flag is set', () => {
+    const frame = renderDialogManager({ isToolsDialogOpen: true });
+    expect(frame).toContain(TOOLS_MARKER);
+    expect(frame).not.toContain(FOLDER_TRUST_MARKER);
+    expect(frame).not.toContain(PROVIDER_MARKER);
+    expect(frame).not.toContain(LOAD_PROFILE_MARKER);
+    expect(frame).not.toContain(CREATE_PROFILE_MARKER);
+  });
+
+  it('renders exactly the folder-trust dialog when early, first-half, and second-half flags are all set', () => {
+    // Early dialogs win: folder trust beats provider (first half) and tools
+    // (second half).
+    const frame = renderDialogManager({
+      isFolderTrustDialogOpen: true,
+      isProviderDialogOpen: true,
+      isToolsDialogOpen: true,
+    });
+    expect(frame).toContain(FOLDER_TRUST_MARKER);
+    expect(frame).not.toContain(PROVIDER_MARKER);
+    expect(frame).not.toContain(TOOLS_MARKER);
+  });
+
+  it('renders exactly the provider dialog when first-half and second-half flags are both set', () => {
+    // First half beats second half: provider beats tools.
+    const frame = renderDialogManager({
+      isProviderDialogOpen: true,
+      isToolsDialogOpen: true,
+    });
+    expect(frame).toContain(PROVIDER_MARKER);
+    expect(frame).not.toContain(TOOLS_MARKER);
+  });
+
+  it('renders exactly the load-profile dialog when both profile flags are set', () => {
+    // Inside the profile tier, load beats create (declaration order in
+    // renderProfileDialogs).
+    const frame = renderDialogManager({
+      isLoadProfileDialogOpen: true,
+      isCreateProfileDialogOpen: true,
+    });
+    expect(frame).toContain(LOAD_PROFILE_MARKER);
+    expect(frame).not.toContain(CREATE_PROFILE_MARKER);
   });
 });
