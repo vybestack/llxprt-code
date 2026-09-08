@@ -117,7 +117,6 @@ export interface ProfileEphemeralSettings {
   'max-image-dimension'?: number;
   'max-image-pixels'?: number;
   'max-prompt-tokens'?: number;
-  'disabled-tools'?: string[];
   'shell-replacement'?: 'allowlist' | 'all' | 'none' | boolean;
   'todo-continuation'?: boolean;
   'socket-timeout'?: number;

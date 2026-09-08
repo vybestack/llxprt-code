@@ -17,12 +17,15 @@ describe('redactSensitiveValues', () => {
     });
   });
 
-  it('redacts auth-key aliases', () => {
+  it('no longer redacts legacy auth-key spellings (#2533 C1: migrated at load)', () => {
+    // Legacy spellings are not registry keys anymore; they are rewritten to
+    // 'auth-key' by migrateLegacySettingKeys before values reach storage.
+    // After migration the canonical key is what gets redacted.
     expect(
       redactSensitiveValues({ apiKey: 'first', 'api-key': 'second' }),
     ).toStrictEqual({
-      apiKey: REDACTED_VALUE,
-      'api-key': REDACTED_VALUE,
+      apiKey: 'first',
+      'api-key': 'second',
     });
   });
 

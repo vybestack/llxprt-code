@@ -347,7 +347,8 @@ describe('ProfileManager — save and load with SettingsService', () => {
       'false',
     ]);
     expect(appliedData['tools.disabled']).toStrictEqual(['2', 'shell']);
-    expect(appliedData['disabled-tools']).toStrictEqual(['2', 'shell']);
+    // #2533 C1: canonical keys only — no legacy 'disabled-tools' write.
+    expect(appliedData['disabled-tools']).toBeUndefined();
   });
 
   it('load normalizes legacy disabled-tools entries before applying settings', async () => {
@@ -373,14 +374,13 @@ describe('ProfileManager — save and load with SettingsService', () => {
 
     await pm.load('legacy-tool-normalization', mockSettingsService);
 
+    // The legacy spelling is migrated once at profile load (#2533 C1
+    // compat point), then applied under the canonical key only.
     expect(appliedData['tools.disabled']).toStrictEqual([
       '3',
       'read_many_files',
     ]);
-    expect(appliedData['disabled-tools']).toStrictEqual([
-      '3',
-      'read_many_files',
-    ]);
+    expect(appliedData['disabled-tools']).toBeUndefined();
   });
 
   it('save persists auth-keyfile in ephemeralSettings', async () => {

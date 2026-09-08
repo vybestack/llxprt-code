@@ -316,7 +316,6 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   },
   {
     key: 'tools.disabled',
-    aliases: ['disabled-tools'],
     category: 'cli-behavior',
     owner: 'agent-policy',
     propagation: 'next-turn',

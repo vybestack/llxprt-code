@@ -492,18 +492,9 @@ export class SettingsService extends EventEmitter {
 
     const allowedValue = this.get('tools.allowed');
     const disabledValue = this.get('tools.disabled');
-    const legacyDisabled = this.get('disabled-tools');
 
     const allowedTools = copyStringArray(allowedValue);
-
-    let disabledTools: string[];
-    if (Array.isArray(disabledValue)) {
-      disabledTools = copyStringArray(disabledValue);
-    } else if (Array.isArray(legacyDisabled)) {
-      disabledTools = copyStringArray(legacyDisabled);
-    } else {
-      disabledTools = [];
-    }
+    const disabledTools = copyStringArray(disabledValue);
 
     const providers: Record<string, Record<string, unknown>> = {};
     for (const [provider, settings] of Object.entries(
@@ -549,7 +540,6 @@ export class SettingsService extends EventEmitter {
       allowed: toolsAllowed,
       disabled: toolsDisabled,
     };
-    this.settings.global['disabled-tools'] = toolsDisabled;
 
     return Promise.resolve();
   }

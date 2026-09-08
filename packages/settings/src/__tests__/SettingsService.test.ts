@@ -527,7 +527,7 @@ describe('SettingsService — change event redacts sensitive values (Issue #2472
     expect(evt?.newValue).toBe('[REDACTED]');
   });
 
-  it('redacts oldValue and newValue for apiKey alias in change events', () => {
+  it('does not redact unmigrated legacy apiKey events (#2533 C1: canonical keys only)', () => {
     const svc = new SettingsService();
     svc.set('apiKey', 'sk-original');
     let evt: { key: string; oldValue: unknown; newValue: unknown } | undefined;
@@ -536,9 +536,10 @@ describe('SettingsService — change event redacts sensitive values (Issue #2472
     });
     svc.set('apiKey', 'sk-rotated');
 
+    // 'apiKey' is no longer a sensitive registry key: the alias is gone and
+    // the spelling is rewritten at load. Only canonical 'auth-key' redacts.
     expect(evt?.key).toBe('apiKey');
-    expect(evt?.oldValue).toBe('[REDACTED]');
-    expect(evt?.newValue).toBe('[REDACTED]');
+    expect(evt?.newValue).toBe('sk-rotated');
   });
 
   it('preserves non-sensitive newValue in change events', () => {

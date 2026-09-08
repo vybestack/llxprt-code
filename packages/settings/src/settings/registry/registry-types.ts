@@ -49,7 +49,6 @@ export interface ValidationResult {
 
 export interface SettingSpec {
   key: string;
-  aliases?: readonly string[];
   category: SettingCategory;
   owner: SettingOwner;
   propagation: SettingPropagation;

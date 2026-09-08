@@ -24,23 +24,6 @@ import { REGISTRY_ENTRIES_PART_2 } from './registry/registry-entries-2.js';
 import { REGISTRY_ENTRIES_PART_3 } from './registry/registry-entries-3.js';
 import { isStrictNumericString } from './numericString.js';
 
-const ALIAS_NORMALIZATION_RULES: Record<string, string> = {
-  'max-tokens': 'max_tokens',
-  maxTokens: 'max_tokens',
-  'response-format': 'response_format',
-  responseFormat: 'response_format',
-  'tool-choice': 'tool_choice',
-  toolChoice: 'tool_choice',
-  'disabled-tools': 'tools.disabled',
-};
-
-const HEADER_PRESERVE_SET = new Set([
-  'user-agent',
-  'content-type',
-  'authorization',
-  'x-api-key',
-]);
-
 export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
   ...REGISTRY_ENTRIES_PART_1,
   ...REGISTRY_ENTRIES_PART_2,
@@ -51,44 +34,23 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Exact-match key canonicalization: returns `key` unchanged unless it is
+ * already a canonical registry key (in which case it is also returned
+ * unchanged). Legacy spellings are NOT resolved here — they are rewritten
+ * once at load time by `migrateLegacySettingKeys` (legacyKeyMigration.ts,
+ * issue #2533 Phase C1). Kept as an export for external callers, which are
+ * cleaned up in Phase C2.
+ */
 export function resolveAlias(key: string): string {
-  const normalizedAlias = ALIAS_NORMALIZATION_RULES[key];
-  if (typeof normalizedAlias === 'string') {
-    return normalizedAlias;
-  }
-
-  for (const spec of SETTINGS_REGISTRY) {
-    if (spec.aliases?.includes(key) === true) {
-      return spec.key;
-    }
-  }
-
-  for (const spec of SETTINGS_REGISTRY) {
-    if (spec.key === key) {
-      return key;
-    }
-  }
-
-  const lowerKey = key.toLowerCase();
-  if (HEADER_PRESERVE_SET.has(lowerKey)) {
-    return key;
-  }
-
-  return key.replace(/-/g, '_');
+  // Exact semantics: every registry key resolves to itself; any other key
+  // (including legacy spellings) is returned unchanged.
+  const isRegistryKey = SETTINGS_REGISTRY.some((spec) => spec.key === key);
+  return isRegistryKey ? key : key;
 }
 
 export function getSettingSpec(key: string): SettingSpec | undefined {
-  // Direct canonical-key match first (fast path)
-  const direct = SETTINGS_REGISTRY.find((s) => s.key === key);
-  if (direct) {
-    return direct;
-  }
-  // Resolve alias to canonical key and look up the spec
-  const resolved = resolveAlias(key);
-  if (resolved !== key) {
-    return SETTINGS_REGISTRY.find((s) => s.key === resolved);
-  }
-  return undefined;
+  return SETTINGS_REGISTRY.find((s) => s.key === key);
 }
 
 export function normalizeSetting(key: string, value: unknown): unknown {
@@ -155,12 +117,6 @@ for (const spec of SETTINGS_REGISTRY) {
       throw new Error(
         `Session-scoped setting "${spec.key}" must not use a dotted key — ` +
           'dotted session-scoped keys are not yet supported.',
-      );
-    }
-    if (spec.aliases !== undefined && spec.aliases.length > 0) {
-      throw new Error(
-        `Session-scoped setting "${spec.key}" must not declare aliases — ` +
-          'aliased session-scoped keys are not yet supported.',
       );
     }
   }
@@ -683,16 +639,9 @@ export function getAutocompleteSuggestions(
 }
 
 function collectProviderConfigKeys(): string[] {
-  const keys: string[] = [];
-  for (const spec of SETTINGS_REGISTRY) {
-    if (spec.category === 'provider-config') {
-      keys.push(spec.key);
-      if (spec.aliases) {
-        keys.push(...spec.aliases);
-      }
-    }
-  }
-  return keys;
+  return SETTINGS_REGISTRY.filter(
+    (spec) => spec.category === 'provider-config',
+  ).map((spec) => spec.key);
 }
 
 export function getProtectedSettingKeys(): string[] {
@@ -702,10 +651,7 @@ export function getProtectedSettingKeys(): string[] {
 }
 
 const SENSITIVE_SETTING_KEYS: ReadonlySet<string> = new Set(
-  SETTINGS_REGISTRY.filter((s) => s.sensitive === true).flatMap((s) => [
-    s.key,
-    ...(s.aliases ?? []),
-  ]),
+  SETTINGS_REGISTRY.filter((s) => s.sensitive === true).map((s) => s.key),
 );
 
 export const REDACTED_VALUE = '[REDACTED]';

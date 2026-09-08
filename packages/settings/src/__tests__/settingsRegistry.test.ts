@@ -30,6 +30,7 @@ import {
   getProviderConfigKeys,
   getDirectSettingSpecs,
 } from '../settings/settingsRegistry.js';
+import { LEGACY_SETTING_KEY_MIGRATIONS } from '../settings/legacyKeyMigration.js';
 
 // ---------------------------------------------------------------------------
 // Compression strategy literal values — tested without importing core
@@ -44,50 +45,37 @@ const EXPECTED_COMPRESSION_STRATEGIES = [
   'high-density',
 ] as const;
 
-describe('resolveAlias — alias normalization', () => {
-  it('resolves max-tokens to max_tokens', () => {
-    expect(resolveAlias('max-tokens')).toBe('max_tokens');
-  });
-
-  it('resolves maxTokens to max_tokens', () => {
-    expect(resolveAlias('maxTokens')).toBe('max_tokens');
-  });
-
-  it('resolves response-format to response_format', () => {
-    expect(resolveAlias('response-format')).toBe('response_format');
-  });
-
-  it('resolves responseFormat to response_format', () => {
-    expect(resolveAlias('responseFormat')).toBe('response_format');
-  });
-
-  it('resolves tool-choice to tool_choice', () => {
-    expect(resolveAlias('tool-choice')).toBe('tool_choice');
-  });
-
-  it('resolves toolChoice to tool_choice', () => {
-    expect(resolveAlias('toolChoice')).toBe('tool_choice');
-  });
-
-  it('resolves disabled-tools to tools.disabled', () => {
-    expect(resolveAlias('disabled-tools')).toBe('tools.disabled');
-  });
-
-  it('resolves streamIdleTimeoutMs to stream-idle-timeout-ms', () => {
-    expect(resolveAlias('streamIdleTimeoutMs')).toBe('stream-idle-timeout-ms');
-  });
-
-  it('preserves user-agent without underscore conversion', () => {
+describe('resolveAlias — exact canonical-key semantics (#2533 C1)', () => {
+  it('returns canonical registry keys unchanged', () => {
+    expect(resolveAlias('max_tokens')).toBe('max_tokens');
+    expect(resolveAlias('response_format')).toBe('response_format');
+    expect(resolveAlias('tool_choice')).toBe('tool_choice');
+    expect(resolveAlias('tools.disabled')).toBe('tools.disabled');
+    expect(resolveAlias('stream-idle-timeout-ms')).toBe(
+      'stream-idle-timeout-ms',
+    );
     expect(resolveAlias('user-agent')).toBe('user-agent');
-  });
-
-  it('returns temperature unchanged (already canonical)', () => {
     expect(resolveAlias('temperature')).toBe('temperature');
+    expect(resolveAlias('auth-key')).toBe('auth-key');
   });
 
-  it('returns an unknown key unchanged', () => {
+  it('does NOT resolve legacy spellings — they are migrated at load instead', () => {
+    // Legacy spellings pass through untouched; load-time
+    // migrateLegacySettingKeys is the only thing that rewrites them.
+    expect(resolveAlias('max-tokens')).toBe('max-tokens');
+    expect(resolveAlias('maxTokens')).toBe('maxTokens');
+    expect(resolveAlias('response-format')).toBe('response-format');
+    expect(resolveAlias('responseFormat')).toBe('responseFormat');
+    expect(resolveAlias('tool-choice')).toBe('tool-choice');
+    expect(resolveAlias('toolChoice')).toBe('toolChoice');
+    expect(resolveAlias('disabled-tools')).toBe('disabled-tools');
+    expect(resolveAlias('apiKey')).toBe('apiKey');
+    expect(resolveAlias('streamIdleTimeoutMs')).toBe('streamIdleTimeoutMs');
+  });
+
+  it('returns an unknown key unchanged with NO kebab-to-snake fallback', () => {
     expect(resolveAlias('completely-unknown-key')).toBe(
-      'completely_unknown_key',
+      'completely-unknown-key',
     );
   });
 });
@@ -103,10 +91,10 @@ describe('getSettingSpec — spec lookup', () => {
     expect(spec?.category).toBe('cli-behavior');
   });
 
-  it('resolves apiKey alias to auth-key canonical spec', () => {
+  it('resolves the auth-key canonical spec directly (#2533 C1: no aliases)', () => {
     const spec = getSettingSpec('auth-key');
     expect(spec?.category).toBe('provider-config');
-    expect(spec?.aliases).toContain('apiKey');
+    expect(spec?.key).toBe('auth-key');
   });
 
   it('resolves auth-key canonical spec directly', () => {
@@ -115,18 +103,18 @@ describe('getSettingSpec — spec lookup', () => {
     expect(spec?.persistToProfile).toBe(true);
   });
 
-  it('resolves auth-keyfile canonical spec with apiKeyfile alias', () => {
+  it('resolves the auth-keyfile canonical spec without aliases', () => {
     const spec = getSettingSpec('auth-keyfile');
     expect(spec?.category).toBe('provider-config');
-    expect(spec?.aliases).toContain('apiKeyfile');
+    expect(spec?.key).toBe('auth-keyfile');
   });
 
-  it('resolves apiKey to auth-key via resolveAlias', () => {
-    expect(resolveAlias('apiKey')).toBe('auth-key');
+  it('does not resolve legacy apiKey to auth-key via resolveAlias', () => {
+    expect(resolveAlias('apiKey')).toBe('apiKey');
   });
 
-  it('resolves apiKeyfile to auth-keyfile via resolveAlias', () => {
-    expect(resolveAlias('apiKeyfile')).toBe('auth-keyfile');
+  it('does not resolve legacy apiKeyfile to auth-keyfile via resolveAlias', () => {
+    expect(resolveAlias('apiKeyfile')).toBe('apiKeyfile');
   });
 
   it('returns a spec with type enum for compression.strategy', () => {
@@ -191,42 +179,45 @@ describe('separateSettings — settings categorization', () => {
     expect(result.customHeaders['X-Foo']).toBe('bar');
   });
 
-  it('does not include apiKey in cliSettings (provider-config filtered)', () => {
-    const result = separateSettings({ apiKey: 'sk-123' });
-    expect(result.cliSettings.apiKey).toBeUndefined();
-  });
-
-  it('does not include apiKey in modelParams', () => {
-    const result = separateSettings({ apiKey: 'sk-123' });
-    expect(result.modelParams.apiKey).toBeUndefined();
-  });
-
   it('places unknown keys in modelParams as pass-through', () => {
     const result = separateSettings({ unknownKey: 'val' });
     expect(result.modelParams.unknownKey).toBe('val');
   });
 
-  it('resolves max-tokens alias to max_tokens in modelParams', () => {
-    const result = separateSettings({ 'max-tokens': 4096 });
+  it('does not special-case legacy apiKey: unknown keys pass through (provider-config filtered after migration)', () => {
+    // With exact-key semantics the registry no longer resolves 'apiKey';
+    // it must be migrated to 'auth-key' at load (legacyKeyMigration).
+    const result = separateSettings({ apiKey: 'sk-123' });
+    expect(result.cliSettings.apiKey).toBeUndefined();
+    expect(result.cliSettings['auth-key']).toBeUndefined();
+  });
+
+  it('migrated canonical max_tokens lands in modelParams', () => {
+    const result = separateSettings({ max_tokens: 4096 });
     expect(result.modelParams.max_tokens).toBe(4096);
   });
 
-  it('places streamIdleTimeoutMs (camelCase) in cliSettings, never modelParams', () => {
-    const result = separateSettings({ streamIdleTimeoutMs: 0 });
+  it('places canonical stream-idle-timeout-ms in cliSettings, never modelParams', () => {
+    const result = separateSettings({ 'stream-idle-timeout-ms': 0 });
     expect(result.cliSettings['stream-idle-timeout-ms']).toBe(0);
-    expect(result.modelParams.streamIdleTimeoutMs).toBeUndefined();
     expect(result.modelParams['stream-idle-timeout-ms']).toBeUndefined();
   });
 
-  it('does not leak streamIdleTimeoutMs into modelParams for anthropic', () => {
-    const result = separateSettings({ streamIdleTimeoutMs: 5000 }, 'anthropic');
-    expect(result.modelParams.streamIdleTimeoutMs).toBeUndefined();
+  it('does not leak canonical stream-idle-timeout-ms into modelParams for anthropic', () => {
+    const result = separateSettings(
+      { 'stream-idle-timeout-ms': 5000 },
+      'anthropic',
+    );
+    expect(result.modelParams['stream-idle-timeout-ms']).toBeUndefined();
     expect(result.cliSettings['stream-idle-timeout-ms']).toBe(5000);
   });
 
-  it('does not leak streamIdleTimeoutMs into modelParams for openai', () => {
-    const result = separateSettings({ streamIdleTimeoutMs: 5000 }, 'openai');
-    expect(result.modelParams.streamIdleTimeoutMs).toBeUndefined();
+  it('does not leak canonical stream-idle-timeout-ms into modelParams for openai', () => {
+    const result = separateSettings(
+      { 'stream-idle-timeout-ms': 5000 },
+      'openai',
+    );
+    expect(result.modelParams['stream-idle-timeout-ms']).toBeUndefined();
     expect(result.cliSettings['stream-idle-timeout-ms']).toBe(5000);
   });
 
@@ -648,32 +639,28 @@ describe('getProfilePersistableKeys — profile persistence', () => {
     expect(keys).toContain('auth-keyfile');
   });
 
-  it('apiKey alias resolves to auth-key spec via getSettingSpec', () => {
-    const spec = getSettingSpec('apiKey');
-    expect(spec).toBeDefined();
-    expect(spec?.key).toBe('auth-key');
-    expect(spec?.category).toBe('provider-config');
-    expect(spec?.aliases).toContain('apiKey');
+  it('legacy apiKey has no spec — it must be migrated at load (#2533 C1)', () => {
+    expect(getSettingSpec('apiKey')).toBeUndefined();
+    expect(LEGACY_SETTING_KEY_MIGRATIONS.get('apiKey')).toBe('auth-key');
   });
 
-  it('apiKeyfile alias resolves to auth-keyfile spec via getSettingSpec', () => {
-    const spec = getSettingSpec('apiKeyfile');
-    expect(spec).toBeDefined();
-    expect(spec?.key).toBe('auth-keyfile');
-    expect(spec?.category).toBe('provider-config');
-    expect(spec?.aliases).toContain('apiKeyfile');
+  it('legacy apiKeyfile has no spec — it must be migrated at load', () => {
+    expect(getSettingSpec('apiKeyfile')).toBeUndefined();
+    expect(LEGACY_SETTING_KEY_MIGRATIONS.get('apiKeyfile')).toBe(
+      'auth-keyfile',
+    );
   });
 
-  it('api-key alias resolves to auth-key spec via getSettingSpec', () => {
-    const spec = getSettingSpec('api-key');
-    expect(spec).toBeDefined();
-    expect(spec?.key).toBe('auth-key');
+  it('legacy api-key has no spec — it must be migrated at load', () => {
+    expect(getSettingSpec('api-key')).toBeUndefined();
+    expect(LEGACY_SETTING_KEY_MIGRATIONS.get('api-key')).toBe('auth-key');
   });
 
-  it('api-keyfile alias resolves to auth-keyfile spec via getSettingSpec', () => {
-    const spec = getSettingSpec('api-keyfile');
-    expect(spec).toBeDefined();
-    expect(spec?.key).toBe('auth-keyfile');
+  it('legacy api-keyfile has no spec — it must be migrated at load', () => {
+    expect(getSettingSpec('api-keyfile')).toBeUndefined();
+    expect(LEGACY_SETTING_KEY_MIGRATIONS.get('api-keyfile')).toBe(
+      'auth-keyfile',
+    );
   });
 });
 
@@ -734,9 +721,10 @@ describe('getProtectedSettingKeys — protected/hidden keys', () => {
     expect(keys).toContain('auth-key');
   });
 
-  it('includes apiKey alias in protected keys', () => {
+  it('no longer includes legacy apiKey alias in protected keys (#2533 C1)', () => {
     const keys = getProtectedSettingKeys();
-    expect(keys).toContain('apiKey');
+    expect(keys).not.toContain('apiKey');
+    expect(keys).toContain('auth-key');
   });
 
   it('includes auth-keyfile in protected keys', () => {
@@ -761,9 +749,9 @@ describe('getProviderConfigKeys — provider config key enumeration', () => {
     expect(keys).toContain('auth-key');
   });
 
-  it('includes apiKey alias', () => {
+  it('no longer includes legacy apiKey alias (#2533 C1)', () => {
     const keys = getProviderConfigKeys();
-    expect(keys).toContain('apiKey');
+    expect(keys).not.toContain('apiKey');
   });
 
   it('includes auth-keyfile canonical', () => {
@@ -771,9 +759,9 @@ describe('getProviderConfigKeys — provider config key enumeration', () => {
     expect(keys).toContain('auth-keyfile');
   });
 
-  it('includes apiKeyfile alias', () => {
+  it('no longer includes legacy apiKeyfile alias (#2533 C1)', () => {
     const keys = getProviderConfigKeys();
-    expect(keys).toContain('apiKeyfile');
+    expect(keys).not.toContain('apiKeyfile');
   });
 
   it('includes base-url', () => {
