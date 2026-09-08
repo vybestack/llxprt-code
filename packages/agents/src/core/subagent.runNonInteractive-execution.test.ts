@@ -293,6 +293,45 @@ describe('subagent.ts', () => {
       expect(scope.output.final_message).toContain('result=Success');
       expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
     });
+    it('rejects a malformed self_emitvalue call with null arguments (issue 3540)', async () => {
+      const { config } = await createMockConfig();
+      const outputConfig: OutputConfig = {
+        outputs: { result: 'The final result' },
+      };
+
+      mockSendMessageStream.mockImplementation(
+        createMockStream([
+          [
+            {
+              name: 'self_emitvalue',
+              args: {
+                emit_variable_name: 'result',
+                emit_variable_value: null,
+              },
+            },
+          ],
+        ]),
+      );
+
+      const { overrides: emitOverrides } = createRuntimeOverrides();
+      const scope = await SubAgentScope.create(
+        'test-agent',
+        config,
+        promptConfig,
+        defaultModelConfig,
+        defaultRunConfig,
+        undefined,
+        outputConfig,
+        emitOverrides,
+      );
+
+      await scope.runNonInteractive(new ContextState());
+
+      expect(scope.output.emitted_vars).toStrictEqual({});
+      expect(scope.output.terminate_reason).not.toBe(
+        SubagentTerminateMode.GOAL,
+      );
+    });
 
     it('should execute external tools and provide the response to the model', async () => {
       const listFilesToolDef: FunctionDeclaration = {

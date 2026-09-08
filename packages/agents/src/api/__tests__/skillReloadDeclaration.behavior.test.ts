@@ -24,12 +24,13 @@
  * it from `createAgent` fails every test here.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, vi } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { ACTIVATE_SKILL_TOOL_NAME } from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import {
   buildAgent,
   internalConfig,
@@ -135,15 +136,29 @@ async function withWorkspace(
   for (const name of initialSkills) {
     writeSkill(workspace, name);
   }
-  const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-    skillsSupport: true,
-    workingDir: workspace,
-  });
+  // Discovery also reads home-anchored user skill directories
+  // (`~/.agents/skills`) that `isolateStorageRoots()` cannot redirect because
+  // they have no environment override. A developer machine carries personal
+  // skills there, which would leak into the strict set assertions below, so
+  // point that root at an empty directory for the duration of the case. The
+  // spy is installed before `buildAgent` so Config.initialize's discovery
+  // sees it.
+  const userAgentsSkillsSpy = vi
+    .spyOn(Storage, 'getUserAgentSkillsDir')
+    .mockReturnValue(join(workspace, 'isolated-user-agents-skills'));
   try {
-    const config = await settle(agent);
-    await run({ agent, config, workspace });
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+      skillsSupport: true,
+      workingDir: workspace,
+    });
+    try {
+      const config = await settle(agent);
+      await run({ agent, config, workspace });
+    } finally {
+      await cleanup();
+    }
   } finally {
-    await cleanup();
+    userAgentsSkillsSpy.mockRestore();
     rmSync(workspace, { recursive: true, force: true });
   }
 }
