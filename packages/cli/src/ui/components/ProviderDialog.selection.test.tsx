@@ -190,4 +190,86 @@ describe('ProviderDialog selection semantics', () => {
     expect(onClose).not.toHaveBeenCalled();
     expect(lastFrame() ?? '').toContain('No providers match');
   });
+
+  it('keeps the search term unchanged when Enter is pressed with zero matches', async () => {
+    const { stdin, lastFrame, onSelect, onClose, providers } =
+      renderProviderDialog();
+
+    await act(async () => {
+      stdin.write('\t'); // enter search mode
+    });
+    for (const char of 'zzzz') {
+      await act(async () => {
+        stdin.write(char);
+      });
+    }
+
+    const foundCount = `(Found ${String(0)} of ${String(providers.length)} providers)`;
+    expect(lastFrame() ?? '').toContain('No providers match');
+    expect(lastFrame() ?? '').toContain(foundCount);
+
+    await act(async () => {
+      stdin.write('\r');
+    });
+
+    const frameAfterEnter = lastFrame() ?? '';
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(frameAfterEnter).toContain('zzzz');
+    expect(frameAfterEnter).toContain(foundCount);
+    expect(frameAfterEnter).toContain('Search Providers');
+
+    for (const _char of 'zzzz') {
+      await act(async () => {
+        stdin.write('\x7f');
+      });
+    }
+    expect(lastFrame() ?? '').toContain('anthropic');
+
+    for (const char of 'openai') {
+      await act(async () => {
+        stdin.write(char);
+      });
+    }
+    const filteredFrame = lastFrame() ?? '';
+    expect(filteredFrame).toContain('(Found 1 of 6 providers)');
+    expect(filteredFrame).toContain('openai');
+    expect(filteredFrame).not.toContain('anthropic');
+  });
+
+  it('keeps the search term unchanged when Enter is pressed with zero matches in the narrow layout', async () => {
+    mockUseTerminalSize.mockReturnValue({ columns: 60, rows: 24 });
+    const { stdin, lastFrame, onSelect, onClose } = renderProviderDialog();
+
+    for (const char of 'zzzz') {
+      await act(async () => {
+        stdin.write(char);
+      });
+    }
+    expect(lastFrame() ?? '').toContain('No providers match');
+
+    await act(async () => {
+      stdin.write('\r');
+    });
+
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+
+    for (const _char of 'zzzz') {
+      await act(async () => {
+        stdin.write('\x7f');
+      });
+    }
+    expect(lastFrame() ?? '').toContain('anthropic');
+
+    for (const char of 'openai') {
+      await act(async () => {
+        stdin.write(char);
+      });
+    }
+    const filteredFrame = lastFrame() ?? '';
+    expect(filteredFrame).toContain('1 providers found');
+    expect(filteredFrame).toContain('openai');
+    expect(filteredFrame).not.toContain('anthropic');
+  });
 });
