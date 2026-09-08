@@ -166,7 +166,6 @@ describe('tool governance blocking', () => {
         ephemerals: {
           'tools.allowed': 'read_file',
           'tools.disabled': 'write_file',
-          'disabled-tools': 'glob',
         },
       }),
     );
@@ -202,17 +201,17 @@ describe('tool governance blocking', () => {
     );
   });
 
-  it('supports legacy disabled-tools ephemeral key', () => {
+  it('ignores the legacy disabled-tools ephemeral key', () => {
     const governance = buildToolGovernance(
       createConfig({
         ephemerals: { 'disabled-tools': ['run_shell_command'] },
       }),
     );
 
-    expect(isToolBlocked('run_shell_command', governance)).toBe(true);
+    expect(isToolBlocked('run_shell_command', governance)).toBe(false);
   });
 
-  it('prefers tools.disabled over the legacy disabled-tools key', () => {
+  it('reads only tools.disabled when the legacy key is also present', () => {
     const governance = buildToolGovernance(
       createConfig({
         ephemerals: {

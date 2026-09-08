@@ -24,7 +24,7 @@ interface UseToolsDialogParams {
 
 function getDisabledToolsFromConfig(config: CliUiRuntime): string[] {
   const ephemeralSettings = config.getEphemeralSettings();
-  const disabledToolsValue = ephemeralSettings['disabled-tools'];
+  const disabledToolsValue = ephemeralSettings['tools.disabled'];
   return Array.isArray(disabledToolsValue)
     ? (disabledToolsValue as string[])
     : [];
@@ -158,7 +158,7 @@ export const useToolsDialog = ({
       );
 
       // Update ephemeral settings
-      config.setEphemeralSetting('disabled-tools', updatedDisabledTools);
+      config.setEphemeralSetting('tools.disabled', updatedDisabledTools);
 
       addMessage({
         type: MessageType.INFO,

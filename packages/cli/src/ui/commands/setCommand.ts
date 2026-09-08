@@ -17,8 +17,8 @@ import {
   parseEphemeralSettingValue,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import {
-  resolveAlias,
   isStrictNumericString,
+  LEGACY_SETTING_KEY_MIGRATIONS,
   validateSetting,
 } from '@vybestack/llxprt-code-settings';
 import { buildSetSchema } from './setCommandSchema.js';
@@ -32,6 +32,22 @@ import { buildSetSchema } from './setCommandSchema.js';
  */
 
 const setSchema = buildSetSchema();
+
+/**
+ * Legacy key spellings are migrated once at settings load; /set must not
+ * silently accept them, so reject with the canonical spelling instead.
+ */
+function rejectLegacySettingKey(key: string): MessageActionReturn | null {
+  const canonicalKey = LEGACY_SETTING_KEY_MIGRATIONS.get(key);
+  if (canonicalKey === undefined) {
+    return null;
+  }
+  return {
+    type: 'message',
+    messageType: 'error',
+    content: `Unknown setting '${key}'. Canonical key: '${canonicalKey}'.`,
+  };
+}
 
 function formatParsedValue(value: unknown): string {
   if (typeof value === 'string') {
@@ -59,6 +75,10 @@ function handleSetModelParam(parts: string[]): MessageActionReturn {
 
   const runtime = getRuntimeApi();
   const paramName = parts[1];
+  const legacyParamRejection = rejectLegacySettingKey(paramName);
+  if (legacyParamRejection) {
+    return legacyParamRejection;
+  }
   const rawValue = parts.slice(2).join(' ');
   const parsed = parseValue(rawValue);
 
@@ -173,9 +193,13 @@ function handleSetUnset(parts: string[]): MessageActionReturn {
     return handleUnsetModelParam(subKey);
   }
 
-  const resolvedTargetKey = resolveAlias(targetKey);
+  const legacyUnsetRejection = rejectLegacySettingKey(targetKey);
+  if (legacyUnsetRejection) {
+    return legacyUnsetRejection;
+  }
+
   const validEphemeralKeys = Object.keys(ephemeralSettingHelp);
-  if (!validEphemeralKeys.includes(resolvedTargetKey)) {
+  if (!validEphemeralKeys.includes(targetKey)) {
     return {
       type: 'message',
       messageType: 'error',
@@ -183,7 +207,7 @@ function handleSetUnset(parts: string[]): MessageActionReturn {
     };
   }
 
-  if (resolvedTargetKey === 'custom-headers' && subKey) {
+  if (targetKey === 'custom-headers' && subKey) {
     return handleUnsetCustomHeader(targetKey, subKey);
   }
 
@@ -200,6 +224,11 @@ function handleSetEphemeral(
   key: string,
   parts: string[],
 ): MessageActionReturn {
+  const legacyRejection = rejectLegacySettingKey(key);
+  if (legacyRejection) {
+    return legacyRejection;
+  }
+
   // If only key is provided, show help for that key
   if (parts.length === 1) {
     if (ephemeralSettingHelp[key]) {

@@ -66,16 +66,13 @@ describe('getToolGovernanceEphemerals', () => {
     });
   });
 
-  it('returns disabled list when present via legacy disabled-tools key', () => {
+  it('ignores the legacy disabled-tools key', () => {
     const config = makeConfig({ 'disabled-tools': ['dangerous_tool'] });
     const result = getToolGovernanceEphemerals(config);
-    expect(result).toStrictEqual({
-      allowed: undefined,
-      disabled: ['dangerous_tool'],
-    });
+    expect(result).toBeUndefined();
   });
 
-  it('prefers tools.disabled over disabled-tools', () => {
+  it('reads only tools.disabled when the legacy key is also present', () => {
     const config = makeConfig({
       'tools.disabled': ['new_tool'],
       'disabled-tools': ['old_tool'],

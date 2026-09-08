@@ -601,11 +601,7 @@ function applyEphemeralSettings(input: PostConfigInput): void {
   // In non-interactive mode, tool governance is enforced from approval mode,
   // so /set must not override governance-managed keys after step 15.
   // Interactive mode retains /set control for tools.allowed/tools.disabled.
-  const GOVERNANCE_KEYS = new Set([
-    'tools.allowed',
-    'tools.disabled',
-    'disabled-tools',
-  ]);
+  const GOVERNANCE_KEYS = new Set(['tools.allowed', 'tools.disabled']);
   const rawSetArgs = argv.set ?? [];
   const enforceGovernanceSetProtection = !input.interactive;
   const setArgsForApplication = enforceGovernanceSetProtection

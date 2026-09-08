@@ -86,13 +86,6 @@ function readToolLists(context: CommandContext): {
     ? new Set((read('tools.allowed') as string[]).map(normalizeToolName))
     : new Set<string>();
 
-  const legacy = read('disabled-tools');
-  if (Array.isArray(legacy)) {
-    for (const name of legacy as string[]) {
-      disabled.add(normalizeToolName(name));
-    }
-  }
-
   return { disabled, allowed };
 }
 
@@ -108,14 +101,12 @@ function persistToolLists(
 
   if (settings) {
     settings.set('tools.disabled', disabledList);
-    settings.set('disabled-tools', disabledList);
     settings.set('tools.allowed', allowedList);
   }
 
   if (config) {
     if (typeof config.setEphemeralSetting === 'function') {
       config.setEphemeralSetting('tools.disabled', disabledList);
-      config.setEphemeralSetting('disabled-tools', disabledList);
       config.setEphemeralSetting('tools.allowed', allowedList);
     }
     if (typeof config.getEphemeralSettings === 'function') {
@@ -123,7 +114,6 @@ function persistToolLists(
       if (ephemerals !== null && typeof ephemerals === 'object') {
         const ephemeralSettings = ephemerals as Record<string, unknown>;
         ephemeralSettings['tools.disabled'] = disabledList;
-        ephemeralSettings['disabled-tools'] = disabledList;
         ephemeralSettings['tools.allowed'] = allowedList;
       }
     }

@@ -262,15 +262,19 @@ describe('setCommand runtime integration', () => {
     },
   );
 
-  it('validates through the registry alias, not just the canonical key', async () => {
+  it('rejects a legacy modelparam spelling with canonical-key guidance', async () => {
     const result = await setCommand.action!(
       context,
       'modelparam max-tokens abc',
     );
 
     expect(mockRuntime.setActiveModelParam).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      type: 'message',
+      messageType: 'error',
+    });
     expect((result as { content: string }).content).toContain(
-      'must be a number',
+      "Unknown setting 'max-tokens'. Canonical key: 'max_tokens'.",
     );
   });
 

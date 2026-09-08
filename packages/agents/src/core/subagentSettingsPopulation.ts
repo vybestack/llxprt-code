@@ -39,9 +39,7 @@ const COMPRESSION_EPHEMERAL_KEYS = [
 const TOOL_GOVERNANCE_EPHEMERAL_KEYS = [
   'tool-format',
   'tools.allowed',
-  'tools_allowed',
   'tools.disabled',
-  'disabled-tools',
 ] as const;
 const MISC_EPHEMERAL_KEYS = ['user-agent'] as const;
 
@@ -119,16 +117,10 @@ function resolveToolGovernance(
   defaultDisabledTools: ReadonlySet<string>,
 ): { allowed: string[] | undefined; disabled: string[] | undefined } {
   const allowed = normalizeToolArray(
-    getStringArraySetting(profile.ephemeralSettings, [
-      'tools.allowed',
-      'tools_allowed',
-    ]),
+    getStringArraySetting(profile.ephemeralSettings, ['tools.allowed']),
   );
   const disabled = mergeDefaultDisabledTools(
-    getStringArraySetting(profile.ephemeralSettings, [
-      'tools.disabled',
-      'disabled-tools',
-    ]),
+    getStringArraySetting(profile.ephemeralSettings, ['tools.disabled']),
     allowed,
     defaultDisabledTools,
   );
