@@ -112,6 +112,37 @@ describe('migrateLegacySettingKeys', () => {
     expect('tools_allowed' in migrated).toBe(false);
   });
 
+  it('migrates legacy baseUrl spellings in a provider block to the canonical base-url key', () => {
+    // The settingsLoader applies this migration to each provider block in
+    // settings.json; the canonical provider-block key is the registered
+    // 'base-url' (registry-entries-1.ts), not the IProvider field 'baseURL'.
+    const providerBlock = {
+      baseUrl: 'https://a.example/v1',
+      baseurl: 'https://b.example/v1',
+      base_url: 'https://c.example/v1',
+      BaseUrl: 'https://d.example/v1',
+      BaseURL: 'https://e.example/v1',
+    };
+    const migrated = migrateLegacySettingKeys(providerBlock);
+    // The map iteration order applies the first legacy spelling; all legacy
+    // keys are deleted and only the canonical key remains.
+    expect(migrated['base-url']).toBe('https://a.example/v1');
+    expect(migrated['baseUrl']).toBeUndefined();
+    expect(migrated['baseurl']).toBeUndefined();
+    expect(migrated['base_url']).toBeUndefined();
+    expect(migrated['BaseUrl']).toBeUndefined();
+    expect(migrated['BaseURL']).toBeUndefined();
+  });
+
+  it('keeps a canonical base-url value over a legacy baseUrl value in a provider block', () => {
+    const migrated = migrateLegacySettingKeys({
+      'base-url': 'https://canonical.example/v1',
+      baseUrl: 'https://legacy.example/v1',
+    });
+    expect(migrated['base-url']).toBe('https://canonical.example/v1');
+    expect('baseUrl' in migrated).toBe(false);
+  });
+
   it('is idempotent: a second run changes nothing', () => {
     const once = migrateLegacySettingKeys({
       'max-tokens': 1024,

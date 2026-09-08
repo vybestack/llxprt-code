@@ -36,6 +36,11 @@ export const LEGACY_SETTING_KEY_MIGRATIONS: ReadonlyMap<string, string> =
     ['api-key', 'auth-key'],
     ['apiKeyfile', 'auth-keyfile'],
     ['api-keyfile', 'auth-keyfile'],
+    ['baseUrl', 'base-url'],
+    ['baseurl', 'base-url'],
+    ['base_url', 'base-url'],
+    ['BaseUrl', 'base-url'],
+    ['BaseURL', 'base-url'],
     ['tool-format', 'toolFormat'],
     ['tool-format-override', 'toolFormatOverride'],
     // headers

@@ -91,48 +91,32 @@ function extractWrappedProviderBaseUrl(
 function extractDirectProviderBaseUrl(
   provider: Record<string, unknown>,
 ): string | undefined {
-  return (
-    normalizeProviderBaseUrl(
-      (provider as { baseUrl?: string | null }).baseUrl ??
-        (provider as { baseURL?: string | null }).baseURL,
-    ) ??
-    normalizeProviderBaseUrl(
-      (provider as { BaseUrl?: string | null }).BaseUrl ??
-        (provider as { BaseURL?: string | null }).BaseURL,
-    )
+  return normalizeProviderBaseUrl(
+    (provider as { baseURL?: string | null }).baseURL,
   );
 }
 
 function extractConfiguredProviderBaseUrl(
   provider: Record<string, unknown>,
 ): string | undefined {
-  const configCandidate = (
-    provider as {
-      providerConfig?: { baseUrl?: string; baseURL?: string };
-    }
-  ).providerConfig;
+  const configCandidate = (provider as { providerConfig?: { baseURL?: string } })
+    .providerConfig;
   if (!configCandidate) {
     return undefined;
   }
-  return normalizeProviderBaseUrl(
-    configCandidate.baseUrl ?? configCandidate.baseURL,
-  );
+  return normalizeProviderBaseUrl(configCandidate.baseURL);
 }
 
 function extractBaseProviderConfigUrl(
   provider: Record<string, unknown>,
 ): string | undefined {
   const baseProviderConfig = (
-    provider as {
-      baseProviderConfig?: { baseURL?: string; baseUrl?: string };
-    }
+    provider as { baseProviderConfig?: { baseURL?: string } }
   ).baseProviderConfig;
   if (!baseProviderConfig) {
     return undefined;
   }
-  return normalizeProviderBaseUrl(
-    baseProviderConfig.baseURL ?? baseProviderConfig.baseUrl,
-  );
+  return normalizeProviderBaseUrl(baseProviderConfig.baseURL);
 }
 
 function extractProviderGetBaseUrl(
@@ -151,8 +135,11 @@ function extractProviderGetBaseUrl(
 }
 
 /**
- * Extract base URL from a provider object by checking various properties.
- * Handles wrapped providers and multiple naming conventions (baseUrl/baseURL).
+ * Extract base URL from a provider object by checking the canonical baseURL
+ * field on the provider, its providerConfig/baseProviderConfig containers,
+ * and the getBaseURL() accessor, following wrapped providers. Provider
+ * objects are LLxprt-owned IProvider instances; legacy spellings are
+ * migrated at settings load and never appear here (issue #2533).
  */
 export function extractProviderBaseUrl(
   provider: unknown,
