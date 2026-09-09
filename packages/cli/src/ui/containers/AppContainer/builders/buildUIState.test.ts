@@ -49,9 +49,6 @@ const makeParams = (): UIStateParams => ({
   showWorkspaceMigrationDialog: false,
   showPrivacyNotice: false,
   isOAuthCodeDialogOpen: false,
-  isPermissionsDialogOpen: false,
-  isLoggingDialogOpen: false,
-  isSubagentDialogOpen: false,
   isModelsDialogOpen: false,
   isSessionBrowserDialogOpen: false,
   isModelConfigDialogOpen: false,
@@ -68,7 +65,7 @@ const makeParams = (): UIStateParams => ({
   toolsDialogTools: [],
   toolsDialogDisabledTools: [],
   workspaceLlxprtExtensions: [],
-  loggingDialogData: { entries: [] },
+  modelsDialogData: undefined,
 
   // Profile management dialog data
   profileListItems: [],
@@ -269,9 +266,6 @@ describe('buildUIState', () => {
     params.showWorkspaceMigrationDialog = true;
     params.showPrivacyNotice = true;
     params.isOAuthCodeDialogOpen = true;
-    params.isPermissionsDialogOpen = true;
-    params.isLoggingDialogOpen = true;
-    params.isSubagentDialogOpen = true;
     params.isModelsDialogOpen = true;
     params.isSessionBrowserDialogOpen = true;
     params.isModelConfigDialogOpen = true;
@@ -294,9 +288,6 @@ describe('buildUIState', () => {
     expect(result.showWorkspaceMigrationDialog).toBe(true);
     expect(result.showPrivacyNotice).toBe(true);
     expect(result.isOAuthCodeDialogOpen).toBe(true);
-    expect(result.isPermissionsDialogOpen).toBe(true);
-    expect(result.isLoggingDialogOpen).toBe(true);
-    expect(result.isSubagentDialogOpen).toBe(true);
     expect(result.isModelsDialogOpen).toBe(true);
     expect(result.isSessionBrowserDialogOpen).toBe(true);
     expect(result.isModelConfigDialogOpen).toBe(true);
@@ -327,9 +318,6 @@ describe('buildUIState', () => {
     const params: Parameters<typeof buildUIState>[0] = {
       ...makeParams(),
       terminalBackgroundColor: undefined,
-      subagentDialogInitialView: undefined,
-      subagentDialogInitialName: undefined,
-      modelsDialogData: undefined,
       activeHooks: undefined,
     };
     const result = buildUIState(params);

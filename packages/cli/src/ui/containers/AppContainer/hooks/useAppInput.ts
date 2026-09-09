@@ -35,6 +35,9 @@ import { useExitHandling } from './useExitHandling.js';
 import { useInputHandling } from './useInputHandling.js';
 import { useShellFocusAutoReset } from './useShellFocusAutoReset.js';
 import { useSteer } from './useSteer.js';
+import type { DialogOpeners } from '../../../stores/dialog/dialogOpeners.js';
+import type { SlashCommandProcessorActions } from '../../../hooks/slashCommandProcessor.js';
+
 import * as fs from 'fs';
 import type { AppBootstrapResult } from './useAppBootstrap.js';
 import type { AppDialogsResult } from './useAppDialogs.js';
@@ -74,10 +77,9 @@ export interface AppInputParams {
   openEditorDialog: AppDialogsResult['openEditorDialog'];
   openPrivacyNotice: AppDialogsResult['openPrivacyNotice'];
   openSettingsDialog: AppDialogsResult['openSettingsDialog'];
-  openLoggingDialog: AppDialogsResult['openLoggingDialog'];
-  openSubagentDialog: AppDialogsResult['openSubagentDialog'];
+  /** Slice B2a: permissions/logging/subagent route through the DialogStore. */
+  dialogs: DialogOpeners;
   openModelsDialog: AppDialogsResult['openModelsDialog'];
-  openPermissionsDialog: AppDialogsResult['openPermissionsDialog'];
   openPoliciesDialog: AppDialogsResult['openPoliciesDialog'];
   openProviderDialog: AppDialogsResult['openProviderDialog'];
   openLoadProfileDialog: AppDialogsResult['openLoadProfileDialog'];
@@ -152,17 +154,15 @@ function useInputCoreCallbacks(p: AppInputParams) {
 function useSlashActions(
   p: AppInputParams,
   quitHandler: (messages: HistoryItem[]) => void,
-) {
+): SlashCommandProcessorActions {
   return useSlashCommandActions({
     openAuthDialog: p.openAuthDialog,
     openThemeDialog: p.openThemeDialog,
     openEditorDialog: p.openEditorDialog,
     openPrivacyNotice: p.openPrivacyNotice,
     openSettingsDialog: p.openSettingsDialog,
-    openLoggingDialog: p.openLoggingDialog,
-    openSubagentDialog: p.openSubagentDialog,
+    dialogs: p.dialogs,
     openModelsDialog: p.openModelsDialog,
-    openPermissionsDialog: p.openPermissionsDialog,
     openPoliciesDialog: p.openPoliciesDialog,
     openProviderDialog: p.openProviderDialog,
     openLoadProfileDialog: p.openLoadProfileDialog,
@@ -176,9 +176,9 @@ function useSlashActions(
     toggleDebugProfiler: p.toggleDebugProfiler,
     dispatchExtensionStateUpdate: p.dispatchExtensionStateUpdate,
     addConfirmUpdateExtensionRequest: p.addConfirmUpdateExtensionRequest,
-    welcomeActions: p.welcomeActions as { resetAndReopen: () => void },
+    welcomeActions: p.welcomeActions,
     openSessionBrowserDialog: p.openSessionBrowserDialog,
-  });
+  }) as SlashCommandProcessorActions;
 }
 
 function useSlashCommandSetup(

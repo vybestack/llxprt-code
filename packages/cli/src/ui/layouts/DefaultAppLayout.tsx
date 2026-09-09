@@ -22,7 +22,7 @@ import {
   renderScrollableMainContentItem,
   keyExtractorScrollableMainContentItem,
   estimateScrollableMainContentItemHeight,
-  hasActiveDialog,
+  useHasActiveDialog,
   useLayoutSettings,
   useScrollableContent,
   type MainControlsProps,
@@ -63,7 +63,7 @@ function useDerivedState(
     uiState.isNarrow,
   );
 
-  const dialogsVisible = hasActiveDialog(uiState);
+  const dialogsVisible = useHasActiveDialog(uiState);
 
   const { listItems, staticItems, pendingItems } = useScrollableContent(
     slashCommandRuntime,
@@ -134,6 +134,7 @@ export const DefaultAppLayout = ({
     nightly,
     uiActions,
     setSuggestionsVisible,
+    dialogsVisible,
   );
 
   if (uiState.quittingMessages) {
@@ -215,6 +216,7 @@ function buildMainControlsProps(
   nightly: boolean,
   uiActions: UIActions,
   onSuggestionsVisibilityChange: (visible: boolean) => void,
+  dialogsVisible: boolean,
 ): MainControlsProps {
   return {
     config: slashCommandRuntime,
@@ -227,7 +229,7 @@ function buildMainControlsProps(
     isQueuedMessagesPanelCollapsed: uiState.isQueuedMessagesPanelCollapsed,
     queuedSubmissions: uiState.queuedSubmissions,
     showTodoPanelSetting: layoutSettings.showTodoPanelSetting,
-    dialogsVisible: hasActiveDialog(uiState),
+    dialogsVisible,
     hideContextSummary: layoutSettings.hideContextSummary,
     hideFooter: layoutSettings.hideFooter,
     showMemoryUsage: layoutSettings.showMemoryUsage,

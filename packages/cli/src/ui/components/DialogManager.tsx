@@ -61,6 +61,12 @@ import { SessionBrowserDialog } from './SessionBrowserDialog.js';
 import { theme } from '../semantic-colors.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
+import { useDialogStore } from '../stores/dialog/DialogContext.js';
+import { useStoreSelector } from '../stores/useStoreSelector.js';
+import {
+  selectActiveDialog,
+  type DialogRequest,
+} from '../stores/dialog/dialogStore.js';
 import type { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { type UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
@@ -74,6 +80,27 @@ interface DialogManagerProps {
 }
 
 const dialogManagerLogger = new DebugLogger('llxprt:ui:dialogmanager');
+
+/** Entry shape LoggingDialog renders; mirrors the token-usage log records. */
+type LoggingDialogEntries = Array<{
+  timestamp: string;
+  type: 'request' | 'response' | 'tool_call';
+  provider: string;
+  model?: string;
+  conversationId?: string;
+  messages?: Array<{ role: string; content: string }>;
+  response?: string;
+  tokens?: { input?: number; output?: number };
+  error?: string;
+  tool?: string;
+  duration?: number;
+  success?: boolean;
+  gitStats?: {
+    linesAdded: number;
+    linesRemoved: number;
+    filesChanged: number;
+  };
+}>;
 
 /**
  * Handler for SessionBrowserDialog selection - performs real session resume.
@@ -456,38 +483,6 @@ function renderToolsDialog(
   );
 }
 
-function renderLoggingDialog(
-  uiState: ReturnType<typeof useUIState>,
-  uiActions: ReturnType<typeof useUIActions>,
-) {
-  return (
-    <LoggingDialog
-      entries={
-        uiState.loggingDialogData.entries as Array<{
-          timestamp: string;
-          type: 'request' | 'response' | 'tool_call';
-          provider: string;
-          model?: string;
-          conversationId?: string;
-          messages?: Array<{ role: string; content: string }>;
-          response?: string;
-          tokens?: { input?: number; output?: number };
-          error?: string;
-          tool?: string;
-          duration?: number;
-          success?: boolean;
-          gitStats?: {
-            linesAdded: number;
-            linesRemoved: number;
-            filesChanged: number;
-          };
-        }>
-      }
-      onClose={uiActions.closeLoggingDialog}
-    />
-  );
-}
-
 function renderModelsDialog(
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
@@ -561,6 +556,11 @@ function useDialogManagerState(
     uiState;
   const staticExtraHeight = 0;
 
+  // Store-backed dialogs are read here — the only hook-legal site — and
+  // threaded through the state bag so the pure render helpers stay pure.
+  const { store, commands } = useDialogStore();
+  const activeStoreDialog = useStoreSelector(store, selectActiveDialog);
+
   const currentProvider = useMemo(() => {
     try {
       return runtime.getActiveProviderName() || null;
@@ -622,6 +622,8 @@ function useDialogManagerState(
     handleProviderSelect,
     handleModelsDialogSelect,
     handleSessionBrowserSelect,
+    activeStoreDialog,
+    closeStoreDialog: commands.closeDialog,
   };
 }
 
@@ -674,6 +676,50 @@ function renderDialogBodyFirstHalf(
   return undefined;
 }
 
+/**
+ * Store-backed dialogs (permissions, logging, subagent): rendered from the
+ * active DialogStore entry instead of per-dialog booleans.
+ */
+function renderStoreBackedDialog(
+  active: DialogRequest | null,
+  state: ReturnType<typeof useDialogManagerState>,
+  config: CliUiRuntime,
+  addItem: UseHistoryManagerReturn['addItem'],
+) {
+  if (active?.kind === 'permissions') {
+    return (
+      <PermissionsModifyTrustDialog
+        onExit={() => state.closeStoreDialog('permissions')}
+        addItem={addItem}
+        config={config}
+      />
+    );
+  }
+  if (active?.kind === 'logging') {
+    const payload = active.payload as { entries: unknown[] };
+    return (
+      <LoggingDialog
+        entries={payload.entries as LoggingDialogEntries}
+        onClose={() => state.closeStoreDialog('logging')}
+      />
+    );
+  }
+  if (active?.kind === 'subagent') {
+    const payload = active.payload as {
+      initialView?: SubagentView;
+      initialName?: string;
+    };
+    return (
+      <SubagentManagerDialog
+        onClose={() => state.closeStoreDialog('subagent')}
+        initialView={payload.initialView ?? SubagentView.MENU}
+        initialSubagentName={payload.initialName}
+      />
+    );
+  }
+  return undefined;
+}
+
 function renderDialogBodySecondHalf(
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
@@ -689,27 +735,13 @@ function renderDialogBodySecondHalf(
       <PrivacyNotice onExit={state.handlePrivacyNoticeExit} config={config} />
     );
   }
-  if (uiState.isPermissionsDialogOpen) {
-    return (
-      <PermissionsModifyTrustDialog
-        onExit={uiActions.closePermissionsDialog}
-        addItem={addItem}
-        config={config}
-      />
-    );
-  }
-  if (uiState.isLoggingDialogOpen) {
-    return renderLoggingDialog(uiState, uiActions);
-  }
-  if (uiState.isSubagentDialogOpen) {
-    return (
-      <SubagentManagerDialog
-        onClose={uiActions.closeSubagentDialog}
-        initialView={uiState.subagentDialogInitialView ?? SubagentView.MENU}
-        initialSubagentName={uiState.subagentDialogInitialName}
-      />
-    );
-  }
+  const storeDialog = renderStoreBackedDialog(
+    state.activeStoreDialog,
+    state,
+    config,
+    addItem,
+  );
+  if (storeDialog !== undefined) return storeDialog;
   if (uiState.isModelsDialogOpen) {
     return renderModelsDialog(
       uiState,

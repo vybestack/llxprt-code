@@ -10,10 +10,11 @@ import {
   selectActiveDialog,
   DIALOG_PRIORITY,
   type DialogKind,
+  type DialogRequest,
 } from './dialogStore.js';
 
-function prompt(settings?: { prompt?: string } = {}) {
-  return { prompt: settings.prompt ?? 'proceed?', onConfirm: () => {} };
+function prompt(settings?: { prompt?: string }) {
+  return { prompt: settings?.prompt ?? 'proceed?', onConfirm: () => {} };
 }
 
 const bodyOrder: DialogKind[] = [
@@ -42,7 +43,7 @@ const bodyOrder: DialogKind[] = [
 function open(kinds: DialogKind[]) {
   const { store, commands } = createDialogStore();
   for (const kind of kinds) {
-    commands.openDialog({ kind, payload: {} });
+    commands.openDialog({ kind, payload: {} } as DialogRequest);
   }
   return { store, commands };
 }
@@ -67,19 +68,33 @@ describe('createDialogStore', () => {
 
   it('openDialog replaces an open kind in place (no duplicate request)', () => {
     const { store, commands } = createDialogStore();
+    const extA = {
+      name: 'a',
+      version: '1.0.0',
+      isActive: true,
+      path: 'a',
+      contextFiles: [],
+    };
+    const extB = {
+      name: 'b',
+      version: '1.0.0',
+      isActive: true,
+      path: 'b',
+      contextFiles: [],
+    };
     commands.openDialog({
       kind: 'workspaceMigration',
-      payload: { extensions: [] },
+      payload: { extensions: [extA] },
     });
     commands.openDialog({
       kind: 'workspaceMigration',
-      payload: { extensions: [{ name: 'a' }] },
+      payload: { extensions: [extB] },
     });
     const state = store.getState();
     expect(state.requests).toHaveLength(1);
     expect(state.requests[0]).toStrictEqual({
       kind: 'workspaceMigration',
-      payload: { extensions: [{ name: 'a' }] },
+      payload: { extensions: [extB] },
     });
   });
 
@@ -117,10 +132,18 @@ describe('createDialogStore', () => {
       },
     });
     commands.updateDialogPayload('welcome', {
-      state: { step: 'provider', authInProgress: false, modelsLoadStatus: 'idle' },
+      state: {
+        step: 'provider',
+        authInProgress: false,
+        modelsLoadStatus: 'idle',
+      },
     });
     expect(store.getState().requests[0]?.payload).toStrictEqual({
-      state: { step: 'provider', authInProgress: false, modelsLoadStatus: 'idle' },
+      state: {
+        step: 'provider',
+        authInProgress: false,
+        modelsLoadStatus: 'idle',
+      },
       availableProviders: [],
       availableModels: [],
     });
@@ -201,9 +224,7 @@ describe('createDialogStore', () => {
     const state = store.getState();
     expect(state.confirmUpdateLlxprtExtensionRequests).toHaveLength(2);
     expect(
-      state.confirmUpdateLlxprtExtensionRequests.map(
-        (r) => r.payload.prompt,
-      ),
+      state.confirmUpdateLlxprtExtensionRequests.map((r) => r.payload.prompt),
     ).toStrictEqual(['first', 'second']);
     expect(selectActiveDialog(state)).toStrictEqual({
       kind: 'extensionUpdateConfirm',
@@ -239,9 +260,6 @@ describe('createDialogStore', () => {
       payload: prompt({ prompt: 'y' }),
     });
     const target = store.getState().confirmUpdateLlxprtExtensionRequests[0];
-    if (!target) {
-      throw new Error('expected a request to exist');
-    }
     commands.resolveConfirmUpdateExtensionRequest(target);
     expect(
       store

@@ -17,9 +17,11 @@ const realInkModule = await import('../../../test-utils/real-ink.js');
 void vi.mock('ink', () => realInkModule);
 
 import { DefaultAppLayout } from './DefaultAppLayout.js';
-import { hasActiveDialog } from './DefaultAppLayoutHelpers.js';
+import { DialogProvider } from '../stores/dialog/DialogContext.js';
+import { createDialogStore } from '../stores/dialog/dialogStore.js';
 import { useUIState, type UIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
+import { useHasActiveDialog } from './DefaultAppLayoutHelpers.js';
 import { StreamingState } from '../types.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import {
@@ -234,7 +236,6 @@ function createBaseUIState() {
     shouldShowIdePrompt: false,
     isFolderTrustDialogOpen: false,
     isWelcomeDialogOpen: false,
-    isPermissionsDialogOpen: false,
     confirmationRequest: null,
     isThemeDialogOpen: false,
     isSettingsDialogOpen: false,
@@ -248,8 +249,6 @@ function createBaseUIState() {
     isProfileDetailDialogOpen: false,
     isProfileEditorDialogOpen: false,
     isToolsDialogOpen: false,
-    isLoggingDialogOpen: false,
-    isSubagentDialogOpen: false,
     isModelsDialogOpen: false,
     isSessionBrowserDialogOpen: false,
     isModelConfigDialogOpen: false,
@@ -266,7 +265,6 @@ const ACTIVE_DIALOG_FLAGS = [
   'shouldShowIdePrompt',
   'isFolderTrustDialogOpen',
   'isWelcomeDialogOpen',
-  'isPermissionsDialogOpen',
   'confirmationRequest',
   'isThemeDialogOpen',
   'isSettingsDialogOpen',
@@ -280,8 +278,6 @@ const ACTIVE_DIALOG_FLAGS = [
   'isProfileDetailDialogOpen',
   'isProfileEditorDialogOpen',
   'isToolsDialogOpen',
-  'isLoggingDialogOpen',
-  'isSubagentDialogOpen',
   'isModelsDialogOpen',
   'isSessionBrowserDialogOpen',
   'isModelConfigDialogOpen',
@@ -308,11 +304,12 @@ function createUIStateWithActiveDialog(flag: ActiveDialogFlag): UIState {
 function renderDefaultAppLayout(
   uiState: UIState,
   settings = createSettingsStub(),
+  store = createDialogStore(),
 ): ReturnType<typeof render> {
   mockUseUIState.mockReturnValue(uiState);
   const config = createConfigStub() as never;
 
-  return render(
+  const inner = (
     <DefaultAppLayout
       uiRuntime={buildUiRuntimeFromSource(config)}
       slashCommandRuntime={buildSlashCommandRuntime(config)}
@@ -324,8 +321,9 @@ function renderDefaultAppLayout(
       availableTerminalHeight={40}
       contextFileNames={[]}
       updateInfo={null}
-    />,
+    />
   );
+  return render(<DialogProvider store={store}>{inner}</DialogProvider>);
 }
 
 describe('DefaultAppLayout', () => {
@@ -346,32 +344,29 @@ describe('DefaultAppLayout', () => {
       }
       readKeys.add(property);
     };
-    // Enumeration would let the predicate reach every flag at once, which
-    // would make the recorded read-set meaningless. Fail loudly instead of
-    // silently passing.
-    const rejectEnumeration = (trap: string): never => {
-      throw new Error(
-        `hasActiveDialog enumerated the UI state via ${trap}. The drift guard ` +
-          'observes discrete property accesses and cannot verify an ' +
-          'enumeration-based predicate; update the guard and ' +
-          'ACTIVE_DIALOG_FLAGS together.',
-      );
-    };
+    // The proxy records which keys the live gating touches; the store-driven
+    // request path is covered by the dedicated DialogStore test below.
     const uiState = new Proxy(createBaseUIState(), {
-      get(target, property, receiver) {
+      get(target, property) {
         recordKey(property);
-        return Reflect.get(target, property, receiver);
+        return Reflect.get(target, property);
       },
       has(target, property) {
         recordKey(property);
         return Reflect.has(target, property);
       },
-      ownKeys: () => rejectEnumeration('ownKeys'),
-      getOwnPropertyDescriptor: () =>
-        rejectEnumeration('getOwnPropertyDescriptor'),
+      ownKeys: () => [],
     });
-
-    hasActiveDialog(uiState);
+    const Probe = () => {
+      useHasActiveDialog(uiState);
+      return null;
+    };
+    const rendered = render(
+      <DialogProvider store={createDialogStore()}>
+        <Probe />
+      </DialogProvider>,
+    );
+    rendered.unmount();
 
     expect([...readKeys].sort()).toStrictEqual([...ACTIVE_DIALOG_FLAGS].sort());
   });
@@ -389,6 +384,22 @@ describe('DefaultAppLayout', () => {
       rendered.unmount();
     },
   );
+
+  it('renders DialogManager instead of Composer when the DialogStore has an open request', () => {
+    const store = createDialogStore();
+    store.commands.openDialog({ kind: 'permissions', payload: {} });
+
+    const rendered = renderDefaultAppLayout(
+      createBaseUIState(),
+      undefined,
+      store,
+    );
+    const frame = rendered.lastFrame();
+
+    expect(frame).toContain(DIALOG_MANAGER_SENTINEL);
+    expect(frame).not.toContain(COMPOSER_SENTINEL);
+    rendered.unmount();
+  });
 
   it('renders Composer when no dialog is open', () => {
     const rendered = renderDefaultAppLayout(createBaseUIState());

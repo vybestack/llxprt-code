@@ -27,6 +27,9 @@ import { OverflowProvider } from '../contexts/OverflowContext.js';
 import { getCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
 import { themeManager } from '../themes/theme-manager.js';
 import type { SlashCommand } from '../commands/types.js';
+import { useDialogStore } from '../stores/dialog/DialogContext.js';
+import { useStoreSelector } from '../stores/useStoreSelector.js';
+import type { DialogState } from '../stores/dialog/dialogStore.js';
 
 import { AppHeader } from '../components/AppHeader.js';
 import { HistoryItemDisplay } from '../components/HistoryItemDisplay.js';
@@ -47,13 +50,27 @@ export {
 } from './scrollableMainContent.js';
 import type { ScrollableMainContentItem } from './scrollableMainContent.js';
 
-export function hasActiveDialog(uiState: UIState): boolean {
+/**
+ * True when any dialog currently owns the input surface. Combines the uiState
+ * dialog flags with the DialogStore request slots (permissions/logging/subagent
+ * in this slice).
+ */
+function hasOpenDialog(state: DialogState): boolean {
+  return (
+    state.requests.length > 0 ||
+    state.confirmationRequest !== null ||
+    state.confirmUpdateLlxprtExtensionRequests.length > 0
+  );
+}
+
+export function useHasActiveDialog(uiState: UIState): boolean {
+  const store = useDialogStore();
+  const storeOpen = useStoreSelector(store.store, hasOpenDialog);
   const dialogFlags = [
     uiState.showWorkspaceMigrationDialog,
     uiState.shouldShowIdePrompt,
     uiState.isFolderTrustDialogOpen,
     uiState.isWelcomeDialogOpen,
-    uiState.isPermissionsDialogOpen,
     Boolean(uiState.confirmationRequest),
     uiState.isThemeDialogOpen,
     uiState.isSettingsDialogOpen,
@@ -67,15 +84,13 @@ export function hasActiveDialog(uiState: UIState): boolean {
     uiState.isProfileDetailDialogOpen,
     uiState.isProfileEditorDialogOpen,
     uiState.isToolsDialogOpen,
-    uiState.isLoggingDialogOpen,
-    uiState.isSubagentDialogOpen,
     uiState.isModelsDialogOpen,
     uiState.isSessionBrowserDialogOpen,
     uiState.isModelConfigDialogOpen,
     uiState.isPoliciesDialogOpen,
     uiState.showPrivacyNotice,
   ];
-  return dialogFlags.some(Boolean);
+  return storeOpen || dialogFlags.some(Boolean);
 }
 
 export interface LayoutSettings {

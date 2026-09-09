@@ -6,7 +6,6 @@
 
 import { useCallback, useRef, useState } from 'react';
 import type { ModelsDialogData } from '../../../commands/types.js';
-import type { SubagentView } from '../../../components/SubagentManagement/types.js';
 
 /**
  * @hook useDialogOrchestration
@@ -20,27 +19,6 @@ import type { SubagentView } from '../../../components/SubagentManagement/types.
  */
 
 export interface UseDialogOrchestrationResult {
-  // Permissions dialog
-  isPermissionsDialogOpen: boolean;
-  openPermissionsDialog: () => void;
-  closePermissionsDialog: () => void;
-
-  // Logging dialog
-  isLoggingDialogOpen: boolean;
-  loggingDialogData: { entries: unknown[] };
-  openLoggingDialog: (data?: { entries: unknown[] }) => void;
-  closeLoggingDialog: () => void;
-
-  // Subagent dialog
-  isSubagentDialogOpen: boolean;
-  subagentDialogInitialView: SubagentView | undefined;
-  subagentDialogInitialName: string | undefined;
-  openSubagentDialog: (
-    initialView?: SubagentView,
-    initialName?: string,
-  ) => void;
-  closeSubagentDialog: () => void;
-
   // Models dialog
   isModelsDialogOpen: boolean;
   modelsDialogData: ModelsDialogData | undefined;
@@ -48,6 +26,9 @@ export interface UseDialogOrchestrationResult {
   closeModelsDialog: () => void;
 
   // Session browser dialog
+  /**
+   * @plan PLAN-20260214-SESSIONBROWSER.P21
+   */
   isSessionBrowserDialogOpen: boolean;
   openSessionBrowserDialog: () => void;
   closeSessionBrowserDialog: () => void;
@@ -90,43 +71,6 @@ function usePayloadDialog<T>(
 
 export function useDialogOrchestration(): UseDialogOrchestrationResult {
   const [
-    isPermissionsDialogOpen,
-    openPermissionsDialog,
-    closePermissionsDialog,
-  ] = useBooleanDialog();
-
-  const [
-    isLoggingDialogOpen,
-    loggingDialogData,
-    openLoggingDialog,
-    closeLoggingDialog,
-  ] = usePayloadDialog<{ entries: unknown[] }>({ entries: [] });
-
-  // Subagent has two payload params — manage manually
-  const [isSubagentDialogOpen, setIsSubagentDialogOpen] = useState(false);
-  const [subagentDialogInitialView, setSubagentDialogInitialView] = useState<
-    SubagentView | undefined
-  >(undefined);
-  const [subagentDialogInitialName, setSubagentDialogInitialName] = useState<
-    string | undefined
-  >(undefined);
-
-  const openSubagentDialog = useCallback(
-    (initialView?: SubagentView, initialName?: string) => {
-      setSubagentDialogInitialView(initialView);
-      setSubagentDialogInitialName(initialName);
-      setIsSubagentDialogOpen(true);
-    },
-    [],
-  );
-
-  const closeSubagentDialog = useCallback(() => {
-    setIsSubagentDialogOpen(false);
-    setSubagentDialogInitialView(undefined);
-    setSubagentDialogInitialName(undefined);
-  }, []);
-
-  const [
     isModelsDialogOpen,
     modelsDialogData,
     openModelsDialog,
@@ -153,24 +97,6 @@ export function useDialogOrchestration(): UseDialogOrchestrationResult {
     useBooleanDialog();
 
   return {
-    // Permissions dialog
-    isPermissionsDialogOpen,
-    openPermissionsDialog,
-    closePermissionsDialog,
-
-    // Logging dialog
-    isLoggingDialogOpen,
-    loggingDialogData,
-    openLoggingDialog,
-    closeLoggingDialog,
-
-    // Subagent dialog
-    isSubagentDialogOpen,
-    subagentDialogInitialView,
-    subagentDialogInitialName,
-    openSubagentDialog,
-    closeSubagentDialog,
-
     // Models dialog
     isModelsDialogOpen,
     modelsDialogData,

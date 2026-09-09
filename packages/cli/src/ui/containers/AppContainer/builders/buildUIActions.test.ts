@@ -90,18 +90,6 @@ const makeParams = (): UIActionsParams => ({
   },
   triggerWelcomeAuth: vi.fn(),
 
-  // Permissions dialog
-  openPermissionsDialog: vi.fn(),
-  closePermissionsDialog: vi.fn(),
-
-  // Logging dialog
-  openLoggingDialog: vi.fn(),
-  closeLoggingDialog: vi.fn(),
-
-  // Subagent dialog
-  openSubagentDialog: vi.fn(),
-  closeSubagentDialog: vi.fn(),
-
   // Models dialog
   openModelsDialog: vi.fn(),
   closeModelsDialog: vi.fn(),
@@ -216,12 +204,6 @@ describe('buildUIActions', () => {
     expect(result.handleFolderTrustSelect).toBeDefined();
     expect(result.welcomeActions).toBeDefined();
     expect(result.triggerWelcomeAuth).toBeDefined();
-    expect(result.openPermissionsDialog).toBeDefined();
-    expect(result.closePermissionsDialog).toBeDefined();
-    expect(result.openLoggingDialog).toBeDefined();
-    expect(result.closeLoggingDialog).toBeDefined();
-    expect(result.openSubagentDialog).toBeDefined();
-    expect(result.closeSubagentDialog).toBeDefined();
     expect(result.openModelsDialog).toBeDefined();
     expect(result.closeModelsDialog).toBeDefined();
     expect(result.openModelConfigDialog).toBeDefined();
@@ -301,12 +283,6 @@ describe('buildUIActions', () => {
     expect(result.handleFolderTrustSelect).toBe(params.handleFolderTrustSelect);
     expect(result.welcomeActions).toBe(params.welcomeActions);
     expect(result.triggerWelcomeAuth).toBe(params.triggerWelcomeAuth);
-    expect(result.openPermissionsDialog).toBe(params.openPermissionsDialog);
-    expect(result.closePermissionsDialog).toBe(params.closePermissionsDialog);
-    expect(result.openLoggingDialog).toBe(params.openLoggingDialog);
-    expect(result.closeLoggingDialog).toBe(params.closeLoggingDialog);
-    expect(result.openSubagentDialog).toBe(params.openSubagentDialog);
-    expect(result.closeSubagentDialog).toBe(params.closeSubagentDialog);
     expect(result.openModelsDialog).toBe(params.openModelsDialog);
     expect(result.closeModelsDialog).toBe(params.closeModelsDialog);
     expect(result.openModelConfigDialog).toBe(params.openModelConfigDialog);

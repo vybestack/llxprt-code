@@ -31,7 +31,6 @@ import type { SlashCommand, CommandContext } from '../commands/types.js';
 
 import type { LoadedSettings } from '../../config/settings.js';
 import type { WelcomeState, ModelInfo } from '../hooks/useWelcomeOnboarding.js';
-import type { SubagentView } from '../components/SubagentManagement/types.js';
 
 /**
  * UI State shape for the AppContainer architecture.
@@ -77,9 +76,6 @@ export interface UIState {
   showWorkspaceMigrationDialog: boolean;
   showPrivacyNotice: boolean;
   isOAuthCodeDialogOpen: boolean;
-  isPermissionsDialogOpen: boolean;
-  isLoggingDialogOpen: boolean;
-  isSubagentDialogOpen: boolean;
   isModelsDialogOpen: boolean;
   /**
    * @plan PLAN-20260214-SESSIONBROWSER.P21
@@ -99,9 +95,6 @@ export interface UIState {
   toolsDialogTools: ToolInfo[];
   toolsDialogDisabledTools: string[];
   workspaceLlxprtExtensions: LlxprtExtension[];
-  loggingDialogData: { entries: unknown[] };
-  subagentDialogInitialView?: SubagentView;
-  subagentDialogInitialName?: string;
   modelsDialogData?: {
     initialSearch?: string;
     initialFilters?: {

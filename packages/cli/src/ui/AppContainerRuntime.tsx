@@ -39,6 +39,16 @@ import type {
   AppLayoutResult,
 } from './containers/AppContainer/hooks/useAppLayout.js';
 import { useUnconfiguredProviderGuidance } from './hooks/useUnconfiguredProviderGuidance.js';
+import {
+  createDialogStore,
+  type DialogStore,
+} from './stores/dialog/dialogStore.js';
+import {
+  createDialogOpeners,
+  type DialogOpeners,
+} from './stores/dialog/dialogOpeners.js';
+import { DialogProvider } from './stores/dialog/DialogContext.js';
+import { useRef, useMemo } from 'react';
 
 const debug = new DebugLogger('llxprt:ui:appcontainer');
 
@@ -83,6 +93,7 @@ function buildInputParams(
   appState: AppState,
   appDispatch: React.Dispatch<AppAction>,
   slashCommandRuntime: SlashCommandRuntime,
+  dialogOpeners: DialogOpeners,
 ): AppInputParams {
   return {
     streamRuntime: bootstrap.streamRuntime,
@@ -112,10 +123,8 @@ function buildInputParams(
     openEditorDialog: dialogs.openEditorDialog,
     openPrivacyNotice: dialogs.openPrivacyNotice,
     openSettingsDialog: dialogs.openSettingsDialog,
-    openLoggingDialog: dialogs.openLoggingDialog,
-    openSubagentDialog: dialogs.openSubagentDialog,
+    dialogs: dialogOpeners,
     openModelsDialog: dialogs.openModelsDialog,
-    openPermissionsDialog: dialogs.openPermissionsDialog,
     openPoliciesDialog: dialogs.openPoliciesDialog,
     openProviderDialog: dialogs.openProviderDialog,
     openLoadProfileDialog: dialogs.openLoadProfileDialog,
@@ -247,9 +256,6 @@ function buildUIStateParamsCore(
     showWorkspaceMigrationDialog: d.showWorkspaceMigrationDialog,
     showPrivacyNotice: d.showPrivacyNotice,
     isOAuthCodeDialogOpen: d.isOAuthCodeDialogOpen,
-    isPermissionsDialogOpen: d.isPermissionsDialogOpen,
-    isLoggingDialogOpen: d.isLoggingDialogOpen,
-    isSubagentDialogOpen: d.isSubagentDialogOpen,
     isModelsDialogOpen: d.isModelsDialogOpen,
     isSessionBrowserDialogOpen: d.isSessionBrowserDialogOpen,
     isModelConfigDialogOpen: d.isModelConfigDialogOpen,
@@ -266,9 +272,6 @@ function buildUIStateParamsCore(
     toolsDialogTools: d.toolsDialogTools,
     toolsDialogDisabledTools: d.toolsDialogDisabledTools,
     workspaceLlxprtExtensions: d.workspaceLlxprtExtensions,
-    loggingDialogData: d.loggingDialogData,
-    subagentDialogInitialView: d.subagentDialogInitialView,
-    subagentDialogInitialName: d.subagentDialogInitialName,
     modelsDialogData: d.modelsDialogData,
   };
 }
@@ -392,12 +395,6 @@ function dialogActionsParams(d: HookResults['dialogs']) {
     handleFolderTrustSelect: d.handleFolderTrustSelect,
     welcomeActions: d.welcomeActions,
     triggerWelcomeAuth: d.triggerWelcomeAuth,
-    openPermissionsDialog: d.openPermissionsDialog,
-    closePermissionsDialog: d.closePermissionsDialog,
-    openLoggingDialog: d.openLoggingDialog,
-    closeLoggingDialog: d.closeLoggingDialog,
-    openSubagentDialog: d.openSubagentDialog,
-    closeSubagentDialog: d.closeSubagentDialog,
     openModelsDialog: d.openModelsDialog,
     closeModelsDialog: d.closeModelsDialog,
 
@@ -447,6 +444,14 @@ function buildUIActionsParams(r: HookResults) {
 
 export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
   debug.debug('AppContainer architecture active (v2)');
+  const dialogStoreRef = useRef<DialogStore | null>(null);
+  dialogStoreRef.current ??= createDialogStore();
+  const dialogStore = dialogStoreRef.current;
+  /** Stable openers object derived once from the store commands. */
+  const dialogOpeners = useMemo(
+    () => createDialogOpeners(dialogStore),
+    [dialogStore],
+  );
   const bootstrap = useAppBootstrap(props);
   const dialogs = useAppDialogs({
     config: props.slashCommandRuntime,
@@ -470,6 +475,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
       props.appState,
       props.appDispatch,
       props.slashCommandRuntime,
+      dialogOpeners,
     ),
     operationLifecycle: props.operationLifecycle,
   });
@@ -487,21 +493,23 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
   });
   const uiActions = useUIActionsBuilder(buildUIActionsParams(r));
   return (
-    <UIStateProvider value={uiState}>
-      <UIActionsProvider value={uiActions}>
-        <DefaultAppLayout
-          uiRuntime={bootstrap.uiRuntime}
-          slashCommandRuntime={props.slashCommandRuntime}
-          settings={bootstrap.settings}
-          startupWarnings={bootstrap.startupWarnings}
-          version={props.version}
-          nightly={bootstrap.nightly}
-          mainControlsRef={layout.mainControlsRef}
-          availableTerminalHeight={layout.availableTerminalHeight}
-          contextFileNames={layout.contextFileNames}
-          updateInfo={bootstrap.updateInfo}
-        />
-      </UIActionsProvider>
-    </UIStateProvider>
+    <DialogProvider store={dialogStore}>
+      <UIStateProvider value={uiState}>
+        <UIActionsProvider value={uiActions}>
+          <DefaultAppLayout
+            uiRuntime={bootstrap.uiRuntime}
+            slashCommandRuntime={props.slashCommandRuntime}
+            settings={bootstrap.settings}
+            startupWarnings={bootstrap.startupWarnings}
+            version={props.version}
+            nightly={bootstrap.nightly}
+            mainControlsRef={layout.mainControlsRef}
+            availableTerminalHeight={layout.availableTerminalHeight}
+            contextFileNames={layout.contextFileNames}
+            updateInfo={bootstrap.updateInfo}
+          />
+        </UIActionsProvider>
+      </UIStateProvider>
+    </DialogProvider>
   );
 };

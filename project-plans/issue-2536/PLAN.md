@@ -183,6 +183,26 @@ builders, `openDialogs`.
    rewrite + migrate all dialog open/close call sites + delete
    useDialogOrchestration, appReducer dialog actions, hook boolean families.
    Verify: targeted tests + full cycle.
+   - **B1 (done, 8ca86b6f9):** createStore + useStoreSelector + typed
+     DialogStore (26 kinds, priority stack, confirmation slots) +
+     DialogProvider + behavior tests.
+   - **B2 (done, 72fb06fb4):** DialogStore made fully typed (payload map,
+     mapped-union requests), dialogStore.test.ts 19 behavior tests.
+   - **B2a (done):** first migration tranche — permissions, logging
+     (entries payload), subagent (initialView/initialName payload) moved
+     end-to-end to the store: dialogOpeners.ts stable handles;
+     useDialogOrchestration loses its 3 payload families; UIState/UIActions
+     lose 6 members; DialogManager renders them from selectActiveDialog
+     (store reads hoisted into useDialogManagerState — rules-of-hooks);
+     useHasActiveDialog (hook) ORs store state with remaining flags;
+     AppContainerRuntime becomes the store composition root
+     (useRef-created store + memoized openers + DialogProvider tree wrap).
+     useSlashCommandActions routes via `dialogs` handles. Suites:
+     canonical runner 745/745 files, 9603/9603 cases (see §6 note).
+   - **Remaining B slices:** theme/settings/auth/editor/provider/profile
+     family/tools/oauth-code tranche (appReducer `openDialogs` deletion);
+     workspaceMigration/folderTrust/welcome/idePrompt/privacy/confirmation
+     tranche; then delete useDialogOrchestration + builders' dialog params.
 3. **TerminalStore + TurnStore (Slice C):** dimensions/focus/display prefs;
    history/streaming/cancellation. Verify.
 4. **SettingsProfileStore + delete builders/contexts (Slice D):** migrate
@@ -235,3 +255,21 @@ TBD — filled at Slice E.
   byte-identical where possible; only its state destination changes.
 - Test volume: full `npm run test` is heavy; slices run scoped bun test files
   plus the mandated full cycle before review/PR.
+
+## 6. Verification semantics discovered during Slice B2a
+
+- **The canonical CLI test gate is `bun run-bun-tests.ts`** (what
+  `npm run test` invokes): it spawns one `bun test` process per file with
+  bounded concurrency, explicitly because "Bun's mock.module registry is
+  process-wide, so sharing a process would leak mocks between files."
+- **Single-process multi-file `bun test fileA fileB` is not a supported
+  mode.** During B2a, `bun test DefaultAppLayout.test.tsx
+  DefaultAppLayout.rendering.test.tsx` in one process showed 25 spurious
+  failures (whichever file evaluated second lost its vi.mock registrations),
+  while every file passes alone. The same artifact explains the three
+  InlineContent placeholder failures earlier believed to be pre-existing on
+  main: they appear only when InlineContent.test.tsx shares a process with
+  DefaultAppLayout*.test.tsx, a combination the canonical runner never
+  produces. All per-file runs are green.
+- Consequence for later slices: verify with per-file runs or the canonical
+  runner; never use multi-file single-process `bun test` as a signal.

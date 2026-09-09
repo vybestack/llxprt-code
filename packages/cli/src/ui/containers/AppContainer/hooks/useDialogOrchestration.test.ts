@@ -7,73 +7,9 @@
 import { act } from 'react';
 import { describe, it, expect } from 'bun:test';
 import { renderHook } from '../../../../test-utils/render.js';
-import { SubagentView } from '../../../components/SubagentManagement/types.js';
 import { useDialogOrchestration } from './useDialogOrchestration.js';
 
 describe('useDialogOrchestration', () => {
-  it('opens and closes the permissions dialog', () => {
-    const { result } = renderHook(() => useDialogOrchestration());
-
-    expect(result.current.isPermissionsDialogOpen).toBe(false);
-
-    act(() => {
-      result.current.openPermissionsDialog();
-    });
-
-    expect(result.current.isPermissionsDialogOpen).toBe(true);
-
-    act(() => {
-      result.current.closePermissionsDialog();
-    });
-
-    expect(result.current.isPermissionsDialogOpen).toBe(false);
-  });
-
-  it('opens logging dialog with provided payload and defaults to empty entries', () => {
-    const { result } = renderHook(() => useDialogOrchestration());
-
-    act(() => {
-      result.current.openLoggingDialog({ entries: ['a', 'b'] });
-    });
-
-    expect(result.current.isLoggingDialogOpen).toBe(true);
-    expect(result.current.loggingDialogData).toStrictEqual({
-      entries: ['a', 'b'],
-    });
-
-    act(() => {
-      result.current.closeLoggingDialog();
-    });
-
-    expect(result.current.isLoggingDialogOpen).toBe(false);
-
-    act(() => {
-      result.current.openLoggingDialog();
-    });
-
-    expect(result.current.loggingDialogData).toStrictEqual({ entries: [] });
-  });
-
-  it('resets subagent initial state when closing the subagent dialog', () => {
-    const { result } = renderHook(() => useDialogOrchestration());
-
-    act(() => {
-      result.current.openSubagentDialog(SubagentView.EDIT, 'agent-alpha');
-    });
-
-    expect(result.current.isSubagentDialogOpen).toBe(true);
-    expect(result.current.subagentDialogInitialView).toBe(SubagentView.EDIT);
-    expect(result.current.subagentDialogInitialName).toBe('agent-alpha');
-
-    act(() => {
-      result.current.closeSubagentDialog();
-    });
-
-    expect(result.current.isSubagentDialogOpen).toBe(false);
-    expect(result.current.subagentDialogInitialView).toBeUndefined();
-    expect(result.current.subagentDialogInitialName).toBeUndefined();
-  });
-
   it('clears models dialog data when closed', () => {
     const { result } = renderHook(() => useDialogOrchestration());
 
@@ -132,5 +68,23 @@ describe('useDialogOrchestration', () => {
     });
 
     expect(result.current.isModelConfigDialogOpen).toBe(false);
+  });
+
+  it('opens and closes policies dialog', () => {
+    const { result } = renderHook(() => useDialogOrchestration());
+
+    expect(result.current.isPoliciesDialogOpen).toBe(false);
+
+    act(() => {
+      result.current.openPoliciesDialog();
+    });
+
+    expect(result.current.isPoliciesDialogOpen).toBe(true);
+
+    act(() => {
+      result.current.closePoliciesDialog();
+    });
+
+    expect(result.current.isPoliciesDialogOpen).toBe(false);
   });
 });

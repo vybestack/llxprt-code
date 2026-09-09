@@ -31,7 +31,6 @@ import type {
   WelcomeState,
   ModelInfo,
 } from '../../../hooks/useWelcomeOnboarding.js';
-import type { SubagentView } from '../../../components/SubagentManagement/types.js';
 import type { UIState } from '../../../contexts/UIStateContext.js';
 
 /**
@@ -77,9 +76,6 @@ export interface UIStateParams {
   showWorkspaceMigrationDialog: boolean;
   showPrivacyNotice: boolean;
   isOAuthCodeDialogOpen: boolean;
-  isPermissionsDialogOpen: boolean;
-  isLoggingDialogOpen: boolean;
-  isSubagentDialogOpen: boolean;
   isModelsDialogOpen: boolean;
   isSessionBrowserDialogOpen: boolean;
   isModelConfigDialogOpen: boolean;
@@ -96,9 +92,6 @@ export interface UIStateParams {
   toolsDialogTools: ToolInfo[];
   toolsDialogDisabledTools: string[];
   workspaceLlxprtExtensions: LlxprtExtension[];
-  loggingDialogData: { entries: unknown[] };
-  subagentDialogInitialView?: SubagentView;
-  subagentDialogInitialName?: string;
   modelsDialogData?: {
     initialSearch?: string;
     initialFilters?: {
@@ -111,8 +104,6 @@ export interface UIStateParams {
     providerOverride?: string | null;
     showAllProviders?: boolean;
   };
-
-  // Profile management dialog data
   profileListItems: Array<{
     name: string;
     type: 'standard' | 'loadbalancer';
@@ -279,9 +270,6 @@ function buildDialogStates(p: UIStateParams) {
     showWorkspaceMigrationDialog: p.showWorkspaceMigrationDialog,
     showPrivacyNotice: p.showPrivacyNotice,
     isOAuthCodeDialogOpen: p.isOAuthCodeDialogOpen,
-    isPermissionsDialogOpen: p.isPermissionsDialogOpen,
-    isLoggingDialogOpen: p.isLoggingDialogOpen,
-    isSubagentDialogOpen: p.isSubagentDialogOpen,
     isModelsDialogOpen: p.isModelsDialogOpen,
     isSessionBrowserDialogOpen: p.isSessionBrowserDialogOpen,
     isModelConfigDialogOpen: p.isModelConfigDialogOpen,
@@ -289,6 +277,7 @@ function buildDialogStates(p: UIStateParams) {
   };
 }
 
+// Dialog data
 function buildDialogData(p: UIStateParams) {
   return {
     providerOptions: p.providerOptions,
@@ -301,16 +290,13 @@ function buildDialogData(p: UIStateParams) {
     toolsDialogTools: p.toolsDialogTools,
     toolsDialogDisabledTools: p.toolsDialogDisabledTools,
     workspaceLlxprtExtensions: p.workspaceLlxprtExtensions,
-    loggingDialogData: p.loggingDialogData,
-    subagentDialogInitialView: p.subagentDialogInitialView,
-    subagentDialogInitialName: p.subagentDialogInitialName,
     modelsDialogData: p.modelsDialogData,
     profileListItems: p.profileListItems,
+    profileDialogError: p.profileDialogError,
     selectedProfileName: p.selectedProfileName,
     selectedProfileData: p.selectedProfileData,
     defaultProfileName: p.defaultProfileName,
     activeProfileName: p.activeProfileName,
-    profileDialogError: p.profileDialogError,
     profileDialogLoading: p.profileDialogLoading,
   };
 }
