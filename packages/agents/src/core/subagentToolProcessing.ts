@@ -38,7 +38,10 @@ import { type CompletedToolCall } from './coreToolScheduler.js';
 import { LocalTodoStore as TodoStore } from '@vybestack/llxprt-code-tools';
 import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
-import { toolFailureMarker } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
+import {
+  createErrorResponse,
+  toolFailureMarker,
+} from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import {
   SubagentTerminateMode,
   type OutputConfig,
@@ -626,8 +629,27 @@ async function executeNonInteractiveTool(
   ctx: ProcessFunctionCallsContext,
 ): Promise<NonInteractiveToolExecutionResult> {
   if (functionCall.name === SCOPE_LOCAL_EMIT_TOOL_NAME) {
-    const valName = String(requestInfo.args['emit_variable_name']);
-    const valVal = String(requestInfo.args['emit_variable_value']);
+    const args = asUnknownRecord(requestInfo.args);
+    const valName = args['emit_variable_name'];
+    const valVal = args['emit_variable_value'];
+    const hasName = typeof valName === 'string' && valName !== '';
+    const hasValue = typeof valVal === 'string' && valVal !== '';
+    if (!hasName || !hasValue) {
+      const errorMessage = `${SCOPE_LOCAL_EMIT_TOOL_NAME} requires emit_variable_name and emit_variable_value arguments.`;
+      ctx.logger.warn(
+        () =>
+          `Subagent ${ctx.subagentId} failed to emit value: ${errorMessage}`,
+      );
+      return {
+        status: 'error',
+        response: createErrorResponse(
+          requestInfo,
+          new Error(errorMessage),
+          ToolErrorType.INVALID_TOOL_PARAMS,
+        ),
+      };
+    }
+
     ctx.output.emitted_vars[valName] = valVal;
 
     const successMessage = `Emitted variable ${valName} successfully`;

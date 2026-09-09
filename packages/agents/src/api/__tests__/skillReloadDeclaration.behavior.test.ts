@@ -135,6 +135,9 @@ async function withWorkspace(
   for (const name of initialSkills) {
     writeSkill(workspace, name);
   }
+  // The storage-isolation preload points LLXPRT_AGENTS_HOME at a temp root,
+  // so discovery never reads the real ~/.agents/skills here; the strict set
+  // assertions only ever see this workspace's skills.
   const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
     skillsSupport: true,
     workingDir: workspace,

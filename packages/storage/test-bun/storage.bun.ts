@@ -827,9 +827,10 @@ describe('Storage.isNonEmptyAbsoluteOverride — override-validity contract', ()
 });
 
 describe('Storage – agents-standard (.agents) paths', () => {
-  // The agents-standard paths are always home-dir-based by design. Set the
-  // LLXPRT_* env overrides to non-home values to PROVE the agents-path
-  // methods do not depend on them.
+  // The agents-standard paths are home-dir-based unless LLXPRT_AGENTS_HOME
+  // says otherwise. Set the other LLXPRT_* env overrides to non-home values
+  // to PROVE the agents-path methods do not depend on them.
+  const originalAgentsHome = process.env['LLXPRT_AGENTS_HOME'];
   beforeEach(() => {
     process.env['LLXPRT_CONFIG_HOME'] = '/nonstandard/config';
     process.env['LLXPRT_DATA_HOME'] = '/nonstandard/data';
@@ -837,25 +838,45 @@ describe('Storage – agents-standard (.agents) paths', () => {
     process.env['LLXPRT_LOG_HOME'] = '/nonstandard/log';
   });
 
-  afterEach(restoreEnv);
+  afterEach(() => {
+    restoreEnv();
+    // restoreEnv only covers the four category roots; put the agents
+    // override back the way the storage-isolation preload left it.
+    if (originalAgentsHome === undefined) {
+      delete process.env['LLXPRT_AGENTS_HOME'];
+    } else {
+      process.env['LLXPRT_AGENTS_HOME'] = originalAgentsHome;
+    }
+  });
 
   it('AGENTS_DIR is ".agents"', () => {
     expect(AGENTS_DIR).toBe('.agents');
   });
 
-  it('getGlobalAgentsDir returns ~/.agents ignoring env overrides', () => {
-    // Setting LLXPRT_CONFIG_HOME etc. must NOT divert the agents dir; it is
-    // always home-dir-based. The fail-closed guarantee (throws when home dir
-    // is unset or non-absolute, never a tmpdir fallback) is verified in
-    // storage.agentsSecurity.test.ts.
+  it('getGlobalAgentsDir falls back to ~/.agents when LLXPRT_AGENTS_HOME is unset, ignoring other env overrides', () => {
+    // Setting LLXPRT_CONFIG_HOME etc. must NOT divert the agents dir. The
+    // fail-closed guarantee (throws when home dir is unset or non-absolute,
+    // never a tmpdir fallback) is verified in storage.agentsSecurity.test.ts.
+    delete process.env['LLXPRT_AGENTS_HOME'];
     expect(Storage.getGlobalAgentsDir()).toBe(
       path.join(os.homedir(), '.agents'),
     );
   });
 
-  it('getUserAgentSkillsDir returns ~/.agents/skills', () => {
+  it('getUserAgentSkillsDir falls back to ~/.agents/skills when LLXPRT_AGENTS_HOME is unset', () => {
+    delete process.env['LLXPRT_AGENTS_HOME'];
     expect(Storage.getUserAgentSkillsDir()).toBe(
       path.join(os.homedir(), '.agents', 'skills'),
+    );
+  });
+
+  it('honors an absolute LLXPRT_AGENTS_HOME override', () => {
+    process.env['LLXPRT_AGENTS_HOME'] = path.join(os.tmpdir(), 'agents-home');
+    expect(Storage.getGlobalAgentsDir()).toBe(
+      path.join(os.tmpdir(), 'agents-home'),
+    );
+    expect(Storage.getUserAgentSkillsDir()).toBe(
+      path.join(os.tmpdir(), 'agents-home', 'skills'),
     );
   });
 

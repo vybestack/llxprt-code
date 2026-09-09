@@ -26,6 +26,7 @@ import {
   SubagentTerminateMode,
   type OutputObject,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from '@vybestack/llxprt-code-core/config/configTypes.js';
 
 describe('subagentToolProcessing', () => {
@@ -303,6 +304,168 @@ describe('subagentToolProcessing', () => {
       finalizeOutput(output);
       expect(output.final_message).toContain('time limit');
       expect(output.final_message.trim().toLowerCase()).not.toBe('none');
+    });
+  });
+  // --- issue 3540: non-interactive scope-local emit validation ---
+
+  describe('processFunctionCalls self_emitvalue validation (issue 3540)', () => {
+    function makeEmitProcessContext(): ProcessFunctionCallsContext {
+      return {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.ERROR,
+        },
+        subagentId: 'emit-agent',
+        logger: new DebugLogger('issue3540-test'),
+        toolExecutorContext: {
+          getToolRegistry: () => ({}) as never,
+          getEphemeralSettings: () => ({}),
+          getEphemeralSetting: () => undefined,
+          getExcludeTools: () => [],
+          getSessionId: () => 'test-session',
+          getTelemetryLogPromptsEnabled: () => false,
+          getOrCreateScheduler: vi.fn(),
+          disposeScheduler: vi.fn(),
+        },
+        // Test-only partial stub; the emit branch only reads the budget.
+        config: {
+          getImagePayloadBudgetBytes: () => DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+        } as unknown as Config,
+      };
+    }
+
+    function emitToolCall(
+      parameters: Readonly<Record<string, unknown>> | undefined,
+      id = 'emit-call',
+    ): ToolCallBlock {
+      return { type: 'tool_call', id, name: 'self_emitvalue', parameters };
+    }
+
+    /**
+     * Narrows the produced failure to the structured contract: the
+     * model-facing message travels in result.error AND the failure is
+     * marked on the top-level field with the INVALID_TOOL_PARAMS type
+     * (issue #3063 convention).
+     */
+    function failureBlock(
+      content: Awaited<ReturnType<typeof processFunctionCalls>>,
+    ): { resultError: string; marker: string } {
+      expect(content).toHaveLength(1);
+      const block = content[0].blocks[0];
+      if (block.type !== 'tool_response') {
+        throw new Error('expected a tool_response block');
+      }
+      const resultError = (block.result as { error?: string }).error;
+      if (typeof resultError !== 'string') {
+        throw new Error('tool_response result does not carry an error');
+      }
+      const marker = block.error;
+      if (typeof marker !== 'string' || marker === '') {
+        throw new Error('tool_response has no top-level failure marker');
+      }
+      return { resultError, marker };
+    }
+
+    it('stores emitted variable when both arguments are strings', async () => {
+      const ctx = makeEmitProcessContext();
+      const content = await processFunctionCalls(
+        [
+          emitToolCall({
+            emit_variable_name: 'result',
+            emit_variable_value: 'hello',
+          }),
+        ],
+        new AbortController(),
+        'prompt-1',
+        ctx,
+      );
+
+      expect(ctx.output.emitted_vars['result']).toBe('hello');
+      expect(content).toHaveLength(1);
+    });
+
+    it('rejects null emit_variable_value without writing it into emitted_vars', async () => {
+      const ctx = makeEmitProcessContext();
+      const content = await processFunctionCalls(
+        [
+          emitToolCall({
+            emit_variable_name: 'result',
+            emit_variable_value: null,
+          }),
+        ],
+        new AbortController(),
+        'prompt-2',
+        ctx,
+      );
+
+      expect(ctx.output.emitted_vars).toStrictEqual({});
+      const { resultError, marker } = failureBlock(content);
+      expect(resultError).toContain('requires');
+      expect(marker).toContain('requires');
+    });
+
+    it('rejects undefined emit_variable_name without writing it into emitted_vars', async () => {
+      const ctx = makeEmitProcessContext();
+      const content = await processFunctionCalls(
+        [emitToolCall({ emit_variable_value: 'hello' })],
+        new AbortController(),
+        'prompt-3',
+        ctx,
+      );
+
+      expect(ctx.output.emitted_vars).toStrictEqual({});
+      const { resultError, marker } = failureBlock(content);
+      expect(resultError).toContain('requires');
+      expect(marker).toContain('requires');
+    });
+
+    it('rejects null emit_variable_name from a non-interactive call', async () => {
+      const ctx = makeEmitProcessContext();
+      const content = await processFunctionCalls(
+        [
+          emitToolCall({
+            emit_variable_name: null,
+            emit_variable_value: 'x',
+          }),
+        ],
+        new AbortController(),
+        'prompt-4',
+        ctx,
+      );
+
+      expect(ctx.output.emitted_vars).toStrictEqual({});
+      failureBlock(content);
+    });
+
+    it('rejects an empty-string emit_variable_value without emitting it', async () => {
+      const ctx = makeEmitProcessContext();
+      const content = await processFunctionCalls(
+        [
+          emitToolCall({
+            emit_variable_name: 'result',
+            emit_variable_value: '',
+          }),
+        ],
+        new AbortController(),
+        'prompt-5',
+        ctx,
+      );
+
+      expect(ctx.output.emitted_vars).toStrictEqual({});
+      failureBlock(content);
+    });
+
+    it('rejects a call whose arguments object is missing entirely', async () => {
+      const ctx = makeEmitProcessContext();
+      const content = await processFunctionCalls(
+        [emitToolCall(undefined)],
+        new AbortController(),
+        'prompt-6',
+        ctx,
+      );
+
+      expect(ctx.output.emitted_vars).toStrictEqual({});
+      failureBlock(content);
     });
   });
 
