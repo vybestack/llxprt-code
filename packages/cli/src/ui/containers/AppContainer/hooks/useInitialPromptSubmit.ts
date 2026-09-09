@@ -11,12 +11,18 @@ import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 
 /** Dialog kinds whose presence defers the initial prompt submission. */
 const BLOCKING_DIALOG_KINDS = [
+  'workspaceMigration',
+  'idePrompt',
+  'folderTrust',
+  'welcome',
   'auth',
   'theme',
   'editor',
   'provider',
   'tools',
   'createProfile',
+  'privacy',
+  'models',
 ] as const;
 
 interface UseInitialPromptSubmitParams {
@@ -25,11 +31,6 @@ interface UseInitialPromptSubmitParams {
   agentClientPresent: boolean;
   interactiveRuntimeReady: boolean;
   store: DialogStore;
-  blockedByDialogs: {
-    showPrivacyNotice: boolean;
-    isWelcomeDialogOpen: boolean;
-    isFolderTrustDialogOpen: boolean;
-  };
   startupGuardsInitialized: boolean;
 }
 
@@ -39,7 +40,6 @@ export function useInitialPromptSubmit({
   agentClientPresent,
   interactiveRuntimeReady,
   store,
-  blockedByDialogs,
   startupGuardsInitialized,
 }: UseInitialPromptSubmitParams): void {
   const initialPromptSubmittedRef = useRef<'idle' | 'pending' | 'done'>('idle');
@@ -54,12 +54,7 @@ export function useInitialPromptSubmit({
       return;
     }
 
-    const isSpecialDialogOpen =
-      blockedByDialogs.showPrivacyNotice ||
-      blockedByDialogs.isWelcomeDialogOpen ||
-      blockedByDialogs.isFolderTrustDialogOpen;
-
-    if (isSpecialDialogOpen || blockingDialogOpen || !agentClientPresent) {
+    if (blockingDialogOpen || !agentClientPresent) {
       return;
     }
 
@@ -88,9 +83,6 @@ export function useInitialPromptSubmit({
     agentClientPresent,
     interactiveRuntimeReady,
     blockingDialogOpen,
-    blockedByDialogs.showPrivacyNotice,
-    blockedByDialogs.isWelcomeDialogOpen,
-    blockedByDialogs.isFolderTrustDialogOpen,
     startupGuardsInitialized,
   ]);
 }

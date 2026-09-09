@@ -51,6 +51,7 @@ import type {
 } from '../types.js';
 import { MessageType, ToolCallStatus } from '../types.js';
 import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
+import type { DialogRequest } from '../stores/dialog/dialogStore.js';
 
 export interface SlashCommandHandlerDeps {
   commands: readonly SlashCommand[] | undefined;
@@ -72,10 +73,7 @@ export interface SlashCommandHandlerDeps {
     updater: (prev: Set<string>) => Set<string>,
   ) => void;
   setConfirmationRequest: (
-    request: {
-      prompt: React.ReactNode;
-      onConfirm: (confirmed: boolean) => void;
-    } | null,
+    request: Extract<DialogRequest, { kind: 'confirmation' }> | null,
   ) => void;
   recordingIntegration?: RecordingIntegration;
   recordingSwapCallbacks?: RecordingSwapCallbacks;
@@ -598,15 +596,19 @@ async function confirmAction(
       deps.confirmationLogger.debug(() => 'Confirmation dialog opened');
     }
     deps.setConfirmationRequest({
-      prompt: result.prompt,
-      onConfirm: (resolvedConfirmed) => {
-        if (deps.confirmationLogger.enabled) {
-          deps.confirmationLogger.debug(
-            () => `Confirmation dialog resolved confirmed=${resolvedConfirmed}`,
-          );
-        }
-        deps.setConfirmationRequest(null);
-        resolve({ confirmed: resolvedConfirmed });
+      kind: 'confirmation',
+      payload: {
+        prompt: result.prompt,
+        onConfirm: (resolvedConfirmed) => {
+          if (deps.confirmationLogger.enabled) {
+            deps.confirmationLogger.debug(
+              () =>
+                `Confirmation dialog resolved confirmed=${resolvedConfirmed}`,
+            );
+          }
+          deps.setConfirmationRequest(null);
+          resolve({ confirmed: resolvedConfirmed });
+        },
       },
     });
   });

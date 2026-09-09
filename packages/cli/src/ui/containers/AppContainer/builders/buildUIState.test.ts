@@ -33,16 +33,7 @@ const makeParams = (): UIStateParams => ({
   buffer: {} as UIStateParams['buffer'],
   shellModeActive: false,
 
-  // Dialog states
-  isFolderTrustDialogOpen: false,
-  showWorkspaceMigrationDialog: false,
-  showPrivacyNotice: false,
-  isModelsDialogOpen: false,
-  isSessionBrowserDialogOpen: false,
-  isModelConfigDialogOpen: false,
-  isPoliciesDialogOpen: false,
-
-  // Dialog data
+  // Dialog data (open state and open-time payloads live in DialogStore)
   providerOptions: [],
   selectedProvider: '',
   currentModel: '',
@@ -52,8 +43,6 @@ const makeParams = (): UIStateParams => ({
   toolsDialogAction: 'enable',
   toolsDialogTools: [],
   toolsDialogDisabledTools: [],
-  workspaceLlxprtExtensions: [],
-  modelsDialogData: undefined,
 
   // Profile management dialog data
   profileListItems: [],
@@ -64,10 +53,6 @@ const makeParams = (): UIStateParams => ({
   activeProfileName: null,
   profileDialogError: null,
   profileDialogLoading: false,
-
-  // Confirmation requests
-  confirmationRequest: null,
-  confirmUpdateLlxprtExtensionRequests: [],
 
   // Exit/warning states
   ctrlCPressedOnce: false,
@@ -129,15 +114,13 @@ const makeParams = (): UIStateParams => ({
   slashCommands: undefined,
   commandContext: {} as CommandContext,
 
-  // IDE prompt
-  shouldShowIdePrompt: false,
+  // IDE prompt (open state lives in DialogStore)
   currentIDE: undefined,
 
   // Trust
   isTrustedFolder: false,
 
-  // Welcome onboarding
-  isWelcomeDialogOpen: false,
+  // Welcome onboarding (dialog open state lives in DialogStore)
   welcomeState: {} as UIStateParams['welcomeState'],
   welcomeAvailableProviders: [],
   welcomeAvailableModels: [],
@@ -236,27 +219,6 @@ describe('buildUIState', () => {
     const resultWithoutProfile = buildUIState(paramsWithoutProfile);
 
     expect(resultWithoutProfile.selectedProfileData).toBe(null);
-  });
-
-  it('maps dialog states correctly', () => {
-    const params = makeParams();
-    params.isFolderTrustDialogOpen = true;
-    params.showWorkspaceMigrationDialog = true;
-    params.showPrivacyNotice = true;
-    params.isModelsDialogOpen = true;
-    params.isSessionBrowserDialogOpen = true;
-    params.isModelConfigDialogOpen = true;
-    params.isPoliciesDialogOpen = true;
-
-    const result = buildUIState(params);
-
-    expect(result.isFolderTrustDialogOpen).toBe(true);
-    expect(result.showWorkspaceMigrationDialog).toBe(true);
-    expect(result.showPrivacyNotice).toBe(true);
-    expect(result.isModelsDialogOpen).toBe(true);
-    expect(result.isSessionBrowserDialogOpen).toBe(true);
-    expect(result.isModelConfigDialogOpen).toBe(true);
-    expect(result.isPoliciesDialogOpen).toBe(true);
   });
 
   it('maps token metrics correctly', () => {

@@ -14,7 +14,6 @@ import { useLayoutMeasurement } from './useLayoutMeasurement.js';
 import { useFlickerDetector } from '../../../hooks/useFlickerDetector.js';
 import { useSelectionDebugLogger } from './useSelectionDebugLogger.js';
 import { useClearScreenAction } from './useClearScreenAction.js';
-import { useConfirmationSelection } from './useConfirmationSelection.js';
 import { useInputHistoryBootstrap } from './useInputHistoryBootstrap.js';
 import { useInitialPromptSubmit } from './useInitialPromptSubmit.js';
 import { usePowerShellPlaceholder } from './usePowerShellPlaceholder.js';
@@ -58,9 +57,6 @@ export interface AppLayoutParams {
   useAlternateBuffer: AppDialogsResult['useAlternateBuffer'];
   ideContextState: AppDialogsResult['ideContextState'];
   setDebugMessage: AppDialogsResult['setDebugMessage'];
-  showPrivacyNotice: AppDialogsResult['showPrivacyNotice'];
-  isWelcomeDialogOpen: AppDialogsResult['isWelcomeDialogOpen'];
-  isFolderTrustDialogOpen: AppDialogsResult['isFolderTrustDialogOpen'];
   /** Typed DialogStore; dialog-open state is read through narrow selectors. */
   store: DialogStore;
   embeddedShellFocused: AppDialogsResult['embeddedShellFocused'];
@@ -70,7 +66,6 @@ export interface AppLayoutParams {
   // From input
   streamingState: AppInputResult['streamingState'];
   pendingHistoryItems: AppInputResult['pendingHistoryItems'];
-  confirmationRequest: AppInputResult['confirmationRequest'];
   cancelOngoingRequest: AppInputResult['cancelOngoingRequest'];
   activeShellPtyId: AppInputResult['activeShellPtyId'];
   ctrlCPressedOnce: AppInputResult['ctrlCPressedOnce'];
@@ -225,13 +220,10 @@ function useLayoutMeasure(p: AppLayoutParams) {
     constrainHeight,
     setFooterHeight,
     footerHeight,
-    confirmationRequest,
+    store,
     terminalHeight,
   } = p;
-  useSelectionDebugLogger({ confirmationRequest });
-  const handleConfirmationSelect = useConfirmationSelection({
-    confirmationRequest,
-  });
+  useSelectionDebugLogger({ store });
   const { mainControlsRef, pendingHistoryItemRef, rootUiRef } =
     useLayoutMeasurement({
       enabled: true,
@@ -252,7 +244,6 @@ function useLayoutMeasure(p: AppLayoutParams) {
     pendingHistoryItemRef,
     rootUiRef,
     availableTerminalHeight,
-    handleConfirmationSelect,
   };
 }
 
@@ -262,9 +253,6 @@ function useLayoutContext(p: AppLayoutParams) {
     settings,
     runtimeMessageBus,
     consoleMessages,
-    showPrivacyNotice,
-    isWelcomeDialogOpen,
-    isFolderTrustDialogOpen,
     store,
     terminalHeight,
     terminalWidth,
@@ -296,11 +284,6 @@ function useLayoutContext(p: AppLayoutParams) {
     agentClientPresent: Boolean(uiRuntime.agentClientSource.getAgentClient()),
     interactiveRuntimeReady,
     store,
-    blockedByDialogs: {
-      showPrivacyNotice,
-      isWelcomeDialogOpen,
-      isFolderTrustDialogOpen,
-    },
     startupGuardsInitialized,
   });
   const mainAreaWidth = calculateMainAreaWidth(terminalWidth, settings);

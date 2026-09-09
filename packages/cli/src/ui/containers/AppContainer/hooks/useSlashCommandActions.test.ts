@@ -16,9 +16,6 @@ const createCallback = () => vi.fn();
 
 function baseCallbacks() {
   return {
-    openPrivacyNotice: createCallback(),
-    openModelsDialog: createCallback(),
-    openPoliciesDialog: createCallback(),
     openProviderDialog: createCallback(),
     openLoadProfileDialog: createCallback(),
     openCreateProfileDialog: createCallback(),
@@ -32,7 +29,6 @@ function baseCallbacks() {
     dispatchExtensionStateUpdate: createCallback(),
     addConfirmUpdateExtensionRequest: createCallback(),
     welcomeActions: { resetAndReopen: createCallback() },
-    openSessionBrowserDialog: createCallback(),
   };
 }
 
@@ -49,11 +45,6 @@ describe('useSlashCommandActions', () => {
 
     const { result } = renderHook(() => useSlashCommandActions(callbacks));
 
-    expect(result.current.openPrivacyNotice).toBe(callbacks.openPrivacyNotice);
-    expect(result.current.openModelsDialog).toBe(callbacks.openModelsDialog);
-    expect(result.current.openPoliciesDialog).toBe(
-      callbacks.openPoliciesDialog,
-    );
     expect(result.current.openProviderDialog).toBe(
       callbacks.openProviderDialog,
     );
@@ -82,9 +73,6 @@ describe('useSlashCommandActions', () => {
     );
     expect(result.current.openWelcomeDialog).toBe(
       callbacks.welcomeActions.resetAndReopen,
-    );
-    expect(result.current.openSessionBrowserDialog).toBe(
-      callbacks.openSessionBrowserDialog,
     );
   });
 
@@ -164,6 +152,40 @@ describe('useSlashCommandActions', () => {
     expect(openSpy.editor).toHaveBeenCalledWith({});
     result.current.openSettingsDialog();
     expect(openSpy.settings).toHaveBeenCalledWith({});
+  });
+
+  it('routes privacy/models/policies/session-browser opens through the dialogs object', () => {
+    const openSpy = {
+      privacy: createCallback(),
+      models: createCallback(),
+      policies: createCallback(),
+      sessionBrowser: createCallback(),
+    };
+    const { dialogs } = withRealStoreDialogs();
+    const spiedDialogs: DialogOpeners = {
+      ...dialogs,
+      privacy: { open: openSpy.privacy, close: createCallback() },
+      models: { open: openSpy.models, close: createCallback() },
+      policies: { open: openSpy.policies, close: createCallback() },
+      sessionBrowser: {
+        open: openSpy.sessionBrowser,
+        close: createCallback(),
+      },
+    };
+    const callbacks = { ...baseCallbacks(), dialogs: spiedDialogs };
+
+    const { result } = renderHook(() => useSlashCommandActions(callbacks));
+
+    result.current.openPrivacyNotice();
+    expect(openSpy.privacy).toHaveBeenCalledWith({});
+    result.current.openModelsDialog();
+    expect(openSpy.models).toHaveBeenCalledWith({});
+    result.current.openModelsDialog({ initialSearch: 'gemini' });
+    expect(openSpy.models).toHaveBeenCalledWith({ initialSearch: 'gemini' });
+    result.current.openPoliciesDialog();
+    expect(openSpy.policies).toHaveBeenCalledWith({});
+    result.current.openSessionBrowserDialog();
+    expect(openSpy.sessionBrowser).toHaveBeenCalledWith({});
   });
 
   it('returns stable identity when dependencies are unchanged', () => {

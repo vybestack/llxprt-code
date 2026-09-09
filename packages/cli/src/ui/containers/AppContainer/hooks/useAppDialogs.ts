@@ -21,7 +21,6 @@ import { useCreateProfileDialog } from '../../../hooks/useCreateProfileDialog.js
 import { useProfileManagement } from '../../../hooks/useProfileManagement.js';
 import { useToolsDialog } from '../../../hooks/useToolsDialog.js';
 import { useWorkspaceMigration } from '../../../hooks/useWorkspaceMigration.js';
-import { useDialogOrchestration } from './useDialogOrchestration.js';
 import { useDisplayPreferences } from './useDisplayPreferences.js';
 import { useModelTracking } from './useModelTracking.js';
 import { useIdeContextBridge } from './useIdeContextBridge.js';
@@ -33,6 +32,7 @@ import { resolveModelIdentity } from '../../../utils/modelIdentity.js';
 import type { useRuntimeApi } from '../../../contexts/RuntimeContext.js';
 import type {
   IdeContext,
+  IdeInfo,
   RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
@@ -60,6 +60,9 @@ export interface AppDialogsParams {
   consoleMessages: ConsoleMessageItem[];
   setLlxprtMdFileCount: (count: number) => void;
   suppressStartupWelcome?: boolean;
+  /** IDE nudge visibility + identity from bootstrap; open state lives in DialogStore. */
+  shouldShowIdePrompt: boolean | null | undefined;
+  currentIDE: IdeInfo | undefined;
 }
 
 function useDialogsState() {
@@ -71,7 +74,6 @@ function useDialogsState() {
   const [editorError] = useState<string | null>(null);
   const [footerHeight, setFooterHeight] = useState<number>(0);
   const [shellModeActive, setShellModeActive] = useState(false);
-  const [showPrivacyNotice, setShowPrivacyNotice] = useState<boolean>(false);
   const [ideContextState, setIdeContextState] = useState<
     IdeContext | undefined
   >();
@@ -91,9 +93,6 @@ function useDialogsState() {
   const handleEscapePromptChange = useCallback((show: boolean) => {
     setShowEscapePrompt(show);
   }, []);
-  const handlePrivacyNoticeExit = useCallback(() => {
-    setShowPrivacyNotice(false);
-  }, []);
   return {
     staticKey,
     setStaticKey,
@@ -111,8 +110,6 @@ function useDialogsState() {
     setFooterHeight,
     shellModeActive,
     setShellModeActive,
-    showPrivacyNotice,
-    setShowPrivacyNotice,
     ideContextState,
     setIdeContextState,
     showEscapePrompt,
@@ -125,7 +122,6 @@ function useDialogsState() {
     setQueueErrorMessage,
     toggleCorgiMode,
     handleEscapePromptChange,
-    handlePrivacyNoticeExit,
   };
 }
 
@@ -133,7 +129,7 @@ function useDialogsCore(
   p: AppDialogsParams,
   st: ReturnType<typeof useDialogsState>,
 ) {
-  const { config, settings, addItem, consoleMessages } = p;
+  const { config, settings, addItem, store, dialogs, consoleMessages } = p;
   const {
     currentModel,
     setCurrentModel,
@@ -144,18 +140,15 @@ function useDialogsCore(
     () => config.getEphemeralSetting('context-limit') as number | undefined,
   );
   const displayPrefs = useDisplayPreferences();
-  const orchestration = useDialogOrchestration();
-  const workspace = useWorkspaceMigration(settings);
+  const workspace = useWorkspaceMigration(settings, dialogs);
   const extensions = config.getExtensions();
   const extUpdates = useExtensionUpdates(
     extensions,
     addItem,
     config.getWorkingDir(),
+    store,
   );
   useIdeContextBridge({ setIdeContextState: st.setIdeContextState });
-  const openPrivacyNotice = useCallback(() => {
-    st.setShowPrivacyNotice(true);
-  }, [st]);
   const errorCount = useMemo(
     () =>
       consoleMessages
@@ -171,10 +164,8 @@ function useDialogsCore(
     contextLimit,
     setContextLimit,
     ...displayPrefs,
-    ...orchestration,
     ...workspace,
     ...extUpdates,
-    openPrivacyNotice,
     errorCount,
   };
 }
@@ -268,15 +259,37 @@ function useDialogsAuth(
   setContextLimit: (limit: number | undefined) => void,
   setShowErrorDetails: (value: boolean) => void,
 ) {
-  const { config, settings, addItem, dialogs } = p;
+  const { config, settings, addItem, store, dialogs } = p;
   const theme = useThemeCommand(settings, dialogs, addItem);
-  const folderTrust = useFolderTrust(settings, addItem, config);
+  const folderTrust = useFolderTrust({
+    settings,
+    addItem,
+    config,
+    store,
+    dialogs,
+  });
   const welcome = useWelcomeOnboarding({
     settings,
     isFolderTrustComplete: !folderTrust.isFolderTrustDialogOpen,
     agent: p.agent,
     suppressStartup: p.suppressStartupWelcome === true,
   });
+  // The welcome dialog mirrors welcome.showWelcome in the DialogStore;
+  // dismiss/resetAndReopen flip showWelcome and this effect follows.
+  useEffect(() => {
+    if (welcome.showWelcome) {
+      dialogs.welcome.open({});
+    } else {
+      dialogs.welcome.close();
+    }
+  }, [welcome.showWelcome, dialogs]);
+  useEffect(() => {
+    if (p.shouldShowIdePrompt === true && p.currentIDE) {
+      dialogs.idePrompt.open({ ide: p.currentIDE });
+    } else {
+      dialogs.idePrompt.close();
+    }
+  }, [p.shouldShowIdePrompt, p.currentIDE, dialogs]);
   useIdeTrustEffect(config, st);
   const authProviders = useDialogsAuthProviders(
     p,
@@ -292,9 +305,7 @@ function useDialogsAuth(
   return {
     handleThemeSelect: theme.handleThemeSelect,
     handleThemeHighlight: theme.handleThemeHighlight,
-    isFolderTrustDialogOpen: folderTrust.isFolderTrustDialogOpen,
     handleFolderTrustSelect: folderTrust.handleFolderTrustSelect,
-    isWelcomeDialogOpen: welcome.showWelcome,
     welcomeState: welcome.state,
     welcomeActions: welcome.actions,
     welcomeAvailableProviders: welcome.availableProviders,

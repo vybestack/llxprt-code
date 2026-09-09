@@ -6,22 +6,28 @@
 
 import { useEffect, useRef } from 'react';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
+import type { DialogStore } from '../../../stores/dialog/dialogStore.js';
+import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 
 const selectionLogger = new DebugLogger('llxprt:ui:selection');
 
 interface UseSelectionDebugLoggerParams {
-  confirmationRequest: { prompt: React.ReactNode } | null;
+  store: DialogStore;
 }
 
 /**
  * @hook useSelectionDebugLogger
  * @description Emits debug logs when confirmation dialog opens/closes
- * @inputs confirmationRequest
+ * @inputs DialogStore
  * @outputs void
  */
 export function useSelectionDebugLogger({
-  confirmationRequest,
+  store,
 }: UseSelectionDebugLoggerParams): void {
+  const confirmationRequest = useStoreSelector(
+    store.store,
+    (state) => state.confirmationRequest,
+  );
   const isInitialMountRef = useRef(true);
   const prevConfirmationRequestRef = useRef(confirmationRequest);
 

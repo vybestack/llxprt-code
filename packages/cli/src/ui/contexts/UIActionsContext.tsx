@@ -99,48 +99,12 @@ export interface UIActions {
     apiKey?: string,
   ) => Promise<void>;
 
-  // Models dialog
-  openModelsDialog: (data?: {
-    initialSearch?: string;
-    initialFilters?: {
-      tools?: boolean;
-      vision?: boolean;
-      reasoning?: boolean;
-      audio?: boolean;
-    };
-    includeDeprecated?: boolean;
-  }) => void;
-  closeModelsDialog: () => void;
-
-  // Model config dialog
-  openModelConfigDialog: () => void;
-  closeModelConfigDialog: () => void;
-
-  // Policies dialog
-  openPoliciesDialog: () => void;
-  closePoliciesDialog: () => void;
-
-  /**
-   * Session browser dialog
-   * @plan PLAN-20260214-SESSIONBROWSER.P21
-   */
-  openSessionBrowserDialog: () => void;
-  closeSessionBrowserDialog: () => void;
-
-  // Workspace migration dialog
+  // Workspace migration dialog (open/close state lives in DialogStore)
   onWorkspaceMigrationDialogOpen: () => void;
-  onWorkspaceMigrationDialogClose: () => void;
-
-  // Privacy notice
-  openPrivacyNotice: () => void;
-  handlePrivacyNoticeExit: () => void;
 
   // OAuth code dialog
   handleOAuthCodeDialogClose: () => void;
   handleOAuthCodeSubmit: (code: string) => Promise<void>;
-
-  // Confirmation handlers
-  handleConfirmationSelect: (value: boolean) => void;
 
   // IDE prompt
   handleIdePromptComplete: (result: IdeIntegrationNudgeResult) => void;

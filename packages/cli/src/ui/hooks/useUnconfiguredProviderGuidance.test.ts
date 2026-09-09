@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -13,8 +13,10 @@ import {
   vi,
   type Mock,
 } from 'bun:test';
+import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { useUnconfiguredProviderGuidance } from './useUnconfiguredProviderGuidance.js';
+import { createDialogStore } from '../stores/dialog/dialogStore.js';
 import type { HistoryItemWithoutId } from '../types.js';
 
 describe('useUnconfiguredProviderGuidance', () => {
@@ -33,7 +35,7 @@ describe('useUnconfiguredProviderGuidance', () => {
       useUnconfiguredProviderGuidance({
         hasActiveProvider: false,
         addItem,
-        isWelcomeDialogOpen: false,
+        store: createDialogStore(),
       }),
     );
     expect(addItem).toHaveBeenCalledTimes(1);
@@ -51,18 +53,20 @@ describe('useUnconfiguredProviderGuidance', () => {
       useUnconfiguredProviderGuidance({
         hasActiveProvider: true,
         addItem,
-        isWelcomeDialogOpen: false,
+        store: createDialogStore(),
       }),
     );
     expect(addItem).not.toHaveBeenCalled();
   });
 
-  it('does NOT show guidance when the welcome dialog is open', () => {
+  it('does NOT show guidance when the welcome dialog is open in the store', () => {
+    const store = createDialogStore();
+    store.commands.openDialog({ kind: 'welcome', payload: {} });
     renderHook(() =>
       useUnconfiguredProviderGuidance({
         hasActiveProvider: false,
         addItem,
-        isWelcomeDialogOpen: true,
+        store,
       }),
     );
     expect(addItem).not.toHaveBeenCalled();
@@ -73,7 +77,7 @@ describe('useUnconfiguredProviderGuidance', () => {
       useUnconfiguredProviderGuidance({
         hasActiveProvider: false,
         addItem,
-        isWelcomeDialogOpen: false,
+        store: createDialogStore(),
       }),
     );
     rerender();
@@ -87,7 +91,7 @@ describe('useUnconfiguredProviderGuidance', () => {
         useUnconfiguredProviderGuidance({
           hasActiveProvider,
           addItem,
-          isWelcomeDialogOpen: false,
+          store: createDialogStore(),
         }),
       { initialProps: { hasActiveProvider: true } },
     );
@@ -97,19 +101,21 @@ describe('useUnconfiguredProviderGuidance', () => {
     expect(addItem).toHaveBeenCalledTimes(1);
   });
 
-  it('closes guidance on transition from welcome open to welcome closed', () => {
-    const { rerender } = renderHook(
-      ({ isWelcomeDialogOpen }) =>
-        useUnconfiguredProviderGuidance({
-          hasActiveProvider: false,
-          addItem,
-          isWelcomeDialogOpen,
-        }),
-      { initialProps: { isWelcomeDialogOpen: true } },
+  it('shows guidance on transition from welcome open to welcome closed', () => {
+    const store = createDialogStore();
+    store.commands.openDialog({ kind: 'welcome', payload: {} });
+    renderHook(() =>
+      useUnconfiguredProviderGuidance({
+        hasActiveProvider: false,
+        addItem,
+        store,
+      }),
     );
     expect(addItem).not.toHaveBeenCalled();
 
-    rerender({ isWelcomeDialogOpen: false });
+    act(() => {
+      store.commands.closeDialog('welcome');
+    });
     expect(addItem).toHaveBeenCalledTimes(1);
   });
 });

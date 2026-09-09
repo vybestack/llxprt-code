@@ -63,7 +63,7 @@ function useDerivedState(
     uiState.isNarrow,
   );
 
-  const dialogsVisible = useHasActiveDialog(uiState);
+  const dialogsVisible = useHasActiveDialog();
 
   const { listItems, staticItems, pendingItems } = useScrollableContent(
     slashCommandRuntime,

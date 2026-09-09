@@ -4,16 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { ExitCodes } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { LoadedSettings } from '../../config/settings.js';
 import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import {
+  isWorkspaceTrusted,
+  TrustLevel,
   loadTrustedFolders,
   resolveLocalWorkspaceTrust,
-  TrustLevel,
-  isWorkspaceTrusted,
   type TrustedFolderSnapshot,
 } from '../../config/trustedFolders.js';
 import { type HistoryItemWithoutId, MessageType } from '../types.js';
@@ -23,16 +23,18 @@ import {
   combineTrustUpdateFailure,
   getTrustCommitErrorMessage,
 } from '../trustDialogHelpers.js';
+import type { DialogStore } from '../stores/dialog/dialogStore.js';
+import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
+import { useStoreSelector } from '../stores/useStoreSelector.js';
+
+const debug = new DebugLogger('llxprt:ui:useFolderTrust');
 
 export type FolderTrustRuntime = Pick<
   CliUiRuntime,
   'getWorkingDir' | 'setTrustedFolderLive' | 'isTrustedFolder'
 >;
 
-const debug = new DebugLogger('llxprt:ui:useFolderTrust');
-
 type AddItemFn = (item: HistoryItemWithoutId, timestamp: number) => number;
-type SetDialogOpenFn = (open: boolean) => void;
 
 function getTrustLevelFromChoice(choice: FolderTrustChoice): TrustLevel | null {
   switch (choice) {
@@ -48,7 +50,7 @@ function getTrustLevelFromChoice(choice: FolderTrustChoice): TrustLevel | null {
 }
 
 function showStartupMessage(
-  trusted: boolean | undefined = undefined,
+  trusted: boolean | undefined,
   addItem: AddItemFn | undefined,
   startupMessageSent: React.MutableRefObject<boolean>,
 ): void {
@@ -72,7 +74,7 @@ async function applyFolderTrustChoice(
   settings: LoadedSettings,
   config: FolderTrustRuntime | undefined,
   addItem: AddItemFn | undefined,
-  setDialogOpen: SetDialogOpenFn,
+  closeDialog: () => void,
   mountedRef: React.MutableRefObject<boolean>,
 ): Promise<void> {
   const trustLevel = getTrustLevelFromChoice(choice);
@@ -98,7 +100,7 @@ async function applyFolderTrustChoice(
     failedPhase = 'live';
     await config?.setTrustedFolderLive(newIsTrusted);
     if (mountedRef.current) {
-      setDialogOpen(false);
+      closeDialog();
     }
   } catch (error) {
     const rollbackFailures: unknown[] = [];
@@ -135,21 +137,29 @@ async function applyFolderTrustChoice(
   }
 }
 
-export const useFolderTrust = (
-  settings: LoadedSettings,
-  addItem?: AddItemFn,
-  config?: FolderTrustRuntime,
-) => {
-  const { folderTrust } = settings.merged;
-  const initialTrust = isWorkspaceTrusted(
+interface UseFolderTrustParams {
+  settings: LoadedSettings;
+  addItem?: AddItemFn;
+  config?: FolderTrustRuntime;
+  store: DialogStore;
+  dialogs: DialogOpeners;
+}
+
+export const useFolderTrust = ({
+  settings,
+  addItem,
+  config,
+  store,
+  dialogs,
+}: UseFolderTrustParams) => {
+  const trusted = isWorkspaceTrusted(
     settings.merged,
     config?.getWorkingDir() ?? process.cwd(),
   );
-  const [isFolderTrustDialogOpen, setIsFolderTrustDialogOpen] = useState(
-    initialTrust === undefined,
+  const isFolderTrustDialogOpen = useStoreSelector(store.store, (state) =>
+    state.requests.some((r) => r.kind === 'folderTrust'),
   );
   const startupMessageSent = useRef(false);
-  const previousFolderTrust = useRef(folderTrust);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -159,18 +169,19 @@ export const useFolderTrust = (
     };
   }, []);
 
+  // The dialog is open exactly while workspace trust is undecided; open and
+  // close are idempotent so re-running with the same verdict is a no-op.
   useEffect(() => {
-    const folderTrustChanged = previousFolderTrust.current !== folderTrust;
-    previousFolderTrust.current = folderTrust;
-    const trusted = isWorkspaceTrusted(
-      settings.merged,
-      config?.getWorkingDir() ?? process.cwd(),
-    );
-    if (folderTrustChanged) {
-      setIsFolderTrustDialogOpen(trusted === undefined);
+    if (trusted === undefined) {
+      dialogs.folderTrust.open({});
+    } else {
+      dialogs.folderTrust.close();
     }
+  }, [trusted, dialogs]);
+
+  useEffect(() => {
     showStartupMessage(trusted, addItem, startupMessageSent);
-  }, [folderTrust, addItem, config, settings.merged]);
+  }, [trusted, addItem]);
 
   const handleFolderTrustSelect = useCallback(
     (choice: FolderTrustChoice): Promise<void> =>
@@ -179,10 +190,10 @@ export const useFolderTrust = (
         settings,
         config,
         addItem,
-        setIsFolderTrustDialogOpen,
+        dialogs.folderTrust.close,
         mountedRef,
       ),
-    [addItem, config, settings],
+    [addItem, config, settings, dialogs],
   );
 
   return { isFolderTrustDialogOpen, handleFolderTrustSelect };

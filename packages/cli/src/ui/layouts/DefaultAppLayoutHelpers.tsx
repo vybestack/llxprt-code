@@ -51,10 +51,8 @@ export {
 import type { ScrollableMainContentItem } from './scrollableMainContent.js';
 
 /**
- * True when any dialog currently owns the input surface. Combines the uiState
- * dialog flags with the DialogStore request slots (all dialog kinds except the
- * pre-store holdouts: workspace migration, IDE prompt, folder trust, welcome,
- * models, session browser, model config, policies, privacy notice).
+ * True when any dialog currently owns the input surface. All dialog kinds
+ * live in the DialogStore, so this is purely a store read.
  */
 function hasOpenDialog(state: DialogState): boolean {
   return (
@@ -64,22 +62,9 @@ function hasOpenDialog(state: DialogState): boolean {
   );
 }
 
-export function useHasActiveDialog(uiState: UIState): boolean {
+export function useHasActiveDialog(): boolean {
   const store = useDialogStore();
-  const storeOpen = useStoreSelector(store.store, hasOpenDialog);
-  const dialogFlags = [
-    uiState.showWorkspaceMigrationDialog,
-    uiState.shouldShowIdePrompt,
-    uiState.isFolderTrustDialogOpen,
-    uiState.isWelcomeDialogOpen,
-    Boolean(uiState.confirmationRequest),
-    uiState.isModelsDialogOpen,
-    uiState.isSessionBrowserDialogOpen,
-    uiState.isModelConfigDialogOpen,
-    uiState.isPoliciesDialogOpen,
-    uiState.showPrivacyNotice,
-  ];
-  return storeOpen || dialogFlags.some(Boolean);
+  return useStoreSelector(store.store, hasOpenDialog);
 }
 
 export interface LayoutSettings {

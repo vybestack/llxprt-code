@@ -18,10 +18,14 @@ void vi.mock('ink', () => realInkModule);
 
 import { DefaultAppLayout } from './DefaultAppLayout.js';
 import { DialogProvider } from '../stores/dialog/DialogContext.js';
-import { createDialogStore } from '../stores/dialog/dialogStore.js';
+import {
+  createDialogStore,
+  DIALOG_PRIORITY,
+  type DialogKind,
+  type DialogStore,
+} from '../stores/dialog/dialogStore.js';
 import { useUIState, type UIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
-import { useHasActiveDialog } from './DefaultAppLayoutHelpers.js';
 import { StreamingState } from '../types.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import {
@@ -231,50 +235,26 @@ function createBaseUIState() {
     currentModelLabel: undefined,
     contextLimit: undefined,
 
-    // dialog flags
-    showWorkspaceMigrationDialog: false,
-    shouldShowIdePrompt: false,
-    isFolderTrustDialogOpen: false,
-    isWelcomeDialogOpen: false,
-    confirmationRequest: null,
-    isThemeDialogOpen: false,
-    isSettingsDialogOpen: false,
-    isAuthDialogOpen: false,
-    isOAuthCodeDialogOpen: false,
-    isEditorDialogOpen: false,
-    isProviderDialogOpen: false,
-    isLoadProfileDialogOpen: false,
-    isCreateProfileDialogOpen: false,
-    isProfileListDialogOpen: false,
-    isProfileDetailDialogOpen: false,
-    isProfileEditorDialogOpen: false,
-    isToolsDialogOpen: false,
-    isModelsDialogOpen: false,
-    isSessionBrowserDialogOpen: false,
-    isModelConfigDialogOpen: false,
-    isPoliciesDialogOpen: false,
-    showPrivacyNotice: false,
+    // Store-driven dialog kinds assert against the store itself; the
+    // createUIStateWithActiveDialog fixture and dialog booleans are gone.
 
     rootUiRef: { current: null },
     pendingHistoryItemRef: { current: null },
   } as never;
 }
 
-const ACTIVE_DIALOG_FLAGS = [
-  'showWorkspaceMigrationDialog',
-  'shouldShowIdePrompt',
-  'isFolderTrustDialogOpen',
-  'isWelcomeDialogOpen',
-  'confirmationRequest',
-  'isModelsDialogOpen',
-  'isSessionBrowserDialogOpen',
-  'isModelConfigDialogOpen',
-  'isPoliciesDialogOpen',
-  'showPrivacyNotice',
-] as const satisfies ReadonlyArray<keyof UIState>;
-
-/** Dialog kinds whose open state lives in the DialogStore (slices B2/B2b). */
+/**
+ * Every dialog kind whose open state lives in the DialogStore. The drift
+ * guard below fails when a kind is added to DIALOG_PRIORITY without this
+ * table (or vice versa), so gating coverage cannot silently regress.
+ */
 const STORE_DRIVEN_DIALOG_KINDS = [
+  'workspaceMigration',
+  'idePrompt',
+  'folderTrust',
+  'welcome',
+  'confirmation',
+  'extensionUpdateConfirm',
   'theme',
   'settings',
   'auth',
@@ -287,25 +267,47 @@ const STORE_DRIVEN_DIALOG_KINDS = [
   'profileDetail',
   'profileEditor',
   'tools',
+  'privacy',
   'permissions',
   'logging',
   'subagent',
-] as const;
+  'models',
+  'sessionBrowser',
+  'modelConfig',
+  'policies',
+] as const satisfies readonly DialogKind[];
 
-type ActiveDialogFlag = (typeof ACTIVE_DIALOG_FLAGS)[number];
-
-function createUIStateWithActiveDialog(flag: ActiveDialogFlag): UIState {
-  const baseState: UIState = createBaseUIState();
-  if (flag === 'confirmationRequest') {
-    return {
-      ...baseState,
-      confirmationRequest: {
-        prompt: null,
-        onConfirm: () => {},
-      },
-    };
+function openStoreDialog(store: DialogStore, kind: DialogKind): void {
+  switch (kind) {
+    case 'workspaceMigration':
+      store.commands.openDialog({ kind, payload: { extensions: [] } });
+      break;
+    case 'idePrompt':
+      store.commands.openDialog({
+        kind,
+        payload: { ide: { name: 'vscode', displayName: 'VS Code' } },
+      });
+      break;
+    case 'confirmation':
+    case 'extensionUpdateConfirm':
+      store.commands.openDialog({
+        kind,
+        payload: { prompt: null, onConfirm: () => {} },
+      });
+      break;
+    case 'profileDetail':
+    case 'profileEditor':
+      store.commands.openDialog({ kind, payload: { profileName: 'p' } });
+      break;
+    case 'tools':
+      store.commands.openDialog({ kind, payload: { action: 'enable' } });
+      break;
+    case 'logging':
+      store.commands.openDialog({ kind, payload: { entries: [] } });
+      break;
+    default:
+      store.commands.openDialog({ kind, payload: {} });
   }
-  return { ...baseState, [flag]: true };
 }
 
 function renderDefaultAppLayout(
@@ -339,93 +341,17 @@ describe('DefaultAppLayout', () => {
     mockUseUIActions.mockReturnValue(createActionsStub() as never);
   });
 
-  it('keeps the dialog test table aligned with every property read by the real predicate', () => {
-    const readKeys = new Set<string>();
-    const recordKey = (property: string | symbol): void => {
-      if (typeof property !== 'string') {
-        throw new Error(
-          `hasActiveDialog read the symbol key ${String(property)}. The drift ` +
-            'guard can only account for string keys; update the guard and ' +
-            'ACTIVE_DIALOG_FLAGS together.',
-        );
-      }
-      readKeys.add(property);
-    };
-    // The proxy records which keys the live gating touches; the store-driven
-    // request path is covered by the dedicated DialogStore test below.
-    const uiState = new Proxy(createBaseUIState(), {
-      get(target, property) {
-        recordKey(property);
-        return Reflect.get(target, property);
-      },
-      has(target, property) {
-        recordKey(property);
-        return Reflect.has(target, property);
-      },
-      ownKeys: () => [],
-    });
-    const Probe = () => {
-      useHasActiveDialog(uiState);
-      return null;
-    };
-    const rendered = render(
-      <DialogProvider store={createDialogStore()}>
-        <Probe />
-      </DialogProvider>,
-    );
-    rendered.unmount();
-
-    expect([...readKeys].sort()).toStrictEqual([...ACTIVE_DIALOG_FLAGS].sort());
-  });
-
-  it.each(ACTIVE_DIALOG_FLAGS.map((flag) => [flag] as const))(
-    'renders DialogManager instead of Composer when %s is active',
-    (flag) => {
-      const rendered = renderDefaultAppLayout(
-        createUIStateWithActiveDialog(flag),
-      );
-      const frame = rendered.lastFrame();
-
-      expect(frame).toContain(DIALOG_MANAGER_SENTINEL);
-      expect(frame).not.toContain(COMPOSER_SENTINEL);
-      rendered.unmount();
-    },
-  );
-
-  it('renders DialogManager instead of Composer when the DialogStore has an open request', () => {
-    const store = createDialogStore();
-    store.commands.openDialog({ kind: 'permissions', payload: {} });
-
-    const rendered = renderDefaultAppLayout(
-      createBaseUIState(),
-      undefined,
-      store,
-    );
-    const frame = rendered.lastFrame();
-
-    expect(frame).toContain(DIALOG_MANAGER_SENTINEL);
-    expect(frame).not.toContain(COMPOSER_SENTINEL);
-    rendered.unmount();
+  it('keeps the store-driven dialog table aligned with DIALOG_PRIORITY', () => {
+    // useHasActiveDialog reads only the DialogStore; the drift risk is a new
+    // store kind missing from this table, so guard against DIALOG_PRIORITY.
+    expect([...STORE_DRIVEN_DIALOG_KINDS]).toStrictEqual([...DIALOG_PRIORITY]);
   });
 
   it.each(STORE_DRIVEN_DIALOG_KINDS.map((kind) => [kind] as const))(
     'renders DialogManager instead of Composer when the %s dialog is open in the DialogStore',
     (kind) => {
       const store = createDialogStore();
-      switch (kind) {
-        case 'profileDetail':
-        case 'profileEditor':
-          store.commands.openDialog({ kind, payload: { profileName: 'p' } });
-          break;
-        case 'tools':
-          store.commands.openDialog({ kind, payload: { action: 'enable' } });
-          break;
-        case 'logging':
-          store.commands.openDialog({ kind, payload: { entries: [] } });
-          break;
-        default:
-          store.commands.openDialog({ kind, payload: {} });
-      }
+      openStoreDialog(store, kind);
 
       const rendered = renderDefaultAppLayout(
         createBaseUIState(),

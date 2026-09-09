@@ -41,11 +41,17 @@ import type {
   ValueArgument,
   LiteralArgument,
 } from '../commands/schema/types.js';
-import type { UIState } from '../contexts/UIStateContext.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { Colors } from '../colors.js';
 import { assertType } from '../../test-utils/assertions.js';
 import { expectFrameContains } from '../../test-utils/inkFrame.js';
+import {
+  createDialogStore,
+  selectActiveDialog,
+  type DialogStore,
+} from '../stores/dialog/dialogStore.js';
+import { DialogProvider } from '../stores/dialog/DialogContext.js';
+import { useStoreSelector } from '../stores/useStoreSelector.js';
 
 /**
  * Helper to narrow a command argument to the ValueArgument variant.
@@ -79,43 +85,17 @@ function isMessageAction(
 }
 
 // ---------------------------------------------------------------------------
-// UIState Factory (minimal for testing)
-// ---------------------------------------------------------------------------
-
-/**
- * Creates a minimal UIState for testing dialog visibility.
- * Only includes fields needed for these tests.
- */
-function createMinimalUIState(
-  overrides: Partial<UIState> = {},
-): Partial<UIState> {
-  return {
-    isSessionBrowserDialogOpen: false,
-    isFolderTrustDialogOpen: false,
-    showWorkspaceMigrationDialog: false,
-    showPrivacyNotice: false,
-    isModelsDialogOpen: false,
-    isWelcomeDialogOpen: false,
-    terminalWidth: 120,
-    terminalHeight: 40,
-    ...overrides,
-  };
-}
-
-// ---------------------------------------------------------------------------
 // Simple Dialog Renderer for Testing
 // ---------------------------------------------------------------------------
 
 /**
  * A minimal component that renders dialog visibility for testing.
- * Uses Box + nested Text properly for ink compatibility.
+ * Subscribes to the DialogStore like the real DialogManager does, so frames
+ * reflect the store-backed open state.
  */
-function TestDialogRenderer({
-  isSessionBrowserDialogOpen,
-}: {
-  isSessionBrowserDialogOpen: boolean;
-}) {
-  if (isSessionBrowserDialogOpen) {
+function TestDialogRenderer({ store }: { store: DialogStore }) {
+  const active = useStoreSelector(store.store, selectActiveDialog);
+  if (active?.kind === 'sessionBrowser') {
     // All text must be wrapped in Text component with color prop
     return (
       <Box flexDirection="column">
@@ -170,36 +150,30 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       expect(result.dialog).toBe('sessionBrowser');
 
       // Verify the action structure matches what processor expects
-      // The processor will call openSessionBrowserDialog() which sets
-      // isSessionBrowserDialogOpen = true
+      // The processor will call dialogs.sessionBrowser.open({}) which pushes
+      // a sessionBrowser request onto the DialogStore
     });
 
     /**
      * Test 2: Escape closes dialog (state transition)
-     * GIVEN: Dialog is open (isSessionBrowserDialogOpen = true)
-     * WHEN: Escape is pressed (simulated by state change)
-     * THEN: isSessionBrowserDialogOpen becomes false
+     * GIVEN: Dialog is open (store holds a sessionBrowser request)
+     * WHEN: Escape is pressed (simulated by closeDialog)
+     * THEN: The store no longer holds the request
      *
      * Note: This tests the state transition logic. The actual keypress
      * handling is in useSessionBrowser hook (tested separately).
      */
     it('dialog state can transition from open to closed', () => {
       // Start with dialog open
-      const openState = createMinimalUIState({
-        isSessionBrowserDialogOpen: true,
-      });
-      expect(openState.isSessionBrowserDialogOpen).toBe(true);
+      const store = createDialogStore();
+      store.commands.openDialog({ kind: 'sessionBrowser', payload: {} });
+      expect(selectActiveDialog(store.store.getState())?.kind).toBe(
+        'sessionBrowser',
+      );
 
       // Simulate closing (what would happen after Escape)
-      const closedState = createMinimalUIState({
-        isSessionBrowserDialogOpen: false,
-      });
-      expect(closedState.isSessionBrowserDialogOpen).toBe(false);
-
-      // Verify the transition is valid
-      expect(openState.isSessionBrowserDialogOpen).not.toBe(
-        closedState.isSessionBrowserDialogOpen,
-      );
+      store.commands.closeDialog('sessionBrowser');
+      expect(selectActiveDialog(store.store.getState())).toBeNull();
     });
 
     /**
@@ -314,16 +288,20 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
   describe('DialogManager Rendering', () => {
     /**
      * Test 7: Browser dialog shows title when open
-     * GIVEN: isSessionBrowserDialogOpen = true
-     * WHEN: DialogManager renders
+     * GIVEN: The DialogStore holds a sessionBrowser request
+     * WHEN: The dialog renderer renders
      * THEN: Output contains "Session Browser" (or renders without crashing in CI)
      *
      * Note: Ink's test renderer on some CI platforms (Ubuntu) produces empty
      * frames. We verify content when present, otherwise just check render success.
      */
-    it('browser dialog shows title when isSessionBrowserDialogOpen=true', () => {
+    it('browser dialog shows title when the store holds a sessionBrowser request', () => {
+      const store = createDialogStore();
+      store.commands.openDialog({ kind: 'sessionBrowser', payload: {} });
       const { lastFrame } = render(
-        <TestDialogRenderer isSessionBrowserDialogOpen={true} />,
+        <DialogProvider store={store}>
+          <TestDialogRenderer store={store} />
+        </DialogProvider>,
       );
 
       const output = lastFrame();
@@ -335,15 +313,19 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
     /**
      * Test 8: Browser dialog shows search bar
      * GIVEN: Dialog is open
-     * WHEN: DialogManager renders
+     * WHEN: The dialog renderer renders
      * THEN: Output contains "Search:" (or renders without crashing in CI)
      *
      * Note: Ink's test renderer on some CI platforms (Ubuntu) produces empty
      * frames. We verify content when present, otherwise just check render success.
      */
     it('browser dialog shows search bar when open', () => {
+      const store = createDialogStore();
+      store.commands.openDialog({ kind: 'sessionBrowser', payload: {} });
       const { lastFrame } = render(
-        <TestDialogRenderer isSessionBrowserDialogOpen={true} />,
+        <DialogProvider store={store}>
+          <TestDialogRenderer store={store} />
+        </DialogProvider>,
       );
 
       const output = lastFrame();
@@ -354,17 +336,20 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
 
     /**
      * Test 9: Browser dialog hides when closed
-     * GIVEN: isSessionBrowserDialogOpen = false
-     * WHEN: DialogManager renders
+     * GIVEN: The DialogStore has no sessionBrowser request
+     * WHEN: The dialog renderer renders
      * THEN: Output does NOT contain "Session Browser"
      */
-    it('browser dialog hides when isSessionBrowserDialogOpen=false', () => {
+    it('browser dialog hides when the store holds no sessionBrowser request', () => {
+      const store = createDialogStore();
       const { lastFrame } = render(
-        <TestDialogRenderer isSessionBrowserDialogOpen={false} />,
+        <DialogProvider store={store}>
+          <TestDialogRenderer store={store} />
+        </DialogProvider>,
       );
 
       const output = lastFrame();
-      // When closed, render returns null so output may be empty or not contain title
+      // When closed, render returns an empty Box so output must not contain title
       expect(output).not.toContain('Session Browser');
     });
   });
@@ -376,64 +361,64 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
   describe('State Transitions', () => {
     /**
      * Test 10: Initial state has browser closed
-     * GIVEN: Fresh UIState
+     * GIVEN: Fresh DialogStore
      * WHEN: State is created
-     * THEN: isSessionBrowserDialogOpen = false
+     * THEN: No sessionBrowser request exists
      */
-    it('initial state has isSessionBrowserDialogOpen=false', () => {
-      const state = createMinimalUIState();
+    it('initial store state has no sessionBrowser request', () => {
+      const store = createDialogStore();
 
-      expect(state.isSessionBrowserDialogOpen).toBe(false);
+      expect(
+        store.store
+          .getState()
+          .requests.some((request) => request.kind === 'sessionBrowser'),
+      ).toBe(false);
     });
 
     /**
-     * Test 11: Opening browser preserves other state
-     * GIVEN: UIState with various fields set
-     * WHEN: isSessionBrowserDialogOpen changes to true
-     * THEN: Other fields are unchanged
+     * Test 11: Opening browser preserves other dialog state
+     * GIVEN: A store with another dialog open
+     * WHEN: sessionBrowser opens
+     * THEN: The other request is preserved (stack semantics)
      */
-    it('opening browser preserves other state fields', () => {
-      const initialState = createMinimalUIState({
-        isModelsDialogOpen: false,
-        terminalWidth: 120,
-        terminalHeight: 40,
-      });
+    it('opening browser preserves other open dialog requests', () => {
+      const store = createDialogStore();
+      store.commands.openDialog({ kind: 'models', payload: {} });
 
       // Simulate opening session browser (what action handler would do)
-      const afterOpenState = {
-        ...initialState,
-        isSessionBrowserDialogOpen: true,
-      };
+      store.commands.openDialog({ kind: 'sessionBrowser', payload: {} });
 
-      expect(afterOpenState.isSessionBrowserDialogOpen).toBe(true);
-      // Other fields preserved
-      expect(afterOpenState.isModelsDialogOpen).toBe(false);
-      expect(afterOpenState.terminalWidth).toBe(120);
-      expect(afterOpenState.terminalHeight).toBe(40);
+      const kinds = store.store
+        .getState()
+        .requests.map((request) => request.kind);
+      expect(kinds).toContain('sessionBrowser');
+      expect(kinds).toContain('models');
     });
 
     /**
      * Test 12: Resume success closes browser
      * GIVEN: Dialog is open, resume completes successfully
      * WHEN: Resume handler runs
-     * THEN: isSessionBrowserDialogOpen becomes false
+     * THEN: The sessionBrowser request is removed
      *
      * Note: The actual close happens in SessionBrowserDialog's onSelect callback.
      * This tests the expected state transition pattern.
      */
     it('resume success would close browser dialog', () => {
       // Start with dialog open
-      const duringResume = createMinimalUIState({
-        isSessionBrowserDialogOpen: true,
-      });
-      expect(duringResume.isSessionBrowserDialogOpen).toBe(true);
+      const store = createDialogStore();
+      store.commands.openDialog({ kind: 'sessionBrowser', payload: {} });
+      expect(selectActiveDialog(store.store.getState())?.kind).toBe(
+        'sessionBrowser',
+      );
 
       // After successful resume, dialog closes
-      const afterResume = {
-        ...duringResume,
-        isSessionBrowserDialogOpen: false,
-      };
-      expect(afterResume.isSessionBrowserDialogOpen).toBe(false);
+      store.commands.closeDialog('sessionBrowser');
+      expect(
+        store.store
+          .getState()
+          .requests.some((request) => request.kind === 'sessionBrowser'),
+      ).toBe(false);
     });
   });
 
@@ -539,17 +524,18 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
     });
 
     /**
-     * Test 16: UIState session browser field exists
-     * GIVEN: UIState interface
-     * WHEN: Checking for session browser field
-     * THEN: isSessionBrowserDialogOpen field is present
+     * Test 16: DialogStore covers the sessionBrowser kind
+     * GIVEN: The DialogStore dialog union
+     * WHEN: Opening a sessionBrowser request
+     * THEN: selectActiveDialog reports the sessionBrowser kind
      */
-    it('UIState interface includes isSessionBrowserDialogOpen field', () => {
-      const state = createMinimalUIState();
+    it('DialogStore tracks the sessionBrowser dialog kind', () => {
+      const store = createDialogStore();
+      store.commands.openDialog({ kind: 'sessionBrowser', payload: {} });
 
-      // Field exists and is boolean
-      expect('isSessionBrowserDialogOpen' in state).toBe(true);
-      expect(typeof state.isSessionBrowserDialogOpen).toBe('boolean');
+      expect(selectActiveDialog(store.store.getState())?.kind).toBe(
+        'sessionBrowser',
+      );
     });
   });
 

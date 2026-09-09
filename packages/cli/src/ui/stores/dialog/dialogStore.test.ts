@@ -12,6 +12,7 @@ import {
   type DialogKind,
   type DialogRequest,
 } from './dialogStore.js';
+import { SubagentView } from '../../components/SubagentManagement/types.js';
 
 function prompt(settings?: { prompt?: string }) {
   return { prompt: settings?.prompt ?? 'proceed?', onConfirm: () => {} };
@@ -120,32 +121,13 @@ describe('createDialogStore', () => {
   it('updateDialogPayload merges a partial patch over the existing payload', () => {
     const { store, commands } = createDialogStore();
     commands.openDialog({
-      kind: 'welcome',
-      payload: {
-        state: {
-          step: 'welcome',
-          authInProgress: false,
-          modelsLoadStatus: 'idle',
-        },
-        availableProviders: [],
-        availableModels: [],
-      },
+      kind: 'subagent',
+      payload: { initialView: SubagentView.MENU, initialName: 'helper' },
     });
-    commands.updateDialogPayload('welcome', {
-      state: {
-        step: 'provider',
-        authInProgress: false,
-        modelsLoadStatus: 'idle',
-      },
-    });
+    commands.updateDialogPayload('subagent', { initialName: 'reviewer' });
     expect(store.getState().requests[0]?.payload).toStrictEqual({
-      state: {
-        step: 'provider',
-        authInProgress: false,
-        modelsLoadStatus: 'idle',
-      },
-      availableProviders: [],
-      availableModels: [],
+      initialView: SubagentView.MENU,
+      initialName: 'reviewer',
     });
   });
 

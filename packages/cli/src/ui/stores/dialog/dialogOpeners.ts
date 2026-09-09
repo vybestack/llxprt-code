@@ -4,8 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { LlxprtExtension, IdeInfo } from '@vybestack/llxprt-code-core';
 import type { SubagentView } from '../../components/SubagentManagement/types.js';
-import type { DialogStore } from './dialogStore.js';
+import type { ModelsDialogData } from '../../commands/types.js';
+import type {
+  DialogKind,
+  DialogPayloadMap,
+  DialogRequest,
+  DialogStore,
+} from './dialogStore.js';
 
 /**
  * A single stable open/close handle per dialog kind routed through the
@@ -13,6 +20,22 @@ import type { DialogStore } from './dialogStore.js';
  * from the store commands and threads it through the slash-command pipeline.
  */
 export type DialogOpeners = {
+  workspaceMigration: {
+    open: (payload: { extensions: LlxprtExtension[] }) => void;
+    close: () => void;
+  };
+  idePrompt: {
+    open: (payload: { ide: IdeInfo }) => void;
+    close: () => void;
+  };
+  folderTrust: {
+    open: (payload: Record<string, never>) => void;
+    close: () => void;
+  };
+  welcome: {
+    open: (payload: Record<string, never>) => void;
+    close: () => void;
+  };
   theme: {
     open: (payload: Record<string, never>) => void;
     close: () => void;
@@ -76,80 +99,121 @@ export type DialogOpeners = {
     }) => void;
     close: () => void;
   };
+  privacy: {
+    open: (payload: Record<string, never>) => void;
+    close: () => void;
+  };
+  models: {
+    open: (payload: ModelsDialogData) => void;
+    close: () => void;
+  };
+  sessionBrowser: {
+    open: (payload: Record<string, never>) => void;
+    close: () => void;
+  };
+  modelConfig: {
+    open: (payload: Record<string, never>) => void;
+    close: () => void;
+  };
+  policies: {
+    open: (payload: Record<string, never>) => void;
+    close: () => void;
+  };
 };
+
+/**
+ * One stable open/close handle routed through the DialogStore for a single
+ * dialog kind. The payload type follows DialogPayloadMap so a kind cannot
+ * be opened with the wrong payload shape.
+ */
+function createKindOpener<K extends DialogKind>(
+  store: DialogStore,
+  kind: K,
+): {
+  open: (payload: DialogPayloadMap[K]) => void;
+  close: () => void;
+} {
+  return {
+    open: (payload) =>
+      store.commands.openDialog({ kind, payload } as DialogRequest),
+    close: () => store.commands.closeDialog(kind),
+  };
+}
+
+/**
+ * Openers for kinds whose payload is only the open request itself
+ * (Record<string, never> in DialogPayloadMap).
+ */
+function createVoidPayloadOpeners(
+  store: DialogStore,
+): Pick<
+  DialogOpeners,
+  | 'folderTrust'
+  | 'welcome'
+  | 'theme'
+  | 'settings'
+  | 'auth'
+  | 'oauthCode'
+  | 'editor'
+  | 'provider'
+  | 'loadProfile'
+  | 'createProfile'
+  | 'profileList'
+  | 'permissions'
+  | 'privacy'
+  | 'sessionBrowser'
+  | 'modelConfig'
+  | 'policies'
+> {
+  return {
+    folderTrust: createKindOpener(store, 'folderTrust'),
+    welcome: createKindOpener(store, 'welcome'),
+    theme: createKindOpener(store, 'theme'),
+    settings: createKindOpener(store, 'settings'),
+    auth: createKindOpener(store, 'auth'),
+    oauthCode: createKindOpener(store, 'oauthCode'),
+    editor: createKindOpener(store, 'editor'),
+    provider: createKindOpener(store, 'provider'),
+    loadProfile: createKindOpener(store, 'loadProfile'),
+    createProfile: createKindOpener(store, 'createProfile'),
+    profileList: createKindOpener(store, 'profileList'),
+    permissions: createKindOpener(store, 'permissions'),
+    privacy: createKindOpener(store, 'privacy'),
+    sessionBrowser: createKindOpener(store, 'sessionBrowser'),
+    modelConfig: createKindOpener(store, 'modelConfig'),
+    policies: createKindOpener(store, 'policies'),
+  };
+}
+
+/** Openers for kinds that carry a typed payload. */
+function createPayloadOpeners(
+  store: DialogStore,
+): Pick<
+  DialogOpeners,
+  | 'workspaceMigration'
+  | 'idePrompt'
+  | 'profileDetail'
+  | 'profileEditor'
+  | 'tools'
+  | 'logging'
+  | 'subagent'
+  | 'models'
+> {
+  return {
+    workspaceMigration: createKindOpener(store, 'workspaceMigration'),
+    idePrompt: createKindOpener(store, 'idePrompt'),
+    profileDetail: createKindOpener(store, 'profileDetail'),
+    profileEditor: createKindOpener(store, 'profileEditor'),
+    tools: createKindOpener(store, 'tools'),
+    logging: createKindOpener(store, 'logging'),
+    subagent: createKindOpener(store, 'subagent'),
+    models: createKindOpener(store, 'models'),
+  };
+}
 
 export function createDialogOpeners(store: DialogStore): DialogOpeners {
   return {
-    theme: {
-      open: (payload) => store.commands.openDialog({ kind: 'theme', payload }),
-      close: () => store.commands.closeDialog('theme'),
-    },
-    settings: {
-      open: (payload) =>
-        store.commands.openDialog({ kind: 'settings', payload }),
-      close: () => store.commands.closeDialog('settings'),
-    },
-    auth: {
-      open: (payload) => store.commands.openDialog({ kind: 'auth', payload }),
-      close: () => store.commands.closeDialog('auth'),
-    },
-    oauthCode: {
-      open: (payload) =>
-        store.commands.openDialog({ kind: 'oauthCode', payload }),
-      close: () => store.commands.closeDialog('oauthCode'),
-    },
-    editor: {
-      open: (payload) => store.commands.openDialog({ kind: 'editor', payload }),
-      close: () => store.commands.closeDialog('editor'),
-    },
-    provider: {
-      open: (payload) =>
-        store.commands.openDialog({ kind: 'provider', payload }),
-      close: () => store.commands.closeDialog('provider'),
-    },
-    loadProfile: {
-      open: (payload) =>
-        store.commands.openDialog({ kind: 'loadProfile', payload }),
-      close: () => store.commands.closeDialog('loadProfile'),
-    },
-    createProfile: {
-      open: (payload) =>
-        store.commands.openDialog({ kind: 'createProfile', payload }),
-      close: () => store.commands.closeDialog('createProfile'),
-    },
-    profileList: {
-      open: (payload) =>
-        store.commands.openDialog({ kind: 'profileList', payload }),
-      close: () => store.commands.closeDialog('profileList'),
-    },
-    profileDetail: {
-      open: (payload) =>
-        store.commands.openDialog({ kind: 'profileDetail', payload }),
-      close: () => store.commands.closeDialog('profileDetail'),
-    },
-    profileEditor: {
-      open: (payload) =>
-        store.commands.openDialog({ kind: 'profileEditor', payload }),
-      close: () => store.commands.closeDialog('profileEditor'),
-    },
-    tools: {
-      open: (payload) => store.commands.openDialog({ kind: 'tools', payload }),
-      close: () => store.commands.closeDialog('tools'),
-    },
-    permissions: {
-      open: (payload) =>
-        store.commands.openDialog({ kind: 'permissions', payload }),
-      close: () => store.commands.closeDialog('permissions'),
-    },
-    logging: {
-      open: (payload) =>
-        store.commands.openDialog({ kind: 'logging', payload }),
-      close: () => store.commands.closeDialog('logging'),
-    },
-    subagent: {
-      open: (payload) =>
-        store.commands.openDialog({ kind: 'subagent', payload }),
-      close: () => store.commands.closeDialog('subagent'),
-    },
+    ...createVoidPayloadOpeners(store),
+    ...createPayloadOpeners(store),
   };
 }

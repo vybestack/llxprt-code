@@ -94,6 +94,7 @@ function buildInputParams(
   appDispatch: React.Dispatch<AppAction>,
   slashCommandRuntime: SlashCommandRuntime,
   dialogOpeners: DialogOpeners,
+  store: DialogStore,
 ): AppInputParams {
   return {
     streamRuntime: bootstrap.streamRuntime,
@@ -118,17 +119,14 @@ function buildInputParams(
     stdout: bootstrap.stdout,
     setIdePromptAnswered: bootstrap.setIdePromptAnswered,
     setLlxprtMdFileCount: bootstrap.setLlxprtMdFileCount,
-    openPrivacyNotice: dialogs.openPrivacyNotice,
     dialogs: dialogOpeners,
-    openModelsDialog: dialogs.openModelsDialog,
-    openPoliciesDialog: dialogs.openPoliciesDialog,
+    store,
     openProviderDialog: dialogs.openProviderDialog,
     openLoadProfileDialog: dialogs.openLoadProfileDialog,
     openCreateProfileDialog: dialogs.openCreateProfileDialog,
     openProfileListDialog: dialogs.openProfileListDialog,
     viewProfileDetail: dialogs.viewProfileDetail,
     openProfileEditor: dialogs.openProfileEditor,
-    openSessionBrowserDialog: dialogs.openSessionBrowserDialog,
     setDebugMessage: dialogs.setDebugMessage,
     toggleCorgiMode: dialogs.toggleCorgiMode,
     toggleDebugProfiler: dialogs.toggleDebugProfiler,
@@ -187,16 +185,12 @@ function buildLayoutParams(
     useAlternateBuffer: dialogs.useAlternateBuffer,
     ideContextState: dialogs.ideContextState,
     setDebugMessage: dialogs.setDebugMessage,
-    showPrivacyNotice: dialogs.showPrivacyNotice,
-    isWelcomeDialogOpen: dialogs.isWelcomeDialogOpen,
-    isFolderTrustDialogOpen: dialogs.isFolderTrustDialogOpen,
     store,
     embeddedShellFocused: dialogs.embeddedShellFocused,
     setEmbeddedShellFocused: dialogs.setEmbeddedShellFocused,
     startupGuardsInitialized: dialogs.startupGuardsInitialized,
     streamingState: input.streamingState,
     pendingHistoryItems: input.pendingHistoryItems,
-    confirmationRequest: input.confirmationRequest,
     cancelOngoingRequest: input.cancelOngoingRequest,
     activeShellPtyId: input.activeShellPtyId,
     ctrlCPressedOnce: input.ctrlCPressedOnce,
@@ -234,13 +228,6 @@ function buildUIStateParamsCore(
     thought: i.thought,
     buffer: i.buffer,
     shellModeActive: d.shellModeActive,
-    isFolderTrustDialogOpen: d.isFolderTrustDialogOpen,
-    showWorkspaceMigrationDialog: d.showWorkspaceMigrationDialog,
-    showPrivacyNotice: d.showPrivacyNotice,
-    isModelsDialogOpen: d.isModelsDialogOpen,
-    isSessionBrowserDialogOpen: d.isSessionBrowserDialogOpen,
-    isModelConfigDialogOpen: d.isModelConfigDialogOpen,
-    isPoliciesDialogOpen: d.isPoliciesDialogOpen,
     providerOptions: d.providerOptions,
     createProfileProviders: d.createProfileProviders,
     selectedProvider: d.selectedProvider,
@@ -251,8 +238,6 @@ function buildUIStateParamsCore(
     toolsDialogAction: d.toolsDialogAction,
     toolsDialogTools: d.toolsDialogTools,
     toolsDialogDisabledTools: d.toolsDialogDisabledTools,
-    workspaceLlxprtExtensions: d.workspaceLlxprtExtensions,
-    modelsDialogData: d.modelsDialogData,
   };
 }
 
@@ -266,8 +251,6 @@ function buildUIStateParamsExtra(r: HookResults) {
     activeProfileName: d.activeProfileName,
     profileDialogError: d.profileDialogError,
     profileDialogLoading: d.profileDialogLoading,
-    confirmationRequest: i.confirmationRequest,
-    confirmUpdateLlxprtExtensionRequests: d.confirmUpdateExtensionRequests,
     ctrlCPressedOnce: i.ctrlCPressedOnce,
     ctrlDPressedOnce: i.ctrlDPressedOnce,
     showEscapePrompt: d.showEscapePrompt,
@@ -306,10 +289,8 @@ function buildUIStateParamsExtra(r: HookResults) {
     pendingHistoryItemRef: l.pendingHistoryItemRef,
     slashCommands: i.slashCommands,
     commandContext: i.commandContext,
-    shouldShowIdePrompt: b.shouldShowIdePrompt === true,
     currentIDE: b.currentIDE,
     isTrustedFolder: b.uiRuntime.app.isTrustedFolder(),
-    isWelcomeDialogOpen: d.isWelcomeDialogOpen,
     welcomeState: d.welcomeState,
     welcomeAvailableProviders: d.welcomeAvailableProviders,
     welcomeAvailableModels: d.welcomeAvailableModels,
@@ -325,15 +306,6 @@ function buildUIStateParamsExtra(r: HookResults) {
     renderMarkdown: d.renderMarkdown,
     activeShellPtyId: i.activeShellPtyId,
     embeddedShellFocused: d.embeddedShellFocused,
-  };
-}
-
-function extraDialogActions(d: AppDialogsResult) {
-  return {
-    openModelConfigDialog: d.openModelConfigDialog,
-    closeModelConfigDialog: d.closeModelConfigDialog,
-    openPoliciesDialog: d.openPoliciesDialog,
-    closePoliciesDialog: d.closePoliciesDialog,
   };
 }
 
@@ -359,17 +331,9 @@ function dialogActionsParams(d: HookResults['dialogs']) {
     handleFolderTrustSelect: d.handleFolderTrustSelect,
     welcomeActions: d.welcomeActions,
     triggerWelcomeAuth: d.triggerWelcomeAuth,
-    openModelsDialog: d.openModelsDialog,
-    closeModelsDialog: d.closeModelsDialog,
-
-    ...extraDialogActions(d),
-
-    openSessionBrowserDialog: d.openSessionBrowserDialog,
-    closeSessionBrowserDialog: d.closeSessionBrowserDialog,
+    // Open/close state for the remaining dialog families lives in the
+    // DialogStore; this is the domain side effect of the migration nudge.
     onWorkspaceMigrationDialogOpen: d.onWorkspaceMigrationDialogOpen,
-    onWorkspaceMigrationDialogClose: d.onWorkspaceMigrationDialogClose,
-    openPrivacyNotice: d.openPrivacyNotice,
-    handlePrivacyNoticeExit: d.handlePrivacyNoticeExit,
     performMemoryRefresh: d.performMemoryRefresh,
     setShowErrorDetails: d.setShowErrorDetails,
     setShowToolDescriptions: d.setShowToolDescriptions,
@@ -391,7 +355,6 @@ function buildUIActionsParams(r: HookResults) {
     handleClearScreen: l.handleClearScreen,
     handleSettingsRestart: i.handleSettingsRestart,
     handleAuthTimeout: i.handleAuthTimeout,
-    handleConfirmationSelect: l.handleConfirmationSelect,
     handleIdePromptComplete: i.handleIdePromptComplete,
     vimHandleInput: i.vimHandleInput,
     toggleVimEnabled: i.toggleVimEnabled,
@@ -432,6 +395,8 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     consoleMessages: bootstrap.consoleMessages,
     setLlxprtMdFileCount: bootstrap.setLlxprtMdFileCount,
     suppressStartupWelcome: props.suppressStartupWelcome,
+    shouldShowIdePrompt: bootstrap.shouldShowIdePrompt,
+    currentIDE: bootstrap.currentIDE,
   });
   const input = useAppInput({
     ...buildInputParams(
@@ -441,6 +406,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
       props.appDispatch,
       props.slashCommandRuntime,
       dialogOpeners,
+      dialogStore,
     ),
     operationLifecycle: props.operationLifecycle,
   });
@@ -451,7 +417,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     hasActiveProvider:
       props.uiRuntime.model.getProviderManager()?.hasActiveProvider() ?? false,
     addItem: bootstrap.addItem,
-    isWelcomeDialogOpen: dialogs.isWelcomeDialogOpen,
+    store: dialogStore,
   });
   const r: HookResults = { bootstrap, dialogs, input, layout };
   const uiState = useUIStateBuilder({

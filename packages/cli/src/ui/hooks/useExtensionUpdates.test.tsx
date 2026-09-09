@@ -20,6 +20,7 @@ import {
   type LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
 import { renderHook, waitFor } from '../../test-utils/render.js';
+import { createDialogStore } from '../stores/dialog/dialogStore.js';
 import { MessageType } from '../types.js';
 import { ExtensionEnablementManager } from '../../config/extensions/extensionEnablement.js';
 import {
@@ -92,7 +93,12 @@ describe('useExtensionUpdates', () => {
     });
 
     renderHook(() =>
-      useExtensionUpdates(extensions as LlxprtExtension[], addItem, cwd),
+      useExtensionUpdates(
+        extensions as LlxprtExtension[],
+        addItem,
+        cwd,
+        createDialogStore(),
+      ),
     );
 
     await waitFor(() => {
@@ -143,7 +149,14 @@ describe('useExtensionUpdates', () => {
       name: '',
     });
 
-    renderHook(() => useExtensionUpdates([extension], addItem, tempHomeDir));
+    renderHook(() =>
+      useExtensionUpdates(
+        [extension],
+        addItem,
+        tempHomeDir,
+        createDialogStore(),
+      ),
+    );
 
     await waitFor(
       () => {
@@ -225,7 +238,14 @@ describe('useExtensionUpdates', () => {
       }),
     );
 
-    renderHook(() => useExtensionUpdates(extensions, addItem, tempHomeDir));
+    renderHook(() =>
+      useExtensionUpdates(
+        extensions,
+        addItem,
+        tempHomeDir,
+        createDialogStore(),
+      ),
+    );
 
     await waitFor(
       () => {

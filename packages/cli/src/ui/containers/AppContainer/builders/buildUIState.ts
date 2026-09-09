@@ -11,7 +11,6 @@ import type {
   HistoryItemWithoutId,
   ConsoleMessageItem,
   StreamingState,
-  ConfirmationRequest,
   ActiveHook,
 } from '../../../types.js';
 import type {
@@ -19,7 +18,6 @@ import type {
   ApprovalMode,
   ThoughtSummary,
   IdeInfo,
-  LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
 import type { ToolInfo } from '@vybestack/llxprt-code-agents';
 import type { Profile } from '@vybestack/llxprt-code-settings';
@@ -60,16 +58,7 @@ export interface UIStateParams {
   buffer: TextBuffer;
   shellModeActive: boolean;
 
-  // Dialog states (B2b kinds moved to DialogStore)
-  isFolderTrustDialogOpen: boolean;
-  showWorkspaceMigrationDialog: boolean;
-  showPrivacyNotice: boolean;
-  isModelsDialogOpen: boolean;
-  isSessionBrowserDialogOpen: boolean;
-  isModelConfigDialogOpen: boolean;
-  isPoliciesDialogOpen: boolean;
-
-  // Dialog data
+  // Dialog data (open state and open-time payloads live in DialogStore)
   providerOptions: string[];
   createProfileProviders: string[];
   selectedProvider: string;
@@ -80,19 +69,6 @@ export interface UIStateParams {
   toolsDialogAction: 'enable' | 'disable';
   toolsDialogTools: ToolInfo[];
   toolsDialogDisabledTools: string[];
-  workspaceLlxprtExtensions: LlxprtExtension[];
-  modelsDialogData?: {
-    initialSearch?: string;
-    initialFilters?: {
-      tools?: boolean;
-      vision?: boolean;
-      reasoning?: boolean;
-      audio?: boolean;
-    };
-    includeDeprecated?: boolean;
-    providerOverride?: string | null;
-    showAllProviders?: boolean;
-  };
   profileListItems: Array<{
     name: string;
     type: 'standard' | 'loadbalancer';
@@ -107,13 +83,6 @@ export interface UIStateParams {
   activeProfileName: string | null;
   profileDialogError: string | null;
   profileDialogLoading: boolean;
-
-  // Confirmation requests
-  confirmationRequest: {
-    prompt: React.ReactNode;
-    onConfirm: (value: boolean) => void;
-  } | null;
-  confirmUpdateLlxprtExtensionRequests: ConfirmationRequest[];
 
   // Exit/warning states
   ctrlCPressedOnce: boolean;
@@ -176,15 +145,13 @@ export interface UIStateParams {
   slashCommands: readonly SlashCommand[] | undefined;
   commandContext: CommandContext;
 
-  // IDE prompt
-  shouldShowIdePrompt: boolean;
+  // IDE context
   currentIDE: IdeInfo | undefined;
 
   // Trust
   isTrustedFolder: boolean;
 
   // Welcome onboarding
-  isWelcomeDialogOpen: boolean;
   welcomeState: WelcomeState;
   welcomeAvailableProviders: string[];
   welcomeAvailableModels: ModelInfo[];
@@ -242,18 +209,6 @@ function buildCoreAndTerminal(p: UIStateParams) {
   };
 }
 
-function buildDialogStates(p: UIStateParams) {
-  return {
-    isFolderTrustDialogOpen: p.isFolderTrustDialogOpen,
-    showWorkspaceMigrationDialog: p.showWorkspaceMigrationDialog,
-    showPrivacyNotice: p.showPrivacyNotice,
-    isModelsDialogOpen: p.isModelsDialogOpen,
-    isSessionBrowserDialogOpen: p.isSessionBrowserDialogOpen,
-    isModelConfigDialogOpen: p.isModelConfigDialogOpen,
-    isPoliciesDialogOpen: p.isPoliciesDialogOpen,
-  };
-}
-
 // Dialog data
 function buildDialogData(p: UIStateParams) {
   return {
@@ -267,8 +222,6 @@ function buildDialogData(p: UIStateParams) {
     toolsDialogAction: p.toolsDialogAction,
     toolsDialogTools: p.toolsDialogTools,
     toolsDialogDisabledTools: p.toolsDialogDisabledTools,
-    workspaceLlxprtExtensions: p.workspaceLlxprtExtensions,
-    modelsDialogData: p.modelsDialogData,
     profileListItems: p.profileListItems,
     profileDialogError: p.profileDialogError,
     selectedProfileName: p.selectedProfileName,
@@ -281,9 +234,6 @@ function buildDialogData(p: UIStateParams) {
 
 function buildConfirmationAndExit(p: UIStateParams) {
   return {
-    confirmationRequest: p.confirmationRequest,
-    confirmUpdateLlxprtExtensionRequests:
-      p.confirmUpdateLlxprtExtensionRequests,
     ctrlCPressedOnce: p.ctrlCPressedOnce,
     ctrlDPressedOnce: p.ctrlDPressedOnce,
     showEscapePrompt: p.showEscapePrompt,
@@ -336,7 +286,6 @@ function buildProcessingAndCommands(p: UIStateParams) {
     pendingHistoryItemRef: p.pendingHistoryItemRef,
     slashCommands: p.slashCommands,
     commandContext: p.commandContext,
-    shouldShowIdePrompt: p.shouldShowIdePrompt,
     currentIDE: p.currentIDE,
     isTrustedFolder: p.isTrustedFolder,
   };
@@ -344,7 +293,6 @@ function buildProcessingAndCommands(p: UIStateParams) {
 
 function buildMiscState(p: UIStateParams) {
   return {
-    isWelcomeDialogOpen: p.isWelcomeDialogOpen,
     welcomeState: p.welcomeState,
     welcomeAvailableProviders: p.welcomeAvailableProviders,
     welcomeAvailableModels: p.welcomeAvailableModels,
@@ -374,7 +322,6 @@ function buildMiscState(p: UIStateParams) {
 export function buildUIState(params: UIStateParams): UIState {
   return {
     ...buildCoreAndTerminal(params),
-    ...buildDialogStates(params),
     ...buildDialogData(params),
     ...buildConfirmationAndExit(params),
     ...buildDisplayAndContext(params),

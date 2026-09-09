@@ -36,6 +36,7 @@ import { useInputHandling } from './useInputHandling.js';
 import { useShellFocusAutoReset } from './useShellFocusAutoReset.js';
 import { useSteer } from './useSteer.js';
 import type { DialogOpeners } from '../../../stores/dialog/dialogOpeners.js';
+import type { DialogStore } from '../../../stores/dialog/dialogStore.js';
 import type { SlashCommandProcessorActions } from '../../../hooks/slashCommandProcessor.js';
 
 import * as fs from 'fs';
@@ -74,9 +75,8 @@ export interface AppInputParams {
   // From dialogs
   /** Dialog openers backed by the typed DialogStore. */
   dialogs: DialogOpeners;
-  openPrivacyNotice: AppDialogsResult['openPrivacyNotice'];
-  openModelsDialog: AppDialogsResult['openModelsDialog'];
-  openPoliciesDialog: AppDialogsResult['openPoliciesDialog'];
+  /** Typed DialogStore; hosts the slash-command confirmation slot. */
+  store: DialogStore;
   /** Domain openers that load data before showing their dialog. */
   openProviderDialog: AppDialogsResult['openProviderDialog'];
   openLoadProfileDialog: AppDialogsResult['openLoadProfileDialog'];
@@ -84,7 +84,6 @@ export interface AppInputParams {
   openProfileListDialog: AppDialogsResult['openProfileListDialog'];
   viewProfileDetail: AppDialogsResult['viewProfileDetail'];
   openProfileEditor: AppDialogsResult['openProfileEditor'];
-  openSessionBrowserDialog: AppDialogsResult['openSessionBrowserDialog'];
   setDebugMessage: AppDialogsResult['setDebugMessage'];
   toggleCorgiMode: AppDialogsResult['toggleCorgiMode'];
   toggleDebugProfiler: AppDialogsResult['toggleDebugProfiler'];
@@ -154,9 +153,6 @@ function useSlashActions(
 ): SlashCommandProcessorActions {
   return useSlashCommandActions({
     dialogs: p.dialogs,
-    openPrivacyNotice: p.openPrivacyNotice,
-    openModelsDialog: p.openModelsDialog,
-    openPoliciesDialog: p.openPoliciesDialog,
     openProviderDialog: p.openProviderDialog,
     openLoadProfileDialog: p.openLoadProfileDialog,
     openCreateProfileDialog: p.openCreateProfileDialog,
@@ -170,7 +166,6 @@ function useSlashActions(
     dispatchExtensionStateUpdate: p.dispatchExtensionStateUpdate,
     addConfirmUpdateExtensionRequest: p.addConfirmUpdateExtensionRequest,
     welcomeActions: p.welcomeActions,
-    openSessionBrowserDialog: p.openSessionBrowserDialog,
   }) as SlashCommandProcessorActions;
 }
 
@@ -211,6 +206,7 @@ function useSlashCommandSetup(
     setIsProcessing,
     setLlxprtMdFileCount,
     slashCommandProcessorActions,
+    p.store,
     extensionsUpdateState,
     true,
     todoContextForCommands,

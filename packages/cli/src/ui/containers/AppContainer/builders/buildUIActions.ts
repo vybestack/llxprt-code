@@ -84,45 +84,12 @@ export interface UIActionsParams {
     apiKey?: string,
   ) => Promise<void>;
 
-  // Models dialog
-  openModelsDialog: (data?: {
-    initialSearch?: string;
-    initialFilters?: {
-      tools?: boolean;
-      vision?: boolean;
-      reasoning?: boolean;
-      audio?: boolean;
-    };
-    includeDeprecated?: boolean;
-  }) => void;
-  closeModelsDialog: () => void;
-
-  // Model config dialog
-  openModelConfigDialog: () => void;
-  closeModelConfigDialog: () => void;
-
-  // Policies dialog
-  openPoliciesDialog: () => void;
-  closePoliciesDialog: () => void;
-
-  // Session browser dialog
-  openSessionBrowserDialog: () => void;
-  closeSessionBrowserDialog: () => void;
-
-  // Workspace migration dialog
+  // Workspace migration dialog (open/close state lives in DialogStore)
   onWorkspaceMigrationDialogOpen: () => void;
-  onWorkspaceMigrationDialogClose: () => void;
-
-  // Privacy notice
-  openPrivacyNotice: () => void;
-  handlePrivacyNoticeExit: () => void;
 
   // OAuth code dialog
   handleOAuthCodeDialogClose: () => void;
   handleOAuthCodeSubmit: (code: string) => Promise<void>;
-
-  // Confirmation handlers
-  handleConfirmationSelect: (value: boolean) => void;
 
   // IDE prompt
   handleIdePromptComplete: (result: IdeIntegrationNudgeResult) => void;
@@ -166,13 +133,6 @@ function queueActions(p: UIActionsParams) {
     sendAllQueuedSubmissions: p.sendAllQueuedSubmissions,
     steerAllQueuedSubmissions: p.steerAllQueuedSubmissions,
     clearQueuedSubmissions: p.clearQueuedSubmissions,
-  };
-}
-
-function policiesActions(p: UIActionsParams) {
-  return {
-    openPoliciesDialog: p.openPoliciesDialog,
-    closePoliciesDialog: p.closePoliciesDialog,
   };
 }
 
@@ -238,34 +198,12 @@ export function buildUIActions(params: UIActionsParams): UIActions {
     welcomeActions: params.welcomeActions,
     triggerWelcomeAuth: params.triggerWelcomeAuth,
 
-    // Models dialog
-    openModelsDialog: params.openModelsDialog,
-    closeModelsDialog: params.closeModelsDialog,
-
-    // Model config dialog
-    openModelConfigDialog: params.openModelConfigDialog,
-    closeModelConfigDialog: params.closeModelConfigDialog,
-
-    ...policiesActions(params),
-
-    // Session browser dialog
-    openSessionBrowserDialog: params.openSessionBrowserDialog,
-    closeSessionBrowserDialog: params.closeSessionBrowserDialog,
-
     // Workspace migration dialog
     onWorkspaceMigrationDialogOpen: params.onWorkspaceMigrationDialogOpen,
-    onWorkspaceMigrationDialogClose: params.onWorkspaceMigrationDialogClose,
-
-    // Privacy notice
-    openPrivacyNotice: params.openPrivacyNotice,
-    handlePrivacyNoticeExit: params.handlePrivacyNoticeExit,
 
     // OAuth code dialog
     handleOAuthCodeDialogClose: params.handleOAuthCodeDialogClose,
     handleOAuthCodeSubmit: params.handleOAuthCodeSubmit,
-
-    // Confirmation handlers
-    handleConfirmationSelect: params.handleConfirmationSelect,
 
     // IDE prompt
     handleIdePromptComplete: params.handleIdePromptComplete,

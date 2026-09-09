@@ -8,10 +8,6 @@ import type { ReactNode } from 'react';
 import { createStore, type Store } from '../createStore.js';
 import type { LlxprtExtension, IdeInfo } from '@vybestack/llxprt-code-core';
 import type { SubagentView } from '../../components/SubagentManagement/types.js';
-import type {
-  WelcomeState,
-  ModelInfo,
-} from '../../hooks/useWelcomeOnboarding.js';
 import type { ModelsDialogData } from '../../commands/types.js';
 
 export interface ConfirmationRequest {
@@ -23,11 +19,10 @@ export interface DialogPayloadMap {
   workspaceMigration: { extensions: LlxprtExtension[] };
   idePrompt: { ide: IdeInfo };
   folderTrust: Record<string, never>;
-  welcome: {
-    state: WelcomeState;
-    availableProviders: string[];
-    availableModels: ModelInfo[];
-  };
+  // Welcome wizard data (state, providers, models) loads asynchronously and
+  // mutates while the dialog is open, so it stays in UIState until the data
+  // store slice; the payload only carries the open request itself.
+  welcome: Record<string, never>;
   confirmation: ConfirmationRequest;
   extensionUpdateConfirm: ConfirmationRequest;
   theme: Record<string, never>;

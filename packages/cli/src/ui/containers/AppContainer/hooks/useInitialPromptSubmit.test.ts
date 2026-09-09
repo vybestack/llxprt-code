@@ -11,12 +11,6 @@ import { renderHook } from '../../../../test-utils/render.js';
 import { useInitialPromptSubmit } from './useInitialPromptSubmit.js';
 import { createDialogStore } from '../../../stores/dialog/dialogStore.js';
 
-const blockedByDialogsClosed = {
-  showPrivacyNotice: false,
-  isWelcomeDialogOpen: false,
-  isFolderTrustDialogOpen: false,
-};
-
 type HookParams = Parameters<typeof useInitialPromptSubmit>[0];
 
 const createParams = (overrides: Partial<HookParams> = {}): HookParams => ({
@@ -25,7 +19,6 @@ const createParams = (overrides: Partial<HookParams> = {}): HookParams => ({
   agentClientPresent: true,
   interactiveRuntimeReady: true,
   store: createDialogStore(),
-  blockedByDialogs: blockedByDialogsClosed,
   startupGuardsInitialized: true,
   ...overrides,
 });
@@ -206,16 +199,15 @@ describe('useInitialPromptSubmit', () => {
 
   it('does not submit when a blocking dialog is open even with startup guards initialized', async () => {
     const submitPrompt = vi.fn().mockResolvedValue(undefined);
+    const store = createDialogStore();
+    store.commands.openDialog({ kind: 'welcome', payload: {} });
 
     renderHook(() =>
       useInitialPromptSubmit(
         createParams({
           initialPrompt: 'hello',
           submitPrompt,
-          blockedByDialogs: {
-            ...blockedByDialogsClosed,
-            isWelcomeDialogOpen: true,
-          },
+          store,
         }),
       ),
     );
@@ -232,20 +224,14 @@ describe('useInitialPromptSubmit', () => {
     const store = createDialogStore();
     store.commands.openDialog({ kind: 'auth', payload: {} });
 
-    const { rerender } = renderHook(
-      ({ open }: { open: boolean }) =>
-        useInitialPromptSubmit(
-          createParams({
-            initialPrompt: 'hello',
-            submitPrompt,
-            store,
-            blockedByDialogs: {
-              ...blockedByDialogsClosed,
-              isWelcomeDialogOpen: open,
-            },
-          }),
-        ),
-      { initialProps: { open: true } },
+    renderHook(() =>
+      useInitialPromptSubmit(
+        createParams({
+          initialPrompt: 'hello',
+          submitPrompt,
+          store,
+        }),
+      ),
     );
 
     await act(async () => {
@@ -254,8 +240,9 @@ describe('useInitialPromptSubmit', () => {
 
     expect(submitPrompt).not.toHaveBeenCalled();
 
-    store.commands.closeDialog('auth');
-    rerender({ open: false });
+    act(() => {
+      store.commands.closeDialog('auth');
+    });
 
     await act(async () => {
       await runAllTimersAsync();
@@ -294,25 +281,21 @@ describe('useInitialPromptSubmit', () => {
     expect(submitPrompt).toHaveBeenCalledTimes(1);
   });
 
-  it('retries submission after submit failure when a blockedByDialogs dependency changes', async () => {
+  it('retries submission after submit failure when a blocking dialog dependency changes', async () => {
     const submitPrompt = vi
       .fn()
       .mockRejectedValueOnce(new Error('fail'))
       .mockResolvedValueOnce(undefined);
+    const store = createDialogStore();
 
-    const { rerender } = renderHook(
-      ({ isFolderTrustDialogOpen }: { isFolderTrustDialogOpen: boolean }) =>
-        useInitialPromptSubmit(
-          createParams({
-            initialPrompt: 'hello',
-            submitPrompt,
-            blockedByDialogs: {
-              ...blockedByDialogsClosed,
-              isFolderTrustDialogOpen,
-            },
-          }),
-        ),
-      { initialProps: { isFolderTrustDialogOpen: false } },
+    renderHook(() =>
+      useInitialPromptSubmit(
+        createParams({
+          initialPrompt: 'hello',
+          submitPrompt,
+          store,
+        }),
+      ),
     );
 
     await act(async () => {
@@ -321,13 +304,17 @@ describe('useInitialPromptSubmit', () => {
 
     expect(submitPrompt).toHaveBeenCalledTimes(1);
 
-    rerender({ isFolderTrustDialogOpen: true });
+    act(() => {
+      store.commands.openDialog({ kind: 'folderTrust', payload: {} });
+    });
 
     await act(async () => {
       await runAllTimersAsync();
     });
 
-    rerender({ isFolderTrustDialogOpen: false });
+    act(() => {
+      store.commands.closeDialog('folderTrust');
+    });
 
     await act(async () => {
       await runAllTimersAsync();
@@ -420,16 +407,15 @@ describe('useInitialPromptSubmit', () => {
 
   it('does not submit when folder trust dialog is open even with startup guards initialized', async () => {
     const submitPrompt = vi.fn().mockResolvedValue(undefined);
+    const store = createDialogStore();
+    store.commands.openDialog({ kind: 'folderTrust', payload: {} });
 
     renderHook(() =>
       useInitialPromptSubmit(
         createParams({
           initialPrompt: 'hello',
           submitPrompt,
-          blockedByDialogs: {
-            ...blockedByDialogsClosed,
-            isFolderTrustDialogOpen: true,
-          },
+          store,
         }),
       ),
     );
@@ -443,32 +429,18 @@ describe('useInitialPromptSubmit', () => {
 
   it('submits after folder trust dialog closes following startup guard initialization', async () => {
     const submitPrompt = vi.fn().mockResolvedValue(undefined);
+    const store = createDialogStore();
+    store.commands.openDialog({ kind: 'folderTrust', payload: {} });
 
-    const { rerender } = renderHook(
-      ({
-        isFolderTrustDialogOpen,
-        startupGuardsInitialized,
-      }: {
-        isFolderTrustDialogOpen: boolean;
-        startupGuardsInitialized: boolean;
-      }) =>
-        useInitialPromptSubmit(
-          createParams({
-            initialPrompt: 'hello',
-            submitPrompt,
-            blockedByDialogs: {
-              ...blockedByDialogsClosed,
-              isFolderTrustDialogOpen,
-            },
-            startupGuardsInitialized,
-          }),
-        ),
-      {
-        initialProps: {
-          isFolderTrustDialogOpen: true,
+    renderHook(() =>
+      useInitialPromptSubmit(
+        createParams({
+          initialPrompt: 'hello',
+          submitPrompt,
+          store,
           startupGuardsInitialized: true,
-        },
-      },
+        }),
+      ),
     );
 
     await act(async () => {
@@ -477,9 +449,8 @@ describe('useInitialPromptSubmit', () => {
 
     expect(submitPrompt).not.toHaveBeenCalled();
 
-    rerender({
-      isFolderTrustDialogOpen: false,
-      startupGuardsInitialized: true,
+    act(() => {
+      store.commands.closeDialog('folderTrust');
     });
 
     await act(async () => {
@@ -492,32 +463,20 @@ describe('useInitialPromptSubmit', () => {
 
   it('waits for startup guards even when folder trust resolves first', async () => {
     const submitPrompt = vi.fn().mockResolvedValue(undefined);
+    const store = createDialogStore();
+    store.commands.openDialog({ kind: 'folderTrust', payload: {} });
 
     const { rerender } = renderHook(
-      ({
-        isFolderTrustDialogOpen,
-        startupGuardsInitialized,
-      }: {
-        isFolderTrustDialogOpen: boolean;
-        startupGuardsInitialized: boolean;
-      }) =>
+      ({ startupGuardsInitialized }: { startupGuardsInitialized: boolean }) =>
         useInitialPromptSubmit(
           createParams({
             initialPrompt: 'hello',
             submitPrompt,
-            blockedByDialogs: {
-              ...blockedByDialogsClosed,
-              isFolderTrustDialogOpen,
-            },
+            store,
             startupGuardsInitialized,
           }),
         ),
-      {
-        initialProps: {
-          isFolderTrustDialogOpen: true,
-          startupGuardsInitialized: false,
-        },
-      },
+      { initialProps: { startupGuardsInitialized: false } },
     );
 
     await act(async () => {
@@ -526,10 +485,11 @@ describe('useInitialPromptSubmit', () => {
 
     expect(submitPrompt).not.toHaveBeenCalled();
 
-    rerender({
-      isFolderTrustDialogOpen: false,
-      startupGuardsInitialized: false,
+    act(() => {
+      store.commands.closeDialog('folderTrust');
     });
+
+    rerender({ startupGuardsInitialized: false });
 
     await act(async () => {
       await runAllTimersAsync();
@@ -537,10 +497,7 @@ describe('useInitialPromptSubmit', () => {
 
     expect(submitPrompt).not.toHaveBeenCalled();
 
-    rerender({
-      isFolderTrustDialogOpen: false,
-      startupGuardsInitialized: true,
-    });
+    rerender({ startupGuardsInitialized: true });
 
     await act(async () => {
       await runAllTimersAsync();

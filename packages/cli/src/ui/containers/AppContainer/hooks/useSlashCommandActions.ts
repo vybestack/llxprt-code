@@ -20,9 +20,6 @@ type WelcomeActionsLike = {
 interface UseSlashCommandActionsParams {
   /** Dialog openers backed by the typed DialogStore. */
   dialogs: DialogOpeners;
-  openPrivacyNotice: () => void;
-  openModelsDialog: (data?: ModelsDialogData) => void;
-  openPoliciesDialog: () => void;
   /** Domain openers that load data before showing their dialog. */
   openProviderDialog: () => void;
   openLoadProfileDialog: () => void | Promise<void>;
@@ -43,7 +40,6 @@ interface UseSlashCommandActionsParams {
   dispatchExtensionStateUpdate: (action: ExtensionUpdateAction) => void;
   addConfirmUpdateExtensionRequest: (request: ConfirmationRequest) => void;
   welcomeActions: WelcomeActionsLike;
-  openSessionBrowserDialog: () => void;
 }
 
 /** Result type of useSlashCommandActions — all callback properties. */
@@ -74,6 +70,9 @@ export interface SlashCommandActions {
   dispatchExtensionStateUpdate: (action: ExtensionUpdateAction) => void;
   addConfirmUpdateExtensionRequest: (request: ConfirmationRequest) => void;
   openWelcomeDialog: () => void;
+  /**
+   * @plan PLAN-20260214-SESSIONBROWSER.P21
+   */
   openSessionBrowserDialog: () => void;
 
   // Slice B2a: permissions/logging/subagent route through the DialogStore.
@@ -100,6 +99,11 @@ function buildActions(p: UseSlashCommandActionsParams): SlashCommandActions {
     openThemeDialog: () => dialogs.theme.open({}),
     openEditorDialog: () => dialogs.editor.open({}),
     openSettingsDialog: () => dialogs.settings.open({}),
+    openPrivacyNotice: () => dialogs.privacy.open({}),
+    openModelsDialog: (data?: ModelsDialogData) =>
+      dialogs.models.open(data ?? {}),
+    openPoliciesDialog: () => dialogs.policies.open({}),
+    openSessionBrowserDialog: () => dialogs.sessionBrowser.open({}),
     openPermissionsDialog: () => dialogs.permissions.open({}),
     closePermissionsDialog: () => dialogs.permissions.close(),
     openLoggingDialog: (data?: { entries: unknown[] }) =>

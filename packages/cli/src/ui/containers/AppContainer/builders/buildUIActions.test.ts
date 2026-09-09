@@ -38,8 +38,6 @@ const makeParams = (): UIActionsParams => ({
   // Load profile dialog
   handleProfileSelect: vi.fn(),
 
-  // Create profile dialog
-
   // Profile management dialogs
   viewProfileDetail: vi.fn(),
   closeProfileDetailDialog: vi.fn(),
@@ -73,36 +71,12 @@ const makeParams = (): UIActionsParams => ({
   },
   triggerWelcomeAuth: vi.fn(),
 
-  // Models dialog
-  openModelsDialog: vi.fn(),
-  closeModelsDialog: vi.fn(),
-
-  // Model config dialog
-  openModelConfigDialog: vi.fn(),
-  closeModelConfigDialog: vi.fn(),
-
-  // Policies dialog
-  openPoliciesDialog: vi.fn(),
-  closePoliciesDialog: vi.fn(),
-
-  // Session browser dialog
-  openSessionBrowserDialog: vi.fn(),
-  closeSessionBrowserDialog: vi.fn(),
-
-  // Workspace migration dialog
+  // Workspace migration dialog (open/close state lives in DialogStore)
   onWorkspaceMigrationDialogOpen: vi.fn(),
-  onWorkspaceMigrationDialogClose: vi.fn(),
-
-  // Privacy notice
-  openPrivacyNotice: vi.fn(),
-  handlePrivacyNoticeExit: vi.fn(),
 
   // OAuth code dialog
   handleOAuthCodeDialogClose: vi.fn(),
   handleOAuthCodeSubmit: vi.fn(),
-
-  // Confirmation handlers
-  handleConfirmationSelect: vi.fn(),
 
   // IDE prompt
   handleIdePromptComplete: vi.fn(),
@@ -140,8 +114,7 @@ const makeParams = (): UIActionsParams => ({
 
 describe('buildUIActions', () => {
   it('produces an object containing every UIActions key', () => {
-    const params = makeParams();
-    const result = buildUIActions(params);
+    const result = buildUIActions(makeParams());
 
     expect(result.addItem).toBeDefined();
     expect(result.clearItems).toBeDefined();
@@ -171,21 +144,9 @@ describe('buildUIActions', () => {
     expect(result.handleFolderTrustSelect).toBeDefined();
     expect(result.welcomeActions).toBeDefined();
     expect(result.triggerWelcomeAuth).toBeDefined();
-    expect(result.openModelsDialog).toBeDefined();
-    expect(result.closeModelsDialog).toBeDefined();
-    expect(result.openModelConfigDialog).toBeDefined();
-    expect(result.closeModelConfigDialog).toBeDefined();
-    expect(result.openPoliciesDialog).toBeDefined();
-    expect(result.closePoliciesDialog).toBeDefined();
-    expect(result.openSessionBrowserDialog).toBeDefined();
-    expect(result.closeSessionBrowserDialog).toBeDefined();
     expect(result.onWorkspaceMigrationDialogOpen).toBeDefined();
-    expect(result.onWorkspaceMigrationDialogClose).toBeDefined();
-    expect(result.openPrivacyNotice).toBeDefined();
-    expect(result.handlePrivacyNoticeExit).toBeDefined();
     expect(result.handleOAuthCodeDialogClose).toBeDefined();
     expect(result.handleOAuthCodeSubmit).toBeDefined();
-    expect(result.handleConfirmationSelect).toBeDefined();
     expect(result.handleIdePromptComplete).toBeDefined();
     expect(result.vimHandleInput).toBeDefined();
     expect(result.toggleVimEnabled).toBeDefined();
@@ -234,33 +195,13 @@ describe('buildUIActions', () => {
     expect(result.handleFolderTrustSelect).toBe(params.handleFolderTrustSelect);
     expect(result.welcomeActions).toBe(params.welcomeActions);
     expect(result.triggerWelcomeAuth).toBe(params.triggerWelcomeAuth);
-    expect(result.openModelsDialog).toBe(params.openModelsDialog);
-    expect(result.closeModelsDialog).toBe(params.closeModelsDialog);
-    expect(result.openModelConfigDialog).toBe(params.openModelConfigDialog);
-    expect(result.closeModelConfigDialog).toBe(params.closeModelConfigDialog);
-    expect(result.openPoliciesDialog).toBe(params.openPoliciesDialog);
-    expect(result.closePoliciesDialog).toBe(params.closePoliciesDialog);
-    expect(result.openSessionBrowserDialog).toBe(
-      params.openSessionBrowserDialog,
-    );
-    expect(result.closeSessionBrowserDialog).toBe(
-      params.closeSessionBrowserDialog,
-    );
     expect(result.onWorkspaceMigrationDialogOpen).toBe(
       params.onWorkspaceMigrationDialogOpen,
     );
-    expect(result.onWorkspaceMigrationDialogClose).toBe(
-      params.onWorkspaceMigrationDialogClose,
-    );
-    expect(result.openPrivacyNotice).toBe(params.openPrivacyNotice);
-    expect(result.handlePrivacyNoticeExit).toBe(params.handlePrivacyNoticeExit);
     expect(result.handleOAuthCodeDialogClose).toBe(
       params.handleOAuthCodeDialogClose,
     );
     expect(result.handleOAuthCodeSubmit).toBe(params.handleOAuthCodeSubmit);
-    expect(result.handleConfirmationSelect).toBe(
-      params.handleConfirmationSelect,
-    );
     expect(result.handleIdePromptComplete).toBe(params.handleIdePromptComplete);
     expect(result.vimHandleInput).toBe(params.vimHandleInput);
     expect(result.toggleVimEnabled).toBe(params.toggleVimEnabled);

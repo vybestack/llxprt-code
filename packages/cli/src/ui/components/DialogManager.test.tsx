@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -21,6 +21,11 @@ void vi.mock('@vybestack/llxprt-code-providers', () => ({
 }));
 
 import { useModelDialogHandler } from './modelDialogHandler.js';
+import {
+  createDialogStore,
+  type DialogKind,
+  type DialogStore,
+} from '../stores/dialog/dialogStore.js';
 
 // --- Stateful runtime fake ---
 interface FakeRuntimeState {
@@ -76,28 +81,11 @@ function createFakeRuntime(overrides: Partial<FakeRuntimeState> = {}) {
 }
 
 let fakeRuntime: ReturnType<typeof createFakeRuntime>;
-let mockUiActions: {
-  closeModelsDialog: ReturnType<typeof vi.fn>;
-  openModelConfigDialog: ReturnType<typeof vi.fn>;
-};
 let mockAddItem: ReturnType<typeof vi.fn>;
 let callSequence: string[];
 
 void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => fakeRuntime,
-}));
-
-void vi.mock('../contexts/UIActionsContext.js', () => ({
-  useUIActions: () => mockUiActions,
-}));
-
-void vi.mock('../contexts/UIStateContext.js', () => ({
-  useUIState: () => ({
-    constrainHeight: false,
-    terminalHeight: 40,
-    mainAreaWidth: 100,
-    commandContext: {},
-  }),
 }));
 
 function makeModel(provider: string, id: string): HydratedModel {
@@ -108,23 +96,33 @@ function makeModel(provider: string, id: string): HydratedModel {
   } as HydratedModel;
 }
 
+/** Store seeded the way the /models flow leaves it: models dialog open. */
+function createSeededStore(): DialogStore {
+  const store = createDialogStore();
+  store.commands.openDialog({ kind: 'models', payload: {} });
+  return store;
+}
+
+function hasRequest(store: DialogStore, kind: DialogKind): boolean {
+  return store.store
+    .getState()
+    .requests.some((request) => request.kind === kind);
+}
+
 describe('useModelDialogHandler', () => {
   beforeEach(() => {
     mockAddItem = vi.fn();
     callSequence = [];
-    mockUiActions = {
-      closeModelsDialog: vi.fn(),
-      openModelConfigDialog: vi.fn(),
-    };
     fakeRuntime = createFakeRuntime();
   });
 
   it('opens config dialog after successful same-provider model switch', async () => {
+    const store = createSeededStore();
     const { result } = renderHook(() =>
       useModelDialogHandler(
         fakeRuntime as never,
         mockAddItem,
-        mockUiActions as never,
+        store,
         'openai',
         {},
       ),
@@ -133,19 +131,20 @@ describe('useModelDialogHandler', () => {
     result.current(makeModel('openai', 'gpt-5'));
 
     await waitFor(() => {
-      expect(mockUiActions.openModelConfigDialog).toHaveBeenCalledTimes(1);
+      expect(hasRequest(store, 'modelConfig')).toBe(true);
     });
     expect(fakeRuntime.setActiveModel).toHaveBeenCalledWith('gpt-5');
-    expect(mockUiActions.closeModelsDialog).toHaveBeenCalledTimes(1);
+    expect(hasRequest(store, 'models')).toBe(false);
   });
 
   it('opens config dialog after successful cross-provider model switch', async () => {
     const recordProviderSwitch = vi.fn();
+    const store = createSeededStore();
     const { result } = renderHook(() =>
       useModelDialogHandler(
         fakeRuntime as never,
         mockAddItem,
-        mockUiActions as never,
+        store,
         'openai',
         { recordingIntegration: { recordProviderSwitch } },
       ),
@@ -154,9 +153,9 @@ describe('useModelDialogHandler', () => {
     result.current(makeModel('anthropic', 'claude-sonnet'));
 
     await waitFor(() => {
-      expect(mockUiActions.openModelConfigDialog).toHaveBeenCalledTimes(1);
+      expect(hasRequest(store, 'modelConfig')).toBe(true);
     });
-    expect(mockUiActions.closeModelsDialog).toHaveBeenCalledTimes(1);
+    expect(hasRequest(store, 'models')).toBe(false);
     expect(fakeRuntime.setProvider).toHaveBeenCalledWith('anthropic');
     expect(fakeRuntime.setActiveModel).toHaveBeenCalledWith('claude-sonnet');
     expect(callSequence).toStrictEqual(['setProvider', 'setActiveModel']);
@@ -168,12 +167,12 @@ describe('useModelDialogHandler', () => {
 
   it('does NOT open config dialog when setActiveModel fails', async () => {
     fakeRuntime = createFakeRuntime({ setActiveModelShouldFail: true });
-
+    const store = createSeededStore();
     const { result } = renderHook(() =>
       useModelDialogHandler(
         fakeRuntime as never,
         mockAddItem,
-        mockUiActions as never,
+        store,
         'openai',
         {},
       ),
@@ -186,18 +185,18 @@ describe('useModelDialogHandler', () => {
         expect.objectContaining({ type: 'error' }),
       );
     });
-    expect(mockUiActions.openModelConfigDialog).not.toHaveBeenCalled();
-    expect(mockUiActions.closeModelsDialog).toHaveBeenCalledTimes(1);
+    expect(hasRequest(store, 'modelConfig')).toBe(false);
+    expect(hasRequest(store, 'models')).toBe(false);
   });
 
   it('does NOT open config dialog when cross-provider setProvider fails', async () => {
     fakeRuntime = createFakeRuntime({ setProviderShouldFail: true });
-
+    const store = createSeededStore();
     const { result } = renderHook(() =>
       useModelDialogHandler(
         fakeRuntime as never,
         mockAddItem,
-        mockUiActions as never,
+        store,
         'openai',
         {},
       ),
@@ -210,8 +209,8 @@ describe('useModelDialogHandler', () => {
         expect.objectContaining({ type: 'error' }),
       );
     });
-    expect(mockUiActions.openModelConfigDialog).not.toHaveBeenCalled();
-    expect(mockUiActions.closeModelsDialog).toHaveBeenCalledTimes(1);
+    expect(hasRequest(store, 'modelConfig')).toBe(false);
+    expect(hasRequest(store, 'models')).toBe(false);
   });
 
   it('does NOT open config dialog when cross-provider setProvider succeeds but setActiveModel fails', async () => {
@@ -219,12 +218,12 @@ describe('useModelDialogHandler', () => {
     // model switch fails. The error must be reported and the config dialog
     // must NOT open (switchSucceeded stays false).
     fakeRuntime = createFakeRuntime({ setActiveModelShouldFail: true });
-
+    const store = createSeededStore();
     const { result } = renderHook(() =>
       useModelDialogHandler(
         fakeRuntime as never,
         mockAddItem,
-        mockUiActions as never,
+        store,
         'openai',
         {},
       ),
@@ -238,8 +237,8 @@ describe('useModelDialogHandler', () => {
       );
     });
     expect(fakeRuntime.setProvider).toHaveBeenCalledTimes(1);
-    expect(mockUiActions.openModelConfigDialog).not.toHaveBeenCalled();
-    expect(mockUiActions.closeModelsDialog).toHaveBeenCalledTimes(1);
+    expect(hasRequest(store, 'modelConfig')).toBe(false);
+    expect(hasRequest(store, 'models')).toBe(false);
   });
 
   it('STILL opens config dialog when addItem fails after successful switch', async () => {
@@ -253,11 +252,12 @@ describe('useModelDialogHandler', () => {
       throw new Error('addItem failed');
     });
 
+    const store = createSeededStore();
     const { result } = renderHook(() =>
       useModelDialogHandler(
         fakeRuntime as never,
         mockAddItem,
-        mockUiActions as never,
+        store,
         'openai',
         { recordingIntegration: { recordProviderSwitch } },
       ),
@@ -266,7 +266,7 @@ describe('useModelDialogHandler', () => {
     result.current(makeModel('openai', 'gpt-5'));
 
     await waitFor(() => {
-      expect(mockUiActions.openModelConfigDialog).toHaveBeenCalledTimes(1);
+      expect(hasRequest(store, 'modelConfig')).toBe(true);
     });
 
     // Verify the error path was genuinely exercised: addItem WAS invoked

@@ -13,7 +13,6 @@ import type {
   HistoryItemWithoutId,
   ConsoleMessageItem,
   StreamingState,
-  ConfirmationRequest,
   ActiveHook,
 } from '../types.js';
 import type {
@@ -21,7 +20,6 @@ import type {
   ApprovalMode,
   ThoughtSummary,
   IdeInfo,
-  LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
 import type { ToolInfo } from '@vybestack/llxprt-code-agents';
 import type { Profile } from '@vybestack/llxprt-code-settings';
@@ -60,18 +58,6 @@ export interface UIState {
   buffer: TextBuffer;
   shellModeActive: boolean;
 
-  // Dialog states
-  isFolderTrustDialogOpen: boolean;
-  showWorkspaceMigrationDialog: boolean;
-  showPrivacyNotice: boolean;
-  isModelsDialogOpen: boolean;
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P21
-   */
-  isSessionBrowserDialogOpen: boolean;
-  isModelConfigDialogOpen: boolean;
-  isPoliciesDialogOpen: boolean;
-
   // Dialog data
   providerOptions: string[];
   /** Providers offered by the profile-create wizard (createProfile dialog). */
@@ -84,21 +70,6 @@ export interface UIState {
   toolsDialogAction: 'enable' | 'disable';
   toolsDialogTools: ToolInfo[];
   toolsDialogDisabledTools: string[];
-  workspaceLlxprtExtensions: LlxprtExtension[];
-  modelsDialogData?: {
-    initialSearch?: string;
-    initialFilters?: {
-      tools?: boolean;
-      vision?: boolean;
-      reasoning?: boolean;
-      audio?: boolean;
-    };
-    includeDeprecated?: boolean;
-    /** Override provider filter from --provider arg */
-    providerOverride?: string | null;
-    /** Show all providers (from --all flag) */
-    showAllProviders?: boolean;
-  };
 
   // Profile management dialog data
   profileListItems: Array<{
@@ -115,13 +86,6 @@ export interface UIState {
   activeProfileName: string | null;
   profileDialogError: string | null;
   profileDialogLoading: boolean;
-
-  // Confirmation requests
-  confirmationRequest: {
-    prompt: React.ReactNode;
-    onConfirm: (value: boolean) => void;
-  } | null;
-  confirmUpdateLlxprtExtensionRequests: ConfirmationRequest[];
 
   // Exit/warning states
   ctrlCPressedOnce: boolean;
@@ -184,15 +148,13 @@ export interface UIState {
   slashCommands: readonly SlashCommand[] | undefined;
   commandContext: CommandContext;
 
-  // IDE prompt
-  shouldShowIdePrompt: boolean;
+  // IDE context (prompt open state lives in DialogStore)
   currentIDE: IdeInfo | undefined;
 
   // Trust
   isTrustedFolder: boolean;
 
-  // Welcome onboarding
-  isWelcomeDialogOpen: boolean;
+  // Welcome onboarding (dialog open state lives in DialogStore)
   welcomeState: WelcomeState;
   welcomeAvailableProviders: string[];
   welcomeAvailableModels: ModelInfo[];
