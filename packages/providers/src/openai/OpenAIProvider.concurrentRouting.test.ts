@@ -82,26 +82,6 @@ interface CallRecord {
   body: string | undefined;
 }
 
-function extractHeaderRecord(
-  headers: HeadersInit | undefined,
-): Record<string, string> {
-  const headerRecord: Record<string, string> = {};
-  if (headers instanceof Headers) {
-    headers.forEach((value, key) => {
-      headerRecord[key] = value;
-    });
-  } else if (
-    headers &&
-    typeof headers === 'object' &&
-    !Array.isArray(headers)
-  ) {
-    for (const [key, value] of Object.entries(headers)) {
-      headerRecord[key] = String(value);
-    }
-  }
-  return headerRecord;
-}
-
 async function extractBody(
   init: RequestInit | undefined,
 ): Promise<string | undefined> {
@@ -116,10 +96,9 @@ async function recordRoutedFetch(
   input: RequestInfo | URL,
   init: RequestInit | undefined,
 ): Promise<Response> {
-  const headerRecord = extractHeaderRecord(init?.headers);
   records.push({
     url: String(input),
-    authHeader: headerRecord.Authorization || headerRecord.authorization,
+    authHeader: new Headers(init?.headers).get('authorization') ?? undefined,
     body: await extractBody(init),
   });
   const url = String(input);

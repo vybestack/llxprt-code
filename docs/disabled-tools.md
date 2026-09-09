@@ -1,6 +1,6 @@
-# LLxprt Code: `disabled-tools` Setting
+# LLxprt Code: `tools.disabled` Setting
 
-The `disabled-tools` setting allows you to disable specific tools for the current session. This setting is particularly useful during debugging, exploration, or when you want to temporarily limit the capabilities available to the AI.
+The `tools.disabled` setting allows you to disable specific tools for the current session. This setting is particularly useful during debugging, exploration, or when you want to temporarily limit the capabilities available to the AI.
 
 ## Setting the Value
 
@@ -17,12 +17,12 @@ You can set this value using either the `/tools` command or the `/set` command. 
 
 ```bash
 # Disable the list_directory and write_file tools for the current session
-/set disabled-tools list_directory write_file
+/set tools.disabled list_directory write_file
 ```
 
 ## How it Works
 
-When you provide a list of tool names to `disabled-tools`, those tools are excluded from the list of available tools sent to the AI model for the current turn. This means the AI will not be able to request those tools.
+When you provide a list of tool names to `tools.disabled`, those tools are excluded from the list of available tools sent to the AI model for the current turn. This means the AI will not be able to request those tools.
 
 ## Tool Names
 
@@ -58,7 +58,7 @@ The `/tools` command provides several subcommands for managing disabled tools:
 
 ## Profile Integration
 
-The `disabled-tools` setting is an ephemeral setting that can be saved to profiles for reuse. When you save your current configuration to a profile, the disabled tools are included in the saved settings.
+The `tools.disabled` setting is an ephemeral setting that can be saved to profiles for reuse. When you save your current configuration to a profile, the disabled tools are included in the saved settings.
 
 ### Example Workflow
 

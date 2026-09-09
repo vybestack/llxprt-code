@@ -118,11 +118,8 @@ const listCommand: SlashCommand = {
   action: async (context: CommandContext, args: string) => {
     const lowerCaseArgs = args.toLowerCase().split(/\s+/).filter(Boolean);
 
-    const hasDesc =
-      lowerCaseArgs.includes('desc') || lowerCaseArgs.includes('descriptions');
-    const hasNodesc =
-      lowerCaseArgs.includes('nodesc') ||
-      lowerCaseArgs.includes('nodescriptions');
+    const hasDesc = lowerCaseArgs.includes('desc');
+    const hasNodesc = lowerCaseArgs.includes('nodesc');
     const showSchema = lowerCaseArgs.includes('schema');
 
     // Show descriptions if `desc` or `schema` is present,

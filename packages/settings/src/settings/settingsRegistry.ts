@@ -35,18 +35,13 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Exact-match key canonicalization: returns `key` unchanged unless it is
- * already a canonical registry key (in which case it is also returned
- * unchanged). Legacy spellings are NOT resolved here — they are rewritten
- * once at load time by `migrateLegacySettingKeys` (legacyKeyMigration.ts,
- * issue #2533 Phase C1). Kept as an export for external callers, which are
- * cleaned up in Phase C2.
+ * Exact-match identity seam: returns `key` unchanged. Legacy spellings are
+ * NOT resolved here — they are rewritten once at load time by
+ * `migrateLegacySettingKeys` (legacyKeyMigration.ts, issue #2533 Phase C1).
+ * Kept as an export for external callers, which are cleaned up in Phase C2.
  */
 export function resolveAlias(key: string): string {
-  // Exact semantics: every registry key resolves to itself; any other key
-  // (including legacy spellings) is returned unchanged.
-  const isRegistryKey = SETTINGS_REGISTRY.some((spec) => spec.key === key);
-  return isRegistryKey ? key : key;
+  return key;
 }
 
 export function getSettingSpec(key: string): SettingSpec | undefined {
@@ -112,13 +107,11 @@ const SESSION_SCOPED_SETTING_KEYS: ReadonlySet<string> = new Set(
 // correctly canonicalize or dispatch such keys. Fail fast rather than
 // silently accept unsupported specs.
 for (const spec of SETTINGS_REGISTRY) {
-  if (spec.sessionScope === true) {
-    if (spec.key.includes('.')) {
-      throw new Error(
-        `Session-scoped setting "${spec.key}" must not use a dotted key — ` +
-          'dotted session-scoped keys are not yet supported.',
-      );
-    }
+  if (spec.sessionScope === true && spec.key.includes('.')) {
+    throw new Error(
+      `Session-scoped setting "${spec.key}" must not use a dotted key — ` +
+        'dotted session-scoped keys are not yet supported.',
+    );
   }
 }
 

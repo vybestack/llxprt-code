@@ -53,9 +53,10 @@ describe('ProviderManager Settings Separation', () => {
     expect(getSnapshot('openai')).toHaveProperty('custom-headers');
   });
 
-  it('context with max-tokens alias accessible via normalized key', () => {
-    settingsService.set('max-tokens', 1000);
-    expect(getSnapshot('openai')).toHaveProperty('max-tokens', 1000);
+  it('snapshot includes canonical max_tokens when set', () => {
+    settingsService.set('max_tokens', 1000);
+    expect(getSnapshot('openai')).toHaveProperty('max_tokens', 1000);
+    expect(getSnapshot('openai')['max-tokens']).toBeUndefined();
   });
 
   it('snapshot includes provider-scoped temperature override', () => {
@@ -71,13 +72,14 @@ describe('ProviderManager Settings Separation', () => {
     expect(getSnapshot('openai').temperature).toBe(0.5);
   });
 
-  it('snapshot does NOT include apiKey in root level', () => {
-    settingsService.set('apiKey', 'sk-test-12345');
-    expect(getSnapshot('openai').apiKey).toBeUndefined();
+  it('snapshot does NOT include auth-key in root level', () => {
+    settingsService.set('auth-key', 'sk-test-12345');
+    expect(getSnapshot('openai')['auth-key']).toBeUndefined();
   });
 
-  it('snapshot does NOT include api-key alias in root level', () => {
-    settingsService.set('api-key', 'sk-test-12345');
+  it('snapshot does NOT include legacy apiKey spellings in root level', () => {
+    settingsService.set('auth-key', 'sk-test-12345');
+    expect(getSnapshot('openai')['apiKey']).toBeUndefined();
     expect(getSnapshot('openai')['api-key']).toBeUndefined();
   });
 

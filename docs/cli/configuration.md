@@ -35,7 +35,7 @@ LLxprt Code uses JSON settings files for persistent configuration. There are fou
   - **Location:** `/etc/llxprt-code/settings.json` (Linux), `C:\ProgramData\llxprt-code\settings.json` (Windows) or `/Library/Application Support/LlxprtCode/settings.json` (macOS). The path can be overridden using the `LLXPRT_SYSTEM_SETTINGS_PATH` environment variable (a legacy alias `LLXPRT_CODE_SYSTEM_SETTINGS_PATH` is also honored for backward compatibility).
   - **Scope:** Applies to all LLxprt Code sessions on the system, for all users. System settings act as overrides, taking precedence over all other settings files. May be useful for system administrators at enterprises to have controls over users' LLxprt Code setups.
 
-**Note on environment variables in settings:** String values within your `settings.json` files can reference environment variables using either `$VAR_NAME` or `${VAR_NAME}` syntax. These variables will be automatically resolved when the settings are loaded. For example, if you have an environment variable `MY_API_TOKEN`, you could use it in `settings.json` like this: `"apiKey": "$MY_API_TOKEN"`.
+**Note on environment variables in settings:** String values within your `settings.json` files can reference environment variables using either `$VAR_NAME` or `${VAR_NAME}` syntax. These variables will be automatically resolved when the settings are loaded. For example, if you have an environment variable `MY_API_TOKEN`, you could use it in `settings.json` like this: `"auth-key": "$MY_API_TOKEN"`.
 
 > **Note for Enterprise Users:** For guidance on deploying and managing LLxprt Code in a corporate environment, please see the [Enterprise Configuration](./enterprise.md) documentation.
 
@@ -1072,17 +1072,17 @@ If you are experiencing performance issues with file searching (e.g., with `@` c
 3.  **Disable Recursive File Search:** As a last resort, you can disable recursive file search entirely by setting `enableRecursiveFileSearch` to `false`. This will be the fastest option as it avoids a recursive crawl of your project. However, it means you will need to type the full path to files when using `@` completions.
 
 - **`coreTools`** (array of strings):
-  - **Description:** Allows you to specify a list of core tool names that should be made available to the model. This can be used to restrict the set of built-in tools. See [Built-in Tools](../tools/index.md#built-in-tools) for a list of core tools. You can also specify command-specific restrictions for tools that support it, like the `ShellTool`. For example, `"coreTools": ["ShellTool(ls -l)"]` will only allow the `ls -l` command to be executed.
+  - **Description:** Allows you to specify a list of core tool names that should be made available to the model. This can be used to restrict the set of built-in tools. See [Built-in Tools](../tools/index.md#built-in-tools) for a list of core tools. You can also specify command-specific restrictions for tools that support it, like the `run_shell_command`. For example, `"coreTools": ["run_shell_command(ls -l)"]` will only allow the `ls -l` command to be executed.
   - **Default:** All tools available for use by the Gemini model.
-  - **Example:** `"coreTools": ["ReadFileTool", "GlobTool", "ShellTool(ls)"]`.
+  - **Example:** `"coreTools": ["read_file", "glob", "run_shell_command(ls)"]`.
 
 - **`allowedTools`** (array of strings):
   - **Default:** `undefined`
   - **Description:** A list of tool names that will bypass the confirmation dialog. This is useful for tools that you trust and use frequently. The match semantics are the same as `coreTools`.
-  - **Example:** `"allowedTools": ["ShellTool(git status)"]`.
+  - **Example:** `"allowedTools": ["run_shell_command(git status)"]`.
 
 - **`excludeTools`** (array of strings):
-  - **Description:** Allows you to specify a list of core tool names that should be excluded from the model. A tool listed in both `excludeTools` and `coreTools` is excluded. You can also specify command-specific restrictions for tools that support it, like the `ShellTool`. For example, `"excludeTools": ["ShellTool(rm -rf)"]` will block the `rm -rf` command.
+  - **Description:** Allows you to specify a list of core tool names that should be excluded from the model. A tool listed in both `excludeTools` and `coreTools` is excluded. You can also specify command-specific restrictions for tools that support it, like the `run_shell_command`. For example, `"excludeTools": ["run_shell_command(rm -rf)"]` will block the `rm -rf` command.
   - **Default**: No tools excluded.
   - **Example:** `"excludeTools": ["run_shell_command", "findFiles"]`.
   - **Security Note:** Command-specific restrictions in

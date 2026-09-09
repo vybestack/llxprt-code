@@ -2,7 +2,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { homedir } from 'os';
 import { FatalConfigError, getErrorMessage } from '@vybestack/llxprt-code-core';
-import { Storage } from '@vybestack/llxprt-code-settings';
+import {
+  Storage,
+  migrateLegacySettingKeys,
+} from '@vybestack/llxprt-code-settings';
 import stripJsonComments from 'strip-json-comments';
 import { DefaultLight } from '../ui/themes/default-light.js';
 import { DefaultDark } from '../ui/themes/default.js';
@@ -16,7 +19,6 @@ import {
   migrateHooksConfig,
   migrateLegacyInteractiveShellSetting,
 } from './settingsLegacy.js';
-import { migrateLegacySettingKeys } from '@vybestack/llxprt-code-settings';
 import { migrateDeprecatedSettings } from './settingsMigrations.js';
 import {
   getSystemDefaultsPath,
@@ -225,14 +227,19 @@ function migrateLoadedSettings(settings: SettingsState): void {
     const providers = scopeRecord['providers'];
     if (isPlainRecord(providers)) {
       for (const provider of Object.values(providers)) {
-        if (isPlainRecord(provider)) {
-          const migratedProvider = migrateLegacySettingKeys(provider);
-          if (migratedProvider !== provider) {
-            applyMigratedScopeKeys(provider, migratedProvider);
-          }
-        }
+        migrateProviderBlock(provider);
       }
     }
+  }
+}
+
+function migrateProviderBlock(provider: unknown): void {
+  if (!isPlainRecord(provider)) {
+    return;
+  }
+  const migratedProvider = migrateLegacySettingKeys(provider);
+  if (migratedProvider !== provider) {
+    applyMigratedScopeKeys(provider, migratedProvider);
   }
 }
 

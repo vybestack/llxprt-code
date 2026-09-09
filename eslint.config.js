@@ -18,6 +18,7 @@ import headers from 'eslint-plugin-headers';
 import reactRenderSafety from './eslint-rules/react-render-safety.js';
 import noInlineDeps from './eslint-rules/no-inline-deps.js';
 import inkTextColorRequired from './eslint-rules/ink-text-color-required.js';
+import noAliasProbes from './eslint-rules/no-alias-probes.js';
 import path from 'node:path';
 import url from 'node:url';
 
@@ -1482,6 +1483,7 @@ export default tseslint.config(
           'react-render-safety': reactRenderSafety,
           'no-inline-deps': noInlineDeps,
           'ink-text-color-required': inkTextColorRequired,
+          'no-alias-probes': noAliasProbes,
         },
       },
     },
@@ -1490,6 +1492,7 @@ export default tseslint.config(
       // 'custom/react-render-safety': 'error', // TODO: Fix for ESLint 9 API
       'custom/no-inline-deps': 'error',
       'custom/ink-text-color-required': 'error',
+      'custom/no-alias-probes': 'error',
     },
   },
   // License header configuration

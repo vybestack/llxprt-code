@@ -13,9 +13,7 @@ import {
   ApprovalMode as ApprovalModeEnum,
   type LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
-import {
-  canonicalizePolicyToolEntry,
-} from '@vybestack/llxprt-code-tools';
+import { canonicalizePolicyToolEntry } from '@vybestack/llxprt-code-tools';
 import type { Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
 import type { ContextResolutionResult } from './interactiveContext.js';

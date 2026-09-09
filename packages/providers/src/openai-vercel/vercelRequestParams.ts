@@ -99,12 +99,8 @@ export function resolveStreamingEnabled(
 }
 
 export function resolveMaxOutputTokens(
-  maxTokensMeta: number | undefined,
   maxTokensOverride: number | undefined,
 ): number | undefined {
-  if (typeof maxTokensMeta === 'number' && Number.isFinite(maxTokensMeta)) {
-    return maxTokensMeta;
-  }
   if (
     typeof maxTokensOverride === 'number' &&
     Number.isFinite(maxTokensOverride)
@@ -123,23 +119,15 @@ export function resolveStopSequences(
 }
 
 /**
- * Resolves all model call parameters from options and metadata.
+ * Resolves all model call parameters from normalized options.
  */
 export function resolveModelCallParams(
   options: NormalizedGenerateChatOptions,
-  metadata: NormalizedGenerateChatOptions['metadata'],
   provider: BaseProvider,
 ): ModelCallParams {
   const modelParams = extractModelParamsFromOptions(options) ?? {};
-  const ephemerals = options.invocation.ephemerals;
-  const maxTokensMeta =
-    (metadata['maxTokens'] as number | undefined) ??
-    (ephemerals['max-tokens'] as number | undefined);
-  const maxTokensOverride =
-    (modelParams['max_tokens'] as number | undefined) ?? undefined;
   const maxOutputTokens = resolveMaxOutputTokens(
-    maxTokensMeta,
-    maxTokensOverride,
+    modelParams['max_tokens'] as number | undefined,
   );
   const temperature = modelParams['temperature'] as number | undefined;
   const topP = modelParams['top_p'] as number | undefined;

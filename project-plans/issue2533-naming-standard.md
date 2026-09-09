@@ -217,3 +217,32 @@ settings/profile, completion, provider adapter.
 Max 2 deepthinker review rounds; max 2 OCR rounds. Findings triaged
 Blocker-Fix / In-scope-Fix / Reject / Defer. Completion only with behavioral
 evidence, green verification + CI, triaged reviews, conflict-free PR.
+
+## Review log (final)
+
+- Round 1 (compliance): verdict FAIL with 1 Blocker + 4 In-scope findings + 3 Defers.
+  All five actionable findings remediated in the same working tree:
+  1. OpenAI request-param alias map + kebab→snake fallback deleted
+     (openaiRequestParams.ts now exact canonical-set filtering); stateless test
+     rewritten to canonical max_tokens + legacy-absence assertion.
+  2. Legacy ephemerals['max-tokens'] reads removed from OpenAIRequestPreparation.ts
+     and vercelRequestParams.ts (canonical modelParams['max_tokens'] only).
+  3. /mcp list accepts only desc/nodesc/schema (descriptions/nodescriptions aliases
+     removed; schema-edge test asserts rejection; docs swept).
+  4. docs settings examples teach auth-key (configuration.md, emoji-filter.md).
+  5. naming-standard.md Enforcement reworded: boundary table = full register;
+     BOUNDARY_EXCEPTIONS = machine-enforced subset. Plus settingsLoader import fold.
+- Round 2 (findings-only follow-up): verdict ALL-RESOLVED, no regressions.
+  Logs: tmp/verify2533-review/, tmp/verify2533-review2/, remediation tmp/verify2533-h1/.
+
+## Known follow-ups (deferred, out of scope here)
+
+- packages/core/src/prompt-config/prompt-resolver.ts private toSnakeCase is not
+  byte-equivalent to the shared packages/tools implementation (consecutive-capitals
+  handling; no -/space folding). Unify behind the shared export with a corpus drift
+  test, or document as a distinct filesystem-naming helper.
+- packages/settings/src/settings/settingsRegistry.ts resolveAlias is now a permanent
+  identity export; inline it away and drop the forward-referencing comment.
+- Gate failures proven pre-existing on main (not branch-owned): proactive-renewal
+  fake-timer suite (identical 4 pass/7 fail on main), SecureStore OS-keyring tests,
+  #3619 vi.mock cross-file pollution, bun solo-run node:fs/promises quirk.
