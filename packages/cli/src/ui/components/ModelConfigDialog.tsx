@@ -425,9 +425,10 @@ function planFieldEdit(field: ConfigField, edit: PendingEdit): FieldPlan {
     return { kind: 'write', write: { kind: 'set-param', value: result.value } };
   }
 
-  // Guarded like validateModelParam guards parseValue: a registry parse
-  // throw surfaces as the inline validation message instead of tearing
-  // down the Ink UI (the pre-refactor dialog caught these the same way).
+  // Unlike validateModelParam (which guards parseValue internally and never
+  // throws), parseEphemeralSettingValue can throw, so it is guarded here: a
+  // throw becomes the inline validation message instead of tearing down the
+  // Ink UI (the pre-refactor dialog caught these the same way).
   try {
     const result = parseEphemeralSettingValue(field.key, raw);
     if (!result.success) return { kind: 'invalid', message: result.message };
