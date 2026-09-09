@@ -140,6 +140,33 @@ ${clamp}`;
   };
 }
 
+/**
+ * Survivor warning appended to an aborted result when the executor's bounded
+ * group-reap window expired with live process-group members (Issue #3517).
+ * Foreground commands have no managed task id, so the explicit kill
+ * instruction is the actionable cleanup the caller can be given. The pgid is
+ * the one already resolved via collectProcessInfo; on POSIX the detached
+ * spawn makes result.pid the process-group id, so it is the fallback.
+ */
+export function appendAbortSurvivorWarning(
+  content: string,
+  result: ShellExecutionResult,
+  pgid: number | null,
+): string {
+  if (result.survivingGroupMembersOnAbort !== true) {
+    return content;
+  }
+  const cleanupPgid = pgid ?? result.pid;
+  if (cleanupPgid === undefined) {
+    return `${content}\n\nWarning: child processes from the aborted command may still be running; they could not be fully terminated.`;
+  }
+  return (
+    `${content}\n\nWarning: child processes from the aborted command may still be ` +
+    `running (process group ${cleanupPgid} could not be fully terminated). ` +
+    `Kill them with \`kill -9 -- -${cleanupPgid}\`.`
+  );
+}
+
 export function isShellToolHost(
   host: IShellToolHost | IShellExecutionService,
 ): host is IShellToolHost {

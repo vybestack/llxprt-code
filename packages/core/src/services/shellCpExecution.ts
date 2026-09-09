@@ -86,9 +86,7 @@ export function createCpResultPromise(
     // confirmed empty (or no group reap applies); never rejects.
     let abortKillChain: Promise<boolean> | null = null;
     const armAbortKill = (): void => {
-      if (abortKillChain === null) {
-        abortKillChain = cpKillOnAbort(state, child);
-      }
+      abortKillChain ??= cpKillOnAbort(state, child);
     };
     setupCpInactivityHandler(
       state,
@@ -139,6 +137,45 @@ function isCpStreamSettled(
     return true;
   }
   return flags.destroyed === true || flags.readableEnded === true;
+}
+
+/**
+ * Wire the once-'end'/'close' settle listeners for still-open stdio streams
+ * so a pending exit finalizes when the last stream settles (or is proven
+ * already settled). Pure extraction from the finalizer's returned closure:
+ * identical listener registration and finalize condition, no behavior change.
+ */
+function armCpStreamSettleListeners(
+  state: CpExecState,
+  child: ChildProcess,
+  openStreams: Array<NonNullable<ChildProcess['stdout']>>,
+  code: number | null,
+  signal: NodeJS.Signals | null,
+  finalize: (code: number | null, signal: NodeJS.Signals | null) => void,
+  streamSettledListeners: Map<NonNullable<ChildProcess['stdout']>, () => void>,
+): void {
+  for (const stream of openStreams) {
+    const onSettled = (): void => {
+      // Remove both registrations: whichever of 'end'/'close' fires, the
+      // other may never arrive (Bun does not always emit 'close'), and a
+      // lingering once-listener would retain the finalizer closure.
+      stream.removeListener('close', onSettled);
+      stream.removeListener('end', onSettled);
+      streamSettledListeners.delete(stream);
+      if (state.hasResolved) {
+        return;
+      }
+      const stillOpen = [child.stdout, child.stderr].some(
+        (candidate) => candidate !== null && !isCpStreamSettled(candidate),
+      );
+      if (!stillOpen) {
+        finalize(code, signal);
+      }
+    };
+    streamSettledListeners.set(stream, onSettled);
+    stream.once('close', onSettled);
+    stream.once('end', onSettled);
+  }
 }
 
 /**
@@ -226,28 +263,15 @@ function createCpExitFinalizer(
       () => finalize(code, signal),
       CP_OUTPUT_DRAIN_GRACE_MS,
     );
-    for (const stream of openStreams) {
-      const onSettled = (): void => {
-        // Remove both registrations: whichever of 'end'/'close' fires, the
-        // other may never arrive (Bun does not always emit 'close'), and a
-        // lingering once-listener would retain the finalizer closure.
-        stream.removeListener('close', onSettled);
-        stream.removeListener('end', onSettled);
-        streamSettledListeners.delete(stream);
-        if (state.hasResolved) {
-          return;
-        }
-        const stillOpen = [child.stdout, child.stderr].some(
-          (candidate) => candidate !== null && !isCpStreamSettled(candidate),
-        );
-        if (!stillOpen) {
-          finalize(code, signal);
-        }
-      };
-      streamSettledListeners.set(stream, onSettled);
-      stream.once('close', onSettled);
-      stream.once('end', onSettled);
-    }
+    armCpStreamSettleListeners(
+      state,
+      child,
+      openStreams,
+      code,
+      signal,
+      finalize,
+      streamSettledListeners,
+    );
   };
 }
 

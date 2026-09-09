@@ -39,6 +39,7 @@ import type {
 } from '../interfaces/IShellToolHost.js';
 import {
   applyOutputFilters,
+  appendAbortSurvivorWarning,
   buildShellSchema,
   collectProcessInfo,
   createShellToolHostFromExecutionService,
@@ -677,7 +678,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
       ? result.error.message.replace(commandToExecute, this.params.command)
       : '(none)';
 
-    const llmContent = [
+    let llmContent = [
       `Command: ${this.params.command}`,
       `Directory: ${stringOrDefault(this.getDirPath(), '(root)')}`,
       `Stdout: ${stringOrDefault(filteredOutput, '(empty)')}`,
@@ -690,6 +691,10 @@ export class ShellToolInvocation extends BaseToolInvocation<
       }`,
       `Process Group PGID: ${pgid ?? result.pid ?? '(none)'}`,
     ].join('\n');
+    // Inactivity-killed CP commands resolve aborted: false (the caller
+    // signal never fired), so the survivor flag set by the executor would
+    // otherwise be dropped here (Issue #3517). No-op without the flag.
+    llmContent = appendAbortSurvivorWarning(llmContent, result, pgid);
 
     let returnDisplayMessage = '';
     if (this.host.getDebugMode()) {
@@ -770,33 +775,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
   private isInvocationAllowlisted(command: string): boolean {
     return this.host.isShellInvocationAllowlisted(command, ShellTool.Name);
   }
-}
-
-/**
- * Survivor warning appended to an aborted result when the executor's bounded
- * group-reap window expired with live process-group members (Issue #3517).
- * Foreground commands have no managed task id, so the explicit kill
- * instruction is the actionable cleanup the caller can be given. The pgid is
- * the one already resolved via collectProcessInfo; on POSIX the detached
- * spawn makes result.pid the process-group id, so it is the fallback.
- */
-function appendAbortSurvivorWarning(
-  content: string,
-  result: ShellExecutionResult,
-  pgid: number | null,
-): string {
-  if (result.survivingGroupMembersOnAbort !== true) {
-    return content;
-  }
-  const cleanupPgid = pgid ?? result.pid;
-  if (cleanupPgid === undefined) {
-    return `${content}\n\nWarning: child processes from the aborted command may still be running; they could not be fully terminated.`;
-  }
-  return (
-    `${content}\n\nWarning: child processes from the aborted command may still be ` +
-    `running (process group ${cleanupPgid} could not be fully terminated). ` +
-    `Kill them with \`kill -9 -- -${cleanupPgid}\`.`
-  );
 }
 
 export class ShellTool extends BaseDeclarativeTool<

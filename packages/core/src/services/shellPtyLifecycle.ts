@@ -571,6 +571,19 @@ export async function ptyAbortAction(
     if (state.hasResolved) {
       return;
     }
+    if (state.exitedGuard.isExited()) {
+      // The real PTY exit fired while the chain ran. This continuation was
+      // registered on the chain before the exit handler's, so it runs first:
+      // resolving here would race ahead of the exit-handler continuation and
+      // overwrite the real exitCode/signal with a synthetic (1, null) result
+      // (the incident transcript's "Signal: 15" depends on the real exit
+      // event winning). The exit handler finalizes with the true values and
+      // already carries the survivingGroupMembersOnAbort flag.
+      return;
+    }
+    // Forward-progress fallback: the PTY never reported an exit. Only this
+    // path resolves the synthetic result, still gated on the bounded
+    // group-reap confirmation (Issue #3517).
     ptyRenderFn(state);
     const result = buildPtyResult(state, 1, null, aborted);
     if (!groupConfirmedEmpty) {
@@ -665,7 +678,11 @@ function ptyExitRace(
   state: PtyExecState,
   exitCode: number,
   signal: number | null,
-  finalizeResult: (exitCode: number, signal?: number | null) => void,
+  finalizeResult: (
+    exitCode: number,
+    signal?: number | null,
+    survivingGroupMembers?: boolean,
+  ) => void,
 ): void {
   const processingComplete = state.processingChain.then(() => 'processed');
   let raceAbortListener: (() => void) | null = null;
@@ -693,8 +710,32 @@ function ptyExitRace(
   });
 
   Promise.race([processingComplete, abortFired])
-    .then(() => {
+    .then((winner) => {
       cleanupRaceListener();
+      if (
+        winner === 'aborted' &&
+        !state.isWindows &&
+        state.supportsProcessGroupKill &&
+        isKillablePid(state.ptyProcess.pid)
+      ) {
+        // An abort landed while natural-exit output was still draining.
+        // onExit already detached the caller abort handler, so nothing else
+        // will kill the group: arm the same bounded group-reap chain
+        // ptyAbortAction's group branch uses (sharing any in-flight chain
+        // instance, never duplicating it) and gate this result on its
+        // confirmation, flagging survivors when the window expires
+        // (Issue #3517). The chain never rejects and is time-bounded.
+        const reapChain =
+          abortGroupReapChains.get(state) ??
+          armPtyGroupAbortKill(state, state.ptyProcess.pid);
+        void reapChain.then((groupConfirmedEmpty) => {
+          if (state.hasResolved) {
+            return;
+          }
+          finalizeResult(exitCode, signal ?? null, !groupConfirmedEmpty);
+        });
+        return;
+      }
       finalizeResult(exitCode, signal ?? null);
     })
     .catch(() => {

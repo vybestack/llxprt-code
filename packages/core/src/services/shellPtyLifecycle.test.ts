@@ -292,6 +292,97 @@ describe('ptyInactivityAbortAction pid validation', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Abort vs exit ordering (fake pty, issue #3517)
+// ---------------------------------------------------------------------------
+
+describe('PTY abort signal fidelity (fake pty, issue #3517)', () => {
+  it('real exit signal wins over the synthetic abort result when the exit fires before the group-reap chain settles', async () => {
+    // process.kill is stubbed for the whole test, so the fabricated pid is
+    // never aimed at a real process group (the suite's standing rule). The
+    // stub makes every signal-0 group probe report "alive" without throwing,
+    // which forces the bounded reap window to expire (the chain resolves
+    // false instead of confirming the group empty) while absorbing every
+    // real signal as a no-op.
+    const realProcessKill = process.kill;
+    const groupProbes: number[] = [];
+    process.kill = ((pid: number, signal?: string | number) => {
+      if (signal === 0) {
+        groupProbes.push(pid);
+      }
+      return true;
+    }) as unknown as typeof process.kill;
+
+    const killSignals: string[] = [];
+    let exitListener:
+      | ((event: { exitCode: number; signal?: number }) => void)
+      | undefined;
+    const ptyProcess = {
+      pid: 999998,
+      kill: (signal?: string | number): void => {
+        killSignals.push(signal === undefined ? '<none>' : String(signal));
+      },
+      onData: () => ({ dispose: () => undefined }),
+      onExit: (
+        listener: (event: { exitCode: number; signal?: number }) => void,
+      ) => {
+        exitListener = listener;
+        return { dispose: () => undefined };
+      },
+    } as unknown as IPty;
+
+    const abortController = new AbortController();
+    const activePtys = new Map<number, ActivePty>();
+    try {
+      const resultPromise = createPtyResultPromise(
+        ptyProcess,
+        false,
+        80,
+        30,
+        () => undefined,
+        abortController.signal,
+        { scrollback: 10 } as ShellExecutionConfig,
+        {
+          name: 'node-pty',
+          module: {},
+          supportsBackpressure: true,
+        } as NonNullable<PtyImplementation>,
+        activePtys,
+        { value: null },
+      );
+
+      // The abort listener runs armPtyGroupAbortKill's synchronous SIGTERM
+      // prefix (and its chain registration) before abort() returns; the real
+      // exit event is then delivered well before the chain settles inside
+      // its bounded kill + reap window.
+      abortController.abort();
+      if (exitListener === undefined) {
+        throw new Error('PTY exit handler was not registered');
+      }
+      exitListener({ exitCode: 137, signal: 9 });
+
+      const result = await resultPromise;
+
+      // The chain really ran: the group got the fake pty's SIGTERM and the
+      // stubbed probe kept reporting members, so the window expired.
+      expect(killSignals).toContain('SIGTERM');
+      expect(groupProbes.length).toBeGreaterThan(0);
+
+      // Ordering guarantee: ptyAbortAction saw exitedGuard marked by the
+      // real exit and deferred to the exit handler's chain continuation
+      // instead of resolving its synthetic (exitCode 1, signal null) result.
+      expect(result.exitCode).toBe(137);
+      expect(result.signal).toBe(9);
+      expect(result.aborted).toBe(true);
+      // The chain could not confirm the group empty, so the survivor flag
+      // must still reach the finalized result.
+      expect(result.survivingGroupMembersOnAbort).toBe(true);
+    } finally {
+      process.kill = realProcessKill;
+    }
+  }, 10000);
+});
+
+// ---------------------------------------------------------------------------
 // Real forkpty abort behavior (POSIX, issue #3517)
 // ---------------------------------------------------------------------------
 
@@ -326,7 +417,11 @@ async function waitForMarker(
 }
 
 /** Race a promise against a deadline, resolving `timeoutValue` on expiry. */
-function withDeadline<T>(promise: Promise<T>, ms: number, timeoutValue: T): Promise<T> {
+function withDeadline<T>(
+  promise: Promise<T>,
+  ms: number,
+  timeoutValue: T,
+): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((resolve) => {
@@ -407,70 +502,74 @@ const forkptyBackend = isWindows ? null : await probeUsableForkptyPty();
 describe.skipIf(isWindows || forkptyBackend === null)(
   'PTY abort group reap (POSIX, forkpty backend, issue #3517)',
   () => {
-    it('kills a TERM-immune grandchild before the abort result resolves', async () => {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pty-abort-'));
-      const marker = path.join(dir, 'grandchild.pid');
-      const { executable, argsPrefix, shell } = getShellConfiguration();
-      const guardedCommand = ensureNativeExitCodePropagated(
-        ensurePromptvarsDisabled(
-          // The subshell stays in the pty shell's process group; `trap '' TERM`
-          // sets SIG_IGN, a disposition that survives `exec sleep 30`. The
-          // foreground `sleep 30` keeps the pty leader alive until the abort.
-          `( trap '' TERM; exec sleep 30 ) & echo $! > ${marker}; sleep 30`,
+    // jest/require-top-level-describe does not recognize bun's
+    // describe.skipIf form, so the case sits in a plain describe block.
+    describe('foreground abort', () => {
+      it('kills a TERM-immune grandchild before the abort result resolves', async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pty-abort-'));
+        const marker = path.join(dir, 'grandchild.pid');
+        const { executable, argsPrefix, shell } = getShellConfiguration();
+        const guardedCommand = ensureNativeExitCodePropagated(
+          ensurePromptvarsDisabled(
+            // The subshell stays in the pty shell's process group; `trap '' TERM`
+            // sets SIG_IGN, a disposition that survives `exec sleep 30`. The
+            // foreground `sleep 30` keeps the pty leader alive until the abort.
+            `( trap '' TERM; exec sleep 30 ) & echo $! > ${marker}; sleep 30`,
+            shell,
+          ),
           shell,
-        ),
-        shell,
-      );
-      const backend = forkptyBackend as NonNullable<PtyImplementation>;
-      const ptyProcess: IPty = backend.module.spawn(
-        executable,
-        [...argsPrefix, guardedCommand],
-        {
-          cwd: dir,
-          name: 'xterm-256color',
-          cols: 80,
-          rows: 30,
-          env: { ...process.env, TERM: 'xterm-256color' },
-        },
-      );
-      const abortController = new AbortController();
-      const activePtys = new Map<number, ActivePty>();
-      try {
-        const resultPromise = createPtyResultPromise(
-          ptyProcess,
-          false,
-          80,
-          30,
-          () => undefined,
-          abortController.signal,
-          { scrollback: 10 },
-          backend,
-          activePtys,
-          { value: null },
         );
-        const grandchildPid = Number(await waitForMarker(marker, 8000));
-        expect(grandchildPid).toBeGreaterThan(0);
+        const backend = forkptyBackend as NonNullable<PtyImplementation>;
+        const ptyProcess: IPty = backend.module.spawn(
+          executable,
+          [...argsPrefix, guardedCommand],
+          {
+            cwd: dir,
+            name: 'xterm-256color',
+            cols: 80,
+            rows: 30,
+            env: { ...process.env, TERM: 'xterm-256color' },
+          },
+        );
+        const abortController = new AbortController();
+        const activePtys = new Map<number, ActivePty>();
+        try {
+          const resultPromise = createPtyResultPromise(
+            ptyProcess,
+            false,
+            80,
+            30,
+            () => undefined,
+            abortController.signal,
+            { scrollback: 10 },
+            backend,
+            activePtys,
+            { value: null },
+          );
+          const grandchildPid = Number(await waitForMarker(marker, 8000));
+          expect(grandchildPid).toBeGreaterThan(0);
 
-        abortController.abort();
-        const result = await resultPromise;
+          abortController.abort();
+          const result = await resultPromise;
 
-        expect(result.aborted).toBe(true);
-        // Escalation succeeded within the reap window: no survivor flag.
-        expect(result.survivingGroupMembersOnAbort).toBeUndefined();
-        // THE assertion (AC1+AC2): the TERM-immune grandchild is dead by the
-        // time the abort result exists. It was reparented when the pty leader
-        // died, so a signal-0 probe proves real death.
-        expect(isPidAlive(grandchildPid)).toBe(false);
-      } finally {
-        if (Number.isInteger(ptyProcess.pid) && ptyProcess.pid > 0) {
-          try {
-            process.kill(-ptyProcess.pid, 'SIGKILL');
-          } catch {
-            // Already gone.
+          expect(result.aborted).toBe(true);
+          // Escalation succeeded within the reap window: no survivor flag.
+          expect(result.survivingGroupMembersOnAbort).toBeUndefined();
+          // THE assertion (AC1+AC2): the TERM-immune grandchild is dead by the
+          // time the abort result exists. It was reparented when the pty leader
+          // died, so a signal-0 probe proves real death.
+          expect(isPidAlive(grandchildPid)).toBe(false);
+        } finally {
+          if (Number.isInteger(ptyProcess.pid) && ptyProcess.pid > 0) {
+            try {
+              process.kill(-ptyProcess.pid, 'SIGKILL');
+            } catch {
+              // Already gone.
+            }
           }
+          fs.rmSync(dir, { recursive: true, force: true });
         }
-        fs.rmSync(dir, { recursive: true, force: true });
-      }
-    }, 30000);
+      }, 30000);
+    });
   },
 );

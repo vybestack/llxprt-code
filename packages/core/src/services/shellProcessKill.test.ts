@@ -309,7 +309,10 @@ describe('ShellProcessKill platform behavior', () => {
         // sets SIG_IGN, a disposition that survives `exec sleep 30`.
         const leader = spawn(
           'bash',
-          ['-c', `( trap '' TERM; exec sleep 30 ) & echo $! > ${marker}; exit 0`],
+          [
+            '-c',
+            `( trap '' TERM; exec sleep 30 ) & echo $! > ${marker}; exit 0`,
+          ],
           { detached: true, stdio: 'ignore' },
         );
         leader.on('error', () => {});

@@ -13,6 +13,8 @@ import {
   expect,
   beforeEach,
   afterEach,
+  afterAll,
+  mock,
   type Mock,
 } from 'bun:test';
 import EventEmitter from 'events';
@@ -35,6 +37,19 @@ const mockGetPty = vi.fn();
 void vi.mock('@lydell/node-pty', () => ({
   spawn: mockPtySpawn,
 }));
+// Captured before the vi.mock calls below execute (bun runs vi.mock in
+// statement order). Bun resolves every file in one shared process and
+// default-import bindings snapshot at load time, so the os factory below
+// spreads the real module and stubs only platform/homedir: a leaked hollow
+// os surface would break later files (shellProcessKill.test.ts needs
+// os.tmpdir).
+const actualOsModule = await import('os');
+const realOsSurface = { ...actualOsModule.default };
+const stubOsSurface = () => ({
+  ...realOsSurface,
+  platform: mockPlatform,
+  homedir: () => '/tmp/test-home',
+});
 const actual = { ...(await import('child_process')) };
 void vi.mock('child_process', () => ({
   ...actual,
@@ -43,33 +58,34 @@ void vi.mock('child_process', () => ({
 void vi.mock('../utils/textUtils.js', () => ({
   isBinary: mockIsBinary,
 }));
-void vi.mock('os', () => ({
-  default: {
-    platform: mockPlatform,
-    homedir: () => '/tmp/test-home',
-    constants: {
-      signals: {
-        SIGTERM: 15,
-        SIGKILL: 9,
-      },
-    },
-  },
-  platform: mockPlatform,
-  homedir: () => '/tmp/test-home',
-  constants: {
-    signals: {
-      SIGTERM: 15,
-      SIGKILL: 9,
-    },
-  },
-}));
+void vi.mock('os', () => ({ ...stubOsSurface(), default: stubOsSurface() }));
 void vi.mock('../utils/getPty.js', () => ({
   getPty: mockGetPty,
 }));
 
+/**
+ * Group pids that have received SIGKILL. Signal-0 liveness probes from the
+ * abort group-reap confirmation (issue #3517) answer "alive" until the
+ * group's SIGKILL is delivered, then ESRCH, mirroring a real process group
+ * dying.
+ */
+const killedGroupPids = new Set<number>();
 const mockProcessKill = vi
   .spyOn(process, 'kill')
-  .mockImplementation(() => true);
+  .mockImplementation((pid: number, signal?: NodeJS.Signals | number) => {
+    if (signal === 0) {
+      if (killedGroupPids.has(pid)) {
+        throw Object.assign(new Error(`process group ${pid} not found`), {
+          code: 'ESRCH',
+        });
+      }
+      return true;
+    }
+    if (signal === 'SIGKILL') {
+      killedGroupPids.add(pid);
+    }
+    return true;
+  });
 
 const stubProcessPlatform = (platform: NodeJS.Platform): void => {
   setGlobal('process', { ...process, env: process.env, platform });
@@ -81,6 +97,7 @@ describe('ShellExecutionService child_process fallback', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    killedGroupPids.clear();
     stubProcessPlatform('linux');
 
     mockIsBinary.mockReturnValue(false);
@@ -107,6 +124,22 @@ describe('ShellExecutionService child_process fallback', () => {
 
   afterEach(() => {
     restoreGlobals();
+  });
+
+  // Bun runs every test file in this invocation in one shared process. The
+  // module-level process.kill spy and the vi.mock module replacements leak
+  // into later files, so this file leaves them behaviorally real: the spy is
+  // restored, the leaked platform stub passes through to the real platform,
+  // and child_process is re-registered with the real spawn for live named
+  // bindings resolved after this point (default-import bindings snapshot at
+  // load time, which is why the os factory itself must stay passthrough-real).
+  afterAll(() => {
+    mockProcessKill.mockRestore();
+    mockPlatform.mockReset();
+    mockPlatform.mockImplementation(() => realOsSurface.platform());
+    const realChildProcess = () => ({ ...actual, spawn: actual.spawn });
+    void mock.module('child_process', realChildProcess);
+    void mock.module('node:child_process', realChildProcess);
   });
 
   // Default shell execution config for tests
@@ -390,46 +423,57 @@ describe('ShellExecutionService child_process fallback', () => {
     it('should gracefully attempt SIGKILL on linux if SIGTERM fails', async () => {
       mockPlatform.mockReturnValue('linux');
       vi.useFakeTimers();
+      try {
+        // Don't await the result inside the simulation block for this specific
+        // test. We need to control the timeline manually.
+        const abortController = new AbortController();
+        const handle = await ShellExecutionService.execute(
+          'unresponsive_process',
+          '/test/dir',
+          onOutputEventMock,
+          abortController.signal,
+          true,
+          defaultShellConfig,
+        );
 
-      // Don't await the result inside the simulation block for this specific test.
-      // We need to control the timeline manually.
-      const abortController = new AbortController();
-      const handle = await ShellExecutionService.execute(
-        'unresponsive_process',
-        '/test/dir',
-        onOutputEventMock,
-        abortController.signal,
-        true,
-        defaultShellConfig,
-      );
+        abortController.abort();
 
-      abortController.abort();
+        // Check the first kill signal
+        expect(mockProcessKill).toHaveBeenCalledWith(
+          -mockChildProcess.pid!,
+          'SIGTERM',
+        );
 
-      // Check the first kill signal
-      expect(mockProcessKill).toHaveBeenCalledWith(
-        -mockChildProcess.pid!,
-        'SIGTERM',
-      );
+        // Now, advance time past the timeout
+        await advanceTimersByTimeAsync(250);
 
-      // Now, advance time past the timeout
-      await advanceTimersByTimeAsync(250);
+        // Check the second kill signal
+        expect(mockProcessKill).toHaveBeenCalledWith(
+          -mockChildProcess.pid!,
+          'SIGKILL',
+        );
 
-      // Check the second kill signal
-      expect(mockProcessKill).toHaveBeenCalledWith(
-        -mockChildProcess.pid!,
-        'SIGKILL',
-      );
+        // Finally, simulate the process exiting and await the result
+        mockChildProcess.emit('exit', null, 'SIGKILL');
+        const result = await handle.result;
 
-      // Finally, simulate the process exiting and await the result
-      mockChildProcess.emit('exit', null, 'SIGKILL');
-      const result = await handle.result;
-
-      vi.useRealTimers();
-
-      expect(result.aborted).toBe(true);
-      expect(result.signal).toBe(9);
-      // The individual kill calls were already asserted above.
-      expect(mockProcessKill).toHaveBeenCalledTimes(2);
+        expect(result.aborted).toBe(true);
+        expect(result.signal).toBe(9);
+        // The individual kill calls were already asserted above. Signal-0
+        // liveness probes from the group-reap confirmation (issue #3517) are
+        // not signal deliveries, so count real signals only.
+        const deliveredSignals = mockProcessKill.mock.calls.filter(
+          (call) => call[1] !== 0,
+        );
+        expect(deliveredSignals).toHaveLength(2);
+      } finally {
+        // A failing or stuck body must not leave fake timers installed for
+        // the rest of the file: every later await (including Bun's own
+        // per-test timeout, which is itself a faked timer) would then hang
+        // until the per-file budget — the twice-identical 300s timeout seen
+        // under run-bun-tests.ts.
+        vi.useRealTimers();
+      }
     });
   });
 

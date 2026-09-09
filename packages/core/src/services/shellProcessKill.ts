@@ -152,7 +152,7 @@ export function isProcessGroupAlive(pid: number): boolean {
     process.kill(-pid, 0);
     return true;
   } catch (error) {
-    return (error as NodeJS.ErrnoException)?.code === 'EPERM';
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
   }
 }
 

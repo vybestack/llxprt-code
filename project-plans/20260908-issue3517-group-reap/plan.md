@@ -164,3 +164,50 @@ compliance review (≤2 rounds), OCR (≤2 rounds), PR, CI watch.
 Findings will be classified Blocker-Fix / In-scope-Fix / Reject / Defer.
 Reviewer suggestions do not expand scope; anything beyond the accepted
 behavior above needs explicit approval before implementation.
+
+### Compliance review (round 1) outcome
+
+- Finding 1 (PTY exit-race window: an abort landing while natural-exit
+  output drains resolved immediately, bypassing the group-reap gate and the
+  survivor warning) — **In-scope-Fix**. Fixed in `ptyExitRace`: the
+  abort-win path now arms/shares the same bounded group-reap chain
+  (`abortGroupReapChains`) that `ptyAbortAction`'s group branch uses and
+  gates the result on it, flagging survivors via the widened
+  `finalizeResult` signature. Same hazard class as the incident, on a
+  foreground timeout/cancel path.
+- Finding 2 (CP inactivity kill set the survivor flag but
+  `formatNormalOutput` never rendered it, because inactivity results carry
+  `aborted: false`) — **In-scope-Fix**. One line: `formatNormalOutput`
+  appends `appendAbortSurvivorWarning`; clean results stay byte-identical.
+- Signal-fidelity pin (reviewer NIT, promoted): new fake-pty test
+  `PTY abort signal fidelity (fake pty, issue #3517)` asserts the real exit
+  signal (9) wins over the synthetic `(1, null)` abort result when the exit
+  fires before the reap chain settles, and that the survivor flag still
+  lands. Guards the fix for the deterministic `main.test.ts` failure.
+- Lint-driven refactors (`appendAbortSurvivorWarning` moved to
+  shell-helpers.ts, `armCpStreamSettleListeners` extraction, `??=`,
+  optional-chain removal) — **no action** (behavior-neutral, verified by
+  diff).
+- Real-process PTY probe skipping in this environment (documented
+  oven-sh/bun#25822 unreliability) — **no action** (legitimate skip; PTY
+  path covered by fake-pty suite plus reading).
+- `ptyInactivityAbortAction` and Windows taskkill confirmation — **Defer**
+  (pre-existing sibling hazards outside this issue's scope, unchanged by
+  this PR).
+
+### Verification results (candidate head)
+
+- Targeted core files: 87 pass / 0 fail / 5 skip (POSIX/Windows gates),
+  2 consecutive runs; tools `shell-tool.test.ts`: 19 pass.
+- Full chain (build → core → tools → cli → lint → typecheck → format):
+  build OK, lint OK, typecheck OK, format clean.
+- Core suite: only `gitService.test.ts` and `editor.test.ts` fail — both
+  reproduced failing on `main` (pre-existing).
+- CLI suite: only `docsCommand.test.ts` and
+  `sandbox-node-modules-preflight.test.ts` fail — both reproduced failing
+  on `main` (pre-existing).
+- Smoke test (`stepfun-37`): blocked by sandbox credential-proxy failure
+  (`Invalid or missing capability token`); reproduced identically on
+  `main`, so pre-existing/environmental, not this change. The sandbox no
+  longer exports `LLXPRT_CAPABILITY_TOKEN` to child processes and the
+  proxy rejects the token frozen in `/proc/1/environ`.
