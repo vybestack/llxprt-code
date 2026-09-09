@@ -39,6 +39,11 @@ interface StatefulRuntimeState {
   modelParams: Record<string, unknown>;
   ephemeralSettings: Record<string, unknown>;
   unallowedParameters?: string[];
+  // Listed keys make the corresponding write method throw, so tests can
+  // exercise the dialog's rollback path against a stateful fake.
+  failSetParamKeys?: string[];
+  failClearParamKeys?: string[];
+  failSetEphemeralKeys?: string[];
 }
 
 function createStatefulRuntime(
@@ -52,6 +57,7 @@ function createStatefulRuntime(
   clearActiveModelParam: (key: string) => void;
   setEphemeralSetting: (key: string, value: unknown) => void;
   getUnallowedParametersForActiveModel: () => string[];
+  writeCounts: () => Record<string, number>;
 } {
   const state: StatefulRuntimeState = {
     providerName: 'openai',
@@ -60,6 +66,10 @@ function createStatefulRuntime(
     ephemeralSettings: { 'reasoning.enabled': true },
     ...overrides,
   };
+  // Completed-write counters keyed as `<op>:<key>` (setParam, clearParam,
+  // setEphemeral). A write that throws is not counted: the counters record
+  // mutations that actually landed.
+  const writes: Record<string, number> = {};
   return {
     ...state,
     getActiveProviderName: () => state.providerName,
@@ -67,15 +77,28 @@ function createStatefulRuntime(
     getActiveModelParams: () => ({ ...state.modelParams }),
     getEphemeralSettings: () => ({ ...state.ephemeralSettings }),
     setActiveModelParam: (key: string, value: unknown) => {
+      if (state.failSetParamKeys?.includes(key) === true) {
+        throw new Error(`write failed: ${key}`);
+      }
+      writes[`setParam:${key}`] = (writes[`setParam:${key}`] ?? 0) + 1;
       state.modelParams[key] = value;
     },
     clearActiveModelParam: (key: string) => {
+      if (state.failClearParamKeys?.includes(key) === true) {
+        throw new Error(`write failed: ${key}`);
+      }
+      writes[`clearParam:${key}`] = (writes[`clearParam:${key}`] ?? 0) + 1;
       delete state.modelParams[key];
     },
     setEphemeralSetting: (key: string, value: unknown) => {
+      if (state.failSetEphemeralKeys?.includes(key) === true) {
+        throw new Error(`write failed: ${key}`);
+      }
+      writes[`setEphemeral:${key}`] = (writes[`setEphemeral:${key}`] ?? 0) + 1;
       state.ephemeralSettings[key] = value;
     },
     getUnallowedParametersForActiveModel: () => state.unallowedParameters ?? [],
+    writeCounts: () => ({ ...writes }),
   };
 }
 
@@ -143,6 +166,75 @@ function navigateToField(
       stdin.write(DOWN);
     });
   }
+}
+
+// The issue-#2831 tests stage several fields in one dialog session. The list
+// only navigates DOWN, so each staging helper takes the current index and
+// returns the field's index for the next call.
+
+function moveDownTo(
+  stdin: { write: (data: string) => void },
+  from: number,
+  target: number,
+): number {
+  for (let i = from; i < target; i++) {
+    act(() => {
+      stdin.write(DOWN);
+    });
+  }
+  return target;
+}
+
+// Navigate to `key`, enter its text editor, clear any pre-filled value
+// (ctrl-a home + ctrl-k kill-to-end), type `value`, Enter to stage.
+async function stageTextAt(
+  stdin: { write: (data: string) => void },
+  key: string,
+  value: string,
+  from: number,
+): Promise<number> {
+  const at = moveDownTo(stdin, from, fieldIndex(key));
+  act(() => {
+    stdin.write(ENTER);
+  });
+  act(() => {
+    stdin.write('\x01');
+  });
+  act(() => {
+    stdin.write('\x0b');
+  });
+  for (const ch of value) {
+    act(() => {
+      stdin.write(ch);
+    });
+  }
+  await act(async () => {
+    stdin.write(ENTER);
+  });
+  return at;
+}
+
+// Navigate to the enum field `key`, enter its editor, press RIGHT
+// `rightSteps` times from the enum's start, Enter to stage.
+async function stageEnumAt(
+  stdin: { write: (data: string) => void },
+  key: string,
+  from: number,
+  rightSteps: number,
+): Promise<number> {
+  const at = moveDownTo(stdin, from, fieldIndex(key));
+  act(() => {
+    stdin.write(ENTER);
+  });
+  for (let i = 0; i < rightSteps; i++) {
+    act(() => {
+      stdin.write(RIGHT);
+    });
+  }
+  await act(async () => {
+    stdin.write(ENTER);
+  });
+  return at;
 }
 
 function defaultProps() {
@@ -714,5 +806,280 @@ describe('<ModelConfigDialog />', () => {
       expect(lastFrame()).toContain('4096');
     });
     expect(lastFrame()).not.toContain('131072');
+  });
+
+  // Issue #2831: [s]ave plans (validates) every staged edit first, then
+  // applies writes in field order, rolling back to snapshotted priors if
+  // one throws. Streaming/prompt-caching below are enum editors.
+
+  // Shared preamble for the tests below: tracked onClose plus the view.
+  function renderTracked() {
+    const props = defaultProps();
+    const view = renderWithProviders(<ModelConfigDialog {...props} />);
+    return { ...view, props };
+  }
+
+  // Live-state assertions against the stateful fake (issue #2831 suite);
+  // activeRuntime is re-read on every call, after setupRuntime overrides.
+  const expectParams = (obj: Record<string, unknown>) =>
+    expect(activeRuntime.getActiveModelParams()).toStrictEqual(obj);
+  const expectEphemeral = (obj: Record<string, unknown>) =>
+    expect(activeRuntime.getEphemeralSettings()).toStrictEqual(obj);
+
+  it('T1: later-field validation failure leaves the runtime untouched (issue #2831)', async () => {
+    const { lastFrame, stdin, props } = renderTracked();
+
+    const at = await stageTextAt(stdin, 'temperature', '9.9', 0);
+    await stageTextAt(stdin, 'top_k', 'abc', at);
+
+    await saveDialog(stdin);
+
+    // The first invalid field in field order is reported...
+    await waitFor(() => {
+      expect(lastFrame()).toContain('top_k: must be a number');
+    });
+    // ...and the earlier VALID edit was not half-committed.
+    expectParams({ temperature: 0.7 });
+    expectEphemeral({ 'reasoning.enabled': true });
+    expect(props.onClose).not.toHaveBeenCalled();
+    expect(lastFrame()).toContain('9.9');
+    expect(lastFrame()).toContain('abc');
+  });
+
+  it('T2: recovery after a failed save commits every staged edit exactly once (issue #2831)', async () => {
+    const { stdin, props } = renderTracked();
+
+    let at = await stageTextAt(stdin, 'temperature', '9.9', 0);
+    at = await stageTextAt(stdin, 'top_k', 'abc', at);
+    await saveDialog(stdin);
+    expect(props.onClose).not.toHaveBeenCalled();
+
+    // Correct the invalid field and re-save: both staged edits land.
+    await stageTextAt(stdin, 'top_k', '40', at);
+    await saveDialog(stdin);
+
+    expectParams({ temperature: 9.9, top_k: 40 });
+    // Each staged key was written exactly once across both saves.
+    expect(activeRuntime.writeCounts()['setParam:temperature']).toBe(1);
+    expect(activeRuntime.writeCounts()['setParam:top_k']).toBe(1);
+    await waitFor(() => {
+      expect(props.onClose).toHaveBeenCalled();
+    });
+  });
+
+  it('T3: mid-loop write throw rolls back already-applied writes (issue #2831)', async () => {
+    setupRuntime({ failSetParamKeys: ['top_p'] });
+    const { lastFrame, stdin, props } = renderTracked();
+
+    const at = await stageTextAt(stdin, 'temperature', '9.9', 0);
+    await stageTextAt(stdin, 'top_p', '0.5', at);
+
+    await saveDialog(stdin);
+
+    // temperature is restored when the top_p write throws.
+    await waitFor(() => {
+      expect(lastFrame()).toContain('top_p: write failed: top_p');
+    });
+    expectParams({ temperature: 0.7 });
+    expect(activeRuntime.getActiveModelParams()).not.toHaveProperty('top_p');
+    expect(props.onClose).not.toHaveBeenCalled();
+    expect(lastFrame()).toContain('9.9');
+    expect(lastFrame()).toContain('0.5');
+  });
+
+  it('T4: staged clear is rolled back when a later write throws (issue #2831)', async () => {
+    setupRuntime({ failSetParamKeys: ['top_p'] });
+    const { lastFrame, stdin, props } = renderTracked();
+
+    // Stage a temperature clear, then a top_p edit whose write throws.
+    const clearAt = moveDownTo(stdin, 0, fieldIndex('temperature'));
+    await act(async () => {
+      stdin.write('c');
+    });
+    await stageTextAt(stdin, 'top_p', '0.5', clearAt);
+
+    await saveDialog(stdin);
+
+    await waitFor(() => {
+      expect(lastFrame()).toContain('top_p: write failed: top_p');
+    });
+    expectParams({ temperature: 0.7 });
+    expect(activeRuntime.getActiveModelParams()).not.toHaveProperty('top_p');
+    expect(props.onClose).not.toHaveBeenCalled();
+    // Restored value visible in the row ('(not set)' would be vacuous).
+    expect(activeRuntime.getActiveModelParams().temperature).toBe(0.7);
+    expect(lastFrame()).toMatch(/temperature\s+0\.7/);
+  });
+
+  it('T5: multi-kind save lands param, clear, boolean, and enum edits together (issue #2831)', async () => {
+    setupRuntime({
+      modelParams: { temperature: 0.7 },
+      ephemeralSettings: { 'reasoning.enabled': false },
+    });
+    const { lastFrame, stdin, props } = renderTracked();
+
+    let at = await stageTextAt(stdin, 'max_tokens', '32000', 0);
+
+    at = moveDownTo(stdin, at, fieldIndex('temperature'));
+    await act(async () => {
+      stdin.write('c');
+    });
+
+    at = moveDownTo(stdin, at, fieldIndex('reasoning.enabled'));
+    await act(async () => {
+      stdin.write(' ');
+    });
+
+    // streaming starts at 'enabled' (one RIGHT: disabled); prompt-caching
+    // starts at 'off' (one RIGHT: 5m).
+    at = await stageEnumAt(stdin, 'streaming', at, 1);
+    await stageEnumAt(stdin, 'prompt-caching', at, 1);
+    await waitFor(() => {
+      expect(lastFrame()).toMatch(/streaming\s+disabled/);
+      expect(lastFrame()).toMatch(/prompt-caching\s+5m/);
+    });
+
+    await saveDialog(stdin);
+
+    expectParams({ max_tokens: 32000 });
+    expectEphemeral({
+      'reasoning.enabled': true,
+      streaming: 'disabled',
+      'prompt-caching': '5m',
+    });
+    await waitFor(() => {
+      expect(props.onClose).toHaveBeenCalled();
+    });
+  });
+
+  it('T6: ephemeral write throwing mid-loop rolls back earlier param clear and ephemeral edit (issue #2831)', async () => {
+    // failSetEphemeralKeys must be set at runtime creation (snapshotted).
+    setupRuntime({ failSetEphemeralKeys: ['streaming'] });
+    const { lastFrame, stdin, props } = renderTracked();
+
+    // Stage a temperature clear (writes first), then a streaming enum edit
+    // whose write throws mid-loop. The clear is verified via runtime state.
+    const clearAt = moveDownTo(stdin, 0, fieldIndex('temperature'));
+    await act(async () => {
+      stdin.write('c');
+    });
+
+    // streaming starts at 'enabled'; one RIGHT lands on 'disabled'.
+    await stageEnumAt(stdin, 'streaming', clearAt, 1);
+
+    await saveDialog(stdin);
+
+    // The throwing field is reported...
+    await waitFor(() => {
+      expect(lastFrame()).toContain('streaming: write failed: streaming');
+    });
+    // ...the clear rolled back and the failed write never landed.
+    expectParams({ temperature: 0.7 });
+    expectEphemeral({ 'reasoning.enabled': true });
+    // streaming threw before mutating: absent, not present-with-undefined.
+    expect('streaming' in activeRuntime.getEphemeralSettings()).toBe(false);
+    expect(props.onClose).not.toHaveBeenCalled();
+    // Staged edits survive: streaming 'disabled', temperature restored 0.7.
+    expect(lastFrame()).toMatch(/temperature\s+0\.7/);
+    expect(lastFrame()).toMatch(/streaming\s+disabled/);
+  });
+
+  it('T7: later ephemeral parse failure aborts before any write (issue #2831)', async () => {
+    const { lastFrame, stdin, props } = renderTracked();
+
+    // context-limit precedes temperature, so its 'abc' is first invalid.
+    const at = await stageTextAt(stdin, 'context-limit', 'abc', 0);
+    await stageTextAt(stdin, 'temperature', '0.9', at);
+
+    await saveDialog(stdin);
+
+    // The first invalid field in field order is reported...
+    await waitFor(() => {
+      expect(lastFrame()).toContain('context-limit:');
+      expect(lastFrame()).toContain('must be a positive integer');
+    });
+    // ...and phase 1 aborted before ANY write (ledger empty).
+    expectParams({ temperature: 0.7 });
+    expectEphemeral({ 'reasoning.enabled': true });
+    expect(activeRuntime.writeCounts()).toStrictEqual({});
+    expect(props.onClose).not.toHaveBeenCalled();
+    expect(lastFrame()).toMatch(/context-limit\s+abc/);
+    expect(lastFrame()).toContain('0.9');
+  });
+
+  it('T8: first planned write throwing rolls back nothing and names the failing field (issue #2831)', async () => {
+    setupRuntime({ failClearParamKeys: ['temperature'] });
+    const { lastFrame, stdin, props } = renderTracked();
+
+    // Stage ONLY the clear of temperature.
+    moveDownTo(stdin, 0, fieldIndex('temperature'));
+    await act(async () => {
+      stdin.write('c');
+    });
+
+    await saveDialog(stdin);
+
+    await waitFor(() => {
+      expect(lastFrame()).toMatch(/temperature: write failed: temperature/);
+    });
+    // Nothing applied; the rollback loop body never ran (ledger empty).
+    expectParams({ temperature: 0.7 });
+    expect(activeRuntime.writeCounts()).toStrictEqual({});
+    expect(props.onClose).not.toHaveBeenCalled();
+    expect(lastFrame()).toMatch(/temperature\s+0\.7/);
+  });
+
+  it('T9: rolling back an ephemeral edit on a previously-absent key restores undefined (issue #2831)', async () => {
+    setupRuntime({ failSetEphemeralKeys: ['prompt-caching'] });
+    const { lastFrame, stdin, props } = renderTracked();
+
+    // streaming starts at 'enabled'; one RIGHT lands on 'disabled'.
+    const at = await stageEnumAt(stdin, 'streaming', 0, 1);
+    // prompt-caching starts at 'off'; one RIGHT lands on '5m'.
+    await stageEnumAt(stdin, 'prompt-caching', at, 1);
+
+    await saveDialog(stdin);
+
+    await waitFor(() => {
+      expect(lastFrame()).toMatch(
+        /prompt-caching: write failed: prompt-caching/,
+      );
+    });
+    expect(activeRuntime.getEphemeralSettings()['reasoning.enabled']).toBe(
+      true,
+    );
+    // The rollback restores the prior value as present-but-undefined,
+    // mirroring the real SettingsService's set(key, undefined) semantics
+    // (the dialog's pre-existing clear idiom).
+    expect(activeRuntime.getEphemeralSettings().streaming).toBeUndefined();
+    expect('streaming' in activeRuntime.getEphemeralSettings()).toBe(true);
+    const counts = activeRuntime.writeCounts();
+    expect(counts).toStrictEqual({ 'setEphemeral:streaming': 2 });
+    expect(props.onClose).not.toHaveBeenCalled();
+  });
+
+  it('T10: restore failure is recorded, rollback continues, and the original error is surfaced (issue #2831)', async () => {
+    setupRuntime({
+      modelParams: {},
+      failSetParamKeys: ['top_p'],
+      failClearParamKeys: ['temperature'],
+    });
+    const { lastFrame, stdin, props } = renderTracked();
+
+    // temperature is initially ABSENT: its forward write is a set-param
+    // whose snapshotted prior is a clear-param.
+    const at = await stageTextAt(stdin, 'temperature', '9.9', 0);
+    await stageTextAt(stdin, 'top_p', '0.5', at);
+
+    await saveDialog(stdin);
+
+    await waitFor(() => {
+      expect(lastFrame()).toContain('top_p: write failed: top_p');
+      expect(lastFrame()).toContain('rollback incomplete: temperature');
+    });
+    // The clear-param restore ALSO threw (failClearParamKeys): temperature
+    // stays at its written value — degraded but reported.
+    expectParams({ temperature: 9.9 });
+    expect(props.onClose).not.toHaveBeenCalled();
   });
 });
