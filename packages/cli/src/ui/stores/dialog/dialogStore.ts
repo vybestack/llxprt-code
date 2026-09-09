@@ -8,7 +8,10 @@ import type { ReactNode } from 'react';
 import { createStore, type Store } from '../createStore.js';
 import type { LlxprtExtension, IdeInfo } from '@vybestack/llxprt-code-core';
 import type { SubagentView } from '../../components/SubagentManagement/types.js';
-import type { WelcomeState, ModelInfo } from '../../hooks/useWelcomeOnboarding.js';
+import type {
+  WelcomeState,
+  ModelInfo,
+} from '../../hooks/useWelcomeOnboarding.js';
 import type { ModelsDialogData } from '../../commands/types.js';
 
 export interface ConfirmationRequest {
@@ -36,8 +39,8 @@ export interface DialogPayloadMap {
   loadProfile: Record<string, never>;
   createProfile: Record<string, never>;
   profileList: Record<string, never>;
-  profileDetail: Record<string, never>;
-  profileEditor: Record<string, never>;
+  profileDetail: { profileName: string };
+  profileEditor: { profileName: string };
   tools: { action: 'enable' | 'disable' };
   privacy: Record<string, never>;
   permissions: Record<string, never>;
@@ -157,9 +160,9 @@ export function selectActiveDialog(state: DialogState): DialogRequest | null {
   if (state.confirmationRequest) {
     candidates.push(state.confirmationRequest);
   }
-  const head = state.confirmUpdateLlxprtExtensionRequests[0];
-  if (head) {
-    candidates.push(head);
+  const fifo = state.confirmUpdateLlxprtExtensionRequests;
+  if (fifo.length > 0) {
+    candidates.push(fifo[0]);
   }
   if (candidates.length === 0) {
     return null;
@@ -169,6 +172,40 @@ export function selectActiveDialog(state: DialogState): DialogRequest | null {
       ? candidate
       : best,
   );
+}
+
+function createExtensionConfirmCommands(
+  store: Store<DialogState>,
+): Pick<
+  DialogCommands,
+  'addConfirmUpdateExtensionRequest' | 'resolveConfirmUpdateExtensionRequest'
+> {
+  const addConfirmUpdateExtensionRequest = (
+    request: Extract<DialogRequest, { kind: 'extensionUpdateConfirm' }>,
+  ): void => {
+    store.setState((prev) => ({
+      ...prev,
+      confirmUpdateLlxprtExtensionRequests: [
+        ...prev.confirmUpdateLlxprtExtensionRequests,
+        request,
+      ],
+    }));
+  };
+
+  const resolveConfirmUpdateExtensionRequest = (
+    request: Extract<DialogRequest, { kind: 'extensionUpdateConfirm' }>,
+  ): void => {
+    store.setState((prev) => ({
+      ...prev,
+      confirmUpdateLlxprtExtensionRequests:
+        prev.confirmUpdateLlxprtExtensionRequests.filter((r) => r !== request),
+    }));
+  };
+
+  return {
+    addConfirmUpdateExtensionRequest,
+    resolveConfirmUpdateExtensionRequest,
+  };
 }
 
 export function createDialogStore(): DialogStore {
@@ -190,9 +227,7 @@ export function createDialogStore(): DialogStore {
       return;
     }
     store.setState((prev) => {
-      const existing = prev.requests.find(
-        (r) => r.kind === request.kind,
-      );
+      const existing = prev.requests.find((r) => r.kind === request.kind);
       if (!existing) {
         return { ...prev, requests: [...prev.requests, request] };
       }
@@ -237,27 +272,7 @@ export function createDialogStore(): DialogStore {
     store.setState((prev) => ({ ...prev, confirmationRequest: request }));
   };
 
-  const addConfirmUpdateExtensionRequest = (
-    request: Extract<DialogRequest, { kind: 'extensionUpdateConfirm' }>,
-  ): void => {
-    store.setState((prev) => ({
-      ...prev,
-      confirmUpdateLlxprtExtensionRequests: [
-        ...prev.confirmUpdateLlxprtExtensionRequests,
-        request,
-      ],
-    }));
-  };
-
-  const resolveConfirmUpdateExtensionRequest = (
-    request: Extract<DialogRequest, { kind: 'extensionUpdateConfirm' }>,
-  ): void => {
-    store.setState((prev) => ({
-      ...prev,
-      confirmUpdateLlxprtExtensionRequests:
-        prev.confirmUpdateLlxprtExtensionRequests.filter((r) => r !== request),
-    }));
-  };
+  const extensionConfirmCommands = createExtensionConfirmCommands(store);
 
   return {
     store,
@@ -266,8 +281,10 @@ export function createDialogStore(): DialogStore {
       closeDialog,
       updateDialogPayload,
       setConfirmationRequest,
-      addConfirmUpdateExtensionRequest,
-      resolveConfirmUpdateExtensionRequest,
+      addConfirmUpdateExtensionRequest:
+        extensionConfirmCommands.addConfirmUpdateExtensionRequest,
+      resolveConfirmUpdateExtensionRequest:
+        extensionConfirmCommands.resolveConfirmUpdateExtensionRequest,
     },
   };
 }

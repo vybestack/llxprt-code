@@ -6,6 +6,7 @@
 
 import type { SlashCommandRuntime } from '../../../cliUiRuntime.js';
 import type React from 'react';
+import type { AppAction } from '../../../reducers/appReducer.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useThemeCommand } from '../../../hooks/useThemeCommand.js';
 import { useAuthCommand } from '../../../hooks/useAuthCommand.js';
@@ -14,7 +15,6 @@ import { useWelcomeOnboarding } from '../../../hooks/useWelcomeOnboarding.js';
 import { useEditorSettings } from '../../../hooks/useEditorSettings.js';
 import { useExtensionUpdates } from '../../../hooks/useExtensionUpdates.js';
 import { useOAuthOrchestration } from '../../../hooks/useOAuthOrchestration.js';
-import { useSettingsCommand } from '../../../hooks/useSettingsCommand.js';
 import { useProviderDialog } from '../../../hooks/useProviderDialog.js';
 import { useLoadProfileDialog } from '../../../hooks/useLoadProfileDialog.js';
 import { useCreateProfileDialog } from '../../../hooks/useCreateProfileDialog.js';
@@ -37,8 +37,10 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../../../../config/settings.js';
-import type { AppState, AppAction } from '../../../reducers/appReducer.js';
 import type { HistoryItem, ConsoleMessageItem } from '../../../types.js';
+import type { DialogStore } from '../../../stores/dialog/dialogStore.js';
+import type { DialogOpeners } from '../../../stores/dialog/dialogOpeners.js';
+import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 
 const QUEUE_ERROR_DISPLAY_DURATION_MS = 3000;
 
@@ -46,7 +48,9 @@ export interface AppDialogsParams {
   config: SlashCommandRuntime;
   agent: Agent;
   settings: LoadedSettings;
-  appState: AppState;
+  store: DialogStore;
+  dialogs: DialogOpeners;
+  /** Dispatch for the reducer-held actions OAuth completion still needs. */
   appDispatch: React.Dispatch<AppAction>;
   addItem: (item: Omit<HistoryItem, 'id'>, baseTimestamp?: number) => number;
   handleNewMessage: (message: ConsoleMessageItem) => void;
@@ -200,26 +204,30 @@ function useDialogsAuthProviders(
   const {
     config,
     settings,
-    appState,
-    appDispatch,
     addItem,
     handleNewMessage,
     recordingIntegration,
     runtime,
+    store,
+    dialogs,
   } = p;
-  const auth = useAuthCommand(settings, appState, st.setAuthError);
-  const isOAuthCodeDialogOpen = appState.openDialogs.oauthCode;
+  const auth = useAuthCommand(settings, dialogs, st.setAuthError);
+  const isOAuthCodeDialogOpen = useStoreSelector(store.store, (state) =>
+    state.requests.some((r) => r.kind === 'oauthCode'),
+  );
   useOAuthOrchestration({
-    appDispatch,
+    appDispatch: p.appDispatch,
+    dialogs,
     isOAuthCodeDialogOpen,
     getActiveProviderName: runtime.getActiveProviderName,
     setAuthError: st.setAuthError,
   });
-  const editor = useEditorSettings(settings, appState, addItem);
+  const editor = useEditorSettings(settings, dialogs, addItem);
   const provider = useProviderDialog({
     addMessage: (msg) =>
       addItem({ type: msg.type, text: msg.content }, msg.timestamp.getTime()),
-    appState,
+    store,
+    dialogs,
     recordingIntegration,
   });
   useModelRuntimeSync({
@@ -240,18 +248,10 @@ function useDialogsAuthProviders(
     setConstrainHeight: st.setConstrainHeight,
   });
   return {
-    isAuthDialogOpen: auth.isAuthDialogOpen,
-    openAuthDialog: auth.openAuthDialog,
     handleAuthSelect: auth.handleAuthSelect,
-    isOAuthCodeDialogOpen,
-    isEditorDialogOpen: editor.isEditorDialogOpen,
-    openEditorDialog: editor.openEditorDialog,
-    handleEditorSelect: editor.handleEditorSelect,
-    exitEditorDialog: editor.exitEditorDialog,
-    isProviderDialogOpen: provider.showDialog,
     openProviderDialog: provider.openDialog,
+    handleEditorSelect: editor.handleEditorSelect,
     handleProviderSelect: provider.handleSelect,
-    exitProviderDialog: provider.closeDialog,
     providerOptions: provider.providers,
     selectedProvider: provider.currentProvider,
   };
@@ -268,9 +268,8 @@ function useDialogsAuth(
   setContextLimit: (limit: number | undefined) => void,
   setShowErrorDetails: (value: boolean) => void,
 ) {
-  const { config, settings, appState, addItem } = p;
-  const theme = useThemeCommand(settings, appState, addItem);
-  const settingsCmd = useSettingsCommand();
+  const { config, settings, addItem, dialogs } = p;
+  const theme = useThemeCommand(settings, dialogs, addItem);
   const folderTrust = useFolderTrust(settings, addItem, config);
   const welcome = useWelcomeOnboarding({
     settings,
@@ -291,13 +290,8 @@ function useDialogsAuth(
     setShowErrorDetails,
   );
   return {
-    isThemeDialogOpen: theme.isThemeDialogOpen,
-    openThemeDialog: theme.openThemeDialog,
     handleThemeSelect: theme.handleThemeSelect,
     handleThemeHighlight: theme.handleThemeHighlight,
-    isSettingsDialogOpen: settingsCmd.isSettingsDialogOpen,
-    openSettingsDialog: settingsCmd.openSettingsDialog,
-    closeSettingsDialog: settingsCmd.closeSettingsDialog,
     isFolderTrustDialogOpen: folderTrust.isFolderTrustDialogOpen,
     handleFolderTrustSelect: folderTrust.handleFolderTrustSelect,
     isWelcomeDialogOpen: welcome.showWelcome,
@@ -311,32 +305,36 @@ function useDialogsAuth(
 }
 
 function useDialogsProfiles(p: AppDialogsParams) {
-  const { config, agent, settings, appState, addItem, setLlxprtMdFileCount } =
-    p;
+  const {
+    config,
+    agent,
+    settings,
+    addItem,
+    setLlxprtMdFileCount,
+    store,
+    dialogs,
+  } = p;
   const loadProfile = useLoadProfileDialog({
     addMessage: (msg) =>
       addItem({ type: msg.type, text: msg.content }, msg.timestamp.getTime()),
-    appState,
+    store,
+    dialogs,
   });
-  const createProfile = useCreateProfileDialog({ appState });
+  const createProfile = useCreateProfileDialog({ store, dialogs });
   const profileMgmt = useProfileManagement({
     addMessage: (msg) =>
       addItem({ type: msg.type, text: msg.content }, msg.timestamp.getTime()),
-    appState,
+    store,
+    dialogs,
   });
   const toolsRaw = useToolsDialog({
     addMessage: (msg) =>
       addItem({ type: msg.type, text: msg.content }, msg.timestamp.getTime()),
-    appState,
+    store,
+    dialogs,
     config,
     agent,
   });
-  const openToolsDialog = useCallback(
-    (action: 'enable' | 'disable') => {
-      void toolsRaw.openDialog(action);
-    },
-    [toolsRaw],
-  );
   const performMemoryRefresh = useMemoryRefreshAction({
     config,
     settings,
@@ -346,18 +344,13 @@ function useDialogsProfiles(p: AppDialogsParams) {
   const useAlternateBuffer =
     settings.merged.ui.useAlternateBuffer === true && !config.getScreenReader();
   return {
-    isLoadProfileDialogOpen: loadProfile.showDialog,
     openLoadProfileDialog: loadProfile.openDialog,
     handleProfileSelect: loadProfile.handleSelect,
-    exitLoadProfileDialog: loadProfile.closeDialog,
     profiles: loadProfile.profiles,
-    isCreateProfileDialogOpen: createProfile.showDialog,
     openCreateProfileDialog: createProfile.openDialog,
-    exitCreateProfileDialog: createProfile.closeDialog,
     createProfileProviders: createProfile.providers,
-    isProfileListDialogOpen: profileMgmt.showListDialog,
-    isProfileDetailDialogOpen: profileMgmt.showDetailDialog,
-    isProfileEditorDialogOpen: profileMgmt.showEditorDialog,
+    openProfileListDialog: profileMgmt.openListDialog,
+    closeProfileDetailDialog: profileMgmt.closeDetailDialog,
     profileListItems: profileMgmt.profiles,
     profileDialogLoading: profileMgmt.isLoading,
     selectedProfileName: profileMgmt.selectedProfileName,
@@ -365,10 +358,7 @@ function useDialogsProfiles(p: AppDialogsParams) {
     defaultProfileName: profileMgmt.defaultProfileName,
     activeProfileName: profileMgmt.activeProfileName,
     profileDialogError: profileMgmt.profileError,
-    openProfileListDialog: profileMgmt.openListDialog,
-    closeProfileListDialog: profileMgmt.closeListDialog,
     viewProfileDetail: profileMgmt.viewProfileDetail,
-    closeProfileDetailDialog: profileMgmt.closeDetailDialog,
     loadProfileFromDetail: profileMgmt.loadProfile,
     deleteProfileFromDetail: profileMgmt.deleteProfile,
     deleteProfileFromList: profileMgmt.deleteProfileFromList,
@@ -376,9 +366,6 @@ function useDialogsProfiles(p: AppDialogsParams) {
     openProfileEditor: profileMgmt.openEditor,
     closeProfileEditor: profileMgmt.closeEditor,
     saveProfileFromEditor: profileMgmt.saveProfile,
-    isToolsDialogOpen: toolsRaw.showDialog,
-    openToolsDialog,
-    exitToolsDialog: toolsRaw.closeDialog,
     toolsDialogAction: toolsRaw.action,
     toolsDialogTools: toolsRaw.availableTools,
     toolsDialogDisabledTools: toolsRaw.disabledTools,

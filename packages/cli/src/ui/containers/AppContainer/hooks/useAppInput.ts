@@ -72,15 +72,12 @@ export interface AppInputParams {
   setLlxprtMdFileCount: AppBootstrapResult['setLlxprtMdFileCount'];
 
   // From dialogs
-  openAuthDialog: AppDialogsResult['openAuthDialog'];
-  openThemeDialog: AppDialogsResult['openThemeDialog'];
-  openEditorDialog: AppDialogsResult['openEditorDialog'];
-  openPrivacyNotice: AppDialogsResult['openPrivacyNotice'];
-  openSettingsDialog: AppDialogsResult['openSettingsDialog'];
-  /** Slice B2a: permissions/logging/subagent route through the DialogStore. */
+  /** Dialog openers backed by the typed DialogStore. */
   dialogs: DialogOpeners;
+  openPrivacyNotice: AppDialogsResult['openPrivacyNotice'];
   openModelsDialog: AppDialogsResult['openModelsDialog'];
   openPoliciesDialog: AppDialogsResult['openPoliciesDialog'];
+  /** Domain openers that load data before showing their dialog. */
   openProviderDialog: AppDialogsResult['openProviderDialog'];
   openLoadProfileDialog: AppDialogsResult['openLoadProfileDialog'];
   openCreateProfileDialog: AppDialogsResult['openCreateProfileDialog'];
@@ -113,7 +110,7 @@ export interface AppInputParams {
 }
 
 function useInputCoreCallbacks(p: AppInputParams) {
-  const { settings, openEditorDialog, setAuthError, appDispatch } = p;
+  const { settings, setAuthError, appDispatch, dialogs } = p;
   const { rows: terminalHeight, columns: terminalWidth } = useTerminalSize();
   const inputWidth = Math.max(20, Math.floor(terminalWidth * 0.9) - 6);
   const suggestionsWidth = Math.max(60, Math.floor(terminalWidth * 0.8));
@@ -127,11 +124,11 @@ function useInputCoreCallbacks(p: AppInputParams) {
   const getPreferredEditor = useCallback(() => {
     const editorType = settings.merged.ui.preferredEditor;
     if (!isEditorAvailable(editorType)) {
-      openEditorDialog();
+      dialogs.editor.open({});
       return undefined;
     }
     return editorType as EditorType;
-  }, [settings, openEditorDialog]);
+  }, [settings, dialogs]);
   const onAuthError = useCallback(() => {
     setAuthError('reauth required');
     appDispatch({ type: 'SET_NEEDS_RELOGIN', payload: true });
@@ -156,12 +153,8 @@ function useSlashActions(
   quitHandler: (messages: HistoryItem[]) => void,
 ): SlashCommandProcessorActions {
   return useSlashCommandActions({
-    openAuthDialog: p.openAuthDialog,
-    openThemeDialog: p.openThemeDialog,
-    openEditorDialog: p.openEditorDialog,
-    openPrivacyNotice: p.openPrivacyNotice,
-    openSettingsDialog: p.openSettingsDialog,
     dialogs: p.dialogs,
+    openPrivacyNotice: p.openPrivacyNotice,
     openModelsDialog: p.openModelsDialog,
     openPoliciesDialog: p.openPoliciesDialog,
     openProviderDialog: p.openProviderDialog,
@@ -265,7 +258,7 @@ function useInputBuffer(
   p: AppInputParams,
   core: ReturnType<typeof useInputCore>,
 ) {
-  const { stdin, setRawMode, appDispatch, runtime } = p;
+  const { stdin, setRawMode, runtime } = p;
   const { shellModeActive } = p;
   const viewport = useMemo(
     () => ({ height: 10, width: core.inputWidth }),
@@ -282,8 +275,8 @@ function useInputBuffer(
   const inputHistoryStore = useInputHistoryStore();
   const lastSubmittedPromptRef = useRef<string | null>('');
   const handleOAuthCodeDialogClose = useCallback(() => {
-    appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
-  }, [appDispatch]);
+    p.dialogs.oauthCode.close();
+  }, [p.dialogs]);
   const handleOAuthCodeSubmit = useCallback(
     async (code: string) => {
       submitOAuthCode(
@@ -403,7 +396,7 @@ function useInputStreamWiring(
     pendingHistoryItems,
     lastSubmittedPromptRef,
     needsRelogin: p.appState.needsRelogin,
-    appDispatch: p.appDispatch,
+    openAuthDialog: () => p.dialogs.auth.open({}),
   });
   const handleUserInputSubmit = useCallback(
     (submittedValue: string) => {

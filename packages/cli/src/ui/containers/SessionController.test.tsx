@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -681,52 +681,6 @@ describe('SessionController', () => {
     );
 
     expect(contextValue!.appState.warnings.has(warningKey)).toBe(false);
-
-    unmount();
-  });
-
-  it('should handle dialog actions from appReducer', async () => {
-    let contextValue: SessionContextType | undefined;
-
-    const TestComponent = () => {
-      contextValue = React.useContext(SessionContext);
-      return null;
-    };
-
-    const { unmount, rerender } = render(
-      <SessionController config={mockConfig as Config}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    // Open dialog
-    contextValue?.appDispatch({
-      type: 'OPEN_DIALOG',
-      payload: 'theme',
-    });
-
-    // Re-render to get updated state
-    rerender(
-      <SessionController config={mockConfig as Config}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    expect(contextValue!.appState.openDialogs.theme).toBe(true);
-
-    // Close dialog
-    contextValue?.appDispatch({
-      type: 'CLOSE_DIALOG',
-      payload: 'theme',
-    });
-
-    rerender(
-      <SessionController config={mockConfig as Config}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    expect(contextValue!.appState.openDialogs.theme).toBe(false);
 
     unmount();
   });

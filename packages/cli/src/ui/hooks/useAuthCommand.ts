@@ -7,33 +7,31 @@
 import { useCallback } from 'react';
 import type { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
-import type { AppState } from '../reducers/appReducer.js';
+import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 
 export const useAuthCommand = (
   settings: LoadedSettings,
-  appState: AppState,
+  dialogs: DialogOpeners,
   setAuthError: (error: string | null) => void,
 ) => {
   const appDispatch = useAppDispatch();
-  const isAuthDialogOpen = appState.openDialogs.auth;
 
   const openAuthDialog = useCallback(() => {
-    appDispatch({ type: 'OPEN_DIALOG', payload: 'auth' });
-  }, [appDispatch]);
+    dialogs.auth.open({});
+  }, [dialogs]);
 
   const handleAuthSelect = useCallback(
     async (selection: string | undefined, _scope: SettingScope) => {
-      appDispatch({ type: 'CLOSE_DIALOG', payload: 'auth' });
+      dialogs.auth.close();
       if (selection === undefined) return;
 
       setAuthError(null);
       appDispatch({ type: 'SET_AUTH_ERROR', payload: null });
     },
-    [appDispatch, setAuthError],
+    [dialogs, appDispatch, setAuthError],
   );
 
   return {
-    isAuthDialogOpen,
     openAuthDialog,
     handleAuthSelect,
   };

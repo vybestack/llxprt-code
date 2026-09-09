@@ -61,21 +61,9 @@ export interface UIState {
   shellModeActive: boolean;
 
   // Dialog states
-  isThemeDialogOpen: boolean;
-  isSettingsDialogOpen: boolean;
-  isAuthDialogOpen: boolean;
-  isEditorDialogOpen: boolean;
-  isProviderDialogOpen: boolean;
-  isLoadProfileDialogOpen: boolean;
-  isCreateProfileDialogOpen: boolean;
-  isProfileListDialogOpen: boolean;
-  isProfileDetailDialogOpen: boolean;
-  isProfileEditorDialogOpen: boolean;
-  isToolsDialogOpen: boolean;
   isFolderTrustDialogOpen: boolean;
   showWorkspaceMigrationDialog: boolean;
   showPrivacyNotice: boolean;
-  isOAuthCodeDialogOpen: boolean;
   isModelsDialogOpen: boolean;
   /**
    * @plan PLAN-20260214-SESSIONBROWSER.P21
@@ -86,6 +74,8 @@ export interface UIState {
 
   // Dialog data
   providerOptions: string[];
+  /** Providers offered by the profile-create wizard (createProfile dialog). */
+  createProfileProviders: string[];
   selectedProvider: string;
   currentModel: string;
   currentModelLabel?: string;

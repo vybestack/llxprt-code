@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -266,24 +266,31 @@ const ACTIVE_DIALOG_FLAGS = [
   'isFolderTrustDialogOpen',
   'isWelcomeDialogOpen',
   'confirmationRequest',
-  'isThemeDialogOpen',
-  'isSettingsDialogOpen',
-  'isAuthDialogOpen',
-  'isOAuthCodeDialogOpen',
-  'isEditorDialogOpen',
-  'isProviderDialogOpen',
-  'isLoadProfileDialogOpen',
-  'isCreateProfileDialogOpen',
-  'isProfileListDialogOpen',
-  'isProfileDetailDialogOpen',
-  'isProfileEditorDialogOpen',
-  'isToolsDialogOpen',
   'isModelsDialogOpen',
   'isSessionBrowserDialogOpen',
   'isModelConfigDialogOpen',
   'isPoliciesDialogOpen',
   'showPrivacyNotice',
 ] as const satisfies ReadonlyArray<keyof UIState>;
+
+/** Dialog kinds whose open state lives in the DialogStore (slices B2/B2b). */
+const STORE_DRIVEN_DIALOG_KINDS = [
+  'theme',
+  'settings',
+  'auth',
+  'oauthCode',
+  'editor',
+  'provider',
+  'loadProfile',
+  'createProfile',
+  'profileList',
+  'profileDetail',
+  'profileEditor',
+  'tools',
+  'permissions',
+  'logging',
+  'subagent',
+] as const;
 
 type ActiveDialogFlag = (typeof ACTIVE_DIALOG_FLAGS)[number];
 
@@ -400,6 +407,38 @@ describe('DefaultAppLayout', () => {
     expect(frame).not.toContain(COMPOSER_SENTINEL);
     rendered.unmount();
   });
+
+  it.each(STORE_DRIVEN_DIALOG_KINDS.map((kind) => [kind] as const))(
+    'renders DialogManager instead of Composer when the %s dialog is open in the DialogStore',
+    (kind) => {
+      const store = createDialogStore();
+      switch (kind) {
+        case 'profileDetail':
+        case 'profileEditor':
+          store.commands.openDialog({ kind, payload: { profileName: 'p' } });
+          break;
+        case 'tools':
+          store.commands.openDialog({ kind, payload: { action: 'enable' } });
+          break;
+        case 'logging':
+          store.commands.openDialog({ kind, payload: { entries: [] } });
+          break;
+        default:
+          store.commands.openDialog({ kind, payload: {} });
+      }
+
+      const rendered = renderDefaultAppLayout(
+        createBaseUIState(),
+        undefined,
+        store,
+      );
+      const frame = rendered.lastFrame();
+
+      expect(frame).toContain(DIALOG_MANAGER_SENTINEL);
+      expect(frame).not.toContain(COMPOSER_SENTINEL);
+      rendered.unmount();
+    },
+  );
 
   it('renders Composer when no dialog is open', () => {
     const rendered = renderDefaultAppLayout(createBaseUIState());

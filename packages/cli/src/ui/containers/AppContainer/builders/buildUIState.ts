@@ -60,22 +60,10 @@ export interface UIStateParams {
   buffer: TextBuffer;
   shellModeActive: boolean;
 
-  // Dialog states
-  isThemeDialogOpen: boolean;
-  isSettingsDialogOpen: boolean;
-  isAuthDialogOpen: boolean;
-  isEditorDialogOpen: boolean;
-  isProviderDialogOpen: boolean;
-  isLoadProfileDialogOpen: boolean;
-  isCreateProfileDialogOpen: boolean;
-  isProfileListDialogOpen: boolean;
-  isProfileDetailDialogOpen: boolean;
-  isProfileEditorDialogOpen: boolean;
-  isToolsDialogOpen: boolean;
+  // Dialog states (B2b kinds moved to DialogStore)
   isFolderTrustDialogOpen: boolean;
   showWorkspaceMigrationDialog: boolean;
   showPrivacyNotice: boolean;
-  isOAuthCodeDialogOpen: boolean;
   isModelsDialogOpen: boolean;
   isSessionBrowserDialogOpen: boolean;
   isModelConfigDialogOpen: boolean;
@@ -83,6 +71,7 @@ export interface UIStateParams {
 
   // Dialog data
   providerOptions: string[];
+  createProfileProviders: string[];
   selectedProvider: string;
   currentModel: string;
   currentModelLabel?: string;
@@ -255,21 +244,9 @@ function buildCoreAndTerminal(p: UIStateParams) {
 
 function buildDialogStates(p: UIStateParams) {
   return {
-    isThemeDialogOpen: p.isThemeDialogOpen,
-    isSettingsDialogOpen: p.isSettingsDialogOpen,
-    isAuthDialogOpen: p.isAuthDialogOpen,
-    isEditorDialogOpen: p.isEditorDialogOpen,
-    isProviderDialogOpen: p.isProviderDialogOpen,
-    isLoadProfileDialogOpen: p.isLoadProfileDialogOpen,
-    isCreateProfileDialogOpen: p.isCreateProfileDialogOpen,
-    isProfileListDialogOpen: p.isProfileListDialogOpen,
-    isProfileDetailDialogOpen: p.isProfileDetailDialogOpen,
-    isProfileEditorDialogOpen: p.isProfileEditorDialogOpen,
-    isToolsDialogOpen: p.isToolsDialogOpen,
     isFolderTrustDialogOpen: p.isFolderTrustDialogOpen,
     showWorkspaceMigrationDialog: p.showWorkspaceMigrationDialog,
     showPrivacyNotice: p.showPrivacyNotice,
-    isOAuthCodeDialogOpen: p.isOAuthCodeDialogOpen,
     isModelsDialogOpen: p.isModelsDialogOpen,
     isSessionBrowserDialogOpen: p.isSessionBrowserDialogOpen,
     isModelConfigDialogOpen: p.isModelConfigDialogOpen,
@@ -281,6 +258,7 @@ function buildDialogStates(p: UIStateParams) {
 function buildDialogData(p: UIStateParams) {
   return {
     providerOptions: p.providerOptions,
+    createProfileProviders: p.createProfileProviders,
     selectedProvider: p.selectedProvider,
     currentModel: p.currentModel,
     currentModelLabel: p.currentModelLabel,

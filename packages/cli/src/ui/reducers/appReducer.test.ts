@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -17,20 +17,6 @@ describe('appReducer', () => {
   describe('initial state', () => {
     it('should have correct initial state', () => {
       expect(initialAppState).toStrictEqual({
-        openDialogs: {
-          theme: false,
-          auth: false,
-          editor: false,
-          provider: false,
-          privacy: false,
-          loadProfile: false,
-          createProfile: false,
-          profileList: false,
-          profileDetail: false,
-          profileEditor: false,
-          tools: false,
-          oauthCode: false,
-        },
         warnings: new Map(),
         errors: {
           theme: null,
@@ -67,7 +53,6 @@ describe('appReducer', () => {
         baseTimestamp: 1234567890,
       });
       // Ensure other state is unchanged
-      expect(result.openDialogs).toBe(initialAppState.openDialogs);
       expect(result.warnings).toBe(initialAppState.warnings);
       expect(result.errors).toBe(initialAppState.errors);
     });
@@ -96,118 +81,6 @@ describe('appReducer', () => {
         itemData: secondItem,
         baseTimestamp: 2000,
       });
-    });
-  });
-
-  describe('OPEN_DIALOG action', () => {
-    const dialogTypes = [
-      'theme',
-      'auth',
-      'editor',
-      'provider',
-      'privacy',
-    ] as const;
-
-    dialogTypes.forEach((dialogType) => {
-      it(`should open ${dialogType} dialog`, () => {
-        const action: AppAction = {
-          type: 'OPEN_DIALOG',
-          payload: dialogType,
-        };
-
-        const result = appReducer(initialAppState, action);
-
-        expect(result.openDialogs[dialogType]).toBe(true);
-        // Check all other dialogs remain closed
-        const otherDialogs = dialogTypes.filter((t) => t !== dialogType);
-        otherDialogs.forEach((otherType) => {
-          expect(result.openDialogs[otherType]).toBe(false);
-        });
-      });
-    });
-
-    it('should maintain immutability when opening dialog', () => {
-      const action: AppAction = {
-        type: 'OPEN_DIALOG',
-        payload: 'theme',
-      };
-
-      const result = appReducer(initialAppState, action);
-
-      expect(result).not.toBe(initialAppState);
-      expect(result.openDialogs).not.toBe(initialAppState.openDialogs);
-      expect(result.warnings).toBe(initialAppState.warnings);
-      expect(result.errors).toBe(initialAppState.errors);
-    });
-
-    it('should allow multiple dialogs to be open', () => {
-      let state = initialAppState;
-
-      state = appReducer(state, { type: 'OPEN_DIALOG', payload: 'theme' });
-      state = appReducer(state, { type: 'OPEN_DIALOG', payload: 'auth' });
-      state = appReducer(state, { type: 'OPEN_DIALOG', payload: 'editor' });
-
-      expect(state.openDialogs.theme).toBe(true);
-      expect(state.openDialogs.auth).toBe(true);
-      expect(state.openDialogs.editor).toBe(true);
-      expect(state.openDialogs.provider).toBe(false);
-      expect(state.openDialogs.privacy).toBe(false);
-    });
-  });
-
-  describe('CLOSE_DIALOG action', () => {
-    it('should close an open dialog', () => {
-      const stateWithOpenDialog = appReducer(initialAppState, {
-        type: 'OPEN_DIALOG',
-        payload: 'theme',
-      });
-
-      const result = appReducer(stateWithOpenDialog, {
-        type: 'CLOSE_DIALOG',
-        payload: 'theme',
-      });
-
-      expect(result.openDialogs.theme).toBe(false);
-    });
-
-    it('should handle closing already closed dialog', () => {
-      const result = appReducer(initialAppState, {
-        type: 'CLOSE_DIALOG',
-        payload: 'theme',
-      });
-
-      expect(result.openDialogs.theme).toBe(false);
-    });
-
-    it('should maintain immutability when closing dialog', () => {
-      const stateWithOpenDialog = appReducer(initialAppState, {
-        type: 'OPEN_DIALOG',
-        payload: 'theme',
-      });
-
-      const result = appReducer(stateWithOpenDialog, {
-        type: 'CLOSE_DIALOG',
-        payload: 'theme',
-      });
-
-      expect(result).not.toBe(stateWithOpenDialog);
-      expect(result.openDialogs).not.toBe(stateWithOpenDialog.openDialogs);
-    });
-
-    it('should only close the specified dialog', () => {
-      let state = initialAppState;
-      state = appReducer(state, { type: 'OPEN_DIALOG', payload: 'theme' });
-      state = appReducer(state, { type: 'OPEN_DIALOG', payload: 'auth' });
-      state = appReducer(state, { type: 'OPEN_DIALOG', payload: 'editor' });
-
-      const result = appReducer(state, {
-        type: 'CLOSE_DIALOG',
-        payload: 'auth',
-      });
-
-      expect(result.openDialogs.theme).toBe(true);
-      expect(result.openDialogs.auth).toBe(false);
-      expect(result.openDialogs.editor).toBe(true);
     });
   });
 
@@ -375,7 +248,6 @@ describe('appReducer', () => {
 
       expect(result).not.toBe(initialAppState);
       expect(result.errors).not.toBe(initialAppState.errors);
-      expect(result.openDialogs).toBe(initialAppState.openDialogs);
       expect(result.warnings).toBe(initialAppState.warnings);
     });
   });
@@ -418,7 +290,6 @@ describe('appReducer', () => {
 
       expect(result).not.toBe(initialAppState);
       expect(result.errors).not.toBe(initialAppState.errors);
-      expect(result.openDialogs).toBe(initialAppState.openDialogs);
       expect(result.warnings).toBe(initialAppState.warnings);
     });
   });
@@ -461,7 +332,6 @@ describe('appReducer', () => {
 
       expect(result).not.toBe(initialAppState);
       expect(result.errors).not.toBe(initialAppState.errors);
-      expect(result.openDialogs).toBe(initialAppState.openDialogs);
       expect(result.warnings).toBe(initialAppState.warnings);
     });
   });
@@ -512,10 +382,6 @@ describe('appReducer', () => {
         },
       });
 
-      // Open dialogs
-      state = appReducer(state, { type: 'OPEN_DIALOG', payload: 'theme' });
-      state = appReducer(state, { type: 'OPEN_DIALOG', payload: 'auth' });
-
       // Set warnings
       state = appReducer(state, {
         type: 'SET_WARNING',
@@ -541,20 +407,15 @@ describe('appReducer', () => {
         itemData: { type: 'user', text: 'test' },
         baseTimestamp: 1000,
       });
-      expect(state.openDialogs.theme).toBe(true);
-      expect(state.openDialogs.auth).toBe(true);
       expect(state.warnings.size).toBe(2);
       expect(state.warnings.get('warning1')).toBe('First warning');
       expect(state.warnings.get('warning2')).toBe('Second warning');
       expect(state.errors.theme).toBe('Theme error');
       expect(state.errors.auth).toBe('Auth error');
 
-      // Close dialog and clear warning
-      state = appReducer(state, { type: 'CLOSE_DIALOG', payload: 'theme' });
+      // Clear warning
       state = appReducer(state, { type: 'CLEAR_WARNING', payload: 'warning1' });
 
-      expect(state.openDialogs.theme).toBe(false);
-      expect(state.openDialogs.auth).toBe(true);
       expect(state.warnings.size).toBe(1);
       expect(state.warnings.has('warning1')).toBe(false);
       expect(state.warnings.has('warning2')).toBe(true);
@@ -564,20 +425,6 @@ describe('appReducer', () => {
   describe('state immutability', () => {
     it('should never mutate the original state', () => {
       const originalState: AppState = {
-        openDialogs: {
-          theme: false,
-          auth: false,
-          editor: false,
-          provider: false,
-          privacy: false,
-          loadProfile: false,
-          createProfile: false,
-          profileList: false,
-          profileDetail: false,
-          profileEditor: false,
-          tools: false,
-          oauthCode: false,
-        },
         warnings: new Map([['key1', 'value1']]),
         errors: {
           theme: 'existing theme error',
@@ -591,7 +438,6 @@ describe('appReducer', () => {
       // Create a deep copy to compare later
       const stateCopy = JSON.parse(
         JSON.stringify({
-          openDialogs: originalState.openDialogs,
           warnings: Array.from(originalState.warnings.entries()),
           errors: originalState.errors,
           lastAddItemAction: originalState.lastAddItemAction,
@@ -599,7 +445,6 @@ describe('appReducer', () => {
       );
 
       // Perform various actions
-      appReducer(originalState, { type: 'OPEN_DIALOG', payload: 'theme' });
       appReducer(originalState, {
         type: 'SET_WARNING',
         payload: { key: 'key2', message: 'value2' },
@@ -618,7 +463,6 @@ describe('appReducer', () => {
 
       // Verify original state is unchanged
       const stateAfter = {
-        openDialogs: originalState.openDialogs,
         warnings: Array.from(originalState.warnings.entries()),
         errors: originalState.errors,
         lastAddItemAction: originalState.lastAddItemAction,

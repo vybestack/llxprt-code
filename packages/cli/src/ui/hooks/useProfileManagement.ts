@@ -6,13 +6,14 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { MessageType } from '../types.js';
-import { useAppDispatch } from '../contexts/AppDispatchContext.js';
-import type { AppState } from '../reducers/appReducer.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import type { ProfileListItem } from '../components/ProfileListDialog.js';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
+import type { DialogStore } from '../stores/dialog/dialogStore.js';
+import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
+import { useStoreSelector } from '../stores/useStoreSelector.js';
 
 const debug = new DebugLogger('llxprt:ui:useProfileManagement');
 
@@ -68,14 +69,24 @@ interface AddMessageFn {
 
 interface UseProfileManagementParams {
   addMessage: AddMessageFn;
-  appState: AppState;
+  store: DialogStore;
+  dialogs: DialogOpeners;
 }
 
-function useProfileDialogStates(appState: AppState) {
+function useProfileDialogStates(store: DialogStore) {
+  const showListDialog = useStoreSelector(store.store, (state) =>
+    state.requests.some((r) => r.kind === 'profileList'),
+  );
+  const showDetailDialog = useStoreSelector(store.store, (state) =>
+    state.requests.some((r) => r.kind === 'profileDetail'),
+  );
+  const showEditorDialog = useStoreSelector(store.store, (state) =>
+    state.requests.some((r) => r.kind === 'profileEditor'),
+  );
   return {
-    showListDialog: appState.openDialogs.profileList,
-    showDetailDialog: appState.openDialogs.profileDetail,
-    showEditorDialog: appState.openDialogs.profileEditor,
+    showListDialog,
+    showDetailDialog,
+    showEditorDialog,
   };
 }
 
@@ -210,26 +221,26 @@ function useProfileLoader(
 }
 
 function useListDialogActions(
-  appDispatch: ReturnType<typeof useAppDispatch>,
+  dialogs: DialogOpeners,
   loadProfiles: () => Promise<void>,
 ) {
   const openListDialog = useCallback(async () => {
     debug.log(() => 'openListDialog called');
-    appDispatch({ type: 'OPEN_DIALOG', payload: 'profileList' });
-    debug.log(() => 'dispatched OPEN_DIALOG profileList');
+    dialogs.profileList.open({});
+    debug.log(() => 'opened profileList dialog');
     await loadProfiles();
     debug.log(() => 'loadProfiles completed');
-  }, [appDispatch, loadProfiles]);
+  }, [dialogs, loadProfiles]);
 
   const closeListDialog = useCallback(() => {
-    appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileList' });
-  }, [appDispatch]);
+    dialogs.profileList.close();
+  }, [dialogs]);
 
   return { openListDialog, closeListDialog };
 }
 
 function useDetailDialogActions(
-  appDispatch: ReturnType<typeof useAppDispatch>,
+  dialogs: DialogOpeners,
   runtime: ReturnType<typeof useRuntimeApi>,
   setSelectedProfileName: React.Dispatch<React.SetStateAction<string | null>>,
   setSelectedProfile: React.Dispatch<React.SetStateAction<Profile | null>>,
@@ -247,8 +258,8 @@ function useDetailDialogActions(
       setIsLoading(true);
       setDetailOpenedDirectly(openedDirectly);
 
-      appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileList' });
-      appDispatch({ type: 'OPEN_DIALOG', payload: 'profileDetail' });
+      dialogs.profileList.close();
+      dialogs.profileDetail.open({ profileName });
 
       try {
         const profile = await runtime.getProfileByName(profileName);
@@ -262,7 +273,7 @@ function useDetailDialogActions(
       }
     },
     [
-      appDispatch,
+      dialogs,
       runtime,
       setSelectedProfileName,
       setSelectedProfile,
@@ -273,18 +284,18 @@ function useDetailDialogActions(
   );
 
   const closeDetailDialog = useCallback(async () => {
-    appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileDetail' });
+    dialogs.profileDetail.close();
     setSelectedProfileName(null);
     setSelectedProfile(null);
     setProfileError(null);
 
     if (detailOpenedDirectly === false) {
-      appDispatch({ type: 'OPEN_DIALOG', payload: 'profileList' });
+      dialogs.profileList.open({});
       await loadProfiles();
     }
     setDetailOpenedDirectly(false);
   }, [
-    appDispatch,
+    dialogs,
     loadProfiles,
     detailOpenedDirectly,
     setSelectedProfileName,
@@ -298,7 +309,7 @@ function useDetailDialogActions(
 
 function useLoadProfileAction(
   addMessage: AddMessageFn,
-  appDispatch: ReturnType<typeof useAppDispatch>,
+  dialogs: DialogOpeners,
   runtime: ReturnType<typeof useRuntimeApi>,
   setActiveProfileName: React.Dispatch<React.SetStateAction<string | null>>,
 ) {
@@ -322,8 +333,8 @@ function useLoadProfileAction(
           });
         }
         setActiveProfileName(profileName);
-        appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileDetail' });
-        appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileList' });
+        dialogs.profileDetail.close();
+        dialogs.profileList.close();
       } catch (error) {
         addMessage({
           type: MessageType.ERROR,
@@ -332,13 +343,13 @@ function useLoadProfileAction(
         });
       }
     },
-    [addMessage, appDispatch, runtime, setActiveProfileName],
+    [addMessage, dialogs, runtime, setActiveProfileName],
   );
 }
 
 function useDeleteProfileAction(
   addMessage: AddMessageFn,
-  appDispatch: ReturnType<typeof useAppDispatch> | null,
+  dialogs: DialogOpeners | null,
   runtime: ReturnType<typeof useRuntimeApi>,
   loadProfiles: (options?: { showLoading?: boolean }) => Promise<void>,
   options?: { fromList?: boolean },
@@ -353,9 +364,9 @@ function useDeleteProfileAction(
           content: `Profile '${profileName}' deleted`,
           timestamp: new Date(),
         });
-        if (!fromList && appDispatch !== null) {
-          appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileDetail' });
-          appDispatch({ type: 'OPEN_DIALOG', payload: 'profileList' });
+        if (!fromList && dialogs !== null) {
+          dialogs.profileDetail.close();
+          dialogs.profileList.open({});
           await loadProfiles();
         } else {
           // Refresh in place without the loading flash so selection can clamp.
@@ -369,7 +380,7 @@ function useDeleteProfileAction(
         });
       }
     },
-    [addMessage, appDispatch, runtime, loadProfiles, fromList],
+    [addMessage, dialogs, runtime, loadProfiles, fromList],
   );
 }
 
@@ -401,7 +412,7 @@ function useSetDefaultAction(
 }
 
 function useOpenEditorAction(
-  appDispatch: ReturnType<typeof useAppDispatch>,
+  dialogs: DialogOpeners,
   runtime: ReturnType<typeof useRuntimeApi>,
   setSelectedProfileName: React.Dispatch<React.SetStateAction<string | null>>,
   setSelectedProfile: React.Dispatch<React.SetStateAction<Profile | null>>,
@@ -429,11 +440,11 @@ function useOpenEditorAction(
         }
       }
 
-      appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileDetail' });
-      appDispatch({ type: 'OPEN_DIALOG', payload: 'profileEditor' });
+      dialogs.profileDetail.close();
+      dialogs.profileEditor.open({ profileName });
     },
     [
-      appDispatch,
+      dialogs,
       runtime,
       setSelectedProfileName,
       setEditorOpenedDirectly,
@@ -445,7 +456,7 @@ function useOpenEditorAction(
 }
 
 function useCloseEditorAction(
-  appDispatch: ReturnType<typeof useAppDispatch>,
+  dialogs: DialogOpeners,
   editorOpenedDirectly: boolean,
   selectedProfileName: string | null,
   detailOpenedDirectly: boolean,
@@ -456,7 +467,7 @@ function useCloseEditorAction(
   setEditorOpenedDirectly: React.Dispatch<React.SetStateAction<boolean>>,
 ) {
   return useCallback(async () => {
-    appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileEditor' });
+    dialogs.profileEditor.close();
 
     if (editorOpenedDirectly === false && selectedProfileName) {
       await viewProfileDetail(selectedProfileName, detailOpenedDirectly);
@@ -467,7 +478,7 @@ function useCloseEditorAction(
     }
     setEditorOpenedDirectly(false);
   }, [
-    appDispatch,
+    dialogs,
     selectedProfileName,
     viewProfileDetail,
     editorOpenedDirectly,
@@ -481,7 +492,7 @@ function useCloseEditorAction(
 
 function useSaveProfileAction(
   addMessage: AddMessageFn,
-  appDispatch: ReturnType<typeof useAppDispatch>,
+  dialogs: DialogOpeners,
   editorOpenedDirectly: boolean,
   viewProfileDetail: (name: string, direct: boolean) => Promise<void>,
   setProfileError: React.Dispatch<React.SetStateAction<string | null>>,
@@ -502,7 +513,7 @@ function useSaveProfileAction(
           content: `Profile '${profileName}' saved`,
           timestamp: new Date(),
         });
-        appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileEditor' });
+        dialogs.profileEditor.close();
         await viewProfileDetail(profileName, editorOpenedDirectly);
       } catch (error) {
         setProfileError(
@@ -512,7 +523,7 @@ function useSaveProfileAction(
     },
     [
       addMessage,
-      appDispatch,
+      dialogs,
       viewProfileDetail,
       editorOpenedDirectly,
       setProfileError,
@@ -522,7 +533,7 @@ function useSaveProfileAction(
 
 function useProfileDispatchActions(
   addMessage: AddMessageFn,
-  appDispatch: ReturnType<typeof useAppDispatch>,
+  dialogs: DialogOpeners,
   runtime: ReturnType<typeof useRuntimeApi>,
   loadProfiles: (options?: { showLoading?: boolean }) => Promise<void>,
   dataStates: ReturnType<typeof useProfileDataStates>,
@@ -530,13 +541,13 @@ function useProfileDispatchActions(
 ) {
   const loadProfile = useLoadProfileAction(
     addMessage,
-    appDispatch,
+    dialogs,
     runtime,
     dataStates.setActiveProfileName,
   );
   const deleteProfile = useDeleteProfileAction(
     addMessage,
-    appDispatch,
+    dialogs,
     runtime,
     loadProfiles,
   );
@@ -553,7 +564,7 @@ function useProfileDispatchActions(
     dataStates.setDefaultProfileName,
   );
   const openEditor = useOpenEditorAction(
-    appDispatch,
+    dialogs,
     runtime,
     dataStates.setSelectedProfileName,
     dataStates.setSelectedProfile,
@@ -562,7 +573,7 @@ function useProfileDispatchActions(
     dataStates.setEditorOpenedDirectly,
   );
   const closeEditor = useCloseEditorAction(
-    appDispatch,
+    dialogs,
     dataStates.editorOpenedDirectly,
     dataStates.selectedProfileName,
     dataStates.detailOpenedDirectly,
@@ -574,7 +585,7 @@ function useProfileDispatchActions(
   );
   const saveProfile = useSaveProfileAction(
     addMessage,
-    appDispatch,
+    dialogs,
     dataStates.editorOpenedDirectly,
     viewProfileDetail,
     dataStates.setProfileError,
@@ -610,12 +621,12 @@ function buildProfileManagementResult<TActions extends object>(
 
 export const useProfileManagement = ({
   addMessage,
-  appState,
+  store,
+  dialogs,
 }: UseProfileManagementParams) => {
-  const appDispatch = useAppDispatch();
   const runtime = useRuntimeApi();
 
-  const dialogStates = useProfileDialogStates(appState);
+  const dialogStates = useProfileDialogStates(store);
   const dataStates = useProfileDataStates();
   const { setActiveProfileName } = dataStates;
 
@@ -641,11 +652,11 @@ export const useProfileManagement = ({
     dataStates.setActiveProfileName,
   );
   const { openListDialog, closeListDialog } = useListDialogActions(
-    appDispatch,
+    dialogs,
     loadProfiles,
   );
   const { viewProfileDetail, closeDetailDialog } = useDetailDialogActions(
-    appDispatch,
+    dialogs,
     runtime,
     dataStates.setSelectedProfileName,
     dataStates.setSelectedProfile,
@@ -657,7 +668,7 @@ export const useProfileManagement = ({
   );
   const dispatchActions = useProfileDispatchActions(
     addMessage,
-    appDispatch,
+    dialogs,
     runtime,
     loadProfiles,
     dataStates,

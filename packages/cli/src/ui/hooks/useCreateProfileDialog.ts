@@ -5,20 +5,24 @@
  */
 
 import { useCallback, useState } from 'react';
-import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
-import type { AppState } from '../reducers/appReducer.js';
+import type { DialogStore } from '../stores/dialog/dialogStore.js';
+import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
+import { useStoreSelector } from '../stores/useStoreSelector.js';
 
 interface UseCreateProfileDialogParams {
-  appState: AppState;
+  store: DialogStore;
+  dialogs: DialogOpeners;
 }
 
 export const useCreateProfileDialog = ({
-  appState,
+  store,
+  dialogs,
 }: UseCreateProfileDialogParams) => {
-  const appDispatch = useAppDispatch();
   const runtime = useRuntimeApi();
-  const showDialog = appState.openDialogs.createProfile;
+  const showDialog = useStoreSelector(store.store, (state) =>
+    state.requests.some((r) => r.kind === 'createProfile'),
+  );
   const [providers, setProviders] = useState<string[]>([]);
 
   const openDialog = useCallback(() => {
@@ -30,12 +34,12 @@ export const useCreateProfileDialog = ({
       // Silently fail - wizard will fall back to static list
       setProviders([]);
     }
-    appDispatch({ type: 'OPEN_DIALOG', payload: 'createProfile' });
-  }, [appDispatch, runtime]);
+    dialogs.createProfile.open({});
+  }, [dialogs, runtime]);
 
   const closeDialog = useCallback(
-    () => appDispatch({ type: 'CLOSE_DIALOG', payload: 'createProfile' }),
-    [appDispatch],
+    () => dialogs.createProfile.close(),
+    [dialogs],
   );
 
   return {

@@ -23,6 +23,7 @@ import type { HistoryItem } from '../../../types.js';
 import type { AppBootstrapResult } from './useAppBootstrap.js';
 import type { AppDialogsResult } from './useAppDialogs.js';
 import type { AppInputResult } from './useAppInput.js';
+import type { DialogStore } from '../../../stores/dialog/dialogStore.js';
 import type { UiRuntime } from '../../../cliUiRuntime.js';
 
 export interface AppLayoutParams {
@@ -57,15 +58,11 @@ export interface AppLayoutParams {
   useAlternateBuffer: AppDialogsResult['useAlternateBuffer'];
   ideContextState: AppDialogsResult['ideContextState'];
   setDebugMessage: AppDialogsResult['setDebugMessage'];
-  isAuthDialogOpen: AppDialogsResult['isAuthDialogOpen'];
-  isThemeDialogOpen: AppDialogsResult['isThemeDialogOpen'];
-  isEditorDialogOpen: AppDialogsResult['isEditorDialogOpen'];
-  isProviderDialogOpen: AppDialogsResult['isProviderDialogOpen'];
-  isToolsDialogOpen: AppDialogsResult['isToolsDialogOpen'];
-  isCreateProfileDialogOpen: AppDialogsResult['isCreateProfileDialogOpen'];
   showPrivacyNotice: AppDialogsResult['showPrivacyNotice'];
   isWelcomeDialogOpen: AppDialogsResult['isWelcomeDialogOpen'];
   isFolderTrustDialogOpen: AppDialogsResult['isFolderTrustDialogOpen'];
+  /** Typed DialogStore; dialog-open state is read through narrow selectors. */
+  store: DialogStore;
   embeddedShellFocused: AppDialogsResult['embeddedShellFocused'];
   setEmbeddedShellFocused: AppDialogsResult['setEmbeddedShellFocused'];
   startupGuardsInitialized: AppDialogsResult['startupGuardsInitialized'];
@@ -265,15 +262,10 @@ function useLayoutContext(p: AppLayoutParams) {
     settings,
     runtimeMessageBus,
     consoleMessages,
-    isAuthDialogOpen,
-    isThemeDialogOpen,
-    isEditorDialogOpen,
-    isProviderDialogOpen,
-    isToolsDialogOpen,
-    isCreateProfileDialogOpen,
     showPrivacyNotice,
     isWelcomeDialogOpen,
     isFolderTrustDialogOpen,
+    store,
     terminalHeight,
     terminalWidth,
     handleUserInputSubmit,
@@ -303,13 +295,8 @@ function useLayoutContext(p: AppLayoutParams) {
     submitPrompt: handleUserInputSubmit,
     agentClientPresent: Boolean(uiRuntime.agentClientSource.getAgentClient()),
     interactiveRuntimeReady,
+    store,
     blockedByDialogs: {
-      isAuthDialogOpen,
-      isThemeDialogOpen,
-      isEditorDialogOpen,
-      isProviderDialogOpen,
-      isToolsDialogOpen,
-      isCreateProfileDialogOpen,
       showPrivacyNotice,
       isWelcomeDialogOpen,
       isFolderTrustDialogOpen,

@@ -4,21 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
+import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 
-export function useSettingsCommand() {
-  const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
-
+export function useSettingsCommand(dialogs: DialogOpeners) {
   const openSettingsDialog = useCallback(() => {
-    setIsSettingsDialogOpen(true);
-  }, []);
+    dialogs.settings.open({});
+  }, [dialogs]);
 
   const closeSettingsDialog = useCallback(() => {
-    setIsSettingsDialogOpen(false);
-  }, []);
+    dialogs.settings.close();
+  }, [dialogs]);
 
   return {
-    isSettingsDialogOpen,
     openSettingsDialog,
     closeSettingsDialog,
   };

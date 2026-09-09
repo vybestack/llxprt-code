@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -14,62 +14,42 @@ import { SubagentView } from '../../../components/SubagentManagement/types.js';
 
 const createCallback = () => vi.fn();
 
-function testDialogsHook() {
-  const openSpy = {
-    permissions: createCallback(),
-    logging: createCallback(),
-    subagent: createCallback(),
+function baseCallbacks() {
+  return {
+    openPrivacyNotice: createCallback(),
+    openModelsDialog: createCallback(),
+    openPoliciesDialog: createCallback(),
+    openProviderDialog: createCallback(),
+    openLoadProfileDialog: createCallback(),
+    openCreateProfileDialog: createCallback(),
+    openProfileListDialog: createCallback(),
+    viewProfileDetail: createCallback(),
+    openProfileEditor: createCallback(),
+    quitHandler: createCallback(),
+    setDebugMessage: createCallback(),
+    toggleCorgiMode: createCallback(),
+    toggleDebugProfiler: createCallback(),
+    dispatchExtensionStateUpdate: createCallback(),
+    addConfirmUpdateExtensionRequest: createCallback(),
+    welcomeActions: { resetAndReopen: createCallback() },
+    openSessionBrowserDialog: createCallback(),
   };
-  const closeSpy = {
-    permissions: createCallback(),
-    logging: createCallback(),
-    subagent: createCallback(),
-  };
-  const dialogs: DialogOpeners = {
-    permissions: { open: openSpy.permissions, close: closeSpy.permissions },
-    logging: { open: openSpy.logging, close: closeSpy.logging },
-    subagent: { open: openSpy.subagent, close: closeSpy.subagent },
-  };
-  return { dialogs, openSpy, closeSpy };
+}
+
+function withRealStoreDialogs() {
+  const store = createDialogStore();
+  const dialogs = createDialogOpeners(store);
+  return { store, dialogs };
 }
 
 describe('useSlashCommandActions', () => {
   it('maps all provided callbacks into slash command action surface', () => {
-    const { dialogs } = testDialogsHook();
-    const callbacks = {
-      openAuthDialog: createCallback(),
-      openThemeDialog: createCallback(),
-      openEditorDialog: createCallback(),
-      openPrivacyNotice: createCallback(),
-      openSettingsDialog: createCallback(),
-      openModelsDialog: createCallback(),
-      openPoliciesDialog: createCallback(),
-      openProviderDialog: createCallback(),
-      openLoadProfileDialog: createCallback(),
-      openCreateProfileDialog: createCallback(),
-      openProfileListDialog: createCallback(),
-      viewProfileDetail: createCallback(),
-      openProfileEditor: createCallback(),
-      quitHandler: createCallback(),
-      setDebugMessage: createCallback(),
-      toggleCorgiMode: createCallback(),
-      toggleDebugProfiler: createCallback(),
-      dispatchExtensionStateUpdate: createCallback(),
-      addConfirmUpdateExtensionRequest: createCallback(),
-      welcomeActions: { resetAndReopen: createCallback() },
-      openSessionBrowserDialog: createCallback(),
-      dialogs,
-    };
+    const { dialogs } = withRealStoreDialogs();
+    const callbacks = { ...baseCallbacks(), dialogs };
 
     const { result } = renderHook(() => useSlashCommandActions(callbacks));
 
-    expect(result.current.openAuthDialog).toBe(callbacks.openAuthDialog);
-    expect(result.current.openThemeDialog).toBe(callbacks.openThemeDialog);
-    expect(result.current.openEditorDialog).toBe(callbacks.openEditorDialog);
     expect(result.current.openPrivacyNotice).toBe(callbacks.openPrivacyNotice);
-    expect(result.current.openSettingsDialog).toBe(
-      callbacks.openSettingsDialog,
-    );
     expect(result.current.openModelsDialog).toBe(callbacks.openModelsDialog);
     expect(result.current.openPoliciesDialog).toBe(
       callbacks.openPoliciesDialog,
@@ -109,31 +89,24 @@ describe('useSlashCommandActions', () => {
   });
 
   it('routes permissions/logging/subagent open/close through the dialogs object', () => {
-    const { dialogs, openSpy, closeSpy } = testDialogsHook();
-    const callbacks = {
-      openAuthDialog: createCallback(),
-      openThemeDialog: createCallback(),
-      openEditorDialog: createCallback(),
-      openPrivacyNotice: createCallback(),
-      openSettingsDialog: createCallback(),
-      openModelsDialog: createCallback(),
-      openPoliciesDialog: createCallback(),
-      openProviderDialog: createCallback(),
-      openLoadProfileDialog: createCallback(),
-      openCreateProfileDialog: createCallback(),
-      openProfileListDialog: createCallback(),
-      viewProfileDetail: createCallback(),
-      openProfileEditor: createCallback(),
-      quitHandler: createCallback(),
-      setDebugMessage: createCallback(),
-      toggleCorgiMode: createCallback(),
-      toggleDebugProfiler: createCallback(),
-      dispatchExtensionStateUpdate: createCallback(),
-      addConfirmUpdateExtensionRequest: createCallback(),
-      welcomeActions: { resetAndReopen: createCallback() },
-      openSessionBrowserDialog: createCallback(),
-      dialogs,
+    const openSpy = {
+      permissions: createCallback(),
+      logging: createCallback(),
+      subagent: createCallback(),
     };
+    const closeSpy = {
+      permissions: createCallback(),
+      logging: createCallback(),
+      subagent: createCallback(),
+    };
+    const { dialogs } = withRealStoreDialogs();
+    const spiedDialogs: DialogOpeners = {
+      ...dialogs,
+      permissions: { open: openSpy.permissions, close: closeSpy.permissions },
+      logging: { open: openSpy.logging, close: closeSpy.logging },
+      subagent: { open: openSpy.subagent, close: closeSpy.subagent },
+    };
+    const callbacks = { ...baseCallbacks(), dialogs: spiedDialogs };
 
     const { result } = renderHook(() => useSlashCommandActions(callbacks));
 
@@ -164,32 +137,38 @@ describe('useSlashCommandActions', () => {
     expect(closeSpy.subagent).toHaveBeenCalledTimes(1);
   });
 
-  it('returns stable identity when dependencies are unchanged', () => {
-    const { dialogs } = testDialogsHook();
-    const callbacks = {
-      openAuthDialog: createCallback(),
-      openThemeDialog: createCallback(),
-      openEditorDialog: createCallback(),
-      openPrivacyNotice: createCallback(),
-      openSettingsDialog: createCallback(),
-      openModelsDialog: createCallback(),
-      openPoliciesDialog: createCallback(),
-      openProviderDialog: createCallback(),
-      openLoadProfileDialog: createCallback(),
-      openCreateProfileDialog: createCallback(),
-      openProfileListDialog: createCallback(),
-      viewProfileDetail: createCallback(),
-      openProfileEditor: createCallback(),
-      quitHandler: createCallback(),
-      setDebugMessage: createCallback(),
-      toggleCorgiMode: createCallback(),
-      toggleDebugProfiler: createCallback(),
-      dispatchExtensionStateUpdate: createCallback(),
-      addConfirmUpdateExtensionRequest: createCallback(),
-      welcomeActions: { resetAndReopen: createCallback() },
-      openSessionBrowserDialog: createCallback(),
-      dialogs,
+  it('routes auth/theme/editor/settings opens through the dialogs object', () => {
+    const openSpy = {
+      auth: createCallback(),
+      theme: createCallback(),
+      editor: createCallback(),
+      settings: createCallback(),
     };
+    const { dialogs } = withRealStoreDialogs();
+    const spiedDialogs: DialogOpeners = {
+      ...dialogs,
+      auth: { open: openSpy.auth, close: createCallback() },
+      theme: { open: openSpy.theme, close: createCallback() },
+      editor: { open: openSpy.editor, close: createCallback() },
+      settings: { open: openSpy.settings, close: createCallback() },
+    };
+    const callbacks = { ...baseCallbacks(), dialogs: spiedDialogs };
+
+    const { result } = renderHook(() => useSlashCommandActions(callbacks));
+
+    result.current.openAuthDialog();
+    expect(openSpy.auth).toHaveBeenCalledWith({});
+    result.current.openThemeDialog();
+    expect(openSpy.theme).toHaveBeenCalledWith({});
+    result.current.openEditorDialog();
+    expect(openSpy.editor).toHaveBeenCalledWith({});
+    result.current.openSettingsDialog();
+    expect(openSpy.settings).toHaveBeenCalledWith({});
+  });
+
+  it('returns stable identity when dependencies are unchanged', () => {
+    const { dialogs } = withRealStoreDialogs();
+    const callbacks = { ...baseCallbacks(), dialogs };
 
     const { result, rerender } = renderHook(() =>
       useSlashCommandActions(callbacks),
@@ -202,9 +181,8 @@ describe('useSlashCommandActions', () => {
   });
 
   it('routes open/close through openers built from a real store', () => {
-    const store = createDialogStore();
-    const dialogs = createDialogOpeners(store);
-    const params = callbacksWithRealStore(dialogs);
+    const { store, dialogs } = withRealStoreDialogs();
+    const params = { ...baseCallbacks(), dialogs };
     const { result } = renderHook(() => useSlashCommandActions(params));
 
     result.current.openPermissionsDialog();
@@ -216,32 +194,10 @@ describe('useSlashCommandActions', () => {
     expect(store.store.getState().requests).toHaveLength(1);
     result.current.closeLoggingDialog();
     expect(store.store.getState().requests).toHaveLength(0);
+
+    result.current.openAuthDialog();
+    expect(store.store.getState().requests).toHaveLength(1);
+    dialogs.auth.close();
+    expect(store.store.getState().requests).toHaveLength(0);
   });
 });
-
-function callbacksWithRealStore(dialogs: DialogOpeners) {
-  return {
-    openAuthDialog: createCallback(),
-    openThemeDialog: createCallback(),
-    openEditorDialog: createCallback(),
-    openPrivacyNotice: createCallback(),
-    openSettingsDialog: createCallback(),
-    openModelsDialog: createCallback(),
-    openPoliciesDialog: createCallback(),
-    openProviderDialog: createCallback(),
-    openLoadProfileDialog: createCallback(),
-    openCreateProfileDialog: createCallback(),
-    openProfileListDialog: createCallback(),
-    viewProfileDetail: createCallback(),
-    openProfileEditor: createCallback(),
-    quitHandler: createCallback(),
-    setDebugMessage: createCallback(),
-    toggleCorgiMode: createCallback(),
-    toggleDebugProfiler: createCallback(),
-    dispatchExtensionStateUpdate: createCallback(),
-    addConfirmUpdateExtensionRequest: createCallback(),
-    welcomeActions: { resetAndReopen: createCallback() },
-    openSessionBrowserDialog: createCallback(),
-    dialogs,
-  };
-}

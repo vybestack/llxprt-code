@@ -7,9 +7,10 @@
 import { useCallback, useState } from 'react';
 import type { Agent, ToolInfo } from '@vybestack/llxprt-code-agents';
 import { MessageType } from '../types.js';
-import { useAppDispatch } from '../contexts/AppDispatchContext.js';
-import type { AppState } from '../reducers/appReducer.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { DialogStore } from '../stores/dialog/dialogStore.js';
+import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
+import { useStoreSelector } from '../stores/useStoreSelector.js';
 
 interface UseToolsDialogParams {
   addMessage: (msg: {
@@ -17,7 +18,8 @@ interface UseToolsDialogParams {
     content: string;
     timestamp: Date;
   }) => void;
-  appState: AppState;
+  store: DialogStore;
+  dialogs: DialogOpeners;
   config: CliUiRuntime;
   agent: Agent | null;
 }
@@ -98,12 +100,14 @@ function updateDisabledToolsList(
 
 export const useToolsDialog = ({
   addMessage,
-  appState,
+  store,
+  dialogs,
   config,
   agent,
 }: UseToolsDialogParams) => {
-  const appDispatch = useAppDispatch();
-  const showDialog = appState.openDialogs.tools;
+  const showDialog = useStoreSelector(store.store, (state) =>
+    state.requests.some((r) => r.kind === 'tools'),
+  );
   const [action, setAction] = useState<'enable' | 'disable'>('disable');
   const [availableTools, setAvailableTools] = useState<ToolInfo[]>([]);
   const [disabledTools, setDisabledTools] = useState<string[]>([]);
@@ -129,7 +133,7 @@ export const useToolsDialog = ({
         setAction(dialogAction);
         setAvailableTools(tools);
         setDisabledTools(currentDisabledTools);
-        appDispatch({ type: 'OPEN_DIALOG', payload: 'tools' });
+        dialogs.tools.open({ action: dialogAction });
       } catch (e) {
         addMessage({
           type: MessageType.ERROR,
@@ -138,13 +142,10 @@ export const useToolsDialog = ({
         });
       }
     },
-    [addMessage, appDispatch, config, agent],
+    [addMessage, config, agent, dialogs],
   );
 
-  const closeDialog = useCallback(
-    () => appDispatch({ type: 'CLOSE_DIALOG', payload: 'tools' }),
-    [appDispatch],
-  );
+  const closeDialog = useCallback(() => dialogs.tools.close(), [dialogs]);
 
   const handleSelect = useCallback(
     (toolName: string) => {
@@ -166,9 +167,9 @@ export const useToolsDialog = ({
         timestamp: new Date(),
       });
 
-      appDispatch({ type: 'CLOSE_DIALOG', payload: 'tools' });
+      dialogs.tools.close();
     },
-    [addMessage, appDispatch, config, action, availableTools, disabledTools],
+    [addMessage, config, action, availableTools, disabledTools, dialogs],
   );
 
   return {

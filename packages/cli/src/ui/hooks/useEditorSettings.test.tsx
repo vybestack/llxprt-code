@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -26,7 +26,10 @@ import {
   allowEditorTypeInSandbox,
 } from '@vybestack/llxprt-code-core';
 import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
-import { type AppState, type AppAction } from '../reducers/appReducer.js';
+import { type AppAction } from '../reducers/appReducer.js';
+import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
+import { createDialogOpeners } from '../stores/dialog/dialogOpeners.js';
+import { createDialogStore } from '../stores/dialog/dialogStore.js';
 
 import { SettingPaths } from '../../config/settingPaths.js';
 
@@ -52,7 +55,8 @@ const mockAllowEditorTypeInSandbox = allowEditorTypeInSandbox as Mock<
 
 describe('useEditorSettings', () => {
   let mockLoadedSettings: LoadedSettings;
-  let mockAppState: AppState;
+  let mockDialogs: DialogOpeners;
+  let mockStore: ReturnType<typeof createDialogStore>;
   let mockAddItem: Mock<
     (item: Omit<HistoryItem, 'id'>, timestamp: number) => void
   >;
@@ -65,30 +69,8 @@ describe('useEditorSettings', () => {
       setValue: vi.fn(),
     } as unknown as LoadedSettings;
 
-    mockAppState = {
-      openDialogs: {
-        theme: false,
-        auth: false,
-        editor: false,
-        provider: false,
-        privacy: false,
-        loadProfile: false,
-        createProfile: false,
-        profileList: false,
-        profileDetail: false,
-        profileEditor: false,
-        tools: false,
-        oauthCode: false,
-      },
-      warnings: new Map(),
-      errors: {
-        theme: null,
-        auth: null,
-        editor: null,
-      },
-      needsRelogin: false,
-      lastAddItemAction: null,
-    };
+    mockStore = createDialogStore();
+    mockDialogs = createDialogOpeners(mockStore);
 
     mockAddItem = vi.fn();
     mockDispatch = vi.fn();
@@ -103,8 +85,8 @@ describe('useEditorSettings', () => {
   });
 
   it('should initialize with dialog closed', () => {
-    const { result } = renderHook(
-      () => useEditorSettings(mockLoadedSettings, mockAppState, mockAddItem),
+    renderHook(
+      () => useEditorSettings(mockLoadedSettings, mockDialogs, mockAddItem),
       {
         wrapper: ({ children }) => (
           <AppDispatchProvider value={mockDispatch}>
@@ -114,12 +96,14 @@ describe('useEditorSettings', () => {
       },
     );
 
-    expect(result.current.isEditorDialogOpen).toBe(false);
+    expect(
+      mockStore.store.getState().requests.some((r) => r.kind === 'editor'),
+    ).toBe(false);
   });
 
   it('should open editor dialog when openEditorDialog is called', () => {
     const { result } = renderHook(
-      () => useEditorSettings(mockLoadedSettings, mockAppState, mockAddItem),
+      () => useEditorSettings(mockLoadedSettings, mockDialogs, mockAddItem),
       {
         wrapper: ({ children }) => (
           <AppDispatchProvider value={mockDispatch}>
@@ -133,15 +117,14 @@ describe('useEditorSettings', () => {
       result.current.openEditorDialog();
     });
 
-    expect(mockDispatch).toHaveBeenCalledWith({
-      type: 'OPEN_DIALOG',
-      payload: 'editor',
-    });
+    expect(
+      mockStore.store.getState().requests.some((r) => r.kind === 'editor'),
+    ).toBe(true);
   });
 
   it('should close editor dialog when exitEditorDialog is called', () => {
     const { result } = renderHook(
-      () => useEditorSettings(mockLoadedSettings, mockAppState, mockAddItem),
+      () => useEditorSettings(mockLoadedSettings, mockDialogs, mockAddItem),
       {
         wrapper: ({ children }) => (
           <AppDispatchProvider value={mockDispatch}>
@@ -150,20 +133,21 @@ describe('useEditorSettings', () => {
         ),
       },
     );
+
+    mockStore.commands.openDialog({ kind: 'editor', payload: {} });
 
     act(() => {
       result.current.exitEditorDialog();
     });
 
-    expect(mockDispatch).toHaveBeenCalledWith({
-      type: 'CLOSE_DIALOG',
-      payload: 'editor',
-    });
+    expect(
+      mockStore.store.getState().requests.some((r) => r.kind === 'editor'),
+    ).toBe(false);
   });
 
   it('should handle editor selection successfully', () => {
     const { result } = renderHook(
-      () => useEditorSettings(mockLoadedSettings, mockAppState, mockAddItem),
+      () => useEditorSettings(mockLoadedSettings, mockDialogs, mockAddItem),
       {
         wrapper: ({ children }) => (
           <AppDispatchProvider value={mockDispatch}>
@@ -172,6 +156,8 @@ describe('useEditorSettings', () => {
         ),
       },
     );
+
+    mockStore.commands.openDialog({ kind: 'editor', payload: {} });
 
     const editorType: EditorType = 'vscode';
     const scope = SettingScope.User;
@@ -198,15 +184,14 @@ describe('useEditorSettings', () => {
       type: 'SET_EDITOR_ERROR',
       payload: null,
     });
-    expect(mockDispatch).toHaveBeenCalledWith({
-      type: 'CLOSE_DIALOG',
-      payload: 'editor',
-    });
+    expect(
+      mockStore.store.getState().requests.some((r) => r.kind === 'editor'),
+    ).toBe(false);
   });
 
   it('should handle clearing editor preference (undefined editor)', () => {
     const { result } = renderHook(
-      () => useEditorSettings(mockLoadedSettings, mockAppState, mockAddItem),
+      () => useEditorSettings(mockLoadedSettings, mockDialogs, mockAddItem),
       {
         wrapper: ({ children }) => (
           <AppDispatchProvider value={mockDispatch}>
@@ -215,6 +200,8 @@ describe('useEditorSettings', () => {
         ),
       },
     );
+
+    mockStore.commands.openDialog({ kind: 'editor', payload: {} });
 
     const scope = SettingScope.Workspace;
 
@@ -240,15 +227,14 @@ describe('useEditorSettings', () => {
       type: 'SET_EDITOR_ERROR',
       payload: null,
     });
-    expect(mockDispatch).toHaveBeenCalledWith({
-      type: 'CLOSE_DIALOG',
-      payload: 'editor',
-    });
+    expect(
+      mockStore.store.getState().requests.some((r) => r.kind === 'editor'),
+    ).toBe(false);
   });
 
   it('should handle different editor types', () => {
     const { result } = renderHook(
-      () => useEditorSettings(mockLoadedSettings, mockAppState, mockAddItem),
+      () => useEditorSettings(mockLoadedSettings, mockDialogs, mockAddItem),
       {
         wrapper: ({ children }) => (
           <AppDispatchProvider value={mockDispatch}>
@@ -284,7 +270,7 @@ describe('useEditorSettings', () => {
 
   it('should handle different setting scopes', () => {
     const { result } = renderHook(
-      () => useEditorSettings(mockLoadedSettings, mockAppState, mockAddItem),
+      () => useEditorSettings(mockLoadedSettings, mockDialogs, mockAddItem),
       {
         wrapper: ({ children }) => (
           <AppDispatchProvider value={mockDispatch}>
@@ -320,7 +306,7 @@ describe('useEditorSettings', () => {
 
   it('should not set preference for unavailable editors', () => {
     const { result } = renderHook(
-      () => useEditorSettings(mockLoadedSettings, mockAppState, mockAddItem),
+      () => useEditorSettings(mockLoadedSettings, mockDialogs, mockAddItem),
       {
         wrapper: ({ children }) => (
           <AppDispatchProvider value={mockDispatch}>
@@ -346,7 +332,7 @@ describe('useEditorSettings', () => {
 
   it('should not set preference for editors not allowed in sandbox', () => {
     const { result } = renderHook(
-      () => useEditorSettings(mockLoadedSettings, mockAppState, mockAddItem),
+      () => useEditorSettings(mockLoadedSettings, mockDialogs, mockAddItem),
       {
         wrapper: ({ children }) => (
           <AppDispatchProvider value={mockDispatch}>
@@ -372,7 +358,7 @@ describe('useEditorSettings', () => {
 
   it('should handle errors during editor selection', () => {
     const { result } = renderHook(
-      () => useEditorSettings(mockLoadedSettings, mockAppState, mockAddItem),
+      () => useEditorSettings(mockLoadedSettings, mockDialogs, mockAddItem),
       {
         wrapper: ({ children }) => (
           <AppDispatchProvider value={mockDispatch}>

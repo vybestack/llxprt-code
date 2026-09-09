@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -91,21 +91,9 @@ function createMinimalUIState(
 ): Partial<UIState> {
   return {
     isSessionBrowserDialogOpen: false,
-    isThemeDialogOpen: false,
-    isSettingsDialogOpen: false,
-    isAuthDialogOpen: false,
-    isEditorDialogOpen: false,
-    isProviderDialogOpen: false,
-    isLoadProfileDialogOpen: false,
-    isCreateProfileDialogOpen: false,
-    isProfileListDialogOpen: false,
-    isProfileDetailDialogOpen: false,
-    isProfileEditorDialogOpen: false,
-    isToolsDialogOpen: false,
     isFolderTrustDialogOpen: false,
     showWorkspaceMigrationDialog: false,
     showPrivacyNotice: false,
-    isOAuthCodeDialogOpen: false,
     isModelsDialogOpen: false,
     isWelcomeDialogOpen: false,
     terminalWidth: 120,
@@ -406,8 +394,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
      */
     it('opening browser preserves other state fields', () => {
       const initialState = createMinimalUIState({
-        isThemeDialogOpen: false,
-        isSettingsDialogOpen: false,
+        isModelsDialogOpen: false,
         terminalWidth: 120,
         terminalHeight: 40,
       });
@@ -420,8 +407,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
 
       expect(afterOpenState.isSessionBrowserDialogOpen).toBe(true);
       // Other fields preserved
-      expect(afterOpenState.isThemeDialogOpen).toBe(false);
-      expect(afterOpenState.isSettingsDialogOpen).toBe(false);
+      expect(afterOpenState.isModelsDialogOpen).toBe(false);
       expect(afterOpenState.terminalWidth).toBe(120);
       expect(afterOpenState.terminalHeight).toBe(40);
     });

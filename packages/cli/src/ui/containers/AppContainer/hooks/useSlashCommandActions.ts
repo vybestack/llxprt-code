@@ -18,15 +18,12 @@ type WelcomeActionsLike = {
 };
 
 interface UseSlashCommandActionsParams {
-  /** Slice B2a: permissions/logging/subagent now live in the DialogStore. */
+  /** Dialog openers backed by the typed DialogStore. */
   dialogs: DialogOpeners;
-  openAuthDialog: () => void;
-  openThemeDialog: () => void;
-  openEditorDialog: () => void;
   openPrivacyNotice: () => void;
-  openSettingsDialog: () => void;
   openModelsDialog: (data?: ModelsDialogData) => void;
   openPoliciesDialog: () => void;
+  /** Domain openers that load data before showing their dialog. */
   openProviderDialog: () => void;
   openLoadProfileDialog: () => void | Promise<void>;
   openCreateProfileDialog: () => void;
@@ -98,7 +95,11 @@ function buildActions(p: UseSlashCommandActionsParams): SlashCommandActions {
     quit: quitHandler,
     openWelcomeDialog: welcomeActions.resetAndReopen,
 
-    // Slice B2a: store-backed handles.
+    // Store-backed handles (pure open/close plumbing).
+    openAuthDialog: () => dialogs.auth.open({}),
+    openThemeDialog: () => dialogs.theme.open({}),
+    openEditorDialog: () => dialogs.editor.open({}),
+    openSettingsDialog: () => dialogs.settings.open({}),
     openPermissionsDialog: () => dialogs.permissions.open({}),
     closePermissionsDialog: () => dialogs.permissions.close(),
     openLoggingDialog: (data?: { entries: unknown[] }) =>

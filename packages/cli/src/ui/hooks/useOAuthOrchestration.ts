@@ -18,6 +18,7 @@
 
 import { useEffect } from 'react';
 import type { AppAction } from '../reducers/appReducer.js';
+import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 import {
   getOAuthGlobalState,
   getPendingOAuthProvider,
@@ -25,6 +26,7 @@ import {
 
 interface UseOAuthOrchestrationOptions {
   appDispatch: React.Dispatch<AppAction>;
+  dialogs: DialogOpeners;
   isOAuthCodeDialogOpen: boolean;
   getActiveProviderName?: () => string;
   setAuthError: (error: string | null) => void;
@@ -51,6 +53,7 @@ function oauthProviderMatchesActive(
 
 export function useOAuthOrchestration({
   appDispatch,
+  dialogs,
   isOAuthCodeDialogOpen,
   getActiveProviderName,
   setAuthError,
@@ -63,12 +66,12 @@ export function useOAuthOrchestration({
           return;
         }
         oauthState.__oauth_needs_code = false;
-        appDispatch({ type: 'OPEN_DIALOG', payload: 'oauthCode' });
+        dialogs.oauthCode.open({});
       }
     }, 100);
 
     return () => clearInterval(checkOAuthFlag);
-  }, [appDispatch, getActiveProviderName]);
+  }, [dialogs, getActiveProviderName]);
 
   // Auto-dismiss OAuth dialog when auth completes via browser callback
   // Issue #1404: Dialog should automatically hide after auth completes
@@ -80,11 +83,11 @@ export function useOAuthOrchestration({
       const oauthState = getOAuthGlobalState();
       if (oauthState.__oauth_browser_auth_complete === true) {
         oauthState.__oauth_browser_auth_complete = false;
-        appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
+        dialogs.oauthCode.close();
       }
     }, 100);
     return () => clearInterval(interval);
-  }, [isOAuthCodeDialogOpen, appDispatch]);
+  }, [isOAuthCodeDialogOpen, dialogs]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -94,10 +97,10 @@ export function useOAuthOrchestration({
         setAuthError(null);
         appDispatch({ type: 'SET_AUTH_ERROR', payload: null });
         appDispatch({ type: 'SET_NEEDS_RELOGIN', payload: false });
-        appDispatch({ type: 'CLOSE_DIALOG', payload: 'auth' });
-        appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
+        dialogs.auth.close();
+        dialogs.oauthCode.close();
       }
     }, 100);
     return () => clearInterval(interval);
-  }, [appDispatch, setAuthError]);
+  }, [appDispatch, dialogs, setAuthError]);
 }

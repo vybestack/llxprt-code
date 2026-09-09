@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -19,43 +19,28 @@ const makeParams = (): UIActionsParams => ({
   handleSteer: vi.fn(),
   handleClearScreen: vi.fn(),
 
-  // Theme dialog
-  openThemeDialog: vi.fn(),
   handleThemeSelect: vi.fn(),
   handleThemeHighlight: vi.fn(),
 
   // Settings dialog
-  openSettingsDialog: vi.fn(),
-  closeSettingsDialog: vi.fn(),
   handleSettingsRestart: vi.fn(),
 
   // Auth dialog
-  openAuthDialog: vi.fn(),
   handleAuthSelect: vi.fn(),
   handleAuthTimeout: vi.fn(),
 
   // Editor dialog
-  openEditorDialog: vi.fn(),
   handleEditorSelect: vi.fn(),
-  exitEditorDialog: vi.fn(),
 
   // Provider dialog
-  openProviderDialog: vi.fn(),
   handleProviderSelect: vi.fn(),
-  exitProviderDialog: vi.fn(),
 
   // Load profile dialog
-  openLoadProfileDialog: vi.fn(),
   handleProfileSelect: vi.fn(),
-  exitLoadProfileDialog: vi.fn(),
 
   // Create profile dialog
-  openCreateProfileDialog: vi.fn(),
-  exitCreateProfileDialog: vi.fn(),
 
   // Profile management dialogs
-  openProfileListDialog: vi.fn(),
-  closeProfileListDialog: vi.fn(),
   viewProfileDetail: vi.fn(),
   closeProfileDetailDialog: vi.fn(),
   loadProfileFromDetail: vi.fn(),
@@ -67,9 +52,7 @@ const makeParams = (): UIActionsParams => ({
   saveProfileFromEditor: vi.fn(),
 
   // Tools dialog
-  openToolsDialog: vi.fn(),
   handleToolsSelect: vi.fn(),
-  exitToolsDialog: vi.fn(),
 
   // Folder trust dialog
   handleFolderTrustSelect: vi.fn(),
@@ -167,28 +150,14 @@ describe('buildUIActions', () => {
     expect(result.handleUserInputSubmit).toBeDefined();
     expect(result.handleSteer).toBeDefined();
     expect(result.handleClearScreen).toBeDefined();
-    expect(result.openThemeDialog).toBeDefined();
     expect(result.handleThemeSelect).toBeDefined();
     expect(result.handleThemeHighlight).toBeDefined();
-    expect(result.openSettingsDialog).toBeDefined();
-    expect(result.closeSettingsDialog).toBeDefined();
     expect(result.handleSettingsRestart).toBeDefined();
-    expect(result.openAuthDialog).toBeDefined();
     expect(result.handleAuthSelect).toBeDefined();
     expect(result.handleAuthTimeout).toBeDefined();
-    expect(result.openEditorDialog).toBeDefined();
     expect(result.handleEditorSelect).toBeDefined();
-    expect(result.exitEditorDialog).toBeDefined();
-    expect(result.openProviderDialog).toBeDefined();
     expect(result.handleProviderSelect).toBeDefined();
-    expect(result.exitProviderDialog).toBeDefined();
-    expect(result.openLoadProfileDialog).toBeDefined();
     expect(result.handleProfileSelect).toBeDefined();
-    expect(result.exitLoadProfileDialog).toBeDefined();
-    expect(result.openCreateProfileDialog).toBeDefined();
-    expect(result.exitCreateProfileDialog).toBeDefined();
-    expect(result.openProfileListDialog).toBeDefined();
-    expect(result.closeProfileListDialog).toBeDefined();
     expect(result.viewProfileDetail).toBeDefined();
     expect(result.closeProfileDetailDialog).toBeDefined();
     expect(result.loadProfileFromDetail).toBeDefined();
@@ -198,9 +167,7 @@ describe('buildUIActions', () => {
     expect(result.openProfileEditor).toBeDefined();
     expect(result.closeProfileEditor).toBeDefined();
     expect(result.saveProfileFromEditor).toBeDefined();
-    expect(result.openToolsDialog).toBeDefined();
     expect(result.handleToolsSelect).toBeDefined();
-    expect(result.exitToolsDialog).toBeDefined();
     expect(result.handleFolderTrustSelect).toBeDefined();
     expect(result.welcomeActions).toBeDefined();
     expect(result.triggerWelcomeAuth).toBeDefined();
@@ -244,28 +211,14 @@ describe('buildUIActions', () => {
     expect(result.handleUserInputSubmit).toBe(params.handleUserInputSubmit);
     expect(result.handleSteer).toBe(params.handleSteer);
     expect(result.handleClearScreen).toBe(params.handleClearScreen);
-    expect(result.openThemeDialog).toBe(params.openThemeDialog);
     expect(result.handleThemeSelect).toBe(params.handleThemeSelect);
     expect(result.handleThemeHighlight).toBe(params.handleThemeHighlight);
-    expect(result.openSettingsDialog).toBe(params.openSettingsDialog);
-    expect(result.closeSettingsDialog).toBe(params.closeSettingsDialog);
     expect(result.handleSettingsRestart).toBe(params.handleSettingsRestart);
-    expect(result.openAuthDialog).toBe(params.openAuthDialog);
     expect(result.handleAuthSelect).toBe(params.handleAuthSelect);
     expect(result.handleAuthTimeout).toBe(params.handleAuthTimeout);
-    expect(result.openEditorDialog).toBe(params.openEditorDialog);
     expect(result.handleEditorSelect).toBe(params.handleEditorSelect);
-    expect(result.exitEditorDialog).toBe(params.exitEditorDialog);
-    expect(result.openProviderDialog).toBe(params.openProviderDialog);
     expect(result.handleProviderSelect).toBe(params.handleProviderSelect);
-    expect(result.exitProviderDialog).toBe(params.exitProviderDialog);
-    expect(result.openLoadProfileDialog).toBe(params.openLoadProfileDialog);
     expect(result.handleProfileSelect).toBe(params.handleProfileSelect);
-    expect(result.exitLoadProfileDialog).toBe(params.exitLoadProfileDialog);
-    expect(result.openCreateProfileDialog).toBe(params.openCreateProfileDialog);
-    expect(result.exitCreateProfileDialog).toBe(params.exitCreateProfileDialog);
-    expect(result.openProfileListDialog).toBe(params.openProfileListDialog);
-    expect(result.closeProfileListDialog).toBe(params.closeProfileListDialog);
     expect(result.viewProfileDetail).toBe(params.viewProfileDetail);
     expect(result.closeProfileDetailDialog).toBe(
       params.closeProfileDetailDialog,
@@ -277,9 +230,7 @@ describe('buildUIActions', () => {
     expect(result.openProfileEditor).toBe(params.openProfileEditor);
     expect(result.closeProfileEditor).toBe(params.closeProfileEditor);
     expect(result.saveProfileFromEditor).toBe(params.saveProfileFromEditor);
-    expect(result.openToolsDialog).toBe(params.openToolsDialog);
     expect(result.handleToolsSelect).toBe(params.handleToolsSelect);
-    expect(result.exitToolsDialog).toBe(params.exitToolsDialog);
     expect(result.handleFolderTrustSelect).toBe(params.handleFolderTrustSelect);
     expect(result.welcomeActions).toBe(params.welcomeActions);
     expect(result.triggerWelcomeAuth).toBe(params.triggerWelcomeAuth);

@@ -27,8 +27,7 @@ export interface UIActionsParams {
   handleSteer: (text: string) => boolean;
   handleClearScreen: () => void;
 
-  // Theme dialog
-  openThemeDialog: () => void;
+  // Theme dialog (open state lives in DialogStore)
   handleThemeSelect: (
     themeName: string | undefined,
     scope: SettingScope,
@@ -36,43 +35,28 @@ export interface UIActionsParams {
   handleThemeHighlight: (themeName: string | undefined) => void;
 
   // Settings dialog
-  openSettingsDialog: () => void;
-  closeSettingsDialog: () => void;
   handleSettingsRestart: () => void;
 
-  // Auth dialog
-  openAuthDialog: () => void;
+  // Auth dialog (open state lives in DialogStore)
   handleAuthSelect: (
     method: string | undefined,
     scope: SettingScope,
   ) => Promise<void>;
   handleAuthTimeout: () => void;
 
-  // Editor dialog
-  openEditorDialog: () => void;
+  // Editor dialog (open state lives in DialogStore)
   handleEditorSelect: (
     editorType: EditorType | undefined,
     scope: SettingScope,
   ) => void;
-  exitEditorDialog: () => void;
 
-  // Provider dialog
-  openProviderDialog: () => void;
+  // Provider dialog (open state lives in DialogStore)
   handleProviderSelect: (provider: string) => Promise<void>;
-  exitProviderDialog: () => void;
 
-  // Load profile dialog
-  openLoadProfileDialog: () => void;
+  // Load profile dialog (open state lives in DialogStore)
   handleProfileSelect: (profile: string) => void;
-  exitLoadProfileDialog: () => void;
 
-  // Create profile dialog
-  openCreateProfileDialog: () => void;
-  exitCreateProfileDialog: () => void;
-
-  // Profile management dialogs
-  openProfileListDialog: () => void;
-  closeProfileListDialog: () => void;
+  // Profile management dialogs (open state lives in DialogStore)
   viewProfileDetail: (profileName: string, openedDirectly?: boolean) => void;
   closeProfileDetailDialog: () => void;
   loadProfileFromDetail: (profileName: string) => void;
@@ -86,10 +70,8 @@ export interface UIActionsParams {
     updatedProfile: unknown,
   ) => Promise<void>;
 
-  // Tools dialog
-  openToolsDialog: (action: 'enable' | 'disable') => void;
+  // Tools dialog (open state lives in DialogStore)
   handleToolsSelect: (tool: string) => void;
-  exitToolsDialog: () => void;
 
   // Folder trust dialog
   handleFolderTrustSelect: (choice: FolderTrustChoice) => Promise<void>;
@@ -216,42 +198,26 @@ export function buildUIActions(params: UIActionsParams): UIActions {
     handleClearScreen: params.handleClearScreen,
 
     // Theme dialog
-    openThemeDialog: params.openThemeDialog,
     handleThemeSelect: params.handleThemeSelect,
     handleThemeHighlight: params.handleThemeHighlight,
 
     // Settings dialog
-    openSettingsDialog: params.openSettingsDialog,
-    closeSettingsDialog: params.closeSettingsDialog,
     handleSettingsRestart: params.handleSettingsRestart,
 
     // Auth dialog
-    openAuthDialog: params.openAuthDialog,
     handleAuthSelect: params.handleAuthSelect,
     handleAuthTimeout: params.handleAuthTimeout,
 
     // Editor dialog
-    openEditorDialog: params.openEditorDialog,
     handleEditorSelect: params.handleEditorSelect,
-    exitEditorDialog: params.exitEditorDialog,
 
     // Provider dialog
-    openProviderDialog: params.openProviderDialog,
     handleProviderSelect: params.handleProviderSelect,
-    exitProviderDialog: params.exitProviderDialog,
 
     // Load profile dialog
-    openLoadProfileDialog: params.openLoadProfileDialog,
     handleProfileSelect: params.handleProfileSelect,
-    exitLoadProfileDialog: params.exitLoadProfileDialog,
-
-    // Create profile dialog
-    openCreateProfileDialog: params.openCreateProfileDialog,
-    exitCreateProfileDialog: params.exitCreateProfileDialog,
 
     // Profile management dialogs
-    openProfileListDialog: params.openProfileListDialog,
-    closeProfileListDialog: params.closeProfileListDialog,
     viewProfileDetail: params.viewProfileDetail,
     closeProfileDetailDialog: params.closeProfileDetailDialog,
     loadProfileFromDetail: params.loadProfileFromDetail,
@@ -263,9 +229,7 @@ export function buildUIActions(params: UIActionsParams): UIActions {
     saveProfileFromEditor: params.saveProfileFromEditor,
 
     // Tools dialog
-    openToolsDialog: params.openToolsDialog,
     handleToolsSelect: params.handleToolsSelect,
-    exitToolsDialog: params.exitToolsDialog,
 
     // Folder trust dialog
     handleFolderTrustSelect: params.handleFolderTrustSelect,

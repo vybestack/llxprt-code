@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -215,21 +215,9 @@ describe('ThemeDialog', () => {
     thought: null,
     buffer: {} as unknown as UIState['buffer'],
     shellModeActive: false,
-    isThemeDialogOpen: true,
-    isSettingsDialogOpen: false,
-    isAuthDialogOpen: false,
-    isEditorDialogOpen: false,
-    isProviderDialogOpen: false,
-    isLoadProfileDialogOpen: false,
-    isCreateProfileDialogOpen: false,
-    isProfileListDialogOpen: false,
-    isProfileDetailDialogOpen: false,
-    isProfileEditorDialogOpen: false,
-    isToolsDialogOpen: false,
     isFolderTrustDialogOpen: false,
     showWorkspaceMigrationDialog: false,
     showPrivacyNotice: false,
-    isOAuthCodeDialogOpen: false,
     isModelsDialogOpen: false,
     isSessionBrowserDialogOpen: false,
     isModelConfigDialogOpen: false,

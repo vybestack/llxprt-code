@@ -11,38 +11,6 @@ export type AppAction =
       type: 'ADD_ITEM';
       payload: { itemData: Omit<HistoryItem, 'id'>; baseTimestamp?: number };
     }
-  | {
-      type: 'OPEN_DIALOG';
-      payload:
-        | 'theme'
-        | 'auth'
-        | 'editor'
-        | 'provider'
-        | 'privacy'
-        | 'loadProfile'
-        | 'createProfile'
-        | 'profileList'
-        | 'profileDetail'
-        | 'profileEditor'
-        | 'tools'
-        | 'oauthCode';
-    }
-  | {
-      type: 'CLOSE_DIALOG';
-      payload:
-        | 'theme'
-        | 'auth'
-        | 'editor'
-        | 'provider'
-        | 'privacy'
-        | 'loadProfile'
-        | 'createProfile'
-        | 'profileList'
-        | 'profileDetail'
-        | 'profileEditor'
-        | 'tools'
-        | 'oauthCode';
-    }
   | { type: 'SET_WARNING'; payload: { key: string; message: string } }
   | { type: 'CLEAR_WARNING'; payload: string }
   | { type: 'SET_THEME_ERROR'; payload: string | null }
@@ -51,20 +19,6 @@ export type AppAction =
   | { type: 'SET_NEEDS_RELOGIN'; payload: boolean };
 
 export interface AppState {
-  openDialogs: {
-    theme: boolean;
-    auth: boolean;
-    editor: boolean;
-    provider: boolean;
-    privacy: boolean;
-    loadProfile: boolean;
-    createProfile: boolean;
-    profileList: boolean;
-    profileDetail: boolean;
-    profileEditor: boolean;
-    tools: boolean;
-    oauthCode: boolean;
-  };
   warnings: Map<string, string>;
   errors: {
     theme: string | null;
@@ -79,20 +33,6 @@ export interface AppState {
 }
 
 export const initialAppState: AppState = {
-  openDialogs: {
-    theme: false,
-    auth: false,
-    editor: false,
-    provider: false,
-    privacy: false,
-    loadProfile: false,
-    createProfile: false,
-    profileList: false,
-    profileDetail: false,
-    profileEditor: false,
-    tools: false,
-    oauthCode: false,
-  },
   warnings: new Map(),
   errors: {
     theme: null,
@@ -103,6 +43,11 @@ export const initialAppState: AppState = {
   lastAddItemAction: null,
 };
 
+/**
+ * App state reducer. Dialog open/close state now lives in the DialogStore
+ * (migrated slice B2b); this reducer keeps warnings, error fields, and the
+ * relogin flag that SessionController depends on.
+ */
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'ADD_ITEM':
@@ -110,24 +55,6 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         lastAddItemAction: action.payload,
-      };
-
-    case 'OPEN_DIALOG':
-      return {
-        ...state,
-        openDialogs: {
-          ...state.openDialogs,
-          [action.payload]: true,
-        },
-      };
-
-    case 'CLOSE_DIALOG':
-      return {
-        ...state,
-        openDialogs: {
-          ...state.openDialogs,
-          [action.payload]: false,
-        },
       };
 
     case 'SET_WARNING': {

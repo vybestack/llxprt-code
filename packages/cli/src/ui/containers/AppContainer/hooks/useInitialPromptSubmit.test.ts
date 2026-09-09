@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,14 +9,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { act } from 'react';
 import { renderHook } from '../../../../test-utils/render.js';
 import { useInitialPromptSubmit } from './useInitialPromptSubmit.js';
+import { createDialogStore } from '../../../stores/dialog/dialogStore.js';
 
 const blockedByDialogsClosed = {
-  isAuthDialogOpen: false,
-  isThemeDialogOpen: false,
-  isEditorDialogOpen: false,
-  isProviderDialogOpen: false,
-  isToolsDialogOpen: false,
-  isCreateProfileDialogOpen: false,
   showPrivacyNotice: false,
   isWelcomeDialogOpen: false,
   isFolderTrustDialogOpen: false,
@@ -29,6 +24,7 @@ const createParams = (overrides: Partial<HookParams> = {}): HookParams => ({
   submitPrompt: vi.fn().mockResolvedValue(undefined),
   agentClientPresent: true,
   interactiveRuntimeReady: true,
+  store: createDialogStore(),
   blockedByDialogs: blockedByDialogsClosed,
   startupGuardsInitialized: true,
   ...overrides,
@@ -229,6 +225,43 @@ describe('useInitialPromptSubmit', () => {
     });
 
     expect(submitPrompt).not.toHaveBeenCalled();
+  });
+
+  it('does not submit while a blocking dialog is open in the DialogStore', async () => {
+    const submitPrompt = vi.fn().mockResolvedValue(undefined);
+    const store = createDialogStore();
+    store.commands.openDialog({ kind: 'auth', payload: {} });
+
+    const { rerender } = renderHook(
+      ({ open }: { open: boolean }) =>
+        useInitialPromptSubmit(
+          createParams({
+            initialPrompt: 'hello',
+            submitPrompt,
+            store,
+            blockedByDialogs: {
+              ...blockedByDialogsClosed,
+              isWelcomeDialogOpen: open,
+            },
+          }),
+        ),
+      { initialProps: { open: true } },
+    );
+
+    await act(async () => {
+      await runAllTimersAsync();
+    });
+
+    expect(submitPrompt).not.toHaveBeenCalled();
+
+    store.commands.closeDialog('auth');
+    rerender({ open: false });
+
+    await act(async () => {
+      await runAllTimersAsync();
+    });
+
+    expect(submitPrompt).toHaveBeenCalledWith('hello');
   });
 
   it('does not re-submit after startup guards transition when prompt was already submitted', async () => {

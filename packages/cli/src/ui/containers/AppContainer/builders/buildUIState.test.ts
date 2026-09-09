@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -34,21 +34,9 @@ const makeParams = (): UIStateParams => ({
   shellModeActive: false,
 
   // Dialog states
-  isThemeDialogOpen: false,
-  isSettingsDialogOpen: false,
-  isAuthDialogOpen: false,
-  isEditorDialogOpen: false,
-  isProviderDialogOpen: false,
-  isLoadProfileDialogOpen: false,
-  isCreateProfileDialogOpen: false,
-  isProfileListDialogOpen: false,
-  isProfileDetailDialogOpen: false,
-  isProfileEditorDialogOpen: false,
-  isToolsDialogOpen: false,
   isFolderTrustDialogOpen: false,
   showWorkspaceMigrationDialog: false,
   showPrivacyNotice: false,
-  isOAuthCodeDialogOpen: false,
   isModelsDialogOpen: false,
   isSessionBrowserDialogOpen: false,
   isModelConfigDialogOpen: false,
@@ -72,6 +60,7 @@ const makeParams = (): UIStateParams => ({
   selectedProfileName: null,
   selectedProfileData: null,
   defaultProfileName: null,
+  createProfileProviders: [],
   activeProfileName: null,
   profileDialogError: null,
   profileDialogLoading: false,
@@ -251,21 +240,9 @@ describe('buildUIState', () => {
 
   it('maps dialog states correctly', () => {
     const params = makeParams();
-    params.isThemeDialogOpen = true;
-    params.isSettingsDialogOpen = true;
-    params.isAuthDialogOpen = true;
-    params.isEditorDialogOpen = true;
-    params.isProviderDialogOpen = true;
-    params.isLoadProfileDialogOpen = true;
-    params.isCreateProfileDialogOpen = true;
-    params.isProfileListDialogOpen = true;
-    params.isProfileDetailDialogOpen = true;
-    params.isProfileEditorDialogOpen = true;
-    params.isToolsDialogOpen = true;
     params.isFolderTrustDialogOpen = true;
     params.showWorkspaceMigrationDialog = true;
     params.showPrivacyNotice = true;
-    params.isOAuthCodeDialogOpen = true;
     params.isModelsDialogOpen = true;
     params.isSessionBrowserDialogOpen = true;
     params.isModelConfigDialogOpen = true;
@@ -273,21 +250,9 @@ describe('buildUIState', () => {
 
     const result = buildUIState(params);
 
-    expect(result.isThemeDialogOpen).toBe(true);
-    expect(result.isSettingsDialogOpen).toBe(true);
-    expect(result.isAuthDialogOpen).toBe(true);
-    expect(result.isEditorDialogOpen).toBe(true);
-    expect(result.isProviderDialogOpen).toBe(true);
-    expect(result.isLoadProfileDialogOpen).toBe(true);
-    expect(result.isCreateProfileDialogOpen).toBe(true);
-    expect(result.isProfileListDialogOpen).toBe(true);
-    expect(result.isProfileDetailDialogOpen).toBe(true);
-    expect(result.isProfileEditorDialogOpen).toBe(true);
-    expect(result.isToolsDialogOpen).toBe(true);
     expect(result.isFolderTrustDialogOpen).toBe(true);
     expect(result.showWorkspaceMigrationDialog).toBe(true);
     expect(result.showPrivacyNotice).toBe(true);
-    expect(result.isOAuthCodeDialogOpen).toBe(true);
     expect(result.isModelsDialogOpen).toBe(true);
     expect(result.isSessionBrowserDialogOpen).toBe(true);
     expect(result.isModelConfigDialogOpen).toBe(true);

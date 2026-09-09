@@ -65,6 +65,7 @@ import { useDialogStore } from '../stores/dialog/DialogContext.js';
 import { useStoreSelector } from '../stores/useStoreSelector.js';
 import {
   selectActiveDialog,
+  type DialogKind,
   type DialogRequest,
 } from '../stores/dialog/dialogStore.js';
 import type { LoadedSettings, SettingScope } from '../../config/settings.js';
@@ -307,6 +308,7 @@ function renderEditorDialog(
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
   settings: LoadedSettings,
+  onExit: () => void,
 ) {
   return (
     <Box flexDirection="column">
@@ -318,7 +320,7 @@ function renderEditorDialog(
       <EditorSettingsDialog
         onSelect={uiActions.handleEditorSelect}
         settings={settings}
-        onExit={uiActions.exitEditorDialog}
+        onExit={onExit}
       />
     </Box>
   );
@@ -326,8 +328,8 @@ function renderEditorDialog(
 
 function renderProviderDialog(
   uiState: ReturnType<typeof useUIState>,
-  uiActions: ReturnType<typeof useUIActions>,
   handleProviderSelect: (provider: string) => void,
+  onClose: () => void,
 ) {
   return (
     <Box flexDirection="column">
@@ -335,7 +337,7 @@ function renderProviderDialog(
         providers={uiState.providerOptions}
         currentProvider={uiState.selectedProvider}
         onSelect={handleProviderSelect}
-        onClose={uiActions.exitProviderDialog}
+        onClose={onClose}
       />
     </Box>
   );
@@ -344,13 +346,14 @@ function renderProviderDialog(
 function renderLoadProfileDialog(
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
+  onClose: () => void,
 ) {
   return (
     <Box flexDirection="column">
       <LoadProfileDialog
         profiles={uiState.profiles}
         onSelect={uiActions.handleProfileSelect}
-        onClose={uiActions.exitLoadProfileDialog}
+        onClose={onClose}
       />
     </Box>
   );
@@ -359,13 +362,14 @@ function renderLoadProfileDialog(
 function renderCreateProfileDialog(
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
+  onClose: () => void,
 ) {
   return (
     <Box flexDirection="column">
       <ProfileCreateWizard
-        onClose={uiActions.exitCreateProfileDialog}
+        onClose={onClose}
         onLoadProfile={uiActions.handleProfileSelect}
-        availableProviders={uiState.providerOptions}
+        availableProviders={uiState.createProfileProviders}
       />
     </Box>
   );
@@ -374,13 +378,14 @@ function renderCreateProfileDialog(
 function renderProfileListDialogView(
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
+  onClose: () => void,
 ) {
   return (
     <Box flexDirection="column">
       <ProfileListDialog
         profiles={uiState.profileListItems}
         onSelect={uiActions.loadProfileFromDetail}
-        onClose={uiActions.closeProfileListDialog}
+        onClose={onClose}
         onViewDetail={uiActions.viewProfileDetail}
         onDelete={uiActions.deleteProfileFromList}
         isLoading={uiState.profileDialogLoading}
@@ -437,47 +442,20 @@ function renderProfileEditorDialogView(
   );
 }
 
-function renderProfileDialogs(
-  uiState: ReturnType<typeof useUIState>,
-  uiActions: ReturnType<typeof useUIActions>,
-) {
-  if (uiState.isLoadProfileDialogOpen) {
-    return renderLoadProfileDialog(uiState, uiActions);
-  }
-  if (uiState.isCreateProfileDialogOpen) {
-    return renderCreateProfileDialog(uiState, uiActions);
-  }
-  if (uiState.isProfileListDialogOpen) {
-    return renderProfileListDialogView(uiState, uiActions);
-  }
-  if (uiState.isProfileDetailDialogOpen) {
-    return renderProfileDetailDialogView(uiState, uiActions);
-  }
-  if (
-    uiState.isProfileEditorDialogOpen &&
-    uiState.selectedProfileData != null
-  ) {
-    return renderProfileEditorDialogView(
-      uiState,
-      uiActions,
-      uiState.selectedProfileData,
-    );
-  }
-  return null;
-}
-
 function renderToolsDialog(
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
+  action: 'enable' | 'disable',
+  onClose: () => void,
 ) {
   return (
     <Box flexDirection="column">
       <ToolsDialog
         tools={uiState.toolsDialogTools}
-        action={uiState.toolsDialogAction}
+        action={action}
         disabledTools={uiState.toolsDialogDisabledTools}
         onSelect={uiActions.handleToolsSelect}
-        onClose={uiActions.exitToolsDialog}
+        onClose={onClose}
       />
     </Box>
   );
@@ -627,97 +605,159 @@ function useDialogManagerState(
   };
 }
 
-function renderDialogBodyFirstHalf(
-  uiState: ReturnType<typeof useUIState>,
-  uiActions: ReturnType<typeof useUIActions>,
-  settings: LoadedSettings,
-  config: CliUiRuntime,
-  state: ReturnType<typeof useDialogManagerState>,
+interface StoreDialogRenderContext {
+  uiState: ReturnType<typeof useUIState>;
+  uiActions: ReturnType<typeof useUIActions>;
+  settings: LoadedSettings;
+  config: CliUiRuntime;
+  addItem: UseHistoryManagerReturn['addItem'];
+}
+
+function renderProfileStoreDialog(
+  active: DialogRequest,
+  ctx: StoreDialogRenderContext,
+  close: (kind: DialogKind) => void,
 ) {
-  if (uiState.isThemeDialogOpen) {
-    return renderThemeDialog(
-      uiState,
-      uiActions,
-      settings,
-      state.constrainHeight,
-      state.terminalHeight,
-      state.staticExtraHeight,
-      state.mainAreaWidth,
-    );
+  const { uiState, uiActions } = ctx;
+  switch (active.kind) {
+    case 'profileList':
+      return renderProfileListDialogView(uiState, uiActions, () =>
+        close('profileList'),
+      );
+    case 'profileDetail':
+      return renderProfileDetailDialogView(uiState, uiActions);
+    case 'profileEditor':
+      if (uiState.selectedProfileData != null) {
+        return renderProfileEditorDialogView(
+          uiState,
+          uiActions,
+          uiState.selectedProfileData,
+        );
+      }
+      return null;
+    default:
+      return undefined;
   }
-  if (uiState.isSettingsDialogOpen) {
-    return (
-      <Box flexDirection="column">
-        <SettingsDialog
-          settings={settings}
-          onSelect={uiActions.closeSettingsDialog}
-          onRestartRequest={uiActions.handleSettingsRestart}
+}
+
+function renderPayloadStoreDialog(
+  active: DialogRequest,
+  ctx: StoreDialogRenderContext,
+  close: (kind: DialogKind) => void,
+) {
+  const { uiState, uiActions, config, addItem } = ctx;
+  switch (active.kind) {
+    case 'tools': {
+      const payload = active.payload as { action: 'enable' | 'disable' };
+      return renderToolsDialog(uiState, uiActions, payload.action, () =>
+        close('tools'),
+      );
+    }
+    case 'permissions':
+      return (
+        <PermissionsModifyTrustDialog
+          onExit={() => close('permissions')}
+          addItem={addItem}
           config={config}
         />
-      </Box>
-    );
+      );
+    case 'logging': {
+      const payload = active.payload as { entries: unknown[] };
+      return (
+        <LoggingDialog
+          entries={payload.entries as LoggingDialogEntries}
+          onClose={() => close('logging')}
+        />
+      );
+    }
+    case 'subagent': {
+      const payload = active.payload as {
+        initialView?: SubagentView;
+        initialName?: string;
+      };
+      return (
+        <SubagentManagerDialog
+          onClose={() => close('subagent')}
+          initialView={payload.initialView ?? SubagentView.MENU}
+          initialSubagentName={payload.initialName}
+        />
+      );
+    }
+    default:
+      return undefined;
   }
-  if (uiState.isAuthDialogOpen) {
-    return renderAuthDialog(uiState, settings, state.handleAuthSelect);
-  }
-  if (uiState.isOAuthCodeDialogOpen) {
-    return renderOAuthCodeDialog(
-      uiState,
-      uiActions,
-      state.handleOAuthCodeSubmit,
-    );
-  }
-  if (uiState.isEditorDialogOpen) {
-    return renderEditorDialog(uiState, uiActions, settings);
-  }
-  if (uiState.isProviderDialogOpen) {
-    return renderProviderDialog(uiState, uiActions, state.handleProviderSelect);
-  }
-  return undefined;
 }
 
 /**
- * Store-backed dialogs (permissions, logging, subagent): rendered from the
- * active DialogStore entry instead of per-dialog booleans.
+ * Store-backed dialogs: rendered from the active DialogStore entry instead of
+ * per-dialog booleans. Dialog data (provider lists, profiles, tools) still
+ * flows through UIState until the data-store slices land.
  */
 function renderStoreBackedDialog(
   active: DialogRequest | null,
+  ctx: StoreDialogRenderContext,
   state: ReturnType<typeof useDialogManagerState>,
-  config: CliUiRuntime,
-  addItem: UseHistoryManagerReturn['addItem'],
 ) {
-  if (active?.kind === 'permissions') {
-    return (
-      <PermissionsModifyTrustDialog
-        onExit={() => state.closeStoreDialog('permissions')}
-        addItem={addItem}
-        config={config}
-      />
-    );
+  const { uiState, uiActions, settings, config } = ctx;
+  const close = state.closeStoreDialog;
+  switch (active?.kind) {
+    case 'theme':
+      return renderThemeDialog(
+        uiState,
+        uiActions,
+        settings,
+        state.constrainHeight,
+        state.terminalHeight,
+        state.staticExtraHeight,
+        state.mainAreaWidth,
+      );
+    case 'settings':
+      return (
+        <Box flexDirection="column">
+          <SettingsDialog
+            settings={settings}
+            onSelect={() => close('settings')}
+            onRestartRequest={uiActions.handleSettingsRestart}
+            config={config}
+          />
+        </Box>
+      );
+    case 'auth':
+      return renderAuthDialog(uiState, settings, state.handleAuthSelect);
+    case 'oauthCode':
+      return renderOAuthCodeDialog(
+        uiState,
+        uiActions,
+        state.handleOAuthCodeSubmit,
+      );
+    case 'editor':
+      return renderEditorDialog(uiState, uiActions, settings, () =>
+        close('editor'),
+      );
+    case 'provider':
+      return renderProviderDialog(uiState, state.handleProviderSelect, () =>
+        close('provider'),
+      );
+    case 'loadProfile':
+      return renderLoadProfileDialog(uiState, uiActions, () =>
+        close('loadProfile'),
+      );
+    case 'createProfile':
+      return renderCreateProfileDialog(uiState, uiActions, () =>
+        close('createProfile'),
+      );
+    case 'profileList':
+    case 'profileDetail':
+    case 'profileEditor':
+      return renderProfileStoreDialog(active, ctx, close);
+    case 'tools':
+    case 'permissions':
+    case 'logging':
+    case 'subagent':
+      return renderPayloadStoreDialog(active, ctx, close);
+    default:
+      return undefined;
   }
-  if (active?.kind === 'logging') {
-    const payload = active.payload as { entries: unknown[] };
-    return (
-      <LoggingDialog
-        entries={payload.entries as LoggingDialogEntries}
-        onClose={() => state.closeStoreDialog('logging')}
-      />
-    );
-  }
-  if (active?.kind === 'subagent') {
-    const payload = active.payload as {
-      initialView?: SubagentView;
-      initialName?: string;
-    };
-    return (
-      <SubagentManagerDialog
-        onClose={() => state.closeStoreDialog('subagent')}
-        initialView={payload.initialView ?? SubagentView.MENU}
-        initialSubagentName={payload.initialName}
-      />
-    );
-  }
-  return undefined;
 }
 
 function renderDialogBodySecondHalf(
@@ -727,21 +767,11 @@ function renderDialogBodySecondHalf(
   addItem: UseHistoryManagerReturn['addItem'],
   state: ReturnType<typeof useDialogManagerState>,
 ) {
-  if (uiState.isToolsDialogOpen) {
-    return renderToolsDialog(uiState, uiActions);
-  }
   if (uiState.showPrivacyNotice) {
     return (
       <PrivacyNotice onExit={state.handlePrivacyNoticeExit} config={config} />
     );
   }
-  const storeDialog = renderStoreBackedDialog(
-    state.activeStoreDialog,
-    state,
-    config,
-    addItem,
-  );
-  if (storeDialog !== undefined) return storeDialog;
   if (uiState.isModelsDialogOpen) {
     return renderModelsDialog(
       uiState,
@@ -786,17 +816,12 @@ function renderDialogBody(
   addItem: UseHistoryManagerReturn['addItem'],
   state: ReturnType<typeof useDialogManagerState>,
 ) {
-  const firstHalf = renderDialogBodyFirstHalf(
-    uiState,
-    uiActions,
-    settings,
-    config,
+  const storeDialog = renderStoreBackedDialog(
+    state.activeStoreDialog,
+    { uiState, uiActions, settings, config, addItem },
     state,
   );
-  if (firstHalf !== undefined) return firstHalf;
-
-  const profileDialog = renderProfileDialogs(uiState, uiActions);
-  if (profileDialog) return profileDialog;
+  if (storeDialog !== undefined) return storeDialog;
 
   return renderDialogBodySecondHalf(uiState, uiActions, config, addItem, state);
 }

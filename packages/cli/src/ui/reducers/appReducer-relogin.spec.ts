@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -46,7 +46,7 @@ describe('appReducer needsRelogin', () => {
     const result = appReducer(initialAppState, action);
 
     expect(result).not.toBe(initialAppState);
-    expect(result.openDialogs).toBe(initialAppState.openDialogs);
+    expect(result.warnings).toBe(initialAppState.warnings);
     expect(result.errors).toBe(initialAppState.errors);
   });
 });

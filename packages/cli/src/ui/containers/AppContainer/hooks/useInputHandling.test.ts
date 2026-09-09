@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -19,7 +19,7 @@ interface InputHandlingHarness {
   pendingHistoryItems: HistoryItemWithoutId[];
   lastSubmittedPromptRef: { current: string | null };
   needsRelogin: boolean;
-  appDispatch: ReturnType<typeof vi.fn>;
+  openAuthDialog: ReturnType<typeof vi.fn>;
 }
 
 const createHarness = (
@@ -37,7 +37,7 @@ const createHarness = (
     pendingHistoryItems: [],
     lastSubmittedPromptRef: { current: 'last submitted prompt' },
     needsRelogin: false,
-    appDispatch: vi.fn(),
+    openAuthDialog: vi.fn(),
     ...overrides,
   };
 };
@@ -51,7 +51,7 @@ const renderInputHandling = (harness: InputHandlingHarness) =>
       pendingHistoryItems: harness.pendingHistoryItems,
       lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
       needsRelogin: harness.needsRelogin,
-      appDispatch: harness.appDispatch,
+      openAuthDialog: harness.openAuthDialog,
     }),
   );
 
@@ -179,10 +179,7 @@ describe('useInputHandling', () => {
       result.current.handleFinalSubmit('search my files');
     });
 
-    expect(harness.appDispatch).toHaveBeenCalledWith({
-      type: 'OPEN_DIALOG',
-      payload: 'auth',
-    });
+    expect(harness.openAuthDialog).toHaveBeenCalledTimes(1);
     expect(harness.submitQuery).not.toHaveBeenCalled();
     expect(harness.addInput).toHaveBeenCalledWith('search my files');
     expect(harness.lastSubmittedPromptRef.current).toBe('search my files');
@@ -199,10 +196,7 @@ describe('useInputHandling', () => {
       result.current.handleFinalSubmit('search my files');
     });
 
-    expect(harness.appDispatch).toHaveBeenCalledWith({
-      type: 'OPEN_DIALOG',
-      payload: 'auth',
-    });
+    expect(harness.openAuthDialog).toHaveBeenCalledTimes(1);
     expect(harness.addInput).not.toHaveBeenCalled();
     expect(harness.submitQuery).not.toHaveBeenCalled();
   });
@@ -217,7 +211,7 @@ describe('useInputHandling', () => {
       result.current.handleFinalSubmit('/help');
     });
 
-    expect(harness.appDispatch).not.toHaveBeenCalled();
+    expect(harness.openAuthDialog).not.toHaveBeenCalled();
     expect(harness.submitQuery).toHaveBeenCalledWith('/help');
   });
 });

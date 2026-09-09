@@ -10,7 +10,6 @@ import type { UseInputHistoryStoreReturn } from '../../../hooks/useInputHistoryS
 import type { HistoryItemWithoutId } from '../../../types.js';
 import { ToolCallStatus } from '../../../types.js';
 import { isSlashCommand } from '../../../utils/commandUtils.js';
-import type { AppAction } from '../../../reducers/appReducer.js';
 
 export interface UseInputHandlingParams {
   buffer: TextBuffer;
@@ -20,8 +19,8 @@ export interface UseInputHandlingParams {
   lastSubmittedPromptRef: React.MutableRefObject<string | null>;
   /** Whether the user needs to re-authenticate before continuing. */
   needsRelogin: boolean;
-  /** Dispatch app actions (e.g., open auth dialog). */
-  appDispatch: React.Dispatch<AppAction>;
+  /** Opens the auth dialog when a submit is deferred for re-login. */
+  openAuthDialog: () => void;
 }
 
 export interface UseInputHandlingResult {
@@ -79,7 +78,7 @@ function useFinalSubmitHandler({
   submitQuery,
   lastSubmittedPromptRef,
   needsRelogin,
-  appDispatch,
+  openAuthDialog,
 }: UseInputHandlingParams): (submittedValue: string) => void {
   return useCallback(
     (submittedValue: string) => {
@@ -88,7 +87,7 @@ function useFinalSubmitHandler({
 
       const isCommand = isSlashCommand(trimmedValue);
       if (!isCommand && needsRelogin) {
-        appDispatch({ type: 'OPEN_DIALOG', payload: 'auth' });
+        openAuthDialog();
         captureDeferredPrompt(
           trimmedValue,
           inputHistoryStore,
@@ -106,7 +105,7 @@ function useFinalSubmitHandler({
       inputHistoryStore,
       lastSubmittedPromptRef,
       needsRelogin,
-      appDispatch,
+      openAuthDialog,
     ],
   );
 }

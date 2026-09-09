@@ -6,10 +6,10 @@
 
 import { useCallback, useState } from 'react';
 import { MessageType } from '../types.js';
-import { useAppDispatch } from '../contexts/AppDispatchContext.js';
-import type { AppState } from '../reducers/appReducer.js';
-
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+import type { DialogStore } from '../stores/dialog/dialogStore.js';
+import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
+import { useStoreSelector } from '../stores/useStoreSelector.js';
 
 interface UseLoadProfileDialogParams {
   addMessage: (msg: {
@@ -17,7 +17,8 @@ interface UseLoadProfileDialogParams {
     content: string;
     timestamp: Date;
   }) => void;
-  appState: AppState;
+  store: DialogStore;
+  dialogs: DialogOpeners;
 }
 
 function formatInfoMessages(result: { infoMessages: string[] }): string {
@@ -70,11 +71,13 @@ function handleProfileLoadError(
 
 export const useLoadProfileDialog = ({
   addMessage,
-  appState,
+  store,
+  dialogs,
 }: UseLoadProfileDialogParams) => {
-  const appDispatch = useAppDispatch();
   const runtime = useRuntimeApi();
-  const showDialog = appState.openDialogs.loadProfile;
+  const showDialog = useStoreSelector(store.store, (state) =>
+    state.requests.some((r) => r.kind === 'loadProfile'),
+  );
   const [profiles, setProfiles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -84,7 +87,7 @@ export const useLoadProfileDialog = ({
     setIsLoading(true);
 
     // Open dialog immediately to show loading state
-    appDispatch({ type: 'OPEN_DIALOG', payload: 'loadProfile' });
+    dialogs.loadProfile.open({});
 
     try {
       const availableProfiles = await runtime.listSavedProfiles();
@@ -96,16 +99,13 @@ export const useLoadProfileDialog = ({
         timestamp: new Date(),
       });
       // Close dialog on error
-      appDispatch({ type: 'CLOSE_DIALOG', payload: 'loadProfile' });
+      dialogs.loadProfile.close();
     } finally {
       setIsLoading(false);
     }
-  }, [addMessage, appDispatch, runtime]);
+  }, [addMessage, dialogs, runtime]);
 
-  const closeDialog = useCallback(
-    () => appDispatch({ type: 'CLOSE_DIALOG', payload: 'loadProfile' }),
-    [appDispatch],
-  );
+  const closeDialog = useCallback(() => dialogs.loadProfile.close(), [dialogs]);
 
   const handleSelect = useCallback(
     async (profileName: string) => {
@@ -127,9 +127,9 @@ export const useLoadProfileDialog = ({
       } catch (error) {
         handleProfileLoadError(error, profileName, addMessage);
       }
-      appDispatch({ type: 'CLOSE_DIALOG', payload: 'loadProfile' });
+      dialogs.loadProfile.close();
     },
-    [addMessage, appDispatch, runtime],
+    [addMessage, dialogs, runtime],
   );
 
   return {

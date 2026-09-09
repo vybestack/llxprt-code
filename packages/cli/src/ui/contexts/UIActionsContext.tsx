@@ -30,8 +30,7 @@ export interface UIActions {
   handleSteer: (text: string) => boolean;
   handleClearScreen: () => void;
 
-  // Theme dialog
-  openThemeDialog: () => void;
+  // Theme dialog (open state lives in DialogStore)
   handleThemeSelect: (
     themeName: string | undefined,
     scope: SettingScope,
@@ -39,43 +38,28 @@ export interface UIActions {
   handleThemeHighlight: (themeName: string | undefined) => void;
 
   // Settings dialog
-  openSettingsDialog: () => void;
-  closeSettingsDialog: () => void;
   handleSettingsRestart: () => void;
 
-  // Auth dialog
-  openAuthDialog: () => void;
+  // Auth dialog (open state lives in DialogStore)
   handleAuthSelect: (
     method: string | undefined,
     scope: SettingScope,
   ) => Promise<void>;
   handleAuthTimeout: () => void;
 
-  // Editor dialog
-  openEditorDialog: () => void;
+  // Editor dialog (open state lives in DialogStore)
   handleEditorSelect: (
     editorType: EditorType | undefined,
     scope: SettingScope,
   ) => void;
-  exitEditorDialog: () => void;
 
-  // Provider dialog
-  openProviderDialog: () => void;
+  // Provider dialog (open state lives in DialogStore)
   handleProviderSelect: (provider: string) => Promise<void>;
-  exitProviderDialog: () => void;
 
-  // Load profile dialog
-  openLoadProfileDialog: () => void;
+  // Load profile dialog (open state lives in DialogStore)
   handleProfileSelect: (profile: string) => void;
-  exitLoadProfileDialog: () => void;
 
-  // Create profile dialog
-  openCreateProfileDialog: () => void;
-  exitCreateProfileDialog: () => void;
-
-  // Profile management dialogs
-  openProfileListDialog: () => void;
-  closeProfileListDialog: () => void;
+  // Profile management dialogs (open state lives in DialogStore)
   viewProfileDetail: (profileName: string, openedDirectly?: boolean) => void;
   closeProfileDetailDialog: () => void;
   loadProfileFromDetail: (profileName: string) => void;
@@ -89,10 +73,8 @@ export interface UIActions {
     updatedProfile: unknown,
   ) => Promise<void>;
 
-  // Tools dialog
-  openToolsDialog: (action: 'enable' | 'disable') => void;
+  // Tools dialog (open state lives in DialogStore)
   handleToolsSelect: (tool: string) => void;
-  exitToolsDialog: () => void;
 
   // Folder trust dialog
   handleFolderTrustSelect: (choice: FolderTrustChoice) => Promise<void>;

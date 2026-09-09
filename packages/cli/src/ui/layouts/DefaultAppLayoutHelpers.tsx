@@ -52,8 +52,9 @@ import type { ScrollableMainContentItem } from './scrollableMainContent.js';
 
 /**
  * True when any dialog currently owns the input surface. Combines the uiState
- * dialog flags with the DialogStore request slots (permissions/logging/subagent
- * in this slice).
+ * dialog flags with the DialogStore request slots (all dialog kinds except the
+ * pre-store holdouts: workspace migration, IDE prompt, folder trust, welcome,
+ * models, session browser, model config, policies, privacy notice).
  */
 function hasOpenDialog(state: DialogState): boolean {
   return (
@@ -72,18 +73,6 @@ export function useHasActiveDialog(uiState: UIState): boolean {
     uiState.isFolderTrustDialogOpen,
     uiState.isWelcomeDialogOpen,
     Boolean(uiState.confirmationRequest),
-    uiState.isThemeDialogOpen,
-    uiState.isSettingsDialogOpen,
-    uiState.isAuthDialogOpen,
-    uiState.isOAuthCodeDialogOpen,
-    uiState.isEditorDialogOpen,
-    uiState.isProviderDialogOpen,
-    uiState.isLoadProfileDialogOpen,
-    uiState.isCreateProfileDialogOpen,
-    uiState.isProfileListDialogOpen,
-    uiState.isProfileDetailDialogOpen,
-    uiState.isProfileEditorDialogOpen,
-    uiState.isToolsDialogOpen,
     uiState.isModelsDialogOpen,
     uiState.isSessionBrowserDialogOpen,
     uiState.isModelConfigDialogOpen,
@@ -303,6 +292,11 @@ export function usePendingItems(
     activeShellPtyId,
     embeddedShellFocused,
   );
+  const dialogStore = useDialogStore();
+  const editorDialogOpen = useStoreSelector(
+    dialogStore.store,
+    (state: DialogState) => state.requests.some((r) => r.kind === 'editor'),
+  );
 
   return React.useMemo(
     () =>
@@ -315,7 +309,7 @@ export function usePendingItems(
           }
           item={{ ...item, id: 0 }}
           isPending={true}
-          isFocused={!uiState.isEditorDialogOpen}
+          isFocused={!editorDialogOpen}
         />
       )),
     [
@@ -323,7 +317,7 @@ export function usePendingItems(
       base,
       constrainHeight,
       effectiveAvailableHeight,
-      uiState.isEditorDialogOpen,
+      editorDialogOpen,
     ],
   );
 }
