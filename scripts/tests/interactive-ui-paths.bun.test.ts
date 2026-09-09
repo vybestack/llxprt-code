@@ -104,6 +104,7 @@ describe('interactive-ui.yml: direct harness inputs are included', () => {
       'scripts/tmux-script.issue2208-newlines.fake.json',
       'scripts/tmux-script.issue2016-composer.fake.json',
       'scripts/tmux-script.provider-model.json',
+      'scripts/tmux-script.profile-create-wizard.json',
       'scripts/tmux-script.welcome.json',
       'scripts/tmux-script.session-browser.json',
       'scripts/tmux-script.session-browser-resize.json',
