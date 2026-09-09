@@ -253,3 +253,25 @@ code; targeted suite independently re-run 28 pass / 0 fail.
   open/synchronize with credentials from repo variables/secrets, includes
   changed test files by rule, and self-limits to 2 auto-reviews — the PR OCR
   round(s) provide the AI-review coverage within the 2+2 budget.
+
+## PR round (#3615) review log
+
+CI round 1 (2dc4f7d21): fully green (35 pass / 0 fail / 3 expected skips).
+PR review round (CodeRabbit + automatic OCR #1): 9 threads, triaged:
+
+| Finding | Class | Action |
+| --- | --- | --- |
+| index.ts: persistence attempt outside guarded boundary (cwd() throw → 44→1 flip) | In-scope-Fix | Guarded in writeFatalError (0211e4555) |
+| startup-fatal-log.ts: `-p` prompt alias leaks prompt into fatal.log (CWE-532) | In-scope-Fix | `-p`/`-i` redaction, bare + equals forms, 5 regression tests |
+| test afterEach rmSync loop could abort before env restore | In-scope-Fix | Env restored first, per-root guarded rmSync |
+| ×4 "assert parsed pause value in parser tests" (OCR, 2 duplicate pairs) | Reject | `pause` deliberately not mapped into CliArgs; acceptance + boolean-registration + pause-matrix tests pin AC4; mapped field would be dead surface |
+| "add pause to CliArgs; opt-out unreachable" (OCR) | Reject | Factually wrong: handler reads raw process.argv; unit-tested |
+| OCR bug/high duplicate of the CodeRabbit persistence finding | In-scope-Fix | Same fix (0211e4555) |
+
+Two round-1 local deferrals stand (getBunSpawn double-cast precedent; `--no-pause=true` equals-form rejected by yargs itself).
+
+Verification on 0211e4555: targeted 33/33; lint/typecheck/format/build exit 0 (format made no rewrites); full suite exit 1 confined to the 4 environmentally-failing files proven identical on pristine main plus one flaky core recording file that passes 16/16 in isolation (core untouched by branch); smoke failure unchanged from pristine-proven baseline (sandbox credential proxy).
+
+CI round 2 (0211e4555): one failure — `useSessionBrowser.part2.spec.ts:839`, a transient-state sampling race in a file this PR does not touch (imports only bun:test/node/core; passed on round 1 and in both local full-suite runs). Retried via empty commit.
+
+CI round 3 (b477d194e): fully green (32 pass / 0 fail / 5 expected skips). All 9 review threads resolved; zero new actionable findings from CodeRabbit re-review and OCR #2 (auto-review budget: 2 of 2 used, as capped).
