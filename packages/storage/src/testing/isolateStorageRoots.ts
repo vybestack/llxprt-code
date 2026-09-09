@@ -15,6 +15,7 @@ export const STORAGE_ENV_KEYS = [
   'LLXPRT_DATA_HOME',
   'LLXPRT_CACHE_HOME',
   'LLXPRT_LOG_HOME',
+  'LLXPRT_AGENTS_HOME',
 ] as const;
 
 export type StorageEnvKey = (typeof STORAGE_ENV_KEYS)[number];
@@ -26,6 +27,7 @@ export const STORAGE_ENV_SUBDIRECTORIES: Readonly<
   LLXPRT_DATA_HOME: 'data',
   LLXPRT_CACHE_HOME: 'cache',
   LLXPRT_LOG_HOME: 'log',
+  LLXPRT_AGENTS_HOME: 'agents',
 };
 
 /**

@@ -158,14 +158,28 @@ export class Storage {
   }
 
   /**
-   * Returns the global `.agents/` directory under the user's home directory,
-   * matching the cross-tool Agent Skills open standard
-   * (https://agentskills.io). Always resolved against `os.homedir()` so it
-   * never falls back to a world-writable temp directory. If the home
-   * directory cannot be determined, this throws rather than silently
-   * resolving to a relative or temp path (fail-closed for security).
+   * Returns the global `.agents/` directory, matching the cross-tool Agent
+   * Skills open standard (https://agentskills.io).
+   *
+   * Resolution order:
+   * 1. `LLXPRT_AGENTS_HOME` environment variable (must be absolute) — the
+   *    operator's explicit choice, mirroring `LLXPRT_CONFIG_HOME` and the
+   *    other category overrides; test isolation depends on it.
+   * 2. `os.homedir()/.agents` — always resolved against the real home so it
+   *    never falls back to a world-writable temp directory. If the home
+   *    directory cannot be determined, this throws rather than silently
+   *    resolving to a relative or temp path (fail-closed for security).
    */
   static getGlobalAgentsDir(): string {
+    const override = process.env.LLXPRT_AGENTS_HOME;
+    if (override !== undefined && override !== '') {
+      if (!path.isAbsolute(override)) {
+        throw new Error(
+          `LLXPRT_AGENTS_HOME must be an absolute path; refusing relative agents directory '${override}'.`,
+        );
+      }
+      return override;
+    }
     const homeDir = os.homedir();
     if (!homeDir || !path.isAbsolute(homeDir)) {
       throw new Error(

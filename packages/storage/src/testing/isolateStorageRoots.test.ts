@@ -40,6 +40,7 @@ describe('isolateStorageRoots', () => {
     expect(Storage.getGlobalDataDir().startsWith(tempRoot)).toBe(true);
     expect(Storage.getGlobalCacheDir().startsWith(tempRoot)).toBe(true);
     expect(Storage.getGlobalLogDir().startsWith(tempRoot)).toBe(true);
+    expect(Storage.getUserAgentSkillsDir().startsWith(tempRoot)).toBe(true);
   });
 
   it('assigns each storage category to its dedicated isolated subdirectory', () => {
@@ -49,6 +50,9 @@ describe('isolateStorageRoots', () => {
     expect(Storage.getGlobalDataDir()).toBe(path.join(tempRoot, 'data'));
     expect(Storage.getGlobalCacheDir()).toBe(path.join(tempRoot, 'cache'));
     expect(Storage.getGlobalLogDir()).toBe(path.join(tempRoot, 'log'));
+    expect(Storage.getUserAgentSkillsDir()).toBe(
+      path.join(tempRoot, 'agents', 'skills'),
+    );
   });
 
   it('provides one shared subdirectory mapping for every storage variable', () => {
@@ -59,6 +63,7 @@ describe('isolateStorageRoots', () => {
       ['LLXPRT_DATA_HOME', 'data'],
       ['LLXPRT_CACHE_HOME', 'cache'],
       ['LLXPRT_LOG_HOME', 'log'],
+      ['LLXPRT_AGENTS_HOME', 'agents'],
     ]);
   });
 

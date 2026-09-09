@@ -49,6 +49,20 @@
 
 Local OCR cap (2 reviews) is now exhausted. Remaining known follow-up: optional message-constant extraction (round-2 finding 1), tracked here rather than in a new issue at this stage.
 
+## Follow-up hardening: platform-level agents-dir isolation
+
+The initial hermeticity fix isolated only the one failing test via a
+`Storage.getUserAgentSkillsDir` spy. Review raised the stricter bar: no test
+may read real machine state, and the directory source must be controllable.
+`Storage.getGlobalAgentsDir()` now honors an explicit, absolute
+`LLXPRT_AGENTS_HOME` override (fail-closed on a relative value; the homedir
+fallback and its fail-closed guarantees are unchanged when the variable is
+unset), and `LLXPRT_AGENTS_HOME` joined `STORAGE_ENV_KEYS` in
+`isolateStorageRoots()` so all 14 workspaces that preload test storage
+isolation point the agents root at their temp dir automatically. The per-test
+spy was removed; the strict skill-set assertions now hold by platform
+guarantee. Storage suite 38/38 and agents suite 402/402 verified.
+
 ## Verification
 
 - `packages/agents` per-file suite (`bun run-bun-tests.ts`): 401/401 test files pass with the complete changeset (`tmp/verify3540/full-agents-suite-final.log`).
