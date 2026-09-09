@@ -55,15 +55,23 @@ function setupIsolatedLogHome(): string {
 
 /**
  * Per-suite teardown: removes every temp tree and restores the original env.
+ * Env is restored first and each rmSync is individually guarded so one
+ * unremovable root cannot skip the rest of the cleanup or leak the
+ * LLXPRT_LOG_HOME override into later tests.
  */
 function cleanupTempRootsAndRestoreEnv(): void {
-  for (const root of tempRoots.splice(0)) {
-    rmSync(root, { recursive: true, force: true });
-  }
   if (ORIGINAL_LOG_HOME === undefined) {
     delete process.env.LLXPRT_LOG_HOME;
   } else {
     process.env.LLXPRT_LOG_HOME = ORIGINAL_LOG_HOME;
+  }
+  for (const root of tempRoots.splice(0)) {
+    try {
+      rmSync(root, { recursive: true, force: true });
+    } catch {
+      // Keep removing the remaining roots; leaked temp dirs beat a poisoned
+      // test environment.
+    }
   }
 }
 
@@ -212,14 +220,54 @@ describe('redactArgvForLog (AC1)', () => {
   });
 
   it('passes non-key tokens through verbatim and leaves the input unmutated', () => {
-    const argv = ['llxprt', 'prompt-words', '-p', 'value', '--sandbox'];
+    // -q (quiet alias) is not a value-taking flag, so its following token is
+    // a positional, not a credential; -p/-i are covered by their own tests.
+    const argv = ['llxprt', 'prompt-words', '-q', 'value', '--sandbox'];
     const redacted = redactArgvForLog(argv);
     expect(redacted).toStrictEqual(argv);
     expect(argv).toStrictEqual([
       'llxprt',
       'prompt-words',
-      '-p',
+      '-q',
       'value',
+      '--sandbox',
+    ]);
+  });
+
+  it('redacts the value after the -p prompt alias', () => {
+    expect(redactArgvForLog(['llxprt', '-p', 'SECRET'])).toStrictEqual([
+      'llxprt',
+      '-p',
+      '[REDACTED]',
+    ]);
+  });
+
+  it('redacts the value after the -i prompt-interactive alias', () => {
+    expect(redactArgvForLog(['llxprt', '-i', 'SECRET'])).toStrictEqual([
+      'llxprt',
+      '-i',
+      '[REDACTED]',
+    ]);
+  });
+
+  it('redacts the value inside -p=<value>', () => {
+    expect(redactArgvForLog(['llxprt', '-p=SECRET'])).toStrictEqual([
+      'llxprt',
+      '-p=[REDACTED]',
+    ]);
+  });
+
+  it('redacts the value inside -i=<value>', () => {
+    expect(redactArgvForLog(['llxprt', '-i=SECRET'])).toStrictEqual([
+      'llxprt',
+      '-i=[REDACTED]',
+    ]);
+  });
+
+  it('does not eat a following flag after the -p alias', () => {
+    expect(redactArgvForLog(['llxprt', '-p', '--sandbox'])).toStrictEqual([
+      'llxprt',
+      '-p',
       '--sandbox',
     ]);
   });

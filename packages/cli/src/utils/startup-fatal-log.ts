@@ -40,25 +40,44 @@ function isBareKeyToken(token: string): boolean {
   );
 }
 
+// Value-taking short flags, hardcoded to mirror the prompt/prompt-interactive
+// aliases registered in config/yargsOptions.ts; importing that table would
+// break this module's dependency-free invariant. Without them, `llxprt -p
+// SECRET` would leak the credential into fatal.log.
+const VALUE_TAKING_SHORT_FLAGS: readonly string[] = ['-p', '-i'];
+
+function isValueTakingShortFlag(token: string): boolean {
+  return VALUE_TAKING_SHORT_FLAGS.includes(token);
+}
+
 /**
  * Replaces the value after a `--key` token and the value inside
- * `--key=<value>` with '[REDACTED]'; all other tokens pass through verbatim.
- * A `--`-prefixed token after a bare `--key` is the next flag, not a value,
- * so it passes through; a genuine value token is still redacted.
+ * `--key=<value>` with '[REDACTED]'; the -p/-i prompt aliases get the same
+ * treatment in both bare and `=` forms. All other tokens pass through
+ * verbatim. A `--`-prefixed token after a bare `--key` is the next flag, not
+ * a value, so it passes through; likewise any `-`-prefixed token after a
+ * value-taking short flag. A genuine value token is still redacted.
  * Returns a new array and never mutates the input.
  */
 export function redactArgvForLog(argv: readonly string[]): string[] {
   return argv.map((token, index) => {
     const previous = index > 0 ? argv[index - 1] : undefined;
-    if (
-      previous !== undefined &&
-      isBareKeyToken(previous) &&
-      !token.startsWith('--')
-    ) {
-      return '[REDACTED]';
+    if (previous !== undefined) {
+      if (isBareKeyToken(previous) && !token.startsWith('--')) {
+        return '[REDACTED]';
+      }
+      if (isValueTakingShortFlag(previous) && !token.startsWith('-')) {
+        return '[REDACTED]';
+      }
     }
     const equalsIndex = token.indexOf('=');
-    if (token.startsWith('--') && equalsIndex !== -1) {
+    if (equalsIndex !== -1 && token.startsWith('--')) {
+      return `${token.slice(0, equalsIndex + 1)}[REDACTED]`;
+    }
+    if (
+      equalsIndex !== -1 &&
+      isValueTakingShortFlag(token.slice(0, equalsIndex))
+    ) {
       return `${token.slice(0, equalsIndex + 1)}[REDACTED]`;
     }
     return token;

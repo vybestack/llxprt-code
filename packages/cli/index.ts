@@ -46,12 +46,22 @@ process.on('uncaughtException', (error) => {
 
 function writeFatalError(error: FatalError): void {
   // Persist first (#3566): if the pane dies, the record survives in
-  // <logHome>/fatal.log. A persistence failure must not change the output.
-  const record = buildStartupFatalRecord(error, {
-    cwd: process.cwd(),
-    argv: process.argv,
-  });
-  const persistResult = appendStartupFatalLog(record);
+  // <logHome>/fatal.log. Persistence must never mask the original fatal:
+  // appendStartupFatalLog reports fs failures via its result, and the attempt
+  // itself (process.cwd() throws on a deleted cwd, or record construction
+  // fails) is guarded here because an escaping throw would land in
+  // writeCriticalErrorAndGetExitCode's catch, suppressing the message and
+  // flipping the exit code (e.g. 44 -> 1).
+  let persistResult: { ok: true; path: string } | { ok: false };
+  try {
+    const record = buildStartupFatalRecord(error, {
+      cwd: process.cwd(),
+      argv: process.argv,
+    });
+    persistResult = appendStartupFatalLog(record);
+  } catch {
+    persistResult = { ok: false };
+  }
   let errorMessage = error.message;
   if (!process.env['NO_COLOR']) {
     errorMessage = `\x1b[31m${errorMessage}\x1b[0m`;
