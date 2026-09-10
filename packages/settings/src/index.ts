@@ -76,6 +76,7 @@ export type {
 } from './profiles/canonicalProfileRepair.js';
 export {
   parseProfile,
+  parseImageProfile,
   parseProfileJson,
   MIN_LOAD_BALANCER_MEMBERS,
 } from './settings/validation.js';
@@ -92,6 +93,10 @@ export type {
   ReasoningEffortMap,
   ReasoningEnabledMap,
   AuthConfig,
+  ImageProfile,
+  ImageQuality,
+  ImageSize,
+  ImageBackground,
 } from './profiles/types.js';
 export {
   AuthConfigSchema,

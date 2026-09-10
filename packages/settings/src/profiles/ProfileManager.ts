@@ -13,12 +13,14 @@ import type {
   StandardProfile,
   EphemeralSettings,
   ModelParams,
+  ImageProfile,
 } from './types.js';
 import { isLoadBalancerProfile } from './types.js';
 import {
   isPlainObject,
   parseLoadBalancerProfile,
   parseProfile,
+  parseImageProfile,
   parseProfileJson,
   parsePromptCaching,
 } from '../settings/validation.js';
@@ -102,6 +104,41 @@ export class ProfileManager {
       JSON.stringify(profile, null, 2),
       'overwrite',
     );
+  }
+
+  async saveImageProfile(
+    profileName: string,
+    profile: ImageProfile,
+  ): Promise<void> {
+    const validated = parseImageProfile(profileName, profile);
+    await writeProfileFile(
+      this.profilesDir,
+      profileName,
+      JSON.stringify(validated, null, 2),
+      'overwrite',
+    );
+  }
+
+  async loadImageProfile(profileName: string): Promise<ImageProfile> {
+    const filePath = path.join(this.profilesDir, `${profileName}.json`);
+    try {
+      const content = await fs.readFile(filePath, 'utf8');
+      const parsed = ProfileManager.parseProfileContent(content);
+      if (
+        typeof parsed !== 'object' ||
+        parsed === null ||
+        !('type' in parsed) ||
+        parsed.type !== 'image'
+      ) {
+        throw new Error(`Profile '${profileName}' is not an image profile`);
+      }
+      return parseImageProfile(profileName, parsed);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('ENOENT')) {
+        throw new Error(`Image profile '${profileName}' not found`);
+      }
+      throw error;
+    }
   }
 
   /**

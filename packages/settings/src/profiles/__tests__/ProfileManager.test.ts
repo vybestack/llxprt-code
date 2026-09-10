@@ -912,3 +912,66 @@ describe('ProfileManager — loadbalancer profile entry validation', () => {
     );
   });
 });
+
+
+describe('ProfileManager typed image profiles', () => {
+  let tempDir: string;
+  let pm: ProfileManager;
+
+  beforeEach(async () => {
+    tempDir = await makeTempDir();
+    pm = new ProfileManager(tempDir);
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('round trips an image profile', async () => {
+    const profile = {
+      version: 1 as const,
+      type: 'image' as const,
+      model: 'gpt-image-2.5-flare',
+      baseUrl: 'https://api.openai.com/v1',
+      auth: { type: 'oauth' as const, provider: 'codex' },
+      defaults: {
+        quality: 'xhigh' as const,
+        size: '1024x1536' as const,
+        background: 'transparent' as const,
+      },
+    };
+
+    await pm.saveImageProfile('art', profile);
+
+    expect(await pm.loadImageProfile('art')).toEqual(profile);
+  });
+
+  it('rejects loading a model profile as an image profile', async () => {
+    await pm.saveProfile('chat', {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-5',
+      modelParams: {},
+      ephemeralSettings: {},
+    });
+
+    await expect(pm.loadImageProfile('chat')).rejects.toThrow(
+      "Profile 'chat' is not an image profile",
+    );
+  });
+
+  it('loads legacy files without a type as model profiles', async () => {
+    await fs.writeFile(
+      path.join(tempDir, 'legacy.json'),
+      JSON.stringify({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-5',
+        modelParams: {},
+        ephemeralSettings: {},
+      }),
+    );
+
+    expect((await pm.loadProfile('legacy')).type).toBeUndefined();
+  });
+});

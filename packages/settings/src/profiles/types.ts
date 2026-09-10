@@ -202,12 +202,39 @@ export type EphemeralSettings = ProfileEphemeralSettings;
  */
 export interface StandardProfile {
   version: 1;
-  type?: 'standard';
+  type?: 'standard' | 'model';
   provider: string;
   model: string;
   modelParams: ModelParams;
   ephemeralSettings: EphemeralSettings;
   auth?: AuthConfig;
+  imageProfile?: string;
+}
+
+export type ImageQuality =
+  | 'auto'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'xhigh'
+  | 'max';
+
+export type ImageSize = 'auto' | '1024x1024' | '1024x1536' | '1536x1024';
+export type ImageBackground = 'auto' | 'transparent' | 'opaque';
+
+export interface ImageProfile {
+  version: 1;
+  type: 'image';
+  model: string;
+  baseUrl: string;
+  auth:
+    | { readonly type: 'oauth'; readonly provider: string }
+    | { readonly type: 'apikey'; readonly keyName: string };
+  defaults: {
+    readonly quality: ImageQuality;
+    readonly size: ImageSize;
+    readonly background: ImageBackground;
+  };
 }
 
 /**

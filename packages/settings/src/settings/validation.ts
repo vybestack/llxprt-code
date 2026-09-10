@@ -9,6 +9,7 @@ import type {
   ModelParams,
   Profile,
   StandardProfile,
+  ImageProfile,
 } from '../profiles/types.js';
 
 /**
@@ -93,12 +94,13 @@ const authConfigSchema = z.discriminatedUnion('type', [
 const standardProfileSchema: z.ZodType<StandardProfile> = z
   .object({
     version: z.literal(1),
-    type: z.literal('standard').optional(),
+    type: z.union([z.literal('standard'), z.literal('model')]).optional(),
     provider: z.string().min(1),
     model: z.string().min(1),
     modelParams: modelParamsSchema,
     ephemeralSettings: ephemeralSettingsSchema,
     auth: authConfigSchema.optional(),
+    imageProfile: z.string().min(1).optional(),
   })
   .passthrough();
 
@@ -278,7 +280,34 @@ export function parseLoadBalancerProfile(
   return loadBalancerProfileSchema.parse(input);
 }
 
+const imageProfileSchema: z.ZodType<ImageProfile> = z
+  .object({
+    version: z.literal(1),
+    type: z.literal('image'),
+    model: z.string().min(1),
+    baseUrl: z.string().url(),
+    auth: z.discriminatedUnion('type', [
+      z.object({ type: z.literal('oauth'), provider: z.string().min(1) }),
+      z.object({ type: z.literal('apikey'), keyName: z.string().min(1) }),
+    ]),
+    defaults: z.object({
+      quality: z.enum(['auto', 'low', 'medium', 'high', 'xhigh', 'max']),
+      size: z.enum(['auto', '1024x1024', '1024x1536', '1536x1024']),
+      background: z.enum(['auto', 'transparent', 'opaque']),
+    }),
+  })
+  .strict();
+
+export function parseImageProfile(name: string, input: unknown): ImageProfile {
+  const parsed = imageProfileSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new Error(`Profile '${name}' is not a valid image profile`);
+  }
+  return parsed.data;
+}
+
 export function parseProfile(input: unknown): Profile {
+
   if (!isPlainObject(input)) {
     throw new Error('missing required fields');
   }
