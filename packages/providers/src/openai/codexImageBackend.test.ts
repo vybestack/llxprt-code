@@ -146,6 +146,7 @@ describe('CodexImageBackend', () => {
       expect(body['quality']).toBe('auto');
       expect(body['size']).toBe('auto');
       expect(body['n']).toBe(1);
+
       // The generation contract must NOT include edit-only keys.
       expect(body['images']).toBeUndefined();
       expect(body['image']).toBeUndefined();
@@ -154,6 +155,40 @@ describe('CodexImageBackend', () => {
       expect(Object.keys(body).sort()).toStrictEqual(
         ['background', 'model', 'n', 'prompt', 'quality', 'size'].sort(),
       );
+    });
+
+    it('uses configured model and operation defaults', async () => {
+      const { fetchImpl, captured } = makeStubFetch({
+        status: 200,
+        body: { data: [{ b64_json: 'aGVsbG8=' }] },
+      });
+      const backend = new CodexImageBackend({
+        getCredential: async () => ({ accessToken: 'token', accountId: 'acct' }),
+        getBaseUrl: () => 'https://images.example/v1',
+        model: 'gpt-image-2.5-flare',
+        defaults: {
+          quality: 'xhigh',
+          size: '1024x1536',
+          background: 'transparent',
+        },
+        allowCustomBaseUrl: true,
+        fetchImpl,
+      });
+
+      await backend.generate(
+        { prompt: 'profile driven' },
+        new AbortController().signal,
+      );
+
+      const request = captured();
+      const body = JSON.parse(String(request?.init.body)) as Record<string, unknown>;
+      expect(request?.url).toBe('https://images.example/v1/images/generations');
+      expect(body).toMatchObject({
+        model: 'gpt-image-2.5-flare',
+        quality: 'xhigh',
+        size: '1024x1536',
+        background: 'transparent',
+      });
     });
   });
 

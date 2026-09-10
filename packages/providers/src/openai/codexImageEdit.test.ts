@@ -209,12 +209,45 @@ describe('CodexImageBackend.edit', () => {
     );
   });
 
+  it('uses configured model and defaults for edits', async () => {
+    const inputPath = path.join(workspaceRoot, 'configured.png');
+    await fs.promises.writeFile(inputPath, makeRealMinimalPng());
+    const { fetchImpl, captured } = makeStubFetch({
+      status: 200,
+      body: { data: [{ b64_json: 'aGVsbG8=' }] },
+    });
+    const backend = new CodexImageBackend({
+      getCredential: async () => ({ accessToken: 'token', accountId: 'acct' }),
+      model: 'gpt-image-2.5-sunburst',
+      defaults: {
+        quality: 'max',
+        size: '1536x1024',
+        background: 'opaque',
+      },
+      fetchImpl,
+    });
+
+    await backend.edit(
+      { prompt: 'configured edit', inputPaths: [inputPath] },
+      new AbortController().signal,
+    );
+
+    const body = JSON.parse(String(captured()?.init.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      model: 'gpt-image-2.5-sunburst',
+      quality: 'max',
+      size: '1536x1024',
+      background: 'opaque',
+    });
+  });
+
   it('includes the full header set on edit', async () => {
     const inputPath = path.join(workspaceRoot, 'input.png');
     await fs.promises.writeFile(inputPath, makeRealMinimalPng());
 
     const { fetchImpl, captured } = makeStubFetch({
       status: 200,
+
       body: { data: [{ b64_json: 'aGVsbG8=' }] },
     });
     const backend = makeBackend({ fetchImpl });

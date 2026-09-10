@@ -108,11 +108,23 @@ export interface CodexImageCredential {
 export interface CodexImageBackendDeps {
   readonly getCredential: () => Promise<CodexImageCredential>;
   readonly getBaseUrl?: () => string | undefined;
+  readonly model?: string;
+  readonly defaults?: Pick<
+    ImageGenerateRequest,
+    'quality' | 'size' | 'background'
+  >;
+  readonly allowCustomBaseUrl?: boolean;
   readonly fetchImpl?: typeof fetch;
 }
 
 interface CodexImageGenerateResponse {
-  readonly data?: ReadonlyArray<{ readonly b64_json?: string }>;
+  readonly quality?: string;
+  readonly size?: string;
+  readonly usage?: Readonly<Record<string, unknown>>;
+  readonly data?: ReadonlyArray<{
+    readonly b64_json?: string;
+    readonly generation_id?: string;
+  }>;
 }
 
 const MAX_BODY_SNIPPET_LENGTH = 500;
@@ -139,15 +151,23 @@ function truncateForSnippet(text: string): string {
 export class CodexImageBackend implements ImageGenerationBackend {
   readonly name = 'codex';
   readonly provider = 'codex';
-  readonly model = CODEX_IMAGE_MODEL;
+  readonly model: string;
 
   private readonly getCredential: () => Promise<CodexImageCredential>;
   private readonly getBaseUrl: () => string | undefined;
+  private readonly defaults: Pick<
+    ImageGenerateRequest,
+    'quality' | 'size' | 'background'
+  >;
+  private readonly allowCustomBaseUrl: boolean;
   private readonly fetchImpl: typeof fetch;
 
   constructor(deps: CodexImageBackendDeps) {
     this.getCredential = deps.getCredential;
     this.getBaseUrl = deps.getBaseUrl ?? (() => undefined);
+    this.model = deps.model ?? CODEX_IMAGE_MODEL;
+    this.defaults = deps.defaults ?? {};
+    this.allowCustomBaseUrl = deps.allowCustomBaseUrl ?? false;
     this.fetchImpl = deps.fetchImpl ?? fetch;
   }
 
@@ -174,7 +194,12 @@ export class CodexImageBackend implements ImageGenerationBackend {
     headers: Record<string, string>,
     signal: AbortSignal,
     operationName: string,
-  ): Promise<string> {
+  ): Promise<{
+    readonly data: string;
+    readonly quality?: string;
+    readonly size?: string;
+    readonly usage?: Readonly<Record<string, unknown>>;
+  }> {
     const response = await this.fetchImpl(endpoint, {
       method: 'POST',
       headers,
@@ -241,7 +266,22 @@ export class CodexImageBackend implements ImageGenerationBackend {
         { status: response.status, endpoint },
       );
     }
-    return b64;
+    return {
+      data: b64,
+      ...(typeof parsed.quality === 'string' ? { quality: parsed.quality } : {}),
+      ...(typeof parsed.size === 'string' ? { size: parsed.size } : {}),
+      ...(parsed.usage !== undefined ? { usage: parsed.usage } : {}),
+    };
+  }
+
+  private buildEndpoint(suffix: 'generations' | 'edits'): string {
+    const baseUrl = this.getBaseUrl();
+    if (this.allowCustomBaseUrl && baseUrl !== undefined) {
+      return `${normalizeBaseUrl(baseUrl)}/images/${suffix}`;
+    }
+    return suffix === 'generations'
+      ? buildCodexImageGenerateEndpoint(baseUrl)
+      : buildCodexImageEditEndpoint(baseUrl);
   }
 
   async generate(
@@ -257,14 +297,15 @@ export class CodexImageBackend implements ImageGenerationBackend {
     }
 
     const credential = await this.getCredential();
-    const endpoint = buildCodexImageGenerateEndpoint(this.getBaseUrl());
+    const endpoint = this.buildEndpoint('generations');
 
     const body = {
-      model: CODEX_IMAGE_MODEL,
+      model: this.model,
       prompt: request.prompt,
-      background: request.background ?? 'auto',
-      quality: request.quality ?? 'auto',
-      size: request.size ?? 'auto',
+      background:
+        request.background ?? this.defaults.background ?? 'auto',
+      quality: request.quality ?? this.defaults.quality ?? 'auto',
+      size: request.size ?? this.defaults.size ?? 'auto',
       n: request.n ?? 1,
     };
 
@@ -274,7 +315,7 @@ export class CodexImageBackend implements ImageGenerationBackend {
       request.sessionId,
     );
 
-    const b64 = await this.postAndParse(
+    const response = await this.postAndParse(
       endpoint,
       body,
       headers,
@@ -283,14 +324,18 @@ export class CodexImageBackend implements ImageGenerationBackend {
     );
 
     logger.debug(
-      () => `Generated Codex image via ${endpoint} (model=${body.model})`,
+      () =>
+        `Generated Codex image via ${endpoint} (model=${body.model}, quality=${response.quality ?? 'unknown'}, size=${response.size ?? 'unknown'}, usage=${JSON.stringify(response.usage ?? {})})`,
     );
 
     return {
       mimeType: 'image/png',
       encoding: 'base64',
-      data: b64,
+      data: response.data,
       caption: request.prompt,
+      ...(response.quality !== undefined ? { quality: response.quality } : {}),
+      ...(response.size !== undefined ? { size: response.size } : {}),
+      ...(response.usage !== undefined ? { usage: response.usage } : {}),
     };
   }
 
@@ -305,6 +350,10 @@ export class CodexImageBackend implements ImageGenerationBackend {
     request: {
       readonly prompt: string;
       readonly inputPaths: readonly string[];
+      readonly model?: string;
+      readonly background?: ImageGenerateRequest['background'];
+      readonly quality?: ImageGenerateRequest['quality'];
+      readonly size?: ImageGenerateRequest['size'];
       readonly sessionId?: string;
     },
     signal: AbortSignal,
@@ -332,19 +381,20 @@ export class CodexImageBackend implements ImageGenerationBackend {
     );
 
     const credential = await this.getCredential();
-    const endpoint = buildCodexImageEditEndpoint(this.getBaseUrl());
+    const endpoint = this.buildEndpoint('edits');
 
     // The Codex `/images/edits` contract requires `images` to be an array of
     // `{ image_url }` objects, NOT an array of bare data-URL strings and not
     // the singular `image` key. Anything else is rejected by the service with
     // `400 missing_required_parameter: images`.
     const body = {
-      model: CODEX_IMAGE_MODEL,
+      model: this.model,
       prompt: request.prompt,
       images: dataUrls.map((imageUrl) => ({ image_url: imageUrl })),
-      background: 'auto',
-      quality: 'auto',
-      size: 'auto',
+      background:
+        request.background ?? this.defaults.background ?? 'auto',
+      quality: request.quality ?? this.defaults.quality ?? 'auto',
+      size: request.size ?? this.defaults.size ?? 'auto',
     };
 
     const headers = this.buildHeaders(
@@ -353,7 +403,7 @@ export class CodexImageBackend implements ImageGenerationBackend {
       request.sessionId,
     );
 
-    const b64 = await this.postAndParse(
+    const response = await this.postAndParse(
       endpoint,
       body,
       headers,
@@ -361,13 +411,19 @@ export class CodexImageBackend implements ImageGenerationBackend {
       'edit',
     );
 
-    logger.debug(() => `Edited Codex image via ${endpoint}`);
+    logger.debug(
+      () =>
+        `Edited Codex image via ${endpoint} (model=${body.model}, quality=${response.quality ?? 'unknown'}, size=${response.size ?? 'unknown'}, usage=${JSON.stringify(response.usage ?? {})})`,
+    );
 
     return {
       mimeType: 'image/png',
       encoding: 'base64',
-      data: b64,
+      data: response.data,
       caption: request.prompt,
+      ...(response.quality !== undefined ? { quality: response.quality } : {}),
+      ...(response.size !== undefined ? { size: response.size } : {}),
+      ...(response.usage !== undefined ? { usage: response.usage } : {}),
     };
   }
 }
