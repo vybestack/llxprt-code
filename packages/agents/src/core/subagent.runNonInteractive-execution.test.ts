@@ -671,7 +671,7 @@ describe('subagent.ts', () => {
       );
 
       await scope.runNonInteractive(new ContextState());
-      expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
+      expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.ERROR);
       expect(scope.output.final_message).toContain(
         'Tool "write_file" is not available',
       );

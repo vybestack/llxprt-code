@@ -862,17 +862,11 @@ export class Turn {
         ? fnCall.id
         : this.createSyntheticFunctionCallId(fnCall, functionCallIndex);
 
-    let name = fnCall.name;
-    if (!name || name.trim() === '') {
-      name = 'undefined_tool_name';
-    } else {
-      const normalized = normalizeToolName(name);
-      if (normalized) {
-        name = normalized;
-      } else {
-        name = 'undefined_tool_name';
-      }
-    }
+    // #3535: carry the raw name unchanged when it is absent or cannot be
+    // normalized. The doomed call must still dispatch so the existing
+    // TOOL_NOT_REGISTERED path returns a proper tool_response instead of the
+    // fabricated literal `undefined_tool_name` the parent cannot diagnose.
+    const name = this.resolveRawToolName(fnCall);
 
     const params = fnCall.parameters;
     const args: Record<string, unknown> =
@@ -882,7 +876,7 @@ export class Turn {
 
     const toolCallRequest: ToolCallRequestInfo = {
       callId,
-      name: name || 'undefined_tool_name',
+      name,
       args,
       isClientInitiated: false,
       prompt_id: this.prompt_id,
@@ -892,6 +886,18 @@ export class Turn {
     this.pendingToolCalls.push(toolCallRequest);
 
     return { type: AgentEventType.ToolCallRequest, value: toolCallRequest };
+  }
+
+  private resolveRawToolName(fnCall: ToolCallBlock): string {
+    const fnName: unknown = fnCall.name;
+    let rawName: string | undefined;
+    if (typeof fnName === 'string') {
+      rawName = fnName;
+    } else if (fnName != null) {
+      rawName = String(fnName);
+    }
+    const normalized = rawName?.trim() ? normalizeToolName(rawName) : null;
+    return normalized ?? rawName ?? '';
   }
 
   private createSyntheticFunctionCallId(
@@ -909,7 +915,7 @@ export class Turn {
       .update(payload)
       .digest('hex')
       .slice(0, 16);
-    const name = normalizeToolName(fnCall.name) ?? 'undefined_tool_name';
+    const name = this.resolveRawToolName(fnCall);
     return `${name}-${functionCallIndex}-${digest}`;
   }
 
