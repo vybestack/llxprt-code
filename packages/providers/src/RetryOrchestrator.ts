@@ -65,6 +65,7 @@ import {
   createInitialRetryState,
   providerOwnsTransportAttempts,
 } from './retryTransportOwnership.js';
+import { RetryPromptEnvelopeRefresh } from './retryPromptEnvelopeRefresh.js';
 import { safeGetDefaultModel } from './utils/safeDefaultModel.js';
 import {
   classifyRetryError,
@@ -315,7 +316,6 @@ export class RetryOrchestrator implements IProvider {
     const requestOptions = request.options;
     const bucketFailoverHandler =
       getBucketFailoverHandlerFromOptions(requestOptions);
-    const ownsAttempts = providerOwnsTransportAttempts(this.wrappedProvider);
     const lifecycleObserver = getAttemptLifecycleObserver(
       requestOptions.metadata,
     );
@@ -324,15 +324,12 @@ export class RetryOrchestrator implements IProvider {
       safeGetDefaultModel(this.wrappedProvider);
     let lastError: unknown;
     const retryState = createInitialRetryState(initialDelayMs);
-    while (budget.used < budget.limit) {
+    const envelopeRefresh = new RetryPromptEnvelopeRefresh();
+    while (envelopeRefresh.canRetry(budget, maxAttempts)) {
       if (isSignalAborted(signal)) throw createAbortError(signal?.reason);
       request.recordTarget(this.name);
       const usedBefore = budget.used;
       const linked = createLinkedAbortController(signal);
-      const attemptOptions = withRequestSignal(
-        requestOptions,
-        linked.controller.signal,
-      );
       const notification = this.createAttemptNotification(
         lifecycleObserver,
         budget.used,
@@ -343,24 +340,21 @@ export class RetryOrchestrator implements IProvider {
       let terminalStatus: AttemptStatus = 'aborted';
       try {
         yield* this.executeRawAttempt(
-          ownsAttempts,
           request,
-          attemptOptions,
+          envelopeRefresh,
           linked,
           retryState,
           bucketFailoverHandler,
-          budget,
         );
         terminalStatus = 'success';
         return;
       } catch (error) {
         attemptError = error;
-        lastError = error;
         terminalStatus = this.resolveTerminalStatus(error);
       } finally {
         this.finalizeAttempt(
           linked,
-          attemptOptions,
+          envelopeRefresh.options,
           budget,
           usedBefore,
           notification,
@@ -368,7 +362,13 @@ export class RetryOrchestrator implements IProvider {
           attemptError,
           request,
         );
+        await envelopeRefresh.settle(
+          budget.used - usedBefore,
+          terminalStatus === 'success',
+          attemptError,
+        );
       }
+      lastError = attemptError;
       if (attemptError === undefined) continue;
       const action = await this.handleRetryError(
         attemptError,
@@ -381,7 +381,7 @@ export class RetryOrchestrator implements IProvider {
         1,
         bucketFailoverHandler,
         authRetryTimeoutMs,
-        budget,
+        envelopeRefresh.recoveryConsumption,
       );
       if (action.type === 'throw') throw action.error;
     }
@@ -390,9 +390,8 @@ export class RetryOrchestrator implements IProvider {
   }
 
   private async *executeRawAttempt(
-    ownsAttempts: boolean,
     request: RetryRequestContext,
-    attemptOptions: GenerateChatOptions,
+    envelopeRefresh: RetryPromptEnvelopeRefresh,
     linked: { controller: AbortController },
     retryState: {
       attempt: number;
@@ -403,9 +402,20 @@ export class RetryOrchestrator implements IProvider {
       consecutiveServerErrors: number;
     },
     bucketFailoverHandler: BucketFailoverHandler | undefined,
-    budget: { used: number; limit: number },
   ): AsyncIterableIterator<IContent> {
-    beginProviderTransportAttempt(ownsAttempts, attemptOptions);
+    const { budget } = request;
+    const attemptOptions = await envelopeRefresh.prepare(
+      this,
+      request.options,
+      linked.controller.signal,
+    );
+    if (linked.controller.signal.aborted) {
+      throw createAbortError(linked.controller.signal.reason);
+    }
+    beginProviderTransportAttempt(
+      providerOwnsTransportAttempts(this.wrappedProvider),
+      attemptOptions,
+    );
     const stream = this.wrappedProvider.generateChatCompletion(attemptOptions);
     const producedContent =
       this.config.streamingTimeoutMs > 0
@@ -439,7 +449,7 @@ export class RetryOrchestrator implements IProvider {
 
   private finalizeAttempt(
     linked: { controller: AbortController; dispose(): void },
-    attemptOptions: GenerateChatOptions,
+    attemptOptions: GenerateChatOptions | undefined,
     budget: TransportAttemptBudget,
     usedBefore: number,
     notification: AttemptNotificationContext,
@@ -449,6 +459,16 @@ export class RetryOrchestrator implements IProvider {
   ): void {
     linked.controller.abort();
     linked.dispose();
+    // A failed prompt-envelope refresh (#3444) aborts the attempt before any
+    // options reach the provider, so there is no provider attempt to account.
+    if (attemptOptions === undefined) {
+      notification.notifyEnd(
+        terminalStatus,
+        resolveAttemptErrorMessage(terminalStatus, attemptError),
+        this.buildFailureReport(request, terminalStatus, attemptError),
+      );
+      return;
+    }
     accountProviderAttempt(
       this.wrappedProvider,
       attemptOptions,
@@ -598,9 +618,9 @@ export class RetryOrchestrator implements IProvider {
     failoverThreshold: number,
     bucketFailoverHandler: BucketFailoverHandler | undefined,
     authRetryTimeoutMs: number,
-    budget: { used: number; limit: number },
+    recoveryAttempt: number,
   ): Promise<{ type: 'throw'; error: unknown } | { type: 'continue' }> {
-    state.attempt = budget.used;
+    state.attempt = recoveryAttempt;
     const committedFailure = await this.resolveCommittedFailureAction(
       error,
       request,

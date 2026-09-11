@@ -21,10 +21,11 @@
 
 import { describe, it, expect } from 'bun:test';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
-import type {
-  IProvider,
-  GenerateChatOptions,
-} from '../IProvider.js';
+import {
+  tryConsumeTransportAttempt,
+  attachTransportAttemptBudget,
+} from '../transportAttemptBudget.js';
+import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IModel } from '../IModel.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
@@ -32,8 +33,8 @@ import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-util
 
 interface OneShotEnvelope {
   readonly token: object;
-  attemptReleases: number;
-  unsentReleases: number;
+  attemptDisposals: number;
+  unsentDisposals: number;
   released: boolean;
 }
 
@@ -53,15 +54,10 @@ function createRateLimitError(): Error {
 
 interface OneShotProviderConfig {
   readonly failFirstSend: boolean;
-  readonly refreshProjection:
-    | 'fresh'
-    | 'undefined'
-    | { readonly error: Error };
+  readonly refreshProjection: 'fresh' | 'undefined' | { readonly error: Error };
 }
 
-function createOneShotProjectedProvider(
-  config: OneShotProviderConfig,
-): {
+function createOneShotProjectedProvider(config: OneShotProviderConfig): {
   provider: IProvider;
   envelopes: OneShotEnvelope[];
   attempts: RecordedAttempt[];
@@ -76,21 +72,18 @@ function createOneShotProjectedProvider(
     name: 'one-shot-projected-provider',
     async projectPromptEnvelope(
       options: GenerateChatOptions,
-    ): Promise<PromptEnvelopeProjection> {
+    ): Promise<PromptEnvelopeProjection | undefined> {
       projectionCalls += 1;
-      if (
-        projectionCalls > 1 &&
-        config.refreshProjection !== 'fresh'
-      ) {
+      if (projectionCalls > 1 && config.refreshProjection !== 'fresh') {
         if (config.refreshProjection === 'undefined') {
-          return undefined as unknown as PromptEnvelopeProjection;
+          return undefined;
         }
         throw config.refreshProjection.error;
       }
       const envelope: OneShotEnvelope = {
         token: Object.freeze({ sequence: envelopes.length }),
-        attemptReleases: 0,
-        unsentReleases: 0,
+        attemptDisposals: 0,
+        unsentDisposals: 0,
         released: false,
       };
       envelopes.push(envelope);
@@ -107,30 +100,32 @@ function createOneShotProjectedProvider(
           sequence: envelopes.length,
         }),
         legacyEstimate: () => Promise.resolve(1),
-        releaseIfUnsent: () => {
-          envelope.unsentReleases += 1;
+        releaseIfUnsent: async () => {
+          if (envelope.released) return;
           envelope.released = true;
-          return Promise.resolve();
+          envelope.unsentDisposals += 1;
         },
       };
     },
     async *generateChatCompletion(
-      options: GenerateChatOptions,
+      optionsOrContents: GenerateChatOptions | IContent[],
     ): AsyncIterableIterator<IContent> {
+      const options: GenerateChatOptions = Array.isArray(optionsOrContents)
+        ? { contents: optionsOrContents }
+        : optionsOrContents;
       const token = options.promptEnvelopeTransportToken;
-      const envelope = token === undefined ? undefined : envelopeByToken.get(token);
+      const envelope =
+        token === undefined ? undefined : envelopeByToken.get(token);
       if (token !== undefined && envelope === undefined) {
         throw new Error('Unknown prompt-envelope transport token');
       }
       let error: unknown;
       let succeeded = false;
       try {
-        if (envelope !== undefined) {
-          if (envelope.released) {
-            throw new Error(
-              'Cannot consume media request contents after release',
-            );
-          }
+        if (envelope?.released === true) {
+          throw new Error(
+            'Cannot consume media request contents after release',
+          );
         }
         const sendIndex = attempts.length;
         if (config.failFirstSend && sendIndex === 0) {
@@ -143,9 +138,9 @@ function createOneShotProjectedProvider(
         throw error;
       } finally {
         attempts.push({ token, error, succeeded });
-        if (envelope !== undefined) {
-          envelope.attemptReleases += 1;
+        if (envelope !== undefined && !envelope.released) {
           envelope.released = true;
+          envelope.attemptDisposals += 1;
         }
       }
     },
@@ -163,6 +158,25 @@ function createOneShotProjectedProvider(
     attempts,
     projectionCalls: () => projectionCalls,
   };
+}
+
+/**
+ * Mint a projection through the fake provider with the optional-method
+ * narrowing the orchestrator performs at runtime.
+ */
+async function mintEnvelope(
+  provider: IProvider,
+  options: GenerateChatOptions,
+): Promise<PromptEnvelopeProjection> {
+  const project = provider.projectPromptEnvelope;
+  if (project === undefined) {
+    throw new Error('test provider cannot project prompt envelopes');
+  }
+  const projection = await project.call(provider, options);
+  if (projection === undefined) {
+    throw new Error('test provider declined to mint a prompt envelope');
+  }
+  return projection;
 }
 
 function buildOptions(token: object | undefined): GenerateChatOptions {
@@ -199,6 +213,254 @@ function errorMessage(error: unknown): string {
 }
 
 describe('RetryOrchestrator prompt-envelope retry contract (@issue:3444)', () => {
+  it.each([
+    'preflight rejection',
+    'returned before starting',
+    'cancel during preparation',
+  ])(
+    'disposes the fresh envelope once after %s without entering its body',
+    async (mode) => {
+      const { provider, envelopes, attempts } = createOneShotProjectedProvider({
+        failFirstSend: true,
+        refreshProjection: 'fresh',
+      });
+      const original = await mintEnvelope(provider, buildOptions(undefined));
+      const generate = provider.generateChatCompletion.bind(provider);
+      const controller = new AbortController();
+      const failure = new Error('adapter preparation failed');
+      let calls = 0;
+      let bodies = 0;
+      provider.generateChatCompletion = (options) => {
+        if (Array.isArray(options)) throw new Error('Expected request options');
+        calls += 1;
+        if (calls === 1) return generate(options);
+        const body = (async function* (): AsyncIterableIterator<IContent> {
+          bodies += 1;
+          yield* generate(options);
+        })();
+        const preparation = async (): Promise<void> => {
+          if (mode === 'preflight rejection') throw failure;
+          if (mode === 'returned before starting') {
+            await body.return?.();
+            throw failure;
+          }
+          await new Promise<void>((resolve) => {
+            controller.signal.addEventListener('abort', () => resolve(), {
+              once: true,
+            });
+            controller.abort(failure);
+          });
+          throw failure;
+        };
+        let pending: Promise<void> | undefined;
+        return {
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+          async next() {
+            pending ??= preparation();
+            await pending;
+            return body.next();
+          },
+          async return() {
+            await body.return?.();
+            return { done: true, value: undefined };
+          },
+        };
+      };
+      const { error } = await drain(
+        new RetryOrchestrator(provider, {
+          maxAttempts: 2,
+          initialDelayMs: 0,
+        }).generateChatCompletion(
+          buildOptions(original.transportToken),
+          undefined,
+          controller.signal,
+        ),
+      );
+      const observedError =
+        mode === 'cancel during preparation' && error instanceof Error
+          ? error.name
+          : error;
+      expect(observedError).toBe(
+        mode === 'cancel during preparation' ? 'AbortError' : failure,
+      );
+      expect(calls).toBe(2);
+      expect(bodies).toBe(0);
+      expect(attempts).toHaveLength(1);
+      expect(envelopes).toHaveLength(2);
+      for (const envelope of envelopes) {
+        expect(envelope.attemptDisposals + envelope.unsentDisposals).toBe(1);
+        expect(envelope.released).toBe(true);
+      }
+    },
+  );
+
+  it('stops after two provider-owned sends and one failed refresh exhaust the combined cap', async () => {
+    const { provider } = createOneShotProjectedProvider({
+      failFirstSend: true,
+      refreshProjection: 'fresh',
+    });
+    const original = await mintEnvelope(provider, buildOptions(undefined));
+    const attached = attachTransportAttemptBudget(
+      buildOptions(original.transportToken),
+      3,
+    );
+    const refreshError = Object.assign(new Error('refresh quota exhausted'), {
+      status: 429,
+    });
+    let sends = 0;
+    let refreshes = 0;
+    provider.transportAttemptOwnership = 'provider';
+    provider.generateChatCompletion = async function* (options) {
+      if (Array.isArray(options)) throw new Error('Expected request options');
+      for (let index = 0; index < 2; index += 1) {
+        if (tryConsumeTransportAttempt(options)) sends += 1;
+      }
+      await original.releaseIfUnsent?.();
+      yield await Promise.reject<IContent>(createRateLimitError());
+    };
+    provider.projectPromptEnvelope = async () => {
+      refreshes += 1;
+      throw refreshError;
+    };
+    try {
+      const options = attached.options;
+      const { error } = await drain(
+        new RetryOrchestrator(provider, {
+          maxAttempts: 3,
+          initialDelayMs: 0,
+        }).generateChatCompletion({
+          ...options,
+          invocation:
+            options.invocation === undefined
+              ? undefined
+              : {
+                  ...options.invocation,
+                  ephemerals: { retries: 3, retrywait: 0 },
+                },
+        }),
+      );
+      expect(error instanceof Error ? error.cause : undefined).toBe(
+        refreshError,
+      );
+      expect(sends).toBe(2);
+      expect(refreshes).toBe(1);
+      expect(attached.budget.used).toBe(2);
+    } finally {
+      attached.release();
+    }
+  });
+  it.each([false, true])(
+    'releases a refresh resolved after cancellation without starting another provider body (release rejects: %s)',
+    async (releaseRejects) => {
+      const { provider, envelopes, attempts } = createOneShotProjectedProvider({
+        failFirstSend: true,
+        refreshProjection: 'fresh',
+      });
+      const options = buildOptions(undefined);
+      const original = await mintEnvelope(provider, options);
+      let resolveFresh: ((value: PromptEnvelopeProjection) => void) | undefined;
+      const pending = new Promise<PromptEnvelopeProjection>((resolve) => {
+        resolveFresh = resolve;
+      });
+      let notifyStarted: (() => void) | undefined;
+      const started = new Promise<void>((resolve) => {
+        notifyStarted = resolve;
+      });
+      const project = provider.projectPromptEnvelope;
+      if (project === undefined) throw new Error('Missing projection seam');
+      provider.projectPromptEnvelope = () => {
+        if (notifyStarted === undefined)
+          throw new Error('Missing start resolver');
+        notifyStarted();
+        return pending;
+      };
+      const controller = new AbortController();
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 2,
+        initialDelayMs: 0,
+      });
+      const result = drain(
+        orchestrator.generateChatCompletion(
+          {
+            ...options,
+            promptEnvelopeTransportToken: original.transportToken,
+          },
+          undefined,
+          controller.signal,
+        ),
+      );
+      await started;
+      controller.abort();
+      const fresh = await project.call(provider, options);
+      if (fresh === undefined) throw new Error('Missing fresh projection');
+      if (resolveFresh === undefined)
+        throw new Error('Missing refresh resolver');
+      resolveFresh({
+        ...fresh,
+        releaseIfUnsent: async () => {
+          await fresh.releaseIfUnsent?.();
+          if (releaseRejects) throw new Error('unsent release failed');
+        },
+      });
+      const { error } = await result;
+      expect(error).toBeInstanceOf(Error);
+      expect(error instanceof Error && error.name).toBe('AbortError');
+      expect(attempts).toHaveLength(1);
+      expect(envelopes[1].unsentDisposals).toBe(1);
+      expect(envelopes[1].attemptDisposals).toBe(0);
+      expect(envelopes[1].released).toBe(true);
+    },
+  );
+
+  it.each([2, 3])(
+    'bounds retryable refresh failures at %s attempts and preserves the last projection error',
+    async (limit) => {
+      const { provider, attempts } = createOneShotProjectedProvider({
+        failFirstSend: true,
+        refreshProjection: 'fresh',
+      });
+      const options = buildOptions(undefined);
+      const original = await mintEnvelope(provider, options);
+      const failures: Error[] = [];
+      provider.projectPromptEnvelope = async () => {
+        const failure = Object.assign(
+          new Error(`refresh rate limit ${failures.length + 1}`),
+          { status: 429 },
+        );
+        failures.push(failure);
+        // Fail deterministically instead of leaving a broken retry loop running.
+        if (failures.length >= limit)
+          throw new Error('recovery limit exceeded');
+        throw failure;
+      };
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: limit,
+        initialDelayMs: 0,
+      });
+      const { error } = await drain(
+        orchestrator.generateChatCompletion({
+          ...options,
+          invocation:
+            options.invocation === undefined
+              ? undefined
+              : {
+                  ...options.invocation,
+                  ephemerals: { retries: limit, retrywait: 0 },
+                },
+          promptEnvelopeTransportToken: original.transportToken,
+        }),
+      );
+      expect(failures).toHaveLength(limit - 1);
+      expect(error instanceof Error ? error.cause : undefined).toBe(
+        failures[limit - 2],
+      );
+      expect(errorMessage(error)).toContain(failures[limit - 2].message);
+      expect(attempts).toHaveLength(1);
+    },
+  );
+
   it('retries with a freshly projected transport token instead of the spent one', async () => {
     const { provider, envelopes, attempts, projectionCalls } =
       createOneShotProjectedProvider({
@@ -212,7 +474,8 @@ describe('RetryOrchestrator prompt-envelope retry contract (@issue:3444)', () =>
 
     // The caller (agent seam) mints the original projection, exactly as the
     // production entry point does before handing options + token over.
-    const firstProjection = await provider.projectPromptEnvelope(
+    const firstProjection = await mintEnvelope(
+      provider,
       buildOptions(undefined),
     );
     const originalToken = firstProjection.transportToken;
@@ -235,9 +498,9 @@ describe('RetryOrchestrator prompt-envelope retry contract (@issue:3444)', () =>
     expect(projectionCalls()).toBe(2);
     // No attempt ever observed the release error.
     for (const attempt of attempts) {
-      expect(attempt.error).not.toMatchObject({
-        message: 'Cannot consume media request contents after release',
-      });
+      expect(errorMessage(attempt.error)).not.toContain(
+        'Cannot consume media request contents after release',
+      );
     }
   });
 
@@ -251,7 +514,8 @@ describe('RetryOrchestrator prompt-envelope retry contract (@issue:3444)', () =>
       initialDelayMs: 0,
     });
 
-    const firstProjection = await provider.projectPromptEnvelope(
+    const firstProjection = await mintEnvelope(
+      provider,
       buildOptions(undefined),
     );
     const { error } = await drain(
@@ -265,8 +529,8 @@ describe('RetryOrchestrator prompt-envelope retry contract (@issue:3444)', () =>
     // Both envelopes were consumed by a provider attempt, which is the sole
     // releaser on the success path (no unsent-release double fire).
     for (const envelope of envelopes) {
-      expect(envelope.attemptReleases).toBe(1);
-      expect(envelope.unsentReleases).toBe(0);
+      expect(envelope.attemptDisposals).toBe(1);
+      expect(envelope.unsentDisposals).toBe(0);
       expect(envelope.released).toBe(true);
     }
   });
@@ -281,7 +545,8 @@ describe('RetryOrchestrator prompt-envelope retry contract (@issue:3444)', () =>
       initialDelayMs: 0,
     });
 
-    const firstProjection = await provider.projectPromptEnvelope(
+    const firstProjection = await mintEnvelope(
+      provider,
       buildOptions(undefined),
     );
     const { chunks, error } = await drain(
@@ -309,7 +574,8 @@ describe('RetryOrchestrator prompt-envelope retry contract (@issue:3444)', () =>
       initialDelayMs: 0,
     });
 
-    const firstProjection = await provider.projectPromptEnvelope(
+    const firstProjection = await mintEnvelope(
+      provider,
       buildOptions(undefined),
     );
     const { error } = await drain(
@@ -318,7 +584,8 @@ describe('RetryOrchestrator prompt-envelope retry contract (@issue:3444)', () =>
       ),
     );
 
-    expect(error).toBeDefined();
+    expect(error).toBe(projectionFailure);
+    expect(errorMessage(error)).toBe(projectionFailure.message);
     // The refresh failure surfaces (or is classified terminally), never the
     // media release error.
     expect(errorMessage(error)).not.toContain(
@@ -348,9 +615,7 @@ describe('RetryOrchestrator prompt-envelope retry contract (@issue:3444)', () =>
     expect(error).toBeUndefined();
     expect(chunks).toHaveLength(1);
     expect(attempts).toHaveLength(2);
-    expect(attempts.every((attempt) => attempt.token === undefined)).toBe(
-      true,
-    );
+    expect(attempts.every((attempt) => attempt.token === undefined)).toBe(true);
     expect(projectionCalls()).toBe(0);
   });
 });

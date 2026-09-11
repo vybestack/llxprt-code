@@ -93,14 +93,6 @@ void vi.mock(
   }),
 );
 
-// Proven imageRecovery harness piece: keep the provider's INTERNAL retry
-// loop out of the picture so both 429s propagate to the RetryOrchestrator,
-// which is the layer under test.
-void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
-  getErrorStatus: vi.fn(() => undefined),
-  isNetworkTransientError: vi.fn(() => false),
-}));
-
 const createMockStream = (text: string) => ({
   async *[Symbol.asyncIterator]() {
     yield {
@@ -112,14 +104,14 @@ const createMockStream = (text: string) => ({
   },
 });
 
-function make429RateLimitError(): Error {
+function make429RateLimitError(message = 'Rate limit exceeded'): Error {
   return APIError.generate(
     429,
     {
       type: 'error',
       error: {
         type: 'rate_limit_error',
-        message: 'Rate limit exceeded',
+        message,
       },
     },
     undefined,
@@ -225,7 +217,6 @@ describe('AnthropicProvider prompt-envelope retry (@issue:3444)', () => {
     });
 
     const chunks: string[] = [];
-    let threw = false;
     let error: unknown;
     try {
       const gen = orchestrator.generateChatCompletion({
@@ -237,11 +228,10 @@ describe('AnthropicProvider prompt-envelope retry (@issue:3444)', () => {
         if (text !== undefined) chunks.push(text.text);
       }
     } catch (e) {
-      threw = true;
       error = e;
     }
 
-    expect(threw).toBe(false);
+    expect(error).toBeUndefined();
     expect(chunks.join('')).toContain('recovered');
     // Attempt 1 (429) + attempt 2 (recovered): both reached the transport.
     expect(mockMessagesCreate).toHaveBeenCalledTimes(2);
@@ -250,9 +240,7 @@ describe('AnthropicProvider prompt-envelope retry (@issue:3444)', () => {
     for (const call of mockMessagesCreate.mock.calls) {
       expect(JSON.stringify(call[0].messages)).toContain('base64');
     }
-    if (error !== undefined) {
-      expect(errorMessage(error)).not.toContain(RELEASE_ERROR);
-    }
+    expect(errorMessage(error)).not.toContain(RELEASE_ERROR);
   });
 
   it('surfaces the terminal transport error, never the media-release error, when retries exhaust', async () => {
@@ -262,9 +250,11 @@ describe('AnthropicProvider prompt-envelope retry (@issue:3444)', () => {
     mockMessagesCreate.mockReset();
     const png = await pngBase64(64, 64);
     const { provider, runtimeContext, settingsService } = setupProvider();
+    const firstError = make429RateLimitError('first SDK rate limit');
+    const finalError = make429RateLimitError('final SDK rate limit');
     mockMessagesCreate
-      .mockRejectedValueOnce(make429RateLimitError())
-      .mockRejectedValueOnce(make429RateLimitError());
+      .mockRejectedValueOnce(firstError)
+      .mockRejectedValueOnce(finalError);
 
     const callOptions = createProviderCallOptions({
       providerName: provider.name,
@@ -297,7 +287,8 @@ describe('AnthropicProvider prompt-envelope retry (@issue:3444)', () => {
 
     expect(caught).toBeDefined();
     // The real transport failure (rate limit) is what the consumer sees.
-    expect(errorMessage(caught)).toContain('Rate limit');
+    expect(errorMessage(caught)).toContain('final SDK rate limit');
+    expect(errorMessage(caught)).not.toContain('first SDK rate limit');
     expect(errorMessage(caught)).not.toContain(RELEASE_ERROR);
     // Both physical attempts reached the SDK; neither died in preparation.
     expect(mockMessagesCreate).toHaveBeenCalledTimes(2);

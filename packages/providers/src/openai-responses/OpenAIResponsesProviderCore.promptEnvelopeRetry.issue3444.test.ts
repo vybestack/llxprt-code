@@ -13,7 +13,7 @@
  * cleanup registered at prepare time), so a retry that replays the token
  * silently sends an EMPTY input payload and corrupts the turn. The provider,
  * projection, executor, and RetryOrchestrator under test are real; only the
- * transport fetch and the SSE body parser are mocked.
+ * transport fetch is mocked. The SSE parser processes real wire events.
  *
  * Scenario wiring: the invocation omits the `retries` ephemeral, so the
  * executor's internal streaming-retry cap falls back to its default (6)
@@ -45,13 +45,6 @@ const mockSettingsService = {
   getAllGlobalSettings: vi.fn().mockReturnValue({}),
 };
 
-const parseResponsesStreamMock = vi.fn(async function* () {
-  yield {
-    role: 'assistant',
-    content: [{ type: 'output_text', text: 'recovered' }],
-  };
-});
-
 const fetchMock = vi.fn();
 const requestBodies: string[] = [];
 
@@ -65,10 +58,6 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
 }));
 
-void vi.mock('../openai/parseResponsesStream.js', () => ({
-  parseResponsesStream: parseResponsesStreamMock,
-}));
-
 function rateLimitResponse(): Response {
   return new Response('rate limited', {
     status: 429,
@@ -76,15 +65,43 @@ function rateLimitResponse(): Response {
   });
 }
 
-function successResponse(): { ok: true; body: ReadableStream } {
-  return {
-    ok: true,
-    body: new ReadableStream({
-      start(controller) {
-        controller.close();
-      },
-    }),
-  };
+function successResponse(): Response {
+  const events = [
+    {
+      type: 'response.output_text.delta',
+      delta: 'recovered',
+      item_id: 'msg_1',
+      output_index: 0,
+      content_index: 0,
+    },
+    {
+      type: 'response.completed',
+      response: { id: 'resp_1', status: 'completed' },
+    },
+  ];
+  return new Response(
+    events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(''),
+    {
+      headers: { 'content-type': 'text/event-stream' },
+    },
+  );
+}
+
+function mediaMessages(): IContent[] {
+  return [
+    {
+      speaker: 'human',
+      blocks: [
+        { type: 'text', text: 'hello-retry-payload' },
+        {
+          type: 'media',
+          mimeType: 'image/png',
+          data: 'aValidBase64Chunk==',
+          encoding: 'base64',
+        },
+      ],
+    },
+  ];
 }
 
 describe('OpenAIResponsesProvider prompt-envelope retry (@issue:3444)', () => {
@@ -98,7 +115,7 @@ describe('OpenAIResponsesProvider prompt-envelope retry (@issue:3444)', () => {
     // the retried attempt still carries the full projected input (the RED
     // failure mode is a silently emptied `input`, not a thrown error).
     fetchMock.mockImplementation(async (_url: unknown, init: RequestInit) => {
-      const body = init.body as ReadableStream | null;
+      const body = init.body;
       requestBodies.push(
         body === null || body === undefined
           ? ''
@@ -121,12 +138,7 @@ describe('OpenAIResponsesProvider prompt-envelope retry (@issue:3444)', () => {
 
     const callOptions = createProviderCallOptions({
       providerName: provider.name,
-      contents: [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'hello-retry-payload' }],
-        },
-      ] as IContent[],
+      contents: mediaMessages(),
       ephemerals: {
         retrywait: 0,
       },
@@ -170,10 +182,57 @@ describe('OpenAIResponsesProvider prompt-envelope retry (@issue:3444)', () => {
     // ...and so did the outer retry. Replaying the spent token would have
     // spliced `input` to an empty array and silently dropped the payload.
     expect(requestBodies[6]).toContain('hello-retry-payload');
-    if (error !== undefined) {
-      expect(String(error)).not.toContain(
-        'Cannot consume media request contents after release',
-      );
+    expect(requestBodies[6]).toContain('input_image');
+    expect(requestBodies[6]).toContain(
+      'data:image/png;base64,aValidBase64Chunk==',
+    );
+    expect(String(error)).not.toContain(
+      'Cannot consume media request contents after release',
+    );
+  });
+
+  it('preserves the last transport failure when the outer retry exhausts', async () => {
+    let sends = 0;
+    fetchMock.mockImplementation(() => {
+      sends += 1;
+      return new Response(`rate limit on physical send ${sends}`, {
+        status: 429,
+        headers: { 'retry-after': '0' },
+      });
+    });
+    const provider = new OpenAIResponsesProvider('test-key', undefined, {
+      getEphemeralSettings: () => ({}),
+    });
+    const options = createProviderCallOptions({
+      providerName: provider.name,
+      contents: mediaMessages(),
+      ephemerals: { retrywait: 0 },
+      resolved: { model: 'gpt-5' },
+    });
+    const projection = await provider.projectPromptEnvelope(options);
+    const orchestrator = new RetryOrchestrator(provider, {
+      maxAttempts: 7,
+      initialDelayMs: 0,
+    });
+    let caught: unknown;
+    const chunks: IContent[] = [];
+    try {
+      for await (const chunk of orchestrator.generateChatCompletion({
+        ...options,
+        promptEnvelopeTransportToken: projection.transportToken,
+      }))
+        chunks.push(chunk);
+    } catch (error) {
+      caught = error;
     }
+    expect(chunks).toHaveLength(0);
+    expect(sends).toBe(7);
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught instanceof Error ? caught.message : '').toContain(
+      'rate limit on physical send 7',
+    );
+    expect(String(caught)).not.toContain(
+      'Cannot consume media request contents after release',
+    );
   });
 });
