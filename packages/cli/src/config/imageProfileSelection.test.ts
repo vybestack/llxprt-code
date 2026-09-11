@@ -5,12 +5,14 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createImageProfileRuntimeState } from '@vybestack/llxprt-code-core';
 import {
   ImageProfileNotFoundError,
+  ImageProfileLoadError,
+  ProfileTypeConflictError,
   ProfileManager,
   type ImageProfile,
 } from '@vybestack/llxprt-code-settings';
@@ -89,6 +91,53 @@ describe('image profile surface selection', () => {
     await applyStartupImageProfile({}, manager, state, result);
     expect(state.getActive()).toBeUndefined();
   });
+  async function loadInlineProfile(imageProfile: string) {
+    return loadAndPrepareProfile({
+      bootstrapArgs: {
+        ...parseBootstrapArgs().bootstrapArgs,
+        profileJson: JSON.stringify({
+          version: 1,
+          provider: 'openai',
+          model: 'chat-model',
+          modelParams: {},
+          ephemeralSettings: {},
+          imageProfile,
+        }),
+      },
+      settings: {},
+      argv: await parseArguments({}),
+      profileToLoad: undefined,
+      profileExplicitlySpecified: false,
+    });
+  }
+
+  it('rejects a dangling inline reference with its typed named error', async () => {
+    const pending = loadInlineProfile('definitely-missing');
+    await expect(pending).rejects.toBeInstanceOf(ImageProfileNotFoundError);
+    await expect(pending).rejects.toThrow('definitely-missing');
+  });
+
+  it('resolves and selects a valid inline image reference', async () => {
+    const result = await loadInlineProfile('local');
+    const state = createImageProfileRuntimeState();
+    await applyStartupImageProfile({}, manager, state, result);
+    expect(state.getActive()?.profile.model).toBe('flux-klein');
+  });
+
+  it('fails default startup for a wrong-type linked image profile', async () => {
+    const pending = loadFileProfile('chat');
+    await expect(pending).rejects.toBeInstanceOf(ProfileTypeConflictError);
+  });
+
+  it.each(['{broken', '{"type":"image","model":12}'])(
+    'fails default startup for an invalid linked image file %s',
+    async (content) => {
+      await writeFile(join(directory, 'profiles', 'invalid.json'), content);
+      const pending = loadFileProfile('invalid');
+      await expect(pending).rejects.toBeInstanceOf(ImageProfileLoadError);
+      await expect(pending).rejects.toThrow('invalid');
+    },
+  );
 
   it('rejects a dangling file reference with a typed named error', async () => {
     const pending = loadFileProfile('missing-reference');

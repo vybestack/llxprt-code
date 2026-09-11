@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { isImageProfileLoadError } from '@vybestack/llxprt-code-settings';
 import type { CommandContext, MessageActionReturn } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
@@ -49,7 +50,7 @@ export function classifyLoadError(
   }
   if (
     error.message.includes('OAuth bucket') ||
-    error.message.startsWith('Image profile ')
+    isImageProfileLoadError(error)
   ) {
     return { type: 'message', messageType: 'error', content: error.message };
   }

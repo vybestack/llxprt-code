@@ -54,6 +54,9 @@ export {
 
 export {
   ImageProfileNotFoundError,
+  ImageProfileLoadError,
+  LoadBalancerMemberTypeError,
+  isImageProfileLoadError,
   ProfileManager,
   ProfileTypeConflictError,
 } from './profiles/ProfileManager.js';

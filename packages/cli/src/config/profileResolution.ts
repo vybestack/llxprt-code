@@ -6,7 +6,10 @@
 
 import process from 'node:process';
 import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
-import { ProfileManager } from '@vybestack/llxprt-code-settings';
+import {
+  ProfileManager,
+  isImageProfileLoadError,
+} from '@vybestack/llxprt-code-settings';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import type { ActiveImageProfile } from '@vybestack/llxprt-code-core';
 import type { MergedSettings, Settings } from './settings.js';
@@ -161,16 +164,33 @@ function isTemporaryDebugMode(argv: CliArgs): boolean {
   );
 }
 
-function applyInlineProfile(
+async function resolveImageReference(
+  manager: ProfileManager,
+  profile: Profile,
+): Promise<ActiveImageProfile | undefined> {
+  const name = 'imageProfile' in profile ? profile.imageProfile : undefined;
+  return name === undefined
+    ? undefined
+    : {
+        name,
+        profile: await manager.loadImageProfile(name),
+      };
+}
+
+async function applyInlineProfile(
   profileJson: string,
   argv: CliArgs,
   settings: Settings,
-): Omit<ProfileLoadResult, 'profileToLoad' | 'profileWarnings'> {
+): Promise<Omit<ProfileLoadResult, 'profileToLoad' | 'profileWarnings'>> {
   const validationResult = parseInlineProfile(profileJson);
   if (validationResult.error !== undefined) {
     throw new Error(validationResult.error);
   }
   const profile = JSON.parse(profileJson) as Profile;
+  const activeImageProfile = await resolveImageReference(
+    new ProfileManager(),
+    profile,
+  );
   const prepared = prepareProfileForApplication(
     profile,
     'inline',
@@ -185,6 +205,7 @@ function applyInlineProfile(
     );
   }
   return {
+    activeImageProfile,
     profileMergedSettings: prepared.profileMergedSettings,
     profileModel: prepared.profileModel,
     profileProvider: prepared.profileProvider,
@@ -207,17 +228,10 @@ async function applyFileProfile(
   try {
     const profileManager = new ProfileManager();
     const profile = await profileManager.loadProfile(profileToLoad);
-    const imageProfileName =
-      'imageProfile' in profile && typeof profile.imageProfile === 'string'
-        ? profile.imageProfile
-        : undefined;
-    const activeImageProfile =
-      imageProfileName === undefined
-        ? undefined
-        : {
-            name: imageProfileName,
-            profile: await profileManager.loadImageProfile(imageProfileName),
-          };
+    const activeImageProfile = await resolveImageReference(
+      profileManager,
+      profile,
+    );
     const prepared = prepareProfileForApplication(
       profile,
       profileToLoad,
@@ -255,10 +269,7 @@ async function applyFileProfile(
     });
     debugLogger.error(failureSummary);
 
-    if (
-      profileExplicitlySpecified ||
-      (error instanceof Error && error.message.startsWith('Image profile '))
-    ) {
+    if (profileExplicitlySpecified || isImageProfileLoadError(error)) {
       throw error;
     }
 
@@ -298,11 +309,12 @@ export async function loadAndPrepareProfile(input: {
   // Handle inline profile from --profile flag
   if (bootstrapArgs.profileJson != null) {
     try {
-      const result = applyInlineProfile(
+      const result = await applyInlineProfile(
         bootstrapArgs.profileJson,
         argv,
         settings,
       );
+      imageProfileSelection = { activeImageProfile: result.activeImageProfile };
       ({
         profileMergedSettings,
         profileModel,
@@ -312,6 +324,7 @@ export async function loadAndPrepareProfile(input: {
         loadedProfile,
       } = result);
     } catch (err) {
+      if (isImageProfileLoadError(err)) throw err;
       throw new Error(
         `Failed to parse inline profile: ${err instanceof Error ? err.message : String(err)}`,
       );

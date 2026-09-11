@@ -830,9 +830,12 @@ async function addLoadBalancerProfileDetails(
   };
 }
 
-export async function listSavedProfiles(): Promise<string[]> {
-  const manager = new ProfileManager();
-  return manager.listProfiles();
+export async function listSavedProfiles(
+  kind?: 'model' | 'image' | 'standard',
+): Promise<string[]> {
+  const manager =
+    getCliRuntimeServices().profileManager ?? new ProfileManager();
+  return manager.listProfiles(kind);
 }
 
 export async function getProfileByName(profileName: string): Promise<Profile> {

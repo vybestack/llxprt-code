@@ -45,26 +45,34 @@ export function validateBucketName(bucket: string): {
   return { valid: true };
 }
 
-export async function listProfiles(): Promise<string[]> {
-  return getRuntimeApi().listSavedProfiles();
+export async function listProfiles(
+  kind?: 'model' | 'image' | 'standard',
+): Promise<string[]> {
+  return getRuntimeApi().listSavedProfiles(kind);
 }
 
-export const profileNameCompleter: CompleterFn = withFuzzyFilter(async () => {
-  try {
-    const profiles = await listProfiles();
-    return profiles.map((profile) => ({
-      value: profile,
-      description: profileSuggestionDescription,
-    }));
-  } catch {
-    return [];
-  }
-});
+function profileCompleter(kind?: 'model' | 'image' | 'standard'): CompleterFn {
+  return withFuzzyFilter(async () => {
+    try {
+      const profiles = await listProfiles(kind);
+      return profiles.map((profile) => ({
+        value: profile,
+        description: profileSuggestionDescription,
+      }));
+    } catch {
+      return [];
+    }
+  });
+}
+
+export const profileNameCompleter = profileCompleter('model');
+const imageProfileCompleter = profileCompleter('image');
+const allProfileCompleter = profileCompleter();
 
 const lbMemberProfileCompleter: CompleterFn = withFuzzyFilter(
   async (_ctx, _partial, tokens) => {
     try {
-      const profiles = await listProfiles();
+      const profiles = await listProfiles('standard');
       // tokens.tokens format: ["save", "loadbalancer", "lb-name", "policy", "prof1", "prof2", ...]
       // Skip first 4 tokens (save, loadbalancer, lb-name, policy) to get already selected profiles
       const alreadySelected = tokens.tokens
@@ -171,7 +179,7 @@ export const profileSaveSchema: CommandArgumentSchema = [
         kind: 'value',
         name: 'profile-name',
         description: 'Enter image profile name',
-        completer: profileNameCompleter,
+        completer: imageProfileCompleter,
       },
     ],
   },
@@ -227,7 +235,7 @@ export const profileLoadSchema: CommandArgumentSchema = [
         kind: 'value',
         name: 'profile',
         description: 'Select image profile to load',
-        completer: profileNameCompleter,
+        completer: imageProfileCompleter,
       },
     ],
   },
@@ -244,7 +252,7 @@ export const profileDeleteSchema: CommandArgumentSchema = [
     kind: 'value',
     name: 'profile',
     description: 'Select profile to delete',
-    completer: profileNameCompleter,
+    completer: allProfileCompleter,
   },
 ];
 
@@ -255,7 +263,7 @@ export const profileSetDefaultSchema: CommandArgumentSchema = [
     description: 'Set default profile or choose none',
     completer: withFuzzyFilter(async () => {
       try {
-        const profiles = await listProfiles();
+        const profiles = await listProfiles('model');
         const candidates = ['none', ...profiles];
         return candidates.map((option) => ({
           value: option,

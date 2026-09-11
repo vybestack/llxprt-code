@@ -10,6 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   ImageProfileNotFoundError,
+  LoadBalancerMemberTypeError,
   ProfileManager,
   ProfileTypeConflictError,
 } from '../ProfileManager.js';
@@ -40,6 +41,53 @@ describe('ProfileManager typed image profiles', () => {
   afterEach(async () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
+  it('discovers model and image profiles separately from persisted kinds', async () => {
+    await manager.saveImageProfile('art', imageProfile());
+    await manager.saveProfile('chat', {
+      version: 1,
+      provider: 'openai',
+      model: 'chat',
+      modelParams: {},
+      ephemeralSettings: {},
+    });
+    expect(await manager.listModelProfiles()).toStrictEqual(['chat']);
+    expect(await manager.listImageProfiles()).toStrictEqual(['art']);
+  });
+
+  it.each(['save', 'load'] as const)(
+    'rejects image members on load balancer %s',
+    async (operation) => {
+      await manager.saveImageProfile('art', imageProfile());
+      await manager.saveProfile('chat', {
+        version: 1,
+        provider: 'openai',
+        model: 'chat',
+        modelParams: {},
+        ephemeralSettings: {},
+      });
+      const profile = {
+        version: 1,
+        type: 'loadbalancer',
+        policy: 'roundrobin',
+        profiles: ['chat', 'art'],
+        provider: '',
+        model: '',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+      await fs.writeFile(
+        path.join(tempDir, 'lb.json'),
+        JSON.stringify(profile),
+      );
+      const pending =
+        operation === 'save'
+          ? manager.saveLoadBalancerProfile('lb', profile)
+          : manager.loadProfile('lb');
+      await expect(pending).rejects.toBeInstanceOf(LoadBalancerMemberTypeError);
+      await expect(pending).rejects.toThrow('art');
+    },
+  );
+
   it.each([
     { operations: [] },
     { operations: ['generate', 'generate'] },

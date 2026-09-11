@@ -57,6 +57,37 @@ export class ImageProfileNotFoundError extends Error {
   }
 }
 
+export class LoadBalancerMemberTypeError extends Error {
+  constructor(
+    readonly profileName: string,
+    readonly memberName: string,
+  ) {
+    super(
+      `LoadBalancer profile '${profileName}' cannot reference image profile '${memberName}'`,
+    );
+    this.name = 'LoadBalancerMemberTypeError';
+  }
+}
+
+export class ImageProfileLoadError extends Error {
+  constructor(
+    readonly profileName: string,
+    cause: unknown,
+  ) {
+    super(`Image profile '${profileName}' could not be loaded`, { cause });
+    this.name = 'ImageProfileLoadError';
+  }
+}
+
+export function isImageProfileLoadError(error: unknown): boolean {
+  return (
+    error instanceof ImageProfileNotFoundError ||
+    error instanceof ImageProfileLoadError ||
+    (error instanceof ProfileTypeConflictError &&
+      error.requestedType === 'image')
+  );
+}
+
 function storedProfileKind(content: string): StoredProfileKind {
   const parsed = parseProfileJson(content);
   if (parsed.kind !== 'parsed' || !isPlainObject(parsed.value)) {
@@ -192,7 +223,10 @@ export class ProfileManager {
       if (hasErrnoCode(error, 'ENOENT')) {
         throw new ImageProfileNotFoundError(profileName);
       }
-      throw error;
+      if (isImageProfileLoadError(error)) {
+        throw error;
+      }
+      throw new ImageProfileLoadError(profileName, error);
     }
   }
 
@@ -244,6 +278,13 @@ export class ProfileManager {
       const referencedProfileData: unknown =
         ProfileManager.parseProfileContent(referencedContent);
 
+      if (
+        isPlainObject(referencedProfileData) &&
+        referencedProfileData.type === 'image'
+      ) {
+        throw new LoadBalancerMemberTypeError(name, referencedProfile);
+      }
+
       if (referencedProfileIsLoadBalancer(referencedProfileData)) {
         throw new Error(
           `LoadBalancer profile '${name}' cannot reference another LoadBalancer profile '${referencedProfile}'`,
@@ -291,6 +332,13 @@ export class ProfileManager {
       );
       const referencedProfileData: unknown =
         ProfileManager.parseProfileContent(referencedContent);
+
+      if (
+        isPlainObject(referencedProfileData) &&
+        referencedProfileData.type === 'image'
+      ) {
+        throw new LoadBalancerMemberTypeError(profileName, referencedProfile);
+      }
 
       if (referencedProfileIsLoadBalancer(referencedProfileData)) {
         throw new Error(
@@ -351,10 +399,18 @@ export class ProfileManager {
   }
 
   /**
-   * List all available profile names.
-   * @returns Array of profile names (without .json extension)
+   * List conversational profiles, including load balancers and legacy files.
+   * @returns Model profile names without the .json extension.
    */
-  async listProfiles(): Promise<string[]> {
+  async listModelProfiles(): Promise<string[]> {
+    return this.listProfiles('model');
+  }
+
+  async listImageProfiles(): Promise<string[]> {
+    return this.listProfiles('image');
+  }
+
+  async listProfiles(kind?: 'model' | 'image' | 'standard'): Promise<string[]> {
     try {
       await fs.mkdir(this.profilesDir, { recursive: true });
 
@@ -364,7 +420,26 @@ export class ProfileManager {
         .filter((file) => file.endsWith('.json'))
         .map((file) => file.slice(0, -5));
 
-      return profileNames;
+      if (kind === undefined) return profileNames;
+      const matching = await Promise.all(
+        profileNames.map(async (name) => {
+          const content = await fs.readFile(
+            path.join(this.profilesDir, `${name}.json`),
+            'utf8',
+          );
+          const parsed = parseProfileJson(content);
+          if (parsed.kind !== 'parsed' || !isPlainObject(parsed.value))
+            return [];
+          const type = parsed.value.type;
+          const isStandard =
+            type === undefined || type === 'model' || type === 'standard';
+          const isModel =
+            isStandard || (kind === 'model' && type === 'loadbalancer');
+          const matches = kind === 'image' ? type === 'image' : isModel;
+          return matches ? [name] : [];
+        }),
+      );
+      return matching.flat();
     } catch {
       return [];
     }

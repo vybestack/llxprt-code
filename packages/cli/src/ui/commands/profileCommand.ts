@@ -599,6 +599,21 @@ export const profileCommand: SlashCommand = {
   subCommands: [
     saveCommand,
     loadCommand,
+    {
+      name: 'reset-image',
+      description:
+        'restore default image backend without changing the model profile',
+      kind: CommandKind.BUILT_IN,
+      action: async (): Promise<MessageActionReturn> => {
+        getRuntimeApi().resetActiveImageProfile();
+        return {
+          type: 'message',
+          messageType: 'info',
+          content:
+            'Image profile reset. Image operations use the default backend; the model profile is unchanged.',
+        };
+      },
+    },
     createCommand,
     deleteCommand,
     setDefaultCommand,
@@ -619,6 +634,7 @@ export const profileCommand: SlashCommand = {
                                 - Save a load balancer profile
   /profile load model <name>    - Load a model profile
   /profile load image <name>    - Load an image profile
+  /profile reset-image          - Restore the default image backend only
   /profile load <name>          - Load a model profile (alias)
   /profile show <name>          - View details of a specific profile
   /profile edit <name>          - Edit a specific profile
