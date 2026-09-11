@@ -77,11 +77,16 @@ describe('ProviderManager Settings Separation', () => {
     expect(getSnapshot('openai')['auth-key']).toBeUndefined();
   });
 
-  it('snapshot does NOT include legacy apiKey spellings in root level', () => {
-    settingsService.set('auth-key', 'sk-test-12345');
-    expect(getSnapshot('openai')['apiKey']).toBeUndefined();
-    expect(getSnapshot('openai')['api-key']).toBeUndefined();
-  });
+  it.each(['apiKey', 'api-key'])(
+    'rejects runtime writes of legacy %s with auth-key guidance',
+    (legacyKey) => {
+      expect(() => settingsService.set(legacyKey, 'sk-test-12345')).toThrow(
+        'auth-key',
+      );
+      expect(getSnapshot('openai')['apiKey']).toBeUndefined();
+      expect(getSnapshot('openai')['api-key']).toBeUndefined();
+    },
+  );
 
   it('snapshot does NOT include base-url in root level', () => {
     settingsService.set('base-url', 'https://api.example.com');

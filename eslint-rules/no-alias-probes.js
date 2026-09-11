@@ -175,8 +175,9 @@ export default {
       const rightObject = normalizeObjectText(sourceCode.getText(right.object));
       if (leftObject !== rightObject) return false;
       return (
+        leftProperty.toLowerCase() === rightProperty.toLowerCase() ||
         normalizePropertyName(leftProperty) ===
-        normalizePropertyName(rightProperty)
+          normalizePropertyName(rightProperty)
       );
     }
 

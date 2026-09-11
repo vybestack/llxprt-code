@@ -278,6 +278,21 @@ describe('setCommand runtime integration', () => {
     );
   });
 
+  it('rejects unsetting a legacy modelparam before changing runtime state', async () => {
+    const result = await setCommand.action!(
+      context,
+      'unset modelparam max-tokens',
+    );
+
+    expect(result).toMatchObject({
+      type: 'message',
+      messageType: 'error',
+      content: "Unknown setting 'max-tokens'. Canonical key: 'max_tokens'.",
+    });
+    expect(mockRuntime.clearActiveModelParam).not.toHaveBeenCalled();
+    expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
+  });
+
   it('still accepts an unregistered provider-specific param verbatim', async () => {
     await setCommand.action!(context, 'modelparam parse_reasoning true');
 

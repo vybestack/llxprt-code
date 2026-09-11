@@ -199,6 +199,10 @@ function handleSetUnset(parts: string[]): MessageActionReturn {
   const subKey = parts[2];
 
   if (targetKey === 'modelparam') {
+    const legacyParamRejection = rejectLegacySettingKey(subKey);
+    if (legacyParamRejection) {
+      return legacyParamRejection;
+    }
     return handleUnsetModelParam(subKey);
   }
 

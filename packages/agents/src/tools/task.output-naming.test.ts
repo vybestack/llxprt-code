@@ -140,6 +140,35 @@ describe('Issue #2533: TaskTool single parameter vocabulary', () => {
     );
   });
 
+  describe('validateToolParamValues', () => {
+    class ValueValidatingTaskTool extends TaskTool {
+      override validateToolParamValues(params: TaskToolParams): string | null {
+        return super.validateToolParamValues(params);
+      }
+    }
+
+    it.each([
+      ['subagentName', 'subagent_name'],
+      ['goalPrompt', 'goal_prompt'],
+    ] as const)(
+      'rejects legacy %s before validating values',
+      (legacyName, canonicalName) => {
+        const tool = new ValueValidatingTaskTool(config, {
+          messageBus: new MessageBus(),
+        });
+        const params = {
+          subagent_name: 'helper',
+          goal_prompt: 'Do work',
+          [legacyName]: 'legacy value',
+        };
+
+        expect(tool.validateToolParamValues(params)).toContain(
+          `use the canonical '${canonicalName}'`,
+        );
+      },
+    );
+  });
+
   describe('normalizeTaskParams', () => {
     it('resolves expected_outputs into outputSpec', () => {
       const normalized = normalizeTaskParams({
@@ -190,7 +219,10 @@ describe('Issue #2533: TaskTool single parameter vocabulary', () => {
         const params = {
           subagent_name: 'helper',
           goal_prompt: 'Do work',
-          [legacyName]: 'legacy value',
+          [legacyName]:
+            canonicalName === 'expected_outputs'
+              ? { result: 'The outcome' }
+              : 'legacy value',
         } as unknown as TaskToolParams;
 
         expect(() => normalizeTaskParams(params)).toThrow(
@@ -208,8 +240,14 @@ describe('Issue #2533: TaskTool single parameter vocabulary', () => {
         const params = {
           subagent_name: 'helper',
           goal_prompt: 'Do work',
-          [canonicalName]: 'canonical value',
-          [legacyName]: 'legacy value',
+          [canonicalName]:
+            canonicalName === 'expected_outputs'
+              ? { result: 'The canonical outcome' }
+              : 'canonical value',
+          [legacyName]:
+            canonicalName === 'expected_outputs'
+              ? { result: 'The outcome' }
+              : 'legacy value',
         } as unknown as TaskToolParams;
 
         expect(() => normalizeTaskParams(params)).toThrow(

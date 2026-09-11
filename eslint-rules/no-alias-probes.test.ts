@@ -73,6 +73,21 @@ describe('no-alias-probes', () => {
       expectFlagged('const v = x.baseUrl ?? x.baseURL;');
     });
 
+    it.each([
+      'const v = a.oldname ?? a.oldName;',
+      "const v = obj['maxtokens'] ?? obj.maxTokens;",
+    ])('flags concatenated case-only variants: %s', (code) => {
+      expectFlagged(code);
+    });
+
+    it.each([
+      'const v = a.olderSibling ?? a.newerSibling;',
+      'const v = a.rise ?? a.rize;',
+      'const v = a.contour ?? a.contor;',
+    ])('allows distinct words: %s', (code) => {
+      expectClean(code);
+    });
+
     it('flags British/American spelling variants', () => {
       expectFlagged(
         'const v = request.behaviourPrompts ?? request.behaviorPrompts;',

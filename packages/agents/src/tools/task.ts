@@ -770,6 +770,10 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
   protected override validateToolParamValues(
     params: TaskToolParams,
   ): string | null {
+    const spellingError = validateCanonicalTaskParamSpellings(params);
+    if (spellingError !== null) {
+      return spellingError;
+    }
     const subagentName = params.subagent_name;
     if (!subagentName || subagentName.trim().length === 0) {
       return 'Task tool requires a subagent_name.';

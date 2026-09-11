@@ -328,7 +328,31 @@ model response (`smoke.log`, stepfun-37 haiku).
   At this documentation update, typecheck and lint logs exist; test, build,
   and smoke logs are not yet present. Full-cycle completion is not claimed here.
 
+## OCR round 2 + CodeRabbit follow-up (2026-09-11)
+
+OCR round 2 (against 4cf04db23) posted 10 findings; CodeRabbit re-review
+posted 1. Five fixed, five dismissed with evidence:
+
+| ID | Finding | Disposition |
+|---|---|---|
+| R2-1 | `/set unset modelparam max-tokens` bypassed legacy-key rejection (modelparam branch returned before the check) | Fixed: rejectLegacySettingKey at branch top, before clearActiveModelParam; regression asserts neither runtime write fires |
+| R2-2 | Rule missed case-only probes on single concatenated lowercase words (`a.oldname ?? a.oldName`) | Fixed: same-object comparison now flags case-insensitive equality OR word-fold equality; substring folding stays out (olderSibling/rise/contour still clean) |
+| R2-3 | validateToolParamValues read canonical members without rejecting legacy spellings first | Fixed (actual site: task.ts): validateCanonicalTaskParamSpellings runs first and its error is returned; normalizeTaskParams throw retained for direct callers |
+| R2-4 | combined canonical+legacy test fixtures used strings for object-typed output params | Fixed: typed fixtures (string maps for expected_outputs/output_spec) |
+| R2-5 | settingsSeparation test asserted legacy absence without ever exercising legacy writes | Fixed: apiKey/api-key writes now attempted and asserted rejected naming auth-key; snapshot carries neither |
+| R2-6 | setCommand unset partial-commit (clear succeeds, ephemeral unset throws) | Dismissed: R2-1 rejects legacy keys before any side effect; remaining failure mode is storage IO mid-sequence, where fail-fast surfacing (no compensating rollback) is the chosen design |
+| R2-7 | security/high: `/set disabled-tools` governance bypass in non-interactive mode | Dismissed: setEphemeralSetting delegates to SettingsService.set, which calls assertCanonicalSettingKey and throws before any governance effect — fails closed on every path |
+| R2-8/9 | toolEntryDecoderDrift imports normalizeToolName "not exported" from policy | Dismissed: packages/policy/src/index.ts:30 exports it; test passes (3/3) locally and in CI core shard |
+| R2-10 | max-output-tokens migration "maps to wrong canonical key" | Dismissed: pre-PR registry declared max_output_tokens alias ['max-output-tokens'] and maxOutputTokens alias ['max-output']; migration preserves those exact relationships |
+
+Verification: 154 targeted tests pass (setCommand 29, rule 28, task trio 86,
+settingsSeparation 11), eslint guard exit 0, prettier clean on all seven
+touched files, smoke green (tmp/verify2533-r2/, full typecheck/lint/test logs
+therein). OCR budget (2 rounds) exhausted; any further findings become
+documented follow-ups, not new cycles.
+
 ## Known follow-ups (deferred, out of scope here)
+
 
 - packages/core/src/prompt-config/prompt-resolver.ts private toSnakeCase is not
   byte-equivalent to the shared packages/tools implementation (consecutive-capitals
