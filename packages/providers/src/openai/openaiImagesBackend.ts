@@ -99,7 +99,7 @@ export class OpenAIImagesBackend implements ImageBackend {
       model: this.model,
       prompt: request.prompt,
       n: 1,
-      ...(this.local || !this.model.startsWith('gpt-image')
+      ...(!this.local && !this.model.startsWith('gpt-image')
         ? { response_format: 'b64_json' }
         : {}),
       ...(this.local ? localOverrides : overrides),
@@ -145,8 +145,11 @@ export class OpenAIImagesBackend implements ImageBackend {
       );
     }
     if (!this.local) {
-      for (const [key, value] of Object.entries(this.overrides(request)))
-        form.set(key, value);
+      const overrides = this.overrides(request);
+      for (const key of ['size', 'quality', 'background'] as const) {
+        const value = overrides[key];
+        if (value !== undefined) form.set(key, value);
+      }
     }
     return this.post('edits', form, request.prompt, signal);
   }

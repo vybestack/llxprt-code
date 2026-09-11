@@ -307,7 +307,7 @@ function useProfileSave(runtime: ReturnType<typeof useRuntimeApi>) {
         );
 
         // Check if profile already exists
-        const existingProfiles = await runtime.listSavedProfiles();
+        const existingProfiles = await runtime.listSavedProfiles('model');
         debug.log(
           `[saveProfile] Existing profiles: ${existingProfiles.join(', ')}`,
         );

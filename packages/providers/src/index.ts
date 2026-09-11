@@ -216,5 +216,8 @@ export {
 } from './openai/imageBackendResponse.js';
 export {
   resolveImageProfileBackendConfig,
+  validateImageProfileAuth,
+  ImageBackendAuthModeError,
+  ImageBackendBaseUrlError,
   type ResolvedImageProfileBackendConfig,
 } from './openai/codexImageBackendResolver.js';

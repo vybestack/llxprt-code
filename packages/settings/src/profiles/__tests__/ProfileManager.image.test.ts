@@ -41,6 +41,38 @@ describe('ProfileManager typed image profiles', () => {
   afterEach(async () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
+  it.each([
+    '../evil',
+    '/absolute',
+    '.',
+    '..',
+    'nested/name',
+    String.raw`nested\name`,
+  ])('rejects unsafe image profile name %s before reading', async (name) => {
+    await expect(manager.loadImageProfile(name)).rejects.toMatchObject({
+      name: 'ImageProfileLoadError',
+      cause: { message: `Invalid profile name: ${JSON.stringify(name)}` },
+    });
+  });
+
+  it.each(['garbage', '{}', '{"type":"image"}'])(
+    'replaces invalid stored profile content %s',
+    async (content) => {
+      await fs.writeFile(path.join(tempDir, 'art.json'), content);
+      await manager.saveImageProfile('art', imageProfile());
+      expect(await manager.loadImageProfile('art')).toStrictEqual(
+        imageProfile(),
+      );
+    },
+  );
+
+  it('skips unreadable and corrupt entries without hiding valid profiles', async () => {
+    await manager.saveImageProfile('art', imageProfile());
+    await fs.mkdir(path.join(tempDir, 'unreadable.json'));
+    await fs.writeFile(path.join(tempDir, 'corrupt.json'), 'garbage');
+    expect(await manager.listImageProfiles()).toStrictEqual(['art']);
+  });
+
   it('discovers model and image profiles separately from persisted kinds', async () => {
     await manager.saveImageProfile('art', imageProfile());
     await manager.saveProfile('chat', {

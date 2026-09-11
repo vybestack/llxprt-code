@@ -30,6 +30,10 @@ import * as fc from 'fast-check';
 import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
+import {
+  setActiveImageProfile,
+  getActiveImageProfile,
+} from '@vybestack/llxprt-code-providers/runtime.js';
 
 // ─── Structural identity probe (cast-free, mirrors fromConfig.behavior idiom) ─
 //
@@ -76,6 +80,31 @@ function asWithRuntimeId(agent: Agent): WithRuntimeId {
 }
 
 describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requirement:REQ-005,REQ-001', () => {
+  it('resets the active image profile through the Agent facade', async () => {
+    const built = await buildCliStyleConfig('plain-text.jsonl');
+    let agent: Agent | undefined;
+    try {
+      agent = await fromConfig({ config: built.config });
+      setActiveImageProfile({
+        name: 'art',
+        profile: {
+          version: 1,
+          type: 'image',
+          backend: 'openai-images',
+          model: 'klein',
+          baseUrl: 'http://localhost:8321/v1',
+          auth: { type: 'none' },
+        },
+      });
+      expect(getActiveImageProfile()?.name).toBe('art');
+      agent.profiles.resetActiveImageProfile();
+      expect(getActiveImageProfile()).toBeUndefined();
+    } finally {
+      await agent?.dispose();
+      await built.cleanup();
+    }
+  });
+
   it('T6a fromConfig with a known sessionId yields agent.getRuntimeId() === that sessionId @requirement:REQ-005.1 @scenario:runtime-id @given:a real CLI-style Config and sessionId "known-runtime-id-T6a" @when:fromConfig({ config, sessionId }) @then:agent.getRuntimeId() === "known-runtime-id-T6a"', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     let agent: Agent | undefined;

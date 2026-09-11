@@ -14,6 +14,8 @@ import type {
   ProfileManager,
 } from '@vybestack/llxprt-code-settings';
 
+import { validateImageProfileAuth } from '../openai/codexImageBackendResolver.js';
+
 export class NoActiveImageProfileError extends Error {
   constructor() {
     super('No active image profile to save');
@@ -55,6 +57,10 @@ export async function applyModelAndImageProfileTransition<TResult>(
       ? undefined
       : await manager.loadImageProfile(imageProfileName);
 
+  if (imageProfile !== undefined) {
+    validateImageProfileAuth(imageProfile, imageProfileName);
+  }
+
   // The application callback owns model mutations and must not publish yet.
   // A rejected application leaves the previous image selection untouched.
   const result = await applyProfile(profile);
@@ -77,6 +83,7 @@ export async function saveAndSelectImageProfile(
     throw new NoActiveImageProfileError();
   }
 
+  validateImageProfileAuth(activeProfile.profile, profileName);
   await manager.saveImageProfile(profileName, activeProfile.profile);
   imageProfileState.select({
     name: profileName,
@@ -92,6 +99,7 @@ export async function loadAndSelectImageProfile(
   name: string,
 ): Promise<ActiveImageProfile> {
   const selection = { name, profile: await manager.loadImageProfile(name) };
+  validateImageProfileAuth(selection.profile, name);
   state.select(selection);
   return selection;
 }

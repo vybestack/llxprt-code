@@ -180,6 +180,37 @@ describe('startup image profile transitions', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
+  it('keeps standalone image selection after bootstrap model reapplication', async () => {
+    await manager.saveProfile('conversation', modelProfile());
+    await loadImageProfileByName('art');
+    const previousBootstrap = process.env.LLXPRT_BOOTSTRAP_PROFILE;
+    process.env.LLXPRT_BOOTSTRAP_PROFILE = 'conversation';
+    try {
+      await reapplyBootstrapProfile(
+        { ...argv, profileLoad: undefined, imageProfile: 'art' },
+        settings,
+      );
+      expect(settings.getCurrentProfileName()).toBe('conversation');
+      expect(getActiveImageProfile()?.name).toBe('art');
+    } finally {
+      if (previousBootstrap === undefined)
+        delete process.env.LLXPRT_BOOTSTRAP_PROFILE;
+      else process.env.LLXPRT_BOOTSTRAP_PROFILE = previousBootstrap;
+    }
+  });
+
+  it('rethrows invalid bootstrap image authentication before model application', async () => {
+    await manager.saveImageProfile('invalid', {
+      ...(await manager.loadImageProfile('art')),
+      auth: { type: 'named-key', keyName: 'remote-key' },
+    });
+    await manager.saveProfile('conversation', modelProfile('invalid'));
+    await expect(reapplyBootstrapProfile(argv, settings)).rejects.toMatchObject(
+      { name: 'ImageBackendAuthModeError' },
+    );
+    expect(getActiveImageProfile()?.name).toBe('old-art');
+  });
+
   it('rethrows a dangling bootstrap image reference', async () => {
     await manager.saveProfile('conversation', modelProfile('missing-image'));
     await expect(

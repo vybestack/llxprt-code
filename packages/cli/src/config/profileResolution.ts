@@ -11,6 +11,11 @@ import {
   isImageProfileLoadError,
 } from '@vybestack/llxprt-code-settings';
 import type { Profile } from '@vybestack/llxprt-code-settings';
+import {
+  validateImageProfileAuth,
+  ImageBackendAuthModeError,
+  ImageBackendBaseUrlError,
+} from '@vybestack/llxprt-code-providers';
 import type { ActiveImageProfile } from '@vybestack/llxprt-code-core';
 import type { MergedSettings, Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
@@ -20,6 +25,14 @@ import {
 } from './profileBootstrap.js';
 
 const logger = new DebugLogger('llxprt:config:profileResolution');
+
+function isImageProfileFailure(error: unknown): boolean {
+  return (
+    isImageProfileLoadError(error) ||
+    error instanceof ImageBackendAuthModeError ||
+    error instanceof ImageBackendBaseUrlError
+  );
+}
 
 // ─── DTOs ───────────────────────────────────────────────────────────────────
 
@@ -169,12 +182,10 @@ async function resolveImageReference(
   profile: Profile,
 ): Promise<ActiveImageProfile | undefined> {
   const name = 'imageProfile' in profile ? profile.imageProfile : undefined;
-  return name === undefined
-    ? undefined
-    : {
-        name,
-        profile: await manager.loadImageProfile(name),
-      };
+  if (name === undefined) return undefined;
+  const imageProfile = await manager.loadImageProfile(name);
+  validateImageProfileAuth(imageProfile, name);
+  return { name, profile: imageProfile };
 }
 
 async function applyInlineProfile(
@@ -269,7 +280,7 @@ async function applyFileProfile(
     });
     debugLogger.error(failureSummary);
 
-    if (profileExplicitlySpecified || isImageProfileLoadError(error)) {
+    if (profileExplicitlySpecified || isImageProfileFailure(error)) {
       throw error;
     }
 
@@ -324,7 +335,7 @@ export async function loadAndPrepareProfile(input: {
         loadedProfile,
       } = result);
     } catch (err) {
-      if (isImageProfileLoadError(err)) throw err;
+      if (isImageProfileFailure(err)) throw err;
       throw new Error(
         `Failed to parse inline profile: ${err instanceof Error ? err.message : String(err)}`,
       );

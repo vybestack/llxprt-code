@@ -162,7 +162,7 @@ function useProfileLoader(
       setProfileError(null);
 
       try {
-        const profileNames = await runtime.listSavedProfiles();
+        const profileNames = await runtime.listSavedProfiles('model');
         const profileItems = await fetchProfileItems(runtime, profileNames);
         setProfiles(profileItems);
 

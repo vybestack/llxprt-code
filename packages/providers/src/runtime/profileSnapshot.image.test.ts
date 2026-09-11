@@ -17,6 +17,7 @@ import {
 } from '@vybestack/llxprt-code-settings';
 import {
   loadAndApplyProfileTransition,
+  loadAndSelectImageProfile,
   saveAndSelectImageProfile,
 } from './profileSnapshotTransition.js';
 
@@ -59,6 +60,63 @@ describe('runtime image-profile transitions', () => {
 
   afterEach(async () => {
     await rm(profilesDir, { recursive: true, force: true });
+  });
+
+  it.each(['select', 'linked', 'save'] as const)(
+    'rejects invalid backend auth before %s changes state',
+    async (surface) => {
+      const state = createImageProfileRuntimeState();
+      const invalid: ImageProfile = {
+        ...imageProfile('invalid'),
+        auth: { type: 'named-key', keyName: 'secret' },
+      };
+      state.select({
+        name: 'previous',
+        profile: surface === 'save' ? invalid : imageProfile('old'),
+      });
+      await manager.saveImageProfile('invalid', invalid);
+      await manager.saveProfile('linked', modelProfile('new', 'invalid'));
+      let applied = false;
+      const transitions = {
+        select: () => loadAndSelectImageProfile(manager, state, 'invalid'),
+        save: () => saveAndSelectImageProfile(manager, state, 'copy'),
+        linked: () =>
+          loadAndApplyProfileTransition(manager, state, 'linked', async () => {
+            applied = true;
+          }),
+      };
+      const pending = transitions[surface]();
+      await expect(pending).rejects.toMatchObject({
+        name: 'ImageBackendAuthModeError',
+      });
+      expect(state.getActive()?.name).toBe('previous');
+      expect(applied).toBe(false);
+      expect(await manager.profileExists('copy')).toBe(false);
+    },
+  );
+
+  it('selects a local IPv6 profile without credentials', async () => {
+    const state = createImageProfileRuntimeState();
+    await manager.saveImageProfile('local', {
+      ...imageProfile('klein'),
+      backend: 'openai-images',
+      baseUrl: 'http://[::1]:8321/v1',
+      auth: { type: 'none' },
+    });
+    await loadAndSelectImageProfile(manager, state, 'local');
+    expect(state.getActive()?.name).toBe('local');
+  });
+
+  it('rejects a bad Codex destination at selection', async () => {
+    const state = createImageProfileRuntimeState();
+    await manager.saveImageProfile('invalid', {
+      ...imageProfile('image'),
+      baseUrl: 'https://example.com/v1',
+    });
+    await expect(
+      loadAndSelectImageProfile(manager, state, 'invalid'),
+    ).rejects.toMatchObject({ name: 'ImageBackendBaseUrlError' });
+    expect(state.getActive()).toBeUndefined();
   });
 
   it('applies linked model and image profiles as one transition', async () => {

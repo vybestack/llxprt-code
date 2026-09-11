@@ -24,6 +24,9 @@ export interface ImageOperationRunnerInput {
 
 /** Bounded result surfaced to capability consumers (no base64). */
 export interface ImageOperationRunnerResult {
+  readonly quality?: string;
+  readonly size?: string;
+  readonly usage?: Readonly<Record<string, unknown>>;
   readonly operation: 'generate' | 'edit';
   readonly absoluteOutputPath: string;
   readonly relativeOutputPath: string;

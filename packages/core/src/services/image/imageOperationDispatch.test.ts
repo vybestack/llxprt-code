@@ -14,6 +14,7 @@ import {
   type ImageOperationInput,
 } from './imageOperationDispatch.js';
 import { ImageOperationError } from './imageOperation.js';
+import type { ImageOperationRunnerResult } from './imageCapability.js';
 
 /**
  * Runs `operation` expecting rejection and returns the rejection reason.
@@ -184,7 +185,7 @@ describe('runImageOperation', () => {
       const metadata = reported
         ? { quality: 'high', size: '512x512', usage: { output_tokens: 7 } }
         : {};
-      const result = await runImageOperation(
+      const result: ImageOperationRunnerResult = await runImageOperation(
         { prompt: 'lake', outputPath: 'metadata.png' },
         {
           workspaceRoot,

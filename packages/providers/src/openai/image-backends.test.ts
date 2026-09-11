@@ -241,7 +241,6 @@ describe('MLX dialect', () => {
         model: 'FLUX.2-klein',
         prompt: 'lake',
         n: 1,
-        response_format: 'b64_json',
         ...(size === undefined ? {} : { size }),
       });
       expect(transport.requests[0].headers.has('authorization')).toBe(false);
@@ -397,7 +396,6 @@ describe('MLX dialect', () => {
         model: 'klein',
         prompt: 'lake',
         n: 1,
-        response_format: 'b64_json',
       });
     },
   );
@@ -585,6 +583,13 @@ describe('shared backend contract and PNG URL materialization', () => {
         'Bearer secret',
       );
       expect(transport.requests[1].headers.has('originator')).toBe(false);
+      await adapter.edit({ prompt: 'lake', inputPaths: [inputPath] }, signal());
+      const sparseForm = await transport.requests[2].formData();
+      expect([...sparseForm.keys()].sort()).toStrictEqual([
+        'image[]',
+        'model',
+        'prompt',
+      ]);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

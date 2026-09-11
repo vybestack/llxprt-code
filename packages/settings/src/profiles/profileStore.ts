@@ -824,7 +824,10 @@ export type ProfileWriteResult =
   | { readonly kind: 'written'; readonly path: string }
   | { readonly kind: 'exists'; readonly path: string };
 
-function profileFilePath(profilesDir: string, profileName: string): string {
+export function profileFilePath(
+  profilesDir: string,
+  profileName: string,
+): string {
   const trimmedName = profileName.trim();
   const forbiddenNames = new Set(['', '.', '..']);
   const hasForbiddenSeparator = /[\\/\0]/u.test(profileName);

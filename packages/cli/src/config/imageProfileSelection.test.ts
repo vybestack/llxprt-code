@@ -74,6 +74,23 @@ describe('image profile surface selection', () => {
     });
   }
 
+  it.each(['file', 'inline'] as const)(
+    'rejects invalid image auth while loading a %s profile',
+    async (surface) => {
+      await manager.saveImageProfile('invalid', {
+        ...localProfile,
+        auth: { type: 'named-key', keyName: 'remote-key' },
+      });
+      const pending =
+        surface === 'file'
+          ? loadFileProfile('invalid')
+          : loadInlineProfile('invalid');
+      await expect(pending).rejects.toMatchObject({
+        name: 'ImageBackendAuthModeError',
+      });
+    },
+  );
+
   it('loads a referenced image profile before runtime registration and applies it later', async () => {
     const result = await loadFileProfile('local');
     const state = createImageProfileRuntimeState();

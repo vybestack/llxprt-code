@@ -417,7 +417,7 @@ const setDefaultCommand: SlashCommand = {
         };
       }
 
-      const profiles = await listProfiles();
+      const profiles = await listProfiles('model');
       if (!profiles.includes(profileName)) {
         return {
           type: 'message',
@@ -516,7 +516,7 @@ const showCommand: SlashCommand = {
     }
 
     try {
-      const profiles = await listProfiles();
+      const profiles = await listProfiles('model');
       if (!profiles.includes(profileName)) {
         return {
           type: 'message',
@@ -569,7 +569,7 @@ const editCommand: SlashCommand = {
     }
 
     try {
-      const profiles = await listProfiles();
+      const profiles = await listProfiles('model');
       if (!profiles.includes(profileName)) {
         return {
           type: 'message',

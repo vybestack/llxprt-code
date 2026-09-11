@@ -30,6 +30,7 @@ import path from 'path';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import {
   writeProfileFile,
+  profileFilePath,
   deleteProfileFile,
   hasErrnoCode,
   type ReadResult,
@@ -93,7 +94,20 @@ function storedProfileKind(content: string): StoredProfileKind {
   if (parsed.kind !== 'parsed' || !isPlainObject(parsed.value)) {
     return 'invalid';
   }
-  return parsed.value.type === 'image' ? 'image' : 'model';
+  try {
+    if (parsed.value.type === 'image') {
+      parseImageProfile('<stored>', parsed.value);
+      return 'image';
+    }
+    if (parsed.value.type === 'loadbalancer') {
+      parseLoadBalancerProfile('<stored>', parsed.value);
+    } else {
+      parseProfile(parsed.value);
+    }
+    return 'model';
+  } catch {
+    return 'invalid';
+  }
 }
 
 function assertCompatibleStoredProfile(
@@ -108,7 +122,7 @@ function assertCompatibleStoredProfile(
     throw existing.error;
   }
   const existingType = storedProfileKind(existing.content);
-  if (existingType !== requestedType) {
+  if (existingType !== 'invalid' && existingType !== requestedType) {
     throw new ProfileTypeConflictError(
       profileName,
       requestedType,
@@ -211,8 +225,8 @@ export class ProfileManager {
   }
 
   async loadImageProfile(profileName: string): Promise<ImageProfile> {
-    const filePath = path.join(this.profilesDir, `${profileName}.json`);
     try {
+      const filePath = profileFilePath(this.profilesDir, profileName);
       const content = await fs.readFile(filePath, 'utf8');
       const parsed = ProfileManager.parseProfileContent(content);
       if (!isPlainObject(parsed) || parsed.type !== 'image') {
@@ -423,10 +437,15 @@ export class ProfileManager {
       if (kind === undefined) return profileNames;
       const matching = await Promise.all(
         profileNames.map(async (name) => {
-          const content = await fs.readFile(
-            path.join(this.profilesDir, `${name}.json`),
-            'utf8',
-          );
+          let content: string;
+          try {
+            content = await fs.readFile(
+              path.join(this.profilesDir, `${name}.json`),
+              'utf8',
+            );
+          } catch {
+            return [];
+          }
           const parsed = parseProfileJson(content);
           if (parsed.kind !== 'parsed' || !isPlainObject(parsed.value))
             return [];
