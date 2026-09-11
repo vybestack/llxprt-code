@@ -317,6 +317,30 @@ describe('ProfileManager — save and load with SettingsService', () => {
     expect(appliedData['currentProfile']).toBe('load-target');
   });
 
+  it('saves and loads toolFormat through provider settings', async () => {
+    await pm.save('tool-format-profile', {
+      exportForProfile: async () => ({
+        defaultProvider: 'openai',
+        providers: { openai: { model: 'gpt-4', toolFormat: 'xml' } },
+      }),
+    });
+
+    const saved: unknown = JSON.parse(
+      await fs.readFile(path.join(tempDir, 'tool-format-profile.json'), 'utf8'),
+    );
+    expect(saved).toMatchObject({ ephemeralSettings: { toolFormat: 'xml' } });
+
+    let imported: unknown;
+    await pm.load('tool-format-profile', {
+      importFromProfile: async (data: unknown) => {
+        imported = data;
+      },
+    });
+    expect(imported).toMatchObject({
+      providers: { openai: { toolFormat: 'xml' } },
+    });
+  });
+
   it('load normalizes tool array entries before applying settings', async () => {
     const profile = {
       version: 1,

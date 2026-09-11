@@ -1058,7 +1058,7 @@ export abstract class BaseProvider implements IProvider {
         'auth-keyfile': _authKeyfile,
         'base-url': _baseUrl,
         model: _model,
-        maxTokens,
+        max_tokens,
         temperature,
         // Defensive: strip legacy sensitive aliases that should never reach
         // the model params pass-through, even if present in imported/malformed
@@ -1070,10 +1070,10 @@ export abstract class BaseProvider implements IProvider {
         ...additionalSettings
       } = settings;
 
-      // Include temperature and maxTokens as model params if they exist
+      // Include registered model parameters when present
       const params: Record<string, unknown> = {};
       if (temperature !== undefined) params.temperature = temperature;
-      if (maxTokens !== undefined) params.max_tokens = maxTokens;
+      if (max_tokens !== undefined) params.max_tokens = max_tokens;
 
       return Object.keys(params).length > 0 ||
         Object.keys(additionalSettings).length > 0
@@ -1098,40 +1098,15 @@ export abstract class BaseProvider implements IProvider {
   ): Promise<void> {
     const settingsService = this.resolveSettingsService();
 
-    try {
-      if (params === undefined) {
-        // Clear model parameters by setting them to undefined
-        await settingsService.updateSettings(this.name, {
-          temperature: undefined,
-          maxTokens: undefined,
-        });
-        return;
-      }
-
-      // Convert standard model params to settings format
-      const updates: Record<string, unknown> = {};
-      if ('temperature' in params) updates.temperature = params.temperature;
-      if ('max_tokens' in params) updates.maxTokens = params.max_tokens;
-      if ('maxTokens' in params) updates.maxTokens = params.maxTokens;
-
-      // Store other parameters as custom fields
-      for (const [key, value] of Object.entries(params)) {
-        if (!['temperature', 'max_tokens', 'maxTokens'].includes(key)) {
-          updates[key] = value;
-        }
-      }
-
-      if (Object.keys(updates).length > 0) {
-        await settingsService.updateSettings(this.name, updates);
-      }
-    } catch (error) {
-      if (process.env.DEBUG) {
-        debugLogger.error(
-          `Failed to set model params in SettingsService for ${this.name}:`,
-          error,
-        );
-      }
+    if (params === undefined) {
+      await settingsService.updateSettings(this.name, {
+        temperature: undefined,
+        max_tokens: undefined,
+      });
+      return;
     }
+
+    await settingsService.updateSettings(this.name, params);
   }
 
   /**

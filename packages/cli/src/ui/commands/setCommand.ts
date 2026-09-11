@@ -131,12 +131,21 @@ function handleUnsetModelParam(subKey: string): MessageActionReturn {
   const runtime = getRuntimeApi();
   try {
     runtime.clearActiveModelParam(subKey);
-    runtime.setEphemeralSetting(subKey, undefined);
   } catch (error) {
     return {
       type: 'message',
       messageType: 'error',
       content: `Failed to clear model parameter: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+
+  try {
+    runtime.setEphemeralSetting(subKey, undefined);
+  } catch (error) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: `Failed to clear ephemeral model parameter: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 

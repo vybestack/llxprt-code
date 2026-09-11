@@ -235,6 +235,99 @@ evidence, green verification + CI, triaged reviews, conflict-free PR.
 - Round 2 (findings-only follow-up): verdict ALL-RESOLVED, no regressions.
   Logs: tmp/verify2533-review/, tmp/verify2533-review2/, remediation tmp/verify2533-h1/.
 
+## OCR round 1 + CI remediation (2026-09-11)
+
+Remediation covers 9 CI failures on head `b086d5058`, 13 OCR findings,
+and 4 CodeRabbit threads. CI causes: prettier reformat on four files;
+tracked-JS allowlist missing `eslint-rules/no-alias-probes.js`; test-file
+coverage guard missing the new rule test; #2174 type escape in
+`settingsLoader.ts`; six tests retaining legacy expectations
+(`settings.part2`/`settings.part3` apiKey env resolution, diagnosticsCommand
+apiKey masking, profileCommand.lb protected stripping, profile-system baseUrl
+round-trip, gemini.stateless max-output-tokens). Write boundaries
+(`SettingsService.set`, `setEphemeralSetting` through its settings write path,
+and `setProviderSetting`) now reject known legacy spellings with guidance
+naming the required key. No read-side aliases were restored; load-time
+migration remains the only legacy acceptance path. `normalizeTaskParams`
+now calls `validateCanonicalTaskParamSpellings` itself and throws on a spelling
+error before normalization, including mixed current/legacy input. This is a
+throwing normalizer, not an atomic full validate-and-normalize API.
+
+| ID | Area | Action |
+|---|---|---|
+| A1 | Formatting | Reformatted `policy/src/config.ts`, `toolNameUtils.ts`, `providerMutations.ts`, and `providerSwitch.ts`; the latter's protected-key list is unchanged semantically. |
+| A2 | Tracked JS | Added `eslint-rules/no-alias-probes.js` to `scripts/no-new-js-allowlist.json`; sorted affected entries. |
+| A3 | Test coverage | Added the `eslint-rules` Bun root with storage-isolation preload; moved `SCRIPTS_SHARD_ROOTS` to `test-shards.ts`, included the new root, and imported/re-exported it in `test.ts`. |
+| A4 | Settings loader | Replaced the double assertion in `settingsLoader.ts` with `isPlainRecord` narrowing before migration (#2174). |
+| A5 | Settings env resolution | `settings.part2.test.ts` now supplies and checks `auth-key` for resolved environment variables. |
+| A6 | Unresolved settings env | `settings.part3.test.ts` now supplies and checks `auth-key` while preserving unresolved-variable behavior. |
+| A7 | Diagnostics | `diagnosticsCommand.edges.spec.ts` now asserts `SettingsService.set('apiKey', ...)` rejects with guidance naming `auth-key` and leaves no legacy key; existing `auth-key` masking coverage retained. |
+| A8 | Load-balancer profiles | `profileCommand.lb.test.ts` rejects legacy `apiKey`/`apiKeyfile` writes; stripping fixtures use `auth-key`, `auth-keyfile`, and `toolFormat`, without alias-acceptance assertions. |
+| A9 | Profile round-trip | Current diff in `profile-system.integration.test.ts` changes the Azure fixture from `tool-format` to `toolFormat`; no additional `baseUrl` edit is present in this remediation diff. |
+| A10 | Gemini stateless | Replaced `max-output-tokens` fixtures with `max_output_tokens` for global, provider, and invocation settings; removed obsolete alias-normalization comments. |
+| B1 | Lint folding | Replaced substring-based `ALIAS_FOLDS` with `ALIAS_WORD_FOLDS`: tokenize identifier words, fold exact words, then join. Substrings inside longer words are no longer rewritten. |
+| B2 | Lint regressions | Added clean cases for `olderSibling/newerSibling`, `rise/rize`, and `contour/contor` in `no-alias-probes.test.ts`. |
+| B3 | Task normalization | `normalizeTaskParams` validates removed spellings and throws before reading fields; shared error helper supplies replacement-key guidance. |
+| B4 | Task output validation | `validateOutputParams` rejects `output_spec`, `outputSpec`, and `expectedOutputs` before its absent-output early return. |
+| B5 | Task rejection tests | `task.output-naming.test.ts` exercises direct output validation, direct normalization of removed spellings, and mixed current/legacy fields. |
+| B6 | Task runtime schema | Tests inspect `createTool().schema.parametersJsonSchema`, including property vocabulary and unknown-property rejection; build assertions use the actual invocation return shape. |
+| B7 | Settings writes | `SettingsService.set` and `setProviderSetting` call `assertCanonicalSettingKey` before mutation; `SettingsService.test.ts` replaces legacy event acceptance with write/clear rejection assertions. |
+| B8 | Settings request separation | `settingsRegistry.ts` drops known legacy keys rather than forwarding them into request buckets; registry test checks `apiKey` enters neither CLI settings nor model params. |
+| B9 | Shared settings assertion | Added `assertCanonicalSettingKey` beside the load migration map in `legacyKeyMigration.ts` and exported it from `packages/settings/src/index.ts`. No migration occurs at writes. |
+| B10 | `/set unset modelparam` | `setCommand.ts` separates active-model clearing from ephemeral clearing; added a test for the distinct ephemeral-clear error and absence of a success response. |
+| B11 | Tools dialog | No remediation diff, new comment, or new test in `useToolsDialog.ts`; existing reads and writes already use `tools.disabled`. |
+| B12 | Runtime write fallout | `subagentSettingsPopulation.ts` writes `toolFormatOverride`; `providerMutations.ts` writes `toolFormat` ephemerals, including `auto`. |
+| C1 | Vercel documentation | Added JSDoc stating that max-output resolution reads only `modelParams['max_tokens']`, not metadata or legacy ephemerals. |
+| C2 | Policy decoder drift | `toolEntryDecoderDrift.test.ts` now checks the MCP wildcard through `canonicalizePolicyToolEntry`; updated the explanatory comment. |
+| C3 | Provider policy fallout | `BaseProvider.test.ts` now tests stripping `auth-key`/`auth-keyfile`; `providerCallOptions.test.ts` uses `max_tokens` instead of `maxTokens`. |
+| C4 | Provider policy fallout | `openaiResponses.stateless.test.ts` uses `max_output_tokens` in fixtures and outgoing-request assertions; `providerMutations.issue1943.test.ts` expects `toolFormat` persistence. |
+
+### Verification
+
+- Targeted suite: 17 files, final all pass. Four needed a fix-retry:
+  `profileCommand.lb`, `gemini.stateless`, `settingsRegistry`, and
+  `openaiResponses.stateless`.
+- Guards: check-no-new-js-files 18 pass; eslint-guard 465 pass;
+  test-file coverage 13 pass. No-alias-probes rule tests: 23 pass.
+- Prettier check clean on all changed files in the remediation pass.
+- Full `npm run test`, lint, typecheck, build, and smoke are run by the
+  driver, with logs under `tmp/verify2533-resume/`: `typecheck3.log`,
+  `lint-full.log`, `test-full.log`, `build.log`, and `smoke.log`.
+
+### Full-suite census round 2 (stream-timeout / model-param regressions)
+
+The first post-remediation full run (`tmp/verify2533-resume/test-full.log`)
+cleared all 63 baseline failures but exposed 31 new ones. Root causes, fixed
+in round k1 (logs `tmp/verify2533-k1/`):
+
+- Read-side camelCase ephemeral alias for stream timeouts survived the
+  original PR: the `streamIdleTimeout` resolver documented a
+  'streamIdleTimeoutMs' ephemeral fallback, `postConfigRuntime` wrote both
+  spellings, and `agentConfig.adapter` forwarded the typed API field names as
+  ephemeral keys. Now one canonical kebab ephemeral write per setting
+  ('stream-idle-timeout-ms' / 'stream-first-response-timeout-ms'); typed
+  camelCase API fields map at the boundary. Tests assert the canonical key and
+  that no legacy key exists.
+- `BaseProvider` converted `max_tokens` to `maxTokens` before the settings
+  write and swallowed the resulting rejection, silently dropping the value.
+  Conversion and swallow removed; snake model params round-trip.
+- Fixtures updated to canonical spellings (provider-multi-runtime `base-url`,
+  ProviderManager.guard `auth-key`, core-api/CLI profile-load `max_tokens`).
+
+Verification after k1: 21 targeted files all pass (116 combined timeout/model
+rerun); CLI subprocess suites needed `--timeout 90000` on this loaded box;
+three skills suites require isolated HOME (host HOME injects 55 real user
+skills — environmental, not branch-owned); grep exact-limit and Podman #3534
+files pass solo (load flakes, #3619 class). Final gates: typecheck exit 0
+(`typecheck5.log`), lint exit 0 (`lint-final.log`), build exit 0
+(`build-final.log`), full test (`test-final.log`: 1755 files, 10 unique
+`(fail)` lines, all environmental — 1 webfetch 5MiB passes solo in 5s,
+7 skills suites pass with isolated HOME, 2 are adversarial fixture echoes
+from passing runner-lifecycle suites), and startup smoke green with a real
+model response (`smoke.log`, stepfun-37 haiku).
+  At this documentation update, typecheck and lint logs exist; test, build,
+  and smoke logs are not yet present. Full-cycle completion is not claimed here.
+
 ## Known follow-ups (deferred, out of scope here)
 
 - packages/core/src/prompt-config/prompt-resolver.ts private toSnakeCase is not

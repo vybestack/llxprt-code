@@ -409,6 +409,24 @@ describe('setCommand runtime integration', () => {
     });
   });
 
+  it('surfaces ephemeral clear failures without reporting success', async () => {
+    mockRuntime.setEphemeralSetting.mockImplementationOnce(() => {
+      throw new Error('cannot clear ephemeral');
+    });
+
+    const result = await setCommand.action!(
+      context,
+      'unset modelparam max_tokens',
+    );
+
+    expect(result).toStrictEqual({
+      type: 'message',
+      messageType: 'error',
+      content:
+        'Failed to clear ephemeral model parameter: cannot clear ephemeral',
+    });
+  });
+
   it('surfaces error from clearActiveModelParam even when ephemeral also cleared', async () => {
     mockRuntime.clearActiveModelParam.mockImplementationOnce(() => {
       throw new Error('cannot clear');

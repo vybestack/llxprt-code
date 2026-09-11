@@ -388,7 +388,7 @@ export class ProfileManager {
         'prompt-caching': parsePromptCaching(
           providerSettings['prompt-caching'],
         ),
-        'tool-format': optionalString(providerSettings.toolFormat),
+        toolFormat: optionalString(providerSettings.toolFormat),
       } satisfies EphemeralSettings,
     };
 
@@ -432,7 +432,7 @@ export class ProfileManager {
           'auth-key': profile.ephemeralSettings['auth-key'],
           'auth-keyfile': profile.ephemeralSettings['auth-keyfile'],
           'prompt-caching': profile.ephemeralSettings['prompt-caching'],
-          toolFormat: profile.ephemeralSettings['tool-format'],
+          toolFormat: profile.ephemeralSettings.toolFormat,
         },
       },
       tools: {

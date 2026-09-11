@@ -7,7 +7,7 @@
 /**
  * Drift test: policy's zero-dep normalizeToolName duplicate must stay
  * behavior-identical to the shared decoder in tools
- * (canonicalizePolicyToolEntry) — see issue #2533 Phase B2a.
+ * (canonicalizePolicyToolEntry), per issue #2533 Phase B2a.
  */
 
 import { describe, it, expect } from 'bun:test';
@@ -50,6 +50,8 @@ describe('policy tool-entry decoder drift', () => {
     expect(canonicalizePolicyToolEntry('user-server__*')).toBe(
       'user-server__*',
     );
-    expect(normalizeToolName('mcp__server__tool*')).toBe('mcp__server__tool*');
+    expect(canonicalizePolicyToolEntry('mcp__server__tool*')).toBe(
+      'mcp__server__tool*',
+    );
   });
 });

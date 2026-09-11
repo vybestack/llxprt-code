@@ -171,7 +171,9 @@ export function canonicalizePolicyToolEntry(entry: string): string {
   }
 
   const openParen = trimmed.indexOf('(');
-  const base = (openParen === -1 ? trimmed : trimmed.slice(0, openParen)).trim();
+  const base = (
+    openParen === -1 ? trimmed : trimmed.slice(0, openParen)
+  ).trim();
   if (!base) {
     return '';
   }

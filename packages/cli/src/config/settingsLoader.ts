@@ -219,7 +219,10 @@ function migrateLoadedSettings(settings: SettingsState): void {
     // the on-disk file). Provider blocks are permissive maps where legacy
     // model-param spellings (e.g. 'max-tokens') actually live, so they are
     // migrated too.
-    const scopeRecord = scopeSettings as unknown as Record<string, unknown>;
+    if (!isPlainRecord(scopeSettings)) {
+      continue;
+    }
+    const scopeRecord: Record<string, unknown> = scopeSettings;
     const migrated = migrateLegacySettingKeys(scopeRecord);
     if (migrated !== scopeRecord) {
       applyMigratedScopeKeys(scopeRecord, migrated);

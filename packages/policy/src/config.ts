@@ -110,7 +110,9 @@ const LEGACY_TOOL_NAME_ALIASES: ReadonlyMap<string, string> = new Map([
 ]);
 
 function isValidPolicyToolName(name: string): boolean {
-  return name.length > 0 && name.length <= 100 && /^[a-zA-Z0-9_.-]+$/.test(name);
+  return (
+    name.length > 0 && name.length <= 100 && /^[a-zA-Z0-9_.-]+$/.test(name)
+  );
 }
 
 function toSnakeCaseToolName(value: string): string {
@@ -121,7 +123,9 @@ function toSnakeCaseToolName(value: string): string {
 }
 
 function hasMultipleWordsInName(name: string): boolean {
-  return /[A-Z]/.test(name.slice(1)) || name.includes('_') || name.includes('-');
+  return (
+    /[A-Z]/.test(name.slice(1)) || name.includes('_') || name.includes('-')
+  );
 }
 
 // Strip a trailing 'Tool' suffix from the last dotted segment when the
@@ -165,7 +169,9 @@ export function normalizeToolName(toolName: string): string {
     return trimmed;
   }
   const openParen = trimmed.indexOf('(');
-  const base = (openParen === -1 ? trimmed : trimmed.slice(0, openParen)).trim();
+  const base = (
+    openParen === -1 ? trimmed : trimmed.slice(0, openParen)
+  ).trim();
   if (!base) {
     return '';
   }

@@ -7,9 +7,7 @@
 import {
   ApprovalMode,
   runImageOperation,
-  STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,
   STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
-  STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
   STREAM_IDLE_TIMEOUT_SETTING_KEY,
   type Config,
   type ImageOperationBackend,
@@ -96,38 +94,18 @@ type ApplyToolPoliciesInput = Pick<
 
 // ─── Stream timeout settings application ───────────────────────────────────
 
-/**
- * Profile/runtime settings input that may carry either the camelCase Settings
- * key or the canonical hyphenated ephemeral key. The hyphenated keys are NOT
- * part of the public JSON Settings schema (they would falsely advertise
- * themselves as JSON properties); they are modeled locally here because
- * profiles and runtime code historically set them as ephemerals directly.
- */
-export type StreamTimeoutSettingsInput = Settings & {
-  readonly 'stream-idle-timeout-ms'?: unknown;
-  readonly 'stream-first-response-timeout-ms'?: unknown;
-};
+export type StreamTimeoutSettingsInput = Pick<
+  Settings,
+  'streamIdleTimeoutMs' | 'streamFirstResponseTimeoutMs'
+>;
 
-/**
- * Generic applicator for a camel/hyphenated timeout setting pair. Reads both
- * the camelCase Settings key and the canonical hyphenated ephemeral key from
- * the supplied settings object and pushes whichever are defined onto Config
- * ephemerals. The hyphenated key is applied second so it wins the resolver's
- * priority order (canonical before alias).
- */
-function applyStreamTimeoutSettingPair(
+function applyStreamTimeoutSetting(
   config: Pick<Config, 'setEphemeralSetting'>,
-  settings: StreamTimeoutSettingsInput,
-  camelKey: keyof Settings,
-  canonicalKey: 'stream-idle-timeout-ms' | 'stream-first-response-timeout-ms',
+  value: number | undefined,
+  key: 'stream-idle-timeout-ms' | 'stream-first-response-timeout-ms',
 ): void {
-  const camelValue = settings[camelKey];
-  if (camelValue !== undefined) {
-    config.setEphemeralSetting(camelKey, camelValue);
-  }
-  const canonicalValue = settings[canonicalKey];
-  if (canonicalValue !== undefined) {
-    config.setEphemeralSetting(canonicalKey, canonicalValue);
+  if (value !== undefined) {
+    config.setEphemeralSetting(key, value);
   }
 }
 
@@ -135,10 +113,9 @@ export function applyStreamIdleTimeoutSettings(
   config: Pick<Config, 'setEphemeralSetting'>,
   settings: StreamTimeoutSettingsInput,
 ): void {
-  applyStreamTimeoutSettingPair(
+  applyStreamTimeoutSetting(
     config,
-    settings,
-    STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
+    settings.streamIdleTimeoutMs,
     STREAM_IDLE_TIMEOUT_SETTING_KEY,
   );
 }
@@ -147,10 +124,9 @@ export function applyStreamFirstResponseTimeoutSettings(
   config: Pick<Config, 'setEphemeralSetting'>,
   settings: StreamTimeoutSettingsInput,
 ): void {
-  applyStreamTimeoutSettingPair(
+  applyStreamTimeoutSetting(
     config,
-    settings,
-    STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,
+    settings.streamFirstResponseTimeoutMs,
     STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
   );
 }
@@ -192,16 +168,15 @@ export function applyGlobalAndProfileEphemeralSettings(
     return;
   }
 
-  applyStreamIdleTimeoutSettings(config, profileSettingsWithTools);
-  applyStreamFirstResponseTimeoutSettings(config, profileSettingsWithTools);
-
   const ephemeralKeys = [
+    'stream-idle-timeout-ms',
+    'stream-first-response-timeout-ms',
     'auth-key',
     'auth-keyfile',
     'context-limit',
     'compression-threshold',
     'base-url',
-    'tool-format',
+    'toolFormat',
     'api-version',
     'custom-headers',
     'socket-timeout',

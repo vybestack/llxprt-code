@@ -37,7 +37,7 @@ const COMPRESSION_EPHEMERAL_KEYS = [
   'compression-preserve-threshold',
 ] as const;
 const TOOL_GOVERNANCE_EPHEMERAL_KEYS = [
-  'tool-format',
+  'toolFormat',
   'tools.allowed',
   'tools.disabled',
 ] as const;
@@ -148,7 +148,7 @@ export function createSettingsSnapshot(
       'compression-preserve-threshold',
     ]),
     toolFormatOverride: getStringSetting(profile.ephemeralSettings, [
-      'tool-format',
+      'toolFormat',
     ]),
     tools: {
       allowed,
@@ -281,10 +281,10 @@ function populateToolAndMiscSettings(
   defaultDisabledTools: ReadonlySet<string>,
 ): void {
   const toolFormat = getStringSetting(profile.ephemeralSettings, [
-    'tool-format',
+    'toolFormat',
   ]);
   if (toolFormat) {
-    service.set('tool-format-override', toolFormat);
+    service.set('toolFormatOverride', toolFormat);
   }
 
   const { allowed, disabled } = resolveToolGovernance(

@@ -158,6 +158,13 @@ const REMOVED_TASK_PARAM_SPELLINGS: ReadonlyMap<string, string> = new Map([
   ['contextVars', 'context'],
 ]);
 
+function removedTaskParamError(
+  legacyName: string,
+  canonicalName: string,
+): string {
+  return `Task tool parameter '${legacyName}' is not recognized; use the canonical '${canonicalName}'.`;
+}
+
 /**
  * Rejects removed TaskTool parameter spellings with an error naming the
  * canonical member. Returns `null` when every key is canonical.
@@ -168,7 +175,7 @@ export function validateCanonicalTaskParamSpellings(
   for (const key of Object.keys(params)) {
     const canonical = REMOVED_TASK_PARAM_SPELLINGS.get(key);
     if (canonical !== undefined) {
-      return `Task tool parameter '${key}' is not recognized; use the canonical '${canonical}'.`;
+      return removedTaskParamError(key, canonical);
     }
   }
   return null;
@@ -209,6 +216,12 @@ export function validateOutputSpec(
  * `resolveOutputSpec` (runtime normalization).
  */
 export function validateOutputParams(params: TaskToolParams): string | null {
+  for (const key of Object.keys(params)) {
+    const canonical = REMOVED_TASK_PARAM_SPELLINGS.get(key);
+    if (canonical === 'expected_outputs') {
+      return removedTaskParamError(key, canonical);
+    }
+  }
   if (params.expected_outputs === undefined) {
     return null;
   }
@@ -225,6 +238,10 @@ export function validateOutputParams(params: TaskToolParams): string | null {
 export function normalizeTaskParams(
   params: TaskToolParams,
 ): TaskToolInvocationParams {
+  const spellingError = validateCanonicalTaskParamSpellings(params);
+  if (spellingError !== null) {
+    throw new Error(spellingError);
+  }
   const subagentName = (params.subagent_name ?? '').trim();
   const goalPrompt = (params.goal_prompt ?? '').trim();
 

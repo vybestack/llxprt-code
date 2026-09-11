@@ -54,21 +54,22 @@ describe('applyStreamIdleTimeoutSettings', () => {
 
     applyStreamIdleTimeoutSettings(config, settings);
 
-    expect(config.getEphemeralSetting('streamIdleTimeoutMs')).toBe(120_000);
+    expect(config.getEphemeralSetting('stream-idle-timeout-ms')).toBe(120_000);
+    expect(config.getEphemeralSetting('streamIdleTimeoutMs')).toBeUndefined();
     expect(resolveStreamIdleTimeoutMs(config)).toBe(120_000);
   });
 
-  it('preserves hyphenated stream-idle-timeout-ms priority over streamIdleTimeoutMs', () => {
+  it('maps the typed idle timeout field to the registry key', () => {
     const config = createCapturingConfig();
     const settings: StreamTimeoutSettingsInput = {
       streamIdleTimeoutMs: 120_000,
-      'stream-idle-timeout-ms': 60_000,
     };
 
     applyStreamIdleTimeoutSettings(config, settings);
 
-    expect(config.getEphemeralSetting('stream-idle-timeout-ms')).toBe(60_000);
-    expect(resolveStreamIdleTimeoutMs(config)).toBe(60_000);
+    expect(config.getEphemeralSetting('stream-idle-timeout-ms')).toBe(120_000);
+    expect(config.getEphemeralSetting('streamIdleTimeoutMs')).toBeUndefined();
+    expect(resolveStreamIdleTimeoutMs(config)).toBe(120_000);
   });
 
   it('keeps the environment variable as the highest priority after settings are wired', () => {
@@ -88,8 +89,10 @@ describe('applyStreamIdleTimeoutSettings', () => {
     const negativeConfig = createCapturingConfig();
     applyStreamIdleTimeoutSettings(negativeConfig, { streamIdleTimeoutMs: -1 });
 
-    expect(zeroConfig.getEphemeralSetting('streamIdleTimeoutMs')).toBe(0);
-    expect(negativeConfig.getEphemeralSetting('streamIdleTimeoutMs')).toBe(-1);
+    expect(zeroConfig.getEphemeralSetting('stream-idle-timeout-ms')).toBe(0);
+    expect(negativeConfig.getEphemeralSetting('stream-idle-timeout-ms')).toBe(
+      -1,
+    );
     expect(resolveStreamIdleTimeoutMs(zeroConfig)).toBe(0);
     expect(resolveStreamIdleTimeoutMs(negativeConfig)).toBe(0);
   });
@@ -134,25 +137,30 @@ describe('applyStreamFirstResponseTimeoutSettings @issue:2607', () => {
 
     applyStreamFirstResponseTimeoutSettings(config, settings);
 
-    expect(config.getEphemeralSetting('streamFirstResponseTimeoutMs')).toBe(
+    expect(config.getEphemeralSetting('stream-first-response-timeout-ms')).toBe(
       200_000,
     );
+    expect(
+      config.getEphemeralSetting('streamFirstResponseTimeoutMs'),
+    ).toBeUndefined();
     expect(resolveStreamFirstResponseTimeoutMs(config)).toBe(200_000);
   });
 
-  it('preserves hyphenated stream-first-response-timeout-ms priority over camelCase', () => {
+  it('maps the typed first-response field to the registry key', () => {
     const config = createCapturingConfig();
     const settings: StreamTimeoutSettingsInput = {
       streamFirstResponseTimeoutMs: 200_000,
-      'stream-first-response-timeout-ms': 100_000,
     };
 
     applyStreamFirstResponseTimeoutSettings(config, settings);
 
     expect(config.getEphemeralSetting('stream-first-response-timeout-ms')).toBe(
-      100_000,
+      200_000,
     );
-    expect(resolveStreamFirstResponseTimeoutMs(config)).toBe(100_000);
+    expect(
+      config.getEphemeralSetting('streamFirstResponseTimeoutMs'),
+    ).toBeUndefined();
+    expect(resolveStreamFirstResponseTimeoutMs(config)).toBe(200_000);
   });
 
   it('keeps the environment variable as the highest priority after settings are wired', () => {
@@ -202,10 +210,11 @@ describe('applyGlobalAndProfileEphemeralSettings', () => {
       bootstrapArgs: { profileJson: null },
       argv: { provider: undefined },
       settings: {},
-      profileSettingsWithTools: { streamIdleTimeoutMs: 120_000 },
+      profileSettingsWithTools: { 'stream-idle-timeout-ms': 120_000 },
       profileLoadResult: { profileToLoad: 'work' },
     });
 
+    expect(config.getEphemeralSetting('streamIdleTimeoutMs')).toBeUndefined();
     expect(resolveStreamIdleTimeoutMs(config)).toBe(120_000);
   });
 
@@ -234,10 +243,11 @@ describe('applyGlobalAndProfileEphemeralSettings', () => {
       bootstrapArgs: { profileJson: '{"provider":"openai"}' },
       argv: { provider: undefined },
       settings: {},
-      profileSettingsWithTools: { streamIdleTimeoutMs: 120_000 },
+      profileSettingsWithTools: { 'stream-idle-timeout-ms': 120_000 },
       profileLoadResult: { profileToLoad: undefined },
     });
 
+    expect(config.getEphemeralSetting('streamIdleTimeoutMs')).toBeUndefined();
     expect(resolveStreamIdleTimeoutMs(config)).toBe(120_000);
   });
 
@@ -249,7 +259,7 @@ describe('applyGlobalAndProfileEphemeralSettings', () => {
       bootstrapArgs: { profileJson: null },
       argv: { provider: 'openai' },
       settings: {},
-      profileSettingsWithTools: { streamIdleTimeoutMs: 120_000 },
+      profileSettingsWithTools: { 'stream-idle-timeout-ms': 120_000 },
       profileLoadResult: { profileToLoad: 'work' },
     });
 
@@ -275,7 +285,7 @@ describe('applyGlobalAndProfileEphemeralSettings', () => {
       profileLoadResult: { profileToLoad: undefined },
     });
 
-    expect(config.getEphemeralSetting('streamIdleTimeoutMs')).toBe(90_000);
+    expect(config.getEphemeralSetting('stream-idle-timeout-ms')).toBe(90_000);
     expect(config.getEphemeralSetting('auth-key')).toBeUndefined();
     expect(resolveStreamIdleTimeoutMs(config)).toBe(90_000);
   });
@@ -295,7 +305,7 @@ describe('applyGlobalAndProfileEphemeralSettings', () => {
       profileLoadResult: { profileToLoad: '' },
     });
 
-    expect(config.getEphemeralSetting('streamIdleTimeoutMs')).toBe(90_000);
+    expect(config.getEphemeralSetting('stream-idle-timeout-ms')).toBe(90_000);
     expect(config.getEphemeralSetting('auth-key')).toBeUndefined();
     expect(resolveStreamIdleTimeoutMs(config)).toBe(90_000);
   });
@@ -329,11 +339,11 @@ describe('applyGlobalAndProfileEphemeralSettings', () => {
       bootstrapArgs: { profileJson: null },
       argv: { provider: 'openai' },
       settings: { streamIdleTimeoutMs: 90_000 },
-      profileSettingsWithTools: { streamIdleTimeoutMs: 120_000 },
+      profileSettingsWithTools: { 'stream-idle-timeout-ms': 120_000 },
       profileLoadResult: { profileToLoad: 'work' },
     });
 
-    expect(config.getEphemeralSetting('streamIdleTimeoutMs')).toBe(90_000);
+    expect(config.getEphemeralSetting('stream-idle-timeout-ms')).toBe(90_000);
     expect(resolveStreamIdleTimeoutMs(config)).toBe(90_000);
   });
 
@@ -345,10 +355,11 @@ describe('applyGlobalAndProfileEphemeralSettings', () => {
       bootstrapArgs: { profileJson: null },
       argv: { provider: undefined },
       settings: { streamIdleTimeoutMs: 90_000 },
-      profileSettingsWithTools: { streamIdleTimeoutMs: 120_000 },
+      profileSettingsWithTools: { 'stream-idle-timeout-ms': 120_000 },
       profileLoadResult: { profileToLoad: 'work' },
     });
 
+    expect(config.getEphemeralSetting('streamIdleTimeoutMs')).toBeUndefined();
     expect(resolveStreamIdleTimeoutMs(config)).toBe(120_000);
   });
 
@@ -360,10 +371,13 @@ describe('applyGlobalAndProfileEphemeralSettings', () => {
       bootstrapArgs: { profileJson: null },
       argv: { provider: undefined },
       settings: {},
-      profileSettingsWithTools: { streamFirstResponseTimeoutMs: 200_000 },
+      profileSettingsWithTools: { 'stream-first-response-timeout-ms': 200_000 },
       profileLoadResult: { profileToLoad: 'work' },
     });
 
+    expect(
+      config.getEphemeralSetting('streamFirstResponseTimeoutMs'),
+    ).toBeUndefined();
     expect(resolveStreamFirstResponseTimeoutMs(config)).toBe(200_000);
   });
 
@@ -375,7 +389,7 @@ describe('applyGlobalAndProfileEphemeralSettings', () => {
       bootstrapArgs: { profileJson: null },
       argv: { provider: 'openai' },
       settings: { streamFirstResponseTimeoutMs: 180_000 },
-      profileSettingsWithTools: { streamFirstResponseTimeoutMs: 200_000 },
+      profileSettingsWithTools: { 'stream-first-response-timeout-ms': 200_000 },
       profileLoadResult: { profileToLoad: 'work' },
     });
 
@@ -390,10 +404,13 @@ describe('applyGlobalAndProfileEphemeralSettings', () => {
       bootstrapArgs: { profileJson: null },
       argv: { provider: undefined },
       settings: { streamFirstResponseTimeoutMs: 180_000 },
-      profileSettingsWithTools: { streamFirstResponseTimeoutMs: 200_000 },
+      profileSettingsWithTools: { 'stream-first-response-timeout-ms': 200_000 },
       profileLoadResult: { profileToLoad: 'work' },
     });
 
+    expect(
+      config.getEphemeralSetting('streamFirstResponseTimeoutMs'),
+    ).toBeUndefined();
     expect(resolveStreamFirstResponseTimeoutMs(config)).toBe(200_000);
   });
 
@@ -405,7 +422,7 @@ describe('applyGlobalAndProfileEphemeralSettings', () => {
       bootstrapArgs: { profileJson: null },
       argv: { provider: undefined },
       settings: {},
-      profileSettingsWithTools: { streamFirstResponseTimeoutMs: 0 },
+      profileSettingsWithTools: { 'stream-first-response-timeout-ms': 0 },
       profileLoadResult: { profileToLoad: 'work' },
     });
 
@@ -431,7 +448,7 @@ describe('applyStreamFirstResponseTimeoutSettings — default-source provenance 
     applyStreamFirstResponseTimeoutSettings(config, {});
 
     expect(
-      config.getEphemeralSetting('streamFirstResponseTimeoutMs'),
+      config.getEphemeralSetting('stream-first-response-timeout-ms'),
     ).toBeUndefined();
     expect(resolveStreamFirstResponseTimeoutMs(config)).toBe(
       DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS,
@@ -448,11 +465,11 @@ describe('applyStreamFirstResponseTimeoutSettings — default-source provenance 
       streamFirstResponseTimeoutMs: DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS,
     });
 
-    expect(config.getEphemeralSetting('streamFirstResponseTimeoutMs')).toBe(
+    expect(config.getEphemeralSetting('stream-first-response-timeout-ms')).toBe(
       DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS,
     );
     expect(resolveStreamFirstResponseTimeoutMsSource(config).source).toBe(
-      'streamFirstResponseTimeoutMs',
+      'stream-first-response-timeout-ms',
     );
   });
 
@@ -462,12 +479,15 @@ describe('applyStreamFirstResponseTimeoutSettings — default-source provenance 
       streamFirstResponseTimeoutMs: 200_000,
     });
 
-    expect(config.getEphemeralSetting('streamFirstResponseTimeoutMs')).toBe(
+    expect(config.getEphemeralSetting('stream-first-response-timeout-ms')).toBe(
       200_000,
     );
+    expect(
+      config.getEphemeralSetting('streamFirstResponseTimeoutMs'),
+    ).toBeUndefined();
     expect(resolveStreamFirstResponseTimeoutMs(config)).toBe(200_000);
     expect(resolveStreamFirstResponseTimeoutMsSource(config).source).toBe(
-      'streamFirstResponseTimeoutMs',
+      'stream-first-response-timeout-ms',
     );
   });
 
@@ -477,17 +497,19 @@ describe('applyStreamFirstResponseTimeoutSettings — default-source provenance 
       streamFirstResponseTimeoutMs: 0,
     });
 
-    expect(config.getEphemeralSetting('streamFirstResponseTimeoutMs')).toBe(0);
+    expect(config.getEphemeralSetting('stream-first-response-timeout-ms')).toBe(
+      0,
+    );
     expect(resolveStreamFirstResponseTimeoutMs(config)).toBe(0);
     expect(resolveStreamFirstResponseTimeoutMsSource(config).source).toBe(
-      'streamFirstResponseTimeoutMs',
+      'stream-first-response-timeout-ms',
     );
   });
 
   it('writes the hyphenated canonical key when it is NOT the built-in default', () => {
     const config = createCapturingConfig();
     applyStreamFirstResponseTimeoutSettings(config, {
-      'stream-first-response-timeout-ms': 120_000,
+      streamFirstResponseTimeoutMs: 120_000,
     });
 
     expect(config.getEphemeralSetting('stream-first-response-timeout-ms')).toBe(
@@ -502,8 +524,7 @@ describe('applyStreamFirstResponseTimeoutSettings — default-source provenance 
   it('preserves an explicit canonical value equal to the built-in fallback', () => {
     const config = createCapturingConfig();
     applyStreamFirstResponseTimeoutSettings(config, {
-      'stream-first-response-timeout-ms':
-        DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS,
+      streamFirstResponseTimeoutMs: DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS,
     });
 
     expect(config.getEphemeralSetting('stream-first-response-timeout-ms')).toBe(

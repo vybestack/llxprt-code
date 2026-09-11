@@ -161,6 +161,18 @@ describe('no-alias-probes', () => {
       expectClean('const v = x.foo ?? x.bar;');
     });
 
+    it('does not fold old inside a longer identifier segment', () => {
+      expectClean('const v = obj.olderSibling || obj.newerSibling;');
+    });
+
+    it('does not fold ise inside a longer identifier segment', () => {
+      expectClean('const v = obj.rise || obj.rize;');
+    });
+
+    it('does not fold our inside a longer identifier segment', () => {
+      expectClean('const v = obj.contour || obj.contor;');
+    });
+
     it('allows nested access on different objects', () => {
       expectClean('const v = params.a.foo ?? params.b.foo;');
     });

@@ -368,10 +368,10 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
 
       // setModelParam reflects in getModelParams
       agent.setModelParam('temperature', 0.7);
-      agent.setModelParam('maxTokens', 1024);
+      agent.setModelParam('max_tokens', 1024);
       const params = agent.getModelParams();
       expect(params['temperature']).toBe(0.7);
-      expect(params['maxTokens']).toBe(1024);
+      expect(params['max_tokens']).toBe(1024);
 
       // params reach the provider call — observable via a successful follow-up
       // turn that uses the configured model + params.

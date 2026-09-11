@@ -23,6 +23,7 @@ import { REGISTRY_ENTRIES_PART_1 } from './registry/registry-entries-1.js';
 import { REGISTRY_ENTRIES_PART_2 } from './registry/registry-entries-2.js';
 import { REGISTRY_ENTRIES_PART_3 } from './registry/registry-entries-3.js';
 import { isStrictNumericString } from './numericString.js';
+import { LEGACY_SETTING_KEY_MIGRATIONS } from './legacyKeyMigration.js';
 
 export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
   ...REGISTRY_ENTRIES_PART_1,
@@ -362,6 +363,10 @@ function categorizeSettingEntry(
   },
 ): void {
   if (value === undefined || value === null) return;
+
+  if (LEGACY_SETTING_KEY_MIGRATIONS.has(rawKey)) {
+    return;
+  }
 
   if (
     typeof value === 'object' &&

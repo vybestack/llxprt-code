@@ -98,6 +98,10 @@ export function resolveStreamingEnabled(
   return streamingSetting !== 'disabled';
 }
 
+/**
+ * Validates the canonical `modelParams['max_tokens']` value. Metadata and
+ * ephemeral legacy spellings are intentionally not read (issue #2533).
+ */
 export function resolveMaxOutputTokens(
   maxTokensOverride: number | undefined,
 ): number | undefined {
@@ -119,7 +123,9 @@ export function resolveStopSequences(
 }
 
 /**
- * Resolves all model call parameters from normalized options.
+ * Resolves model call parameters from canonical modelParams keys. For maximum
+ * output tokens, only `modelParams['max_tokens']` is honored; metadata and
+ * ephemeral legacy spellings are intentionally unread (issue #2533).
  */
 export function resolveModelCallParams(
   options: NormalizedGenerateChatOptions,

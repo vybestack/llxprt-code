@@ -104,6 +104,19 @@ function writeCanonicalValue(
 }
 
 /**
+ * Rejects a known legacy spelling at a mutation boundary. Migration is only
+ * permitted while loading persisted state.
+ */
+export function assertCanonicalSettingKey(key: string): void {
+  const canonicalKey = LEGACY_SETTING_KEY_MIGRATIONS.get(key);
+  if (canonicalKey !== undefined) {
+    throw new Error(
+      `Setting '${key}' is not recognized; use the canonical '${canonicalKey}'.`,
+    );
+  }
+}
+
+/**
  * Rewrites legacy setting-key spellings to their canonical key once, and
  * deletes the legacy key.
  *

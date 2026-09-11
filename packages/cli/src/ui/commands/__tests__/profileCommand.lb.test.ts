@@ -12,6 +12,7 @@ import { profileCommand } from '../profileCommand.js';
 import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
 import type { CommandContext } from '../types.js';
 import type { LoadBalancerProfile } from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { testRegex } from '../../../test-utils/regex.js';
 
 const runtimeMocks = {
@@ -39,6 +40,20 @@ describe('profileCommand - load balancer save with protected settings', () => {
 
   const save = profileCommand.subCommands!.find((cmd) => cmd.name === 'save')!;
 
+  it.each([
+    ['apiKey', 'auth-key'],
+    ['apiKeyfile', 'auth-keyfile'],
+  ] as const)(
+    'rejects legacy %s writes before profile save with canonical guidance',
+    (legacyKey, canonicalKey) => {
+      const settings = new SettingsService();
+
+      expect(() => settings.set(legacyKey, 'secret')).toThrow(
+        `use the canonical '${canonicalKey}'`,
+      );
+    },
+  );
+
   describe('protected settings stripping', () => {
     it('strips protected settings when saving loadbalancer profile', async () => {
       // Setup: Mock ephemeral settings with both protected and non-protected settings
@@ -47,10 +62,8 @@ describe('profileCommand - load balancer save with protected settings', () => {
         'auth-key': 'secret-key-12345',
         'auth-keyfile': '/path/to/keyfile',
         'base-url': 'https://custom.api.example.com',
-        apiKey: 'api-key-67890',
-        apiKeyfile: '/path/to/api-keyfile',
         model: 'gpt-4',
-        'tool-format': 'openai',
+        toolFormat: 'openai',
         GOOGLE_CLOUD_PROJECT: 'my-project',
         GOOGLE_CLOUD_LOCATION: 'us-central1',
         // Non-protected settings (should be preserved)
@@ -75,10 +88,8 @@ describe('profileCommand - load balancer save with protected settings', () => {
       expect(savedProfile.ephemeralSettings).not.toHaveProperty('auth-key');
       expect(savedProfile.ephemeralSettings).not.toHaveProperty('auth-keyfile');
       expect(savedProfile.ephemeralSettings).not.toHaveProperty('base-url');
-      expect(savedProfile.ephemeralSettings).not.toHaveProperty('apiKey');
-      expect(savedProfile.ephemeralSettings).not.toHaveProperty('apiKeyfile');
       expect(savedProfile.ephemeralSettings).not.toHaveProperty('model');
-      expect(savedProfile.ephemeralSettings).not.toHaveProperty('tool-format');
+      expect(savedProfile.ephemeralSettings).not.toHaveProperty('toolFormat');
       expect(savedProfile.ephemeralSettings).not.toHaveProperty(
         'GOOGLE_CLOUD_PROJECT',
       );
@@ -189,7 +200,6 @@ describe('profileCommand - load balancer save with protected settings', () => {
     it('handles ephemeral settings with only protected values', async () => {
       runtimeMocks.getEphemeralSettings.mockReturnValue({
         'auth-key': 'secret',
-        apiKey: 'key',
         model: 'gpt-4',
       });
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
@@ -227,14 +237,11 @@ describe('profileCommand - load balancer save with protected settings', () => {
       ]);
     });
 
-    it('strips all variations of protected setting names', async () => {
+    it('strips all canonical protected setting names', async () => {
       runtimeMocks.getEphemeralSettings.mockReturnValue({
-        // All variations of protected settings
         'auth-key': 'key1',
         'auth-keyfile': 'file1',
         'base-url': 'url1',
-        apiKey: 'key2',
-        apiKeyfile: 'file2',
         model: 'model1',
         provider: 'openai', // LB profiles use load-balancer, not current provider
         GOOGLE_CLOUD_PROJECT: 'proj',

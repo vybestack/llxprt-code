@@ -257,13 +257,13 @@ describe('Gemini provider stateless contract tests', () => {
     const settingsPrimary = new SettingsService();
     settingsPrimary.set('call-id', 'runtime-config');
     settingsPrimary.set('temperature', 0.21);
-    settingsPrimary.set('max-output-tokens', 1024);
+    settingsPrimary.set('max_output_tokens', 1024);
     settingsPrimary.setProviderSetting('gemini', 'temperature', 0.21);
-    settingsPrimary.setProviderSetting('gemini', 'max-output-tokens', 1024);
+    settingsPrimary.setProviderSetting('gemini', 'max_output_tokens', 1024);
     const configPrimary = createRuntimeConfigStub(settingsPrimary, {
       getEphemeralSettings: () => ({
         temperature: 0.21,
-        'max-output-tokens': 1024,
+        max_output_tokens: 1024,
       }),
     });
     const runtimePrimary = createProviderRuntimeContext({
@@ -285,8 +285,8 @@ describe('Gemini provider stateless contract tests', () => {
 
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003
     // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
-    // In stateless implementation, parameters are resolved from invocation.modelParams
-    // 'max-output-tokens' is normalized to 'max_output_tokens' by alias rules
+    // In stateless implementation, canonical parameters are resolved directly
+    // from invocation.modelParams.
     const firstRequest = googleGenAIState.streamCalls.at(-1)?.request as
       | { config?: Record<string, unknown> }
       | undefined;
@@ -308,13 +308,13 @@ describe('Gemini provider stateless contract tests', () => {
     const settingsOverride = new SettingsService();
     settingsOverride.set('call-id', 'runtime-config');
     settingsOverride.set('temperature', 0.78);
-    settingsOverride.set('max-output-tokens', 256);
+    settingsOverride.set('max_output_tokens', 256);
     settingsOverride.setProviderSetting('gemini', 'temperature', 0.78);
-    settingsOverride.setProviderSetting('gemini', 'max-output-tokens', 256);
+    settingsOverride.setProviderSetting('gemini', 'max_output_tokens', 256);
     const configOverride = createRuntimeConfigStub(settingsOverride, {
       getEphemeralSettings: () => ({
         temperature: 0.78,
-        'max-output-tokens': 256,
+        max_output_tokens: 256,
       }),
     });
     const runtimeOverride = createProviderRuntimeContext({
@@ -336,8 +336,8 @@ describe('Gemini provider stateless contract tests', () => {
 
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003
     // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
-    // In stateless implementation, parameters are resolved from invocation.modelParams
-    // 'max-output-tokens' is normalized to 'max_output_tokens' by alias rules
+    // In stateless implementation, canonical parameters are resolved directly
+    // from invocation.modelParams.
     const secondRequest = googleGenAIState.streamCalls.at(-1)?.request as
       | { config?: Record<string, unknown> }
       | undefined;

@@ -13,24 +13,33 @@
  * canonical property name instead of probing for legacy spellings inline.
  */
 
-// Fold spelling variants (including British/American and the versioned
-// old/new alias pair) so e.g. behaviourPrompts/behaviorPrompts and
-// oldName/newName compare equal. Substring replaces applied to both sides.
-const ALIAS_FOLDS = [
-  [/isation/g, 'ization'],
-  [/ise/g, 'ize'],
-  [/yse/g, 'yze'],
-  [/our/g, 'or'],
-  [/logue/g, 'log'],
-  [/old/g, 'new'],
-];
+const ALIAS_WORD_FOLDS = new Map([
+  ['old', 'new'],
+  ['behaviour', 'behavior'],
+  ['behaviours', 'behaviors'],
+  ['colour', 'color'],
+  ['colours', 'colors'],
+  ['normalise', 'normalize'],
+  ['normalised', 'normalized'],
+  ['normalisation', 'normalization'],
+  ['analyse', 'analyze'],
+  ['analysed', 'analyzed'],
+  ['catalogue', 'catalog'],
+]);
+
+function propertyNameWords(name) {
+  return name
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[_$\s-]+/)
+    .filter(Boolean)
+    .map((word) => word.toLowerCase());
+}
 
 function normalizePropertyName(name) {
-  let folded = name.toLowerCase().replace(/[_$-]/g, '');
-  for (const [pattern, replacement] of ALIAS_FOLDS) {
-    folded = folded.replace(pattern, replacement);
-  }
-  return folded;
+  return propertyNameWords(name)
+    .map((word) => ALIAS_WORD_FOLDS.get(word) ?? word)
+    .join('');
 }
 
 function normalizeObjectText(text) {

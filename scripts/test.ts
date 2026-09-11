@@ -43,9 +43,11 @@ import { propertyValue } from './utils/error-guards.ts';
 import {
   TEST_SHARDS,
   SCRIPTS_SHARD_NAME,
+  SCRIPTS_SHARD_ROOTS,
   expandShard,
   findShard,
 } from './test-shards.ts';
+export { SCRIPTS_SHARD_ROOTS } from './test-shards.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -252,16 +254,6 @@ function createRunnerWithPATH(rootDir: string): CommandRunner {
 // the script harness needs. It is no longer a separate root: it is discovered
 // alongside every other scripts/tests file and receives its larger timeout via
 // a per-file timeout override on the scripts-tests root (issue #2780).
-/**
- * Bun-native roots owned by the scripts shard, in execution order.
- *
- * These belong to no workspace, so nothing else would run them. Exported as
- * the single source of truth: `scripts/tests/bun-test-root-ownership.bun.test.ts`
- * reads this list to prove every root has exactly one executor, and the root
- * `test:scripts` script delegates here rather than restating it.
- */
-export const SCRIPTS_SHARD_ROOTS: readonly string[] = ['scripts-tests'];
-
 export function scriptsRootCommand(root: string): string {
   return `bun scripts/run_bun_tests.ts --root ${root}`;
 }

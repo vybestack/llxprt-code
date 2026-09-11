@@ -16,9 +16,7 @@ import {
   LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV,
   LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV,
   STREAM_IDLE_TIMEOUT_SETTING_KEY,
-  STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
   STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
-  STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,
 } from './streamIdleTimeout.js';
 
 /**
@@ -101,14 +99,11 @@ describe('resolveStreamIdleTimeoutMsSource', () => {
     expect(source).toBe(STREAM_IDLE_TIMEOUT_SETTING_KEY);
   });
 
-  it('reports the camelCase alias when only it is set', () => {
-    const mockConfig = sourceConfigFor(
-      STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
-      90_000,
-    );
+  it('ignores legacy spelling and uses the default', () => {
+    const mockConfig = sourceConfigFor('streamIdleTimeoutMs', 90_000);
     const { ms, source } = resolveStreamIdleTimeoutMsSource(mockConfig);
-    expect(ms).toBe(90_000);
-    expect(source).toBe(STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY);
+    expect(ms).toBe(DEFAULT_STREAM_IDLE_TIMEOUT_MS);
+    expect(source).toBe('default');
   });
 
   it('env var takes precedence over both setting keys for source', () => {
@@ -167,15 +162,12 @@ describe('resolveStreamFirstResponseTimeoutMsSource', () => {
     expect(source).toBe(STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY);
   });
 
-  it('reports the camelCase alias when only it is set', () => {
-    const mockConfig = sourceConfigFor(
-      STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,
-      150_000,
-    );
+  it('ignores legacy spelling and uses the default', () => {
+    const mockConfig = sourceConfigFor('streamFirstResponseTimeoutMs', 150_000);
     const { ms, source } =
       resolveStreamFirstResponseTimeoutMsSource(mockConfig);
-    expect(ms).toBe(150_000);
-    expect(source).toBe(STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY);
+    expect(ms).toBe(DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS);
+    expect(source).toBe('default');
   });
 
   it('env var takes precedence over both canonical and camelCase ephemerals for source', () => {

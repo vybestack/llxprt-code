@@ -527,19 +527,22 @@ describe('SettingsService — change event redacts sensitive values (Issue #2472
     expect(evt?.newValue).toBe('[REDACTED]');
   });
 
-  it('does not redact unmigrated legacy apiKey events (#2533 C1: canonical keys only)', () => {
+  it('rejects legacy apiKey writes with canonical guidance', () => {
     const svc = new SettingsService();
-    svc.set('apiKey', 'sk-original');
-    let evt: { key: string; oldValue: unknown; newValue: unknown } | undefined;
-    svc.on('change', (e) => {
-      evt = e;
-    });
-    svc.set('apiKey', 'sk-rotated');
 
-    // 'apiKey' is no longer a sensitive registry key: the alias is gone and
-    // the spelling is rewritten at load. Only canonical 'auth-key' redacts.
-    expect(evt?.key).toBe('apiKey');
-    expect(evt?.newValue).toBe('sk-rotated');
+    expect(() => svc.set('apiKey', 'sk-secret')).toThrow(
+      "use the canonical 'auth-key'",
+    );
+    expect(svc.get('apiKey')).toBeUndefined();
+  });
+
+  it('rejects legacy disabled-tools clears with canonical guidance', () => {
+    const svc = new SettingsService();
+
+    expect(() => svc.set('disabled-tools', undefined)).toThrow(
+      "use the canonical 'tools.disabled'",
+    );
+    expect(svc.get('disabled-tools')).toBeUndefined();
   });
 
   it('preserves non-sensitive newValue in change events', () => {
@@ -571,19 +574,13 @@ describe('SettingsService — change event redacts sensitive values (Issue #2472
     expect(evt?.newValue).toBe('[REDACTED]');
   });
 
-  it('preserves provider and key metadata in provider-change events for sensitive keys', () => {
+  it('rejects legacy provider-setting writes with canonical guidance', () => {
     const svc = new SettingsService();
-    svc.setProviderSetting('anthropic', 'apiKey', 'sk-original');
-    let evt:
-      | { provider: string; key: string; oldValue: unknown; newValue: unknown }
-      | undefined;
-    svc.on('provider-change', (e) => {
-      evt = e;
-    });
-    svc.setProviderSetting('anthropic', 'apiKey', 'sk-rotated');
 
-    expect(evt?.provider).toBe('anthropic');
-    expect(evt?.key).toBe('apiKey');
+    expect(() =>
+      svc.setProviderSetting('anthropic', 'apiKey', 'sk-secret'),
+    ).toThrow("use the canonical 'auth-key'");
+    expect(svc.getProviderSettings('anthropic')).not.toHaveProperty('apiKey');
   });
 
   it('preserves non-sensitive newValue in provider-change events', () => {

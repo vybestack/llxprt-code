@@ -23,6 +23,7 @@ import {
   assertSessionScopedKey,
 } from './settingsRegistry.js';
 import { SessionSettingsOverlay } from './SessionSettingsOverlay.js';
+import { assertCanonicalSettingKey } from './legacyKeyMigration.js';
 
 function redactEventValue(key: string, value: unknown): unknown {
   return isSensitiveSettingKey(key) ? REDACTED_VALUE : value;
@@ -131,6 +132,7 @@ export class SettingsService extends EventEmitter {
   }
 
   set(key: string, value: unknown): void {
+    assertCanonicalSettingKey(key);
     const oldValue = this.get(key);
 
     if (key.includes('.')) {
@@ -235,6 +237,7 @@ export class SettingsService extends EventEmitter {
   }
 
   setProviderSetting(provider: string, key: string, value: unknown): void {
+    assertCanonicalSettingKey(key);
     this.assertSafePath([provider]);
     const entry = this.getOrCreateProvider(provider);
     const oldValue = entry[key];

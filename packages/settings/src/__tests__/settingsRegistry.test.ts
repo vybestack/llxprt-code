@@ -184,12 +184,13 @@ describe('separateSettings — settings categorization', () => {
     expect(result.modelParams.unknownKey).toBe('val');
   });
 
-  it('does not special-case legacy apiKey: unknown keys pass through (provider-config filtered after migration)', () => {
-    // With exact-key semantics the registry no longer resolves 'apiKey';
-    // it must be migrated to 'auth-key' at load (legacyKeyMigration).
+  it('does not pass legacy apiKey into any request settings bucket', () => {
+    // The legacy spelling is never resolved here; persisted input migrates at
+    // load, while this final separation boundary drops it from request data.
     const result = separateSettings({ apiKey: 'sk-123' });
     expect(result.cliSettings.apiKey).toBeUndefined();
     expect(result.cliSettings['auth-key']).toBeUndefined();
+    expect(result.modelParams.apiKey).toBeUndefined();
   });
 
   it('migrated canonical max_tokens lands in modelParams', () => {

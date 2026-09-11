@@ -14,9 +14,10 @@
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { TaskTool, type TaskToolParams } from './task.js';
-import { taskToolSchema } from './taskSchema.js';
+import { TaskTool, type TaskToolParams } from './task.js';
 import {
   validateOutputSpec,
+  validateOutputParams,
   normalizeTaskParams,
 } from './taskToolGovernance.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -122,6 +123,23 @@ describe('Issue #2533: TaskTool single parameter vocabulary', () => {
     });
   });
 
+  describe('validateOutputParams', () => {
+    it.each(['output_spec', 'outputSpec', 'expectedOutputs'] as const)(
+      'rejects legacy %s even without schema validation',
+      (legacyName) => {
+        const params = {
+          subagent_name: 'helper',
+          goal_prompt: 'Do work',
+          [legacyName]: { result: 'The outcome' },
+        } as unknown as TaskToolParams;
+
+        expect(validateOutputParams(params)).toContain(
+          "use the canonical 'expected_outputs'",
+        );
+      },
+    );
+  });
+
   describe('normalizeTaskParams', () => {
     it('resolves expected_outputs into outputSpec', () => {
       const normalized = normalizeTaskParams({
@@ -153,21 +171,89 @@ describe('Issue #2533: TaskTool single parameter vocabulary', () => {
         "expected_outputs 'findings' must be a plain string description, not a JSON Schema object.",
       );
     });
+
+    it.each([
+      ['subagentName', 'subagent_name'],
+      ['goalPrompt', 'goal_prompt'],
+      ['behaviourPrompts', 'behaviour_prompts'],
+      ['behavior_prompts', 'behaviour_prompts'],
+      ['behaviorPrompts', 'behaviour_prompts'],
+      ['toolWhitelist', 'tool_whitelist'],
+      ['output_spec', 'expected_outputs'],
+      ['outputSpec', 'expected_outputs'],
+      ['expectedOutputs', 'expected_outputs'],
+      ['context_vars', 'context'],
+      ['contextVars', 'context'],
+    ] as const)(
+      'rejects legacy %s before normalization can drop it',
+      (legacyName, canonicalName) => {
+        const params = {
+          subagent_name: 'helper',
+          goal_prompt: 'Do work',
+          [legacyName]: 'legacy value',
+        } as unknown as TaskToolParams;
+
+        expect(() => normalizeTaskParams(params)).toThrow(
+          `use the canonical '${canonicalName}'`,
+        );
+      },
+    );
+
+    it.each([
+      ['expected_outputs', 'output_spec', 'expected_outputs'],
+      ['subagent_name', 'subagentName', 'subagent_name'],
+    ] as const)(
+      'rejects canonical %s combined with legacy %s',
+      (canonicalName, legacyName, expectedCanonicalName) => {
+        const params = {
+          subagent_name: 'helper',
+          goal_prompt: 'Do work',
+          [canonicalName]: 'canonical value',
+          [legacyName]: 'legacy value',
+        } as unknown as TaskToolParams;
+
+        expect(() => normalizeTaskParams(params)).toThrow(
+          `use the canonical '${expectedCanonicalName}'`,
+        );
+      },
+    );
   });
 
   describe('taskToolSchema', () => {
-    it('exposes exactly the canonical property set', () => {
-      expect(Object.keys(taskToolSchema.properties).sort()).toStrictEqual(
+    function runtimeParameterSchema(): Record<string, unknown> {
+      const schema = createTool().schema.parametersJsonSchema;
+      if (
+        typeof schema !== 'object' ||
+        schema === null ||
+        Array.isArray(schema)
+      ) {
+        throw new Error('TaskTool runtime parameter schema must be an object.');
+      }
+      return schema;
+    }
+
+    it('exposes exactly the canonical property set at runtime', () => {
+      const properties = runtimeParameterSchema()['properties'];
+      if (
+        typeof properties !== 'object' ||
+        properties === null ||
+        Array.isArray(properties)
+      ) {
+        throw new Error(
+          'TaskTool runtime schema properties must be an object.',
+        );
+      }
+      expect(Object.keys(properties).sort()).toStrictEqual(
         CANONICAL_TASK_PARAM_NAMES,
       );
     });
 
     it('rejects unknown properties', () => {
-      expect(taskToolSchema.additionalProperties).toBe(false);
+      expect(runtimeParameterSchema()['additionalProperties']).toBe(false);
     });
 
     it('describes expected_outputs string values', () => {
-      expect(taskToolSchema.properties.expected_outputs.description).toContain(
+      expect(JSON.stringify(runtimeParameterSchema())).toContain(
         'Values must be strings, not JSON Schema objects.',
       );
     });
@@ -202,7 +288,7 @@ describe('Issue #2533: TaskTool single parameter vocabulary', () => {
 
     it('rejects a completely unknown property via the schema', () => {
       expect(() => buildWithExtra({ bogus_param: 'value' })).toThrow(
-        /must NOT have additional properties|use the canonical/,
+        'params must NOT have additional properties',
       );
     });
 
@@ -223,7 +309,7 @@ describe('Issue #2533: TaskTool single parameter vocabulary', () => {
         goal_prompt: 'Do work',
         expected_outputs: { findings: 'A concise summary' },
       });
-      expect(invocation.result).toBeUndefined();
+      expect(invocation).toBeDefined();
     });
 
     it('rejects JSON-Schema-shaped expected_outputs at schema validation time', () => {

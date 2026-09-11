@@ -99,8 +99,9 @@ function extractDirectProviderBaseUrl(
 function extractConfiguredProviderBaseUrl(
   provider: Record<string, unknown>,
 ): string | undefined {
-  const configCandidate = (provider as { providerConfig?: { baseURL?: string } })
-    .providerConfig;
+  const configCandidate = (
+    provider as { providerConfig?: { baseURL?: string } }
+  ).providerConfig;
   if (!configCandidate) {
     return undefined;
   }
@@ -394,14 +395,14 @@ export async function setActiveToolFormatOverride(
 
   if (!formatName || formatName === 'auto') {
     await settingsService.updateSettings(provider.name, { toolFormat: 'auto' });
-    config.setEphemeralSetting('tool-format', 'auto');
+    config.setEphemeralSetting('toolFormat', 'auto');
     return getActiveToolFormatState();
   }
 
   await settingsService.updateSettings(provider.name, {
     toolFormat: formatName,
   });
-  config.setEphemeralSetting('tool-format', formatName);
+  config.setEphemeralSetting('toolFormat', formatName);
   return getActiveToolFormatState();
 }
 

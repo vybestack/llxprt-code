@@ -10,8 +10,8 @@
 
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import {
-  STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,
-  STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
+  STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
+  STREAM_IDLE_TIMEOUT_SETTING_KEY,
 } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { AgentConfig } from './config-types.js';
 import { CONFIG_FIELD_CLASSIFICATION } from './config-classification.js';
@@ -350,13 +350,13 @@ export function applyRuntimeEphemerals(
 ): void {
   if (agentConfig.streamIdleTimeoutMs !== undefined) {
     config.setEphemeralSetting(
-      STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
+      STREAM_IDLE_TIMEOUT_SETTING_KEY,
       agentConfig.streamIdleTimeoutMs,
     );
   }
   if (agentConfig.streamFirstResponseTimeoutMs !== undefined) {
     config.setEphemeralSetting(
-      STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,
+      STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
       agentConfig.streamFirstResponseTimeoutMs,
     );
   }

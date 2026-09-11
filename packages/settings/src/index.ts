@@ -39,6 +39,7 @@ export {
   SETTINGS_REGISTRY,
 } from './settings/settingsRegistry.js';
 export {
+  assertCanonicalSettingKey,
   LEGACY_SETTING_KEY_MIGRATIONS,
   migrateLegacySettingKeys,
 } from './settings/legacyKeyMigration.js';

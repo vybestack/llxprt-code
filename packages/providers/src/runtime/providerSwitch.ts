@@ -683,13 +683,9 @@ function applyAliasEphemeralSettings(context: ProviderSwitchContext): void {
     // protection here. Comparison is case-insensitive because the raw alias
     // key is lowercased below, which also blocks case variants of these keys.
     const protectedAliasEphemeralKeys = new Set(
-      [
-        'activeProvider',
-        'base-url',
-        'model',
-        'auth-key',
-        'auth-keyfile',
-      ].map((canonicalKey) => canonicalKey.toLowerCase()),
+      ['activeProvider', 'base-url', 'model', 'auth-key', 'auth-keyfile'].map(
+        (canonicalKey) => canonicalKey.toLowerCase(),
+      ),
     );
 
     Object.entries(aliasEphemeralSettings).forEach(([rawKey, rawValue]) => {
