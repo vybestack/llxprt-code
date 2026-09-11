@@ -92,7 +92,7 @@ function buildCodexImageEndpoint(
  */
 export interface CodexImageCredential {
   readonly accessToken: string;
-  readonly accountId: string;
+  readonly accountId?: string;
 }
 
 /**
@@ -173,15 +173,17 @@ export class CodexImageBackend implements ImageGenerationBackend {
 
   private buildHeaders(
     accessToken: string,
-    accountId: string,
+    accountId: string | undefined,
     sessionId?: string,
   ): Record<string, string> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${accessToken}`,
-      'ChatGPT-Account-ID': accountId,
       originator: 'codex_cli_rs',
       'Content-Type': 'application/json',
     };
+    if (accountId !== undefined) {
+      headers['ChatGPT-Account-ID'] = accountId;
+    }
     if (sessionId !== undefined) {
       headers['session_id'] = sessionId;
     }
@@ -268,7 +270,9 @@ export class CodexImageBackend implements ImageGenerationBackend {
     }
     return {
       data: b64,
-      ...(typeof parsed.quality === 'string' ? { quality: parsed.quality } : {}),
+      ...(typeof parsed.quality === 'string'
+        ? { quality: parsed.quality }
+        : {}),
       ...(typeof parsed.size === 'string' ? { size: parsed.size } : {}),
       ...(parsed.usage !== undefined ? { usage: parsed.usage } : {}),
     };
@@ -302,8 +306,7 @@ export class CodexImageBackend implements ImageGenerationBackend {
     const body = {
       model: this.model,
       prompt: request.prompt,
-      background:
-        request.background ?? this.defaults.background ?? 'auto',
+      background: request.background ?? this.defaults.background ?? 'auto',
       quality: request.quality ?? this.defaults.quality ?? 'auto',
       size: request.size ?? this.defaults.size ?? 'auto',
       n: request.n ?? 1,
@@ -391,8 +394,7 @@ export class CodexImageBackend implements ImageGenerationBackend {
       model: this.model,
       prompt: request.prompt,
       images: dataUrls.map((imageUrl) => ({ image_url: imageUrl })),
-      background:
-        request.background ?? this.defaults.background ?? 'auto',
+      background: request.background ?? this.defaults.background ?? 'auto',
       quality: request.quality ?? this.defaults.quality ?? 'auto',
       size: request.size ?? this.defaults.size ?? 'auto',
     };

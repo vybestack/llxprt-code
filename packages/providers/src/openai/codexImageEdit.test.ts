@@ -232,7 +232,10 @@ describe('CodexImageBackend.edit', () => {
       new AbortController().signal,
     );
 
-    const body = JSON.parse(String(captured()?.init.body)) as Record<string, unknown>;
+    const body = JSON.parse(String(captured()?.init.body)) as Record<
+      string,
+      unknown
+    >;
     expect(body).toMatchObject({
       model: 'gpt-image-2.5-sunburst',
       quality: 'max',

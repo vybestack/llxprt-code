@@ -248,4 +248,39 @@ describe('createCodexImageBackendResolver', () => {
     ).toMatchObject({ message: expect.stringMatching(/account_id/i) });
     expect(mockFetch).not.toHaveBeenCalled();
   });
+  it('configures the backend from the active image profile', async () => {
+    const fetchImpl = vi.fn(async () => makeImageResponse());
+    const resolve = createCodexImageBackendResolver({
+      oauthManager: makeStubOAuthManager(VALID_TOKEN),
+      getActiveProvider: () => undefined,
+      getActiveImageProfile: () => ({
+        version: 1,
+        type: 'image',
+        model: 'gpt-image-2.5-flare',
+        baseUrl: 'https://images.example/v1',
+        auth: { type: 'oauth', provider: 'codex' },
+        defaults: {
+          quality: 'xhigh',
+          size: '1024x1536',
+          background: 'transparent',
+        },
+      }),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    await resolve()?.generate(
+      { prompt: 'a cat' },
+      new AbortController().signal,
+    );
+
+    const [url, init] = fetchImpl.mock.calls[0] ?? [];
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    expect(String(url)).toBe('https://images.example/v1/images/generations');
+    expect(body).toMatchObject({
+      model: 'gpt-image-2.5-flare',
+      quality: 'xhigh',
+      size: '1024x1536',
+      background: 'transparent',
+    });
+  });
 });

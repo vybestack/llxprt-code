@@ -12,7 +12,9 @@ import { testRegex } from '../../test-utils/regex.js';
 
 const runtimeMocks = {
   saveProfileSnapshot: vi.fn(),
+  saveImageProfileSnapshot: vi.fn(),
   loadProfileByName: vi.fn(),
+  loadImageProfileByName: vi.fn(),
   deleteProfileByName: vi.fn(),
   listSavedProfiles: vi.fn(),
   setDefaultProfileName: vi.fn(),
@@ -81,6 +83,21 @@ describe('profileCommand', () => {
       expect(runtimeMocks.saveProfileSnapshot).toHaveBeenCalledWith(
         'demo',
         undefined,
+      );
+    });
+
+    it('keeps the untyped save form as a model alias', async () => {
+      await save.action!(context, 'demo');
+      expect(runtimeMocks.saveProfileSnapshot).toHaveBeenCalledWith(
+        'demo',
+        undefined,
+      );
+    });
+
+    it('saves the active image profile by name', async () => {
+      await save.action!(context, 'image artwork');
+      expect(runtimeMocks.saveImageProfileSnapshot).toHaveBeenCalledWith(
+        'artwork',
       );
     });
 
@@ -166,6 +183,25 @@ describe('profileCommand', () => {
       expect((result as { content: string }).content).toContain(
         'fallback provider used',
       );
+    });
+
+    it('loads an explicitly typed model profile', async () => {
+      runtimeMocks.loadProfileByName.mockResolvedValue({ infoMessages: [] });
+      await load.action!(context, 'model demo');
+      expect(runtimeMocks.loadProfileByName).toHaveBeenCalledWith('demo');
+    });
+
+    it('loads an image profile without switching the chat provider', async () => {
+      runtimeMocks.loadImageProfileByName.mockResolvedValue({
+        name: 'artwork',
+        profile: { model: 'gpt-image-2.5-flare' },
+      });
+      const result = await load.action!(context, 'image artwork');
+      expect(runtimeMocks.loadImageProfileByName).toHaveBeenCalledWith(
+        'artwork',
+      );
+      expect(agentMocks.setProvider).not.toHaveBeenCalled();
+      expect((result as { content: string }).content).toContain('artwork');
     });
 
     it('refreshes Gemini tools after profile load', async () => {

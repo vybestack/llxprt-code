@@ -913,7 +913,6 @@ describe('ProfileManager — loadbalancer profile entry validation', () => {
   });
 });
 
-
 describe('ProfileManager typed image profiles', () => {
   let tempDir: string;
   let pm: ProfileManager;

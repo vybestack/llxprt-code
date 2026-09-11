@@ -18,6 +18,7 @@ import type {
   Profile,
   ModelParams,
   LoadBalancerProfile,
+  ImageProfile,
 } from '@vybestack/llxprt-code-settings';
 import {
   getCliRuntimeServices,
@@ -44,8 +45,45 @@ type LoadBalancerProfileDetail = {
   temperature?: unknown;
   maxTokens?: unknown;
   modelParams?: Record<string, unknown>;
+
   loadError?: boolean;
 };
+export interface ActiveImageProfile {
+  readonly name: string;
+  readonly profile: ImageProfile;
+}
+
+let activeImageProfile: ActiveImageProfile | undefined;
+
+export function getActiveImageProfile(): ActiveImageProfile | undefined {
+  return activeImageProfile;
+}
+export function setActiveImageProfile(
+  profile: ActiveImageProfile | undefined,
+): void {
+  activeImageProfile = profile;
+}
+
+export async function loadImageProfileByName(
+  profileName: string,
+): Promise<ActiveImageProfile> {
+  const profile = await new ProfileManager().loadImageProfile(profileName);
+  activeImageProfile = { name: profileName, profile };
+  return activeImageProfile;
+}
+
+export async function saveImageProfileSnapshot(
+  profileName: string,
+): Promise<ImageProfile> {
+  if (activeImageProfile === undefined) {
+    throw new Error('No active image profile to save');
+  }
+  await new ProfileManager().saveImageProfile(
+    profileName,
+    activeImageProfile.profile,
+  );
+  return activeImageProfile.profile;
+}
 
 type LoadBalancerProfileWithDetails = LoadBalancerProfile & {
   loadBalancerProfileDetails?: LoadBalancerProfileDetail[];
@@ -652,9 +690,17 @@ export async function saveProfileSnapshot(
   const manager = new ProfileManager();
   const snapshot = buildRuntimeProfileSnapshot();
 
-  let finalProfile: Profile = snapshot;
+  let finalProfile: Profile = isLoadBalancerProfile(snapshot)
+    ? snapshot
+    : {
+        ...snapshot,
+        type: 'model',
+        ...(activeImageProfile !== undefined
+          ? { imageProfile: activeImageProfile.name }
+          : {}),
+      };
   if (additionalConfig) {
-    finalProfile = { ...snapshot, ...additionalConfig } as Profile;
+    finalProfile = { ...finalProfile, ...additionalConfig } as Profile;
   }
 
   // Defense in depth for issue #2479: never persist the virtual
@@ -695,7 +741,20 @@ export async function loadProfileByName(
 ): Promise<ProfileLoadResult> {
   const manager = new ProfileManager();
   const profile = await manager.loadProfile(profileName);
-  return applyProfileSnapshot(profile, { profileName });
+  const imageProfileName =
+    'imageProfile' in profile && typeof profile.imageProfile === 'string'
+      ? profile.imageProfile
+      : undefined;
+  const resolvedImageProfile =
+    imageProfileName === undefined
+      ? undefined
+      : await manager.loadImageProfile(imageProfileName);
+  const result = await applyProfileSnapshot(profile, { profileName });
+  activeImageProfile =
+    resolvedImageProfile === undefined || imageProfileName === undefined
+      ? undefined
+      : { name: imageProfileName, profile: resolvedImageProfile };
+  return result;
 }
 
 export async function deleteProfileByName(profileName: string): Promise<void> {

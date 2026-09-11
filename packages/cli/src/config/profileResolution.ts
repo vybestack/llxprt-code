@@ -8,6 +8,7 @@ import process from 'node:process';
 import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { Profile } from '@vybestack/llxprt-code-settings';
+import { setActiveImageProfile } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { MergedSettings, Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
 import {
@@ -204,6 +205,17 @@ async function applyFileProfile(
   try {
     const profileManager = new ProfileManager();
     const profile = await profileManager.loadProfile(profileToLoad);
+    const imageProfileName =
+      'imageProfile' in profile && typeof profile.imageProfile === 'string'
+        ? profile.imageProfile
+        : undefined;
+    if (imageProfileName === undefined) {
+      setActiveImageProfile(undefined);
+    } else {
+      const imageProfile =
+        await profileManager.loadImageProfile(imageProfileName);
+      setActiveImageProfile({ name: imageProfileName, profile: imageProfile });
+    }
     const prepared = prepareProfileForApplication(
       profile,
       profileToLoad,
@@ -240,7 +252,10 @@ async function applyFileProfile(
     });
     debugLogger.error(failureSummary);
 
-    if (profileExplicitlySpecified) {
+    if (
+      profileExplicitlySpecified ||
+      (error instanceof Error && error.message.startsWith('Image profile '))
+    ) {
       throw error;
     }
 

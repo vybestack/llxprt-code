@@ -21,6 +21,8 @@
  */
 
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
+import type { ImageProfile } from '@vybestack/llxprt-code-settings';
+import { createProviderKeyStorage } from '../auth/index.js';
 
 import {
   CodexImageBackend,
@@ -75,6 +77,7 @@ export interface ResolvedImageBackendLike {
 export interface CodexImageBackendResolverDeps {
   readonly oauthManager: OAuthManager | undefined;
   readonly getActiveProvider: () => IProvider | undefined;
+  readonly getActiveImageProfile?: () => ImageProfile | undefined;
   readonly fetchImpl?: typeof fetch;
 }
 
@@ -119,6 +122,37 @@ async function resolveFreshCredential(
   return { accessToken, accountId };
 }
 
+async function resolveProfileCredential(
+  profile: ImageProfile,
+  oauthManager: OAuthManager | undefined,
+): Promise<CodexImageCredential> {
+  if (profile.auth.type === 'apikey') {
+    const key = await createProviderKeyStorage().getKey(profile.auth.keyName);
+    if (key === null || key === undefined || key === '') {
+      throw new Error(
+        `Image profile API key reference '${profile.auth.keyName}' was not found`,
+      );
+    }
+    return { accessToken: key };
+  }
+  if (oauthManager === undefined) {
+    throw new Error(
+      `Image profile OAuth reference '${profile.auth.provider}' requires OAuth authentication`,
+    );
+  }
+  const token = await oauthManager.getOAuthToken?.(profile.auth.provider);
+  if (token === null || token === undefined || token.access_token === '') {
+    throw new Error(
+      `Image profile OAuth reference '${profile.auth.provider}' is not authenticated`,
+    );
+  }
+  const accountId = (token as Record<string, unknown>)['account_id'];
+  return {
+    accessToken: token.access_token,
+    ...(typeof accountId === 'string' && accountId !== '' ? { accountId } : {}),
+  };
+}
+
 /**
  * Build a lazy resolver that returns a CodexImageBackend when the active
  * provider is in Codex mode, or null otherwise.
@@ -131,29 +165,40 @@ export function createCodexImageBackendResolver(
   deps: CodexImageBackendResolverDeps,
 ): () => ResolvedImageBackendLike | null {
   return () => {
-    if (deps.oauthManager === undefined) {
+    const imageProfile = deps.getActiveImageProfile?.();
+    const oauthManager = deps.oauthManager;
+    if (imageProfile === undefined && oauthManager === undefined) {
       return null;
     }
 
-    // Image generation is a Codex-backed capability that is INDEPENDENT of the
-    // conversational provider. A user chatting with Anthropic (or any other
-    // provider) can still generate images with their Codex credentials, so the
-    // active provider is deliberately NOT a gate.
-    //
-    // The active provider's base URL is honoured only when it is already a
-    // Codex URL, so a custom Codex endpoint keeps working; otherwise the
-    // canonical endpoint is used.
     const provider = deps.getActiveProvider();
     const activeBaseUrl =
       provider === undefined ? undefined : getBaseUrlFromProvider(provider);
-    const baseUrl = isCodexBaseUrl(activeBaseUrl)
-      ? (activeBaseUrl as string)
-      : DEFAULT_CODEX_BASE_URL;
+    const baseUrl =
+      imageProfile?.baseUrl ??
+      (isCodexBaseUrl(activeBaseUrl)
+        ? (activeBaseUrl as string)
+        : DEFAULT_CODEX_BASE_URL);
 
-    const oauthManager = deps.oauthManager;
+    const getCredential = (): Promise<CodexImageCredential> => {
+      if (imageProfile !== undefined) {
+        return resolveProfileCredential(imageProfile, oauthManager);
+      }
+      if (oauthManager === undefined) {
+        throw new Error('Codex image backend requires OAuth authentication');
+      }
+      return resolveFreshCredential(oauthManager);
+    };
     const backendDeps: CodexImageBackendDeps = {
-      getCredential: () => resolveFreshCredential(oauthManager),
+      getCredential,
       getBaseUrl: () => baseUrl,
+      ...(imageProfile !== undefined
+        ? {
+            model: imageProfile.model,
+            defaults: imageProfile.defaults,
+            allowCustomBaseUrl: true,
+          }
+        : {}),
       ...(deps.fetchImpl !== undefined ? { fetchImpl: deps.fetchImpl } : {}),
     };
 

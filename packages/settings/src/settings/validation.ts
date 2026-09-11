@@ -307,7 +307,6 @@ export function parseImageProfile(name: string, input: unknown): ImageProfile {
 }
 
 export function parseProfile(input: unknown): Profile {
-
   if (!isPlainObject(input)) {
     throw new Error('missing required fields');
   }

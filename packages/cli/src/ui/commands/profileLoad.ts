@@ -47,7 +47,10 @@ export function classifyLoadError(
       content: `Failed to load profile: ${String(error)}`,
     };
   }
-  if (error.message.includes('OAuth bucket')) {
+  if (
+    error.message.includes('OAuth bucket') ||
+    error.message.startsWith('Image profile ')
+  ) {
     return { type: 'message', messageType: 'error', content: error.message };
   }
   if (error.message.includes('not found')) {

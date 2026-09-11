@@ -37,6 +37,17 @@ llxprt --profile-load kimi-k3
 /profile set-default none       # Clear auto-load
 ```
 
+The typed forms make the profile kind explicit. The untyped forms remain aliases for model profiles.
+
+```
+/profile save model <name>
+/profile load model <name>
+/profile save image <name>
+/profile load image <name>
+```
+
+An image profile stores its model slug, `baseUrl`, auth reference, and defaults for `quality`, `size`, and `background`. Loading an image profile switches the active image backend for `generate_image`, `/image`, and direct CLI image mode. A model profile saved while an image profile is active records `imageProfile: "<name>"`. Loading that model profile resolves the image profile by name and fails if the referenced profile is missing. Model profiles without `imageProfile` continue to use `gpt-image-2` with Codex OAuth.
+
 Profiles are stored in `<config>/profiles/<name>.json` (see [Application Directories](./reference/application-directories.md)).
 
 ### CLI Flags Override Profiles

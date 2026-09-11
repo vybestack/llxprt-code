@@ -163,7 +163,10 @@ describe('CodexImageBackend', () => {
         body: { data: [{ b64_json: 'aGVsbG8=' }] },
       });
       const backend = new CodexImageBackend({
-        getCredential: async () => ({ accessToken: 'token', accountId: 'acct' }),
+        getCredential: async () => ({
+          accessToken: 'token',
+          accountId: 'acct',
+        }),
         getBaseUrl: () => 'https://images.example/v1',
         model: 'gpt-image-2.5-flare',
         defaults: {
@@ -181,7 +184,10 @@ describe('CodexImageBackend', () => {
       );
 
       const request = captured();
-      const body = JSON.parse(String(request?.init.body)) as Record<string, unknown>;
+      const body = JSON.parse(String(request?.init.body)) as Record<
+        string,
+        unknown
+      >;
       expect(request?.url).toBe('https://images.example/v1/images/generations');
       expect(body).toMatchObject({
         model: 'gpt-image-2.5-flare',
@@ -231,7 +237,12 @@ describe('CodexImageBackend', () => {
     it('normalizes data[0].b64_json into a base64/png ImageResult with the prompt as caption', async () => {
       const { fetchImpl } = makeStubFetch({
         status: 200,
-        body: { data: [{ b64_json: 'aGVsbG8=' }] },
+        body: {
+          quality: 'low',
+          size: '1254x1254',
+          usage: { input_tokens: 14, output_tokens: 515 },
+          data: [{ b64_json: 'aGVsbG8=', generation_id: 'generation-1' }],
+        },
       });
       const backend = makeBackend({ fetchImpl });
 
@@ -244,6 +255,9 @@ describe('CodexImageBackend', () => {
       expect(result.encoding).toBe('base64');
       expect(result.data).toBe('aGVsbG8=');
       expect(result.caption).toBe('a red panda');
+      expect(result.quality).toBe('low');
+      expect(result.size).toBe('1254x1254');
+      expect(result.usage).toEqual({ input_tokens: 14, output_tokens: 515 });
     });
   });
 

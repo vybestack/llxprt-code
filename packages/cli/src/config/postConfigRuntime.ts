@@ -25,6 +25,7 @@ import {
   getCliRuntimeContext,
   setCliRuntimeContext,
   applyCliSetArguments,
+  getActiveImageProfile,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { createCodexImageBackendResolver } from '@vybestack/llxprt-code-providers';
@@ -312,6 +313,7 @@ async function setupRuntimeContext(
   const imageBackendResolver = createCodexImageBackendResolver({
     oauthManager: finalRuntime.oauthManager,
     getActiveProvider: () => runtimeState.providerManager.getActiveProvider(),
+    getActiveImageProfile: () => getActiveImageProfile()?.profile,
   });
   config.setImageBackendResolver(imageBackendResolver);
 

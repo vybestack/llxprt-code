@@ -28,13 +28,7 @@ export interface ImageGenerateRequest {
   readonly prompt: string;
   readonly model?: string;
   readonly background?: 'auto' | 'transparent' | 'opaque';
-  readonly quality?:
-    | 'auto'
-    | 'high'
-    | 'medium'
-    | 'low'
-    | 'xhigh'
-    | 'max';
+  readonly quality?: 'auto' | 'high' | 'medium' | 'low' | 'xhigh' | 'max';
   readonly size?: 'auto' | '1024x1024' | '1024x1536' | '1536x1024';
   readonly n?: number;
   readonly sessionId?: string;

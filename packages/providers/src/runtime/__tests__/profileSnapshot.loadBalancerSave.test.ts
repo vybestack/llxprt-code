@@ -86,13 +86,16 @@ void vi.mock('@vybestack/llxprt-code-settings', () => {
   };
 });
 
-const { buildRuntimeProfileSnapshot, saveProfileSnapshot } = await import(
-  '../profileSnapshot.js'
-);
+const {
+  buildRuntimeProfileSnapshot,
+  saveProfileSnapshot,
+  setActiveImageProfile,
+} = await import('../profileSnapshot.js');
 
 describe('profile save while load balancer is active (issue #2479)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setActiveImageProfile(undefined);
     runtimeServicesState.activeProviderName = 'load-balancer';
     runtimeServicesState.ephemerals = {};
     runtimeServicesState.lbConfig = {
@@ -165,6 +168,25 @@ describe('profile save while load balancer is active (issue #2479)', () => {
       } as never),
     ).rejects.toThrow(/corrupt profile/);
     expect(saveProfileMock).not.toHaveBeenCalled();
+  });
+
+  it('captures the active image profile reference in a model profile', async () => {
+    runtimeServicesState.activeProviderName = 'anthropic';
+    setActiveImageProfile({
+      name: 'artwork',
+      profile: {
+        version: 1,
+        type: 'image',
+        model: 'gpt-image-2.5-flare',
+        baseUrl: 'https://images.example/v1',
+        auth: { type: 'oauth', provider: 'codex' },
+        defaults: { quality: 'high', size: 'auto', background: 'auto' },
+      },
+    });
+
+    const saved = await saveProfileSnapshot('chat');
+
+    expect(saved).toMatchObject({ type: 'model', imageProfile: 'artwork' });
   });
 
   it('standard-provider saves are unaffected', async () => {

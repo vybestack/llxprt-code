@@ -164,6 +164,19 @@ export const profileSaveSchema: CommandArgumentSchema = [
   },
   {
     kind: 'literal',
+    value: 'image',
+    description: 'Save the active image configuration',
+    next: [
+      {
+        kind: 'value',
+        name: 'profile-name',
+        description: 'Enter image profile name',
+        completer: profileNameCompleter,
+      },
+    ],
+  },
+  {
+    kind: 'literal',
     value: 'loadbalancer',
     description: 'Create a load balancer profile',
     next: [
@@ -193,9 +206,35 @@ export const profileSaveSchema: CommandArgumentSchema = [
 
 export const profileLoadSchema: CommandArgumentSchema = [
   {
+    kind: 'literal',
+    value: 'model',
+    description: 'Load a model profile',
+    next: [
+      {
+        kind: 'value',
+        name: 'profile',
+        description: 'Select model profile to load',
+        completer: profileNameCompleter,
+      },
+    ],
+  },
+  {
+    kind: 'literal',
+    value: 'image',
+    description: 'Load an image profile',
+    next: [
+      {
+        kind: 'value',
+        name: 'profile',
+        description: 'Select image profile to load',
+        completer: profileNameCompleter,
+      },
+    ],
+  },
+  {
     kind: 'value',
     name: 'profile',
-    description: 'Select profile to load',
+    description: 'Select model profile to load',
     completer: profileNameCompleter,
   },
 ];
