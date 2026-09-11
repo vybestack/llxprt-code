@@ -425,15 +425,17 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       applySandboxBashrc: () => {},
     }));
     void mock.module('./unconfiguredProviderGuard.js', () => ({
-      guardUnconfiguredProvider: async () => {},
+      guardUnconfiguredProvider: async () => {
+        throw new Error(
+          'Image mode must not require a conversational provider',
+        );
+      },
       UNCONFIGURED_PROVIDER_MESSAGE: '',
     }));
     void mock.module('./cliProviderInit.js', () => ({
-      activateConfiguredProvider: async () => ({
-        authFailed: false,
-        token: undefined,
-        intent: undefined,
-      }),
+      activateConfiguredProvider: async () => {
+        throw new Error('Image mode must not activate conversational auth');
+      },
       configureProvidersAndServices: async () => ({}),
       connectIdeClientIfEnabled: async () => {},
       ensureAcpProviderActivated: () => {},
@@ -532,12 +534,12 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
     await main();
   }
 
-  it('image mode dispatches when stdin is not a TTY and no conversational prompt is present', async () => {
+  it('image mode dispatches without conversational auth, provider, prompt or TTY', async () => {
     // process.exit(0) is called by image mode after a successful dispatch.
     vi.spyOn(process, 'exit').mockImplementation((code) => {
       throw new Error(`process.exit(${code})`);
     });
-    await expect(runMainImageMode(makeConfig(true, false))).rejects.toThrow(
+    await expect(runMainImageMode(makeConfig(false, false))).rejects.toThrow(
       'process.exit(0)',
     );
     // The stdin guard must NOT have been called (bypassed for image mode).

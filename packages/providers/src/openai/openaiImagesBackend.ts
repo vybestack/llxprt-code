@@ -26,7 +26,7 @@ import {
 
 export interface OpenAIImagesBackendDeps {
   readonly config: ResolvedImageProfileBackendConfig;
-  readonly getApiKey?: () => Promise<string>;
+  readonly getApiKey?: () => Promise<string | undefined>;
   readonly fetchImpl?: typeof fetch;
 }
 
@@ -145,7 +145,13 @@ export class OpenAIImagesBackend implements ImageBackend {
           'validation',
           'Image backend requires an API key resolver.',
         );
-      headers.set('Authorization', `Bearer ${await this.deps.getApiKey()}`);
+      const apiKey = await this.deps.getApiKey();
+      if (apiKey === undefined)
+        throw new ImageBackendError(
+          'validation',
+          'Image profile credential is missing.',
+        );
+      headers.set('Authorization', `Bearer ${apiKey}`);
     }
     const endpoint = `${normalizeBaseUrl(this.deps.config.baseUrl)}/images/${operation}`;
     const response = await this.fetchImpl(endpoint, {

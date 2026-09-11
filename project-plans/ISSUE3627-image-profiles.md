@@ -285,3 +285,30 @@ Verification artifacts are in `tmp/verify3627b/`. The focused Bun command covers
 profile persistence tests. It passes with no failures. Repository-wide typecheck
 and touched-file ESLint passed; settings, tools, core, and providers builds passed.
 No network calls were made by the tests.
+
+## Slice C implementation (2026-09-11)
+
+The exported `createImageApiKeyResolver` resolves named keys through
+`createProviderKeyStorage()`, reads keyfiles with at most one trailing newline
+removed, preserves literal keys, and returns no credential for `none`.
+`ImageCredentialError` identifies missing named keys, unreadable keyfiles, and
+unavailable Codex credentials without including secret contents. The existing
+Codex token-access path now lives in the same module as
+`resolveCodexImageCredential`; token-source failures propagate unchanged and
+access token/account identity remain paired from one fetch per operation.
+
+`postConfigRuntime.ts` injects the resolver into image operations. Both generation
+and edit tests verify profile-only authorization with no conversational provider
+or OAuth manager. A named-key rotation/removal test verifies fresh resolution on
+each operation and failure without a conversational fallback.
+
+Direct image mode skips the conversational provider guard and auth preflight but
+retains the sandbox hop and image-operation error handling. Image-profile command
+loading and runtime snapshot selection already avoid chat authentication; those
+paths required no production changes. The startup selector remains Slice D work.
+
+Verification artifacts are in `tmp/verify3627c/`: 121 focused providers tests and
+85 CLI tests passed, repository-wide `npm run typecheck` exited 0, and touched-file
+ESLint and Prettier checks passed. The providers build passed. The test-audit scan
+reported no findings for either changed test file. Tests used no network or real
+key storage.

@@ -204,6 +204,13 @@ export type {
 } from '@vybestack/llxprt-code-providers/imageBackend.js';
 export type { ImageBackendAuth } from './imageBackendAuth.js';
 export {
+  createImageApiKeyResolver,
+  resolveCodexImageCredential,
+  ImageCredentialError,
+  type ImageCredentialErrorCode,
+  type ImageApiKeyResolverDeps,
+} from './image-auth-resolution.js';
+export {
   ImageBackendError,
   type ImageBackendErrorCode,
 } from './openai/imageBackendResponse.js';

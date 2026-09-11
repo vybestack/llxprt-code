@@ -28,7 +28,10 @@ import {
   getActiveImageProfile,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { createCodexImageBackendResolver } from '@vybestack/llxprt-code-providers';
+import {
+  createCodexImageBackendResolver,
+  createImageApiKeyResolver,
+} from '@vybestack/llxprt-code-providers';
 import { preflightAgentActivation } from '@vybestack/llxprt-code-agents';
 import { createOAuthSettingsAdapter } from '../auth/oauth-settings-adapter.js';
 import {
@@ -311,6 +314,7 @@ async function setupRuntimeContext(
   // was already created during config.initialize(), the lazy closure reads
   // this resolver at invocation time.
   const imageBackendResolver = createCodexImageBackendResolver({
+    getImageApiKey: createImageApiKeyResolver(finalRuntime),
     oauthManager: finalRuntime.oauthManager,
     getActiveProvider: () => runtimeState.providerManager.getActiveProvider(),
     getActiveImageProfile: () => getActiveImageProfile()?.profile,
