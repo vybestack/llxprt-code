@@ -5,10 +5,7 @@
  */
 
 import { createStore, type Store } from '../createStore.js';
-import type {
-  HistoryItem,
-  HistoryItemWithoutId,
-} from '../../types.js';
+import type { HistoryItem, HistoryItemWithoutId } from '../../types.js';
 import { StreamingState } from '../../types.js';
 import { ConversationContext } from '../../../utils/ConversationContext.js';
 import type { ThoughtSummary } from '@vybestack/llxprt-code-core';
@@ -126,22 +123,42 @@ function initialTurnState(): TurnState {
   };
 }
 
-export function createTurnStore(initial?: Partial<TurnState>): TurnStore {
-  const ledger: HistoryLedger = createHistoryLedger();
-  const store = createStore<TurnState>({
-    ...initialTurnState(),
-    ...initial,
-  });
-  if (initial?.history !== undefined) {
-    ledger.load(initial.history);
-  }
+type TurnHistoryCommands = Pick<
+  TurnCommands,
+  | 'addItem'
+  | 'updateItem'
+  | 'removeItems'
+  | 'clearItems'
+  | 'loadHistory'
+  | 'setHistoryLimits'
+>;
 
-  let addRequestSeq = 0;
+type TurnAddRequestCommands = Pick<TurnCommands, 'requestAddItem'>;
 
-  const publishHistory = (): void => {
-    store.setState((prev) => ({ ...prev, history: projectHistory(ledger.getState()) }));
-  };
+type TurnStatusCommands = Pick<
+  TurnCommands,
+  | 'setPendingHistoryItems'
+  | 'setStreamingState'
+  | 'setThought'
+  | 'setQueuedSubmissions'
+  | 'setElapsedTime'
+  | 'setCurrentLoadingPhrase'
+  | 'setQuittingMessages'
+  | 'setCtrlCPressedOnce'
+  | 'setCtrlDPressedOnce'
+  | 'setIsProcessing'
+  | 'refreshStatic'
+>;
 
+/**
+ * History-ledger writers. Every mutator publishes only when the ledger state
+ * reference changed, preserving <Static> item identity on no-ops, and the
+ * before/after comparison keeps cancel-race ordering intact.
+ */
+function createTurnHistoryCommands(
+  ledger: HistoryLedger,
+  publishHistory: () => void,
+): TurnHistoryCommands {
   const addItem = (
     itemData: Omit<HistoryItem, 'id'>,
     baseTimestamp: number = Date.now(),
@@ -198,6 +215,22 @@ export function createTurnStore(initial?: Partial<TurnState>): TurnStore {
     }
   };
 
+  return {
+    addItem,
+    updateItem,
+    removeItems,
+    clearItems,
+    loadHistory,
+    setHistoryLimits,
+  };
+}
+
+/** Out-of-tree add request writer; seq lets identical requests still notify. */
+function createTurnAddRequestCommands(
+  store: Store<TurnState>,
+): TurnAddRequestCommands {
+  let addRequestSeq = 0;
+
   const requestAddItem = (
     itemData: Omit<HistoryItem, 'id'>,
     baseTimestamp?: number,
@@ -209,6 +242,11 @@ export function createTurnStore(initial?: Partial<TurnState>): TurnStore {
     }));
   };
 
+  return { requestAddItem };
+}
+
+/** Streaming and turn-status writers backed directly by store state. */
+function createTurnStatusCommands(store: Store<TurnState>): TurnStatusCommands {
   const setPendingHistoryItems = (items: HistoryItemWithoutId[]): void => {
     store.setState((prev) => ({ ...prev, pendingHistoryItems: items }));
   };
@@ -256,26 +294,43 @@ export function createTurnStore(initial?: Partial<TurnState>): TurnStore {
   };
 
   return {
+    setPendingHistoryItems,
+    setStreamingState,
+    setThought,
+    setQueuedSubmissions,
+    setElapsedTime,
+    setCurrentLoadingPhrase,
+    setQuittingMessages,
+    setCtrlCPressedOnce,
+    setCtrlDPressedOnce,
+    setIsProcessing,
+    refreshStatic,
+  };
+}
+
+export function createTurnStore(initial?: Partial<TurnState>): TurnStore {
+  const ledger: HistoryLedger = createHistoryLedger();
+  const store = createStore<TurnState>({
+    ...initialTurnState(),
+    ...initial,
+  });
+  if (initial?.history !== undefined) {
+    ledger.load(initial.history);
+  }
+
+  const publishHistory = (): void => {
+    store.setState((prev) => ({
+      ...prev,
+      history: projectHistory(ledger.getState()),
+    }));
+  };
+
+  return {
     store,
     commands: {
-      addItem,
-      updateItem,
-      removeItems,
-      clearItems,
-      loadHistory,
-      setHistoryLimits,
-      requestAddItem,
-      setPendingHistoryItems,
-      setStreamingState,
-      setThought,
-      setQueuedSubmissions,
-      setElapsedTime,
-      setCurrentLoadingPhrase,
-      setQuittingMessages,
-      setCtrlCPressedOnce,
-      setCtrlDPressedOnce,
-      setIsProcessing,
-      refreshStatic,
+      ...createTurnHistoryCommands(ledger, publishHistory),
+      ...createTurnAddRequestCommands(store),
+      ...createTurnStatusCommands(store),
     },
   };
 }

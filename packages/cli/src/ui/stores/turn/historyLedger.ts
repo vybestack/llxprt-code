@@ -338,7 +338,10 @@ export interface HistoryLedger {
   getLimits: () => HistoryLimits;
   setLimits: (limits: HistoryLimits) => void;
   append: (item: HistoryItem) => void;
-  update: (id: number, updates: Partial<Omit<HistoryItem, 'id'>> | HistoryItemUpdater) => void;
+  update: (
+    id: number,
+    updates: Partial<Omit<HistoryItem, 'id'>> | HistoryItemUpdater,
+  ) => void;
   remove: (ids: readonly number[]) => void;
   load: (items: readonly HistoryItem[]) => void;
   clear: () => void;

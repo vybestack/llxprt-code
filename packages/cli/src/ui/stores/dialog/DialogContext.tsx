@@ -16,7 +16,9 @@ export function DialogProvider({
   store: DialogStore;
   children: React.ReactNode;
 }) {
-  return <DialogContext.Provider value={store}>{children}</DialogContext.Provider>;
+  return (
+    <DialogContext.Provider value={store}>{children}</DialogContext.Provider>
+  );
 }
 
 export function useDialogStore(): DialogStore {

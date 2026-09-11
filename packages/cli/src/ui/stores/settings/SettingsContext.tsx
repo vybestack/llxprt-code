@@ -7,9 +7,7 @@
 import { createContext, useContext } from 'react';
 import type { SettingsProfileStore } from './settingsStore.js';
 
-const SettingsProfileContext = createContext<SettingsProfileStore | null>(
-  null,
-);
+const SettingsProfileContext = createContext<SettingsProfileStore | null>(null);
 
 export function SettingsProfileProvider({
   store,
