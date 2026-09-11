@@ -22,39 +22,6 @@ import {
 } from '../../utils/imageDimensionBudget.js';
 
 /**
- * Structural duplicate of the backend-neutral image contract.
- *
- * The tools package is a leaf workspace package with zero workspace deps, so
- * it cannot import the core contract directly. TypeScript's structural typing
- * makes any concrete core-backed backend assignable to this shape.
- */
-export interface ImageBackendResult {
-  readonly mimeType: string;
-  readonly encoding: 'base64' | 'url';
-  readonly data: string;
-  readonly caption?: string;
-  readonly revisedPrompt?: string;
-}
-
-export interface ImageGenerationBackendLike {
-  readonly name: string;
-  readonly provider: string;
-  readonly model: string;
-  generate(
-    request: { readonly prompt: string; readonly sessionId?: string },
-    signal: AbortSignal,
-  ): Promise<ImageBackendResult>;
-  edit(
-    request: {
-      readonly prompt: string;
-      readonly inputPaths: readonly string[];
-      readonly sessionId?: string;
-    },
-    signal: AbortSignal,
-  ): Promise<ImageBackendResult>;
-}
-
-/**
  * The provider-independent tool surface required by issue #2128.
  *
  * `output_path` is REQUIRED and caller-selected. `input_paths` is optional;

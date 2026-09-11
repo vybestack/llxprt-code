@@ -11,6 +11,9 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
+    "./imageBackend.js": {
+      "types": "./src/imageBackend.d.ts"
+    },
     ".": {
       "types": "./dist/index.d.ts",
       "bun": "./index.ts",

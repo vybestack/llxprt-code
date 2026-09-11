@@ -21,7 +21,12 @@
  */
 
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
-import type { ImageGenerateRequest } from '@vybestack/llxprt-code-core';
+import type {
+  ImageBackend,
+  ImageGenerateRequest,
+} from '@vybestack/llxprt-code-providers/imageBackend.js';
+import { OpenAIImagesBackend } from './openaiImagesBackend.js';
+import { isLocalImageEndpoint } from './imageEndpoint.js';
 import type { ImageProfile } from '@vybestack/llxprt-code-settings';
 import type { ImageBackendAuth } from '../imageBackendAuth.js';
 
@@ -33,47 +38,6 @@ import {
 import { getBaseUrlFromProvider } from '../baseUrlResolver.js';
 import type { IProvider } from '../IProvider.js';
 
-/**
- * Structural shape the GenerateImageTool expects from a resolved backend.
- * Duplicated here because the tools package is a leaf dependency that cannot
- * be imported from providers. TypeScript structural typing makes the concrete
- * CodexImageBackend assignable to this shape.
- */
-export interface ResolvedImageBackendLike {
-  readonly name: string;
-  readonly provider: string;
-  readonly model: string;
-  generate(
-    request: {
-      readonly prompt: string;
-      readonly model?: string;
-      readonly background?: string;
-      readonly quality?: string;
-      readonly size?: string;
-      readonly n?: number;
-      readonly sessionId?: string;
-    },
-    signal: AbortSignal,
-  ): Promise<{
-    readonly mimeType: string;
-    readonly data: string;
-    readonly encoding: 'url' | 'base64';
-    readonly caption?: string;
-  }>;
-  edit(
-    request: {
-      readonly prompt: string;
-      readonly inputPaths: readonly string[];
-      readonly sessionId?: string;
-    },
-    signal: AbortSignal,
-  ): Promise<{
-    readonly mimeType: string;
-    readonly data: string;
-    readonly encoding: 'url' | 'base64';
-    readonly caption?: string;
-  }>;
-}
 export type ImageProfileOperationOverrides = Pick<
   ImageGenerateRequest,
   'quality' | 'size' | 'background'
@@ -129,18 +93,10 @@ function resolveAuthContext(
     return 'codex';
   }
 
-  let hostname: string;
   try {
-    hostname = new URL(profile.baseUrl).hostname.toLowerCase();
+    if (isLocalImageEndpoint(profile.baseUrl)) return 'local';
   } catch {
     throw new ImageBackendBaseUrlError(profileName, profile.baseUrl);
-  }
-  if (
-    hostname === 'localhost' ||
-    hostname === '::1' ||
-    hostname.startsWith('127.')
-  ) {
-    return 'local';
   }
   return 'openai';
 }
@@ -187,6 +143,7 @@ export function resolveImageProfileBackendConfig(
 }
 
 export interface CodexImageBackendResolverDeps {
+  readonly getImageApiKey?: (auth: ImageBackendAuth) => Promise<string>;
   readonly oauthManager: OAuthManager | undefined;
   readonly getActiveProvider: () => IProvider | undefined;
   readonly getActiveImageProfile?: () => ImageProfile | undefined;
@@ -247,7 +204,7 @@ async function resolveFreshCredential(
  */
 export function createCodexImageBackendResolver(
   deps: CodexImageBackendResolverDeps,
-): () => ResolvedImageBackendLike | null {
+): () => ImageBackend | null {
   return () => {
     const imageProfile = deps.getActiveImageProfile?.();
     const profileConfig =
@@ -255,7 +212,14 @@ export function createCodexImageBackendResolver(
         ? undefined
         : resolveImageProfileBackendConfig(imageProfile);
     if (profileConfig?.backend === 'openai-images') {
-      return null;
+      const getImageApiKey = deps.getImageApiKey;
+      return new OpenAIImagesBackend({
+        config: profileConfig,
+        ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }),
+        ...(getImageApiKey === undefined
+          ? {}
+          : { getApiKey: () => getImageApiKey(profileConfig.auth) }),
+      });
     }
 
     const oauthManager = deps.oauthManager;

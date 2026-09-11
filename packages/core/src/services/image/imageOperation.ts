@@ -55,16 +55,8 @@ export interface ImageOperationInput {
   readonly signal?: AbortSignal;
 }
 
-/**
- * Backend result for a single generated/edited image (raw bytes metadata).
- */
-export interface ImageBackendResult {
-  readonly mimeType: string;
-  readonly encoding: 'base64' | 'url';
-  readonly data: string;
-  readonly caption?: string;
-  readonly revisedPrompt?: string;
-}
+/** Backend result shared by all image adapters. */
+export type { ImageBackendResult } from '@vybestack/llxprt-code-providers/imageBackend.js';
 
 /**
  * A normalized image-operation result.
@@ -92,23 +84,7 @@ export interface ImageOperationResult {
 /**
  * Backend capability contract: a backend implements generate and/or edit.
  */
-export interface ImageOperationBackend {
-  readonly name: string;
-  readonly provider: string;
-  readonly model: string;
-  generate(
-    request: { readonly prompt: string; readonly sessionId?: string },
-    signal: AbortSignal,
-  ): Promise<ImageBackendResult>;
-  edit(
-    request: {
-      readonly prompt: string;
-      readonly inputPaths: readonly string[];
-      readonly sessionId?: string;
-    },
-    signal: AbortSignal,
-  ): Promise<ImageBackendResult>;
-}
+export type { ImageBackend as ImageOperationBackend } from '@vybestack/llxprt-code-providers/imageBackend.js';
 
 /**
  * Error thrown when an image operation fails at a specific stage.

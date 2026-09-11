@@ -198,9 +198,9 @@ describe('CodexImageBackend.edit', () => {
     const images = body['images'] as Array<{ image_url: string }>;
     expect(images).toHaveLength(1);
     expect(images[0].image_url).toMatch(/^data:image\/png;base64,/);
-    expect(Object.hasOwn(body, 'background')).toBe(false);
-    expect(Object.hasOwn(body, 'quality')).toBe(false);
-    expect(Object.hasOwn(body, 'size')).toBe(false);
+    expect(body).not.toHaveProperty('background');
+    expect(body).not.toHaveProperty('quality');
+    expect(body).not.toHaveProperty('size');
     // The edit contract must NOT include generate-only keys.
     expect(body['n']).toBeUndefined();
     // The body must contain ONLY the documented edit keys.

@@ -249,3 +249,39 @@ Behavioral cases:
 
 Artifacts: keep all generated PNGs for Andrew under a gitignored `tmp/` run
 directory; record timings (1024 steady ~14.5s, single edit ~215s expected).
+
+## Slice B implementation (2026-09-11)
+
+The providers package owns `ImageBackend`, request types, and the base64 PNG
+result contract through the type-only public `imageBackend.js` export. Core's
+existing backend type names alias that contract; the unused tools-layer backend
+duplicates are removed. The declaration source is shipped directly so core can
+consume the types without importing provider implementations or depending on a
+prior providers build.
+
+`OpenAIImagesBackend` uses multipart edits and selects the pinned MLX vocabulary
+for loopback endpoints. Local detection includes bracketed IPv6 `[::1]` as
+returned by the URL parser. MLX generations omit unset size, reject unsupported
+sizes and counts, and exclude quality/background. Edits use `image`, omit all
+extras, accept PNG/JPEG, and cap Klein input images at one. Error envelopes map
+to typed validation, model-not-found, server-failure, or timeout errors without
+including raw response inputs in messages.
+
+Both transports use shared URL-result materialization: HTTP(S) only, no embedded
+credentials, no redirect following, no forwarded auth headers or cookies, a
+60-second download timeout, a 15 MiB streamed limit, and PNG signature validation.
+Download failures do not retain signed URLs in messages or causes. Existing
+inline-base64 handling and the dispatcher's full PNG validation remain intact.
+Missing response usage remains absent.
+
+Slice C integration seam: `CodexImageBackendResolverDeps.getImageApiKey(auth)`
+resolves the selected image profile's credentials per operation. The backend
+never falls back to conversational credentials. Local `none` profiles already
+resolve without an OAuth manager. Named-key, keyfile, and literal-key resolution
+remain Slice C work, as planned.
+
+Verification artifacts are in `tmp/verify3627b/`. The focused Bun command covers
+205 tests in ten source files, including core dispatch, image tool, and
+profile persistence tests. It passes with no failures. Repository-wide typecheck
+and touched-file ESLint passed; settings, tools, core, and providers builds passed.
+No network calls were made by the tests.

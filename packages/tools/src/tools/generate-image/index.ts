@@ -8,8 +8,6 @@ export {
   GenerateImageTool,
   type GenerateImageToolParams,
   type GenerateImageToolDependencies,
-  type ImageGenerationBackendLike,
-  type ImageBackendResult,
   type ImageOperationRunnerResult,
   type ImageOperationRunnerError,
   MAX_INPUT_IMAGES,

@@ -195,3 +195,19 @@ export {
   buildProviderDumpBody,
 } from './utils/providerRequestConversion.js';
 export { wrapStreamWithDump } from './utils/dumpSDKContext.js';
+
+export type {
+  ImageBackend,
+  ImageBackendResult,
+  ImageGenerateRequest,
+  ImageEditRequest,
+} from '@vybestack/llxprt-code-providers/imageBackend.js';
+export type { ImageBackendAuth } from './imageBackendAuth.js';
+export {
+  ImageBackendError,
+  type ImageBackendErrorCode,
+} from './openai/imageBackendResponse.js';
+export {
+  resolveImageProfileBackendConfig,
+  type ResolvedImageProfileBackendConfig,
+} from './openai/codexImageBackendResolver.js';
