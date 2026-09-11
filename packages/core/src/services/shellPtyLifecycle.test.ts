@@ -297,6 +297,110 @@ describe('ptyInactivityAbortAction pid validation', () => {
 // ---------------------------------------------------------------------------
 
 describe('PTY abort signal fidelity (fake pty, issue #3517)', () => {
+  for (const scenario of [
+    {
+      name: 'inactivity kill without caller abort waits for group reaping and reports survivors (fake pty)',
+      groupSurvives: true,
+    },
+    {
+      name: 'inactivity kill resolves promptly with no survivor flag when the group dies (fake pty)',
+      groupSurvives: false,
+    },
+  ]) {
+    it.skipIf(isWindows)(
+      scenario.name,
+      async () => {
+        const groupSignals: Array<string | number | undefined> = [];
+        const groupProbes: number[] = [];
+        let inactivityStartedAt = 0;
+        let onData: ((data: string) => void) | undefined;
+        let onExit:
+          | ((event: { exitCode: number; signal?: number }) => void)
+          | undefined;
+        // Fabricated pids must never reach real groups, including signal-0
+        // probes. Deliver exit after the kill chain registers (Issue #3517).
+        const killSpy = vi
+          .spyOn(process, 'kill')
+          .mockImplementation((pid, signal) => {
+            if (signal === 0) {
+              groupProbes.push(pid);
+              if (!scenario.groupSurvives) {
+                throw Object.assign(new Error('Group is gone'), {
+                  code: 'ESRCH',
+                });
+              }
+            } else {
+              groupSignals.push(signal);
+              if (signal === 'SIGTERM') {
+                inactivityStartedAt = Date.now();
+                queueMicrotask(() => onExit?.({ exitCode: 143, signal: 15 }));
+              }
+            }
+            return true;
+          });
+        const { state } = makeFakeState({
+          pid: 999995,
+          isWindows: false,
+          supportsProcessGroupKill: true,
+        });
+        const activePtys = new Map<number, ActivePty>();
+        const ptyProcess: IPty = {
+          ...state.ptyProcess,
+          onData: (listener) => {
+            onData = listener;
+            return { dispose: () => undefined };
+          },
+          onExit: (listener) => {
+            onExit = listener;
+            return { dispose: () => undefined };
+          },
+        };
+        try {
+          const resultPromise = createPtyResultPromise(
+            ptyProcess,
+            false,
+            80,
+            30,
+            () => undefined,
+            new AbortController().signal,
+            { scrollback: 10, inactivityTimeoutMs: 10 },
+            state.ptyInfo,
+            activePtys,
+            { value: null },
+          );
+          if (onData === undefined || onExit === undefined) {
+            throw new Error('PTY handlers were not registered');
+          }
+          onData('output before inactivity');
+          const result = await resultPromise;
+          const elapsed = Date.now() - inactivityStartedAt;
+
+          expect(inactivityStartedAt).toBeGreaterThan(0);
+          expect(groupSignals).toContain('SIGTERM');
+          expect(groupProbes.length).toBeGreaterThan(0);
+          expect(result.aborted).toBe(false);
+          expect(result.exitCode).toBe(143);
+          expect(result.signal).toBe(15);
+          if (scenario.groupSurvives) {
+            expect(elapsed).toBeGreaterThanOrEqual(GROUP_REAP_WINDOW_MS);
+            expect(result.survivingGroupMembersOnAbort).toBe(true);
+            expect(groupSignals).toContain('SIGKILL');
+          } else {
+            expect(elapsed).toBeLessThan(GROUP_REAP_WINDOW_MS);
+            expect(result.survivingGroupMembersOnAbort).toBeUndefined();
+          }
+        } finally {
+          // Keep the signal stub installed until even an early resolution's
+          // escalation grace has passed, so the red test is safe as well.
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          disposeFakeState(state);
+          killSpy.mockRestore();
+        }
+      },
+      10000,
+    );
+  }
+
   it.skipIf(isWindows)(
     'never broadcasts to pid -1 on abort or inactivity',
     async () => {

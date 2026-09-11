@@ -349,3 +349,37 @@ prettier clean on all six touched files.
   main). format:check initially flagged one line-wrap in
   `shellProcessKill.test.ts` (the widened tuple annotation); fixed by
   the repo formatter, file re-verified green.
+
+### CodeRabbit review outcome (PR #3637) — 1 actionable finding, fixed
+
+- Finding (Major, core, `shellPtyLifecycle.ts`): on a pure inactivity kill
+  (caller never aborts), the POSIX group branch still ran the OLD inline
+  sequence — group SIGKILL skipped once the direct child exited — never
+  armed the group-reap chain, and the exit handler only gated on the chain
+  when `state.abortSignal.aborted`; `ptyExitRace`'s non-abort winner
+  resolved immediately with no group confirmation and no survivor flag
+  while TERM-immune descendants kept running. Exactly the incident shape
+  on the inactivity path, which AC4 claims inherits the gate —
+  **In-scope-Fix**. This fully supersedes the round-1 compliance defer of
+  `ptyInactivityAbortAction` (Windows taskkill confirmation stays
+  deferred). Fix: the inactivity group branch now awaits
+  `armPtyGroupAbortKill` (shared chain, group-liveness-gated SIGKILL,
+  bounded reap) and mirrors `ptyAbortAction`'s resolution tail
+  (hasResolved/exitedGuard early returns; synthetic forward-progress
+  result stamped with the survivor flag); `registerPtyExitHandler`'s
+  onExit hoists the chain lookup and gates non-aborted resolution on an
+  in-flight chain too (natural-exit values win, survivors flagged).
+  Implemented by fallbacktypescriptcoder (typescriptexpert provider down).
+- Tests: two POSIX-gated fake-pty cases through the REAL inactivity timer
+  (`createPtyResultPromise` + `inactivityTimeoutMs: 10`): surviving group
+  (probes alive → window expires → flag set, SIGKILL issued, elapsed ≥
+  window) and confirmed-empty group (probes ESRCH → prompt resolve, no
+  flag); both assert `aborted === false`, exit fidelity (143/15), and
+  TERM+probe delivery. Both failed before the production change.
+- Verification: targeted suite 15 pass/1 skip/0 fail; package typecheck,
+  eslint, prettier clean on the two files; full chain v7 run post-fix
+  (results below).
+- v7 (CodeRabbit-fix tree, final): build OK, tools OK, cli OK, lint OK,
+  typecheck OK, format:check OK, smoke OK (stepfun-37). Core 430/432 with
+  only the two #3631 skills files failing — identical to the v6 baseline;
+  no regression from the inactivity-path fix.

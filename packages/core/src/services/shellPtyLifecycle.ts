@@ -421,23 +421,29 @@ export async function ptyInactivityAbortAction(
     if (!isGroupTargetPid(pid)) {
       return;
     }
-    try {
-      process.kill(-pid, 'SIGTERM');
-      await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
-      if (!state.exitedGuard.isExited()) {
-        process.kill(-pid, 'SIGKILL');
-      }
-    } catch {
-      if (!state.exitedGuard.isExited()) {
-        state.ptyProcess.kill('SIGKILL');
-      }
+    // Share caller-abort group confirmation so a dead leader cannot hide
+    // surviving descendants after inactivity termination (Issue #3517).
+    const groupConfirmedEmpty = await armPtyGroupAbortKill(state, pid);
+    if (state.hasResolved) {
+      return;
     }
-  } else {
-    state.ptyProcess.kill('SIGTERM');
-    await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
-    if (!state.exitedGuard.isExited()) {
-      state.ptyProcess.kill('SIGKILL');
+    if (state.exitedGuard.isExited()) {
+      // The exit handler's later continuation preserves the real exit
+      // values and carries the survivor flag (Issue #3517).
+      return;
     }
+    ptyRenderFn(state);
+    const result = buildPtyResult(state, 1, null, state.abortSignal.aborted);
+    if (!groupConfirmedEmpty) {
+      result.survivingGroupMembersOnAbort = true;
+    }
+    resolveResult(result);
+    return;
+  }
+  state.ptyProcess.kill('SIGTERM');
+  await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
+  if (!state.exitedGuard.isExited()) {
+    state.ptyProcess.kill('SIGKILL');
   }
   finalizeInactivityKill(state, resolveResult);
 }
@@ -681,11 +687,11 @@ function registerPtyExitHandler(
       state.exitedGuard.markExited();
       state.abortSignal.removeEventListener('abort', abortHandler);
 
+      const reapChain = abortGroupReapChains.get(state);
       if (state.abortSignal.aborted) {
         // An abort kill is mid-flight: its bounded group-reap chain owns the
         // confirmation that the group is empty before the abort result is
         // produced (Issue #3517).
-        const reapChain = abortGroupReapChains.get(state);
         if (reapChain !== undefined) {
           void reapChain.then((groupConfirmedEmpty) => {
             finalizeResult(exitCode, normalizedSignal, !groupConfirmedEmpty);
@@ -693,6 +699,16 @@ function registerPtyExitHandler(
           return;
         }
         finalizeResult(exitCode, normalizedSignal);
+        return;
+      }
+
+      if (reapChain !== undefined) {
+        // Inactivity termination owns group confirmation even without a
+        // caller abort. Preserve natural-exit values and flag survivors
+        // instead of resolving during the kill chain (Issue #3517).
+        void reapChain.then((groupConfirmedEmpty) => {
+          finalizeResult(exitCode, normalizedSignal, !groupConfirmedEmpty);
+        });
         return;
       }
 
