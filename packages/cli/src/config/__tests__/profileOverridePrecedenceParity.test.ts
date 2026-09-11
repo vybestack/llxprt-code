@@ -35,6 +35,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   createProviderRuntimeContext,
+  createImageProfileRuntimeState,
   setActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
@@ -236,6 +237,7 @@ void vi.mock(
       () => runtimeSettingsState.context?.config ?? null,
     ),
     getCliRuntimeServices: vi.fn(() => ({
+      imageProfileState: createImageProfileRuntimeState(),
       config: runtimeSettingsState.context?.config ?? null,
       settingsService:
         runtimeSettingsState.context?.settingsService ?? new SettingsService(),
@@ -348,6 +350,7 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
       () => runtimeSettingsState.context?.config ?? null,
     ),
     getCliRuntimeServices: vi.fn(() => ({
+      imageProfileState: createImageProfileRuntimeState(),
       config: runtimeSettingsState.context?.config ?? null,
       settingsService:
         runtimeSettingsState.context?.settingsService ?? new SettingsService(),
