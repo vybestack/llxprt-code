@@ -275,6 +275,23 @@ describe('runImageOperation', () => {
     expect(result.inputPaths).toStrictEqual([inputPath]);
   });
 
+  it('propagates a typed resolver failure without producing an artifact', async () => {
+    const failure = new ImageOperationError(
+      'Image profile unavailable',
+      'capability',
+    );
+    await expect(
+      runImageOperation(
+        { prompt: 'a cat', outputPath: 'cat.png' },
+        {
+          workspaceRoot,
+          resolveBackend: makeStubResolver({ throwOnResolve: failure }),
+        },
+      ),
+    ).rejects.toBe(failure);
+    expect(await fs.promises.readdir(workspaceRoot)).toStrictEqual([]);
+  });
+
   it('returns a capability error when no backend resolves', async () => {
     expect(
       await captureRejection(

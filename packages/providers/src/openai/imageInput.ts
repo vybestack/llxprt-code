@@ -8,7 +8,7 @@ import { ImageValidationError } from '@vybestack/llxprt-code-core/services/image
 
 const MAX_INPUT_IMAGE_BYTES = 20 * 1024 * 1024;
 
-const PNG_SIGNATURE_BYTES = Buffer.from([
+export const PNG_SIGNATURE_BYTES = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
 
@@ -43,6 +43,7 @@ export async function readInputImage(
   const path = await import('node:path');
 
   // Reject symlinks before reading.
+  let bytes: Buffer;
   try {
     const stat = await fs.lstat(inputPath);
     if (stat.isSymbolicLink()) {
@@ -60,6 +61,7 @@ export async function readInputImage(
         `Input image exceeds the maximum size: ${inputPath}.`,
       );
     }
+    bytes = await fs.readFile(inputPath);
   } catch (error) {
     if (error instanceof ImageValidationError) {
       throw error;
@@ -68,8 +70,6 @@ export async function readInputImage(
       `Input image could not be accessed: ${inputPath}.`,
     );
   }
-
-  const bytes = await fs.readFile(inputPath);
 
   // Validate the image signature by extension and magic bytes.
   const ext = path.extname(inputPath).toLowerCase();

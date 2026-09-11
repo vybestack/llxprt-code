@@ -135,6 +135,7 @@ void vi.mock('../profileBootstrap.js', () => {
 });
 
 const runtimeSettingsState = {
+  imageProfileState: createImageProfileRuntimeState(),
   context: null as {
     settingsService: SettingsService;
     config: ServerConfig.Config | null;
@@ -206,7 +207,7 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
       () => runtimeSettingsState.context?.config ?? null,
     ),
     getCliRuntimeServices: vi.fn(() => ({
-      imageProfileState: createImageProfileRuntimeState(),
+      imageProfileState: runtimeSettingsState.imageProfileState,
       config: runtimeSettingsState.context?.config ?? null,
       settingsService:
         runtimeSettingsState.context?.settingsService ?? new SettingsService(),
@@ -353,6 +354,7 @@ describe('toolGovernanceParity: interactive mode', () => {
     );
     process.stdin.isTTY = true;
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
+    runtimeSettingsState.imageProfileState = createImageProfileRuntimeState();
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
@@ -419,6 +421,7 @@ describe('toolGovernanceParity: non-interactive mode', () => {
     );
     process.stdin.isTTY = false;
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
+    runtimeSettingsState.imageProfileState = createImageProfileRuntimeState();
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
@@ -528,6 +531,7 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
     );
     process.stdin.isTTY = false;
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
+    runtimeSettingsState.imageProfileState = createImageProfileRuntimeState();
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;

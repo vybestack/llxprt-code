@@ -15,6 +15,10 @@ const enabled =
 it.skipIf(!enabled)(
   'generates a 256x256 PNG through a local image profile',
   async () => {
+    const baseUrl = process.env.LLXPRT_MLX_BASE_URL;
+    if (baseUrl === undefined || baseUrl.trim() === '') {
+      throw new Error('LLXPRT_MLX_BASE_URL is required');
+    }
     const backend = createCodexImageBackendResolver({
       oauthManager: undefined,
       getActiveProvider: () => undefined,
@@ -23,7 +27,7 @@ it.skipIf(!enabled)(
         type: 'image',
         backend: 'openai-images',
         model: 'black-forest-labs/FLUX.2-klein-4B',
-        baseUrl: process.env.LLXPRT_MLX_BASE_URL ?? 'http://127.0.0.1:8321/v1',
+        baseUrl,
         auth: { type: 'none' },
         defaults: { size: '256x256' },
       }),

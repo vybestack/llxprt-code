@@ -5,19 +5,10 @@
  */
 
 /**
- * Factory that builds a lazy resolveBackend closure for GenerateImageTool.
- *
- * Returns a CodexImageBackend whenever an OAuth manager is available, and null
- * otherwise. Image generation is NOT gated on the active conversational
- * provider: it is a Codex-backed capability usable from any provider. Whether
- * the user actually holds Codex credentials is resolved per operation, so a
- * missing token produces an actionable authentication error rather than the
- * capability appearing absent.
- *
- * The closure is deliberately lazy: it reads the active provider and OAuth
- * state at invocation time (when the model calls generate_image), NOT at
- * registration time. This is critical because the provider manager and OAuth
- * manager are wired onto Config AFTER the tool registry is constructed.
+ * Resolve the active image profile to an OpenAI Images or Codex transport.
+ * Profile selection and the active provider are read when the resolver runs;
+ * the OAuth manager is supplied when the resolver is created. Credentials are
+ * fetched separately for every generate or edit operation.
  */
 
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
@@ -163,12 +154,15 @@ function isCodexBaseUrl(baseUrl: string | undefined): baseUrl is string {
 }
 
 /**
- * Build a lazy resolver that returns a CodexImageBackend when the active
- * provider is in Codex mode, or null otherwise.
+ * Build a resolver that validates an active image profile and selects its
+ * OpenAI Images or Codex backend. Without a profile, return the default Codex
+ * backend if an OAuth manager exists, or null otherwise. Conversational
+ * provider selection does not gate image capability.
  *
- * Auth is resolved lazily and exactly once per generate()/edit() call via the
- * backend's injected `getCredential` callback, so each operation fetches a
- * fresh, consistently-paired credential object (not cached globally).
+ * Explicit Codex profiles resolve even without OAuth machinery; attempting an
+ * operation then raises an authentication error. Each Codex operation resolves
+ * a fresh paired token and account id. OpenAI Images operations use only the
+ * profile's credential resolver, or no credentials for local endpoints.
  */
 export function createCodexImageBackendResolver(
   deps: CodexImageBackendResolverDeps,

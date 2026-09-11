@@ -42,10 +42,11 @@ export class ProfileTypeConflictError extends Error {
   constructor(
     readonly profileName: string,
     readonly requestedType: 'model' | 'image',
-    readonly existingType: StoredProfileKind,
+    readonly existingType: string,
+    operation: 'save' | 'load' = 'save',
   ) {
     super(
-      `Cannot save ${requestedType} profile '${profileName}' because that name belongs to a ${existingType} profile`,
+      `Cannot ${operation} ${requestedType} profile '${profileName}' because that name belongs to a ${existingType} profile`,
     );
     this.name = 'ProfileTypeConflictError';
   }
@@ -113,13 +114,10 @@ function storedProfileKind(content: string): StoredProfileKind {
 function assertCompatibleStoredProfile(
   profileName: string,
   requestedType: 'model' | 'image',
-  existing: ReadResult,
+  existing: Exclude<ReadResult, { kind: 'error' }>,
 ): void {
   if (existing.kind === 'absent') {
     return;
-  }
-  if (existing.kind === 'error') {
-    throw existing.error;
   }
   const existingType = storedProfileKind(existing.content);
   if (existingType !== 'invalid' && existingType !== requestedType) {
@@ -163,6 +161,22 @@ function optionalNumber(value: unknown): number | undefined {
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
+}
+
+function storedProfileType(profile: unknown): string {
+  if (!isPlainObject(profile)) return 'unknown';
+  if (typeof profile.type === 'string') return profile.type;
+  return typeof profile.provider === 'string' ? 'model' : 'unknown';
+}
+
+function assertModelMember(
+  profileName: string,
+  memberName: string,
+  profile: unknown,
+): void {
+  if (isPlainObject(profile) && profile.type === 'image') {
+    throw new LoadBalancerMemberTypeError(profileName, memberName);
+  }
 }
 
 function referencedProfileIsLoadBalancer(profile: unknown): boolean {
@@ -230,7 +244,12 @@ export class ProfileManager {
       const content = await fs.readFile(filePath, 'utf8');
       const parsed = ProfileManager.parseProfileContent(content);
       if (!isPlainObject(parsed) || parsed.type !== 'image') {
-        throw new ProfileTypeConflictError(profileName, 'image', 'model');
+        throw new ProfileTypeConflictError(
+          profileName,
+          'image',
+          storedProfileType(parsed),
+          'load',
+        );
       }
       return parseImageProfile(profileName, parsed);
     } catch (error) {
@@ -292,12 +311,7 @@ export class ProfileManager {
       const referencedProfileData: unknown =
         ProfileManager.parseProfileContent(referencedContent);
 
-      if (
-        isPlainObject(referencedProfileData) &&
-        referencedProfileData.type === 'image'
-      ) {
-        throw new LoadBalancerMemberTypeError(name, referencedProfile);
-      }
+      assertModelMember(name, referencedProfile, referencedProfileData);
 
       if (referencedProfileIsLoadBalancer(referencedProfileData)) {
         throw new Error(
@@ -347,12 +361,7 @@ export class ProfileManager {
       const referencedProfileData: unknown =
         ProfileManager.parseProfileContent(referencedContent);
 
-      if (
-        isPlainObject(referencedProfileData) &&
-        referencedProfileData.type === 'image'
-      ) {
-        throw new LoadBalancerMemberTypeError(profileName, referencedProfile);
-      }
+      assertModelMember(profileName, referencedProfile, referencedProfileData);
 
       if (referencedProfileIsLoadBalancer(referencedProfileData)) {
         throw new Error(

@@ -258,7 +258,7 @@ describe('CodexImageBackend', () => {
       const backend = new CodexImageBackend({
         getCredential: async () => {
           credentials++;
-          return { accessToken: 'secret' };
+          return { accessToken: 'secret', accountId: 'account' };
         },
         getBaseUrl: () => 'https://images.example/v1',
         defaults: {},
@@ -304,7 +304,10 @@ describe('CodexImageBackend', () => {
         body: { data: [{ b64_json: 'aGVsbG8=' }] },
       });
       await new CodexImageBackend({
-        getCredential: async () => ({ accessToken: 'secret' }),
+        getCredential: async () => ({
+          accessToken: 'secret',
+          accountId: 'account',
+        }),
         defaults: { quality: 'auto' },
         fetchImpl,
       }).generate({ prompt: 'auto' }, new AbortController().signal);

@@ -6,6 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import fs from 'node:fs/promises';
+import { ZodError } from 'zod';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -41,6 +42,39 @@ describe('ProfileManager typed image profiles', () => {
   afterEach(async () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
+  it('preserves schema issue details for invalid image fields', () => {
+    let failure: unknown;
+    try {
+      parseImageProfile('typo', { ...imageProfile(), model: 42 });
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toMatchObject({
+      name: 'ZodError',
+      issues: expect.arrayContaining([
+        expect.objectContaining({ path: ['model'], code: 'invalid_type' }),
+      ]),
+    });
+  });
+
+  it.each([
+    [{ type: 'loadbalancer' }, 'loadbalancer'],
+    [null, 'unknown'],
+  ])(
+    'reports stored type when loading %j as an image',
+    async (content, existingType) => {
+      await fs.writeFile(
+        path.join(tempDir, 'wrong.json'),
+        JSON.stringify(content),
+      );
+      await expect(manager.loadImageProfile('wrong')).rejects.toMatchObject({
+        name: 'ProfileTypeConflictError',
+        existingType,
+        message: expect.stringContaining('Cannot load image profile'),
+      });
+    },
+  );
+
   it.each([
     '../evil',
     '/absolute',
@@ -128,7 +162,7 @@ describe('ProfileManager typed image profiles', () => {
   ])('rejects invalid operation declarations %j', ({ operations }) => {
     expect(() =>
       parseImageProfile('invalid', { ...imageProfile(), operations }),
-    ).toThrow('not a valid image profile');
+    ).toThrow(ZodError);
   });
 
   it.each(['256x256', '512x512', '1024x1024'] as const)(

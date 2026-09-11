@@ -31,6 +31,34 @@ import {
 import type { ImageProfile } from '@vybestack/llxprt-code-settings';
 
 describe('external image responses', () => {
+  it('rejects non-Latin-1 credentials with a typed validation error', async () => {
+    const backend = new OpenAIImagesBackend({
+      config: config('https://example.com/v1'),
+      getApiKey: async () => '\uFEFFsecret',
+      fetchImpl: http().fetchImpl,
+    });
+    await expect(
+      backend.generate({ prompt: 'lake' }, signal()),
+    ).rejects.toMatchObject({
+      name: 'ImageBackendError',
+      code: 'validation',
+    });
+  });
+
+  it('rejects an invalid Codex profile URL before accessing edit inputs', async () => {
+    const backend = new CodexImageBackend({
+      getCredential: async () => ({
+        accessToken: 'secret',
+        accountId: 'account',
+      }),
+      getBaseUrl: () => 'https://untrusted.example/v1',
+      defaults: {},
+      fetchImpl: http().fetchImpl,
+    });
+    await expect(
+      backend.edit({ prompt: 'lake', inputPaths: ['/missing.png'] }, signal()),
+    ).rejects.toBeInstanceOf(ImageBackendBaseUrlError);
+  });
   it.each(['api-key', 'keyfile'] as const)(
     'rejects multi-line %s credentials without leaking secrets',
     async (type) => {
@@ -64,6 +92,36 @@ describe('external image responses', () => {
       }
     },
   );
+
+  it('preserves input order in remote multipart edits', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'issue3627-input-order-'));
+    try {
+      const images = [png, Buffer.concat([png, Buffer.from('second')])];
+      const inputPaths = images.map((_bytes, index) =>
+        join(directory, `${index}.png`),
+      );
+      await Promise.all(
+        images.map((bytes, index) => writeFile(inputPaths[index], bytes)),
+      );
+      const transport = http();
+      const backend = new OpenAIImagesBackend({
+        config: config('https://example.com/v1'),
+        getApiKey: async () => 'secret',
+        fetchImpl: transport.fetchImpl,
+      });
+      await backend.edit({ prompt: 'combine', inputPaths }, signal());
+      const form = await transport.requests[0].formData();
+      const uploaded = await Promise.all(
+        form.getAll('image[]').map(async (part) => {
+          if (!(part instanceof Blob)) throw new Error('Expected image bytes');
+          return Buffer.from(await part.arrayBuffer());
+        }),
+      );
+      expect(uploaded).toStrictEqual(images);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 
   it('redacts userinfo and query secrets from rejected Codex destinations', () => {
     let error: unknown;
@@ -452,6 +510,18 @@ describe('shared backend contract and PNG URL materialization', () => {
     },
   );
   for (const kind of adapters) {
+    it(`${kind} classifies a download timeout separately from materialization`, async () => {
+      const fetchImpl: typeof fetch = async (_input, init) => {
+        if (init?.method === 'POST')
+          return Response.json({
+            data: [{ url: 'https://cdn.example/result' }],
+          });
+        throw new DOMException('Download deadline exceeded', 'TimeoutError');
+      };
+      await expect(
+        backend(kind, fetchImpl).generate({ prompt: 'lake' }, signal()),
+      ).rejects.toMatchObject({ name: 'ImageBackendError', code: 'timeout' });
+    });
     it.each([
       'bad-png',
       'truncated-png',

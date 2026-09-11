@@ -869,7 +869,7 @@ export async function writeProfileFile(
   profileName: string,
   data: string,
   mode: ProfileWriteMode = 'overwrite',
-  validateExisting?: (existing: ReadResult) => void,
+  validateExisting?: (existing: Exclude<ReadResult, { kind: 'error' }>) => void,
 ): Promise<ProfileWriteResult> {
   const filePath = profileFilePath(profilesDir, profileName);
   return withProfilesLock(profilesDir, async () => {

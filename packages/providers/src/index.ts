@@ -203,6 +203,7 @@ export type {
   ImageEditRequest,
 } from '@vybestack/llxprt-code-providers/imageBackend.js';
 export type { ImageBackendAuth } from './imageBackendAuth.js';
+export type { CodexImageCredential } from './openai/codexImageBackend.js';
 export {
   createImageApiKeyResolver,
   resolveCodexImageCredential,

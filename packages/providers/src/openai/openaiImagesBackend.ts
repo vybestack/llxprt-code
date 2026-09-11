@@ -18,7 +18,8 @@ import type {
 import type { ResolvedImageProfileBackendConfig } from './codexImageBackendResolver.js';
 import { normalizeBaseUrl } from './codexBaseUrl.js';
 import { isLocalImageEndpoint } from './imageEndpoint.js';
-import { readInputImage } from './imageInput.js';
+import { readInputImage, PNG_SIGNATURE_BYTES } from './imageInput.js';
+import { MAX_INPUT_IMAGES } from '@vybestack/llxprt-code-core/services/image/imageOperation.js';
 import {
   ImageBackendError,
   imageResponseError,
@@ -118,7 +119,8 @@ export class OpenAIImagesBackend implements ImageBackend {
   ): Promise<ImageBackendResult> {
     this.validateOperation('edit');
     validateImagePrompt(request.prompt);
-    const maxInputs = this.local && /klein/i.test(this.model) ? 1 : 5;
+    const maxInputs =
+      this.local && /klein/i.test(this.model) ? 1 : MAX_INPUT_IMAGES;
     if (
       request.inputPaths.length === 0 ||
       request.inputPaths.length > maxInputs
@@ -131,8 +133,8 @@ export class OpenAIImagesBackend implements ImageBackend {
     const form = new FormData();
     form.set('model', this.model);
     form.set('prompt', request.prompt);
-    for (const inputPath of request.inputPaths) {
-      const { bytes, mimeType } = await readInputImage(inputPath);
+    const inputs = await Promise.all(request.inputPaths.map(readInputImage));
+    for (const { bytes, mimeType } of inputs) {
       if (this.local && mimeType !== 'image/png' && mimeType !== 'image/jpeg') {
         throw new ImageValidationError(
           'MLX edits accept only PNG or JPEG input images.',
@@ -171,7 +173,7 @@ export class OpenAIImagesBackend implements ImageBackend {
     if (
       [...apiKey].some((character) => {
         const code = character.charCodeAt(0);
-        return code < 32 || code === 127;
+        return code < 32 || code === 127 || code > 0xff;
       })
     ) {
       throw new ImageBackendError(
@@ -242,8 +244,8 @@ export class OpenAIImagesBackend implements ImageBackend {
     if (
       this.local &&
       !Buffer.from(result.data, 'base64')
-        .subarray(0, 8)
-        .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+        .subarray(0, PNG_SIGNATURE_BYTES.length)
+        .equals(PNG_SIGNATURE_BYTES)
     ) {
       throw new ImageBackendError(
         'invalid_png',

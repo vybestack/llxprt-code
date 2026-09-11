@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -304,6 +304,27 @@ describe('CodexImageBackend.edit', () => {
     expect(result.encoding).toBe('base64');
     expect(result.data).toBe('aGVsbG8=');
     expect(result.caption).toBe('edit it');
+  });
+
+  it('reports read-phase filesystem failures as image validation errors', async () => {
+    const inputPath = path.join(workspaceRoot, 'unreadable.png');
+    await fs.promises.writeFile(inputPath, makeRealMinimalPng());
+    const read = spyOn(fs.promises, 'readFile').mockRejectedValue(
+      Object.assign(new Error('Permission denied'), { code: 'EACCES' }),
+    );
+    try {
+      await expect(
+        makeBackend().edit(
+          { prompt: 'edit', inputPaths: [inputPath] },
+          new AbortController().signal,
+        ),
+      ).rejects.toMatchObject({
+        name: 'ImageValidationError',
+        message: `Input image could not be accessed: ${inputPath}.`,
+      });
+    } finally {
+      read.mockRestore();
+    }
   });
 
   it('rejects zero input paths for an edit', async () => {

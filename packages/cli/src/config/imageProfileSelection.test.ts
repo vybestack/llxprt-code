@@ -108,7 +108,17 @@ describe('image profile surface selection', () => {
     await applyStartupImageProfile({}, manager, state, result);
     expect(state.getActive()).toBeUndefined();
   });
-  async function loadInlineProfile(imageProfile: string) {
+  it.each(['', 42, null, {}])(
+    'rejects malformed inline image reference %j',
+    async (reference) => {
+      await expect(loadInlineProfile(reference)).rejects.toMatchObject({
+        name: 'ImageProfileLoadError',
+        cause: { message: 'imageProfile must be a non-empty string' },
+      });
+    },
+  );
+
+  async function loadInlineProfile(imageProfile: unknown) {
     return loadAndPrepareProfile({
       bootstrapArgs: {
         ...parseBootstrapArgs().bootstrapArgs,

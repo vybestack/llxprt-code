@@ -9,6 +9,7 @@ import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
   ProfileManager,
   isImageProfileLoadError,
+  ImageProfileLoadError,
 } from '@vybestack/llxprt-code-settings';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import {
@@ -183,6 +184,12 @@ async function resolveImageReference(
 ): Promise<ActiveImageProfile | undefined> {
   const name = 'imageProfile' in profile ? profile.imageProfile : undefined;
   if (name === undefined) return undefined;
+  if (typeof name !== 'string' || name.length === 0) {
+    throw new ImageProfileLoadError(
+      '<reference>',
+      new Error('imageProfile must be a non-empty string'),
+    );
+  }
   const imageProfile = await manager.loadImageProfile(name);
   validateImageProfileAuth(imageProfile, name);
   return { name, profile: imageProfile };

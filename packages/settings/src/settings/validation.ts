@@ -327,12 +327,8 @@ const imageProfileSchema: z.ZodType<ImageProfile> = z
   })
   .strict();
 
-export function parseImageProfile(name: string, input: unknown): ImageProfile {
-  const parsed = imageProfileSchema.safeParse(input);
-  if (!parsed.success) {
-    throw new Error(`Profile '${name}' is not a valid image profile`);
-  }
-  return parsed.data;
+export function parseImageProfile(_name: string, input: unknown): ImageProfile {
+  return imageProfileSchema.parse(input);
 }
 
 export function parseProfile(input: unknown): Profile {

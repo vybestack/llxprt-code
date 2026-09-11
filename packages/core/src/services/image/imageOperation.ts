@@ -86,7 +86,7 @@ export interface ImageOperationResult {
 }
 
 /**
- * Backend capability contract: a backend implements generate and/or edit.
+ * Backend capability contract: a backend implements both generate and edit.
  */
 export type { ImageBackend as ImageOperationBackend } from './imageBackendContract.js';
 

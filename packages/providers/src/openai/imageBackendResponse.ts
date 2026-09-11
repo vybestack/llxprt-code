@@ -194,6 +194,9 @@ async function materializeUrl(
   } catch (error) {
     if (signal.aborted) signal.throwIfAborted();
     if (error instanceof ImageBackendError) throw error;
+    if (error instanceof DOMException && error.name === 'TimeoutError') {
+      throw new ImageBackendError('timeout', 'Image download timed out.');
+    }
     // Fetch errors may contain signed URLs, so their causes must not escape.
     throw new ImageBackendError('materialization', 'Image download failed.');
   }

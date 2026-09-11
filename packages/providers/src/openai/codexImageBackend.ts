@@ -81,7 +81,7 @@ function buildCodexImageEndpoint(
  */
 export interface CodexImageCredential {
   readonly accessToken: string;
-  readonly accountId?: string;
+  readonly accountId: string;
 }
 
 /**
@@ -152,17 +152,15 @@ export class CodexImageBackend implements ImageBackend {
 
   private buildHeaders(
     accessToken: string,
-    accountId: string | undefined,
+    accountId: string,
     sessionId?: string,
   ): Record<string, string> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${accessToken}`,
       originator: 'codex_cli_rs',
       'Content-Type': 'application/json',
+      'ChatGPT-Account-ID': accountId,
     };
-    if (accountId !== undefined) {
-      headers['ChatGPT-Account-ID'] = accountId;
-    }
     if (sessionId !== undefined) {
       headers['session_id'] = sessionId;
     }
@@ -347,6 +345,7 @@ export class CodexImageBackend implements ImageBackend {
         cause: new Error('Aborted'),
       });
     }
+    const endpoint = this.buildEndpoint('edits');
     const dataUrls = await Promise.all(
       request.inputPaths.map(async (inputPath) => {
         const { bytes, mimeType } = await readInputImage(inputPath);
@@ -354,7 +353,6 @@ export class CodexImageBackend implements ImageBackend {
       }),
     );
 
-    const endpoint = this.buildEndpoint('edits');
     const credential = await this.getCredential();
 
     // The Codex `/images/edits` contract requires `images` to be an array of

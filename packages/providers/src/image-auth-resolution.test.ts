@@ -113,6 +113,22 @@ describe('image credential resolution', () => {
     });
   });
 
+  it('rejects an empty OAuth access token with a typed auth error', async () => {
+    await expect(
+      resolveCodexImageCredential({
+        getOAuthToken: async () => ({
+          access_token: '',
+          account_id: 'account',
+          expiry: 9999999999,
+          token_type: 'Bearer',
+        }),
+      }),
+    ).rejects.toMatchObject({
+      name: 'ImageCredentialError',
+      code: 'oauth_unavailable',
+    });
+  });
+
   it('preserves failures from the Codex token source', async () => {
     const failure = new ImageCredentialError(
       'oauth_unavailable',

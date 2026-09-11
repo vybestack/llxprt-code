@@ -183,6 +183,7 @@ void vi.mock(
 
 // config.ts: import { setCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime/runtimeLifecycle.js'
 const runtimeSettingsState = {
+  imageProfileState: createImageProfileRuntimeState(),
   context: null as {
     settingsService: SettingsService;
     config: ServerConfig.Config | null;
@@ -237,7 +238,7 @@ void vi.mock(
       () => runtimeSettingsState.context?.config ?? null,
     ),
     getCliRuntimeServices: vi.fn(() => ({
-      imageProfileState: createImageProfileRuntimeState(),
+      imageProfileState: runtimeSettingsState.imageProfileState,
       config: runtimeSettingsState.context?.config ?? null,
       settingsService:
         runtimeSettingsState.context?.settingsService ?? new SettingsService(),
@@ -350,7 +351,7 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
       () => runtimeSettingsState.context?.config ?? null,
     ),
     getCliRuntimeServices: vi.fn(() => ({
-      imageProfileState: createImageProfileRuntimeState(),
+      imageProfileState: runtimeSettingsState.imageProfileState,
       config: runtimeSettingsState.context?.config ?? null,
       settingsService:
         runtimeSettingsState.context?.settingsService ?? new SettingsService(),
@@ -502,6 +503,7 @@ describe('profileOverridePrecedenceParity: synthetic profile for CLI auth', () =
     setEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
+    runtimeSettingsState.imageProfileState = createImageProfileRuntimeState();
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
@@ -565,6 +567,7 @@ describe('profileOverridePrecedenceParity: --provider skips profile ephemeral se
     setEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
+    runtimeSettingsState.imageProfileState = createImageProfileRuntimeState();
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
@@ -667,6 +670,7 @@ describe('profileOverridePrecedenceParity: CLI model override after provider swi
     setEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
+    runtimeSettingsState.imageProfileState = createImageProfileRuntimeState();
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
