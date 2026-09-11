@@ -26,6 +26,7 @@ export async function loadAndApplyProfileTransition<TResult>(
   imageProfileState: ImageProfileRuntimeState,
   profileName: string,
   applyProfile: (profile: Profile) => Promise<TResult>,
+  publishProfile?: (result: TResult) => void,
 ): Promise<TResult> {
   const profile = await manager.loadProfile(profileName);
   const imageProfileName =
@@ -37,12 +38,15 @@ export async function loadAndApplyProfileTransition<TResult>(
       ? undefined
       : await manager.loadImageProfile(imageProfileName);
 
+  // The application callback owns model mutations and must not publish yet.
+  // A rejected application leaves the previous image selection untouched.
   const result = await applyProfile(profile);
   if (imageProfileName === undefined || imageProfile === undefined) {
     imageProfileState.reset();
   } else {
     imageProfileState.select({ name: imageProfileName, profile: imageProfile });
   }
+  publishProfile?.(result);
   return result;
 }
 

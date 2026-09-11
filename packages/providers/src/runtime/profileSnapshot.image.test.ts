@@ -119,7 +119,43 @@ describe('runtime image-profile transitions', () => {
     expect(state.getActive()?.name).toBe('old-image');
   });
 
-  it('preserves image state when model application fails', async () => {
+  for (const linkedImage of ['new-image', undefined]) {
+    it(`publishes the coherent model and image selection before observer refresh (${linkedImage ?? 'reset-to-none'})`, async () => {
+      const state = createImageProfileRuntimeState();
+      state.select({
+        name: 'old-image',
+        profile: imageProfile('old-image-model'),
+      });
+      await manager.saveImageProfile(
+        'new-image',
+        imageProfile('new-image-model'),
+      );
+      await manager.saveProfile('next', modelProfile('new-model', linkedImage));
+      let appliedModel = 'old-model';
+      const observations: Array<{ model: string; image: string | undefined }> =
+        [];
+
+      await loadAndApplyProfileTransition(
+        manager,
+        state,
+        'next',
+        async (profile) => {
+          appliedModel = profile.model;
+          return appliedModel;
+        },
+        (model) => {
+          observations.push({ model, image: state.getActive()?.name });
+        },
+      );
+
+      expect(observations).toStrictEqual([
+        { model: 'new-model', image: linkedImage },
+      ]);
+      expect(appliedModel).toBe('new-model');
+    });
+  }
+
+  it('preserves image state and the typed error after model application mutates then fails', async () => {
     const state = createImageProfileRuntimeState();
     state.select({
       name: 'old-image',
@@ -134,15 +170,29 @@ describe('runtime image-profile transitions', () => {
       modelProfile('new-model', 'new-image'),
     );
 
+    const error = new TypeError('model application failed');
+    let appliedModel = 'old-model';
+    let published = false;
     const load = loadAndApplyProfileTransition(
       manager,
       state,
       'new-model-profile',
-      () => Promise.reject(new Error('model application failed')),
+      async (profile) => {
+        appliedModel = profile.model;
+        throw error;
+      },
+      () => {
+        published = true;
+      },
     );
 
-    await expect(load).rejects.toThrow('model application failed');
-    expect(state.getActive()?.name).toBe('old-image');
+    await expect(load).rejects.toBe(error);
+    expect(appliedModel).toBe('new-model');
+    expect(state.getActive()).toStrictEqual({
+      name: 'old-image',
+      profile: imageProfile('old-image-model'),
+    });
+    expect(published).toBe(false);
   });
 
   it('clears stale image state when a loaded model has no reference', async () => {

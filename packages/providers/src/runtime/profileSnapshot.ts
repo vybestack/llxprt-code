@@ -669,6 +669,15 @@ export async function applyProfileSnapshot(
   profile: Profile,
   options: ProfileLoadOptions = {},
 ): Promise<ProfileLoadResult> {
+  const result = await applyProfileSnapshotState(profile, options);
+  publishProfileSnapshot(result);
+  return result;
+}
+
+async function applyProfileSnapshotState(
+  profile: Profile,
+  options: ProfileLoadOptions,
+): Promise<ProfileLoadResult> {
   const { settingsService, config } = getCliRuntimeServices();
   const applicationResult = await applyProfileWithGuards(profile, options);
 
@@ -684,8 +693,10 @@ export async function applyProfileSnapshot(
     }
   }
 
-  const result = buildProfileLoadResult(options.profileName, applicationResult);
+  return buildProfileLoadResult(options.profileName, applicationResult);
+}
 
+function publishProfileSnapshot(result: ProfileLoadResult): void {
   coreEvents.emitModelProfileChanged(
     buildModelProfileInfoPayload({
       model: result.modelName,
@@ -693,8 +704,6 @@ export async function applyProfileSnapshot(
       profileName: result.profileName,
     }),
   );
-
-  return result;
 }
 
 export async function saveProfileSnapshot(
@@ -761,7 +770,8 @@ export async function loadProfileByName(
     manager,
     services.imageProfileState,
     profileName,
-    (profile) => applyProfileSnapshot(profile, { profileName }),
+    (profile) => applyProfileSnapshotState(profile, { profileName }),
+    publishProfileSnapshot,
   );
 }
 
