@@ -66,7 +66,6 @@ describe('MLX dialect', () => {
         model: 'FLUX.2-klein',
         prompt: 'lake',
         n: 1,
-        response_format: 'b64_json',
         ...(size === undefined ? {} : { size }),
       });
       expect(transport.requests[0].headers.has('authorization')).toBe(false);
@@ -222,7 +221,6 @@ describe('MLX dialect', () => {
         model: 'klein',
         prompt: 'lake',
         n: 1,
-        response_format: 'b64_json',
       });
     },
   );

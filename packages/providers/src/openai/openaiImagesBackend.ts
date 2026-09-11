@@ -81,8 +81,9 @@ export class OpenAIImagesBackend implements ImageBackend {
       model: this.model,
       prompt: request.prompt,
       n: 1,
-      response_format: 'b64_json',
-      ...(this.local ? localOverrides : overrides),
+      ...(this.local
+        ? localOverrides
+        : { response_format: 'b64_json', ...overrides }),
     };
     return this.post(
       'generations',
@@ -172,9 +173,18 @@ export class OpenAIImagesBackend implements ImageBackend {
       );
     }
     if (!response.ok) throw imageResponseError(parsed, response.status);
-    return {
-      ...(await parseImageResponse(parsed, this.fetchImpl, signal)),
-      caption: prompt,
-    };
+    const result = await parseImageResponse(parsed, this.fetchImpl, signal);
+    if (
+      this.local &&
+      !Buffer.from(result.data, 'base64')
+        .subarray(0, 8)
+        .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    ) {
+      throw new ImageBackendError(
+        'invalid_png',
+        'MLX image response is not a PNG.',
+      );
+    }
+    return { ...result, caption: prompt };
   }
 }

@@ -38,9 +38,21 @@ export function imageResponseError(
 ): ImageBackendError {
   const envelope = isRecord(body) ? body : {};
   if (Array.isArray(envelope.detail)) {
+    const details = envelope.detail.filter(isRecord).map((item) => {
+      const location = Array.isArray(item.loc)
+        ? item.loc
+            .filter(
+              (part: unknown) =>
+                typeof part === 'string' || typeof part === 'number',
+            )
+            .join('.')
+        : 'request';
+      const message = typeof item.msg === 'string' ? item.msg : 'Invalid field';
+      return `${location}: ${message}`;
+    });
     return new ImageBackendError(
       'validation',
-      'Image endpoint rejected the request fields (validation failed).',
+      `Image endpoint rejected the request fields (validation failed). ${details.join('; ')}`.trim(),
       status,
     );
   }
@@ -56,13 +68,17 @@ export function imageResponseError(
   if (error.type === 'model_not_found') {
     return new ImageBackendError(
       'model_not_found',
-      'Image model was not found on the configured endpoint.',
+      typeof error.message === 'string' && error.message.trim() !== ''
+        ? error.message
+        : 'Image model was not found on the configured endpoint.',
       status,
     );
   }
   return new ImageBackendError(
     'server_error',
-    `Image endpoint failed with HTTP ${status}.`,
+    typeof error.message === 'string' && error.message.trim() !== ''
+      ? error.message
+      : `Image endpoint failed with HTTP ${status}.`,
     status,
   );
 }

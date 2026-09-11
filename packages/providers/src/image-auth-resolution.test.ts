@@ -16,6 +16,7 @@ import {
 } from './image-auth-resolution.js';
 import { createCodexImageBackendResolver } from './openai/codexImageBackendResolver.js';
 import type { ImageBackendAuth } from './imageBackendAuth.js';
+import { generationSuccess } from './openai/mlx-wire-fixtures.js';
 
 const directories: string[] = [];
 
@@ -148,7 +149,7 @@ describe('image credential resolution', () => {
         init?: RequestInit,
       ) => {
         headers.push(new Headers(init?.headers));
-        return Response.json({ data: [{ b64_json: 'aGVsbG8=' }] });
+        return Response.json(generationSuccess);
       };
       const backend = createCodexImageBackendResolver({
         oauthManager: undefined,
