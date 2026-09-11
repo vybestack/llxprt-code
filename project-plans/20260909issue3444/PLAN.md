@@ -227,3 +227,28 @@ executor's default internal cap, and the seventh send exercises the orchestrator
 fresh-envelope outer retry. Invocation settings omit `retries`; the orchestrator
 limit is seven. Both success and exhaustion cases retain payload assertions,
 and exhaustion identifies the error from send seven.
+
+## Verification record and dispositions
+
+The full-suite run in `tmp/verify3444/final3-full-test.log` ended with
+`EXIT=1`, with exactly two failures outside the changed files:
+
+1. `packages/cli`'s `startup-fatal-log.test.ts` encountered a `/var` versus
+   `/private/var` cwd mismatch caused by macOS symlink resolution. This is
+   pre-existing on main and macOS-only; CI runs Linux.
+2. `packages/core`'s `shellBoundedAcquisition` test, `preserves exit code`,
+   flaked under concurrent sibling-checkout suites and passed in isolation.
+
+Both affected files were rerun in isolation with zero failures. The remaining
+verification completed with `EXIT=0`: providers (643/643, including all
+issue3444 tests), lint (19/19), typecheck, format, build, and the `stepfun-37`
+smoke test. These dispositions do not make the full-suite run green.
+
+The boundary-f remediation seeds retry recovery consumption with entry-time
+shared `budget.used`. The token-less differential (limit 4, one prior send,
+retries 2, then a 429) reproduced two new sends and success on the unfixed
+branch, versus one new send and exhaustion on main. The regression requires
+main's result, including final budget usage 2. A projected-request regression
+uses retries 3 with one prior send and verifies that the remaining retry
+receives a fresh token. Failed refreshes still count toward recovery without
+consuming physical transport budget.

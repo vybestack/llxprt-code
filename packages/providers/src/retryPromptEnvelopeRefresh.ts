@@ -50,7 +50,7 @@ export class RetryPromptEnvelopeRefresh {
   options: GenerateChatOptions | undefined;
   private unsentRelease: (() => Promise<void>) | undefined;
   private attempt = 0;
-  recoveryConsumption = 0;
+  constructor(public recoveryConsumption: number) {}
 
   canRetry(budget: TransportAttemptBudget, maxAttempts: number): boolean {
     return budget.used < budget.limit && this.recoveryConsumption < maxAttempts;

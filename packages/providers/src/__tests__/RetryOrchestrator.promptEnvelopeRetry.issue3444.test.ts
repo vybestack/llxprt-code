@@ -213,6 +213,89 @@ function errorMessage(error: unknown): string {
 }
 
 describe('RetryOrchestrator prompt-envelope retry contract (@issue:3444)', () => {
+  it('exhausts token-less retries using pre-consumed shared budget attempts', async () => {
+    const { provider, attempts, projectionCalls } =
+      createOneShotProjectedProvider({
+        failFirstSend: true,
+        refreshProjection: 'fresh',
+      });
+    const attached = attachTransportAttemptBudget(buildOptions(undefined), 4);
+    try {
+      expect(tryConsumeTransportAttempt(attached.options)).toBe(true);
+      const { chunks, error } = await drain(
+        new RetryOrchestrator(provider, {
+          maxAttempts: 2,
+          initialDelayMs: 0,
+        }).generateChatCompletion(attached.options),
+      );
+
+      expect({
+        sends: attempts.length,
+        budgetUsed: attached.budget.used,
+        outcome: errorMessage(error),
+        chunks: chunks.length,
+      }).toStrictEqual({
+        sends: 1,
+        budgetUsed: 2,
+        outcome: expect.stringContaining(
+          'retries exhausted after 2 transport attempts',
+        ),
+        chunks: 0,
+      });
+      expect(projectionCalls()).toBe(0);
+    } finally {
+      attached.release();
+    }
+  });
+
+  it('refreshes a spent token with pre-consumed shared budget when a retry remains', async () => {
+    const { provider, attempts, envelopes } = createOneShotProjectedProvider({
+      failFirstSend: true,
+      refreshProjection: 'fresh',
+    });
+    const base = buildOptions(undefined);
+    const original = await mintEnvelope(provider, base);
+    const attached = attachTransportAttemptBudget(
+      {
+        ...base,
+        invocation:
+          base.invocation === undefined
+            ? undefined
+            : {
+                ...base.invocation,
+                ephemerals: { retries: 3, retrywait: 0 },
+              },
+        promptEnvelopeTransportToken: original.transportToken,
+      },
+      4,
+    );
+    try {
+      expect(tryConsumeTransportAttempt(attached.options)).toBe(true);
+      const { chunks, error } = await drain(
+        new RetryOrchestrator(provider, {
+          maxAttempts: 3,
+          initialDelayMs: 0,
+        }).generateChatCompletion(attached.options),
+      );
+
+      expect(error).toBeUndefined();
+      expect(chunks).toHaveLength(1);
+      expect(attempts).toHaveLength(2);
+      expect(attached.budget.used).toBe(3);
+      expect(attempts[0].token).toBe(original.transportToken);
+      expect(attempts[1].token).toBeDefined();
+      expect(attempts[1].token).not.toBe(original.transportToken);
+      expect(attempts[1].succeeded).toBe(true);
+      expect(envelopes).toHaveLength(2);
+      for (const envelope of envelopes) {
+        expect(envelope.attemptDisposals).toBe(1);
+        expect(envelope.unsentDisposals).toBe(0);
+      }
+    } finally {
+      attached.release();
+    }
+  });
+
   it.each([
     'preflight rejection',
     'returned before starting',
