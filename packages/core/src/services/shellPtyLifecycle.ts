@@ -17,6 +17,7 @@ import { makeInactivityTimer } from './shellOutputUtils.js';
 import {
   SIGKILL_TIMEOUT_MS,
   isKillablePid,
+  isGroupTargetPid,
   isProcessGroupAlive,
   reapProcessGroup,
   taskkillTree,
@@ -417,6 +418,9 @@ export async function ptyInactivityAbortAction(
     return;
   }
   if (state.supportsProcessGroupKill) {
+    if (!isGroupTargetPid(pid)) {
+      return;
+    }
     try {
       process.kill(-pid, 'SIGTERM');
       await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
@@ -482,7 +486,7 @@ function finalizeInactivityKill(
   state: PtyExecState,
   resolveResult: (resultValue: ShellExecutionResult) => void,
 ): void {
-  if (state.exitedGuard.isExited()) {
+  if (state.exitedGuard.isExited() || abortGroupReapChains.has(state)) {
     return;
   }
   schedulePtyAbortFallback(
@@ -522,6 +526,9 @@ function armPtyGroupAbortKill(
   state: PtyExecState,
   pid: number,
 ): Promise<boolean> {
+  if (!isGroupTargetPid(pid)) {
+    return Promise.resolve(true);
+  }
   // A fallback timer armed by a prior inactivity kill would resolve the
   // result before this chain's bounded group-reap confirmation settles;
   // single ownership requires clearing it before arming (Issue #3517).
@@ -736,7 +743,7 @@ function ptyExitRace(
         winner === 'aborted' &&
         !state.isWindows &&
         state.supportsProcessGroupKill &&
-        isKillablePid(state.ptyProcess.pid)
+        isGroupTargetPid(state.ptyProcess.pid)
       ) {
         // An abort landed while natural-exit output was still draining.
         // onExit already detached the caller abort handler, so nothing else

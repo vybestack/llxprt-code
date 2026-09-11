@@ -489,9 +489,8 @@ describe('ShellProcessKill platform behavior', () => {
         // Signal-0 probes say the group is gone after the SIGTERM grace, so
         // the escalation must stop: no kill(-pid, 'SIGKILL') may be issued.
         const realKill = process.kill;
-        const deliveredSignals: Array<
-          [pid: number, signal: string | number]
-        > = [];
+        const deliveredSignals: Array<[pid: number, signal: string | number]> =
+          [];
         const killSpy = vi
           .spyOn(process, 'kill')
           .mockImplementation((pid: number, signal?: string | number) => {

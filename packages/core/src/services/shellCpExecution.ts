@@ -229,8 +229,8 @@ function createCpExitFinalizer(
     const { finalBuffer } = cleanupCpResources(state, child, abortHandler);
     const resolveFromKillChain = (groupConfirmedEmpty: boolean): void => {
       const result = buildCpExitResult(state, child, code, signal, finalBuffer);
-      if (!groupConfirmedEmpty) {
-        // The bounded reap window expired with live group members: carry
+      if (!state.isWindows && !groupConfirmedEmpty) {
+        // The POSIX reap window expired with live group members: carry
         // that fact so the tool layer can tell the caller children may
         // still be running (Issue #3517).
         result.survivingGroupMembersOnAbort = true;

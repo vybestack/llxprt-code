@@ -613,6 +613,7 @@ describe('shell result contracts @plan:issue1995 @plan:issue3200', () => {
      */
     function createTimeoutAbortingHost(
       resultFields: Partial<ShellExecutionResult>,
+      onEntered: () => void = () => undefined,
     ): IShellToolHost {
       const base = createFakeHostWithBackground(() => {
         throw new Error(
@@ -633,6 +634,7 @@ describe('shell result contracts @plan:issue1995 @plan:issue3200', () => {
         ...base,
         executeShellCommand: (_command, _cwd, _onOutput, signal) =>
           new Promise<ShellExecutionResult>((resolve) => {
+            onEntered();
             if (signal.aborted) {
               resolve(buildResult());
               return;
@@ -674,8 +676,12 @@ describe('shell result contracts @plan:issue1995 @plan:issue3200', () => {
       // Cancel via the USER signal, not the timeout controller, so the tool
       // takes the user-cancel branch (timeoutTriggered === false).
       const userAbort = new AbortController();
+      const entered = Promise.withResolvers<void>();
       const tool = new ShellTool(
-        createTimeoutAbortingHost({ survivingGroupMembersOnAbort: true }),
+        createTimeoutAbortingHost(
+          { survivingGroupMembersOnAbort: true },
+          entered.resolve,
+        ),
         createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
       );
 
@@ -684,7 +690,7 @@ describe('shell result contracts @plan:issue1995 @plan:issue3200', () => {
         { command: 'sleep 60' },
         userAbort.signal,
       );
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await entered.promise;
       userAbort.abort();
       const result = await resultPromise;
 
@@ -734,6 +740,45 @@ describe('shell result contracts @plan:issue1995 @plan:issue3200', () => {
       expect(llm).toContain('SUMMARIZED OUTPUT');
       expect(llm).toContain('may still be running');
       expect(llm).toContain('kill -9 -- -4321');
+      expect(String(result.returnDisplay)).toContain('kill -9 -- -4321');
+    });
+
+    it.each([1, Number.NaN])(
+      'uses a generic survivor warning for unsafe pgid %s',
+      async (pgid) => {
+        const tool = new ShellTool(
+          createTimeoutAbortingHost({
+            pgid,
+            survivingGroupMembersOnAbort: true,
+          }),
+          createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
+        );
+        const result = await executeToolForBehavioralAssertion(tool, {
+          command: 'sleep 60',
+          timeout_seconds: 0.01,
+        });
+        for (const content of [result.llmContent, result.returnDisplay]) {
+          expect(String(content)).toContain(
+            'may still be running; they could not be fully terminated.',
+          );
+          expect(String(content)).not.toContain('kill -9');
+        }
+      },
+    );
+
+    it('does not show POSIX cleanup instructions on Windows', async () => {
+      mockPlatform.mockReturnValue('win32');
+      const tool = new ShellTool(
+        createTimeoutAbortingHost({ survivingGroupMembersOnAbort: true }),
+        createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
+      );
+      const result = await executeToolForBehavioralAssertion(tool, {
+        command: 'sleep 60',
+        timeout_seconds: 0.01,
+      });
+      expect(String(result.llmContent)).toContain('timed out');
+      expect(String(result.llmContent)).not.toContain('kill -9');
+      expect(String(result.returnDisplay)).not.toContain('kill -9');
     });
 
     it('a clean timeout result carries no survivor warning', async () => {

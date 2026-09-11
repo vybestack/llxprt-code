@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -297,6 +297,109 @@ describe('ptyInactivityAbortAction pid validation', () => {
 // ---------------------------------------------------------------------------
 
 describe('PTY abort signal fidelity (fake pty, issue #3517)', () => {
+  it.skipIf(isWindows)(
+    'never broadcasts to pid -1 on abort or inactivity',
+    async () => {
+      const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+      const { state } = makeFakeState({
+        pid: 1,
+        isWindows: false,
+        supportsProcessGroupKill: true,
+      });
+      try {
+        await ptyAbortAction(state, () => undefined);
+        await ptyInactivityAbortAction(state, () => undefined);
+        expect(killSpy.mock.calls.some(([pid]) => pid === -1)).toBe(false);
+      } finally {
+        disposeFakeState(state);
+        killSpy.mockRestore();
+      }
+    },
+  );
+
+  it.skipIf(isWindows)(
+    'never broadcasts to pid -1 when abort wins the exit drain race',
+    async () => {
+      const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+      const { state } = makeFakeState({
+        pid: 1,
+        isWindows: false,
+        supportsProcessGroupKill: true,
+      });
+      let onData: ((data: string) => void) | undefined;
+      let onExit:
+        | ((event: { exitCode: number; signal?: number }) => void)
+        | undefined;
+      const ptyProcess: IPty = {
+        ...state.ptyProcess,
+        onData: (listener) => {
+          onData = listener;
+          return { dispose: () => undefined };
+        },
+        onExit: (listener) => {
+          onExit = listener;
+          return { dispose: () => undefined };
+        },
+      };
+      try {
+        const abortController = new AbortController();
+        const resultPromise = createPtyResultPromise(
+          ptyProcess,
+          false,
+          80,
+          30,
+          () => undefined,
+          abortController.signal,
+          { scrollback: 10 },
+          state.ptyInfo,
+          new Map(),
+          { value: null },
+        );
+        if (onData === undefined || onExit === undefined) {
+          throw new Error('PTY handlers were not registered');
+        }
+        onData('draining output');
+        onExit({ exitCode: 0 });
+        abortController.abort();
+        const result = await resultPromise;
+        expect(result.exitCode).toBe(0);
+        expect(result.aborted).toBe(true);
+        expect(killSpy.mock.calls.some(([pid]) => pid === -1)).toBe(false);
+      } finally {
+        disposeFakeState(state);
+        killSpy.mockRestore();
+      }
+    },
+  );
+
+  it.skipIf(isWindows)(
+    'inactivity during caller abort waits for group reaping and reports survivors',
+    async () => {
+      const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+      const { state } = makeFakeState({
+        pid: 999996,
+        isWindows: false,
+        supportsProcessGroupKill: true,
+      });
+      const completed = Promise.withResolvers<ShellExecutionResult>();
+      const startedAt = Date.now();
+      const abortAction = ptyAbortAction(state, completed.resolve);
+      try {
+        await ptyInactivityAbortAction(state, completed.resolve);
+        const result = await completed.promise;
+        expect(Date.now() - startedAt).toBeGreaterThanOrEqual(
+          GROUP_REAP_WINDOW_MS,
+        );
+        expect(result.survivingGroupMembersOnAbort).toBe(true);
+      } finally {
+        await abortAction;
+        disposeFakeState(state);
+        killSpy.mockRestore();
+      }
+    },
+    10000,
+  );
+
   it('real exit signal wins over the synthetic abort result when the exit fires before the group-reap chain settles', async () => {
     // process.kill is stubbed for the whole test, so the fabricated pid is
     // never aimed at a real process group (the suite's standing rule). The

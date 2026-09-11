@@ -248,6 +248,57 @@ behavior above needs explicit approval before implementation.
   worst case adds one reap window of latency before the survivor warning) —
   accepted limitation, same class as the already-accepted PID-reuse races.
 
+### Open code review (round 2) outcome — 7 findings (glm-5.3, complete)
+
+Run against merge-base..HEAD including the OCR-r1 remediation (verified
+model glm-5.3 in the manifest after discarding a first host-side attempt
+that silently used the config default glm-5.2 — the named-provider config
+overrides OCR_LLM_MODEL; explicit `--provider zai-anthropic --model
+glm-5.3` flags are required on the host). All 7 findings **In-scope-Fix**
+(addressed in the OCR-r2 remediation; none deferred):
+
+- Finding 1 (HIGH, tools): cleanup instruction `kill -9 -- -PGID` had no
+  integer/>1 guard — pgid 1 would print `kill -9 -- -1` (broadcast) and a
+  NaN pgid from `tryResolvePgidFromPs` prints `-NaN`. `appendAbortSurvivorWarning`
+  now falls back to the generic warning unless
+  `Number.isInteger(pgid) && pgid > 1`; tests pin pgid 1 and NaN.
+- Finding 4 (HIGH, core): `armPtyGroupAbortKill` and the inactivity group
+  branch issued `process.kill(-pid, 'SIGTERM')` gated only on
+  `isKillablePid` (accepts pid 1) — the exact broadcast the
+  `isGroupTargetPid` chokepoint exists to prevent, missing at these new
+  call sites. Both paths now guard with `isGroupTargetPid`
+  (treat-as-already-gone semantics); `ptyExitRace` gate swapped to
+  `isGroupTargetPid`; POSIX-gated fake-pty tests assert pid 1 never
+  produces a `process.kill(-1, ...)` target. This supersedes the round-1
+  compliance defer of `ptyInactivityAbortAction`: the chokepoint contract
+  ("every `process.kill(-pid, ...)` call site") introduced in this PR
+  makes that branch in-scope.
+- Finding 5 (MEDIUM, core): a Windows taskkill spawn throw (converted to
+  `false` by the arm-site catch) stamped the survivor flag on Windows
+  results, violating the POSIX-only contract. Flag stamp now gated on
+  `!state.isWindows`; Windows regression test added via synchronous
+  taskkill-spawn failure.
+- Finding 6 (MEDIUM, tools): the `result.aborted === true` gate hid the
+  survivor warning from `returnDisplay` on inactivity kills
+  (`aborted: false` + flag) — the gate tracked who killed, not whether
+  children survived. Gate dropped; inactivity test now asserts the
+  display warning too.
+- Finding 7 (MEDIUM, core): `finalizeInactivityKill` could arm the 200 ms
+  fallback while a caller-abort group-reap chain was in flight, resolving
+  the synthetic result before the chain settled (dropping the survivor
+  flag and possibly overwriting late real exit values). It now skips
+  fallback scheduling when `abortGroupReapChains.has(state)`; overlapping
+  abort/inactivity regression test added.
+- Findings 2+3 (LOW, tools tests): win32 no-op branch of
+  `appendAbortSurvivorWarning` pinned with `mockPlatform('win32')`; the
+  user-cancel test's 50 ms sleep race made deterministic via an
+  entered-`executeShellCommand` signal awaited before abort.
+
+Scoped verification after fixes: core typecheck exit 0; shell service
+tests 33 pass/5 skip/0 fail; execution-service contract tests 61 pass/0
+fail; tools typecheck + shell-tool tests 24 pass/0 fail; eslint and
+prettier clean on all six touched files.
+
 ### Verification results (candidate head)
 
 - Targeted core files: 87 pass / 0 fail / 5 skip (POSIX/Windows gates),
@@ -292,3 +343,9 @@ behavior above needs explicit approval before implementation.
   suites), lint OK (both shell.ts errors gone), format OK, root
   typecheck exit 0 after one knock-on tuple-annotation fix
   (`deliveredSignals` widened to `signal: string | number`).
+- v6 (final, OCR-r2 remediation tree): build OK, tools OK, cli OK
+  (full suites), lint OK, typecheck OK, smoke OK (stepfun-37). Core
+  430/432 with only the two #3631 skills files failing (proven on
+  main). format:check initially flagged one line-wrap in
+  `shellProcessKill.test.ts` (the widened tuple annotation); fixed by
+  the repo formatter, file re-verified green.

@@ -4,8 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, vi, mock } from 'bun:test';
 import fs from 'node:fs';
+import * as childProcess from 'node:child_process';
+import { ChildProcess } from 'node:child_process';
+import { createCpResultPromise } from './shellCpExecution.js';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -177,3 +180,39 @@ describe.skipIf(isWindows)(
     });
   },
 );
+
+describe('Windows abort result', () => {
+  it('does not report POSIX survivors when taskkill spawn throws', async () => {
+    const child = new ChildProcess();
+    Object.defineProperties(child, {
+      pid: { value: 4321 },
+      stdout: { value: null },
+      stderr: { value: null },
+    });
+    const originalModule = { ...childProcess };
+    void mock.module('node:child_process', () => ({
+      ...originalModule,
+      spawn: () => {
+        throw new Error('taskkill spawn failed');
+      },
+    }));
+    try {
+      const abortController = new AbortController();
+      const resultPromise = createCpResultPromise(
+        child,
+        true,
+        () => undefined,
+        abortController.signal,
+        undefined,
+        undefined,
+      );
+      abortController.abort();
+      child.emit('exit', 1, null);
+      const result = await resultPromise;
+      expect(result.aborted).toBe(true);
+      expect(result.survivingGroupMembersOnAbort).toBeUndefined();
+    } finally {
+      void mock.module('node:child_process', () => originalModule);
+    }
+  });
+});

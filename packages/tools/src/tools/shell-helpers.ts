@@ -163,7 +163,11 @@ export function appendAbortSurvivorWarning(
     return content;
   }
   const cleanupPgid = pgid ?? result.pid;
-  if (cleanupPgid === undefined) {
+  if (
+    cleanupPgid === undefined ||
+    !Number.isInteger(cleanupPgid) ||
+    cleanupPgid <= 1
+  ) {
     return `${content}\n\nWarning: child processes from the aborted command may still be running; they could not be fully terminated.`;
   }
   return (
@@ -178,7 +182,7 @@ export function appendAbortSurvivorWarning(
  * lossy processing (summarization, token limiting), following the clamp
  * notice pattern: the warning must survive even when the underlying
  * content is replaced (Issue #3517). Also appended to `returnDisplay` on
- * aborted results so the human UI shows it. No-op without the flag, so
+ * flagged results so the human UI shows it. No-op without the flag, so
  * clean results stay byte-identical.
  */
 export function appendSurvivorNoticeToResult(
@@ -189,13 +193,14 @@ export function appendSurvivorNoticeToResult(
   if (result.survivingGroupMembersOnAbort !== true) {
     return toolResult;
   }
-  const appendDisplay = result.aborted === true;
   return {
     ...toolResult,
     llmContent: appendAbortSurvivorWarning(toolResult.llmContent, result, pgid),
-    returnDisplay: appendDisplay
-      ? appendAbortSurvivorWarning(toolResult.returnDisplay, result, pgid)
-      : toolResult.returnDisplay,
+    returnDisplay: appendAbortSurvivorWarning(
+      toolResult.returnDisplay,
+      result,
+      pgid,
+    ),
   };
 }
 
