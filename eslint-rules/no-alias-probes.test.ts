@@ -93,8 +93,8 @@ describe('no-alias-probes', () => {
     // OpenAI sending both `reasoning_details` and `reasoningDetails`) are
     // flagged by design. Boundary exceptions live in the rule's exported
     // BOUNDARY_EXCEPTIONS allowlist (each entry with owner, reason, and
-    // removal condition), mirrored in dev-docs/naming-standard.md; inline
-    // eslint-disable comments are not the mechanism.
+    // removal condition), mirrored in dev-docs/naming-standard.md;
+    // inline lint suppressions are not the mechanism.
     it('flags an inline third-party field-variant probe in an adapter shape', () => {
       expectFlagged(
         'const details = payload.reasoning_details ?? payload.reasoningDetails;',
