@@ -104,7 +104,12 @@ export async function dispatch(
       },
     );
   } finally {
-    toolExecutorContext.disposeScheduler(toolExecutorContext.getSessionId());
-    await config.dispose();
+    // disposeScheduler is synchronous (void); guard only against a sync throw
+    // so config.dispose() always runs.
+    try {
+      toolExecutorContext.disposeScheduler(toolExecutorContext.getSessionId());
+    } finally {
+      await config.dispose();
+    }
   }
 }
