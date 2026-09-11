@@ -713,6 +713,7 @@ export async function finalizeConfig(input: PostConfigInput): Promise<Config> {
     buildImageModeFlags(input.argv),
     services.profileManager ?? new ProfileManager(),
     services.imageProfileState,
+    input.profileLoadResult,
   );
 
   // Step 14: Reapply CLI overrides after provider switch

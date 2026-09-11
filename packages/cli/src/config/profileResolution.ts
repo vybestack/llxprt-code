@@ -8,7 +8,7 @@ import process from 'node:process';
 import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { Profile } from '@vybestack/llxprt-code-settings';
-import { setActiveImageProfile } from '@vybestack/llxprt-code-providers/runtime.js';
+import type { ActiveImageProfile } from '@vybestack/llxprt-code-core';
 import type { MergedSettings, Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
 import {
@@ -43,6 +43,8 @@ export interface ProfileResolutionResult {
 }
 
 export interface ProfileLoadResult {
+  /** Absent preserves selection; explicit undefined resets it after bootstrap. */
+  readonly activeImageProfile?: ActiveImageProfile | undefined;
   readonly profileMergedSettings: MergedSettings;
   readonly profileModel: string | undefined;
   readonly profileProvider: string | undefined;
@@ -209,13 +211,13 @@ async function applyFileProfile(
       'imageProfile' in profile && typeof profile.imageProfile === 'string'
         ? profile.imageProfile
         : undefined;
-    if (imageProfileName === undefined) {
-      setActiveImageProfile(undefined);
-    } else {
-      const imageProfile =
-        await profileManager.loadImageProfile(imageProfileName);
-      setActiveImageProfile({ name: imageProfileName, profile: imageProfile });
-    }
+    const activeImageProfile =
+      imageProfileName === undefined
+        ? undefined
+        : {
+            name: imageProfileName,
+            profile: await profileManager.loadImageProfile(imageProfileName),
+          };
     const prepared = prepareProfileForApplication(
       profile,
       profileToLoad,
@@ -235,6 +237,7 @@ async function applyFileProfile(
     }
 
     return {
+      activeImageProfile,
       profileMergedSettings: prepared.profileMergedSettings,
       profileModel: prepared.profileModel,
       profileProvider: prepared.profileProvider,
@@ -289,6 +292,7 @@ export async function loadAndPrepareProfile(input: {
   let profileModelParams: Record<string, unknown> | undefined;
   let profileBaseUrl: string | undefined;
   let loadedProfile: Profile | null = null;
+  let imageProfileSelection: Pick<ProfileLoadResult, 'activeImageProfile'> = {};
   const profileWarnings: string[] = [];
 
   // Handle inline profile from --profile flag
@@ -324,6 +328,7 @@ export async function loadAndPrepareProfile(input: {
       profileWarnings,
     );
     if (result) {
+      imageProfileSelection = { activeImageProfile: result.activeImageProfile };
       ({
         profileMergedSettings,
         profileModel,
@@ -342,6 +347,7 @@ export async function loadAndPrepareProfile(input: {
     profileModelParams,
     profileBaseUrl,
     loadedProfile,
+    ...imageProfileSelection,
     profileWarnings,
     profileToLoad,
   };

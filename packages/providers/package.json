@@ -12,7 +12,9 @@
   "types": "dist/index.d.ts",
   "exports": {
     "./imageBackend.js": {
-      "types": "./src/imageBackend.d.ts"
+      "types": "./dist/src/imageBackend.d.ts",
+      "bun": "./src/imageBackend.ts",
+      "import": "./dist/src/imageBackend.js"
     },
     ".": {
       "types": "./dist/index.d.ts",

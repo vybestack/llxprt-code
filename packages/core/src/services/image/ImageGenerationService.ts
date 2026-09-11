@@ -24,8 +24,8 @@ import crypto from 'node:crypto';
  * Mirrors the Codex `gpt-image-2` generate endpoint shape; backend-neutral so
  * future backends (OpenRouter, LM Studio, local models) can reuse it.
  */
-import type { ImageGenerateRequest } from '@vybestack/llxprt-code-providers/imageBackend.js';
-export type { ImageGenerateRequest } from '@vybestack/llxprt-code-providers/imageBackend.js';
+import type { ImageGenerateRequest } from './imageBackendContract.js';
+export type { ImageGenerateRequest } from './imageBackendContract.js';
 
 /**
  * A normalized image-generation result.
@@ -96,7 +96,7 @@ export class ImageValidationError extends Error {
  * expose a uniform `generate` capability. The capability interface keeps the
  * service and tool decoupled from any specific provider.
  */
-export type { ImageBackend as ImageGenerationBackend } from '@vybestack/llxprt-code-providers/imageBackend.js';
+export type { ImageBackend as ImageGenerationBackend } from './imageBackendContract.js';
 
 /**
  * The application-level image-generation service.

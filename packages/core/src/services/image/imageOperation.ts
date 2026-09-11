@@ -57,7 +57,7 @@ export interface ImageOperationInput {
 }
 
 /** Backend result shared by all image adapters. */
-export type { ImageBackendResult } from '@vybestack/llxprt-code-providers/imageBackend.js';
+export type { ImageBackendResult } from './imageBackendContract.js';
 
 /**
  * A normalized image-operation result.
@@ -85,7 +85,7 @@ export interface ImageOperationResult {
 /**
  * Backend capability contract: a backend implements generate and/or edit.
  */
-export type { ImageBackend as ImageOperationBackend } from '@vybestack/llxprt-code-providers/imageBackend.js';
+export type { ImageBackend as ImageOperationBackend } from './imageBackendContract.js';
 
 /**
  * Error thrown when an image operation fails at a specific stage.

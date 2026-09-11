@@ -596,6 +596,10 @@ export type {
   ProviderRuntimeContext,
   ProviderRuntimeContextInit,
 } from './runtime/providerRuntimeContext.js';
+export type {
+  ImageBackend,
+  ImageEditRequest,
+} from './services/image/imageBackendContract.js';
 export {
   createImageProfileRuntimeState,
   type ActiveImageProfile,

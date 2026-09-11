@@ -15,16 +15,25 @@ import {
 } from '@vybestack/llxprt-code-providers';
 import { loadAndSelectImageProfile } from '@vybestack/llxprt-code-providers/runtime.js';
 import { isImageModeActive, type ImageModeFlags } from './imageMode.js';
+import type { ProfileLoadResult } from './profileResolution.js';
 
-/** Select a startup image profile only when no direct operation was requested. */
+/** Apply file-profile selection after bootstrap; standalone CLI selection wins. */
 export async function applyStartupImageProfile(
   flags: ImageModeFlags,
   manager: ProfileManager,
   state: ImageProfileRuntimeState,
+  fileProfile: Pick<ProfileLoadResult, 'activeImageProfile'> = {},
 ): Promise<void> {
   const name = flags.imageProfile?.trim();
-  if (!name || isImageModeActive(flags)) return;
-  await loadAndSelectImageProfile(manager, state, name);
+  if (name && !isImageModeActive(flags)) {
+    await loadAndSelectImageProfile(manager, state, name);
+  } else if ('activeImageProfile' in fileProfile) {
+    if (fileProfile.activeImageProfile === undefined) {
+      state.reset();
+    } else {
+      state.select(fileProfile.activeImageProfile);
+    }
+  }
 }
 
 /** Resolve saved per-operation overrides without changing runtime selection. */
