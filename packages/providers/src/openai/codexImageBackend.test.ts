@@ -5,6 +5,9 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   CodexImageBackend,
   buildCodexImageGenerateEndpoint,
@@ -115,9 +118,88 @@ describe('CodexImageBackend', () => {
     expect(backend.name).toBe('codex');
     expect(CODEX_IMAGE_MODEL).toBe('gpt-image-2');
   });
+  it.each([
+    ['generate', 'omitted'],
+    ['generate', 'defaults'],
+    ['generate', 'overrides'],
+    ['edit', 'omitted'],
+    ['edit', 'defaults'],
+    ['edit', 'overrides'],
+  ] as const)(
+    '%s sends %s image knobs without synthesizing values',
+    async (operation, mode) => {
+      const directory = await mkdtemp(join(tmpdir(), 'issue3627-image-knobs-'));
+      try {
+        const inputPath = join(directory, 'input.png');
+        await writeFile(
+          inputPath,
+          Buffer.from(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=',
+            'base64',
+          ),
+        );
+        const { fetchImpl, captured } = makeStubFetch({
+          status: 200,
+          body: { data: [{ b64_json: 'aGVsbG8=' }] },
+        });
+        const defaults = {
+          background: 'transparent',
+          quality: 'high',
+          size: '1024x1536',
+        } as const;
+        const overrides = {
+          background: 'opaque',
+          quality: 'low',
+          size: '1536x1024',
+        } as const;
+        const backend = new CodexImageBackend({
+          getCredential: async () => ({
+            accessToken: 'token',
+            accountId: 'acct',
+          }),
+          getBaseUrl: () => undefined,
+          ...(mode === 'omitted' ? {} : { defaults }),
+          fetchImpl,
+        });
+        const request = {
+          prompt: 'image knobs',
+          ...(mode === 'overrides' ? overrides : {}),
+        };
+
+        if (operation === 'edit') {
+          await backend.edit(
+            { ...request, inputPaths: [inputPath] },
+            new AbortController().signal,
+          );
+        } else {
+          await backend.generate(request, new AbortController().signal);
+        }
+
+        const body: unknown = JSON.parse(String(captured()?.init.body));
+        const expectedKnobs = mode === 'overrides' ? overrides : defaults;
+        const imageUrl = expect.stringMatching(/^data:image\/png;base64,/);
+        expect(body).toStrictEqual({
+          model: 'gpt-image-2',
+          prompt: request.prompt,
+          ...(operation === 'edit'
+            ? {
+                images: [
+                  {
+                    image_url: imageUrl,
+                  },
+                ],
+              }
+            : { n: 1 }),
+          ...(mode === 'omitted' ? {} : expectedKnobs),
+        });
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
 
   describe('A1 — request shape', () => {
-    it('posts to the generate endpoint with model gpt-image-2 and auto defaults, n:1', async () => {
+    it('posts to the generate endpoint without omitted knobs, with model gpt-image-2 and n:1', async () => {
       const { fetchImpl, captured } = makeStubFetch({
         status: 200,
         body: { data: [{ b64_json: 'aGVsbG8=' }] },
@@ -142,9 +224,9 @@ describe('CodexImageBackend', () => {
       >;
       expect(body['model']).toBe('gpt-image-2');
       expect(body['prompt']).toBe('a serene mountain lake at dawn');
-      expect(body['background']).toBe('auto');
-      expect(body['quality']).toBe('auto');
-      expect(body['size']).toBe('auto');
+      expect(body).not.toHaveProperty('background');
+      expect(body).not.toHaveProperty('quality');
+      expect(body).not.toHaveProperty('size');
       expect(body['n']).toBe(1);
 
       // The generation contract must NOT include edit-only keys.
@@ -153,7 +235,7 @@ describe('CodexImageBackend', () => {
       // The body must contain ONLY the documented generation keys — no
       // extra/undocumented fields that the provider might reject.
       expect(Object.keys(body).sort()).toStrictEqual(
-        ['background', 'model', 'n', 'prompt', 'quality', 'size'].sort(),
+        ['model', 'n', 'prompt'].sort(),
       );
     });
 
@@ -257,7 +339,10 @@ describe('CodexImageBackend', () => {
       expect(result.caption).toBe('a red panda');
       expect(result.quality).toBe('low');
       expect(result.size).toBe('1254x1254');
-      expect(result.usage).toEqual({ input_tokens: 14, output_tokens: 515 });
+      expect(result.usage).toStrictEqual({
+        input_tokens: 14,
+        output_tokens: 515,
+      });
     });
   });
 

@@ -7,8 +7,14 @@
 import { describe, it, expect, vi } from 'bun:test';
 
 import { buildCodexImageGenerateEndpoint } from './codexImageBackend.js';
-import { createCodexImageBackendResolver } from './codexImageBackendResolver.js';
+import {
+  createCodexImageBackendResolver,
+  ImageBackendAuthModeError,
+  resolveImageProfileBackendConfig,
+  validateImageProfileAuth,
+} from './codexImageBackendResolver.js';
 import type { CodexImageBackendResolverDeps } from './codexImageBackendResolver.js';
+import type { ImageProfile } from '@vybestack/llxprt-code-settings';
 import type { IProvider } from '../IProvider.js';
 
 /**
@@ -256,6 +262,7 @@ describe('createCodexImageBackendResolver', () => {
       getActiveImageProfile: () => ({
         version: 1,
         type: 'image',
+        backend: 'codex',
         model: 'gpt-image-2.5-flare',
         baseUrl: 'https://images.example/v1',
         auth: { type: 'oauth', provider: 'codex' },
@@ -282,5 +289,113 @@ describe('createCodexImageBackendResolver', () => {
       size: '1024x1536',
       background: 'transparent',
     });
+  });
+});
+
+function configuredImageProfile(
+  overrides: Partial<ImageProfile>,
+): ImageProfile {
+  return {
+    version: 1,
+    type: 'image',
+    backend: 'codex',
+    model: 'gpt-image-2',
+    baseUrl: CODEX_BASE_URL,
+    auth: { type: 'oauth', provider: 'codex' },
+    ...overrides,
+  };
+}
+
+describe('image backend auth validation', () => {
+  it('accepts Codex OAuth', () => {
+    const profile = configuredImageProfile({
+      backend: 'codex',
+      auth: { type: 'oauth', provider: 'codex' },
+    });
+
+    expect(() => validateImageProfileAuth(profile, 'codex-art')).not.toThrow();
+  });
+
+  it('rejects non-OAuth auth for Codex', () => {
+    const profile = configuredImageProfile({
+      backend: 'codex',
+      auth: { type: 'none' },
+    });
+
+    expect(() => validateImageProfileAuth(profile, 'codex-art')).toThrow(
+      ImageBackendAuthModeError,
+    );
+  });
+
+  it('accepts every key mode for api.openai.com', () => {
+    const profiles: readonly ImageProfile[] = [
+      configuredImageProfile({
+        backend: 'openai-images',
+        baseUrl: 'https://api.openai.com/v1',
+        auth: { type: 'api-key', apiKey: 'literal-key' },
+      }),
+      configuredImageProfile({
+        backend: 'openai-images',
+        baseUrl: 'https://api.openai.com/v1',
+        auth: { type: 'named-key', keyName: 'openai-images' },
+      }),
+      configuredImageProfile({
+        backend: 'openai-images',
+        baseUrl: 'https://api.openai.com/v1',
+        auth: { type: 'keyfile', path: '/keys/openai' },
+      }),
+    ];
+
+    for (const profile of profiles) {
+      expect(() =>
+        validateImageProfileAuth(profile, 'openai-art'),
+      ).not.toThrow();
+    }
+  });
+
+  it('rejects unauthenticated api.openai.com profiles', () => {
+    const profile = configuredImageProfile({
+      backend: 'openai-images',
+      baseUrl: 'https://api.openai.com/v1',
+      auth: { type: 'none' },
+    });
+
+    expect(() => validateImageProfileAuth(profile, 'openai-art')).toThrow(
+      ImageBackendAuthModeError,
+    );
+  });
+
+  it('accepts no auth for a local MLX endpoint', () => {
+    const profile = configuredImageProfile({
+      backend: 'openai-images',
+      baseUrl: 'http://127.0.0.1:8321/v1',
+      auth: { type: 'none' },
+    });
+
+    expect(() => validateImageProfileAuth(profile, 'mlx-art')).not.toThrow();
+  });
+
+  it('rejects credentials for a local MLX endpoint', () => {
+    const profile = configuredImageProfile({
+      backend: 'openai-images',
+      baseUrl: 'http://localhost:8321/v1',
+      auth: { type: 'named-key', keyName: 'unused' },
+    });
+
+    expect(() => validateImageProfileAuth(profile, 'mlx-art')).toThrow(
+      ImageBackendAuthModeError,
+    );
+  });
+
+  it('preserves omitted operation overrides at the backend request seam', () => {
+    const profile = configuredImageProfile({
+      defaults: { quality: 'high' },
+    });
+
+    const config = resolveImageProfileBackendConfig(profile, 'codex-art');
+
+    expect(config.overrides).toStrictEqual({ quality: 'high' });
+    expect(Object.hasOwn(config.overrides, 'size')).toBe(false);
+    expect(Object.hasOwn(config.overrides, 'background')).toBe(false);
   });
 });

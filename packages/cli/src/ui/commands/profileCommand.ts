@@ -44,6 +44,37 @@ import {
   type ProfileLoadResultView,
 } from './profileLoad.js';
 
+function parseProfileLoadTarget(args: string): {
+  readonly profileType: 'model' | 'image';
+  readonly profileName: string;
+} {
+  const typeSeparator = args.search(/[ \t]/);
+  const possibleType =
+    typeSeparator === -1 ? args : args.slice(0, typeSeparator);
+  const isTyped = possibleType === 'model' || possibleType === 'image';
+  return {
+    profileType: isTyped ? possibleType : 'model',
+    profileName: extractProfileName(
+      isTyped ? args.slice(typeSeparator + 1).trim() : args,
+    ),
+  };
+}
+
+async function loadImageProfileCommand(
+  profileName: string,
+): Promise<MessageActionReturn> {
+  try {
+    await getRuntimeApi().loadImageProfileByName(profileName);
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: `Image profile '${profileName}' loaded`,
+    };
+  } catch (error) {
+    return classifyLoadError(error, profileName);
+  }
+}
+
 /**
  * Profile save subcommand
  */
@@ -131,9 +162,7 @@ const loadCommand: SlashCommand = {
       };
     }
 
-    const typedMatch = trimmedArgs.match(/^(model|image)\s+(.+)$/);
-    const profileType = typedMatch?.[1] ?? 'model';
-    const profileName = extractProfileName(typedMatch?.[2] ?? trimmedArgs);
+    const { profileType, profileName } = parseProfileLoadTarget(trimmedArgs);
 
     if (!profileName) {
       return {
@@ -149,16 +178,7 @@ const loadCommand: SlashCommand = {
     }
 
     if (profileType === 'image') {
-      try {
-        await getRuntimeApi().loadImageProfileByName(profileName);
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `Image profile '${profileName}' loaded`,
-        };
-      } catch (error) {
-        return classifyLoadError(error, profileName);
-      }
+      return loadImageProfileCommand(profileName);
     }
 
     try {

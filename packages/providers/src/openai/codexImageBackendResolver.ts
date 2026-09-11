@@ -21,8 +21,9 @@
  */
 
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
+import type { ImageGenerateRequest } from '@vybestack/llxprt-code-core';
 import type { ImageProfile } from '@vybestack/llxprt-code-settings';
-import { createProviderKeyStorage } from '../auth/index.js';
+import type { ImageBackendAuth } from '../imageBackendAuth.js';
 
 import {
   CodexImageBackend,
@@ -73,6 +74,117 @@ export interface ResolvedImageBackendLike {
     readonly caption?: string;
   }>;
 }
+export type ImageProfileOperationOverrides = Pick<
+  ImageGenerateRequest,
+  'quality' | 'size' | 'background'
+>;
+
+export interface ResolvedImageProfileBackendConfig {
+  readonly backend: ImageProfile['backend'];
+  readonly model: string;
+  readonly baseUrl: string;
+  readonly auth: ImageBackendAuth;
+  readonly overrides: ImageProfileOperationOverrides;
+}
+
+type ImageBackendAuthContext = 'codex' | 'openai' | 'local';
+
+export class ImageBackendAuthModeError extends Error {
+  readonly profileName: string;
+  readonly backend: ImageBackendAuthContext;
+  readonly authType: ImageBackendAuth['type'];
+
+  constructor(
+    profileName: string,
+    backend: ImageBackendAuthContext,
+    authType: ImageBackendAuth['type'],
+  ) {
+    super(
+      `Image profile '${profileName}' cannot use auth mode '${authType}' with the '${backend}' backend`,
+    );
+    this.name = 'ImageBackendAuthModeError';
+    this.profileName = profileName;
+    this.backend = backend;
+    this.authType = authType;
+  }
+}
+
+export class ImageBackendBaseUrlError extends Error {
+  readonly profileName: string;
+  readonly baseUrl: string;
+
+  constructor(profileName: string, baseUrl: string) {
+    super(`Image profile '${profileName}' has an invalid base URL: ${baseUrl}`);
+    this.name = 'ImageBackendBaseUrlError';
+    this.profileName = profileName;
+    this.baseUrl = baseUrl;
+  }
+}
+
+function resolveAuthContext(
+  profile: ImageProfile,
+  profileName: string,
+): ImageBackendAuthContext {
+  if (profile.backend === 'codex') {
+    return 'codex';
+  }
+
+  let hostname: string;
+  try {
+    hostname = new URL(profile.baseUrl).hostname.toLowerCase();
+  } catch {
+    throw new ImageBackendBaseUrlError(profileName, profile.baseUrl);
+  }
+  if (
+    hostname === 'localhost' ||
+    hostname === '::1' ||
+    hostname.startsWith('127.')
+  ) {
+    return 'local';
+  }
+  return 'openai';
+}
+
+export function validateImageProfileAuth(
+  profile: ImageProfile,
+  profileName = '<active>',
+): void {
+  const backend = resolveAuthContext(profile, profileName);
+  const authType = profile.auth.type;
+  const allowedModes: Readonly<
+    Record<ImageBackendAuthContext, ReadonlyArray<ImageBackendAuth['type']>>
+  > = {
+    codex: ['oauth'],
+    openai: ['api-key', 'named-key', 'keyfile'],
+    local: ['none'],
+  };
+  const valid = allowedModes[backend].includes(authType);
+  if (!valid) {
+    throw new ImageBackendAuthModeError(profileName, backend, authType);
+  }
+}
+
+export function resolveImageProfileBackendConfig(
+  profile: ImageProfile,
+  profileName = '<active>',
+): ResolvedImageProfileBackendConfig {
+  validateImageProfileAuth(profile, profileName);
+  const defaults = profile.defaults;
+  const overrides: ImageProfileOperationOverrides = {
+    ...(defaults?.quality === undefined ? {} : { quality: defaults.quality }),
+    ...(defaults?.size === undefined ? {} : { size: defaults.size }),
+    ...(defaults?.background === undefined
+      ? {}
+      : { background: defaults.background }),
+  };
+  return {
+    backend: profile.backend,
+    model: profile.model,
+    baseUrl: profile.baseUrl,
+    auth: profile.auth,
+    overrides,
+  };
+}
 
 export interface CodexImageBackendResolverDeps {
   readonly oauthManager: OAuthManager | undefined;
@@ -87,7 +199,7 @@ export interface CodexImageBackendResolverDeps {
  */
 const DEFAULT_CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 
-function isCodexBaseUrl(baseUrl: string | undefined): boolean {
+function isCodexBaseUrl(baseUrl: string | undefined): baseUrl is string {
   return baseUrl?.includes('chatgpt.com/backend-api/codex') ?? false;
 }
 
@@ -113,44 +225,16 @@ async function resolveFreshCredential(
       'Codex image generation requires an OAuth token with a non-empty access_token.',
     );
   }
-  const accountId = (token as Record<string, unknown>)['account_id'];
-  if (typeof accountId !== 'string' || accountId === '') {
+  const accountId =
+    'account_id' in token && typeof token.account_id === 'string'
+      ? token.account_id
+      : undefined;
+  if (accountId === undefined || accountId === '') {
     throw new Error(
       'Codex image generation requires an OAuth token with account_id.',
     );
   }
   return { accessToken, accountId };
-}
-
-async function resolveProfileCredential(
-  profile: ImageProfile,
-  oauthManager: OAuthManager | undefined,
-): Promise<CodexImageCredential> {
-  if (profile.auth.type === 'apikey') {
-    const key = await createProviderKeyStorage().getKey(profile.auth.keyName);
-    if (key === null || key === undefined || key === '') {
-      throw new Error(
-        `Image profile API key reference '${profile.auth.keyName}' was not found`,
-      );
-    }
-    return { accessToken: key };
-  }
-  if (oauthManager === undefined) {
-    throw new Error(
-      `Image profile OAuth reference '${profile.auth.provider}' requires OAuth authentication`,
-    );
-  }
-  const token = await oauthManager.getOAuthToken?.(profile.auth.provider);
-  if (token === null || token === undefined || token.access_token === '') {
-    throw new Error(
-      `Image profile OAuth reference '${profile.auth.provider}' is not authenticated`,
-    );
-  }
-  const accountId = (token as Record<string, unknown>)['account_id'];
-  return {
-    accessToken: token.access_token,
-    ...(typeof accountId === 'string' && accountId !== '' ? { accountId } : {}),
-  };
 }
 
 /**
@@ -166,8 +250,16 @@ export function createCodexImageBackendResolver(
 ): () => ResolvedImageBackendLike | null {
   return () => {
     const imageProfile = deps.getActiveImageProfile?.();
+    const profileConfig =
+      imageProfile === undefined
+        ? undefined
+        : resolveImageProfileBackendConfig(imageProfile);
+    if (profileConfig?.backend === 'openai-images') {
+      return null;
+    }
+
     const oauthManager = deps.oauthManager;
-    if (imageProfile === undefined && oauthManager === undefined) {
+    if (oauthManager === undefined && profileConfig === undefined) {
       return null;
     }
 
@@ -175,15 +267,10 @@ export function createCodexImageBackendResolver(
     const activeBaseUrl =
       provider === undefined ? undefined : getBaseUrlFromProvider(provider);
     const baseUrl =
-      imageProfile?.baseUrl ??
-      (isCodexBaseUrl(activeBaseUrl)
-        ? (activeBaseUrl as string)
-        : DEFAULT_CODEX_BASE_URL);
+      profileConfig?.baseUrl ??
+      (isCodexBaseUrl(activeBaseUrl) ? activeBaseUrl : DEFAULT_CODEX_BASE_URL);
 
     const getCredential = (): Promise<CodexImageCredential> => {
-      if (imageProfile !== undefined) {
-        return resolveProfileCredential(imageProfile, oauthManager);
-      }
       if (oauthManager === undefined) {
         throw new Error('Codex image backend requires OAuth authentication');
       }
@@ -192,13 +279,13 @@ export function createCodexImageBackendResolver(
     const backendDeps: CodexImageBackendDeps = {
       getCredential,
       getBaseUrl: () => baseUrl,
-      ...(imageProfile !== undefined
-        ? {
-            model: imageProfile.model,
-            defaults: imageProfile.defaults,
+      ...(profileConfig === undefined
+        ? {}
+        : {
+            model: profileConfig.model,
+            defaults: profileConfig.overrides,
             allowCustomBaseUrl: true,
-          }
-        : {}),
+          }),
       ...(deps.fetchImpl !== undefined ? { fetchImpl: deps.fetchImpl } : {}),
     };
 

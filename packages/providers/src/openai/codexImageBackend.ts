@@ -135,12 +135,41 @@ function truncateForSnippet(text: string): string {
     : text;
 }
 
+interface ParsedImageData {
+  readonly data: string;
+  readonly quality?: string;
+  readonly size?: string;
+  readonly usage?: Readonly<Record<string, unknown>>;
+}
+
+function extractImageData(
+  parsed: CodexImageGenerateResponse,
+  operationName: string,
+  status: number,
+  endpoint: string,
+): ParsedImageData {
+  const data = parsed.data?.[0]?.b64_json;
+  if (typeof data !== 'string' || data === '') {
+    throw new ImageGenerationError(
+      `Codex image ${operationName} returned no image data.`,
+      { status, endpoint },
+    );
+  }
+  return {
+    data,
+    ...(typeof parsed.quality === 'string' ? { quality: parsed.quality } : {}),
+    ...(typeof parsed.size === 'string' ? { size: parsed.size } : {}),
+    ...(parsed.usage !== undefined ? { usage: parsed.usage } : {}),
+  };
+}
+
 /**
  * Codex OAuth adapter for the backend-neutral image-generation service.
  *
  * Implements {@link ImageGenerationBackend} using the same standalone-fetch
  * pattern as `fetchCodexUsage`: a direct `fetch` with `Authorization: Bearer`,
  * `ChatGPT-Account-Id`, `originator: codex_cli_rs`, and an `AbortSignal`
+
  * passed straight through so cancellation propagates.
  *
  * A single fresh credential object (`{ accessToken, accountId }`) is resolved
@@ -261,21 +290,7 @@ export class CodexImageBackend implements ImageGenerationBackend {
       );
     }
 
-    const b64 = parsed.data?.[0]?.b64_json;
-    if (typeof b64 !== 'string' || b64 === '') {
-      throw new ImageGenerationError(
-        `Codex image ${operationName} returned no image data.`,
-        { status: response.status, endpoint },
-      );
-    }
-    return {
-      data: b64,
-      ...(typeof parsed.quality === 'string'
-        ? { quality: parsed.quality }
-        : {}),
-      ...(typeof parsed.size === 'string' ? { size: parsed.size } : {}),
-      ...(parsed.usage !== undefined ? { usage: parsed.usage } : {}),
-    };
+    return extractImageData(parsed, operationName, response.status, endpoint);
   }
 
   private buildEndpoint(suffix: 'generations' | 'edits'): string {
@@ -303,12 +318,15 @@ export class CodexImageBackend implements ImageGenerationBackend {
     const credential = await this.getCredential();
     const endpoint = this.buildEndpoint('generations');
 
+    const background = request.background ?? this.defaults.background;
+    const quality = request.quality ?? this.defaults.quality;
+    const size = request.size ?? this.defaults.size;
     const body = {
       model: this.model,
       prompt: request.prompt,
-      background: request.background ?? this.defaults.background ?? 'auto',
-      quality: request.quality ?? this.defaults.quality ?? 'auto',
-      size: request.size ?? this.defaults.size ?? 'auto',
+      ...(background !== undefined ? { background } : {}),
+      ...(quality !== undefined ? { quality } : {}),
+      ...(size !== undefined ? { size } : {}),
       n: request.n ?? 1,
     };
 
@@ -390,13 +408,16 @@ export class CodexImageBackend implements ImageGenerationBackend {
     // `{ image_url }` objects, NOT an array of bare data-URL strings and not
     // the singular `image` key. Anything else is rejected by the service with
     // `400 missing_required_parameter: images`.
+    const background = request.background ?? this.defaults.background;
+    const quality = request.quality ?? this.defaults.quality;
+    const size = request.size ?? this.defaults.size;
     const body = {
       model: this.model,
       prompt: request.prompt,
       images: dataUrls.map((imageUrl) => ({ image_url: imageUrl })),
-      background: request.background ?? this.defaults.background ?? 'auto',
-      quality: request.quality ?? this.defaults.quality ?? 'auto',
-      size: request.size ?? this.defaults.size ?? 'auto',
+      ...(background !== undefined ? { background } : {}),
+      ...(quality !== undefined ? { quality } : {}),
+      ...(size !== undefined ? { size } : {}),
     };
 
     const headers = this.buildHeaders(
