@@ -15,9 +15,7 @@ import {
 } from '../ProfileManager.js';
 import type { ImageProfile, StandardProfile } from '../types.js';
 
-function imageProfile(
-  overrides: Partial<ImageProfile> = {},
-): ImageProfile {
+function imageProfile(overrides: Partial<ImageProfile> = {}): ImageProfile {
   return {
     version: 1,
     type: 'image',
@@ -76,7 +74,9 @@ describe('ProfileManager typed image profiles', () => {
     const save = manager.saveImageProfile('shared-name', imageProfile());
 
     await expect(save).rejects.toBeInstanceOf(ProfileTypeConflictError);
-    expect(await manager.loadProfile('shared-name')).toStrictEqual(modelProfile);
+    expect(await manager.loadProfile('shared-name')).toStrictEqual(
+      modelProfile,
+    );
   });
 
   it('rejects overwriting an image profile with a model profile', async () => {
@@ -101,7 +101,9 @@ describe('ProfileManager typed image profiles', () => {
     const load = manager.loadImageProfile('missing-image');
 
     await expect(load).rejects.toBeInstanceOf(ImageProfileNotFoundError);
-    await expect(load).rejects.toThrow("Image profile 'missing-image' not found");
+    await expect(load).rejects.toThrow(
+      "Image profile 'missing-image' not found",
+    );
   });
 
   it('rejects loading a model profile as an image profile', async () => {
