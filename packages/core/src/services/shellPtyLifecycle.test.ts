@@ -297,6 +297,74 @@ describe('ptyInactivityAbortAction pid validation', () => {
 // ---------------------------------------------------------------------------
 
 describe('PTY abort signal fidelity (fake pty, issue #3517)', () => {
+  it.skipIf(isWindows)(
+    'non-group-target pid gets direct-only escalation, never a group signal (fake pty, issue #3517)',
+    async () => {
+      const processSignals: Array<
+        [number, NodeJS.Signals | number | undefined]
+      > = [];
+      const killSignals: Array<string | undefined> = [];
+      const killSpy = vi
+        .spyOn(process, 'kill')
+        .mockImplementation((pid: number, signal?: NodeJS.Signals | number) => {
+          processSignals.push([pid, signal]);
+          return true;
+        });
+      const { state } = makeFakeState({
+        pid: 1,
+        isWindows: false,
+        supportsProcessGroupKill: true,
+      });
+      let exitListener:
+        | ((event: { exitCode: number; signal?: number }) => void)
+        | undefined;
+      const ptyProcess: IPty = {
+        ...state.ptyProcess,
+        kill: (signal) => {
+          killSignals.push(signal);
+        },
+        onData: () => ({ dispose: () => undefined }),
+        onExit: (listener) => {
+          exitListener = listener;
+          return { dispose: () => undefined };
+        },
+      };
+      const abortController = new AbortController();
+      const activePtys = new Map<number, ActivePty>();
+      try {
+        const resultPromise = createPtyResultPromise(
+          ptyProcess,
+          false,
+          80,
+          30,
+          () => undefined,
+          abortController.signal,
+          { scrollback: 10 },
+          state.ptyInfo,
+          activePtys,
+          { value: null },
+        );
+        if (exitListener === undefined) {
+          throw new Error('PTY exit handler was not registered');
+        }
+        abortController.abort();
+        const result = await resultPromise;
+
+        expect(result.aborted).toBe(true);
+        expect(result.survivingGroupMembersOnAbort).toBeUndefined();
+        expect(killSignals).toContain('SIGTERM');
+        expect(killSignals).toContain('SIGKILL');
+        expect(processSignals.every(([pid]) => pid !== -1)).toBe(true);
+      } finally {
+        // Keep the signal stub installed until even an early resolution's
+        // escalation grace has passed, so the red test is safe as well.
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        disposeFakeState(state);
+        killSpy.mockRestore();
+      }
+    },
+  );
+
   for (const scenario of [
     {
       name: 'inactivity kill without caller abort waits for group reaping and reports survivors (fake pty)',
@@ -400,6 +468,37 @@ describe('PTY abort signal fidelity (fake pty, issue #3517)', () => {
       10000,
     );
   }
+
+  it.skipIf(isWindows)(
+    'inactivity kill with a non-group-target pid still kills the PTY directly (fake pty, issue #3517)',
+    async () => {
+      const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+      const inputs = { pid: 1, isWindows, supportsProcessGroupKill: true };
+      const { state, killSignals } = makeFakeState(inputs);
+      try {
+        const result = await createPtyResultPromise(
+          state.ptyProcess,
+          false,
+          80,
+          30,
+          () => undefined,
+          new AbortController().signal,
+          { scrollback: 10, inactivityTimeoutMs: 10 },
+          state.ptyInfo,
+          new Map(),
+          { value: null },
+        );
+
+        expect(result.aborted).toBe(false);
+        expect(result.survivingGroupMembersOnAbort).toBeUndefined();
+        expect(killSignals.slice(0, 2)).toStrictEqual(['SIGTERM', 'SIGKILL']);
+        expect(killSpy.mock.calls.some(([pid]) => pid === -1)).toBe(false);
+      } finally {
+        disposeFakeState(state);
+        killSpy.mockRestore();
+      }
+    },
+  );
 
   it.skipIf(isWindows)(
     'never broadcasts to pid -1 on abort or inactivity',
@@ -692,8 +791,8 @@ function isPidAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code !== 'ESRCH';
   }
 }
 

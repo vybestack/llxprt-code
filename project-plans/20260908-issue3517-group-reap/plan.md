@@ -383,3 +383,68 @@ prettier clean on all six touched files.
   typecheck OK, format:check OK, smoke OK (stepfun-37). Core 430/432 with
   only the two #3631 skills files failing — identical to the v6 baseline;
   no regression from the inactivity-path fix.
+
+## CI OpenCodeReview bot findings (PR #3637)
+
+The CI-side OpenCodeReview bot reviewed two pushed snapshots and opened
+inline threads; local OCR remained capped at 2/2 rounds and was not re-run.
+
+### Run 1 (first snapshot) — 3 threads
+
+- `ho2M_` (high) — non-group-target pids resolved `armPtyGroupAbortKill`
+  with no kill at all. **Fixed**: direct-only escalation chain (leader
+  TERM → grace → conditional SIGKILL, registered in
+  `abortGroupReapChains`, resolves confirmed-empty) plus a POSIX-gated
+  fake-pty regression test.
+- `ho2NG` — `shellExecutionService.main.test.ts` mock only matched string
+  `'SIGKILL'`; the escalation can emit numeric 9. **Fixed**: mock matches
+  both (`signal === 'SIGKILL' || signal === 9`), normalized in
+  `main.test.ts` + `fallback.test.ts`.
+- `ho2ND` — rejected: the pid==pgid assumption holds by construction for
+  `detached: true` spawns (child becomes group leader), and the existing
+  `pgid <= 0` guard covers the degenerate case.
+
+### Run 2 (snapshot 42d1bac94) — 11 threads
+
+Fixed (batch 2, subagent-verified, TDD red→green on the inactivity test):
+
+- `hpuYr` + `hpuYt` (high, duplicate pair) — `ptyInactivityAbortAction`
+  early-returned for non-group-target pids without killing anything. The
+  guard is removed; the path now flows into `armPtyGroupAbortKill`'s
+  direct-only escalation. New test: inactivity kill with pid 1 delivers
+  `['SIGTERM', 'SIGKILL']` to the PTY, resolves `aborted: false`, no
+  survivor flag, and never signals pid −1.
+- `hpuYu` + `hpuYw` — `shellCpExecution.test.ts`: `execute()` moved
+  inside `try` with `let handle` + guarded `reapGroup(handle.pid)` so a
+  synchronous throw cannot orphan the spawned group or temp dir.
+- `hpuY1` + `hpuY2` — `void mock.module(...)` → `await` (setup and
+  finally-restore) in the Windows taskkill test.
+- `hpuZI` — `isPidAlive` helper: `catch { return false }` →
+  EPERM-is-alive (`code !== 'ESRCH'`).
+- `hpuY-` — doc-only: `reapProcessGroup` now documents the
+  treat-as-reaped contract for pids 0/1 (no safe negated probe:
+  `kill(-1,0)` broadcasts, `kill(-0,0)` probes the caller's own group).
+- `hpuY5` — duplicate of `ho2NG` (already fixed in batch 1).
+
+Rejected:
+
+- `hpuY8` — EACCES→alive mapping: `kill(2)` documents only
+  EPERM/ESRCH/EINVAL; an EACCES branch is dead code.
+- `hpuZB` — relaxing the `pgid <= 1` guard on the cleanup instruction:
+  `kill -9 -- -1` is the POSIX broadcast and pgid 1 is init's group;
+  the guard was itself the fix for an earlier high-severity finding.
+
+### Verification (v8–v10)
+
+- v8: build/core/tools valid (core 430/432, failures = #3631 pair only);
+  cli/lint/typecheck/format/smoke steps **invalidated by a full disk** —
+  a sibling session's live 183 GB `tmp/verify3567/repo-db/` filled the
+  volume mid-chain (reported; not deleted). Freed ~800 MB of this
+  checkout's stale tmp dirs; APFS purgeable released the rest.
+- v9: deliberately aborted after build (tree was about to change).
+- v10 (final tree): build OK; core 430/432 (#3631 only — proven
+  pre-existing); tools OK; cli OK; lint OK; typecheck initially flagged
+  one inferred-type error in the new fake-pty spy (fixed with explicit
+  `(pid: number, signal?: NodeJS.Signals | number)` annotations; core
+  and root typecheck re-verified exit 0); format:check OK; stepfun-37
+  smoke OK.

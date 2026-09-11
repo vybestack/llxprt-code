@@ -418,11 +418,8 @@ export async function ptyInactivityAbortAction(
     return;
   }
   if (state.supportsProcessGroupKill) {
-    if (!isGroupTargetPid(pid)) {
-      return;
-    }
-    // Share caller-abort group confirmation so a dead leader cannot hide
-    // surviving descendants after inactivity termination (Issue #3517).
+    // Share caller-abort escalation, including direct-only kills for non-group
+    // targets, so inactivity termination cannot leave survivors (Issue #3517).
     const groupConfirmedEmpty = await armPtyGroupAbortKill(state, pid);
     if (state.hasResolved) {
       return;
@@ -527,13 +524,39 @@ const abortGroupReapChains = new WeakMap<PtyExecState, Promise<boolean>>();
  * suppress the group SIGKILL, letting a TERM-immune grandchild keep running
  * after the tool reported termination, Issue #3517). Resolves true when the
  * group is confirmed empty within the bounded reap window. Never rejects.
+ * Non-group-target pids get direct-only escalation (leader TERM → grace →
+ * SIGKILL) with no group-directed signals.
  */
 function armPtyGroupAbortKill(
   state: PtyExecState,
   pid: number,
 ): Promise<boolean> {
   if (!isGroupTargetPid(pid)) {
-    return Promise.resolve(true);
+    // A pid that is not a valid group target (in practice pid 1) must
+    // never receive group-directed signals — kill(-1, ...) is the POSIX
+    // broadcast — but the direct PTY still has to die before the
+    // synthetic abort result may claim termination: escalate against the
+    // leader only (Issue #3517). No group semantics apply, so the chain
+    // resolves confirmed-empty.
+    clearPendingAbortFallback(state);
+    const directChain = (async (): Promise<boolean> => {
+      try {
+        state.ptyProcess.kill('SIGTERM');
+      } catch {
+        // PTY may already be terminated.
+      }
+      await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
+      if (!state.exitedGuard.isExited()) {
+        try {
+          state.ptyProcess.kill('SIGKILL');
+        } catch {
+          // PTY may already be terminated.
+        }
+      }
+      return true;
+    })();
+    abortGroupReapChains.set(state, directChain);
+    return directChain;
   }
   // A fallback timer armed by a prior inactivity kill would resolve the
   // result before this chain's bounded group-reap confirmation settles;

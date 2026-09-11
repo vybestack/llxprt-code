@@ -176,6 +176,10 @@ export function isProcessGroupAlive(pid: number): boolean {
  * window expires. Resolves true when the group was confirmed empty, false
  * when members may still be alive after the window (the caller must then say
  * so in its result — Issue #3517).
+ * Non-group-target pids 0 and 1 return true (treated as already reaped) by
+ * contract because there is no safe negated probe: kill(-1, 0) is the POSIX
+ * broadcast to every signalable process, and kill(-0, 0) probes the caller's
+ * own process group.
  */
 export async function reapProcessGroup(
   pid: number,

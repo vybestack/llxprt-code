@@ -64,7 +64,8 @@ void vi.mock('../utils/getPty.js', () => ({
 }));
 
 /**
- * Group pids that have received SIGKILL. Signal-0 liveness probes from the
+ * Group pids that have received SIGKILL (string or numeric 9). Signal-0
+ * liveness probes from the
  * abort group-reap confirmation (issue #3517) answer "alive" until the
  * group's SIGKILL is delivered, then ESRCH, mirroring a real process group
  * dying.
@@ -81,7 +82,7 @@ const mockProcessKill = vi
       }
       return true;
     }
-    if (signal === 'SIGKILL') {
+    if (signal === 'SIGKILL' || signal === 9) {
       killedGroupPids.add(pid);
     }
     return true;

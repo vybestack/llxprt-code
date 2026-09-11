@@ -79,14 +79,17 @@ describe.skipIf(isWindows)(
         // 30` keeps the direct child alive until the abort fires.
         const command = `( trap '' TERM; exec sleep 30 ) & echo $! > ${marker}; sleep 30`;
         const abortController = new AbortController();
-        const handle = await ShellExecutionService.execute(
-          command,
-          dir,
-          () => undefined,
-          abortController.signal,
-          false,
-        );
+        let handle:
+          | Awaited<ReturnType<typeof ShellExecutionService.execute>>
+          | undefined;
         try {
+          handle = await ShellExecutionService.execute(
+            command,
+            dir,
+            () => undefined,
+            abortController.signal,
+            false,
+          );
           const grandchildPid = Number(await waitForMarker(marker, 8000));
           expect(grandchildPid).toBeGreaterThan(0);
 
@@ -101,21 +104,26 @@ describe.skipIf(isWindows)(
           // signal-0 probe proves real death.
           expect(isPidAlive(grandchildPid)).toBe(false);
         } finally {
-          reapGroup(handle.pid);
+          if (handle) {
+            reapGroup(handle.pid);
+          }
           fs.rmSync(dir, { recursive: true, force: true });
         }
       }, 30000);
 
       it('resolves a prompt abort with no survivor field when the group dies on SIGTERM', async () => {
         const abortController = new AbortController();
-        const handle = await ShellExecutionService.execute(
-          'sleep 30',
-          os.tmpdir(),
-          () => undefined,
-          abortController.signal,
-          false,
-        );
+        let handle:
+          | Awaited<ReturnType<typeof ShellExecutionService.execute>>
+          | undefined;
         try {
+          handle = await ShellExecutionService.execute(
+            'sleep 30',
+            os.tmpdir(),
+            () => undefined,
+            abortController.signal,
+            false,
+          );
           // Let the command reach its steady state before aborting, as a real
           // timeout would.
           await new Promise((resolve) => setTimeout(resolve, 300));
@@ -131,7 +139,9 @@ describe.skipIf(isWindows)(
           // first-poll confirmation.
           expect(elapsed).toBeLessThan(2000);
         } finally {
-          reapGroup(handle.pid);
+          if (handle) {
+            reapGroup(handle.pid);
+          }
         }
       }, 20000);
 
@@ -190,7 +200,7 @@ describe('Windows abort result', () => {
       stderr: { value: null },
     });
     const originalModule = { ...childProcess };
-    void mock.module('node:child_process', () => ({
+    await mock.module('node:child_process', () => ({
       ...originalModule,
       spawn: () => {
         throw new Error('taskkill spawn failed');
@@ -212,7 +222,7 @@ describe('Windows abort result', () => {
       expect(result.aborted).toBe(true);
       expect(result.survivingGroupMembersOnAbort).toBeUndefined();
     } finally {
-      void mock.module('node:child_process', () => originalModule);
+      await mock.module('node:child_process', () => originalModule);
     }
   });
 });
