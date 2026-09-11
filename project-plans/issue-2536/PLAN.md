@@ -244,7 +244,30 @@ and the targeted bun test files green before the next slice starts.
 
 ### After
 
-TBD — filled at Slice E.
+Measured on `issue2536` @ d803d4992 (slice E, 2026-09-11). Fixture fields
+counted as everything a test author seeds for one render: store seed
+overrides + component props + settings/config stub fields that feed those
+props. Dialog fixture fields counted separately, since dialog booleans were
+the dominant before-cost.
+
+| Test file | Before | After | Dialog fields before → after |
+|---|---|---|---|
+| `DefaultAppLayout.rendering.test.tsx` | 75-field `createUIState` | 35–36 (9 TerminalStore seeds + 0–1 TurnStore `history` + 11 `DefaultAppLayout` props + 7 settings stub + 8 config stub) | 23 → 0 |
+| `DefaultAppLayout.test.tsx` | 46 dialog-boolean lines | 35 (9 TerminalStore seeds + 11 props + 7 settings stub + 8 config stub); dialogs opened via `store.commands.openDialog` | 46 → 0 |
+| `ThemeDialog.test.tsx` | 21 | 5 (1 TerminalStore seed + 4 props) | 0 dialog booleans remained in the UIState slice → 0 |
+| `integrationWiring.spec.tsx` | 60 | 1 (the `store` prop on `TestDialogRenderer`; 0 store seed fields; 9 `openDialog`/`closeDialog` command calls drive the flows) | 60 → 0 |
+
+Notes:
+
+- The `DefaultAppLayout.test.tsx` dialog gating suite now iterates
+  `DIALOG_PRIORITY` against a real `DialogStore`; the 26-kind table and the
+  per-kind payload map are command arguments, not fixture fields.
+- Dialog fixture fields are zero everywhere: no test seeds dialog open/close
+  booleans. Tests that need an open dialog open one on a real store.
+- Isolation guarantees are pinned by
+  `stores/__tests__/renderIsolation.test.tsx` (AC8): cross-store updates do
+  not rerender other stores' subscribers, and same-store writes to
+  unselected fields do not rerender narrow subscribers.
 
 ## 5. Risks
 
