@@ -41,6 +41,8 @@ import type {
   TerminalDimensions,
   TerminalStore,
 } from '../../../stores/terminal/terminalStore.js';
+import type { TurnStore } from '../../../stores/turn/turnStore.js';
+import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 import type { SlashCommandProcessorActions } from '../../../hooks/slashCommandProcessor.js';
 
 import * as fs from 'fs';
@@ -59,11 +61,12 @@ export interface AppInputParams {
   settings: AppBootstrapResult['settings'];
   runtime: AppBootstrapResult['runtime'];
   subagentManager?: UiSubagentManager;
-  history: AppBootstrapResult['history'];
-  addItem: (item: Omit<HistoryItem, 'id'>, baseTimestamp?: number) => number;
-  removeItems: (ids: readonly number[]) => void;
-  clearItems: AppBootstrapResult['clearItems'];
-  loadHistory: AppBootstrapResult['loadHistory'];
+  /**
+   * Turn store; owns the committed history and the addItem/removeItems/
+   * clearItems/loadHistory commands. History is read through a narrow
+   * selector where the stream needs it; commands are stable references.
+   */
+  turnStore: TurnStore;
   todos: AppBootstrapResult['todos'];
   updateTodos: AppBootstrapResult['updateTodos'];
   recordingIntegrationRef: AppBootstrapResult['recordingIntegrationRef'];
@@ -102,7 +105,6 @@ export interface AppInputParams {
   embeddedShellFocused: AppDialogsResult['embeddedShellFocused'];
   setAuthError: AppDialogsResult['setAuthError'];
   shellModeActive: AppDialogsResult['shellModeActive'];
-  isProcessing: AppDialogsResult['isProcessing'];
   performMemoryRefresh: AppDialogsResult['performMemoryRefresh'];
   handleExternalEditorOpen: AppDialogsResult['handleExternalEditorOpen'];
   refreshStatic: AppDialogsResult['refreshStatic'];
@@ -204,9 +206,6 @@ function useSlashCommandSetup(
   const {
     agent,
     settings,
-    addItem,
-    clearItems,
-    loadHistory,
     todos,
     updateTodos,
     recordingIntegrationRef,
@@ -216,6 +215,7 @@ function useSlashCommandSetup(
     setLlxprtMdFileCount,
     refreshStatic,
   } = p;
+  const { addItem, clearItems, loadHistory } = p.turnStore.commands;
   const slashCommandProcessorActions = useSlashActions(p, quitHandler);
   const todoContextForCommands = useMemo(
     () => ({ todos, updateTodos, refreshTodos: () => {} }),
@@ -340,9 +340,6 @@ function useInputStreamSetup(
   const {
     streamRuntime,
     settings,
-    history,
-    addItem,
-    removeItems,
     recordingIntegration,
     runtimeMessageBus,
     stdout,
@@ -351,6 +348,10 @@ function useInputStreamSetup(
     handleExternalEditorOpen,
     refreshStatic,
   } = p;
+  // The stream reads the committed transcript (checkpoint context) through a
+  // narrow selector; commands come straight from the store.
+  const history = useStoreSelector(p.turnStore.store, (s) => s.history);
+  const { addItem, removeItems } = p.turnStore.commands;
   const { handleSlashCommand, setDebugMessage, shellModeActive } = {
     ...core,
     ...p,
@@ -559,7 +560,7 @@ function useInputFinish(
   );
   const showAutoAcceptIndicator = useAutoAcceptIndicator({
     agent: p.agent,
-    addItem: p.addItem,
+    addItem: p.turnStore.commands.addItem,
   });
   const handleSettingsRestart = useCallback(() => {
     void handleSlashCommand('/quit');

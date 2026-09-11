@@ -37,10 +37,11 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../../../../config/settings.js';
-import type { HistoryItem, ConsoleMessageItem } from '../../../types.js';
+import type { ConsoleMessageItem } from '../../../types.js';
 import type { DialogStore } from '../../../stores/dialog/dialogStore.js';
 import type { DialogOpeners } from '../../../stores/dialog/dialogOpeners.js';
 import type { TerminalStore } from '../../../stores/terminal/terminalStore.js';
+import type { TurnStore } from '../../../stores/turn/turnStore.js';
 import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 
 const QUEUE_ERROR_DISPLAY_DURATION_MS = 3000;
@@ -53,9 +54,13 @@ export interface AppDialogsParams {
   dialogs: DialogOpeners;
   /** Terminal store; dialogs owns the capability-sync writer effect. */
   terminalStore: TerminalStore;
+  /**
+   * Turn store; owns staticKey/isProcessing state and the history addItem
+   * command the dialog data loaders message through.
+   */
+  turnStore: TurnStore;
   /** Dispatch for the reducer-held actions OAuth completion still needs. */
   appDispatch: React.Dispatch<AppAction>;
-  addItem: (item: Omit<HistoryItem, 'id'>, baseTimestamp?: number) => number;
   handleNewMessage: (message: ConsoleMessageItem) => void;
   recordingIntegration?: RecordingIntegration;
   recordingIntegrationRef: React.MutableRefObject<RecordingIntegration | null>;
@@ -68,8 +73,8 @@ export interface AppDialogsParams {
   currentIDE: IdeInfo | undefined;
 }
 
-function useDialogsState() {
-  const [staticKey, setStaticKey] = useState(0);
+function useDialogsState(turnStore: TurnStore) {
+  const { refreshStatic, setIsProcessing } = turnStore.commands;
   const [debugMessage, setDebugMessage] = useState<string>('');
   const [themeError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -79,7 +84,6 @@ function useDialogsState() {
     IdeContext | undefined
   >();
   const [showEscapePrompt, setShowEscapePrompt] = useState(false);
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [embeddedShellFocused, setEmbeddedShellFocused] = useState(false);
   const [queueErrorMessage, setQueueErrorMessage] = useState<string | null>(
     null,
@@ -88,15 +92,10 @@ function useDialogsState() {
   // the _corgiMode state it previously toggled was never read or rendered.
   const toggleCorgiMode = useCallback(() => {}, []);
   const handleExternalEditorOpen = useCallback(() => {}, []);
-  const refreshStatic = useCallback(() => {
-    setStaticKey((prev) => prev + 1);
-  }, []);
   const handleEscapePromptChange = useCallback((show: boolean) => {
     setShowEscapePrompt(show);
   }, []);
   return {
-    staticKey,
-    setStaticKey,
     refreshStatic,
     handleExternalEditorOpen,
     debugMessage,
@@ -111,7 +110,6 @@ function useDialogsState() {
     setIdeContextState,
     showEscapePrompt,
     setShowEscapePrompt,
-    isProcessing,
     setIsProcessing,
     embeddedShellFocused,
     setEmbeddedShellFocused,
@@ -126,7 +124,8 @@ function useDialogsCore(
   p: AppDialogsParams,
   st: ReturnType<typeof useDialogsState>,
 ) {
-  const { config, settings, addItem, store, dialogs, consoleMessages } = p;
+  const { config, settings, store, dialogs, consoleMessages } = p;
+  const { addItem } = p.turnStore.commands;
   const {
     currentModel,
     setCurrentModel,
@@ -191,13 +190,13 @@ function useDialogsAuthProviders(
   const {
     config,
     settings,
-    addItem,
     handleNewMessage,
     recordingIntegration,
     runtime,
     store,
     dialogs,
   } = p;
+  const { addItem } = p.turnStore.commands;
   const auth = useAuthCommand(settings, dialogs, st.setAuthError);
   const isOAuthCodeDialogOpen = useStoreSelector(store.store, (state) =>
     state.requests.some((r) => r.kind === 'oauthCode'),
@@ -254,7 +253,8 @@ function useDialogsAuth(
   contextLimit: number | undefined,
   setContextLimit: (limit: number | undefined) => void,
 ) {
-  const { config, settings, addItem, store, dialogs } = p;
+  const { config, settings, store, dialogs } = p;
+  const { addItem } = p.turnStore.commands;
   const theme = useThemeCommand(settings, dialogs, addItem);
   const folderTrust = useFolderTrust({
     settings,
@@ -310,15 +310,8 @@ function useDialogsAuth(
 }
 
 function useDialogsProfiles(p: AppDialogsParams) {
-  const {
-    config,
-    agent,
-    settings,
-    addItem,
-    setLlxprtMdFileCount,
-    store,
-    dialogs,
-  } = p;
+  const { config, agent, settings, setLlxprtMdFileCount, store, dialogs } = p;
+  const { addItem } = p.turnStore.commands;
   const loadProfile = useLoadProfileDialog({
     addMessage: (msg) =>
       addItem({ type: msg.type, text: msg.content }, msg.timestamp.getTime()),
@@ -398,7 +391,7 @@ function useTerminalCapabilitySync(
 }
 
 export function useAppDialogs(params: AppDialogsParams) {
-  const st = useDialogsState();
+  const st = useDialogsState(params.turnStore);
   const core = useDialogsCore(params, st);
   useTerminalCapabilitySync(params, core.settingsNonce);
   const auth = useDialogsAuth(

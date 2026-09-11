@@ -40,6 +40,8 @@ import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
 import type { AppAction, AppState } from '../reducers/appReducer.js';
 import { appReducer, initialAppState } from '../reducers/appReducer.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
+import { useStoreSelector } from '../stores/useStoreSelector.js';
+import { createTurnStore, type TurnStore } from '../stores/turn/turnStore.js';
 
 // Context type
 export interface SessionContextType {
@@ -71,11 +73,17 @@ export const SessionContext = createContext<SessionContextType | undefined>(
 interface SessionControllerProps {
   children: React.ReactNode;
   config: CliUiRuntime;
+  /**
+   * Turn store owning the history state. Created per instance when not
+   * supplied (the composition root owns the app-wide instance).
+   */
+  turnStore?: TurnStore;
 }
 
 export const SessionController: React.FC<SessionControllerProps> = ({
   children,
   config,
+  turnStore,
 }) => {
   const runtime = useRuntimeApi();
   const statusSnapshot = runtime.getActiveProviderStatus();
@@ -89,7 +97,7 @@ export const SessionController: React.FC<SessionControllerProps> = ({
 
   return (
     <SessionStateProvider initialState={initialState}>
-      <SessionControllerInner {...{ children, config }} />
+      <SessionControllerInner {...{ children, config, turnStore }} />
     </SessionStateProvider>
   );
 };
@@ -290,11 +298,20 @@ function useModelChangeWatcher(
 const SessionControllerInner: React.FC<SessionControllerProps> = ({
   children,
   config,
+  turnStore: turnStoreProp,
 }) => {
   const [sessionState, dispatch] = useSessionState();
   const [appState, appDispatch] = useReducer(appReducer, initialAppState);
-  const { history, addItem, updateItem, clearItems, loadHistory } =
-    useHistory();
+  const turnStoreRef = useRef<TurnStore | null>(null);
+  const turnStore =
+    turnStoreProp ?? (turnStoreRef.current ??= createTurnStore());
+  const { addItem, updateItem, clearItems, loadHistory } =
+    useHistory(turnStore);
+  const history = useStoreSelector(turnStore.store, (state) => state.history);
+  const pendingAddRequest = useStoreSelector(
+    turnStore.store,
+    (state) => state.pendingAddRequest,
+  );
   const warningTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const checkPaymentModeChange = useCheckPaymentModeChange(
@@ -312,12 +329,15 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
     warningTimerRef,
   );
 
+  // Side-effect channel for out-of-tree add requests (the former appReducer
+  // ADD_ITEM action): the request is recorded synchronously on the store and
+  // this effect performs the add once the state lands (dispatch -> effect).
   useEffect(() => {
-    if (appState.lastAddItemAction) {
-      const { itemData, baseTimestamp } = appState.lastAddItemAction;
+    if (pendingAddRequest) {
+      const { itemData, baseTimestamp } = pendingAddRequest;
       addItem(itemData, baseTimestamp);
     }
-  }, [appState.lastAddItemAction, addItem]);
+  }, [pendingAddRequest, addItem]);
 
   const contextValue = useMemo(
     () => ({

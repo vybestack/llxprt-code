@@ -11,7 +11,6 @@ import {
   type AppState,
   type AppAction,
 } from './appReducer.js';
-import type { HistoryItem } from '../types.js';
 
 describe('appReducer', () => {
   describe('initial state', () => {
@@ -24,7 +23,6 @@ describe('appReducer', () => {
           editor: null,
         },
         needsRelogin: false,
-        lastAddItemAction: null,
       });
     });
 
@@ -32,55 +30,6 @@ describe('appReducer', () => {
       const unknownAction = { type: 'UNKNOWN_ACTION' } as unknown as AppAction;
       const result = appReducer(initialAppState, unknownAction);
       expect(result).toBe(initialAppState);
-    });
-  });
-
-  describe('ADD_ITEM action', () => {
-    it('should store the ADD_ITEM action payload in lastAddItemAction', () => {
-      const itemData: Omit<HistoryItem, 'id'> = {
-        type: 'user',
-        text: 'test message',
-      };
-      const action: AppAction = {
-        type: 'ADD_ITEM',
-        payload: { itemData, baseTimestamp: 1234567890 },
-      };
-
-      const result = appReducer(initialAppState, action);
-
-      expect(result.lastAddItemAction).toStrictEqual({
-        itemData,
-        baseTimestamp: 1234567890,
-      });
-      // Ensure other state is unchanged
-      expect(result.warnings).toBe(initialAppState.warnings);
-      expect(result.errors).toBe(initialAppState.errors);
-    });
-
-    it('should replace previous lastAddItemAction', () => {
-      const firstItem: Omit<HistoryItem, 'id'> = {
-        type: 'user',
-        text: 'first message',
-      };
-      const secondItem: Omit<HistoryItem, 'id'> = {
-        type: 'gemini',
-        text: 'second message',
-      };
-
-      const state1 = appReducer(initialAppState, {
-        type: 'ADD_ITEM',
-        payload: { itemData: firstItem, baseTimestamp: 1000 },
-      });
-
-      const state2 = appReducer(state1, {
-        type: 'ADD_ITEM',
-        payload: { itemData: secondItem, baseTimestamp: 2000 },
-      });
-
-      expect(state2.lastAddItemAction).toStrictEqual({
-        itemData: secondItem,
-        baseTimestamp: 2000,
-      });
     });
   });
 
@@ -373,15 +322,6 @@ describe('appReducer', () => {
     it('should handle multiple state changes correctly', () => {
       let state = initialAppState;
 
-      // Add item
-      state = appReducer(state, {
-        type: 'ADD_ITEM',
-        payload: {
-          itemData: { type: 'user', text: 'test' },
-          baseTimestamp: 1000,
-        },
-      });
-
       // Set warnings
       state = appReducer(state, {
         type: 'SET_WARNING',
@@ -403,10 +343,6 @@ describe('appReducer', () => {
       });
 
       // Verify complete state
-      expect(state.lastAddItemAction).toStrictEqual({
-        itemData: { type: 'user', text: 'test' },
-        baseTimestamp: 1000,
-      });
       expect(state.warnings.size).toBe(2);
       expect(state.warnings.get('warning1')).toBe('First warning');
       expect(state.warnings.get('warning2')).toBe('Second warning');
@@ -432,7 +368,6 @@ describe('appReducer', () => {
           editor: null,
         },
         needsRelogin: false,
-        lastAddItemAction: null,
       };
 
       // Create a deep copy to compare later
@@ -440,7 +375,6 @@ describe('appReducer', () => {
         JSON.stringify({
           warnings: Array.from(originalState.warnings.entries()),
           errors: originalState.errors,
-          lastAddItemAction: originalState.lastAddItemAction,
         }),
       );
 
@@ -454,18 +388,14 @@ describe('appReducer', () => {
         payload: 'new error',
       });
       appReducer(originalState, {
-        type: 'ADD_ITEM',
-        payload: {
-          itemData: { type: 'user', text: 'test' },
-          baseTimestamp: 1000,
-        },
+        type: 'SET_NEEDS_RELOGIN',
+        payload: true,
       });
 
       // Verify original state is unchanged
       const stateAfter = {
         warnings: Array.from(originalState.warnings.entries()),
         errors: originalState.errors,
-        lastAddItemAction: originalState.lastAddItemAction,
       };
 
       expect(stateAfter).toStrictEqual(stateCopy);

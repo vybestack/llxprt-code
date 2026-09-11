@@ -17,6 +17,7 @@ import type { SlashCommandRuntime, UiRuntime } from './cliUiRuntime.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
 import type { AppState, AppAction } from './reducers/appReducer.js';
+import type { HistoryItem } from './types.js';
 import type { OperationLifecycleRegistry } from './hooks/agentStream/operationLifecycle.js';
 import type { MemoryTelemetryController } from './hooks/memoryTrend/memoryTelemetry.js';
 import { UIStateProvider } from './contexts/UIStateContext.js';
@@ -53,6 +54,9 @@ import {
   type TerminalStore,
 } from './stores/terminal/terminalStore.js';
 import { TerminalProvider } from './stores/terminal/TerminalContext.js';
+import { createTurnStore, type TurnStore } from './stores/turn/turnStore.js';
+import { TurnProvider } from './stores/turn/TurnContext.js';
+import { useStoreSelector } from './stores/useStoreSelector.js';
 import { useRef, useMemo } from 'react';
 
 const debug = new DebugLogger('llxprt:ui:appcontainer');
@@ -101,6 +105,7 @@ function buildInputParams(
   dialogOpeners: DialogOpeners,
   store: DialogStore,
   terminalStore: TerminalStore,
+  turnStore: TurnStore,
 ): AppInputParams {
   return {
     streamRuntime: bootstrap.streamRuntime,
@@ -109,11 +114,7 @@ function buildInputParams(
     settings: bootstrap.settings,
     runtime: bootstrap.runtime,
     subagentManager: bootstrap.uiRuntime.app.getSubagentManager(),
-    history: bootstrap.history,
-    addItem: bootstrap.addItem,
-    removeItems: bootstrap.removeItems,
-    clearItems: bootstrap.clearItems,
-    loadHistory: bootstrap.loadHistory,
+    turnStore,
     todos: bootstrap.todos,
     updateTodos: bootstrap.updateTodos,
     recordingIntegrationRef: bootstrap.recordingIntegrationRef,
@@ -142,7 +143,6 @@ function buildInputParams(
     welcomeActions: dialogs.welcomeActions,
     extensionsUpdateState: dialogs.extensionsUpdateState,
     setIsProcessing: dialogs.setIsProcessing,
-    isProcessing: dialogs.isProcessing,
     setEmbeddedShellFocused: dialogs.setEmbeddedShellFocused,
     embeddedShellFocused: dialogs.embeddedShellFocused,
     setAuthError: dialogs.setAuthError,
@@ -162,6 +162,7 @@ function buildLayoutParams(
   input: AppInputResult,
   store: DialogStore,
   terminalStore: TerminalStore,
+  turnStore: TurnStore,
 ): AppLayoutParams {
   return {
     uiRuntime: bootstrap.uiRuntime,
@@ -169,9 +170,7 @@ function buildLayoutParams(
     runtimeMessageBus: bootstrap.runtimeMessageBus,
     consoleMessages: bootstrap.consoleMessages,
     clearConsoleMessagesState: bootstrap.clearConsoleMessagesState,
-    addItem: bootstrap.addItem,
-    clearItems: bootstrap.clearItems,
-    history: bootstrap.history,
+    turnStore,
     refreshStatic: dialogs.refreshStatic,
     renderMarkdown: dialogs.renderMarkdown,
     setRenderMarkdown: dialogs.setRenderMarkdown,
@@ -207,6 +206,7 @@ function buildLayoutParams(
 function buildUIStateParamsCore(
   r: HookResults,
   slashCommandRuntime: SlashCommandRuntime,
+  history: HistoryItem[],
 ) {
   const { bootstrap: b, dialogs: d, input: i } = r;
   return {
@@ -214,7 +214,7 @@ function buildUIStateParamsCore(
     settings: b.settings,
     settingsNonce: d.settingsNonce,
     terminalBackgroundColor: b.uiRuntime.shell.getTerminalBackground(),
-    history: b.history,
+    history,
     pendingHistoryItems: i.pendingHistoryItems,
     streamingState: i.streamingState,
     thought: i.thought,
@@ -233,7 +233,11 @@ function buildUIStateParamsCore(
   };
 }
 
-function buildUIStateParamsExtra(r: HookResults) {
+function buildUIStateParamsExtra(
+  r: HookResults,
+  isProcessing: boolean,
+  staticKey: number,
+) {
   const { bootstrap: b, dialogs: d, input: i, layout: l } = r;
   return {
     profileListItems: d.profileListItems,
@@ -269,7 +273,7 @@ function buildUIStateParamsExtra(r: HookResults) {
     authError: d.authError,
     themeError: d.themeError,
     editorError: d.editorError,
-    isProcessing: d.isProcessing,
+    isProcessing,
     rootUiRef: l.rootUiRef,
     pendingHistoryItemRef: l.pendingHistoryItemRef,
     slashCommands: i.slashCommands,
@@ -280,7 +284,7 @@ function buildUIStateParamsExtra(r: HookResults) {
     welcomeAvailableProviders: d.welcomeAvailableProviders,
     welcomeAvailableModels: d.welcomeAvailableModels,
     inputHistory: i.inputHistoryStore.inputHistory,
-    staticKey: d.staticKey,
+    staticKey,
     debugMessage: d.debugMessage,
     showDebugProfiler: d.showDebugProfiler,
     placeholder: l.placeholder,
@@ -323,12 +327,13 @@ function dialogActionsParams(d: HookResults['dialogs']) {
   };
 }
 
-function buildUIActionsParams(r: HookResults) {
-  const { bootstrap: b, input: i, layout: l } = r;
+function buildUIActionsParams(r: HookResults, turnStore: TurnStore) {
+  const { input: i, layout: l } = r;
+  const { addItem, clearItems, loadHistory } = turnStore.commands;
   return {
-    addItem: b.addItem,
-    clearItems: b.clearItems,
-    loadHistory: b.loadHistory,
+    addItem,
+    clearItems,
+    loadHistory,
     handleUserInputSubmit: i.handleUserInputSubmit,
     handleSteer: i.handleSteer,
     handleClearScreen: l.handleClearScreen,
@@ -358,18 +363,67 @@ function useTerminalStoreInstance(): TerminalStore {
   return terminalStoreRef.current;
 }
 
+/** Same lifetime/StrictMode rules as the terminal store instance. */
+function useTurnStoreInstance(): TurnStore {
+  const turnStoreRef = useRef<TurnStore | null>(null);
+  turnStoreRef.current ??= createTurnStore();
+  return turnStoreRef.current;
+}
+
 /** Guidance nudge for sessions without an active provider configured. */
 function useUnconfiguredGuidance(
   props: AppContainerRuntimeProps,
-  bootstrap: ReturnType<typeof useAppBootstrap>,
+  turnStore: TurnStore,
   dialogStore: DialogStore,
 ): void {
   useUnconfiguredProviderGuidance({
     hasActiveProvider:
       props.uiRuntime.model.getProviderManager()?.hasActiveProvider() ?? false,
-    addItem: bootstrap.addItem,
+    addItem: turnStore.commands.addItem,
     store: dialogStore,
   });
+}
+
+/** Dialog-data runtime: wiring only; every param is bootstrap/store-owned. */
+function useAppDialogsRuntime(
+  props: AppContainerRuntimeProps,
+  bootstrap: AppBootstrapResult,
+  dialogStore: DialogStore,
+  dialogOpeners: DialogOpeners,
+  terminalStore: TerminalStore,
+  turnStore: TurnStore,
+): AppDialogsResult {
+  return useAppDialogs({
+    config: props.slashCommandRuntime,
+    agent: props.agent,
+    settings: bootstrap.settings,
+    store: dialogStore,
+    dialogs: dialogOpeners,
+    terminalStore,
+    turnStore,
+    appDispatch: props.appDispatch,
+    handleNewMessage: bootstrap.handleNewMessage,
+    recordingIntegration: bootstrap.recordingIntegration,
+    recordingIntegrationRef: bootstrap.recordingIntegrationRef,
+    runtime: bootstrap.runtime,
+    consoleMessages: bootstrap.consoleMessages,
+    setLlxprtMdFileCount: bootstrap.setLlxprtMdFileCount,
+    suppressStartupWelcome: props.suppressStartupWelcome,
+    shouldShowIdePrompt: bootstrap.shouldShowIdePrompt,
+    currentIDE: bootstrap.currentIDE,
+  });
+}
+
+/**
+ * Narrow turn-store reads the UIState/UIActions bags still project; the
+ * DefaultAppLayout subtree consumes them through the legacy contexts until
+ * slice D replaces those providers.
+ */
+function useTurnStoreProjection(turnStore: TurnStore) {
+  const history = useStoreSelector(turnStore.store, (s) => s.history);
+  const isProcessing = useStoreSelector(turnStore.store, (s) => s.isProcessing);
+  const staticKey = useStoreSelector(turnStore.store, (s) => s.staticKey);
+  return { history, isProcessing, staticKey };
 }
 
 export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
@@ -383,26 +437,21 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     [dialogStore],
   );
   const terminalStore = useTerminalStoreInstance();
-  const bootstrap = useAppBootstrap({ ...props, terminalStore });
-  const dialogs = useAppDialogs({
-    config: props.slashCommandRuntime,
-    agent: props.agent,
-    settings: bootstrap.settings,
-    store: dialogStore,
-    dialogs: dialogOpeners,
+  const turnStore = useTurnStoreInstance();
+  const {
+    history: turnHistory,
+    isProcessing,
+    staticKey,
+  } = useTurnStoreProjection(turnStore);
+  const bootstrap = useAppBootstrap({ ...props, terminalStore, turnStore });
+  const dialogs = useAppDialogsRuntime(
+    props,
+    bootstrap,
+    dialogStore,
+    dialogOpeners,
     terminalStore,
-    appDispatch: props.appDispatch,
-    addItem: bootstrap.addItem,
-    handleNewMessage: bootstrap.handleNewMessage,
-    recordingIntegration: bootstrap.recordingIntegration,
-    recordingIntegrationRef: bootstrap.recordingIntegrationRef,
-    runtime: bootstrap.runtime,
-    consoleMessages: bootstrap.consoleMessages,
-    setLlxprtMdFileCount: bootstrap.setLlxprtMdFileCount,
-    suppressStartupWelcome: props.suppressStartupWelcome,
-    shouldShowIdePrompt: bootstrap.shouldShowIdePrompt,
-    currentIDE: bootstrap.currentIDE,
-  });
+    turnStore,
+  );
   const input = useAppInput({
     ...buildInputParams(
       bootstrap,
@@ -413,38 +462,48 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
       dialogOpeners,
       dialogStore,
       terminalStore,
+      turnStore,
     ),
     operationLifecycle: props.operationLifecycle,
   });
   const layout = useAppLayout(
-    buildLayoutParams(bootstrap, dialogs, input, dialogStore, terminalStore),
+    buildLayoutParams(
+      bootstrap,
+      dialogs,
+      input,
+      dialogStore,
+      terminalStore,
+      turnStore,
+    ),
   );
-  useUnconfiguredGuidance(props, bootstrap, dialogStore);
+  useUnconfiguredGuidance(props, turnStore, dialogStore);
   const r: HookResults = { bootstrap, dialogs, input, layout };
   const uiState = useUIStateBuilder({
-    ...buildUIStateParamsCore(r, props.slashCommandRuntime),
-    ...buildUIStateParamsExtra(r),
+    ...buildUIStateParamsCore(r, props.slashCommandRuntime, turnHistory),
+    ...buildUIStateParamsExtra(r, isProcessing, staticKey),
   });
-  const uiActions = useUIActionsBuilder(buildUIActionsParams(r));
+  const uiActions = useUIActionsBuilder(buildUIActionsParams(r, turnStore));
   return (
     <TerminalProvider store={terminalStore}>
-      <DialogProvider store={dialogStore}>
-        <UIStateProvider value={uiState}>
-          <UIActionsProvider value={uiActions}>
-            <DefaultAppLayout
-              uiRuntime={bootstrap.uiRuntime}
-              slashCommandRuntime={props.slashCommandRuntime}
-              settings={bootstrap.settings}
-              startupWarnings={bootstrap.startupWarnings}
-              version={props.version}
-              nightly={bootstrap.nightly}
-              mainControlsRef={layout.mainControlsRef}
-              contextFileNames={layout.contextFileNames}
-              updateInfo={bootstrap.updateInfo}
-            />
-          </UIActionsProvider>
-        </UIStateProvider>
-      </DialogProvider>
+      <TurnProvider store={turnStore}>
+        <DialogProvider store={dialogStore}>
+          <UIStateProvider value={uiState}>
+            <UIActionsProvider value={uiActions}>
+              <DefaultAppLayout
+                uiRuntime={bootstrap.uiRuntime}
+                slashCommandRuntime={props.slashCommandRuntime}
+                settings={bootstrap.settings}
+                startupWarnings={bootstrap.startupWarnings}
+                version={props.version}
+                nightly={bootstrap.nightly}
+                mainControlsRef={layout.mainControlsRef}
+                contextFileNames={layout.contextFileNames}
+                updateInfo={bootstrap.updateInfo}
+              />
+            </UIActionsProvider>
+          </UIStateProvider>
+        </DialogProvider>
+      </TurnProvider>
     </TerminalProvider>
   );
 };

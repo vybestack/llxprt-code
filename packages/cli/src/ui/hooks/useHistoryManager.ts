@@ -4,32 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
-import { Buffer } from 'node:buffer';
+import { useEffect, useMemo } from 'react';
 import type { HistoryItem } from '../types.js';
-import { ConversationContext } from '../../utils/ConversationContext.js';
-import {
-  DEFAULT_HISTORY_MAX_BYTES,
-  DEFAULT_HISTORY_MAX_ITEMS,
-} from '../../constants/historyLimits.js';
-
-let globalMessageIdCounter = 0;
-
-/**
- * Marker inserted when an item is too large for the on-screen scrollback
- * budget. The bound is display-only: the model's copy lives in the core
- * `HistoryService` and the complete text is written to the session transcript,
- * so nothing is lost (issue #2852).
- */
-const TRUNCATION_MARKER =
-  '\n[... middle omitted from display; full text is in the session transcript ...]\n';
-
-const DISPLAY_BOUND_NOTICE =
-  '[Item too large to display; full text is in the session transcript]';
-
-type HistoryItemUpdater = (
-  prevItem: HistoryItem,
-) => Partial<Omit<HistoryItem, 'id'>>;
+import { useStoreSelector } from '../stores/useStoreSelector.js';
+import type {
+  HistoryItemUpdater,
+  HistoryLimits,
+} from '../stores/turn/historyLedger.js';
+import { normalizeHistoryLimits } from '../stores/turn/historyLedger.js';
+import type { TurnStore } from '../stores/turn/turnStore.js';
 
 export interface UseHistoryManagerReturn {
   history: HistoryItem[];
@@ -58,379 +41,46 @@ export interface UseHistoryOptions {
   maxBytes?: number;
 }
 
-interface HistoryLimits {
-  readonly maxItems: number;
-  readonly maxBytes: number;
-}
-
-interface HistoryEntry {
-  readonly item: HistoryItem;
-  readonly bytes: number;
-}
-
-interface HistoryState {
-  readonly entries: readonly HistoryEntry[];
-  readonly totalBytes: number;
-}
-
-const EMPTY_HISTORY_STATE: HistoryState = { entries: [], totalBytes: 0 };
-
+/**
+ * History state lives in the TurnStore (issue #2536 slice C2). This hook
+ * keeps the command-orchestration role: it binds the store's history
+ * commands, mirrors cleared conversations into ConversationContext, and
+ * applies the display limits (dispatch -> effect ordering).
+ */
 export function useHistory(
+  turnStore: TurnStore,
   options?: UseHistoryOptions,
 ): UseHistoryManagerReturn {
-  return useRetractableHistory(options);
+  return useRetractableHistory(turnStore, options);
 }
 
 export function useRetractableHistory(
+  turnStore: TurnStore,
   options?: UseHistoryOptions,
 ): RetractableHistoryManagerReturn {
+  const { store, commands } = turnStore;
   const maxItems = options?.maxItems;
   const maxBytes = options?.maxBytes;
-  const limits = useMemo(
+  const limits: HistoryLimits = useMemo(
     () => normalizeHistoryLimits({ maxItems, maxBytes }),
     [maxItems, maxBytes],
   );
-  const [state, setState] = useState<HistoryState>(EMPTY_HISTORY_STATE);
+
+  const history = useStoreSelector(store, (state) => state.history);
 
   useEffect(() => {
-    setState((previous) => trimHistoryState(previous, limits));
-  }, [limits]);
-
-  const getNextMessageId = useCallback((baseTimestamp: number): number => {
-    globalMessageIdCounter += 1;
-    return baseTimestamp * 1000 + globalMessageIdCounter;
-  }, []);
-
-  const loadHistory = useCallback(
-    (newHistory: HistoryItem[]) => {
-      setState(createHistoryState(newHistory, limits));
-    },
-    [limits],
-  );
-
-  const addItem = useCallback(
-    (
-      itemData: Omit<HistoryItem, 'id'>,
-      baseTimestamp: number = Date.now(),
-      _isResuming: boolean = false,
-    ): number => {
-      const id = getNextMessageId(baseTimestamp);
-      const newItem: HistoryItem = { ...itemData, id } as HistoryItem;
-      setState((previous) => appendHistoryItem(previous, newItem, limits));
-      return id;
-    },
-    [getNextMessageId, limits],
-  );
-
-  const updateItem = useCallback(
-    (
-      id: number,
-      updates: Partial<Omit<HistoryItem, 'id'>> | HistoryItemUpdater,
-    ) => {
-      setState((previous) => updateHistoryItem(previous, id, updates, limits));
-    },
-    [limits],
-  );
-
-  const removeItems = useCallback(
-    (ids: readonly number[]) => {
-      setState((previous) => removeHistoryItems(previous, ids, limits));
-    },
-    [limits],
-  );
-
-  const clearItems = useCallback(() => {
-    setState(EMPTY_HISTORY_STATE);
-    ConversationContext.startNewConversation();
-  }, []);
-
-  const history = useMemo(
-    () => state.entries.map((entry) => entry.item),
-    [state.entries],
-  );
+    commands.setHistoryLimits(limits);
+  }, [commands, limits]);
 
   return useMemo(
     () => ({
       history,
-      addItem,
-      updateItem,
-      removeItems,
-      clearItems,
-      loadHistory,
+      addItem: commands.addItem,
+      updateItem: commands.updateItem,
+      removeItems: commands.removeItems,
+      clearItems: commands.clearItems,
+      loadHistory: commands.loadHistory,
     }),
-    [history, addItem, updateItem, removeItems, clearItems, loadHistory],
+    [history, commands],
   );
-}
-
-function normalizeHistoryLimits(options?: UseHistoryOptions): HistoryLimits {
-  return {
-    maxItems: normalizeLimit(options?.maxItems, DEFAULT_HISTORY_MAX_ITEMS),
-    maxBytes: normalizeLimit(options?.maxBytes, DEFAULT_HISTORY_MAX_BYTES),
-  };
-}
-
-function normalizeLimit(
-  value: number | null | undefined,
-  fallback: number,
-): number {
-  if (value === undefined || value === null || !Number.isFinite(value)) {
-    return fallback;
-  }
-  if (value < 0) {
-    return Number.POSITIVE_INFINITY;
-  }
-  return Math.floor(value);
-}
-
-function estimateHistoryItemBytes(item: HistoryItem): number {
-  try {
-    return Buffer.byteLength(JSON.stringify(item), 'utf8');
-  } catch {
-    return 0;
-  }
-}
-
-function createHistoryEntry(
-  item: HistoryItem,
-  maxBytes: number,
-): HistoryEntry | undefined {
-  const bounded = boundHistoryItem(item, maxBytes);
-  if (bounded === undefined) {
-    return undefined;
-  }
-  return { item: bounded, bytes: estimateHistoryItemBytes(bounded) };
-}
-
-function createHistoryState(
-  items: readonly HistoryItem[],
-  limits: HistoryLimits,
-): HistoryState {
-  const entries = items.flatMap((item) => {
-    const entry = createHistoryEntry(item, limits.maxBytes);
-    return entry === undefined ? [] : [entry];
-  });
-  return trimHistoryState(
-    {
-      entries,
-      totalBytes: entries.reduce((total, entry) => total + entry.bytes, 0),
-    },
-    limits,
-  );
-}
-
-function trimHistoryState(
-  state: HistoryState,
-  limits: HistoryLimits,
-): HistoryState {
-  const itemStart = Number.isFinite(limits.maxItems)
-    ? Math.max(0, state.entries.length - limits.maxItems)
-    : 0;
-  const itemBounded = state.entries.slice(itemStart);
-  let totalBytes = itemBounded.reduce((total, entry) => total + entry.bytes, 0);
-  let byteStart = 0;
-  while (totalBytes > limits.maxBytes && byteStart < itemBounded.length - 1) {
-    totalBytes -= itemBounded[byteStart].bytes;
-    byteStart += 1;
-  }
-  return { entries: itemBounded.slice(byteStart), totalBytes };
-}
-
-function appendHistoryItem(
-  previous: HistoryState,
-  newItem: HistoryItem,
-  limits: HistoryLimits,
-): HistoryState {
-  const lastEntry =
-    previous.entries.length > 0
-      ? previous.entries[previous.entries.length - 1]
-      : null;
-  if (
-    lastEntry !== null &&
-    lastEntry.item.type === 'user' &&
-    newItem.type === 'user' &&
-    lastEntry.item.text === newItem.text
-  ) {
-    return previous;
-  }
-  const entry = createHistoryEntry(newItem, limits.maxBytes);
-  if (entry === undefined) {
-    return previous;
-  }
-  return trimHistoryState(
-    {
-      entries: [...previous.entries, entry],
-      totalBytes: previous.totalBytes + entry.bytes,
-    },
-    limits,
-  );
-}
-
-function updateHistoryItem(
-  previous: HistoryState,
-  id: number,
-  updates: Partial<Omit<HistoryItem, 'id'>> | HistoryItemUpdater,
-  limits: HistoryLimits,
-): HistoryState {
-  const index = previous.entries.findIndex((entry) => entry.item.id === id);
-  if (index < 0) {
-    return previous;
-  }
-  const oldEntry = previous.entries[index];
-  const newUpdates =
-    typeof updates === 'function' ? updates(oldEntry.item) : updates;
-  const updatedItem: HistoryItem = {
-    ...oldEntry.item,
-    ...newUpdates,
-  } as HistoryItem;
-  const updatedEntry = createHistoryEntry(updatedItem, limits.maxBytes);
-  const entries =
-    updatedEntry === undefined
-      ? previous.entries
-      : previous.entries.map((entry, entryIndex) =>
-          entryIndex === index ? updatedEntry : entry,
-        );
-  const totalBytes =
-    updatedEntry === undefined
-      ? previous.totalBytes
-      : previous.totalBytes - oldEntry.bytes + updatedEntry.bytes;
-  return trimHistoryState({ entries, totalBytes }, limits);
-}
-
-function removeHistoryItems(
-  previous: HistoryState,
-  ids: readonly number[],
-  limits: HistoryLimits,
-): HistoryState {
-  if (ids.length === 0) {
-    return previous;
-  }
-  const removal = new Set(ids);
-  const entries = previous.entries.filter(
-    (entry) => !removal.has(entry.item.id),
-  );
-  if (entries.length === previous.entries.length) {
-    return previous;
-  }
-  const totalBytes = entries.reduce((total, entry) => total + entry.bytes, 0);
-  return trimHistoryState({ entries, totalBytes }, limits);
-}
-
-function boundHistoryItem(
-  item: HistoryItem,
-  maxBytes: number,
-): HistoryItem | undefined {
-  if (
-    !Number.isFinite(maxBytes) ||
-    estimateHistoryItemBytes(item) <= maxBytes
-  ) {
-    return item;
-  }
-  if (maxBytes <= 0) {
-    return undefined;
-  }
-  if (typeof item.text === 'string') {
-    const fitted = fitHistoryText(item, item.text, maxBytes);
-    if (fitted !== undefined) {
-      return fitted;
-    }
-  }
-  if (item.type === 'tool_group') {
-    const perToolBytes = Math.max(1, Math.floor(maxBytes / item.tools.length));
-    const tools = item.tools.map((tool) => ({
-      ...tool,
-      resultDisplay:
-        typeof tool.resultDisplay === 'string'
-          ? boundUtf8Text(tool.resultDisplay, perToolBytes)
-          : tool.resultDisplay,
-    }));
-    const candidate: HistoryItem = { ...item, tools };
-    if (estimateHistoryItemBytes(candidate) <= maxBytes) {
-      return candidate;
-    }
-  }
-  const fallback: HistoryItem = {
-    id: item.id,
-    type: 'info',
-    text: DISPLAY_BOUND_NOTICE,
-  };
-  return estimateHistoryItemBytes(fallback) <= maxBytes ? fallback : undefined;
-}
-
-/**
- * Fits `text` into the item's byte budget.
- *
- * The budget is computed directly from the item's serialised overhead rather
- * than by binary-searching over `JSON.stringify` of the whole item, which cost
- * `O(log n)` full serialisations per oversized item (issue #2852). JSON
- * escaping can still expand the preview, so the result is verified once and,
- * if needed, rescaled once by the observed expansion.
- */
-function fitHistoryText(
-  item: HistoryItem,
-  text: string,
-  maxBytes: number,
-): HistoryItem | undefined {
-  const overhead = estimateHistoryItemBytes({
-    ...item,
-    text: '',
-  } as HistoryItem);
-  const markerBytes = Buffer.byteLength(TRUNCATION_MARKER, 'utf8');
-  let budget = maxBytes - overhead - markerBytes;
-  if (budget <= 0) {
-    return undefined;
-  }
-
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const candidate: HistoryItem = {
-      ...item,
-      text: previewText(text, budget),
-    } as HistoryItem;
-    const measured = estimateHistoryItemBytes(candidate);
-    if (measured <= maxBytes) {
-      return candidate;
-    }
-    budget = Math.floor(
-      (budget * (maxBytes - overhead)) / (measured - overhead),
-    );
-    if (budget <= 0) {
-      return undefined;
-    }
-  }
-  return undefined;
-}
-
-/** Head and tail of `text` fitting `maxBytes`, joined by the display marker. */
-function previewText(text: string, maxBytes: number): string {
-  const headBytes = Math.ceil(maxBytes / 2);
-  const tailBytes = Math.floor(maxBytes / 2);
-  return `${takeUtf8(text, headBytes, false)}${TRUNCATION_MARKER}${takeUtf8(text, tailBytes, true)}`;
-}
-
-function boundUtf8Text(text: string, maxBytes: number): string {
-  if (Buffer.byteLength(text, 'utf8') <= maxBytes) {
-    return text;
-  }
-  const markerBytes = Buffer.byteLength(TRUNCATION_MARKER, 'utf8');
-  const budget = maxBytes - markerBytes;
-  return budget > 0 ? previewText(text, budget) : '';
-}
-
-/** Head or tail of `text` within `maxBytes`, never splitting a code point. */
-function takeUtf8(text: string, maxBytes: number, fromEnd: boolean): string {
-  const bytes = Buffer.from(text, 'utf8');
-  if (bytes.length <= maxBytes) {
-    return text;
-  }
-  if (!fromEnd) {
-    let end = maxBytes;
-    while (end > 0 && (bytes[end] & 0xc0) === 0x80) {
-      end -= 1;
-    }
-    return bytes.subarray(0, end).toString('utf8');
-  }
-  let start = bytes.length - maxBytes;
-  while (start < bytes.length && (bytes[start] & 0xc0) === 0x80) {
-    start += 1;
-  }
-  return bytes.subarray(start).toString('utf8');
 }

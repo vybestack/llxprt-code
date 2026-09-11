@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useStdin, useStdout } from 'ink';
 import { useResponsive } from '../../../hooks/useResponsive.js';
 import type { TerminalStore } from '../../../stores/terminal/terminalStore.js';
+import type { TurnStore } from '../../../stores/turn/turnStore.js';
 import { useBracketedPaste } from '../../../hooks/useBracketedPaste.js';
 import { useConsoleMessages } from '../../../hooks/useConsoleMessages.js';
 import { useExtensionAutoUpdate } from '../../../hooks/useExtensionAutoUpdate.js';
@@ -17,7 +18,10 @@ import {
   DEFAULT_HISTORY_MAX_BYTES,
   DEFAULT_HISTORY_MAX_ITEMS,
 } from '../../../../constants/historyLimits.js';
-import { useRetractableHistory } from '../../../hooks/useHistoryManager.js';
+import {
+  useRetractableHistory,
+  type UseHistoryManagerReturn,
+} from '../../../hooks/useHistoryManager.js';
 import { useMemoryMonitor } from '../../../hooks/useMemoryMonitor.js';
 import {
   type IContent,
@@ -44,7 +48,6 @@ import { registerCleanup } from '../../../../utils/cleanup.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { MemoryTelemetryController } from '../../../hooks/memoryTrend/memoryTelemetry.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
-import type { HistoryItem } from '../../../types.js';
 import type {
   AgentClientSource,
   StreamRuntime,
@@ -71,6 +74,11 @@ export interface AppBootstrapProps {
   memoryController?: MemoryTelemetryController;
   /** Terminal store; bootstrap owns the focus/narrow writer effects. */
   terminalStore: TerminalStore;
+  /**
+   * Turn store owning history and streamed-turn state; bootstrap binds the
+   * history commands and applies the history display limits.
+   */
+  turnStore: TurnStore;
 }
 
 export interface AppBootstrapResult {
@@ -88,15 +96,6 @@ export interface AppBootstrapResult {
   agentClientSource: AgentClientSource;
   settings: LoadedSettings;
   runtime: ReturnType<typeof useRuntimeApi>;
-  history: HistoryItem[];
-  addItem: (
-    item: Omit<HistoryItem, 'id'>,
-    baseTimestamp?: number,
-    isResuming?: boolean,
-  ) => number;
-  removeItems: (ids: readonly number[]) => void;
-  clearItems: () => void;
-  loadHistory: (newHistory: HistoryItem[]) => void;
   llxprtMdFileCount: number;
   setLlxprtMdFileCount: (count: number) => void;
   coreMemoryFileCount: number;
@@ -164,8 +163,10 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     }),
     [settings.merged.ui.historyMaxItems, settings.merged.ui.historyMaxBytes],
   );
-  const { history, addItem, removeItems, clearItems, loadHistory } =
-    useRetractableHistory(historyLimits);
+  const { addItem, loadHistory } = useRetractableHistory(
+    props.turnStore,
+    historyLimits,
+  );
   const {
     llxprtMdFileCount,
     setLlxprtMdFileCount,
@@ -187,11 +188,7 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     stdin,
     setRawMode,
     nightly,
-    history,
     addItem,
-    removeItems,
-    clearItems,
-    loadHistory,
     llxprtMdFileCount,
     setLlxprtMdFileCount,
     coreMemoryFileCount,
@@ -207,7 +204,7 @@ function useBootstrapTodo() {
 /** Initializes recording, IDE prompt, messages, and token metrics */
 function useBootstrapEvents(
   props: AppBootstrapProps,
-  addItem: AppBootstrapResult['addItem'],
+  addItem: UseHistoryManagerReturn['addItem'],
   setUpdateInfo: React.Dispatch<React.SetStateAction<UpdateObject | null>>,
   runtime: ReturnType<typeof useRuntimeApi>,
 ) {
@@ -299,11 +296,6 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     recordingIntegration: props.recordingIntegration,
     nightly: h.nightly,
     runtime: h.runtime,
-    history: h.history,
-    addItem: h.addItem,
-    removeItems: h.removeItems,
-    clearItems: h.clearItems,
-    loadHistory: h.loadHistory,
     llxprtMdFileCount: h.llxprtMdFileCount,
     setLlxprtMdFileCount: h.setLlxprtMdFileCount,
     coreMemoryFileCount: h.coreMemoryFileCount,

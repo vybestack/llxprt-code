@@ -85,6 +85,7 @@ import { MessageType } from '../types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 // import { AppAction } from '../reducers/appReducer.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
+import { createTurnStore } from '../stores/turn/turnStore.js';
 
 function dispatchAvailability(
   contextValue: SessionContextType | undefined,
@@ -258,18 +259,15 @@ describe('SessionController', () => {
     unmount();
   });
 
-  it('should handle ADD_ITEM actions and call addItem on the session', () => {
+  it('performs pending add requests recorded on the TurnStore', () => {
     mockAddItem.mockReturnValue(1);
 
-    let contextValue: SessionContextType | undefined;
+    const turnStore = createTurnStore();
 
-    const TestComponent = () => {
-      contextValue = React.useContext(SessionContext);
-      return null;
-    };
+    const TestComponent = () => null;
 
     const { unmount, rerender } = render(
-      <SessionController config={mockConfig as Config}>
+      <SessionController config={mockConfig as Config} turnStore={turnStore}>
         <TestComponent />
       </SessionController>,
     );
@@ -277,15 +275,13 @@ describe('SessionController', () => {
     const itemData = { type: MessageType.USER, text: 'Test message' };
     const baseTimestamp = Date.now();
 
-    // Use appDispatch from the context
-    contextValue?.appDispatch({
-      type: 'ADD_ITEM',
-      payload: { itemData, baseTimestamp },
-    });
+    // Record the request on the store (the former appDispatch ADD_ITEM);
+    // the controller's effect performs the add once the state lands.
+    turnStore.commands.requestAddItem(itemData, baseTimestamp);
 
     // Force a re-render to trigger effects
     rerender(
-      <SessionController config={mockConfig as Config}>
+      <SessionController config={mockConfig as Config} turnStore={turnStore}>
         <TestComponent />
       </SessionController>,
     );

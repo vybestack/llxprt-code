@@ -22,6 +22,7 @@ import path from 'node:path';
 import { SessionRecordingService } from '@vybestack/llxprt-code-core';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { useHistory } from './useHistoryManager.js';
+import { createTurnStore } from '../stores/turn/turnStore.js';
 
 const created: string[] = [];
 const services: SessionRecordingService[] = [];
@@ -47,8 +48,9 @@ describe('UI history display bound preserves content elsewhere', () => {
       blocks: [{ type: 'text', text: LARGE_TEXT }],
     });
 
+    const turnStore = createTurnStore();
     const { result } = renderHook(() =>
-      useHistory({ maxItems: 10, maxBytes: 4096 }),
+      useHistory(turnStore, { maxItems: 10, maxBytes: 4096 }),
     );
     act(() => {
       result.current.addItem({ type: 'gemini', text: LARGE_TEXT });

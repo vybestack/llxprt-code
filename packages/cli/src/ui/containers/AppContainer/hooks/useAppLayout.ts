@@ -18,12 +18,12 @@ import { useInputHistoryBootstrap } from './useInputHistoryBootstrap.js';
 import { useInitialPromptSubmit } from './useInitialPromptSubmit.js';
 import { usePowerShellPlaceholder } from './usePowerShellPlaceholder.js';
 import { calculateMainAreaWidth } from '../../../utils/ui-sizing.js';
-import type { HistoryItem } from '../../../types.js';
 import type { AppBootstrapResult } from './useAppBootstrap.js';
 import type { AppDialogsResult } from './useAppDialogs.js';
 import type { AppInputResult } from './useAppInput.js';
 import type { DialogStore } from '../../../stores/dialog/dialogStore.js';
 import type { TerminalStore } from '../../../stores/terminal/terminalStore.js';
+import type { TurnStore } from '../../../stores/turn/turnStore.js';
 import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 import type { UiRuntime } from '../../../cliUiRuntime.js';
 
@@ -34,9 +34,11 @@ export interface AppLayoutParams {
   runtimeMessageBus: AppBootstrapResult['runtimeMessageBus'];
   consoleMessages: AppBootstrapResult['consoleMessages'];
   clearConsoleMessagesState: AppBootstrapResult['clearConsoleMessagesState'];
-  addItem: (item: Omit<HistoryItem, 'id'>, baseTimestamp?: number) => number;
-  clearItems: AppBootstrapResult['clearItems'];
-  history: AppBootstrapResult['history'];
+  /**
+   * Turn store; the command context gets addItem and the clear-screen action
+   * gets clearItems straight from the store commands (stable references).
+   */
+  turnStore: TurnStore;
 
   // From dialogs
   refreshStatic: AppDialogsResult['refreshStatic'];
@@ -125,9 +127,9 @@ function useLayoutKeybindings(p: AppLayoutParams) {
     requestCtrlCExit,
     requestCtrlDExit,
     handleSlashCommand,
-    addItem,
     buffer,
   } = p;
+  const { addItem } = p.turnStore.commands;
   const { commands } = p.terminalStore;
   const display = useTerminalDisplayState(p.terminalStore);
   useKeybindings({
@@ -179,11 +181,11 @@ function useLayoutKeybindings(p: AppLayoutParams) {
 function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
   const {
     uiRuntime,
-    clearItems,
     clearConsoleMessagesState,
     refreshStatic,
     inputHistoryStore,
   } = p;
+  const { clearItems } = p.turnStore.commands;
   useLayoutKeybindings(p);
   const logger = useLogger(uiRuntime.storage);
   useInputHistoryBootstrap({ inputHistoryStore, logger });
