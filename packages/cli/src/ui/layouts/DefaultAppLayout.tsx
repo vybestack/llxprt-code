@@ -12,6 +12,9 @@ import type { UpdateObject } from '../utils/updateCheck.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
 import type { UIActions } from '../contexts/UIActionsContext.js';
+import { useTerminalStore } from '../stores/terminal/TerminalContext.js';
+import { useStoreSelector } from '../stores/useStoreSelector.js';
+import type { TerminalState } from '../stores/terminal/terminalStore.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
 import { OverflowProvider } from '../contexts/OverflowContext.js';
 import { ShowMoreLines } from '../components/ShowMoreLines.js';
@@ -39,9 +42,66 @@ interface DefaultAppLayoutProps {
   version: string;
   nightly: boolean;
   mainControlsRef: React.RefObject<DOMElement | null>;
-  availableTerminalHeight: number;
   contextFileNames: string[];
   updateInfo: UpdateObject | null;
+}
+
+/**
+ * Terminal-plane values the layout root consumes. Each field is a separate
+ * primitive selector so unrelated store writes (e.g. focus flips during
+ * streaming) do not rerender the layout.
+ */
+function useTerminalLayoutState() {
+  const { store } = useTerminalStore();
+  const terminalWidth = useStoreSelector(
+    store,
+    (s: TerminalState) => s.terminalWidth,
+  );
+  const terminalHeight = useStoreSelector(
+    store,
+    (s: TerminalState) => s.terminalHeight,
+  );
+  const mainAreaWidth = useStoreSelector(
+    store,
+    (s: TerminalState) => s.mainAreaWidth,
+  );
+  const inputWidth = useStoreSelector(
+    store,
+    (s: TerminalState) => s.inputWidth,
+  );
+  const isNarrow = useStoreSelector(store, (s: TerminalState) => s.isNarrow);
+  const constrainHeight = useStoreSelector(
+    store,
+    (s: TerminalState) => s.constrainHeight,
+  );
+  const availableTerminalHeight = useStoreSelector(
+    store,
+    (s: TerminalState) => s.availableTerminalHeight,
+  );
+  const showErrorDetails = useStoreSelector(
+    store,
+    (s: TerminalState) => s.showErrorDetails,
+  );
+  const showToolDescriptions = useStoreSelector(
+    store,
+    (s: TerminalState) => s.showToolDescriptions,
+  );
+  const isInputActive = useStoreSelector(
+    store,
+    (s: TerminalState) => s.isInputActive,
+  );
+  return {
+    terminalWidth,
+    terminalHeight,
+    mainAreaWidth,
+    inputWidth,
+    isNarrow,
+    constrainHeight,
+    availableTerminalHeight,
+    showErrorDetails,
+    showToolDescriptions,
+    isInputActive,
+  };
 }
 
 function useDerivedState(
@@ -49,18 +109,18 @@ function useDerivedState(
   uiRuntime: UiRuntime,
   slashCommandRuntime: SlashCommandRuntime,
   settings: LoadedSettings,
-  availableTerminalHeight: number,
+  terminal: ReturnType<typeof useTerminalLayoutState>,
   version: string,
   nightly: boolean,
 ) {
   const layoutSettings = useLayoutSettings(
     uiRuntime,
     settings,
-    availableTerminalHeight,
-    uiState.terminalHeight,
-    uiState.constrainHeight,
-    uiState.availableTerminalHeight,
-    uiState.isNarrow,
+    terminal.availableTerminalHeight,
+    terminal.terminalHeight,
+    terminal.constrainHeight,
+    terminal.availableTerminalHeight,
+    terminal.isNarrow,
   );
 
   const dialogsVisible = useHasActiveDialog();
@@ -70,10 +130,10 @@ function useDerivedState(
     settings,
     version,
     nightly,
-    uiState.terminalWidth,
-    uiState.mainAreaWidth,
+    terminal.terminalWidth,
+    terminal.mainAreaWidth,
     layoutSettings.staticAreaMaxItemHeight,
-    uiState.constrainHeight,
+    terminal.constrainHeight,
     layoutSettings.effectiveAvailableHeight,
     layoutSettings.showTodoPanelSetting,
     uiState,
@@ -99,12 +159,12 @@ export const DefaultAppLayout = ({
   version,
   nightly,
   mainControlsRef,
-  availableTerminalHeight,
   contextFileNames,
   updateInfo,
 }: DefaultAppLayoutProps) => {
   const uiState = useUIState();
   const uiActions = useUIActions();
+  const terminal = useTerminalLayoutState();
   const [, setSuggestionsVisible] = React.useState(false);
 
   const {
@@ -118,13 +178,14 @@ export const DefaultAppLayout = ({
     uiRuntime,
     slashCommandRuntime,
     settings,
-    availableTerminalHeight,
+    terminal,
     version,
     nightly,
   );
 
   const mainControlsSharedProps = buildMainControlsProps(
     uiState,
+    terminal,
     layoutSettings,
     slashCommandRuntime,
     settings,
@@ -140,9 +201,9 @@ export const DefaultAppLayout = ({
   if (uiState.quittingMessages) {
     return (
       <QuittingDisplay
-        constrainHeight={uiState.constrainHeight}
+        constrainHeight={terminal.constrainHeight}
         effectiveAvailableHeight={layoutSettings.effectiveAvailableHeight}
-        terminalWidth={uiState.terminalWidth}
+        terminalWidth={terminal.terminalWidth}
         quittingMessages={uiState.quittingMessages}
         config={slashCommandRuntime}
         slashCommands={uiState.slashCommands}
@@ -153,6 +214,7 @@ export const DefaultAppLayout = ({
 
   return renderLayout(
     uiState,
+    terminal,
     layoutSettings,
     dialogsVisible,
     listItems,
@@ -165,6 +227,7 @@ export const DefaultAppLayout = ({
 
 function renderLayout(
   uiState: ReturnType<typeof useUIState>,
+  terminal: ReturnType<typeof useTerminalLayoutState>,
   layoutSettings: ReturnType<typeof useLayoutSettings>,
   dialogsVisible: boolean,
   listItems: ScrollableMainContentItem[],
@@ -177,8 +240,8 @@ function renderLayout(
     return (
       <StreamingContext.Provider value={uiState.streamingState}>
         <AlternateBufferLayout
-          terminalWidth={uiState.terminalWidth}
-          terminalHeight={uiState.terminalHeight}
+          terminalWidth={terminal.terminalWidth}
+          terminalHeight={terminal.terminalHeight}
           rootUiRef={uiState.rootUiRef}
           dialogsVisible={dialogsVisible}
           listItems={listItems}
@@ -197,7 +260,7 @@ function renderLayout(
         staticItems={staticItems}
         pendingHistoryItemRef={uiState.pendingHistoryItemRef}
         pendingItems={pendingItems}
-        constrainHeight={uiState.constrainHeight}
+        constrainHeight={terminal.constrainHeight}
         mainControlsRef={mainControlsRef}
         mainControlsSharedProps={mainControlsSharedProps}
       />
@@ -207,6 +270,7 @@ function renderLayout(
 
 function buildMainControlsProps(
   uiState: ReturnType<typeof useUIState>,
+  terminal: ReturnType<typeof useTerminalLayoutState>,
   layoutSettings: ReturnType<typeof useLayoutSettings>,
   slashCommandRuntime: SlashCommandRuntime,
   settings: LoadedSettings,
@@ -224,7 +288,7 @@ function buildMainControlsProps(
     startupWarnings,
     updateInfo,
     history: uiState.history,
-    inputWidth: uiState.inputWidth,
+    inputWidth: terminal.inputWidth,
     isTodoPanelCollapsed: uiState.isTodoPanelCollapsed,
     isQueuedMessagesPanelCollapsed: uiState.isQueuedMessagesPanelCollapsed,
     queuedSubmissions: uiState.queuedSubmissions,
@@ -235,7 +299,7 @@ function buildMainControlsProps(
     showMemoryUsage: layoutSettings.showMemoryUsage,
     currentThemeName: layoutSettings.currentThemeName,
     nightly,
-    constrainHeight: uiState.constrainHeight,
+    constrainHeight: terminal.constrainHeight,
     debugConsoleMaxHeight: layoutSettings.debugConsoleMaxHeight,
     effectiveAvailableHeight: layoutSettings.effectiveAvailableHeight,
     disableLoadingPhrases: layoutSettings.disableLoadingPhrases,
@@ -251,12 +315,12 @@ function buildMainControlsProps(
     llxprtMdFileCount: uiState.llxprtMdFileCount,
     coreMemoryFileCount: uiState.coreMemoryFileCount,
     contextFileNames,
-    showToolDescriptions: uiState.showToolDescriptions,
+    showToolDescriptions: terminal.showToolDescriptions,
     showAutoAcceptIndicator: uiState.showAutoAcceptIndicator,
     shellModeActive: uiState.shellModeActive,
-    showErrorDetails: uiState.showErrorDetails,
+    showErrorDetails: terminal.showErrorDetails,
     consoleMessages: uiState.consoleMessages,
-    isInputActive: uiState.isInputActive,
+    isInputActive: terminal.isInputActive,
     vimModeEnabled: uiState.vimModeEnabled,
     vimMode: uiState.vimMode,
     currentModel: uiState.currentModel,
@@ -269,7 +333,6 @@ function buildMainControlsProps(
     historyTokenCount: uiState.historyTokenCount,
     tokenMetrics: uiState.tokenMetrics,
     uiActions,
-    terminalWidth: uiState.terminalWidth,
     onSuggestionsVisibilityChange,
   };
 }

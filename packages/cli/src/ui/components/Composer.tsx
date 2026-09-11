@@ -7,6 +7,9 @@
 import type { LoadedSettings } from '../../config/settings.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
+import { useTerminalStore } from '../stores/terminal/TerminalContext.js';
+import { useStoreSelector } from '../stores/useStoreSelector.js';
+import type { TerminalState } from '../stores/terminal/terminalStore.js';
 import { InputPrompt } from './InputPrompt.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
@@ -49,15 +52,25 @@ export const Composer = ({
   // settings is passed for future use but currently not used
   const uiState = useUIState();
   const uiActions = useUIActions();
+  const { store: terminalStore } = useTerminalStore();
+  const inputWidth = useStoreSelector(
+    terminalStore,
+    (s: TerminalState) => s.inputWidth,
+  );
+  const suggestionsWidth = useStoreSelector(
+    terminalStore,
+    (s: TerminalState) => s.suggestionsWidth,
+  );
+  const isFocused = useStoreSelector(
+    terminalStore,
+    (s: TerminalState) => s.isFocused,
+  );
 
   const {
     buffer,
-    inputWidth,
-    suggestionsWidth,
     slashCommands,
     commandContext,
     shellModeActive,
-    isFocused,
     vimModeEnabled,
     showAutoAcceptIndicator,
     placeholder,

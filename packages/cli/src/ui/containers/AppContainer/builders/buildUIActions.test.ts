@@ -91,11 +91,6 @@ const makeParams = (): UIActionsParams => ({
   // Memory
   performMemoryRefresh: vi.fn(),
 
-  // Display toggles
-  setShowErrorDetails: vi.fn(),
-  setShowToolDescriptions: vi.fn(),
-  setConstrainHeight: vi.fn(),
-
   // Shell mode
   setShellModeActive: vi.fn(),
 
@@ -152,9 +147,6 @@ describe('buildUIActions', () => {
     expect(result.toggleVimEnabled).toBeDefined();
     expect(result.handleSlashCommand).toBeDefined();
     expect(result.performMemoryRefresh).toBeDefined();
-    expect(result.setShowErrorDetails).toBeDefined();
-    expect(result.setShowToolDescriptions).toBeDefined();
-    expect(result.setConstrainHeight).toBeDefined();
     expect(result.setShellModeActive).toBeDefined();
     expect(result.handleEscapePromptChange).toBeDefined();
     expect(result.cancelOngoingRequest).toBeDefined();
@@ -207,9 +199,6 @@ describe('buildUIActions', () => {
     expect(result.toggleVimEnabled).toBe(params.toggleVimEnabled);
     expect(result.handleSlashCommand).toBe(params.handleSlashCommand);
     expect(result.performMemoryRefresh).toBe(params.performMemoryRefresh);
-    expect(result.setShowErrorDetails).toBe(params.setShowErrorDetails);
-    expect(result.setShowToolDescriptions).toBe(params.setShowToolDescriptions);
-    expect(result.setConstrainHeight).toBe(params.setConstrainHeight);
     expect(result.setShellModeActive).toBe(params.setShellModeActive);
     expect(result.handleEscapePromptChange).toBe(
       params.handleEscapePromptChange,

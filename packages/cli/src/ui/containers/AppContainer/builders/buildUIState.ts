@@ -40,12 +40,8 @@ export interface UIStateParams {
   settings: LoadedSettings;
   settingsNonce: number;
 
-  // Terminal dimensions
-  terminalWidth: number;
-  terminalHeight: number;
-  mainAreaWidth: number;
-  inputWidth: number;
-  suggestionsWidth: number;
+  // Terminal background color (dimensions/focus/capabilities live in the
+  // TerminalStore)
   terminalBackgroundColor?: string;
 
   // History and streaming
@@ -91,13 +87,9 @@ export interface UIStateParams {
   quittingMessages: HistoryItem[] | null;
 
   // Display options
-  constrainHeight: boolean;
-  showErrorDetails: boolean;
-  showToolDescriptions: boolean;
   isTodoPanelCollapsed: boolean;
   isQueuedMessagesPanelCollapsed: boolean;
   queuedSubmissions: readonly QueuedSubmission[];
-  isNarrow: boolean;
   vimModeEnabled: boolean;
   vimMode: string | undefined;
 
@@ -134,8 +126,6 @@ export interface UIStateParams {
 
   // Processing states
   isProcessing: boolean;
-  isInputActive: boolean;
-  isFocused: boolean;
 
   // Refs for flicker detection
   rootUiRef: React.RefObject<DOMElement | null>;
@@ -166,22 +156,11 @@ export interface UIStateParams {
   debugMessage: string;
   showDebugProfiler: boolean;
 
-  // Copy mode
-  copyModeEnabled: boolean;
-
-  // Footer height
-  footerHeight: number;
-
   // Placeholder text
   placeholder: string;
 
-  // Available terminal height for content
-  availableTerminalHeight: number;
-
   // Queue error message
   queueErrorMessage: string | null;
-
-  // Markdown rendering toggle
   renderMarkdown: boolean;
 
   // Interactive shell focus state
@@ -194,11 +173,6 @@ function buildCoreAndTerminal(p: UIStateParams) {
     slashCommandRuntime: p.slashCommandRuntime,
     settings: p.settings,
     settingsNonce: p.settingsNonce,
-    terminalWidth: p.terminalWidth,
-    terminalHeight: p.terminalHeight,
-    mainAreaWidth: p.mainAreaWidth,
-    inputWidth: p.inputWidth,
-    suggestionsWidth: p.suggestionsWidth,
     terminalBackgroundColor: p.terminalBackgroundColor,
     history: p.history,
     pendingHistoryItems: p.pendingHistoryItems,
@@ -243,13 +217,9 @@ function buildConfirmationAndExit(p: UIStateParams) {
 
 function buildDisplayAndContext(p: UIStateParams) {
   return {
-    constrainHeight: p.constrainHeight,
-    showErrorDetails: p.showErrorDetails,
-    showToolDescriptions: p.showToolDescriptions,
     isTodoPanelCollapsed: p.isTodoPanelCollapsed,
     isQueuedMessagesPanelCollapsed: p.isQueuedMessagesPanelCollapsed,
     queuedSubmissions: p.queuedSubmissions,
-    isNarrow: p.isNarrow,
     vimModeEnabled: p.vimModeEnabled,
     vimMode: p.vimMode,
     ideContextState: p.ideContextState,
@@ -280,8 +250,6 @@ function buildMetricsAndErrors(p: UIStateParams) {
 function buildProcessingAndCommands(p: UIStateParams) {
   return {
     isProcessing: p.isProcessing,
-    isInputActive: p.isInputActive,
-    isFocused: p.isFocused,
     rootUiRef: p.rootUiRef,
     pendingHistoryItemRef: p.pendingHistoryItemRef,
     slashCommands: p.slashCommands,
@@ -300,10 +268,7 @@ function buildMiscState(p: UIStateParams) {
     staticKey: p.staticKey,
     debugMessage: p.debugMessage,
     showDebugProfiler: p.showDebugProfiler,
-    copyModeEnabled: p.copyModeEnabled,
-    footerHeight: p.footerHeight,
     placeholder: p.placeholder,
-    availableTerminalHeight: p.availableTerminalHeight,
     queueErrorMessage: p.queueErrorMessage,
     renderMarkdown: p.renderMarkdown,
     activeShellPtyId: p.activeShellPtyId,

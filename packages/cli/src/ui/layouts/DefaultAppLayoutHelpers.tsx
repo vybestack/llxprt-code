@@ -560,7 +560,6 @@ export interface MainControlsProps {
     sessionTokenTotal: number;
   };
   uiActions: UIActions;
-  terminalWidth: number;
   onSuggestionsVisibilityChange: (visible: boolean) => void;
 }
 
@@ -586,7 +585,6 @@ export function MainControls(props: MainControlsProps) {
           config={props.config}
           settings={props.settings}
           addItem={props.uiActions.addItem}
-          terminalWidth={props.terminalWidth}
         />
       ) : (
         <InlineContent {...props} />

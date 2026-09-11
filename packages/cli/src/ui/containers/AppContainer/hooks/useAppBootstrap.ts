@@ -8,6 +8,7 @@ import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useStdin, useStdout } from 'ink';
 import { useResponsive } from '../../../hooks/useResponsive.js';
+import type { TerminalStore } from '../../../stores/terminal/terminalStore.js';
 import { useBracketedPaste } from '../../../hooks/useBracketedPaste.js';
 import { useConsoleMessages } from '../../../hooks/useConsoleMessages.js';
 import { useExtensionAutoUpdate } from '../../../hooks/useExtensionAutoUpdate.js';
@@ -68,6 +69,8 @@ export interface AppBootstrapProps {
   initialLockHandle?: LockHandle | null;
   /** P12: optional memory telemetry controller (perf+memory enabled only). */
   memoryController?: MemoryTelemetryController;
+  /** Terminal store; bootstrap owns the focus/narrow writer effects. */
+  terminalStore: TerminalStore;
 }
 
 export interface AppBootstrapResult {
@@ -85,8 +88,6 @@ export interface AppBootstrapResult {
   agentClientSource: AgentClientSource;
   settings: LoadedSettings;
   runtime: ReturnType<typeof useRuntimeApi>;
-  isFocused: boolean;
-  isNarrow: boolean;
   history: HistoryItem[];
   addItem: (
     item: Omit<HistoryItem, 'id'>,
@@ -138,6 +139,14 @@ function useBootstrapHistory(props: AppBootstrapProps) {
   const isFocused = useFocus();
   const { isNarrow } = useResponsive();
   useBracketedPaste();
+  // Focus and narrow-width detection stay here (they own the effects and
+  // platform reads); the values move to the TerminalStore via writer effects.
+  useEffect(() => {
+    props.terminalStore.commands.setFocus(isFocused);
+  }, [props.terminalStore, isFocused]);
+  useEffect(() => {
+    props.terminalStore.commands.setNarrow(isNarrow);
+  }, [props.terminalStore, isNarrow]);
   const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null);
   const { stdout } = useStdout();
   const { stdin, setRawMode } = useStdin();
@@ -172,8 +181,6 @@ function useBootstrapHistory(props: AppBootstrapProps) {
   useMemoryMonitor({ addItem, memoryController: props.memoryController });
   return {
     runtime,
-    isFocused,
-    isNarrow,
     updateInfo,
     setUpdateInfo,
     stdout,
@@ -292,8 +299,6 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     recordingIntegration: props.recordingIntegration,
     nightly: h.nightly,
     runtime: h.runtime,
-    isFocused: h.isFocused,
-    isNarrow: h.isNarrow,
     history: h.history,
     addItem: h.addItem,
     removeItems: h.removeItems,

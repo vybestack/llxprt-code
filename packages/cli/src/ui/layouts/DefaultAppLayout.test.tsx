@@ -18,6 +18,8 @@ void vi.mock('ink', () => realInkModule);
 
 import { DefaultAppLayout } from './DefaultAppLayout.js';
 import { DialogProvider } from '../stores/dialog/DialogContext.js';
+import { TerminalProvider } from '../stores/terminal/TerminalContext.js';
+import { createTerminalStore } from '../stores/terminal/terminalStore.js';
 import {
   createDialogStore,
   DIALOG_PRIORITY,
@@ -186,25 +188,14 @@ function createActionsStub() {
 
 function createBaseUIState() {
   return {
-    terminalWidth: 120,
-    terminalHeight: 40,
-    mainAreaWidth: 120,
-    inputWidth: 120,
-    suggestionsWidth: 60,
-    isNarrow: false,
     history: [],
     pendingHistoryItems: [],
     streamingState: StreamingState.Idle,
     quittingMessages: null,
-    constrainHeight: false,
-    showErrorDetails: false,
-    showToolDescriptions: false,
-    isTodoPanelCollapsed: false,
+    ctrlCPressedOnce: false,
     consoleMessages: [],
     slashCommands: [],
     staticKey: 0,
-    isInputActive: true,
-    ctrlCPressedOnce: false,
     ctrlDPressedOnce: false,
     showEscapePrompt: false,
     ideContextState: undefined,
@@ -226,7 +217,7 @@ function createBaseUIState() {
       sessionTokenTotal: 0,
     },
     currentModel: 'test-model',
-    availableTerminalHeight: 40,
+    isTodoPanelCollapsed: false,
     activeShellPtyId: null,
     embeddedShellFocused: false,
     isQueuedMessagesPanelCollapsed: false,
@@ -327,12 +318,28 @@ function renderDefaultAppLayout(
       version={'0.0.0-test'}
       nightly={false}
       mainControlsRef={{ current: null }}
-      availableTerminalHeight={40}
       contextFileNames={[]}
       updateInfo={null}
     />
   );
-  return render(<DialogProvider store={store}>{inner}</DialogProvider>);
+  // TerminalStore seeding mirrors the dimensions the old UIState fixture
+  // carried (120x40), so layout gating behavior is unchanged.
+  const terminalStore = createTerminalStore({
+    terminalWidth: 120,
+    terminalHeight: 40,
+    mainAreaWidth: 120,
+    inputWidth: 120,
+    suggestionsWidth: 60,
+    isNarrow: false,
+    constrainHeight: false,
+    availableTerminalHeight: 40,
+    isInputActive: true,
+  });
+  return render(
+    <TerminalProvider store={terminalStore}>
+      <DialogProvider store={store}>{inner}</DialogProvider>
+    </TerminalProvider>,
+  );
 }
 
 describe('DefaultAppLayout', () => {

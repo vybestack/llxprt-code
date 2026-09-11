@@ -40,12 +40,8 @@ export interface UIState {
   slashCommandRuntime: SlashCommandRuntime;
   settings: LoadedSettings;
 
-  // Terminal dimensions
-  terminalWidth: number;
-  terminalHeight: number;
-  mainAreaWidth: number;
-  inputWidth: number;
-  suggestionsWidth: number;
+  // Terminal background color (dimensions/focus/capabilities live in the
+  // TerminalStore)
   terminalBackgroundColor?: string;
 
   // History and streaming
@@ -94,13 +90,9 @@ export interface UIState {
   quittingMessages: HistoryItem[] | null;
 
   // Display options
-  constrainHeight: boolean;
-  showErrorDetails: boolean;
-  showToolDescriptions: boolean;
   isTodoPanelCollapsed: boolean;
   isQueuedMessagesPanelCollapsed: boolean;
   queuedSubmissions: readonly QueuedSubmission[];
-  isNarrow: boolean;
   vimModeEnabled: boolean;
   vimMode: string | undefined;
 
@@ -137,8 +129,6 @@ export interface UIState {
 
   // Processing states
   isProcessing: boolean;
-  isInputActive: boolean;
-  isFocused: boolean;
 
   // Refs for flicker detection
   rootUiRef: React.RefObject<DOMElement | null>;
@@ -169,17 +159,8 @@ export interface UIState {
   debugMessage: string;
   showDebugProfiler: boolean;
 
-  // Copy mode
-  copyModeEnabled: boolean;
-
-  // Footer height
-  footerHeight: number;
-
   // Placeholder text
   placeholder: string;
-
-  // Available terminal height for content (after footer measurement)
-  availableTerminalHeight: number;
 
   // Queue error message (displayed when slash/shell commands cannot be queued)
   queueErrorMessage: string | null;

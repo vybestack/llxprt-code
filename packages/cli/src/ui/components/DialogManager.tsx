@@ -63,6 +63,7 @@ import { theme } from '../semantic-colors.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
 import { useDialogStore } from '../stores/dialog/DialogContext.js';
+import { useTerminalStore } from '../stores/terminal/TerminalContext.js';
 import { useStoreSelector } from '../stores/useStoreSelector.js';
 import {
   selectActiveDialog,
@@ -76,7 +77,6 @@ import { firstNonEmptyString } from '../../utils/coalesce.js';
 
 interface DialogManagerProps {
   addItem: UseHistoryManagerReturn['addItem'];
-  terminalWidth: number;
   config: CliUiRuntime;
   settings: LoadedSettings;
 }
@@ -516,6 +516,16 @@ function renderSessionBrowserDialog(
   );
 }
 
+/** Terminal-plane values via narrow primitive selectors (hook-legal site). */
+function useTerminalDialogValues() {
+  const { store } = useTerminalStore();
+  const terminalWidth = useStoreSelector(store, (s) => s.terminalWidth);
+  const terminalHeight = useStoreSelector(store, (s) => s.terminalHeight);
+  const mainAreaWidth = useStoreSelector(store, (s) => s.mainAreaWidth);
+  const constrainHeight = useStoreSelector(store, (s) => s.constrainHeight);
+  return { terminalWidth, terminalHeight, mainAreaWidth, constrainHeight };
+}
+
 function useDialogManagerState(
   addItem: UseHistoryManagerReturn['addItem'],
   config: CliUiRuntime,
@@ -523,10 +533,8 @@ function useDialogManagerState(
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
   runtime: ReturnType<typeof useRuntimeApi>,
-  _terminalWidth: number,
 ) {
-  const { constrainHeight, terminalHeight, mainAreaWidth, commandContext } =
-    uiState;
+  const { commandContext } = uiState;
   const staticExtraHeight = 0;
 
   // Store-backed dialogs are read here — the only hook-legal site — and
@@ -536,6 +544,8 @@ function useDialogManagerState(
     dialogStore.store,
     selectActiveDialog,
   );
+  const { terminalWidth, terminalHeight, mainAreaWidth, constrainHeight } =
+    useTerminalDialogValues();
 
   const currentProvider = useMemo(() => {
     try {
@@ -582,7 +592,7 @@ function useDialogManagerState(
   );
 
   return {
-    terminalWidth: _terminalWidth,
+    terminalWidth,
     constrainHeight,
     terminalHeight,
     mainAreaWidth,
@@ -845,7 +855,6 @@ function renderDialogBody(
 // Props for DialogManager
 export const DialogManager = ({
   addItem,
-  terminalWidth,
   config,
   settings,
 }: DialogManagerProps) => {
@@ -860,7 +869,6 @@ export const DialogManager = ({
     uiState,
     uiActions,
     runtime,
-    terminalWidth,
   );
 
   // NOTE: IdeTrustChangeDialog not yet ported from upstream

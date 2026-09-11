@@ -160,6 +160,8 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
 
 const { DefaultAppLayout } = await import('./DefaultAppLayout.js');
 import { createDialogStore } from '../stores/dialog/dialogStore.js';
+import { TerminalProvider } from '../stores/terminal/TerminalContext.js';
+import { createTerminalStore } from '../stores/terminal/terminalStore.js';
 const { UIStateContext } = await import('../contexts/UIStateContext.js');
 const { UIActionsContext } = await import('../contexts/UIActionsContext.js');
 const { StreamingState } = await import('../types.js');
@@ -167,7 +169,6 @@ const { buildSlashCommandRuntime, buildUiRuntimeFromSource } = await import(
   '../cliUiRuntime.js'
 );
 
-const TERMINAL_WIDTH = 80;
 const TERMINAL_HEIGHT = 24;
 
 /** Sentinel supplied as history-item input; never produced by a stub. */
@@ -244,12 +245,6 @@ function createUIState(
   historyText: string | undefined,
 ) {
   return {
-    terminalWidth: TERMINAL_WIDTH,
-    terminalHeight: TERMINAL_HEIGHT,
-    mainAreaWidth: TERMINAL_WIDTH,
-    inputWidth: TERMINAL_WIDTH,
-    suggestionsWidth: 60,
-    isNarrow: false,
     history:
       historyText === undefined
         ? []
@@ -257,14 +252,6 @@ function createUIState(
     pendingHistoryItems: [],
     streamingState: StreamingState.Idle,
     quittingMessages: null,
-    constrainHeight: false,
-    showErrorDetails: false,
-    showToolDescriptions: false,
-    isTodoPanelCollapsed: false,
-    consoleMessages: [],
-    slashCommands: [],
-    staticKey: 0,
-    isInputActive: true,
     ctrlCPressedOnce: false,
     ctrlDPressedOnce: false,
     showEscapePrompt: false,
@@ -287,7 +274,10 @@ function createUIState(
       sessionTokenTotal: 0,
     },
     currentModel: 'test-model',
-    availableTerminalHeight: TERMINAL_HEIGHT,
+    isTodoPanelCollapsed: false,
+    consoleMessages: [],
+    slashCommands: [],
+    staticKey: 0,
     activeShellPtyId: null,
     embeddedShellFocused: false,
     isQueuedMessagesPanelCollapsed: false,
@@ -342,18 +332,35 @@ function renderLayout({
       value={createUIState(rootUiRef, historyText) as never}
     >
       <UIActionsContext.Provider value={createActions() as never}>
-        <DefaultAppLayout
-          uiRuntime={buildUiRuntimeFromSource(configSource as never)}
-          slashCommandRuntime={buildSlashCommandRuntime(configSource as never)}
-          settings={createSettings(useAlternateBuffer) as never}
-          startupWarnings={[]}
-          version={'0.0.0-test'}
-          nightly={false}
-          mainControlsRef={mainControlsRef}
-          availableTerminalHeight={TERMINAL_HEIGHT}
-          contextFileNames={[]}
-          updateInfo={null}
-        />
+        {/* Terminal-plane state now lives in the TerminalStore; the 80x24
+            seeding mirrors the geometry this suite asserts on. */}
+        <TerminalProvider
+          store={createTerminalStore({
+            terminalWidth: 80,
+            terminalHeight: TERMINAL_HEIGHT,
+            mainAreaWidth: 80,
+            inputWidth: 80,
+            suggestionsWidth: 60,
+            isNarrow: false,
+            constrainHeight: false,
+            availableTerminalHeight: TERMINAL_HEIGHT,
+            isInputActive: true,
+          })}
+        >
+          <DefaultAppLayout
+            uiRuntime={buildUiRuntimeFromSource(configSource as never)}
+            slashCommandRuntime={buildSlashCommandRuntime(
+              configSource as never,
+            )}
+            settings={createSettings(useAlternateBuffer) as never}
+            startupWarnings={[]}
+            version={'0.0.0-test'}
+            nightly={false}
+            mainControlsRef={mainControlsRef}
+            contextFileNames={[]}
+            updateInfo={null}
+          />
+        </TerminalProvider>
       </UIActionsContext.Provider>
     </UIStateContext.Provider>,
   );

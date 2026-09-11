@@ -5,7 +5,7 @@
  */
 
 import type React from 'react';
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAgentStream } from '../../../hooks/agentStream/index.js';
 import type { OperationLifecycleRegistry } from '../../../hooks/agentStream/operationLifecycle.js';
 import { useAutoAcceptIndicator } from '../../../hooks/useAutoAcceptIndicator.js';
@@ -37,6 +37,10 @@ import { useShellFocusAutoReset } from './useShellFocusAutoReset.js';
 import { useSteer } from './useSteer.js';
 import type { DialogOpeners } from '../../../stores/dialog/dialogOpeners.js';
 import type { DialogStore } from '../../../stores/dialog/dialogStore.js';
+import type {
+  TerminalDimensions,
+  TerminalStore,
+} from '../../../stores/terminal/terminalStore.js';
 import type { SlashCommandProcessorActions } from '../../../hooks/slashCommandProcessor.js';
 
 import * as fs from 'fs';
@@ -77,6 +81,8 @@ export interface AppInputParams {
   dialogs: DialogOpeners;
   /** Typed DialogStore; hosts the slash-command confirmation slot. */
   store: DialogStore;
+  /** Terminal store; input owns the dimension writer effect. */
+  terminalStore: TerminalStore;
   /** Domain openers that load data before showing their dialog. */
   openProviderDialog: AppDialogsResult['openProviderDialog'];
   openLoadProfileDialog: AppDialogsResult['openLoadProfileDialog'];
@@ -108,11 +114,36 @@ export interface AppInputParams {
   operationLifecycle?: OperationLifecycleRegistry;
 }
 
-function useInputCoreCallbacks(p: AppInputParams) {
-  const { settings, setAuthError, appDispatch, dialogs } = p;
+/**
+ * Measures the terminal and derives the input/suggestion widths. The values
+ * are written to the TerminalStore (dispatch -> effect ordering); the return
+ * feeds the buffer viewport, which needs the width synchronously.
+ */
+function useTerminalDimensions(
+  terminalStore: TerminalStore,
+): TerminalDimensions {
   const { rows: terminalHeight, columns: terminalWidth } = useTerminalSize();
   const inputWidth = Math.max(20, Math.floor(terminalWidth * 0.9) - 6);
   const suggestionsWidth = Math.max(60, Math.floor(terminalWidth * 0.8));
+  useEffect(() => {
+    terminalStore.commands.setDimensions({
+      terminalWidth,
+      terminalHeight,
+      inputWidth,
+      suggestionsWidth,
+    });
+  }, [
+    terminalStore,
+    terminalWidth,
+    terminalHeight,
+    inputWidth,
+    suggestionsWidth,
+  ]);
+  return { terminalWidth, terminalHeight, inputWidth, suggestionsWidth };
+}
+
+function useInputCoreCallbacks(p: AppInputParams) {
+  const { settings, setAuthError, appDispatch, dialogs } = p;
   const isValidPath = useCallback((filePath: string): boolean => {
     try {
       return fs.existsSync(filePath) && fs.statSync(filePath).isFile();
@@ -136,10 +167,6 @@ function useInputCoreCallbacks(p: AppInputParams) {
     setAuthError('Authentication timed out. Please try again.');
   }, [setAuthError]);
   return {
-    terminalHeight,
-    terminalWidth,
-    inputWidth,
-    suggestionsWidth,
     isValidPath,
     getPreferredEditor,
     onAuthError,
@@ -245,9 +272,10 @@ function useInputCoreProcessors(p: AppInputParams) {
 }
 
 function useInputCore(p: AppInputParams) {
+  const dims = useTerminalDimensions(p.terminalStore);
   const cb = useInputCoreCallbacks(p);
   const proc = useInputCoreProcessors(p);
-  return { ...cb, ...proc };
+  return { dims, ...cb, ...proc };
 }
 
 function useInputBuffer(
@@ -257,8 +285,8 @@ function useInputBuffer(
   const { stdin, setRawMode, runtime } = p;
   const { shellModeActive } = p;
   const viewport = useMemo(
-    () => ({ height: 10, width: core.inputWidth }),
-    [core.inputWidth],
+    () => ({ height: 10, width: core.dims.inputWidth }),
+    [core.dims.inputWidth],
   );
   const buffer = useTextBuffer({
     initialText: '',
@@ -543,6 +571,11 @@ function useInputFinish(
     isAwaitingSlashCommandConfirmation:
       computeIsAwaitingSlashCommandConfirmation(core.pendingHistoryItems),
   });
+  // The composer-active decision lands in the TerminalStore; readers
+  // subscribe instead of receiving it through the hook bag.
+  useEffect(() => {
+    p.terminalStore.commands.setInputActive(isInputActive);
+  }, [p.terminalStore, isInputActive]);
   return {
     handleIdePromptComplete,
     vimHandleInput,
@@ -553,7 +586,6 @@ function useInputFinish(
     currentLoadingPhrase,
     showAutoAcceptIndicator,
     handleSettingsRestart,
-    isInputActive,
   };
 }
 
@@ -561,7 +593,10 @@ export function useAppInput(params: AppInputParams) {
   const core = useInputCore(params);
   const stream = useInputStream(params, core);
   const finish = useInputFinish(params, core, stream);
-  return { ...core, ...stream, ...finish };
+  // Terminal dims live in the TerminalStore; only the buffer viewport keeps a
+  // local copy, so the public bag drops them here.
+  const { dims: _dims, ...publicResult } = { ...core, ...stream, ...finish };
+  return publicResult;
 }
 
 export type AppInputResult = ReturnType<typeof useAppInput>;

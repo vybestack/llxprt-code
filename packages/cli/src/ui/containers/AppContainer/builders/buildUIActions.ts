@@ -104,11 +104,6 @@ export interface UIActionsParams {
   // Memory
   performMemoryRefresh: () => Promise<void>;
 
-  // Display toggles
-  setShowErrorDetails: (show: boolean) => void;
-  setShowToolDescriptions: (show: boolean) => void;
-  setConstrainHeight: (constrain: boolean) => void;
-
   // Shell mode
   setShellModeActive: (active: boolean) => void;
 
@@ -217,13 +212,6 @@ export function buildUIActions(params: UIActionsParams): UIActions {
 
     // Memory
     performMemoryRefresh: params.performMemoryRefresh,
-
-    // Display toggles
-    setShowErrorDetails: params.setShowErrorDetails,
-    setShowToolDescriptions: params.setShowToolDescriptions,
-    setConstrainHeight: params.setConstrainHeight,
-
-    // Shell mode
     setShellModeActive: params.setShellModeActive,
 
     // Escape prompt

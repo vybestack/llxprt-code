@@ -14,6 +14,8 @@ import { MouseProvider } from '../ui/contexts/MouseContext.js';
 import { SettingsContext } from '../ui/contexts/SettingsContext.js';
 import { ShellCommandDisplayProvider } from '../ui/contexts/ShellCommandDisplayContext.js';
 import { UIStateContext, type UIState } from '../ui/contexts/UIStateContext.js';
+import { TerminalProvider } from '../ui/stores/terminal/TerminalContext.js';
+import { createTerminalStore } from '../ui/stores/terminal/terminalStore.js';
 import { StreamingState } from '../ui/types.js';
 
 // Wrapper around ink-testing-library's render that ensures act() is called
@@ -85,8 +87,6 @@ export const createMockSettings = (
 // Tests that need specific UIState values should provide their own.
 const baseMockUiState: Partial<UIState> = {
   streamingState: StreamingState.Idle,
-  mainAreaWidth: 100,
-  terminalWidth: 120,
   terminalBackgroundColor: undefined,
   // Matches the shipped default. Without it, message components fall back to
   // plain-text rendering and code blocks lose their syntax highlighting and
@@ -197,19 +197,21 @@ export const renderWithProviders = (
   render(
     <SettingsContext.Provider value={settings}>
       <UIStateContext.Provider value={uiState as UIState}>
-        <MockRuntimeContextProvider>
-          <KeypressProvider>
-            <MouseProvider mouseEventsEnabled={mouseEventsEnabled}>
-              <ShellCommandDisplayProvider
-                alwaysDisplayFullShellCommand={
-                  settings.merged.ui.alwaysDisplayFullShellCommand ?? true
-                }
-              >
-                {component}
-              </ShellCommandDisplayProvider>
-            </MouseProvider>
-          </KeypressProvider>
-        </MockRuntimeContextProvider>
+        <TerminalProvider store={createTerminalStore()}>
+          <MockRuntimeContextProvider>
+            <KeypressProvider>
+              <MouseProvider mouseEventsEnabled={mouseEventsEnabled}>
+                <ShellCommandDisplayProvider
+                  alwaysDisplayFullShellCommand={
+                    settings.merged.ui.alwaysDisplayFullShellCommand ?? true
+                  }
+                >
+                  {component}
+                </ShellCommandDisplayProvider>
+              </MouseProvider>
+            </KeypressProvider>
+          </MockRuntimeContextProvider>
+        </TerminalProvider>
       </UIStateContext.Provider>
     </SettingsContext.Provider>,
   );

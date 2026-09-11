@@ -40,6 +40,7 @@ import type { LoadedSettings } from '../../../../config/settings.js';
 import type { HistoryItem, ConsoleMessageItem } from '../../../types.js';
 import type { DialogStore } from '../../../stores/dialog/dialogStore.js';
 import type { DialogOpeners } from '../../../stores/dialog/dialogOpeners.js';
+import type { TerminalStore } from '../../../stores/terminal/terminalStore.js';
 import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 
 const QUEUE_ERROR_DISPLAY_DURATION_MS = 3000;
@@ -50,6 +51,8 @@ export interface AppDialogsParams {
   settings: LoadedSettings;
   store: DialogStore;
   dialogs: DialogOpeners;
+  /** Terminal store; dialogs owns the capability-sync writer effect. */
+  terminalStore: TerminalStore;
   /** Dispatch for the reducer-held actions OAuth completion still needs. */
   appDispatch: React.Dispatch<AppAction>;
   addItem: (item: Omit<HistoryItem, 'id'>, baseTimestamp?: number) => number;
@@ -67,12 +70,10 @@ export interface AppDialogsParams {
 
 function useDialogsState() {
   const [staticKey, setStaticKey] = useState(0);
-  const [constrainHeight, setConstrainHeight] = useState<boolean>(true);
   const [debugMessage, setDebugMessage] = useState<string>('');
   const [themeError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [editorError] = useState<string | null>(null);
-  const [footerHeight, setFooterHeight] = useState<number>(0);
   const [shellModeActive, setShellModeActive] = useState(false);
   const [ideContextState, setIdeContextState] = useState<
     IdeContext | undefined
@@ -96,8 +97,6 @@ function useDialogsState() {
   return {
     staticKey,
     setStaticKey,
-    constrainHeight,
-    setConstrainHeight,
     refreshStatic,
     handleExternalEditorOpen,
     debugMessage,
@@ -106,8 +105,6 @@ function useDialogsState() {
     authError,
     setAuthError,
     editorError,
-    footerHeight,
-    setFooterHeight,
     shellModeActive,
     setShellModeActive,
     ideContextState,
@@ -190,7 +187,6 @@ function useDialogsAuthProviders(
   setCurrentModelLabel: (label: string) => void,
   contextLimit: number | undefined,
   setContextLimit: (limit: number | undefined) => void,
-  setShowErrorDetails: (value: boolean) => void,
 ) {
   const {
     config,
@@ -235,8 +231,8 @@ function useDialogsAuthProviders(
   });
   useAppEventHandlers({
     handleNewMessage,
-    setShowErrorDetails,
-    setConstrainHeight: st.setConstrainHeight,
+    setShowErrorDetails: p.terminalStore.commands.setShowErrorDetails,
+    setConstrainHeight: p.terminalStore.commands.setConstrainHeight,
   });
   return {
     handleAuthSelect: auth.handleAuthSelect,
@@ -257,7 +253,6 @@ function useDialogsAuth(
   setCurrentModelLabel: (label: string) => void,
   contextLimit: number | undefined,
   setContextLimit: (limit: number | undefined) => void,
-  setShowErrorDetails: (value: boolean) => void,
 ) {
   const { config, settings, addItem, store, dialogs } = p;
   const theme = useThemeCommand(settings, dialogs, addItem);
@@ -300,7 +295,6 @@ function useDialogsAuth(
     setCurrentModelLabel,
     contextLimit,
     setContextLimit,
-    setShowErrorDetails,
   );
   return {
     handleThemeSelect: theme.handleThemeSelect,
@@ -352,8 +346,6 @@ function useDialogsProfiles(p: AppDialogsParams) {
     addItem,
     setLlxprtMdFileCount,
   });
-  const useAlternateBuffer =
-    settings.merged.ui.useAlternateBuffer === true && !config.getScreenReader();
   return {
     openLoadProfileDialog: loadProfile.openDialog,
     handleProfileSelect: loadProfile.handleSelect,
@@ -382,13 +374,33 @@ function useDialogsProfiles(p: AppDialogsParams) {
     toolsDialogDisabledTools: toolsRaw.disabledTools,
     handleToolsSelect: toolsRaw.handleSelect,
     performMemoryRefresh,
-    useAlternateBuffer,
   };
+}
+
+/**
+ * Terminal capability flags follow settings and the host terminal. The
+ * settingsNonce dep re-syncs when CoreEvent.SettingsChanged fires (settings
+ * can keep identity while merged values flip).
+ */
+function useTerminalCapabilitySync(
+  p: AppDialogsParams,
+  settingsNonce: number,
+): void {
+  const { config, settings, terminalStore } = p;
+  useEffect(() => {
+    terminalStore.commands.setCapabilities({
+      useAlternateBuffer:
+        settings.merged.ui.useAlternateBuffer === true &&
+        !config.getScreenReader(),
+      screenReaderEnabled: config.getScreenReader(),
+    });
+  }, [config, settings, terminalStore, settingsNonce]);
 }
 
 export function useAppDialogs(params: AppDialogsParams) {
   const st = useDialogsState();
   const core = useDialogsCore(params, st);
+  useTerminalCapabilitySync(params, core.settingsNonce);
   const auth = useDialogsAuth(
     params,
     st,
@@ -398,7 +410,6 @@ export function useAppDialogs(params: AppDialogsParams) {
     core.setCurrentModelLabel,
     core.contextLimit,
     core.setContextLimit,
-    core.setShowErrorDetails,
   );
   const profiles = useDialogsProfiles(params);
   const [startupGuardsInitialized, setStartupGuardsInitialized] =

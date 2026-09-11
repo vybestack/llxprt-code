@@ -48,6 +48,11 @@ import {
   type DialogOpeners,
 } from './stores/dialog/dialogOpeners.js';
 import { DialogProvider } from './stores/dialog/DialogContext.js';
+import {
+  createTerminalStore,
+  type TerminalStore,
+} from './stores/terminal/terminalStore.js';
+import { TerminalProvider } from './stores/terminal/TerminalContext.js';
 import { useRef, useMemo } from 'react';
 
 const debug = new DebugLogger('llxprt:ui:appcontainer');
@@ -95,6 +100,7 @@ function buildInputParams(
   slashCommandRuntime: SlashCommandRuntime,
   dialogOpeners: DialogOpeners,
   store: DialogStore,
+  terminalStore: TerminalStore,
 ): AppInputParams {
   return {
     streamRuntime: bootstrap.streamRuntime,
@@ -121,6 +127,7 @@ function buildInputParams(
     setLlxprtMdFileCount: bootstrap.setLlxprtMdFileCount,
     dialogs: dialogOpeners,
     store,
+    terminalStore,
     openProviderDialog: dialogs.openProviderDialog,
     openLoadProfileDialog: dialogs.openLoadProfileDialog,
     openCreateProfileDialog: dialogs.openCreateProfileDialog,
@@ -154,6 +161,7 @@ function buildLayoutParams(
   dialogs: AppDialogsResult,
   input: AppInputResult,
   store: DialogStore,
+  terminalStore: TerminalStore,
 ): AppLayoutParams {
   return {
     uiRuntime: bootstrap.uiRuntime,
@@ -164,13 +172,7 @@ function buildLayoutParams(
     addItem: bootstrap.addItem,
     clearItems: bootstrap.clearItems,
     history: bootstrap.history,
-    constrainHeight: dialogs.constrainHeight,
-    setConstrainHeight: dialogs.setConstrainHeight,
     refreshStatic: dialogs.refreshStatic,
-    showErrorDetails: dialogs.showErrorDetails,
-    setShowErrorDetails: dialogs.setShowErrorDetails,
-    showToolDescriptions: dialogs.showToolDescriptions,
-    setShowToolDescriptions: dialogs.setShowToolDescriptions,
     renderMarkdown: dialogs.renderMarkdown,
     setRenderMarkdown: dialogs.setRenderMarkdown,
     isTodoPanelCollapsed: dialogs.isTodoPanelCollapsed,
@@ -178,14 +180,10 @@ function buildLayoutParams(
     isQueuedMessagesPanelCollapsed: dialogs.isQueuedMessagesPanelCollapsed,
     setIsQueuedMessagesPanelCollapsed:
       dialogs.setIsQueuedMessagesPanelCollapsed,
-    setFooterHeight: dialogs.setFooterHeight,
-    footerHeight: dialogs.footerHeight,
-    copyModeEnabled: dialogs.copyModeEnabled,
-    setCopyModeEnabled: dialogs.setCopyModeEnabled,
-    useAlternateBuffer: dialogs.useAlternateBuffer,
     ideContextState: dialogs.ideContextState,
     setDebugMessage: dialogs.setDebugMessage,
     store,
+    terminalStore,
     embeddedShellFocused: dialogs.embeddedShellFocused,
     setEmbeddedShellFocused: dialogs.setEmbeddedShellFocused,
     startupGuardsInitialized: dialogs.startupGuardsInitialized,
@@ -202,8 +200,6 @@ function buildLayoutParams(
     handleSteer: input.handleSteer,
     interactiveRuntimeReady: input.interactiveRuntimeReady,
     vimModeEnabled: input.vimModeEnabled,
-    terminalHeight: input.terminalHeight,
-    terminalWidth: input.terminalWidth,
     buffer: input.buffer,
   };
 }
@@ -217,10 +213,6 @@ function buildUIStateParamsCore(
     slashCommandRuntime,
     settings: b.settings,
     settingsNonce: d.settingsNonce,
-    terminalWidth: i.terminalWidth,
-    terminalHeight: i.terminalHeight,
-    inputWidth: i.inputWidth,
-    suggestionsWidth: i.suggestionsWidth,
     terminalBackgroundColor: b.uiRuntime.shell.getTerminalBackground(),
     history: b.history,
     pendingHistoryItems: i.pendingHistoryItems,
@@ -255,19 +247,14 @@ function buildUIStateParamsExtra(r: HookResults) {
     ctrlDPressedOnce: i.ctrlDPressedOnce,
     showEscapePrompt: d.showEscapePrompt,
     quittingMessages: i.quittingMessages,
-    constrainHeight: d.constrainHeight,
-    showErrorDetails: d.showErrorDetails,
-    showToolDescriptions: d.showToolDescriptions,
     isTodoPanelCollapsed: d.isTodoPanelCollapsed,
     isQueuedMessagesPanelCollapsed: d.isQueuedMessagesPanelCollapsed,
     queuedSubmissions: i.queuedSubmissions,
-    isNarrow: b.isNarrow,
     vimModeEnabled: i.vimModeEnabled,
     vimMode: i.vimMode,
     ideContextState: d.ideContextState,
     llxprtMdFileCount: b.llxprtMdFileCount,
     coreMemoryFileCount: b.coreMemoryFileCount,
-    mainAreaWidth: l.mainAreaWidth,
     branchName: l.branchName,
     branchIsDirty: l.branchIsDirty,
     errorCount: d.errorCount,
@@ -283,8 +270,6 @@ function buildUIStateParamsExtra(r: HookResults) {
     themeError: d.themeError,
     editorError: d.editorError,
     isProcessing: d.isProcessing,
-    isInputActive: i.isInputActive,
-    isFocused: b.isFocused,
     rootUiRef: l.rootUiRef,
     pendingHistoryItemRef: l.pendingHistoryItemRef,
     slashCommands: i.slashCommands,
@@ -298,10 +283,7 @@ function buildUIStateParamsExtra(r: HookResults) {
     staticKey: d.staticKey,
     debugMessage: d.debugMessage,
     showDebugProfiler: d.showDebugProfiler,
-    copyModeEnabled: d.copyModeEnabled,
-    footerHeight: d.footerHeight,
     placeholder: l.placeholder,
-    availableTerminalHeight: l.availableTerminalHeight,
     queueErrorMessage: d.queueErrorMessage,
     renderMarkdown: d.renderMarkdown,
     activeShellPtyId: i.activeShellPtyId,
@@ -335,9 +317,6 @@ function dialogActionsParams(d: HookResults['dialogs']) {
     // DialogStore; this is the domain side effect of the migration nudge.
     onWorkspaceMigrationDialogOpen: d.onWorkspaceMigrationDialogOpen,
     performMemoryRefresh: d.performMemoryRefresh,
-    setShowErrorDetails: d.setShowErrorDetails,
-    setShowToolDescriptions: d.setShowToolDescriptions,
-    setConstrainHeight: d.setConstrainHeight,
     setShellModeActive: d.setShellModeActive,
     handleEscapePromptChange: d.handleEscapePromptChange,
     setQueueErrorMessage: d.setQueueErrorMessage,
@@ -369,6 +348,30 @@ function buildUIActionsParams(r: HookResults) {
   };
 }
 
+/**
+ * Store instances live for the lifetime of the mounted app; the ref keeps
+ * StrictMode double-mounts from creating a second instance.
+ */
+function useTerminalStoreInstance(): TerminalStore {
+  const terminalStoreRef = useRef<TerminalStore | null>(null);
+  terminalStoreRef.current ??= createTerminalStore();
+  return terminalStoreRef.current;
+}
+
+/** Guidance nudge for sessions without an active provider configured. */
+function useUnconfiguredGuidance(
+  props: AppContainerRuntimeProps,
+  bootstrap: ReturnType<typeof useAppBootstrap>,
+  dialogStore: DialogStore,
+): void {
+  useUnconfiguredProviderGuidance({
+    hasActiveProvider:
+      props.uiRuntime.model.getProviderManager()?.hasActiveProvider() ?? false,
+    addItem: bootstrap.addItem,
+    store: dialogStore,
+  });
+}
+
 export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
   debug.debug('AppContainer architecture active (v2)');
   const dialogStoreRef = useRef<DialogStore | null>(null);
@@ -379,13 +382,15 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     () => createDialogOpeners(dialogStore),
     [dialogStore],
   );
-  const bootstrap = useAppBootstrap(props);
+  const terminalStore = useTerminalStoreInstance();
+  const bootstrap = useAppBootstrap({ ...props, terminalStore });
   const dialogs = useAppDialogs({
     config: props.slashCommandRuntime,
     agent: props.agent,
     settings: bootstrap.settings,
     store: dialogStore,
     dialogs: dialogOpeners,
+    terminalStore,
     appDispatch: props.appDispatch,
     addItem: bootstrap.addItem,
     handleNewMessage: bootstrap.handleNewMessage,
@@ -407,18 +412,14 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
       props.slashCommandRuntime,
       dialogOpeners,
       dialogStore,
+      terminalStore,
     ),
     operationLifecycle: props.operationLifecycle,
   });
   const layout = useAppLayout(
-    buildLayoutParams(bootstrap, dialogs, input, dialogStore),
+    buildLayoutParams(bootstrap, dialogs, input, dialogStore, terminalStore),
   );
-  useUnconfiguredProviderGuidance({
-    hasActiveProvider:
-      props.uiRuntime.model.getProviderManager()?.hasActiveProvider() ?? false,
-    addItem: bootstrap.addItem,
-    store: dialogStore,
-  });
+  useUnconfiguredGuidance(props, bootstrap, dialogStore);
   const r: HookResults = { bootstrap, dialogs, input, layout };
   const uiState = useUIStateBuilder({
     ...buildUIStateParamsCore(r, props.slashCommandRuntime),
@@ -426,23 +427,24 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
   });
   const uiActions = useUIActionsBuilder(buildUIActionsParams(r));
   return (
-    <DialogProvider store={dialogStore}>
-      <UIStateProvider value={uiState}>
-        <UIActionsProvider value={uiActions}>
-          <DefaultAppLayout
-            uiRuntime={bootstrap.uiRuntime}
-            slashCommandRuntime={props.slashCommandRuntime}
-            settings={bootstrap.settings}
-            startupWarnings={bootstrap.startupWarnings}
-            version={props.version}
-            nightly={bootstrap.nightly}
-            mainControlsRef={layout.mainControlsRef}
-            availableTerminalHeight={layout.availableTerminalHeight}
-            contextFileNames={layout.contextFileNames}
-            updateInfo={bootstrap.updateInfo}
-          />
-        </UIActionsProvider>
-      </UIStateProvider>
-    </DialogProvider>
+    <TerminalProvider store={terminalStore}>
+      <DialogProvider store={dialogStore}>
+        <UIStateProvider value={uiState}>
+          <UIActionsProvider value={uiActions}>
+            <DefaultAppLayout
+              uiRuntime={bootstrap.uiRuntime}
+              slashCommandRuntime={props.slashCommandRuntime}
+              settings={bootstrap.settings}
+              startupWarnings={bootstrap.startupWarnings}
+              version={props.version}
+              nightly={bootstrap.nightly}
+              mainControlsRef={layout.mainControlsRef}
+              contextFileNames={layout.contextFileNames}
+              updateInfo={bootstrap.updateInfo}
+            />
+          </UIActionsProvider>
+        </UIStateProvider>
+      </DialogProvider>
+    </TerminalProvider>
   );
 };

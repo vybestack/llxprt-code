@@ -119,11 +119,6 @@ export interface UIActions {
   // Memory
   performMemoryRefresh: () => Promise<void>;
 
-  // Display toggles
-  setShowErrorDetails: (show: boolean) => void;
-  setShowToolDescriptions: (show: boolean) => void;
-  setConstrainHeight: (constrain: boolean) => void;
-
   // Shell mode
   setShellModeActive: (active: boolean) => void;
 

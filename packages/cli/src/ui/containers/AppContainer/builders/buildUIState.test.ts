@@ -16,13 +16,6 @@ const makeParams = (): UIStateParams => ({
   settings: {} as UIStateParams['settings'],
   settingsNonce: 0,
 
-  // Terminal dimensions
-  terminalWidth: 0,
-  terminalHeight: 0,
-  mainAreaWidth: 0,
-  inputWidth: 0,
-  suggestionsWidth: 0,
-
   // History and streaming
   history: [],
   pendingHistoryItems: [],
@@ -61,13 +54,9 @@ const makeParams = (): UIStateParams => ({
   quittingMessages: null,
 
   // Display options
-  constrainHeight: false,
-  showErrorDetails: false,
-  showToolDescriptions: false,
   isTodoPanelCollapsed: false,
   isQueuedMessagesPanelCollapsed: false,
   queuedSubmissions: [],
-  isNarrow: false,
   vimModeEnabled: false,
   vimMode: undefined,
 
@@ -103,8 +92,6 @@ const makeParams = (): UIStateParams => ({
 
   // Processing states
   isProcessing: false,
-  isInputActive: false,
-  isFocused: false,
 
   // Refs for flicker detection
   rootUiRef: { current: null },
@@ -135,17 +122,8 @@ const makeParams = (): UIStateParams => ({
   debugMessage: '',
   showDebugProfiler: false,
 
-  // Copy mode
-  copyModeEnabled: false,
-
-  // Footer height
-  footerHeight: 0,
-
   // Placeholder text
   placeholder: '',
-
-  // Available terminal height for content
-  availableTerminalHeight: 0,
 
   // Queue error message
   queueErrorMessage: null,
@@ -166,11 +144,6 @@ describe('buildUIState', () => {
     expect(result.slashCommandRuntime).toBe(params.slashCommandRuntime);
     expect(result.settings).toBe(params.settings);
     expect(result.settingsNonce).toBe(0);
-    expect(result.terminalWidth).toBe(0);
-    expect(result.terminalHeight).toBe(0);
-    expect(result.mainAreaWidth).toBe(0);
-    expect(result.inputWidth).toBe(0);
-    expect(result.suggestionsWidth).toBe(0);
     expect(result.history).toBe(params.history);
     expect(result.pendingHistoryItems).toBe(params.pendingHistoryItems);
     expect(result.streamingState).toBe(StreamingState.Idle);
@@ -181,8 +154,6 @@ describe('buildUIState', () => {
     expect(result.consoleMessages).toBe(params.consoleMessages);
     expect(result.elapsedTime).toBe(0);
     expect(result.isProcessing).toBe(false);
-    expect(result.isInputActive).toBe(false);
-    expect(result.isFocused).toBe(false);
     expect(result.rootUiRef).toBe(params.rootUiRef);
     expect(result.pendingHistoryItemRef).toBe(params.pendingHistoryItemRef);
     expect(result.commandContext).toBe(params.commandContext);
@@ -190,10 +161,7 @@ describe('buildUIState', () => {
     expect(result.staticKey).toBe(0);
     expect(result.debugMessage).toBe('');
     expect(result.showDebugProfiler).toBe(false);
-    expect(result.copyModeEnabled).toBe(false);
-    expect(result.footerHeight).toBe(0);
     expect(result.placeholder).toBe('');
-    expect(result.availableTerminalHeight).toBe(0);
     expect(result.queueErrorMessage).toBeNull();
     expect(result.renderMarkdown).toBe(false);
     expect(result.activeShellPtyId).toBeNull();

@@ -23,6 +23,8 @@ import type { AppBootstrapResult } from './useAppBootstrap.js';
 import type { AppDialogsResult } from './useAppDialogs.js';
 import type { AppInputResult } from './useAppInput.js';
 import type { DialogStore } from '../../../stores/dialog/dialogStore.js';
+import type { TerminalStore } from '../../../stores/terminal/terminalStore.js';
+import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 import type { UiRuntime } from '../../../cliUiRuntime.js';
 
 export interface AppLayoutParams {
@@ -37,28 +39,19 @@ export interface AppLayoutParams {
   history: AppBootstrapResult['history'];
 
   // From dialogs
-  constrainHeight: AppDialogsResult['constrainHeight'];
-  setConstrainHeight: AppDialogsResult['setConstrainHeight'];
   refreshStatic: AppDialogsResult['refreshStatic'];
-  showErrorDetails: AppDialogsResult['showErrorDetails'];
-  setShowErrorDetails: AppDialogsResult['setShowErrorDetails'];
-  showToolDescriptions: AppDialogsResult['showToolDescriptions'];
-  setShowToolDescriptions: AppDialogsResult['setShowToolDescriptions'];
   renderMarkdown: AppDialogsResult['renderMarkdown'];
   setRenderMarkdown: AppDialogsResult['setRenderMarkdown'];
   isTodoPanelCollapsed: AppDialogsResult['isTodoPanelCollapsed'];
   setIsTodoPanelCollapsed: AppDialogsResult['setIsTodoPanelCollapsed'];
   isQueuedMessagesPanelCollapsed: AppDialogsResult['isQueuedMessagesPanelCollapsed'];
   setIsQueuedMessagesPanelCollapsed: AppDialogsResult['setIsQueuedMessagesPanelCollapsed'];
-  setFooterHeight: AppDialogsResult['setFooterHeight'];
-  footerHeight: AppDialogsResult['footerHeight'];
-  copyModeEnabled: AppDialogsResult['copyModeEnabled'];
-  setCopyModeEnabled: AppDialogsResult['setCopyModeEnabled'];
-  useAlternateBuffer: AppDialogsResult['useAlternateBuffer'];
   ideContextState: AppDialogsResult['ideContextState'];
   setDebugMessage: AppDialogsResult['setDebugMessage'];
   /** Typed DialogStore; dialog-open state is read through narrow selectors. */
   store: DialogStore;
+  /** Terminal store; layout reads dimensions/prefs and writes derived sizes. */
+  terminalStore: TerminalStore;
   embeddedShellFocused: AppDialogsResult['embeddedShellFocused'];
   setEmbeddedShellFocused: AppDialogsResult['setEmbeddedShellFocused'];
   startupGuardsInitialized: AppDialogsResult['startupGuardsInitialized'];
@@ -77,83 +70,47 @@ export interface AppLayoutParams {
   handleSteer: AppInputResult['handleSteer'];
   interactiveRuntimeReady: AppInputResult['interactiveRuntimeReady'];
   vimModeEnabled: AppInputResult['vimModeEnabled'];
-  terminalHeight: AppInputResult['terminalHeight'];
-  terminalWidth: AppInputResult['terminalWidth'];
   buffer: AppInputResult['buffer'];
 }
-function pickCopyModeKeybindingState(p: AppLayoutParams) {
+
+/**
+ * Terminal-backed display state for the keybinding layer. Values arrive via
+ * narrow primitive selectors; setters come straight from the store commands.
+ */
+function useTerminalDisplayState(terminalStore: TerminalStore) {
+  const constrainHeight = useStoreSelector(
+    terminalStore.store,
+    (s) => s.constrainHeight,
+  );
+  const showErrorDetails = useStoreSelector(
+    terminalStore.store,
+    (s) => s.showErrorDetails,
+  );
+  const showToolDescriptions = useStoreSelector(
+    terminalStore.store,
+    (s) => s.showToolDescriptions,
+  );
+  const copyModeEnabled = useStoreSelector(
+    terminalStore.store,
+    (s) => s.copyModeEnabled,
+  );
+  const useAlternateBuffer = useStoreSelector(
+    terminalStore.store,
+    (s) => s.useAlternateBuffer,
+  );
   return {
-    copyModeEnabled: p.copyModeEnabled,
-    setCopyModeEnabled: p.setCopyModeEnabled,
-    useAlternateBuffer: p.useAlternateBuffer,
+    constrainHeight,
+    showErrorDetails,
+    showToolDescriptions,
+    copyModeEnabled,
+    useAlternateBuffer,
   };
 }
 
-function buildKeybindingsConfig(
-  p: AppLayoutParams,
-  exitState: {
-    requestCtrlCExit: AppLayoutParams['requestCtrlCExit'];
-    requestCtrlDExit: AppLayoutParams['requestCtrlDExit'];
-    ctrlCPressedOnce: AppLayoutParams['ctrlCPressedOnce'];
-    cancelOngoingRequest: AppLayoutParams['cancelOngoingRequest'];
-    bufferTextLength: number;
-  },
-  displayState: {
-    showErrorDetails: AppLayoutParams['showErrorDetails'];
-    setShowErrorDetails: AppLayoutParams['setShowErrorDetails'];
-    showToolDescriptions: AppLayoutParams['showToolDescriptions'];
-    setShowToolDescriptions: AppLayoutParams['setShowToolDescriptions'];
-    renderMarkdown: AppLayoutParams['renderMarkdown'];
-    setRenderMarkdown: AppLayoutParams['setRenderMarkdown'];
-    isTodoPanelCollapsed: AppLayoutParams['isTodoPanelCollapsed'];
-    setIsTodoPanelCollapsed: AppLayoutParams['setIsTodoPanelCollapsed'];
-    isQueuedMessagesPanelCollapsed: AppLayoutParams['isQueuedMessagesPanelCollapsed'];
-    setIsQueuedMessagesPanelCollapsed: AppLayoutParams['setIsQueuedMessagesPanelCollapsed'];
-    constrainHeight: AppLayoutParams['constrainHeight'];
-    setConstrainHeight: AppLayoutParams['setConstrainHeight'];
-    refreshStatic: AppLayoutParams['refreshStatic'];
-    addItem: AppLayoutParams['addItem'];
-    handleSlashCommand: AppLayoutParams['handleSlashCommand'];
-  },
-  shellState: {
-    activeShellPtyId: AppLayoutParams['activeShellPtyId'];
-    setEmbeddedShellFocused: AppLayoutParams['setEmbeddedShellFocused'];
-    ideContextState: AppLayoutParams['ideContextState'];
-  },
-) {
-  const { uiRuntime } = p;
-  return {
-    exit: exitState,
-    display: displayState,
-    shell: {
-      activeShellPtyId: shellState.activeShellPtyId,
-      setEmbeddedShellFocused: shellState.setEmbeddedShellFocused,
-      getEnableInteractiveShell: () =>
-        uiRuntime.shell.getEnableInteractiveShell(),
-    },
-    copyMode: pickCopyModeKeybindingState(p),
-    ideContext: {
-      getIdeMode: () => uiRuntime.ide.getIdeMode(),
-      ideContextState: shellState.ideContextState,
-    },
-    mcp: {
-      getMcpServers: () => uiRuntime.mcp.getMcpServers(),
-    },
-  };
-}
-
-function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
+function useLayoutKeybindings(p: AppLayoutParams) {
   const {
     uiRuntime,
-    clearItems,
-    clearConsoleMessagesState,
-    constrainHeight,
-    setConstrainHeight,
     refreshStatic,
-    showErrorDetails,
-    setShowErrorDetails,
-    showToolDescriptions,
-    setShowToolDescriptions,
     renderMarkdown,
     setRenderMarkdown,
     isTodoPanelCollapsed,
@@ -169,42 +126,71 @@ function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
     requestCtrlDExit,
     handleSlashCommand,
     addItem,
-    inputHistoryStore,
     buffer,
-    useAlternateBuffer,
   } = p;
-  useKeybindings(
-    buildKeybindingsConfig(
-      p,
-      {
-        requestCtrlCExit,
-        requestCtrlDExit,
-        ctrlCPressedOnce,
-        cancelOngoingRequest,
-        bufferTextLength: buffer.text.length,
-      },
-      {
-        showErrorDetails,
-        setShowErrorDetails,
-        showToolDescriptions,
-        setShowToolDescriptions,
-        renderMarkdown,
-        setRenderMarkdown,
-        isTodoPanelCollapsed,
-        setIsTodoPanelCollapsed,
-        isQueuedMessagesPanelCollapsed,
-        setIsQueuedMessagesPanelCollapsed,
-        constrainHeight,
-        setConstrainHeight,
-        refreshStatic,
-        addItem,
-        handleSlashCommand,
-      },
-      { activeShellPtyId, setEmbeddedShellFocused, ideContextState },
-    ),
-  );
+  const { commands } = p.terminalStore;
+  const display = useTerminalDisplayState(p.terminalStore);
+  useKeybindings({
+    exit: {
+      requestCtrlCExit,
+      requestCtrlDExit,
+      ctrlCPressedOnce,
+      cancelOngoingRequest,
+      bufferTextLength: buffer.text.length,
+    },
+    display: {
+      showErrorDetails: display.showErrorDetails,
+      setShowErrorDetails: commands.setShowErrorDetails,
+      showToolDescriptions: display.showToolDescriptions,
+      setShowToolDescriptions: commands.setShowToolDescriptions,
+      renderMarkdown,
+      setRenderMarkdown,
+      isTodoPanelCollapsed,
+      setIsTodoPanelCollapsed,
+      isQueuedMessagesPanelCollapsed,
+      setIsQueuedMessagesPanelCollapsed,
+      constrainHeight: display.constrainHeight,
+      setConstrainHeight: commands.setConstrainHeight,
+      refreshStatic,
+      addItem,
+      handleSlashCommand,
+    },
+    shell: {
+      activeShellPtyId,
+      setEmbeddedShellFocused,
+      getEnableInteractiveShell: () =>
+        uiRuntime.shell.getEnableInteractiveShell(),
+    },
+    copyMode: {
+      copyModeEnabled: display.copyModeEnabled,
+      setCopyModeEnabled: commands.setCopyModeEnabled,
+      useAlternateBuffer: display.useAlternateBuffer,
+    },
+    ideContext: {
+      getIdeMode: () => uiRuntime.ide.getIdeMode(),
+      ideContextState,
+    },
+    mcp: {
+      getMcpServers: () => uiRuntime.mcp.getMcpServers(),
+    },
+  });
+}
+
+function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
+  const {
+    uiRuntime,
+    clearItems,
+    clearConsoleMessagesState,
+    refreshStatic,
+    inputHistoryStore,
+  } = p;
+  useLayoutKeybindings(p);
   const logger = useLogger(uiRuntime.storage);
   useInputHistoryBootstrap({ inputHistoryStore, logger });
+  const useAlternateBuffer = useStoreSelector(
+    p.terminalStore.store,
+    (s) => s.useAlternateBuffer,
+  );
   const handleClearScreen = useClearScreenAction({
     clearItems,
     clearConsoleMessagesState,
@@ -215,35 +201,51 @@ function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
 }
 
 function useLayoutMeasure(p: AppLayoutParams) {
-  const {
-    consoleMessages,
-    constrainHeight,
-    setFooterHeight,
-    footerHeight,
-    store,
-    terminalHeight,
-  } = p;
-  useSelectionDebugLogger({ store });
+  const { consoleMessages } = p;
+  const { commands } = p.terminalStore;
+  const terminalHeight = useStoreSelector(
+    p.terminalStore.store,
+    (s) => s.terminalHeight,
+  );
+  const footerHeight = useStoreSelector(
+    p.terminalStore.store,
+    (s) => s.footerHeight,
+  );
+  const constrainHeight = useStoreSelector(
+    p.terminalStore.store,
+    (s) => s.constrainHeight,
+  );
+  const copyModeEnabled = useStoreSelector(
+    p.terminalStore.store,
+    (s) => s.copyModeEnabled,
+  );
+  const showErrorDetails = useStoreSelector(
+    p.terminalStore.store,
+    (s) => s.showErrorDetails,
+  );
+  useSelectionDebugLogger({ store: p.store });
   const { mainControlsRef, pendingHistoryItemRef, rootUiRef } =
     useLayoutMeasurement({
       enabled: true,
-      copyShortcutEnabled: p.copyModeEnabled,
-      setFooterHeight,
+      copyShortcutEnabled: copyModeEnabled,
+      setFooterHeight: commands.setFooterHeight,
       terminalHeight,
       consoleMessages,
-      showErrorDetails: p.showErrorDetails,
+      showErrorDetails,
     });
   const staticExtraHeight = 3;
   const availableTerminalHeight = useMemo(
     () => terminalHeight - footerHeight - staticExtraHeight,
     [terminalHeight, footerHeight],
   );
+  useEffect(() => {
+    commands.setAvailableTerminalHeight(availableTerminalHeight);
+  }, [commands, availableTerminalHeight]);
   useFlickerDetector(rootUiRef, terminalHeight, constrainHeight);
   return {
     mainControlsRef,
     pendingHistoryItemRef,
     rootUiRef,
-    availableTerminalHeight,
   };
 }
 
@@ -254,14 +256,20 @@ function useLayoutContext(p: AppLayoutParams) {
     runtimeMessageBus,
     consoleMessages,
     store,
-    terminalHeight,
-    terminalWidth,
     handleUserInputSubmit,
     handleSteer,
     interactiveRuntimeReady,
     vimModeEnabled,
     startupGuardsInitialized,
   } = p;
+  const terminalWidth = useStoreSelector(
+    p.terminalStore.store,
+    (s) => s.terminalWidth,
+  );
+  const terminalHeight = useStoreSelector(
+    p.terminalStore.store,
+    (s) => s.terminalHeight,
+  );
   const debugMode = uiRuntime.app.getDebugMode();
   const filteredConsoleMessages = useMemo(() => {
     if (debugMode) return consoleMessages;
@@ -287,6 +295,9 @@ function useLayoutContext(p: AppLayoutParams) {
     startupGuardsInitialized,
   });
   const mainAreaWidth = calculateMainAreaWidth(terminalWidth, settings);
+  useEffect(() => {
+    p.terminalStore.commands.setMainAreaWidth(mainAreaWidth);
+  }, [p.terminalStore, mainAreaWidth]);
   const placeholder = usePowerShellPlaceholder({ vimModeEnabled });
   useEffect(() => {
     uiRuntime.shell.setPtyTerminalSize(mainAreaWidth, terminalHeight);
@@ -298,7 +309,6 @@ function useLayoutContext(p: AppLayoutParams) {
     branchIsDirty,
     contextFileNames,
     initialPrompt,
-    mainAreaWidth,
     placeholder,
     activeHooks,
     handleSteer,

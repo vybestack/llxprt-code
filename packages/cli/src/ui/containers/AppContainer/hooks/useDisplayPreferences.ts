@@ -19,21 +19,9 @@ import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
  */
 
 export interface UseDisplayPreferencesResult {
-  // Error details display
-  showErrorDetails: boolean;
-  setShowErrorDetails: (show: boolean) => void;
-
-  // Tool descriptions display
-  showToolDescriptions: boolean;
-  setShowToolDescriptions: (show: boolean) => void;
-
   // Debug profiler
   showDebugProfiler: boolean;
   toggleDebugProfiler: () => void;
-
-  // Copy mode
-  copyModeEnabled: boolean;
-  setCopyModeEnabled: (enabled: boolean) => void;
 
   // Markdown rendering
   renderMarkdown: boolean;
@@ -52,11 +40,7 @@ export interface UseDisplayPreferencesResult {
 }
 
 export function useDisplayPreferences(): UseDisplayPreferencesResult {
-  const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
-  const [showToolDescriptions, setShowToolDescriptions] =
-    useState<boolean>(false);
   const [showDebugProfiler, setShowDebugProfiler] = useState(false);
-  const [copyModeEnabled, setCopyModeEnabled] = useState(false);
   const [renderMarkdown, setRenderMarkdown] = useState<boolean>(true);
   const [isTodoPanelCollapsed, setIsTodoPanelCollapsed] = useState(false);
   const [isQueuedMessagesPanelCollapsed, setIsQueuedMessagesPanelCollapsed] =
@@ -80,21 +64,9 @@ export function useDisplayPreferences(): UseDisplayPreferencesResult {
   }, []);
 
   return {
-    // Error details display
-    showErrorDetails,
-    setShowErrorDetails,
-
-    // Tool descriptions display
-    showToolDescriptions,
-    setShowToolDescriptions,
-
     // Debug profiler
     showDebugProfiler,
     toggleDebugProfiler,
-
-    // Copy mode
-    copyModeEnabled,
-    setCopyModeEnabled,
 
     // Markdown rendering
     renderMarkdown,
