@@ -14,6 +14,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { createImageProfileRuntimeState } from '@vybestack/llxprt-code-core';
 import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 import type { LoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 
@@ -27,6 +28,7 @@ const runtimeServicesState = {
   activeProviderName: 'load-balancer' as string,
   lbConfig: null as unknown,
   ephemerals: {} as Record<string, unknown>,
+  imageProfileState: createImageProfileRuntimeState(),
 };
 
 void vi.mock('../runtimeAccessors.js', () => ({
@@ -50,6 +52,7 @@ void vi.mock('../runtimeAccessors.js', () => ({
             }
           : null,
     },
+    imageProfileState: runtimeServicesState.imageProfileState,
   })),
   maybeGetCliOAuthManager: vi.fn(() => null),
   getActiveModelName: vi.fn(() => 'test-model'),
@@ -177,6 +180,7 @@ describe('profile save while load balancer is active (issue #2479)', () => {
       profile: {
         version: 1,
         type: 'image',
+        backend: 'codex',
         model: 'gpt-image-2.5-flare',
         baseUrl: 'https://images.example/v1',
         auth: { type: 'oauth', provider: 'codex' },

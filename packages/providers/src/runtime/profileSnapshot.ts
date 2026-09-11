@@ -4,21 +4,22 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import { type ModelProfileInfoPayload } from '@vybestack/llxprt-code-core';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
-import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
-import { ProfileManager } from '@vybestack/llxprt-code-settings';
-import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings/profiles/types.js';
+import {
+  coreEvents,
+  DebugLogger,
+  type ActiveImageProfile,
+  type ModelProfileInfoPayload,
+} from '@vybestack/llxprt-code-core';
 import {
   getProfilePersistableKeys,
   isInternalSettingKey,
+  isLoadBalancerProfile,
+  ProfileManager,
   resolveAlias,
-} from '@vybestack/llxprt-code-settings/settings/settingsRegistry.js';
-import type {
-  Profile,
-  ModelParams,
-  LoadBalancerProfile,
-  ImageProfile,
+  type ImageProfile,
+  type LoadBalancerProfile,
+  type ModelParams,
+  type Profile,
 } from '@vybestack/llxprt-code-settings';
 import {
   getCliRuntimeServices,
@@ -28,6 +29,10 @@ import {
   _internal as runtimeAccessorsInternal,
 } from './runtimeAccessors.js';
 import { applyProfileWithGuards } from './profileApplication.js';
+import {
+  loadAndApplyProfileTransition,
+  saveAndSelectImageProfile,
+} from './profileSnapshotTransition.js';
 import type { LoadBalancingProviderConfig } from '../loadBalancing/loadBalancerTypes.js';
 import {
   getProfileEphemeralSettings,
@@ -48,41 +53,48 @@ type LoadBalancerProfileDetail = {
 
   loadError?: boolean;
 };
-export interface ActiveImageProfile {
-  readonly name: string;
-  readonly profile: ImageProfile;
-}
-
-let activeImageProfile: ActiveImageProfile | undefined;
+export type { ActiveImageProfile } from '@vybestack/llxprt-code-core';
 
 export function getActiveImageProfile(): ActiveImageProfile | undefined {
-  return activeImageProfile;
+  return getCliRuntimeServices().imageProfileState.getActive();
 }
+
 export function setActiveImageProfile(
   profile: ActiveImageProfile | undefined,
 ): void {
-  activeImageProfile = profile;
+  const state = getCliRuntimeServices().imageProfileState;
+  if (profile === undefined) {
+    state.reset();
+    return;
+  }
+  state.select(profile);
+}
+
+export function resetActiveImageProfile(): void {
+  getCliRuntimeServices().imageProfileState.reset();
 }
 
 export async function loadImageProfileByName(
   profileName: string,
 ): Promise<ActiveImageProfile> {
-  const profile = await new ProfileManager().loadImageProfile(profileName);
-  activeImageProfile = { name: profileName, profile };
-  return activeImageProfile;
+  const services = getCliRuntimeServices();
+  const manager = services.profileManager ?? new ProfileManager();
+  const profile = await manager.loadImageProfile(profileName);
+  const selection = { name: profileName, profile };
+  services.imageProfileState.select(selection);
+  return selection;
 }
 
 export async function saveImageProfileSnapshot(
   profileName: string,
 ): Promise<ImageProfile> {
-  if (activeImageProfile === undefined) {
-    throw new Error('No active image profile to save');
-  }
-  await new ProfileManager().saveImageProfile(
+  const services = getCliRuntimeServices();
+  const manager = services.profileManager ?? new ProfileManager();
+  return saveAndSelectImageProfile(
+    manager,
+    services.imageProfileState,
     profileName,
-    activeImageProfile.profile,
   );
-  return activeImageProfile.profile;
 }
 
 type LoadBalancerProfileWithDetails = LoadBalancerProfile & {
@@ -687,8 +699,10 @@ export async function saveProfileSnapshot(
   profileName: string,
   additionalConfig?: Partial<Profile>,
 ): Promise<Profile> {
-  const manager = new ProfileManager();
+  const services = getCliRuntimeServices();
+  const manager = services.profileManager ?? new ProfileManager();
   const snapshot = buildRuntimeProfileSnapshot();
+  const activeImageProfile = services.imageProfileState.getActive();
 
   let finalProfile: Profile = isLoadBalancerProfile(snapshot)
     ? snapshot
@@ -739,22 +753,14 @@ export async function saveLoadBalancerProfile(
 export async function loadProfileByName(
   profileName: string,
 ): Promise<ProfileLoadResult> {
-  const manager = new ProfileManager();
-  const profile = await manager.loadProfile(profileName);
-  const imageProfileName =
-    'imageProfile' in profile && typeof profile.imageProfile === 'string'
-      ? profile.imageProfile
-      : undefined;
-  const resolvedImageProfile =
-    imageProfileName === undefined
-      ? undefined
-      : await manager.loadImageProfile(imageProfileName);
-  const result = await applyProfileSnapshot(profile, { profileName });
-  activeImageProfile =
-    resolvedImageProfile === undefined || imageProfileName === undefined
-      ? undefined
-      : { name: imageProfileName, profile: resolvedImageProfile };
-  return result;
+  const services = getCliRuntimeServices();
+  const manager = services.profileManager ?? new ProfileManager();
+  return loadAndApplyProfileTransition(
+    manager,
+    services.imageProfileState,
+    profileName,
+    (profile) => applyProfileSnapshot(profile, { profileName }),
+  );
 }
 
 export async function deleteProfileByName(profileName: string): Promise<void> {

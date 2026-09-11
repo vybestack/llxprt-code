@@ -185,6 +185,7 @@ export {
   loadImageProfileByName,
   getActiveImageProfile,
   setActiveImageProfile,
+  resetActiveImageProfile,
   deleteProfileByName,
   listSavedProfiles,
   getProfileByName,
