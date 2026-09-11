@@ -33,6 +33,7 @@ import type {
   HostShellJobInfo,
   HostShellJobTailResult,
   BackgroundPromotionResult,
+  ShellExecutionResult,
 } from '../interfaces/index.js';
 import { executeToolForBehavioralAssertion } from './red-test-helpers.js';
 
@@ -599,5 +600,203 @@ describe('shell result contracts @plan:issue1995 @plan:issue3200', () => {
     // The error must be caught and surfaced, not silently degraded.
     expect(result.error).toBeDefined();
     expect(result.error?.message).toContain('not supported');
+  });
+
+  describe('timeout survivor warning formatting @plan:issue3517', () => {
+    /**
+     * Builds a host whose foreground execution resolves with an aborted
+     * result only when the combined timeout/user signal fires, so the tool
+     * computes a genuine abort path (timeout-triggered or user-cancelled)
+     * the way production does. The fake result carries its pgid verbatim so
+     * collectProcessInfo never falls through to a real `ps` lookup for the
+     * fabricated pid.
+     */
+    function createTimeoutAbortingHost(
+      resultFields: Partial<ShellExecutionResult>,
+      onEntered: () => void = () => undefined,
+    ): IShellToolHost {
+      const base = createFakeHostWithBackground(() => {
+        throw new Error(
+          'Foreground execution must not launch a background job',
+        );
+      });
+      const buildResult = (): ShellExecutionResult => ({
+        output: 'partial output',
+        exitCode: null,
+        signal: '15',
+        error: null,
+        aborted: true,
+        pid: 4321,
+        pgid: 4321,
+        ...resultFields,
+      });
+      return {
+        ...base,
+        executeShellCommand: (_command, _cwd, _onOutput, signal) =>
+          new Promise<ShellExecutionResult>((resolve) => {
+            onEntered();
+            if (signal.aborted) {
+              resolve(buildResult());
+              return;
+            }
+            signal.addEventListener(
+              'abort',
+              () => {
+                resolve(buildResult());
+              },
+              { once: true },
+            );
+          }),
+      };
+    }
+
+    it('a timeout result with surviving group members includes the kill -9 cleanup instruction', async () => {
+      const tool = new ShellTool(
+        createTimeoutAbortingHost({ survivingGroupMembersOnAbort: true }),
+        createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
+      );
+
+      const result = await executeToolForBehavioralAssertion(tool, {
+        command: 'sleep 60',
+        timeout_seconds: 0.5,
+      });
+
+      const llm = String(result.llmContent);
+      expect(llm).toContain('timed out');
+      expect(llm).toContain('may still be running');
+      // The cleanup instruction names the process group id (the resolved pgid
+      // falls back to result.pid, the detached group leader on POSIX).
+      expect(llm).toContain('kill -9 -- -4321');
+      // The timeout branch is user-facing too: the human display must carry
+      // the cleanup instruction, not just the model-facing content.
+      expect(String(result.returnDisplay)).toContain('kill -9 -- -4321');
+    });
+
+    it('a user-cancelled result with surviving group members shows the warning in llmContent and returnDisplay', async () => {
+      // Cancel via the USER signal, not the timeout controller, so the tool
+      // takes the user-cancel branch (timeoutTriggered === false).
+      const userAbort = new AbortController();
+      const entered = Promise.withResolvers<void>();
+      const tool = new ShellTool(
+        createTimeoutAbortingHost(
+          { survivingGroupMembersOnAbort: true },
+          entered.resolve,
+        ),
+        createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
+      );
+
+      const resultPromise = executeToolForBehavioralAssertion(
+        tool,
+        { command: 'sleep 60' },
+        userAbort.signal,
+      );
+      await entered.promise;
+      userAbort.abort();
+      const result = await resultPromise;
+
+      const llm = String(result.llmContent);
+      expect(llm).toContain('cancelled by user');
+      expect(llm).toContain('may still be running');
+      expect(llm).toContain('kill -9 -- -4321');
+      // The non-debug display path drops the llmContent, so the warning must
+      // be appended to the display string itself.
+      expect(String(result.returnDisplay)).toContain('kill -9 -- -4321');
+    });
+
+    it('an inactivity-style result (aborted: false) with survivors keeps the warning in the final llmContent even when summarization replaces the output', async () => {
+      const base = createFakeHostWithBackground(() => {
+        throw new Error(
+          'Foreground execution must not launch a background job',
+        );
+      });
+      // Inactivity-killed CP commands resolve aborted: false, so the content
+      // IS summarized before the result is built — a warning appended during
+      // formatting would be lost with it.
+      const host: IShellToolHost = {
+        ...base,
+        getSummarizeConfig: () => ({ tokenBudget: 100 }),
+        trySummarizeOutput: async () => 'SUMMARIZED OUTPUT',
+        executeShellCommand: async () => ({
+          output: 'partial output',
+          exitCode: null,
+          signal: '9',
+          error: null,
+          aborted: false,
+          pid: 4321,
+          pgid: 4321,
+          survivingGroupMembersOnAbort: true,
+        }),
+      };
+
+      const result = await executeToolForBehavioralAssertion(
+        new ShellTool(
+          host,
+          createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
+        ),
+        { command: 'sleep 60' },
+      );
+
+      const llm = String(result.llmContent);
+      expect(llm).toContain('SUMMARIZED OUTPUT');
+      expect(llm).toContain('may still be running');
+      expect(llm).toContain('kill -9 -- -4321');
+      expect(String(result.returnDisplay)).toContain('kill -9 -- -4321');
+    });
+
+    it.each([1, Number.NaN])(
+      'uses a generic survivor warning for unsafe pgid %s',
+      async (pgid) => {
+        const tool = new ShellTool(
+          createTimeoutAbortingHost({
+            pgid,
+            survivingGroupMembersOnAbort: true,
+          }),
+          createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
+        );
+        const result = await executeToolForBehavioralAssertion(tool, {
+          command: 'sleep 60',
+          timeout_seconds: 0.01,
+        });
+        for (const content of [result.llmContent, result.returnDisplay]) {
+          expect(String(content)).toContain(
+            'may still be running; they could not be fully terminated.',
+          );
+          expect(String(content)).not.toContain('kill -9');
+        }
+      },
+    );
+
+    it('does not show POSIX cleanup instructions on Windows', async () => {
+      mockPlatform.mockReturnValue('win32');
+      const tool = new ShellTool(
+        createTimeoutAbortingHost({ survivingGroupMembersOnAbort: true }),
+        createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
+      );
+      const result = await executeToolForBehavioralAssertion(tool, {
+        command: 'sleep 60',
+        timeout_seconds: 0.01,
+      });
+      expect(String(result.llmContent)).toContain('timed out');
+      expect(String(result.llmContent)).not.toContain('kill -9');
+      expect(String(result.returnDisplay)).not.toContain('kill -9');
+    });
+
+    it('a clean timeout result carries no survivor warning', async () => {
+      const tool = new ShellTool(
+        createTimeoutAbortingHost({}),
+        createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
+      );
+
+      const result = await executeToolForBehavioralAssertion(tool, {
+        command: 'sleep 60',
+        timeout_seconds: 0.5,
+      });
+
+      const llm = String(result.llmContent);
+      expect(llm).toContain('timed out');
+      expect(llm).not.toContain('may still be running');
+      expect(llm).not.toContain('kill -9');
+      expect(String(result.returnDisplay)).not.toContain('kill -9');
+    });
   });
 });

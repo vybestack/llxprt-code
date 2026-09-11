@@ -17,6 +17,9 @@ import { makeInactivityTimer } from './shellOutputUtils.js';
 import {
   SIGKILL_TIMEOUT_MS,
   isKillablePid,
+  isGroupTargetPid,
+  isProcessGroupAlive,
+  reapProcessGroup,
   taskkillTree,
 } from './shellProcessKill.js';
 import type { PtyExecState } from './shellPtyState.js';
@@ -415,25 +418,45 @@ export async function ptyInactivityAbortAction(
     return;
   }
   if (state.supportsProcessGroupKill) {
-    try {
-      process.kill(-pid, 'SIGTERM');
-      await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
-      if (!state.exitedGuard.isExited()) {
-        process.kill(-pid, 'SIGKILL');
-      }
-    } catch {
-      if (!state.exitedGuard.isExited()) {
-        state.ptyProcess.kill('SIGKILL');
-      }
+    // Share caller-abort escalation, including direct-only kills for non-group
+    // targets, so inactivity termination cannot leave survivors (Issue #3517).
+    const groupConfirmedEmpty = await armPtyGroupAbortKill(state, pid);
+    if (state.hasResolved) {
+      return;
     }
-  } else {
-    state.ptyProcess.kill('SIGTERM');
-    await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
-    if (!state.exitedGuard.isExited()) {
-      state.ptyProcess.kill('SIGKILL');
+    if (state.exitedGuard.isExited()) {
+      // The exit handler's later continuation preserves the real exit
+      // values and carries the survivor flag (Issue #3517).
+      return;
     }
+    ptyRenderFn(state);
+    const result = buildPtyResult(state, 1, null, state.abortSignal.aborted);
+    if (!groupConfirmedEmpty) {
+      result.survivingGroupMembersOnAbort = true;
+    }
+    resolveResult(result);
+    return;
+  }
+  state.ptyProcess.kill('SIGTERM');
+  await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
+  if (!state.exitedGuard.isExited()) {
+    state.ptyProcess.kill('SIGKILL');
   }
   finalizeInactivityKill(state, resolveResult);
+}
+
+/**
+ * Clear a pending abort-fallback resolution timer. Single-owner hand-off: a
+ * fallback armed by a prior inactivity kill would resolve the result after
+ * SIGKILL_TIMEOUT_MS, before the caller-abort group-reap chain settles —
+ * bypassing the confirmation gate — so every path that arms that chain must
+ * clear the stale fallback first (Issue #3517).
+ */
+function clearPendingAbortFallback(state: PtyExecState): void {
+  if (state.abortFinalizeTimeout !== null) {
+    clearTimeout(state.abortFinalizeTimeout);
+    state.abortFinalizeTimeout = null;
+  }
 }
 
 /**
@@ -452,9 +475,7 @@ function schedulePtyAbortFallback(
   resolveResult: (resultValue: ShellExecutionResult) => void,
   getAborted: () => boolean,
 ): void {
-  if (state.abortFinalizeTimeout !== null) {
-    clearTimeout(state.abortFinalizeTimeout);
-  }
+  clearPendingAbortFallback(state);
   state.abortFinalizeTimeout = setTimeout(() => {
     state.abortFinalizeTimeout = null;
     if (state.hasResolved) {
@@ -468,7 +489,7 @@ function finalizeInactivityKill(
   state: PtyExecState,
   resolveResult: (resultValue: ShellExecutionResult) => void,
 ): void {
-  if (state.exitedGuard.isExited()) {
+  if (state.exitedGuard.isExited() || abortGroupReapChains.has(state)) {
     return;
   }
   schedulePtyAbortFallback(
@@ -485,6 +506,99 @@ function setupPtyAbortHandler(
   return () => {
     void ptyAbortAction(state, resolveResult);
   };
+}
+
+/**
+ * In-flight group-abort kill chains keyed by execution state, so the PTY
+ * exit handler can gate its abort-branch resolution on the same bounded
+ * group-reap confirmation instead of resolving while group members are still
+ * alive (Issue #3517). Held in a module WeakMap because the state bag is
+ * owned by shellPtyState.ts; entries die with the state object.
+ */
+const abortGroupReapChains = new WeakMap<PtyExecState, Promise<boolean>>();
+
+/**
+ * Escalate a PTY abort against the process group: SIGTERM to the group and
+ * the leader, a short grace, then a group SIGKILL gated on GROUP liveness
+ * (not direct-child liveness — the leader dying from the SIGTERM used to
+ * suppress the group SIGKILL, letting a TERM-immune grandchild keep running
+ * after the tool reported termination, Issue #3517). Resolves true when the
+ * group is confirmed empty within the bounded reap window. Never rejects.
+ * Non-group-target pids get direct-only escalation (leader TERM → grace →
+ * SIGKILL) with no group-directed signals.
+ */
+function armPtyGroupAbortKill(
+  state: PtyExecState,
+  pid: number,
+): Promise<boolean> {
+  if (!isGroupTargetPid(pid)) {
+    // A pid that is not a valid group target (in practice pid 1) must
+    // never receive group-directed signals — kill(-1, ...) is the POSIX
+    // broadcast — but the direct PTY still has to die before the
+    // synthetic abort result may claim termination: escalate against the
+    // leader only (Issue #3517). No group semantics apply, so the chain
+    // resolves confirmed-empty.
+    clearPendingAbortFallback(state);
+    const directChain = (async (): Promise<boolean> => {
+      try {
+        state.ptyProcess.kill('SIGTERM');
+      } catch {
+        // PTY may already be terminated.
+      }
+      await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
+      if (!state.exitedGuard.isExited()) {
+        try {
+          state.ptyProcess.kill('SIGKILL');
+        } catch {
+          // PTY may already be terminated.
+        }
+      }
+      return true;
+    })();
+    abortGroupReapChains.set(state, directChain);
+    return directChain;
+  }
+  // A fallback timer armed by a prior inactivity kill would resolve the
+  // result before this chain's bounded group-reap confirmation settles;
+  // single ownership requires clearing it before arming (Issue #3517).
+  clearPendingAbortFallback(state);
+  const chain = (async (): Promise<boolean> => {
+    try {
+      process.kill(-pid, 'SIGTERM');
+    } catch {
+      // Process group may already be terminated.
+    }
+    try {
+      state.ptyProcess.kill('SIGTERM');
+    } catch {
+      // PTY may already be terminated.
+    }
+
+    await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
+    try {
+      if (isProcessGroupAlive(pid)) {
+        process.kill(-pid, 'SIGKILL');
+      }
+    } catch {
+      // Process group may already be terminated.
+    }
+    if (!state.exitedGuard.isExited()) {
+      try {
+        state.ptyProcess.kill('SIGKILL');
+      } catch {
+        // PTY may already be terminated.
+      }
+    }
+    // Enforce the "Never rejects" contract locally: consumers use bare
+    // `.then(...)` with no `.catch`, so a rejection escaping the reap would
+    // go unhandled and stall their resolution. Resolve false (group not
+    // confirmed empty) instead.
+    return reapProcessGroup(pid).catch((): boolean => false);
+  })();
+  // Arm before yielding: the synchronous prefix (both SIGTERMs) runs before
+  // the first await, so any exit event dispatched later finds the chain.
+  abortGroupReapChains.set(state, chain);
+  return chain;
 }
 
 export async function ptyAbortAction(
@@ -505,12 +619,39 @@ export async function ptyAbortAction(
   }
 
   if (state.supportsProcessGroupKill) {
-    try {
-      process.kill(-pid, 'SIGTERM');
-    } catch {
-      // Process group may already be terminated.
+    // The group-kill branch owns its resolution: escalate, confirm the group
+    // is empty within the bounded window, then resolve. The direct child
+    // having exited no longer suppresses the group SIGKILL, and the exit
+    // handler awaits the same chain before resolving (Issue #3517).
+    const groupConfirmedEmpty = await armPtyGroupAbortKill(state, pid);
+    if (state.hasResolved) {
+      return;
     }
+    if (state.exitedGuard.isExited()) {
+      // The real PTY exit fired while the chain ran. This continuation was
+      // registered on the chain before the exit handler's, so it runs first:
+      // resolving here would race ahead of the exit-handler continuation and
+      // overwrite the real exitCode/signal with a synthetic (1, null) result
+      // (the incident transcript's "Signal: 15" depends on the real exit
+      // event winning). The exit handler finalizes with the true values and
+      // already carries the survivingGroupMembersOnAbort flag.
+      return;
+    }
+    // Forward-progress fallback: the PTY never reported an exit. Only this
+    // path resolves the synthetic result, still gated on the bounded
+    // group-reap confirmation (Issue #3517).
+    ptyRenderFn(state);
+    const result = buildPtyResult(state, 1, null, aborted);
+    if (!groupConfirmedEmpty) {
+      result.survivingGroupMembersOnAbort = true;
+    }
+    resolveResult(result);
+    return;
   }
+
+  // bun-pty (no process group): direct-kill only, unchanged. No group reap
+  // is possible here — waiting would stall every abort without being able to
+  // kill anything (Issue #3517 documents, not changes, this limitation).
   try {
     state.ptyProcess.kill('SIGTERM');
   } catch {
@@ -522,13 +663,6 @@ export async function ptyAbortAction(
     return;
   }
 
-  if (state.supportsProcessGroupKill) {
-    try {
-      process.kill(-pid, 'SIGKILL');
-    } catch {
-      // Process group may already be terminated.
-    }
-  }
   try {
     state.ptyProcess.kill('SIGKILL');
   } catch {
@@ -543,19 +677,28 @@ function registerPtyExitHandler(
   resolveResult: (resultValue: ShellExecutionResult) => void,
   abortHandler: () => void,
 ): void {
-  const finalizeResult = (exitCode: number, signal?: number | null) => {
+  const finalizeResult = (
+    exitCode: number,
+    signal?: number | null,
+    survivingGroupMembers = false,
+  ) => {
     if (state.hasResolved) {
       return;
     }
     ptyRenderFn(state);
-    resolveResult(
-      buildPtyResult(
-        state,
-        exitCode,
-        signal ?? null,
-        state.abortSignal.aborted,
-      ),
+    const result = buildPtyResult(
+      state,
+      exitCode,
+      signal ?? null,
+      state.abortSignal.aborted,
     );
+    if (survivingGroupMembers) {
+      // Bounded group-reap window expired with live members after an abort
+      // kill: the result must say so instead of implying full termination
+      // (Issue #3517).
+      result.survivingGroupMembersOnAbort = true;
+    }
+    resolveResult(result);
   };
 
   state.activePtyEntry.onExitDisposable = state.ptyProcess.onExit(
@@ -567,8 +710,28 @@ function registerPtyExitHandler(
       state.exitedGuard.markExited();
       state.abortSignal.removeEventListener('abort', abortHandler);
 
+      const reapChain = abortGroupReapChains.get(state);
       if (state.abortSignal.aborted) {
+        // An abort kill is mid-flight: its bounded group-reap chain owns the
+        // confirmation that the group is empty before the abort result is
+        // produced (Issue #3517).
+        if (reapChain !== undefined) {
+          void reapChain.then((groupConfirmedEmpty) => {
+            finalizeResult(exitCode, normalizedSignal, !groupConfirmedEmpty);
+          });
+          return;
+        }
         finalizeResult(exitCode, normalizedSignal);
+        return;
+      }
+
+      if (reapChain !== undefined) {
+        // Inactivity termination owns group confirmation even without a
+        // caller abort. Preserve natural-exit values and flag survivors
+        // instead of resolving during the kill chain (Issue #3517).
+        void reapChain.then((groupConfirmedEmpty) => {
+          finalizeResult(exitCode, normalizedSignal, !groupConfirmedEmpty);
+        });
         return;
       }
 
@@ -581,7 +744,11 @@ function ptyExitRace(
   state: PtyExecState,
   exitCode: number,
   signal: number | null,
-  finalizeResult: (exitCode: number, signal?: number | null) => void,
+  finalizeResult: (
+    exitCode: number,
+    signal?: number | null,
+    survivingGroupMembers?: boolean,
+  ) => void,
 ): void {
   const processingComplete = state.processingChain.then(() => 'processed');
   let raceAbortListener: (() => void) | null = null;
@@ -609,8 +776,32 @@ function ptyExitRace(
   });
 
   Promise.race([processingComplete, abortFired])
-    .then(() => {
+    .then((winner) => {
       cleanupRaceListener();
+      if (
+        winner === 'aborted' &&
+        !state.isWindows &&
+        state.supportsProcessGroupKill &&
+        isGroupTargetPid(state.ptyProcess.pid)
+      ) {
+        // An abort landed while natural-exit output was still draining.
+        // onExit already detached the caller abort handler, so nothing else
+        // will kill the group: arm the same bounded group-reap chain
+        // ptyAbortAction's group branch uses (sharing any in-flight chain
+        // instance, never duplicating it) and gate this result on its
+        // confirmation, flagging survivors when the window expires
+        // (Issue #3517). The chain never rejects and is time-bounded.
+        const reapChain =
+          abortGroupReapChains.get(state) ??
+          armPtyGroupAbortKill(state, state.ptyProcess.pid);
+        void reapChain.then((groupConfirmedEmpty) => {
+          if (state.hasResolved) {
+            return;
+          }
+          finalizeResult(exitCode, signal ?? null, !groupConfirmedEmpty);
+        });
+        return;
+      }
       finalizeResult(exitCode, signal ?? null);
     })
     .catch(() => {
