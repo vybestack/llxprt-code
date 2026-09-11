@@ -7,7 +7,10 @@
 import dns from 'node:dns';
 import { type Config, setGitStatsService } from '@vybestack/llxprt-code-core';
 import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  isImageProfileLoadError,
+  type SettingsService,
+} from '@vybestack/llxprt-code-settings';
 import { loadProfileByName } from '@vybestack/llxprt-code-providers/runtime.js';
 import {
   preflightAgentActivation,
@@ -202,6 +205,7 @@ export async function reapplyBootstrapProfile(
   try {
     await loadProfileByName(bootstrapProfileName);
   } catch (error) {
+    if (isImageProfileLoadError(error)) throw error;
     const message = error instanceof Error ? error.message : String(error);
     debugLogger.warn(
       `[bootstrap] Failed to reapply profile '${bootstrapProfileName}' after provider manager initialization: ${message}`,

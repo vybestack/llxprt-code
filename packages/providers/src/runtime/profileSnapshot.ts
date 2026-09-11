@@ -31,6 +31,7 @@ import {
 import { applyProfileWithGuards } from './profileApplication.js';
 import {
   loadAndApplyProfileTransition,
+  applyModelAndImageProfileTransition,
   loadAndSelectImageProfile,
   saveAndSelectImageProfile,
 } from './profileSnapshotTransition.js';
@@ -669,9 +670,15 @@ export async function applyProfileSnapshot(
   profile: Profile,
   options: ProfileLoadOptions = {},
 ): Promise<ProfileLoadResult> {
-  const result = await applyProfileSnapshotState(profile, options);
-  publishProfileSnapshot(result);
-  return result;
+  const services = getCliRuntimeServices();
+  const manager = services.profileManager ?? new ProfileManager();
+  return applyModelAndImageProfileTransition(
+    manager,
+    services.imageProfileState,
+    profile,
+    (snapshot) => applyProfileSnapshotState(snapshot, options),
+    publishProfileSnapshot,
+  );
 }
 
 async function applyProfileSnapshotState(

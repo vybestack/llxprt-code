@@ -14,15 +14,97 @@ import type {
 } from '@vybestack/llxprt-code-providers/imageBackend.js';
 import { CodexImageBackend } from './codexImageBackend.js';
 import { OpenAIImagesBackend } from './openaiImagesBackend.js';
+import { createImageApiKeyResolver } from '../image-auth-resolution.js';
 import {
   createCodexImageBackendResolver,
   resolveImageProfileBackendConfig,
 } from './codexImageBackendResolver.js';
 
-import { imageResponseError } from './imageBackendResponse.js';
+import {
+  ImageBackendError,
+  imageResponseError,
+} from './imageBackendResponse.js';
+import {
+  ImageBackendBaseUrlError,
+  validateCodexImageProfileBaseUrl,
+} from './imageEndpoint.js';
 import type { ImageProfile } from '@vybestack/llxprt-code-settings';
 
 describe('external image responses', () => {
+  it.each(['api-key', 'keyfile'] as const)(
+    'rejects multi-line %s credentials without leaking secrets',
+    async (type) => {
+      const directory = await mkdtemp(
+        join(tmpdir(), 'llxprt-image-credential-'),
+      );
+      try {
+        const credential = 'FAKE-MULTILINE-SECRET\r\nsecond-line\r\n';
+        const path = join(directory, 'key');
+        await writeFile(path, credential);
+        const auth: ImageProfile['auth'] =
+          type === 'api-key' ? { type, apiKey: credential } : { type, path };
+        const transport = http();
+        const resolveKey = createImageApiKeyResolver();
+        const backend = new OpenAIImagesBackend({
+          config: { ...config('https://example.com/v1'), auth },
+          getApiKey: () => resolveKey(auth),
+          fetchImpl: transport.fetchImpl,
+        });
+        const error: unknown = await backend
+          .generate({ prompt: 'lake' }, signal())
+          .catch((error: unknown) => error);
+        expect(error).toBeInstanceOf(ImageBackendError);
+        if (!(error instanceof Error))
+          throw new Error('Expected credential error');
+        expect(error.message).toContain('contains invalid characters');
+        expect(error.message).not.toContain('FAKE-MULTILINE-SECRET');
+        expect(transport.requests).toHaveLength(0);
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it('redacts userinfo and query secrets from rejected Codex destinations', () => {
+    let error: unknown;
+    try {
+      validateCodexImageProfileBaseUrl(
+        'https://user:FAKE-PASSWORD@chatgpt.com/backend-api/codex?token=FAKE-QUERY',
+      );
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(ImageBackendBaseUrlError);
+    if (!(error instanceof Error)) throw new Error('Expected URL error');
+    expect(error.message).not.toContain('FAKE-PASSWORD');
+    expect(error.message).not.toContain('FAKE-QUERY');
+    expect(error.message).toContain('https://chatgpt.com/backend-api/codex');
+  });
+
+  it.each([
+    { model: 'gpt-image-1', responseFields: {} },
+    { model: 'gpt-image-2', responseFields: {} },
+    { model: 'dall-e-3', responseFields: { response_format: 'b64_json' } },
+  ])(
+    'uses the remote response vocabulary for $model',
+    async ({ model, responseFields }) => {
+      const transport = http();
+      const backend = new OpenAIImagesBackend({
+        config: { ...config('https://example.com/v1'), model },
+        getApiKey: async () => 'secret',
+        fetchImpl: transport.fetchImpl,
+      });
+      await backend.generate({ prompt: 'lake' }, signal());
+      const body = await transport.requests[0].json();
+      expect(body).toStrictEqual({
+        model,
+        prompt: 'lake',
+        n: 1,
+        ...responseFields,
+      });
+    },
+  );
+
   it.each([
     'Incorrect API key provided: FAKE-REVIEW-SECRET',
     'Incorrect API key provided: "FAKE-REVIEW-SECRET"',
@@ -159,6 +241,7 @@ describe('MLX dialect', () => {
         model: 'FLUX.2-klein',
         prompt: 'lake',
         n: 1,
+        response_format: 'b64_json',
         ...(size === undefined ? {} : { size }),
       });
       expect(transport.requests[0].headers.has('authorization')).toBe(false);
@@ -314,6 +397,7 @@ describe('MLX dialect', () => {
         model: 'klein',
         prompt: 'lake',
         n: 1,
+        response_format: 'b64_json',
       });
     },
   );

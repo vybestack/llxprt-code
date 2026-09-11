@@ -29,6 +29,23 @@ export async function loadAndApplyProfileTransition<TResult>(
   publishProfile?: (result: TResult) => void,
 ): Promise<TResult> {
   const profile = await manager.loadProfile(profileName);
+  return applyModelAndImageProfileTransition(
+    manager,
+    imageProfileState,
+    profile,
+    applyProfile,
+    publishProfile,
+  );
+}
+
+/** Resolve the image reference and commit both selections before publication. */
+export async function applyModelAndImageProfileTransition<TResult>(
+  manager: ProfileManager,
+  imageProfileState: ImageProfileRuntimeState,
+  profile: Profile,
+  applyProfile: (profile: Profile) => Promise<TResult>,
+  publishProfile?: (result: TResult) => void,
+): Promise<TResult> {
   const imageProfileName =
     'imageProfile' in profile && typeof profile.imageProfile === 'string'
       ? profile.imageProfile

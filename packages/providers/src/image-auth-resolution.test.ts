@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, expectTypeOf, it } from 'bun:test';
+import type { PersistedImageBackendAuth } from '@vybestack/llxprt-code-settings';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -41,10 +42,13 @@ describe('image credential resolution', () => {
         .map((path) => rm(path, { recursive: true, force: true })),
     );
   });
-  it('looks up the selected named key', async () => {
-    expect(await resolveKey({ type: 'named-key', keyName: 'image' })).toBe(
-      'image-secret',
-    );
+  it('resolves persisted named-key auth through the identical runtime contract', async () => {
+    expectTypeOf<ImageBackendAuth>().toEqualTypeOf<PersistedImageBackendAuth>();
+    const auth: PersistedImageBackendAuth = {
+      type: 'named-key',
+      keyName: 'image',
+    };
+    expect(await resolveKey(auth)).toBe('image-secret');
   });
 
   it('reports the missing key name with a typed error', async () => {

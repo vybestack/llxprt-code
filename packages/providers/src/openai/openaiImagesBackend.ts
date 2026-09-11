@@ -99,9 +99,10 @@ export class OpenAIImagesBackend implements ImageBackend {
       model: this.model,
       prompt: request.prompt,
       n: 1,
-      ...(this.local
-        ? localOverrides
-        : { response_format: 'b64_json', ...overrides }),
+      ...(this.local || !this.model.startsWith('gpt-image')
+        ? { response_format: 'b64_json' }
+        : {}),
+      ...(this.local ? localOverrides : overrides),
     };
     return this.post(
       'generations',
@@ -164,6 +165,17 @@ export class OpenAIImagesBackend implements ImageBackend {
         'Image profile credential is missing.',
       );
     }
+    if (
+      [...apiKey].some((character) => {
+        const code = character.charCodeAt(0);
+        return code < 32 || code === 127;
+      })
+    ) {
+      throw new ImageBackendError(
+        'validation',
+        'Image profile credential contains invalid characters.',
+      );
+    }
     return apiKey;
   }
 
@@ -173,17 +185,18 @@ export class OpenAIImagesBackend implements ImageBackend {
     prompt: string,
     signal: AbortSignal,
   ): Promise<ImageBackendResult> {
-    const headers = new Headers();
-    let credential: string | undefined;
-    if (typeof body === 'string')
-      headers.set('Content-Type', 'application/json');
-    if (this.deps.config.auth.type !== 'none') {
-      credential = await this.resolveApiKey();
-      headers.set('Authorization', `Bearer ${credential}`);
-    }
+    const credential =
+      this.deps.config.auth.type === 'none'
+        ? undefined
+        : await this.resolveApiKey();
     const endpoint = `${normalizeBaseUrl(this.deps.config.baseUrl)}/images/${operation}`;
     let response: Response;
     try {
+      const headers = new Headers();
+      if (typeof body === 'string')
+        headers.set('Content-Type', 'application/json');
+      if (credential !== undefined)
+        headers.set('Authorization', `Bearer ${credential}`);
       response = await this.fetchImpl(endpoint, {
         method: 'POST',
         headers,
