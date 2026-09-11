@@ -47,6 +47,14 @@ import {
   MAX_TEST_CONCURRENCY,
   resolveTestConcurrency,
 } from '../../scripts/lib/bun-test-policy.js';
+import {
+  assertRunnerActive,
+  createBespokeRunnerIsolation,
+  killRunnerChild,
+  throwWorkerFailures,
+  installRunnerSignalHandlers,
+  trackRunnerChild,
+} from '../../scripts/lib/bespoke-runner-isolation.js';
 
 process.env.LLXPRT_RUNNING_TESTS = 'true';
 
@@ -196,7 +204,9 @@ export async function runTestFileWithTimeoutRetry<
 export function runTestFile(
   file: string,
   reportPath: string,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<TestResult> {
+  assertRunnerActive();
   const timeoutMs =
     envPerFileTimeoutMs(process.env, 'LLXPRT_TEST_FILE_TIMEOUT_MS') ??
     DEFAULT_PER_FILE_TIMEOUT_MS;
@@ -224,9 +234,11 @@ export function runTestFile(
       {
         cwd: WORKSPACE_ROOT,
         stdio: 'inherit',
-        env: process.env,
+        env,
+        detached: process.platform !== 'win32',
       },
     );
+    trackRunnerChild(child);
 
     // Set by the wall-clock timer so the `close` handler can report the real
     // reason. The result is only produced once the process has actually been
@@ -237,7 +249,13 @@ export function runTestFile(
 
     const timer = setTimeout(() => {
       killedByTimeout = true;
-      child.kill('SIGKILL');
+      try {
+        killRunnerChild(child);
+      } catch (error) {
+        console.error(
+          `Failed to kill timed-out test child ${child.pid}: ${String(error)}`,
+        );
+      }
     }, timeoutMs);
 
     // `close` rather than `exit`: it fires once the child's stdio has been
@@ -411,67 +429,89 @@ async function main(): Promise<void> {
     `Running ${testFiles.length} agents test files with concurrency ${CONCURRENCY}`,
   );
 
-  // Each child writes its own JUnit report here; they are merged into a single
-  // workspace-level junit.xml once the run finishes.
-  const reportDir = mkdtempSync(join(tmpdir(), 'agents-bun-junit-'));
-  const reportPathFor = (file: string): string =>
-    join(reportDir, `${file.replace(/[\\/]/g, '__')}.xml`);
+  // Session-scoped fake system root (issue #3622): every spawned test process
+  // gets HOME/TMPDIR/XDG_* inside a throwaway root while this runner keeps
+  // its real environment for the sentinel guard.
+  const isolation = createBespokeRunnerIsolation(process.env);
+  const removeSignalHandlers = installRunnerSignalHandlers(() => {
+    isolation.finalize();
+  });
+  let exitCode = 1;
+  try {
+    // Each child writes its own JUnit report here; they are merged into a single
+    // workspace-level junit.xml once the run finishes.
+    const reportDir = mkdtempSync(join(tmpdir(), 'agents-bun-junit-'));
+    const reportPathFor = (file: string): string =>
+      join(reportDir, `${file.replace(/[\\/]/g, '__')}.xml`);
 
-  // Sliding worker pool: each worker takes the next unclaimed file as soon as
-  // it is free. Fixed-size batches would hold `CONCURRENCY - 1` slots idle
-  // while the slowest file in a batch finished, which both lengthens the run
-  // and prolongs the contention window that makes slow files slower still.
-  const results: TestResult[] = [];
-  let nextIndex = 0;
-  const worker = async (): Promise<void> => {
-    while (nextIndex < testFiles.length) {
-      const file = testFiles[nextIndex++];
-      try {
-        const reportPath = reportPathFor(file);
-        results.push(
-          await runTestFileWithTimeoutRetry(file, () =>
-            runTestFile(file, reportPath),
-          ),
-        );
-      } catch (error: unknown) {
-        // `spawn` can throw synchronously under OS-level resource exhaustion
-        // (EMFILE). Record it as a failed file so the run still produces a
-        // report and a controlled exit code rather than dying on an unhandled
-        // rejection and discarding every result collected so far.
-        console.error(
-          `Unexpected error running ${file}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-        results.push({
-          file,
-          passed: false,
-          exitCode: -1,
-          signal: null,
-          timedOut: false,
-          timeoutMs: perFileOverrideMs ?? DEFAULT_PER_FILE_TIMEOUT_MS,
-        });
+    // Sliding worker pool: each worker takes the next unclaimed file as soon as
+    // it is free. Fixed-size batches would hold `CONCURRENCY - 1` slots idle
+    // while the slowest file in a batch finished, which both lengthens the run
+    // and prolongs the contention window that makes slow files slower still.
+    const results: TestResult[] = [];
+    let nextIndex = 0;
+    const worker = async (): Promise<void> => {
+      while (nextIndex < testFiles.length) {
+        const file = testFiles[nextIndex++];
+        try {
+          const reportPath = reportPathFor(file);
+          results.push(
+            await isolation.runFile(file, () =>
+              runTestFileWithTimeoutRetry(file, () =>
+                runTestFile(file, reportPath, isolation.sessionEnv),
+              ),
+            ),
+          );
+        } catch (error: unknown) {
+          // `spawn` can throw synchronously under OS-level resource exhaustion
+          // (EMFILE). Record it as a failed file so the run still produces a
+          // report and a controlled exit code rather than dying on an unhandled
+          // rejection and discarding every result collected so far.
+          console.error(
+            `Unexpected error running ${file}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+          results.push({
+            file,
+            passed: false,
+            exitCode: -1,
+            signal: null,
+            timedOut: false,
+            timeoutMs: perFileOverrideMs ?? DEFAULT_PER_FILE_TIMEOUT_MS,
+          });
+        }
       }
+    };
+    const workers = await Promise.allSettled(
+      Array.from({ length: Math.min(CONCURRENCY, testFiles.length) }, worker),
+    );
+    throwWorkerFailures(workers);
+
+    results.sort((left, right) => left.file.localeCompare(right.file));
+
+    const failed = results.filter((result) => !result.passed);
+    for (const result of failed) {
+      console.error(`FAILED: ${result.file} (${describeFailure(result)})`);
     }
-  };
-  await Promise.all(
-    Array.from({ length: Math.min(CONCURRENCY, testFiles.length) }, worker),
-  );
-  results.sort((left, right) => left.file.localeCompare(right.file));
 
-  const failed = results.filter((result) => !result.passed);
-  for (const result of failed) {
-    console.error(`FAILED: ${result.file} (${describeFailure(result)})`);
+    console.log(
+      `Passed ${results.length - failed.length}/${testFiles.length} test files` +
+        (failed.length > 0 ? ` (${failed.length} failed)` : ''),
+    );
+
+    writeFileSync(JUNIT_PATH, generateJUnit(results, reportPathFor));
+    rmSync(reportDir, { recursive: true, force: true });
+
+    exitCode = failed.length > 0 ? 1 : 0;
+  } finally {
+    try {
+      if (isolation.finalize() > 0) exitCode = 1;
+    } finally {
+      removeSignalHandlers();
+    }
+    process.exitCode = exitCode;
   }
-
-  console.log(
-    `Passed ${results.length - failed.length}/${testFiles.length} test files` +
-      (failed.length > 0 ? ` (${failed.length} failed)` : ''),
-  );
-
-  writeFileSync(JUNIT_PATH, generateJUnit(results, reportPathFor));
-  rmSync(reportDir, { recursive: true, force: true });
-  process.exit(failed.length > 0 ? 1 : 0);
 }
 
 if (import.meta.main) {

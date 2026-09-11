@@ -49,12 +49,17 @@ describe('Storage — static path methods', () => {
   const originalLogHome = process.env['LLXPRT_LOG_HOME'];
 
   const originalOptIn = process.env[REAL_STORAGE_OPT_IN_ENV];
+  const originalIsolationMarker = process.env.LLXPRT_TEST_STORAGE_ISOLATED;
+  const originalLegacyHome = process.env['LLXPRT_TEST_LEGACY_HOME'];
 
   beforeEach(() => {
     delete process.env['LLXPRT_CONFIG_HOME'];
     delete process.env['LLXPRT_DATA_HOME'];
     delete process.env['LLXPRT_CACHE_HOME'];
     delete process.env['LLXPRT_LOG_HOME'];
+    // The unset-fallback legacy-dir case below must hold even when a
+    // storage-isolation preload has set the legacy-home test override.
+    delete process.env['LLXPRT_TEST_LEGACY_HOME'];
     // The platform default IS the subject of this block, so it opts out of the
     // guard that otherwise refuses to resolve an unredirected root in a test
     // process. These cases compute paths and assert on their shape; the ones
@@ -69,6 +74,8 @@ describe('Storage — static path methods', () => {
       LLXPRT_CACHE_HOME: originalCacheHome,
       LLXPRT_LOG_HOME: originalLogHome,
       [REAL_STORAGE_OPT_IN_ENV]: originalOptIn,
+      LLXPRT_TEST_LEGACY_HOME: originalLegacyHome,
+      LLXPRT_TEST_STORAGE_ISOLATED: originalIsolationMarker,
     })) {
       if (original !== undefined) {
         process.env[key] = original;
@@ -142,6 +149,13 @@ describe('Storage — static path methods', () => {
   it('getLegacyLlxprtDir returns ~/.llxprt', () => {
     const result = Storage.getLegacyLlxprtDir();
     expect(result).toBe(path.join(os.homedir(), '.llxprt'));
+  });
+
+  it('getLegacyLlxprtDir returns <LLXPRT_TEST_LEGACY_HOME>/.llxprt when the test override is set', () => {
+    const legacyHome = path.join(os.tmpdir(), 'llxprt-legacy-home-override');
+    process.env.LLXPRT_TEST_STORAGE_ISOLATED = '1';
+    process.env['LLXPRT_TEST_LEGACY_HOME'] = legacyHome;
+    expect(Storage.getLegacyLlxprtDir()).toBe(path.join(legacyHome, '.llxprt'));
   });
 
   it('getGlobalSettingsPath ends with settings.json', () => {

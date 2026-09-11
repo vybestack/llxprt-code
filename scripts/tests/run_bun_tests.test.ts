@@ -6,7 +6,13 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { pathToFileURL } from 'node:url';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+  statSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -24,6 +30,7 @@ import {
   type BunTestSpawnOptions,
   type ChildExitInfo,
 } from '../run_bun_tests.js';
+import { RealHomeSentinelGuard } from '../lib/real-home-sentinel.js';
 import {
   planNextAttempt,
   resolveTimeoutRetryBudget,
@@ -254,6 +261,7 @@ describe('runBunTests', () => {
         return entries;
       },
       resolveTsconfig: () => '/invoke/config/tsconfig.json',
+      createSentinelGuard: () => new RealHomeSentinelGuard({ targets: [] }),
       spawn: (command, options) => {
         calls.push({ command, options });
         const result = results[calls.length - 1];
@@ -282,7 +290,7 @@ describe('runBunTests', () => {
     expect(resolvedWorkspace).toBe('selected');
     // The SIGTERM-killed third entry consumes its timeout-only retry (issue
     // #3439) before reporting the final failure, so it spawns twice.
-    const expectedCall = (file: string, cwd: string) => ({
+    const expectedSpawn = (file: string, cwd: string) => ({
       command: [
         '/bin/bun',
         'test',
@@ -296,20 +304,42 @@ describe('runBunTests', () => {
       ] as const,
       options: {
         cwd,
-        env: environment,
         stdin: 'inherit',
         stdout: 'pipe',
         stderr: 'pipe',
         timeout: 120_000,
       } as const,
     });
-    expect(calls).toEqual([
+    expect(
+      calls.map((call) => ({
+        command: call.command,
+        options: {
+          cwd: call.options.cwd,
+          stdin: call.options.stdin,
+          stdout: call.options.stdout,
+          stderr: call.options.stderr,
+          timeout: call.options.timeout,
+        },
+      })),
+    ).toEqual([
       ...entries
         .slice(0, 2)
-        .map((entry) => expectedCall(entry.file, entry.cwd)),
-      expectedCall(entries[2]!.file, entries[2]!.cwd),
-      expectedCall(entries[2]!.file, entries[2]!.cwd),
+        .map((entry) => expectedSpawn(entry.file, entry.cwd)),
+      expectedSpawn(entries[2]!.file, entries[2]!.cwd),
+      expectedSpawn(entries[2]!.file, entries[2]!.cwd),
     ]);
+    // Every spawn runs with the run's session env (issue #3622) while the
+    // runner's own environment stays untouched.
+    const sessionRoots = new Set(
+      calls.map((call) => call.options.env['LLXPRT_TEST_SESSION_ROOT']),
+    );
+    expect(sessionRoots.size).toBe(1);
+    const sessionRoot = calls[0]!.options.env['LLXPRT_TEST_SESSION_ROOT'];
+    expect(sessionRoot).toBeDefined();
+    expect(statSync(sessionRoot!).isDirectory()).toBe(true);
+    expect(calls[0]!.options.env['RUNNER_TEST']).toBe('1');
+    expect(environment).toEqual({ RUNNER_TEST: '1' });
+    rmSync(sessionRoot!, { recursive: true, force: true });
     expect(stderr).toEqual([
       'Native Bun test failed: /repo/packages/two/two.test.ts (exit code: 7)',
       'Native Bun test timed out (attempt 1), retrying: /repo/packages/three/three.test.ts (signal: SIGTERM)',
@@ -335,6 +365,7 @@ describe('runBunTests', () => {
         { cwd: '/repo/two', file: '/repo/two/passes.test.ts', preloads: [] },
       ],
       resolveTsconfig: resolveTsconfigOverride,
+      createSentinelGuard: () => new RealHomeSentinelGuard({ targets: [] }),
       spawn: () => {
         spawnCount++;
         if (spawnCount === 1) {
@@ -374,6 +405,7 @@ describe('runBunTests', () => {
         { cwd: '/repo/core', file: '/repo/core/test.ts', preloads: [] },
       ],
       resolveTsconfig: resolveTsconfigOverride,
+      createSentinelGuard: () => new RealHomeSentinelGuard({ targets: [] }),
       spawn: () => ({ exitCode: 0, signalCode: null }),
       loadGlobalSetup: noGlobalSetup,
       stdout: (line) => stdout.push(line),
@@ -396,6 +428,7 @@ describe('runBunTests', () => {
         { cwd: '/repo/core', file: '/repo/core/test.ts', preloads: [] },
       ],
       resolveTsconfig: resolveTsconfigOverride,
+      createSentinelGuard: () => new RealHomeSentinelGuard({ targets: [] }),
       spawn: () => ({ exitCode: 0, signalCode: null }),
       loadGlobalSetup: noGlobalSetup,
       stdout: () => {},
@@ -424,6 +457,7 @@ describe('runBunTests', () => {
         },
       ],
       resolveTsconfig: resolveTsconfigOverride,
+      createSentinelGuard: () => new RealHomeSentinelGuard({ targets: [] }),
       spawn: (command) => {
         calls.push(command);
         return { exitCode: 0, signalCode: null };
@@ -469,6 +503,7 @@ describe('runBunTests', () => {
         },
       ],
       resolveTsconfig: resolveTsconfigOverride,
+      createSentinelGuard: () => new RealHomeSentinelGuard({ targets: [] }),
       spawn: () => {
         attempts++;
         return attempts < 3
@@ -504,6 +539,7 @@ describe('runBunTests', () => {
         },
       ],
       resolveTsconfig: resolveTsconfigOverride,
+      createSentinelGuard: () => new RealHomeSentinelGuard({ targets: [] }),
       spawn: () => {
         attempts++;
         return { exitCode: 1, signalCode: null };
@@ -539,6 +575,7 @@ describe('runBunTests', () => {
         },
       ],
       resolveTsconfig: resolveTsconfigOverride,
+      createSentinelGuard: () => new RealHomeSentinelGuard({ targets: [] }),
       spawn: () => {
         attempts++;
         // First attempt: killed by the per-file timeout with partial output.
@@ -577,6 +614,7 @@ describe('runBunTests', () => {
         },
       ],
       resolveTsconfig: resolveTsconfigOverride,
+      createSentinelGuard: () => new RealHomeSentinelGuard({ targets: [] }),
       spawn: () => {
         attempts++;
         return { exitCode: null, signalCode: 'SIGTERM' };

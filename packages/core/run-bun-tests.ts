@@ -42,6 +42,13 @@ import {
   DEFAULT_PER_TEST_TIMEOUT_MS,
   resolveTestConcurrency,
 } from '../../scripts/lib/bun-test-policy.js';
+import {
+  assertRunnerActive,
+  createBespokeRunnerIsolation,
+  throwWorkerFailures,
+  installRunnerSignalHandlers,
+  trackRunnerChild,
+} from '../../scripts/lib/bespoke-runner-isolation.js';
 
 process.env.LLXPRT_RUNNING_TESTS = 'true';
 
@@ -137,6 +144,12 @@ export interface RunTestFileOptions {
     childClosed: Promise<void>,
   ) => Promise<void>;
   readonly scanJUnitReport?: (reportPath: string) => boolean;
+  /**
+   * Env the test process is spawned with (issue #3622): main() passes the
+   * session env with the fake HOME/TMPDIR/XDG root. Defaults to the runner's
+   * own environment.
+   */
+  readonly env?: NodeJS.ProcessEnv;
 }
 
 const REAP_TIMEOUT_MS = 10_000;
@@ -443,6 +456,7 @@ export function runTestFile(
   file: string,
   options: RunTestFileOptions = {},
 ): Promise<TestResult> {
+  assertRunnerActive();
   const timeoutMs = options.timeoutMs ?? PER_FILE_TIMEOUT_MS;
   return new Promise((resolve, reject) => {
     let resolved = false;
@@ -495,7 +509,7 @@ export function runTestFile(
       {
         cwd: WORKSPACE_ROOT,
         stdio: ['ignore', 'inherit', 'inherit'],
-        env: process.env,
+        env: options.env ?? process.env,
         // POSIX: put the test child in its own process group so a timeout
         // can kill the entire per-test process tree by negative PID.
         // Windows ignores detached for process-group purposes; the Windows
@@ -503,6 +517,7 @@ export function runTestFile(
         detached: process.platform !== 'win32',
       },
     );
+    trackRunnerChild(child);
     const childClosed = observeChildClose(child);
     // Test seam mirroring removeAttemptDir: replaces the timed-out-child
     // reap so a test can force its failure deterministically instead of
@@ -664,68 +679,92 @@ async function main(): Promise<void> {
     `Running ${testFiles.length} test files with concurrency ${CONCURRENCY}`,
   );
 
-  const results: TestResult[] = [];
+  // Session-scoped fake system root (issue #3622): every spawned test process
+  // gets HOME/TMPDIR/XDG_* inside a throwaway root while this runner keeps
+  // its real environment for the sentinel guard.
+  const isolation = createBespokeRunnerIsolation(process.env);
+  const removeSignalHandlers = installRunnerSignalHandlers(() => {
+    isolation.finalize();
+  });
+  let exitCode = 1;
+  let failFast = false;
+  try {
+    const results: TestResult[] = [];
 
-  for (let i = 0; i < testFiles.length; i += CONCURRENCY) {
-    const batch = testFiles.slice(i, i + CONCURRENCY);
-    const batchResults = await Promise.all(
-      batch.map((file) =>
-        runTestFileWithTimeoutRetry(file, () => runTestFile(file)),
-      ),
-    );
-    results.push(...batchResults);
+    for (let i = 0; i < testFiles.length; i += CONCURRENCY) {
+      const batch = testFiles.slice(i, i + CONCURRENCY);
+      const settled = await Promise.allSettled(
+        batch.map((file) =>
+          isolation.runFile(file, () =>
+            runTestFileWithTimeoutRetry(file, () =>
+              runTestFile(file, { env: isolation.sessionEnv }),
+            ),
+          ),
+        ),
+      );
+      const batchResults = throwWorkerFailures(settled);
+      results.push(...batchResults);
 
-    // Fail fast: only an unrecovered reap or attempt-cleanup failure aborts
-    // the run. A failure on the first attempt that the retry outlived
-    // (reapFailed=false on the returned result) means the suspect tree is
-    // gone and the file is already marked failed; subsequent files are safe
-    // to run. A failure on the final attempt means the old process tree may
-    // still be alive and holding resources (log handles, ports) that would
-    // corrupt subsequent results.
-    if (batchResults.some((r) => r.reapFailed)) {
-      for (const result of batchResults) {
-        if (result.reapFailed && result.reapError !== null) {
-          console.error(`  ${result.file}: ${result.reapError}`);
+      // Fail fast: only an unrecovered reap or attempt-cleanup failure aborts
+      // the run. A failure on the first attempt that the retry outlived
+      // (reapFailed=false on the returned result) means the suspect tree is
+      // gone and the file is already marked failed; subsequent files are safe
+      // to run. A failure on the final attempt means the old process tree may
+      // still be alive and holding resources (log handles, ports) that would
+      // corrupt subsequent results.
+      if (batchResults.some((r) => r.reapFailed)) {
+        for (const result of batchResults) {
+          if (result.reapFailed && result.reapError !== null) {
+            console.error(`  ${result.file}: ${result.reapError}`);
+          }
         }
+        console.error(
+          'FATAL: failed to reap a timed-out test process tree or clean up ' +
+            'its attempt directory; aborting to avoid running subsequent files ' +
+            'against leaked resources.',
+        );
+        failFast = true;
+        break;
       }
-      console.error(
-        'FATAL: failed to reap a timed-out test process tree or clean up ' +
-          'its attempt directory; aborting to avoid running subsequent files ' +
-          'against leaked resources.',
-      );
-      writeFileSync(JUNIT_PATH, generateJUnit(results));
-      process.exit(1);
     }
-  }
 
-  const passed = results.filter((r) => r.passed).length;
-  const failed = results.filter((r) => !r.passed);
+    const passed = results.filter((r) => r.passed).length;
+    const failed = results.filter((r) => !r.passed);
 
-  for (const result of failed) {
-    if (result.timedOut) {
-      console.error(
-        `TIMEOUT: ${result.file} (exceeded ${timeoutExceededLabel(result)})` +
-          (result.reapFailed
-            ? ' [REAP FAILED]'
-            : result.reapError
-              ? ' [REAP FAILED (recovered on retry)]'
-              : ''),
-      );
-    } else {
-      console.error(
-        `FAILED: ${result.file} (exit code ${result.exitCode ?? -1})`,
-      );
+    for (const result of failed) {
+      if (result.timedOut) {
+        console.error(
+          `TIMEOUT: ${result.file} (exceeded ${timeoutExceededLabel(result)})` +
+            (result.reapFailed
+              ? ' [REAP FAILED]'
+              : result.reapError
+                ? ' [REAP FAILED (recovered on retry)]'
+                : ''),
+        );
+      } else {
+        console.error(
+          `FAILED: ${result.file} (exit code ${result.exitCode ?? -1})`,
+        );
+      }
     }
+
+    console.log(
+      `Passed ${passed}/${testFiles.length} test files` +
+        (failed.length > 0 ? ` (${failed.length} failed)` : ''),
+    );
+
+    writeFileSync(JUNIT_PATH, generateJUnit(results));
+
+    exitCode = failFast || failed.length > 0 ? 1 : 0;
+  } finally {
+    try {
+      if (isolation.finalize() > 0) exitCode = 1;
+    } finally {
+      removeSignalHandlers();
+    }
+    process.exitCode = exitCode;
   }
-
-  console.log(
-    `Passed ${passed}/${testFiles.length} test files` +
-      (failed.length > 0 ? ` (${failed.length} failed)` : ''),
-  );
-
-  writeFileSync(JUNIT_PATH, generateJUnit(results));
-
-  process.exit(failed.length > 0 ? 1 : 0);
+  if (failFast) process.exit(exitCode);
 }
 
 if (import.meta.main) {

@@ -20,6 +20,14 @@ import {
   DEFAULT_PER_TEST_TIMEOUT_MS,
   resolveTestConcurrency,
 } from '../../scripts/lib/bun-test-policy.js';
+import {
+  assertRunnerActive,
+  createBespokeRunnerIsolation,
+  killRunnerChild,
+  throwWorkerFailures,
+  installRunnerSignalHandlers,
+  trackRunnerChild,
+} from '../../scripts/lib/bespoke-runner-isolation.js';
 
 process.env.LLXPRT_RUNNING_TESTS = 'true';
 
@@ -115,7 +123,11 @@ export async function runTestFileWithTimeoutRetry<
   return runAttempt();
 }
 
-export function runTestFile(file: string): Promise<TestResult> {
+export function runTestFile(
+  file: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<TestResult> {
+  assertRunnerActive();
   return new Promise((resolve) => {
     let resolved = false;
     const child = spawn(
@@ -133,9 +145,11 @@ export function runTestFile(file: string): Promise<TestResult> {
       {
         cwd: WORKSPACE_ROOT,
         stdio: 'inherit',
-        env: process.env,
+        env,
+        detached: process.platform !== 'win32',
       },
     );
+    trackRunnerChild(child);
 
     // Set by the timer so the exit handler can report the real reason. The
     // result is only produced once the process has actually been reaped:
@@ -148,7 +162,13 @@ export function runTestFile(file: string): Promise<TestResult> {
 
     const timer = setTimeout(() => {
       killedByTimeout = true;
-      child.kill('SIGKILL');
+      try {
+        killRunnerChild(child);
+      } catch (error) {
+        console.error(
+          `Failed to kill timed-out test child ${child.pid}: ${String(error)}`,
+        );
+      }
     }, PER_FILE_TIMEOUT_MS);
 
     child.on('exit', (code, signal) => {
@@ -240,43 +260,65 @@ async function main(): Promise<void> {
     `Running ${testFiles.length} test files with concurrency ${CONCURRENCY}`,
   );
 
-  // A worker pool rather than fixed batches: a batch only advances when its
-  // slowest file finishes, so one slow file leaves CONCURRENCY - 1 slots idle
-  // exactly when the machine has work queued behind it.
-  const results: TestResult[] = [];
-  let nextIndex = 0;
+  // Session-scoped fake system root (issue #3622): every spawned test process
+  // gets HOME/TMPDIR/XDG_* inside a throwaway root while this runner keeps
+  // its real environment for the sentinel guard.
+  const isolation = createBespokeRunnerIsolation(process.env);
+  const removeSignalHandlers = installRunnerSignalHandlers(() => {
+    isolation.finalize();
+  });
+  let exitCode = 1;
+  try {
+    // A worker pool rather than fixed batches: a batch only advances when its
+    // slowest file finishes, so one slow file leaves CONCURRENCY - 1 slots idle
+    // exactly when the machine has work queued behind it.
+    const results: TestResult[] = [];
+    let nextIndex = 0;
 
-  async function worker(): Promise<void> {
-    while (nextIndex < testFiles.length) {
-      const file = testFiles[nextIndex++];
-      results.push(
-        await runTestFileWithTimeoutRetry(file, () => runTestFile(file)),
-      );
+    async function worker(): Promise<void> {
+      while (nextIndex < testFiles.length) {
+        const file = testFiles[nextIndex++];
+        results.push(
+          await isolation.runFile(file, () =>
+            runTestFileWithTimeoutRetry(file, () =>
+              runTestFile(file, isolation.sessionEnv),
+            ),
+          ),
+        );
+      }
     }
+
+    const workers = await Promise.allSettled(
+      Array.from({ length: Math.min(CONCURRENCY, testFiles.length) }, worker),
+    );
+    throwWorkerFailures(workers);
+
+    const passed = results.filter((r) => r.passed).length;
+    const failed = results.filter((r) => !r.passed);
+
+    for (const result of failed) {
+      console.error(`FAILED: ${result.file} (${formatFailureReason(result)})`);
+    }
+
+    console.log(
+      `Passed ${passed}/${testFiles.length} test files` +
+        (failed.length > 0 ? ` (${failed.length} failed)` : ''),
+    );
+
+    writeFileSync(
+      JUNIT_PATH,
+      generateJUnit(results, testFiles.length, failed.length),
+    );
+
+    exitCode = failed.length > 0 ? 1 : 0;
+  } finally {
+    try {
+      if (isolation.finalize() > 0) exitCode = 1;
+    } finally {
+      removeSignalHandlers();
+    }
+    process.exitCode = exitCode;
   }
-
-  await Promise.all(
-    Array.from({ length: Math.min(CONCURRENCY, testFiles.length) }, worker),
-  );
-
-  const passed = results.filter((r) => r.passed).length;
-  const failed = results.filter((r) => !r.passed);
-
-  for (const result of failed) {
-    console.error(`FAILED: ${result.file} (${formatFailureReason(result)})`);
-  }
-
-  console.log(
-    `Passed ${passed}/${testFiles.length} test files` +
-      (failed.length > 0 ? ` (${failed.length} failed)` : ''),
-  );
-
-  writeFileSync(
-    JUNIT_PATH,
-    generateJUnit(results, testFiles.length, failed.length),
-  );
-
-  process.exit(failed.length > 0 ? 1 : 0);
 }
 
 if (import.meta.main) {

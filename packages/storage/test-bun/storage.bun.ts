@@ -72,6 +72,8 @@ const ENV_KEYS = [
   'LLXPRT_DATA_HOME',
   'LLXPRT_CACHE_HOME',
   'LLXPRT_LOG_HOME',
+  'LLXPRT_TEST_LEGACY_HOME',
+  'LLXPRT_TEST_STORAGE_ISOLATED',
 ] as const;
 const ORIGINAL_ENV: Record<string, string | undefined> = {};
 for (const key of ENV_KEYS) {
@@ -426,6 +428,9 @@ describe('Storage – default platform paths (no overrides)', () => {
 describe('Storage – legacy path', () => {
   beforeEach(() => {
     process.env['LLXPRT_CONFIG_HOME'] = '/tmp/some-override';
+    // The unset-fallback case below must hold even when a storage-isolation
+    // preload has set the legacy-home test override.
+    delete process.env['LLXPRT_TEST_LEGACY_HOME'];
   });
 
   afterEach(restoreEnv);
@@ -433,6 +438,32 @@ describe('Storage – legacy path', () => {
   it('getLegacyLlxprtDir returns ~/.llxprt regardless of override', () => {
     const expected = path.join(os.homedir(), '.llxprt');
     expect(Storage.getLegacyLlxprtDir()).toBe(expected);
+  });
+
+  it('getLegacyLlxprtDir returns <LLXPRT_TEST_LEGACY_HOME>/.llxprt when the test override is set', () => {
+    const legacyHome = path.join(os.tmpdir(), 'llxprt-legacy-home-override');
+    process.env['LLXPRT_TEST_STORAGE_ISOLATED'] = '1';
+    process.env['LLXPRT_TEST_LEGACY_HOME'] = legacyHome;
+    expect(Storage.getLegacyLlxprtDir()).toBe(path.join(legacyHome, '.llxprt'));
+  });
+
+  it('ignores a legacy-home override outside isolated tests', () => {
+    delete process.env.LLXPRT_TEST_STORAGE_ISOLATED;
+    process.env.LLXPRT_TEST_LEGACY_HOME = path.join(
+      os.tmpdir(),
+      'ignored-home',
+    );
+    expect(Storage.getLegacyLlxprtDir()).toBe(
+      path.join(os.homedir(), '.llxprt'),
+    );
+  });
+
+  it('getLegacyLlxprtDir ignores a relative LLXPRT_TEST_LEGACY_HOME', () => {
+    process.env['LLXPRT_TEST_STORAGE_ISOLATED'] = '1';
+    process.env['LLXPRT_TEST_LEGACY_HOME'] = 'relative/legacy-home';
+    expect(Storage.getLegacyLlxprtDir()).toBe(
+      path.join(os.homedir(), '.llxprt'),
+    );
   });
 });
 

@@ -134,8 +134,20 @@ export class Storage {
    * Returns the legacy global configuration directory (`~/.llxprt`).
    * Used solely by the startup migration logic to detect and copy
    * pre-migration configuration into the new platform-standard paths.
+   *
+   * In test processes, an absolute `LLXPRT_TEST_LEGACY_HOME` redirects the
+   * resolution so the legacy dir never lands in the real home. Production
+   * never sets that variable.
    */
   static getLegacyLlxprtDir(): string {
+    const legacyHome = process.env.LLXPRT_TEST_LEGACY_HOME;
+    if (
+      process.env.LLXPRT_TEST_STORAGE_ISOLATED &&
+      legacyHome !== undefined &&
+      path.isAbsolute(legacyHome)
+    ) {
+      return path.join(legacyHome, LLXPRT_DIR);
+    }
     const homeDir = os.homedir();
     if (!homeDir) {
       return path.join(os.tmpdir(), '.llxprt');

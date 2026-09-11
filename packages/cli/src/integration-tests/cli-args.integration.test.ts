@@ -564,16 +564,31 @@ describe('CLI --profile-load Integration Tests', () => {
 describe('CLI --version and --help flags', () => {
   let tempDir: string;
   let originalHome: string | undefined;
+  let originalConfigHome: string | undefined;
 
   beforeEach(async () => {
     tempDir = await createTempDirectory();
     originalHome = process.env.HOME;
     process.env.HOME = tempDir;
+    // Point Storage at a per-test config root (issue #3581): the
+    // invalid-settings.json cases below write through
+    // Storage.getGlobalConfigDir(), which reads this env at call time. Without
+    // the override, a direct (non-preloaded) run resolves the developer's
+    // real config dir and the fixture lands in the real home.
+    originalConfigHome = process.env.LLXPRT_CONFIG_HOME;
+    process.env.LLXPRT_CONFIG_HOME = path.join(tempDir, 'config-home');
   });
 
   afterEach(async () => {
-    if (originalHome) {
+    if (originalHome !== undefined) {
       process.env.HOME = originalHome;
+    } else {
+      delete process.env.HOME;
+    }
+    if (originalConfigHome !== undefined) {
+      process.env.LLXPRT_CONFIG_HOME = originalConfigHome;
+    } else {
+      delete process.env.LLXPRT_CONFIG_HOME;
     }
     await cleanupTempDirectory(tempDir);
   });
