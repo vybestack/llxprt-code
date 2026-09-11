@@ -198,14 +198,14 @@ describe('CodexImageBackend.edit', () => {
     const images = body['images'] as Array<{ image_url: string }>;
     expect(images).toHaveLength(1);
     expect(images[0].image_url).toMatch(/^data:image\/png;base64,/);
-    expect(body['background']).toBe('auto');
-    expect(body['quality']).toBe('auto');
-    expect(body['size']).toBe('auto');
+    expect(Object.hasOwn(body, 'background')).toBe(false);
+    expect(Object.hasOwn(body, 'quality')).toBe(false);
+    expect(Object.hasOwn(body, 'size')).toBe(false);
     // The edit contract must NOT include generate-only keys.
     expect(body['n']).toBeUndefined();
     // The body must contain ONLY the documented edit keys.
     expect(Object.keys(body).sort()).toStrictEqual(
-      ['background', 'images', 'model', 'prompt', 'quality', 'size'].sort(),
+      ['images', 'model', 'prompt'].sort(),
     );
   });
 
