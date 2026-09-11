@@ -325,7 +325,7 @@ export class RetryOrchestrator implements IProvider {
     let lastError: unknown;
     const retryState = createInitialRetryState(initialDelayMs);
     const envelopeRefresh = new RetryPromptEnvelopeRefresh(budget.used);
-    while (envelopeRefresh.canRetry(budget, maxAttempts)) {
+    while (envelopeRefresh.canRetry(budget)) {
       if (isSignalAborted(signal)) throw createAbortError(signal?.reason);
       request.recordTarget(this.name);
       const usedBefore = budget.used;

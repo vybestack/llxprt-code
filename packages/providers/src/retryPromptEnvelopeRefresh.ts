@@ -52,8 +52,8 @@ export class RetryPromptEnvelopeRefresh {
   private attempt = 0;
   constructor(public recoveryConsumption: number) {}
 
-  canRetry(budget: TransportAttemptBudget, maxAttempts: number): boolean {
-    return budget.used < budget.limit && this.recoveryConsumption < maxAttempts;
+  canRetry(budget: TransportAttemptBudget): boolean {
+    return budget.used < budget.limit;
   }
 
   async settle(

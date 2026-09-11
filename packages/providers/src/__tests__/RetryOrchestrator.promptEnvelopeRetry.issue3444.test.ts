@@ -213,6 +213,38 @@ function errorMessage(error: unknown): string {
 }
 
 describe('RetryOrchestrator prompt-envelope retry contract (@issue:3444)', () => {
+  it('sends once on entry with pre-consumed shared budget when retries remain only for numbering', async () => {
+    const { provider, attempts } = createOneShotProjectedProvider({
+      failFirstSend: false,
+      refreshProjection: 'fresh',
+    });
+    const attached = attachTransportAttemptBudget(buildOptions(undefined), 4);
+    try {
+      expect(tryConsumeTransportAttempt(attached.options)).toBe(true);
+      expect(tryConsumeTransportAttempt(attached.options)).toBe(true);
+      const { chunks, error } = await drain(
+        new RetryOrchestrator(provider, {
+          maxAttempts: 2,
+          initialDelayMs: 0,
+        }).generateChatCompletion(attached.options),
+      );
+
+      expect({
+        sends: attempts.length,
+        chunks,
+        error,
+        used: attached.budget.used,
+      }).toStrictEqual({
+        sends: 1,
+        chunks: [{ speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] }],
+        error: undefined,
+        used: 3,
+      });
+    } finally {
+      attached.release();
+    }
+  });
+
   it('exhausts token-less retries using pre-consumed shared budget attempts', async () => {
     const { provider, attempts, projectionCalls } =
       createOneShotProjectedProvider({

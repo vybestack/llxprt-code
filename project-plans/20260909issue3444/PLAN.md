@@ -252,3 +252,33 @@ main's result, including final budget usage 2. A projected-request regression
 uses retries 3 with one prior send and verifies that the remaining retry
 receives a fresh token. Failed refreshes still count toward recovery without
 consuming physical transport budget.
+
+Round-2 review found a remaining boundary-f entry-gate mismatch: when shared
+`budget.used >= maxAttempts` but `budget.used < budget.limit`, the additional
+recovery-consumption gate blocked entry while main allowed a send. The final
+remediation restores main's exact loop gate, `budget.used < budget.limit`,
+with `maxAttempts` enforced solely in the retry-decision path. Entry-time
+`budget.used` still seeds recovery consumption, and failed refreshes still
+increment it without consuming physical transport budget.
+
+The pre-edit differential with token-less entry used 2, limit 4, and maxAttempts
+2 produced zero sends, zero chunks, and exhaustion on HEAD b053d8b15; main
+produced one send, one `ok` chunk, and success with final budget usage 3. The
+added entry-parity regression failed with that HEAD result before the fix and
+passes with main's result afterward. The existing used-1 exhaustion regression
+and all existing refresh-bound tests remain unchanged and pass.
+
+Refresh exceptions reach `attemptError`; `settle()` adds one recovery attempt
+because preparation left `options` undefined. `handleRetryError` assigns that
+consumption to `state.attempt`. Auth refresh and bucket failover cannot continue
+at the cap, and `decideRetryOrThrow` returns exhaustion at `maxAttempts` for
+retryable errors (nonretryable errors throw immediately). The existing
+`bounds retryable refresh failures at %s attempts and preserves the last
+projection error` cases stop after one send plus limit-minus-one failed
+refreshes for limits 2 and 3. The provider-owned two-send/one-refresh case
+also passes, preserving physical budget usage 2.
+
+Final targeted verification: orchestrator issue3444 file 16 passed, full
+RetryOrchestrator suite 128 passed across 16 files, three provider issue3444
+files 6 passed, all with zero failures. Providers workspace typecheck and lint
+both exited 0.
