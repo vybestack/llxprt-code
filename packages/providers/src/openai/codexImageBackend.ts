@@ -18,6 +18,7 @@ import type {
 } from '@vybestack/llxprt-code-providers/imageBackend.js';
 import { readInputImage } from './imageInput.js';
 import { parseImageResponse } from './imageBackendResponse.js';
+import { validateCodexImageProfileBaseUrl } from './imageEndpoint.js';
 import { normalizeBaseUrl } from './codexBaseUrl.js';
 
 const logger = new DebugLogger('llxprt:openai:codex:image');
@@ -101,7 +102,6 @@ export interface CodexImageBackendDeps {
     ImageGenerateRequest,
     'quality' | 'size' | 'background'
   >;
-  readonly allowCustomBaseUrl?: boolean;
   readonly fetchImpl?: typeof fetch;
 }
 
@@ -138,7 +138,7 @@ export class CodexImageBackend implements ImageBackend {
     ImageGenerateRequest,
     'quality' | 'size' | 'background'
   >;
-  private readonly allowCustomBaseUrl: boolean;
+  private readonly hasImageProfile: boolean;
   private readonly fetchImpl: typeof fetch;
 
   constructor(deps: CodexImageBackendDeps) {
@@ -146,7 +146,7 @@ export class CodexImageBackend implements ImageBackend {
     this.getBaseUrl = deps.getBaseUrl ?? (() => undefined);
     this.model = deps.model ?? CODEX_IMAGE_MODEL;
     this.defaults = deps.defaults ?? {};
-    this.allowCustomBaseUrl = deps.allowCustomBaseUrl ?? false;
+    this.hasImageProfile = deps.defaults !== undefined;
     this.fetchImpl = deps.fetchImpl ?? fetch;
   }
 
@@ -245,9 +245,8 @@ export class CodexImageBackend implements ImageBackend {
 
   private buildEndpoint(suffix: 'generations' | 'edits'): string {
     const baseUrl = this.getBaseUrl();
-    if (this.allowCustomBaseUrl && baseUrl !== undefined) {
-      return `${normalizeBaseUrl(baseUrl)}/images/${suffix}`;
-    }
+    if (this.hasImageProfile && baseUrl !== undefined)
+      validateCodexImageProfileBaseUrl(baseUrl);
     return suffix === 'generations'
       ? buildCodexImageGenerateEndpoint(baseUrl)
       : buildCodexImageEditEndpoint(baseUrl);
@@ -265,12 +264,21 @@ export class CodexImageBackend implements ImageBackend {
       );
     }
 
-    const credential = await this.getCredential();
     const endpoint = this.buildEndpoint('generations');
+    const credential = await this.getCredential();
 
-    const background = request.background ?? this.defaults.background;
-    const quality = request.quality ?? this.defaults.quality;
-    const size = request.size ?? this.defaults.size;
+    const background =
+      request.background ??
+      this.defaults.background ??
+      (this.hasImageProfile ? undefined : 'auto');
+    const quality =
+      request.quality ??
+      this.defaults.quality ??
+      (this.hasImageProfile ? undefined : 'auto');
+    const size =
+      request.size ??
+      this.defaults.size ??
+      (this.hasImageProfile ? undefined : 'auto');
     const body = {
       model: this.model,
       prompt: request.prompt,
@@ -346,16 +354,22 @@ export class CodexImageBackend implements ImageBackend {
       }),
     );
 
-    const credential = await this.getCredential();
     const endpoint = this.buildEndpoint('edits');
+    const credential = await this.getCredential();
 
     // The Codex `/images/edits` contract requires `images` to be an array of
     // `{ image_url }` objects, NOT an array of bare data-URL strings and not
     // the singular `image` key. Anything else is rejected by the service with
     // `400 missing_required_parameter: images`.
-    const background = request.background ?? this.defaults.background;
-    const quality = request.quality ?? this.defaults.quality;
-    const size = request.size ?? this.defaults.size;
+    const background = this.hasImageProfile
+      ? (request.background ?? this.defaults.background)
+      : 'auto';
+    const quality = this.hasImageProfile
+      ? (request.quality ?? this.defaults.quality)
+      : 'auto';
+    const size = this.hasImageProfile
+      ? (request.size ?? this.defaults.size)
+      : 'auto';
     const body = {
       model: this.model,
       prompt: request.prompt,

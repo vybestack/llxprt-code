@@ -264,7 +264,7 @@ describe('createCodexImageBackendResolver', () => {
         type: 'image',
         backend: 'codex',
         model: 'gpt-image-2.5-flare',
-        baseUrl: 'https://images.example/v1',
+        baseUrl: CODEX_BASE_URL,
         auth: { type: 'oauth', provider: 'codex' },
         defaults: {
           quality: 'xhigh',
@@ -282,7 +282,7 @@ describe('createCodexImageBackendResolver', () => {
 
     const [url, init] = fetchImpl.mock.calls[0] ?? [];
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-    expect(String(url)).toBe('https://images.example/v1/images/generations');
+    expect(String(url)).toBe(`${CODEX_BASE_URL}/images/generations`);
     expect(body).toMatchObject({
       model: 'gpt-image-2.5-flare',
       quality: 'xhigh',
@@ -307,6 +307,17 @@ function configuredImageProfile(
 }
 
 describe('image backend auth validation', () => {
+  it.each([
+    'https://images.example/v1',
+    'https://chatgpt.com.evil/backend-api/codex',
+    'https://evil/chatgpt.com/backend-api/codex',
+    'http://chatgpt.com/backend-api/codex',
+    'https://user:secret@chatgpt.com/backend-api/codex',
+  ])('rejects custom Codex profile URL %s during resolution', (baseUrl) => {
+    expect(() =>
+      resolveImageProfileBackendConfig(configuredImageProfile({ baseUrl })),
+    ).toThrow(expect.objectContaining({ name: 'ImageBackendBaseUrlError' }));
+  });
   it('accepts Codex OAuth', () => {
     const profile = configuredImageProfile({
       backend: 'codex',

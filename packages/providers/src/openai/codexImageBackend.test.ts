@@ -158,7 +158,7 @@ describe('CodexImageBackend', () => {
             accountId: 'acct',
           }),
           getBaseUrl: () => undefined,
-          ...(mode === 'omitted' ? {} : { defaults }),
+          defaults: mode === 'omitted' ? {} : defaults,
           fetchImpl,
         });
         const request = {
@@ -199,7 +199,7 @@ describe('CodexImageBackend', () => {
   );
 
   describe('A1 — request shape', () => {
-    it('posts to the generate endpoint without omitted knobs, with model gpt-image-2 and n:1', async () => {
+    it('pins merge-base no-profile generation wire bytes with auto defaults', async () => {
       const { fetchImpl, captured } = makeStubFetch({
         status: 200,
         body: { data: [{ b64_json: 'aGVsbG8=' }] },
@@ -218,15 +218,25 @@ describe('CodexImageBackend', () => {
         'https://chatgpt.com/backend-api/codex/images/generations',
       );
 
+      expect(req?.init.body).toBe(
+        JSON.stringify({
+          model: 'gpt-image-2',
+          prompt: 'a serene mountain lake at dawn',
+          background: 'auto',
+          quality: 'auto',
+          size: 'auto',
+          n: 1,
+        }),
+      );
       const body = JSON.parse(req?.init.body as string) as Record<
         string,
         unknown
       >;
       expect(body['model']).toBe('gpt-image-2');
       expect(body['prompt']).toBe('a serene mountain lake at dawn');
-      expect(body).not.toHaveProperty('background');
-      expect(body).not.toHaveProperty('quality');
-      expect(body).not.toHaveProperty('size');
+      expect(body.background).toBe('auto');
+      expect(body.quality).toBe('auto');
+      expect(body.size).toBe('auto');
       expect(body['n']).toBe(1);
 
       // The generation contract must NOT include edit-only keys.
@@ -235,47 +245,74 @@ describe('CodexImageBackend', () => {
       // The body must contain ONLY the documented generation keys — no
       // extra/undocumented fields that the provider might reject.
       expect(Object.keys(body).sort()).toStrictEqual(
-        ['model', 'n', 'prompt'].sort(),
+        ['model', 'n', 'prompt', 'background', 'quality', 'size'].sort(),
       );
     });
 
-    it('uses configured model and operation defaults', async () => {
+    it('rejects custom profile origins before credentials or requests', async () => {
       const { fetchImpl, captured } = makeStubFetch({
         status: 200,
         body: { data: [{ b64_json: 'aGVsbG8=' }] },
       });
+      let credentials = 0;
       const backend = new CodexImageBackend({
-        getCredential: async () => ({
-          accessToken: 'token',
-          accountId: 'acct',
-        }),
-        getBaseUrl: () => 'https://images.example/v1',
-        model: 'gpt-image-2.5-flare',
-        defaults: {
-          quality: 'xhigh',
-          size: '1024x1536',
-          background: 'transparent',
+        getCredential: async () => {
+          credentials++;
+          return { accessToken: 'secret' };
         },
-        allowCustomBaseUrl: true,
+        getBaseUrl: () => 'https://images.example/v1',
+        defaults: {},
         fetchImpl,
       });
-
-      await backend.generate(
-        { prompt: 'profile driven' },
+      await expect(
+        backend.generate(
+          { prompt: 'profile driven' },
+          new AbortController().signal,
+        ),
+      ).rejects.toMatchObject({ name: 'ImageBackendBaseUrlError' });
+      expect(credentials).toBe(0);
+      expect(captured()).toBeUndefined();
+    });
+    it('pins merge-base no-profile generation request overrides', async () => {
+      const { fetchImpl, captured } = makeStubFetch({
+        status: 200,
+        body: { data: [{ b64_json: 'aGVsbG8=' }] },
+      });
+      await makeBackend({ fetchImpl }).generate(
+        {
+          prompt: 'override',
+          background: 'opaque',
+          quality: 'high',
+          size: '512x512',
+        },
         new AbortController().signal,
       );
-
-      const request = captured();
-      const body = JSON.parse(String(request?.init.body)) as Record<
-        string,
-        unknown
-      >;
-      expect(request?.url).toBe('https://images.example/v1/images/generations');
-      expect(body).toMatchObject({
-        model: 'gpt-image-2.5-flare',
-        quality: 'xhigh',
-        size: '1024x1536',
-        background: 'transparent',
+      expect(captured()?.init.body).toBe(
+        JSON.stringify({
+          model: 'gpt-image-2',
+          prompt: 'override',
+          background: 'opaque',
+          quality: 'high',
+          size: '512x512',
+          n: 1,
+        }),
+      );
+    });
+    it('passes explicit profile auto values through unchanged', async () => {
+      const { fetchImpl, captured } = makeStubFetch({
+        status: 200,
+        body: { data: [{ b64_json: 'aGVsbG8=' }] },
+      });
+      await new CodexImageBackend({
+        getCredential: async () => ({ accessToken: 'secret' }),
+        defaults: { quality: 'auto' },
+        fetchImpl,
+      }).generate({ prompt: 'auto' }, new AbortController().signal);
+      expect(JSON.parse(String(captured()?.init.body))).toStrictEqual({
+        model: 'gpt-image-2',
+        prompt: 'auto',
+        quality: 'auto',
+        n: 1,
       });
     });
   });

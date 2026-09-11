@@ -178,6 +178,39 @@ describe('runImageOperation', () => {
     await fs.promises.rm(workspaceRoot, { recursive: true, force: true });
   });
 
+  it.each([true, false])(
+    'preserves reported metadata presence=%s through dispatch',
+    async (reported) => {
+      const metadata = reported
+        ? { quality: 'high', size: '512x512', usage: { output_tokens: 7 } }
+        : {};
+      const result = await runImageOperation(
+        { prompt: 'lake', outputPath: 'metadata.png' },
+        {
+          workspaceRoot,
+          resolveBackend: () => ({
+            name: 'test',
+            provider: 'test',
+            model: 'test',
+            generate: async () => ({
+              mimeType: 'image/png',
+              encoding: 'base64',
+              data: VALID_PNG_BASE64,
+              ...metadata,
+            }),
+            edit: async () => {
+              throw new Error('unexpected edit');
+            },
+          }),
+        },
+      );
+      for (const field of ['quality', 'size', 'usage'] as const) {
+        expect(Object.hasOwn(result, field)).toBe(reported);
+        expect(result[field]).toStrictEqual(metadata[field]);
+      }
+    },
+  );
+
   it('resolves an operation override without changing the active backend', async () => {
     const resolveBackend: ImageOperationBackendResolver = async (name) => {
       const backend = await makeStubResolver({})();

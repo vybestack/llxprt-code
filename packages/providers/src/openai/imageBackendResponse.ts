@@ -4,10 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ImageGenerationError } from '@vybestack/llxprt-code-core/services/image/ImageGenerationService.js';
+import {
+  ImageGenerationError,
+  validatePngStructure,
+} from '@vybestack/llxprt-code-core/services/image/ImageGenerationService.js';
 import type { ImageBackendResult } from '@vybestack/llxprt-code-providers/imageBackend.js';
 
 export type ImageBackendErrorCode =
+  | 'unsupported_operation'
   | 'validation'
   | 'model_not_found'
   | 'server_error'
@@ -22,9 +26,33 @@ export class ImageBackendError extends ImageGenerationError {
     message: string,
     status?: number,
   ) {
-    super(message, status === undefined ? undefined : { status });
+    super(
+      sanitizeImageErrorMessage(message),
+      status === undefined ? undefined : { status },
+    );
     this.name = 'ImageBackendError';
   }
+}
+
+/** Redact credentials in external diagnostics while retaining useful context. */
+export function sanitizeImageErrorMessage(
+  message: string,
+  secrets: readonly string[] = [],
+): string {
+  let sanitized = message;
+  for (const secret of secrets) {
+    if (secret !== '') sanitized = sanitized.split(secret).join('[REDACTED]');
+  }
+  return sanitized
+    .replace(/https?:\/\/[^\s"'<>]+/gi, (value) =>
+      value.replace(/\?[^\s]*/, '?[REDACTED]'),
+    )
+    .replace(/\bBearer\s+[^\s,;"'<>]+/gi, 'Bearer [REDACTED]')
+    .replace(/\bsk-[a-z0-9_.*-]+/gi, '[REDACTED]')
+    .replace(
+      /(API[ -]?key(?: provided)?\s*[:=]\s*["']?)[^\s,;"'<>]+/gi,
+      '$1[REDACTED]',
+    );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -84,7 +112,6 @@ export function imageResponseError(
 }
 
 const MAX_DOWNLOAD_BYTES = 15 * 1024 * 1024;
-const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
 async function boundedBody(response: Response): Promise<Buffer> {
   if (Number(response.headers.get('content-length')) > MAX_DOWNLOAD_BYTES) {
@@ -155,10 +182,12 @@ async function materializeUrl(
       );
     }
     const bytes = await boundedBody(response);
-    if (!bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
+    try {
+      validatePngStructure(bytes);
+    } catch {
       throw new ImageBackendError(
         'invalid_png',
-        'Downloaded image is not a PNG.',
+        'Downloaded image is not a structurally valid PNG.',
       );
     }
     return bytes.toString('base64');

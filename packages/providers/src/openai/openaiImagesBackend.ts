@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   ImageValidationError,
   validateImagePrompt,
@@ -22,7 +23,10 @@ import {
   ImageBackendError,
   imageResponseError,
   parseImageResponse,
+  sanitizeImageErrorMessage,
 } from './imageBackendResponse.js';
+
+const logger = new DebugLogger('llxprt:openai:images');
 
 export interface OpenAIImagesBackendDeps {
   readonly config: ResolvedImageProfileBackendConfig;
@@ -44,6 +48,19 @@ export class OpenAIImagesBackend implements ImageBackend {
     this.fetchImpl = deps.fetchImpl ?? fetch;
   }
 
+  private validateOperation(operation: 'generate' | 'edit'): void {
+    if (
+      this.local &&
+      this.deps.config.operations !== undefined &&
+      !this.deps.config.operations.includes(operation)
+    ) {
+      throw new ImageBackendError(
+        'unsupported_operation',
+        `Image profile does not support ${operation}.`,
+      );
+    }
+  }
+
   private overrides(
     request: ImageGenerateRequest,
   ): Pick<ImageGenerateRequest, 'size' | 'quality' | 'background'> {
@@ -62,6 +79,7 @@ export class OpenAIImagesBackend implements ImageBackend {
     request: ImageGenerateRequest,
     signal: AbortSignal,
   ): Promise<ImageBackendResult> {
+    this.validateOperation('generate');
     validateImagePrompt(request.prompt);
     if (request.n !== undefined && request.n !== 1)
       throw new ImageValidationError('Image generation only supports n=1.');
@@ -97,6 +115,7 @@ export class OpenAIImagesBackend implements ImageBackend {
     request: ImageEditRequest,
     signal: AbortSignal,
   ): Promise<ImageBackendResult> {
+    this.validateOperation('edit');
     validateImagePrompt(request.prompt);
     const maxInputs = this.local && /klein/i.test(this.model) ? 1 : 5;
     if (
@@ -131,6 +150,23 @@ export class OpenAIImagesBackend implements ImageBackend {
     return this.post('edits', form, request.prompt, signal);
   }
 
+  private async resolveApiKey(): Promise<string> {
+    if (this.deps.getApiKey === undefined) {
+      throw new ImageBackendError(
+        'validation',
+        'Image backend requires an API key resolver.',
+      );
+    }
+    const apiKey = await this.deps.getApiKey();
+    if (apiKey === undefined) {
+      throw new ImageBackendError(
+        'validation',
+        'Image profile credential is missing.',
+      );
+    }
+    return apiKey;
+  }
+
   private async post(
     operation: 'generations' | 'edits',
     body: string | FormData,
@@ -138,30 +174,33 @@ export class OpenAIImagesBackend implements ImageBackend {
     signal: AbortSignal,
   ): Promise<ImageBackendResult> {
     const headers = new Headers();
+    let credential: string | undefined;
     if (typeof body === 'string')
       headers.set('Content-Type', 'application/json');
     if (this.deps.config.auth.type !== 'none') {
-      if (this.deps.getApiKey === undefined)
-        throw new ImageBackendError(
-          'validation',
-          'Image backend requires an API key resolver.',
-        );
-      const apiKey = await this.deps.getApiKey();
-      if (apiKey === undefined)
-        throw new ImageBackendError(
-          'validation',
-          'Image profile credential is missing.',
-        );
-      headers.set('Authorization', `Bearer ${apiKey}`);
+      credential = await this.resolveApiKey();
+      headers.set('Authorization', `Bearer ${credential}`);
     }
     const endpoint = `${normalizeBaseUrl(this.deps.config.baseUrl)}/images/${operation}`;
-    const response = await this.fetchImpl(endpoint, {
-      method: 'POST',
-      headers,
-      body,
-      signal,
-      redirect: 'error',
-    });
+    let response: Response;
+    try {
+      response = await this.fetchImpl(endpoint, {
+        method: 'POST',
+        headers,
+        body,
+        signal,
+        redirect: 'error',
+      });
+    } catch (error) {
+      if (signal.aborted) signal.throwIfAborted();
+      throw new ImageBackendError(
+        'server_error',
+        sanitizeImageErrorMessage(
+          error instanceof Error ? error.message : String(error),
+          credential === undefined ? [] : [credential],
+        ),
+      );
+    }
     let parsed: unknown;
     try {
       parsed = await response.json();
@@ -172,7 +211,17 @@ export class OpenAIImagesBackend implements ImageBackend {
         response.status,
       );
     }
-    if (!response.ok) throw imageResponseError(parsed, response.status);
+    if (!response.ok) {
+      const error = imageResponseError(parsed, response.status);
+      throw new ImageBackendError(
+        error.code,
+        sanitizeImageErrorMessage(
+          error.message,
+          credential === undefined ? [] : [credential],
+        ),
+        response.status,
+      );
+    }
     const result = await parseImageResponse(parsed, this.fetchImpl, signal);
     if (
       this.local &&
@@ -185,6 +234,10 @@ export class OpenAIImagesBackend implements ImageBackend {
         'MLX image response is not a PNG.',
       );
     }
+    logger.debug(
+      () =>
+        `Image ${operation} (model=${this.model}, quality=${result.quality ?? 'unknown'}, size=${result.size ?? 'unknown'}, usage=${result.usage === undefined ? 'unknown' : JSON.stringify(result.usage)})`,
+    );
     return { ...result, caption: prompt };
   }
 }

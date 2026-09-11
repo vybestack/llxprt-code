@@ -99,6 +99,8 @@ export type {
   AuthConfig,
   ImageProfile,
   ImageQuality,
+  ImageOperation,
+  PersistedImageBackendAuth,
   ImageSize,
   ImageBackground,
 } from './profiles/types.js';

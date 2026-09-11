@@ -68,6 +68,9 @@ export type { ImageBackendResult } from './imageBackendContract.js';
  */
 export interface ImageOperationResult {
   readonly operation: ImageOperation;
+  readonly quality?: string;
+  readonly size?: string;
+  readonly usage?: Readonly<Record<string, unknown>>;
   readonly absoluteOutputPath: string;
   readonly relativeOutputPath: string;
   readonly mimeType: string;

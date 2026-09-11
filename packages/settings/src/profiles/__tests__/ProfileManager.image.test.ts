@@ -13,6 +13,7 @@ import {
   ProfileManager,
   ProfileTypeConflictError,
 } from '../ProfileManager.js';
+import { parseImageProfile } from '../../settings/validation.js';
 import type { ImageProfile, StandardProfile } from '../types.js';
 
 function imageProfile(overrides: Partial<ImageProfile> = {}): ImageProfile {
@@ -39,6 +40,35 @@ describe('ProfileManager typed image profiles', () => {
   afterEach(async () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
+  it.each([
+    { operations: [] },
+    { operations: ['generate', 'generate'] },
+    { operations: ['inpaint'] },
+    { operations: 'generate' },
+  ])('rejects invalid operation declarations %j', ({ operations }) => {
+    expect(() =>
+      parseImageProfile('invalid', { ...imageProfile(), operations }),
+    ).toThrow('not a valid image profile');
+  });
+
+  it.each(['256x256', '512x512', '1024x1024'] as const)(
+    'persists MLX size %s and declared operations through parsing and save/load',
+    async (size) => {
+      const profile = parseImageProfile(
+        'mlx',
+        imageProfile({
+          baseUrl: 'http://localhost:8321/v1',
+          auth: { type: 'none' },
+          operations: ['generate'],
+          defaults: { size },
+        }),
+      );
+      await manager.saveImageProfile('mlx', profile);
+      const loaded = await manager.loadImageProfile('mlx');
+      expect(loaded.defaults?.size).toBe(size);
+      expect(loaded.operations).toStrictEqual(['generate']);
+    },
+  );
 
   it('round trips optional image overrides without synthesizing omitted knobs', async () => {
     const profile = imageProfile({

@@ -3,6 +3,12 @@
  */
 
 import { z } from 'zod';
+import {
+  IMAGE_QUALITIES,
+  IMAGE_SIZES,
+  IMAGE_BACKGROUNDS,
+  IMAGE_OPERATIONS,
+} from '../profiles/types.js';
 import type {
   EphemeralSettings,
   LoadBalancerProfile,
@@ -304,15 +310,17 @@ const imageProfileSchema: z.ZodType<ImageProfile> = z
         .object({ type: z.literal('oauth'), provider: z.literal('codex') })
         .strict(),
     ]),
+    operations: z
+      .array(z.enum(IMAGE_OPERATIONS))
+      .min(1)
+      .max(2)
+      .refine((operations) => new Set(operations).size === operations.length)
+      .optional(),
     defaults: z
       .object({
-        quality: z
-          .enum(['auto', 'low', 'medium', 'high', 'xhigh', 'max'])
-          .optional(),
-        size: z
-          .enum(['auto', '1024x1024', '1024x1536', '1536x1024'])
-          .optional(),
-        background: z.enum(['auto', 'transparent', 'opaque']).optional(),
+        quality: z.enum(IMAGE_QUALITIES).optional(),
+        size: z.enum(IMAGE_SIZES).optional(),
+        background: z.enum(IMAGE_BACKGROUNDS).optional(),
       })
       .strict()
       .optional(),

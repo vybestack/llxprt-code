@@ -4,19 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type {
+  ImageQuality,
+  ImageSize,
+  ImageBackground,
+} from '@vybestack/llxprt-code-settings';
+
 /** Optional operation overrides. Absence delegates to the endpoint default. */
 export interface ImageGenerateRequest {
   readonly prompt: string;
   readonly model?: string;
-  readonly background?: 'auto' | 'transparent' | 'opaque';
-  readonly quality?: 'auto' | 'high' | 'medium' | 'low' | 'xhigh' | 'max';
-  readonly size?:
-    | 'auto'
-    | '256x256'
-    | '512x512'
-    | '1024x1024'
-    | '1024x1536'
-    | '1536x1024';
+  readonly background?: ImageBackground;
+  readonly quality?: ImageQuality;
+  readonly size?: ImageSize;
   readonly n?: number;
   readonly sessionId?: string;
 }

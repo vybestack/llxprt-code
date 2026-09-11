@@ -19,15 +19,63 @@ import {
   resolveImageProfileBackendConfig,
 } from './codexImageBackendResolver.js';
 
-const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0]);
+import { imageResponseError } from './imageBackendResponse.js';
+import type { ImageProfile } from '@vybestack/llxprt-code-settings';
+
+describe('external image responses', () => {
+  it.each([
+    'Incorrect API key provided: FAKE-REVIEW-SECRET',
+    'Incorrect API key provided: "FAKE-REVIEW-SECRET"',
+    "Incorrect API key provided: 'FAKE-REVIEW-SECRET'",
+  ])('redacts arbitrary echoed API keys in remote errors: %s', (message) => {
+    const error = imageResponseError(
+      { error: { message: `${message}; check your account` } },
+      401,
+    );
+    expect(error.message).not.toContain('FAKE-REVIEW-SECRET');
+    expect(error.message).toContain('check your account');
+  });
+
+  it.each([true, false])(
+    'preserves sparse OpenAI response metadata presence=%s',
+    async (reported) => {
+      const metadata = reported
+        ? { quality: 'high', size: '512x512', usage: { output_tokens: 7 } }
+        : {};
+      const transport = http({
+        data: [{ b64_json: png.toString('base64') }],
+        ...metadata,
+      });
+      const backend = new OpenAIImagesBackend({
+        config: config('https://example.com/v1'),
+        getApiKey: async () => 'secret',
+        fetchImpl: transport.fetchImpl,
+      });
+      const result = await backend.generate({ prompt: 'lake' }, signal());
+      for (const field of ['quality', 'size', 'usage'] as const) {
+        expect(Object.hasOwn(result, field)).toBe(reported);
+        expect(result[field]).toStrictEqual(metadata[field]);
+      }
+    },
+  );
+});
+
+const png = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  'base64',
+);
 const signal = (): AbortSignal => new AbortController().signal;
-function config(baseUrl = 'http://localhost:8321/v1') {
+function config(
+  baseUrl = 'http://localhost:8321/v1',
+  operations?: ImageProfile['operations'],
+) {
   return resolveImageProfileBackendConfig({
     version: 1,
     type: 'image',
     backend: 'openai-images',
     model: 'FLUX.2-klein',
     baseUrl,
+    ...(operations === undefined ? {} : { operations }),
     auth: baseUrl.includes('example')
       ? { type: 'api-key', apiKey: 'secret' }
       : { type: 'none' },
@@ -46,6 +94,51 @@ function http(
 }
 
 describe('MLX dialect', () => {
+  it.each(['generate', 'edit'] as const)(
+    'rejects unsupported %s before request construction',
+    async (operation) => {
+      const transport = http();
+      const backend = new OpenAIImagesBackend({
+        config: config(undefined, [
+          operation === 'generate' ? 'edit' : 'generate',
+        ]),
+        fetchImpl: transport.fetchImpl,
+      });
+      const request = { prompt: 'lake', inputPaths: ['/nonexistent.png'] };
+      await expect(backend[operation](request, signal())).rejects.toMatchObject(
+        { name: 'ImageBackendError', code: 'unsupported_operation' },
+      );
+      expect(transport.requests).toHaveLength(0);
+    },
+  );
+  it.each(['response', 'fetch'] as const)(
+    'redacts echoed credentials from %s errors',
+    async (source) => {
+      const message =
+        'Incorrect API key provided: FAKE-REVIEW-SECRET; Bearer other-token; sk-proj-probe; https://cdn.example/image?signature=hidden&token=private';
+      const backend = new OpenAIImagesBackend({
+        config: config('https://example.com/v1'),
+        getApiKey: async () => 'FAKE-REVIEW-SECRET',
+        fetchImpl: async () => {
+          if (source === 'fetch') throw new Error(message);
+          return Response.json({ error: { message } }, { status: 401 });
+        },
+      });
+      const error: unknown = await backend
+        .generate({ prompt: 'lake' }, signal())
+        .catch((error: unknown) => error);
+      expect(error).toMatchObject({ name: 'ImageBackendError' });
+      expect(String(error)).toContain('Incorrect API key provided:');
+      for (const secret of [
+        'FAKE-REVIEW-SECRET',
+        'other-token',
+        'sk-proj-probe',
+        'signature=hidden',
+        'token=private',
+      ])
+        expect(String(error)).not.toContain(secret);
+    },
+  );
   it.each([undefined, '256x256', '512x512', '1024x1024'] as const)(
     'sends only supported generation fields with size %s',
     async (size) => {
@@ -279,6 +372,8 @@ describe('shared backend contract and PNG URL materialization', () => {
   for (const kind of adapters) {
     it.each([
       'bad-png',
+      'truncated-png',
+      'bad-crc',
       'network',
       'status',
       'oversized',
@@ -311,6 +406,13 @@ describe('shared backend contract and PNG URL materialization', () => {
             return new Response(png, {
               headers: { 'content-length': String(30 * 1024 * 1024) },
             });
+          if (failure === 'truncated-png')
+            return new Response(png.subarray(0, 9));
+          if (failure === 'bad-crc') {
+            const corrupted = Buffer.from(png);
+            corrupted[29] ^= 1;
+            return new Response(corrupted);
+          }
           return new Response('not a PNG');
         };
         const outcome: unknown = await backend(kind, fetchImpl)

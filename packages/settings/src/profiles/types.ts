@@ -213,16 +213,29 @@ export interface StandardProfile {
   imageProfile?: string;
 }
 
-export type ImageQuality = 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export const IMAGE_QUALITIES = [
+  'auto',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+] as const;
+export type ImageQuality = (typeof IMAGE_QUALITIES)[number];
 
-export type ImageSize =
-  | 'auto'
-  | '256x256'
-  | '512x512'
-  | '1024x1024'
-  | '1024x1536'
-  | '1536x1024';
-export type ImageBackground = 'auto' | 'transparent' | 'opaque';
+export const IMAGE_SIZES = [
+  'auto',
+  '256x256',
+  '512x512',
+  '1024x1024',
+  '1024x1536',
+  '1536x1024',
+] as const;
+export type ImageSize = (typeof IMAGE_SIZES)[number];
+export const IMAGE_BACKGROUNDS = ['auto', 'transparent', 'opaque'] as const;
+export type ImageBackground = (typeof IMAGE_BACKGROUNDS)[number];
+export const IMAGE_OPERATIONS = ['generate', 'edit'] as const;
+export type ImageOperation = (typeof IMAGE_OPERATIONS)[number];
 
 export type PersistedImageBackendAuth =
   | { readonly type: 'none' }
@@ -240,6 +253,7 @@ export interface ImageProfile {
   model: string;
   baseUrl: string;
   auth: PersistedImageBackendAuth;
+  operations?: readonly ImageOperation[];
   defaults?: {
     readonly quality?: ImageQuality;
     readonly size?: ImageSize;

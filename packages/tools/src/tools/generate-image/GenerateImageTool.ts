@@ -42,6 +42,9 @@ export interface GenerateImageToolParams {
  */
 export interface ImageOperationRunnerResult {
   readonly operation: 'generate' | 'edit';
+  readonly quality?: string;
+  readonly size?: string;
+  readonly usage?: Readonly<Record<string, unknown>>;
   readonly absoluteOutputPath: string;
   readonly relativeOutputPath: string;
   readonly mimeType: string;
@@ -280,7 +283,10 @@ class GenerateImageToolInvocation extends BaseToolInvocation<
     }
     const operation = result.operation === 'generate' ? 'Generated' : 'Edited';
     const textPart = `${operation} image.
-Saved to: ${result.absoluteOutputPath}`;
+Saved to: ${result.absoluteOutputPath}
+Quality: ${result.quality ?? 'unknown'}
+Size: ${result.size ?? 'unknown'}
+Usage: ${result.usage === undefined ? 'unknown' : JSON.stringify(result.usage)}`;
     const inlinePart = {
       inlineData: {
         mimeType: result.media.mimeType,
@@ -290,8 +296,7 @@ Saved to: ${result.absoluteOutputPath}`;
 
     return {
       llmContent: [inlinePart, textPart],
-      returnDisplay: `${operation} image.
-Saved to: ${result.absoluteOutputPath}`,
+      returnDisplay: textPart,
     };
   }
 

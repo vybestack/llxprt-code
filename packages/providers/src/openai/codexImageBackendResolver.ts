@@ -26,7 +26,11 @@ import type {
   ImageGenerateRequest,
 } from '@vybestack/llxprt-code-providers/imageBackend.js';
 import { OpenAIImagesBackend } from './openaiImagesBackend.js';
-import { isLocalImageEndpoint } from './imageEndpoint.js';
+import {
+  isLocalImageEndpoint,
+  ImageBackendBaseUrlError,
+  validateCodexImageProfileBaseUrl,
+} from './imageEndpoint.js';
 import type { ImageProfile } from '@vybestack/llxprt-code-settings';
 import type { ImageBackendAuth } from '../imageBackendAuth.js';
 import { resolveCodexImageCredential } from '../image-auth-resolution.js';
@@ -50,6 +54,7 @@ export interface ResolvedImageProfileBackendConfig {
   readonly baseUrl: string;
   readonly auth: ImageBackendAuth;
   readonly overrides: ImageProfileOperationOverrides;
+  readonly operations?: ImageProfile['operations'];
 }
 
 type ImageBackendAuthContext = 'codex' | 'openai' | 'local';
@@ -74,23 +79,14 @@ export class ImageBackendAuthModeError extends Error {
   }
 }
 
-export class ImageBackendBaseUrlError extends Error {
-  readonly profileName: string;
-  readonly baseUrl: string;
-
-  constructor(profileName: string, baseUrl: string) {
-    super(`Image profile '${profileName}' has an invalid base URL: ${baseUrl}`);
-    this.name = 'ImageBackendBaseUrlError';
-    this.profileName = profileName;
-    this.baseUrl = baseUrl;
-  }
-}
+export { ImageBackendBaseUrlError } from './imageEndpoint.js';
 
 function resolveAuthContext(
   profile: ImageProfile,
   profileName: string,
 ): ImageBackendAuthContext {
   if (profile.backend === 'codex') {
+    validateCodexImageProfileBaseUrl(profile.baseUrl, profileName);
     return 'codex';
   }
 
@@ -139,6 +135,9 @@ export function resolveImageProfileBackendConfig(
     model: profile.model,
     baseUrl: profile.baseUrl,
     auth: profile.auth,
+    ...(profile.operations === undefined
+      ? {}
+      : { operations: profile.operations }),
     overrides,
   };
 }
@@ -213,7 +212,6 @@ export function createCodexImageBackendResolver(
         : {
             model: profileConfig.model,
             defaults: profileConfig.overrides,
-            allowCustomBaseUrl: true,
           }),
       ...(deps.fetchImpl !== undefined ? { fetchImpl: deps.fetchImpl } : {}),
     };

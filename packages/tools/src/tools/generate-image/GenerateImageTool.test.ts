@@ -104,6 +104,33 @@ function makeTool(options: ToolOptions = {}): {
 }
 
 describe('GenerateImageTool', () => {
+  it.each([true, false])(
+    'surfaces reported metadata or unknown when presence=%s',
+    async (reported) => {
+      const { tool } = makeTool({
+        runImageImpl: async () =>
+          makeRunnerResult(
+            reported
+              ? {
+                  quality: 'high',
+                  size: '512x512',
+                  usage: { output_tokens: 7 },
+                }
+              : {},
+          ),
+      });
+      const result = await tool
+        .build({ prompt: 'lake', output_path: 'out.png' })
+        .execute(new AbortController().signal);
+      const text = JSON.stringify(result.llmContent);
+      expect(text).toContain(reported ? 'Quality: high' : 'Quality: unknown');
+      expect(text).toContain(reported ? 'Size: 512x512' : 'Size: unknown');
+      expect(text).toContain(reported ? 'output_tokens' : 'Usage: unknown');
+      expect(String(result.returnDisplay)).toContain(
+        reported ? 'output_tokens' : 'Usage: unknown',
+      );
+    },
+  );
   it('exposes the static name "generate_image"', () => {
     expect(GenerateImageTool.Name).toBe('generate_image');
   });

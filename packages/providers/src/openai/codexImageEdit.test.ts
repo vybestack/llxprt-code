@@ -163,7 +163,7 @@ describe('CodexImageBackend.edit', () => {
     await fs.promises.rm(workspaceRoot, { recursive: true, force: true });
   });
 
-  it('posts to the edit endpoint with model gpt-image-2 and input images as data URLs', async () => {
+  it('pins merge-base no-profile edit wire bytes with always-auto knobs', async () => {
     const inputPng = makeRealMinimalPng();
     const inputPath = path.join(workspaceRoot, 'input.png');
     await fs.promises.writeFile(inputPath, inputPng);
@@ -175,11 +175,29 @@ describe('CodexImageBackend.edit', () => {
     const backend = makeBackend({ fetchImpl });
 
     await backend.edit(
-      { prompt: 'add a mouse', inputPaths: [inputPath] },
+      {
+        prompt: 'add a mouse',
+        inputPaths: [inputPath],
+        quality: 'high',
+        background: 'opaque',
+        size: '512x512',
+      },
       new AbortController().signal,
     );
 
     const req = captured();
+    expect(req?.init.body).toBe(
+      JSON.stringify({
+        model: 'gpt-image-2',
+        prompt: 'add a mouse',
+        images: [
+          { image_url: `data:image/png;base64,${inputPng.toString('base64')}` },
+        ],
+        background: 'auto',
+        quality: 'auto',
+        size: 'auto',
+      }),
+    );
     expect(req).toBeDefined();
     expect(req?.init.method).toBe('POST');
     expect(req?.url).toBe('https://chatgpt.com/backend-api/codex/images/edits');
@@ -198,14 +216,14 @@ describe('CodexImageBackend.edit', () => {
     const images = body['images'] as Array<{ image_url: string }>;
     expect(images).toHaveLength(1);
     expect(images[0].image_url).toMatch(/^data:image\/png;base64,/);
-    expect(body).not.toHaveProperty('background');
-    expect(body).not.toHaveProperty('quality');
-    expect(body).not.toHaveProperty('size');
+    expect(body.background).toBe('auto');
+    expect(body.quality).toBe('auto');
+    expect(body.size).toBe('auto');
     // The edit contract must NOT include generate-only keys.
     expect(body['n']).toBeUndefined();
     // The body must contain ONLY the documented edit keys.
     expect(Object.keys(body).sort()).toStrictEqual(
-      ['images', 'model', 'prompt'].sort(),
+      ['images', 'model', 'prompt', 'background', 'quality', 'size'].sort(),
     );
   });
 

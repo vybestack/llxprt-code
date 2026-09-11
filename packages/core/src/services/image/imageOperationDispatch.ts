@@ -223,6 +223,13 @@ export async function runImageOperation(
     backend: backend.name,
     provider: backend.provider,
     model: backend.model,
+    ...(backendResult.quality === undefined
+      ? {}
+      : { quality: backendResult.quality }),
+    ...(backendResult.size === undefined ? {} : { size: backendResult.size }),
+    ...(backendResult.usage === undefined
+      ? {}
+      : { usage: backendResult.usage }),
     inputPaths: resolvedInputPaths,
     media: {
       mimeType: backendResult.mimeType,
