@@ -48,6 +48,7 @@ export interface ImageOperationRequest {
  * `/image`, tool) can propagate cancellation from their own context.
  */
 export interface ImageOperationInput {
+  readonly imageProfileName?: string;
   readonly prompt: string;
   readonly outputPath: string;
   readonly inputPaths?: readonly string[];

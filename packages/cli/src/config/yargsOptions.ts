@@ -387,6 +387,11 @@ export const innerCommandOptions: Record<string, Options> = {
     description: 'Skip browser OAuth flow, use manual code entry',
     default: false,
   },
+  'image-profile': {
+    type: 'string',
+    description:
+      'Select a saved image profile for the session, or only this operation in direct image mode.',
+  },
   'image-input': {
     alias: 'I',
     type: 'array',

@@ -29,6 +29,36 @@ describe('image flags: real parser → normalized request', () => {
   afterEach(() => {
     process.argv = originalArgv;
   });
+  it('selects an image profile without enabling direct mode', async () => {
+    process.argv = ['bun', 'cli.ts', '--image-profile', ' local '];
+    const argv = await parseArguments({});
+    expect(argv.imageProfile).toBe('local');
+    expect(resolveDirectImageMode(argv)).toBeNull();
+  });
+
+  it('treats a blank image profile as absent', async () => {
+    process.argv = ['bun', 'cli.ts', '--image-profile', '  '];
+    expect((await parseArguments({})).imageProfile).toBeUndefined();
+  });
+
+  it('uses the last repeated image profile for a direct operation', async () => {
+    process.argv = [
+      'bun',
+      'cli.ts',
+      '--image-profile',
+      'first',
+      '--image-profile',
+      'second',
+      '-O',
+      'out.png',
+      '-P',
+      'a cat',
+    ];
+    const argv = await parseArguments({});
+    expect(argv.imageProfile).toBe('second');
+    expect(resolveDirectImageMode(argv)?.imageProfileName).toBe('second');
+  });
+
   it('parses long-form --image-output/--image-prompt into CliArgs and resolves a generate request', async () => {
     process.argv = [
       'node',

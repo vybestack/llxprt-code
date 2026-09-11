@@ -178,6 +178,31 @@ describe('runImageOperation', () => {
     await fs.promises.rm(workspaceRoot, { recursive: true, force: true });
   });
 
+  it('resolves an operation override without changing the active backend', async () => {
+    const resolveBackend: ImageOperationBackendResolver = async (name) => {
+      const backend = await makeStubResolver({})();
+      if (backend === null) throw new Error('Missing test backend');
+      return {
+        ...backend,
+        model: name === 'local' ? 'local-model' : 'active-model',
+      };
+    };
+    const override = await runImageOperation(
+      {
+        prompt: 'a cat',
+        outputPath: 'override.png',
+        imageProfileName: 'local',
+      },
+      { workspaceRoot, resolveBackend },
+    );
+    const active = await runImageOperation(
+      { prompt: 'a cat', outputPath: 'active.png' },
+      { workspaceRoot, resolveBackend },
+    );
+    expect(override.model).toBe('local-model');
+    expect(active.model).toBe('active-model');
+  });
+
   it('generates an image and writes it to the resolved output path', async () => {
     const input: ImageOperationInput = {
       prompt: 'a cat',

@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ImageProfileRuntimeState } from '@vybestack/llxprt-code-core';
+import type {
+  ActiveImageProfile,
+  ImageProfileRuntimeState,
+} from '@vybestack/llxprt-code-core';
 import type {
   ImageProfile,
   Profile,
@@ -59,4 +62,15 @@ export async function saveAndSelectImageProfile(
     profile: activeProfile.profile,
   });
   return activeProfile.profile;
+}
+
+/** Load fully before replacing the runtime's image selection. */
+export async function loadAndSelectImageProfile(
+  manager: ProfileManager,
+  state: ImageProfileRuntimeState,
+  name: string,
+): Promise<ActiveImageProfile> {
+  const selection = { name, profile: await manager.loadImageProfile(name) };
+  state.select(selection);
+  return selection;
 }

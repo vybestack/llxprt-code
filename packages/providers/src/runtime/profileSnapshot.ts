@@ -31,6 +31,7 @@ import {
 import { applyProfileWithGuards } from './profileApplication.js';
 import {
   loadAndApplyProfileTransition,
+  loadAndSelectImageProfile,
   saveAndSelectImageProfile,
 } from './profileSnapshotTransition.js';
 import type { LoadBalancingProviderConfig } from '../loadBalancing/loadBalancerTypes.js';
@@ -79,10 +80,11 @@ export async function loadImageProfileByName(
 ): Promise<ActiveImageProfile> {
   const services = getCliRuntimeServices();
   const manager = services.profileManager ?? new ProfileManager();
-  const profile = await manager.loadImageProfile(profileName);
-  const selection = { name: profileName, profile };
-  services.imageProfileState.select(selection);
-  return selection;
+  return loadAndSelectImageProfile(
+    manager,
+    services.imageProfileState,
+    profileName,
+  );
 }
 
 export async function saveImageProfileSnapshot(

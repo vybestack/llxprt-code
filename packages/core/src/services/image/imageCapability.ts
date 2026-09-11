@@ -15,6 +15,7 @@
 
 /** Normalized input accepted by the shared image-operation runner. */
 export interface ImageOperationRunnerInput {
+  readonly imageProfileName?: string;
   readonly prompt: string;
   readonly outputPath: string;
   readonly inputPaths?: readonly string[];
