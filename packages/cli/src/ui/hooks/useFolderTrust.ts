@@ -160,6 +160,8 @@ export const useFolderTrust = ({
     state.requests.some((r) => r.kind === 'folderTrust'),
   );
   const startupMessageSent = useRef(false);
+  const previousFolderTrust = useRef(settings.merged.folderTrust);
+  const initialized = useRef(false);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -169,15 +171,23 @@ export const useFolderTrust = ({
     };
   }, []);
 
-  // The dialog is open exactly while workspace trust is undecided; open and
-  // close are idempotent so re-running with the same verdict is a no-op.
+  // Persistence can become visible before the live transition finishes.
+  // Only startup and a folderTrust setting change synchronize visibility;
+  // the selection transaction owns dismissal after its awaited work.
   useEffect(() => {
-    if (trusted === undefined) {
-      dialogs.folderTrust.open({});
-    } else {
-      dialogs.folderTrust.close();
+    if (
+      !initialized.current ||
+      previousFolderTrust.current !== settings.merged.folderTrust
+    ) {
+      initialized.current = true;
+      previousFolderTrust.current = settings.merged.folderTrust;
+      if (trusted === undefined) {
+        dialogs.folderTrust.open({});
+      } else {
+        dialogs.folderTrust.close();
+      }
     }
-  }, [trusted, dialogs]);
+  }, [trusted, dialogs, settings.merged.folderTrust]);
 
   useEffect(() => {
     showStartupMessage(trusted, addItem, startupMessageSent);

@@ -139,6 +139,44 @@ describe('useFolderTrust', () => {
     }
   });
 
+  it('keeps completion blocked after persistence while the live transition is pending', async () => {
+    isWorkspaceTrustedSpy.mockImplementation(() =>
+      !Object.hasOwn(mockTrustedFolders.user.config, '/test/path')
+        ? undefined
+        : true,
+    );
+    const transition = createDeferred<void>();
+    mockConfig.setTrustedFolderLive.mockImplementation(
+      () => transition.promise,
+    );
+    const { result, rerender, unmount } = renderHook(() =>
+      useFolderTrust({
+        settings: mockSettings,
+        config: mockConfig,
+        store: mockStore,
+        dialogs: mockDialogs,
+      }),
+    );
+    let pending: Promise<void> | undefined;
+    act(() => {
+      pending = result.current.handleFolderTrustSelect(
+        FolderTrustChoice.TRUST_FOLDER,
+      );
+    });
+    expect(mockTrustedFolders.user.config['/test/path']).toBe(
+      TrustLevel.TRUST_FOLDER,
+    );
+    rerender();
+    expect(result.current.isFolderTrustDialogOpen).toBe(true);
+    expect(hasRequest(mockStore, 'folderTrust')).toBe(true);
+    await act(async () => {
+      transition.resolve();
+      await pending;
+    });
+    expect(result.current.isFolderTrustDialogOpen).toBe(false);
+    unmount();
+  });
+
   it('should not open dialog when folder is already trusted', async () => {
     isWorkspaceTrustedSpy.mockReturnValue(true);
     renderHook(() =>

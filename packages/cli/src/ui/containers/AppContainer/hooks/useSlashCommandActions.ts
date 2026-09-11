@@ -20,7 +20,8 @@ type WelcomeActionsLike = {
 interface UseSlashCommandActionsParams {
   /** Dialog openers backed by the typed DialogStore. */
   dialogs: DialogOpeners;
-  /** Domain openers that load data before showing their dialog. */
+  /** Domain openers that load data or enforce policy before showing their dialog. */
+  openThemeDialog: () => void;
   openProviderDialog: () => void;
   openLoadProfileDialog: () => void | Promise<void>;
   openCreateProfileDialog: () => void;
@@ -96,7 +97,6 @@ function buildActions(p: UseSlashCommandActionsParams): SlashCommandActions {
 
     // Store-backed handles (pure open/close plumbing).
     openAuthDialog: () => dialogs.auth.open({}),
-    openThemeDialog: () => dialogs.theme.open({}),
     openEditorDialog: () => dialogs.editor.open({}),
     openSettingsDialog: () => dialogs.settings.open({}),
     openPrivacyNotice: () => dialogs.privacy.open({}),

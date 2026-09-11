@@ -90,6 +90,7 @@ export interface AppInputParams {
   /** Settings/profile store; input mirrors stream/command projections into it. */
   settingsStore: SettingsProfileStore;
   /** Domain openers that load data before showing their dialog. */
+  openThemeDialog: AppDialogsResult['openThemeDialog'];
   openProviderDialog: AppDialogsResult['openProviderDialog'];
   openLoadProfileDialog: AppDialogsResult['openLoadProfileDialog'];
   openCreateProfileDialog: AppDialogsResult['openCreateProfileDialog'];
@@ -180,6 +181,7 @@ function useSlashActions(
 ): SlashCommandProcessorActions {
   return useSlashCommandActions({
     dialogs: p.dialogs,
+    openThemeDialog: p.openThemeDialog,
     openProviderDialog: p.openProviderDialog,
     openLoadProfileDialog: p.openLoadProfileDialog,
     openCreateProfileDialog: p.openCreateProfileDialog,

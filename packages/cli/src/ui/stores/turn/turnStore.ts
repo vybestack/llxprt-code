@@ -13,7 +13,6 @@ import type { QueuedSubmission } from '../../hooks/agentStream/types.js';
 import {
   createHistoryLedger,
   nextHistoryItemId,
-  normalizeHistoryLimits,
   projectHistory,
   type HistoryItemUpdater,
   type HistoryLedger,
@@ -207,9 +206,8 @@ function createTurnHistoryCommands(
   };
 
   const setHistoryLimits = (limits: HistoryLimits): void => {
-    const normalized = normalizeHistoryLimits(limits);
     const before = ledger.getState();
-    ledger.setLimits(normalized);
+    ledger.setLimits(limits);
     if (ledger.getState() !== before) {
       publishHistory();
     }

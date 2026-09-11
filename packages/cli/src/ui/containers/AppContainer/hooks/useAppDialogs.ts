@@ -325,6 +325,7 @@ function useDialogsAuth(
     setContextLimit,
   );
   return {
+    openThemeDialog: theme.openThemeDialog,
     handleThemeSelect: theme.handleThemeSelect,
     handleThemeHighlight: theme.handleThemeHighlight,
     handleFolderTrustSelect: folderTrust.handleFolderTrustSelect,
@@ -543,6 +544,7 @@ export function useAppDialogs(params: AppDialogsParams) {
     triggerWelcomeAuth: auth.triggerWelcomeAuth,
     performMemoryRefresh: profiles.performMemoryRefresh,
     // Dialog domain handlers for the view command surface
+    openThemeDialog: auth.openThemeDialog,
     openProviderDialog: auth.openProviderDialog,
     handleThemeSelect: auth.handleThemeSelect,
     handleThemeHighlight: auth.handleThemeHighlight,

@@ -12,6 +12,29 @@ import { createTurnStore } from '../stores/turn/turnStore.js';
 import { ToolCallStatus, type HistoryItem } from '../types.js';
 
 describe('useHistoryManager', () => {
+  it('retains history beyond both default display budgets with unlimited options', () => {
+    const turnStore = createTurnStore();
+    const { result, unmount } = renderHook(() =>
+      useHistory(turnStore, { maxItems: -1, maxBytes: -1 }),
+    );
+    const text = 'x'.repeat(11000);
+    act(() => {
+      for (let index = 0; index < 401; index++) {
+        result.current.addItem(
+          { type: 'user', text: `${index}:${text}` },
+          index,
+        );
+      }
+    });
+    expect(result.current.history).toHaveLength(401);
+    expect(
+      result.current.history.every(
+        (item) => item.type === 'user' && item.text.endsWith(text),
+      ),
+    ).toBe(true);
+    unmount();
+  });
+
   it('should initialize with an empty history', () => {
     const turnStore = createTurnStore();
     const { result } = renderHook(() => useHistory(turnStore));

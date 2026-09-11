@@ -173,12 +173,12 @@ function getMergedCustomThemes(loadedSettings: LoadedSettings) {
 
 function isThemeAvailable(
   themeName: string | undefined,
-  mergedCustomThemes: unknown,
+  mergedCustomThemes: LoadedSettings['merged']['ui']['customThemes'],
 ): boolean {
-  if (themeName === undefined || mergedCustomThemes === undefined) {
-    return true;
-  }
-  return themeName in (mergedCustomThemes as Record<string, unknown>);
+  return (
+    themeManager.findThemeByName(themeName) !== undefined ||
+    (themeName !== undefined && Boolean(mergedCustomThemes?.[themeName]))
+  );
 }
 
 function reportThemeSelectionError(

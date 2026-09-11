@@ -34,7 +34,12 @@ export interface AppCommands {
   vimHandleInput: (key: Key) => boolean;
   sendAllQueuedSubmissions?: () => void;
   steerAllQueuedSubmissions?: () => void;
-  clearQueuedSubmissions?: () => void;
+  /**
+   * Clears all queued submissions (Backspace on an empty input, issue #2882).
+   * Required in production: the Composer passes it straight to the
+   * InputPrompt, and the key handler no-ops when it is absent.
+   */
+  clearQueuedSubmissions: () => void;
 
   // Composer mode commands
   setShellModeActive: (active: boolean) => void;
@@ -51,7 +56,10 @@ export interface AppCommands {
     method: 'oauth' | 'api_key',
     apiKey?: string,
   ) => Promise<void>;
-  handleThemeSelect: (themeName: string | undefined, scope: SettingScope) => void;
+  handleThemeSelect: (
+    themeName: string | undefined,
+    scope: SettingScope,
+  ) => void;
   handleThemeHighlight: (themeName: string | undefined) => void;
   handleAuthSelect: (
     method: string | undefined,
@@ -100,7 +108,9 @@ export function AppCommandsProvider({
 export function useAppCommands(): AppCommands {
   const commands = useContext(AppCommandsContext);
   if (commands === null) {
-    throw new Error('useAppCommands must be used within an AppCommandsProvider');
+    throw new Error(
+      'useAppCommands must be used within an AppCommandsProvider',
+    );
   }
   return commands;
 }

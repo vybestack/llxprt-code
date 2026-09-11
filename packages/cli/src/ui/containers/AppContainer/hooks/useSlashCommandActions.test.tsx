@@ -5,7 +5,19 @@
  */
 
 import { describe, it, expect, vi } from 'bun:test';
-import { renderHook } from '../../../../test-utils/render.js';
+import { act } from 'react';
+import {
+  createMockSettings,
+  renderHook,
+} from '../../../../test-utils/render.js';
+import { createMockCommandContext } from '../../../../test-utils/mockCommandContext.js';
+import { AppDispatchProvider } from '../../../contexts/AppDispatchContext.js';
+import { useThemeCommand } from '../../../hooks/useThemeCommand.js';
+import { processSlashCommand } from '../../../hooks/slashCommandHandlers.js';
+import { themeCommand } from '../../../commands/themeCommand.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
+import { createTurnStore } from '../../../stores/turn/turnStore.js';
+
 import { useSlashCommandActions } from './useSlashCommandActions.js';
 import { createDialogStore } from '../../../stores/dialog/dialogStore.js';
 import type { DialogOpeners } from '../../../stores/dialog/dialogOpeners.js';
@@ -16,6 +28,7 @@ const createCallback = () => vi.fn();
 
 function baseCallbacks() {
   return {
+    openThemeDialog: createCallback(),
     openProviderDialog: createCallback(),
     openLoadProfileDialog: createCallback(),
     openCreateProfileDialog: createCallback(),
@@ -39,6 +52,65 @@ function withRealStoreDialogs() {
 }
 
 describe('useSlashCommandActions', () => {
+  it('reports NO_COLOR without requesting a theme dialog through slash dispatch', async () => {
+    const previous = process.env.NO_COLOR;
+    process.env.NO_COLOR = '1';
+    const { store, dialogs } = withRealStoreDialogs();
+    const turn = createTurnStore();
+    const settings = createMockSettings({ ui: { theme: 'Dracula' } });
+    const { result, unmount } = renderHook(
+      () => {
+        const theme = useThemeCommand(settings, dialogs, turn.commands.addItem);
+        return useSlashCommandActions({
+          ...baseCallbacks(),
+          dialogs,
+          openThemeDialog: theme.openThemeDialog,
+        });
+      },
+      {
+        wrapper: ({ children }) => (
+          <AppDispatchProvider value={() => {}}>{children}</AppDispatchProvider>
+        ),
+      },
+    );
+    try {
+      await act(async () => {
+        await processSlashCommand(
+          {
+            commands: [themeCommand],
+            config: null,
+            commandContext: createMockCommandContext(),
+            actions: { ...result.current, openSubagentDialog: () => {} },
+            addItem: turn.commands.addItem,
+            addMessage: () => {},
+            setIsProcessing: () => {},
+            setLocalIsProcessing: () => {},
+            setPendingItem: () => {},
+            setSessionShellAllowlist: () => {},
+            setConfirmationRequest: () => {},
+            confirmationLogger: new DebugLogger('test'),
+            slashCommandLogger: new DebugLogger('test'),
+            beginSlashCommandAction: () => new AbortController(),
+            endSlashCommandAction: () => {},
+          },
+          '/theme',
+        );
+      });
+      expect(
+        turn.store
+          .getState()
+          .history.some(
+            (item) => item.type === 'info' && item.text.includes('NO_COLOR'),
+          ),
+      ).toBe(true);
+      expect(store.store.getState().requests).toHaveLength(0);
+    } finally {
+      unmount();
+      if (previous === undefined) delete process.env.NO_COLOR;
+      else process.env.NO_COLOR = previous;
+    }
+  });
+
   it('maps all provided callbacks into slash command action surface', () => {
     const { dialogs } = withRealStoreDialogs();
     const callbacks = { ...baseCallbacks(), dialogs };
@@ -125,10 +197,9 @@ describe('useSlashCommandActions', () => {
     expect(closeSpy.subagent).toHaveBeenCalledTimes(1);
   });
 
-  it('routes auth/theme/editor/settings opens through the dialogs object', () => {
+  it('routes auth/editor/settings opens through the dialogs object', () => {
     const openSpy = {
       auth: createCallback(),
-      theme: createCallback(),
       editor: createCallback(),
       settings: createCallback(),
     };
@@ -136,7 +207,6 @@ describe('useSlashCommandActions', () => {
     const spiedDialogs: DialogOpeners = {
       ...dialogs,
       auth: { open: openSpy.auth, close: createCallback() },
-      theme: { open: openSpy.theme, close: createCallback() },
       editor: { open: openSpy.editor, close: createCallback() },
       settings: { open: openSpy.settings, close: createCallback() },
     };
@@ -146,8 +216,7 @@ describe('useSlashCommandActions', () => {
 
     result.current.openAuthDialog();
     expect(openSpy.auth).toHaveBeenCalledWith({});
-    result.current.openThemeDialog();
-    expect(openSpy.theme).toHaveBeenCalledWith({});
+
     result.current.openEditorDialog();
     expect(openSpy.editor).toHaveBeenCalledWith({});
     result.current.openSettingsDialog();

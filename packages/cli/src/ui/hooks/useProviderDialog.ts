@@ -111,6 +111,7 @@ export const useProviderDialog = ({
         notifyProviderSwitch({
           addMessage,
           prevProvider: prev,
+          infoMessages: result.infoMessages,
           providerName,
         });
         setCurrentProvider(result.nextProvider);
@@ -136,12 +137,14 @@ function notifyProviderSwitch({
   addMessage,
   prevProvider,
   providerName,
+  infoMessages,
 }: {
   addMessage: (msg: {
     type: MessageType;
     content: string;
     timestamp: Date;
   }) => void;
+  infoMessages: readonly string[];
   prevProvider: string;
   providerName: string;
 }) {
@@ -151,4 +154,7 @@ function notifyProviderSwitch({
     content: `Switched from ${from} to ${providerName}`,
     timestamp: new Date(),
   });
+  for (const content of infoMessages) {
+    addMessage({ type: MessageType.INFO, content, timestamp: new Date() });
+  }
 }

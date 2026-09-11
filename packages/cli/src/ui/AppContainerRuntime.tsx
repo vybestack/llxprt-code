@@ -126,6 +126,7 @@ function buildInputParams(
     store: stores.dialogStore,
     terminalStore: stores.terminalStore,
     settingsStore: stores.settingsStore,
+    openThemeDialog: dialogs.openThemeDialog,
     openProviderDialog: dialogs.openProviderDialog,
     openLoadProfileDialog: dialogs.openLoadProfileDialog,
     openCreateProfileDialog: dialogs.openCreateProfileDialog,
@@ -252,10 +253,15 @@ function useAppDialogsRuntime(
  * View-facing command surface: stable callbacks from the domain hooks plus
  * the terminal-store mode commands. Data reads stay in the stores.
  */
-function buildAppCommands(
-  dialogs: AppDialogsResult,
-  input: AppInputResult,
-  layout: AppLayoutResult,
+export function buildAppCommands(
+  dialogs: Pick<AppDialogsResult, keyof AppCommands & keyof AppDialogsResult>,
+  input: Pick<AppInputResult, keyof AppCommands & keyof AppInputResult> & {
+    inputHistoryStore: Pick<
+      AppInputResult['inputHistoryStore'],
+      'inputHistory'
+    >;
+  },
+  layout: Pick<AppLayoutResult, 'handleClearScreen'>,
   terminalStore: TerminalStore,
 ): AppCommands {
   const { commands: terminalCommands } = terminalStore;
@@ -269,6 +275,7 @@ function buildAppCommands(
     vimHandleInput: input.vimHandleInput,
     sendAllQueuedSubmissions: input.sendAllQueuedSubmissions,
     steerAllQueuedSubmissions: input.steerAllQueuedSubmissions,
+    clearQueuedSubmissions: input.clearQueuedSubmissions,
     setShellModeActive: terminalCommands.setShellModeActive,
     handleEscapePromptChange: terminalCommands.setShowEscapePrompt,
     setQueueErrorMessage: terminalCommands.setQueueErrorMessage,
