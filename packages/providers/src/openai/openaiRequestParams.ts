@@ -38,22 +38,6 @@ const OPENAI_ALLOWED_PARAM_KEYS = new Set<string>([
   'prompt_cache_retention',
 ]);
 
-const OPENAI_PARAM_KEY_ALIASES: Record<string, string> = {
-  'max-tokens': 'max_tokens',
-  maxTokens: 'max_tokens',
-  'response-format': 'response_format',
-  responseFormat: 'response_format',
-  'tool-choice': 'tool_choice',
-  toolChoice: 'tool_choice',
-};
-
-function normalizeOpenAIParamKey(key: string): string {
-  if (OPENAI_PARAM_KEY_ALIASES[key]) {
-    return OPENAI_PARAM_KEY_ALIASES[key];
-  }
-  return key.replace(/-/g, '_');
-}
-
 const OPENAI_REASONING_INTERNAL_KEYS = new Set<string>([
   'enabled',
   'includeInContext',
@@ -100,18 +84,17 @@ function processParamEntry(
   if (value === undefined || value === null) {
     return undefined;
   }
-  const normalizedKey = normalizeOpenAIParamKey(rawKey);
-  if (!OPENAI_ALLOWED_PARAM_KEYS.has(normalizedKey)) {
+  if (!OPENAI_ALLOWED_PARAM_KEYS.has(rawKey)) {
     return undefined;
   }
-  if (normalizedKey === 'reasoning') {
+  if (rawKey === 'reasoning') {
     const sanitized = stripInternalReasoningKeys(value);
     if (!sanitized) {
       return undefined;
     }
-    return { key: normalizedKey, value: sanitized };
+    return { key: rawKey, value: sanitized };
   }
-  if (normalizedKey === 'prompt_cache_key') {
+  if (rawKey === 'prompt_cache_key') {
     // OpenAI rejects prompt_cache_key longer than 64 chars (issue #2135);
     // clamp at egress so overlong runtime/session-derived keys never reach
     // the API regardless of which layer injected them. Non-string or empty
@@ -119,9 +102,9 @@ function processParamEntry(
     if (typeof value !== 'string' || value.trim() === '') {
       return undefined;
     }
-    return { key: normalizedKey, value: sanitizePromptCacheKey(value) };
+    return { key: rawKey, value: sanitizePromptCacheKey(value) };
   }
-  return { key: normalizedKey, value };
+  return { key: rawKey, value };
 }
 
 export function filterOpenAIRequestParams(

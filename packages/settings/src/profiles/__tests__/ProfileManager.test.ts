@@ -317,6 +317,30 @@ describe('ProfileManager — save and load with SettingsService', () => {
     expect(appliedData['currentProfile']).toBe('load-target');
   });
 
+  it('saves and loads toolFormat through provider settings', async () => {
+    await pm.save('tool-format-profile', {
+      exportForProfile: async () => ({
+        defaultProvider: 'openai',
+        providers: { openai: { model: 'gpt-4', toolFormat: 'xml' } },
+      }),
+    });
+
+    const saved: unknown = JSON.parse(
+      await fs.readFile(path.join(tempDir, 'tool-format-profile.json'), 'utf8'),
+    );
+    expect(saved).toMatchObject({ ephemeralSettings: { toolFormat: 'xml' } });
+
+    let imported: unknown;
+    await pm.load('tool-format-profile', {
+      importFromProfile: async (data: unknown) => {
+        imported = data;
+      },
+    });
+    expect(imported).toMatchObject({
+      providers: { openai: { toolFormat: 'xml' } },
+    });
+  });
+
   it('load normalizes tool array entries before applying settings', async () => {
     const profile = {
       version: 1,
@@ -347,7 +371,8 @@ describe('ProfileManager — save and load with SettingsService', () => {
       'false',
     ]);
     expect(appliedData['tools.disabled']).toStrictEqual(['2', 'shell']);
-    expect(appliedData['disabled-tools']).toStrictEqual(['2', 'shell']);
+    // #2533 C1: canonical keys only — no legacy 'disabled-tools' write.
+    expect(appliedData['disabled-tools']).toBeUndefined();
   });
 
   it('load normalizes legacy disabled-tools entries before applying settings', async () => {
@@ -373,14 +398,13 @@ describe('ProfileManager — save and load with SettingsService', () => {
 
     await pm.load('legacy-tool-normalization', mockSettingsService);
 
+    // The legacy spelling is migrated once at profile load (#2533 C1
+    // compat point), then applied under the canonical key only.
     expect(appliedData['tools.disabled']).toStrictEqual([
       '3',
       'read_many_files',
     ]);
-    expect(appliedData['disabled-tools']).toStrictEqual([
-      '3',
-      'read_many_files',
-    ]);
+    expect(appliedData['disabled-tools']).toBeUndefined();
   });
 
   it('save persists auth-keyfile in ephemeralSettings', async () => {

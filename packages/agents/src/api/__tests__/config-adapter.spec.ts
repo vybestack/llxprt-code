@@ -27,9 +27,9 @@ import {
 } from '@vybestack/llxprt-code-agents';
 import { applyRuntimeEphemerals } from '../agentConfig.adapter.js';
 
-const STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY = 'streamIdleTimeoutMs';
-const STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY =
-  'streamFirstResponseTimeoutMs';
+const STREAM_IDLE_TIMEOUT_SETTING_KEY = 'stream-idle-timeout-ms';
+const STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY =
+  'stream-first-response-timeout-ms';
 
 /** Reads a ConfigParameters field by name without leaking a cast into asserts. */
 function read(params: Readonly<Record<string, unknown>>, key: string): unknown {
@@ -510,7 +510,7 @@ describe('applyRuntimeEphemerals (typed stream timeouts) @issue:2607', () => {
       streamFirstResponseTimeoutMs: undefined,
     });
     expect(sink.entries).toStrictEqual([
-      [STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY, 12_000],
+      [STREAM_IDLE_TIMEOUT_SETTING_KEY, 12_000],
     ]);
   });
 
@@ -521,7 +521,7 @@ describe('applyRuntimeEphemerals (typed stream timeouts) @issue:2607', () => {
       streamFirstResponseTimeoutMs: 300_000,
     });
     expect(sink.entries).toStrictEqual([
-      [STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY, 300_000],
+      [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY, 300_000],
     ]);
   });
 
@@ -532,8 +532,8 @@ describe('applyRuntimeEphemerals (typed stream timeouts) @issue:2607', () => {
       streamFirstResponseTimeoutMs: 300_000,
     });
     expect(sink.entries).toStrictEqual([
-      [STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY, 5_000],
-      [STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY, 300_000],
+      [STREAM_IDLE_TIMEOUT_SETTING_KEY, 5_000],
+      [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY, 300_000],
     ]);
   });
 
@@ -553,7 +553,7 @@ describe('applyRuntimeEphemerals (typed stream timeouts) @issue:2607', () => {
       streamFirstResponseTimeoutMs: 0,
     });
     expect(sink.entries).toStrictEqual([
-      [STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY, 0],
+      [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY, 0],
     ]);
   });
 
@@ -564,7 +564,7 @@ describe('applyRuntimeEphemerals (typed stream timeouts) @issue:2607', () => {
       streamFirstResponseTimeoutMs: -1,
     });
     expect(sink.entries).toStrictEqual([
-      [STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY, -1],
+      [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY, -1],
     ]);
   });
 
@@ -577,7 +577,7 @@ describe('applyRuntimeEphemerals (typed stream timeouts) @issue:2607', () => {
     // A single explicit write at 300000; absent would have written nothing.
     expect(sink.entries).toHaveLength(1);
     expect(sink.entries[0]?.[0]).toBe(
-      STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,
+      STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
     );
     expect(sink.entries[0]?.[1]).toBe(300_000);
   });

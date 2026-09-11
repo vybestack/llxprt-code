@@ -103,7 +103,7 @@ export interface ProfileEphemeralSettings {
   'base-url'?: string;
   'sandbox-base-url'?: string;
   'requires-auth'?: boolean;
-  'tool-format'?: string;
+  toolFormat?: string;
   'api-version'?: string;
   'custom-headers'?: Record<string, string>;
   'tool-output-max-items'?: number;
@@ -117,7 +117,6 @@ export interface ProfileEphemeralSettings {
   'max-image-dimension'?: number;
   'max-image-pixels'?: number;
   'max-prompt-tokens'?: number;
-  'disabled-tools'?: string[];
   'shell-replacement'?: 'allowlist' | 'all' | 'none' | boolean;
   'todo-continuation'?: boolean;
   'socket-timeout'?: number;
@@ -181,9 +180,7 @@ export interface ProfileEphemeralSettings {
   'compression.density.recencyRetention'?: number;
   'compression.density.compressHeadroom'?: number;
   'stream-first-response-timeout-ms'?: number;
-  streamFirstResponseTimeoutMs?: number;
   'stream-idle-timeout-ms'?: number;
-  streamIdleTimeoutMs?: number;
   'image-payload-budget-bytes'?: number;
   'media-store-quota-bytes'?: number;
   'session-recording-queue-max-bytes'?: number;

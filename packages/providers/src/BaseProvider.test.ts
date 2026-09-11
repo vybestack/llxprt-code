@@ -862,9 +862,9 @@ describe('BaseProvider', () => {
       clearActiveProviderRuntimeContext();
     });
 
-    it('strips legacy apiKey from additionalSettings', async () => {
+    it('strips canonical auth-key from additionalSettings', async () => {
       const settingsService = getSettingsService();
-      settingsService.setProviderSetting('test', 'apiKey', 'leaked-legacy-key');
+      settingsService.setProviderSetting('test', 'auth-key', 'provider-key');
       settingsService.setProviderSetting('test', 'model', 'gpt-4');
       settingsService.setProviderSetting('test', 'enabled', true);
 
@@ -879,14 +879,14 @@ describe('BaseProvider', () => {
         }
       ).getModelParamsFromSettings();
 
-      expect(params?.apiKey).toBeUndefined();
+      expect(params?.['auth-key']).toBeUndefined();
     });
 
-    it('strips legacy apiKeyfile from additionalSettings', async () => {
+    it('strips canonical auth-keyfile from additionalSettings', async () => {
       const settingsService = getSettingsService();
       settingsService.setProviderSetting(
         'test',
-        'apiKeyfile',
+        'auth-keyfile',
         '/path/to/keyfile',
       );
       settingsService.setProviderSetting('test', 'model', 'gpt-4');
@@ -903,15 +903,15 @@ describe('BaseProvider', () => {
         }
       ).getModelParamsFromSettings();
 
-      expect(params?.apiKeyfile).toBeUndefined();
+      expect(params?.['auth-keyfile']).toBeUndefined();
     });
 
-    it('strips legacy api-key and api-keyfile from additionalSettings', async () => {
+    it('strips canonical auth settings from additionalSettings', async () => {
       const settingsService = getSettingsService();
-      settingsService.setProviderSetting('test', 'api-key', 'leaked-key');
+      settingsService.setProviderSetting('test', 'auth-key', 'provider-key');
       settingsService.setProviderSetting(
         'test',
-        'api-keyfile',
+        'auth-keyfile',
         '/path/to/keyfile',
       );
       settingsService.setProviderSetting('test', 'model', 'gpt-4');
@@ -928,13 +928,13 @@ describe('BaseProvider', () => {
         }
       ).getModelParamsFromSettings();
 
-      expect(params?.['api-key']).toBeUndefined();
-      expect(params?.['api-keyfile']).toBeUndefined();
+      expect(params?.['auth-key']).toBeUndefined();
+      expect(params?.['auth-keyfile']).toBeUndefined();
     });
 
     it('preserves non-sensitive custom params alongside stripping', async () => {
       const settingsService = getSettingsService();
-      settingsService.setProviderSetting('test', 'apiKey', 'leaked');
+      settingsService.setProviderSetting('test', 'auth-key', 'provider-key');
       settingsService.setProviderSetting('test', 'model', 'gpt-4');
       settingsService.setProviderSetting('test', 'enabled', true);
       settingsService.setProviderSetting('test', 'customParam', 'keep-me');
@@ -950,7 +950,7 @@ describe('BaseProvider', () => {
         }
       ).getModelParamsFromSettings();
 
-      expect(params?.apiKey).toBeUndefined();
+      expect(params?.['auth-key']).toBeUndefined();
       expect(params?.customParam).toBe('keep-me');
     });
   });

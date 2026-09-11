@@ -73,7 +73,7 @@ describe('CLI --profile-load Integration Tests', () => {
         model: 'gemini-exp-1206',
         modelParams: {
           temperature: 0.5,
-          maxTokens: 2000,
+          max_tokens: 2000,
         },
         ephemeralSettings: {},
       };
@@ -400,7 +400,7 @@ describe('CLI --profile-load Integration Tests', () => {
         model: 'gemini-exp-1206',
         modelParams: {
           temperature: 0.2,
-          maxTokens: 1500,
+          max_tokens: 1500,
           topP: 0.9,
         },
         ephemeralSettings: {},

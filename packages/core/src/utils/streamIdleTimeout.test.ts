@@ -16,9 +16,7 @@ import {
   LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV,
   LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV,
   STREAM_IDLE_TIMEOUT_SETTING_KEY,
-  STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
   STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
-  STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,
 } from './streamIdleTimeout.js';
 
 function timeoutConfigFor(
@@ -398,7 +396,7 @@ describe('resolveStreamIdleTimeoutMs', () => {
     });
   });
 
-  describe('camelCase streamIdleTimeoutMs runtime wiring', () => {
+  describe('legacy idle timeout spellings are ignored', () => {
     const originalEnv = process.env;
 
     beforeEach(() => {
@@ -410,40 +408,31 @@ describe('resolveStreamIdleTimeoutMs', () => {
       process.env = originalEnv;
     });
 
-    it('camelCase streamIdleTimeoutMs with a very large finite value resolves to that value', () => {
+    it('ignores a legacy large finite value', () => {
       const mockConfig = timeoutConfigFor(
-        STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
+        'streamIdleTimeoutMs',
         Number.MAX_SAFE_INTEGER,
       );
       const result = resolveStreamIdleTimeoutMs(mockConfig);
-      expect(result).toBe(Number.MAX_SAFE_INTEGER);
+      expect(result).toBe(DEFAULT_STREAM_IDLE_TIMEOUT_MS);
     });
 
-    it('camelCase 0 resolves to 0 (disabled semantics preserved)', () => {
-      const mockConfig = timeoutConfigFor(
-        STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
-        0,
-      );
+    it('ignores legacy zero and uses the default', () => {
+      const mockConfig = timeoutConfigFor('streamIdleTimeoutMs', 0);
       const result = resolveStreamIdleTimeoutMs(mockConfig);
-      expect(result).toBe(0);
+      expect(result).toBe(DEFAULT_STREAM_IDLE_TIMEOUT_MS);
     });
 
-    it('camelCase negative resolves to 0 (disabled semantics preserved)', () => {
-      const mockConfig = timeoutConfigFor(
-        STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
-        -100,
-      );
+    it('ignores legacy negative values and uses the default', () => {
+      const mockConfig = timeoutConfigFor('streamIdleTimeoutMs', -100);
       const result = resolveStreamIdleTimeoutMs(mockConfig);
-      expect(result).toBe(0);
+      expect(result).toBe(DEFAULT_STREAM_IDLE_TIMEOUT_MS);
     });
 
-    it('camelCase string value is parsed correctly', () => {
-      const mockConfig = timeoutConfigFor(
-        STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
-        '45000',
-      );
+    it('ignores a legacy numeric string', () => {
+      const mockConfig = timeoutConfigFor('streamIdleTimeoutMs', '45000');
       const result = resolveStreamIdleTimeoutMs(mockConfig);
-      expect(result).toBe(45_000);
+      expect(result).toBe(DEFAULT_STREAM_IDLE_TIMEOUT_MS);
     });
 
     it('existing hyphenated stream-idle-timeout-ms behavior remains preserved', () => {
@@ -458,7 +447,7 @@ describe('resolveStreamIdleTimeoutMs', () => {
     it('hyphenated takes priority over camelCase when both are present', () => {
       const mockConfig = timeoutConfigForMany({
         [STREAM_IDLE_TIMEOUT_SETTING_KEY]: 300_000,
-        [STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY]: 150_000,
+        streamIdleTimeoutMs: 150_000,
       });
       const result = resolveStreamIdleTimeoutMs(mockConfig);
       expect(result).toBe(300_000); // hyphenated wins
@@ -467,26 +456,26 @@ describe('resolveStreamIdleTimeoutMs', () => {
     it('hyphenated 0 (disabled) wins over camelCase positive value', () => {
       const mockConfig = timeoutConfigForMany({
         [STREAM_IDLE_TIMEOUT_SETTING_KEY]: 0,
-        [STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY]: 150_000,
+        streamIdleTimeoutMs: 150_000,
       });
       const result = resolveStreamIdleTimeoutMs(mockConfig);
       expect(result).toBe(0);
     });
 
-    it('invalid hyphenated value falls through to camelCase', () => {
+    it('uses the default for an invalid registry value despite a legacy value', () => {
       const mockConfig = timeoutConfigForMany({
         [STREAM_IDLE_TIMEOUT_SETTING_KEY]: 'not-a-number',
-        [STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY]: 90_000,
+        streamIdleTimeoutMs: 90_000,
       });
       const result = resolveStreamIdleTimeoutMs(mockConfig);
-      expect(result).toBe(90_000);
+      expect(result).toBe(DEFAULT_STREAM_IDLE_TIMEOUT_MS);
     });
 
     it('env var LLXPRT_STREAM_IDLE_TIMEOUT_MS remains highest priority', () => {
       process.env[LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV] = '500000';
       const mockConfig = timeoutConfigForMany({
         [STREAM_IDLE_TIMEOUT_SETTING_KEY]: 300_000,
-        [STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY]: 150_000,
+        streamIdleTimeoutMs: 150_000,
       });
       const result = resolveStreamIdleTimeoutMs(mockConfig);
       expect(result).toBe(500_000); // env wins
@@ -494,17 +483,14 @@ describe('resolveStreamIdleTimeoutMs', () => {
 
     it('env var takes priority over camelCase when hyphenated is absent', () => {
       process.env[LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV] = '500000';
-      const mockConfig = timeoutConfigFor(
-        STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
-        60_000,
-      );
+      const mockConfig = timeoutConfigFor('streamIdleTimeoutMs', 60_000);
       const result = resolveStreamIdleTimeoutMs(mockConfig);
       expect(result).toBe(500_000);
     });
 
     it('falls through to default when camelCase is invalid', () => {
       const mockConfig = timeoutConfigFor(
-        STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
+        'streamIdleTimeoutMs',
         'not-a-number',
       );
       const result = resolveStreamIdleTimeoutMs(mockConfig);
@@ -520,10 +506,7 @@ describe('resolveStreamIdleTimeoutMs', () => {
     });
 
     it('camelCase empty string falls through to default (not parsed as 0)', () => {
-      const mockConfig = timeoutConfigFor(
-        STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
-        '',
-      );
+      const mockConfig = timeoutConfigFor('streamIdleTimeoutMs', '');
       const result = resolveStreamIdleTimeoutMs(mockConfig);
       expect(result).toBe(DEFAULT_STREAM_IDLE_TIMEOUT_MS);
     });
@@ -582,19 +565,19 @@ describe('resolveStreamFirstResponseTimeoutMs', () => {
     expect(result).toBe(180_000);
   });
 
-  it('camelCase ephemeral setting is used when no env var and no hyphenated', () => {
+  it('ignores legacy spelling and uses the default', () => {
     const mockConfig = timeoutConfigFor(
-      STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,
+      'streamFirstResponseTimeoutMs',
       150_000,
     );
     const result = resolveStreamFirstResponseTimeoutMs(mockConfig);
-    expect(result).toBe(150_000);
+    expect(result).toBe(DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS);
   });
 
   it('hyphenated takes priority over camelCase when both are present', () => {
     const mockConfig = timeoutConfigForMany({
       [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY]: 200_000,
-      [STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY]: 100_000,
+      streamFirstResponseTimeoutMs: 100_000,
     });
     const result = resolveStreamFirstResponseTimeoutMs(mockConfig);
     expect(result).toBe(200_000); // hyphenated wins
@@ -604,7 +587,7 @@ describe('resolveStreamFirstResponseTimeoutMs', () => {
     process.env[LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV] = '450000';
     const mockConfig = timeoutConfigForMany({
       [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY]: 200_000,
-      [STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY]: 100_000,
+      streamFirstResponseTimeoutMs: 100_000,
     });
     const result = resolveStreamFirstResponseTimeoutMs(mockConfig);
     expect(result).toBe(450_000); // env wins
@@ -667,22 +650,22 @@ describe('resolveStreamFirstResponseTimeoutMs', () => {
     expect(result).toBe(300_000);
   });
 
-  it('invalid hyphenated value falls through to camelCase', () => {
+  it('uses the default for an invalid registry value despite a legacy value', () => {
     const mockConfig = timeoutConfigForMany({
       [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY]: 'not-a-number',
-      [STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY]: 90_000,
+      streamFirstResponseTimeoutMs: 90_000,
     });
     const result = resolveStreamFirstResponseTimeoutMs(mockConfig);
-    expect(result).toBe(90_000);
+    expect(result).toBe(DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS);
   });
 
   it('falls through to default when camelCase is invalid', () => {
     const mockConfig = timeoutConfigFor(
-      STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,
+      'streamFirstResponseTimeoutMs',
       'not-a-number',
     );
     const result = resolveStreamFirstResponseTimeoutMs(mockConfig);
-    expect(result).toBe(300_000);
+    expect(result).toBe(DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS);
   });
 
   it('string config value is parsed correctly', () => {

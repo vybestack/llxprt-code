@@ -3,11 +3,11 @@ import { filterOpenAIRequestParams } from './openaiRequestParams.js';
 import { MAX_PROMPT_CACHE_KEY_LENGTH } from '../openai-responses/sanitizePromptCacheKey.js';
 
 describe('filterOpenAIRequestParams', () => {
-  it('keeps supported OpenAI parameters and normalizes aliases', () => {
+  it('keeps supported canonical OpenAI parameters', () => {
     const filtered = filterOpenAIRequestParams({
       temperature: 0.5,
-      'max-tokens': 2048,
-      responseFormat: { type: 'json_schema' },
+      max_tokens: 2048,
+      response_format: { type: 'json_schema' },
       stop: ['END'],
     });
 
@@ -17,6 +17,19 @@ describe('filterOpenAIRequestParams', () => {
       response_format: { type: 'json_schema' },
       stop: ['END'],
     });
+  });
+
+  it('drops removed legacy spellings instead of translating them', () => {
+    const filtered = filterOpenAIRequestParams({
+      'max-tokens': 2048,
+      maxTokens: 2048,
+      'response-format': { type: 'json_schema' },
+      responseFormat: { type: 'json_schema' },
+      'tool-choice': 'auto',
+      toolChoice: 'auto',
+    });
+
+    expect(filtered).toBeUndefined();
   });
 
   it('drops CLI-only or unrelated ephemeral settings', () => {

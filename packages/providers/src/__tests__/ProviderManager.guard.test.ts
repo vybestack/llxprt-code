@@ -782,7 +782,7 @@ describe('ProviderManager.normalizeRuntimeInputs empty/whitespace fallback seman
     settingsService.setProviderSetting('empty-model-provider', 'model', '');
     settingsService.setProviderSetting(
       'empty-model-provider',
-      'apiKey',
+      'auth-key',
       'test-key',
     );
     settingsService.setProviderSetting(

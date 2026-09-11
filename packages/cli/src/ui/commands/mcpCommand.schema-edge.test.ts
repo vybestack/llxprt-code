@@ -271,18 +271,21 @@ describe('mcpCommand', () => {
       });
     });
 
-    it('should handle "descriptions" as alias for "desc"', async () => {
+    it('should not treat the removed "descriptions" spelling as "desc"', async () => {
       const result = await mcpCommand.action!(mockContext, 'descriptions');
       assertMessageAction(result);
-      expect(result.content).toContain('Test tool');
-      expect(result.content).toContain('Server description');
+      expect(result.content).not.toContain('Test tool');
+      expect(result.content).not.toContain('Server description');
+      expect(result.content).not.toContain('Parameters:');
+      expect(result.content).toContain('\u001b[36mtool1\u001b[0m');
     });
 
-    it('should handle "nodescriptions" as alias for "nodesc"', async () => {
+    it('should not treat the removed "nodescriptions" spelling as "nodesc"', async () => {
       const result = await mcpCommand.action!(mockContext, 'nodescriptions');
       assertMessageAction(result);
       expect(result.content).not.toContain('Test tool');
       expect(result.content).not.toContain('Server description');
+      expect(result.content).not.toContain('Parameters:');
       expect(result.content).toContain('\u001b[36mtool1\u001b[0m');
     });
 

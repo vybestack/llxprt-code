@@ -115,14 +115,9 @@ export function buildToolGovernance(
   const allowedExplicit = isStringArray(allowedValue);
   const allowedRaw: string[] = allowedExplicit ? allowedValue : [];
 
-  let disabledRaw: string[];
-  if (isStringArray(ephemerals['tools.disabled'])) {
-    disabledRaw = ephemerals['tools.disabled'];
-  } else if (isStringArray(ephemerals['disabled-tools'])) {
-    disabledRaw = ephemerals['disabled-tools'];
-  } else {
-    disabledRaw = [];
-  }
+  const disabledRaw: string[] = isStringArray(ephemerals['tools.disabled'])
+    ? ephemerals['tools.disabled']
+    : [];
 
   const excludeValue =
     typeof config.getExcludeTools === 'function'

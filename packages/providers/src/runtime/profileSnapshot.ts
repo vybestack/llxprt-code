@@ -12,7 +12,6 @@ import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings/profiles/
 import {
   getProfilePersistableKeys,
   isInternalSettingKey,
-  resolveAlias,
 } from '@vybestack/llxprt-code-settings/settings/settingsRegistry.js';
 import type {
   Profile,
@@ -151,22 +150,7 @@ function getProfileEphemeralValue(
   ephemeralRecord: Record<string, unknown>,
   key: string,
 ): unknown {
-  const directValue = getNestedValue(ephemeralRecord, key);
-  if (directValue !== undefined) {
-    return directValue;
-  }
-
-  for (const [aliasKey, aliasValue] of Object.entries(ephemeralRecord)) {
-    if (
-      aliasValue !== undefined &&
-      !isInternalSettingKey(aliasKey) &&
-      resolveAlias(aliasKey) === key
-    ) {
-      return aliasValue;
-    }
-  }
-
-  return undefined;
+  return getNestedValue(ephemeralRecord, key);
 }
 
 /**

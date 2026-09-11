@@ -123,14 +123,14 @@ function resolveReasoningConfig(
 }
 
 /**
- * Apply reasoning, max-tokens, and stream-options to the request body.
+ * Apply model-param overrides, reasoning config, and stream-options to the
+ * request body.
  */
 function applyRequestBodyOverrides(
   requestBody: OpenAIChatRequestBody,
   options: NormalizedGenerateChatOptions,
   ephemeralSettings: Readonly<Record<string, unknown>>,
   model: string,
-  maxTokens: number | undefined,
   streamingEnabled: boolean,
   providerName: string,
   logger: DebugLogger,
@@ -163,10 +163,6 @@ function applyRequestBodyOverrides(
     providerName,
     logger,
   );
-
-  if (typeof maxTokens === 'number' && Number.isFinite(maxTokens)) {
-    requestBody.max_tokens = maxTokens;
-  }
 
   // Add stream options if streaming is enabled
   const streamOptions = (ephemeralSettings['stream-options'] as
@@ -205,16 +201,6 @@ function sanitizeOverridesCacheKey(
     );
   }
   return Object.keys(result).length > 0 ? result : undefined;
-}
-
-function resolveMaxTokens(
-  metadataValue: unknown,
-  ephemeralValue: unknown,
-): number | undefined {
-  if (typeof metadataValue === 'number') {
-    return metadataValue;
-  }
-  return typeof ephemeralValue === 'number' ? ephemeralValue : undefined;
 }
 
 interface OpenAIMessagePayload {
@@ -274,18 +260,12 @@ export async function prepareRequest(
   providerName?: string,
   mediaTransportCapabilities: ProviderMediaTransportCapabilities = conservativeMediaTransportCapabilities(),
 ): Promise<RequestContext> {
-  const { metadata } = options;
   const model = options.resolved.model || defaultModel;
   const ephemeralSettings = readInvocationRecord(options.invocation.ephemerals);
   const resolvedProviderName = providerName ?? 'openai';
   const { detectedFormat, formattedTools, messagesWithSystem } =
     prepareMessagePayload(options, model, config, logger, resolvedProviderName);
   const streamingEnabled = ephemeralSettings['streaming'] !== 'disabled';
-
-  const maxTokens = resolveMaxTokens(
-    metadata.maxTokens,
-    ephemeralSettings['max-tokens'],
-  );
 
   // Build request
   const requestBody: OpenAIChatRequestBody = {
@@ -299,13 +279,12 @@ export async function prepareRequest(
     requestBody.tool_choice = 'auto';
   }
 
-  // Apply reasoning, max-tokens, and stream-options overrides
+  // Apply model params, reasoning, and stream-options overrides
   applyRequestBodyOverrides(
     requestBody,
     options,
     ephemeralSettings,
     model,
-    maxTokens,
     streamingEnabled,
     resolvedProviderName,
     logger,

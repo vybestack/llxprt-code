@@ -22,6 +22,7 @@ import {
   parseProfileJson,
   parsePromptCaching,
 } from '../settings/validation.js';
+import { migrateLegacySettingKeys } from '../settings/legacyKeyMigration.js';
 
 import fs from 'fs/promises';
 import path from 'path';
@@ -224,6 +225,16 @@ export class ProfileManager {
           ? parseLoadBalancerProfile(profileName, parsed)
           : parseProfile(parsed);
 
+      if (!isLoadBalancerProfile(profile)) {
+        // The one allowed compat point (#2533 Phase C1): profiles exported
+        // before the canonical-key policy may persist legacy ephemeral key
+        // spellings (e.g. 'disabled-tools'); migrate them once at load so
+        // everything downstream reads canonical keys only.
+        profile.ephemeralSettings = migrateLegacySettingKeys(
+          profile.ephemeralSettings as unknown as Record<string, unknown>,
+        ) as unknown as EphemeralSettings;
+      }
+
       if (isLoadBalancerProfile(profile)) {
         await this.validateLoadBalancerReferences(profileName, profile);
       }
@@ -377,7 +388,7 @@ export class ProfileManager {
         'prompt-caching': parsePromptCaching(
           providerSettings['prompt-caching'],
         ),
-        'tool-format': optionalString(providerSettings.toolFormat),
+        toolFormat: optionalString(providerSettings.toolFormat),
       } satisfies EphemeralSettings,
     };
 
@@ -390,7 +401,6 @@ export class ProfileManager {
 
     profile.ephemeralSettings['tools.allowed'] = toolsAllowed;
     profile.ephemeralSettings['tools.disabled'] = toolsDisabled;
-    profile.ephemeralSettings['disabled-tools'] = toolsDisabled;
 
     if (typeof settingsService.setCurrentProfileName === 'function') {
       settingsService.setCurrentProfileName(profileName);
@@ -408,15 +418,7 @@ export class ProfileManager {
     const allowedTools = stringArray(allowedValue);
 
     const disabledValue = profile.ephemeralSettings['tools.disabled'];
-    const legacyDisabled = profile.ephemeralSettings['disabled-tools'];
-    let disabledTools: string[];
-    if (Array.isArray(disabledValue)) {
-      disabledTools = stringArray(disabledValue);
-    } else if (Array.isArray(legacyDisabled)) {
-      disabledTools = stringArray(legacyDisabled);
-    } else {
-      disabledTools = [];
-    }
+    const disabledTools: string[] = stringArray(disabledValue);
 
     return {
       defaultProvider: profile.provider,
@@ -430,7 +432,7 @@ export class ProfileManager {
           'auth-key': profile.ephemeralSettings['auth-key'],
           'auth-keyfile': profile.ephemeralSettings['auth-keyfile'],
           'prompt-caching': profile.ephemeralSettings['prompt-caching'],
-          toolFormat: profile.ephemeralSettings['tool-format'],
+          toolFormat: profile.ephemeralSettings.toolFormat,
         },
       },
       tools: {
@@ -449,7 +451,6 @@ export class ProfileManager {
     if (settingsService.set) {
       settingsService.set('tools.allowed', settingsData.tools.allowed);
       settingsService.set('tools.disabled', settingsData.tools.disabled);
-      settingsService.set('disabled-tools', settingsData.tools.disabled);
     }
   }
 

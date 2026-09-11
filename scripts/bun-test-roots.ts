@@ -235,6 +235,12 @@ export const BUN_TEST_ROOTS: readonly BunTestRoot[] = [
     ],
   },
   {
+    root: 'eslint-rules',
+    cwd: '.',
+    directories: ['eslint-rules'],
+    preload: ['scripts/tests/storage-isolation-guard.ts'],
+  },
+  {
     root: 'evals',
     cwd: 'evals',
     pattern: /\.eval\.ts$/,

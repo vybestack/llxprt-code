@@ -678,23 +678,15 @@ function applyAliasEphemeralSettings(context: ProviderSwitchContext): void {
     typeof aliasEphemeralSettings === 'object' &&
     !Array.isArray(aliasEphemeralSettings)
   ) {
-    const protectedAliasEphemeralKeys = new Set([
-      'activeprovider',
-      'base-url',
-      'baseurl',
-      'base_url',
-      'model',
-      'auth-key',
-      'auth-keyfile',
-      'authkey',
-      'authkeyfile',
-      'api-key',
-      'api-keyfile',
-      'api_key',
-      'api_keyfile',
-      'apikey',
-      'apikeyfile',
-    ]);
+    // Canonical protected keys only (issue #2533): legacy spellings are
+    // rewritten to canonical at load, so only the registered names need
+    // protection here. Comparison is case-insensitive because the raw alias
+    // key is lowercased below, which also blocks case variants of these keys.
+    const protectedAliasEphemeralKeys = new Set(
+      ['activeProvider', 'base-url', 'model', 'auth-key', 'auth-keyfile'].map(
+        (canonicalKey) => canonicalKey.toLowerCase(),
+      ),
+    );
 
     Object.entries(aliasEphemeralSettings).forEach(([rawKey, rawValue]) => {
       if (

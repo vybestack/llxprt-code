@@ -19,6 +19,7 @@ import {
   DEFAULT_AGENT_ID,
   formatTodoListForDisplay,
 } from '@vybestack/llxprt-code-core';
+import { canonicalizeToolName } from '@vybestack/llxprt-code-tools';
 import { SHELL_COMMAND_NAME, SHELL_NAME } from '../../constants.js';
 import { useTodoContext } from '../../contexts/TodoContext.js';
 import type { CliUiRuntime } from '../../cliUiRuntime.js';
@@ -52,14 +53,11 @@ const extractCountFromText = (text?: string): number | undefined => {
   return Number(match[1]);
 };
 
-const normalizeToolName = (name: string): string =>
-  name.replace(/[^a-z]/gi, '').toLowerCase();
-
 const isTodoReadTool = (name: string): boolean =>
-  normalizeToolName(name) === 'todoread';
+  canonicalizeToolName(name) === 'todo_read';
 
 const isTodoWriteTool = (name: string): boolean =>
-  normalizeToolName(name) === 'todowrite';
+  canonicalizeToolName(name) === 'todo_write';
 
 const formatTaskCountLabel = (count: number): string => {
   const normalized = Math.max(count, 0);

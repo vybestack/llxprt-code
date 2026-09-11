@@ -141,6 +141,47 @@ export function filterExcludedFromWhitelist(
 }
 
 /**
+ * Removed TaskTool parameter spellings mapped to their canonical members.
+ * Used only to reject legacy input with guidance — never to read values.
+ */
+const REMOVED_TASK_PARAM_SPELLINGS: ReadonlyMap<string, string> = new Map([
+  ['subagentName', 'subagent_name'],
+  ['goalPrompt', 'goal_prompt'],
+  ['behaviourPrompts', 'behaviour_prompts'],
+  ['behavior_prompts', 'behaviour_prompts'],
+  ['behaviorPrompts', 'behaviour_prompts'],
+  ['toolWhitelist', 'tool_whitelist'],
+  ['output_spec', 'expected_outputs'],
+  ['outputSpec', 'expected_outputs'],
+  ['expectedOutputs', 'expected_outputs'],
+  ['context_vars', 'context'],
+  ['contextVars', 'context'],
+]);
+
+function removedTaskParamError(
+  legacyName: string,
+  canonicalName: string,
+): string {
+  return `Task tool parameter '${legacyName}' is not recognized; use the canonical '${canonicalName}'.`;
+}
+
+/**
+ * Rejects removed TaskTool parameter spellings with an error naming the
+ * canonical member. Returns `null` when every key is canonical.
+ */
+export function validateCanonicalTaskParamSpellings(
+  params: TaskToolParams,
+): string | null {
+  for (const key of Object.keys(params)) {
+    const canonical = REMOVED_TASK_PARAM_SPELLINGS.get(key);
+    if (canonical !== undefined) {
+      return removedTaskParamError(key, canonical);
+    }
+  }
+  return null;
+}
+
+/**
  * Validates that every value in an output-spec map is a plain string.
  * Rejects JSON-Schema-shaped objects (e.g. `{ type: "string", description: "..." }`)
  * that LLMs sometimes send when the parameter name invites a schema mental model.
@@ -167,66 +208,55 @@ export function validateOutputSpec(
 }
 
 /**
- * Validates the output-spec parameters (preferred `expected_outputs` and
- * deprecated `output_spec` alias) from raw `TaskToolParams`. Returns the first
- * validation error, or `null` if valid.
+ * Validates the `expected_outputs` parameter from raw `TaskToolParams`.
+ * Returns the first validation error, or `null` if valid.
  *
  * This is the single source of truth for output-param validation, shared by
  * both `validateToolParamValues` (pre-build schema-adjacent check) and
  * `resolveOutputSpec` (runtime normalization).
  */
 export function validateOutputParams(params: TaskToolParams): string | null {
-  const preferred =
-    params.expected_outputs ?? params.expectedOutputs ?? undefined;
-  if (preferred !== undefined) {
-    const error = validateOutputSpec(preferred, 'expected_outputs');
-    if (error !== null) {
-      return error;
+  for (const key of Object.keys(params)) {
+    const canonical = REMOVED_TASK_PARAM_SPELLINGS.get(key);
+    if (canonical === 'expected_outputs') {
+      return removedTaskParamError(key, canonical);
     }
   }
-
-  const legacy = params.output_spec ?? params.outputSpec ?? undefined;
-  if (legacy !== undefined) {
-    return validateOutputSpec(legacy, 'output_spec');
+  if (params.expected_outputs === undefined) {
+    return null;
   }
-
-  return null;
+  return validateOutputSpec(params.expected_outputs, 'expected_outputs');
 }
 
 /**
- * Normalizes the public `TaskToolParams` (which accepts multiple alias keys)
- * into the canonical `TaskToolInvocationParams`. Trims prompts/tools, dedupes
- * behaviour prompts, and resolves the async flag.
+ * Normalizes the public `TaskToolParams` (canonical snake_case members only)
+ * into the internal camelCase `TaskToolInvocationParams`. Trims
+ * prompts/tools, dedupes behaviour prompts, and resolves the async flag.
  *
- * Output-spec resolution precedence (Issue #2255):
- *   1. expected_outputs / expectedOutputs (preferred, non-schema-suggestive)
- *   2. output_spec / outputSpec (deprecated alias)
- *
- * @throws When either source contains non-string values.
+ * @throws When `expected_outputs` contains non-string values.
  */
 export function normalizeTaskParams(
   params: TaskToolParams,
 ): TaskToolInvocationParams {
-  const subagentName = (
-    params.subagent_name ??
-    params.subagentName ??
-    ''
-  ).trim();
-  const goalPrompt = (params.goal_prompt ?? params.goalPrompt ?? '').trim();
+  const spellingError = validateCanonicalTaskParamSpellings(params);
+  if (spellingError !== null) {
+    throw new Error(spellingError);
+  }
+  const subagentName = (params.subagent_name ?? '').trim();
+  const goalPrompt = (params.goal_prompt ?? '').trim();
 
-  const behaviourPrompts = [goalPrompt, ...resolveBehaviourPrompts(params)]
+  const behaviourPrompts = [goalPrompt, ...(params.behaviour_prompts ?? [])]
     .map((prompt) => prompt.trim())
     .filter((prompt): prompt is string => Boolean(prompt))
     .filter((prompt, index, array) => array.indexOf(prompt) === index);
 
-  const toolWhitelist = resolveToolWhitelist(params)
+  const toolWhitelist = (params.tool_whitelist ?? [])
     .map((tool) => tool.trim())
     .filter((tool): tool is string => Boolean(tool));
 
   const outputSpec = resolveOutputSpec(params);
 
-  const context =
-    params.context ?? params.context_vars ?? params.contextVars ?? {};
+  const context = params.context ?? {};
 
   return {
     subagentName,
@@ -240,56 +270,17 @@ export function normalizeTaskParams(
   };
 }
 
-function resolveBehaviourPrompts(params: TaskToolParams): string[] {
-  return (
-    firstDefined(
-      params.behaviour_prompts,
-      params.behavior_prompts,
-      params.behaviourPrompts,
-    ) ??
-    params.behaviorPrompts ??
-    []
-  );
-}
-
-function firstDefined<T>(...values: Array<T | undefined>): T | undefined {
-  for (const value of values) {
-    if (value !== undefined) {
-      return value;
-    }
-  }
-  return undefined;
-}
-
-function resolveToolWhitelist(params: TaskToolParams): string[] {
-  return params.tool_whitelist ?? params.toolWhitelist ?? [];
-}
-
 /**
- * Resolves the output spec from `expected_outputs` (preferred) or the
- * deprecated `output_spec` alias. Validates that every value is a plain
- * string and throws with a clear message if a JSON-Schema-shaped object is
- * encountered.
+ * Resolves the output spec from `expected_outputs`. Validates that every
+ * value is a plain string and throws with a clear message if a
+ * JSON-Schema-shaped object is encountered.
  */
 function resolveOutputSpec(
   params: TaskToolParams,
 ): Record<string, string> | undefined {
-  const preferred =
-    params.expected_outputs ?? params.expectedOutputs ?? undefined;
-  const legacy = params.output_spec ?? params.outputSpec ?? undefined;
-
   const error = validateOutputParams(params);
   if (error !== null) {
     throw new Error(error);
   }
-
-  if (preferred !== undefined) {
-    return preferred;
-  }
-
-  if (legacy !== undefined) {
-    return legacy;
-  }
-
-  return undefined;
+  return params.expected_outputs;
 }

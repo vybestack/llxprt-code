@@ -2,7 +2,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { homedir } from 'os';
 import { FatalConfigError, getErrorMessage } from '@vybestack/llxprt-code-core';
-import { Storage } from '@vybestack/llxprt-code-settings';
+import {
+  Storage,
+  migrateLegacySettingKeys,
+} from '@vybestack/llxprt-code-settings';
 import stripJsonComments from 'strip-json-comments';
 import { DefaultLight } from '../ui/themes/default-light.js';
 import { DefaultDark } from '../ui/themes/default.js';
@@ -211,6 +214,58 @@ function migrateLoadedSettings(settings: SettingsState): void {
   ]) {
     migrateLegacyInteractiveShellSetting(scopeSettings);
     migrateHooksConfig(scopeSettings);
+    // #2533 Phase C1: rewrite legacy setting-key spellings once at load,
+    // in memory, exactly like the migrations above (no immediate rewrite of
+    // the on-disk file). Provider blocks are permissive maps where legacy
+    // model-param spellings (e.g. 'max-tokens') actually live, so they are
+    // migrated too.
+    if (!isPlainRecord(scopeSettings)) {
+      continue;
+    }
+    const scopeRecord: Record<string, unknown> = scopeSettings;
+    const migrated = migrateLegacySettingKeys(scopeRecord);
+    if (migrated !== scopeRecord) {
+      applyMigratedScopeKeys(scopeRecord, migrated);
+    }
+    const providers = scopeRecord['providers'];
+    if (isPlainRecord(providers)) {
+      for (const provider of Object.values(providers)) {
+        migrateProviderBlock(provider);
+      }
+    }
+  }
+}
+
+function migrateProviderBlock(provider: unknown): void {
+  if (!isPlainRecord(provider)) {
+    return;
+  }
+  const migratedProvider = migrateLegacySettingKeys(provider);
+  if (migratedProvider !== provider) {
+    applyMigratedScopeKeys(provider, migratedProvider);
+  }
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Copies migrated key/value pairs back into the original scope object
+ * in place (the scope objects are referenced elsewhere), removing keys the
+ * migration deleted.
+ */
+function applyMigratedScopeKeys(
+  target: Record<string, unknown>,
+  migrated: Record<string, unknown>,
+): void {
+  for (const key of Object.keys(target)) {
+    if (!(key in migrated)) {
+      delete target[key];
+    }
+  }
+  for (const [key, value] of Object.entries(migrated)) {
+    target[key] = value;
   }
 }
 

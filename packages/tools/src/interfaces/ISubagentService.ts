@@ -21,8 +21,6 @@ export interface SubagentRequest {
   cwd?: string;
   /** Additional behavioural prompts to append after the primary prompt. */
   behaviourPrompts?: string[];
-  /** American-spelling alias for behaviourPrompts. */
-  behaviorPrompts?: string[];
   /** Optional tool whitelist for the subagent runtime. */
   toolWhitelist?: string[];
   /** Whether the request included an explicit whitelist even if it was empty. */

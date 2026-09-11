@@ -24,51 +24,60 @@ import {
   getSettingSpec,
   separateSettings,
 } from '../settings/settingsRegistry.js';
+import { migrateLegacySettingKeys } from '../settings/legacyKeyMigration.js';
 
-describe('issue #2182: streamIdleTimeoutMs camelCase alias', () => {
-  it('resolves streamIdleTimeoutMs to the canonical stream-idle-timeout-ms', () => {
-    expect(resolveAlias('streamIdleTimeoutMs')).toBe('stream-idle-timeout-ms');
+describe('issue #2182: stream idle timeout (canonical key + load-time migration)', () => {
+  it('canonical stream-idle-timeout-ms resolves exactly', () => {
+    expect(resolveAlias('stream-idle-timeout-ms')).toBe(
+      'stream-idle-timeout-ms',
+    );
   });
 
-  it('finds the cli-behavior spec for streamIdleTimeoutMs via the alias', () => {
-    const spec = getSettingSpec('streamIdleTimeoutMs');
+  it('legacy streamIdleTimeoutMs is migrated at load, not resolved', () => {
+    expect(resolveAlias('streamIdleTimeoutMs')).toBe('streamIdleTimeoutMs');
+    const migrated = migrateLegacySettingKeys({ streamIdleTimeoutMs: 60_000 });
+    expect(migrated['stream-idle-timeout-ms']).toBe(60_000);
+    expect('streamIdleTimeoutMs' in migrated).toBe(false);
+  });
+
+  it('finds the cli-behavior spec for the canonical key', () => {
+    const spec = getSettingSpec('stream-idle-timeout-ms');
     expect(spec?.key).toBe('stream-idle-timeout-ms');
     expect(spec?.category).toBe('cli-behavior');
   });
 
-  it('does not leak streamIdleTimeoutMs into modelParams for anthropic', () => {
+  it('does not leak the canonical key into modelParams for anthropic', () => {
     const result = separateSettings(
-      { streamIdleTimeoutMs: 60_000 },
+      { 'stream-idle-timeout-ms': 60_000 },
       'anthropic',
     );
-    expect(result.modelParams['streamIdleTimeoutMs']).toBeUndefined();
-    expect(result.modelParams['stream_idle_timeout_ms']).toBeUndefined();
     expect(result.modelParams['stream-idle-timeout-ms']).toBeUndefined();
+    expect(result.modelParams['stream_idle_timeout_ms']).toBeUndefined();
   });
 
-  it('classifies streamIdleTimeoutMs into cliSettings for every provider', () => {
+  it('classifies the canonical key into cliSettings for every provider', () => {
     for (const provider of ['anthropic', 'codex', 'openai', 'gemini']) {
       const result = separateSettings(
-        { streamIdleTimeoutMs: 60_000 },
+        { 'stream-idle-timeout-ms': 60_000 },
         provider,
       );
       expect(result.cliSettings['stream-idle-timeout-ms']).toBe(60_000);
       expect(Object.keys(result.modelParams)).not.toContain(
-        'streamIdleTimeoutMs',
+        'stream-idle-timeout-ms',
       );
     }
   });
 
-  it('treats the canonical hyphenated key identically', () => {
+  it('a migrated legacy value behaves identically to the canonical key', () => {
     const canonical = separateSettings(
       { 'stream-idle-timeout-ms': 60_000 },
       'anthropic',
     );
-    const camel = separateSettings(
-      { streamIdleTimeoutMs: 60_000 },
+    const migrated = separateSettings(
+      migrateLegacySettingKeys({ streamIdleTimeoutMs: 60_000 }),
       'anthropic',
     );
-    expect(camel.cliSettings['stream-idle-timeout-ms']).toBe(
+    expect(migrated.cliSettings['stream-idle-timeout-ms']).toBe(
       canonical.cliSettings['stream-idle-timeout-ms'],
     );
   });

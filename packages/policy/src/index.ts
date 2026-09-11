@@ -27,6 +27,7 @@ export {
   getPolicyTier,
   formatPolicyError,
   migrateLegacyApprovalMode,
+  normalizeToolName,
   AUTO_EDIT_TOOLS,
 } from './config.js';
 export type { PolicyConfigSource, PolicyPathResolver } from './config.js';

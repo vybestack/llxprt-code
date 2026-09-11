@@ -98,13 +98,13 @@ export function resolveStreamingEnabled(
   return streamingSetting !== 'disabled';
 }
 
+/**
+ * Validates the canonical `modelParams['max_tokens']` value. Metadata and
+ * ephemeral legacy spellings are intentionally not read (issue #2533).
+ */
 export function resolveMaxOutputTokens(
-  maxTokensMeta: number | undefined,
   maxTokensOverride: number | undefined,
 ): number | undefined {
-  if (typeof maxTokensMeta === 'number' && Number.isFinite(maxTokensMeta)) {
-    return maxTokensMeta;
-  }
   if (
     typeof maxTokensOverride === 'number' &&
     Number.isFinite(maxTokensOverride)
@@ -123,23 +123,17 @@ export function resolveStopSequences(
 }
 
 /**
- * Resolves all model call parameters from options and metadata.
+ * Resolves model call parameters from canonical modelParams keys. For maximum
+ * output tokens, only `modelParams['max_tokens']` is honored; metadata and
+ * ephemeral legacy spellings are intentionally unread (issue #2533).
  */
 export function resolveModelCallParams(
   options: NormalizedGenerateChatOptions,
-  metadata: NormalizedGenerateChatOptions['metadata'],
   provider: BaseProvider,
 ): ModelCallParams {
   const modelParams = extractModelParamsFromOptions(options) ?? {};
-  const ephemerals = options.invocation.ephemerals;
-  const maxTokensMeta =
-    (metadata['maxTokens'] as number | undefined) ??
-    (ephemerals['max-tokens'] as number | undefined);
-  const maxTokensOverride =
-    (modelParams['max_tokens'] as number | undefined) ?? undefined;
   const maxOutputTokens = resolveMaxOutputTokens(
-    maxTokensMeta,
-    maxTokensOverride,
+    modelParams['max_tokens'] as number | undefined,
   );
   const temperature = modelParams['temperature'] as number | undefined;
   const topP = modelParams['top_p'] as number | undefined;

@@ -57,7 +57,6 @@ describe('tools governance integration', () => {
           ephemeralSettings: {
             'tools.allowed': [],
             'tools.disabled': ['code-editor'],
-            'disabled-tools': ['code-editor'],
           },
         },
         null,

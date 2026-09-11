@@ -133,7 +133,11 @@ You can restrict the shell tool to specific commands:
 
 ```json
 {
-  "coreTools": ["ShellTool(npm test)", "ShellTool(npm run lint)", "read_file"]
+  "coreTools": [
+    "run_shell_command(npm test)",
+    "run_shell_command(npm run lint)",
+    "read_file"
+  ]
 }
 ```
 

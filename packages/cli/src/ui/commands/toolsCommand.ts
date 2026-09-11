@@ -12,6 +12,10 @@ import {
 import { MessageType } from '../types.js';
 import type { ToolInfo } from '@vybestack/llxprt-code-agents';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  canonicalizeToolName,
+  INVALID_TOOL_NAME,
+} from '@vybestack/llxprt-code-tools';
 import { type CommandArgumentSchema } from './schema/types.js';
 
 const toolsSchema: CommandArgumentSchema = [
@@ -24,12 +28,14 @@ const toolsSchema: CommandArgumentSchema = [
       { value: 'disable', description: 'Disable a tool by name' },
       { value: 'enable', description: 'Enable a tool by name' },
       { value: 'desc', description: 'List tools with descriptions' },
-      { value: 'descriptions', description: 'Alias for desc' },
     ],
   },
 ];
 
-const normalizeToolName = (name: string): string => name.trim().toLowerCase();
+const normalizeToolName = (name: string): string => {
+  const canonical = canonicalizeToolName(name);
+  return canonical === INVALID_TOOL_NAME ? '' : canonical;
+};
 
 // Tokenizes quoted/unquoted args. The pattern is passed to RegExp via an
 // identifier so it is not a static literal flagged by sonarjs/regular-expr.
@@ -80,13 +86,6 @@ function readToolLists(context: CommandContext): {
     ? new Set((read('tools.allowed') as string[]).map(normalizeToolName))
     : new Set<string>();
 
-  const legacy = read('disabled-tools');
-  if (Array.isArray(legacy)) {
-    for (const name of legacy as string[]) {
-      disabled.add(normalizeToolName(name));
-    }
-  }
-
   return { disabled, allowed };
 }
 
@@ -102,14 +101,12 @@ function persistToolLists(
 
   if (settings) {
     settings.set('tools.disabled', disabledList);
-    settings.set('disabled-tools', disabledList);
     settings.set('tools.allowed', allowedList);
   }
 
   if (config) {
     if (typeof config.setEphemeralSetting === 'function') {
       config.setEphemeralSetting('tools.disabled', disabledList);
-      config.setEphemeralSetting('disabled-tools', disabledList);
       config.setEphemeralSetting('tools.allowed', allowedList);
     }
     if (typeof config.getEphemeralSettings === 'function') {
@@ -117,7 +114,6 @@ function persistToolLists(
       if (ephemerals !== null && typeof ephemerals === 'object') {
         const ephemeralSettings = ephemerals as Record<string, unknown>;
         ephemeralSettings['tools.disabled'] = disabledList;
-        ephemeralSettings['disabled-tools'] = disabledList;
         ephemeralSettings['tools.allowed'] = allowedList;
       }
     }
@@ -297,8 +293,7 @@ export const toolsCommand: SlashCommand = {
     const { disabled, allowed } = readToolLists(context);
     const tools = agent.tools.list();
 
-    const showDescriptions =
-      subcommand === 'desc' || subcommand === 'descriptions';
+    const showDescriptions = subcommand === 'desc';
 
     if (subcommand === 'list' || showDescriptions) {
       const message = formatListMessage(

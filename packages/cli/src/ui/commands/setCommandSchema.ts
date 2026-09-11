@@ -13,10 +13,7 @@ import type {
 import type { CommandContext } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { ephemeralSettingHelp } from '@vybestack/llxprt-code-providers/runtime.js';
-import {
-  getDirectSettingSpecs,
-  resolveAlias,
-} from '@vybestack/llxprt-code-settings';
+import { getDirectSettingSpecs } from '@vybestack/llxprt-code-settings';
 import {
   filterStrings,
   filterCompletions,
@@ -177,9 +174,7 @@ function buildSettingValueCompleter(): NonNullable<ValueArgument['completer']> {
     const setting = tokens.tokens[0] || tokens.partialToken;
     const enableFuzzy = getFuzzyEnabled(ctx);
 
-    const resolvedSetting = resolveAlias(setting);
-    const registryOptions =
-      directSettingSpecByValue.get(resolvedSetting)?.options;
+    const registryOptions = directSettingSpecByValue.get(setting)?.options;
 
     if (registryOptions && registryOptions.length > 0) {
       return filterCompletions(registryOptions, partial, { enableFuzzy });

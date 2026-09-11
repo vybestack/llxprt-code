@@ -5,9 +5,8 @@
  */
 
 // Model-facing schema: only snake_case properties are exposed to the LLM.
-// camelCase aliases (subagentName, expectedOutputs, etc.) exist in
-// TaskToolParams for programmatic callers but are intentionally excluded
-// from the schema — additionalProperties: false enforces this.
+// `TaskToolParams` mirrors this schema exactly (canonical snake_case members
+// only) and `additionalProperties: false` rejects every other spelling.
 export const taskToolSchema = {
   type: 'object',
   additionalProperties: false,
@@ -39,12 +38,6 @@ export const taskToolSchema = {
       type: 'object',
       description:
         'Map each output variable name to a plain string description. Values must be strings, not JSON Schema objects.',
-      additionalProperties: { type: 'string' },
-    },
-    output_spec: {
-      type: 'object',
-      description:
-        'Deprecated alias for expected_outputs. Map each output variable name to a plain string description. Values must be strings, not JSON Schema objects.',
       additionalProperties: { type: 'string' },
     },
     timeout_seconds: {

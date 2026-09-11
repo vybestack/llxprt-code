@@ -726,7 +726,7 @@ describe('Settings Loading and Merging', () => {
     it('should resolve environment variables in user settings', () => {
       process.env.TEST_API_KEY = 'user_api_key_from_env';
       const userSettingsContent = {
-        apiKey: '$TEST_API_KEY',
+        'auth-key': '$TEST_API_KEY',
         someUrl: 'https://test.com/${TEST_API_KEY}',
       };
       (
@@ -741,11 +741,11 @@ describe('Settings Loading and Merging', () => {
       );
 
       const arbitrary = dynamicSettings(loadSettings(MOCK_WORKSPACE_DIR));
-      expect(arbitrary.user.settings.apiKey).toBe('user_api_key_from_env');
+      expect(arbitrary.user.settings['auth-key']).toBe('user_api_key_from_env');
       expect(arbitrary.user.settings.someUrl).toBe(
         'https://test.com/user_api_key_from_env',
       );
-      expect(arbitrary.merged.apiKey).toBe('user_api_key_from_env');
+      expect(arbitrary.merged['auth-key']).toBe('user_api_key_from_env');
       delete process.env.TEST_API_KEY;
     });
 
