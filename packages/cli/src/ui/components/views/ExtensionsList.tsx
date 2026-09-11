@@ -6,7 +6,7 @@
 
 import type React from 'react';
 import { Box, Text } from 'ink';
-import { useUIState } from '../../contexts/UIStateContext.js';
+import { useAppCommands } from '../../contexts/AppCommandsContext.js';
 import { ExtensionUpdateState } from '../../state/extensions.js';
 import { Colors } from '../../colors.js';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
@@ -18,7 +18,7 @@ interface ExtensionsListProps {
 export const ExtensionsList: React.FC<ExtensionsListProps> = ({
   extensions,
 }) => {
-  const { commandContext } = useUIState();
+  const { commandContext } = useAppCommands();
   const extensionsUpdateState = commandContext.ui.extensionsUpdateState;
 
   if (extensions.length === 0) {

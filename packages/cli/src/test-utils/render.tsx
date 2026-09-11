@@ -13,10 +13,18 @@ import { KeypressProvider } from '../ui/contexts/KeypressContext.js';
 import { MouseProvider } from '../ui/contexts/MouseContext.js';
 import { SettingsContext } from '../ui/contexts/SettingsContext.js';
 import { ShellCommandDisplayProvider } from '../ui/contexts/ShellCommandDisplayContext.js';
-import { UIStateContext, type UIState } from '../ui/contexts/UIStateContext.js';
+import { VimModeProvider } from '../ui/contexts/VimModeContext.js';
 import { TerminalProvider } from '../ui/stores/terminal/TerminalContext.js';
 import { createTerminalStore } from '../ui/stores/terminal/terminalStore.js';
-import { StreamingState } from '../ui/types.js';
+import type { TerminalState } from '../ui/stores/terminal/terminalStore.js';
+import { TurnProvider } from '../ui/stores/turn/TurnContext.js';
+import { createTurnStore } from '../ui/stores/turn/turnStore.js';
+import type { TurnState } from '../ui/stores/turn/turnStore.js';
+import { DialogProvider } from '../ui/stores/dialog/DialogContext.js';
+import { createDialogStore } from '../ui/stores/dialog/dialogStore.js';
+import { SettingsProfileProvider } from '../ui/stores/settings/SettingsContext.js';
+import { createSettingsProfileStore } from '../ui/stores/settings/settingsStore.js';
+import type { SettingsProfileState } from '../ui/stores/settings/settingsStore.js';
 
 // Wrapper around ink-testing-library's render that ensures act() is called
 // This fixes React 18+ warnings about state updates not being wrapped in act()
@@ -83,16 +91,16 @@ export const createMockSettings = (
   );
 };
 
-// A minimal mock UIState to satisfy the context provider.
-// Tests that need specific UIState values should provide their own.
-const baseMockUiState: Partial<UIState> = {
-  streamingState: StreamingState.Idle,
-  terminalBackgroundColor: undefined,
-  // Matches the shipped default. Without it, message components fall back to
-  // plain-text rendering and code blocks lose their syntax highlighting and
-  // line numbers, which silently changes what every snapshot captures.
-  renderMarkdown: true,
-};
+/**
+ * Store seeds for renders. Tests seed only the slice a component reads; the
+ * stores keep their documented defaults for everything else (streamingState
+ * Idle, renderMarkdown true, terminal 80x24).
+ */
+export interface RenderStoreSeeds {
+  terminal?: Partial<TerminalState>;
+  turn?: Partial<TurnState>;
+  settingsProfile?: Partial<SettingsProfileState>;
+}
 
 // Mock RuntimeApi for tests - provides stub implementations of runtime functions
 interface MockRuntimeApi {
@@ -182,11 +190,12 @@ export const renderWithProviders = (
   component: React.ReactElement,
   {
     settings = mockSettings,
-    uiState = baseMockUiState,
+    terminal,
+    turn,
+    settingsProfile,
     mouseEventsEnabled = false,
-  }: {
+  }: RenderStoreSeeds & {
     settings?: LoadedSettings;
-    uiState?: Partial<UIState>;
     /**
      * MouseProvider only attaches its stdin listener when this is true, so
      * tests that drive SGR mouse sequences have to opt in.
@@ -196,23 +205,32 @@ export const renderWithProviders = (
 ): ReturnType<typeof render> =>
   render(
     <SettingsContext.Provider value={settings}>
-      <UIStateContext.Provider value={uiState as UIState}>
-        <TerminalProvider store={createTerminalStore()}>
-          <MockRuntimeContextProvider>
-            <KeypressProvider>
-              <MouseProvider mouseEventsEnabled={mouseEventsEnabled}>
-                <ShellCommandDisplayProvider
-                  alwaysDisplayFullShellCommand={
-                    settings.merged.ui.alwaysDisplayFullShellCommand ?? true
-                  }
-                >
-                  {component}
-                </ShellCommandDisplayProvider>
-              </MouseProvider>
-            </KeypressProvider>
-          </MockRuntimeContextProvider>
-        </TerminalProvider>
-      </UIStateContext.Provider>
+      <SettingsProfileProvider
+        store={createSettingsProfileStore(settingsProfile)}
+      >
+        <VimModeProvider settings={settings}>
+          <TerminalProvider store={createTerminalStore(terminal)}>
+            <TurnProvider store={createTurnStore(turn)}>
+              <DialogProvider store={createDialogStore()}>
+                <MockRuntimeContextProvider>
+                  <KeypressProvider>
+                    <MouseProvider mouseEventsEnabled={mouseEventsEnabled}>
+                      <ShellCommandDisplayProvider
+                        alwaysDisplayFullShellCommand={
+                          settings.merged.ui.alwaysDisplayFullShellCommand ??
+                          true
+                        }
+                      >
+                        {component}
+                      </ShellCommandDisplayProvider>
+                    </MouseProvider>
+                  </KeypressProvider>
+                </MockRuntimeContextProvider>
+              </DialogProvider>
+            </TurnProvider>
+          </TerminalProvider>
+        </VimModeProvider>
+      </SettingsProfileProvider>
     </SettingsContext.Provider>,
   );
 

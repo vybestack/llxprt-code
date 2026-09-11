@@ -1,17 +1,20 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import type { CliUiRuntime } from '../../../cliUiRuntime.js';
+import type { SettingsProfileStore } from '../../../stores/settings/settingsStore.js';
+import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 
 /**
  * @hook useModelTracking
- * @description Current model tracking from config
- * @inputs config
- * @outputs currentModel, setCurrentModel
+ * @description Current model tracking from config, mirrored into the
+ * settings/profile store
+ * @inputs config, settingsStore
+ * @outputs currentModel, setCurrentModel, currentModelLabel, setCurrentModelLabel
  * @sideEffects Settings service subscription for model changes
  * @cleanup Unsubscribes from settings service on unmount
  * @strictMode Safe - subscription cleanup runs on both unmounts
@@ -20,6 +23,7 @@ import type { CliUiRuntime } from '../../../cliUiRuntime.js';
 
 export interface UseModelTrackingParams {
   config: CliUiRuntime;
+  settingsStore: SettingsProfileStore;
 }
 
 export interface UseModelTrackingResult {
@@ -31,20 +35,21 @@ export interface UseModelTrackingResult {
    * `undefined` until useModelRuntimeSync computes the first identity.
    */
   currentModelLabel: string | undefined;
-  setCurrentModelLabel: (label: string) => void;
+  setCurrentModelLabel: (label: string | undefined) => void;
 }
 
 export function useModelTracking({
   config,
+  settingsStore,
 }: UseModelTrackingParams): UseModelTrackingResult {
-  const [currentModel, setCurrentModel] = useState(config.getModel());
-  // Seed the profile-aware label undefined so useModelRuntimeSync computes the
-  // profile-qualified identity (e.g. `profileName:modelName`) on its initial
-  // sync. Seeding it with the raw model would trip the hook's "already set"
-  // guard and leave the footer showing the bare model until the next event.
-  const [currentModelLabel, setCurrentModelLabel] = useState<
-    string | undefined
-  >(undefined);
+  const currentModel = useStoreSelector(
+    settingsStore.store,
+    (s) => s.currentModel,
+  );
+  const currentModelLabel = useStoreSelector(
+    settingsStore.store,
+    (s) => s.currentModelLabel,
+  );
 
   // Update currentModel when settings change - get it from the SAME place as diagnostics
   useEffect(() => {
@@ -67,7 +72,7 @@ export function useModelTracking({
 
         const model = diagnosticsData.model;
         if (typeof model === 'string' && model !== '') {
-          setCurrentModel(model);
+          settingsStore.commands.setCurrentModel(model);
           return;
         }
       } catch {
@@ -76,7 +81,7 @@ export function useModelTracking({
 
       // Otherwise use config (which is what diagnostics falls back to)
       if (isCurrentRequest(seq)) {
-        setCurrentModel(config.getModel());
+        settingsStore.commands.setCurrentModel(config.getModel());
       }
     };
 
@@ -93,12 +98,12 @@ export function useModelTracking({
       disposed = true;
       settingsService.off('settings-changed', handleSettingsChanged);
     };
-  }, [config]);
+  }, [config, settingsStore]);
 
   return {
     currentModel,
-    setCurrentModel,
+    setCurrentModel: settingsStore.commands.setCurrentModel,
     currentModelLabel,
-    setCurrentModelLabel,
+    setCurrentModelLabel: settingsStore.commands.setCurrentModelLabel,
   };
 }

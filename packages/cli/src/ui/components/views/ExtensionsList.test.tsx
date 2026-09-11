@@ -4,22 +4,29 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { automock } from '@vybestack/llxprt-code-test-utils';
 import { render } from 'ink-testing-library';
-import { vi, describe, beforeEach, it, expect, type Mock } from 'bun:test';
-import { useUIState } from '../../contexts/UIStateContext.js';
+import { vi, describe, beforeEach, it, expect } from 'bun:test';
 import { ExtensionUpdateState } from '../../state/extensions.js';
 import { ExtensionsList } from './ExtensionsList.js';
+import { AppCommandsProvider } from '../../contexts/AppCommandsContext.js';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 
-const realUIStateContextModule = {
-  ...(await import('../../contexts/UIStateContext.js')),
-};
-
-void vi.mock('../../contexts/UIStateContext.js', () =>
-  automock(realUIStateContextModule),
-);
-
-const mockUseUIState = useUIState as Mock<typeof useUIState>;
+/**
+ * ExtensionsList reads only `commandContext.ui.extensionsUpdateState` from
+ * the AppCommands context; the provider stub supplies exactly that slice.
+ */
+function renderExtensionsList(
+  extensions: readonly LlxprtExtension[],
+  extensionsUpdateState: Map<string, ExtensionUpdateState>,
+) {
+  return render(
+    <AppCommandsProvider
+      value={{ commandContext: { ui: { extensionsUpdateState } } } as never}
+    >
+      <ExtensionsList extensions={extensions} />
+    </AppCommandsProvider>,
+  );
+}
 
 const mockExtensions = [
   {
@@ -53,31 +60,13 @@ describe('<ExtensionsList />', () => {
     vi.resetAllMocks();
   });
 
-  const mockUIState = (
-    extensionsUpdateState: Map<string, ExtensionUpdateState>,
-    _disabledExtensions: string[] = [],
-  ) => {
-    mockUseUIState.mockReturnValue({
-      commandContext: {
-        ui: {
-          extensionsUpdateState,
-        },
-      },
-      // Add other required properties from UIState if needed by the component
-    } as never);
-  };
-
   it('should render "No extensions installed." if there are no extensions', () => {
-    mockUIState(new Map());
-    const { lastFrame } = render(<ExtensionsList extensions={[]} />);
+    const { lastFrame } = renderExtensionsList([], new Map());
     expect(lastFrame()).toContain('No extensions installed.');
   });
 
   it('should render a list of extensions with their version and status', () => {
-    mockUIState(new Map());
-    const { lastFrame } = render(
-      <ExtensionsList extensions={mockExtensions} />,
-    );
+    const { lastFrame } = renderExtensionsList(mockExtensions, new Map());
     const output = lastFrame();
     expect(output).toContain('ext-one (v1.0.0) - active');
     expect(output).toContain('ext-two (v2.1.0) - active');
@@ -85,10 +74,7 @@ describe('<ExtensionsList />', () => {
   });
 
   it('should display "unknown state" if an extension has no update state', () => {
-    mockUIState(new Map());
-    const { lastFrame } = render(
-      <ExtensionsList extensions={[mockExtensions[0]]} />,
-    );
+    const { lastFrame } = renderExtensionsList([mockExtensions[0]], new Map());
     expect(lastFrame()).toContain('(unknown state)');
   });
 
@@ -130,9 +116,9 @@ describe('<ExtensionsList />', () => {
   for (const { state, expectedText } of stateTestCases) {
     it(`should correctly display the state: ${state}`, () => {
       const updateState = new Map([[mockExtensions[0].name, state]]);
-      mockUIState(updateState);
-      const { lastFrame } = render(
-        <ExtensionsList extensions={[mockExtensions[0]]} />,
+      const { lastFrame } = renderExtensionsList(
+        [mockExtensions[0]],
+        updateState,
       );
       expect(lastFrame()).toContain(expectedText);
     });

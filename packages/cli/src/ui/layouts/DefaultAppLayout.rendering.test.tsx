@@ -27,7 +27,6 @@
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { render } from 'ink-testing-library';
-import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import type { DOMElement } from 'ink';
 
 const realInkModule = {
@@ -162,9 +161,12 @@ const { DefaultAppLayout } = await import('./DefaultAppLayout.js');
 import { createDialogStore } from '../stores/dialog/dialogStore.js';
 import { TerminalProvider } from '../stores/terminal/TerminalContext.js';
 import { createTerminalStore } from '../stores/terminal/terminalStore.js';
-const { UIStateContext } = await import('../contexts/UIStateContext.js');
-const { UIActionsContext } = await import('../contexts/UIActionsContext.js');
-const { StreamingState } = await import('../types.js');
+import { TurnProvider } from '../stores/turn/TurnContext.js';
+import { createTurnStore } from '../stores/turn/turnStore.js';
+import type { HistoryItem } from '../types.js';
+import { SettingsProfileProvider } from '../stores/settings/SettingsContext.js';
+import { createSettingsProfileStore } from '../stores/settings/settingsStore.js';
+import { VimModeProvider } from '../contexts/VimModeContext.js';
 const { buildSlashCommandRuntime, buildUiRuntimeFromSource } = await import(
   '../cliUiRuntime.js'
 );
@@ -223,100 +225,6 @@ function createSettings(useAlternateBuffer: boolean) {
   };
 }
 
-/** UI actions the layout hands to its children; none are asserted on. */
-function createActions() {
-  return {
-    addItem: vi.fn(),
-    handleUserInputSubmit: vi.fn(),
-    handleClearScreen: vi.fn(),
-    setShellModeActive: vi.fn(),
-    handleEscapePromptChange: vi.fn(),
-    vimHandleInput: vi.fn(),
-    setQueueErrorMessage: vi.fn(),
-  };
-}
-
-/**
- * UI state for a render. `rootUiRef` is threaded in so the caller can observe
- * whether the layout actually mounted its root.
- */
-function createUIState(
-  rootUiRef: { current: DOMElement | null },
-  historyText: string | undefined,
-) {
-  return {
-    history:
-      historyText === undefined
-        ? []
-        : [{ id: 1, type: 'user', text: historyText }],
-    pendingHistoryItems: [],
-    streamingState: StreamingState.Idle,
-    quittingMessages: null,
-    ctrlCPressedOnce: false,
-    ctrlDPressedOnce: false,
-    showEscapePrompt: false,
-    ideContextState: undefined,
-    llxprtMdFileCount: 0,
-    elapsedTime: 0,
-    currentLoadingPhrase: undefined,
-    showAutoAcceptIndicator: ApprovalMode.DEFAULT,
-    shellModeActive: false,
-    thought: undefined,
-    branchName: undefined,
-    debugMessage: '',
-    errorCount: 0,
-    historyTokenCount: 0,
-    vimModeEnabled: false,
-    vimMode: undefined,
-    tokenMetrics: {
-      tokensPerMinute: 0,
-      throttleWaitTimeMs: 0,
-      sessionTokenTotal: 0,
-    },
-    currentModel: 'test-model',
-    isTodoPanelCollapsed: false,
-    consoleMessages: [],
-    slashCommands: [],
-    staticKey: 0,
-    activeShellPtyId: null,
-    embeddedShellFocused: false,
-    isQueuedMessagesPanelCollapsed: false,
-    queuedSubmissions: [],
-    coreMemoryFileCount: 0,
-    currentModelLabel: undefined,
-    contextLimit: undefined,
-
-    showWorkspaceMigrationDialog: false,
-    shouldShowIdePrompt: false,
-    isFolderTrustDialogOpen: false,
-    isWelcomeDialogOpen: false,
-    isPermissionsDialogOpen: false,
-    confirmationRequest: null,
-    isThemeDialogOpen: false,
-    isSettingsDialogOpen: false,
-    isAuthDialogOpen: false,
-    isOAuthCodeDialogOpen: false,
-    isEditorDialogOpen: false,
-    isProviderDialogOpen: false,
-    isLoadProfileDialogOpen: false,
-    isCreateProfileDialogOpen: false,
-    isProfileListDialogOpen: false,
-    isProfileDetailDialogOpen: false,
-    isProfileEditorDialogOpen: false,
-    isToolsDialogOpen: false,
-    isLoggingDialogOpen: false,
-    isSubagentDialogOpen: false,
-    isModelsDialogOpen: false,
-    isSessionBrowserDialogOpen: false,
-    isModelConfigDialogOpen: false,
-    isPoliciesDialogOpen: false,
-    showPrivacyNotice: false,
-
-    rootUiRef,
-    pendingHistoryItemRef: { current: null },
-  };
-}
-
 /** Renders DefaultAppLayout through real Ink and returns what tests assert on. */
 function renderLayout({
   useAlternateBuffer,
@@ -325,14 +233,26 @@ function renderLayout({
 }: RenderOptions): RenderedLayout {
   const mainControlsRef: { current: DOMElement | null } = { current: null };
   const rootUiRef: { current: DOMElement | null } = { current: null };
+  const pendingHistoryItemRef: { current: DOMElement | null } = {
+    current: null,
+  };
   const configSource = createConfigSource(screenReader);
+  const settings = createSettings(useAlternateBuffer) as never;
+
+  // Turn-plane state lives in the TurnStore; only the history content this
+  // suite asserts on is seeded, everything else keeps store defaults.
+  const turnStore = createTurnStore(
+    historyText === undefined
+      ? {}
+      : {
+          history: [{ id: 1, type: 'user', text: historyText } as HistoryItem],
+        },
+  );
 
   const rendered = render(
-    <UIStateContext.Provider
-      value={createUIState(rootUiRef, historyText) as never}
-    >
-      <UIActionsContext.Provider value={createActions() as never}>
-        {/* Terminal-plane state now lives in the TerminalStore; the 80x24
+    <SettingsProfileProvider store={createSettingsProfileStore()}>
+      <VimModeProvider settings={settings}>
+        {/* Terminal-plane state lives in the TerminalStore; the 80x24
             seeding mirrors the geometry this suite asserts on. */}
         <TerminalProvider
           store={createTerminalStore({
@@ -347,22 +267,26 @@ function renderLayout({
             isInputActive: true,
           })}
         >
-          <DefaultAppLayout
-            uiRuntime={buildUiRuntimeFromSource(configSource as never)}
-            slashCommandRuntime={buildSlashCommandRuntime(
-              configSource as never,
-            )}
-            settings={createSettings(useAlternateBuffer) as never}
-            startupWarnings={[]}
-            version={'0.0.0-test'}
-            nightly={false}
-            mainControlsRef={mainControlsRef}
-            contextFileNames={[]}
-            updateInfo={null}
-          />
+          <TurnProvider store={turnStore}>
+            <DefaultAppLayout
+              uiRuntime={buildUiRuntimeFromSource(configSource as never)}
+              slashCommandRuntime={buildSlashCommandRuntime(
+                configSource as never,
+              )}
+              settings={settings}
+              startupWarnings={[]}
+              version={'0.0.0-test'}
+              nightly={false}
+              mainControlsRef={mainControlsRef}
+              rootUiRef={rootUiRef}
+              pendingHistoryItemRef={pendingHistoryItemRef}
+              contextFileNames={[]}
+              updateInfo={null}
+            />
+          </TurnProvider>
         </TerminalProvider>
-      </UIActionsContext.Provider>
-    </UIStateContext.Provider>,
+      </VimModeProvider>
+    </SettingsProfileProvider>,
   );
 
   const frame = rendered.lastFrame() ?? '';

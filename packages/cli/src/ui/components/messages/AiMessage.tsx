@@ -12,7 +12,8 @@ import { SCREEN_READER_MODEL_PREFIX } from '../../textConstants.js';
 import { ThinkingBlockDisplay } from './ThinkingBlockDisplay.js';
 import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
 import { useRuntimeApi } from '../../contexts/RuntimeContext.js';
-import { useUIState } from '../../contexts/UIStateContext.js';
+import { useTerminalStore } from '../../stores/terminal/TerminalContext.js';
+import { useStoreSelector } from '../../stores/useStoreSelector.js';
 import { useResolvedWorkspaceDirectories } from '../../hooks/useResolvedWorkspaceDirectories.js';
 
 interface AiMessageProps {
@@ -54,7 +55,8 @@ export const AiMessage: React.FC<AiMessageProps> = ({
   const { getEphemeralSetting } = useRuntimeApi();
   const showThinking = (getEphemeralSetting('reasoning.includeInResponse') ??
     true) as boolean;
-  const { renderMarkdown } = useUIState();
+  const { store } = useTerminalStore();
+  const renderMarkdown = useStoreSelector(store, (s) => s.renderMarkdown);
   const resolvedWorkspaceDirectories =
     useResolvedWorkspaceDirectories(workspaceDirectories);
 

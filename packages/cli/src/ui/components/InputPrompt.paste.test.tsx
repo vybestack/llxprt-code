@@ -835,9 +835,6 @@ describe('InputPrompt', () => {
 
         const { stdin, unmount } = renderWithProviders(
           <InputPrompt {...props} />,
-          {
-            uiState: { activePtyId: 1 },
-          },
         );
 
         await act(async () => {

@@ -4,20 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-  type Mock,
-} from 'bun:test';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { render } from 'ink-testing-library';
 import type { HistoryItem } from '../types.js';
 import { StreamingState } from '../types.js';
-import { useUIState } from '../contexts/UIStateContext.js';
 import { Notifications } from './Notifications.js';
+import { TerminalProvider } from '../stores/terminal/TerminalContext.js';
+import { createTerminalStore } from '../stores/terminal/terminalStore.js';
+import { TurnProvider } from '../stores/turn/TurnContext.js';
+import { createTurnStore } from '../stores/turn/turnStore.js';
+import { SettingsProfileProvider } from '../stores/settings/SettingsContext.js';
+import { createSettingsProfileStore } from '../stores/settings/settingsStore.js';
 
 const realRealInkModule = {
   ...(await import('../../../test-utils/real-ink.js')),
@@ -35,11 +32,6 @@ void vi.mock('./UpdateNotification.js', () => ({
   UpdateNotification: () => null,
 }));
 
-void vi.mock('../contexts/UIStateContext.js', () => ({
-  useUIState: vi.fn(),
-}));
-
-const mockUseUIState = useUIState as Mock<typeof useUIState>;
 const activeRenders: Array<ReturnType<typeof render>> = [];
 
 interface NotificationTestOptions {
@@ -50,27 +42,34 @@ interface NotificationTestOptions {
 }
 
 function renderNotifications(options: NotificationTestOptions = {}) {
-  mockUseUIState.mockReturnValue({
-    initError: options.initError ?? null,
-    streamingState: options.streamingState ?? StreamingState.Idle,
-  } as never);
-
+  // Notifications reads initError from the settings/profile store and
+  // streamingState from the turn store; seed exactly those slices.
   const rendered = render(
-    <Notifications
-      startupWarnings={options.startupWarnings ?? []}
-      updateInfo={null}
-      history={options.history ?? []}
-    />,
+    <SettingsProfileProvider
+      store={createSettingsProfileStore({
+        initError: options.initError ?? null,
+      })}
+    >
+      <TurnProvider
+        store={createTurnStore({
+          streamingState: options.streamingState ?? StreamingState.Idle,
+        })}
+      >
+        <TerminalProvider store={createTerminalStore()}>
+          <Notifications
+            startupWarnings={options.startupWarnings ?? []}
+            updateInfo={null}
+            history={options.history ?? []}
+          />
+        </TerminalProvider>
+      </TurnProvider>
+    </SettingsProfileProvider>,
   );
   activeRenders.push(rendered);
   return rendered;
 }
 
 describe('Notifications', () => {
-  beforeEach(() => {
-    mockUseUIState.mockReset();
-  });
-
   afterEach(() => {
     for (const rendered of activeRenders.splice(0)) {
       rendered.unmount();

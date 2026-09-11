@@ -23,7 +23,8 @@ import {
   getScopeMessageForSetting,
 } from '../../utils/dialogScopeUtils.js';
 import { useKeypress } from '../hooks/useKeypress.js';
-import { useUIState } from '../contexts/UIStateContext.js';
+import { useTerminalStore } from '../stores/terminal/TerminalContext.js';
+import { useStoreSelector } from '../stores/useStoreSelector.js';
 import { theme } from '../semantic-colors.js';
 import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
@@ -448,7 +449,11 @@ export function ThemeDialog({
   availableTerminalHeight,
   terminalWidth,
 }: ThemeDialogProps): React.JSX.Element {
-  const { terminalBackgroundColor } = useUIState();
+  const { store } = useTerminalStore();
+  const terminalBackgroundColor = useStoreSelector(
+    store,
+    (s) => s.terminalBackgroundColor,
+  );
   const state = useThemeDialogState(
     settings,
     onSelect,

@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { Box } from 'ink';
+import { Box, type DOMElement } from 'ink';
 import type {
   MessageBus,
   IdeContext,
@@ -15,14 +15,14 @@ import type {
 import type {
   StreamingState,
   HistoryItem,
+  HistoryItemWithoutId,
   ConsoleMessageItem,
 } from '../types.js';
 import type { SlashCommandRuntime, UiRuntime } from '../cliUiRuntime.js';
 import type { QueuedSubmission } from '../hooks/agentStream/types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UpdateObject } from '../utils/updateCheck.js';
-import type { UIState } from '../contexts/UIStateContext.js';
-import type { UIActions } from '../contexts/UIActionsContext.js';
+import { useVimMode } from '../contexts/VimModeContext.js';
 import { OverflowProvider } from '../contexts/OverflowContext.js';
 import { getCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
 import { themeManager } from '../themes/theme-manager.js';
@@ -259,7 +259,8 @@ export function useStaticItems(
 }
 
 export function usePendingItems(
-  uiState: UIState,
+  pendingHistoryItems: HistoryItemWithoutId[],
+  pendingHistoryItemRef: React.RefObject<DOMElement | null>,
   config: SlashCommandRuntime,
   mainAreaWidth: number,
   constrainHeight: boolean,
@@ -285,7 +286,7 @@ export function usePendingItems(
 
   return React.useMemo(
     () =>
-      uiState.pendingHistoryItems.map((item, i) => (
+      pendingHistoryItems.map((item, i) => (
         <HistoryItemDisplay
           key={i}
           {...base}
@@ -298,7 +299,7 @@ export function usePendingItems(
         />
       )),
     [
-      uiState.pendingHistoryItems,
+      pendingHistoryItems,
       base,
       constrainHeight,
       effectiveAvailableHeight,
@@ -308,7 +309,8 @@ export function usePendingItems(
 }
 
 export function usePendingElement(
-  uiState: UIState,
+  pendingHistoryItems: HistoryItemWithoutId[],
+  pendingHistoryItemRef: React.RefObject<DOMElement | null>,
   config: SlashCommandRuntime,
   mainAreaWidth: number,
   constrainHeight: boolean,
@@ -319,7 +321,8 @@ export function usePendingElement(
   embeddedShellFocused: boolean,
 ): React.ReactElement {
   const pendingItems = usePendingItems(
-    uiState,
+    pendingHistoryItems,
+    pendingHistoryItemRef,
     config,
     mainAreaWidth,
     constrainHeight,
@@ -333,17 +336,21 @@ export function usePendingElement(
   return React.useMemo(
     () => (
       <OverflowProvider>
-        <Box ref={uiState.pendingHistoryItemRef} flexDirection="column">
+        <Box ref={pendingHistoryItemRef} flexDirection="column">
           {pendingItems}
           <ShowMoreLines constrainHeight={constrainHeight} />
         </Box>
       </OverflowProvider>
     ),
-    [uiState.pendingHistoryItemRef, pendingItems, constrainHeight],
+    [pendingHistoryItemRef, pendingItems, constrainHeight],
   );
 }
 
-export function useScrollableContent(
+/**
+ * Center column of the scrollable layout: app header, pending overlay and
+ * the virtualized list built from them.
+ */
+function useScrollableCenterItems(
   config: SlashCommandRuntime,
   settings: LoadedSettings,
   version: string,
@@ -354,7 +361,9 @@ export function useScrollableContent(
   constrainHeight: boolean,
   effectiveAvailableHeight: number,
   showTodoPanelSetting: boolean,
-  uiState: UIState,
+  history: HistoryItem[],
+  pendingHistoryItems: HistoryItemWithoutId[],
+  pendingHistoryItemRef: React.RefObject<DOMElement | null>,
   slashCommands: readonly SlashCommand[] | undefined,
   activeShellPtyId: number | null,
   embeddedShellFocused: boolean,
@@ -373,7 +382,8 @@ export function useScrollableContent(
   );
 
   const pendingElement = usePendingElement(
-    uiState,
+    pendingHistoryItems,
+    pendingHistoryItemRef,
     config,
     mainAreaWidth,
     constrainHeight,
@@ -384,15 +394,53 @@ export function useScrollableContent(
     embeddedShellFocused,
   );
 
-  const listItems = useListItems(
+  return useListItems(
     headerElement,
     pendingElement,
-    uiState.history,
+    history,
     config,
     mainAreaWidth,
     staticAreaMaxItemHeight,
     slashCommands,
     showTodoPanelSetting,
+    activeShellPtyId,
+    embeddedShellFocused,
+  );
+}
+
+export function useScrollableContent(
+  config: SlashCommandRuntime,
+  settings: LoadedSettings,
+  version: string,
+  nightly: boolean,
+  terminalWidth: number,
+  mainAreaWidth: number,
+  staticAreaMaxItemHeight: number,
+  constrainHeight: boolean,
+  effectiveAvailableHeight: number,
+  showTodoPanelSetting: boolean,
+  history: HistoryItem[],
+  pendingHistoryItems: HistoryItemWithoutId[],
+  pendingHistoryItemRef: React.RefObject<DOMElement | null>,
+  slashCommands: readonly SlashCommand[] | undefined,
+  activeShellPtyId: number | null,
+  embeddedShellFocused: boolean,
+) {
+  const listItems = useScrollableCenterItems(
+    config,
+    settings,
+    version,
+    nightly,
+    terminalWidth,
+    mainAreaWidth,
+    staticAreaMaxItemHeight,
+    constrainHeight,
+    effectiveAvailableHeight,
+    showTodoPanelSetting,
+    history,
+    pendingHistoryItems,
+    pendingHistoryItemRef,
+    slashCommands,
     activeShellPtyId,
     embeddedShellFocused,
   );
@@ -403,7 +451,7 @@ export function useScrollableContent(
     version,
     nightly,
     terminalWidth,
-    uiState.history,
+    history,
     mainAreaWidth,
     staticAreaMaxItemHeight,
     slashCommands,
@@ -413,7 +461,8 @@ export function useScrollableContent(
   );
 
   const pendingItems = usePendingItems(
-    uiState,
+    pendingHistoryItems,
+    pendingHistoryItemRef,
     config,
     mainAreaWidth,
     constrainHeight,
@@ -544,27 +593,25 @@ export interface MainControlsProps {
   showErrorDetails: boolean;
   consoleMessages: ConsoleMessageItem[];
   isInputActive: boolean;
-  vimModeEnabled: boolean;
-  vimMode: string | undefined;
+  debugMessage: string;
+  errorCount: number;
   currentModel: string;
   currentModelLabel?: string;
   contextLimit: number | undefined;
   branchName: string | undefined;
   branchIsDirty: boolean;
-  debugMessage: string;
-  errorCount: number;
   historyTokenCount: number;
   tokenMetrics: {
     tokensPerMinute: number;
     throttleWaitTimeMs: number;
     sessionTokenTotal: number;
   };
-  uiActions: UIActions;
   onSuggestionsVisibilityChange: (visible: boolean) => void;
 }
 
 export function MainControls(props: MainControlsProps) {
   const { dialogsVisible, hideFooter } = props;
+  const { vimEnabled, vimMode } = useVimMode();
 
   return (
     <>
@@ -581,11 +628,7 @@ export function MainControls(props: MainControlsProps) {
       />
       <BucketAuthSection dialogsVisible={dialogsVisible} />
       {dialogsVisible ? (
-        <DialogManager
-          config={props.config}
-          settings={props.settings}
-          addItem={props.uiActions.addItem}
-        />
+        <DialogManager config={props.config} settings={props.settings} />
       ) : (
         <InlineContent {...props} />
       )}
@@ -596,8 +639,8 @@ export function MainControls(props: MainControlsProps) {
         showMemoryUsage={props.showMemoryUsage}
         currentThemeName={props.currentThemeName}
         nightly={props.nightly}
-        vimModeEnabled={props.vimModeEnabled}
-        vimMode={props.vimMode}
+        vimModeEnabled={vimEnabled}
+        vimMode={vimMode}
         currentModel={props.currentModel}
         currentModelLabel={props.currentModelLabel}
         contextLimit={props.contextLimit}

@@ -1,18 +1,21 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
+import type { TerminalStore } from '../../../stores/terminal/terminalStore.js';
+import type { SettingsProfileStore } from '../../../stores/settings/settingsStore.js';
+import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 
 /**
  * @hook useDisplayPreferences
- * @description Display toggles and settings sync
- * @inputs none
+ * @description Display toggles and settings sync backed by the stores
+ * @inputs terminalStore (display prefs), settingsStore (nonce)
  * @outputs Display states, setters, settingsNonce
- * @sideEffects CoreEvent.SettingsChanged subscription
+ * @sideEffects CoreEvent.SettingsChanged subscription writing the nonce
  * @cleanup Unsubscribes on unmount
  * @strictMode Safe - subscription cleanup runs on both unmounts
  * @subscriptionStrategy Resubscribe
@@ -39,46 +42,60 @@ export interface UseDisplayPreferencesResult {
   settingsNonce: number;
 }
 
-export function useDisplayPreferences(): UseDisplayPreferencesResult {
-  const [showDebugProfiler, setShowDebugProfiler] = useState(false);
-  const [renderMarkdown, setRenderMarkdown] = useState<boolean>(true);
-  const [isTodoPanelCollapsed, setIsTodoPanelCollapsed] = useState(false);
-  const [isQueuedMessagesPanelCollapsed, setIsQueuedMessagesPanelCollapsed] =
-    useState(false);
-  const [settingsNonce, setSettingsNonce] = useState(0);
+export function useDisplayPreferences(
+  terminalStore: TerminalStore,
+  settingsStore: SettingsProfileStore,
+): UseDisplayPreferencesResult {
+  const showDebugProfiler = useStoreSelector(
+    terminalStore.store,
+    (s) => s.showDebugProfiler,
+  );
+  const renderMarkdown = useStoreSelector(
+    terminalStore.store,
+    (s) => s.renderMarkdown,
+  );
+  const isTodoPanelCollapsed = useStoreSelector(
+    terminalStore.store,
+    (s) => s.isTodoPanelCollapsed,
+  );
+  const isQueuedMessagesPanelCollapsed = useStoreSelector(
+    terminalStore.store,
+    (s) => s.isQueuedMessagesPanelCollapsed,
+  );
+  const settingsNonce = useStoreSelector(
+    settingsStore.store,
+    (s) => s.settingsNonce,
+  );
 
-  const toggleDebugProfiler = useCallback(() => {
-    setShowDebugProfiler((prev) => !prev);
-  }, []);
-
-  // Subscribe to settings changes to increment nonce
+  // Subscribe to settings changes to bump the nonce
   useEffect(() => {
     const handleSettingsChanged = () => {
-      setSettingsNonce((prev) => prev + 1);
+      settingsStore.commands.bumpSettingsNonce();
     };
 
     coreEvents.on(CoreEvent.SettingsChanged, handleSettingsChanged);
     return () => {
       coreEvents.off(CoreEvent.SettingsChanged, handleSettingsChanged);
     };
-  }, []);
+  }, [settingsStore]);
 
   return {
     // Debug profiler
     showDebugProfiler,
-    toggleDebugProfiler,
+    toggleDebugProfiler: terminalStore.commands.toggleDebugProfiler,
 
     // Markdown rendering
     renderMarkdown,
-    setRenderMarkdown,
+    setRenderMarkdown: terminalStore.commands.setRenderMarkdown,
 
     // Task-list panel collapse state
     isTodoPanelCollapsed,
-    setIsTodoPanelCollapsed,
+    setIsTodoPanelCollapsed: terminalStore.commands.setIsTodoPanelCollapsed,
 
     // Queued messages panel collapse state
     isQueuedMessagesPanelCollapsed,
-    setIsQueuedMessagesPanelCollapsed,
+    setIsQueuedMessagesPanelCollapsed:
+      terminalStore.commands.setIsQueuedMessagesPanelCollapsed,
 
     // Settings nonce
     settingsNonce,

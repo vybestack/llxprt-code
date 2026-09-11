@@ -8,7 +8,8 @@ import { Text } from 'ink';
 import { useEffect, useState } from 'react';
 import { FixedDeque } from 'mnemonist';
 import { SemanticColors } from '../colors.js';
-import { useUIState } from '../contexts/UIStateContext.js';
+import { useTerminalStore } from '../stores/terminal/TerminalContext.js';
+import { useStoreSelector } from '../stores/useStoreSelector.js';
 import { debugState } from '../debug.js';
 import { appEvents, AppEvent } from '../../utils/events.js';
 import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
@@ -118,10 +119,11 @@ export const profiler = {
   },
 };
 
-export const DebugProfiler = () => {
-  const { showDebugProfiler } = useUIState();
-  const [forceRefresh, setForceRefresh] = useState(0);
-
+/**
+ * Registers every stdin/stdout/app/core event source as a profiler action so
+ * expected UI renders don't trigger spurious idle-frame warnings.
+ */
+function useActionTrackingEffect() {
   // Effect for listening to stdin for keypresses and stdout for resize events.
   useEffect(() => {
     const stdin = process.stdin;
@@ -160,6 +162,14 @@ export const DebugProfiler = () => {
       }
     };
   }, []);
+}
+
+export const DebugProfiler = () => {
+  const { store } = useTerminalStore();
+  const showDebugProfiler = useStoreSelector(store, (s) => s.showDebugProfiler);
+  const [forceRefresh, setForceRefresh] = useState(0);
+
+  useActionTrackingEffect();
 
   // Effect for patching stdout to count frames and detect idle ones
   useEffect(() => {

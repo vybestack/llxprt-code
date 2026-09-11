@@ -32,17 +32,12 @@ import { act } from 'react';
 import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
 import { testRegex } from '../../test-utils/regex.js';
 
-// Mock useUIState since we don't wrap in UIStateProvider
 const realVimModeContextModule = {
   ...(await import('../contexts/VimModeContext.js')),
 };
 const realSettingsUtilsModule = {
   ...(await import('../../utils/settingsUtils.js')),
 };
-
-void vi.mock('../contexts/UIStateContext.js', () => ({
-  useUIState: () => ({ mainAreaWidth: 120 }),
-}));
 
 // Mock the VimModeContext
 const mockToggleVimEnabled = vi.fn().mockResolvedValue(undefined);

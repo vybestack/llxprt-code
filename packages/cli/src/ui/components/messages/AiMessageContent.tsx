@@ -7,7 +7,8 @@
 import type React from 'react';
 import { Box } from 'ink';
 import { MarkdownDisplay } from '../../utils/MarkdownDisplay.js';
-import { useUIState } from '../../contexts/UIStateContext.js';
+import { useTerminalStore } from '../../stores/terminal/TerminalContext.js';
+import { useStoreSelector } from '../../stores/useStoreSelector.js';
 import { useResolvedWorkspaceDirectories } from '../../hooks/useResolvedWorkspaceDirectories.js';
 
 interface AiMessageContentProps {
@@ -31,7 +32,8 @@ export const AiMessageContent: React.FC<AiMessageContentProps> = ({
   terminalWidth,
   workspaceDirectories,
 }) => {
-  const { renderMarkdown } = useUIState();
+  const { store } = useTerminalStore();
+  const renderMarkdown = useStoreSelector(store, (s) => s.renderMarkdown);
   const resolvedWorkspaceDirectories =
     useResolvedWorkspaceDirectories(workspaceDirectories);
 

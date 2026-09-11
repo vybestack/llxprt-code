@@ -41,6 +41,7 @@ import type {
   TerminalDimensions,
   TerminalStore,
 } from '../../../stores/terminal/terminalStore.js';
+import type { SettingsProfileStore } from '../../../stores/settings/settingsStore.js';
 import type { TurnStore } from '../../../stores/turn/turnStore.js';
 import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 import type { SlashCommandProcessorActions } from '../../../hooks/slashCommandProcessor.js';
@@ -86,6 +87,8 @@ export interface AppInputParams {
   store: DialogStore;
   /** Terminal store; input owns the dimension writer effect. */
   terminalStore: TerminalStore;
+  /** Settings/profile store; input mirrors stream/command projections into it. */
+  settingsStore: SettingsProfileStore;
   /** Domain openers that load data before showing their dialog. */
   openProviderDialog: AppDialogsResult['openProviderDialog'];
   openLoadProfileDialog: AppDialogsResult['openLoadProfileDialog'];
@@ -95,19 +98,12 @@ export interface AppInputParams {
   openProfileEditor: AppDialogsResult['openProfileEditor'];
   setDebugMessage: AppDialogsResult['setDebugMessage'];
   toggleCorgiMode: AppDialogsResult['toggleCorgiMode'];
-  toggleDebugProfiler: AppDialogsResult['toggleDebugProfiler'];
   dispatchExtensionStateUpdate: AppDialogsResult['dispatchExtensionStateUpdate'];
   addConfirmUpdateExtensionRequest: AppDialogsResult['addConfirmUpdateExtensionRequest'];
   welcomeActions: AppDialogsResult['welcomeActions'];
   extensionsUpdateState: AppDialogsResult['extensionsUpdateState'];
-  setIsProcessing: AppDialogsResult['setIsProcessing'];
-  setEmbeddedShellFocused: AppDialogsResult['setEmbeddedShellFocused'];
-  embeddedShellFocused: AppDialogsResult['embeddedShellFocused'];
-  setAuthError: AppDialogsResult['setAuthError'];
-  shellModeActive: AppDialogsResult['shellModeActive'];
   performMemoryRefresh: AppDialogsResult['performMemoryRefresh'];
   handleExternalEditorOpen: AppDialogsResult['handleExternalEditorOpen'];
-  refreshStatic: AppDialogsResult['refreshStatic'];
 
   // Direct
   appState: AppState;
@@ -145,7 +141,7 @@ function useTerminalDimensions(
 }
 
 function useInputCoreCallbacks(p: AppInputParams) {
-  const { settings, setAuthError, appDispatch, dialogs } = p;
+  const { settings, appDispatch, dialogs, settingsStore } = p;
   const isValidPath = useCallback((filePath: string): boolean => {
     try {
       return fs.existsSync(filePath) && fs.statSync(filePath).isFile();
@@ -162,12 +158,14 @@ function useInputCoreCallbacks(p: AppInputParams) {
     return editorType as EditorType;
   }, [settings, dialogs]);
   const onAuthError = useCallback(() => {
-    setAuthError('reauth required');
+    settingsStore.commands.setAuthError('reauth required');
     appDispatch({ type: 'SET_NEEDS_RELOGIN', payload: true });
-  }, [setAuthError, appDispatch]);
+  }, [settingsStore, appDispatch]);
   const handleAuthTimeout = useCallback(() => {
-    setAuthError('Authentication timed out. Please try again.');
-  }, [setAuthError]);
+    settingsStore.commands.setAuthError(
+      'Authentication timed out. Please try again.',
+    );
+  }, [settingsStore]);
   return {
     isValidPath,
     getPreferredEditor,
@@ -191,7 +189,7 @@ function useSlashActions(
     quitHandler,
     setDebugMessage: p.setDebugMessage,
     toggleCorgiMode: p.toggleCorgiMode,
-    toggleDebugProfiler: p.toggleDebugProfiler,
+    toggleDebugProfiler: p.terminalStore.commands.toggleDebugProfiler,
     dispatchExtensionStateUpdate: p.dispatchExtensionStateUpdate,
     addConfirmUpdateExtensionRequest: p.addConfirmUpdateExtensionRequest,
     welcomeActions: p.welcomeActions,
@@ -211,11 +209,10 @@ function useSlashCommandSetup(
     recordingIntegrationRef,
     recordingSwapCallbacks,
     extensionsUpdateState,
-    setIsProcessing,
     setLlxprtMdFileCount,
-    refreshStatic,
   } = p;
-  const { addItem, clearItems, loadHistory } = p.turnStore.commands;
+  const { addItem, clearItems, loadHistory, refreshStatic, setIsProcessing } =
+    p.turnStore.commands;
   const slashCommandProcessorActions = useSlashActions(p, quitHandler);
   const todoContextForCommands = useMemo(
     () => ({ todos, updateTodos, refreshTodos: () => {} }),
@@ -283,7 +280,10 @@ function useInputBuffer(
   core: ReturnType<typeof useInputCore>,
 ) {
   const { stdin, setRawMode, runtime } = p;
-  const { shellModeActive } = p;
+  const shellModeActive = useStoreSelector(
+    p.terminalStore.store,
+    (s) => s.shellModeActive,
+  );
   const viewport = useMemo(
     () => ({ height: 10, width: core.dims.inputWidth }),
     [core.dims.inputWidth],
@@ -343,19 +343,21 @@ function useInputStreamSetup(
     recordingIntegration,
     runtimeMessageBus,
     stdout,
-    setEmbeddedShellFocused,
     performMemoryRefresh,
     handleExternalEditorOpen,
-    refreshStatic,
   } = p;
+  const { setEmbeddedShellFocused } = p.terminalStore.commands;
+  const { refreshStatic } = p.turnStore.commands;
   // The stream reads the committed transcript (checkpoint context) through a
   // narrow selector; commands come straight from the store.
   const history = useStoreSelector(p.turnStore.store, (s) => s.history);
   const { addItem, removeItems } = p.turnStore.commands;
-  const { handleSlashCommand, setDebugMessage, shellModeActive } = {
-    ...core,
-    ...p,
-  };
+  const handleSlashCommand = core.handleSlashCommand;
+  const setDebugMessage = p.setDebugMessage;
+  const shellModeActive = useStoreSelector(
+    p.terminalStore.store,
+    (s) => s.shellModeActive,
+  );
   const bufferSetup = useInputBuffer(p, core);
   const { handleUserCancel } = bufferSetup;
   const agentStreamResult = useAgentStream(
@@ -391,8 +393,12 @@ function useInputStreamWiring(
   core: ReturnType<typeof useInputCore>,
   setup: ReturnType<typeof useInputStreamSetup>,
 ) {
-  const { todos, updateTodos, embeddedShellFocused, setEmbeddedShellFocused } =
-    p;
+  const { todos, updateTodos } = p;
+  const { setEmbeddedShellFocused } = p.terminalStore.commands;
+  const embeddedShellFocused = useStoreSelector(
+    p.terminalStore.store,
+    (s) => s.embeddedShellFocused,
+  );
   const {
     buffer,
     inputHistoryStore,
@@ -509,22 +515,16 @@ export function computeIsInputActive(inputs: IsInputActiveInputs): boolean {
   );
 }
 
-function useInputFinish(
-  p: AppInputParams,
-  core: ReturnType<typeof useInputCore>,
-  stream: ReturnType<typeof useInputStream>,
+/**
+ * IDE nudge resolution: slash-command-driven enable/install plus a persisted
+ * "seen" flag so the nudge never renders twice.
+ */
+function useIdePromptComplete(
+  settings: AppInputParams['settings'],
+  handleSlashCommand: ReturnType<typeof useInputCore>['handleSlashCommand'],
+  setIdePromptAnswered: AppInputParams['setIdePromptAnswered'],
 ) {
-  const { settings, setIdePromptAnswered } = p;
-  const { handleSlashCommand, vimModeEnabled, vimMode, toggleVimEnabled } =
-    core;
-  const {
-    buffer,
-    handleFinalSubmit,
-    streamingState,
-    initError,
-    slashCommands,
-  } = { ...core, ...stream };
-  const handleIdePromptComplete = useCallback(
+  return useCallback(
     (result: IdeIntegrationNudgeResult) => {
       if (result.userSelection === 'yes') {
         if (result.isExtensionPreInstalled) {
@@ -548,6 +548,113 @@ function useInputFinish(
     },
     [handleSlashCommand, settings, setIdePromptAnswered],
   );
+}
+
+/**
+ * Settings/terminal mirrors: the layout tree reads init error, slash
+ * commands, auto-accept indicator and shell focus through store selectors;
+ * these writer effects preserve dispatch -> effect ordering.
+ */
+function useSettingsStoreMirrors(
+  p: AppInputParams,
+  core: ReturnType<typeof useInputCore>,
+  stream: ReturnType<typeof useInputStream>,
+  showAutoAcceptIndicator: ReturnType<typeof useAutoAcceptIndicator>,
+) {
+  const { setInitError, setSlashCommands, setShowAutoAcceptIndicator } =
+    p.settingsStore.commands;
+  useEffect(() => {
+    setInitError(stream.initError);
+  }, [setInitError, stream.initError]);
+  useEffect(() => {
+    setSlashCommands(core.slashCommands);
+  }, [setSlashCommands, core.slashCommands]);
+  useEffect(() => {
+    setShowAutoAcceptIndicator(showAutoAcceptIndicator);
+  }, [setShowAutoAcceptIndicator, showAutoAcceptIndicator]);
+  const { setActiveShellPtyId } = p.terminalStore.commands;
+  useEffect(() => {
+    setActiveShellPtyId(stream.activeShellPtyId);
+  }, [setActiveShellPtyId, stream.activeShellPtyId]);
+}
+
+/**
+ * Turn mirrors: the stream/exit hooks stay value-returning; these writer
+ * effects project their results into the TurnStore for the layout tree.
+ */
+function useTurnStoreMirrors(
+  p: AppInputParams,
+  core: ReturnType<typeof useInputCore>,
+  stream: ReturnType<typeof useInputStream>,
+  mirrors: {
+    elapsedTime: number;
+    currentLoadingPhrase: string;
+  },
+) {
+  const {
+    setStreamingState,
+    setThought,
+    setPendingHistoryItems,
+    setQuittingMessages,
+    setCtrlCPressedOnce,
+    setCtrlDPressedOnce,
+    setQueuedSubmissions,
+    setElapsedTime,
+    setCurrentLoadingPhrase,
+  } = p.turnStore.commands;
+  useEffect(() => {
+    setStreamingState(stream.streamingState);
+  }, [setStreamingState, stream.streamingState]);
+  useEffect(() => {
+    setThought(stream.thought);
+  }, [setThought, stream.thought]);
+  useEffect(() => {
+    setPendingHistoryItems(stream.pendingHistoryItems);
+  }, [setPendingHistoryItems, stream.pendingHistoryItems]);
+  useEffect(() => {
+    setQuittingMessages(core.quittingMessages);
+  }, [setQuittingMessages, core.quittingMessages]);
+  useEffect(() => {
+    setCtrlCPressedOnce(core.ctrlCPressedOnce);
+  }, [setCtrlCPressedOnce, core.ctrlCPressedOnce]);
+  useEffect(() => {
+    setCtrlDPressedOnce(core.ctrlDPressedOnce);
+  }, [setCtrlDPressedOnce, core.ctrlDPressedOnce]);
+  useEffect(() => {
+    setQueuedSubmissions(stream.queuedSubmissions);
+  }, [setQueuedSubmissions, stream.queuedSubmissions]);
+  useEffect(() => {
+    setElapsedTime(mirrors.elapsedTime);
+  }, [setElapsedTime, mirrors.elapsedTime]);
+  useEffect(() => {
+    setCurrentLoadingPhrase(mirrors.currentLoadingPhrase);
+  }, [setCurrentLoadingPhrase, mirrors.currentLoadingPhrase]);
+}
+
+function useInputFinish(
+  p: AppInputParams,
+  core: ReturnType<typeof useInputCore>,
+  stream: ReturnType<typeof useInputStream>,
+) {
+  const { settings, setIdePromptAnswered } = p;
+  const { handleSlashCommand, vimModeEnabled, vimMode, toggleVimEnabled } =
+    core;
+  const {
+    buffer,
+    handleFinalSubmit,
+    streamingState,
+    initError,
+    slashCommands,
+  } = { ...core, ...stream };
+  const embeddedShellFocused = useStoreSelector(
+    p.terminalStore.store,
+    (s) => s.embeddedShellFocused,
+  );
+  const handleIdePromptComplete = useIdePromptComplete(
+    settings,
+    handleSlashCommand,
+    setIdePromptAnswered,
+  );
   const { handleInput: vimHandleInput } = useVim(buffer, handleFinalSubmit);
   const { elapsedTime, currentLoadingPhrase } = useLoadingIndicator(
     streamingState,
@@ -555,13 +662,19 @@ function useInputFinish(
       settings.merged.wittyPhraseStyle ??
       'default',
     settings.merged.ui.customWittyPhrases ?? settings.merged.customWittyPhrases,
-    stream.activeShellPtyId != null && !p.embeddedShellFocused,
+    stream.activeShellPtyId != null && !embeddedShellFocused,
     stream.lastOutputTime,
   );
   const showAutoAcceptIndicator = useAutoAcceptIndicator({
     agent: p.agent,
     addItem: p.turnStore.commands.addItem,
   });
+  // Store mirrors: the stream/command projections the layout tree reads live
+  // in the stores; these writer effects preserve dispatch -> effect ordering.
+  useSettingsStoreMirrors(p, core, stream, showAutoAcceptIndicator);
+  // Turn mirrors: the stream/exit hooks stay value-returning; these writer
+  // effects project their results into the TurnStore for the layout tree.
+  useTurnStoreMirrors(p, core, stream, { elapsedTime, currentLoadingPhrase });
   const handleSettingsRestart = useCallback(() => {
     void handleSlashCommand('/quit');
   }, [handleSlashCommand]);

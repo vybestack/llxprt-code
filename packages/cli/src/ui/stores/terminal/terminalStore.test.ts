@@ -27,6 +27,17 @@ describe('createTerminalStore', () => {
       constrainHeight: true,
       showErrorDetails: false,
       showToolDescriptions: false,
+      renderMarkdown: true,
+      isTodoPanelCollapsed: false,
+      isQueuedMessagesPanelCollapsed: false,
+      showDebugProfiler: false,
+      terminalBackgroundColor: undefined,
+      shellModeActive: false,
+      showEscapePrompt: false,
+      queueErrorMessage: null,
+      embeddedShellFocused: false,
+      activeShellPtyId: null,
+      placeholder: '',
     } satisfies TerminalState);
   });
 

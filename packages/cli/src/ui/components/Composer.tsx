@@ -5,11 +5,12 @@
  */
 
 import type { LoadedSettings } from '../../config/settings.js';
-import { useUIState } from '../contexts/UIStateContext.js';
-import { useUIActions } from '../contexts/UIActionsContext.js';
+import { useAppCommands } from '../contexts/AppCommandsContext.js';
+import { useVimMode } from '../contexts/VimModeContext.js';
 import { useTerminalStore } from '../stores/terminal/TerminalContext.js';
+import { useSettingsProfileStore } from '../stores/settings/SettingsContext.js';
+import { useTurnStore } from '../stores/turn/TurnContext.js';
 import { useStoreSelector } from '../stores/useStoreSelector.js';
-import type { TerminalState } from '../stores/terminal/terminalStore.js';
 import { InputPrompt } from './InputPrompt.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
@@ -41,79 +42,105 @@ interface ComposerProps {
 }
 
 /**
- * The Composer component handles user input in the CLI.
- * It wraps the InputPrompt component and connects it to the UIState and UIActions contexts.
+ * Narrow store reads for the Composer. One hook so the component body stays
+ * small; each selector still subscribes independently.
+ */
+function useComposerSelectors() {
+  const { store: terminalStore } = useTerminalStore();
+  const settingsStore = useSettingsProfileStore();
+  const turnStore = useTurnStore();
+
+  return {
+    inputWidth: useStoreSelector(terminalStore, (s) => s.inputWidth),
+    suggestionsWidth: useStoreSelector(
+      terminalStore,
+      (s) => s.suggestionsWidth,
+    ),
+    isFocused: useStoreSelector(terminalStore, (s) => s.isFocused),
+    shellModeActive: useStoreSelector(terminalStore, (s) => s.shellModeActive),
+    queueErrorMessage: useStoreSelector(
+      terminalStore,
+      (s) => s.queueErrorMessage,
+    ),
+    embeddedShellFocused: useStoreSelector(
+      terminalStore,
+      (s) => s.embeddedShellFocused,
+    ),
+    placeholder: useStoreSelector(terminalStore, (s) => s.placeholder),
+    slashCommands: useStoreSelector(
+      settingsStore.store,
+      (s) => s.slashCommands,
+    ),
+    showAutoAcceptIndicator: useStoreSelector(
+      settingsStore.store,
+      (s) => s.showAutoAcceptIndicator,
+    ),
+    streamingState: useStoreSelector(turnStore.store, (s) => s.streamingState),
+    queuedSubmissions: useStoreSelector(
+      turnStore.store,
+      (s) => s.queuedSubmissions,
+    ),
+  };
+}
+
+/**
+ * The Composer component handles user input in the CLI. Commands come from
+ * the AppCommands context; data comes from narrow store selectors.
  */
 export const Composer = ({
   config,
   settings: _settings,
   onSuggestionsVisibilityChange,
 }: ComposerProps) => {
-  // settings is passed for future use but currently not used
-  const uiState = useUIState();
-  const uiActions = useUIActions();
-  const { store: terminalStore } = useTerminalStore();
-  const inputWidth = useStoreSelector(
-    terminalStore,
-    (s: TerminalState) => s.inputWidth,
-  );
-  const suggestionsWidth = useStoreSelector(
-    terminalStore,
-    (s: TerminalState) => s.suggestionsWidth,
-  );
-  const isFocused = useStoreSelector(
-    terminalStore,
-    (s: TerminalState) => s.isFocused,
-  );
-
+  const commands = useAppCommands();
+  const { vimEnabled } = useVimMode();
   const {
-    buffer,
-    slashCommands,
-    commandContext,
+    inputWidth,
+    suggestionsWidth,
+    isFocused,
     shellModeActive,
-    vimModeEnabled,
-    showAutoAcceptIndicator,
-    placeholder,
-    inputHistory,
-    streamingState,
     queueErrorMessage,
     embeddedShellFocused,
+    placeholder,
+    slashCommands,
+    showAutoAcceptIndicator,
+    streamingState,
     queuedSubmissions,
-  } = uiState;
+  } = useComposerSelectors();
 
   return (
     <InputPrompt
-      buffer={buffer}
+      buffer={commands.buffer}
       inputWidth={inputWidth}
       suggestionsWidth={suggestionsWidth}
-      onSubmit={uiActions.handleUserInputSubmit}
-      onSteer={uiActions.handleSteer}
-      userMessages={inputHistory}
-      onClearScreen={uiActions.handleClearScreen}
+      onSubmit={commands.handleUserInputSubmit}
+      onSteer={commands.handleSteer}
+      userMessages={commands.inputHistory}
+      onClearScreen={commands.handleClearScreen}
       config={config}
       slashCommands={slashCommands ?? []}
-      commandContext={commandContext}
+      commandContext={commands.commandContext}
       shellModeActive={shellModeActive}
-      setShellModeActive={uiActions.setShellModeActive}
-      onEscapePromptChange={uiActions.handleEscapePromptChange}
+      setShellModeActive={commands.setShellModeActive}
+      onEscapePromptChange={commands.handleEscapePromptChange}
       onSuggestionsVisibilityChange={onSuggestionsVisibilityChange}
       focus={isFocused}
-      vimHandleInput={uiActions.vimHandleInput}
+      vimHandleInput={commands.vimHandleInput}
       placeholder={getComposerPlaceholder(
-        vimModeEnabled,
+        vimEnabled,
         shellModeActive,
         placeholder,
       )}
       approvalMode={showAutoAcceptIndicator}
-      vimModeEnabled={vimModeEnabled}
-      setQueueErrorMessage={uiActions.setQueueErrorMessage}
+      vimModeEnabled={vimEnabled}
+      setQueueErrorMessage={commands.setQueueErrorMessage}
       streamingState={streamingState}
       queueErrorMessage={queueErrorMessage}
       isEmbeddedShellFocused={embeddedShellFocused}
       queuedSubmissionCount={queuedSubmissions.length}
-      sendAllQueuedSubmissions={uiActions.sendAllQueuedSubmissions}
-      steerAllQueuedSubmissions={uiActions.steerAllQueuedSubmissions}
-      clearQueuedSubmissions={uiActions.clearQueuedSubmissions}
+      sendAllQueuedSubmissions={commands.sendAllQueuedSubmissions}
+      steerAllQueuedSubmissions={commands.steerAllQueuedSubmissions}
+      clearQueuedSubmissions={commands.clearQueuedSubmissions}
     />
   );
 };

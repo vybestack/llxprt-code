@@ -9,10 +9,9 @@ import { Box, type DOMElement, Static } from 'ink';
 
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UpdateObject } from '../utils/updateCheck.js';
-import { useUIState } from '../contexts/UIStateContext.js';
-import { useUIActions } from '../contexts/UIActionsContext.js';
-import type { UIActions } from '../contexts/UIActionsContext.js';
 import { useTerminalStore } from '../stores/terminal/TerminalContext.js';
+import { useTurnStore } from '../stores/turn/TurnContext.js';
+import { useSettingsProfileStore } from '../stores/settings/SettingsContext.js';
 import { useStoreSelector } from '../stores/useStoreSelector.js';
 import type { TerminalState } from '../stores/terminal/terminalStore.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
@@ -42,16 +41,23 @@ interface DefaultAppLayoutProps {
   version: string;
   nightly: boolean;
   mainControlsRef: React.RefObject<DOMElement | null>;
+  /** Root ink node; owned by the layout measurement hook. */
+  rootUiRef: React.RefObject<DOMElement | null>;
+  /** Pending-history wrapper node; owned by the layout measurement hook. */
+  pendingHistoryItemRef: React.RefObject<DOMElement | null>;
   contextFileNames: string[];
   updateInfo: UpdateObject | null;
 }
 
-/**
- * Terminal-plane values the layout root consumes. Each field is a separate
+/** Terminal-plane values the layout root consumes. Each field is a separate
  * primitive selector so unrelated store writes (e.g. focus flips during
- * streaming) do not rerender the layout.
- */
+ * streaming) do not rerender the layout. */
 function useTerminalLayoutState() {
+  return { ...useTerminalDimensions(), ...useTerminalUiFlags() };
+}
+
+/** Geometry selectors: widths, heights and the narrow/constrained flags. */
+function useTerminalDimensions() {
   const { store } = useTerminalStore();
   const terminalWidth = useStoreSelector(
     store,
@@ -78,6 +84,20 @@ function useTerminalLayoutState() {
     store,
     (s: TerminalState) => s.availableTerminalHeight,
   );
+  return {
+    terminalWidth,
+    terminalHeight,
+    mainAreaWidth,
+    inputWidth,
+    isNarrow,
+    constrainHeight,
+    availableTerminalHeight,
+  };
+}
+
+/** Mode/visibility selectors: dialogs, shell focus and panel collapse. */
+function useTerminalUiFlags() {
+  const { store } = useTerminalStore();
   const showErrorDetails = useStoreSelector(
     store,
     (s: TerminalState) => s.showErrorDetails,
@@ -90,26 +110,129 @@ function useTerminalLayoutState() {
     store,
     (s: TerminalState) => s.isInputActive,
   );
+  const shellModeActive = useStoreSelector(
+    store,
+    (s: TerminalState) => s.shellModeActive,
+  );
+  const showEscapePrompt = useStoreSelector(
+    store,
+    (s: TerminalState) => s.showEscapePrompt,
+  );
+  const activeShellPtyId = useStoreSelector(
+    store,
+    (s: TerminalState) => s.activeShellPtyId,
+  );
+  const embeddedShellFocused = useStoreSelector(
+    store,
+    (s: TerminalState) => s.embeddedShellFocused,
+  );
+  const isTodoPanelCollapsed = useStoreSelector(
+    store,
+    (s: TerminalState) => s.isTodoPanelCollapsed,
+  );
+  const isQueuedMessagesPanelCollapsed = useStoreSelector(
+    store,
+    (s: TerminalState) => s.isQueuedMessagesPanelCollapsed,
+  );
   return {
-    terminalWidth,
-    terminalHeight,
-    mainAreaWidth,
-    inputWidth,
-    isNarrow,
-    constrainHeight,
-    availableTerminalHeight,
     showErrorDetails,
     showToolDescriptions,
     isInputActive,
+    shellModeActive,
+    showEscapePrompt,
+    activeShellPtyId,
+    embeddedShellFocused,
+    isTodoPanelCollapsed,
+    isQueuedMessagesPanelCollapsed,
+  };
+}
+
+/** Committed/streamed turn data the layout renders. */
+function useTurnLayoutState() {
+  const { store } = useTurnStore();
+  const history = useStoreSelector(store, (s) => s.history);
+  const pendingHistoryItems = useStoreSelector(
+    store,
+    (s) => s.pendingHistoryItems,
+  );
+  const streamingState = useStoreSelector(store, (s) => s.streamingState);
+  const thought = useStoreSelector(store, (s) => s.thought);
+  const staticKey = useStoreSelector(store, (s) => s.staticKey);
+  const quittingMessages = useStoreSelector(store, (s) => s.quittingMessages);
+  const ctrlCPressedOnce = useStoreSelector(store, (s) => s.ctrlCPressedOnce);
+  const ctrlDPressedOnce = useStoreSelector(store, (s) => s.ctrlDPressedOnce);
+  const queuedSubmissions = useStoreSelector(store, (s) => s.queuedSubmissions);
+  const currentLoadingPhrase = useStoreSelector(
+    store,
+    (s) => s.currentLoadingPhrase,
+  );
+  const elapsedTime = useStoreSelector(store, (s) => s.elapsedTime);
+  return {
+    history,
+    pendingHistoryItems,
+    streamingState,
+    thought,
+    staticKey,
+    quittingMessages,
+    ctrlCPressedOnce,
+    ctrlDPressedOnce,
+    queuedSubmissions,
+    currentLoadingPhrase,
+    elapsedTime,
+  };
+}
+
+/** Settings/profile projections the layout and footer render. */
+function useSettingsLayoutState() {
+  const { store } = useSettingsProfileStore();
+  const slashCommands = useStoreSelector(store, (s) => s.slashCommands);
+  const ideContextState = useStoreSelector(store, (s) => s.ideContextState);
+  const llxprtMdFileCount = useStoreSelector(store, (s) => s.llxprtMdFileCount);
+  const coreMemoryFileCount = useStoreSelector(
+    store,
+    (s) => s.coreMemoryFileCount,
+  );
+  const consoleMessages = useStoreSelector(store, (s) => s.consoleMessages);
+  const showAutoAcceptIndicator = useStoreSelector(
+    store,
+    (s) => s.showAutoAcceptIndicator,
+  );
+  const branchName = useStoreSelector(store, (s) => s.branchName);
+  const branchIsDirty = useStoreSelector(store, (s) => s.branchIsDirty);
+  const debugMessage = useStoreSelector(store, (s) => s.debugMessage);
+  const errorCount = useStoreSelector(store, (s) => s.errorCount);
+  const currentModel = useStoreSelector(store, (s) => s.currentModel);
+  const currentModelLabel = useStoreSelector(store, (s) => s.currentModelLabel);
+  const contextLimit = useStoreSelector(store, (s) => s.contextLimit);
+  const tokenMetrics = useStoreSelector(store, (s) => s.tokenMetrics);
+  const historyTokenCount = useStoreSelector(store, (s) => s.historyTokenCount);
+  return {
+    slashCommands,
+    ideContextState,
+    llxprtMdFileCount,
+    coreMemoryFileCount,
+    consoleMessages,
+    showAutoAcceptIndicator,
+    branchName,
+    branchIsDirty,
+    debugMessage,
+    errorCount,
+    currentModel,
+    currentModelLabel,
+    contextLimit,
+    tokenMetrics,
+    historyTokenCount,
   };
 }
 
 function useDerivedState(
-  uiState: ReturnType<typeof useUIState>,
   uiRuntime: UiRuntime,
   slashCommandRuntime: SlashCommandRuntime,
   settings: LoadedSettings,
   terminal: ReturnType<typeof useTerminalLayoutState>,
+  turn: ReturnType<typeof useTurnLayoutState>,
+  settingsData: ReturnType<typeof useSettingsLayoutState>,
+  pendingHistoryItemRef: React.RefObject<DOMElement | null>,
   version: string,
   nightly: boolean,
 ) {
@@ -136,10 +259,12 @@ function useDerivedState(
     terminal.constrainHeight,
     layoutSettings.effectiveAvailableHeight,
     layoutSettings.showTodoPanelSetting,
-    uiState,
-    uiState.slashCommands,
-    uiState.activeShellPtyId,
-    uiState.embeddedShellFocused,
+    turn.history,
+    turn.pendingHistoryItems,
+    pendingHistoryItemRef,
+    settingsData.slashCommands,
+    terminal.activeShellPtyId,
+    terminal.embeddedShellFocused,
   );
 
   return {
@@ -159,12 +284,14 @@ export const DefaultAppLayout = ({
   version,
   nightly,
   mainControlsRef,
+  rootUiRef,
+  pendingHistoryItemRef,
   contextFileNames,
   updateInfo,
 }: DefaultAppLayoutProps) => {
-  const uiState = useUIState();
-  const uiActions = useUIActions();
   const terminal = useTerminalLayoutState();
+  const turn = useTurnLayoutState();
+  const settingsData = useSettingsLayoutState();
   const [, setSuggestionsVisible] = React.useState(false);
 
   const {
@@ -174,18 +301,21 @@ export const DefaultAppLayout = ({
     staticItems,
     pendingItems,
   } = useDerivedState(
-    uiState,
     uiRuntime,
     slashCommandRuntime,
     settings,
     terminal,
+    turn,
+    settingsData,
+    pendingHistoryItemRef,
     version,
     nightly,
   );
 
-  const mainControlsSharedProps = buildMainControlsProps(
-    uiState,
+  const mainControlsSharedProps = buildMainControlsProps({
     terminal,
+    turn,
+    settingsData,
     layoutSettings,
     slashCommandRuntime,
     settings,
@@ -193,56 +323,74 @@ export const DefaultAppLayout = ({
     updateInfo,
     contextFileNames,
     nightly,
-    uiActions,
     setSuggestionsVisible,
     dialogsVisible,
-  );
+  });
 
-  if (uiState.quittingMessages) {
+  if (turn.quittingMessages) {
     return (
       <QuittingDisplay
         constrainHeight={terminal.constrainHeight}
         effectiveAvailableHeight={layoutSettings.effectiveAvailableHeight}
         terminalWidth={terminal.terminalWidth}
-        quittingMessages={uiState.quittingMessages}
+        quittingMessages={turn.quittingMessages}
         config={slashCommandRuntime}
-        slashCommands={uiState.slashCommands}
+        slashCommands={settingsData.slashCommands}
         showTodoPanelSetting={layoutSettings.showTodoPanelSetting}
       />
     );
   }
 
-  return renderLayout(
-    uiState,
+  return renderLayout({
+    turn,
     terminal,
     layoutSettings,
     dialogsVisible,
     listItems,
     staticItems,
     pendingItems,
+    rootUiRef,
+    pendingHistoryItemRef,
     mainControlsRef,
     mainControlsSharedProps,
-  );
+  });
 };
 
-function renderLayout(
-  uiState: ReturnType<typeof useUIState>,
-  terminal: ReturnType<typeof useTerminalLayoutState>,
-  layoutSettings: ReturnType<typeof useLayoutSettings>,
-  dialogsVisible: boolean,
-  listItems: ScrollableMainContentItem[],
-  staticItems: React.ReactElement[],
-  pendingItems: React.ReactElement[],
-  mainControlsRef: React.RefObject<DOMElement | null>,
-  mainControlsSharedProps: MainControlsProps,
-) {
+interface RenderLayoutArgs {
+  turn: ReturnType<typeof useTurnLayoutState>;
+  terminal: ReturnType<typeof useTerminalLayoutState>;
+  layoutSettings: ReturnType<typeof useLayoutSettings>;
+  dialogsVisible: boolean;
+  listItems: ScrollableMainContentItem[];
+  staticItems: React.ReactElement[];
+  pendingItems: React.ReactElement[];
+  rootUiRef: React.RefObject<DOMElement | null>;
+  pendingHistoryItemRef: React.RefObject<DOMElement | null>;
+  mainControlsRef: React.RefObject<DOMElement | null>;
+  mainControlsSharedProps: MainControlsProps;
+}
+
+function renderLayout(args: RenderLayoutArgs) {
+  const {
+    turn,
+    terminal,
+    layoutSettings,
+    dialogsVisible,
+    listItems,
+    staticItems,
+    pendingItems,
+    rootUiRef,
+    pendingHistoryItemRef,
+    mainControlsRef,
+    mainControlsSharedProps,
+  } = args;
   if (layoutSettings.useAlternateBuffer) {
     return (
-      <StreamingContext.Provider value={uiState.streamingState}>
+      <StreamingContext.Provider value={turn.streamingState}>
         <AlternateBufferLayout
           terminalWidth={terminal.terminalWidth}
           terminalHeight={terminal.terminalHeight}
-          rootUiRef={uiState.rootUiRef}
+          rootUiRef={rootUiRef}
           dialogsVisible={dialogsVisible}
           listItems={listItems}
           mainControlsRef={mainControlsRef}
@@ -253,12 +401,12 @@ function renderLayout(
   }
 
   return (
-    <StreamingContext.Provider value={uiState.streamingState}>
+    <StreamingContext.Provider value={turn.streamingState}>
       <StandardBufferLayout
-        rootUiRef={uiState.rootUiRef}
-        staticKey={uiState.staticKey}
+        rootUiRef={rootUiRef}
+        staticKey={turn.staticKey}
         staticItems={staticItems}
-        pendingHistoryItemRef={uiState.pendingHistoryItemRef}
+        pendingHistoryItemRef={pendingHistoryItemRef}
         pendingItems={pendingItems}
         constrainHeight={terminal.constrainHeight}
         mainControlsRef={mainControlsRef}
@@ -268,30 +416,48 @@ function renderLayout(
   );
 }
 
+interface BuildMainControlsArgs {
+  terminal: ReturnType<typeof useTerminalLayoutState>;
+  turn: ReturnType<typeof useTurnLayoutState>;
+  settingsData: ReturnType<typeof useSettingsLayoutState>;
+  layoutSettings: ReturnType<typeof useLayoutSettings>;
+  slashCommandRuntime: SlashCommandRuntime;
+  settings: LoadedSettings;
+  startupWarnings: string[];
+  updateInfo: UpdateObject | null;
+  contextFileNames: string[];
+  nightly: boolean;
+  setSuggestionsVisible: (visible: boolean) => void;
+  dialogsVisible: boolean;
+}
+
 function buildMainControlsProps(
-  uiState: ReturnType<typeof useUIState>,
-  terminal: ReturnType<typeof useTerminalLayoutState>,
-  layoutSettings: ReturnType<typeof useLayoutSettings>,
-  slashCommandRuntime: SlashCommandRuntime,
-  settings: LoadedSettings,
-  startupWarnings: string[],
-  updateInfo: UpdateObject | null,
-  contextFileNames: string[],
-  nightly: boolean,
-  uiActions: UIActions,
-  onSuggestionsVisibilityChange: (visible: boolean) => void,
-  dialogsVisible: boolean,
+  args: BuildMainControlsArgs,
 ): MainControlsProps {
+  const {
+    terminal,
+    turn,
+    settingsData,
+    layoutSettings,
+    slashCommandRuntime,
+    settings,
+    startupWarnings,
+    updateInfo,
+    contextFileNames,
+    nightly,
+    setSuggestionsVisible,
+    dialogsVisible,
+  } = args;
   return {
     config: slashCommandRuntime,
     settings,
     startupWarnings,
     updateInfo,
-    history: uiState.history,
+    history: turn.history,
     inputWidth: terminal.inputWidth,
-    isTodoPanelCollapsed: uiState.isTodoPanelCollapsed,
-    isQueuedMessagesPanelCollapsed: uiState.isQueuedMessagesPanelCollapsed,
-    queuedSubmissions: uiState.queuedSubmissions,
+    isTodoPanelCollapsed: terminal.isTodoPanelCollapsed,
+    isQueuedMessagesPanelCollapsed: terminal.isQueuedMessagesPanelCollapsed,
+    queuedSubmissions: turn.queuedSubmissions,
     showTodoPanelSetting: layoutSettings.showTodoPanelSetting,
     dialogsVisible,
     hideContextSummary: layoutSettings.hideContextSummary,
@@ -303,37 +469,34 @@ function buildMainControlsProps(
     debugConsoleMaxHeight: layoutSettings.debugConsoleMaxHeight,
     effectiveAvailableHeight: layoutSettings.effectiveAvailableHeight,
     disableLoadingPhrases: layoutSettings.disableLoadingPhrases,
-    streamingState: uiState.streamingState,
-    thought: uiState.thought,
-    currentLoadingPhrase: uiState.currentLoadingPhrase,
-    elapsedTime: uiState.elapsedTime,
+    streamingState: turn.streamingState,
+    thought: turn.thought,
+    currentLoadingPhrase: turn.currentLoadingPhrase,
+    elapsedTime: turn.elapsedTime,
     isNarrow: layoutSettings.isNarrow,
-    ctrlCPressedOnce: uiState.ctrlCPressedOnce,
-    ctrlDPressedOnce: uiState.ctrlDPressedOnce,
-    showEscapePrompt: uiState.showEscapePrompt,
-    ideContextState: uiState.ideContextState,
-    llxprtMdFileCount: uiState.llxprtMdFileCount,
-    coreMemoryFileCount: uiState.coreMemoryFileCount,
+    ctrlCPressedOnce: turn.ctrlCPressedOnce,
+    ctrlDPressedOnce: turn.ctrlDPressedOnce,
+    showEscapePrompt: terminal.showEscapePrompt,
+    ideContextState: settingsData.ideContextState,
+    llxprtMdFileCount: settingsData.llxprtMdFileCount,
+    coreMemoryFileCount: settingsData.coreMemoryFileCount,
     contextFileNames,
     showToolDescriptions: terminal.showToolDescriptions,
-    showAutoAcceptIndicator: uiState.showAutoAcceptIndicator,
-    shellModeActive: uiState.shellModeActive,
+    showAutoAcceptIndicator: settingsData.showAutoAcceptIndicator,
+    shellModeActive: terminal.shellModeActive,
     showErrorDetails: terminal.showErrorDetails,
-    consoleMessages: uiState.consoleMessages,
+    consoleMessages: settingsData.consoleMessages,
     isInputActive: terminal.isInputActive,
-    vimModeEnabled: uiState.vimModeEnabled,
-    vimMode: uiState.vimMode,
-    currentModel: uiState.currentModel,
-    currentModelLabel: uiState.currentModelLabel,
-    contextLimit: uiState.contextLimit,
-    branchName: uiState.branchName,
-    branchIsDirty: uiState.branchIsDirty,
-    debugMessage: uiState.debugMessage,
-    errorCount: uiState.errorCount,
-    historyTokenCount: uiState.historyTokenCount,
-    tokenMetrics: uiState.tokenMetrics,
-    uiActions,
-    onSuggestionsVisibilityChange,
+    debugMessage: settingsData.debugMessage,
+    errorCount: settingsData.errorCount,
+    currentModel: settingsData.currentModel,
+    currentModelLabel: settingsData.currentModelLabel,
+    contextLimit: settingsData.contextLimit,
+    branchName: settingsData.branchName,
+    branchIsDirty: settingsData.branchIsDirty,
+    historyTokenCount: settingsData.historyTokenCount,
+    tokenMetrics: settingsData.tokenMetrics,
+    onSuggestionsVisibilityChange: setSuggestionsVisible,
   };
 }
 

@@ -12,7 +12,6 @@ import {
   beforeEach,
   afterEach,
   setSystemTime,
-  type Mock,
 } from 'bun:test';
 import { appEvents, AppEvent } from '../../utils/events.js';
 import { coreEvents } from '@vybestack/llxprt-code-core';
@@ -23,14 +22,11 @@ import {
   FRAME_TIMESTAMP_CAPACITY,
 } from './DebugProfiler.js';
 import { render } from '../../test-utils/render.js';
-import { useUIState, type UIState } from '../contexts/UIStateContext.js';
+import { TerminalProvider } from '../stores/terminal/TerminalContext.js';
+import { createTerminalStore } from '../stores/terminal/terminalStore.js';
 import { FixedDeque } from 'mnemonist';
 import { debugState } from '../debug.js';
 import { act } from 'react';
-
-void vi.mock('../contexts/UIStateContext.js', () => ({
-  useUIState: vi.fn(),
-}));
 
 describe('DebugProfiler', () => {
   beforeEach(() => {
@@ -221,12 +217,19 @@ describe('DebugProfiler', () => {
 });
 
 describe('DebugProfiler Component', () => {
-  beforeEach(() => {
-    (useUIState as Mock<typeof useUIState>).mockReturnValue({
-      showDebugProfiler: true,
-      constrainHeight: false,
-    } as unknown as UIState);
-  });
+  /** Component fixtures: profiler visible, height unconstrained. */
+  function renderProfiler() {
+    return render(
+      <TerminalProvider
+        store={createTerminalStore({
+          showDebugProfiler: true,
+          constrainHeight: false,
+        })}
+      >
+        <DebugProfiler />
+      </TerminalProvider>,
+    );
+  }
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -235,7 +238,7 @@ describe('DebugProfiler Component', () => {
   it('should report an action when a CoreEvent is emitted', async () => {
     const reportActionSpy = vi.spyOn(profiler, 'reportAction');
 
-    const { unmount } = render(<DebugProfiler />);
+    const { unmount } = renderProfiler();
 
     act(() => {
       coreEvents.emitModelChanged('new-model');
@@ -248,7 +251,7 @@ describe('DebugProfiler Component', () => {
   it('should report an action when an AppEvent is emitted', async () => {
     const reportActionSpy = vi.spyOn(profiler, 'reportAction');
 
-    const { unmount } = render(<DebugProfiler />);
+    const { unmount } = renderProfiler();
 
     act(() => {
       appEvents.emit(AppEvent.OpenDebugConsole);
