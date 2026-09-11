@@ -28,7 +28,63 @@ import {
 import fs from 'fs/promises';
 import path from 'path';
 import { Storage } from '@vybestack/llxprt-code-storage';
-import { writeProfileFile, deleteProfileFile } from './profileStore.js';
+import {
+  writeProfileFile,
+  deleteProfileFile,
+  hasErrnoCode,
+  type ReadResult,
+} from './profileStore.js';
+
+type StoredProfileKind = 'model' | 'image' | 'invalid';
+
+export class ProfileTypeConflictError extends Error {
+  constructor(
+    readonly profileName: string,
+    readonly requestedType: 'model' | 'image',
+    readonly existingType: StoredProfileKind,
+  ) {
+    super(
+      `Cannot save ${requestedType} profile '${profileName}' because that name belongs to a ${existingType} profile`,
+    );
+    this.name = 'ProfileTypeConflictError';
+  }
+}
+
+export class ImageProfileNotFoundError extends Error {
+  constructor(readonly profileName: string) {
+    super(`Image profile '${profileName}' not found`);
+    this.name = 'ImageProfileNotFoundError';
+  }
+}
+
+function storedProfileKind(content: string): StoredProfileKind {
+  const parsed = parseProfileJson(content);
+  if (parsed.kind !== 'parsed' || !isPlainObject(parsed.value)) {
+    return 'invalid';
+  }
+  return parsed.value.type === 'image' ? 'image' : 'model';
+}
+
+function assertCompatibleStoredProfile(
+  profileName: string,
+  requestedType: 'model' | 'image',
+  existing: ReadResult,
+): void {
+  if (existing.kind === 'absent') {
+    return;
+  }
+  if (existing.kind === 'error') {
+    throw existing.error;
+  }
+  const existingType = storedProfileKind(existing.content);
+  if (existingType !== requestedType) {
+    throw new ProfileTypeConflictError(
+      profileName,
+      requestedType,
+      existingType,
+    );
+  }
+}
 
 interface ProfileSettingsServiceLike {
   exportForProfile?: () => Promise<{
@@ -103,6 +159,8 @@ export class ProfileManager {
       profileName,
       JSON.stringify(profile, null, 2),
       'overwrite',
+      (existing) =>
+        assertCompatibleStoredProfile(profileName, 'model', existing),
     );
   }
 
@@ -116,6 +174,8 @@ export class ProfileManager {
       profileName,
       JSON.stringify(validated, null, 2),
       'overwrite',
+      (existing) =>
+        assertCompatibleStoredProfile(profileName, 'image', existing),
     );
   }
 
@@ -124,18 +184,13 @@ export class ProfileManager {
     try {
       const content = await fs.readFile(filePath, 'utf8');
       const parsed = ProfileManager.parseProfileContent(content);
-      if (
-        typeof parsed !== 'object' ||
-        parsed === null ||
-        !('type' in parsed) ||
-        parsed.type !== 'image'
-      ) {
-        throw new Error(`Profile '${profileName}' is not an image profile`);
+      if (!isPlainObject(parsed) || parsed.type !== 'image') {
+        throw new ProfileTypeConflictError(profileName, 'image', 'model');
       }
       return parseImageProfile(profileName, parsed);
     } catch (error) {
-      if (error instanceof Error && error.message.includes('ENOENT')) {
-        throw new Error(`Image profile '${profileName}' not found`);
+      if (hasErrnoCode(error, 'ENOENT')) {
+        throw new ImageProfileNotFoundError(profileName);
       }
       throw error;
     }
@@ -203,6 +258,7 @@ export class ProfileManager {
       name,
       JSON.stringify(loadBalancerProfile, null, 2),
       'overwrite',
+      (existing) => assertCompatibleStoredProfile(name, 'model', existing),
     );
   }
 
@@ -256,6 +312,9 @@ export class ProfileManager {
       const content = await fs.readFile(filePath, 'utf8');
 
       const parsed = ProfileManager.parseProfileContent(content);
+      if (isPlainObject(parsed) && parsed.type === 'image') {
+        throw new ProfileTypeConflictError(profileName, 'model', 'image');
+      }
       const profile =
         isPlainObject(parsed) && parsed.type === 'loadbalancer'
           ? parseLoadBalancerProfile(profileName, parsed)

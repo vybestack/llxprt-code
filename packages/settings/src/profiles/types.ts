@@ -203,6 +203,8 @@ export type EphemeralSettings = ProfileEphemeralSettings;
 export interface StandardProfile {
   version: 1;
   type?: 'standard' | 'model';
+  label?: string;
+  description?: string;
   provider: string;
   model: string;
   modelParams: ModelParams;
@@ -216,18 +218,26 @@ export type ImageQuality = 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type ImageSize = 'auto' | '1024x1024' | '1024x1536' | '1536x1024';
 export type ImageBackground = 'auto' | 'transparent' | 'opaque';
 
+export type PersistedImageBackendAuth =
+  | { readonly type: 'none' }
+  | { readonly type: 'api-key'; readonly apiKey: string }
+  | { readonly type: 'named-key'; readonly keyName: string }
+  | { readonly type: 'keyfile'; readonly path: string }
+  | { readonly type: 'oauth'; readonly provider: 'codex' };
+
 export interface ImageProfile {
   version: 1;
   type: 'image';
+  label?: string;
+  description?: string;
+  backend: 'codex' | 'openai-images';
   model: string;
   baseUrl: string;
-  auth:
-    | { readonly type: 'oauth'; readonly provider: string }
-    | { readonly type: 'apikey'; readonly keyName: string };
-  defaults: {
-    readonly quality: ImageQuality;
-    readonly size: ImageSize;
-    readonly background: ImageBackground;
+  auth: PersistedImageBackendAuth;
+  defaults?: {
+    readonly quality?: ImageQuality;
+    readonly size?: ImageSize;
+    readonly background?: ImageBackground;
   };
 }
 

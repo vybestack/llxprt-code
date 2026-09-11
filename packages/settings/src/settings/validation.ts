@@ -284,17 +284,38 @@ const imageProfileSchema: z.ZodType<ImageProfile> = z
   .object({
     version: z.literal(1),
     type: z.literal('image'),
+    label: z.string().min(1).optional(),
+    description: z.string().min(1).optional(),
+    backend: z.enum(['codex', 'openai-images']),
     model: z.string().min(1),
     baseUrl: z.string().url(),
     auth: z.discriminatedUnion('type', [
-      z.object({ type: z.literal('oauth'), provider: z.string().min(1) }),
-      z.object({ type: z.literal('apikey'), keyName: z.string().min(1) }),
+      z.object({ type: z.literal('none') }).strict(),
+      z
+        .object({ type: z.literal('api-key'), apiKey: z.string().min(1) })
+        .strict(),
+      z
+        .object({ type: z.literal('named-key'), keyName: z.string().min(1) })
+        .strict(),
+      z
+        .object({ type: z.literal('keyfile'), path: z.string().min(1) })
+        .strict(),
+      z
+        .object({ type: z.literal('oauth'), provider: z.literal('codex') })
+        .strict(),
     ]),
-    defaults: z.object({
-      quality: z.enum(['auto', 'low', 'medium', 'high', 'xhigh', 'max']),
-      size: z.enum(['auto', '1024x1024', '1024x1536', '1536x1024']),
-      background: z.enum(['auto', 'transparent', 'opaque']),
-    }),
+    defaults: z
+      .object({
+        quality: z
+          .enum(['auto', 'low', 'medium', 'high', 'xhigh', 'max'])
+          .optional(),
+        size: z
+          .enum(['auto', '1024x1024', '1024x1536', '1536x1024'])
+          .optional(),
+        background: z.enum(['auto', 'transparent', 'opaque']).optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
