@@ -39,7 +39,7 @@ import type {
 } from '../interfaces/IShellToolHost.js';
 import {
   applyOutputFilters,
-  appendAbortSurvivorWarning,
+  appendSurvivorNoticeToResult,
   buildShellSchema,
   collectProcessInfo,
   createShellToolHostFromExecutionService,
@@ -458,9 +458,15 @@ export class ShellToolInvocation extends BaseToolInvocation<
         result.outputTruncation,
       );
 
-      // Append the durable clamp notice AFTER summarization and token
-      // limiting so it survives lossy processing (Issue #3031).
-      return appendClampNoticeToResult(toolResult, resolution);
+      // Durable notices are applied after buildToolResult because
+      // summarizeIfNeeded (not skipped on the aborted:false inactivity
+      // branch) and limitOutputTokens can replace the formatted content
+      // wholesale; only a post-processing append is guaranteed to reach the
+      // model (Issues #3031 and #3517).
+      return appendClampNoticeToResult(
+        appendSurvivorNoticeToResult(toolResult, result, pgid),
+        resolution,
+      );
     } finally {
       fs.rmSync(tempFilePath, { force: true });
     }
@@ -631,7 +637,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
         } else {
           llmContent += ' There was no output before timeout.';
         }
-        llmContent = appendAbortSurvivorWarning(llmContent, result, pgid);
         returnDisplayMessage = llmContent;
       } else {
         llmContent = 'Command was cancelled by user before it could complete.';
@@ -641,7 +646,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
         } else {
           llmContent += ' There was no output before it was cancelled.';
         }
-        llmContent = appendAbortSurvivorWarning(llmContent, result, pgid);
 
         if (this.host.getDebugMode()) {
           returnDisplayMessage = llmContent;
@@ -678,7 +682,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
       ? result.error.message.replace(commandToExecute, this.params.command)
       : '(none)';
 
-    let llmContent = [
+    const llmContent = [
       `Command: ${this.params.command}`,
       `Directory: ${stringOrDefault(this.getDirPath(), '(root)')}`,
       `Stdout: ${stringOrDefault(filteredOutput, '(empty)')}`,
@@ -691,10 +695,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
       }`,
       `Process Group PGID: ${pgid ?? result.pid ?? '(none)'}`,
     ].join('\n');
-    // Inactivity-killed CP commands resolve aborted: false (the caller
-    // signal never fired), so the survivor flag set by the executor would
-    // otherwise be dropped here (Issue #3517). No-op without the flag.
-    llmContent = appendAbortSurvivorWarning(llmContent, result, pgid);
 
     let returnDisplayMessage = '';
     if (this.host.getDebugMode()) {

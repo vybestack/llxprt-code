@@ -439,6 +439,20 @@ export async function ptyInactivityAbortAction(
 }
 
 /**
+ * Clear a pending abort-fallback resolution timer. Single-owner hand-off: a
+ * fallback armed by a prior inactivity kill would resolve the result after
+ * SIGKILL_TIMEOUT_MS, before the caller-abort group-reap chain settles —
+ * bypassing the confirmation gate — so every path that arms that chain must
+ * clear the stale fallback first (Issue #3517).
+ */
+function clearPendingAbortFallback(state: PtyExecState): void {
+  if (state.abortFinalizeTimeout !== null) {
+    clearTimeout(state.abortFinalizeTimeout);
+    state.abortFinalizeTimeout = null;
+  }
+}
+
+/**
  * Schedule the post-escalation fallback resolution. Single-owner: a pending
  * fallback is cleared first so staggered abort/inactivity chains cannot leak
  * timers past one another. The callback re-checks hasResolved before
@@ -454,9 +468,7 @@ function schedulePtyAbortFallback(
   resolveResult: (resultValue: ShellExecutionResult) => void,
   getAborted: () => boolean,
 ): void {
-  if (state.abortFinalizeTimeout !== null) {
-    clearTimeout(state.abortFinalizeTimeout);
-  }
+  clearPendingAbortFallback(state);
   state.abortFinalizeTimeout = setTimeout(() => {
     state.abortFinalizeTimeout = null;
     if (state.hasResolved) {
@@ -510,6 +522,10 @@ function armPtyGroupAbortKill(
   state: PtyExecState,
   pid: number,
 ): Promise<boolean> {
+  // A fallback timer armed by a prior inactivity kill would resolve the
+  // result before this chain's bounded group-reap confirmation settles;
+  // single ownership requires clearing it before arming (Issue #3517).
+  clearPendingAbortFallback(state);
   const chain = (async (): Promise<boolean> => {
     try {
       process.kill(-pid, 'SIGTERM');
@@ -537,7 +553,11 @@ function armPtyGroupAbortKill(
         // PTY may already be terminated.
       }
     }
-    return reapProcessGroup(pid);
+    // Enforce the "Never rejects" contract locally: consumers use bare
+    // `.then(...)` with no `.catch`, so a rejection escaping the reap would
+    // go unhandled and stall their resolution. Resolve false (group not
+    // confirmed empty) instead.
+    return reapProcessGroup(pid).catch((): boolean => false);
   })();
   // Arm before yielding: the synchronous prefix (both SIGTERMs) runs before
   // the first await, so any exit event dispatched later finds the chain.

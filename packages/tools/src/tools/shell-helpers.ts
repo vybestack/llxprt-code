@@ -147,6 +147,9 @@ ${clamp}`;
  * instruction is the actionable cleanup the caller can be given. The pgid is
  * the one already resolved via collectProcessInfo; on POSIX the detached
  * spawn makes result.pid the process-group id, so it is the fallback.
+ * POSIX-only: core never sets the flag on Windows (taskkill walks the tree),
+ * and a Windows host that ever sets it must not be shown a bash `kill -9`
+ * instruction to run in PowerShell.
  */
 export function appendAbortSurvivorWarning(
   content: string,
@@ -154,6 +157,9 @@ export function appendAbortSurvivorWarning(
   pgid: number | null,
 ): string {
   if (result.survivingGroupMembersOnAbort !== true) {
+    return content;
+  }
+  if (os.platform() === 'win32') {
     return content;
   }
   const cleanupPgid = pgid ?? result.pid;
@@ -165,6 +171,32 @@ export function appendAbortSurvivorWarning(
     `running (process group ${cleanupPgid} could not be fully terminated). ` +
     `Kill them with \`kill -9 -- -${cleanupPgid}\`.`
   );
+}
+
+/**
+ * Appends the durable survivor warning to a foreground result AFTER all
+ * lossy processing (summarization, token limiting), following the clamp
+ * notice pattern: the warning must survive even when the underlying
+ * content is replaced (Issue #3517). Also appended to `returnDisplay` on
+ * aborted results so the human UI shows it. No-op without the flag, so
+ * clean results stay byte-identical.
+ */
+export function appendSurvivorNoticeToResult(
+  toolResult: StringContentToolResult,
+  result: ShellExecutionResult,
+  pgid: number | null,
+): StringContentToolResult {
+  if (result.survivingGroupMembersOnAbort !== true) {
+    return toolResult;
+  }
+  const appendDisplay = result.aborted === true;
+  return {
+    ...toolResult,
+    llmContent: appendAbortSurvivorWarning(toolResult.llmContent, result, pgid),
+    returnDisplay: appendDisplay
+      ? appendAbortSurvivorWarning(toolResult.returnDisplay, result, pgid)
+      : toolResult.returnDisplay,
+  };
 }
 
 export function isShellToolHost(

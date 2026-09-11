@@ -25,6 +25,19 @@ export function isKillablePid(pid: unknown): pid is number {
 }
 
 /**
+ * Group-target variant of {@link isKillablePid} for every
+ * `process.kill(-pid, ...)` call site. `kill(-1, ...)` is the POSIX
+ * broadcast special case — every signalable process — which is the exact
+ * hazard the chokepoint exists to prevent, reintroduced via negation, so a
+ * group target must additionally be greater than 1. `isKillablePid(1)`
+ * deliberately stays true: pid 1 is a legitimate direct kill target, and
+ * that predicate is used for non-group kills.
+ */
+export function isGroupTargetPid(pid: unknown): pid is number {
+  return typeof pid === 'number' && Number.isInteger(pid) && pid > 1;
+}
+
+/**
  * Fire-and-forget taskkill on Windows.  The arguments are explicit and
  * fully controlled; `sonarjs/no-os-command-from-path` is centrally
  * disabled for this codebase.
@@ -143,9 +156,10 @@ export const GROUP_REAP_POLL_INTERVAL_MS = 50;
  * every other failure means the group is gone.
  */
 export function isProcessGroupAlive(pid: number): boolean {
-  if (!isKillablePid(pid)) {
-    // Rejected by the same chokepoint that guards every real signal: pid 0
-    // would probe the caller's own process group.
+  if (!isGroupTargetPid(pid)) {
+    // Rejected by the group-target chokepoint: pid 1 would broadcast to
+    // every signalable process and pid 0 would probe the caller's own
+    // process group.
     return false;
   }
   try {
@@ -167,7 +181,9 @@ export async function reapProcessGroup(
   pid: number,
   windowMs: number = GROUP_REAP_WINDOW_MS,
 ): Promise<boolean> {
-  if (!isKillablePid(pid)) {
+  if (!isGroupTargetPid(pid)) {
+    // Rejected by the group-target chokepoint: probing pid 1 would ask
+    // about every signalable process, and pid 0 the caller's own group.
     return true;
   }
   const deadline = Date.now() + windowMs;
@@ -197,9 +213,10 @@ export async function escalateKillUnix(
   exitedGuard: ExitGuard,
   killFallback: () => void,
 ): Promise<void> {
-  if (!isKillablePid(pid)) {
-    // A non-killable pid must never reach process.kill(-pid): pid 0 would
-    // signal the caller's own process group. Treat it as already gone.
+  if (!isGroupTargetPid(pid)) {
+    // A pid that is not a valid group target must never reach
+    // process.kill(-pid): pid 0 would signal the caller's own process group
+    // and pid 1 every signalable process. Treat it as already gone.
     return;
   }
   try {

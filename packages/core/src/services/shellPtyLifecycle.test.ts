@@ -17,6 +17,7 @@ import type {
   ShellExecutionResult,
 } from './shellExecutionTypes.js';
 import { createExitGuard } from './shellExitGuard.js';
+import { GROUP_REAP_WINDOW_MS } from './shellProcessKill.js';
 import {
   createPtyResultPromise,
   ptyAbortAction,
@@ -380,6 +381,99 @@ describe('PTY abort signal fidelity (fake pty, issue #3517)', () => {
       process.kill = realProcessKill;
     }
   }, 10000);
+
+  it('abort during natural-exit drain resolves only after the group-reap chain settles (fake pty)', async () => {
+    // process.kill is stubbed for the whole test, so the fabricated pid is
+    // never aimed at a real process group. Signal-0 probes report the group
+    // alive so the bounded reap window must expire; the result may only be
+    // produced after that chain settles.
+    const realProcessKill = process.kill;
+    const groupProbes: number[] = [];
+    process.kill = ((pid: number, signal?: string | number) => {
+      if (signal === 0) {
+        groupProbes.push(pid);
+      }
+      return true;
+    }) as unknown as typeof process.kill;
+
+    const killSignals: string[] = [];
+    let dataListener: ((data: string | Buffer) => void) | undefined;
+    let exitListener:
+      | ((event: { exitCode: number; signal?: number | null }) => void)
+      | undefined;
+    const ptyProcess = {
+      pid: 999997,
+      kill: (signal?: string | number): void => {
+        killSignals.push(signal === undefined ? '<none>' : String(signal));
+      },
+      onData: (listener: (data: string | Buffer) => void) => {
+        dataListener = listener;
+        return { dispose: () => undefined };
+      },
+      onExit: (
+        listener: (event: { exitCode: number; signal?: number | null }) => void,
+      ) => {
+        exitListener = listener;
+        return { dispose: () => undefined };
+      },
+    } as unknown as IPty;
+
+    const abortController = new AbortController();
+    const activePtys = new Map<number, ActivePty>();
+    try {
+      const resultPromise = createPtyResultPromise(
+        ptyProcess,
+        false,
+        80,
+        30,
+        () => undefined,
+        abortController.signal,
+        { scrollback: 10 } as ShellExecutionConfig,
+        {
+          name: 'node-pty',
+          module: {},
+          supportsBackpressure: true,
+        } as NonNullable<PtyImplementation>,
+        activePtys,
+        { value: null },
+      );
+      if (dataListener === undefined || exitListener === undefined) {
+        throw new Error('PTY data/exit handlers were not registered');
+      }
+
+      // Pending output processing: xterm processes writes asynchronously, so
+      // delivering data and then the exit event without an intervening await
+      // leaves processingChain unsettled when the race is armed.
+      dataListener('draining output\n');
+      // Natural exit while the caller signal is not yet aborted: the exit
+      // race runs with processingComplete still pending.
+      exitListener({ exitCode: 0, signal: null });
+      // The caller abort lands during the drain and wins the race. The exit
+      // handler already detached the regular abort handler, so the race's
+      // abort-win arm must kill the group itself.
+      const abortTime = Date.now();
+      abortController.abort();
+
+      const result = await resultPromise;
+
+      // The result was gated on the bounded group-reap chain (escalation
+      // grace + reap window with lying-alive probes), so it cannot have
+      // resolved early.
+      expect(Date.now() - abortTime).toBeGreaterThanOrEqual(
+        GROUP_REAP_WINDOW_MS,
+      );
+      // The chain really ran: the group was TERMed and probed.
+      expect(killSignals).toContain('SIGTERM');
+      expect(groupProbes.length).toBeGreaterThan(0);
+      // The natural-exit values win, and the chain outcome (window expired,
+      // group not confirmed empty) is carried on the result.
+      expect(result.exitCode).toBe(0);
+      expect(result.aborted).toBe(true);
+      expect(result.survivingGroupMembersOnAbort).toBe(true);
+    } finally {
+      process.kill = realProcessKill;
+    }
+  }, 20000);
 });
 
 // ---------------------------------------------------------------------------
@@ -497,7 +591,18 @@ async function probeUsableForkptyPty(): Promise<PtyImplementation> {
   return ptyInfo;
 }
 
-const forkptyBackend = isWindows ? null : await probeUsableForkptyPty();
+// A probe rejection (e.g. a synchronous forkpty spawn throw surfacing through
+// the withDeadline race) must skip only the real-PTY suite below: letting it
+// propagate would fail the whole file and lose the deterministic fake-pty
+// tests too. The probe itself is unchanged and stays as strict as before.
+let forkptyBackend: PtyImplementation | null = null;
+if (!isWindows) {
+  try {
+    forkptyBackend = await probeUsableForkptyPty();
+  } catch {
+    forkptyBackend = null;
+  }
+}
 
 describe.skipIf(isWindows || forkptyBackend === null)(
   'PTY abort group reap (POSIX, forkpty backend, issue #3517)',

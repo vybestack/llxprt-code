@@ -86,7 +86,13 @@ export function createCpResultPromise(
     // confirmed empty (or no group reap applies); never rejects.
     let abortKillChain: Promise<boolean> | null = null;
     const armAbortKill = (): void => {
-      abortKillChain ??= cpKillOnAbort(state, child);
+      // Enforce the never-rejecting contract at the arm site: a rejection
+      // from the escalation/reap chain (e.g. a synchronous taskkill spawn
+      // throw on Windows) is converted to `false` — group not confirmed
+      // empty — so the finalizer's gate can always resolve the result.
+      abortKillChain ??= cpKillOnAbort(state, child).catch(
+        (): boolean => false,
+      );
     };
     setupCpInactivityHandler(
       state,

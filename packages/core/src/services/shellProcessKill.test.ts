@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, vi } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,7 +13,9 @@ import { spawn } from 'node:child_process';
 import {
   boundedTaskkill,
   escalateKillUnix,
+  isGroupTargetPid,
   isKillablePid,
+  isProcessGroupAlive,
   reapProcessGroup,
   taskkillTree,
 } from './shellProcessKill.js';
@@ -100,6 +102,37 @@ describe('isKillablePid', () => {
     expect(isKillablePid(1)).toBe(true);
     expect(isKillablePid(1234)).toBe(true);
     expect(isKillablePid(process.pid)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isGroupTargetPid — the group-scoped chokepoint for process.kill(-pid, ...)
+// ---------------------------------------------------------------------------
+
+describe('isGroupTargetPid', () => {
+  it('rejects the POSIX broadcast special case (pid 1) and non-groups', () => {
+    // kill(-1, ...) signals every signalable process; kill(-0, ...) the
+    // caller's own group. Neither may be formed from a group target.
+    expect(isGroupTargetPid(1)).toBe(false);
+    expect(isGroupTargetPid(0)).toBe(false);
+    expect(isGroupTargetPid(-1)).toBe(false);
+    expect(isGroupTargetPid(-1234)).toBe(false);
+  });
+
+  it('rejects non-finite and non-integer values', () => {
+    expect(isGroupTargetPid(Number.NaN)).toBe(false);
+    expect(isGroupTargetPid(Number.POSITIVE_INFINITY)).toBe(false);
+    expect(isGroupTargetPid(1.5)).toBe(false);
+    expect(isGroupTargetPid(undefined)).toBe(false);
+  });
+
+  it('accepts whole pids greater than 1 while isKillablePid still accepts pid 1', () => {
+    // pid 1 stays a legitimate DIRECT kill target; only its negation is a
+    // broadcast and therefore rejected for group operations.
+    expect(isGroupTargetPid(2)).toBe(true);
+    expect(isGroupTargetPid(1234)).toBe(true);
+    expect(isKillablePid(1)).toBe(true);
+    expect(isGroupTargetPid(1)).toBe(false);
   });
 });
 
@@ -380,14 +413,112 @@ describe('ShellProcessKill platform behavior', () => {
         }
       }, 20000);
 
-      it('resolves false when a probed group stays alive for the window', async () => {
-        // pid 1 always exists and never dies, so the probe window must
-        // expire. Signal-0 probes ONLY: sig 0 delivers no signal, so init is
-        // never actually signalled.
-        const start = Date.now();
-        await expect(reapProcessGroup(1, 300)).resolves.toBe(false);
-        expect(Date.now() - start).toBeGreaterThanOrEqual(250);
+      it('resolves false when a real group stays alive for the window', async () => {
+        // A detached `sleep 5` leads its own process group and will not die
+        // within the short reap window, so the probes must outlive it. The
+        // old form probed pid 1: kill(-1, 0) asks about EVERY signalable
+        // process, which passed for the wrong reason, was semantically the
+        // broadcast special case, and was non-hermetic on minimal containers
+        // where pid 1 may not exist.
+        const leader = spawn('sleep', ['5'], {
+          detached: true,
+          stdio: 'ignore',
+        });
+        leader.on('error', () => {});
+        leader.unref();
+        const leaderPid = observedProcessPid(leader.pid);
+        expect(leaderPid).toBeGreaterThan(0);
+        try {
+          await waitForGroupAlive(leaderPid, 8000);
+          const start = Date.now();
+          await expect(reapProcessGroup(leaderPid, 300)).resolves.toBe(false);
+          expect(Date.now() - start).toBeGreaterThanOrEqual(250);
+        } finally {
+          reapGroup(leaderPid);
+        }
       }, 20000);
+
+      it('resolves true when the group dies mid-window (convergent reap)', async () => {
+        // Alive at the first probe, empty before the deadline: the
+        // production path for a group that dies during the reap window.
+        const leader = spawn('sleep', ['0.4'], {
+          detached: true,
+          stdio: 'ignore',
+        });
+        leader.on('error', () => {});
+        leader.unref();
+        // Attach before any await: the runtime reaps this direct child, and
+        // the listener keeps the exit observation registered.
+        leader.once('exit', () => undefined);
+        const leaderPid = observedProcessPid(leader.pid);
+        expect(leaderPid).toBeGreaterThan(0);
+        try {
+          await waitForGroupAlive(leaderPid, 8000);
+          await expect(reapProcessGroup(leaderPid, 2000)).resolves.toBe(true);
+        } finally {
+          reapGroup(leaderPid);
+        }
+      }, 20000);
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // Liveness probe semantics + escalation skip path — POSIX-only, spy-based
+  // (deterministic: no foreign process required) — Issue #3517
+  // ---------------------------------------------------------------------------
+
+  describe.skipIf(isWindows)(
+    'liveness probe semantics (POSIX, issue #3517)',
+    () => {
+      it('isProcessGroupAlive maps EPERM to alive (a member exists that we may not signal)', async () => {
+        const killSpy = vi
+          .spyOn(process, 'kill')
+          .mockImplementation((_pid: number, _signal?: string | number) => {
+            throw Object.assign(new Error('operation not permitted'), {
+              code: 'EPERM',
+            });
+          });
+        try {
+          expect(isProcessGroupAlive(4242)).toBe(true);
+        } finally {
+          killSpy.mockRestore();
+        }
+      });
+
+      it('escalateKillUnix skips the group SIGKILL when the group dies during the grace window', async () => {
+        // Signal-0 probes say the group is gone after the SIGTERM grace, so
+        // the escalation must stop: no kill(-pid, 'SIGKILL') may be issued.
+        const realKill = process.kill;
+        const deliveredSignals: Array<
+          [pid: number, signal: string | number]
+        > = [];
+        const killSpy = vi
+          .spyOn(process, 'kill')
+          .mockImplementation((pid: number, signal?: string | number) => {
+            if (signal === undefined) {
+              return realKill(pid);
+            }
+            if (signal !== 0) {
+              deliveredSignals.push([pid, signal]);
+            }
+            if (signal === 0) {
+              throw Object.assign(new Error('no such process'), {
+                code: 'ESRCH',
+              });
+            }
+            return true;
+          });
+        try {
+          const guard = createExitGuard();
+          await escalateKillUnix(424242, guard, () => {});
+          const realSignals = deliveredSignals.filter(
+            ([, signal]) => signal !== 0,
+          );
+          expect(realSignals).toStrictEqual([[424242 * -1, 'SIGTERM']]);
+        } finally {
+          killSpy.mockRestore();
+        }
+      });
     },
   );
 
@@ -494,6 +625,23 @@ async function waitForPidGone(pid: number, timeoutMs: number): Promise<void> {
     if (!isPidAlive(pid)) return;
     await new Promise((resolve) => setTimeout(resolve, 150));
   }
+}
+
+/**
+ * Poll the signal-0 group probe until it reports the group alive. Readiness
+ * gate for real spawned groups: the detached child needs a moment to become
+ * observable as a process-group leader.
+ */
+async function waitForGroupAlive(
+  pgid: number,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (isProcessGroupAlive(pgid)) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`Process group ${pgid} not alive within ${timeoutMs}ms`);
 }
 
 /**

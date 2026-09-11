@@ -44,8 +44,10 @@ export interface ShellExecutionResult {
   pgid?: number | null;
   /**
    * True when an abort-timeout kill left live members in the spawned process
-   * group after the executor's bounded reap window expired (Issue #3517).
-   * Absent means the group was confirmed empty (or no group kill applies).
+   * group after the bounded reap window expired. Set only on the POSIX
+   * group-kill abort path; absent means the group was confirmed empty (or no
+   * group kill applies). Carried so the tool layer can tell the caller
+   * children may still be running (Issue #3517).
    */
   survivingGroupMembersOnAbort?: boolean;
   /**

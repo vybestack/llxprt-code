@@ -195,6 +195,59 @@ behavior above needs explicit approval before implementation.
   (pre-existing sibling hazards outside this issue's scope, unchanged by
   this PR).
 
+### Open code review (round 1) outcome — 18 findings (glm-5.3, complete)
+
+16 **In-scope-Fix** (all addressed in the OCR-r1 remediation):
+
+- Finding 1 (survivor warning lost through `summarizeIfNeeded` on the
+  `aborted: false` inactivity path and through `limitOutputTokens` on every
+  path) — warning now appended AFTER `buildToolResult` by
+  `appendSurvivorNoticeToResult` (durable post-processing, same pattern as
+  the clamp notice, Issues #3031/#3517).
+- Finding 2 + 15 (formatting coverage gaps + env-dependent `pid: 4321`
+  resolution) — user-cancel and inactivity-style tests added; fake results
+  carry `pgid: 4321` verbatim so `collectProcessInfo` never hits a real
+  `ps` lookup.
+- Finding 3 (contract asymmetry on the tools-side field doc) — comment
+  rewritten to state the POSIX group-kill-abort-path restriction.
+- Finding 4 (cp kill-chain rejection could stall `handle.result` forever) —
+  never-reject contract enforced at the arm site:
+  `cpKillOnAbort(...).catch(() => false)`.
+- Finding 5 (cp survivor-branch never exercised) — new
+  `shellCpExecution.test.ts` case with the established `process.kill` spy
+  pattern (group probes keep reporting alive → window expires → flag set).
+- Findings 7 + 18 (PTY chain rejection contract + stale inactivity-kill
+  fallback timer resolving before the group-reap chain settles) —
+  `reapProcessGroup(pid).catch(() => false)` tail and
+  `clearPendingAbortFallback` called before arming the group chain.
+- Finding 8 (module-level `await probeUsableForkptyPty()` throw took down
+  the whole test file) — probe failure now skips only the real-PTY suite
+  (`forkptyBackend = null`), fake-pty tests preserved.
+- Finding 9 (ptyExitRace abort-during-drain branch untested) — new
+  deterministic fake-pty test gates the result on the group-reap chain and
+  asserts exit values win + survivor flag lands.
+- Findings 10 + 12 + 13 + 14 (`kill(-1, ...)` broadcast footgun via
+  negation, pid-1 probe test passing for the wrong reason, EPERM→alive and
+  skip-path unpinned, convergent reap untested) — new
+  `isGroupTargetPid` chokepoint (`pid > 1`) shared by
+  `isProcessGroupAlive`/`reapProcessGroup`/`escalateKillUnix` with unit
+  tests; reap tests now use real detached groups (`waitForGroupAlive`
+  readiness gate) instead of pid-1 probes; spy-based EPERM and
+  skip-the-group-SIGKILL tests; convergent mid-window-death test.
+- Findings 16 + 17 (warning dropped from `returnDisplay`; POSIX-only
+  `kill -9` instruction emitted unconditionally) — `returnDisplay`
+  appended on aborted results; `appendAbortSurvivorWarning` is a no-op on
+  win32.
+
+2 **Defer** (documented known follow-ups, no behavioral risk):
+
+- Finding 6 (mock infra duplicated between
+  `shellExecutionService.main.test.ts` and `.fallback.test.ts`) —
+  test-infra dedup refactor across files this PR does not otherwise touch.
+- Finding 11 (zombie-leader can hold `kill(-pgid, 0)` alive until reaped;
+  worst case adds one reap window of latency before the survivor warning) —
+  accepted limitation, same class as the already-accepted PID-reuse races.
+
 ### Verification results (candidate head)
 
 - Targeted core files: 87 pass / 0 fail / 5 skip (POSIX/Windows gates),
@@ -211,3 +264,31 @@ behavior above needs explicit approval before implementation.
   `main`, so pre-existing/environmental, not this change. The sandbox no
   longer exports `LLXPRT_CAPABILITY_TOKEN` to child processes and the
   proxy rejects the token frozen in `/proc/1/environ`.
+
+### Verification results (OCR-r1 remediation tree, chain v3/v4)
+
+- v3 (remediation as left by the crashed session): build OK, tools OK
+  (21 pass shell-tool), cli OK (743/743 files, 9581 cases — the two v2
+  cli failures did not recur), format OK, **smoke OK** (the v2
+  credential-proxy failure was transient and resolved).
+- v3 core: FAIL, but only `skillManager.test.ts` +
+  `extensionSkillRefresh.test.ts` — reproduced identically on `main`
+  (worktree run: 19 pass / 2 fail, same files). Machine-state dependent
+  (real global user skills leak into the assertions; 55 discovered).
+  Filed as #3631. The v2-era `gitService`/`editor` failures did not
+  recur this run.
+- v3 caught real gaps the crashed session left: 2 lint errors
+  (prefer-const on the now-unreassigned `llmContent`; shell.ts at 822
+  lines vs 800 max) and 4 typecheck errors (mock signatures on
+  `vi.spyOn(process,'kill')` in 3 files; `signal: null` vs
+  `signal?: number` in the fake-pty drain test). Fixed by
+  typescriptexpert: `const`, `appendSurvivorNoticeToResult` moved to
+  shell-helpers.ts as an exported pure function, mock annotations
+  matched to `process.kill`'s type, exit-listener event widened to
+  `signal?: number | null` (mirroring the existing fake-pty test).
+- v4/v5 (post-fix chains): build OK, targeted core shell tests OK
+  (16 pass/4 skip in shellProcessKill alone; 29 pass/5 skip across the
+  three files), full tools suite OK (133/133 isolated files + runner
+  suites), lint OK (both shell.ts errors gone), format OK, root
+  typecheck exit 0 after one knock-on tuple-annotation fix
+  (`deliveredSignals` widened to `signal: string | number`).

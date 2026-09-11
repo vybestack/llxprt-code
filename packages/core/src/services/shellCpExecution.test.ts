@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, vi } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -131,6 +131,49 @@ describe.skipIf(isWindows)(
           reapGroup(handle.pid);
         }
       }, 20000);
+
+      it('flags survivingGroupMembersOnAbort when the group outlives the SIGKILL escalation', async () => {
+        // The established process.kill mock pattern (see
+        // shellExecutionService.main.test.ts), survivor variant: every group
+        // liveness probe (signal 0 on -pid) keeps reporting live members even
+        // after the SIGKILL, so the bounded reap window must expire. Real
+        // signals pass through so the child genuinely exits and the
+        // finalizer's gate runs.
+        const realKill = process.kill;
+        let pgid: number | undefined;
+        const killSpy = vi
+          .spyOn(process, 'kill')
+          .mockImplementation((pid: number, signal?: string | number) => {
+            if (signal === 0 && pid < 0) {
+              return true;
+            }
+            return signal === undefined ? realKill(pid) : realKill(pid, signal);
+          });
+
+        try {
+          const abortController = new AbortController();
+          const handle = await ShellExecutionService.execute(
+            'sleep 30',
+            os.tmpdir(),
+            () => undefined,
+            abortController.signal,
+            false,
+          );
+          pgid = handle.pid;
+          // Let the command reach its steady state before aborting.
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          abortController.abort();
+          const result: ShellExecutionResult = await handle.result;
+
+          expect(result.aborted).toBe(true);
+          // The bounded reap window expired with (probed) live members, so
+          // the result must carry the survivor flag for the tool layer.
+          expect(result.survivingGroupMembersOnAbort).toBe(true);
+        } finally {
+          killSpy.mockRestore();
+          reapGroup(pgid);
+        }
+      }, 30000);
     });
   },
 );
