@@ -37,7 +37,7 @@ const resolveKey = createImageApiKeyResolver({
 
 describe('image credential resolution', () => {
   afterEach(async () => {
-    await Promise.all(
+    await Promise.allSettled(
       directories
         .splice(0)
         .map((path) => rm(path, { recursive: true, force: true })),

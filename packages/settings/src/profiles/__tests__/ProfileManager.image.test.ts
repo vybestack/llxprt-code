@@ -302,6 +302,21 @@ describe('ProfileManager typed image profiles', () => {
     });
   });
 
+  it('preserves an explicitly standard profile type through save and load', async () => {
+    const profile: StandardProfile = {
+      version: 1,
+      type: 'standard',
+      provider: 'openai',
+      model: 'chat',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    await manager.saveProfile('standard-chat', profile);
+
+    expect(await manager.loadProfile('standard-chat')).toStrictEqual(profile);
+  });
+
   it('loads legacy files without a type as model profiles', async () => {
     await fs.writeFile(
       path.join(tempDir, 'legacy.json'),

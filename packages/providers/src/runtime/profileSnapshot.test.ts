@@ -20,7 +20,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type { ImageProfile, Profile } from '@vybestack/llxprt-code-settings';
 
-const imageProfileState = createImageProfileRuntimeState();
+let imageProfileState: ReturnType<typeof createImageProfileRuntimeState>;
 
 // Mock external dependencies of applyProfileSnapshot so we can verify
 // emission without bootstrapping the entire CLI runtime.
@@ -235,7 +235,8 @@ describe('buildModelProfileInfoPayload', () => {
 describe('ModelProfileChanged emission from applyProfileSnapshot', () => {
   beforeEach(() => {
     coreEvents.removeAllListeners();
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    imageProfileState = createImageProfileRuntimeState();
   });
 
   afterEach(() => {
@@ -277,6 +278,10 @@ describe('ModelProfileChanged emission from applyProfileSnapshot', () => {
 
       await loadProfileByName('next');
 
+      expect(profileManagerLoadProfileMock).toHaveBeenCalledWith('next');
+      expect(profileManagerLoadImageProfileMock.mock.calls).toStrictEqual(
+        linkedImage === undefined ? [] : [[linkedImage]],
+      );
       expect(observations).toStrictEqual([
         { model: 'next-model', image: linkedImage },
       ]);
@@ -354,7 +359,8 @@ describe('ModelProfileChanged emission from applyProfileSnapshot', () => {
 
 describe('buildRuntimeProfileSnapshot', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    imageProfileState = createImageProfileRuntimeState();
   });
 
   it('includes registered reasoning wire settings while excluding internal settings', () => {
@@ -448,7 +454,8 @@ async function loadProfileWithBalancerMembers(
 
 describe('getProfileByName', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    imageProfileState = createImageProfileRuntimeState();
   });
 
   it('adds load balancer member details from referenced profiles', async () => {

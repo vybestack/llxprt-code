@@ -173,6 +173,9 @@ describe('runtime image-profile transitions', () => {
     );
 
     await expect(load).rejects.toBeInstanceOf(ImageProfileNotFoundError);
+    await expect(load).rejects.toThrow(
+      "Image profile 'missing-image' not found",
+    );
     expect(appliedModel).toBe('old-model');
     expect(state.getActive()?.name).toBe('old-image');
   });

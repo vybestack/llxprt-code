@@ -121,7 +121,7 @@ const {
 
 describe('profile save while load balancer is active (issue #2479)', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     setActiveImageProfile(undefined);
     runtimeServicesState.activeProviderName = 'load-balancer';
     runtimeServicesState.ephemerals = {};
@@ -280,6 +280,17 @@ describe('profile save while load balancer is active (issue #2479)', () => {
     const saved = await saveProfileSnapshot('chat');
 
     expect(saved).toMatchObject({ type: 'model', imageProfile: 'artwork' });
+  });
+
+  it('preserves an explicitly standard profile type when saving', async () => {
+    runtimeServicesState.activeProviderName = 'anthropic';
+
+    const saved = await saveProfileSnapshot('standard-chat', {
+      type: 'standard',
+    });
+
+    expect(saved.type).toBe('standard');
+    expect(saveProfileMock).toHaveBeenCalledWith('standard-chat', saved);
   });
 
   it('standard-provider saves are unaffected', async () => {
