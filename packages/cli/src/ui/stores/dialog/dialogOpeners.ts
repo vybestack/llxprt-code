@@ -4,9 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { LlxprtExtension, IdeInfo } from '@vybestack/llxprt-code-core';
-import type { SubagentView } from '../../components/SubagentManagement/types.js';
-import type { ModelsDialogData } from '../../commands/types.js';
 import type {
   ListDialogKind,
   DialogPayloadMap,
@@ -20,105 +17,8 @@ import type {
  * from the store commands and threads it through the slash-command pipeline.
  */
 export type DialogOpeners = {
-  workspaceMigration: {
-    open: (payload: { extensions: LlxprtExtension[] }) => void;
-    close: () => void;
-  };
-  idePrompt: {
-    open: (payload: { ide: IdeInfo }) => void;
-    close: () => void;
-  };
-  folderTrust: {
-    open: (payload: Record<string, never>) => void;
-    close: () => void;
-  };
-  welcome: {
-    open: (payload: Record<string, never>) => void;
-    close: () => void;
-  };
-  theme: {
-    open: (payload: Record<string, never>) => void;
-    close: () => void;
-  };
-  settings: {
-    open: (payload: Record<string, never>) => void;
-    close: () => void;
-  };
-  auth: {
-    open: (payload: Record<string, never>) => void;
-    close: () => void;
-  };
-  oauthCode: {
-    open: (payload: Record<string, never>) => void;
-    close: () => void;
-  };
-  editor: {
-    open: (payload: Record<string, never>) => void;
-    close: () => void;
-  };
-  provider: {
-    open: (payload: Record<string, never>) => void;
-    close: () => void;
-  };
-  loadProfile: {
-    open: (payload: Record<string, never>) => void;
-    close: () => void;
-  };
-  createProfile: {
-    open: (payload: Record<string, never>) => void;
-    close: () => void;
-  };
-  profileList: {
-    open: (payload: Record<string, never>) => void;
-    close: () => void;
-  };
-  profileDetail: {
-    open: (payload: { profileName: string }) => void;
-    close: () => void;
-  };
-  profileEditor: {
-    open: (payload: { profileName: string }) => void;
-    close: () => void;
-  };
-  tools: {
-    open: (payload: { action: 'enable' | 'disable' }) => void;
-    close: () => void;
-  };
-  permissions: {
-    open: (payload: Record<string, never>) => void;
-    close: () => void;
-  };
-  logging: {
-    open: (payload: {
-      entries: DialogPayloadMap['logging']['entries'];
-    }) => void;
-    close: () => void;
-  };
-  subagent: {
-    open: (payload: {
-      initialView?: SubagentView;
-      initialName?: string;
-    }) => void;
-    close: () => void;
-  };
-  privacy: {
-    open: (payload: Record<string, never>) => void;
-    close: () => void;
-  };
-  models: {
-    open: (payload: ModelsDialogData) => void;
-    close: () => void;
-  };
-  sessionBrowser: {
-    open: (payload: Record<string, never>) => void;
-    close: () => void;
-  };
-  modelConfig: {
-    open: (payload: Record<string, never>) => void;
-    close: () => void;
-  };
-  policies: {
-    open: (payload: Record<string, never>) => void;
+  [Kind in ListDialogKind]: {
+    open: (payload: DialogPayloadMap[Kind]) => void;
     close: () => void;
   };
 };

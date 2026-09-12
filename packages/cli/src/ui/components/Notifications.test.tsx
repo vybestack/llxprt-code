@@ -9,8 +9,6 @@ import { render } from 'ink-testing-library';
 import type { HistoryItem } from '../types.js';
 import { StreamingState } from '../types.js';
 import { Notifications } from './Notifications.js';
-import { TerminalProvider } from '../stores/terminal/TerminalContext.js';
-import { createTerminalStore } from '../stores/terminal/terminalStore.js';
 import { TurnProvider } from '../stores/turn/TurnContext.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
 import { SettingsProfileProvider } from '../stores/settings/SettingsContext.js';
@@ -55,13 +53,11 @@ function renderNotifications(options: NotificationTestOptions = {}) {
           streamingState: options.streamingState ?? StreamingState.Idle,
         })}
       >
-        <TerminalProvider store={createTerminalStore()}>
-          <Notifications
-            startupWarnings={options.startupWarnings ?? []}
-            updateInfo={null}
-            history={options.history ?? []}
-          />
-        </TerminalProvider>
+        <Notifications
+          startupWarnings={options.startupWarnings ?? []}
+          updateInfo={null}
+          history={options.history ?? []}
+        />
       </TurnProvider>
     </SettingsProfileProvider>,
   );

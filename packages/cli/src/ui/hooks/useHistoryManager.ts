@@ -68,9 +68,12 @@ export function useRetractableHistory(
 
   const history = useStoreSelector(store, (state) => state.history);
 
+  // Bootstrap owns configured limits; SessionController only binds commands.
+  // An options-less consumer must not overwrite the owner's shared budget.
+  const ownsLimits = options !== undefined;
   useEffect(() => {
-    commands.setHistoryLimits(limits);
-  }, [commands, limits]);
+    if (ownsLimits) commands.setHistoryLimits(limits);
+  }, [commands, limits, ownsLimits]);
 
   return useMemo(
     () => ({

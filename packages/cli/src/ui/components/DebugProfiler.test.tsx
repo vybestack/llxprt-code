@@ -217,13 +217,11 @@ describe('DebugProfiler', () => {
 });
 
 describe('DebugProfiler Component', () => {
-  /** Component fixtures: profiler visible, height unconstrained. */
-  function renderProfiler() {
+  function renderProfiler(showDebugProfiler = true) {
     return render(
       <TerminalProvider
         store={createTerminalStore({
-          showDebugProfiler: true,
-          constrainHeight: false,
+          showDebugProfiler,
         })}
       >
         <DebugProfiler />
@@ -233,6 +231,24 @@ describe('DebugProfiler Component', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('renders profiler statistics only when enabled in the terminal store', () => {
+    const hidden = renderProfiler(false);
+    try {
+      expect(hidden.lastFrame()).toBe('');
+    } finally {
+      hidden.unmount();
+    }
+
+    const visible = renderProfiler(true);
+    try {
+      expect(visible.lastFrame()).toContain('Renders:');
+      expect(visible.lastFrame()).toContain('(total)');
+      expect(visible.lastFrame()).toContain('(idle)');
+    } finally {
+      visible.unmount();
+    }
   });
 
   it('should report an action when a CoreEvent is emitted', async () => {

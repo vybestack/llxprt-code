@@ -6,19 +6,33 @@
 
 import { describe, it, expect, vi } from 'bun:test';
 import { act } from 'react';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { ConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import {
   createMockSettings,
   renderHook,
+  renderWithProviders,
 } from '../../../../test-utils/render.js';
 import { createMockCommandContext } from '../../../../test-utils/mockCommandContext.js';
 import { AppDispatchProvider } from '../../../contexts/AppDispatchContext.js';
 import { useThemeCommand } from '../../../hooks/useThemeCommand.js';
 import { processSlashCommand } from '../../../hooks/slashCommandHandlers.js';
+import { SubagentManager } from '@vybestack/llxprt-code-core';
+import { ProfileManager } from '@vybestack/llxprt-code-settings';
+import { subagentCommand } from '../../../commands/subagentCommand.js';
+import { LoggingDialog } from '../../../components/LoggingDialog.js';
+import { useEditorSettings } from '../../../hooks/useEditorSettings.js';
 import { themeCommand } from '../../../commands/themeCommand.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { createSettingsProfileStore } from '../../../stores/settings/settingsStore.js';
 import { createTurnStore } from '../../../stores/turn/turnStore.js';
 
+import {
+  useCommandContext,
+  useManagers,
+} from '../../../hooks/slashCommandProcessorSupport.js';
 import { useSlashCommandActions } from './useSlashCommandActions.js';
 import { createDialogStore } from '../../../stores/dialog/dialogStore.js';
 import type { DialogOpeners } from '../../../stores/dialog/dialogOpeners.js';
@@ -30,6 +44,7 @@ const createCallback = () => vi.fn();
 function baseCallbacks() {
   return {
     openThemeDialog: createCallback(),
+    openEditorDialog: createCallback(),
     openProviderDialog: createCallback(),
     openLoadProfileDialog: createCallback(),
     openCreateProfileDialog: createCallback(),
@@ -118,6 +133,64 @@ describe('useSlashCommandActions', () => {
     }
   });
 
+  it('retains command-context identity for equal input fields and updates changed fields', () => {
+    const { dialogs } = withRealStoreDialogs();
+    const callbacks = { ...baseCallbacks(), dialogs };
+    const context = createMockCommandContext();
+    const turn = createTurnStore();
+    const settings = createMockSettings({});
+    const refreshStatic = () => {};
+    const toggleVimEnabled = async () => false;
+    const setCount = () => {};
+    const setPendingItem = () => {};
+    const reloadCommands = () => {};
+    const allowlist = new Set<string>();
+    const extensionsUpdateState: Parameters<
+      typeof useCommandContext
+    >[0]['extensionsUpdateState'] = new Map();
+    const { result, rerender, unmount } = renderHook(
+      ({ processing }) => {
+        const managers = useManagers(null);
+        const actions = useSlashCommandActions(callbacks);
+        return useCommandContext({
+          ...managers,
+          config: null,
+          agent: null,
+          settings,
+          addItem: turn.commands.addItem,
+          clearItems: turn.commands.clearItems,
+          loadHistory: turn.commands.loadHistory,
+          refreshStatic,
+          toggleVimEnabled,
+          setLlxprtMdFileCount: setCount,
+          actions,
+          alternateBuffer: true,
+          pendingItem: null,
+          setPendingItem,
+          sessionShellAllowlist: allowlist,
+          localIsProcessing: processing,
+          reloadCommands,
+          extensionsUpdateState,
+          todoContext: undefined,
+          recordingIntegration: undefined,
+          recordingSwapCallbacks: undefined,
+          stats: {
+            stats: context.session.stats,
+            updateHistoryTokenCount: setCount,
+          },
+        });
+      },
+      { initialProps: { processing: false } },
+    );
+    const initial = result.current;
+    rerender({ processing: false });
+    expect(result.current).toBe(initial);
+    rerender({ processing: true });
+    expect(result.current).not.toBe(initial);
+    expect(result.current.session.isProcessing).toBe(true);
+    unmount();
+  });
+
   it('maps all provided callbacks into slash command action surface', () => {
     const { dialogs } = withRealStoreDialogs();
     const callbacks = { ...baseCallbacks(), dialogs };
@@ -173,7 +246,11 @@ describe('useSlashCommandActions', () => {
       logging: { open: openSpy.logging, close: closeSpy.logging },
       subagent: { open: openSpy.subagent, close: closeSpy.subagent },
     };
-    const callbacks = { ...baseCallbacks(), dialogs: spiedDialogs };
+    const callbacks = {
+      ...baseCallbacks(),
+      dialogs: spiedDialogs,
+      openEditorDialog: () => spiedDialogs.editor.open({}),
+    };
 
     const { result } = renderHook(() => useSlashCommandActions(callbacks));
 
@@ -200,7 +277,7 @@ describe('useSlashCommandActions', () => {
     result.current.closeLoggingDialog();
     expect(closeSpy.logging).toHaveBeenCalledTimes(1);
 
-    result.current.openSubagentDialog({ initialView: SubagentView.LIST });
+    result.current.openSubagentDialog(SubagentView.LIST);
     expect(openSpy.subagent).toHaveBeenCalledWith({
       initialView: SubagentView.LIST,
     });
@@ -221,7 +298,11 @@ describe('useSlashCommandActions', () => {
       editor: { open: openSpy.editor, close: createCallback() },
       settings: { open: openSpy.settings, close: createCallback() },
     };
-    const callbacks = { ...baseCallbacks(), dialogs: spiedDialogs };
+    const callbacks = {
+      ...baseCallbacks(),
+      dialogs: spiedDialogs,
+      openEditorDialog: () => spiedDialogs.editor.open({}),
+    };
 
     const { result } = renderHook(() => useSlashCommandActions(callbacks));
 
@@ -252,7 +333,11 @@ describe('useSlashCommandActions', () => {
         close: createCallback(),
       },
     };
-    const callbacks = { ...baseCallbacks(), dialogs: spiedDialogs };
+    const callbacks = {
+      ...baseCallbacks(),
+      dialogs: spiedDialogs,
+      openEditorDialog: () => spiedDialogs.editor.open({}),
+    };
 
     const { result } = renderHook(() => useSlashCommandActions(callbacks));
 
@@ -307,35 +392,182 @@ describe('useSlashCommandActions', () => {
 });
 
 describe('logging data boundary', () => {
-  it('rejects malformed external log records before opening a dialog', () => {
+  it('opens writer-produced request, response and gitless tool records while skipping malformed input', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'logs-2536-'));
     const { store, dialogs } = withRealStoreDialogs();
     const { result, unmount } = renderHook(() =>
       useSlashCommandActions({ ...baseCallbacks(), dialogs }),
     );
     try {
-      expect(() =>
-        result.current.openLoggingDialog({
-          entries: [{ timestamp: '2026-09-11', type: 'request', provider: 42 }],
-        }),
-      ).toThrow('Expected string, received number');
-      expect(store.store.getState().requests).toHaveLength(0);
+      const writer = new ConversationFileWriter(directory);
+      await writer.writeRequest(
+        'test',
+        [
+          {
+            speaker: 'human',
+            blocks: [
+              { type: 'text', text: 'hello' },
+              { type: 'image', data: 'image' },
+            ],
+          },
+        ],
+        { conversationId: 'conversation' },
+      );
+      await writer.writeResponse('test', 'answer', {
+        duration: 42,
+        success: true,
+        conversationId: 'conversation',
+      });
+      await writer.writeToolCall('test', 'read_file', {
+        gitStats: null,
+        success: true,
+      });
+      const [file] = await readdir(directory);
+      const entries: unknown[] = (await readFile(join(directory, file), 'utf8'))
+        .trim()
+        .split('\n')
+        .map((line): unknown => JSON.parse(line));
       result.current.openLoggingDialog({
-        entries: [
-          { timestamp: '2026-09-11', type: 'request', provider: 'test' },
+        entries: [entries[0], { provider: 42 }, ...entries.slice(1)],
+      });
+      const request = store.store.getState().requests[0];
+      if (request.kind !== 'logging')
+        throw new Error('Expected logging dialog');
+      expect(request.payload.entries).toHaveLength(3);
+      expect(request.payload.entries[0].messages?.[0]).toMatchObject({
+        speaker: 'human',
+        blocks: [
+          { type: 'text', text: 'hello' },
+          { type: 'image', data: 'image' },
         ],
       });
+      expect(request.payload.entries[0].conversationId).toBe('conversation');
+      expect(request.payload.entries[1]).toMatchObject({
+        duration: 42,
+        success: true,
+        conversationId: 'conversation',
+      });
+      expect(request.payload.entries[2].gitStats).toBeNull();
+      const view = renderWithProviders(
+        <LoggingDialog entries={request.payload.entries} onClose={() => {}} />,
+      );
+      try {
+        expect(view.lastFrame()).toContain('hello');
+        expect(view.lastFrame()).toContain('answer');
+        expect(view.lastFrame()).toContain('read_file');
+      } finally {
+        view.unmount();
+      }
+    } finally {
+      unmount();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+  it('preserves the positional subagent deep-link view and name', () => {
+    const { store, dialogs } = withRealStoreDialogs();
+    const { result, unmount } = renderHook(() =>
+      useSlashCommandActions({ ...baseCallbacks(), dialogs }),
+    );
+    result.current.openSubagentDialog(SubagentView.SHOW, 'researcher');
+    expect(store.store.getState().requests).toStrictEqual([
+      {
+        kind: 'subagent',
+        payload: { initialView: SubagentView.SHOW, initialName: 'researcher' },
+      },
+    ]);
+    unmount();
+  });
+});
+
+describe('domain dialog routes', () => {
+  it('opens the selected subagent through the real slash-command processor', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'subagent-route-2536-'));
+    const { store, dialogs } = withRealStoreDialogs();
+    const turn = createTurnStore();
+    const { result, unmount } = renderHook(() =>
+      useSlashCommandActions({ ...baseCallbacks(), dialogs }),
+    );
+    try {
+      const profiles = new ProfileManager(join(directory, 'profiles'));
+      await profiles.saveProfile('testprofile', {
+        version: 1,
+        provider: 'openai',
+        model: 'test',
+        modelParams: {},
+        ephemeralSettings: {},
+      });
+      const subagents = new SubagentManager(
+        join(directory, 'subagents'),
+        profiles,
+      );
+      await subagents.saveSubagent(
+        'researcher',
+        'testprofile',
+        'Research the subject',
+      );
+      const context = createMockCommandContext();
+      await processSlashCommand(
+        {
+          commands: [subagentCommand],
+          config: null,
+          commandContext: {
+            ...context,
+            services: { ...context.services, subagentManager: subagents },
+          },
+          actions: result.current,
+          addItem: turn.commands.addItem,
+          addMessage: () => {},
+          setIsProcessing: () => {},
+          setLocalIsProcessing: () => {},
+          setPendingItem: () => {},
+          setSessionShellAllowlist: () => {},
+          setConfirmationRequest: () => {},
+          confirmationLogger: new DebugLogger('test'),
+          slashCommandLogger: new DebugLogger('test'),
+          beginSlashCommandAction: () => new AbortController(),
+          endSlashCommandAction: () => {},
+        },
+        '/subagent show researcher',
+      );
       expect(store.store.getState().requests).toStrictEqual([
         {
-          kind: 'logging',
+          kind: 'subagent',
           payload: {
-            entries: [
-              { timestamp: '2026-09-11', type: 'request', provider: 'test' },
-            ],
+            initialView: SubagentView.SHOW,
+            initialName: 'researcher',
           },
         },
       ]);
     } finally {
       unmount();
+      await rm(directory, { recursive: true, force: true });
     }
+  });
+
+  it('clears a stale editor banner when the slash opener starts a new session', () => {
+    const { store, dialogs } = withRealStoreDialogs();
+    const settings = createSettingsProfileStore({
+      editorError: 'previous failure',
+    });
+    const loaded = createMockSettings({});
+    const { result, unmount } = renderHook(() => {
+      const editor = useEditorSettings(
+        loaded,
+        dialogs,
+        () => {},
+        settings.commands.setEditorError,
+      );
+      return useSlashCommandActions({
+        ...baseCallbacks(),
+        dialogs,
+        openEditorDialog: editor.openEditorDialog,
+      });
+    });
+    act(() => result.current.openEditorDialog());
+    expect(settings.store.getState().editorError).toBeNull();
+    expect(store.store.getState().requests).toStrictEqual([
+      { kind: 'editor', payload: {} },
+    ]);
+    unmount();
   });
 });

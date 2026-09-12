@@ -98,8 +98,6 @@ export const useLoadProfileDialog = ({
     }
   }, [addMessage, dialogs, runtime]);
 
-  const closeDialog = useCallback(() => dialogs.loadProfile.close(), [dialogs]);
-
   const handleSelect = useCallback(
     async (profileName: string) => {
       try {
@@ -127,7 +125,6 @@ export const useLoadProfileDialog = ({
 
   return {
     openDialog,
-    closeDialog,
     profiles,
     handleSelect,
     isLoading,

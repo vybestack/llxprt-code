@@ -325,7 +325,7 @@ function useLoadProfileAction(
 
 function useDeleteProfileAction(
   addMessage: AddMessageFn,
-  dialogs: DialogOpeners | null,
+  dialogs: DialogOpeners,
   runtime: ReturnType<typeof useRuntimeApi>,
   loadProfiles: (options?: { showLoading?: boolean }) => Promise<void>,
   options?: { fromList?: boolean },
@@ -340,7 +340,7 @@ function useDeleteProfileAction(
           content: `Profile '${profileName}' deleted`,
           timestamp: new Date(),
         });
-        if (!fromList && dialogs !== null) {
+        if (!fromList) {
           dialogs.profileDetail.close();
           dialogs.profileList.open({});
           await loadProfiles();
@@ -529,7 +529,7 @@ function useProfileDispatchActions(
   );
   const deleteProfileFromList = useDeleteProfileAction(
     addMessage,
-    null,
+    dialogs,
     runtime,
     loadProfiles,
     { fromList: true },

@@ -198,8 +198,9 @@ function createTurnHistoryCommands(
   };
 
   const clearItems = (): void => {
+    const before = ledger.getState();
     ledger.clear();
-    publishHistory();
+    if (ledger.getState() !== before) publishHistory();
     // The conversation-id reset travels with the command so every caller
     // (hook, keybinding, slash command) gets the same semantics.
     ConversationContext.startNewConversation();
@@ -320,13 +321,14 @@ function createTurnStatusCommands(store: Store<TurnState>): TurnStatusCommands {
 
 export function createTurnStore(initial?: Partial<TurnState>): TurnStore {
   const ledger: HistoryLedger = createHistoryLedger();
-  const store = createStore<TurnState>({
-    ...initialTurnState(),
-    ...initial,
-  });
   if (initial?.history !== undefined) {
     ledger.load(initial.history);
   }
+  const store = createStore<TurnState>({
+    ...initialTurnState(),
+    ...initial,
+    history: projectHistory(ledger.getState()),
+  });
 
   const publishHistory = (): void => {
     store.setState((prev) => ({

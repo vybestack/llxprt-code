@@ -89,6 +89,24 @@ describe('useEditorSettings', () => {
     vi.restoreAllMocks();
   });
 
+  it('clears editor errors when exiting and opening a new dialog session', () => {
+    const { result, unmount } = renderHook(() =>
+      useEditorSettings(
+        mockLoadedSettings,
+        mockDialogs,
+        mockAddItem,
+        settingsStore.commands.setEditorError,
+      ),
+    );
+    settingsStore.commands.setEditorError('Editor unavailable');
+    act(() => result.current.exitEditorDialog());
+    expect(settingsStore.store.getState().editorError).toBeNull();
+    settingsStore.commands.setEditorError('Editor unavailable');
+    act(() => result.current.openEditorDialog());
+    expect(settingsStore.store.getState().editorError).toBeNull();
+    unmount();
+  });
+
   it('should initialize with dialog closed', () => {
     renderHook(
       () =>
@@ -362,9 +380,18 @@ describe('useEditorSettings', () => {
       result.current.handleEditorSelect(editorType, scope);
     });
 
+    expect(settingsStore.store.getState().editorError).toBe(
+      'Editor "vscode" is unavailable.',
+    );
     expect(mockLoadedSettings.setValue).not.toHaveBeenCalled();
     expect(mockAddItem).not.toHaveBeenCalled();
     expect(mockDispatch).not.toHaveBeenCalled();
+
+    act(() => result.current.exitEditorDialog());
+    expect(settingsStore.store.getState().editorError).toBeNull();
+    act(() => result.current.openEditorDialog());
+    expect(hasDialogRequest(mockStore, 'editor')).toBe(true);
+    expect(settingsStore.store.getState().editorError).toBeNull();
   });
 
   it('should not set preference for editors not allowed in sandbox', () => {
@@ -394,9 +421,18 @@ describe('useEditorSettings', () => {
       result.current.handleEditorSelect(editorType, scope);
     });
 
+    expect(settingsStore.store.getState().editorError).toBe(
+      'Editor "vscode" is unavailable.',
+    );
     expect(mockLoadedSettings.setValue).not.toHaveBeenCalled();
     expect(mockAddItem).not.toHaveBeenCalled();
     expect(mockDispatch).not.toHaveBeenCalled();
+
+    act(() => result.current.exitEditorDialog());
+    expect(settingsStore.store.getState().editorError).toBeNull();
+    act(() => result.current.openEditorDialog());
+    expect(hasDialogRequest(mockStore, 'editor')).toBe(true);
+    expect(settingsStore.store.getState().editorError).toBeNull();
   });
 
   it('should handle errors during editor selection', () => {

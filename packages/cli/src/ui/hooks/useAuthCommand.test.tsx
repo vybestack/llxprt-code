@@ -4,55 +4,50 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { act } from 'react';
-import { describe, expect, it, vi } from 'bun:test';
+import { act } from 'react';
+import { describe, expect, it } from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
+import { hasDialogRequest } from '../../test-utils/dialogStore.js';
 import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
-import type { AppAction } from '../reducers/appReducer.js';
+import {
+  appReducer,
+  initialAppState,
+  type AppAction,
+} from '../reducers/appReducer.js';
 import { useAuthCommand } from './useAuthCommand.js';
 import { SettingScope } from '../../config/settings.js';
-import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
-
-const createWrapper = (dispatch: React.Dispatch<AppAction>) =>
-  function AuthCommandTestWrapper({
-    children,
-  }: {
-    children: React.ReactNode;
-  }): React.JSX.Element {
-    return (
-      <AppDispatchProvider value={dispatch}>{children}</AppDispatchProvider>
-    );
-  };
-
-function createDialogs() {
-  return {
-    auth: { open: vi.fn(), close: vi.fn() },
-  } as unknown as DialogOpeners;
-}
+import { createDialogOpeners } from '../stores/dialog/dialogOpeners.js';
+import { createDialogStore } from '../stores/dialog/dialogStore.js';
+import { createSettingsProfileStore } from '../stores/settings/settingsStore.js';
 
 describe('useAuthCommand', () => {
-  it('keeps relogin gated when an auth option is selected', async () => {
-    const appDispatch = vi.fn<React.Dispatch<AppAction>>();
-    const setAuthError = vi.fn<(error: string | null) => void>();
-    const dialogs = createDialogs();
-
-    const { result } = renderHook(() => useAuthCommand(dialogs, setAuthError), {
-      wrapper: createWrapper(appDispatch),
+  it('dismisses auth and clears its error without releasing the relogin gate', async () => {
+    const store = createDialogStore();
+    const dialogs = createDialogOpeners(store);
+    const settings = createSettingsProfileStore({
+      authError: 'Authentication failed',
     });
+    let appState = { ...initialAppState, needsRelogin: true };
+    const dispatch = (action: AppAction): void => {
+      appState = appReducer(appState, action);
+    };
+    dialogs.auth.open({});
+    const { result, unmount } = renderHook(
+      () => useAuthCommand(dialogs, settings.commands.setAuthError),
+      {
+        wrapper: ({ children }) => (
+          <AppDispatchProvider value={dispatch}>{children}</AppDispatchProvider>
+        ),
+      },
+    );
 
     await act(async () => {
       await result.current.handleAuthSelect('anthropic', SettingScope.User);
     });
 
-    expect(dialogs.auth.close).toHaveBeenCalledTimes(1);
-    expect(setAuthError).toHaveBeenCalledWith(null);
-    expect(appDispatch).toHaveBeenCalledWith({
-      type: 'SET_AUTH_ERROR',
-      payload: null,
-    });
-    expect(appDispatch).not.toHaveBeenCalledWith({
-      type: 'SET_NEEDS_RELOGIN',
-      payload: false,
-    });
+    expect(hasDialogRequest(store, 'auth')).toBe(false);
+    expect(settings.store.getState().authError).toBeNull();
+    expect(appState.needsRelogin).toBe(true);
+    unmount();
   });
 });

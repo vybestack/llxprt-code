@@ -33,7 +33,7 @@ export function useUnconfiguredProviderGuidance({
     if (guidanceShown.current) {
       return;
     }
-    if (isWelcomeDialogOpen) {
+    if (selectDialogOpen(store.store.getState(), 'welcome')) {
       return;
     }
     if (hasActiveProvider) {
@@ -44,5 +44,5 @@ export function useUnconfiguredProviderGuidance({
       { type: MessageType.INFO, text: UNCONFIGURED_GUIDANCE },
       Date.now(),
     );
-  }, [hasActiveProvider, addItem, isWelcomeDialogOpen]);
+  }, [hasActiveProvider, addItem, isWelcomeDialogOpen, store]);
 }

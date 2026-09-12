@@ -20,7 +20,10 @@ describe('UI store architecture contracts', () => {
         `AppContainerRuntime.tsx is missing the view contract anchor: ${anchor}`,
       );
     }
-    const viewContract = source.slice(anchorIndex);
+    const contractEnd = source.indexOf('\n}', anchorIndex);
+    if (contractEnd < 0)
+      throw new Error('AppRuntimeViewProps has no closing brace');
+    const viewContract = source.slice(anchorIndex, contractEnd + 2);
     expect(viewContract).not.toMatch(/\b(?:bootstrap|layout)\s*:/);
     expect(source).not.toMatch(
       /\b(?:bootstrap|layout)=\{(?:bootstrap|layout)\}/,

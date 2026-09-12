@@ -5,7 +5,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { LogEntry } from '../../components/LoggingDialog.js';
+import type { LogEntry } from '../../utils/logEntry.js';
 import { createStore, type Store } from '../createStore.js';
 import type { LlxprtExtension, IdeInfo } from '@vybestack/llxprt-code-core';
 import type { SubagentView } from '../../components/SubagentManagement/types.js';
@@ -224,19 +224,15 @@ function createExtensionConfirmCommands(
 export function createDialogStore(): DialogStore {
   const store = createStore<DialogState>(initialDialogState());
 
+  const extensionConfirmCommands = createExtensionConfirmCommands(store);
+
   const openDialog = (request: DialogRequest): void => {
     if (request.kind === 'confirmation') {
       store.setState((prev) => ({ ...prev, confirmationRequest: request }));
       return;
     }
     if (request.kind === 'extensionUpdateConfirm') {
-      store.setState((prev) => ({
-        ...prev,
-        confirmUpdateLlxprtExtensionRequests: [
-          ...prev.confirmUpdateLlxprtExtensionRequests,
-          request,
-        ],
-      }));
+      extensionConfirmCommands.addConfirmUpdateExtensionRequest(request);
       return;
     }
     store.setState((prev) => {
@@ -284,8 +280,6 @@ export function createDialogStore(): DialogStore {
   ): void => {
     store.setState((prev) => ({ ...prev, confirmationRequest: request }));
   };
-
-  const extensionConfirmCommands = createExtensionConfirmCommands(store);
 
   return {
     store,

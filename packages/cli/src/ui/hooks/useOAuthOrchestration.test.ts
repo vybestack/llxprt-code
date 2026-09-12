@@ -85,10 +85,6 @@ describe('useOAuthOrchestration', () => {
 
     expect(setAuthError).toHaveBeenCalledWith(null);
     expect(appDispatch).toHaveBeenCalledWith({
-      type: 'SET_AUTH_ERROR',
-      payload: null,
-    });
-    expect(appDispatch).toHaveBeenCalledWith({
       type: 'SET_NEEDS_RELOGIN',
       payload: false,
     });

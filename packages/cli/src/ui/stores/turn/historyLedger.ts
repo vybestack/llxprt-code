@@ -108,6 +108,11 @@ function trimHistoryState(
   state: HistoryState,
   limits: HistoryLimits,
 ): HistoryState {
+  if (
+    state.entries.length <= limits.maxItems &&
+    state.totalBytes <= limits.maxBytes
+  )
+    return state;
   const itemStart = Number.isFinite(limits.maxItems)
     ? Math.max(0, state.entries.length - limits.maxItems)
     : 0;
@@ -164,21 +169,17 @@ function updateHistoryItem(
   const oldEntry = previous.entries[index];
   const newUpdates =
     typeof updates === 'function' ? updates(oldEntry.item) : updates;
+  if (newUpdates === oldEntry.item) return trimHistoryState(previous, limits);
   const updatedItem: HistoryItem = {
     ...oldEntry.item,
     ...newUpdates,
   } as HistoryItem;
   const updatedEntry = createHistoryEntry(updatedItem, limits.maxBytes);
-  const entries =
-    updatedEntry === undefined
-      ? previous.entries
-      : previous.entries.map((entry, entryIndex) =>
-          entryIndex === index ? updatedEntry : entry,
-        );
-  const totalBytes =
-    updatedEntry === undefined
-      ? previous.totalBytes
-      : previous.totalBytes - oldEntry.bytes + updatedEntry.bytes;
+  if (updatedEntry === undefined) return trimHistoryState(previous, limits);
+  const entries = previous.entries.map((entry, entryIndex) =>
+    entryIndex === index ? updatedEntry : entry,
+  );
+  const totalBytes = previous.totalBytes - oldEntry.bytes + updatedEntry.bytes;
   return trimHistoryState({ entries, totalBytes }, limits);
 }
 

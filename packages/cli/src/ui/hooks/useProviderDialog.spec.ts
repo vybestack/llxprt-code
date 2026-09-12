@@ -68,7 +68,6 @@ function createRuntimeApiStub(overrides?: Partial<RuntimeApiStub>): {
 
 function renderProviderDialog(
   api: RuntimeApiStub,
-  store: DialogStore,
   dialogs: DialogOpeners,
   addMessage: ReturnType<typeof vi.fn>,
 ) {
@@ -94,7 +93,7 @@ describe('useProviderDialog', () => {
   describe('openDialog with an active provider', () => {
     it('loads providers, records the active provider, and opens the dialog', () => {
       const { api, store, dialogs, addMessage } = createRuntimeApiStub();
-      const { result } = renderProviderDialog(api, store, dialogs, addMessage);
+      const { result } = renderProviderDialog(api, dialogs, addMessage);
 
       act(() => {
         result.current.openDialog();
@@ -116,7 +115,7 @@ describe('useProviderDialog', () => {
           throw new Error(NO_ACTIVE_PROVIDER_ERROR_MESSAGE);
         }),
       });
-      const { result } = renderProviderDialog(api, store, dialogs, addMessage);
+      const { result } = renderProviderDialog(api, dialogs, addMessage);
 
       act(() => {
         result.current.openDialog();
@@ -140,7 +139,7 @@ describe('useProviderDialog', () => {
           throw new Error('runtime not registered');
         }),
       });
-      const { result } = renderProviderDialog(api, store, dialogs, addMessage);
+      const { result } = renderProviderDialog(api, dialogs, addMessage);
 
       act(() => {
         result.current.openDialog();
@@ -172,7 +171,7 @@ describe('useProviderDialog', () => {
         }),
         setProvider: vi.fn().mockResolvedValue(switchResult),
       });
-      const { result } = renderProviderDialog(api, store, dialogs, addMessage);
+      const { result } = renderProviderDialog(api, dialogs, addMessage);
 
       act(() => {
         result.current.openDialog();
@@ -208,7 +207,7 @@ describe('useProviderDialog', () => {
       const { api, store, dialogs, addMessage } = createRuntimeApiStub({
         setProvider: vi.fn().mockRejectedValue(new Error('network down')),
       });
-      const { result } = renderProviderDialog(api, store, dialogs, addMessage);
+      const { result } = renderProviderDialog(api, dialogs, addMessage);
 
       act(() => {
         result.current.openDialog();
@@ -239,7 +238,7 @@ describe('useProviderDialog', () => {
           throw new Error('runtime registry corrupted');
         }),
       });
-      const { result } = renderProviderDialog(api, store, dialogs, addMessage);
+      const { result } = renderProviderDialog(api, dialogs, addMessage);
 
       act(() => {
         result.current.openDialog();

@@ -631,99 +631,27 @@ describe('SessionController', () => {
     unmount();
   });
 
-  it('should handle warnings from appReducer', async () => {
+  it('propagates theme invalidation and relogin state through the session', () => {
     let contextValue: SessionContextType | undefined;
-
     const TestComponent = () => {
       contextValue = React.useContext(SessionContext);
       return null;
     };
-
     const { unmount, rerender } = render(
       <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
     );
-
-    const warningKey = 'test-warning';
-    const warningMessage = 'This is a test warning';
-
-    // Use the appDispatch from context
-    contextValue?.appDispatch({
-      type: 'SET_WARNING',
-      payload: { key: warningKey, message: warningMessage },
-    });
-
-    // Re-render to get updated state
+    if (!contextValue) throw new Error('Missing session context');
+    contextValue.appDispatch({ type: 'REFRESH_THEME' });
+    contextValue.appDispatch({ type: 'SET_NEEDS_RELOGIN', payload: true });
     rerender(
       <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
     );
-
-    expect(contextValue!.appState.warnings.get(warningKey)).toBe(
-      warningMessage,
-    );
-
-    contextValue?.appDispatch({
-      type: 'CLEAR_WARNING',
-      payload: warningKey,
-    });
-
-    rerender(
-      <SessionController config={mockConfig as Config}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    expect(contextValue!.appState.warnings.has(warningKey)).toBe(false);
-
-    unmount();
-  });
-
-  it('should handle error actions from appReducer', async () => {
-    let contextValue: SessionContextType | undefined;
-
-    const TestComponent = () => {
-      contextValue = React.useContext(SessionContext);
-      return null;
-    };
-
-    const { unmount, rerender } = render(
-      <SessionController config={mockConfig as Config}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    const errorMessage = 'Test error message';
-
-    contextValue?.appDispatch({
-      type: 'SET_AUTH_ERROR',
-      payload: errorMessage,
-    });
-
-    // Re-render to get updated state
-    rerender(
-      <SessionController config={mockConfig as Config}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    expect(contextValue!.appState.errors.auth).toBe(errorMessage);
-
-    contextValue?.appDispatch({
-      type: 'SET_AUTH_ERROR',
-      payload: null,
-    });
-
-    rerender(
-      <SessionController config={mockConfig as Config}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    expect(contextValue!.appState.errors.auth).toBe(null);
-
+    expect(contextValue.appState.themeRevision).toBe(1);
+    expect(contextValue.appState.needsRelogin).toBe(true);
     unmount();
   });
 });

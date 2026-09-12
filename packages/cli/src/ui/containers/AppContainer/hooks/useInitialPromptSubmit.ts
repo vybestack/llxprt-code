@@ -6,11 +6,14 @@
 
 import { useEffect, useRef } from 'react';
 import { isSlashCommand } from '../../../utils/commandUtils.js';
-import type { DialogStore } from '../../../stores/dialog/dialogStore.js';
+import type {
+  DialogStore,
+  DialogKind,
+} from '../../../stores/dialog/dialogStore.js';
 import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 
 /** Dialog kinds whose presence defers the initial prompt submission. */
-const BLOCKING_DIALOG_KINDS = [
+const BLOCKING_DIALOG_KINDS: ReadonlySet<DialogKind> = new Set<DialogKind>([
   'workspaceMigration',
   'idePrompt',
   'folderTrust',
@@ -23,7 +26,7 @@ const BLOCKING_DIALOG_KINDS = [
   'createProfile',
   'privacy',
   'models',
-] as const;
+]);
 
 interface UseInitialPromptSubmitParams {
   initialPrompt: string | undefined;
@@ -44,9 +47,7 @@ export function useInitialPromptSubmit({
 }: UseInitialPromptSubmitParams): void {
   const initialPromptSubmittedRef = useRef<'idle' | 'pending' | 'done'>('idle');
   const blockingDialogOpen = useStoreSelector(store.store, (state) =>
-    state.requests.some((r) =>
-      (BLOCKING_DIALOG_KINDS as readonly string[]).includes(r.kind),
-    ),
+    state.requests.some((r) => BLOCKING_DIALOG_KINDS.has(r.kind)),
   );
 
   useEffect(() => {

@@ -13,7 +13,8 @@ import {
   vi,
   type Mock,
 } from 'bun:test';
-import { act } from 'react';
+import { act, useEffect } from 'react';
+import { createTurnStore } from '../stores/turn/turnStore.js';
 import { renderHook } from '../../test-utils/render.js';
 import { useUnconfiguredProviderGuidance } from './useUnconfiguredProviderGuidance.js';
 import { createDialogStore } from '../stores/dialog/dialogStore.js';
@@ -28,6 +29,25 @@ describe('useUnconfiguredProviderGuidance', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('suppresses guidance when welcome opens earlier in the same effect flush', () => {
+    const store = createDialogStore();
+    const turn = createTurnStore();
+    const { unmount } = renderHook(() => {
+      useEffect(() => {
+        store.commands.openDialog({ kind: 'welcome', payload: {} });
+      }, []);
+      useUnconfiguredProviderGuidance({
+        hasActiveProvider: false,
+        addItem: turn.commands.addItem,
+        store,
+      });
+    });
+    expect(turn.store.getState().history).toHaveLength(0);
+    act(() => store.commands.closeDialog('welcome'));
+    expect(turn.store.getState().history).toHaveLength(1);
+    unmount();
   });
 
   it('shows /setup guidance when no provider is active and welcome dialog is closed', () => {

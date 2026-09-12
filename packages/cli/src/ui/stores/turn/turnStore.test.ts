@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import { ConversationContext } from '../../../utils/ConversationContext.js';
 import type {
   HistoryItem,
   HistoryItemUser,
@@ -23,6 +24,37 @@ function userItem(text: string): HistoryItemUser {
 }
 
 describe('createTurnStore', () => {
+  it('projects seeded history through ledger limits before the first read', () => {
+    const history: HistoryItem[] = Array.from({ length: 401 }, (_, id) => ({
+      id,
+      type: 'info',
+      text: String(id),
+    }));
+    const { store, commands } = createTurnStore({ history });
+    expect(store.getState().history).toHaveLength(400);
+    const first = store.getState().history[0];
+    commands.updateItem(-1, { text: 'absent' });
+    expect(store.getState().history[0]).toBe(first);
+  });
+
+  it('does not publish unchanged limits, identity updates or repeated clears', () => {
+    const { store, commands } = createTurnStore();
+    const id = commands.addItem({ type: 'info', text: 'retained' });
+    const history = store.getState().history;
+    let notifications = 0;
+    store.subscribe(() => {
+      notifications++;
+    });
+    commands.setHistoryLimits({ maxItems: 400, maxBytes: 4 * 1024 * 1024 });
+    commands.updateItem(id, (item) => item);
+    expect(store.getState().history).toBe(history);
+    expect(notifications).toBe(0);
+    commands.clearItems();
+    const clearedNotifications = notifications;
+    commands.clearItems();
+    expect(notifications).toBe(clearedNotifications);
+  });
+
   it('starts with the documented defaults', () => {
     const { store } = createTurnStore();
     expect(store.getState()).toStrictEqual({
@@ -130,6 +162,33 @@ describe('createTurnStore', () => {
       expect(store.getState().history).toBe(before);
     });
 
+    for (const populated of [false, true]) {
+      it(`clearItems resets the conversation context with ${populated ? 'populated' : 'empty'} history`, () => {
+        const previousContext = ConversationContext.getContext();
+        try {
+          ConversationContext.startNewConversation();
+          ConversationContext.setParentId('previous-message');
+          const previousId = ConversationContext.getContext().conversationId;
+          const { commands } = createTurnStore();
+          if (populated) commands.addItem(userItem('previous turn'));
+
+          commands.clearItems();
+
+          const context = ConversationContext.getContext();
+          expect(context.conversationId).toBeDefined();
+          expect(context.conversationId).not.toBe(previousId);
+          expect(context.parentId).toBeUndefined();
+
+          commands.clearItems();
+          expect(ConversationContext.getContext().conversationId).not.toBe(
+            context.conversationId,
+          );
+        } finally {
+          ConversationContext.setContext(previousContext);
+        }
+      });
+    }
+
     it('clearItems empties history', () => {
       const { store, commands } = createTurnStore();
       commands.addItem(userItem('a'), 1_000);
@@ -144,10 +203,11 @@ describe('createTurnStore', () => {
       const first: HistoryItem = { id: 11, type: 'user', text: 'one' };
       const second: HistoryItem = { id: 12, type: 'info', text: 'two' };
 
-      commands.loadHistory([first, second]);
+      const seeded = [first, second];
+      commands.loadHistory(seeded);
 
       const history = store.getState().history;
-      expect(history).not.toBe([first, second]);
+      expect(history).not.toBe(seeded);
       expect(history[0]).toBe(first);
       expect(history[1]).toBe(second);
     });

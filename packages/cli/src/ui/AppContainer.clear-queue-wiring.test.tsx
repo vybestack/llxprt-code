@@ -9,11 +9,12 @@ import { act, memo, useEffect } from 'react';
 import { Config } from '@vybestack/llxprt-code-core';
 import {
   renderWithProviders,
+  renderHook,
   createMockSettings,
   waitFor,
 } from '../test-utils/render.js';
 import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
-import { buildAppCommands } from './AppContainerRuntime.js';
+import { buildAppCommands, useAppStores } from './AppContainerRuntime.js';
 import {
   AppCommandsProvider,
   useAppCommands,
@@ -190,5 +191,22 @@ describe('AppContainer queue command wiring', () => {
     } finally {
       unmount();
     }
+  });
+});
+
+describe('app store initialization', () => {
+  it('exposes the configured model on the first render and retains the stores', () => {
+    const renderedModels: string[] = [];
+    const runtime = { getModel: () => 'configured-model' };
+    const { result, rerender, unmount } = renderHook(() => {
+      const stores = useAppStores(runtime);
+      renderedModels.push(stores.settingsStore.store.getState().currentModel);
+      return stores;
+    });
+    expect(renderedModels[0]).toBe('configured-model');
+    const initial = result.current.settingsStore;
+    rerender();
+    expect(result.current.settingsStore).toBe(initial);
+    unmount();
   });
 });

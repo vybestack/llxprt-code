@@ -32,8 +32,9 @@ export const useEditorSettings = (
   setEditorError: (error: string | null) => void,
 ): UseEditorSettingsReturn => {
   const openEditorDialog = useCallback(() => {
+    setEditorError(null);
     dialogs.editor.open({});
-  }, [dialogs]);
+  }, [dialogs, setEditorError]);
 
   const handleEditorSelect = useCallback(
     (editorType: EditorType | undefined, scope: SettingScope) => {
@@ -69,8 +70,9 @@ export const useEditorSettings = (
   );
 
   const exitEditorDialog = useCallback(() => {
+    setEditorError(null);
     dialogs.editor.close();
-  }, [dialogs]);
+  }, [dialogs, setEditorError]);
 
   return {
     openEditorDialog,

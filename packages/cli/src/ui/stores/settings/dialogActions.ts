@@ -7,6 +7,7 @@
 /** Loaders stay owned by dialogs; slash commands consume the committed callbacks. */
 export interface DialogActions {
   openThemeDialog: () => void;
+  openEditorDialog: () => void;
   openProviderDialog: () => void;
   openLoadProfileDialog: () => void | Promise<void>;
   openCreateProfileDialog: () => void;
@@ -30,6 +31,7 @@ function uninitializedDialogAction(): never {
 export function initialDialogActions(): DialogActions {
   return {
     openThemeDialog: uninitializedDialogAction,
+    openEditorDialog: uninitializedDialogAction,
     openProviderDialog: uninitializedDialogAction,
     openLoadProfileDialog: uninitializedDialogAction,
     openCreateProfileDialog: uninitializedDialogAction,

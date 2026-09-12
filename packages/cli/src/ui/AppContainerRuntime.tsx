@@ -90,7 +90,13 @@ export interface AppContainerRuntimeProps {
 }
 
 /** Stores retain identity across renders and StrictMode effect replay. */
-function useAppStores() {
+export function useAppStores(runtime: Pick<SlashCommandRuntime, 'getModel'>): {
+  dialogStore: DialogStore;
+  terminalStore: TerminalStore;
+  turnStore: TurnStore;
+  settingsStore: SettingsProfileStore;
+  dialogOpeners: DialogOpeners;
+} {
   const storesRef = useRef<{
     dialogStore: DialogStore;
     terminalStore: TerminalStore;
@@ -101,7 +107,9 @@ function useAppStores() {
     dialogStore: createDialogStore(),
     terminalStore: createTerminalStore(),
     turnStore: createTurnStore(),
-    settingsStore: createSettingsProfileStore(),
+    settingsStore: createSettingsProfileStore({
+      currentModel: runtime.getModel(),
+    }),
   };
   const stores = storesRef.current;
   const dialogOpeners = useMemo(
@@ -149,7 +157,6 @@ function useAppDialogsRuntime(
     recordingIntegration: bootstrap.recordingIntegration,
     recordingIntegrationRef: bootstrap.recordingIntegrationRef,
     runtime: bootstrap.runtime,
-    setLlxprtMdFileCount: bootstrap.setLlxprtMdFileCount,
     suppressStartupWelcome: props.suppressStartupWelcome,
     shouldShowIdePrompt: bootstrap.shouldShowIdePrompt,
     currentIDE: bootstrap.currentIDE,
@@ -257,7 +264,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     turnStore,
     settingsStore,
     dialogOpeners,
-  } = useAppStores();
+  } = useAppStores(props.slashCommandRuntime);
   const bootstrap = useAppBootstrap({
     ...props,
     terminalStore,

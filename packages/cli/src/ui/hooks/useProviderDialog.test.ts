@@ -7,6 +7,7 @@
 import { describe, expect, it, vi } from 'bun:test';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
+import { hasDialogRequest } from '../../test-utils/dialogStore.js';
 import { createDialogStore } from '../stores/dialog/dialogStore.js';
 import { createDialogOpeners } from '../stores/dialog/dialogOpeners.js';
 import { MessageType } from '../types.js';
@@ -56,7 +57,7 @@ describe('provider switch notices', () => {
     expect(messages.every((message) => message.type === MessageType.INFO)).toBe(
       true,
     );
-    expect(store.store.getState().requests).toHaveLength(0);
+    expect(hasDialogRequest(store, 'provider')).toBe(false);
     unmount();
   });
 });

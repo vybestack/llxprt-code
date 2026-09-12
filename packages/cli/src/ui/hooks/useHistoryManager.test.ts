@@ -12,6 +12,21 @@ import { createTurnStore } from '../stores/turn/turnStore.js';
 import { ToolCallStatus, type HistoryItem } from '../types.js';
 
 describe('useHistoryManager', () => {
+  it('does not reset owner limits when an options-less consumer mounts', () => {
+    const store = createTurnStore();
+    const owner = renderHook(() =>
+      useHistory(store, { maxItems: -1, maxBytes: -1 }),
+    );
+    const reader = renderHook(() => useHistory(store));
+    act(() => {
+      for (let index = 0; index < 401; index++)
+        store.commands.addItem({ type: 'info', text: String(index) });
+    });
+    expect(store.store.getState().history).toHaveLength(401);
+    reader.unmount();
+    owner.unmount();
+  });
+
   it('retains history beyond both default display budgets with unlimited options', () => {
     const turnStore = createTurnStore();
     const { result, unmount } = renderHook(() =>

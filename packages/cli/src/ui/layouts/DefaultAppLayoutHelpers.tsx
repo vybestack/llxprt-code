@@ -183,7 +183,6 @@ export function useStaticItems(
 
 export function usePendingItems(
   pendingHistoryItems: HistoryItemWithoutId[],
-  pendingHistoryItemRef: React.RefObject<DOMElement | null>,
   config: SlashCommandRuntime,
   mainAreaWidth: number,
   constrainHeight: boolean,
@@ -245,7 +244,6 @@ export function usePendingElement(
 ): React.ReactElement {
   const pendingItems = usePendingItems(
     pendingHistoryItems,
-    pendingHistoryItemRef,
     config,
     mainAreaWidth,
     constrainHeight,
@@ -385,7 +383,6 @@ export function useScrollableContent(
 
   const pendingItems = usePendingItems(
     pendingHistoryItems,
-    pendingHistoryItemRef,
     config,
     mainAreaWidth,
     constrainHeight,

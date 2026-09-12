@@ -74,69 +74,26 @@ export interface AppDialogsParams {
   recordingIntegration?: RecordingIntegration;
   recordingIntegrationRef: React.MutableRefObject<RecordingIntegration | null>;
   runtime: ReturnType<typeof useRuntimeApi>;
-  setLlxprtMdFileCount: (count: number) => void;
   suppressStartupWelcome?: boolean;
   /** IDE nudge visibility + identity from bootstrap; open state lives in DialogStore. */
   shouldShowIdePrompt: boolean | null | undefined;
   currentIDE: IdeInfo | undefined;
 }
 
-/**
- * Composer/input-plane flags read through narrow store selectors; the setters
- * are the TerminalStore/SettingsProfileStore commands. The former useState
- * families (debug/auth errors, shell mode, escape prompt, queue error,
- * embedded shell focus) moved here in slice D.
- */
+/** Only the queue timeout subscribes here; other domains read their own slices. */
 function useDialogsStoreState(
   terminalStore: TerminalStore,
   settingsStore: SettingsProfileStore,
 ) {
-  const debugMessage = useStoreSelector(
-    settingsStore.store,
-    (s) => s.debugMessage,
-  );
-  const authError = useStoreSelector(settingsStore.store, (s) => s.authError);
-  const shellModeActive = useStoreSelector(
-    terminalStore.store,
-    (s) => s.shellModeActive,
-  );
-  const ideContextState = useStoreSelector(
-    settingsStore.store,
-    (s) => s.ideContextState,
-  );
-  const showEscapePrompt = useStoreSelector(
-    terminalStore.store,
-    (s) => s.showEscapePrompt,
-  );
-  const embeddedShellFocused = useStoreSelector(
-    terminalStore.store,
-    (s) => s.embeddedShellFocused,
-  );
   const queueErrorMessage = useStoreSelector(
     terminalStore.store,
     (s) => s.queueErrorMessage,
   );
-  // toggleCorgiMode is retained as a no-op interface required by slash commands;
-  // the _corgiMode state it previously toggled was never read or rendered.
-  const toggleCorgiMode = useCallback(() => {}, []);
-  const handleExternalEditorOpen = useCallback(() => {}, []);
   return {
-    debugMessage,
-    authError,
-    shellModeActive,
-    ideContextState,
-    showEscapePrompt,
-    embeddedShellFocused,
     queueErrorMessage,
-    setDebugMessage: settingsStore.commands.setDebugMessage,
     setAuthError: settingsStore.commands.setAuthError,
-    setShellModeActive: terminalStore.commands.setShellModeActive,
     setIdeContextState: settingsStore.commands.setIdeContextState,
-    handleEscapePromptChange: terminalStore.commands.setShowEscapePrompt,
-    setEmbeddedShellFocused: terminalStore.commands.setEmbeddedShellFocused,
     setQueueErrorMessage: terminalStore.commands.setQueueErrorMessage,
-    toggleCorgiMode,
-    handleExternalEditorOpen,
   };
 }
 
@@ -186,7 +143,6 @@ function useDialogsCore(
 }
 
 function useQueueErrorTimeoutWiring(
-  config: AppDialogsParams['config'],
   st: ReturnType<typeof useDialogsStoreState>,
 ) {
   useQueueErrorTimeout({
@@ -260,6 +216,7 @@ function useDialogsAuthProviders(
     handleAuthSelect: auth.handleAuthSelect,
     openProviderDialog: provider.openDialog,
     handleEditorSelect: editor.handleEditorSelect,
+    openEditorDialog: editor.openEditorDialog,
     handleProviderSelect: provider.handleSelect,
     providerData: {
       providers: provider.providers,
@@ -316,7 +273,7 @@ function useDialogsAuth(
       dialogs.idePrompt.close();
     }
   }, [p.shouldShowIdePrompt, p.currentIDE, dialogs]);
-  useQueueErrorTimeoutWiring(config, st);
+  useQueueErrorTimeoutWiring(st);
   const authProviders = useDialogsAuthProviders(
     p,
     st,
@@ -515,6 +472,7 @@ function useDialogActionsSync(
   const dialogActions = useShallowMemo(
     () => ({
       openThemeDialog: auth.openThemeDialog,
+      openEditorDialog: auth.openEditorDialog,
       openProviderDialog: auth.openProviderDialog,
       openLoadProfileDialog: profiles.openLoadProfileDialog,
       openCreateProfileDialog: profiles.openCreateProfileDialog,
@@ -525,6 +483,7 @@ function useDialogActionsSync(
     }),
     {
       authTheme: auth.openThemeDialog,
+      authEditor: auth.openEditorDialog,
       authProvider: auth.openProviderDialog,
       load: profiles.openLoadProfileDialog,
       create: profiles.openCreateProfileDialog,
@@ -565,11 +524,9 @@ export function useAppDialogs(params: AppDialogsParams) {
   useDialogActionsSync(params.settingsStore, auth, profiles);
   return {
     // Input-surface commands (cross-hook command arguments)
-    setDebugMessage: st.setDebugMessage,
-    toggleCorgiMode: st.toggleCorgiMode,
-    handleExternalEditorOpen: st.handleExternalEditorOpen,
     welcomeActions: auth.welcome.actions,
     triggerWelcomeAuth: auth.triggerWelcomeAuth,
+    onWorkspaceMigrationDialogOpen: core.onWorkspaceMigrationDialogOpen,
     // Dialog domain handlers for the view command surface
     openThemeDialog: auth.openThemeDialog,
     openProviderDialog: auth.openProviderDialog,
@@ -593,7 +550,6 @@ export function useAppDialogs(params: AppDialogsParams) {
     saveProfileFromEditor: profiles.saveProfileFromEditor,
     handleToolsSelect: profiles.handleToolsSelect,
     handleFolderTrustSelect: auth.handleFolderTrustSelect,
-    onWorkspaceMigrationDialogOpen: core.onWorkspaceMigrationDialogOpen,
   };
 }
 

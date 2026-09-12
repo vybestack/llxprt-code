@@ -138,8 +138,6 @@ export const useToolsDialog = ({
     [addMessage, config, agent, dialogs],
   );
 
-  const closeDialog = useCallback(() => dialogs.tools.close(), [dialogs]);
-
   const handleSelect = useCallback(
     (toolName: string) => {
       const selectedTool = availableTools.find((t) => t.name === toolName);
@@ -167,7 +165,6 @@ export const useToolsDialog = ({
 
   return {
     openDialog,
-    closeDialog,
     action,
     availableTools,
     disabledTools,

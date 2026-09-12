@@ -185,7 +185,7 @@ function useSlashActions(
     dispatchExtensionStateUpdate: extensions.dispatchExtensionStateUpdate,
     addConfirmUpdateExtensionRequest:
       extensions.addConfirmUpdateExtensionRequest,
-  }) as SlashCommandProcessorActions;
+  });
 }
 
 function noop(): void {}
@@ -242,11 +242,7 @@ function useSlashCommandSetup(
 }
 
 function useInputCoreProcessors(p: AppInputParams) {
-  const {
-    vimEnabled: vimModeEnabled,
-    vimMode,
-    toggleVimEnabled,
-  } = useVimMode();
+  const { toggleVimEnabled } = useVimMode();
   const setQuittingMessagesRef = useRef<
     ((messages: HistoryItem[]) => void) | null
   >(null);
@@ -261,9 +257,6 @@ function useInputCoreProcessors(p: AppInputParams) {
   });
   setQuittingMessagesRef.current = exitResult.setQuittingMessages;
   return {
-    vimModeEnabled,
-    vimMode,
-    toggleVimEnabled,
     setQuittingMessagesRef,
     ...slashResult,
     ...exitResult,
@@ -642,8 +635,7 @@ function useInputFinish(
   stream: ReturnType<typeof useInputStream>,
 ) {
   const { settings, setIdePromptAnswered } = p;
-  const { handleSlashCommand, vimModeEnabled, vimMode, toggleVimEnabled } =
-    core;
+  const { handleSlashCommand } = core;
   const {
     buffer,
     handleFinalSubmit,
@@ -698,12 +690,6 @@ function useInputFinish(
   return {
     handleIdePromptComplete,
     vimHandleInput,
-    vimModeEnabled,
-    vimMode,
-    toggleVimEnabled,
-    elapsedTime,
-    currentLoadingPhrase,
-    showAutoAcceptIndicator,
     handleSettingsRestart,
   };
 }
@@ -747,10 +733,21 @@ export function useAppInput(params: AppInputParams) {
   const stream = useInputStream(params, core);
   const finish = useInputFinish(params, core, stream);
   useInputStartup(params, core, stream);
-  // Terminal dims live in the TerminalStore; only the buffer viewport keeps a
-  // local copy, so the public bag drops them here.
-  const { dims: _dims, ...publicResult } = { ...core, ...stream, ...finish };
-  return publicResult;
+  return {
+    buffer: stream.buffer,
+    commandContext: core.commandContext,
+    inputHistoryStore: stream.inputHistoryStore,
+    handleUserInputSubmit: stream.handleUserInputSubmit,
+    handleSteer: stream.handleSteer,
+    vimHandleInput: finish.vimHandleInput,
+    sendAllQueuedSubmissions: stream.sendAllQueuedSubmissions,
+    steerAllQueuedSubmissions: stream.steerAllQueuedSubmissions,
+    clearQueuedSubmissions: stream.clearQueuedSubmissions,
+    handleIdePromptComplete: finish.handleIdePromptComplete,
+    handleOAuthCodeDialogClose: stream.handleOAuthCodeDialogClose,
+    handleOAuthCodeSubmit: stream.handleOAuthCodeSubmit,
+    handleSettingsRestart: finish.handleSettingsRestart,
+  };
 }
 
 export type AppInputResult = ReturnType<typeof useAppInput>;

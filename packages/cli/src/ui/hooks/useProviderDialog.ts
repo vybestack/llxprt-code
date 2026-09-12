@@ -85,8 +85,6 @@ export const useProviderDialog = ({
     dialogs.provider.open({});
   }, [addMessage, dialogs, runtime]);
 
-  const closeDialog = useCallback(() => dialogs.provider.close(), [dialogs]);
-
   const handleSelect = useCallback(
     async (providerName: string) => {
       try {
@@ -118,7 +116,6 @@ export const useProviderDialog = ({
 
   return {
     openDialog,
-    closeDialog,
     providers,
     currentProvider,
     handleSelect,

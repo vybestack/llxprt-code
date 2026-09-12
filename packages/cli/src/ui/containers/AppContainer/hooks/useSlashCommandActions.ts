@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { logEntrySchema } from '../../../utils/logEntry.js';
+import { parseLogEntries } from '../../../utils/logEntry.js';
 import type { HistoryItem, ConfirmationRequest } from '../../../types.js';
 import type { SubagentView } from '../../../components/SubagentManagement/types.js';
 import type { ModelsDialogData } from '../../../commands/types.js';
@@ -23,6 +23,7 @@ interface UseSlashCommandActionsParams {
   dialogs: DialogOpeners;
   /** Domain openers that load data or enforce policy before showing their dialog. */
   openThemeDialog: () => void;
+  openEditorDialog: () => void;
   openProviderDialog: () => void;
   openLoadProfileDialog: () => void | Promise<void>;
   openCreateProfileDialog: () => void;
@@ -82,10 +83,10 @@ export interface SlashCommandActions {
   closePermissionsDialog: () => void;
   openLoggingDialog: (data?: { entries: unknown[] }) => void;
   closeLoggingDialog: () => void;
-  openSubagentDialog: (data?: {
-    initialView?: SubagentView;
-    initialName?: string;
-  }) => void;
+  openSubagentDialog: (
+    initialView?: SubagentView,
+    initialName?: string,
+  ) => void;
   closeSubagentDialog: () => void;
 }
 
@@ -98,7 +99,6 @@ function buildActions(p: UseSlashCommandActionsParams): SlashCommandActions {
 
     // Store-backed handles (pure open/close plumbing).
     openAuthDialog: () => dialogs.auth.open({}),
-    openEditorDialog: () => dialogs.editor.open({}),
     openSettingsDialog: () => dialogs.settings.open({}),
     openPrivacyNotice: () => dialogs.privacy.open({}),
     openModelsDialog: (data?: ModelsDialogData) =>
@@ -109,15 +109,11 @@ function buildActions(p: UseSlashCommandActionsParams): SlashCommandActions {
     closePermissionsDialog: () => dialogs.permissions.close(),
     openLoggingDialog: (data?: { entries: unknown[] }) =>
       dialogs.logging.open({
-        entries: (data?.entries ?? []).map((entry) =>
-          logEntrySchema.parse(entry),
-        ),
+        entries: parseLogEntries(data?.entries ?? []),
       }),
     closeLoggingDialog: () => dialogs.logging.close(),
-    openSubagentDialog: (data?: {
-      initialView?: SubagentView;
-      initialName?: string;
-    }) => dialogs.subagent.open(data ?? {}),
+    openSubagentDialog: (initialView?: SubagentView, initialName?: string) =>
+      dialogs.subagent.open({ initialView, initialName }),
     closeSubagentDialog: () => dialogs.subagent.close(),
   };
 }

@@ -94,15 +94,11 @@ export const useThemeCommand = (
         // If theme is not found, open the theme selection dialog and set error message
         dialogs.theme.open({});
         setThemeError(`Theme "${themeName}" not found.`);
-      } else {
-        // Force re-render by updating a dummy warning
-        appDispatch({
-          type: 'SET_WARNING',
-          payload: { key: 'theme-render', message: '' },
-        });
-        appDispatch({ type: 'CLEAR_WARNING', payload: 'theme-render' });
-        setThemeError(null); // Clear any previous theme error on success
+        return false;
       }
+      appDispatch({ type: 'REFRESH_THEME' });
+      setThemeError(null);
+      return true;
     },
     [dialogs, appDispatch, setThemeError],
   );
@@ -139,7 +135,7 @@ function performThemeSelection(
   themeName: string | undefined,
   scope: SettingScope,
   loadedSettings: LoadedSettings,
-  applyTheme: (themeName: string | undefined) => void,
+  applyTheme: (themeName: string | undefined) => boolean,
   dialogs: DialogOpeners,
   setThemeError: (error: string | null) => void,
 ): void {
@@ -148,39 +144,11 @@ function performThemeSelection(
     setThemeError(null);
     return;
   }
-  const mergedCustomThemes = getMergedCustomThemes(loadedSettings);
-
-  if (!isThemeAvailable(themeName, mergedCustomThemes)) {
-    reportThemeSelectionError(themeName, setThemeError);
-    return;
-  }
-
-  loadedSettings.setValue(scope, 'ui.theme', themeName);
   if (loadedSettings.merged.ui.customThemes) {
     themeManager.loadCustomThemes(loadedSettings.merged.ui.customThemes);
   }
-  applyTheme(loadedSettings.merged.ui.theme);
+  if (!applyTheme(themeName)) return;
+  loadedSettings.setValue(scope, 'ui.theme', themeName);
   setThemeError(null);
   dialogs.theme.close();
-}
-
-function getMergedCustomThemes(loadedSettings: LoadedSettings) {
-  return loadedSettings.merged.ui.customThemes;
-}
-
-function isThemeAvailable(
-  themeName: string | undefined,
-  mergedCustomThemes: LoadedSettings['merged']['ui']['customThemes'],
-): boolean {
-  return (
-    themeManager.findThemeByName(themeName) !== undefined ||
-    (themeName !== undefined && Boolean(mergedCustomThemes?.[themeName]))
-  );
-}
-
-function reportThemeSelectionError(
-  themeName: string,
-  setThemeError: (error: string | null) => void,
-): void {
-  setThemeError(`Theme "${themeName}" not found.`);
 }

@@ -101,7 +101,14 @@ function getEntryMainContent(entry: LogEntry, contentWidth: number): string {
   if (entry.type === 'request' && entry.messages) {
     const lastMessage = entry.messages.at(-1);
     if (lastMessage) {
-      return formatContent(lastMessage.content, contentWidth);
+      const text =
+        'blocks' in lastMessage
+          ? lastMessage.blocks
+              .filter((block) => block.type === 'text')
+              .map((block) => block.text ?? '')
+              .join('\n')
+          : lastMessage.content;
+      return formatContent(text, contentWidth);
     }
   } else if (entry.type === 'response' && entry.response) {
     return formatContent(entry.response, contentWidth);

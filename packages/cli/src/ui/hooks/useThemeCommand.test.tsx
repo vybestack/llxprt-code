@@ -54,10 +54,10 @@ describe('theme selection', () => {
     const settingsStore = createSettingsProfileStore();
     const dialogs = createDialogOpeners(store);
     let appState = initialAppState;
-    const warningStates: boolean[] = [];
+    const themeRevisions: number[] = [];
     const dispatch = (action: AppAction): void => {
       appState = appReducer(appState, action);
-      warningStates.push(appState.warnings.has('theme-render'));
+      themeRevisions.push(appState.themeRevision);
     };
     const hook = renderHook(
       () =>
@@ -74,7 +74,7 @@ describe('theme selection', () => {
       },
     );
     act(() => dialogs.theme.open({}));
-    return { ...hook, file, settings, store, settingsStore, warningStates };
+    return { ...hook, file, settings, store, settingsStore, themeRevisions };
   }
 
   const cases: Array<{
@@ -105,7 +105,7 @@ describe('theme selection', () => {
         settings,
         store,
         settingsStore,
-        warningStates,
+        themeRevisions,
       } = setup(customThemes);
       expect(themeManager.findThemeByName(themeName) !== undefined).toBe(
         alreadyRegistered,
@@ -114,12 +114,60 @@ describe('theme selection', () => {
       expect(settings.merged.ui.theme).toBe(themeName);
       expect(readFileSync(file, 'utf8')).toContain(themeName);
       expect(themeManager.getActiveTheme().name).toBe(themeName);
-      expect(warningStates).toStrictEqual([true, false]);
+      expect(themeRevisions).toStrictEqual([1]);
       expect(settingsStore.store.getState().themeError).toBeNull();
       expect(hasDialogRequest(store, 'theme')).toBe(false);
       unmount();
     });
   }
+
+  for (const persisted of [false, true]) {
+    it(`dismisses an undefined selection without ${persisted ? 'modifying' : 'creating'} settings`, () => {
+      const { result, file, settings, store, settingsStore, unmount } = setup(
+        {},
+      );
+      if (persisted) {
+        settings.setValue(SettingScope.User, 'ui.theme', 'Default');
+      }
+      const previousFile = persisted ? readFileSync(file, 'utf8') : undefined;
+      act(() =>
+        result.current.handleThemeSelect('DoesNotExist', SettingScope.User),
+      );
+      expect(settingsStore.store.getState().themeError).not.toBeNull();
+      expect(hasDialogRequest(store, 'theme')).toBe(true);
+
+      act(() => result.current.handleThemeSelect(undefined, SettingScope.User));
+
+      expect(hasDialogRequest(store, 'theme')).toBe(false);
+      expect(settingsStore.store.getState().themeError).toBeNull();
+      expect(settings.merged.ui.theme).toBe('Default');
+      expect(existsSync(file)).toBe(persisted);
+      const currentFile = existsSync(file)
+        ? readFileSync(file, 'utf8')
+        : undefined;
+      expect(currentFile).toBe(previousFile);
+      unmount();
+    });
+  }
+
+  it('does not persist a malformed custom theme and leaves its error visible', () => {
+    const { result, file, settings, store, settingsStore, unmount } = setup({
+      Broken: {
+        ...DEFAULT_THEME.colors,
+        name: 'Broken',
+        type: 'custom',
+        Background: 'invalid-color',
+      },
+    });
+    act(() => result.current.handleThemeSelect('Broken', SettingScope.User));
+    expect(existsSync(file)).toBe(false);
+    expect(settings.merged.ui.theme).toBe('Default');
+    expect(settingsStore.store.getState().themeError).toBe(
+      'Theme "Broken" not found.',
+    );
+    expect(hasDialogRequest(store, 'theme')).toBe(true);
+    unmount();
+  });
 
   it('leaves an unknown theme unpersisted and reports the error in the open picker', () => {
     const {
@@ -129,7 +177,7 @@ describe('theme selection', () => {
       settings,
       store,
       settingsStore,
-      warningStates,
+      themeRevisions,
     } = setup({});
     const previousTheme = themeManager.getActiveTheme().name;
     act(() =>
@@ -138,7 +186,7 @@ describe('theme selection', () => {
     expect(settings.merged.ui.theme).toBe('Default');
     expect(existsSync(file)).toBe(false);
     expect(themeManager.getActiveTheme().name).toBe(previousTheme);
-    expect(warningStates).toHaveLength(0);
+    expect(themeRevisions).toHaveLength(0);
     expect(settingsStore.store.getState().themeError).toBe(
       'Theme "DoesNotExist" not found.',
     );

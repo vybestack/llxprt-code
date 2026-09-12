@@ -339,3 +339,49 @@ items; round 2 verified the remediations. Final state:
 - Suite environmental flakes observed under sibling-session load
   (ToolResultDisplay.retention.behavior, sandbox-podman-diagnostics):
   both pass standalone repeatedly; not load-bearing here.
+
+## 8. External review (OCR, glm-5.3) outcomes
+
+Two rounds ran against the branch (round 1: 65/108 files reviewed, 33
+findings; round 2 after remediation: 93/118 files, 37 findings; the
+remainder failed on provider rate limits — the 2-round cap was reached,
+per the review policy). All HIGH findings were fixed with red/green
+tests; false positives were verified and skipped with evidence.
+
+Round-1 remediation: three real behavior losses fixed (hook-execution
+indicator wiring, pendingAddRequest replay via consume-by-sequence,
+theme/editor error banners via SettingsProfileStore), dead migration
+leftovers deleted (useSettingsCommand, profile dialog subscriptions,
+unused params), type hardening (exhaustive DIALOG_PRIORITY,
+ListDialogKind narrowing, shared LogEntry/INITIAL_WELCOME_STATE/width
+helpers), nine weak tests strengthened. The reported tools-dialog
+regression was verified pre-existing on main (no production trigger
+before or after).
+
+Round-2 remediation (all verified real, fixed): /logs dialog crashed on
+real log files (schema mismatched the ConversationFileWriter format;
+schema corrected, malformed lines now degrade individually); subagent
+deep-link commands broken by a processor-actions cast (signatures
+fixed, cast removed); welcome gating, first-paint model seeding,
+custom-theme apply failures, editor-error staleness, history/ledger
+construction identity, trim notification churn, shared history-limits
+ownership, and AppCommandData memo identity all restored. Plus ten
+cleanup items (vestigial subscriptions, dead reducer error slice, dead
+closeDialog returns, FIFO dedup, openers exhaustiveness, typed
+BLOCKING_DIALOG_KINDS) and twelve test-quality items (shared typed
+AppCommandBindings factory, real typed auth openers, meaningful
+identity assertions, coverage for moved side effects).
+
+### Remaining documented follow-ups (not fixed, with reasons)
+
+- Profile dialogs mirror their data one commit after opening (new,
+  minor flash of empty list on first open; synchronous seeding in the
+  open path is the clean fix if it matters in practice).
+- createStore's function-shaped-state ambiguity is theoretical for the
+  current object stores; documented rather than constrained.
+- DialogOpeners' mapped exhaustiveness now guards list kinds; the two
+  consent slots are deliberately outside the mapped openers (they have
+  request-based commands, not payload openers).
+- 25 of 118 round-2 items and 43 of 108 round-1 items were never
+  externally reviewed (provider rate limits). The internal review
+  cycles and the full suite cover the same code.

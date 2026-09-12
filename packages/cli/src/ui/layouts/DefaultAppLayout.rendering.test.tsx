@@ -35,13 +35,8 @@ const realInkModule = {
 
 void vi.mock('ink', () => realInkModule);
 
-// The DialogStore seam is stubbed at module level (not via a real provider).
-// The canonical runner (run-bun-tests.ts) gives every test file its own
-// process, so these stubs are not for cross-file safety — they keep this file
-// hermetic: a closed stub store yields the same observable layout (no dialog
-// rendered) that HEAD's all-false dialog booleans did, without importing the
-// real store graph into a line-count assertion surface. DialogManager and
-// Composer are nulled for the same reason — neither's output is asserted here.
+// Closed dialog-store stubs and omitted child components isolate layout geometry
+// and history rendering. The Bun runner gives each test file its own process.
 void vi.mock('../stores/dialog/DialogContext.js', () => ({
   useDialogStore: () => createDialogStore(),
   DialogProvider: ({ children }: { children: React.ReactNode }) => (
@@ -100,45 +95,12 @@ void vi.mock('../components/ContextSummaryDisplay.js', () => ({
 void vi.mock('../components/DetailedMessagesDisplay.js', () => ({
   DetailedMessagesDisplay: () => null,
 }));
-// The layout consumes real DialogStore state via useHasActiveDialog; a real
-// provider with an empty store keeps dialogs closed, matching the all-false
-// dialog fixture booleans. Module-level store mocks are avoided on purpose:
-// bun shares module-cache identity across test files in one process, so
-// stubbing the store modules here leaks into sibling layout test files.
 void vi.mock('../components/shared/ScrollableList.js', () => ({
   ScrollableList: () => null,
 }));
 void vi.mock('../components/shared/VirtualizedList.js', () => ({
   SCROLL_TO_ITEM_END: -1,
 }));
-void vi.mock('../stores/dialog/DialogContext.js', () => ({
-  useDialogStore: () => createDialogStore(),
-  DialogProvider: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-}));
-void vi.mock('../stores/dialog/dialogStore.js', () => ({
-  createDialogStore: () => ({
-    store: {
-      getState: () => ({
-        requests: [],
-        confirmationRequest: null,
-        confirmUpdateLlxprtExtensionRequests: [],
-      }),
-      subscribe: () => () => {},
-      getInitialState: () => undefined,
-    },
-    commands: {
-      openDialog: () => {},
-      closeDialog: () => {},
-      updateDialogPayload: () => {},
-      setConfirmationRequest: () => {},
-      addConfirmUpdateExtensionRequest: () => {},
-      resolveConfirmUpdateExtensionRequest: () => {},
-    },
-  }),
-}));
-
 // The CLI runtime context is process-global infrastructure that the layout
 // only reads to hand a message bus to the (stubbed) bucket-auth confirmation.
 const providersRuntime = await import(

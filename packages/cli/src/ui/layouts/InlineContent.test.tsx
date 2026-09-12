@@ -16,39 +16,33 @@ import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
 import { StreamingState } from '../types.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
 import { AppCommandsProvider } from '../contexts/AppCommandsContext.js';
-import type { TextBuffer } from '../components/shared/text-buffer.js';
+import { useTextBuffer } from '../components/shared/text-buffer.js';
+import { createAppCommandBindings } from '../../test-utils/appCommandBindings.js';
+import { useTerminalStore } from '../stores/terminal/TerminalContext.js';
 import { InlineContent, type InlineContentProps } from './InlineContent.js';
 
-/** Composer-command stub: the handlers Composer reads from the context. */
-function createAppCommandsStub() {
-  return {
-    buffer: {
-      text: '',
-      lines: [''],
-      cursor: [0, 0],
-      transformationsByLine: [[]],
-      visualToTransformedMap: [0],
-      viewportVisualLines: [''],
-      allVisualLines: [''],
-      visualCursor: [0, 0],
-      visualScrollRow: 0,
-      visualToLogicalMap: [[0, 0]],
-      setText: vi.fn(),
-      replaceRangeByOffset: vi.fn(),
-      moveToVisualPosition: vi.fn(),
-    } as unknown as TextBuffer,
-    commandContext: createMockCommandContext(),
-    inputHistory: [],
-    handleUserInputSubmit: vi.fn(),
-    handleSteer: vi.fn(),
-    handleClearScreen: vi.fn(),
-    vimHandleInput: vi.fn(),
-    setShellModeActive: vi.fn(),
-    handleEscapePromptChange: vi.fn(),
-    setQueueErrorMessage: vi.fn(),
-    sendAllQueuedSubmissions: vi.fn(),
-    steerAllQueuedSubmissions: vi.fn(),
-  } as never;
+function ComposerHarness(props: InlineContentProps) {
+  const terminal = useTerminalStore();
+  const buffer = useTextBuffer({
+    viewport: { width: 80, height: 24 },
+    isValidPath: () => false,
+  });
+  const commands = createAppCommandBindings(
+    'InlineContent',
+    {
+      buffer,
+      commandContext: createMockCommandContext(),
+      inputHistory: [],
+    },
+    { handleEscapePromptChange: terminal.commands.setShowEscapePrompt },
+  );
+  return (
+    <AppCommandsProvider value={commands}>
+      <StreamingContext.Provider value={props.streamingState}>
+        <InlineContent {...props} />
+      </StreamingContext.Provider>
+    </AppCommandsProvider>
+  );
 }
 
 const activeRenders: Array<ReturnType<typeof render>> = [];
@@ -179,17 +173,10 @@ function renderComposer(
     isInputActive,
     settings,
   };
-  const rendered = renderWithProviders(
-    <AppCommandsProvider value={createAppCommandsStub()}>
-      <StreamingContext.Provider value={props.streamingState}>
-        <InlineContent {...props} />
-      </StreamingContext.Provider>
-    </AppCommandsProvider>,
-    {
-      settings: props.settings,
-      terminal: { shellModeActive: options.shellModeActive ?? false },
-    },
-  );
+  const rendered = renderWithProviders(<ComposerHarness {...props} />, {
+    settings: props.settings,
+    terminal: { shellModeActive: options.shellModeActive ?? false },
+  });
   activeRenders.push(rendered);
   return rendered;
 }

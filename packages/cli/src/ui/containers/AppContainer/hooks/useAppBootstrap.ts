@@ -100,7 +100,6 @@ export interface AppBootstrapResult {
   settings: LoadedSettings;
   runtime: ReturnType<typeof useRuntimeApi>;
   setLlxprtMdFileCount: (count: number) => void;
-  consoleMessages: ReturnType<typeof useConsoleMessages>['consoleMessages'];
   handleNewMessage: ReturnType<typeof useConsoleMessages>['handleNewMessage'];
   clearConsoleMessagesState: ReturnType<
     typeof useConsoleMessages
@@ -327,7 +326,6 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     setIdePromptAnswered: e.setIdePromptAnswered,
     currentIDE: e.currentIDE,
     shouldShowIdePrompt: e.shouldShowIdePrompt,
-    consoleMessages: e.consoleMessages,
     handleNewMessage: e.handleNewMessage,
     clearConsoleMessagesState: e.clearConsoleMessagesState,
   };

@@ -95,7 +95,6 @@ export function useOAuthOrchestration({
       if (oauthState.__oauth_auth_complete === true) {
         oauthState.__oauth_auth_complete = false;
         setAuthError(null);
-        appDispatch({ type: 'SET_AUTH_ERROR', payload: null });
         appDispatch({ type: 'SET_NEEDS_RELOGIN', payload: false });
         dialogs.auth.close();
         dialogs.oauthCode.close();

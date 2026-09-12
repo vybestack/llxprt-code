@@ -30,14 +30,8 @@ export const useCreateProfileDialog = ({
     dialogs.createProfile.open({});
   }, [dialogs, runtime]);
 
-  const closeDialog = useCallback(
-    () => dialogs.createProfile.close(),
-    [dialogs],
-  );
-
   return {
     openDialog,
-    closeDialog,
     providers,
   };
 };

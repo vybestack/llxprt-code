@@ -5,20 +5,14 @@
  */
 
 import { render } from 'ink-testing-library';
-import { vi, describe, beforeEach, it, expect } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import { ExtensionUpdateState } from '../../state/extensions.js';
 import { ExtensionsList } from './ExtensionsList.js';
 import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
 import { useTextBuffer } from '../shared/text-buffer.js';
-import {
-  AppCommandsProvider,
-  type AppCommandBindings,
-} from '../../contexts/AppCommandsContext.js';
+import { AppCommandsProvider } from '../../contexts/AppCommandsContext.js';
+import { createAppCommandBindings } from '../../../test-utils/appCommandBindings.js';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
-
-function unusedCommand(): never {
-  throw new Error('ExtensionsList must not invoke app commands');
-}
 
 function ExtensionsListHarness({
   extensions,
@@ -32,58 +26,14 @@ function ExtensionsListHarness({
     isValidPath: () => false,
   });
   const commandContext = createMockCommandContext();
-  const value: AppCommandBindings = {
+  const value = createAppCommandBindings('ExtensionsList', {
     buffer,
     commandContext: {
       ...commandContext,
       ui: { ...commandContext.ui, extensionsUpdateState },
     },
     inputHistory: [],
-    handleUserInputSubmit: unusedCommand,
-    handleSteer: unusedCommand,
-    handleClearScreen: unusedCommand,
-    vimHandleInput: unusedCommand,
-    clearQueuedSubmissions: unusedCommand,
-    setShellModeActive: unusedCommand,
-    handleEscapePromptChange: unusedCommand,
-    setQueueErrorMessage: unusedCommand,
-    onWorkspaceMigrationDialogOpen: unusedCommand,
-    handleIdePromptComplete: unusedCommand,
-    handleFolderTrustSelect: unusedCommand,
-    welcomeActions: {
-      startSetup: unusedCommand,
-      selectProvider: unusedCommand,
-      selectModel: unusedCommand,
-      selectAuthMethod: unusedCommand,
-      onAuthComplete: unusedCommand,
-      onAuthError: unusedCommand,
-      skipSetup: unusedCommand,
-      goBack: unusedCommand,
-      saveProfile: unusedCommand,
-      dismiss: unusedCommand,
-      resetAndReopen: unusedCommand,
-    },
-    triggerWelcomeAuth: unusedCommand,
-    handleThemeSelect: unusedCommand,
-    handleThemeHighlight: unusedCommand,
-    handleAuthSelect: unusedCommand,
-    handleOAuthCodeDialogClose: unusedCommand,
-    handleOAuthCodeSubmit: unusedCommand,
-    handleEditorSelect: unusedCommand,
-    handleProviderSelect: unusedCommand,
-    handleProfileSelect: unusedCommand,
-    viewProfileDetail: unusedCommand,
-    closeProfileDetailDialog: unusedCommand,
-    loadProfileFromDetail: unusedCommand,
-    deleteProfileFromDetail: unusedCommand,
-    deleteProfileFromList: unusedCommand,
-    setProfileAsDefault: unusedCommand,
-    openProfileEditor: unusedCommand,
-    closeProfileEditor: unusedCommand,
-    saveProfileFromEditor: unusedCommand,
-    handleToolsSelect: unusedCommand,
-    handleSettingsRestart: unusedCommand,
-  };
+  });
   return (
     <AppCommandsProvider value={value}>
       <ExtensionsList extensions={extensions} />
@@ -131,10 +81,6 @@ const mockExtensions = [
 ];
 
 describe('<ExtensionsList />', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-  });
-
   it('should render "No extensions installed." if there are no extensions', () => {
     const { lastFrame } = renderExtensionsList([], new Map());
     expect(lastFrame()).toContain('No extensions installed.');

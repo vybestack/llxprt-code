@@ -21,6 +21,7 @@ describe('dialog command store flow', () => {
     const actions = initialDialogActions();
     const invocations = [
       actions.openThemeDialog,
+      actions.openEditorDialog,
       actions.openProviderDialog,
       actions.openLoadProfileDialog,
       actions.openCreateProfileDialog,

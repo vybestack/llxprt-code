@@ -46,7 +46,7 @@ describe('appReducer needsRelogin', () => {
     const result = appReducer(initialAppState, action);
 
     expect(result).not.toBe(initialAppState);
-    expect(result.warnings).toBe(initialAppState.warnings);
-    expect(result.errors).toBe(initialAppState.errors);
+    expect(result.themeRevision).toBe(initialAppState.themeRevision);
+    expect(initialAppState.needsRelogin).toBe(false);
   });
 });
