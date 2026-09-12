@@ -11,4 +11,3 @@ name: 'LLxprt CodeQL config'
 queries:
   - uses: 'security-and-quality'
   - uses: './.github/codeql/queries'
-
