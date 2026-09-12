@@ -83,8 +83,8 @@ export class ImageGenerationError extends Error {
  * Error thrown when an image-generation request fails input validation.
  */
 export class ImageValidationError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = 'ImageValidationError';
   }
 }

@@ -26,12 +26,17 @@ const WEBP_FOURCC_BYTES = Buffer.from([0x57, 0x45, 0x42, 0x50]); // "WEBP"
 /**
  * Read an input image from the filesystem, validate it (no URLs, no escaping
  * symlinks, valid image signature, bounded size), and return bytes with MIME.
+ * File metadata and bounded reads use the same descriptor. O_NOFOLLOW rejects
+ * final-component symlinks atomically where supported; other platforms use lstat.
  *
  * Never logs the image bytes.
  */
 export async function readInputImage(
   inputPath: string,
 ): Promise<{ readonly bytes: Buffer; readonly mimeType: string }> {
+  if (inputPath.trim() === '') {
+    throw new ImageValidationError('Input image path must not be empty.');
+  }
   // Reject URLs — only local file inputs are supported initially.
   if (/^https?:\/\//i.test(inputPath) || /^file:\/\//i.test(inputPath)) {
     throw new ImageValidationError(
@@ -39,35 +44,62 @@ export async function readInputImage(
     );
   }
 
-  const { promises: fs } = await import('node:fs');
+  const { promises: fs, constants } = await import('node:fs');
   const path = await import('node:path');
 
-  // Reject symlinks before reading.
   let bytes: Buffer;
   try {
-    const stat = await fs.lstat(inputPath);
-    if (stat.isSymbolicLink()) {
+    if (
+      constants.O_NOFOLLOW === undefined &&
+      (await fs.lstat(inputPath)).isSymbolicLink()
+    ) {
       throw new ImageValidationError(
         `Input image is a symbolic link and cannot be used safely: ${inputPath}.`,
       );
     }
-    if (!stat.isFile()) {
-      throw new ImageValidationError(
-        `Input image is not a regular file: ${inputPath}.`,
-      );
+    const file = await fs.open(
+      inputPath,
+      constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+    );
+    try {
+      const stat = await file.stat();
+      if (!stat.isFile()) {
+        throw new ImageValidationError(
+          `Input image is not a regular file: ${inputPath}.`,
+        );
+      }
+      if (stat.size > MAX_INPUT_IMAGE_BYTES) {
+        throw new ImageValidationError(
+          `Input image exceeds the maximum size: ${inputPath}.`,
+        );
+      }
+      const chunks: Buffer[] = [];
+      let total = 0;
+      while (true) {
+        const chunk = Buffer.alloc(
+          Math.min(64 * 1024, MAX_INPUT_IMAGE_BYTES + 1 - total),
+        );
+        const { bytesRead } = await file.read(chunk, 0, chunk.length, null);
+        if (bytesRead === 0) break;
+        total += bytesRead;
+        if (total > MAX_INPUT_IMAGE_BYTES) {
+          throw new ImageValidationError(
+            `Input image exceeds the maximum size: ${inputPath}.`,
+          );
+        }
+        chunks.push(chunk.subarray(0, bytesRead));
+      }
+      bytes = Buffer.concat(chunks, total);
+    } finally {
+      await file.close();
     }
-    if (stat.size > MAX_INPUT_IMAGE_BYTES) {
-      throw new ImageValidationError(
-        `Input image exceeds the maximum size: ${inputPath}.`,
-      );
-    }
-    bytes = await fs.readFile(inputPath);
   } catch (error) {
     if (error instanceof ImageValidationError) {
       throw error;
     }
     throw new ImageValidationError(
       `Input image could not be accessed: ${inputPath}.`,
+      { cause: error },
     );
   }
 
