@@ -168,6 +168,72 @@ test('${name}', () => { ${body} });`,
     );
   }
 
+  it.each(['baseline', 'setup', 'report', 'signal', 'success'])(
+    'removes temporary JUnit artifacts after %s',
+    async (stage) => {
+      let signalCleanup: (() => void | Promise<void>) | undefined;
+      let signalArtifacts: string[] | undefined;
+      const report = join(root, 'report.json');
+      const dependencies: BunTestRunnerDependencies = {
+        ...realDependencies({
+          setup: () => {
+            if (stage === 'setup') throw new Error('setup failed');
+          },
+        }),
+        registerSignalCleanup: (cleanup) => {
+          signalCleanup = cleanup;
+          return () => {};
+        },
+        createSentinelGuard: () => ({
+          captureBaseline: () => {
+            if (stage === 'baseline') throw new Error('baseline failed');
+          },
+          assertUnchanged: () => {},
+          cleanup: () => {},
+        }),
+        spawn: async (command) => {
+          const outfile = command.find((arg) =>
+            arg.startsWith('--reporter-outfile='),
+          );
+          if (outfile === undefined)
+            throw new Error('Missing JUnit output path');
+          writeFileSync(
+            outfile.slice('--reporter-outfile='.length),
+            '<testsuites><testsuite name="example" tests="1"><testcase name="passes" classname="example" time="0" /></testsuite></testsuites>',
+          );
+          if (stage === 'signal') {
+            await signalCleanup?.();
+            signalArtifacts = readdirSync(root).filter((name) =>
+              name.startsWith('bun-junit-'),
+            );
+            throw new Error('interrupted');
+          }
+          return { exitCode: 0 };
+        },
+      };
+      if (stage === 'report') mkdirSync(report);
+      if (stage === 'baseline' || stage === 'setup' || stage === 'report') {
+        await expect(
+          runBunTests(['--json-report', report], dependencies),
+        ).rejects.toThrow();
+      } else if (stage === 'signal') {
+        // Real signal handlers exit after cleanup rather than returning to the run.
+        await runBunTests(['--json-report', report], dependencies).catch(
+          () => {},
+        );
+        expect(signalArtifacts).toEqual([]);
+      } else {
+        expect(await runBunTests(['--json-report', report], dependencies)).toBe(
+          0,
+        );
+        expect(readFileSync(report, 'utf8')).toContain('passes');
+      }
+      expect(
+        readdirSync(root).filter((name) => name.startsWith('bun-junit-')),
+      ).toEqual([]);
+    },
+  );
+
   it('reports cleanup failure without losing successful file results', async () => {
     const report = join(root, 'cleanup-junit.xml');
     const diagnostics: string[] = [];
@@ -187,6 +253,60 @@ test('${name}', () => { ${body} });`,
     expect(status).toBe(1);
     expect(diagnostics.join()).toContain('cleanup failed');
     expect(readFileSync(report, 'utf8')).toContain('tests="2"');
+  });
+
+  it('does not report removed sentinels when a file settles after signal cleanup', () => {
+    const runnerUrl = new URL('../run_bun_tests.ts', import.meta.url).href;
+    const isolationUrl = new URL(
+      '../lib/bespoke-runner-isolation.ts',
+      import.meta.url,
+    ).href;
+    const guardUrl = new URL('../lib/real-home-sentinel.ts', import.meta.url)
+      .href;
+    const child = Bun.spawnSync(
+      [
+        process.execPath,
+        '--eval',
+        `
+        import { runBunTests, resolveTsconfigOverride } from ${JSON.stringify(runnerUrl)};
+        import { installRunnerSignalHandlers } from ${JSON.stringify(isolationUrl)};
+        import { RealHomeSentinelGuard } from ${JSON.stringify(guardUrl)};
+        const settled = Promise.withResolvers();
+        const finished = Promise.withResolvers();
+        const status = await runBunTests([], {
+          repoRoot: ${JSON.stringify(root)},
+          invocationDirectory: ${JSON.stringify(root)},
+          executable: process.execPath,
+          environment: process.env,
+          resolveFiles: () => [{ cwd: ${JSON.stringify(root)}, file: 'one.test.ts', preloads: [] }],
+          resolveTsconfig: resolveTsconfigOverride,
+          loadGlobalSetup: async () => ({}),
+          createSentinelGuard: () => new RealHomeSentinelGuard({
+            targets: [{ path: ${JSON.stringify(watched)}, description: 'temporary real home' }],
+          }),
+          registerSignalCleanup: (cleanup) => installRunnerSignalHandlers(async () => {
+            await cleanup();
+            settled.resolve({ exitCode: 0 });
+            await finished.promise;
+          }),
+          spawn: () => {
+            process.emit('SIGTERM');
+            return settled.promise;
+          },
+          stdout: () => {},
+          stderr: (message) => console.error(message),
+        });
+        console.log(JSON.stringify({ status }));
+        finished.resolve();
+        `,
+      ],
+      { stdout: 'pipe', stderr: 'pipe', timeout: 5000 },
+    );
+
+    expect(child.exitCode).toBe(143);
+    expect(child.stderr.toString()).toBe('');
+    expect(JSON.parse(child.stdout.toString())).toEqual({ status: 0 });
+    expect(readdirSync(watched)).toEqual([]);
   });
 
   it('reports unexpected guard errors without losing later results or reports', async () => {

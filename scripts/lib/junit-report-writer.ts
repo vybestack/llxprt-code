@@ -4,7 +4,31 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+/** Creates report staging storage with best-effort, idempotent cleanup. */
+export function createJunitTempDirectory(
+  directory: string,
+  log: (message: string) => void,
+): { readonly path: string; readonly cleanup: () => void } {
+  const path = mkdtempSync(join(directory, 'bun-junit-'));
+  let cleaned = false;
+  return {
+    path,
+    cleanup: () => {
+      if (cleaned) return;
+      cleaned = true;
+      try {
+        rmSync(path, { recursive: true, force: true });
+      } catch (error) {
+        log(
+          `Failed to remove JUnit temporary directory ${path}: ${String(error)}`,
+        );
+      }
+    },
+  };
+}
 
 export interface JUnitTestFileOutcome {
   readonly name: string;

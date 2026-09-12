@@ -12,6 +12,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { ChildProcess } from 'node:child_process';
+import * as childProcess from 'node:child_process';
 import {
   mkdtempSync,
   mkdirSync,
@@ -264,6 +265,44 @@ describe('bespoke isolation with real sentinel targets', () => {
 });
 
 describe('runner child shutdown', () => {
+  it('falls back to SIGKILL when taskkill exits unsuccessfully', async () => {
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+    if (platform === undefined) throw new Error('Missing platform descriptor');
+    const child = new ChildProcess();
+    Object.defineProperty(child, 'pid', { value: 12345 });
+    const signals: Array<NodeJS.Signals | number | undefined> = [];
+    const messages: unknown[] = [];
+    const taskkill = spyOn(childProcess, 'spawnSync').mockReturnValue({
+      pid: 99,
+      output: [],
+      stdout: Buffer.alloc(0),
+      stderr: Buffer.alloc(0),
+      status: 128,
+      signal: null,
+    });
+    const kill = spyOn(child, 'kill').mockImplementation((signal) => {
+      signals.push(signal);
+      queueMicrotask(() => child.emit('close', null, signal));
+      return true;
+    });
+    const log = spyOn(console, 'error').mockImplementation(
+      (message: unknown) => {
+        messages.push(message);
+      },
+    );
+    try {
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+      await stopRunnerChildren([child], () => {}, 20);
+      expect(signals).toEqual(['SIGKILL']);
+      expect(messages.join()).toContain('Failed to kill test child tree 12345');
+      expect(messages.join()).toContain('128');
+    } finally {
+      Object.defineProperty(process, 'platform', platform);
+      taskkill.mockRestore();
+      kill.mockRestore();
+      log.mockRestore();
+    }
+  });
   it('bounds the wait when a killed child never closes its pipes', async () => {
     const child = new ChildProcess();
     Object.defineProperty(child, 'pid', { value: 12345 });

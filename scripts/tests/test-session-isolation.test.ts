@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, spyOn } from 'bun:test';
+import * as fs from 'node:fs';
 import {
   existsSync,
   mkdtempSync,
@@ -23,6 +24,51 @@ import {
   type TestSession,
 } from '../lib/test-session-isolation.js';
 
+it.each([0, 1, 7])(
+  'reports removal failure without masking exit code %i',
+  async (exitCode) => {
+    const session = createTestSessionRoot();
+    const savedExitCode = process.exitCode;
+    const savedRetention = process.env.LLXPRT_TEST_KEEP_SESSION_ROOT;
+    const warnings: unknown[] = [];
+    const warn = spyOn(console, 'warn').mockImplementation(
+      (message: unknown) => {
+        warnings.push(message);
+      },
+    );
+    const remove = spyOn(fs, 'rmSync').mockImplementation(() => {
+      throw new Error('removal denied');
+    });
+    try {
+      delete process.env.LLXPRT_TEST_KEEP_SESSION_ROOT;
+      process.exitCode = exitCode;
+      expect(removeSessionRoot(session)).toBe(false);
+      const failures = await cleanupTestSession(
+        session,
+        {
+          captureBaseline: () => {},
+          assertUnchanged: () => {},
+          cleanup: () => {},
+        },
+        async () => 0,
+        () => {},
+      );
+      expect(failures).toBe(1);
+      expect(process.exitCode).toBe(exitCode === 0 ? 1 : exitCode);
+      expect(warnings.join()).toContain(session.root);
+      expect(warnings.join()).toContain('removal denied');
+      expect(existsSync(session.root)).toBe(true);
+    } finally {
+      remove.mockRestore();
+      warn.mockRestore();
+      process.exitCode = savedExitCode ?? 0;
+      if (savedRetention === undefined)
+        delete process.env.LLXPRT_TEST_KEEP_SESSION_ROOT;
+      else process.env.LLXPRT_TEST_KEEP_SESSION_ROOT = savedRetention;
+      rmSync(session.root, { recursive: true, force: true });
+    }
+  },
+);
 describe('createTestSessionRoot', () => {
   function cleanup(session: TestSession): void {
     rmSync(session.root, { recursive: true, force: true });

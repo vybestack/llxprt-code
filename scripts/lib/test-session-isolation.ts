@@ -115,12 +115,16 @@ export function buildSessionEnv(
 }
 
 /** Removes session artifacts unless retention was explicitly requested. */
-export function removeSessionRoot(session: TestSession): void {
-  if (process.env.LLXPRT_TEST_KEEP_SESSION_ROOT === '1') return;
+export function removeSessionRoot(session: TestSession): boolean {
+  if (process.env.LLXPRT_TEST_KEEP_SESSION_ROOT === '1') return true;
   try {
     rmSync(session.root, { recursive: true, force: true });
-  } catch {
-    // Best-effort cleanup must not replace the test run's outcome.
+    return true;
+  } catch (error) {
+    console.warn(
+      `Failed to remove test session root ${session.root}: ${String(error)}`,
+    );
+    return false;
   }
 }
 
@@ -132,6 +136,7 @@ export async function cleanupTestSession(
   log: (message: string) => void,
 ): Promise<number> {
   let failures = 0;
+  let removed = true;
   try {
     failures += await teardown();
   } catch (error) {
@@ -150,9 +155,16 @@ export async function cleanupTestSession(
         failures++;
         log(`Test runner cleanup failed: ${String(error)}`);
       } finally {
-        removeSessionRoot(session);
+        removed = removeSessionRoot(session);
+        failures += removed ? 0 : 1;
       }
     }
+  }
+  if (
+    !removed &&
+    (process.exitCode === undefined || Number(process.exitCode) === 0)
+  ) {
+    process.exitCode = 1;
   }
   return failures;
 }

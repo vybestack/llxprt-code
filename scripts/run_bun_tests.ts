@@ -33,6 +33,7 @@ import './tests/browser-launch-guard.js';
 import { spawn } from 'node:child_process';
 import {
   assertRunnerActive,
+  isRunnerActive,
   installRunnerSignalHandlers,
   trackRunnerChild,
   killRunnerChild,
@@ -41,8 +42,6 @@ import {
   statSync,
   writeFileSync,
   mkdirSync,
-  mkdtempSync,
-  rmSync,
   readFileSync,
   readdirSync,
 } from 'node:fs';
@@ -72,7 +71,10 @@ import {
   type JUnitTestSuites,
   type JUnitTestSuite,
 } from './bun-junit-to-json-report.js';
-import { writeJUnitReport } from './lib/junit-report-writer.js';
+import {
+  createJunitTempDirectory,
+  writeJUnitReport,
+} from './lib/junit-report-writer.js';
 
 // The reaper implementation moved to scripts/lib/bun-test-reaper.ts; it is
 // re-exported here so the pre-existing import surface of this module is
@@ -596,16 +598,7 @@ export async function runBunTests(
 ): Promise<number> {
   const options = parseArgs(argv);
   const tsconfigOverride = resolveTsconfig(options, dependencies);
-  const files = applyFilters(
-    applyExclusions(
-      dependencies.resolveFiles(
-        dependencies.repoRoot,
-        options.workspace ?? undefined,
-      ),
-      options.exclude,
-    ),
-    options.filters,
-  );
+  const files = resolveSelectedFiles(options, dependencies);
 
   if (files.length === 0) {
     const scope = options.workspace
@@ -631,17 +624,23 @@ export async function runBunTests(
   // gets HOME/TMPDIR/XDG_* inside a throwaway root, while the runner keeps
   // its real environment for the sentinel guard below.
   const session = createTestSessionRoot();
-  const createGuard =
-    dependencies.createSentinelGuard ?? createRealHomeSentinelGuard;
-  const guard = createGuard(dependencies.environment);
+  const guard = (
+    dependencies.createSentinelGuard ?? createRealHomeSentinelGuard
+  )(dependencies.environment);
 
-  const junitTempDir = createJunitTempDir(options, dependencies);
+  const junit = options.jsonReport
+    ? createJunitTempDirectory(
+        resolve(dependencies.invocationDirectory),
+        dependencies.stderr,
+      )
+    : null;
+  const junitTempDir = junit?.path ?? null;
   const started: string[] = [];
   let testResults: FileTestResult[] = [];
   let teardownFailures = 0;
   let sentinelViolations = 0;
   let teardown: Promise<void> | undefined;
-  const finalizeGuard = (): Promise<void> =>
+  const finalizeSession = (): Promise<void> =>
     (teardown ??= cleanupTestSession(
       session,
       guard,
@@ -650,6 +649,8 @@ export async function runBunTests(
     ).then((failures) => {
       teardownFailures = failures;
     }));
+  const finalizeGuard = (): Promise<void> =>
+    finalizeSession().finally(() => junit?.cleanup());
   const unsubscribe = dependencies.registerSignalCleanup?.(finalizeGuard);
   try {
     guard.captureBaseline();
@@ -666,6 +667,9 @@ export async function runBunTests(
     );
     testResults = outcome.results;
     sentinelViolations = outcome.sentinelViolations;
+    await finalizeSession();
+    reportResults(testResults, dependencies);
+    writeReports(options, testResults, junitTempDir, dependencies);
   } finally {
     try {
       await finalizeGuard();
@@ -674,15 +678,11 @@ export async function runBunTests(
     }
   }
 
-  reportResults(testResults, dependencies);
-
-  writeReports(options, testResults, junitTempDir, dependencies);
-
-  const failed = testResults.filter((r) => !r.passed).length;
   // A global teardown that throws means the root's cleanup contract was
   // violated (e.g. an eval run's temp storage survived). Vitest fails the run
   // in that case, so reporting success here would leak the failure. A
   // sentinel violation means a watched real-home change was detected.
+  const failed = testResults.filter((r) => !r.passed).length;
   return failed > 0 || teardownFailures > 0 || sentinelViolations > 0 ? 1 : 0;
 }
 
@@ -698,13 +698,19 @@ function resolveTsconfig(
     : null;
 }
 
-function createJunitTempDir(
+function resolveSelectedFiles(
   options: CliOptions,
   dependencies: BunTestRunnerDependencies,
-): string | null {
-  if (!options.jsonReport) return null;
-  return mkdtempSync(
-    join(resolve(dependencies.invocationDirectory, '.'), 'bun-junit-'),
+): readonly BunTestFile[] {
+  return applyFilters(
+    applyExclusions(
+      dependencies.resolveFiles(
+        dependencies.repoRoot,
+        options.workspace ?? undefined,
+      ),
+      options.exclude,
+    ),
+    options.filters,
   );
 }
 
@@ -742,7 +748,7 @@ async function runAllFiles(
     results.push(result);
     // The settled file identifies the detection window, not proven causality.
     try {
-      guard.assertUnchanged(result.name);
+      if (isRunnerActive()) guard.assertUnchanged(result.name);
     } catch (error: unknown) {
       dependencies.stderr(
         error instanceof Error ? error.message : String(error),
@@ -818,7 +824,6 @@ function writeReports(
       dependencies,
     );
     dependencies.stdout(`JSON report written to ${jsonReportPath}`);
-    rmSync(junitTempDir, { recursive: true, force: true });
   }
 }
 

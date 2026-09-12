@@ -135,6 +135,11 @@ export function createBespokeRunnerIsolation(
 const runnerChildren = new Set<ChildProcess>();
 let runnerTerminating = false;
 
+/** Returns whether cancellation has not yet started. */
+export function isRunnerActive(): boolean {
+  return !runnerTerminating;
+}
+
 /** Refuses new test work once cancellation has started. */
 export function assertRunnerActive(): void {
   if (runnerTerminating) throw new Error('Test runner is terminating');
@@ -171,7 +176,10 @@ function killWindowsRunnerChild(child: ChildProcess): void {
         '/F',
       ]);
       if (result.error) throw result.error;
-      return;
+      if (result.status === 0) return;
+      console.error(
+        `Failed to kill test child tree ${child.pid}: taskkill exited with status ${result.status}`,
+      );
     } catch (error) {
       console.error(
         `Failed to kill test child tree ${child.pid}: ${String(error)}`,
