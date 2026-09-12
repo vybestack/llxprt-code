@@ -4,26 +4,60 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  afterAll,
+  vi,
+} from 'bun:test';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import {
   ProfileManager,
-  SettingsService,
   type AuthConfig,
 } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { LoadBalancingProvider } from '../../LoadBalancingProvider.js';
-import { ProviderManager } from '../../ProviderManager.js';
 import type { GenerateChatOptions, IProvider } from '../../IProvider.js';
-import { createProviderKeyStorage } from '../runtimeSettings.js';
+import { createProviderKeyStorage } from '../../auth/proxy/credential-store-factory.js';
 import { resolveLoadBalancerSubProfile } from './loadBalancerProfile.js';
 import { resolveMemberAuthentication } from '../../loadBalancing/memberAuthentication.js';
 
+const realProviderManagerModule = {
+  ...(await import('../../ProviderManager.js')),
+};
+void vi.mock('../../ProviderManager.js', () => ({
+  ProviderManager: class {
+    private readonly providers = new Map<string, IProvider>();
+
+    registerProvider(provider: IProvider): void {
+      this.providers.set(provider.name, provider);
+    }
+
+    getProviderByName(name: string): IProvider | undefined {
+      return this.providers.get(name);
+    }
+
+    getTokenizerFactory(): undefined {
+      return undefined;
+    }
+  },
+}));
+const { ProviderManager: StubProviderManager } = await import(
+  '../../ProviderManager.js'
+);
+
 describe('resolveLoadBalancerSubProfile — member auth handling', () => {
   const tempDirs: string[] = [];
+  let restoreStorage: (() => void) | undefined;
+
+  afterAll(() => {
+    void vi.mock('../../ProviderManager.js', () => realProviderManagerModule);
+  });
 
   async function makeTempDir(): Promise<string> {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'llxprt-lb-auth-'));
@@ -57,9 +91,35 @@ describe('resolveLoadBalancerSubProfile — member auth handling', () => {
         'loadBalancerProfile.memberAuth tests require isolated storage (preload guard)',
       );
     }
+    const keys = new Map<string, string | Error>([
+      ['invalid key name!', new Error('Invalid key name')],
+    ]);
+    const storage = createProviderKeyStorage();
+    const getKey = vi
+      .spyOn(storage, 'getKey')
+      .mockImplementation(async (name) => {
+        const value = keys.get(name);
+        if (value instanceof Error) throw value;
+        return value ?? null;
+      });
+    const saveKey = vi
+      .spyOn(storage, 'saveKey')
+      .mockImplementation(async (name, value) => {
+        keys.set(name, value);
+      });
+    const deleteKey = vi
+      .spyOn(storage, 'deleteKey')
+      .mockImplementation(async (name) => keys.delete(name));
+    restoreStorage = () => {
+      getKey.mockRestore();
+      saveKey.mockRestore();
+      deleteKey.mockRestore();
+    };
   });
 
   afterEach(async () => {
+    restoreStorage?.();
+    restoreStorage = undefined;
     await Promise.all(
       tempDirs.map((dir) =>
         fs.rm(dir, { recursive: true, force: true }).catch(() => {}),
@@ -174,18 +234,7 @@ describe('resolveLoadBalancerSubProfile — member auth handling', () => {
           'member-keyname',
           deps(pm),
         );
-        const settings = new SettingsService();
-        const config = createRuntimeConfigStub(settings);
-        const runtime = {
-          settingsService: settings,
-          config,
-          runtimeId: keyName,
-        };
-        const providerManager = new ProviderManager({
-          settingsService: settings,
-          config,
-          runtime,
-        });
+        const providerManager = new StubProviderManager();
         const delegate: IProvider = {
           name: 'key-probe',
           getModels: async () => [],
@@ -216,9 +265,6 @@ describe('resolveLoadBalancerSubProfile — member auth handling', () => {
           await fs.writeFile(keyfile, value);
           for await (const chunk of lb.generateChatCompletion({
             contents: [],
-            settings,
-            config,
-            runtime,
           })) {
             observed.push(chunk);
           }
