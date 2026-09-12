@@ -8,7 +8,7 @@ import type { LlxprtExtension, IdeInfo } from '@vybestack/llxprt-code-core';
 import type { SubagentView } from '../../components/SubagentManagement/types.js';
 import type { ModelsDialogData } from '../../commands/types.js';
 import type {
-  DialogKind,
+  ListDialogKind,
   DialogPayloadMap,
   DialogRequest,
   DialogStore,
@@ -89,7 +89,9 @@ export type DialogOpeners = {
     close: () => void;
   };
   logging: {
-    open: (payload: { entries: unknown[] }) => void;
+    open: (payload: {
+      entries: DialogPayloadMap['logging']['entries'];
+    }) => void;
     close: () => void;
   };
   subagent: {
@@ -126,7 +128,7 @@ export type DialogOpeners = {
  * dialog kind. The payload type follows DialogPayloadMap so a kind cannot
  * be opened with the wrong payload shape.
  */
-function createKindOpener<K extends DialogKind>(
+function createKindOpener<K extends ListDialogKind>(
   store: DialogStore,
   kind: K,
 ): {

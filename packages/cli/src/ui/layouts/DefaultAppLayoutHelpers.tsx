@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { selectDialogOpen } from '../stores/dialog/dialogStore.js';
 import React from 'react';
 import { Box, type DOMElement } from 'ink';
 import type { HistoryItem, HistoryItemWithoutId } from '../types.js';
@@ -203,7 +204,7 @@ export function usePendingItems(
   const dialogStore = useDialogStore();
   const editorDialogOpen = useStoreSelector(
     dialogStore.store,
-    (state: DialogState) => state.requests.some((r) => r.kind === 'editor'),
+    (state: DialogState) => selectDialogOpen(state, 'editor'),
   );
 
   return React.useMemo(

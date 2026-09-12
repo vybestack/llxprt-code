@@ -10,7 +10,6 @@ import { renderHook } from '../../test-utils/render.js';
 import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
 import type { AppAction } from '../reducers/appReducer.js';
 import { useAuthCommand } from './useAuthCommand.js';
-import type { LoadedSettings } from '../../config/settings.js';
 import { SettingScope } from '../../config/settings.js';
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 
@@ -37,10 +36,9 @@ describe('useAuthCommand', () => {
     const setAuthError = vi.fn<(error: string | null) => void>();
     const dialogs = createDialogs();
 
-    const { result } = renderHook(
-      () => useAuthCommand({} as LoadedSettings, dialogs, setAuthError),
-      { wrapper: createWrapper(appDispatch) },
-    );
+    const { result } = renderHook(() => useAuthCommand(dialogs, setAuthError), {
+      wrapper: createWrapper(appDispatch),
+    });
 
     await act(async () => {
       await result.current.handleAuthSelect('anthropic', SettingScope.User);

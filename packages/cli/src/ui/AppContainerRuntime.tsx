@@ -309,6 +309,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
   const appCommands = useAppCommands(dialogs, input, layout, terminalStore);
   return (
     <AppRuntimeView
+      runtimeMessageBus={props.runtimeMessageBus}
       slashCommandRuntime={props.slashCommandRuntime}
       version={props.version}
       uiRuntime={bootstrap.uiRuntime}

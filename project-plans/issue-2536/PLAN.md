@@ -296,3 +296,46 @@ Notes:
   produces. All per-file runs are green.
 - Consequence for later slices: verify with per-file runs or the canonical
   runner; never use multi-file single-process `bun test` as a signal.
+
+## 7. Review outcomes (post-implementation)
+
+Two review rounds ran against the finished branch. Round 1 found eight
+items; round 2 verified the remediations. Final state:
+
+- All six behavior regressions fixed and verified with red/green tests
+  (queue clearing, built-in themes with custom maps, folder-trust
+  transaction ownership,   unlimited history limits, NO_COLOR `/theme`,
+  provider info messages).
+- Composition root complete: `buildInputParams`/`buildLayoutParams`
+  deleted, ownership moved into the owning hooks (keybindings, history
+  init, initial prompt to input; loader callbacks/startup readiness to
+  SettingsProfileStore). `AppRuntimeView` takes typed props, not hook
+  result bags.
+- `AppCommands` context is referentially stable; changing input
+  snapshots (buffer, commandContext, inputHistory) live in a separate
+  `AppCommandData` context.
+- Layout split into independently subscribed regions; production-fiber
+  isolation test shows transcript renders: dialog open 0, elapsedTime
+  tick 0, resize 0 (viewport child updates on resize), history append 1.
+- Footer trust became reactive (settings-store field written on
+  CoreEvent.FolderTrustChanged) after round 2 found the region split
+  could leave the untrusted warning stale in an idle session.
+- The #2373 config boundary guard caught one regression during
+  remediation (root passed `props.uiRuntime` where main threads
+  `bootstrap.streamRuntime`); fixed.
+
+### Known follow-ups (documented, not blocking)
+
+- **`buildAppCommands` remains** as the root's command-surface
+  assembler. Round 2 read AC2 as "no aggregate assembly anywhere in the
+  root" and flagged it; the implemented interpretation is that the
+  composition root legitimately composes the stable command surface
+  (handlers only; changing data is separated), and deleting the helper
+  would just inline the same assembly into the component body. AC2's
+  named builders are gone either way.
+- The production isolation test mounts `DefaultAppLayout`, not the full
+  `AppContainerRuntime`, and stubs service-heavy leaves (including
+  Footer). A full-tree variant would strengthen AC8 further.
+- Suite environmental flakes observed under sibling-session load
+  (ToolResultDisplay.retention.behavior, sandbox-podman-diagnostics):
+  both pass standalone repeatedly; not load-bearing here.

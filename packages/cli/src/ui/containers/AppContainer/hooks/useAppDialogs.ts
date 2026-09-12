@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { selectDialogOpen } from '../../../stores/dialog/dialogStore.js';
 import type { SlashCommandRuntime } from '../../../cliUiRuntime.js';
 import type React from 'react';
 import type { AppAction } from '../../../reducers/appReducer.js';
@@ -184,7 +185,7 @@ function useDialogsCore(
   };
 }
 
-function useIdeTrustEffect(
+function useQueueErrorTimeoutWiring(
   config: AppDialogsParams['config'],
   st: ReturnType<typeof useDialogsStoreState>,
 ) {
@@ -215,9 +216,9 @@ function useDialogsAuthProviders(
     dialogs,
   } = p;
   const { addItem } = p.turnStore.commands;
-  const auth = useAuthCommand(settings, dialogs, st.setAuthError);
+  const auth = useAuthCommand(dialogs, st.setAuthError);
   const isOAuthCodeDialogOpen = useStoreSelector(store.store, (state) =>
-    state.requests.some((r) => r.kind === 'oauthCode'),
+    selectDialogOpen(state, 'oauthCode'),
   );
   useOAuthOrchestration({
     appDispatch: p.appDispatch,
@@ -226,11 +227,15 @@ function useDialogsAuthProviders(
     getActiveProviderName: runtime.getActiveProviderName,
     setAuthError: st.setAuthError,
   });
-  const editor = useEditorSettings(settings, dialogs, addItem);
+  const editor = useEditorSettings(
+    settings,
+    dialogs,
+    addItem,
+    p.settingsStore.commands.setEditorError,
+  );
   const addMessage = useDialogHistoryMessage(p.turnStore);
   const provider = useProviderDialog({
     addMessage,
-    store,
     dialogs,
     recordingIntegration,
   });
@@ -275,7 +280,12 @@ function useDialogsAuth(
 ) {
   const { config, settings, store, dialogs } = p;
   const { addItem } = p.turnStore.commands;
-  const theme = useThemeCommand(settings, dialogs, addItem);
+  const theme = useThemeCommand(
+    settings,
+    dialogs,
+    addItem,
+    p.settingsStore.commands.setThemeError,
+  );
   const folderTrust = useFolderTrust({
     settingsStore: p.settingsStore,
     settings,
@@ -306,7 +316,7 @@ function useDialogsAuth(
       dialogs.idePrompt.close();
     }
   }, [p.shouldShowIdePrompt, p.currentIDE, dialogs]);
-  useIdeTrustEffect(config, st);
+  useQueueErrorTimeoutWiring(config, st);
   const authProviders = useDialogsAuthProviders(
     p,
     st,
@@ -358,22 +368,19 @@ function useDialogHistoryMessage(turnStore: TurnStore) {
 }
 
 function useDialogsProfiles(p: AppDialogsParams) {
-  const { config, agent, store, dialogs } = p;
+  const { config, agent, dialogs } = p;
   const addMessage = useDialogHistoryMessage(p.turnStore);
   const loadProfile = useLoadProfileDialog({
     addMessage,
-    store,
     dialogs,
   });
-  const createProfile = useCreateProfileDialog({ store, dialogs });
+  const createProfile = useCreateProfileDialog({ dialogs });
   const profileMgmt = useProfileManagement({
     addMessage,
-    store,
     dialogs,
   });
   const toolsRaw = useToolsDialog({
     addMessage,
-    store,
     dialogs,
     config,
     agent,

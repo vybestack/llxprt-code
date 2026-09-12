@@ -187,14 +187,6 @@ void vi.mock('../hooks/useFolderTrust.js', () => ({
   })),
 }));
 
-void vi.mock('../hooks/useSettingsCommand.js', () => ({
-  useSettingsCommand: vi.fn(() => ({
-    isSettingsDialogOpen: false,
-    openSettingsDialog: vi.fn(),
-    closeSettingsDialog: vi.fn(),
-  })),
-}));
-
 void vi.mock('../hooks/useProviderDialog.js', () => ({
   useProviderDialog: vi.fn(() => ({
     showDialog: false,
@@ -227,9 +219,6 @@ void vi.mock('../hooks/useCreateProfileDialog.js', () => ({
 
 void vi.mock('../hooks/useProfileManagement.js', () => ({
   useProfileManagement: vi.fn(() => ({
-    showListDialog: false,
-    showDetailDialog: false,
-    showEditorDialog: false,
     profiles: [],
     isLoading: false,
     selectedProfileName: null,
@@ -238,7 +227,6 @@ void vi.mock('../hooks/useProfileManagement.js', () => ({
     activeProfileName: null,
     profileError: null,
     openListDialog: vi.fn(),
-    closeListDialog: vi.fn(),
     viewProfileDetail: vi.fn(),
     closeDetailDialog: vi.fn(),
     loadProfile: vi.fn(),

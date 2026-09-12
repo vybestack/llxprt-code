@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { hasDialogRequest } from '../../test-utils/dialogStore.js';
+
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
@@ -23,7 +25,6 @@ void vi.mock('@vybestack/llxprt-code-providers', () => ({
 import { useModelDialogHandler } from './modelDialogHandler.js';
 import {
   createDialogStore,
-  type DialogKind,
   type DialogStore,
 } from '../stores/dialog/dialogStore.js';
 
@@ -103,12 +104,6 @@ function createSeededStore(): DialogStore {
   return store;
 }
 
-function hasRequest(store: DialogStore, kind: DialogKind): boolean {
-  return store.store
-    .getState()
-    .requests.some((request) => request.kind === kind);
-}
-
 describe('useModelDialogHandler', () => {
   beforeEach(() => {
     mockAddItem = vi.fn();
@@ -131,10 +126,10 @@ describe('useModelDialogHandler', () => {
     result.current(makeModel('openai', 'gpt-5'));
 
     await waitFor(() => {
-      expect(hasRequest(store, 'modelConfig')).toBe(true);
+      expect(hasDialogRequest(store, 'modelConfig')).toBe(true);
     });
     expect(fakeRuntime.setActiveModel).toHaveBeenCalledWith('gpt-5');
-    expect(hasRequest(store, 'models')).toBe(false);
+    expect(hasDialogRequest(store, 'models')).toBe(false);
   });
 
   it('opens config dialog after successful cross-provider model switch', async () => {
@@ -153,9 +148,9 @@ describe('useModelDialogHandler', () => {
     result.current(makeModel('anthropic', 'claude-sonnet'));
 
     await waitFor(() => {
-      expect(hasRequest(store, 'modelConfig')).toBe(true);
+      expect(hasDialogRequest(store, 'modelConfig')).toBe(true);
     });
-    expect(hasRequest(store, 'models')).toBe(false);
+    expect(hasDialogRequest(store, 'models')).toBe(false);
     expect(fakeRuntime.setProvider).toHaveBeenCalledWith('anthropic');
     expect(fakeRuntime.setActiveModel).toHaveBeenCalledWith('claude-sonnet');
     expect(callSequence).toStrictEqual(['setProvider', 'setActiveModel']);
@@ -185,8 +180,8 @@ describe('useModelDialogHandler', () => {
         expect.objectContaining({ type: 'error' }),
       );
     });
-    expect(hasRequest(store, 'modelConfig')).toBe(false);
-    expect(hasRequest(store, 'models')).toBe(false);
+    expect(hasDialogRequest(store, 'modelConfig')).toBe(false);
+    expect(hasDialogRequest(store, 'models')).toBe(false);
   });
 
   it('does NOT open config dialog when cross-provider setProvider fails', async () => {
@@ -209,8 +204,8 @@ describe('useModelDialogHandler', () => {
         expect.objectContaining({ type: 'error' }),
       );
     });
-    expect(hasRequest(store, 'modelConfig')).toBe(false);
-    expect(hasRequest(store, 'models')).toBe(false);
+    expect(hasDialogRequest(store, 'modelConfig')).toBe(false);
+    expect(hasDialogRequest(store, 'models')).toBe(false);
   });
 
   it('does NOT open config dialog when cross-provider setProvider succeeds but setActiveModel fails', async () => {
@@ -237,8 +232,8 @@ describe('useModelDialogHandler', () => {
       );
     });
     expect(fakeRuntime.setProvider).toHaveBeenCalledTimes(1);
-    expect(hasRequest(store, 'modelConfig')).toBe(false);
-    expect(hasRequest(store, 'models')).toBe(false);
+    expect(hasDialogRequest(store, 'modelConfig')).toBe(false);
+    expect(hasDialogRequest(store, 'models')).toBe(false);
   });
 
   it('STILL opens config dialog when addItem fails after successful switch', async () => {
@@ -266,7 +261,7 @@ describe('useModelDialogHandler', () => {
     result.current(makeModel('openai', 'gpt-5'));
 
     await waitFor(() => {
-      expect(hasRequest(store, 'modelConfig')).toBe(true);
+      expect(hasDialogRequest(store, 'modelConfig')).toBe(true);
     });
 
     // Verify the error path was genuinely exercised: addItem WAS invoked

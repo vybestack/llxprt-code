@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { hasDialogRequest } from '../../test-utils/dialogStore.js';
+
 // Enable React's act() environment so hook state updates are flushed.
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -75,7 +77,6 @@ function renderProviderDialog(
   return renderHook(() =>
     useProviderDialog({
       addMessage,
-      store,
       dialogs,
     }),
   );
@@ -101,10 +102,7 @@ describe('useProviderDialog', () => {
 
       expect(api.listProviders).toHaveBeenCalledTimes(1);
       expect(api.getActiveProviderName).toHaveBeenCalledTimes(1);
-      expect(
-        store.store.getState().requests.some((r) => r.kind === 'provider'),
-      ).toBe(true);
-      expect(result.current.showDialog).toBe(true);
+      expect(hasDialogRequest(store, 'provider')).toBe(true);
       expect(addMessage).not.toHaveBeenCalled();
     });
   });
@@ -125,9 +123,7 @@ describe('useProviderDialog', () => {
       });
 
       expect(api.listProviders).toHaveBeenCalledTimes(1);
-      expect(
-        store.store.getState().requests.some((r) => r.kind === 'provider'),
-      ).toBe(true);
+      expect(hasDialogRequest(store, 'provider')).toBe(true);
       expect(result.current.providers).toStrictEqual([
         'anthropic',
         'openai',
@@ -150,9 +146,7 @@ describe('useProviderDialog', () => {
         result.current.openDialog();
       });
 
-      expect(
-        store.store.getState().requests.some((r) => r.kind === 'provider'),
-      ).toBe(false);
+      expect(hasDialogRequest(store, 'provider')).toBe(false);
       const calls = addMessage.mock.calls as unknown as AddMessageCall[][];
       expect(calls).toHaveLength(1);
       const message = calls[0][0];
@@ -183,9 +177,7 @@ describe('useProviderDialog', () => {
       act(() => {
         result.current.openDialog();
       });
-      expect(
-        store.store.getState().requests.some((r) => r.kind === 'provider'),
-      ).toBe(true);
+      expect(hasDialogRequest(store, 'provider')).toBe(true);
 
       await act(async () => {
         await result.current.handleSelect('anthropic');
@@ -193,9 +185,7 @@ describe('useProviderDialog', () => {
 
       expect(api.setProvider).toHaveBeenCalledWith('anthropic');
       expect(result.current.currentProvider).toBe('anthropic');
-      expect(
-        store.store.getState().requests.some((r) => r.kind === 'provider'),
-      ).toBe(false);
+      expect(hasDialogRequest(store, 'provider')).toBe(false);
       // The notification message should fire, not a switch error. With no
       // prior provider the message reports the "none" origin explicitly.
       const calls = addMessage.mock.calls as unknown as AddMessageCall[][];
@@ -235,9 +225,7 @@ describe('useProviderDialog', () => {
       expect(errors).toHaveLength(1);
       expect(errors[0].content).toContain('Failed to switch provider');
       expect(errors[0].content).toContain('network down');
-      expect(
-        store.store.getState().requests.some((r) => r.kind === 'provider'),
-      ).toBe(false);
+      expect(hasDialogRequest(store, 'provider')).toBe(false);
     });
   });
 
@@ -257,9 +245,7 @@ describe('useProviderDialog', () => {
         result.current.openDialog();
       });
 
-      expect(
-        store.store.getState().requests.some((r) => r.kind === 'provider'),
-      ).toBe(false);
+      expect(hasDialogRequest(store, 'provider')).toBe(false);
       const calls = addMessage.mock.calls as unknown as AddMessageCall[][];
       expect(calls).toHaveLength(1);
       const message = calls[0][0];

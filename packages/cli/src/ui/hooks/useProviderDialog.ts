@@ -9,8 +9,6 @@ import { MessageType } from '../types.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import { type RecordingIntegration } from '@vybestack/llxprt-code-core';
 import { NO_ACTIVE_PROVIDER_ERROR_MESSAGE } from '@vybestack/llxprt-code-providers/runtime.js';
-import { useStoreSelector } from '../stores/useStoreSelector.js';
-import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 
 interface UseProviderDialogParams {
@@ -19,7 +17,6 @@ interface UseProviderDialogParams {
     content: string;
     timestamp: Date;
   }) => void;
-  store: DialogStore;
   dialogs: DialogOpeners;
   recordingIntegration?: RecordingIntegration;
 }
@@ -66,14 +63,10 @@ function resolveActiveProviderName(
 
 export const useProviderDialog = ({
   addMessage,
-  store,
   dialogs,
   recordingIntegration,
 }: UseProviderDialogParams) => {
   const runtime = useRuntimeApi();
-  const showDialog = useStoreSelector(store.store, (state) =>
-    state.requests.some((r) => r.kind === 'provider'),
-  );
   const [providers, setProviders] = useState<string[]>([]);
   const [currentProvider, setCurrentProvider] = useState<string>('');
 
@@ -124,7 +117,6 @@ export const useProviderDialog = ({
   );
 
   return {
-    showDialog,
     openDialog,
     closeDialog,
     providers,

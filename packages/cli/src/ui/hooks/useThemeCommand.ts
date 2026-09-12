@@ -35,7 +35,7 @@ function useInitialDialogState(
 function useThemeValidation(
   effectiveTheme: string | undefined,
   dialogs: DialogOpeners,
-  appDispatch: ReturnType<typeof useAppDispatch>,
+  setThemeError: (error: string | null) => void,
   addItem: (item: Omit<HistoryItem, 'id'>, timestamp: number) => void,
 ): void {
   useEffect(() => {
@@ -54,27 +54,25 @@ function useThemeValidation(
 
     if (effectiveTheme && !themeManager.findThemeByName(effectiveTheme)) {
       dialogs.theme.open({});
-      appDispatch({
-        type: 'SET_THEME_ERROR',
-        payload: `Theme "${effectiveTheme}" not found.`,
-      });
+      setThemeError(`Theme "${effectiveTheme}" not found.`);
     } else {
-      appDispatch({ type: 'SET_THEME_ERROR', payload: null });
+      setThemeError(null);
     }
-  }, [effectiveTheme, dialogs, appDispatch, addItem]);
+  }, [effectiveTheme, dialogs, setThemeError, addItem]);
 }
 
 export const useThemeCommand = (
   loadedSettings: LoadedSettings,
   dialogs: DialogOpeners,
   addItem: (item: Omit<HistoryItem, 'id'>, timestamp: number) => void,
+  setThemeError: (error: string | null) => void,
 ): UseThemeCommandReturn => {
   // Determine the effective theme
   const effectiveTheme = loadedSettings.merged.ui.theme;
   const appDispatch = useAppDispatch();
 
   useInitialDialogState(effectiveTheme, dialogs);
-  useThemeValidation(effectiveTheme, dialogs, appDispatch, addItem);
+  useThemeValidation(effectiveTheme, dialogs, setThemeError, addItem);
 
   const openThemeDialog = useCallback(() => {
     if (process.env.NO_COLOR) {
@@ -95,10 +93,7 @@ export const useThemeCommand = (
       if (!themeManager.setActiveTheme(themeName)) {
         // If theme is not found, open the theme selection dialog and set error message
         dialogs.theme.open({});
-        appDispatch({
-          type: 'SET_THEME_ERROR',
-          payload: `Theme "${themeName}" not found.`,
-        });
+        setThemeError(`Theme "${themeName}" not found.`);
       } else {
         // Force re-render by updating a dummy warning
         appDispatch({
@@ -106,10 +101,10 @@ export const useThemeCommand = (
           payload: { key: 'theme-render', message: '' },
         });
         appDispatch({ type: 'CLEAR_WARNING', payload: 'theme-render' });
-        appDispatch({ type: 'SET_THEME_ERROR', payload: null }); // Clear any previous theme error on success
+        setThemeError(null); // Clear any previous theme error on success
       }
     },
-    [dialogs, appDispatch],
+    [dialogs, appDispatch, setThemeError],
   );
 
   const handleThemeHighlight = useCallback(
@@ -127,10 +122,10 @@ export const useThemeCommand = (
         loadedSettings,
         applyTheme,
         dialogs,
-        appDispatch,
+        setThemeError,
       );
     },
-    [applyTheme, loadedSettings, dialogs, appDispatch],
+    [applyTheme, loadedSettings, dialogs, setThemeError],
   );
 
   return {
@@ -146,25 +141,27 @@ function performThemeSelection(
   loadedSettings: LoadedSettings,
   applyTheme: (themeName: string | undefined) => void,
   dialogs: DialogOpeners,
-  appDispatch: ReturnType<typeof useAppDispatch>,
+  setThemeError: (error: string | null) => void,
 ): void {
-  try {
-    const mergedCustomThemes = getMergedCustomThemes(loadedSettings);
-
-    if (!isThemeAvailable(themeName, mergedCustomThemes)) {
-      reportThemeSelectionError(themeName, appDispatch);
-      return;
-    }
-
-    loadedSettings.setValue(scope, 'ui.theme', themeName);
-    if (loadedSettings.merged.ui.customThemes) {
-      themeManager.loadCustomThemes(loadedSettings.merged.ui.customThemes);
-    }
-    applyTheme(loadedSettings.merged.ui.theme);
-    appDispatch({ type: 'SET_THEME_ERROR', payload: null });
-  } finally {
+  if (themeName === undefined) {
     dialogs.theme.close();
+    setThemeError(null);
+    return;
   }
+  const mergedCustomThemes = getMergedCustomThemes(loadedSettings);
+
+  if (!isThemeAvailable(themeName, mergedCustomThemes)) {
+    reportThemeSelectionError(themeName, setThemeError);
+    return;
+  }
+
+  loadedSettings.setValue(scope, 'ui.theme', themeName);
+  if (loadedSettings.merged.ui.customThemes) {
+    themeManager.loadCustomThemes(loadedSettings.merged.ui.customThemes);
+  }
+  applyTheme(loadedSettings.merged.ui.theme);
+  setThemeError(null);
+  dialogs.theme.close();
 }
 
 function getMergedCustomThemes(loadedSettings: LoadedSettings) {
@@ -182,14 +179,8 @@ function isThemeAvailable(
 }
 
 function reportThemeSelectionError(
-  themeName: string | undefined,
-  appDispatch: ReturnType<typeof useAppDispatch>,
+  themeName: string,
+  setThemeError: (error: string | null) => void,
 ): void {
-  appDispatch({
-    type: 'SET_THEME_ERROR',
-    payload:
-      themeName === undefined
-        ? 'No theme selected.'
-        : `Theme "${themeName}" not found.`,
-  });
+  setThemeError(`Theme "${themeName}" not found.`);
 }

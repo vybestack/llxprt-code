@@ -61,7 +61,7 @@ import { useTerminalStore } from '../stores/terminal/TerminalContext.js';
 import { useStoreSelector } from '../stores/useStoreSelector.js';
 import {
   selectActiveDialog,
-  type DialogKind,
+  type ListDialogKind,
   type DialogRequest,
 } from '../stores/dialog/dialogStore.js';
 import type { LoadedSettings, SettingScope } from '../../config/settings.js';
@@ -86,6 +86,8 @@ function useDialogData(): DialogData {
     store,
     (s) => s.welcomeAvailableModels,
   );
+  const themeError = useStoreSelector(store, (s) => s.themeError);
+  const editorError = useStoreSelector(store, (s) => s.editorError);
   const authError = useStoreSelector(store, (s) => s.authError);
   const providerOptions = useStoreSelector(store, (s) => s.providerOptions);
   const selectedProvider = useStoreSelector(store, (s) => s.selectedProvider);
@@ -126,6 +128,8 @@ function useDialogData(): DialogData {
     welcomeAvailableProviders,
     welcomeAvailableModels,
     authError,
+    themeError,
+    editorError,
     providerOptions,
     selectedProvider,
     profiles,
@@ -141,27 +145,6 @@ function useDialogData(): DialogData {
     toolsDialogDisabledTools,
   };
 }
-
-/** Entry shape LoggingDialog renders; mirrors the token-usage log records. */
-type LoggingDialogEntries = Array<{
-  timestamp: string;
-  type: 'request' | 'response' | 'tool_call';
-  provider: string;
-  model?: string;
-  conversationId?: string;
-  messages?: Array<{ role: string; content: string }>;
-  response?: string;
-  tokens?: { input?: number; output?: number };
-  error?: string;
-  tool?: string;
-  duration?: number;
-  success?: boolean;
-  gitStats?: {
-    linesAdded: number;
-    linesRemoved: number;
-    filesChanged: number;
-  };
-}>;
 
 /**
  * Handler for SessionBrowserDialog selection - performs real session resume.
@@ -179,7 +162,7 @@ function useSessionBrowserHandler(
     recordingSwapCallbacks?: unknown;
   },
   addItem: UseHistoryManagerReturn['addItem'],
-  closeDialog: (kind: DialogKind) => void,
+  closeDialog: (kind: ListDialogKind) => void,
 ) {
   return useCallback(
     async (target: ContinueTarget): Promise<PerformResumeResult> => {
@@ -253,7 +236,6 @@ function useTerminalDialogValues() {
 function useDialogManagerState(
   addItem: UseHistoryManagerReturn['addItem'],
   config: CliUiRuntime,
-  settings: LoadedSettings,
   uiActions: AppCommands,
   runtime: ReturnType<typeof useRuntimeApi>,
 ) {
@@ -335,7 +317,7 @@ function useDialogManagerState(
 function renderProfileStoreDialog(
   active: DialogRequest,
   ctx: StoreDialogRenderContext,
-  close: (kind: DialogKind) => void,
+  close: (kind: ListDialogKind) => void,
 ) {
   const { uiState, uiActions } = ctx;
   switch (active.kind) {
@@ -370,7 +352,7 @@ function renderProfileStoreDialog(
 function renderPayloadStoreDialog(
   active: DialogRequest,
   ctx: StoreDialogRenderContext,
-  close: (kind: DialogKind) => void,
+  close: (kind: ListDialogKind) => void,
 ) {
   const { uiState, uiActions, config, addItem } = ctx;
   switch (active.kind) {
@@ -389,7 +371,7 @@ function renderPayloadStoreDialog(
     case 'logging':
       return (
         <LoggingDialog
-          entries={active.payload.entries as LoggingDialogEntries}
+          entries={active.payload.entries}
           onClose={() => close('logging')}
         />
       );
@@ -411,12 +393,13 @@ function renderSettingsStoreDialog(
   active: DialogRequest,
   ctx: StoreDialogRenderContext,
   state: ReturnType<typeof useDialogManagerState>,
-  close: (kind: DialogKind) => void,
+  close: (kind: ListDialogKind) => void,
 ) {
   const { uiActions, settings, config } = ctx;
   switch (active.kind) {
     case 'theme':
       return renderThemeDialog(
+        ctx.uiState.themeError,
         uiActions,
         settings,
         state.constrainHeight,
@@ -436,7 +419,12 @@ function renderSettingsStoreDialog(
         </Box>
       );
     case 'editor':
-      return renderEditorDialog(uiActions, settings, () => close('editor'));
+      return renderEditorDialog(
+        ctx.uiState.editorError,
+        uiActions,
+        settings,
+        () => close('editor'),
+      );
     default:
       return undefined;
   }
@@ -447,18 +435,14 @@ function renderAccountStoreDialog(
   active: DialogRequest,
   ctx: StoreDialogRenderContext,
   state: ReturnType<typeof useDialogManagerState>,
-  close: (kind: DialogKind) => void,
+  close: (kind: ListDialogKind) => void,
 ) {
   const { uiState, uiActions, settings } = ctx;
   switch (active.kind) {
     case 'auth':
       return renderAuthDialog(uiState, settings, state.handleAuthSelect);
     case 'oauthCode':
-      return renderOAuthCodeDialog(
-        uiState,
-        uiActions,
-        state.handleOAuthCodeSubmit,
-      );
+      return renderOAuthCodeDialog(uiActions, state.handleOAuthCodeSubmit);
     case 'provider':
       return renderProviderDialog(uiState, state.handleProviderSelect, () =>
         close('provider'),
@@ -571,13 +555,7 @@ export const DialogManager = ({ config, settings }: DialogManagerProps) => {
   const runtime = useRuntimeApi();
   const { addItem } = useTurnStore().commands;
 
-  const state = useDialogManagerState(
-    addItem,
-    config,
-    settings,
-    uiActions,
-    runtime,
-  );
+  const state = useDialogManagerState(addItem, config, uiActions, runtime);
 
   // NOTE: IdeTrustChangeDialog not yet ported from upstream
   return renderDialogBody(uiState, uiActions, settings, config, addItem, state);

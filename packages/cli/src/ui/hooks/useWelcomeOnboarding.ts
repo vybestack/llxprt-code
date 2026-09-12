@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { INITIAL_WELCOME_STATE } from './welcomeState.js';
 import { useState, useCallback, useEffect } from 'react';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { type LoadedSettings } from '../../config/settings.js';
@@ -416,11 +417,7 @@ export const useWelcomeOnboarding = (
   // Only show welcome after folder trust is complete
   const showWelcome = !welcomeCompleted && isFolderTrustComplete;
 
-  const [state, setState] = useState<WelcomeState>({
-    step: 'welcome',
-    authInProgress: false,
-    modelsLoadStatus: 'idle',
-  });
+  const [state, setState] = useState<WelcomeState>(INITIAL_WELCOME_STATE);
 
   const [availableProviders] = useProviderLoader(runtime);
   const [availableModels, setAvailableModels] = useModelLoader(

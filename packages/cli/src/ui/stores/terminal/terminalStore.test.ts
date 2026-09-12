@@ -93,6 +93,46 @@ describe('createTerminalStore', () => {
   });
 
   describe('field setters', () => {
+    it('hands focus back and forth using the current focus value', () => {
+      const { store, commands } = createTerminalStore();
+      commands.setEmbeddedShellFocused(true);
+      expect(store.getState().embeddedShellFocused).toBe(true);
+      commands.setEmbeddedShellFocused((focused) => !focused);
+      expect(store.getState().embeddedShellFocused).toBe(false);
+      commands.setEmbeddedShellFocused((focused) => !focused);
+      expect(store.getState().embeddedShellFocused).toBe(true);
+      commands.setEmbeddedShellFocused(false);
+      expect(store.getState().embeddedShellFocused).toBe(false);
+    });
+
+    it('writes and clears queue errors', () => {
+      const { store, commands } = createTerminalStore();
+      commands.setQueueErrorMessage('Queue is busy');
+      expect(store.getState().queueErrorMessage).toBe('Queue is busy');
+      commands.setQueueErrorMessage(null);
+      expect(store.getState().queueErrorMessage).toBeNull();
+    });
+
+    it('enters and leaves shell mode, escape prompting and the active PTY', () => {
+      const { store, commands } = createTerminalStore();
+      commands.setShellModeActive(true);
+      commands.setShowEscapePrompt(true);
+      commands.setActiveShellPtyId(42);
+      expect(store.getState()).toMatchObject({
+        shellModeActive: true,
+        showEscapePrompt: true,
+        activeShellPtyId: 42,
+      });
+      commands.setShellModeActive(false);
+      commands.setShowEscapePrompt(false);
+      commands.setActiveShellPtyId(null);
+      expect(store.getState()).toMatchObject({
+        shellModeActive: false,
+        showEscapePrompt: false,
+        activeShellPtyId: null,
+      });
+    });
+
     it('setMainAreaWidth', () => {
       const { store, commands } = createTerminalStore();
       commands.setMainAreaWidth(110);
@@ -214,5 +254,32 @@ describe('createTerminalStore', () => {
       expect(store.getState()).not.toBe(before);
       expect(store.getState()).toStrictEqual(before);
     });
+  });
+});
+
+describe('store migration regressions', () => {
+  it('preserves equal focus, color and placeholder references while notifying', () => {
+    const { store, commands } = createTerminalStore();
+    const initial = store.getState();
+    let notifications = 0;
+    store.subscribe(() => {
+      notifications += 1;
+    });
+    const equalWrites = [
+      () => commands.setEmbeddedShellFocused(initial.embeddedShellFocused),
+      () => commands.setEmbeddedShellFocused((focused) => focused),
+      () =>
+        commands.setTerminalBackgroundColor(initial.terminalBackgroundColor),
+      () => commands.setPlaceholder(initial.placeholder),
+    ];
+    for (const [index, write] of equalWrites.entries()) {
+      write();
+      expect(store.getState()).toBe(initial);
+      expect(notifications).toBe(index + 1);
+    }
+    commands.setEmbeddedShellFocused((focused) => !focused);
+    expect(store.getState().embeddedShellFocused).toBe(
+      !initial.embeddedShellFocused,
+    );
   });
 });

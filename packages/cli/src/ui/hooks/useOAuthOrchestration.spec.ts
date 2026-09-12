@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { hasDialogRequest } from '../../test-utils/dialogStore.js';
 import { renderHook } from '../../test-utils/render.js';
 import { useOAuthOrchestration } from './useOAuthOrchestration.js';
 import type { AppAction } from '../reducers/appReducer.js';
@@ -15,10 +16,6 @@ import {
 import { createDialogOpeners } from '../stores/dialog/dialogOpeners.js';
 
 const OAUTH_POLL_MS = 100;
-
-function hasRequest(store: DialogStore, kind: string): boolean {
-  return store.store.getState().requests.some((r) => r.kind === kind);
-}
 
 describe('useOAuthOrchestration', () => {
   let appDispatch: React.Dispatch<AppAction>;
@@ -65,7 +62,7 @@ describe('useOAuthOrchestration', () => {
       vi.advanceTimersByTime(OAUTH_POLL_MS * 3);
 
       expect(appDispatch).not.toHaveBeenCalled();
-      expect(hasRequest(store, 'oauthCode')).toBe(false);
+      expect(hasDialogRequest(store, 'oauthCode')).toBe(false);
       expect((global as Record<string, unknown>).__oauth_needs_code).toBe(true);
     });
 
@@ -86,7 +83,7 @@ describe('useOAuthOrchestration', () => {
 
       vi.advanceTimersByTime(OAUTH_POLL_MS * 3);
 
-      expect(hasRequest(store, 'oauthCode')).toBe(true);
+      expect(hasDialogRequest(store, 'oauthCode')).toBe(true);
       expect((global as Record<string, unknown>).__oauth_needs_code).toBe(
         false,
       );
@@ -108,7 +105,7 @@ describe('useOAuthOrchestration', () => {
 
       vi.advanceTimersByTime(OAUTH_POLL_MS * 3);
 
-      expect(hasRequest(store, 'oauthCode')).toBe(true);
+      expect(hasDialogRequest(store, 'oauthCode')).toBe(true);
       expect((global as Record<string, unknown>).__oauth_needs_code).toBe(
         false,
       );
@@ -134,7 +131,7 @@ describe('useOAuthOrchestration', () => {
       vi.advanceTimersByTime(OAUTH_POLL_MS * 3);
 
       expect(appDispatch).not.toHaveBeenCalled();
-      expect(hasRequest(store, 'oauthCode')).toBe(false);
+      expect(hasDialogRequest(store, 'oauthCode')).toBe(false);
     });
 
     it('opens the dialog when getActiveProviderName is not provided (backward compatibility)', () => {
@@ -152,7 +149,7 @@ describe('useOAuthOrchestration', () => {
 
       vi.advanceTimersByTime(OAUTH_POLL_MS * 3);
 
-      expect(hasRequest(store, 'oauthCode')).toBe(true);
+      expect(hasDialogRequest(store, 'oauthCode')).toBe(true);
     });
   });
 
@@ -172,7 +169,7 @@ describe('useOAuthOrchestration', () => {
 
       vi.advanceTimersByTime(OAUTH_POLL_MS * 3);
 
-      expect(hasRequest(store, 'oauthCode')).toBe(false);
+      expect(hasDialogRequest(store, 'oauthCode')).toBe(false);
     });
   });
 });

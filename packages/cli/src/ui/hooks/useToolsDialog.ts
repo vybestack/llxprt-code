@@ -8,9 +8,7 @@ import { useCallback, useState } from 'react';
 import type { Agent, ToolInfo } from '@vybestack/llxprt-code-agents';
 import { MessageType } from '../types.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
-import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
-import { useStoreSelector } from '../stores/useStoreSelector.js';
 
 interface UseToolsDialogParams {
   addMessage: (msg: {
@@ -18,7 +16,6 @@ interface UseToolsDialogParams {
     content: string;
     timestamp: Date;
   }) => void;
-  store: DialogStore;
   dialogs: DialogOpeners;
   config: CliUiRuntime;
   agent: Agent | null;
@@ -100,14 +97,10 @@ function updateDisabledToolsList(
 
 export const useToolsDialog = ({
   addMessage,
-  store,
   dialogs,
   config,
   agent,
 }: UseToolsDialogParams) => {
-  const showDialog = useStoreSelector(store.store, (state) =>
-    state.requests.some((r) => r.kind === 'tools'),
-  );
   const [action, setAction] = useState<'enable' | 'disable'>('disable');
   const [availableTools, setAvailableTools] = useState<ToolInfo[]>([]);
   const [disabledTools, setDisabledTools] = useState<string[]>([]);
@@ -173,7 +166,6 @@ export const useToolsDialog = ({
   );
 
   return {
-    showDialog,
     openDialog,
     closeDialog,
     action,

@@ -5,20 +5,15 @@
  */
 
 import { useCallback } from 'react';
-import type { LoadedSettings, SettingScope } from '../../config/settings.js';
+import type { SettingScope } from '../../config/settings.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 
 export const useAuthCommand = (
-  settings: LoadedSettings,
   dialogs: DialogOpeners,
   setAuthError: (error: string | null) => void,
 ) => {
   const appDispatch = useAppDispatch();
-
-  const openAuthDialog = useCallback(() => {
-    dialogs.auth.open({});
-  }, [dialogs]);
 
   const handleAuthSelect = useCallback(
     async (selection: string | undefined, _scope: SettingScope) => {
@@ -32,7 +27,6 @@ export const useAuthCommand = (
   );
 
   return {
-    openAuthDialog,
     handleAuthSelect,
   };
 };

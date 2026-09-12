@@ -85,6 +85,8 @@ export interface TurnCommands {
     itemData: Omit<HistoryItem, 'id'>,
     baseTimestamp?: number,
   ) => void;
+  /** Claims a matching request once, including across effect replays. */
+  consumePendingAddRequest: (seq: number) => PendingAddRequest | null;
   setPendingHistoryItems: (items: HistoryItemWithoutId[]) => void;
   setStreamingState: (state: StreamingState) => void;
   setThought: (thought: ThoughtSummary | null) => void;
@@ -132,7 +134,10 @@ type TurnHistoryCommands = Pick<
   | 'setHistoryLimits'
 >;
 
-type TurnAddRequestCommands = Pick<TurnCommands, 'requestAddItem'>;
+type TurnAddRequestCommands = Pick<
+  TurnCommands,
+  'requestAddItem' | 'consumePendingAddRequest'
+>;
 
 type TurnStatusCommands = Pick<
   TurnCommands,
@@ -240,7 +245,14 @@ function createTurnAddRequestCommands(
     }));
   };
 
-  return { requestAddItem };
+  const consumePendingAddRequest = (seq: number): PendingAddRequest | null => {
+    const request = store.getState().pendingAddRequest;
+    if (request?.seq !== seq) return null;
+    store.setState((prev) => ({ ...prev, pendingAddRequest: null }));
+    return request;
+  };
+
+  return { requestAddItem, consumePendingAddRequest };
 }
 
 /** Streaming and turn-status writers backed directly by store state. */

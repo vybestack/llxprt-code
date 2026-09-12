@@ -7,9 +7,7 @@
 import { useCallback, useState } from 'react';
 import { MessageType } from '../types.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
-import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
-import { useStoreSelector } from '../stores/useStoreSelector.js';
 
 interface UseLoadProfileDialogParams {
   addMessage: (msg: {
@@ -17,7 +15,6 @@ interface UseLoadProfileDialogParams {
     content: string;
     timestamp: Date;
   }) => void;
-  store: DialogStore;
   dialogs: DialogOpeners;
 }
 
@@ -71,13 +68,9 @@ function handleProfileLoadError(
 
 export const useLoadProfileDialog = ({
   addMessage,
-  store,
   dialogs,
 }: UseLoadProfileDialogParams) => {
   const runtime = useRuntimeApi();
-  const showDialog = useStoreSelector(store.store, (state) =>
-    state.requests.some((r) => r.kind === 'loadProfile'),
-  );
   const [profiles, setProfiles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -133,7 +126,6 @@ export const useLoadProfileDialog = ({
   );
 
   return {
-    showDialog,
     openDialog,
     closeDialog,
     profiles,

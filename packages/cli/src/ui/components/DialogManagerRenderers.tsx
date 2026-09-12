@@ -11,7 +11,8 @@
  */
 
 import type { CliUiRuntime } from '../cliUiRuntime.js';
-import { Box } from 'ink';
+import { Box, Text } from 'ink';
+import { theme } from '../semantic-colors.js';
 import { IdeIntegrationNudge } from '../IdeIntegrationNudge.js';
 import type {
   ContinueTarget,
@@ -50,7 +51,7 @@ import type { AppCommands } from '../contexts/AppCommandsContext.js';
 import type { LoadedSettings, SettingScope } from '../../config/settings.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import type {
-  DialogKind,
+  ListDialogKind,
   DialogRequest,
 } from '../stores/dialog/dialogStore.js';
 /**
@@ -63,6 +64,8 @@ import { SessionBrowserDialog } from './SessionBrowserDialog.js';
  * selectors at the hook-legal site so the pure render helpers stay pure.
  */
 export interface DialogData {
+  themeError: string | null;
+  editorError: string | null;
   welcomeState: WelcomeState;
   welcomeAvailableProviders: string[];
   welcomeAvailableModels: ModelInfo[];
@@ -99,7 +102,7 @@ export function renderEarlyStoreDialog(
   active: DialogRequest,
   ctx: StoreDialogRenderContext,
   terminalWidth: number,
-  close: (kind: DialogKind) => void,
+  close: (kind: ListDialogKind) => void,
 ) {
   const { uiState, uiActions, config } = ctx;
   switch (active.kind) {
@@ -150,7 +153,8 @@ export function renderEarlyStoreDialog(
 }
 
 export function renderThemeDialog(
-  uiActions: AppCommands,
+  error: string | null,
+  uiActions: Pick<AppCommands, 'handleThemeSelect' | 'handleThemeHighlight'>,
   settings: LoadedSettings,
   constrainHeight: boolean,
   terminalHeight: number,
@@ -159,6 +163,11 @@ export function renderThemeDialog(
 ) {
   return (
     <Box flexDirection="column">
+      {error && (
+        <Box marginBottom={1}>
+          <Text color={theme.status.error}>{error}</Text>
+        </Box>
+      )}
       <ThemeDialog
         onSelect={uiActions.handleThemeSelect}
         onHighlight={uiActions.handleThemeHighlight}
@@ -189,7 +198,6 @@ export function renderAuthDialog(
 }
 
 export function renderOAuthCodeDialog(
-  uiState: DialogData,
   uiActions: AppCommands,
   handleOAuthCodeSubmit: (code: string) => void,
 ) {
@@ -204,12 +212,18 @@ export function renderOAuthCodeDialog(
 }
 
 export function renderEditorDialog(
-  uiActions: AppCommands,
+  error: string | null,
+  uiActions: Pick<AppCommands, 'handleEditorSelect'>,
   settings: LoadedSettings,
   onExit: () => void,
 ) {
   return (
     <Box flexDirection="column">
+      {error && (
+        <Box marginBottom={1}>
+          <Text color={theme.status.error}>{error}</Text>
+        </Box>
+      )}
       <EditorSettingsDialog
         onSelect={uiActions.handleEditorSelect}
         settings={settings}

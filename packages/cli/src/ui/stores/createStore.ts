@@ -12,7 +12,12 @@ export interface Store<S> {
 
 /**
  * Minimal external store primitive. Setters replace the whole state reference and
- * notify every listener. No cloning, no guards: the caller owns immutability.
+ * notify every listener, including identical-reference writes. Commands own
+ * equality policy: settings assignments skip equal writes; terminal geometry
+ * writes invalidate state references, while focus/color/placeholder no-ops
+ * retain references but still notify. Selectors compare selected values with
+ * Object.is. Callers must not assume every notification changes identity.
+ * No cloning: the caller owns immutability.
  */
 export function createStore<S>(initial: S): Store<S> {
   let state = initial;

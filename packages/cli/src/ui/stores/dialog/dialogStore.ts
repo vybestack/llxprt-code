@@ -5,6 +5,7 @@
  */
 
 import type { ReactNode } from 'react';
+import type { LogEntry } from '../../components/LoggingDialog.js';
 import { createStore, type Store } from '../createStore.js';
 import type { LlxprtExtension, IdeInfo } from '@vybestack/llxprt-code-core';
 import type { SubagentView } from '../../components/SubagentManagement/types.js';
@@ -39,7 +40,7 @@ export interface DialogPayloadMap {
   tools: { action: 'enable' | 'disable' };
   privacy: Record<string, never>;
   permissions: Record<string, never>;
-  logging: { entries: unknown[] };
+  logging: { entries: LogEntry[] };
   subagent: { initialView?: SubagentView; initialName?: string };
   models: ModelsDialogData;
   sessionBrowser: Record<string, never>;
@@ -48,6 +49,10 @@ export interface DialogPayloadMap {
 }
 
 export type DialogKind = keyof DialogPayloadMap;
+export type ListDialogKind = Exclude<
+  DialogKind,
+  'confirmation' | 'extensionUpdateConfirm'
+>;
 
 export type DialogRequest = {
   [K in DialogKind]: {
@@ -55,10 +60,6 @@ export type DialogRequest = {
     payload: DialogPayloadMap[K];
   };
 }[DialogKind];
-
-export type ConfirmationDialogRequest = DialogRequest & {
-  kind: 'confirmation' | 'extensionUpdateConfirm';
-};
 
 export interface DialogState {
   requests: DialogRequest[];
@@ -70,8 +71,8 @@ export interface DialogState {
 
 export interface DialogCommands {
   openDialog: (request: DialogRequest) => void;
-  closeDialog: (kind: DialogKind) => void;
-  updateDialogPayload: <K extends DialogKind>(
+  closeDialog: (kind: ListDialogKind) => void;
+  updateDialogPayload: <K extends ListDialogKind>(
     kind: K,
     patch: Partial<DialogPayloadMap[K]>,
   ) => void;
@@ -96,7 +97,7 @@ export interface DialogStore {
  * early dialogs first (workspaceMigration through extensionUpdateConfirm), then the
  * body order. Lower index renders first when multiple dialogs are open.
  */
-export const DIALOG_PRIORITY: readonly DialogKind[] = [
+export const DIALOG_PRIORITY = [
   'workspaceMigration',
   'idePrompt',
   'folderTrust',
@@ -123,7 +124,24 @@ export const DIALOG_PRIORITY: readonly DialogKind[] = [
   'sessionBrowser',
   'modelConfig',
   'policies',
-] as const;
+] as const satisfies readonly DialogKind[];
+
+type RankedDialogKind = (typeof DIALOG_PRIORITY)[number];
+const allDialogKindsRanked: Exclude<DialogKind, RankedDialogKind> extends never
+  ? true
+  : never = true;
+void allDialogKindsRanked;
+
+/** Reports visibility across both the request list and consent slots. */
+export function selectDialogOpen(
+  state: DialogState,
+  kind: DialogKind,
+): boolean {
+  if (kind === 'confirmation') return state.confirmationRequest !== null;
+  if (kind === 'extensionUpdateConfirm')
+    return state.confirmUpdateLlxprtExtensionRequests.length > 0;
+  return state.requests.some((request) => request.kind === kind);
+}
 
 const priorityIndex = new Map<DialogKind, number>(
   DIALOG_PRIORITY.map((kind, index) => [kind, index]),
@@ -236,14 +254,14 @@ export function createDialogStore(): DialogStore {
     });
   };
 
-  const closeDialog = (kind: DialogKind): void => {
+  const closeDialog = (kind: ListDialogKind): void => {
     store.setState((prev) => ({
       ...prev,
       requests: prev.requests.filter((r) => r.kind !== kind),
     }));
   };
 
-  const updateDialogPayload = <K extends DialogKind>(
+  const updateDialogPayload = <K extends ListDialogKind>(
     kind: K,
     patch: Partial<DialogPayloadMap[K]>,
   ): void => {

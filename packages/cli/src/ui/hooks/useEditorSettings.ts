@@ -12,7 +12,6 @@ import {
   allowEditorTypeInSandbox,
   checkHasEditorType,
 } from '@vybestack/llxprt-code-core';
-import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 
 import { SettingPaths } from '../../config/settingPaths.js';
@@ -30,9 +29,8 @@ export const useEditorSettings = (
   loadedSettings: LoadedSettings,
   dialogs: DialogOpeners,
   addItem: (item: Omit<HistoryItem, 'id'>, timestamp: number) => void,
+  setEditorError: (error: string | null) => void,
 ): UseEditorSettingsReturn => {
-  const appDispatch = useAppDispatch();
-
   const openEditorDialog = useCallback(() => {
     dialogs.editor.open({});
   }, [dialogs]);
@@ -44,6 +42,7 @@ export const useEditorSettings = (
         (!checkHasEditorType(editorType) ||
           !allowEditorTypeInSandbox(editorType))
       ) {
+        setEditorError(`Editor "${editorType}" is unavailable.`);
         return;
       }
 
@@ -60,16 +59,13 @@ export const useEditorSettings = (
           },
           Date.now(),
         );
-        appDispatch({ type: 'SET_EDITOR_ERROR', payload: null });
+        setEditorError(null);
         dialogs.editor.close();
       } catch (error) {
-        appDispatch({
-          type: 'SET_EDITOR_ERROR',
-          payload: `Failed to set editor preference: ${error}`,
-        });
+        setEditorError(`Failed to set editor preference: ${error}`);
       }
     },
-    [loadedSettings, appDispatch, addItem, dialogs],
+    [loadedSettings, setEditorError, addItem, dialogs],
   );
 
   const exitEditorDialog = useCallback(() => {

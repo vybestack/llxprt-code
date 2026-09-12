@@ -34,3 +34,15 @@ export const calculateMainAreaWidth = (
   }
   return getMainAreaWidthInternal(terminalWidth);
 };
+
+export const STATIC_EXTRA_HEIGHT = 3;
+
+/** Input width shared by startup defaults and live resize writers. */
+export function computeInputWidth(terminalWidth: number): number {
+  return Math.max(20, Math.floor(terminalWidth * 0.9) - 6);
+}
+
+/** Suggestions width shared by startup defaults and live resize writers. */
+export function computeSuggestionsWidth(terminalWidth: number): number {
+  return Math.max(60, Math.floor(terminalWidth * 0.8));
+}

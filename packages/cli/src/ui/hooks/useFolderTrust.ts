@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { selectDialogOpen } from '../stores/dialog/dialogStore.js';
 import { useCallback, useEffect, useRef } from 'react';
 import { ExitCodes, coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
@@ -162,7 +163,7 @@ export const useFolderTrust = ({
     config?.getWorkingDir() ?? process.cwd(),
   );
   const isFolderTrustDialogOpen = useStoreSelector(store.store, (state) =>
-    state.requests.some((r) => r.kind === 'folderTrust'),
+    selectDialogOpen(state, 'folderTrust'),
   );
   const startupMessageSent = useRef(false);
   const previousFolderTrust = useRef(settings.merged.folderTrust);

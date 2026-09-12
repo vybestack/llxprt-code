@@ -11,9 +11,7 @@ import type { Profile } from '@vybestack/llxprt-code-settings';
 import type { ProfileListItem } from '../components/ProfileListDialog.js';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
-import { useStoreSelector } from '../stores/useStoreSelector.js';
 
 const debug = new DebugLogger('llxprt:ui:useProfileManagement');
 
@@ -69,25 +67,7 @@ interface AddMessageFn {
 
 interface UseProfileManagementParams {
   addMessage: AddMessageFn;
-  store: DialogStore;
   dialogs: DialogOpeners;
-}
-
-function useProfileDialogStates(store: DialogStore) {
-  const showListDialog = useStoreSelector(store.store, (state) =>
-    state.requests.some((r) => r.kind === 'profileList'),
-  );
-  const showDetailDialog = useStoreSelector(store.store, (state) =>
-    state.requests.some((r) => r.kind === 'profileDetail'),
-  );
-  const showEditorDialog = useStoreSelector(store.store, (state) =>
-    state.requests.some((r) => r.kind === 'profileEditor'),
-  );
-  return {
-    showListDialog,
-    showDetailDialog,
-    showEditorDialog,
-  };
 }
 
 function useProfileDataStates() {
@@ -232,11 +212,7 @@ function useListDialogActions(
     debug.log(() => 'loadProfiles completed');
   }, [dialogs, loadProfiles]);
 
-  const closeListDialog = useCallback(() => {
-    dialogs.profileList.close();
-  }, [dialogs]);
-
-  return { openListDialog, closeListDialog };
+  return { openListDialog };
 }
 
 function useDetailDialogActions(
@@ -602,12 +578,10 @@ function useProfileDispatchActions(
 }
 
 function buildProfileManagementResult<TActions extends object>(
-  dialogStates: ReturnType<typeof useProfileDialogStates>,
   dataStates: ReturnType<typeof useProfileDataStates>,
   actions: TActions,
 ) {
   return {
-    ...dialogStates,
     profiles: dataStates.profiles,
     isLoading: dataStates.isLoading,
     selectedProfileName: dataStates.selectedProfileName,
@@ -621,12 +595,10 @@ function buildProfileManagementResult<TActions extends object>(
 
 export const useProfileManagement = ({
   addMessage,
-  store,
   dialogs,
 }: UseProfileManagementParams) => {
   const runtime = useRuntimeApi();
 
-  const dialogStates = useProfileDialogStates(store);
   const dataStates = useProfileDataStates();
   const { setActiveProfileName } = dataStates;
 
@@ -651,10 +623,7 @@ export const useProfileManagement = ({
     dataStates.setDefaultProfileName,
     dataStates.setActiveProfileName,
   );
-  const { openListDialog, closeListDialog } = useListDialogActions(
-    dialogs,
-    loadProfiles,
-  );
+  const { openListDialog } = useListDialogActions(dialogs, loadProfiles);
   const { viewProfileDetail, closeDetailDialog } = useDetailDialogActions(
     dialogs,
     runtime,
@@ -675,9 +644,8 @@ export const useProfileManagement = ({
     viewProfileDetail,
   );
 
-  return buildProfileManagementResult(dialogStates, dataStates, {
+  return buildProfileManagementResult(dataStates, {
     openListDialog,
-    closeListDialog,
     viewProfileDetail,
     closeDetailDialog,
     ...dispatchActions,

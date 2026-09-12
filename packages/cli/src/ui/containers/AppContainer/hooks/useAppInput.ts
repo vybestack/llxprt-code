@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  computeInputWidth,
+  computeSuggestionsWidth,
+} from '../../../utils/ui-sizing.js';
 import type React from 'react';
 import { useStdin, useStdout } from 'ink';
 import { useTodoContext } from '../../../contexts/TodoContext.js';
@@ -109,8 +113,8 @@ function useTerminalDimensions(
   terminalStore: TerminalStore,
 ): TerminalDimensions {
   const { rows: terminalHeight, columns: terminalWidth } = useTerminalSize();
-  const inputWidth = Math.max(20, Math.floor(terminalWidth * 0.9) - 6);
-  const suggestionsWidth = Math.max(60, Math.floor(terminalWidth * 0.8));
+  const inputWidth = computeInputWidth(terminalWidth);
+  const suggestionsWidth = computeSuggestionsWidth(terminalWidth);
   useEffect(() => {
     terminalStore.commands.setDimensions({
       terminalWidth,

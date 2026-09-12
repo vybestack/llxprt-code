@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { logEntrySchema } from '../../../utils/logEntry.js';
 import type { HistoryItem, ConfirmationRequest } from '../../../types.js';
 import type { SubagentView } from '../../../components/SubagentManagement/types.js';
 import type { ModelsDialogData } from '../../../commands/types.js';
@@ -107,7 +108,11 @@ function buildActions(p: UseSlashCommandActionsParams): SlashCommandActions {
     openPermissionsDialog: () => dialogs.permissions.open({}),
     closePermissionsDialog: () => dialogs.permissions.close(),
     openLoggingDialog: (data?: { entries: unknown[] }) =>
-      dialogs.logging.open(data ?? { entries: [] }),
+      dialogs.logging.open({
+        entries: (data?.entries ?? []).map((entry) =>
+          logEntrySchema.parse(entry),
+        ),
+      }),
     closeLoggingDialog: () => dialogs.logging.close(),
     openSubagentDialog: (data?: {
       initialView?: SubagentView;

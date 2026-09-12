@@ -5,6 +5,7 @@
  */
 
 import React from 'react';
+import type { MessageBus } from '@vybestack/llxprt-code-core';
 import { Box, type DOMElement, Static } from 'ink';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UpdateObject } from '../utils/updateCheck.js';
@@ -37,6 +38,7 @@ import type { HistoryItem, HistoryItemWithoutId } from '../types.js';
 import { themeManager } from '../themes/theme-manager.js';
 
 export interface DefaultAppLayoutProps {
+  runtimeMessageBus?: MessageBus;
   uiRuntime: UiRuntime;
   slashCommandRuntime: SlashCommandRuntime;
   settings: LoadedSettings;

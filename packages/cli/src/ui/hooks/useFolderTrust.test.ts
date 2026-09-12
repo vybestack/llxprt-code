@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { hasDialogRequest } from '../../test-utils/dialogStore.js';
+
 import {
   advanceTimersByTimeAsync,
   waitFor,
@@ -29,10 +31,7 @@ import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import type { LoadedTrustedFolders } from '../../config/trustedFolders.js';
 import { TrustLevel } from '../../config/trustedFolders.js';
 import * as trustedFolders from '../../config/trustedFolders.js';
-import {
-  createDialogStore,
-  type DialogStore,
-} from '../stores/dialog/dialogStore.js';
+import { createDialogStore } from '../stores/dialog/dialogStore.js';
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 import { createDialogOpeners } from '../stores/dialog/dialogOpeners.js';
 import { createSettingsProfileStore } from '../stores/settings/settingsStore.js';
@@ -61,10 +60,6 @@ void vi.mock('node:process', () => {
   // explicitly so the mocked cwd/exit are the ones the hook actually calls.
   return { ...mockedProcess, default: mockedProcess };
 });
-
-function hasRequest(store: DialogStore, kind: string): boolean {
-  return store.store.getState().requests.some((r) => r.kind === kind);
-}
 
 describe('useFolderTrust', () => {
   let mockSettings: LoadedSettings;
@@ -172,7 +167,7 @@ describe('useFolderTrust', () => {
     );
     rerender();
     expect(result.current.isFolderTrustDialogOpen).toBe(true);
-    expect(hasRequest(mockStore, 'folderTrust')).toBe(true);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(true);
     await act(async () => {
       transition.resolve();
       await pending;
@@ -193,7 +188,7 @@ describe('useFolderTrust', () => {
         dialogs: mockDialogs,
       }),
     );
-    expect(hasRequest(mockStore, 'folderTrust')).toBe(false);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(false);
   });
 
   it('should not open dialog when folder is already untrusted', async () => {
@@ -208,7 +203,7 @@ describe('useFolderTrust', () => {
         dialogs: mockDialogs,
       }),
     );
-    expect(hasRequest(mockStore, 'folderTrust')).toBe(false);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(false);
   });
 
   it('should open dialog when folder trust is undefined', async () => {
@@ -223,7 +218,7 @@ describe('useFolderTrust', () => {
         dialogs: mockDialogs,
       }),
     );
-    expect(hasRequest(mockStore, 'folderTrust')).toBe(true);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(true);
   });
 
   it('should send a message if the folder is untrusted', async () => {
@@ -286,7 +281,7 @@ describe('useFolderTrust', () => {
       mockConfig.getWorkingDir(),
       TrustLevel.TRUST_FOLDER,
     );
-    expect(hasRequest(mockStore, 'folderTrust')).toBe(false);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(false);
     expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(true);
   });
 
@@ -342,7 +337,7 @@ describe('useFolderTrust', () => {
       mockConfig.getWorkingDir(),
       TrustLevel.TRUST_PARENT,
     );
-    expect(hasRequest(mockStore, 'folderTrust')).toBe(false);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(false);
     expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(true);
   });
 
@@ -371,7 +366,7 @@ describe('useFolderTrust', () => {
       mockConfig.getWorkingDir(),
       TrustLevel.DO_NOT_TRUST,
     );
-    expect(hasRequest(mockStore, 'folderTrust')).toBe(false);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(false);
     expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(false);
   });
 
@@ -396,7 +391,7 @@ describe('useFolderTrust', () => {
 
     expect(mockTrustedFolders.setValue).not.toHaveBeenCalled();
     expect(mockSettings.setValue).not.toHaveBeenCalled();
-    expect(hasRequest(mockStore, 'folderTrust')).toBe(true);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(true);
     expect(mockConfig.setTrustedFolderLive).not.toHaveBeenCalled();
   });
 
@@ -421,7 +416,7 @@ describe('useFolderTrust', () => {
     });
 
     expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(true);
-    expect(hasRequest(mockStore, 'folderTrust')).toBe(false);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(false);
   });
 
   it('should call setTrustedFolderLive(false) when revoking trust', async () => {
@@ -445,7 +440,7 @@ describe('useFolderTrust', () => {
     });
 
     expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(false);
-    expect(hasRequest(mockStore, 'folderTrust')).toBe(false);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(false);
   });
 
   it('persists trust when no live config is provided', async () => {
@@ -470,7 +465,7 @@ describe('useFolderTrust', () => {
       mockedCwd(),
       TrustLevel.TRUST_FOLDER,
     );
-    expect(hasRequest(mockStore, 'folderTrust')).toBe(false);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(false);
   });
 
   it('classifies local trust resolution failures as persistence errors', async () => {
@@ -736,7 +731,7 @@ describe('useFolderTrust', () => {
         dialogs: mockDialogs,
       }),
     );
-    const isDialogOpen = hasRequest(mockStore, 'folderTrust');
+    const isDialogOpen = hasDialogRequest(mockStore, 'folderTrust');
 
     await act(async () => {
       await result.current.handleFolderTrustSelect(

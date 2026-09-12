@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { hasDialogRequest } from '../../test-utils/dialogStore.js';
+
 import {
   afterEach,
   beforeEach,
@@ -31,6 +33,7 @@ import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 import { createDialogOpeners } from '../stores/dialog/dialogOpeners.js';
 import { createDialogStore } from '../stores/dialog/dialogStore.js';
 
+import { createSettingsProfileStore } from '../stores/settings/settingsStore.js';
 import { SettingPaths } from '../../config/settingPaths.js';
 
 const realLlxprtCodeCoreModule = {
@@ -54,6 +57,7 @@ const mockAllowEditorTypeInSandbox = allowEditorTypeInSandbox as Mock<
 >;
 
 describe('useEditorSettings', () => {
+  let settingsStore = createSettingsProfileStore();
   let mockLoadedSettings: LoadedSettings;
   let mockDialogs: DialogOpeners;
   let mockStore: ReturnType<typeof createDialogStore>;
@@ -64,6 +68,7 @@ describe('useEditorSettings', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    settingsStore = createSettingsProfileStore();
 
     mockLoadedSettings = {
       setValue: vi.fn(),
@@ -86,7 +91,13 @@ describe('useEditorSettings', () => {
 
   it('should initialize with dialog closed', () => {
     renderHook(
-      () => useEditorSettings(mockLoadedSettings, mockDialogs, mockAddItem),
+      () =>
+        useEditorSettings(
+          mockLoadedSettings,
+          mockDialogs,
+          mockAddItem,
+          settingsStore.commands.setEditorError,
+        ),
       {
         wrapper: ({ children }) => (
           <AppDispatchProvider value={mockDispatch}>
@@ -96,14 +107,18 @@ describe('useEditorSettings', () => {
       },
     );
 
-    expect(
-      mockStore.store.getState().requests.some((r) => r.kind === 'editor'),
-    ).toBe(false);
+    expect(hasDialogRequest(mockStore, 'editor')).toBe(false);
   });
 
   it('should open editor dialog when openEditorDialog is called', () => {
     const { result } = renderHook(
-      () => useEditorSettings(mockLoadedSettings, mockDialogs, mockAddItem),
+      () =>
+        useEditorSettings(
+          mockLoadedSettings,
+          mockDialogs,
+          mockAddItem,
+          settingsStore.commands.setEditorError,
+        ),
       {
         wrapper: ({ children }) => (
           <AppDispatchProvider value={mockDispatch}>
@@ -117,14 +132,18 @@ describe('useEditorSettings', () => {
       result.current.openEditorDialog();
     });
 
-    expect(
-      mockStore.store.getState().requests.some((r) => r.kind === 'editor'),
-    ).toBe(true);
+    expect(hasDialogRequest(mockStore, 'editor')).toBe(true);
   });
 
   it('should close editor dialog when exitEditorDialog is called', () => {
     const { result } = renderHook(
-      () => useEditorSettings(mockLoadedSettings, mockDialogs, mockAddItem),
+      () =>
+        useEditorSettings(
+          mockLoadedSettings,
+          mockDialogs,
+          mockAddItem,
+          settingsStore.commands.setEditorError,
+        ),
       {
         wrapper: ({ children }) => (
           <AppDispatchProvider value={mockDispatch}>
@@ -140,14 +159,18 @@ describe('useEditorSettings', () => {
       result.current.exitEditorDialog();
     });
 
-    expect(
-      mockStore.store.getState().requests.some((r) => r.kind === 'editor'),
-    ).toBe(false);
+    expect(hasDialogRequest(mockStore, 'editor')).toBe(false);
   });
 
   it('should handle editor selection successfully', () => {
     const { result } = renderHook(
-      () => useEditorSettings(mockLoadedSettings, mockDialogs, mockAddItem),
+      () =>
+        useEditorSettings(
+          mockLoadedSettings,
+          mockDialogs,
+          mockAddItem,
+          settingsStore.commands.setEditorError,
+        ),
       {
         wrapper: ({ children }) => (
           <AppDispatchProvider value={mockDispatch}>
@@ -180,18 +203,19 @@ describe('useEditorSettings', () => {
       expect.any(Number),
     );
 
-    expect(mockDispatch).toHaveBeenCalledWith({
-      type: 'SET_EDITOR_ERROR',
-      payload: null,
-    });
-    expect(
-      mockStore.store.getState().requests.some((r) => r.kind === 'editor'),
-    ).toBe(false);
+    expect(settingsStore.store.getState().editorError).toBe(null);
+    expect(hasDialogRequest(mockStore, 'editor')).toBe(false);
   });
 
   it('should handle clearing editor preference (undefined editor)', () => {
     const { result } = renderHook(
-      () => useEditorSettings(mockLoadedSettings, mockDialogs, mockAddItem),
+      () =>
+        useEditorSettings(
+          mockLoadedSettings,
+          mockDialogs,
+          mockAddItem,
+          settingsStore.commands.setEditorError,
+        ),
       {
         wrapper: ({ children }) => (
           <AppDispatchProvider value={mockDispatch}>
@@ -223,18 +247,19 @@ describe('useEditorSettings', () => {
       expect.any(Number),
     );
 
-    expect(mockDispatch).toHaveBeenCalledWith({
-      type: 'SET_EDITOR_ERROR',
-      payload: null,
-    });
-    expect(
-      mockStore.store.getState().requests.some((r) => r.kind === 'editor'),
-    ).toBe(false);
+    expect(settingsStore.store.getState().editorError).toBe(null);
+    expect(hasDialogRequest(mockStore, 'editor')).toBe(false);
   });
 
   it('should handle different editor types', () => {
     const { result } = renderHook(
-      () => useEditorSettings(mockLoadedSettings, mockDialogs, mockAddItem),
+      () =>
+        useEditorSettings(
+          mockLoadedSettings,
+          mockDialogs,
+          mockAddItem,
+          settingsStore.commands.setEditorError,
+        ),
       {
         wrapper: ({ children }) => (
           <AppDispatchProvider value={mockDispatch}>
@@ -270,7 +295,13 @@ describe('useEditorSettings', () => {
 
   it('should handle different setting scopes', () => {
     const { result } = renderHook(
-      () => useEditorSettings(mockLoadedSettings, mockDialogs, mockAddItem),
+      () =>
+        useEditorSettings(
+          mockLoadedSettings,
+          mockDialogs,
+          mockAddItem,
+          settingsStore.commands.setEditorError,
+        ),
       {
         wrapper: ({ children }) => (
           <AppDispatchProvider value={mockDispatch}>
@@ -306,7 +337,13 @@ describe('useEditorSettings', () => {
 
   it('should not set preference for unavailable editors', () => {
     const { result } = renderHook(
-      () => useEditorSettings(mockLoadedSettings, mockDialogs, mockAddItem),
+      () =>
+        useEditorSettings(
+          mockLoadedSettings,
+          mockDialogs,
+          mockAddItem,
+          settingsStore.commands.setEditorError,
+        ),
       {
         wrapper: ({ children }) => (
           <AppDispatchProvider value={mockDispatch}>
@@ -332,7 +369,13 @@ describe('useEditorSettings', () => {
 
   it('should not set preference for editors not allowed in sandbox', () => {
     const { result } = renderHook(
-      () => useEditorSettings(mockLoadedSettings, mockDialogs, mockAddItem),
+      () =>
+        useEditorSettings(
+          mockLoadedSettings,
+          mockDialogs,
+          mockAddItem,
+          settingsStore.commands.setEditorError,
+        ),
       {
         wrapper: ({ children }) => (
           <AppDispatchProvider value={mockDispatch}>
@@ -358,7 +401,13 @@ describe('useEditorSettings', () => {
 
   it('should handle errors during editor selection', () => {
     const { result } = renderHook(
-      () => useEditorSettings(mockLoadedSettings, mockDialogs, mockAddItem),
+      () =>
+        useEditorSettings(
+          mockLoadedSettings,
+          mockDialogs,
+          mockAddItem,
+          settingsStore.commands.setEditorError,
+        ),
       {
         wrapper: ({ children }) => (
           <AppDispatchProvider value={mockDispatch}>
@@ -382,10 +431,9 @@ describe('useEditorSettings', () => {
       result.current.handleEditorSelect(editorType, scope);
     });
 
-    expect(mockDispatch).toHaveBeenCalledWith({
-      type: 'SET_EDITOR_ERROR',
-      payload: `Failed to set editor preference: Error: ${errorMessage}`,
-    });
+    expect(settingsStore.store.getState().editorError).toBe(
+      `Failed to set editor preference: Error: ${errorMessage}`,
+    );
     expect(mockAddItem).not.toHaveBeenCalled();
   });
 });

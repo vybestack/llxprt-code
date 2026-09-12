@@ -5,6 +5,8 @@
  */
 
 import React from 'react';
+import { useHookDisplayState } from '../hooks/useHookDisplayState.js';
+import { HookStatusDisplay } from '../components/HookStatusDisplay.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core';
 import { getCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
 import { useTerminalStore } from '../stores/terminal/TerminalContext.js';
@@ -126,6 +128,7 @@ export function FooterRegion(props: DefaultAppLayoutProps): React.ReactNode {
   const { store } = useSettingsProfileStore();
   const terminal = useTerminalStore();
   const { vimEnabled, vimMode } = useVimMode();
+  const activeHooks = useHookDisplayState(props.runtimeMessageBus);
   const fields = {
     isTrustedFolder: useStoreSelector(store, (s) => s.isTrustedFolder),
     currentModel: useStoreSelector(store, (s) => s.currentModel),
@@ -143,20 +146,25 @@ export function FooterRegion(props: DefaultAppLayoutProps): React.ReactNode {
     ),
   };
   return (
-    <FooterSection
-      {...fields}
-      config={props.slashCommandRuntime}
-      settings={props.settings}
-      hideFooter={props.settings.merged.ui.hideFooter ?? false}
-      showMemoryUsage={
-        props.uiRuntime.app.getDebugMode() ||
-        (props.settings.merged.ui.showMemoryUsage ?? false)
-      }
-      currentThemeName={themeManager.getActiveTheme().name}
-      nightly={props.nightly}
-      vimModeEnabled={vimEnabled}
-      vimMode={vimMode}
-    />
+    <>
+      {activeHooks.length > 0 && (
+        <HookStatusDisplay activeHooks={activeHooks} />
+      )}
+      <FooterSection
+        {...fields}
+        config={props.slashCommandRuntime}
+        settings={props.settings}
+        hideFooter={props.settings.merged.ui.hideFooter ?? false}
+        showMemoryUsage={
+          props.uiRuntime.app.getDebugMode() ||
+          (props.settings.merged.ui.showMemoryUsage ?? false)
+        }
+        currentThemeName={themeManager.getActiveTheme().name}
+        nightly={props.nightly}
+        vimModeEnabled={vimEnabled}
+        vimMode={vimMode}
+      />
+    </>
   );
 }
 

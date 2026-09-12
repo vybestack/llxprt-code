@@ -8,6 +8,9 @@ import { describe, expect, it } from 'bun:test';
 import {
   createDialogStore,
   selectActiveDialog,
+  selectDialogOpen,
+  type DialogCommands,
+  type ListDialogKind,
   DIALOG_PRIORITY,
   type DialogKind,
   type DialogRequest,
@@ -18,7 +21,7 @@ function prompt(settings?: { prompt?: string }) {
   return { prompt: settings?.prompt ?? 'proceed?', onConfirm: () => {} };
 }
 
-const bodyOrder: DialogKind[] = [
+const bodyOrder: ListDialogKind[] = [
   'theme',
   'settings',
   'auth',
@@ -251,7 +254,7 @@ describe('createDialogStore', () => {
   });
 
   it('DIALOG_PRIORITY matches the DialogManager if-chain order', () => {
-    expect(DIALOG_PRIORITY).toStrictEqual([
+    expect([...DIALOG_PRIORITY]).toStrictEqual([
       'workspaceMigration',
       'idePrompt',
       'folderTrust',
@@ -286,12 +289,66 @@ describe('createDialogStore', () => {
 
   it('reopening a lower-ranked body dialog does not demote the active one', () => {
     const { store, commands } = open(['theme', 'settings']);
+    const active = selectActiveDialog(store.getState());
+    commands.openDialog({ kind: 'settings', payload: {} });
+    expect(store.getState().requests).toHaveLength(2);
+    expect(selectActiveDialog(store.getState())).toBe(active);
+    expect(active?.kind).toBe('theme');
     commands.closeDialog('theme');
     expect(selectActiveDialog(store.getState())?.kind).toBe('settings');
   });
 
   it('selectActiveDialog returns null when nothing is open', () => {
     const { store } = createDialogStore();
+    expect(selectActiveDialog(store.getState())).toBeNull();
+  });
+});
+
+describe('store migration regressions', () => {
+  it('selects list, confirmation and extension FIFO visibility', () => {
+    const { store, commands } = createDialogStore();
+    expect(selectDialogOpen(store.getState(), 'theme')).toBe(false);
+    commands.openDialog({ kind: 'theme', payload: {} });
+    commands.openDialog({ kind: 'confirmation', payload: prompt() });
+    const extension = {
+      kind: 'extensionUpdateConfirm',
+      payload: prompt(),
+    } as const;
+    commands.openDialog(extension);
+    expect(selectDialogOpen(store.getState(), 'theme')).toBe(true);
+    expect(selectDialogOpen(store.getState(), 'confirmation')).toBe(true);
+    expect(selectDialogOpen(store.getState(), 'extensionUpdateConfirm')).toBe(
+      true,
+    );
+    commands.setConfirmationRequest(null);
+    commands.resolveConfirmUpdateExtensionRequest(extension);
+    expect(selectDialogOpen(store.getState(), 'confirmation')).toBe(false);
+    expect(selectDialogOpen(store.getState(), 'extensionUpdateConfirm')).toBe(
+      false,
+    );
+  });
+
+  it('reserves slot dismissal for the dedicated lifecycle commands', () => {
+    const closeExcludesSlots: Extract<
+      Parameters<DialogCommands['closeDialog']>[0],
+      'confirmation' | 'extensionUpdateConfirm'
+    > extends never
+      ? true
+      : false = true;
+    const updateExcludesSlots: Extract<
+      Parameters<DialogCommands['updateDialogPayload']>[0],
+      'confirmation' | 'extensionUpdateConfirm'
+    > extends never
+      ? true
+      : false = true;
+    void closeExcludesSlots;
+    void updateExcludesSlots;
+    const { store, commands } = createDialogStore();
+    commands.openDialog({ kind: 'confirmation', payload: prompt() });
+    commands.openDialog({ kind: 'theme', payload: {} });
+    commands.closeDialog('theme');
+    expect(selectActiveDialog(store.getState())?.kind).toBe('confirmation');
+    commands.setConfirmationRequest(null);
     expect(selectActiveDialog(store.getState())).toBeNull();
   });
 });

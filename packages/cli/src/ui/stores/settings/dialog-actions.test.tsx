@@ -13,9 +13,29 @@ import { createDialogStore } from '../dialog/dialogStore.js';
 import { createDialogOpeners } from '../dialog/dialogOpeners.js';
 import { createTurnStore } from '../turn/turnStore.js';
 import { createSettingsProfileStore } from './settingsStore.js';
+import { initialDialogActions } from './dialogActions.js';
 import { useStoreSelector } from '../useStoreSelector.js';
 
 describe('dialog command store flow', () => {
+  it('initial dialog actions fail fast before the writer commits', () => {
+    const actions = initialDialogActions();
+    const invocations = [
+      actions.openThemeDialog,
+      actions.openProviderDialog,
+      actions.openLoadProfileDialog,
+      actions.openCreateProfileDialog,
+      actions.openProfileListDialog,
+      () => actions.viewProfileDetail('profile'),
+      () => actions.openProfileEditor('profile'),
+      actions.welcomeActions.resetAndReopen,
+    ];
+    for (const invoke of invocations) {
+      expect(invoke).toThrow(
+        'Dialog actions invoked before the dialog writer committed',
+      );
+    }
+  });
+
   it('preserves theme policy when input invokes a published dialog loader', () => {
     const previous = process.env.NO_COLOR;
     process.env.NO_COLOR = '1';
@@ -26,7 +46,12 @@ describe('dialog command store flow', () => {
     const loaded = createMockSettings({ ui: { theme: 'Dracula' } });
     const { result, unmount } = renderHook(
       () => {
-        const theme = useThemeCommand(loaded, openers, turn.commands.addItem);
+        const theme = useThemeCommand(
+          loaded,
+          openers,
+          turn.commands.addItem,
+          settings.commands.setThemeError,
+        );
         const actions = useStoreSelector(
           settings.store,
           (s) => s.dialogActions,
@@ -62,7 +87,7 @@ describe('dialog command store flow', () => {
     }
   });
 
-  it('keeps startup submission blocked until the dialog writer completes', () => {
+  it('defaults startupGuardsInitialized to false until the guard command sets it', () => {
     const settings = createSettingsProfileStore();
     expect(settings.store.getState().startupGuardsInitialized).toBe(false);
     settings.commands.setStartupGuardsInitialized(true);

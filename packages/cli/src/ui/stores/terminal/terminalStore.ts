@@ -4,6 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  computeInputWidth,
+  computeSuggestionsWidth,
+  STATIC_EXTRA_HEIGHT,
+} from '../../utils/ui-sizing.js';
 import { createStore, type Store } from '../createStore.js';
 
 /**
@@ -110,19 +115,17 @@ export interface TerminalStore {
 
 const DEFAULT_TERMINAL_WIDTH = 80;
 const DEFAULT_TERMINAL_HEIGHT = 24;
-const DEFAULT_STATIC_EXTRA_HEIGHT = 3;
 
 function initialTerminalState(): TerminalState {
   return {
     terminalWidth: DEFAULT_TERMINAL_WIDTH,
     terminalHeight: DEFAULT_TERMINAL_HEIGHT,
     mainAreaWidth: DEFAULT_TERMINAL_WIDTH,
-    inputWidth: Math.max(20, Math.floor(DEFAULT_TERMINAL_WIDTH * 0.9) - 6),
-    suggestionsWidth: Math.max(60, Math.floor(DEFAULT_TERMINAL_WIDTH * 0.8)),
+    inputWidth: computeInputWidth(DEFAULT_TERMINAL_WIDTH),
+    suggestionsWidth: computeSuggestionsWidth(DEFAULT_TERMINAL_WIDTH),
     isNarrow: false,
     footerHeight: 0,
-    availableTerminalHeight:
-      DEFAULT_TERMINAL_HEIGHT - DEFAULT_STATIC_EXTRA_HEIGHT,
+    availableTerminalHeight: DEFAULT_TERMINAL_HEIGHT - STATIC_EXTRA_HEIGHT,
     isFocused: true,
     isInputActive: false,
     useAlternateBuffer: false,

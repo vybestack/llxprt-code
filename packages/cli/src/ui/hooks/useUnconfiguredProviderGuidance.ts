@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { selectDialogOpen } from '../stores/dialog/dialogStore.js';
 import { useEffect, useRef } from 'react';
 import { MessageType, type HistoryItemWithoutId } from '../types.js';
 import type { DialogStore } from '../stores/dialog/dialogStore.js';
@@ -24,7 +25,7 @@ export function useUnconfiguredProviderGuidance({
   store,
 }: UnconfiguredProviderGuidanceOptions): void {
   const isWelcomeDialogOpen = useStoreSelector(store.store, (state) =>
-    state.requests.some((r) => r.kind === 'welcome'),
+    selectDialogOpen(state, 'welcome'),
   );
   const guidanceShown = useRef(false);
 

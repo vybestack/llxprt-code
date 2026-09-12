@@ -12,7 +12,10 @@ import { useFlickerDetector } from '../../../hooks/useFlickerDetector.js';
 import { useSelectionDebugLogger } from './useSelectionDebugLogger.js';
 import { useClearScreenAction } from './useClearScreenAction.js';
 import { usePowerShellPlaceholder } from './usePowerShellPlaceholder.js';
-import { calculateMainAreaWidth } from '../../../utils/ui-sizing.js';
+import {
+  calculateMainAreaWidth,
+  STATIC_EXTRA_HEIGHT,
+} from '../../../utils/ui-sizing.js';
 import type { AppBootstrapResult } from './useAppBootstrap.js';
 import { useVimMode } from '../../../contexts/VimModeContext.js';
 import type { DialogStore } from '../../../stores/dialog/dialogStore.js';
@@ -95,9 +98,8 @@ function useLayoutMeasure(p: AppLayoutParams) {
       consoleMessages,
       showErrorDetails,
     });
-  const staticExtraHeight = 3;
   const availableTerminalHeight = useMemo(
-    () => terminalHeight - footerHeight - staticExtraHeight,
+    () => terminalHeight - footerHeight - STATIC_EXTRA_HEIGHT,
     [terminalHeight, footerHeight],
   );
   useEffect(() => {

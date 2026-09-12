@@ -8,23 +8,98 @@ import { render } from 'ink-testing-library';
 import { vi, describe, beforeEach, it, expect } from 'bun:test';
 import { ExtensionUpdateState } from '../../state/extensions.js';
 import { ExtensionsList } from './ExtensionsList.js';
-import { AppCommandsProvider } from '../../contexts/AppCommandsContext.js';
+import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
+import { useTextBuffer } from '../shared/text-buffer.js';
+import {
+  AppCommandsProvider,
+  type AppCommandBindings,
+} from '../../contexts/AppCommandsContext.js';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 
-/**
- * ExtensionsList reads only `commandContext.ui.extensionsUpdateState` from
- * the AppCommands context; the provider stub supplies exactly that slice.
- */
+function unusedCommand(): never {
+  throw new Error('ExtensionsList must not invoke app commands');
+}
+
+function ExtensionsListHarness({
+  extensions,
+  extensionsUpdateState,
+}: {
+  extensions: readonly LlxprtExtension[];
+  extensionsUpdateState: Map<string, ExtensionUpdateState>;
+}) {
+  const buffer = useTextBuffer({
+    viewport: { width: 80, height: 24 },
+    isValidPath: () => false,
+  });
+  const commandContext = createMockCommandContext();
+  const value: AppCommandBindings = {
+    buffer,
+    commandContext: {
+      ...commandContext,
+      ui: { ...commandContext.ui, extensionsUpdateState },
+    },
+    inputHistory: [],
+    handleUserInputSubmit: unusedCommand,
+    handleSteer: unusedCommand,
+    handleClearScreen: unusedCommand,
+    vimHandleInput: unusedCommand,
+    clearQueuedSubmissions: unusedCommand,
+    setShellModeActive: unusedCommand,
+    handleEscapePromptChange: unusedCommand,
+    setQueueErrorMessage: unusedCommand,
+    onWorkspaceMigrationDialogOpen: unusedCommand,
+    handleIdePromptComplete: unusedCommand,
+    handleFolderTrustSelect: unusedCommand,
+    welcomeActions: {
+      startSetup: unusedCommand,
+      selectProvider: unusedCommand,
+      selectModel: unusedCommand,
+      selectAuthMethod: unusedCommand,
+      onAuthComplete: unusedCommand,
+      onAuthError: unusedCommand,
+      skipSetup: unusedCommand,
+      goBack: unusedCommand,
+      saveProfile: unusedCommand,
+      dismiss: unusedCommand,
+      resetAndReopen: unusedCommand,
+    },
+    triggerWelcomeAuth: unusedCommand,
+    handleThemeSelect: unusedCommand,
+    handleThemeHighlight: unusedCommand,
+    handleAuthSelect: unusedCommand,
+    handleOAuthCodeDialogClose: unusedCommand,
+    handleOAuthCodeSubmit: unusedCommand,
+    handleEditorSelect: unusedCommand,
+    handleProviderSelect: unusedCommand,
+    handleProfileSelect: unusedCommand,
+    viewProfileDetail: unusedCommand,
+    closeProfileDetailDialog: unusedCommand,
+    loadProfileFromDetail: unusedCommand,
+    deleteProfileFromDetail: unusedCommand,
+    deleteProfileFromList: unusedCommand,
+    setProfileAsDefault: unusedCommand,
+    openProfileEditor: unusedCommand,
+    closeProfileEditor: unusedCommand,
+    saveProfileFromEditor: unusedCommand,
+    handleToolsSelect: unusedCommand,
+    handleSettingsRestart: unusedCommand,
+  };
+  return (
+    <AppCommandsProvider value={value}>
+      <ExtensionsList extensions={extensions} />
+    </AppCommandsProvider>
+  );
+}
+
 function renderExtensionsList(
   extensions: readonly LlxprtExtension[],
   extensionsUpdateState: Map<string, ExtensionUpdateState>,
 ) {
   return render(
-    <AppCommandsProvider
-      value={{ commandContext: { ui: { extensionsUpdateState } } } as never}
-    >
-      <ExtensionsList extensions={extensions} />
-    </AppCommandsProvider>,
+    <ExtensionsListHarness
+      extensions={extensions}
+      extensionsUpdateState={extensionsUpdateState}
+    />,
   );
 }
 

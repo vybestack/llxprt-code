@@ -74,6 +74,8 @@ describe('createSettingsProfileStore', () => {
       branchIsDirty: false,
       debugMessage: '',
       authError: null,
+      themeError: null,
+      editorError: null,
       initError: null,
       showAutoAcceptIndicator: 'default' as ApprovalMode,
       tokenMetrics: {
@@ -538,5 +540,20 @@ describe('createSettingsProfileStore', () => {
       commands.setCurrentModel('glm-5.3');
       expect(store.getState().profiles).toBe(profiles);
     });
+  });
+});
+
+describe('store migration regressions', () => {
+  it('stores and clears theme and editor feedback independently', () => {
+    const { store, commands } = createSettingsProfileStore();
+    commands.setThemeError('Theme unavailable');
+    commands.setEditorError('Editor unavailable');
+    expect(store.getState().themeError).toBe('Theme unavailable');
+    expect(store.getState().editorError).toBe('Editor unavailable');
+    commands.setThemeError(null);
+    expect(store.getState().themeError).toBeNull();
+    expect(store.getState().editorError).toBe('Editor unavailable');
+    commands.setEditorError(null);
+    expect(store.getState().editorError).toBeNull();
   });
 });

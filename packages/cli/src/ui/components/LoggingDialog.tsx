@@ -14,32 +14,8 @@ import { useKeypress } from '../hooks/useKeypress.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
 import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
-interface LogEntry {
-  timestamp: string;
-  type: 'request' | 'response' | 'tool_call';
-  provider: string;
-  model?: string;
-  conversationId?: string;
-  messages?: Array<{
-    role: string;
-    content: string;
-  }>;
-  response?: string;
-  tokens?: {
-    input?: number;
-    output?: number;
-  };
-  error?: string;
-  // Tool call specific fields
-  tool?: string;
-  duration?: number;
-  success?: boolean;
-  gitStats?: {
-    linesAdded: number;
-    linesRemoved: number;
-    filesChanged: number;
-  };
-}
+export type { LogEntry } from '../utils/logEntry.js';
+import type { LogEntry } from '../utils/logEntry.js';
 
 interface LoggingDialogProps {
   entries: LogEntry[];

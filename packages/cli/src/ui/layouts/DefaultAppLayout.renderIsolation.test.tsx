@@ -64,7 +64,9 @@ const { DefaultAppLayout } = await import('./DefaultAppLayout.js');
 const { buildSlashCommandRuntime, buildUiRuntimeFromSource } = await import(
   '../cliUiRuntime.js'
 );
-const { Config } = await import('@vybestack/llxprt-code-core');
+const { Config, MessageBus, MessageBusType, PolicyEngine } = await import(
+  '@vybestack/llxprt-code-core'
+);
 const { TerminalProvider } = await import(
   '../stores/terminal/TerminalContext.js'
 );
@@ -76,7 +78,7 @@ const { createTerminalStore } = await import(
 const { createTurnStore } = await import('../stores/turn/turnStore.js');
 const { createDialogStore } = await import('../stores/dialog/dialogStore.js');
 
-function mountLayout() {
+function mountLayout(runtimeMessageBus?: InstanceType<typeof MessageBus>) {
   const terminal = createTerminalStore();
   const turn = createTurnStore({
     history: [{ id: 1, type: 'user', text: 'committed transcript' }],
@@ -98,6 +100,7 @@ function mountLayout() {
   });
   const layout = (
     <DefaultAppLayout
+      runtimeMessageBus={runtimeMessageBus}
       uiRuntime={buildUiRuntimeFromSource(config)}
       slashCommandRuntime={buildSlashCommandRuntime(config)}
       settings={settings}
@@ -183,6 +186,31 @@ describe('production layout render isolation', () => {
     } finally {
       view.unmount();
       restoreEnv();
+    }
+  });
+});
+
+describe('store migration regressions', () => {
+  it('renders runtime hook activity and clears it after completion', async () => {
+    const bus = new MessageBus(new PolicyEngine(), false);
+    const { view } = mountLayout(bus);
+    try {
+      await act(async () => {
+        bus.publish({
+          type: MessageBusType.HOOK_EXECUTION_REQUEST,
+          payload: { eventName: 'BeforeTool', correlationId: 'layout-hook' },
+        });
+      });
+      expect(view.lastFrame()).toContain('Executing Hook');
+      await act(async () => {
+        bus.publish({
+          type: MessageBusType.HOOK_EXECUTION_RESPONSE,
+          payload: { correlationId: 'layout-hook', success: true },
+        });
+      });
+      expect(view.lastFrame()).not.toContain('Executing Hook');
+    } finally {
+      view.unmount();
     }
   });
 });

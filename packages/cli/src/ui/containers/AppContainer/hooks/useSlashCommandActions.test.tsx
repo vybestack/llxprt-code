@@ -16,6 +16,7 @@ import { useThemeCommand } from '../../../hooks/useThemeCommand.js';
 import { processSlashCommand } from '../../../hooks/slashCommandHandlers.js';
 import { themeCommand } from '../../../commands/themeCommand.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
+import { createSettingsProfileStore } from '../../../stores/settings/settingsStore.js';
 import { createTurnStore } from '../../../stores/turn/turnStore.js';
 
 import { useSlashCommandActions } from './useSlashCommandActions.js';
@@ -57,10 +58,16 @@ describe('useSlashCommandActions', () => {
     process.env.NO_COLOR = '1';
     const { store, dialogs } = withRealStoreDialogs();
     const turn = createTurnStore();
+    const settingsStore = createSettingsProfileStore();
     const settings = createMockSettings({ ui: { theme: 'Dracula' } });
     const { result, unmount } = renderHook(
       () => {
-        const theme = useThemeCommand(settings, dialogs, turn.commands.addItem);
+        const theme = useThemeCommand(
+          settings,
+          dialogs,
+          turn.commands.addItem,
+          settingsStore.commands.setThemeError,
+        );
         return useSlashCommandActions({
           ...baseCallbacks(),
           dialogs,
@@ -182,8 +189,12 @@ describe('useSlashCommandActions', () => {
     result.current.closePermissionsDialog();
     expect(closeSpy.permissions).toHaveBeenCalledTimes(1);
 
-    result.current.openLoggingDialog({ entries: [1, 2] });
-    expect(openSpy.logging).toHaveBeenCalledWith({ entries: [1, 2] });
+    result.current.openLoggingDialog({
+      entries: [{ timestamp: '2026-09-11', type: 'request', provider: 'test' }],
+    });
+    expect(openSpy.logging).toHaveBeenCalledWith({
+      entries: [{ timestamp: '2026-09-11', type: 'request', provider: 'test' }],
+    });
     result.current.openLoggingDialog();
     expect(openSpy.logging).toHaveBeenCalledWith({ entries: [] });
     result.current.closeLoggingDialog();
@@ -281,7 +292,9 @@ describe('useSlashCommandActions', () => {
     result.current.closePermissionsDialog();
     expect(store.store.getState().requests).toHaveLength(0);
 
-    result.current.openLoggingDialog({ entries: [1] });
+    result.current.openLoggingDialog({
+      entries: [{ timestamp: '2026-09-11', type: 'request', provider: 'test' }],
+    });
     expect(store.store.getState().requests).toHaveLength(1);
     result.current.closeLoggingDialog();
     expect(store.store.getState().requests).toHaveLength(0);
@@ -290,5 +303,39 @@ describe('useSlashCommandActions', () => {
     expect(store.store.getState().requests).toHaveLength(1);
     dialogs.auth.close();
     expect(store.store.getState().requests).toHaveLength(0);
+  });
+});
+
+describe('logging data boundary', () => {
+  it('rejects malformed external log records before opening a dialog', () => {
+    const { store, dialogs } = withRealStoreDialogs();
+    const { result, unmount } = renderHook(() =>
+      useSlashCommandActions({ ...baseCallbacks(), dialogs }),
+    );
+    try {
+      expect(() =>
+        result.current.openLoggingDialog({
+          entries: [{ timestamp: '2026-09-11', type: 'request', provider: 42 }],
+        }),
+      ).toThrow('Expected string, received number');
+      expect(store.store.getState().requests).toHaveLength(0);
+      result.current.openLoggingDialog({
+        entries: [
+          { timestamp: '2026-09-11', type: 'request', provider: 'test' },
+        ],
+      });
+      expect(store.store.getState().requests).toStrictEqual([
+        {
+          kind: 'logging',
+          payload: {
+            entries: [
+              { timestamp: '2026-09-11', type: 'request', provider: 'test' },
+            ],
+          },
+        },
+      ]);
+    } finally {
+      unmount();
+    }
   });
 });

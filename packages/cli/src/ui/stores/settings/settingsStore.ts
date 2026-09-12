@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { INITIAL_WELCOME_STATE } from '../../hooks/welcomeState.js';
 import { createStore, type Store } from '../createStore.js';
 import { initialDialogActions, type DialogActions } from './dialogActions.js';
 import type { ApprovalMode, IdeContext } from '@vybestack/llxprt-code-core';
@@ -91,6 +92,8 @@ export interface SettingsProfileState {
   branchIsDirty: boolean;
   debugMessage: string;
   authError: string | null;
+  themeError: string | null;
+  editorError: string | null;
   initError: string | null;
   showAutoAcceptIndicator: ApprovalMode;
   tokenMetrics: TokenMetricsSnapshot;
@@ -134,6 +137,8 @@ export interface SettingsProfileCommands {
   setBranchInfo: (branchName: string | undefined, isDirty: boolean) => void;
   setDebugMessage: (message: string) => void;
   setAuthError: (error: string | null) => void;
+  setThemeError: (error: string | null) => void;
+  setEditorError: (error: string | null) => void;
   setInitError: (error: string | null) => void;
   setShowAutoAcceptIndicator: (mode: ApprovalMode) => void;
   setTokenMetrics: (metrics: TokenMetricsSnapshot) => void;
@@ -169,11 +174,7 @@ function initialSettingsProfileState(): SettingsProfileState {
     toolsDialogTools: [],
     toolsDialogDisabledTools: [],
     slashCommands: undefined,
-    welcomeState: {
-      step: 'welcome',
-      authInProgress: false,
-      modelsLoadStatus: 'idle',
-    },
+    welcomeState: INITIAL_WELCOME_STATE,
     welcomeAvailableProviders: [],
     welcomeAvailableModels: [],
     ideContextState: undefined,
@@ -186,6 +187,8 @@ function initialSettingsProfileState(): SettingsProfileState {
     branchIsDirty: false,
     debugMessage: '',
     authError: null,
+    themeError: null,
+    editorError: null,
     initError: null,
     showAutoAcceptIndicator: 'default' as ApprovalMode,
     tokenMetrics: {
@@ -198,15 +201,8 @@ function initialSettingsProfileState(): SettingsProfileState {
   };
 }
 
-export function createSettingsProfileStore(
-  initial?: Partial<SettingsProfileState>,
-): SettingsProfileStore {
-  const store = createStore<SettingsProfileState>({
-    ...initialSettingsProfileState(),
-    ...initial,
-  });
-
-  const assign = <K extends keyof SettingsProfileState>(
+function createSettingsAssignment(store: Store<SettingsProfileState>) {
+  return <K extends keyof SettingsProfileState>(
     key: K,
     value: SettingsProfileState[K],
   ): void => {
@@ -217,6 +213,17 @@ export function createSettingsProfileStore(
     }
     store.setState((prev) => ({ ...prev, [key]: value }));
   };
+}
+
+export function createSettingsProfileStore(
+  initial?: Partial<SettingsProfileState>,
+): SettingsProfileStore {
+  const store = createStore<SettingsProfileState>({
+    ...initialSettingsProfileState(),
+    ...initial,
+  });
+
+  const assign = createSettingsAssignment(store);
 
   const commands: SettingsProfileCommands = {
     setIsTrustedFolder: (trusted) => assign('isTrustedFolder', trusted),
@@ -268,6 +275,8 @@ export function createSettingsProfileStore(
     },
     setDebugMessage: (message) => assign('debugMessage', message),
     setAuthError: (error) => assign('authError', error),
+    setThemeError: (error) => assign('themeError', error),
+    setEditorError: (error) => assign('editorError', error),
     setInitError: (error) => assign('initError', error),
     setShowAutoAcceptIndicator: (mode) =>
       assign('showAutoAcceptIndicator', mode),

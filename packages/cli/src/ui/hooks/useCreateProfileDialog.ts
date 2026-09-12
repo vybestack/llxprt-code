@@ -6,23 +6,16 @@
 
 import { useCallback, useState } from 'react';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
-import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
-import { useStoreSelector } from '../stores/useStoreSelector.js';
 
 interface UseCreateProfileDialogParams {
-  store: DialogStore;
   dialogs: DialogOpeners;
 }
 
 export const useCreateProfileDialog = ({
-  store,
   dialogs,
 }: UseCreateProfileDialogParams) => {
   const runtime = useRuntimeApi();
-  const showDialog = useStoreSelector(store.store, (state) =>
-    state.requests.some((r) => r.kind === 'createProfile'),
-  );
   const [providers, setProviders] = useState<string[]>([]);
 
   const openDialog = useCallback(() => {
@@ -43,7 +36,6 @@ export const useCreateProfileDialog = ({
   );
 
   return {
-    showDialog,
     openDialog,
     closeDialog,
     providers,

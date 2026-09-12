@@ -25,6 +25,7 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 // process), so vi.unmock('ink') from the Vitest era is unnecessary and
 // unsupported by Bun's test runner.
 
+import { hasDialogRequest } from '../../test-utils/dialogStore.js';
 import { render } from 'ink-testing-library';
 import { Box, Text } from 'ink';
 
@@ -368,11 +369,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
     it('initial store state has no sessionBrowser request', () => {
       const store = createDialogStore();
 
-      expect(
-        store.store
-          .getState()
-          .requests.some((request) => request.kind === 'sessionBrowser'),
-      ).toBe(false);
+      expect(hasDialogRequest(store, 'sessionBrowser')).toBe(false);
     });
 
     /**
@@ -414,11 +411,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
 
       // After successful resume, dialog closes
       store.commands.closeDialog('sessionBrowser');
-      expect(
-        store.store
-          .getState()
-          .requests.some((request) => request.kind === 'sessionBrowser'),
-      ).toBe(false);
+      expect(hasDialogRequest(store, 'sessionBrowser')).toBe(false);
     });
   });
 

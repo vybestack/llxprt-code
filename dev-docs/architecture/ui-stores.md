@@ -29,8 +29,13 @@ returning:
 - `subscribe(listener: () => void): () => void`
 
 `setState` replaces the state reference and notifies every listener. It does
-not clone, diff, or skip equal values (two store commands add their own
-equal-value skips where quiet no-ops matter). Callers own immutability:
+not clone, diff, or skip equal values. Equality policy belongs to commands:
+settings assignments skip equal writes entirely; terminal geometry and most
+plain setters publish fresh references even for equal values. Terminal
+embedded-shell focus, background color, and placeholder preserve the reference
+on equal values but still notify. Subscribers must not equate a notification
+with a changed state identity. Narrow selectors compare the selected value
+with `Object.is` in all cases. Callers own immutability:
 updates spread the previous state and replace only the changed fields.
 
 `packages/cli/src/ui/stores/useStoreSelector.ts` subscribes through
@@ -91,7 +96,9 @@ on cleanup.
 
 Out-of-tree add requests travel through `TurnStore.requestAddItem`, which
 records a `pendingAddRequest` with a monotonic `seq`. A subscriber performs
-the add when the request reference changes, replacing the former appReducer
+the add when the request reference changes. It claims the matching sequence
+through `consumePendingAddRequest` before adding, so replayed effects cannot
+consume it twice. This replaces the former appReducer
 `ADD_ITEM` side-effect channel with the same ordering guarantees.
 
 ## Provider composition

@@ -377,3 +377,21 @@ describe('createTurnStore', () => {
     });
   });
 });
+
+describe('add request consumption', () => {
+  // A retained store can outlive an effect subscription or StrictMode replay.
+  it('claims an add request once and preserves newer requests', () => {
+    const { store, commands } = createTurnStore();
+    commands.requestAddItem(userItem('once'), 100);
+    const first = store.getState().pendingAddRequest;
+    if (!first) throw new Error('Expected pending request');
+    expect(commands.consumePendingAddRequest(first.seq)).toBe(first);
+    expect(commands.consumePendingAddRequest(first.seq)).toBeNull();
+    commands.requestAddItem(userItem('once'), 100);
+    const second = store.getState().pendingAddRequest;
+    if (!second) throw new Error('Expected second request');
+    expect(second.seq).toBeGreaterThan(first.seq);
+    expect(commands.consumePendingAddRequest(first.seq)).toBeNull();
+    expect(store.getState().pendingAddRequest).toBe(second);
+  });
+});

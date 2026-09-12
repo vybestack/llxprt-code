@@ -333,11 +333,12 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
   // ADD_ITEM action): the request is recorded synchronously on the store and
   // this effect performs the add once the state lands (dispatch -> effect).
   useEffect(() => {
-    if (pendingAddRequest) {
-      const { itemData, baseTimestamp } = pendingAddRequest;
-      addItem(itemData, baseTimestamp);
-    }
-  }, [pendingAddRequest, addItem]);
+    if (!pendingAddRequest) return;
+    const request = turnStore.commands.consumePendingAddRequest(
+      pendingAddRequest.seq,
+    );
+    if (request) addItem(request.itemData, request.baseTimestamp);
+  }, [pendingAddRequest, addItem, turnStore]);
 
   const contextValue = useMemo(
     () => ({

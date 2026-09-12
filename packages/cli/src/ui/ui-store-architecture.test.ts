@@ -13,9 +13,14 @@ describe('UI store architecture contracts', () => {
       new URL('./AppContainerRuntime.tsx', import.meta.url),
       'utf8',
     );
-    const viewContract = source.slice(
-      source.indexOf('interface AppRuntimeViewProps'),
-    );
+    const anchor = 'interface AppRuntimeViewProps';
+    const anchorIndex = source.indexOf(anchor);
+    if (anchorIndex < 0) {
+      throw new Error(
+        `AppContainerRuntime.tsx is missing the view contract anchor: ${anchor}`,
+      );
+    }
+    const viewContract = source.slice(anchorIndex);
     expect(viewContract).not.toMatch(/\b(?:bootstrap|layout)\s*:/);
     expect(source).not.toMatch(
       /\b(?:bootstrap|layout)=\{(?:bootstrap|layout)\}/,

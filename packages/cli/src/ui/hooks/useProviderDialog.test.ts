@@ -40,7 +40,6 @@ describe('provider switch notices', () => {
     dialogs.provider.open({});
     const { result, unmount } = renderHook(() =>
       useProviderDialog({
-        store,
         dialogs,
         addMessage: (message) => messages.push(message),
       }),
