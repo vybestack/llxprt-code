@@ -9,8 +9,11 @@ contexts with four external stores.
 The interactive UI keeps its shared state in four stores under
 `packages/cli/src/ui/stores/`. Each store owns one plane of UI state, is
 created once per app mount, and is provided to the tree through a stable
-React context. Components subscribe with narrow selectors, so an update to
-one store or one field rerenders only the components that read it.
+React context. Narrow selectors prevent unrelated store writes from scheduling
+a subscriber. They do not prevent parent renders or other context updates
+from rendering that component. The current layout still combines several
+domains in one component; the store probe tests alone do not prove isolation
+of the production transcript.
 
 The stores are plain external stores, not a state library. There is no new
 dependency; the whole mechanism is `createStore` plus `useStoreSelector`.
@@ -36,9 +39,11 @@ updates spread the previous state and replace only the changed fields.
   when the selected value fails `Object.is` against the cached value.
 - A selector that derives a primitive (`s.terminalWidth`,
   `s.requests.length`) is stable across unrelated writes to the same store.
-- A selector that returns an object gets a new result every time the state
-  reference changes; pass an `isEqual`-stable value or select primitives when
-  rerender frequency matters.
+- There is no custom `isEqual` argument. `useSyncExternalStore` compares
+  snapshots with `Object.is`. Select existing objects whose identities are
+  retained across unrelated writes, or select individual primitives. A
+  selector that allocates a new object on each state change schedules a
+  render even when that object contains equal fields.
 
 ## The four stores
 
@@ -88,7 +93,7 @@ the add when the request reference changes, replacing the former appReducer
 ## Provider composition
 
 `AppContainerRuntime.tsx` is the composition root. It creates each store
-once (in `useRef` guards, so StrictMode double-mounts reuse the instance),
+once per retained mount (in `useRef` guards),
 derives a memoized `DialogOpeners` object from the dialog commands, mounts
 the domain hooks, and wraps the tree:
 
@@ -97,13 +102,49 @@ TerminalProvider > TurnProvider > SettingsProfileProvider > DialogProvider
   > AppCommandsProvider > DefaultAppLayout
 ```
 
-Provider values are the store objects themselves and never change identity
-while the app is mounted, so context switches never cause re-renders.
+The four store provider values retain their identities while the app is
+mounted. StrictMode effect cleanup and replay use the retained instance and
+must clean up subscriptions before subscribing again. A real unmount followed
+by a new mount creates new refs and new stores. Ref guards do not preserve
+instances across remounts or across discarded render attempts.
+
+`AppCommandsProvider` separates changing input data from commands. The
+`AppCommandsContext` value is created from a stable ref, not from a render's
+buffer, command context, or input history. Each command invocation reads the
+current handler from that ref, including nested welcome actions. The provider
+updates the ref from the latest domain bindings on each render. Callbacks
+retained by a view therefore dispatch to the current domain closure rather
+than the closure that happened to exist when the command value was created.
+
+`useAppCommandData` reads a separate context containing `buffer`,
+`commandContext`, and `inputHistory`. Its value changes when those snapshots
+change. Composer and the views that use command-context data subscribe to
+that boundary; command-only consumers do not. This is not yet a per-field
+selector boundary. `buildAppCommands` still assembles the input bindings in
+the root, and `buildInputParams` and `buildLayoutParams` still project hook
+results. Removing those projections remains outstanding.
 
 `DialogOpeners` (`stores/dialog/dialogOpeners.ts`) gives one stable
 `open`/`close` handle per dialog kind, typed against `DialogPayloadMap`. The
 slash-command pipeline and feature hooks receive openers, not the raw store,
 so a dialog cannot be opened with the wrong payload shape.
+
+## Runtime services and Agent ownership
+
+`RuntimeContext` binds provider and profile operations to the current runtime
+scope. It exposes service operations, not an interactive display-state store.
+`cliUiRuntime.ts` defines the capability interfaces used by UI domains, such as
+storage, shell, model, IDE, and session operations. These capabilities are
+passed into the composition root; the interactive stores do not construct or
+own them.
+
+The application composition root supplies the interactive `Agent` to the
+domain hooks. The Agent owns conversation execution and provider transitions;
+the turn store holds the UI's committed and pending display items, queue
+readouts, and cancellation presentation. SettingsProfileStore holds display
+projections of provider and profile state rather than replacing the runtime's
+source of truth. Noninteractive execution uses runtime services and the Agent
+without importing the interactive stores.
 
 ## Test patterns
 
@@ -120,10 +161,14 @@ store mocks. Three patterns recur:
 - Render isolation: probe components subscribe through `useStoreSelector`
   and count their own renders while tests drive store commands inside
   `act()` (see `stores/__tests__/renderIsolation.test.tsx`). These tests
-  pin the isolation guarantees: a dialog update rerenders only dialog
-  subscribers, a resize rerenders only terminal subscribers, a history
-  append rerenders only the transcript region, and opening a dialog does
-  not rerender the transcript.
+  pin the selector behavior of the probe tree, not the production layout.
+  Production transcript isolation needs a real-tree test with counters inside
+  the actual transcript region. That test is still outstanding.
+- Command boundary: `AppContainer.clear-queue-wiring.test.tsx` renders the
+  production provider and Composer with real input and queue hooks. It checks
+  that an input-owner update leaves a memoized command consumer alone while a
+  retained command dispatches to the current input handler. It also exercises
+  Backspace clearing the real submission queue.
 
 For component tests, `src/test-utils/render.tsx` provides
 `renderWithProviders`, which mounts the full provider stack and accepts
@@ -133,8 +178,10 @@ per-store seed objects (`{ terminal, turn, settingsProfile }`).
 
 1. Commands stay out of views. Components render from store state; they
    receive command callbacks through `AppCommandsContext` or hook results,
-   never by pulling a store and calling commands in JSX paths. Dialog
-   open/close goes through `DialogOpeners`.
+   not by writing state during render. Domain openers go through
+   `DialogOpeners`. `DialogManager` may take `closeDialog` directly from
+   `DialogStore.commands` for dismissal and completed resume callbacks. This
+   is the dialog lifecycle owner's command access, not a state projection.
 2. Select narrow. Select primitives or identity-stable values. Whole-state
    reads (`useStoreSelector(store, (s) => s)`) rerender on every store write
    and defeat the isolation guarantees.

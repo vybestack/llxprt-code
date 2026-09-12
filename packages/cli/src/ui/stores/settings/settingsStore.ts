@@ -5,6 +5,7 @@
  */
 
 import { createStore, type Store } from '../createStore.js';
+import { initialDialogActions, type DialogActions } from './dialogActions.js';
 import type { ApprovalMode, IdeContext } from '@vybestack/llxprt-code-core';
 import type { ToolInfo } from '@vybestack/llxprt-code-agents';
 import type { Profile } from '@vybestack/llxprt-code-settings';
@@ -43,6 +44,8 @@ export interface TokenMetricsSnapshot {
  * narrow selectors.
  */
 export interface SettingsProfileState {
+  dialogActions: DialogActions;
+  startupGuardsInitialized: boolean;
   // Model/provider projection
   currentModel: string;
   currentModelLabel: string | undefined;
@@ -81,6 +84,7 @@ export interface SettingsProfileState {
 
   // Status readouts
   consoleMessages: ConsoleMessageItem[];
+  rawConsoleMessages: ConsoleMessageItem[];
   errorCount: number;
   branchName: string | undefined;
   branchIsDirty: boolean;
@@ -96,6 +100,8 @@ export interface SettingsProfileState {
 }
 
 export interface SettingsProfileCommands {
+  setDialogActions: (actions: DialogActions) => void;
+  setStartupGuardsInitialized: (initialized: boolean) => void;
   setCurrentModel: (model: string) => void;
   setCurrentModelLabel: (label: string | undefined) => void;
   setContextLimit: (limit: number | undefined) => void;
@@ -121,6 +127,7 @@ export interface SettingsProfileCommands {
   setLlxprtMdFileCount: (count: number) => void;
   setCoreMemoryFileCount: (count: number) => void;
   setConsoleMessages: (messages: ConsoleMessageItem[]) => void;
+  setRawConsoleMessages: (messages: ConsoleMessageItem[]) => void;
   setErrorCount: (count: number) => void;
   setBranchInfo: (branchName: string | undefined, isDirty: boolean) => void;
   setDebugMessage: (message: string) => void;
@@ -139,6 +146,8 @@ export interface SettingsProfileStore {
 
 function initialSettingsProfileState(): SettingsProfileState {
   return {
+    dialogActions: initialDialogActions(),
+    startupGuardsInitialized: false,
     currentModel: '',
     currentModelLabel: undefined,
     contextLimit: undefined,
@@ -168,6 +177,7 @@ function initialSettingsProfileState(): SettingsProfileState {
     llxprtMdFileCount: 0,
     coreMemoryFileCount: 0,
     consoleMessages: [],
+    rawConsoleMessages: [],
     errorCount: 0,
     branchName: undefined,
     branchIsDirty: false,
@@ -206,6 +216,9 @@ export function createSettingsProfileStore(
   };
 
   const commands: SettingsProfileCommands = {
+    setDialogActions: (actions) => assign('dialogActions', actions),
+    setStartupGuardsInitialized: (initialized) =>
+      assign('startupGuardsInitialized', initialized),
     setCurrentModel: (model) => assign('currentModel', model),
     setCurrentModelLabel: (label) => assign('currentModelLabel', label),
     setContextLimit: (limit) => assign('contextLimit', limit),
@@ -237,6 +250,7 @@ export function createSettingsProfileStore(
     setLlxprtMdFileCount: (count) => assign('llxprtMdFileCount', count),
     setCoreMemoryFileCount: (count) => assign('coreMemoryFileCount', count),
     setConsoleMessages: (messages) => assign('consoleMessages', messages),
+    setRawConsoleMessages: (messages) => assign('rawConsoleMessages', messages),
     setErrorCount: (count) => assign('errorCount', count),
     setBranchInfo: (branchName, branchIsDirty) => {
       const prev = store.getState();

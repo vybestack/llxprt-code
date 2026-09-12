@@ -10,7 +10,7 @@ import { Box, Text } from 'ink';
 import { Colors } from '../../colors.js';
 import { useSettingsProfileStore } from '../../stores/settings/SettingsContext.js';
 import { useStoreSelector } from '../../stores/useStoreSelector.js';
-import { useAppCommands } from '../../contexts/AppCommandsContext.js';
+import { useAppCommandData } from '../../contexts/AppCommandsContext.js';
 import type { CommandContext } from '../../commands/types.js';
 import type { SubagentManager } from '@vybestack/llxprt-code-core';
 import type { ProfileManager } from '@vybestack/llxprt-code-settings';
@@ -612,7 +612,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
     settingsStore.store,
     (s) => s.activeProfileName,
   );
-  const { commandContext } = useAppCommands();
+  const { commandContext } = useAppCommandData();
   const runtimeCommandContext = commandContext as CommandContext | undefined;
   const subagentManager = runtimeCommandContext?.services.subagentManager;
   const profileManager = runtimeCommandContext?.services.profileManager;

@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useMemo, useRef } from 'react';
+import { createStableAppCommands } from './stableAppCommands.js';
 import type { EditorType } from '@vybestack/llxprt-code-core';
 import type { TextBuffer } from '../components/shared/text-buffer.js';
 import type { CommandContext } from '../commands/types.js';
@@ -15,18 +16,19 @@ import type { IdeIntegrationNudgeResult } from '../IdeIntegrationNudge.js';
 import type { SettingScope } from '../../config/settings.js';
 
 /**
- * The view-facing command surface, assembled once by the composition root
- * (AppContainerRuntime) from the domain hooks' stable callbacks and exposed
- * through a single provider. Views (Composer, DialogManager, dialog body
- * components) read handlers from here instead of receiving whole hook bags;
- * data reads stay in the stores.
+ * Changing input snapshots use a separate context from stable view commands.
+ * This data boundary updates input consumers without invalidating consumers
+ * that only dispatch commands.
  */
-export interface AppCommands {
-  // Services projected by the composition root (stable identities)
+export interface AppCommandData {
   buffer: TextBuffer;
   commandContext: CommandContext;
   inputHistory: string[];
+}
 
+export interface AppCommandBindings extends AppCommands, AppCommandData {}
+
+export interface AppCommands {
   // Composer input commands
   handleUserInputSubmit: (value: string) => void;
   handleSteer: (text: string) => boolean;
@@ -89,18 +91,30 @@ export interface AppCommands {
   handleSettingsRestart: () => void;
 }
 
+const AppCommandDataContext = createContext<AppCommandData | null>(null);
+
 const AppCommandsContext = createContext<AppCommands | null>(null);
 
 export function AppCommandsProvider({
   value,
   children,
 }: {
-  value: AppCommands;
+  value: AppCommandBindings;
   children: React.ReactNode;
 }) {
+  const latest = useRef(value);
+  latest.current = value;
+  const commands = useMemo(() => createStableAppCommands(latest), [latest]);
+  const { buffer, commandContext, inputHistory } = value;
+  const data = useMemo(
+    () => ({ buffer, commandContext, inputHistory }),
+    [buffer, commandContext, inputHistory],
+  );
   return (
-    <AppCommandsContext.Provider value={value}>
-      {children}
+    <AppCommandsContext.Provider value={commands}>
+      <AppCommandDataContext.Provider value={data}>
+        {children}
+      </AppCommandDataContext.Provider>
     </AppCommandsContext.Provider>
   );
 }
@@ -113,4 +127,15 @@ export function useAppCommands(): AppCommands {
     );
   }
   return commands;
+}
+
+/** Reads changing input snapshots without subscribing command-only consumers. */
+export function useAppCommandData(): AppCommandData {
+  const data = useContext(AppCommandDataContext);
+  if (data === null) {
+    throw new Error(
+      'useAppCommandData must be used within an AppCommandsProvider',
+    );
+  }
+  return data;
 }

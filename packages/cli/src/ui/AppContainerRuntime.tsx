@@ -25,10 +25,7 @@ import type { AppBootstrapResult } from './containers/AppContainer/hooks/useAppB
 import { useAppDialogs } from './containers/AppContainer/hooks/useAppDialogs.js';
 import type { AppDialogsResult } from './containers/AppContainer/hooks/useAppDialogs.js';
 import { useAppInput } from './containers/AppContainer/hooks/useAppInput.js';
-import type {
-  AppInputParams,
-  AppInputResult,
-} from './containers/AppContainer/hooks/useAppInput.js';
+import type { AppInputResult } from './containers/AppContainer/hooks/useAppInput.js';
 import { useAppLayout } from './containers/AppContainer/hooks/useAppLayout.js';
 import type { AppLayoutResult } from './containers/AppContainer/hooks/useAppLayout.js';
 import { useUnconfiguredProviderGuidance } from './hooks/useUnconfiguredProviderGuidance.js';
@@ -55,7 +52,7 @@ import {
 import { SettingsProfileProvider } from './stores/settings/SettingsContext.js';
 import {
   AppCommandsProvider,
-  type AppCommands,
+  type AppCommandBindings,
 } from './contexts/AppCommandsContext.js';
 import { useRef, useMemo } from 'react';
 
@@ -89,118 +86,26 @@ export interface AppContainerRuntimeProps {
   memoryController?: MemoryTelemetryController;
 }
 
-function buildInputParams(
-  bootstrap: AppBootstrapResult,
-  dialogs: AppDialogsResult,
-  appState: AppState,
-  appDispatch: React.Dispatch<AppAction>,
-  slashCommandRuntime: SlashCommandRuntime,
-  dialogOpeners: DialogOpeners,
-  stores: {
+/** Stores retain identity across renders and StrictMode effect replay. */
+function useAppStores() {
+  const storesRef = useRef<{
     dialogStore: DialogStore;
     terminalStore: TerminalStore;
-    settingsStore: SettingsProfileStore;
     turnStore: TurnStore;
-  },
-): AppInputParams {
-  return {
-    streamRuntime: bootstrap.streamRuntime,
-    slashCommandRuntime,
-    agent: bootstrap.agent,
-    settings: bootstrap.settings,
-    runtime: bootstrap.runtime,
-    subagentManager: bootstrap.uiRuntime.app.getSubagentManager(),
-    turnStore: stores.turnStore,
-    todos: bootstrap.todos,
-    updateTodos: bootstrap.updateTodos,
-    recordingIntegrationRef: bootstrap.recordingIntegrationRef,
-    recordingSwapCallbacks: bootstrap.recordingSwapCallbacks,
-    recordingIntegration: bootstrap.recordingIntegration,
-    runtimeMessageBus: bootstrap.runtimeMessageBus,
-    stdin: bootstrap.stdin,
-    setRawMode: bootstrap.setRawMode,
-    stdout: bootstrap.stdout,
-    setIdePromptAnswered: bootstrap.setIdePromptAnswered,
-    setLlxprtMdFileCount: bootstrap.setLlxprtMdFileCount,
-    dialogs: dialogOpeners,
-    store: stores.dialogStore,
-    terminalStore: stores.terminalStore,
-    settingsStore: stores.settingsStore,
-    openThemeDialog: dialogs.openThemeDialog,
-    openProviderDialog: dialogs.openProviderDialog,
-    openLoadProfileDialog: dialogs.openLoadProfileDialog,
-    openCreateProfileDialog: dialogs.openCreateProfileDialog,
-    openProfileListDialog: dialogs.openProfileListDialog,
-    viewProfileDetail: dialogs.viewProfileDetail,
-    openProfileEditor: dialogs.openProfileEditor,
-    setDebugMessage: dialogs.setDebugMessage,
-    toggleCorgiMode: dialogs.toggleCorgiMode,
-    dispatchExtensionStateUpdate: dialogs.dispatchExtensionStateUpdate,
-    addConfirmUpdateExtensionRequest: dialogs.addConfirmUpdateExtensionRequest,
-    welcomeActions: dialogs.welcomeActions,
-    extensionsUpdateState: dialogs.extensionsUpdateState,
-    performMemoryRefresh: dialogs.performMemoryRefresh,
-    handleExternalEditorOpen: dialogs.handleExternalEditorOpen,
-    // appReducer-held auth state (needsRelogin); dialogs moved to DialogStore.
-    appState,
-    appDispatch,
-  };
-}
-
-function buildLayoutParams(
-  bootstrap: AppBootstrapResult,
-  dialogs: AppDialogsResult,
-  input: AppInputResult,
-  stores: {
-    dialogStore: DialogStore;
-    terminalStore: TerminalStore;
     settingsStore: SettingsProfileStore;
-    turnStore: TurnStore;
-  },
-): Parameters<typeof useAppLayout>[0] {
-  return {
-    uiRuntime: bootstrap.uiRuntime,
-    settings: bootstrap.settings,
-    consoleMessages: bootstrap.consoleMessages,
-    clearConsoleMessagesState: bootstrap.clearConsoleMessagesState,
-    turnStore: stores.turnStore,
-    store: stores.dialogStore,
-    terminalStore: stores.terminalStore,
-    settingsStore: stores.settingsStore,
-    startupGuardsInitialized: dialogs.startupGuardsInitialized,
-    cancelOngoingRequest: input.cancelOngoingRequest,
-    requestCtrlCExit: input.requestCtrlCExit,
-    requestCtrlDExit: input.requestCtrlDExit,
-    handleSlashCommand: input.handleSlashCommand,
-    inputHistoryStore: input.inputHistoryStore,
-    handleUserInputSubmit: input.handleUserInputSubmit,
-    interactiveRuntimeReady: input.interactiveRuntimeReady,
-    buffer: input.buffer,
+  } | null>(null);
+  storesRef.current ??= {
+    dialogStore: createDialogStore(),
+    terminalStore: createTerminalStore(),
+    turnStore: createTurnStore(),
+    settingsStore: createSettingsProfileStore(),
   };
-}
-
-/**
- * Store instances live for the lifetime of the mounted app; the ref keeps
- * StrictMode double-mounts from creating a second instance.
- */
-function useTerminalStoreInstance(): TerminalStore {
-  const terminalStoreRef = useRef<TerminalStore | null>(null);
-  terminalStoreRef.current ??= createTerminalStore();
-  return terminalStoreRef.current;
-}
-
-/** Same lifetime/StrictMode rules as the terminal store instance. */
-function useTurnStoreInstance(): TurnStore {
-  const turnStoreRef = useRef<TurnStore | null>(null);
-  turnStoreRef.current ??= createTurnStore();
-  return turnStoreRef.current;
-}
-
-/** Same lifetime/StrictMode rules as the terminal store instance. */
-function useSettingsProfileStoreInstance(): SettingsProfileStore {
-  const settingsStoreRef = useRef<SettingsProfileStore | null>(null);
-  settingsStoreRef.current ??= createSettingsProfileStore();
-  return settingsStoreRef.current;
+  const stores = storesRef.current;
+  const dialogOpeners = useMemo(
+    () => createDialogOpeners(stores.dialogStore),
+    [stores],
+  );
+  return { ...stores, dialogOpeners };
 }
 
 /** Guidance nudge for sessions without an active provider configured. */
@@ -241,7 +146,6 @@ function useAppDialogsRuntime(
     recordingIntegration: bootstrap.recordingIntegration,
     recordingIntegrationRef: bootstrap.recordingIntegrationRef,
     runtime: bootstrap.runtime,
-    consoleMessages: bootstrap.consoleMessages,
     setLlxprtMdFileCount: bootstrap.setLlxprtMdFileCount,
     suppressStartupWelcome: props.suppressStartupWelcome,
     shouldShowIdePrompt: bootstrap.shouldShowIdePrompt,
@@ -250,12 +154,18 @@ function useAppDialogsRuntime(
 }
 
 /**
- * View-facing command surface: stable callbacks from the domain hooks plus
- * the terminal-store mode commands. Data reads stay in the stores.
+ * Current domain bindings, including changing input snapshots. The provider
+ * separates these snapshots from the stable view-facing command callbacks.
  */
 export function buildAppCommands(
-  dialogs: Pick<AppDialogsResult, keyof AppCommands & keyof AppDialogsResult>,
-  input: Pick<AppInputResult, keyof AppCommands & keyof AppInputResult> & {
+  dialogs: Pick<
+    AppDialogsResult,
+    keyof AppCommandBindings & keyof AppDialogsResult
+  >,
+  input: Pick<
+    AppInputResult,
+    keyof AppCommandBindings & keyof AppInputResult
+  > & {
     inputHistoryStore: Pick<
       AppInputResult['inputHistoryStore'],
       'inputHistory'
@@ -263,7 +173,7 @@ export function buildAppCommands(
   },
   layout: Pick<AppLayoutResult, 'handleClearScreen'>,
   terminalStore: TerminalStore,
-): AppCommands {
+): AppCommandBindings {
   const { commands: terminalCommands } = terminalStore;
   return {
     buffer: input.buffer,
@@ -326,17 +236,13 @@ export function buildAppCommands(
 
 export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
   debug.debug('AppContainer architecture active (v2)');
-  const dialogStoreRef = useRef<DialogStore | null>(null);
-  dialogStoreRef.current ??= createDialogStore();
-  const dialogStore = dialogStoreRef.current;
-  /** Stable openers object derived once from the store commands. */
-  const dialogOpeners = useMemo(
-    () => createDialogOpeners(dialogStore),
-    [dialogStore],
-  );
-  const terminalStore = useTerminalStoreInstance();
-  const turnStore = useTurnStoreInstance();
-  const settingsStore = useSettingsProfileStoreInstance();
+  const {
+    dialogStore,
+    terminalStore,
+    turnStore,
+    settingsStore,
+    dialogOpeners,
+  } = useAppStores();
   const bootstrap = useAppBootstrap({
     ...props,
     terminalStore,
@@ -352,27 +258,81 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     settingsStore,
     turnStore,
   );
-  const stores = { dialogStore, terminalStore, settingsStore, turnStore };
   const input = useAppInput({
-    ...buildInputParams(
-      bootstrap,
-      dialogs,
-      props.appState,
-      props.appDispatch,
-      props.slashCommandRuntime,
-      dialogOpeners,
-      stores,
-    ),
+    uiRuntime: props.uiRuntime,
+    streamRuntime: props.uiRuntime,
+    slashCommandRuntime: props.slashCommandRuntime,
+    agent: props.agent,
+    settings: props.settings,
+    runtime: bootstrap.runtime,
+    subagentManager: props.uiRuntime.app.getSubagentManager(),
+    turnStore,
+    recordingIntegrationRef: bootstrap.recordingIntegrationRef,
+    recordingSwapCallbacks: bootstrap.recordingSwapCallbacks,
+    recordingIntegration: props.recordingIntegration,
+    runtimeMessageBus: props.runtimeMessageBus,
+    setIdePromptAnswered: bootstrap.setIdePromptAnswered,
+    setLlxprtMdFileCount: bootstrap.setLlxprtMdFileCount,
+    dialogs: dialogOpeners,
+    store: dialogStore,
+    terminalStore,
+    settingsStore,
+    appState: props.appState,
+    appDispatch: props.appDispatch,
     operationLifecycle: props.operationLifecycle,
   });
-  const layout: AppLayoutResult = useAppLayout(
-    buildLayoutParams(bootstrap, dialogs, input, stores),
-  );
+  const layout = useAppLayout({
+    uiRuntime: props.uiRuntime,
+    settings: props.settings,
+    clearConsoleMessagesState: bootstrap.clearConsoleMessagesState,
+    turnStore,
+    store: dialogStore,
+    terminalStore,
+    settingsStore,
+  });
   useUnconfiguredGuidance(props, turnStore, dialogStore);
   const appCommands = useMemo(
     () => buildAppCommands(dialogs, input, layout, terminalStore),
     [dialogs, input, layout, terminalStore],
   );
+  return (
+    <AppRuntimeView
+      slashCommandRuntime={props.slashCommandRuntime}
+      version={props.version}
+      bootstrap={bootstrap}
+      layout={layout}
+      appCommands={appCommands}
+      dialogStore={dialogStore}
+      terminalStore={terminalStore}
+      turnStore={turnStore}
+      settingsStore={settingsStore}
+    />
+  );
+};
+
+interface AppRuntimeViewProps {
+  slashCommandRuntime: SlashCommandRuntime;
+  version: string;
+  bootstrap: AppBootstrapResult;
+  layout: AppLayoutResult;
+  appCommands: AppCommandBindings;
+  dialogStore: DialogStore;
+  terminalStore: TerminalStore;
+  turnStore: TurnStore;
+  settingsStore: SettingsProfileStore;
+}
+
+function AppRuntimeView({
+  slashCommandRuntime,
+  version,
+  bootstrap,
+  layout,
+  appCommands,
+  dialogStore,
+  terminalStore,
+  turnStore,
+  settingsStore,
+}: AppRuntimeViewProps): React.ReactNode {
   return (
     <TerminalProvider store={terminalStore}>
       <TurnProvider store={turnStore}>
@@ -381,10 +341,10 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
             <AppCommandsProvider value={appCommands}>
               <DefaultAppLayout
                 uiRuntime={bootstrap.uiRuntime}
-                slashCommandRuntime={props.slashCommandRuntime}
+                slashCommandRuntime={slashCommandRuntime}
                 settings={bootstrap.settings}
                 startupWarnings={bootstrap.startupWarnings}
-                version={props.version}
+                version={version}
                 nightly={bootstrap.nightly}
                 mainControlsRef={layout.mainControlsRef}
                 rootUiRef={layout.rootUiRef}
@@ -398,4 +358,4 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
       </TurnProvider>
     </TerminalProvider>
   );
-};
+}

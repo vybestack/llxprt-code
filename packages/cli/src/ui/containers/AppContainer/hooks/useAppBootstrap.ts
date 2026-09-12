@@ -298,6 +298,9 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
   const h = useBootstrapHistory(props);
   const t = useBootstrapTodo();
   const e = useBootstrapEvents(props, h.addItem, h.setUpdateInfo, h.runtime);
+  useEffect(() => {
+    props.settingsStore.commands.setRawConsoleMessages(e.consoleMessages);
+  }, [props.settingsStore, e.consoleMessages]);
   return {
     uiRuntime,
     streamRuntime,

@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { act, useEffect } from 'react';
+import { act, memo, useEffect } from 'react';
 import { Config } from '@vybestack/llxprt-code-core';
 import {
   renderWithProviders,
@@ -14,7 +14,11 @@ import {
 } from '../test-utils/render.js';
 import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
 import { buildAppCommands } from './AppContainerRuntime.js';
-import { AppCommandsProvider } from './contexts/AppCommandsContext.js';
+import {
+  AppCommandsProvider,
+  useAppCommands,
+  type AppCommands,
+} from './contexts/AppCommandsContext.js';
 import { Composer } from './components/Composer.js';
 import { useTextBuffer } from './components/shared/text-buffer.js';
 import { useQueuedSubmissions } from './hooks/agentStream/useQueuedSubmissions.js';
@@ -75,8 +79,16 @@ function createHarness() {
     model: 'test-model',
   });
   const submitted: string[] = [];
+  const observedCommands: AppCommands[] = [];
+  const CommandConsumer = memo(() => {
+    observedCommands.push(useAppCommands());
+    return null;
+  });
+  CommandConsumer.displayName = 'CommandConsumer';
   let queue: ReturnType<typeof useQueuedSubmissions> | undefined;
+  let revision = 0;
   function Harness() {
+    const currentRevision = revision++;
     queue = useQueuedSubmissions();
     const buffer = useTextBuffer({
       initialText: '',
@@ -94,7 +106,7 @@ function createHarness() {
         commandContext: createMockCommandContext(),
         inputHistoryStore: { inputHistory: [] },
         handleUserInputSubmit: (text) => {
-          submitted.push(text);
+          submitted.push(`${currentRevision}:${text}`);
         },
         handleSteer: () => false,
         vimHandleInput: () => false,
@@ -112,6 +124,7 @@ function createHarness() {
     return (
       <TurnProvider store={turn}>
         <AppCommandsProvider value={commands}>
+          <CommandConsumer />
           <Composer config={config} settings={settings} />
         </AppCommandsProvider>
       </TurnProvider>
@@ -120,6 +133,8 @@ function createHarness() {
   return {
     turn,
     submitted,
+    observedCommands,
+    getRevision: () => revision - 1,
     render: () => renderWithProviders(<Harness />, { settings }),
     getQueue: () => {
       if (queue === undefined) throw new Error('Harness must be mounted');
@@ -129,6 +144,27 @@ function createHarness() {
 }
 
 describe('AppContainer queue command wiring', () => {
+  it('keeps commands stable while dispatching to the current input handler', () => {
+    const harness = createHarness();
+    const { unmount } = harness.render();
+    try {
+      const commands = harness.observedCommands.at(0);
+      if (commands === undefined) throw new Error('Commands were not mounted');
+      const renders = harness.observedCommands.length;
+      const initialRevision = harness.getRevision();
+      act(() => {
+        harness.getQueue().enqueueSubmission({ query: 'force input update' });
+      });
+      expect(harness.getRevision()).toBeGreaterThan(initialRevision);
+      expect(harness.observedCommands).toHaveLength(renders);
+      commands.handleUserInputSubmit('current handler');
+      expect(harness.submitted).toStrictEqual([
+        `${harness.getRevision()}:current handler`,
+      ]);
+    } finally {
+      unmount();
+    }
+  });
   it('clears the real queue with Backspace on empty input and leaves nothing to drain', async () => {
     const harness = createHarness();
     const { stdin, unmount } = harness.render();

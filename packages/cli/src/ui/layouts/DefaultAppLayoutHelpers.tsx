@@ -6,26 +6,10 @@
 
 import React from 'react';
 import { Box, type DOMElement } from 'ink';
-import type {
-  MessageBus,
-  IdeContext,
-  ThoughtSummary,
-  ApprovalMode,
-} from '@vybestack/llxprt-code-core';
-import type {
-  StreamingState,
-  HistoryItem,
-  HistoryItemWithoutId,
-  ConsoleMessageItem,
-} from '../types.js';
-import type { SlashCommandRuntime, UiRuntime } from '../cliUiRuntime.js';
-import type { QueuedSubmission } from '../hooks/agentStream/types.js';
+import type { HistoryItem, HistoryItemWithoutId } from '../types.js';
+import type { SlashCommandRuntime } from '../cliUiRuntime.js';
 import type { LoadedSettings } from '../../config/settings.js';
-import type { UpdateObject } from '../utils/updateCheck.js';
-import { useVimMode } from '../contexts/VimModeContext.js';
 import { OverflowProvider } from '../contexts/OverflowContext.js';
-import { getCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
-import { themeManager } from '../themes/theme-manager.js';
 import type { SlashCommand } from '../commands/types.js';
 import { useDialogStore } from '../stores/dialog/DialogContext.js';
 import { useStoreSelector } from '../stores/useStoreSelector.js';
@@ -34,13 +18,7 @@ import type { DialogState } from '../stores/dialog/dialogStore.js';
 import { AppHeader } from '../components/AppHeader.js';
 import { HistoryItemDisplay } from '../components/HistoryItemDisplay.js';
 import { ShowMoreLines } from '../components/ShowMoreLines.js';
-import { Notifications } from '../components/Notifications.js';
-import { TodoPanel } from '../components/TodoPanel.js';
-import { QueuedMessagesPanel } from '../components/QueuedMessagesPanel.js';
 import { Footer } from '../components/Footer.js';
-import { DialogManager } from '../components/DialogManager.js';
-import { BucketAuthConfirmation } from '../components/BucketAuthConfirmation.js';
-import { InlineContent } from './InlineContent.js';
 
 export type { ScrollableMainContentItem } from './scrollableMainContent.js';
 export {
@@ -65,62 +43,6 @@ function hasOpenDialog(state: DialogState): boolean {
 export function useHasActiveDialog(): boolean {
   const store = useDialogStore();
   return useStoreSelector(store.store, hasOpenDialog);
-}
-
-export interface LayoutSettings {
-  showTodoPanelSetting: boolean;
-  hideContextSummary: boolean;
-  hideFooter: boolean;
-  showMemoryUsage: boolean;
-  disableLoadingPhrases: boolean;
-  currentThemeName: string;
-  isNarrow: boolean;
-  useAlternateBuffer: boolean;
-  debugConsoleMaxHeight: number;
-  staticAreaMaxItemHeight: number;
-  effectiveAvailableHeight: number;
-}
-
-export function useLayoutSettings(
-  config: UiRuntime,
-  settings: LoadedSettings,
-  availableTerminalHeight: number,
-  terminalHeight: number,
-  constrainHeight: boolean,
-  uiAvailableTerminalHeight: number,
-  isNarrow: boolean,
-): LayoutSettings {
-  const showTodoPanelSetting = settings.merged.ui.showTodoPanel ?? true;
-  const hideContextSummary = settings.merged.ui.hideContextSummary ?? false;
-  const hideFooter = settings.merged.ui.hideFooter ?? false;
-  const showMemoryUsage =
-    config.app.getDebugMode() || (settings.merged.ui.showMemoryUsage ?? false);
-  const disableLoadingPhrases =
-    config.app.getAccessibility().disableLoadingPhrases === true ||
-    config.app.getScreenReader();
-  const currentThemeName = themeManager.getActiveTheme().name;
-  const useAlternateBuffer =
-    settings.merged.ui.useAlternateBuffer === true &&
-    !config.app.getScreenReader();
-  const debugConsoleMaxHeight = Math.floor(Math.max(terminalHeight * 0.2, 5));
-  const staticAreaMaxItemHeight = Math.max(terminalHeight * 4, 100);
-  const effectiveAvailableHeight = constrainHeight
-    ? uiAvailableTerminalHeight
-    : availableTerminalHeight;
-
-  return {
-    showTodoPanelSetting,
-    hideContextSummary,
-    hideFooter,
-    showMemoryUsage,
-    disableLoadingPhrases,
-    currentThemeName,
-    isNarrow,
-    useAlternateBuffer,
-    debugConsoleMaxHeight,
-    staticAreaMaxItemHeight,
-    effectiveAvailableHeight,
-  };
 }
 
 function useHistoryItemDisplayProps(
@@ -550,165 +472,6 @@ export function FooterSection(props: FooterProps) {
       hideSandboxStatus={settings.merged.hideSandboxStatus}
       hideModelInfo={settings.merged.hideModelInfo}
       themeName={currentThemeName}
-    />
-  );
-}
-
-export interface MainControlsProps {
-  config: SlashCommandRuntime;
-  settings: LoadedSettings;
-  startupWarnings: string[];
-  updateInfo: UpdateObject | null;
-  history: HistoryItem[];
-  inputWidth: number;
-  isTodoPanelCollapsed: boolean;
-  isQueuedMessagesPanelCollapsed: boolean;
-  queuedSubmissions: readonly QueuedSubmission[];
-  showTodoPanelSetting: boolean;
-  dialogsVisible: boolean;
-  hideContextSummary: boolean;
-  hideFooter: boolean;
-  showMemoryUsage: boolean;
-  currentThemeName: string;
-  nightly: boolean;
-  constrainHeight: boolean;
-  debugConsoleMaxHeight: number;
-  effectiveAvailableHeight: number;
-  disableLoadingPhrases: boolean;
-  streamingState: StreamingState;
-  thought: ThoughtSummary | null;
-  currentLoadingPhrase: string | undefined;
-  elapsedTime: number;
-  isNarrow: boolean;
-  ctrlCPressedOnce: boolean;
-  ctrlDPressedOnce: boolean;
-  showEscapePrompt: boolean;
-  ideContextState: IdeContext | undefined;
-  llxprtMdFileCount: number;
-  coreMemoryFileCount: number;
-  contextFileNames: string[];
-  showToolDescriptions: boolean;
-  showAutoAcceptIndicator: ApprovalMode;
-  shellModeActive: boolean;
-  showErrorDetails: boolean;
-  consoleMessages: ConsoleMessageItem[];
-  isInputActive: boolean;
-  debugMessage: string;
-  errorCount: number;
-  currentModel: string;
-  currentModelLabel?: string;
-  contextLimit: number | undefined;
-  branchName: string | undefined;
-  branchIsDirty: boolean;
-  historyTokenCount: number;
-  tokenMetrics: {
-    tokensPerMinute: number;
-    throttleWaitTimeMs: number;
-    sessionTokenTotal: number;
-  };
-  onSuggestionsVisibilityChange: (visible: boolean) => void;
-}
-
-export function MainControls(props: MainControlsProps) {
-  const { dialogsVisible, hideFooter } = props;
-  const { vimEnabled, vimMode } = useVimMode();
-
-  return (
-    <>
-      <NotificationsSection {...props} />
-      <TodoPanelSection
-        showTodoPanelSetting={props.showTodoPanelSetting}
-        inputWidth={props.inputWidth}
-        isTodoPanelCollapsed={props.isTodoPanelCollapsed}
-      />
-      <QueuedMessagesPanelSection
-        inputWidth={props.inputWidth}
-        isQueuedMessagesPanelCollapsed={props.isQueuedMessagesPanelCollapsed}
-        queuedSubmissions={props.queuedSubmissions}
-      />
-      <BucketAuthSection dialogsVisible={dialogsVisible} />
-      {dialogsVisible ? (
-        <DialogManager config={props.config} settings={props.settings} />
-      ) : (
-        <InlineContent {...props} />
-      )}
-      <FooterSection
-        config={props.config}
-        settings={props.settings}
-        hideFooter={hideFooter}
-        showMemoryUsage={props.showMemoryUsage}
-        currentThemeName={props.currentThemeName}
-        nightly={props.nightly}
-        vimModeEnabled={vimEnabled}
-        vimMode={vimMode}
-        currentModel={props.currentModel}
-        currentModelLabel={props.currentModelLabel}
-        contextLimit={props.contextLimit}
-        branchName={props.branchName}
-        branchIsDirty={props.branchIsDirty}
-        debugMessage={props.debugMessage}
-        errorCount={props.errorCount}
-        showErrorDetails={props.showErrorDetails}
-        historyTokenCount={props.historyTokenCount}
-        tokenMetrics={props.tokenMetrics}
-      />
-    </>
-  );
-}
-
-function NotificationsSection(props: MainControlsProps) {
-  return (
-    <Notifications
-      startupWarnings={props.startupWarnings}
-      updateInfo={props.updateInfo}
-      history={props.history}
-    />
-  );
-}
-
-function TodoPanelSection({
-  showTodoPanelSetting,
-  inputWidth,
-  isTodoPanelCollapsed,
-}: {
-  showTodoPanelSetting: boolean;
-  inputWidth: number;
-  isTodoPanelCollapsed: boolean;
-}) {
-  if (!showTodoPanelSetting) {
-    return null;
-  }
-  return <TodoPanel width={inputWidth} collapsed={isTodoPanelCollapsed} />;
-}
-
-function QueuedMessagesPanelSection({
-  inputWidth,
-  isQueuedMessagesPanelCollapsed,
-  queuedSubmissions,
-}: {
-  inputWidth: number;
-  isQueuedMessagesPanelCollapsed: boolean;
-  queuedSubmissions: readonly QueuedSubmission[];
-}) {
-  if (queuedSubmissions.length === 0) {
-    return null;
-  }
-  return (
-    <QueuedMessagesPanel
-      width={inputWidth}
-      collapsed={isQueuedMessagesPanelCollapsed}
-      messages={queuedSubmissions}
-    />
-  );
-}
-
-function BucketAuthSection({ dialogsVisible }: { dialogsVisible: boolean }) {
-  return (
-    <BucketAuthConfirmation
-      messageBus={
-        (getCliRuntimeContext() as { messageBus?: MessageBus }).messageBus
-      }
-      isFocused={!dialogsVisible}
     />
   );
 }

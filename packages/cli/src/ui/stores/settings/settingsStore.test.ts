@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import { initialDialogActions } from './dialogActions.js';
 import { ApprovalMode, type IdeContext } from '@vybestack/llxprt-code-core';
 import type { ToolInfo } from '@vybestack/llxprt-code-agents';
 import type { Profile } from '@vybestack/llxprt-code-settings';
@@ -35,6 +36,8 @@ describe('createSettingsProfileStore', () => {
   it('starts with the documented defaults', () => {
     const { store } = createSettingsProfileStore();
     expect(store.getState()).toStrictEqual({
+      dialogActions: initialDialogActions(),
+      startupGuardsInitialized: false,
       currentModel: '',
       currentModelLabel: undefined,
       contextLimit: undefined,
@@ -64,6 +67,7 @@ describe('createSettingsProfileStore', () => {
       llxprtMdFileCount: 0,
       coreMemoryFileCount: 0,
       consoleMessages: [],
+      rawConsoleMessages: [],
       errorCount: 0,
       branchName: undefined,
       branchIsDirty: false,

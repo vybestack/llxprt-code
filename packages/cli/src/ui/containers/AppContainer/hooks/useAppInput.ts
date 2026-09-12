@@ -5,6 +5,8 @@
  */
 
 import type React from 'react';
+import { useStdin, useStdout } from 'ink';
+import { useTodoContext } from '../../../contexts/TodoContext.js';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAgentStream } from '../../../hooks/agentStream/index.js';
 import type { OperationLifecycleRegistry } from '../../../hooks/agentStream/operationLifecycle.js';
@@ -48,13 +50,20 @@ import type { SlashCommandProcessorActions } from '../../../hooks/slashCommandPr
 
 import * as fs from 'fs';
 import type { AppBootstrapResult } from './useAppBootstrap.js';
-import type { AppDialogsResult } from './useAppDialogs.js';
+import { useMemoryRefreshAction } from './useMemoryRefreshAction.js';
+import { useExtensionUpdates } from '../../../hooks/useExtensionUpdates.js';
+import { useLogger } from '../../../hooks/useLogger.js';
+import { useInputHistoryBootstrap } from './useInputHistoryBootstrap.js';
+import { useInitialPromptSubmit } from './useInitialPromptSubmit.js';
+import { useInputKeybindings } from './useInputKeybindings.js';
 import type {
   SlashCommandRuntime,
+  UiRuntime,
   UiSubagentManager,
 } from '../../../cliUiRuntime.js';
 
 export interface AppInputParams {
+  uiRuntime: UiRuntime;
   // From bootstrap
   streamRuntime: AppBootstrapResult['streamRuntime'];
   slashCommandRuntime: SlashCommandRuntime;
@@ -68,15 +77,10 @@ export interface AppInputParams {
    * selector where the stream needs it; commands are stable references.
    */
   turnStore: TurnStore;
-  todos: AppBootstrapResult['todos'];
-  updateTodos: AppBootstrapResult['updateTodos'];
   recordingIntegrationRef: AppBootstrapResult['recordingIntegrationRef'];
   recordingSwapCallbacks: AppBootstrapResult['recordingSwapCallbacks'];
   recordingIntegration: AppBootstrapResult['recordingIntegration'];
   runtimeMessageBus: AppBootstrapResult['runtimeMessageBus'];
-  stdin: AppBootstrapResult['stdin'];
-  setRawMode: AppBootstrapResult['setRawMode'];
-  stdout: AppBootstrapResult['stdout'];
   setIdePromptAnswered: AppBootstrapResult['setIdePromptAnswered'];
   setLlxprtMdFileCount: AppBootstrapResult['setLlxprtMdFileCount'];
 
@@ -89,23 +93,6 @@ export interface AppInputParams {
   terminalStore: TerminalStore;
   /** Settings/profile store; input mirrors stream/command projections into it. */
   settingsStore: SettingsProfileStore;
-  /** Domain openers that load data before showing their dialog. */
-  openThemeDialog: AppDialogsResult['openThemeDialog'];
-  openProviderDialog: AppDialogsResult['openProviderDialog'];
-  openLoadProfileDialog: AppDialogsResult['openLoadProfileDialog'];
-  openCreateProfileDialog: AppDialogsResult['openCreateProfileDialog'];
-  openProfileListDialog: AppDialogsResult['openProfileListDialog'];
-  viewProfileDetail: AppDialogsResult['viewProfileDetail'];
-  openProfileEditor: AppDialogsResult['openProfileEditor'];
-  setDebugMessage: AppDialogsResult['setDebugMessage'];
-  toggleCorgiMode: AppDialogsResult['toggleCorgiMode'];
-  dispatchExtensionStateUpdate: AppDialogsResult['dispatchExtensionStateUpdate'];
-  addConfirmUpdateExtensionRequest: AppDialogsResult['addConfirmUpdateExtensionRequest'];
-  welcomeActions: AppDialogsResult['welcomeActions'];
-  extensionsUpdateState: AppDialogsResult['extensionsUpdateState'];
-  performMemoryRefresh: AppDialogsResult['performMemoryRefresh'];
-  handleExternalEditorOpen: AppDialogsResult['handleExternalEditorOpen'];
-
   // Direct
   appState: AppState;
   appDispatch: React.Dispatch<AppAction>;
@@ -178,25 +165,26 @@ function useInputCoreCallbacks(p: AppInputParams) {
 function useSlashActions(
   p: AppInputParams,
   quitHandler: (messages: HistoryItem[]) => void,
+  extensions: ReturnType<typeof useExtensionUpdates>,
 ): SlashCommandProcessorActions {
+  const actions = useStoreSelector(
+    p.settingsStore.store,
+    (s) => s.dialogActions,
+  );
   return useSlashCommandActions({
+    ...actions,
     dialogs: p.dialogs,
-    openThemeDialog: p.openThemeDialog,
-    openProviderDialog: p.openProviderDialog,
-    openLoadProfileDialog: p.openLoadProfileDialog,
-    openCreateProfileDialog: p.openCreateProfileDialog,
-    openProfileListDialog: p.openProfileListDialog,
-    viewProfileDetail: p.viewProfileDetail,
-    openProfileEditor: p.openProfileEditor,
     quitHandler,
-    setDebugMessage: p.setDebugMessage,
-    toggleCorgiMode: p.toggleCorgiMode,
+    setDebugMessage: p.settingsStore.commands.setDebugMessage,
+    toggleCorgiMode: noop,
     toggleDebugProfiler: p.terminalStore.commands.toggleDebugProfiler,
-    dispatchExtensionStateUpdate: p.dispatchExtensionStateUpdate,
-    addConfirmUpdateExtensionRequest: p.addConfirmUpdateExtensionRequest,
-    welcomeActions: p.welcomeActions,
+    dispatchExtensionStateUpdate: extensions.dispatchExtensionStateUpdate,
+    addConfirmUpdateExtensionRequest:
+      extensions.addConfirmUpdateExtensionRequest,
   }) as SlashCommandProcessorActions;
 }
+
+function noop(): void {}
 
 function useSlashCommandSetup(
   p: AppInputParams,
@@ -206,16 +194,24 @@ function useSlashCommandSetup(
   const {
     agent,
     settings,
-    todos,
-    updateTodos,
     recordingIntegrationRef,
     recordingSwapCallbacks,
-    extensionsUpdateState,
     setLlxprtMdFileCount,
   } = p;
   const { addItem, clearItems, loadHistory, refreshStatic, setIsProcessing } =
     p.turnStore.commands;
-  const slashCommandProcessorActions = useSlashActions(p, quitHandler);
+  const extensions = useExtensionUpdates(
+    p.slashCommandRuntime.getExtensions(),
+    addItem,
+    p.slashCommandRuntime.getWorkingDir(),
+    p.store,
+  );
+  const slashCommandProcessorActions = useSlashActions(
+    p,
+    quitHandler,
+    extensions,
+  );
+  const { todos, updateTodos } = useTodoContext();
   const todoContextForCommands = useMemo(
     () => ({ todos, updateTodos, refreshTodos: () => {} }),
     [todos, updateTodos],
@@ -233,7 +229,7 @@ function useSlashCommandSetup(
     setLlxprtMdFileCount,
     slashCommandProcessorActions,
     p.store,
-    extensionsUpdateState,
+    extensions.extensionsUpdateState,
     true,
     todoContextForCommands,
     recordingIntegrationRef.current ?? undefined,
@@ -281,7 +277,8 @@ function useInputBuffer(
   p: AppInputParams,
   core: ReturnType<typeof useInputCore>,
 ) {
-  const { stdin, setRawMode, runtime } = p;
+  const { runtime } = p;
+  const { stdin, setRawMode } = useStdin();
   const shellModeActive = useStoreSelector(
     p.terminalStore.store,
     (s) => s.shellModeActive,
@@ -299,6 +296,8 @@ function useInputBuffer(
     shellModeActive,
   });
   const inputHistoryStore = useInputHistoryStore();
+  const logger = useLogger(p.uiRuntime.storage);
+  useInputHistoryBootstrap({ inputHistoryStore, logger });
   const lastSubmittedPromptRef = useRef<string | null>('');
   const handleOAuthCodeDialogClose = useCallback(() => {
     p.dialogs.oauthCode.close();
@@ -339,15 +338,9 @@ function useInputStreamSetup(
   p: AppInputParams,
   core: ReturnType<typeof useInputCore>,
 ) {
-  const {
-    streamRuntime,
-    settings,
-    recordingIntegration,
-    runtimeMessageBus,
-    stdout,
-    performMemoryRefresh,
-    handleExternalEditorOpen,
-  } = p;
+  const { streamRuntime, settings, recordingIntegration, runtimeMessageBus } =
+    p;
+  const { stdout } = useStdout();
   const { setEmbeddedShellFocused } = p.terminalStore.commands;
   const { refreshStatic } = p.turnStore.commands;
   // The stream reads the committed transcript (checkpoint context) through a
@@ -355,7 +348,13 @@ function useInputStreamSetup(
   const history = useStoreSelector(p.turnStore.store, (s) => s.history);
   const { addItem, removeItems } = p.turnStore.commands;
   const handleSlashCommand = core.handleSlashCommand;
-  const setDebugMessage = p.setDebugMessage;
+  const setDebugMessage = p.settingsStore.commands.setDebugMessage;
+  const performMemoryRefresh = useMemoryRefreshAction({
+    config: p.slashCommandRuntime,
+    settings,
+    addItem,
+    setLlxprtMdFileCount: p.setLlxprtMdFileCount,
+  });
   const shellModeActive = useStoreSelector(
     p.terminalStore.store,
     (s) => s.shellModeActive,
@@ -379,7 +378,7 @@ function useInputStreamSetup(
     setEmbeddedShellFocused,
     stdout.columns,
     stdout.rows,
-    handleExternalEditorOpen,
+    noop,
     recordingIntegration,
     runtimeMessageBus,
     p.subagentManager,
@@ -395,7 +394,7 @@ function useInputStreamWiring(
   core: ReturnType<typeof useInputCore>,
   setup: ReturnType<typeof useInputStreamSetup>,
 ) {
-  const { todos, updateTodos } = p;
+  const { todos, updateTodos } = useTodoContext();
   const { setEmbeddedShellFocused } = p.terminalStore.commands;
   const embeddedShellFocused = useStoreSelector(
     p.terminalStore.store,
@@ -705,10 +704,45 @@ function useInputFinish(
   };
 }
 
+function useInputStartup(
+  p: AppInputParams,
+  core: ReturnType<typeof useInputCore>,
+  stream: ReturnType<typeof useInputStream>,
+): void {
+  useInputKeybindings({
+    uiRuntime: p.uiRuntime,
+    terminalStore: p.terminalStore,
+    settingsStore: p.settingsStore,
+    turnStore: p.turnStore,
+    buffer: stream.buffer,
+    cancelOngoingRequest: stream.cancelOngoingRequest,
+    requestCtrlCExit: core.requestCtrlCExit,
+    requestCtrlDExit: core.requestCtrlDExit,
+    handleSlashCommand: core.handleSlashCommand,
+  });
+  const startupGuardsInitialized = useStoreSelector(
+    p.settingsStore.store,
+    (s) => s.startupGuardsInitialized,
+  );
+  const initialPrompt = useMemo(
+    () => p.uiRuntime.app.getQuestion(),
+    [p.uiRuntime],
+  );
+  useInitialPromptSubmit({
+    initialPrompt,
+    submitPrompt: stream.handleUserInputSubmit,
+    agentClientPresent: Boolean(p.uiRuntime.agentClientSource.getAgentClient()),
+    interactiveRuntimeReady: stream.interactiveRuntimeReady,
+    store: p.store,
+    startupGuardsInitialized,
+  });
+}
+
 export function useAppInput(params: AppInputParams) {
   const core = useInputCore(params);
   const stream = useInputStream(params, core);
   const finish = useInputFinish(params, core, stream);
+  useInputStartup(params, core, stream);
   // Terminal dims live in the TerminalStore; only the buffer viewport keeps a
   // local copy, so the public bag drops them here.
   const { dims: _dims, ...publicResult } = { ...core, ...stream, ...finish };

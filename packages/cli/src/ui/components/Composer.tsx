@@ -5,7 +5,10 @@
  */
 
 import type { LoadedSettings } from '../../config/settings.js';
-import { useAppCommands } from '../contexts/AppCommandsContext.js';
+import {
+  useAppCommands,
+  useAppCommandData,
+} from '../contexts/AppCommandsContext.js';
 import { useVimMode } from '../contexts/VimModeContext.js';
 import { useTerminalStore } from '../stores/terminal/TerminalContext.js';
 import { useSettingsProfileStore } from '../stores/settings/SettingsContext.js';
@@ -93,6 +96,7 @@ export const Composer = ({
   onSuggestionsVisibilityChange,
 }: ComposerProps) => {
   const commands = useAppCommands();
+  const data = useAppCommandData();
   const { vimEnabled } = useVimMode();
   const {
     inputWidth,
@@ -110,16 +114,16 @@ export const Composer = ({
 
   return (
     <InputPrompt
-      buffer={commands.buffer}
+      buffer={data.buffer}
       inputWidth={inputWidth}
       suggestionsWidth={suggestionsWidth}
       onSubmit={commands.handleUserInputSubmit}
       onSteer={commands.handleSteer}
-      userMessages={commands.inputHistory}
+      userMessages={data.inputHistory}
       onClearScreen={commands.handleClearScreen}
       config={config}
       slashCommands={slashCommands ?? []}
-      commandContext={commands.commandContext}
+      commandContext={data.commandContext}
       shellModeActive={shellModeActive}
       setShellModeActive={commands.setShellModeActive}
       onEscapePromptChange={commands.handleEscapePromptChange}

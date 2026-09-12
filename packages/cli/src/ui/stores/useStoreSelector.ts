@@ -10,9 +10,9 @@ import type { Store } from './createStore.js';
 /**
  * Subscribes to a {@link Store} and returns the selected slice. The snapshot is
  * the last selected value, cached by state reference, so useSyncExternalStore
- * only re-renders when the selected value stops being equal (Object.is by
- * default). A non-equal cached value is replaced every call; enabling a custom
- * `isEqual` suppresses re-renders for equal selections produced from a new state.
+ * only re-renders for store notifications when the selected snapshot changes
+ * according to Object.is. There is no custom equality argument. Select existing
+ * identity-stable objects or primitives rather than allocating derived objects.
  */
 export function useStoreSelector<S, Sel>(
   store: Store<S>,

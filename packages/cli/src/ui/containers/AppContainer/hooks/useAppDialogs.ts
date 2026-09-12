@@ -7,14 +7,14 @@
 import type { SlashCommandRuntime } from '../../../cliUiRuntime.js';
 import type React from 'react';
 import type { AppAction } from '../../../reducers/appReducer.js';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useThemeCommand } from '../../../hooks/useThemeCommand.js';
 import { useAuthCommand } from '../../../hooks/useAuthCommand.js';
 import { useFolderTrust } from '../../../hooks/useFolderTrust.js';
 import { useWelcomeOnboarding } from '../../../hooks/useWelcomeOnboarding.js';
 import type { UseWelcomeOnboardingReturn } from '../../../hooks/useWelcomeOnboarding.js';
 import { useEditorSettings } from '../../../hooks/useEditorSettings.js';
-import { useExtensionUpdates } from '../../../hooks/useExtensionUpdates.js';
+import { useShallowMemo } from '../../../hooks/useShallowMemo.js';
 import { useOAuthOrchestration } from '../../../hooks/useOAuthOrchestration.js';
 import { useProviderDialog } from '../../../hooks/useProviderDialog.js';
 import { useLoadProfileDialog } from '../../../hooks/useLoadProfileDialog.js';
@@ -26,7 +26,6 @@ import { useDisplayPreferences } from './useDisplayPreferences.js';
 import { useModelTracking } from './useModelTracking.js';
 import { useIdeContextBridge } from './useIdeContextBridge.js';
 import { useQueueErrorTimeout } from './useQueueErrorTimeout.js';
-import { useMemoryRefreshAction } from './useMemoryRefreshAction.js';
 import { useModelRuntimeSync } from './useModelRuntimeSync.js';
 import { useAppEventHandlers } from './useAppEventHandlers.js';
 import { resolveModelIdentity } from '../../../utils/modelIdentity.js';
@@ -74,7 +73,6 @@ export interface AppDialogsParams {
   recordingIntegration?: RecordingIntegration;
   recordingIntegrationRef: React.MutableRefObject<RecordingIntegration | null>;
   runtime: ReturnType<typeof useRuntimeApi>;
-  consoleMessages: ConsoleMessageItem[];
   setLlxprtMdFileCount: (count: number) => void;
   suppressStartupWelcome?: boolean;
   /** IDE nudge visibility + identity from bootstrap; open state lives in DialogStore. */
@@ -145,9 +143,11 @@ function useDialogsCore(
   p: AppDialogsParams,
   st: ReturnType<typeof useDialogsStoreState>,
 ) {
-  const { config, settings, store, dialogs, consoleMessages, settingsStore } =
-    p;
-  const { addItem } = p.turnStore.commands;
+  const { config, settings, dialogs, settingsStore } = p;
+  const consoleMessages = useStoreSelector(
+    settingsStore.store,
+    (s) => s.rawConsoleMessages,
+  );
   const { currentModel, currentModelLabel } = useModelTracking({
     config,
     settingsStore,
@@ -163,13 +163,6 @@ function useDialogsCore(
   }, [config, settingsStore]);
   const displayPrefs = useDisplayPreferences(p.terminalStore, settingsStore);
   const workspace = useWorkspaceMigration(settings, dialogs);
-  const extensions = config.getExtensions();
-  const extUpdates = useExtensionUpdates(
-    extensions,
-    addItem,
-    config.getWorkingDir(),
-    store,
-  );
   useIdeContextBridge({ setIdeContextState: st.setIdeContextState });
   const errorCount = useMemo(
     () =>
@@ -187,7 +180,6 @@ function useDialogsCore(
     setContextLimit: settingsStore.commands.setContextLimit,
     ...displayPrefs,
     ...workspace,
-    ...extUpdates,
     errorCount,
   };
 }
@@ -235,9 +227,9 @@ function useDialogsAuthProviders(
     setAuthError: st.setAuthError,
   });
   const editor = useEditorSettings(settings, dialogs, addItem);
+  const addMessage = useDialogHistoryMessage(p.turnStore);
   const provider = useProviderDialog({
-    addMessage: (msg) =>
-      addItem({ type: msg.type, text: msg.content }, msg.timestamp.getTime()),
+    addMessage,
     store,
     dialogs,
     recordingIntegration,
@@ -352,35 +344,38 @@ interface ProfileDialogsData {
   toolsDialogDisabledTools: string[];
 }
 
+function useDialogHistoryMessage(turnStore: TurnStore) {
+  const { addItem } = turnStore.commands;
+  return useCallback(
+    (
+      msg: Parameters<Parameters<typeof useProviderDialog>[0]['addMessage']>[0],
+    ) => {
+      addItem({ type: msg.type, text: msg.content }, msg.timestamp.getTime());
+    },
+    [addItem],
+  );
+}
+
 function useDialogsProfiles(p: AppDialogsParams) {
-  const { config, agent, settings, setLlxprtMdFileCount, store, dialogs } = p;
-  const { addItem } = p.turnStore.commands;
+  const { config, agent, store, dialogs } = p;
+  const addMessage = useDialogHistoryMessage(p.turnStore);
   const loadProfile = useLoadProfileDialog({
-    addMessage: (msg) =>
-      addItem({ type: msg.type, text: msg.content }, msg.timestamp.getTime()),
+    addMessage,
     store,
     dialogs,
   });
   const createProfile = useCreateProfileDialog({ store, dialogs });
   const profileMgmt = useProfileManagement({
-    addMessage: (msg) =>
-      addItem({ type: msg.type, text: msg.content }, msg.timestamp.getTime()),
+    addMessage,
     store,
     dialogs,
   });
   const toolsRaw = useToolsDialog({
-    addMessage: (msg) =>
-      addItem({ type: msg.type, text: msg.content }, msg.timestamp.getTime()),
+    addMessage,
     store,
     dialogs,
     config,
     agent,
-  });
-  const performMemoryRefresh = useMemoryRefreshAction({
-    config,
-    settings,
-    addItem,
-    setLlxprtMdFileCount,
   });
   const data: ProfileDialogsData = {
     profiles: loadProfile.profiles,
@@ -411,7 +406,6 @@ function useDialogsProfiles(p: AppDialogsParams) {
     closeProfileEditor: profileMgmt.closeEditor,
     saveProfileFromEditor: profileMgmt.saveProfile,
     handleToolsSelect: toolsRaw.handleSelect,
-    performMemoryRefresh,
     data,
   };
 }
@@ -505,6 +499,39 @@ function useTerminalCapabilitySync(
   }, [config, settings, terminalStore, settingsNonce]);
 }
 
+function useDialogActionsSync(
+  settingsStore: SettingsProfileStore,
+  auth: ReturnType<typeof useDialogsAuth>,
+  profiles: ReturnType<typeof useDialogsProfiles>,
+): void {
+  const dialogActions = useShallowMemo(
+    () => ({
+      openThemeDialog: auth.openThemeDialog,
+      openProviderDialog: auth.openProviderDialog,
+      openLoadProfileDialog: profiles.openLoadProfileDialog,
+      openCreateProfileDialog: profiles.openCreateProfileDialog,
+      openProfileListDialog: profiles.openProfileListDialog,
+      viewProfileDetail: profiles.viewProfileDetail,
+      openProfileEditor: profiles.openProfileEditor,
+      welcomeActions: { resetAndReopen: auth.welcome.actions.resetAndReopen },
+    }),
+    {
+      authTheme: auth.openThemeDialog,
+      authProvider: auth.openProviderDialog,
+      load: profiles.openLoadProfileDialog,
+      create: profiles.openCreateProfileDialog,
+      list: profiles.openProfileListDialog,
+      detail: profiles.viewProfileDetail,
+      editor: profiles.openProfileEditor,
+      welcome: auth.welcome.actions.resetAndReopen,
+    },
+  );
+  useEffect(() => {
+    settingsStore.commands.setDialogActions(dialogActions);
+    settingsStore.commands.setStartupGuardsInitialized(true);
+  }, [settingsStore, dialogActions]);
+}
+
 export function useAppDialogs(params: AppDialogsParams) {
   const st = useDialogsStoreState(params.terminalStore, params.settingsStore);
   const core = useDialogsCore(params, st);
@@ -527,22 +554,14 @@ export function useAppDialogs(params: AppDialogsParams) {
     profiles.data,
     core.errorCount,
   );
-  const [startupGuardsInitialized, setStartupGuardsInitialized] =
-    useState(false);
-  useEffect(() => {
-    setStartupGuardsInitialized(true);
-  }, []);
+  useDialogActionsSync(params.settingsStore, auth, profiles);
   return {
     // Input-surface commands (cross-hook command arguments)
     setDebugMessage: st.setDebugMessage,
     toggleCorgiMode: st.toggleCorgiMode,
     handleExternalEditorOpen: st.handleExternalEditorOpen,
-    dispatchExtensionStateUpdate: core.dispatchExtensionStateUpdate,
-    addConfirmUpdateExtensionRequest: core.addConfirmUpdateExtensionRequest,
-    extensionsUpdateState: core.extensionsUpdateState,
     welcomeActions: auth.welcome.actions,
     triggerWelcomeAuth: auth.triggerWelcomeAuth,
-    performMemoryRefresh: profiles.performMemoryRefresh,
     // Dialog domain handlers for the view command surface
     openThemeDialog: auth.openThemeDialog,
     openProviderDialog: auth.openProviderDialog,
@@ -567,7 +586,6 @@ export function useAppDialogs(params: AppDialogsParams) {
     handleToolsSelect: profiles.handleToolsSelect,
     handleFolderTrustSelect: auth.handleFolderTrustSelect,
     onWorkspaceMigrationDialogOpen: core.onWorkspaceMigrationDialogOpen,
-    startupGuardsInitialized,
   };
 }
 

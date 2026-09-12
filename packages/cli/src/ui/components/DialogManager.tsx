@@ -51,6 +51,7 @@ import {
 } from './DialogManagerRenderers.js';
 import {
   useAppCommands,
+  useAppCommandData,
   type AppCommands,
 } from '../contexts/AppCommandsContext.js';
 import { useSettingsProfileStore } from '../stores/settings/SettingsContext.js';
@@ -256,7 +257,7 @@ function useDialogManagerState(
   uiActions: AppCommands,
   runtime: ReturnType<typeof useRuntimeApi>,
 ) {
-  const { commandContext } = useAppCommands();
+  const { commandContext } = useAppCommandData();
   const staticExtraHeight = 0;
 
   // Store-backed dialogs are read here — the only hook-legal site — and
