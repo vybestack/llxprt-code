@@ -295,6 +295,7 @@ async function setupRuntimeContext(
   const providerContributions = input.runtimeOverrides.providerContributions;
   const finalRuntime = assembleCliProviderRuntime({
     settingsService,
+    profileManager,
     config,
     runtimeId: bootstrapRuntimeId,
     metadata: baseBootstrapMetadata,

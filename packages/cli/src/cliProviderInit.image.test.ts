@@ -39,7 +39,60 @@ import {
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { reapplyBootstrapProfile } from './cliProviderInit.js';
 import { applyProfileToRuntime } from './config/profileRuntimeApplication.js';
+import {
+  getCliRuntimeServices,
+  resetCliRuntimeRegistryForTesting,
+} from '@vybestack/llxprt-code-providers/runtime.js';
+import { loadCliConfig } from './config/config.js';
+import { parseArguments } from './config/cliArgParser.js';
+import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 import type { CliArgs } from './config/cliArgParser.js';
+
+describe('profile manager registration during boot', () => {
+  afterEach(() => resetCliRuntimeRegistryForTesting());
+  it.each([{ flags: [] }, { flags: ['--experimental-acp'] }])(
+    'registers a usable manager without profile flags (%j)',
+    async ({ flags }) => {
+      const directory = await mkdtemp(join(tmpdir(), 'llxprt-plain-boot-'));
+      const previousHome = process.env.LLXPRT_CONFIG_HOME;
+      const previousArgv = process.argv;
+      process.env.LLXPRT_CONFIG_HOME = directory;
+      process.argv = ['bun', 'cli.ts', ...flags];
+      resetCliProviderInfrastructure();
+      try {
+        await loadCliConfig(
+          {},
+          [],
+          new ExtensionEnablementManager(join(directory, 'extensions')),
+          'plain-boot',
+          await parseArguments({}),
+          undefined,
+          { settingsService: new SettingsService() },
+        );
+        const manager = getCliRuntimeServices().profileManager;
+        expect(manager).toBeInstanceOf(ProfileManager);
+        if (!manager)
+          throw new Error('Boot did not register a profile manager');
+        await manager.saveImageProfile('boot-image', {
+          version: 1,
+          type: 'image',
+          backend: 'openai-images',
+          model: 'local-image',
+          baseUrl: 'http://localhost:8321/v1',
+          auth: { type: 'none' },
+        });
+        await loadImageProfileByName('boot-image');
+        expect(getActiveImageProfile()?.profile.model).toBe('local-image');
+      } finally {
+        resetCliProviderInfrastructure();
+        process.argv = previousArgv;
+        if (previousHome === undefined) delete process.env.LLXPRT_CONFIG_HOME;
+        else process.env.LLXPRT_CONFIG_HOME = previousHome;
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
+});
 
 const argv: CliArgs = {
   model: undefined,
