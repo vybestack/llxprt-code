@@ -59,6 +59,7 @@ import {
 import {
   buildSessionEnv,
   createTestSessionRoot,
+  cleanupTestSession,
 } from './lib/test-session-isolation.js';
 import {
   createRealHomeSentinelGuard,
@@ -356,7 +357,9 @@ export interface BunTestRunnerDependencies {
   readonly stdout: (line: string) => void;
   readonly stderr: (line: string) => void;
   /** Registers the signal-path cleanup callback and returns its unsubscriber. */
-  readonly registerSignalCleanup?: (cleanup: () => void) => () => void;
+  readonly registerSignalCleanup?: (
+    cleanup: () => void | Promise<void>,
+  ) => () => void;
   /**
    * Builds the real-home sentinel guard from the runner env. Optional so
    * existing dependency sets keep compiling; defaults to the shared factory
@@ -637,13 +640,17 @@ export async function runBunTests(
   let testResults: FileTestResult[] = [];
   let teardownFailures = 0;
   let sentinelViolations = 0;
-  let finalized = false;
-  const finalize = (): void => {
-    if (finalized) return;
-    finalized = true;
-    sentinelViolations += finalizeGuard(guard, dependencies);
-  };
-  const removeSignalHandlers = dependencies.registerSignalCleanup?.(finalize);
+  let teardown: Promise<void> | undefined;
+  const finalizeGuard = (): Promise<void> =>
+    (teardown ??= cleanupTestSession(
+      session,
+      guard,
+      () => teardownSetups(started, dependencies),
+      dependencies.stderr,
+    ).then((failures) => {
+      teardownFailures = failures;
+    }));
+  const unsubscribe = dependencies.registerSignalCleanup?.(finalizeGuard);
   try {
     guard.captureBaseline();
     await startGlobalSetups(files, started, dependencies);
@@ -660,11 +667,10 @@ export async function runBunTests(
     testResults = outcome.results;
     sentinelViolations = outcome.sentinelViolations;
   } finally {
-    teardownFailures = await teardownSetups(started, dependencies);
     try {
-      finalize();
+      await finalizeGuard();
     } finally {
-      removeSignalHandlers?.();
+      unsubscribe?.();
     }
   }
 
@@ -745,27 +751,6 @@ async function runAllFiles(
     }
   }
   return { results, sentinelViolations };
-}
-
-/**
- * Final guard check after the whole run, including global teardowns: a
- * violation here means a real-home write happened outside an attributable
- * file. Cleanup ALWAYS runs so sentinels never outlive the runner, even when
- * the final assertion fails.
- */
-function finalizeGuard(
-  guard: SentinelGuard,
-  dependencies: BunTestRunnerDependencies,
-): number {
-  try {
-    guard.assertUnchanged('run teardown');
-    return 0;
-  } catch (error: unknown) {
-    dependencies.stderr(error instanceof Error ? error.message : String(error));
-    return 1;
-  } finally {
-    guard.cleanup();
-  }
 }
 
 /**

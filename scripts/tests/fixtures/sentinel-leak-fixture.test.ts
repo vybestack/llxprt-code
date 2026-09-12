@@ -30,7 +30,14 @@ describe('sentinel leak fixture (issue #3622)', () => {
         '-e',
         'setInterval(() => {}, 1000)',
       ]);
+      descendant.once('error', (error) => {
+        writeFileSync(ready, `ERROR: ${error.message}`);
+      });
       try {
+        if (!descendant.pid) {
+          writeFileSync(ready, 'ERROR: descendant did not start');
+          throw new Error('Descendant did not start');
+        }
         writeFileSync(ready, String(descendant.pid));
         await new Promise<void>(() => {});
       } finally {

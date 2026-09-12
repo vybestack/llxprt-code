@@ -8,6 +8,7 @@
  * Session isolation and real-home sentinel wiring shared by the bespoke
  * workspace runners (packages/{cli,core,agents,auth}/run-bun-tests.ts,
  * issue #3622).
+ * Only one isolation instance may be created per process.
  *
  * Unlike the shared runner (scripts/run_bun_tests.ts), which runs files
  * serially, these runners use worker pools: when a file settles, sibling
@@ -16,10 +17,11 @@
  * may have caused the change. The teardown assertion checks for late changes.
  */
 
-import type { ChildProcess } from 'node:child_process';
+import { spawnSync, type ChildProcess } from 'node:child_process';
 import {
   buildSessionEnv,
   createTestSessionRoot,
+  removeSessionRoot,
 } from './test-session-isolation.js';
 import {
   createRealHomeSentinelGuard,
@@ -45,6 +47,8 @@ export interface BespokeRunnerIsolation {
   finalize(): number;
 }
 
+let instantiated = false;
+
 export function createBespokeRunnerIsolation(
   env: NodeJS.ProcessEnv,
   createGuard: (
@@ -52,13 +56,20 @@ export function createBespokeRunnerIsolation(
   ) => SentinelGuard = createRealHomeSentinelGuard,
   log: (message: string) => void = console.error,
 ): BespokeRunnerIsolation {
+  if (instantiated)
+    throw new Error('bespoke runner isolation is single-instance per process');
+  instantiated = true;
   const session = createTestSessionRoot();
   const sessionEnv = buildSessionEnv(env, session);
   const guard = createGuard(env);
   try {
     guard.captureBaseline();
   } catch (error) {
-    guard.cleanup();
+    try {
+      guard.cleanup();
+    } finally {
+      removeSessionRoot(session);
+    }
     throw error;
   }
   const inFlight = new Set<string>();
@@ -110,7 +121,11 @@ export function createBespokeRunnerIsolation(
         }
         recordViolation(error);
       } finally {
-        guard.cleanup();
+        try {
+          guard.cleanup();
+        } finally {
+          removeSessionRoot(session);
+        }
       }
       return violations;
     },
@@ -134,7 +149,7 @@ export function trackRunnerChild(child: ChildProcess): void {
 /** Kills the POSIX test process group, including descendants. */
 export function killRunnerChild(child: ChildProcess): void {
   if (process.platform === 'win32') {
-    child.kill('SIGKILL');
+    killWindowsRunnerChild(child);
     return;
   }
   if (child.pid === undefined) return;
@@ -144,6 +159,26 @@ export function killRunnerChild(child: ChildProcess): void {
     if (!(error instanceof Error && 'code' in error && error.code === 'ESRCH'))
       throw error;
   }
+}
+
+function killWindowsRunnerChild(child: ChildProcess): void {
+  if (child.pid !== undefined) {
+    try {
+      const result = spawnSync('taskkill', [
+        '/PID',
+        String(child.pid),
+        '/T',
+        '/F',
+      ]);
+      if (result.error) throw result.error;
+      return;
+    } catch (error) {
+      console.error(
+        `Failed to kill test child tree ${child.pid}: ${String(error)}`,
+      );
+    }
+  }
+  child.kill('SIGKILL');
 }
 
 function waitForChildClose(
@@ -197,7 +232,9 @@ export function throwWorkerFailures<T>(
 }
 
 /** Installs catchable-signal teardown; SIGKILL cannot run user-space cleanup. */
-export function installRunnerSignalHandlers(finalize: () => void): () => void {
+export function installRunnerSignalHandlers(
+  finalize: () => void | Promise<void>,
+): () => void {
   const stop = async (exitCode: number): Promise<void> => {
     if (runnerTerminating) return;
     runnerTerminating = true;
@@ -205,7 +242,7 @@ export function installRunnerSignalHandlers(finalize: () => void): () => void {
       await stopRunnerChildren([...runnerChildren]);
     } finally {
       try {
-        finalize();
+        await finalize();
       } finally {
         process.exit(exitCode);
       }

@@ -431,6 +431,7 @@ describe('Storage – legacy path', () => {
     // The unset-fallback case below must hold even when a storage-isolation
     // preload has set the legacy-home test override.
     delete process.env['LLXPRT_TEST_LEGACY_HOME'];
+    delete process.env.LLXPRT_TEST_STORAGE_ISOLATED;
   });
 
   afterEach(restoreEnv);
@@ -458,13 +459,23 @@ describe('Storage – legacy path', () => {
     );
   });
 
-  it('getLegacyLlxprtDir ignores a relative LLXPRT_TEST_LEGACY_HOME', () => {
-    process.env['LLXPRT_TEST_STORAGE_ISOLATED'] = '1';
-    process.env['LLXPRT_TEST_LEGACY_HOME'] = 'relative/legacy-home';
-    expect(Storage.getLegacyLlxprtDir()).toBe(
-      path.join(os.homedir(), '.llxprt'),
-    );
-  });
+  it.each(['1', '', '0', 'keyring=0'])(
+    'fails closed for invalid legacy homes with marker %j',
+    (marker) => {
+      process.env.LLXPRT_TEST_STORAGE_ISOLATED = marker;
+      for (const home of [undefined, '', 'relative/legacy-home']) {
+        if (home === undefined) delete process.env.LLXPRT_TEST_LEGACY_HOME;
+        else process.env.LLXPRT_TEST_LEGACY_HOME = home;
+        expect(() => Storage.getLegacyLlxprtDir()).toThrow(
+          'LLXPRT_TEST_LEGACY_HOME must be set to an absolute path when test storage isolation is active',
+        );
+      }
+      process.env.LLXPRT_TEST_LEGACY_HOME = os.tmpdir();
+      expect(Storage.getLegacyLlxprtDir()).toBe(
+        path.join(os.tmpdir(), '.llxprt'),
+      );
+    },
+  );
 });
 
 describe('Storage – instance (workspace-local) helpers', () => {

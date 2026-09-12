@@ -14,15 +14,15 @@
  * with that env. Sibling repo checkouts share the machine temp dir, so every
  * session id must be unique across processes and time.
  *
- * The session root is intentionally never cleaned up: test processes are
- * short-lived, the OS reclaims its temp dir, and CI runners are ephemeral
- * (the same convention as `isolateStorageRoots()` in the storage package).
+ * Runners remove the session root after children and teardowns finish.
+ * Set `LLXPRT_TEST_KEEP_SESSION_ROOT=1` to retain artifacts for debugging.
  */
 
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
+import type { SentinelGuard } from './real-home-sentinel.js';
 
 /** Layout handle for one test-run session root. */
 export interface TestSession {
@@ -112,4 +112,47 @@ export function buildSessionEnv(
   // The child's storage preload owns this marker, not the session env.
   delete sessionEnv.LLXPRT_TEST_STORAGE_ISOLATED;
   return sessionEnv;
+}
+
+/** Removes session artifacts unless retention was explicitly requested. */
+export function removeSessionRoot(session: TestSession): void {
+  if (process.env.LLXPRT_TEST_KEEP_SESSION_ROOT === '1') return;
+  try {
+    rmSync(session.root, { recursive: true, force: true });
+  } catch {
+    // Best-effort cleanup must not replace the test run's outcome.
+  }
+}
+
+/** Finishes teardown and sentinel checks before removing the session root. */
+export async function cleanupTestSession(
+  session: TestSession,
+  guard: SentinelGuard,
+  teardown: () => Promise<number>,
+  log: (message: string) => void,
+): Promise<number> {
+  let failures = 0;
+  try {
+    failures += await teardown();
+  } catch (error) {
+    failures++;
+    log(`Global teardown failed: ${String(error)}`);
+  } finally {
+    try {
+      guard.assertUnchanged('run teardown');
+    } catch (error) {
+      failures++;
+      log(String(error));
+    } finally {
+      try {
+        guard.cleanup();
+      } catch (error) {
+        failures++;
+        log(`Test runner cleanup failed: ${String(error)}`);
+      } finally {
+        removeSessionRoot(session);
+      }
+    }
+  }
+  return failures;
 }

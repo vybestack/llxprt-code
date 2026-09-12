@@ -144,8 +144,8 @@ function captureTargetBaseline(
   }
   const sentinelPath = join(target.path, `${SENTINEL_PREFIX}${sessionId}`);
   const content = randomBytes(32);
-  writeFileSync(sentinelPath, content);
   try {
+    writeFileSync(sentinelPath, content);
     return {
       existed: true,
       target,
@@ -155,8 +155,18 @@ function captureTargetBaseline(
       entries: listNonSentinelEntries(target.path),
     };
   } catch (error) {
-    rmSync(sentinelPath, { force: true });
+    removeSentinel(sentinelPath);
     throw error;
+  }
+}
+
+function removeSentinel(sentinelPath: string): void {
+  try {
+    rmSync(sentinelPath, { force: true });
+  } catch (error) {
+    console.error(
+      `Failed to remove sentinel ${sentinelPath}: ${String(error)}`,
+    );
   }
 }
 
@@ -295,7 +305,7 @@ export class RealHomeSentinelGuard implements SentinelGuard {
   cleanup(): void {
     for (const baseline of this.baselines) {
       if (baseline.existed) {
-        rmSync(baseline.sentinelPath, { force: true });
+        removeSentinel(baseline.sentinelPath);
       }
     }
   }

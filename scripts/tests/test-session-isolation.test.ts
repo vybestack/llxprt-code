@@ -5,12 +5,20 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  cleanupTestSession,
   buildSessionEnv,
   createTestSessionRoot,
+  removeSessionRoot,
   SESSION_ENV_KEYS,
   type TestSession,
 } from '../lib/test-session-isolation.js';
@@ -188,4 +196,58 @@ describe('buildSessionEnv', () => {
       rmSync(session.root, { recursive: true, force: true });
     }
   });
+});
+
+it('removes populated sessions idempotently unless retention is requested', () => {
+  const session = createTestSessionRoot();
+  const saved = process.env.LLXPRT_TEST_KEEP_SESSION_ROOT;
+  try {
+    writeFileSync(join(session.homeDir, 'artifact'), 'test');
+    process.env.LLXPRT_TEST_KEEP_SESSION_ROOT = '1';
+    removeSessionRoot(session);
+    expect(existsSync(join(session.homeDir, 'artifact'))).toBe(true);
+    delete process.env.LLXPRT_TEST_KEEP_SESSION_ROOT;
+    removeSessionRoot(session);
+    removeSessionRoot(session);
+    expect(existsSync(session.root)).toBe(false);
+  } finally {
+    if (saved === undefined) delete process.env.LLXPRT_TEST_KEEP_SESSION_ROOT;
+    else process.env.LLXPRT_TEST_KEEP_SESSION_ROOT = saved;
+    rmSync(session.root, { recursive: true, force: true });
+  }
+});
+
+it('checks and cleans sentinels after teardown rejects, then removes the root', async () => {
+  const session = createTestSessionRoot();
+  const messages: string[] = [];
+  const events: string[] = [];
+  try {
+    const failures = await cleanupTestSession(
+      session,
+      {
+        captureBaseline: () => {},
+        assertUnchanged: () => {
+          expect(existsSync(session.root)).toBe(true);
+          events.push('checked');
+        },
+        cleanup: () => {
+          expect(existsSync(session.root)).toBe(true);
+          events.push('cleaned');
+          throw new Error('sentinel cleanup failed');
+        },
+      },
+      async () => {
+        events.push('teardown');
+        throw new Error('teardown rejected');
+      },
+      (message) => messages.push(message),
+    );
+    expect(failures).toBe(2);
+    expect(events).toEqual(['teardown', 'checked', 'cleaned']);
+    expect(messages.join()).toContain('teardown rejected');
+    expect(messages.join()).toContain('sentinel cleanup failed');
+    expect(existsSync(session.root)).toBe(false);
+  } finally {
+    rmSync(session.root, { recursive: true, force: true });
+  }
 });

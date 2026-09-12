@@ -404,8 +404,9 @@ runs under one contract:
   `HOME`, `TMPDIR`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, and `XDG_DATA_HOME`
   pointed inside it, plus `LLXPRT_TEST_SESSION_ROOT=<root>`.
   Bun's `os.homedir()` reads `$HOME` only at process start, so this isolation
-  happens at spawn time in the runners. A preload cannot redirect it. Session roots are intentionally never
-  cleaned (same convention as `isolateStorageRoots()`). The platform-matrix
+  happens at spawn time in the runners. A preload cannot redirect it. Session roots are
+  removed after children and teardowns finish by default. Set
+  `LLXPRT_TEST_KEEP_SESSION_ROOT=1` to retain them for debugging. The platform-matrix
   socket fixture uses a short `/tmp` mkdtemp base instead of session `TMPDIR`
   on Unix because session paths can exceed the Unix socket path budget.
 - **Env precedence.** The runner passes its own env through and overrides
@@ -428,9 +429,11 @@ runs under one contract:
   while the flag is set.
 - **Legacy `~/.llxprt` override.** `LLXPRT_TEST_LEGACY_HOME` points at
   `<storage-root>/home/user`; `Storage.getLegacyLlxprtDir()` resolves
-  `$LLXPRT_TEST_LEGACY_HOME/.llxprt` when the override is absolute. The
-  storage-isolation marker validates that it matches the active storage root
-  and exists before a test proceeds.
+  `$LLXPRT_TEST_LEGACY_HOME/.llxprt` when the storage-isolation marker is
+  defined and the override is absolute. With any defined
+  `LLXPRT_TEST_STORAGE_ISOLATED` value, a missing or relative override throws
+  instead of falling back to the real home. Without the marker, production
+  path resolution is unchanged.
 - **Real-home sentinel guard.** Runners watch the real `~/.llxprt`,
   `~/.agents/skills`, and the platform config/log dirs by dropping a
   per-session sentinel file and diffing directory listings. A run fails if a

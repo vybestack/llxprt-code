@@ -312,7 +312,7 @@ export async function runTestFileWithTimeoutRetry<
 
 export async function runTestFile(
   file: string,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = { ...process.env },
   onTimeout?: () => void,
 ): Promise<TestResult> {
   assertRunnerActive();
@@ -354,8 +354,12 @@ export async function runTestFile(
 
     const timer = setTimeout(() => {
       killedByTimeout = true;
-      onTimeout?.();
       killProcessTree(child);
+      try {
+        onTimeout?.();
+      } catch (error) {
+        console.error(`Test timeout callback failed: ${String(error)}`);
+      }
     }, timeoutMs);
 
     child.on('exit', (code) => {

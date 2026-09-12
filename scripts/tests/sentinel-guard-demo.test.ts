@@ -51,6 +51,7 @@ const KEYS_TO_STRIP = [
   'LLXPRT_TEST_DISABLE_OS_KEYRING',
   'LLXPRT_TEST_LEGACY_HOME',
   'LLXPRT_TEST_SESSION_ROOT',
+  'LLXPRT_TEST_KEEP_SESSION_ROOT',
   'LLXPRT_TEST_SENTINEL_GUARD',
   'LLXPRT_SENTINEL_DEMO',
   'LLXPRT_SENTINEL_DEMO_TARGET',
@@ -130,6 +131,9 @@ describe('real-home sentinel guard end-to-end demo (issue #3622)', () => {
         buildFakeRealEnv(fakeRealHome),
       );
       expect(control.exitCode).toBe(0);
+      expect(readdirSync(join(fakeRealHome, 'tmp', 'llxprt-tests'))).toEqual(
+        [],
+      );
       expect({
         leak: leakSentinels,
         control: sentinelFiles(legacyDir),
@@ -226,6 +230,7 @@ describe('every runner entrypoint forwards the session environment', () => {
             join(home, 'tmp', 'llxprt-tests'),
           ),
         ).toBe(true);
+        expect(existsSync(readFileSync(receipt, 'utf8'))).toBe(false);
         expect(stdout + stderr).not.toMatch(/\b[1-9]\d* skip\b/);
         expect(sentinelFiles(join(home, '.llxprt'))).toEqual([]);
       } finally {
@@ -384,7 +389,9 @@ describe('runner SIGTERM cleanup', () => {
         let descendant: number | undefined;
         try {
           await waitUntil(() => existsSync(ready));
-          descendant = Number(readFileSync(ready, 'utf8'));
+          const readiness = readFileSync(ready, 'utf8');
+          if (readiness.startsWith('ERROR:')) throw new Error(readiness);
+          descendant = Number(readiness);
           expect(
             watched.every((path) => sentinelFiles(path).length === 1),
           ).toBe(true);

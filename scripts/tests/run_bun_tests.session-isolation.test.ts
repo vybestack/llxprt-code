@@ -6,6 +6,7 @@
 
 import { afterEach, beforeEach, describe, it, expect } from 'bun:test';
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -48,6 +49,9 @@ describe('runBunTests session isolation and sentinel guard', () => {
       resolveFiles: () => entries,
       resolveTsconfig: resolveTsconfigOverride,
       spawn: (_command, options) => {
+        const session = options.env.LLXPRT_TEST_SESSION_ROOT;
+        if (session !== undefined) sessions.add(session);
+        expect(statSync(options.env.HOME!).isDirectory()).toBe(true);
         calls.push(options);
         return { exitCode: 0, signalCode: null };
       },
@@ -66,7 +70,7 @@ describe('runBunTests session isolation and sentinel guard', () => {
     expect(calls).toHaveLength(2);
     const sessionRoot = calls[0]!.env['LLXPRT_TEST_SESSION_ROOT'];
     expect(sessionRoot).toBeDefined();
-    expect(statSync(sessionRoot!).isDirectory()).toBe(true);
+    expect(existsSync(sessionRoot!)).toBe(false);
     for (const options of calls) {
       expect(options.env).not.toBe(environment);
       expect(options.env['LLXPRT_TEST_SESSION_ROOT']).toBe(sessionRoot);
@@ -75,7 +79,6 @@ describe('runBunTests session isolation and sentinel guard', () => {
       expect(options.env['XDG_CONFIG_HOME']).toBe(
         join(sessionRoot!, 'home', 'user', '.config'),
       );
-      expect(statSync(options.env['HOME']!).isDirectory()).toBe(true);
       expect(options.env['RUNNER_TEST']).toBe('1');
       // Pre-existing LLXPRT_* isolation keeps precedence over the session.
       expect(options.env['LLXPRT_CONFIG_HOME']).toBe('/isolated/config');
@@ -164,6 +167,27 @@ import { join } from 'node:path';
 test('${name}', () => { ${body} });`,
     );
   }
+
+  it('reports cleanup failure without losing successful file results', async () => {
+    const report = join(root, 'cleanup-junit.xml');
+    const diagnostics: string[] = [];
+    const status = await runBunTests(['--junit', report], {
+      ...realDependencies(),
+      resolveFiles: () => entries,
+      spawn: () => ({ exitCode: 0, signalCode: null }),
+      createSentinelGuard: () => ({
+        captureBaseline: () => {},
+        assertUnchanged: () => {},
+        cleanup: () => {
+          throw new Error('cleanup failed');
+        },
+      }),
+      stderr: (message) => diagnostics.push(message),
+    });
+    expect(status).toBe(1);
+    expect(diagnostics.join()).toContain('cleanup failed');
+    expect(readFileSync(report, 'utf8')).toContain('tests="2"');
+  });
 
   it('reports unexpected guard errors without losing later results or reports', async () => {
     const diagnostics: string[] = [];

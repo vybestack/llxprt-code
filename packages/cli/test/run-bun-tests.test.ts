@@ -11,7 +11,7 @@
  * contract so a future change cannot quietly drop files from the run.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import {
   existsSync,
   mkdirSync,
@@ -992,3 +992,28 @@ describe('real CLI test-file child retry', () => {
     }
   }, 15_000);
 });
+
+it('reaps a timed-out child even when timeout notification throws', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cli-timeout-callback-'));
+  const diagnostics: unknown[] = [];
+  const log = spyOn(console, 'error').mockImplementation((message: unknown) => {
+    diagnostics.push(message);
+  });
+  try {
+    const file = writeFlakyThenPassTest(dir);
+    const result = await withShortPerFileTimeout(() =>
+      runTestFile(file, undefined, () => {
+        throw new Error('notification failed');
+      }),
+    );
+    expect(result.timedOut).toBe(true);
+    expect(result.passed).toBe(false);
+    expect(diagnostics.join()).toContain('notification failed');
+    const pid = Number(readFileSync(join(dir, 'first-attempt.marker'), 'utf8'));
+    if (process.platform !== 'win32')
+      expect(() => process.kill(pid, 0)).toThrow();
+  } finally {
+    log.mockRestore();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 15_000);

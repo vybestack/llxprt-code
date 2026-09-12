@@ -276,16 +276,31 @@ async function main(): Promise<void> {
     let nextIndex = 0;
 
     async function worker(): Promise<void> {
+      const failures: unknown[] = [];
       while (nextIndex < testFiles.length) {
-        const file = testFiles[nextIndex++];
-        results.push(
-          await isolation.runFile(file, () =>
+        const file = testFiles[nextIndex];
+        const resultIndex = results.length;
+        results.push({
+          file,
+          passed: false,
+          exitCode: -1,
+          signal: null,
+          timedOut: false,
+        });
+        nextIndex++;
+        try {
+          results[resultIndex] = await isolation.runFile(file, () =>
             runTestFileWithTimeoutRetry(file, () =>
               runTestFile(file, isolation.sessionEnv),
             ),
-          ),
-        );
+          );
+        } catch (error) {
+          failures.push(error);
+        }
       }
+      throwWorkerFailures(
+        failures.map((reason) => ({ status: 'rejected', reason })),
+      );
     }
 
     const workers = await Promise.allSettled(
@@ -313,7 +328,10 @@ async function main(): Promise<void> {
     exitCode = failed.length > 0 ? 1 : 0;
   } finally {
     try {
-      if (isolation.finalize() > 0) exitCode = 1;
+      if (isolation.finalize() > 0 && exitCode === 0) exitCode = 1;
+    } catch (error) {
+      console.error(`Test runner cleanup failed: ${String(error)}`);
+      if (exitCode === 0) exitCode = 1;
     } finally {
       removeSignalHandlers();
     }

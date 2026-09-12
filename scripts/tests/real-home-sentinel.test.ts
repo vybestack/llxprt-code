@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import {
   existsSync,
   mkdirSync,
@@ -15,6 +15,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
+import * as fs from 'node:fs';
 import { join } from 'node:path';
 import {
   RealHomeSentinelGuard,
@@ -394,4 +395,53 @@ describe('resolveRealHomeSentinelTargets', () => {
       }
     }
   });
+});
+
+it('continues removing later sentinels when one removal fails', () => {
+  const root = mkdtempSync(join(tmpdir(), 'sentinel-cleanup-'));
+  const targets = ['first', 'second'].map((name) => join(root, name));
+  for (const target of targets) mkdirSync(target);
+  const guard = new RealHomeSentinelGuard({
+    targets: targets.map((path) => ({ path, description: path })),
+    sessionId: 'cleanup',
+  });
+  const messages: unknown[] = [];
+  const log = spyOn(console, 'error').mockImplementation((message: unknown) => {
+    messages.push(message);
+  });
+  try {
+    guard.captureBaseline();
+    const blocked = join(targets[0]!, '.llxprt-sentinel-cleanup');
+    rmSync(blocked);
+    mkdirSync(blocked);
+    expect(() => guard.cleanup()).not.toThrow();
+    expect(readdirSync(targets[1]!)).toEqual([]);
+    expect(messages.join()).toContain(blocked);
+  } finally {
+    log.mockRestore();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+it('removes a partially written sentinel when writing the baseline fails', () => {
+  const root = mkdtempSync(join(tmpdir(), 'sentinel-partial-write-'));
+  const write = fs.writeFileSync;
+  const guard = new RealHomeSentinelGuard({
+    targets: [{ path: root, description: root }],
+    sessionId: 'partial-write',
+  });
+  const failingWrite = spyOn(fs, 'writeFileSync').mockImplementation(
+    (path, content, options) => {
+      write(path, content, options);
+      throw new Error('partial write failed');
+    },
+  );
+  try {
+    expect(() => guard.captureBaseline()).toThrow('partial write failed');
+    expect(readdirSync(root)).toEqual([]);
+  } finally {
+    failingWrite.mockRestore();
+    guard.cleanup();
+    rmSync(root, { recursive: true, force: true });
+  }
 });

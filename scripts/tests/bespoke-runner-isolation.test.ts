@@ -23,7 +23,6 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  createBespokeRunnerIsolation,
   stopRunnerChildren,
   throwWorkerFailures,
   type BespokeRunnerIsolation,
@@ -33,6 +32,14 @@ import {
   type SentinelGuard,
 } from '../lib/real-home-sentinel.js';
 import { SESSION_ENV_KEYS } from '../lib/test-session-isolation.js';
+
+let createBespokeRunnerIsolation: typeof import('../lib/bespoke-runner-isolation.js').createBespokeRunnerIsolation;
+let moduleId = 0;
+beforeEach(async () => {
+  ({ createBespokeRunnerIsolation } = await import(
+    `../lib/bespoke-runner-isolation.ts?test=${moduleId++}`
+  ));
+});
 
 describe('createBespokeRunnerIsolation', () => {
   let root: string;
@@ -72,6 +79,13 @@ describe('createBespokeRunnerIsolation', () => {
     );
     return isolation;
   }
+
+  it('rejects a second instance even after finalization', () => {
+    start().finalize();
+    expect(() => start()).toThrow(
+      'bespoke runner isolation is single-instance per process',
+    );
+  });
 
   it('creates a sentinel baseline before any file runs', () => {
     start();

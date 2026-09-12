@@ -758,7 +758,10 @@ async function main(): Promise<void> {
     exitCode = failFast || failed.length > 0 ? 1 : 0;
   } finally {
     try {
-      if (isolation.finalize() > 0) exitCode = 1;
+      if (isolation.finalize() > 0 && exitCode === 0) exitCode = 1;
+    } catch (error) {
+      console.error(`Test runner cleanup failed: ${String(error)}`);
+      if (exitCode === 0) exitCode = 1;
     } finally {
       removeSignalHandlers();
     }
