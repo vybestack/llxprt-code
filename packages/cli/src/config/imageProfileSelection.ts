@@ -17,7 +17,11 @@ import { loadAndSelectImageProfile } from '@vybestack/llxprt-code-providers/runt
 import { isImageModeActive, type ImageModeFlags } from './imageMode.js';
 import type { ProfileLoadResult } from './profileResolution.js';
 
-/** Apply file-profile selection after bootstrap; standalone CLI selection wins. */
+/**
+ * Outside image mode, standalone CLI selection overrides the file profile.
+ * In image mode, the file profile selection or reset applies to the session;
+ * the CLI selector is resolved separately for the direct operation.
+ */
 export async function applyStartupImageProfile(
   flags: ImageModeFlags,
   manager: ProfileManager,

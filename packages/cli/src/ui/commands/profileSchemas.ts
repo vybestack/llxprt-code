@@ -329,14 +329,10 @@ export async function parseProfileLoadTarget(args: string): Promise<{
     typeSeparator === -1 &&
     (await listProfiles()).includes(args);
   const isTyped = isTypeToken && !isSavedName;
+  const typedName =
+    typeSeparator === -1 ? '' : args.slice(typeSeparator + 1).trim();
   return {
     profileType: isTyped ? possibleType : 'model',
-    profileName: extractProfileName(
-      isTyped
-        ? typeSeparator === -1
-          ? ''
-          : args.slice(typeSeparator + 1).trim()
-        : args,
-    ),
+    profileName: extractProfileName(isTyped ? typedName : args),
   };
 }

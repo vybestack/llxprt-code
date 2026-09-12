@@ -710,9 +710,14 @@ export async function finalizeConfig(input: PostConfigInput): Promise<Config> {
   // Steps 12-13: Apply profile + switch provider
   const finalProvider = await activateProviderAndProfile(input);
   const services = getCliRuntimeServices();
+  if (!services.profileManager) {
+    throw new Error(
+      '[cli] Profile manager should have been initialized by setupRuntimeContext',
+    );
+  }
   await applyStartupImageProfile(
     buildImageModeFlags(input.argv),
-    services.profileManager ?? new ProfileManager(),
+    services.profileManager,
     services.imageProfileState,
     input.profileLoadResult,
   );

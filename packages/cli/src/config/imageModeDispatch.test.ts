@@ -351,8 +351,11 @@ describe('runDirectImageModeAndExit', () => {
       );
       expect(code).toBe(ExitCodes.FATAL_INPUT_ERROR);
       expect(stderrChunks.join('')).toContain('wrong');
-      if (kind === 'model')
-        expect(stderrChunks.join('')).toMatch(/model.*image|image.*model/i);
+      const expectedDiagnostic =
+        kind === 'model'
+          ? /model.*image|image.*model/i
+          : /could not be loaded/i;
+      expect(stderrChunks.join('')).toMatch(expectedDiagnostic);
       expect(fs.existsSync(path.join(workspaceRoot, 'cat.png'))).toBe(false);
     },
   );

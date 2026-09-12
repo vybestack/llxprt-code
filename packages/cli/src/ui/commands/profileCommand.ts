@@ -592,7 +592,7 @@ export const profileCommand: SlashCommand = {
       kind: CommandKind.BUILT_IN,
       action: async (): Promise<MessageActionReturn> => {
         try {
-          await getRuntimeApi().resetActiveImageProfile();
+          await Promise.resolve(getRuntimeApi().resetActiveImageProfile());
         } catch (error) {
           return {
             type: 'message',

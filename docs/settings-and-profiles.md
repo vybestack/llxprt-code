@@ -107,9 +107,10 @@ server running `flux2-klein-edit-4b` for edits, and a separate profile such as
 Klein edits accept one PNG or JPEG input. Edit sizes are controlled by the
 server, so omit `defaults.size`. The edit configuration cannot generate
 without an input image. The `operations` field restricts the profile to
-`generate`, `edit`, or both; requests outside the declaration fail before
-network I/O. If omitted, both operations are allowed. Declare only what your
-server actually supports.
+`generate`, `edit`, or both on local MLX-style endpoints; requests outside the
+declaration fail before network I/O. If omitted, both operations are allowed.
+Remote `openai-images` and `codex` endpoints serve both operations regardless of
+this field. For local endpoints, declare only what your server actually supports.
 
 For a remote OpenAI Images endpoint, save this as `remote-images.json` after
 storing your key with `/key save image-api <your-key>`:
