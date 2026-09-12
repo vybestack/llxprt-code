@@ -104,7 +104,12 @@ export function AppCommandsProvider({
 }) {
   const latest = useRef(value);
   latest.current = value;
-  const commands = useMemo(() => createStableAppCommands(latest), [latest]);
+  const canSendQueued = value.sendAllQueuedSubmissions !== undefined;
+  const canSteerQueued = value.steerAllQueuedSubmissions !== undefined;
+  const commands = useMemo(
+    () => createStableAppCommands(latest, { canSendQueued, canSteerQueued }),
+    [latest, canSendQueued, canSteerQueued],
+  );
   const { buffer, commandContext, inputHistory } = value;
   const data = useMemo(
     () => ({ buffer, commandContext, inputHistory }),

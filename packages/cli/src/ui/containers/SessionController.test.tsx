@@ -259,14 +259,14 @@ describe('SessionController', () => {
     unmount();
   });
 
-  it('performs pending add requests recorded on the TurnStore', () => {
+  it('performs pending add requests recorded on the TurnStore', async () => {
     mockAddItem.mockReturnValue(1);
 
     const turnStore = createTurnStore();
 
     const TestComponent = () => null;
 
-    const { unmount, rerender } = render(
+    const { unmount } = render(
       <SessionController config={mockConfig as Config} turnStore={turnStore}>
         <TestComponent />
       </SessionController>,
@@ -275,19 +275,12 @@ describe('SessionController', () => {
     const itemData = { type: MessageType.USER, text: 'Test message' };
     const baseTimestamp = Date.now();
 
-    // Record the request on the store (the former appDispatch ADD_ITEM);
-    // the controller's effect performs the add once the state lands.
-    turnStore.commands.requestAddItem(itemData, baseTimestamp);
+    await React.act(async () => {
+      turnStore.commands.requestAddItem(itemData, baseTimestamp);
+    });
 
-    // Force a re-render to trigger effects
-    rerender(
-      <SessionController config={mockConfig as Config} turnStore={turnStore}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    // The effect should have run synchronously after the re-render
     expect(mockAddItem).toHaveBeenCalledWith(itemData, baseTimestamp);
+    expect(turnStore.store.getState().pendingAddRequest).toBeNull();
 
     unmount();
   });

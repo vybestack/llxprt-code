@@ -44,9 +44,6 @@ void vi.mock('../components/Composer.js', () => ({ Composer: () => null }));
 void vi.mock('../components/DialogManager.js', () => ({
   DialogManager: () => null,
 }));
-void vi.mock('../components/BucketAuthConfirmation.js', () => ({
-  BucketAuthConfirmation: () => null,
-}));
 void vi.mock('../components/Footer.js', () => ({ Footer: () => null }));
 void vi.mock('../components/AppHeader.js', () => ({ AppHeader: () => null }));
 void vi.mock('../components/LoadingIndicator.js', () => ({
@@ -191,6 +188,33 @@ describe('production layout render isolation', () => {
 });
 
 describe('store migration regressions', () => {
+  it.each([true, false])(
+    'shows bucket authentication requests only when the layout receives the bus (provided: %s)',
+    async (provided) => {
+      const bus = new MessageBus(new PolicyEngine(), false);
+      const { view } = mountLayout(provided ? bus : undefined);
+      try {
+        expect(view.lastFrame()).not.toContain('OAuth Bucket Authentication');
+        await act(async () => {
+          bus.publish({
+            type: MessageBusType.BUCKET_AUTH_CONFIRMATION_REQUEST,
+            correlationId: 'layout-bucket-auth',
+            provider: 'anthropic',
+            bucket: 'work',
+            bucketIndex: 1,
+            totalBuckets: 2,
+          });
+        });
+        const frame = view.lastFrame() ?? '';
+        expect(frame.includes('OAuth Bucket Authentication')).toBe(provided);
+        expect(frame.includes('Bucket 1 of 2: work')).toBe(provided);
+        expect(frame.includes('Provider: anthropic')).toBe(provided);
+      } finally {
+        view.unmount();
+      }
+    },
+  );
+
   it('renders runtime hook activity and clears it after completion', async () => {
     const bus = new MessageBus(new PolicyEngine(), false);
     const { view } = mountLayout(bus);

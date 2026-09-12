@@ -35,12 +35,16 @@ function createWelcomeCommands(
 }
 
 /**
- * Binds the view command surface once. Each invocation reads the current domain
- * handler, whose closure belongs to the latest render of its owning hook.
+ * Binds the view command surface for the available capabilities. Each invocation
+ * reads the current handler from the latest render of its owning hook.
  * @param latest Reference maintained by the command provider.
+ * @param capabilities Optional queue commands available in this render.
  * @returns Stable callbacks, including the nested onboarding commands.
  */
-export function createStableAppCommands(latest: CommandRef): AppCommands {
+export function createStableAppCommands(
+  latest: CommandRef,
+  capabilities: { canSendQueued: boolean; canSteerQueued: boolean },
+): AppCommands {
   return {
     welcomeActions: createWelcomeCommands(latest),
     handleUserInputSubmit: (...args) =>
@@ -48,10 +52,12 @@ export function createStableAppCommands(latest: CommandRef): AppCommands {
     handleSteer: (...args) => latest.current.handleSteer(...args),
     handleClearScreen: (...args) => latest.current.handleClearScreen(...args),
     vimHandleInput: (...args) => latest.current.vimHandleInput(...args),
-    sendAllQueuedSubmissions: (...args) =>
-      latest.current.sendAllQueuedSubmissions?.(...args),
-    steerAllQueuedSubmissions: (...args) =>
-      latest.current.steerAllQueuedSubmissions?.(...args),
+    sendAllQueuedSubmissions: capabilities.canSendQueued
+      ? (...args) => latest.current.sendAllQueuedSubmissions?.(...args)
+      : undefined,
+    steerAllQueuedSubmissions: capabilities.canSteerQueued
+      ? (...args) => latest.current.steerAllQueuedSubmissions?.(...args)
+      : undefined,
     clearQueuedSubmissions: (...args) =>
       latest.current.clearQueuedSubmissions(...args),
     setShellModeActive: (...args) => latest.current.setShellModeActive(...args),

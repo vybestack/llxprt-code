@@ -208,11 +208,18 @@ function createExtensionConfirmCommands(
   const resolveConfirmUpdateExtensionRequest = (
     request: Extract<DialogRequest, { kind: 'extensionUpdateConfirm' }>,
   ): void => {
-    store.setState((prev) => ({
-      ...prev,
-      confirmUpdateLlxprtExtensionRequests:
-        prev.confirmUpdateLlxprtExtensionRequests.filter((r) => r !== request),
-    }));
+    store.setState((prev) => {
+      const requests = prev.confirmUpdateLlxprtExtensionRequests;
+      const index = requests.indexOf(request);
+      if (index === -1) return prev;
+      return {
+        ...prev,
+        confirmUpdateLlxprtExtensionRequests: [
+          ...requests.slice(0, index),
+          ...requests.slice(index + 1),
+        ],
+      };
+    });
   };
 
   return {

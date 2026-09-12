@@ -11,7 +11,8 @@ import type {
   HistoryItemUser,
   HistoryItemWithoutId,
 } from '../../types.js';
-import { StreamingState } from '../../types.js';
+import { StreamingState, ToolCallStatus } from '../../types.js';
+import { createHistoryLedger } from './historyLedger.js';
 import type { QueuedSubmission } from '../../hooks/agentStream/types.js';
 import {
   createTurnStore,
@@ -24,6 +25,45 @@ function userItem(text: string): HistoryItemUser {
 }
 
 describe('createTurnStore', () => {
+  it('replaces cyclic tool metadata with a counted display notice', () => {
+    const metadata: Record<string, unknown> = {};
+    metadata.self = metadata;
+    const ledger = createHistoryLedger({ maxItems: 10, maxBytes: 1024 });
+
+    ledger.append({
+      id: 42,
+      type: 'tool_group',
+      tools: [
+        {
+          callId: 'cyclic',
+          name: 'read_file',
+          description: 'read a file',
+          status: ToolCallStatus.Success,
+          confirmationDetails: undefined,
+          resultDisplay: {
+            content: 'result',
+            fileName: 'test',
+            filePath: '/test',
+            metadata,
+          },
+        },
+      ],
+    });
+
+    const state = ledger.getState();
+    expect(state.entries).toHaveLength(1);
+    expect(state.entries[0].item).toStrictEqual({
+      id: 42,
+      type: 'info',
+      text: '[Item too large to display; full text is in the session transcript]',
+    });
+    expect(state.totalBytes).toBe(
+      Buffer.byteLength(JSON.stringify(state.entries[0].item), 'utf8'),
+    );
+    expect(state.totalBytes).toBeGreaterThan(0);
+    expect(state.totalBytes).toBeLessThanOrEqual(1024);
+  });
+
   it('projects seeded history through ledger limits before the first read', () => {
     const history: HistoryItem[] = Array.from({ length: 401 }, (_, id) => ({
       id,

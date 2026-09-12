@@ -16,7 +16,7 @@ import { MessageType } from '../types.js';
 const runtime = {
   getActiveProviderName: () => 'old',
   setProvider: async (name: string) => ({
-    nextProvider: name,
+    nextProvider: name.trim(),
     infoMessages: [
       'Endpoint: https://example.test',
       'Selected model: example',
@@ -46,7 +46,7 @@ describe('provider switch notices', () => {
       }),
     );
     await act(async () => {
-      await result.current.handleSelect('new');
+      await result.current.handleSelect('  new  ');
     });
     expect(messages.map((message) => message.content)).toStrictEqual([
       'Switched from old to new',

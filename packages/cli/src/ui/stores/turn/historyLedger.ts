@@ -72,7 +72,7 @@ function estimateHistoryItemBytes(item: HistoryItem): number {
   try {
     return Buffer.byteLength(JSON.stringify(item), 'utf8');
   } catch {
-    return 0;
+    return Number.POSITIVE_INFINITY;
   }
 }
 

@@ -53,6 +53,29 @@ function open(kinds: DialogKind[]) {
 }
 
 describe('createDialogStore', () => {
+  it('resolves only the first occurrence of an extension confirmation', () => {
+    const { store, commands } = createDialogStore();
+    const request = {
+      kind: 'extensionUpdateConfirm',
+      payload: prompt(),
+    } as const;
+    commands.addConfirmUpdateExtensionRequest(request);
+    commands.addConfirmUpdateExtensionRequest(request);
+
+    commands.resolveConfirmUpdateExtensionRequest(request);
+    expect(store.getState().confirmUpdateLlxprtExtensionRequests).toStrictEqual(
+      [request],
+    );
+    commands.resolveConfirmUpdateExtensionRequest(request);
+    expect(store.getState().confirmUpdateLlxprtExtensionRequests).toStrictEqual(
+      [],
+    );
+
+    const empty = store.getState();
+    commands.resolveConfirmUpdateExtensionRequest(request);
+    expect(store.getState()).toBe(empty);
+  });
+
   it('opens a dialog and selectActiveDialog reports it', () => {
     const { store, commands } = createDialogStore();
     commands.openDialog({ kind: 'privacy', payload: {} });

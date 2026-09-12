@@ -332,6 +332,8 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
   // Side-effect channel for out-of-tree add requests (the former appReducer
   // ADD_ITEM action): the request is recorded synchronously on the store and
   // this effect performs the add once the state lands (dispatch -> effect).
+  // Preserve appReducer's lastAddItemAction semantics: requests before the
+  // consuming effect replace the slot rather than queueing multiple adds.
   useEffect(() => {
     if (!pendingAddRequest) return;
     const request = turnStore.commands.consumePendingAddRequest(

@@ -68,7 +68,8 @@ function dialogCommands(): Parameters<typeof buildAppCommands>[0] {
   };
 }
 
-function createHarness() {
+function createHarness(initialQueueCommandsAvailable = true) {
+  let queueCommandsAvailable = initialQueueCommandsAvailable;
   const turn = createTurnStore({ streamingState: StreamingState.Responding });
   const terminal = createTerminalStore();
   const settings = createMockSettings({});
@@ -124,7 +125,15 @@ function createHarness() {
     );
     return (
       <TurnProvider store={turn}>
-        <AppCommandsProvider value={commands}>
+        <AppCommandsProvider
+          value={{
+            ...commands,
+            sendAllQueuedSubmissions: queueCommandsAvailable ? noop : undefined,
+            steerAllQueuedSubmissions: queueCommandsAvailable
+              ? noop
+              : undefined,
+          }}
+        >
           <CommandConsumer />
           <Composer config={config} settings={settings} />
         </AppCommandsProvider>
@@ -136,6 +145,9 @@ function createHarness() {
     submitted,
     observedCommands,
     getRevision: () => revision - 1,
+    setQueueCommandsAvailable: (available: boolean) => {
+      queueCommandsAvailable = available;
+    },
     render: () => renderWithProviders(<Harness />, { settings }),
     getQueue: () => {
       if (queue === undefined) throw new Error('Harness must be mounted');
@@ -145,6 +157,45 @@ function createHarness() {
 }
 
 describe('AppContainer queue command wiring', () => {
+  it('publishes queue command availability changes to command consumers', () => {
+    const harness = createHarness(false);
+    const { unmount } = harness.render();
+    try {
+      expect(
+        harness.observedCommands.at(-1)?.sendAllQueuedSubmissions,
+      ).toBeUndefined();
+      expect(
+        harness.observedCommands.at(-1)?.steerAllQueuedSubmissions,
+      ).toBeUndefined();
+      const initialRenders = harness.observedCommands.length;
+      act(() => {
+        harness.setQueueCommandsAvailable(true);
+        harness.getQueue().enqueueSubmission({ query: 'enable commands' });
+      });
+      expect(harness.observedCommands.length).toBeGreaterThan(initialRenders);
+      expect(
+        typeof harness.observedCommands.at(-1)?.sendAllQueuedSubmissions,
+      ).toBe('function');
+      expect(
+        typeof harness.observedCommands.at(-1)?.steerAllQueuedSubmissions,
+      ).toBe('function');
+      const enabledRenders = harness.observedCommands.length;
+      act(() => {
+        harness.setQueueCommandsAvailable(false);
+        harness.getQueue().enqueueSubmission({ query: 'disable commands' });
+      });
+      expect(harness.observedCommands.length).toBeGreaterThan(enabledRenders);
+      expect(
+        harness.observedCommands.at(-1)?.sendAllQueuedSubmissions,
+      ).toBeUndefined();
+      expect(
+        harness.observedCommands.at(-1)?.steerAllQueuedSubmissions,
+      ).toBeUndefined();
+    } finally {
+      unmount();
+    }
+  });
+
   it('keeps commands stable while dispatching to the current input handler', () => {
     const harness = createHarness();
     const { unmount } = harness.render();

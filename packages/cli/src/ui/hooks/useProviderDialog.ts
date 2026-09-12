@@ -103,7 +103,7 @@ export const useProviderDialog = ({
           addMessage,
           prevProvider: prev,
           infoMessages: result.infoMessages,
-          providerName,
+          providerName: result.nextProvider,
         });
         setCurrentProvider(result.nextProvider);
       } catch (e) {

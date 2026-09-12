@@ -7,8 +7,6 @@
 import React from 'react';
 import { useHookDisplayState } from '../hooks/useHookDisplayState.js';
 import { HookStatusDisplay } from '../components/HookStatusDisplay.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core';
-import { getCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
 import { useTerminalStore } from '../stores/terminal/TerminalContext.js';
 import { useTurnStore } from '../stores/turn/TurnContext.js';
 import { useSettingsProfileStore } from '../stores/settings/SettingsContext.js';
@@ -106,11 +104,10 @@ function ComposerContent(props: DefaultAppLayoutProps) {
 /** The dialog layer reads visibility; DialogManager selects the active request. */
 export function DialogRegion(props: DefaultAppLayoutProps): React.ReactNode {
   const dialogsVisible = useHasActiveDialog();
-  const runtime = getCliRuntimeContext() as { messageBus?: MessageBus };
   return (
     <>
       <BucketAuthConfirmation
-        messageBus={runtime.messageBus}
+        messageBus={props.runtimeMessageBus}
         isFocused={!dialogsVisible}
       />
       {dialogsVisible ? (
