@@ -117,19 +117,15 @@ function buildResolvedSubProfileOptions(
   if (contextLimit !== undefined) {
     mergedEphemeralSettings['context-limit'] = contextLimit;
   }
-
   const mergedModelParams = {
     ...subProfile.modelParams,
     ...ctx.lbProfileModelParams,
   };
-  // Session-scoped keys from the immutable upstream invocation snapshot must
-  // overlay member/LB profile ephemerals LAST so an explicit session override
-  // (e.g. `/dumpcontext on`) is never clobbered by a delegate profile value.
-  const upstreamSessionEphemerals = extractUpstreamSessionEphemerals(options);
+
   const mergedInvocationEphemerals = {
     ...mergedEphemeralSettings,
     ...mergedModelParams,
-    ...upstreamSessionEphemerals,
+    ...extractUpstreamSessionEphemerals(options),
   };
 
   const temperature = readNumericSetting(
@@ -169,6 +165,7 @@ function buildResolvedSubProfileOptions(
     metadata: {
       ...options.metadata,
       loadBalancerDelegate: true,
+      profileId: subProfile.name,
       ephemeralSettings: mergedEphemeralSettings,
       modelParams: mergedModelParams,
     },

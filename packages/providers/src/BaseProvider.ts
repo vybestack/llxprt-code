@@ -853,6 +853,9 @@ export abstract class BaseProvider implements IProvider {
           providedOptions.resolved?.baseURL ?? resolvedBaseURL,
         ),
         ...(runtimeId === undefined ? {} : { runtimeId }),
+        ...(typeof providedOptions.metadata?.profileId === 'string'
+          ? { profileId: providedOptions.metadata.profileId }
+          : {}),
       });
       resolvedAuth = authResult.token ?? '';
       if (authResult.token === null) {

@@ -26,7 +26,11 @@ import {
 import fs from 'fs/promises';
 import path from 'path';
 import { Storage } from '@vybestack/llxprt-code-storage';
-import { writeProfileFile, deleteProfileFile } from './profileStore.js';
+import {
+  writeProfileFile,
+  writeProfileFileIfUnchanged,
+  deleteProfileFile,
+} from './profileStore.js';
 
 interface ProfileSettingsServiceLike {
   exportForProfile?: () => Promise<{
@@ -101,6 +105,19 @@ export class ProfileManager {
       profileName,
       JSON.stringify(profile, null, 2),
       'overwrite',
+    );
+  }
+
+  async saveProfileIfUnchanged(
+    profileName: string,
+    profile: PersistableProfile,
+    expected: { mtimeMs: number; size: number },
+  ): Promise<boolean> {
+    return writeProfileFileIfUnchanged(
+      this.profilesDir,
+      profileName,
+      JSON.stringify(profile, null, 2),
+      expected,
     );
   }
 

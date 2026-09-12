@@ -47,6 +47,7 @@ export interface ResolveAuthOptions {
   settingsService?: ISettingsService | null;
   includeOAuth?: boolean;
   runtimeId?: string;
+  profileId?: string;
 }
 
 interface ResolutionFailure {
@@ -225,6 +226,7 @@ export class AuthPrecedenceResolver {
         settingsService,
         providerKey,
         trace,
+        options?.profileId,
       );
       if (oauthAuth !== null) return { token: oauthAuth };
     }
@@ -377,8 +379,13 @@ export class AuthPrecedenceResolver {
     settingsService: ISettingsService,
     providerKey: string | undefined,
     trace: ResolutionTrace,
+    profileId?: string,
   ): Promise<string | null> {
-    const context = this.buildOAuthContext(settingsService, providerKey);
+    const context = this.buildOAuthContext(
+      settingsService,
+      providerKey,
+      profileId,
+    );
     if ((await this.isOAuthDisabledByManager()) === true) {
       this.invalidateDisabledOAuthEntry(context);
       return null;
@@ -403,9 +410,10 @@ export class AuthPrecedenceResolver {
   private buildOAuthContext(
     settingsService: ISettingsService,
     providerKey: string | undefined,
+    explicitProfileId?: string,
   ): OAuthResolutionContext {
     const providerId = this.resolveProviderIdentifier(providerKey);
-    const profileId = resolveProfileId(settingsService);
+    const profileId = explicitProfileId ?? resolveProfileId(settingsService);
     const runtime = this.tryGetRuntimeState(settingsService, providerId);
     return {
       settingsService,

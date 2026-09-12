@@ -845,6 +845,31 @@ function profileFilePath(profilesDir: string, profileName: string): string {
   return resolvedFile;
 }
 
+export async function writeProfileFileIfUnchanged(
+  profilesDir: string,
+  profileName: string,
+  data: string,
+  expected: { mtimeMs: number; size: number },
+): Promise<boolean> {
+  const filePath = profileFilePath(profilesDir, profileName);
+  return withProfilesLock(profilesDir, async () => {
+    let info: fsSync.Stats;
+    try {
+      info = await fs.stat(filePath);
+    } catch (error) {
+      if (hasErrnoCode(error, 'ENOENT') || hasErrnoCode(error, 'ENOTDIR')) {
+        return false;
+      }
+      throw error;
+    }
+    if (info.mtimeMs !== expected.mtimeMs || info.size !== expected.size) {
+      return false;
+    }
+    await atomicWriteFile(filePath, data, info.mode & 0o777);
+    return true;
+  });
+}
+
 /**
  * Cohesive public API for writing a canonical profile JSON file under the
  * shared profiles lock. Preserves create-only vs overwrite behavior and

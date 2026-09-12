@@ -61,14 +61,26 @@ export interface ExtendedLoadBalancerStats extends LoadBalancerStats {
   currentTPM: Record<string, number>;
 }
 
+/**
+ * Records a load-balancer member's declared auth intent at registration time,
+ * without secret material. Request-time identity scoping uses the delegate's
+ * metadata.profileId, not this field.
+ */
+export interface ProfileAuthIntent {
+  type: 'oauth' | 'apikey';
+  buckets?: readonly string[];
+}
+
 export interface ResolvedSubProfile {
   name: string;
   providerName: string;
   model: string;
   baseURL?: string;
   authToken?: string;
+  authKeyName?: string;
   authKeyfile?: string;
   contextWindow?: number;
+  auth?: ProfileAuthIntent;
   ephemeralSettings: Record<string, unknown>;
   modelParams: Record<string, unknown>;
 }
@@ -138,7 +150,7 @@ function hasResolvedSettings(profile: unknown): profile is ResolvedSubProfile {
   );
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return false;
   }

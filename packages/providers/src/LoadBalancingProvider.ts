@@ -34,6 +34,7 @@ import { extractFailoverSettings as extractFailoverSettingsFromEphemeral } from 
 import { isTimeoutError } from './loadBalancing/streamTimeout.js';
 import { buildExtendedStats } from './loadBalancing/statsBuilder.js';
 import { buildRoundRobinResolvedOptions as buildRoundRobinResolvedOptionsExternal } from './loadBalancing/resolvedOptionsBuilder.js';
+import { resolveMemberAuthentication } from './loadBalancing/memberAuthentication.js';
 import { cloneContentsForCompression } from './loadBalancing/contentClone.js';
 import {
   getRequestSignal,
@@ -211,10 +212,14 @@ export class LoadBalancingProvider implements IProvider {
    */
   private async estimateForSubProfile(
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
-    resolvedOptions: GenerateChatOptions,
+    options: GenerateChatOptions,
     delegateProvider: IProvider,
   ): Promise<EstimationResult> {
     const model = resolveSubProfileModel(subProfile);
+    const resolvedOptions = this.buildDelegateResolvedOptions(
+      await resolveMemberAuthentication(subProfile, this.logger),
+      options,
+    );
     const result = await estimatePreparedPrompt(
       subProfile,
       resolvedOptions,
@@ -263,7 +268,7 @@ export class LoadBalancingProvider implements IProvider {
     const compressedOptions = { ...options, contents: compressed };
     const compressedResult = await this.estimateForSubProfile(
       subProfile,
-      this.buildDelegateResolvedOptions(subProfile, compressedOptions),
+      compressedOptions,
       delegateProvider,
     );
     if (compressedResult.tokens <= contextLimit) {
@@ -319,13 +324,9 @@ export class LoadBalancingProvider implements IProvider {
       subProfile.providerName,
       resolveSubProfileModel(subProfile),
     );
-    const resolvedOptions = this.buildDelegateResolvedOptions(
-      subProfile,
-      targetOptions,
-    );
     const result = await this.estimateForSubProfile(
       subProfile,
-      resolvedOptions,
+      targetOptions,
       delegateProvider,
     );
     if (contextLimit === undefined || result.tokens <= contextLimit) {
@@ -403,7 +404,7 @@ export class LoadBalancingProvider implements IProvider {
     );
 
     const resolvedOptions = this.buildRoundRobinResolvedOptions(
-      subProfile,
+      await resolveMemberAuthentication(subProfile, this.logger),
       preparedTarget.options,
     );
     requireTransportAttempt(resolvedOptions);
