@@ -21,6 +21,7 @@ import {
   existsSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -535,7 +536,7 @@ describe('end-to-end: CLI entry persists startup fatals (AC1/AC2/AC5)', () => {
     expect(parsed.argv).toContain('--prompt');
     // The prompt value follows a --key token, so it must be redacted.
     expect(parsed.argv[parsed.argv.indexOf('--prompt') + 1]).toBe('[REDACTED]');
-    expect(parsed.cwd).toBe(childCwd);
+    expect(parsed.cwd).toBe(realpathSync(childCwd));
     expect(parsed.exitCode).toBe(44);
     expect(!isNaN(Date.parse(parsed.timestamp))).toBe(true);
     expect(stderrText).toContain('Invalid sandbox command');

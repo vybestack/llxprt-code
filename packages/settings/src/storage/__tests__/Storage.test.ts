@@ -49,12 +49,19 @@ describe('Storage — static path methods', () => {
   const originalLogHome = process.env['LLXPRT_LOG_HOME'];
 
   const originalOptIn = process.env[REAL_STORAGE_OPT_IN_ENV];
+  const originalIsolationMarker = process.env.LLXPRT_TEST_STORAGE_ISOLATED;
+  const originalLegacyHome = process.env['LLXPRT_TEST_LEGACY_HOME'];
 
   beforeEach(() => {
     delete process.env['LLXPRT_CONFIG_HOME'];
     delete process.env['LLXPRT_DATA_HOME'];
     delete process.env['LLXPRT_CACHE_HOME'];
     delete process.env['LLXPRT_LOG_HOME'];
+    // This block asserts production-path resolution with the isolation marker
+    // cleared and the real-storage opt-in set. Legacy-home cases set their own
+    // environment per test.
+    delete process.env.LLXPRT_TEST_STORAGE_ISOLATED;
+    delete process.env['LLXPRT_TEST_LEGACY_HOME'];
     // The platform default IS the subject of this block, so it opts out of the
     // guard that otherwise refuses to resolve an unredirected root in a test
     // process. These cases compute paths and assert on their shape; the ones
@@ -69,6 +76,8 @@ describe('Storage — static path methods', () => {
       LLXPRT_CACHE_HOME: originalCacheHome,
       LLXPRT_LOG_HOME: originalLogHome,
       [REAL_STORAGE_OPT_IN_ENV]: originalOptIn,
+      LLXPRT_TEST_LEGACY_HOME: originalLegacyHome,
+      LLXPRT_TEST_STORAGE_ISOLATED: originalIsolationMarker,
     })) {
       if (original !== undefined) {
         process.env[key] = original;
@@ -142,6 +151,21 @@ describe('Storage — static path methods', () => {
   it('getLegacyLlxprtDir returns ~/.llxprt', () => {
     const result = Storage.getLegacyLlxprtDir();
     expect(result).toBe(path.join(os.homedir(), '.llxprt'));
+  });
+
+  it('getLegacyLlxprtDir returns <LLXPRT_TEST_LEGACY_HOME>/.llxprt when the test override is set', () => {
+    const legacyHome = path.join(os.tmpdir(), 'llxprt-legacy-home-override');
+    process.env.LLXPRT_TEST_STORAGE_ISOLATED = '1';
+    process.env['LLXPRT_TEST_LEGACY_HOME'] = legacyHome;
+    expect(Storage.getLegacyLlxprtDir()).toBe(path.join(legacyHome, '.llxprt'));
+  });
+
+  it('getLegacyLlxprtDir fails closed when the isolation marker is set without a legacy home', () => {
+    process.env.LLXPRT_TEST_STORAGE_ISOLATED = '1';
+    delete process.env.LLXPRT_TEST_LEGACY_HOME;
+    expect(() => Storage.getLegacyLlxprtDir()).toThrow(
+      'LLXPRT_TEST_LEGACY_HOME must be set to an absolute path when test storage isolation is active',
+    );
   });
 
   it('getGlobalSettingsPath ends with settings.json', () => {

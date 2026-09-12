@@ -12,6 +12,10 @@
   "include": [
     "run-bun-tests.ts",
     "test/run-bun-tests.test.ts",
-    "../../scripts/lib/bun-test-policy.ts"
+    "../../scripts/lib/bun-test-policy.ts",
+    "../../scripts/lib/bespoke-runner-isolation.ts",
+    "../../scripts/lib/test-session-isolation.ts",
+    "../../scripts/lib/real-home-sentinel.ts",
+    "../storage/src/config/path-resolver.ts"
   ]
 }

@@ -80,7 +80,7 @@
     "test:bun": "bun ../../scripts/run_bun_tests.ts --workspace storage",
     "test:ci": "bun ../../scripts/run_bun_tests.ts --workspace storage --junit junit.xml",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test-bun.json",
-    "test:secure-store:keyring": "bun test --timeout 30000 --reporter=junit --reporter-outfile=junit.secure-store.xml src/secure-store/secure-store.native-keyring.test.ts",
+    "test:secure-store:keyring": "cross-env LLXPRT_TEST_DISABLE_OS_KEYRING=0 bun test --timeout 30000 --reporter=junit --reporter-outfile=junit.secure-store.xml src/secure-store/secure-store.native-keyring.test.ts",
     "test:secure-store:fallback": "bun test --timeout 30000 --reporter=junit --reporter-outfile=junit.secure-store.xml src/secure-store/secure-store.fallback-behavior.test.ts src/secure-store/provider-key-storage.fallback.test.ts"
   },
   "files": [
@@ -103,6 +103,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.2.1",
+    "cross-env": "^7.0.3",
     "typescript": "^5.3.3"
   },
   "engines": {

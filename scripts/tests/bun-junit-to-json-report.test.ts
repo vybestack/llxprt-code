@@ -5,6 +5,10 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { writeJUnitReport } from '../lib/junit-report-writer.js';
 import {
   parseJUnitXml,
   buildVitestJsonReport,
@@ -408,4 +412,17 @@ describe('nested Bun testsuite elements', () => {
     expect(report.testResults).toHaveLength(1);
     expect(report.testResults[0].name).toBe('save_memory');
   });
+});
+
+it('writes an empty suite when no test files ran', () => {
+  const root = mkdtempSync(join(tmpdir(), 'empty-junit-'));
+  try {
+    const report = join(root, 'junit.xml');
+    writeJUnitReport(report, []);
+    const xml = readFileSync(report, 'utf8');
+    expect(xml).toContain('<testsuite name="(no test files)" tests="0"');
+    expect(xml).toContain('failures="0" errors="0" skipped="0" time="0" />');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
