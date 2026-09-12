@@ -72,7 +72,7 @@ const allProfileCompleter = profileCompleter();
 const lbMemberProfileCompleter: CompleterFn = withFuzzyFilter(
   async (_ctx, _partial, tokens) => {
     try {
-      const profiles = await listProfiles('standard');
+      const profiles = await listProfiles('model');
       // tokens.tokens format: ["save", "loadbalancer", "lb-name", "policy", "prof1", "prof2", ...]
       // Skip first 4 tokens (save, loadbalancer, lb-name, policy) to get already selected profiles
       const alreadySelected = tokens.tokens
@@ -313,4 +313,30 @@ export function validateProfileName(
     };
   }
   return null;
+}
+
+/** Resolve typed targets while preserving saved profiles named model or image. */
+export async function parseProfileLoadTarget(args: string): Promise<{
+  readonly profileType: 'model' | 'image';
+  readonly profileName: string;
+}> {
+  const typeSeparator = args.search(/[ \t]/);
+  const possibleType =
+    typeSeparator === -1 ? args : args.slice(0, typeSeparator);
+  const isTypeToken = possibleType === 'model' || possibleType === 'image';
+  const isSavedName =
+    isTypeToken &&
+    typeSeparator === -1 &&
+    (await listProfiles()).includes(args);
+  const isTyped = isTypeToken && !isSavedName;
+  return {
+    profileType: isTyped ? possibleType : 'model',
+    profileName: extractProfileName(
+      isTyped
+        ? typeSeparator === -1
+          ? ''
+          : args.slice(typeSeparator + 1).trim()
+        : args,
+    ),
+  };
 }

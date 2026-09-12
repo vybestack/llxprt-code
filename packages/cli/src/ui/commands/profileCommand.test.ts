@@ -11,6 +11,7 @@ import type { CommandContext } from './types.js';
 import { testRegex } from '../../test-utils/regex.js';
 
 const runtimeMocks = {
+  resetActiveImageProfile: vi.fn(),
   saveProfileSnapshot: vi.fn(),
   saveImageProfileSnapshot: vi.fn(),
   loadProfileByName: vi.fn(),
@@ -160,10 +161,45 @@ describe('profileCommand', () => {
     });
   });
 
+  it('reports an asynchronous image reset failure', async () => {
+    const reset = profileCommand.subCommands!.find(
+      (command) => command.name === 'reset-image',
+    )!;
+    runtimeMocks.resetActiveImageProfile.mockImplementation(async () => {
+      throw new Error('reset unavailable');
+    });
+    expect(await reset.action!(context, '')).toMatchObject({
+      messageType: 'error',
+      content: expect.stringContaining('reset unavailable'),
+    });
+  });
+
   describe('load subcommand', () => {
     const load = profileCommand.subCommands!.find(
       (cmd) => cmd.name === 'load',
     )!;
+
+    it.each(['image', 'model'])(
+      'requires a name after bare %s unless saved',
+      async (kind) => {
+        expect(await load.action!(context, kind)).toMatchObject({
+          messageType: 'error',
+          content: expect.stringContaining('Usage:'),
+        });
+      },
+    );
+
+    it.each(['model', 'image'])(
+      'loads a model profile named %s',
+      async (name) => {
+        runtimeMocks.listSavedProfiles.mockResolvedValue([name]);
+        runtimeMocks.loadProfileByName.mockResolvedValue({ infoMessages: [] });
+        expect(await load.action!(context, name)).toMatchObject({
+          messageType: 'info',
+          content: expect.stringContaining(`Profile '${name}' loaded`),
+        });
+      },
+    );
 
     it('loads profile and surfaces info messages', async () => {
       runtimeMocks.loadProfileByName.mockResolvedValue({

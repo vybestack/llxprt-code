@@ -29,6 +29,7 @@ import {
   extractProfileName,
   validateProfileName,
   listProfiles,
+  parseProfileLoadTarget,
 } from './profileSchemas.js';
 import {
   saveModelProfile,
@@ -43,22 +44,6 @@ import {
   logger,
   type ProfileLoadResultView,
 } from './profileLoad.js';
-
-function parseProfileLoadTarget(args: string): {
-  readonly profileType: 'model' | 'image';
-  readonly profileName: string;
-} {
-  const typeSeparator = args.search(/[ \t]/);
-  const possibleType =
-    typeSeparator === -1 ? args : args.slice(0, typeSeparator);
-  const isTyped = possibleType === 'model' || possibleType === 'image';
-  return {
-    profileType: isTyped ? possibleType : 'model',
-    profileName: extractProfileName(
-      isTyped ? args.slice(typeSeparator + 1).trim() : args,
-    ),
-  };
-}
 
 async function loadImageProfileCommand(
   profileName: string,
@@ -162,7 +147,8 @@ const loadCommand: SlashCommand = {
       };
     }
 
-    const { profileType, profileName } = parseProfileLoadTarget(trimmedArgs);
+    const { profileType, profileName } =
+      await parseProfileLoadTarget(trimmedArgs);
 
     if (!profileName) {
       return {
@@ -605,7 +591,15 @@ export const profileCommand: SlashCommand = {
         'restore default image backend without changing the model profile',
       kind: CommandKind.BUILT_IN,
       action: async (): Promise<MessageActionReturn> => {
-        getRuntimeApi().resetActiveImageProfile();
+        try {
+          await getRuntimeApi().resetActiveImageProfile();
+        } catch (error) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: `Failed to reset image profile: ${error instanceof Error ? error.message : String(error)}`,
+          };
+        }
         return {
           type: 'message',
           messageType: 'info',

@@ -117,7 +117,7 @@ describe('image profile command surfaces', () => {
     expect(getActiveProfileName()).toBe('conversation');
   });
 
-  it('offers only standard model profiles as load balancer members', async () => {
+  it('offers model profiles as load balancer members', async () => {
     await manager.saveProfile('second-chat', {
       version: 1,
       provider: 'openai',
@@ -143,7 +143,10 @@ describe('image profile command surfaces', () => {
       hasTrailingSpace: true,
       position: 5,
     });
-    expect(result.map((option) => option.value)).toStrictEqual(['second-chat']);
+    expect(result.map((option) => option.value)).toStrictEqual([
+      'second-chat',
+      'balanced',
+    ]);
   });
 
   it.each(['model', 'image'] as const)(
