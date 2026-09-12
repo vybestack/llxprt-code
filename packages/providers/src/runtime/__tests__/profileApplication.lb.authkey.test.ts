@@ -6,6 +6,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import * as fs from 'node:fs/promises';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { GenerateChatOptions } from '../../IProvider.js';
+import {
+  isResolvedSubProfile,
+  type ResolvedSubProfile,
+} from '../../loadBalancing/loadBalancerTypes.js';
+import { resolveMemberAuthentication } from '../../loadBalancing/memberAuthentication.js';
+import { buildRoundRobinResolvedOptions } from '../../loadBalancing/resolvedOptionsBuilder.js';
+import { createProviderKeyStorage } from '../../auth/proxy/credential-store-factory.js';
 import {
   switchActiveProviderMock,
   setActiveModelMock,
@@ -19,7 +28,6 @@ import {
   getActiveProviderOrThrowMock,
   isCliStatelessProviderModeEnabledMock,
   isCliRuntimeStatelessReadyMock,
-  createProviderKeyStorageMock,
   keyStorageStub,
   profileManagerStub,
   wrapRegisterProviderToCaptureLB,
@@ -38,7 +46,7 @@ void vi.mock('../runtimeSettings.js', () => ({
   clearActiveModelParam: clearActiveModelParamMock,
   getActiveModelParams: getActiveModelParamsMock,
   setEphemeralSetting: setEphemeralSettingMock,
-  createProviderKeyStorage: createProviderKeyStorageMock,
+  createProviderKeyStorage,
   getCliRuntimeServices: getCliRuntimeServicesMock,
   getActiveProviderOrThrow: getActiveProviderOrThrowMock,
   isCliStatelessProviderModeEnabled: isCliStatelessProviderModeEnabledMock,
@@ -46,6 +54,34 @@ void vi.mock('../runtimeSettings.js', () => ({
 }));
 
 const { applyProfileWithGuards } = await import('../profileApplication.js');
+
+function getResolvedMember(
+  lbProvider: Parameters<typeof getLbSubProfiles>[0],
+  name: string,
+): ResolvedSubProfile {
+  const member = getLbSubProfiles(lbProvider).find((sp) => sp.name === name);
+  if (!isResolvedSubProfile(member)) {
+    throw new Error(`Expected registered member ${name}`);
+  }
+  return member;
+}
+
+async function buildMemberOptions(
+  member: ResolvedSubProfile,
+): Promise<GenerateChatOptions> {
+  const logger = new DebugLogger('llxprt:test:lb-auth-key');
+  return buildRoundRobinResolvedOptions(
+    await resolveMemberAuthentication(member, logger),
+    { contents: [] },
+    {
+      lbProfileEphemeralSettings: undefined,
+      lbProfileModelParams: undefined,
+      logger,
+      providerName: 'load-balancer',
+      getEffectiveContextLimit: () => undefined,
+    },
+  );
+}
 
 async function resolveNamedApiKey(name: string): Promise<string | null> {
   if (name === 'chutes') return 'resolved-chutes-api-key';
@@ -79,15 +115,25 @@ async function loadNamedAuthProfile(profileName: string): Promise<Profile> {
 }
 
 describe('auth-key-name resolution in sub-profiles (issue #1970)', () => {
+  let restoreStorage: (() => void) | undefined;
+
   beforeEach(() => {
     resetLbProfileApplicationStubs();
+    if (process.env.LLXPRT_TEST_STORAGE_ISOLATED !== '1') {
+      throw new Error('LB auth-key tests require isolated storage');
+    }
+    const getKey = vi.spyOn(createProviderKeyStorage(), 'getKey');
+    restoreStorage = () => getKey.mockRestore();
+    getKey.mockImplementation(keyStorageStub.getKey);
   });
 
   afterEach(() => {
+    restoreStorage?.();
+    restoreStorage = undefined;
     vi.clearAllMocks();
   });
 
-  it('resolves auth-key-name from secure storage into sub-profile authToken', async () => {
+  it('resolves each member named key into delegate options only at use time', async () => {
     keyStorageStub.getKey.mockImplementation(resolveNamedApiKey);
 
     const lbProfile = makeLbProfile(['zai', 'ollamaglm51']);
@@ -103,15 +149,87 @@ describe('auth-key-name resolution in sub-profiles (issue #1970)', () => {
 
     const lbProvider = getLBProvider();
     expect(lbProvider).not.toBeNull();
-    expect(createProviderKeyStorageMock).toHaveBeenCalled();
-    expect(keyStorageStub.getKey).toHaveBeenCalledWith('chutes');
-    expect(keyStorageStub.getKey).toHaveBeenCalledWith('openrouter');
+    const zaiSub = getResolvedMember(lbProvider, 'zai');
+    const ollamaSub = getResolvedMember(lbProvider, 'ollamaglm51');
+    expect(zaiSub.authKeyName).toBe('chutes');
+    expect(ollamaSub.authKeyName).toBe('openrouter');
+    expect(zaiSub.authToken).toBeUndefined();
+    expect(ollamaSub.authToken).toBeUndefined();
+    expect(keyStorageStub.getKey).not.toHaveBeenCalled();
 
-    const subProfiles = getLbSubProfiles(lbProvider);
-    const zaiSub = subProfiles.find((sp) => sp.name === 'zai');
-    const ollamaSub = subProfiles.find((sp) => sp.name === 'ollamaglm51');
-    expect(zaiSub?.authToken).toBe('resolved-chutes-api-key');
-    expect(ollamaSub?.authToken).toBe('resolved-openrouter-api-key');
+    const zaiOptions = await buildMemberOptions(zaiSub);
+    expect(zaiOptions.metadata?.profileId).toBe('zai');
+    expect(zaiOptions.resolved?.authToken).toBe('resolved-chutes-api-key');
+    expect(keyStorageStub.getKey).toHaveBeenCalledWith('chutes');
+    expect(keyStorageStub.getKey).not.toHaveBeenCalledWith('openrouter');
+
+    const ollamaOptions = await buildMemberOptions(ollamaSub);
+    expect(ollamaOptions.metadata?.profileId).toBe('ollamaglm51');
+    expect(ollamaOptions.resolved?.authToken).toBe(
+      'resolved-openrouter-api-key',
+    );
+    expect(keyStorageStub.getKey).toHaveBeenCalledWith('openrouter');
+    expect(zaiSub.authToken).toBeUndefined();
+    expect(ollamaSub.authToken).toBeUndefined();
+  });
+
+  it('reads a rotated named key on the next options build without caching plaintext', async () => {
+    keyStorageStub.getKey.mockResolvedValue('  key-A  ');
+    profileManagerStub.loadProfile = vi.fn(loadNamedAuthProfile);
+    const { getLBProvider } = wrapRegisterProviderToCaptureLB();
+
+    await applyProfileWithGuards(makeLbProfile(['zai']), {
+      profileName: 'glm',
+    });
+
+    const member = getResolvedMember(getLBProvider(), 'zai');
+    expect(member.authKeyName).toBe('chutes');
+    expect(member.authToken).toBeUndefined();
+    expect(keyStorageStub.getKey).not.toHaveBeenCalled();
+
+    const firstOptions = await buildMemberOptions(member);
+    expect(firstOptions.resolved?.authToken).toBe('key-A');
+    expect(member.authToken).toBeUndefined();
+
+    keyStorageStub.getKey.mockResolvedValue('  key-B  ');
+    const secondOptions = await buildMemberOptions(member);
+    expect(secondOptions.resolved?.authToken).toBe('key-B');
+    expect(firstOptions.resolved?.authToken).toBe('key-A');
+    expect(member.authToken).toBeUndefined();
+    expect(keyStorageStub.getKey).toHaveBeenCalledTimes(2);
+    expect(keyStorageStub.getKey).toHaveBeenCalledWith('chutes');
+  });
+
+  it('reads keyfile rotation between attempts without storing plaintext on the member', async () => {
+    const { tempDir, keyfilePath } =
+      await createTempKeyfile('  first-file-key  ');
+    try {
+      profileManagerStub.loadProfile = vi.fn(
+        async (): Promise<Profile> => ({
+          version: 1,
+          provider: 'gemini',
+          model: 'gemini-flash',
+          modelParams: {},
+          ephemeralSettings: { 'auth-keyfile': keyfilePath },
+        }),
+      );
+      const { getLBProvider } = wrapRegisterProviderToCaptureLB();
+      await applyProfileWithGuards(makeLbProfile(['keyfile-member']), {
+        profileName: 'file-lb',
+      });
+      const member = getResolvedMember(getLBProvider(), 'keyfile-member');
+      expect(member.authToken).toStrictEqual(undefined);
+      const first = await buildMemberOptions(member);
+      await fs.writeFile(keyfilePath, '  second-file-key  ');
+      const second = await buildMemberOptions(member);
+      expect([
+        first.resolved?.authToken,
+        second.resolved?.authToken,
+      ]).toStrictEqual(['first-file-key', 'second-file-key']);
+      expect(member.authToken).toStrictEqual(undefined);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('prefers explicit auth-key over auth-key-name', async () => {
@@ -141,12 +259,17 @@ describe('auth-key-name resolution in sub-profiles (issue #1970)', () => {
 
     const lbProvider = getLBProvider();
     expect(lbProvider).not.toBeNull();
-    const subProfiles = getLbSubProfiles(lbProvider);
+    const member = getResolvedMember(lbProvider, 'explicitKey');
     expect(keyStorageStub.getKey).not.toHaveBeenCalled();
-    expect(subProfiles[0]?.authToken).toBe('explicit-direct-key');
+    expect(member.authToken).toBe('explicit-direct-key');
+    expect(member.authKeyName).toBeUndefined();
+
+    const options = await buildMemberOptions(member);
+    expect(options.resolved?.authToken).toBe('explicit-direct-key');
+    expect(keyStorageStub.getKey).not.toHaveBeenCalled();
   });
 
-  it('warns and continues when auth-key-name references a missing key', async () => {
+  it('continues without a token when the named key is missing at use time', async () => {
     keyStorageStub.getKey.mockResolvedValue(null);
 
     const lbProfile = makeLbProfile(['missingKeyProfile']);
@@ -172,11 +295,18 @@ describe('auth-key-name resolution in sub-profiles (issue #1970)', () => {
 
     const lbProvider = getLBProvider();
     expect(lbProvider).not.toBeNull();
-    const subProfiles = getLbSubProfiles(lbProvider);
-    expect(subProfiles[0]?.authToken).toBeUndefined();
+    const member = getResolvedMember(lbProvider, 'missingKeyProfile');
+    expect(member.authKeyName).toBe('nonexistent-key');
+    expect(member.authToken).toBeUndefined();
+    expect(keyStorageStub.getKey).not.toHaveBeenCalled();
+
+    const options = await buildMemberOptions(member);
+    expect(options.metadata?.profileId).toBe('missingKeyProfile');
+    expect(options.resolved?.authToken).toBeUndefined();
+    expect(keyStorageStub.getKey).toHaveBeenCalledWith('nonexistent-key');
   });
 
-  it('resolves auth-key-name and falls back to auth-keyfile when named key missing', async () => {
+  it('falls back to the member keyfile at use time when the named key is missing', async () => {
     keyStorageStub.getKey.mockResolvedValue(null);
     const { tempDir, keyfilePath } = await createTempKeyfile(
       'resolved-from-keyfile\n',
@@ -207,8 +337,20 @@ describe('auth-key-name resolution in sub-profiles (issue #1970)', () => {
 
       const lbProvider = getLBProvider();
       expect(lbProvider).not.toBeNull();
-      const subProfiles = getLbSubProfiles(lbProvider);
-      expect(subProfiles[0]?.authToken).toBe('resolved-from-keyfile');
+      const member = getResolvedMember(lbProvider, 'fallbackProfile');
+      expect(member.authKeyName).toBe('missing-key');
+      expect(member.authKeyfile).toBe(keyfilePath);
+      expect(member.authToken).toBeUndefined();
+      expect(keyStorageStub.getKey).not.toHaveBeenCalled();
+
+      await fs.writeFile(keyfilePath, '  resolved-from-keyfile-at-use-time  ');
+      const options = await buildMemberOptions(member);
+      expect(options.metadata?.profileId).toBe('fallbackProfile');
+      expect(options.resolved?.authToken).toBe(
+        'resolved-from-keyfile-at-use-time',
+      );
+      expect(keyStorageStub.getKey).toHaveBeenCalledWith('missing-key');
+      expect(member.authToken).toBeUndefined();
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
     }

@@ -34,6 +34,7 @@ import { extractFailoverSettings as extractFailoverSettingsFromEphemeral } from 
 import { isTimeoutError } from './loadBalancing/streamTimeout.js';
 import { buildExtendedStats } from './loadBalancing/statsBuilder.js';
 import { buildRoundRobinResolvedOptions as buildRoundRobinResolvedOptionsExternal } from './loadBalancing/resolvedOptionsBuilder.js';
+import { resolveMemberAuthentication } from './loadBalancing/memberAuthentication.js';
 import { cloneContentsForCompression } from './loadBalancing/contentClone.js';
 import {
   getRequestSignal,
@@ -97,6 +98,7 @@ export type { TokenAccountingDiagnostics } from './loadBalancing/tokenAccounting
 export { isLoadBalancerProfileFormat } from './loadBalancing/loadBalancerProfileFormat.js';
 
 interface PreparedLoadBalancerTarget {
+  readonly authenticatedSubProfile: ResolvedSubProfile | LoadBalancerSubProfile;
   readonly options: GenerateChatOptions;
   readonly delegateProvider: IProvider;
 }
@@ -211,10 +213,16 @@ export class LoadBalancingProvider implements IProvider {
    */
   private async estimateForSubProfile(
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
-    resolvedOptions: GenerateChatOptions,
+    options: GenerateChatOptions,
     delegateProvider: IProvider,
   ): Promise<EstimationResult> {
     const model = resolveSubProfileModel(subProfile);
+    const resolvedOptions = this.buildDelegateResolvedOptions(
+      this.config.strategy === 'failover'
+        ? await resolveMemberAuthentication(subProfile, this.logger)
+        : subProfile,
+      options,
+    );
     const result = await estimatePreparedPrompt(
       subProfile,
       resolvedOptions,
@@ -263,7 +271,7 @@ export class LoadBalancingProvider implements IProvider {
     const compressedOptions = { ...options, contents: compressed };
     const compressedResult = await this.estimateForSubProfile(
       subProfile,
-      this.buildDelegateResolvedOptions(subProfile, compressedOptions),
+      compressedOptions,
       delegateProvider,
     );
     if (compressedResult.tokens <= contextLimit) {
@@ -300,6 +308,10 @@ export class LoadBalancingProvider implements IProvider {
     options: GenerateChatOptions,
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
   ): Promise<PreparedLoadBalancerTarget> {
+    const authenticatedSubProfile =
+      this.config.strategy === 'failover'
+        ? subProfile
+        : await resolveMemberAuthentication(subProfile, this.logger);
     const sharedLimit = this.getEffectiveContextLimit();
     const contextLimit = getTargetContextLimit(subProfile, sharedLimit);
     const delegateProvider = this.providerManager.getProviderByName(
@@ -319,30 +331,27 @@ export class LoadBalancingProvider implements IProvider {
       subProfile.providerName,
       resolveSubProfileModel(subProfile),
     );
-    const resolvedOptions = this.buildDelegateResolvedOptions(
-      subProfile,
-      targetOptions,
-    );
     const result = await this.estimateForSubProfile(
-      subProfile,
-      resolvedOptions,
+      authenticatedSubProfile,
+      targetOptions,
       delegateProvider,
     );
     if (contextLimit === undefined || result.tokens <= contextLimit) {
       return {
         options: optionsWithPromptProjection(targetOptions, result),
         delegateProvider,
+        authenticatedSubProfile,
       };
     }
     const compressed = await this.compressForContextLimit(
       targetOptions,
-      subProfile,
+      authenticatedSubProfile,
       result,
       contextLimit,
       delegateProvider,
     );
     if (compressed !== undefined) {
-      return { options: compressed, delegateProvider };
+      return { options: compressed, delegateProvider, authenticatedSubProfile };
     }
 
     throw new LoadBalancerContextLimitError({
@@ -403,7 +412,7 @@ export class LoadBalancingProvider implements IProvider {
     );
 
     const resolvedOptions = this.buildRoundRobinResolvedOptions(
-      subProfile,
+      preparedTarget.authenticatedSubProfile,
       preparedTarget.options,
     );
     requireTransportAttempt(resolvedOptions);

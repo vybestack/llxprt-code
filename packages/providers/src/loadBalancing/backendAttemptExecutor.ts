@@ -34,6 +34,7 @@ import {
 } from '../retryRequestContext.js';
 import { createHash } from 'node:crypto';
 import type { CircuitBreakerManager } from './circuitBreakerManager.js';
+import { resolveMemberAuthentication } from './memberAuthentication.js';
 
 export interface BackendAttemptDeps {
   readonly logger: DebugLogger;
@@ -75,18 +76,23 @@ export interface BackendAttemptParams {
  * Returns the resolved options and delegate provider so the caller can
  * start the lifecycle and invoke the delegate immediately after.
  */
-function resolveBackendDelegate(
-  subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+async function resolveBackendDelegate(
+  configuredSubProfile: ResolvedSubProfile | LoadBalancerSubProfile,
   options: GenerateChatOptions,
   delegateProvider: IProvider,
   deps: BackendAttemptDeps,
-): {
+): Promise<{
   resolvedOptions: GenerateChatOptions;
   delegateProvider: IProvider;
-} {
+  subProfile: ResolvedSubProfile | LoadBalancerSubProfile;
+}> {
+  const subProfile = await resolveMemberAuthentication(
+    configuredSubProfile,
+    deps.logger,
+  );
   const resolvedOptions = deps.buildResolvedOptions(subProfile, options);
   requireTransportAttempt(resolvedOptions);
-  return { resolvedOptions, delegateProvider };
+  return { resolvedOptions, delegateProvider, subProfile };
 }
 
 /**
@@ -171,7 +177,7 @@ export async function* executeBackendAttempt(
   let attemptCtx: BackendAttemptContext | null = null;
   let terminalEmitted = false;
 
-  const prepared = resolveBackendDelegate(
+  const prepared = await resolveBackendDelegate(
     subProfile,
     options,
     delegateProvider,
@@ -186,7 +192,7 @@ export async function* executeBackendAttempt(
       prepared.delegateProvider,
       prepared.resolvedOptions,
       settings,
-      subProfile,
+      prepared.subProfile,
       deps,
     );
     for await (const chunk of cleanupDelegateAttempt(

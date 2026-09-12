@@ -109,6 +109,79 @@ describe('AuthPrecedenceResolver DI behavioral tests', () => {
   });
 
   describe('precedence chain resolution', () => {
+    it.each(['oauth', 'apikey', undefined])(
+      'honors member auth intent %s with ambient credentials present',
+      async (intent) => {
+        const authIntent =
+          intent === 'oauth' || intent === 'apikey' ? intent : undefined;
+        const settings = createInMemorySettingsService(
+          { authOnly: false, 'auth-key': 'global-key' },
+          { anthropic: { 'auth-key': 'provider-key' } },
+        );
+        const resolver = new AuthPrecedenceResolver(
+          {
+            providerId: 'anthropic',
+            oauthProvider: 'anthropic',
+            supportsOAuth: true,
+            isOAuthEnabled: true,
+            apiKey: 'constructor-key',
+            envKeyNames: ['TEST_LB_INTENT_KEY'],
+          },
+          {
+            settingsService: settings,
+            oauthManager: createOAuthManager('member-oauth'),
+          },
+        );
+        const prior = process.env.TEST_LB_INTENT_KEY;
+        process.env.TEST_LB_INTENT_KEY = 'environment-key';
+        try {
+          expect(
+            await resolver.resolveAuthenticationResult({
+              includeOAuth: true,
+              profileId: 'member',
+              authIntent,
+            }),
+          ).toStrictEqual({
+            token: authIntent === 'oauth' ? 'member-oauth' : 'provider-key',
+          });
+        } finally {
+          if (prior === undefined) delete process.env.TEST_LB_INTENT_KEY;
+          else process.env.TEST_LB_INTENT_KEY = prior;
+        }
+      },
+    );
+
+    it('does not fall back to ambient credentials when member OAuth is missing', async () => {
+      const resolver = new AuthPrecedenceResolver(
+        {
+          providerId: 'anthropic',
+          oauthProvider: 'anthropic',
+          supportsOAuth: true,
+          isOAuthEnabled: true,
+          apiKey: 'constructor-key',
+        },
+        {
+          settingsService: createInMemorySettingsService({ authOnly: false }),
+          oauthManager: {
+            getToken: async () => null,
+            isAuthenticated: async () => false,
+          },
+        },
+      );
+      const result = await resolver.resolveAuthenticationResult({
+        includeOAuth: true,
+        authIntent: 'oauth',
+        profileId: 'missing-member',
+      });
+      expect(result.token).toStrictEqual(null);
+      if (result.token !== null)
+        throw new Error('expected missing OAuth credential');
+      expect(result.failure.kind).toStrictEqual('credential-not-found');
+      expect(result.failure.diagnostics.attemptedMechanisms).toStrictEqual([
+        'oauth',
+      ]);
+    });
+
     it('resolves auth-key from provider-specific settings first', async () => {
       const settings = createInMemorySettingsService(
         { 'auth-key': 'global-key' },

@@ -22,6 +22,14 @@ import type { ISettingsService } from './interfaces/settings-service.js';
 import type { IProviderRuntimeContext } from './interfaces/runtime-context.js';
 import type { IDebugLogger } from './interfaces/index.js';
 
+export interface ResolveAuthOptions {
+  settingsService?: ISettingsService | null;
+  includeOAuth?: boolean;
+  runtimeId?: string;
+  profileId?: string;
+  authIntent?: 'oauth' | 'apikey';
+}
+
 export interface AuthPrecedenceConfig {
   // Constructor/direct API key
   apiKey?: string;
