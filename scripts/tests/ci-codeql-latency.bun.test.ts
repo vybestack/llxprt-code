@@ -11,8 +11,11 @@
  * `.github/workflows/ci.yml` (not a mock). Pins the CodeQL job's event-aware
  * timeout (15 minutes for pull_request, 360 for all other events) and
  * credential-free checkout while proving the job's runner, duplicate-only
- * gate, least-privilege permissions, pinned SHA actions, default-query
- * JavaScript configuration, and event coverage remain unchanged.
+ * gate, least-privilege permissions, pinned SHA actions, event coverage,
+ * and the init configuration remain unchanged. The default-query JavaScript
+ * configuration is retained on the PR path (pull_request, merge_group);
+ * non-PR events (push, workflow_dispatch) route to the #3567 config files
+ * via the init step's config-file expression.
  */
 
 import { describe, it, expect, beforeAll } from 'bun:test';
@@ -178,20 +181,18 @@ describe('Issue #3187: bound CodeQL latency on the PR feedback path', () => {
     });
   });
 
-  describe('init configuration (default queries, full coverage)', () => {
-    it('init with-inputs are exactly languages: javascript', () => {
-      expect(stepWith(initStep)).toEqual({ languages: 'javascript' });
+  describe('init configuration (languages plus #3567 config-file routing)', () => {
+    it('init with-inputs are exactly languages and the #3567 config-file routing expression', () => {
+      expect(stepWith(initStep)).toEqual({
+        languages: 'javascript',
+        'config-file':
+          "${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && './.github/codeql/codeql-config.yml' || './.github/codeql/codeql-config-pr.yml' }}",
+      });
     });
 
-    it('init declares no queries, config-file, or path exclusions', () => {
+    it('init declares no queries, packs, or path exclusions', () => {
       const initWith = stepWith(initStep);
-      const forbiddenKeys = [
-        'queries',
-        'config-file',
-        'paths',
-        'paths-ignore',
-        'packs',
-      ];
+      const forbiddenKeys = ['queries', 'paths', 'paths-ignore', 'packs'];
       for (const key of forbiddenKeys) {
         expect(initWith[key]).toBeUndefined();
       }

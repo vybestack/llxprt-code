@@ -1675,6 +1675,11 @@ jobs:
         uses: 'github/codeql-action/init@bce182f857edf1feab116e9795a3393d21977282' # ratchet:github/codeql-action/init@v4
         with:
           languages: 'javascript'
+          # Issue #3567: route non-PR events (push, workflow_dispatch) to the
+          # security-and-quality suite plus the local mechanism-class query
+          # pack, while pull_request and merge_group keep the default security
+          # suite until #3495/#3187 settle the PR-path budgets (#2702).
+          config-file: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && './.github/codeql/codeql-config.yml' || './.github/codeql/codeql-config-pr.yml' }}
 
       - name: 'Perform CodeQL Analysis'
         uses: 'github/codeql-action/analyze@bce182f857edf1feab116e9795a3393d21977282' # ratchet:github/codeql-action/analyze@v4
