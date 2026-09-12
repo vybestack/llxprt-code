@@ -27,68 +27,70 @@ function uniqueKey(prefix: string): string {
 // and survives the storage preload. Run these separately from the isolated
 // suite, e.g.
 //   LLXPRT_TEST_DISABLE_OS_KEYRING= bun test src/secure-store/secure-store.native-keyring.test.ts
-describe.skipIf(process.env.LLXPRT_TEST_DISABLE_OS_KEYRING === '1')(
-  'SecureStore native keyring',
-  () => {
-    const entriesToClean: Array<{ store: SecureStore; key: string }> = [];
+describe('SecureStore native keyring smoke tests', () => {
+  describe.skipIf(process.env.LLXPRT_TEST_DISABLE_OS_KEYRING === '1')(
+    'SecureStore native keyring',
+    () => {
+      const entriesToClean: Array<{ store: SecureStore; key: string }> = [];
 
-    afterEach(async () => {
-      const entries = entriesToClean.splice(0);
-      const results = await Promise.allSettled(
-        entries.map(({ store, key }) => store.delete(key)),
-      );
-      const failures = entries
-        .map(({ key }, index) => ({ key, result: results[index] }))
-        .filter(
-          (entry): entry is { key: string; result: PromiseRejectedResult } =>
-            entry.result.status === 'rejected',
+      afterEach(async () => {
+        const entries = entriesToClean.splice(0);
+        const results = await Promise.allSettled(
+          entries.map(({ store, key }) => store.delete(key)),
         );
+        const failures = entries
+          .map(({ key }, index) => ({ key, result: results[index] }))
+          .filter(
+            (entry): entry is { key: string; result: PromiseRejectedResult } =>
+              entry.result.status === 'rejected',
+          );
 
-      if (failures.length > 0) {
-        const details = failures
-          .map(({ key, result }) => `  • ${key}: ${String(result.reason)}`)
-          .join('\n');
-        throw new Error(
-          `afterEach cleanup failed to delete ${failures.length} keyring entry(ies), leaving real OS keyring pollution:\n${details}`,
-        );
-      }
-    });
+        if (failures.length > 0) {
+          const details = failures
+            .map(({ key, result }) => `  • ${key}: ${String(result.reason)}`)
+            .join('\n');
+          throw new Error(
+            `afterEach cleanup failed to delete ${failures.length} keyring entry(ies), leaving real OS keyring pollution:\n${details}`,
+          );
+        }
+      });
 
-    it('sets and gets a value through the real OS keyring', async () => {
-      const store = createStore();
-      const key = uniqueKey('roundtrip');
-      const value = `secret-${crypto.randomUUID()}`;
-      entriesToClean.push({ store, key });
+      it('sets and gets a value through the real OS keyring', async () => {
+        const store = createStore();
+        const key = uniqueKey('roundtrip');
+        const value = `secret-${crypto.randomUUID()}`;
+        entriesToClean.push({ store, key });
 
-      await store.set(key, value);
+        await store.set(key, value);
 
-      expect(await store.get(key)).toBe(value);
-    });
+        expect(await store.get(key)).toBe(value);
+      });
 
-    it('reports whether a real OS keyring entry exists', async () => {
-      const store = createStore();
-      const key = uniqueKey('has');
-      entriesToClean.push({ store, key });
+      it('reports whether a real OS keyring entry exists', async () => {
+        const store = createStore();
+        const key = uniqueKey('has');
+        entriesToClean.push({ store, key });
 
-      expect(await store.has(key)).toBe(false);
+        expect(await store.has(key)).toBe(false);
 
-      await store.set(key, `secret-${crypto.randomUUID()}`);
+        await store.set(key, `secret-${crypto.randomUUID()}`);
 
-      expect(await store.has(key)).toBe(true);
-    });
+        expect(await store.has(key)).toBe(true);
+      });
 
-    it('deletes a real OS keyring entry', async () => {
-      const store = createStore();
-      const key = uniqueKey('delete');
-      entriesToClean.push({ store, key });
-      await store.set(key, `secret-${crypto.randomUUID()}`);
+      it('deletes a real OS keyring entry', async () => {
+        const store = createStore();
+        const key = uniqueKey('delete');
+        entriesToClean.push({ store, key });
+        await store.set(key, `secret-${crypto.randomUUID()}`);
 
-      expect(await store.delete(key)).toBe(true);
-      expect(await store.get(key)).toBeNull();
-    });
+        expect(await store.delete(key)).toBe(true);
+        expect(await store.get(key)).toBeNull();
+      });
 
-    it('reports the real OS keyring as available', async () => {
-      expect(await createStore().isKeychainAvailable()).toBe(true);
-    });
-  },
-);
+      it('reports the real OS keyring as available', async () => {
+        expect(await createStore().isKeychainAvailable()).toBe(true);
+      });
+    },
+  );
+});
