@@ -8,10 +8,13 @@ import { normalizeBaseUrl } from './codexBaseUrl.js';
 
 /** Loopback profiles use the deployed MLX image dialect. */
 export function isLocalImageEndpoint(baseUrl: string): boolean {
-  const hostname = new URL(baseUrl).hostname.toLowerCase();
+  if (!URL.canParse(baseUrl)) return false;
+  const url = new URL(baseUrl);
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
   return (
     hostname === 'localhost' ||
-    hostname === '[::1]' ||
+    hostname.endsWith('.localhost') ||
     hostname === '::1' ||
     hostname.startsWith('127.')
   );
@@ -44,10 +47,15 @@ export function validateCodexImageProfileBaseUrl(
   let url: URL;
   try {
     url = new URL(baseUrl);
-  } catch {
-    throw new ImageBackendBaseUrlError(profileName, baseUrl);
+  } catch (cause) {
+    throw new ImageBackendBaseUrlError(profileName, baseUrl, { cause });
   }
-  if (normalizeBaseUrl(url.href) !== 'https://chatgpt.com/backend-api/codex') {
+  if (
+    url.username !== '' ||
+    url.password !== '' ||
+    normalizeBaseUrl(url.href) !==
+      normalizeBaseUrl('https://chatgpt.com/backend-api/codex')
+  ) {
     throw new ImageBackendBaseUrlError(profileName, baseUrl);
   }
 }

@@ -24,7 +24,10 @@ import {
 } from './imageEndpoint.js';
 import type { ImageProfile } from '@vybestack/llxprt-code-settings';
 import type { ImageBackendAuth } from '../imageBackendAuth.js';
-import { resolveCodexImageCredential } from '../image-auth-resolution.js';
+import {
+  ImageCredentialError,
+  resolveCodexImageCredential,
+} from '../image-auth-resolution.js';
 
 import {
   CodexImageBackend,
@@ -82,7 +85,16 @@ function resolveAuthContext(
   }
 
   try {
-    if (isLocalImageEndpoint(profile.baseUrl)) return 'local';
+    const url = new URL(profile.baseUrl);
+    const local = isLocalImageEndpoint(profile.baseUrl);
+    if (
+      url.username !== '' ||
+      url.password !== '' ||
+      (!local && url.protocol !== 'https:')
+    ) {
+      throw new ImageBackendBaseUrlError(profileName, profile.baseUrl);
+    }
+    if (local) return 'local';
   } catch (cause) {
     throw new ImageBackendBaseUrlError(profileName, profile.baseUrl, { cause });
   }
@@ -179,6 +191,12 @@ export function createCodexImageBackendResolver(
           );
     if (profileConfig?.backend === 'openai-images') {
       const getImageApiKey = deps.getImageApiKey;
+      if (profileConfig.auth.type !== 'none' && getImageApiKey === undefined) {
+        throw new ImageCredentialError(
+          'api_key_empty',
+          `Image profile '${deps.getActiveImageProfileName?.() ?? '<active>'}' requires an API key resolver.`,
+        );
+      }
       return new OpenAIImagesBackend({
         config: profileConfig,
         ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }),
