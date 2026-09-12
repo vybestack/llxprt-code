@@ -51,7 +51,7 @@ export async function resolveCodexImageCredential(
 ): Promise<CodexImageCredential> {
   let token;
   try {
-    token = await oauthManager?.getOAuthToken('codex');
+    token = await oauthManager?.getOAuthToken?.('codex');
   } catch (cause) {
     if (cause instanceof ImageCredentialError) throw cause;
     throw new ImageCredentialError(

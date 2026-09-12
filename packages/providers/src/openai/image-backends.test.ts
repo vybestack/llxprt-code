@@ -20,10 +20,7 @@ import {
   resolveImageProfileBackendConfig,
 } from './codexImageBackendResolver.js';
 
-import {
-  ImageBackendError,
-  imageResponseError,
-} from './imageBackendResponse.js';
+import { imageResponseError } from './imageBackendResponse.js';
 import {
   ImageBackendBaseUrlError,
   validateCodexImageProfileBaseUrl,

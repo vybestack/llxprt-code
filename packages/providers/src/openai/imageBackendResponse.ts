@@ -181,16 +181,11 @@ function isRestrictedHost(url: URL): boolean {
   const octets = host.split('.').map(Number);
   if (octets.length !== 4 || octets.some(Number.isNaN)) return false;
   const [a, b] = octets;
-  return (
-    a === 0 ||
-    a === 10 ||
-    a === 127 ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    (a === 100 && b >= 64 && b <= 127) ||
-    a >= 224
-  );
+  if ([0, 10, 127].includes(a) || a >= 224) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  return a === 100 && b >= 64 && b <= 127;
 }
 
 /** Download without credentials or redirects; never include signed URLs in errors. */
@@ -202,12 +197,14 @@ async function materializeUrl(
 ): Promise<string> {
   try {
     const parsed = new URL(url);
+    const restricted =
+      !allowLocalUrls &&
+      (parsed.protocol !== 'https:' || isRestrictedHost(parsed));
     if (
       !['http:', 'https:'].includes(parsed.protocol) ||
       parsed.username !== '' ||
       parsed.password !== '' ||
-      (!allowLocalUrls &&
-        (parsed.protocol !== 'https:' || isRestrictedHost(parsed)))
+      restricted
     ) {
       throw new ImageBackendError(
         'materialization',
@@ -244,7 +241,12 @@ async function materializeUrl(
     if (signal.aborted) signal.throwIfAborted();
     if (error instanceof ImageBackendError) throw error;
     if (error instanceof DOMException && error.name === 'TimeoutError') {
-      throw new ImageBackendError('timeout', 'Image download timed out.');
+      throw new ImageBackendError(
+        'timeout',
+        'Image download timed out.',
+        undefined,
+        { cause: error },
+      );
     }
     if (error instanceof Error && error.name === 'AbortError') throw error;
     throw new ImageBackendError(
@@ -273,16 +275,17 @@ export async function parseImageResponse(
       'Image endpoint returned no image data.',
     );
   let data: string;
-  let mimeType = 'image/png';
+  let mimeType: ImageBackendResult['mimeType'] = 'image/png';
   if (typeof first.b64_json === 'string' && first.b64_json !== '') {
     data = first.b64_json;
     const bytes = Buffer.from(data, 'base64');
     if (
       !/^[A-Za-z0-9+/]+={0,2}$/.test(data) ||
-      bytes.toString('base64').replace(/=+$/, '') !== data.replace(/=+$/, '')
+      bytes.toString('base64').replace(/={1,2}$/, '') !==
+        data.replace(/={1,2}$/, '')
     ) {
       throw new ImageBackendError(
-        options.allowLocalUrls ? 'invalid_png' : 'invalid_image',
+        options.allowLocalUrls === true ? 'invalid_png' : 'invalid_image',
         'Image endpoint returned invalid base64 image data.',
       );
     }
@@ -297,7 +300,7 @@ export async function parseImageResponse(
       mimeType = 'image/webp';
     else
       throw new ImageBackendError(
-        options.allowLocalUrls ? 'invalid_png' : 'invalid_image',
+        options.allowLocalUrls === true ? 'invalid_png' : 'invalid_image',
         'Image endpoint returned an unrecognized image format.',
       );
   } else if (typeof first.url === 'string' && first.url !== '') {
@@ -305,7 +308,7 @@ export async function parseImageResponse(
       first.url,
       fetchImpl,
       signal,
-      options.allowLocalUrls ?? false,
+      options.allowLocalUrls === true,
     );
   } else {
     throw new ImageBackendError(

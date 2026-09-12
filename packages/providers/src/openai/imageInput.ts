@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { FileHandle } from 'node:fs/promises';
 import { ImageValidationError } from '@vybestack/llxprt-code-core/services/image/ImageGenerationService.js';
 
 const MAX_INPUT_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -46,21 +47,21 @@ export async function readInputImage(
 
   const { promises: fs, constants } = await import('node:fs');
   const path = await import('node:path');
+  const platformConstants: Readonly<Record<string, number | undefined>> =
+    constants;
+  const noFollow = platformConstants['O_NOFOLLOW'];
 
   let bytes: Buffer;
   try {
     if (
-      constants.O_NOFOLLOW === undefined &&
+      noFollow === undefined &&
       (await fs.lstat(inputPath)).isSymbolicLink()
     ) {
       throw new ImageValidationError(
         `Input image is a symbolic link and cannot be used safely: ${inputPath}.`,
       );
     }
-    const file = await fs.open(
-      inputPath,
-      constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
-    );
+    const file = await fs.open(inputPath, constants.O_RDONLY | (noFollow ?? 0));
     try {
       const stat = await file.stat();
       if (!stat.isFile()) {
@@ -73,23 +74,7 @@ export async function readInputImage(
           `Input image exceeds the maximum size: ${inputPath}.`,
         );
       }
-      const chunks: Buffer[] = [];
-      let total = 0;
-      while (true) {
-        const chunk = Buffer.alloc(
-          Math.min(64 * 1024, MAX_INPUT_IMAGE_BYTES + 1 - total),
-        );
-        const { bytesRead } = await file.read(chunk, 0, chunk.length, null);
-        if (bytesRead === 0) break;
-        total += bytesRead;
-        if (total > MAX_INPUT_IMAGE_BYTES) {
-          throw new ImageValidationError(
-            `Input image exceeds the maximum size: ${inputPath}.`,
-          );
-        }
-        chunks.push(chunk.subarray(0, bytesRead));
-      }
-      bytes = Buffer.concat(chunks, total);
+      bytes = await readBoundedInput(file, inputPath);
     } finally {
       await file.close();
     }
@@ -113,6 +98,29 @@ export async function readInputImage(
   }
 
   return { bytes, mimeType };
+}
+
+async function readBoundedInput(
+  file: FileHandle,
+  inputPath: string,
+): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  let bytesRead: number;
+  do {
+    const chunk = Buffer.alloc(
+      Math.min(64 * 1024, MAX_INPUT_IMAGE_BYTES + 1 - total),
+    );
+    ({ bytesRead } = await file.read(chunk, 0, chunk.length, null));
+    total += bytesRead;
+    if (total > MAX_INPUT_IMAGE_BYTES) {
+      throw new ImageValidationError(
+        `Input image exceeds the maximum size: ${inputPath}.`,
+      );
+    }
+    chunks.push(chunk.subarray(0, bytesRead));
+  } while (bytesRead !== 0);
+  return Buffer.concat(chunks, total);
 }
 
 function detectImageMimeType(ext: string, bytes: Buffer): string | null {

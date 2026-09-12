@@ -41,13 +41,13 @@ describe('image endpoint policy', () => {
     ).not.toThrow();
   });
   it('preserves malformed URL causes', () => {
+    let caught: unknown;
     try {
       validateCodexImageProfileBaseUrl('invalid');
     } catch (error) {
-      expect(error).toMatchObject({ cause: expect.any(TypeError) });
-      return;
+      caught = error;
     }
-    throw new Error('Expected rejection');
+    expect(caught).toMatchObject({ cause: expect.any(TypeError) });
   });
   it.each([
     'http://images.example',

@@ -27,7 +27,7 @@ export interface ImageEditRequest extends Omit<ImageGenerateRequest, 'n'> {
 
 /** Adapters materialize remote results before crossing the backend boundary. */
 export interface ImageBackendResult {
-  readonly mimeType: 'image/png';
+  readonly mimeType: 'image/png' | 'image/jpeg' | 'image/webp';
   readonly encoding: 'base64';
   readonly data: string;
   readonly caption?: string;

@@ -39,7 +39,6 @@ it.skipIf(!enabled)(
       AbortSignal.timeout(300_000),
     );
     expect(result.data).toBeDefined();
-    if (result.data === undefined) throw new Error('Expected image data');
     const bytes = Buffer.from(result.data, 'base64');
     expect(result).toMatchObject({ mimeType: 'image/png', encoding: 'base64' });
     expect(bytes.subarray(0, 8)).toStrictEqual(
