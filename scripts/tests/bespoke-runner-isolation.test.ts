@@ -56,12 +56,15 @@ describe('createBespokeRunnerIsolation', () => {
     logs = [];
   });
   afterEach(() => {
-    isolation?.finalize();
-    const session = isolation?.sessionEnv.LLXPRT_TEST_SESSION_ROOT;
-    if (session !== undefined)
-      rmSync(session, { recursive: true, force: true });
-    isolation = undefined;
-    rmSync(root, { recursive: true, force: true });
+    try {
+      isolation?.finalize();
+    } finally {
+      const session = isolation?.sessionEnv.LLXPRT_TEST_SESSION_ROOT;
+      if (session !== undefined)
+        rmSync(session, { recursive: true, force: true });
+      isolation = undefined;
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   function start(env: NodeJS.ProcessEnv = {}): BespokeRunnerIsolation {
