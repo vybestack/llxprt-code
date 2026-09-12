@@ -35,6 +35,7 @@ import {
 } from '../stores/dialog/dialogStore.js';
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 import { createDialogOpeners } from '../stores/dialog/dialogOpeners.js';
+import { createSettingsProfileStore } from '../stores/settings/settingsStore.js';
 import { createDeferred } from '../../test-utils/async.js';
 
 const realNodeProcessModule = { ...(await import('node:process')) };
@@ -76,8 +77,10 @@ describe('useFolderTrust', () => {
   };
   let mockStore: ReturnType<typeof createDialogStore>;
   let mockDialogs: DialogOpeners;
+  let settingsStore: ReturnType<typeof createSettingsProfileStore>;
 
   beforeEach(() => {
+    settingsStore = createSettingsProfileStore();
     mockSettings = {
       merged: {
         folderTrust: true,
@@ -154,6 +157,7 @@ describe('useFolderTrust', () => {
         settings: mockSettings,
         config: mockConfig,
         store: mockStore,
+        settingsStore,
         dialogs: mockDialogs,
       }),
     );
@@ -185,6 +189,7 @@ describe('useFolderTrust', () => {
         addItem,
         config: mockConfig,
         store: mockStore,
+        settingsStore,
         dialogs: mockDialogs,
       }),
     );
@@ -199,6 +204,7 @@ describe('useFolderTrust', () => {
         addItem,
         config: mockConfig,
         store: mockStore,
+        settingsStore,
         dialogs: mockDialogs,
       }),
     );
@@ -213,6 +219,7 @@ describe('useFolderTrust', () => {
         addItem,
         config: mockConfig,
         store: mockStore,
+        settingsStore,
         dialogs: mockDialogs,
       }),
     );
@@ -227,6 +234,7 @@ describe('useFolderTrust', () => {
         addItem,
         config: mockConfig,
         store: mockStore,
+        settingsStore,
         dialogs: mockDialogs,
       }),
     );
@@ -247,6 +255,7 @@ describe('useFolderTrust', () => {
         addItem,
         config: mockConfig,
         store: mockStore,
+        settingsStore,
         dialogs: mockDialogs,
       }),
     );
@@ -261,6 +270,7 @@ describe('useFolderTrust', () => {
         addItem,
         config: mockConfig,
         store: mockStore,
+        settingsStore,
         dialogs: mockDialogs,
       }),
     );
@@ -290,6 +300,7 @@ describe('useFolderTrust', () => {
         addItem,
         config: mockConfig,
         store: mockStore,
+        settingsStore,
         dialogs: mockDialogs,
       }),
     );
@@ -315,6 +326,7 @@ describe('useFolderTrust', () => {
         addItem,
         config: mockConfig,
         store: mockStore,
+        settingsStore,
         dialogs: mockDialogs,
       }),
     );
@@ -342,6 +354,7 @@ describe('useFolderTrust', () => {
         addItem,
         config: mockConfig,
         store: mockStore,
+        settingsStore,
         dialogs: mockDialogs,
       }),
     );
@@ -370,6 +383,7 @@ describe('useFolderTrust', () => {
         addItem,
         config: mockConfig,
         store: mockStore,
+        settingsStore,
         dialogs: mockDialogs,
       }),
     );
@@ -394,6 +408,7 @@ describe('useFolderTrust', () => {
         addItem,
         config: mockConfig,
         store: mockStore,
+        settingsStore,
         dialogs: mockDialogs,
       }),
     );
@@ -417,6 +432,7 @@ describe('useFolderTrust', () => {
         addItem,
         config: mockConfig,
         store: mockStore,
+        settingsStore,
         dialogs: mockDialogs,
       }),
     );
@@ -439,6 +455,7 @@ describe('useFolderTrust', () => {
         settings: mockSettings,
         addItem,
         store: mockStore,
+        settingsStore,
         dialogs: mockDialogs,
       }),
     );
@@ -471,6 +488,7 @@ describe('useFolderTrust', () => {
           addItem,
           config: mockConfig,
           store: mockStore,
+          settingsStore,
           dialogs: mockDialogs,
         }),
       );
@@ -507,6 +525,7 @@ describe('useFolderTrust', () => {
           addItem,
           config: mockConfig,
           store: mockStore,
+          settingsStore,
           dialogs: mockDialogs,
         }),
       );
@@ -550,6 +569,7 @@ describe('useFolderTrust', () => {
           addItem,
           config: mockConfig,
           store: mockStore,
+          settingsStore,
           dialogs: mockDialogs,
         }),
       );
@@ -591,6 +611,7 @@ describe('useFolderTrust', () => {
           addItem,
           config: mockConfig,
           store: mockStore,
+          settingsStore,
           dialogs: mockDialogs,
         }),
       );
@@ -626,6 +647,7 @@ describe('useFolderTrust', () => {
           addItem,
           config: mockConfig,
           store: mockStore,
+          settingsStore,
           dialogs: mockDialogs,
         }),
       );
@@ -676,6 +698,7 @@ describe('useFolderTrust', () => {
             addItem,
             config: mockConfig,
             store: mockStore,
+            settingsStore,
             dialogs: mockDialogs,
           }),
         );
@@ -709,6 +732,7 @@ describe('useFolderTrust', () => {
         addItem,
         config: mockConfig,
         store: mockStore,
+        settingsStore,
         dialogs: mockDialogs,
       }),
     );

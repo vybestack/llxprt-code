@@ -19,7 +19,10 @@ import type { LoadedSettings } from '../config/settings.js';
 import type { AppState, AppAction } from './reducers/appReducer.js';
 import type { OperationLifecycleRegistry } from './hooks/agentStream/operationLifecycle.js';
 import type { MemoryTelemetryController } from './hooks/memoryTrend/memoryTelemetry.js';
-import { DefaultAppLayout } from './layouts/DefaultAppLayout.js';
+import {
+  DefaultAppLayout,
+  type DefaultAppLayoutProps,
+} from './layouts/DefaultAppLayout.js';
 import { useAppBootstrap } from './containers/AppContainer/hooks/useAppBootstrap.js';
 import type { AppBootstrapResult } from './containers/AppContainer/hooks/useAppBootstrap.js';
 import { useAppDialogs } from './containers/AppContainer/hooks/useAppDialogs.js';
@@ -234,6 +237,18 @@ export function buildAppCommands(
   };
 }
 
+function useAppCommands(
+  dialogs: AppDialogsResult,
+  input: AppInputResult,
+  layout: AppLayoutResult,
+  terminalStore: TerminalStore,
+): AppCommandBindings {
+  return useMemo(
+    () => buildAppCommands(dialogs, input, layout, terminalStore),
+    [dialogs, input, layout, terminalStore],
+  );
+}
+
 export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
   debug.debug('AppContainer architecture active (v2)');
   const {
@@ -260,7 +275,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
   );
   const input = useAppInput({
     uiRuntime: props.uiRuntime,
-    streamRuntime: props.uiRuntime,
+    streamRuntime: bootstrap.streamRuntime,
     slashCommandRuntime: props.slashCommandRuntime,
     agent: props.agent,
     settings: props.settings,
@@ -282,7 +297,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     operationLifecycle: props.operationLifecycle,
   });
   const layout = useAppLayout({
-    uiRuntime: props.uiRuntime,
+    uiRuntime: bootstrap.uiRuntime,
     settings: props.settings,
     clearConsoleMessagesState: bootstrap.clearConsoleMessagesState,
     turnStore,
@@ -291,16 +306,20 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     settingsStore,
   });
   useUnconfiguredGuidance(props, turnStore, dialogStore);
-  const appCommands = useMemo(
-    () => buildAppCommands(dialogs, input, layout, terminalStore),
-    [dialogs, input, layout, terminalStore],
-  );
+  const appCommands = useAppCommands(dialogs, input, layout, terminalStore);
   return (
     <AppRuntimeView
       slashCommandRuntime={props.slashCommandRuntime}
       version={props.version}
-      bootstrap={bootstrap}
-      layout={layout}
+      uiRuntime={bootstrap.uiRuntime}
+      settings={bootstrap.settings}
+      startupWarnings={bootstrap.startupWarnings}
+      nightly={bootstrap.nightly}
+      updateInfo={bootstrap.updateInfo}
+      mainControlsRef={layout.mainControlsRef}
+      rootUiRef={layout.rootUiRef}
+      pendingHistoryItemRef={layout.pendingHistoryItemRef}
+      contextFileNames={layout.contextFileNames}
       appCommands={appCommands}
       dialogStore={dialogStore}
       terminalStore={terminalStore}
@@ -310,11 +329,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
   );
 };
 
-interface AppRuntimeViewProps {
-  slashCommandRuntime: SlashCommandRuntime;
-  version: string;
-  bootstrap: AppBootstrapResult;
-  layout: AppLayoutResult;
+interface AppRuntimeViewProps extends DefaultAppLayoutProps {
   appCommands: AppCommandBindings;
   dialogStore: DialogStore;
   terminalStore: TerminalStore;
@@ -323,15 +338,12 @@ interface AppRuntimeViewProps {
 }
 
 function AppRuntimeView({
-  slashCommandRuntime,
-  version,
-  bootstrap,
-  layout,
   appCommands,
   dialogStore,
   terminalStore,
   turnStore,
   settingsStore,
+  ...layoutProps
 }: AppRuntimeViewProps): React.ReactNode {
   return (
     <TerminalProvider store={terminalStore}>
@@ -339,19 +351,7 @@ function AppRuntimeView({
         <SettingsProfileProvider store={settingsStore}>
           <DialogProvider store={dialogStore}>
             <AppCommandsProvider value={appCommands}>
-              <DefaultAppLayout
-                uiRuntime={bootstrap.uiRuntime}
-                slashCommandRuntime={slashCommandRuntime}
-                settings={bootstrap.settings}
-                startupWarnings={bootstrap.startupWarnings}
-                version={version}
-                nightly={bootstrap.nightly}
-                mainControlsRef={layout.mainControlsRef}
-                rootUiRef={layout.rootUiRef}
-                pendingHistoryItemRef={layout.pendingHistoryItemRef}
-                contextFileNames={layout.contextFileNames}
-                updateInfo={bootstrap.updateInfo}
-              />
+              <DefaultAppLayout {...layoutProps} />
             </AppCommandsProvider>
           </DialogProvider>
         </SettingsProfileProvider>

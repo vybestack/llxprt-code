@@ -277,6 +277,7 @@ function useDialogsAuth(
   const { addItem } = p.turnStore.commands;
   const theme = useThemeCommand(settings, dialogs, addItem);
   const folderTrust = useFolderTrust({
+    settingsStore: p.settingsStore,
     settings,
     addItem,
     config,

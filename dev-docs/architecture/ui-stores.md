@@ -11,9 +11,10 @@ The interactive UI keeps its shared state in four stores under
 created once per app mount, and is provided to the tree through a stable
 React context. Narrow selectors prevent unrelated store writes from scheduling
 a subscriber. They do not prevent parent renders or other context updates
-from rendering that component. The current layout still combines several
-domains in one component; the store probe tests alone do not prove isolation
-of the production transcript.
+from rendering that component. The layout splits subscriptions across memoized transcript, composer, dialog,
+footer, and panel regions. `FooterRegion` selects status readouts, including
+effective folder trust, independently of turn clocks and dialog visibility.
+The production layout test checks transcript isolation in the real tree.
 
 The stores are plain external stores, not a state library. There is no new
 dependency; the whole mechanism is `createStore` plus `useStoreSelector`.
@@ -83,7 +84,10 @@ route every write through store commands. Writes that used to be reducer
 dispatches stay effects, which preserves the old dispatch-then-effect
 ordering. One example: `useDisplayPreferences` subscribes to
 `CoreEvent.SettingsChanged` and bumps `settingsNonce`, and view code re-reads
-settings when the nonce changes.
+settings when the nonce changes. `useFolderTrust` initializes effective trust
+from the runtime and subscribes to `CoreEvent.FolderTrustChanged`, writing
+`SettingsProfileStore.isTrustedFolder` for the footer. It removes the listener
+on cleanup.
 
 Out-of-tree add requests travel through `TurnStore.requestAddItem`, which
 records a `pendingAddRequest` with a monotonic `seq`. A subscriber performs
@@ -120,9 +124,10 @@ than the closure that happened to exist when the command value was created.
 `commandContext`, and `inputHistory`. Its value changes when those snapshots
 change. Composer and the views that use command-context data subscribe to
 that boundary; command-only consumers do not. This is not yet a per-field
-selector boundary. `buildAppCommands` still assembles the input bindings in
-the root, and `buildInputParams` and `buildLayoutParams` still project hook
-results. Removing those projections remains outstanding.
+selector boundary. The composition root uses `buildAppCommands` to assemble
+the stable command surface; the provider separates changing input data.
+Views and regions receive explicit typed props, never whole hook-result bags.
+The former input and layout parameter projection helpers have been removed.
 
 `DialogOpeners` (`stores/dialog/dialogOpeners.ts`) gives one stable
 `open`/`close` handle per dialog kind, typed against `DialogPayloadMap`. The
@@ -162,8 +167,10 @@ store mocks. Three patterns recur:
   and count their own renders while tests drive store commands inside
   `act()` (see `stores/__tests__/renderIsolation.test.tsx`). These tests
   pin the selector behavior of the probe tree, not the production layout.
-  Production transcript isolation needs a real-tree test with counters inside
-  the actual transcript region. That test is still outstanding.
+  `layouts/DefaultAppLayout.renderIsolation.test.tsx` also measures performed
+  work in the real transcript and viewport regions. It verifies isolation on
+  dialog, clock, geometry, and parent updates, and checks that committed
+  history changes still render the transcript.
 - Command boundary: `AppContainer.clear-queue-wiring.test.tsx` renders the
   production provider and Composer with real input and queue hooks. It checks
   that an input-owner update leaves a memoized command consumer alone while a
@@ -177,7 +184,7 @@ per-store seed objects (`{ terminal, turn, settingsProfile }`).
 ## Rules
 
 1. Commands stay out of views. Components render from store state; they
-   receive command callbacks through `AppCommandsContext` or hook results,
+   receive command callbacks through `AppCommandsContext`,
    not by writing state during render. Domain openers go through
    `DialogOpeners`. `DialogManager` may take `closeDialog` directly from
    `DialogStore.commands` for dismissal and completed resume callbacks. This

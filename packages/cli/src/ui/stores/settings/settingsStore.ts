@@ -46,6 +46,7 @@ export interface TokenMetricsSnapshot {
 export interface SettingsProfileState {
   dialogActions: DialogActions;
   startupGuardsInitialized: boolean;
+  isTrustedFolder: boolean;
   // Model/provider projection
   currentModel: string;
   currentModelLabel: string | undefined;
@@ -100,6 +101,7 @@ export interface SettingsProfileState {
 }
 
 export interface SettingsProfileCommands {
+  setIsTrustedFolder: (trusted: boolean) => void;
   setDialogActions: (actions: DialogActions) => void;
   setStartupGuardsInitialized: (initialized: boolean) => void;
   setCurrentModel: (model: string) => void;
@@ -148,6 +150,7 @@ function initialSettingsProfileState(): SettingsProfileState {
   return {
     dialogActions: initialDialogActions(),
     startupGuardsInitialized: false,
+    isTrustedFolder: false,
     currentModel: '',
     currentModelLabel: undefined,
     contextLimit: undefined,
@@ -216,6 +219,7 @@ export function createSettingsProfileStore(
   };
 
   const commands: SettingsProfileCommands = {
+    setIsTrustedFolder: (trusted) => assign('isTrustedFolder', trusted),
     setDialogActions: (actions) => assign('dialogActions', actions),
     setStartupGuardsInitialized: (initialized) =>
       assign('startupGuardsInitialized', initialized),

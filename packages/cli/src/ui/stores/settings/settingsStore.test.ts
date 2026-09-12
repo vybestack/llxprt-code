@@ -38,6 +38,7 @@ describe('createSettingsProfileStore', () => {
     expect(store.getState()).toStrictEqual({
       dialogActions: initialDialogActions(),
       startupGuardsInitialized: false,
+      isTrustedFolder: false,
       currentModel: '',
       currentModelLabel: undefined,
       contextLimit: undefined,

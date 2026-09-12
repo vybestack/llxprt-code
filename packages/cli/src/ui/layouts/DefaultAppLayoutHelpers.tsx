@@ -399,6 +399,7 @@ export function useScrollableContent(
 }
 
 export interface FooterProps {
+  isTrustedFolder: boolean;
   config: SlashCommandRuntime;
   settings: LoadedSettings;
   hideFooter: boolean;
@@ -464,7 +465,7 @@ export function FooterSection(props: FooterProps) {
       nightly={nightly}
       vimMode={vimModeEnabled ? vimMode : undefined}
       contextLimit={contextLimit}
-      isTrustedFolder={config.isTrustedFolder()}
+      isTrustedFolder={props.isTrustedFolder}
       tokensPerMinute={tokenMetrics.tokensPerMinute}
       throttleWaitTimeMs={tokenMetrics.throttleWaitTimeMs}
       sessionTokenTotal={tokenMetrics.sessionTokenTotal}

@@ -127,6 +127,7 @@ export function FooterRegion(props: DefaultAppLayoutProps): React.ReactNode {
   const terminal = useTerminalStore();
   const { vimEnabled, vimMode } = useVimMode();
   const fields = {
+    isTrustedFolder: useStoreSelector(store, (s) => s.isTrustedFolder),
     currentModel: useStoreSelector(store, (s) => s.currentModel),
     currentModelLabel: useStoreSelector(store, (s) => s.currentModelLabel),
     contextLimit: useStoreSelector(store, (s) => s.contextLimit),

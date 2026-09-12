@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useRef } from 'react';
-import { ExitCodes } from '@vybestack/llxprt-code-core';
+import { ExitCodes, coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { LoadedSettings } from '../../config/settings.js';
 import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
@@ -26,6 +26,8 @@ import {
 import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 import { useStoreSelector } from '../stores/useStoreSelector.js';
+
+import type { SettingsProfileStore } from '../stores/settings/settingsStore.js';
 
 const debug = new DebugLogger('llxprt:ui:useFolderTrust');
 
@@ -142,6 +144,7 @@ interface UseFolderTrustParams {
   addItem?: AddItemFn;
   config?: FolderTrustRuntime;
   store: DialogStore;
+  settingsStore: SettingsProfileStore;
   dialogs: DialogOpeners;
 }
 
@@ -151,7 +154,9 @@ export const useFolderTrust = ({
   config,
   store,
   dialogs,
+  settingsStore,
 }: UseFolderTrustParams) => {
+  useEffectiveFolderTrust(config, settingsStore);
   const trusted = isWorkspaceTrusted(
     settings.merged,
     config?.getWorkingDir() ?? process.cwd(),
@@ -208,3 +213,17 @@ export const useFolderTrust = ({
 
   return { isFolderTrustDialogOpen, handleFolderTrustSelect };
 };
+
+function useEffectiveFolderTrust(
+  config: FolderTrustRuntime | undefined,
+  settingsStore: SettingsProfileStore,
+): void {
+  useEffect(() => {
+    const publish = settingsStore.commands.setIsTrustedFolder;
+    coreEvents.on(CoreEvent.FolderTrustChanged, publish);
+    publish(config?.isTrustedFolder() ?? false);
+    return () => {
+      coreEvents.off(CoreEvent.FolderTrustChanged, publish);
+    };
+  }, [config, settingsStore]);
+}
