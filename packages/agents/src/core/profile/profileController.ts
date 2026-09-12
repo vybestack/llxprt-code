@@ -522,6 +522,8 @@ export class ProfileController {
         // The reuse path carries the prior binding into the new runtime; disposing
         // the prior runtime here would dispose the binding that is still live.
         void prior[Symbol.asyncDispose]().catch(() => {});
+      } else if (prior !== undefined) {
+        committed.newRuntime.retainRoleRuntimesFrom(prior);
       }
     } else if (
       committed.newState !== this.state &&

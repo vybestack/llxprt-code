@@ -98,6 +98,7 @@ export type { TokenAccountingDiagnostics } from './loadBalancing/tokenAccounting
 export { isLoadBalancerProfileFormat } from './loadBalancing/loadBalancerProfileFormat.js';
 
 interface PreparedLoadBalancerTarget {
+  readonly authenticatedSubProfile: ResolvedSubProfile | LoadBalancerSubProfile;
   readonly options: GenerateChatOptions;
   readonly delegateProvider: IProvider;
 }
@@ -217,7 +218,9 @@ export class LoadBalancingProvider implements IProvider {
   ): Promise<EstimationResult> {
     const model = resolveSubProfileModel(subProfile);
     const resolvedOptions = this.buildDelegateResolvedOptions(
-      await resolveMemberAuthentication(subProfile, this.logger),
+      this.config.strategy === 'failover'
+        ? await resolveMemberAuthentication(subProfile, this.logger)
+        : subProfile,
       options,
     );
     const result = await estimatePreparedPrompt(
@@ -305,6 +308,10 @@ export class LoadBalancingProvider implements IProvider {
     options: GenerateChatOptions,
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
   ): Promise<PreparedLoadBalancerTarget> {
+    const authenticatedSubProfile =
+      this.config.strategy === 'failover'
+        ? subProfile
+        : await resolveMemberAuthentication(subProfile, this.logger);
     const sharedLimit = this.getEffectiveContextLimit();
     const contextLimit = getTargetContextLimit(subProfile, sharedLimit);
     const delegateProvider = this.providerManager.getProviderByName(
@@ -325,7 +332,7 @@ export class LoadBalancingProvider implements IProvider {
       resolveSubProfileModel(subProfile),
     );
     const result = await this.estimateForSubProfile(
-      subProfile,
+      authenticatedSubProfile,
       targetOptions,
       delegateProvider,
     );
@@ -333,17 +340,18 @@ export class LoadBalancingProvider implements IProvider {
       return {
         options: optionsWithPromptProjection(targetOptions, result),
         delegateProvider,
+        authenticatedSubProfile,
       };
     }
     const compressed = await this.compressForContextLimit(
       targetOptions,
-      subProfile,
+      authenticatedSubProfile,
       result,
       contextLimit,
       delegateProvider,
     );
     if (compressed !== undefined) {
-      return { options: compressed, delegateProvider };
+      return { options: compressed, delegateProvider, authenticatedSubProfile };
     }
 
     throw new LoadBalancerContextLimitError({
@@ -404,7 +412,7 @@ export class LoadBalancingProvider implements IProvider {
     );
 
     const resolvedOptions = this.buildRoundRobinResolvedOptions(
-      await resolveMemberAuthentication(subProfile, this.logger),
+      preparedTarget.authenticatedSubProfile,
       preparedTarget.options,
     );
     requireTransportAttempt(resolvedOptions);

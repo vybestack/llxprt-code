@@ -212,6 +212,8 @@ describe('load balancer member OAuth identity (#2643)', () => {
     const buckets = new OAuthBucketManager(store);
     const settings = new SettingsService();
     settings.setCurrentProfileName(lbParentName);
+    settings.set('authOnly', false);
+    settings.setProviderSetting(PROVIDER, 'auth-key', 'ambient-provider-key');
     const config = createRuntimeConfigStub(settings);
     const runtime = {
       settingsService: settings,

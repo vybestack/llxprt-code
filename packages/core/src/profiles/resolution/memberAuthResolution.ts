@@ -89,7 +89,9 @@ export function memberCredentialBindings(
   }> = [];
   const warnings: string[] = [];
   for (const name of lb.profiles) {
-    const member = members[name];
+    const member = Object.prototype.hasOwnProperty.call(members, name)
+      ? members[name]
+      : undefined;
     if (member === undefined) {
       perMember.push({ member: name, binding: undefined });
       warnings.push(`member ${name} document unavailable`);

@@ -111,6 +111,17 @@ describe('deriveMemberAuthBinding', () => {
 });
 
 describe('memberCredentialBindings', () => {
+  it.each(['__proto__', 'constructor', 'toString'])(
+    'does not bind inherited member %s',
+    (name) => {
+      expect(memberCredentialBindings(lb([name]), {})).toStrictEqual({
+        bindings: [],
+        perMember: [{ member: name, binding: undefined }],
+        warnings: [`member ${name} document unavailable`],
+      });
+    },
+  );
+
   it('resolves members in lb.profiles order', () => {
     const members = {
       alpha: member({

@@ -8,6 +8,35 @@ import { describe, it, expect } from 'bun:test';
 import { isProfileCommand } from './profileCommands.js';
 
 describe('isProfileCommand', () => {
+  it.each([
+    { kind: 'model', model: 'gpt-4o', member: 7 },
+    { kind: 'model', model: 'gpt-4o', member: null },
+    { kind: 'load', name: 'work', discardUnsaved: 'true' },
+    { kind: 'load', name: 'work', discardUnsaved: null },
+    { kind: 'load', name: 'work', discardUnsaved: 1 },
+    { kind: 'save', name: null },
+    { kind: 'startup', profileName: null },
+    {
+      kind: 'confirm-discard',
+      pending: { token: 't', commandKind: 'unknown', description: 'discard' },
+    },
+  ])('rejects malformed optional fields %j', (payload) => {
+    expect(isProfileCommand({ expectedRevision: 3, ...payload })).toStrictEqual(
+      false,
+    );
+  });
+
+  it.each([true, false])('accepts load discardUnsaved=%s', (discardUnsaved) => {
+    expect(
+      isProfileCommand({
+        kind: 'load',
+        name: 'work',
+        discardUnsaved,
+        expectedRevision: 3,
+      }),
+    ).toStrictEqual(true);
+  });
+
   it.each(['startup', 'setup'])(
     'accepts explicit discard booleans for %s',
     (kind) => {

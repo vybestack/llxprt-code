@@ -22,6 +22,7 @@ const storedKeys = new Map<string, string>();
 
 function createProjectionFixture(
   strategy: LoadBalancingProviderConfig['strategy'],
+  rotateDuringProjection = false,
 ): {
   lb: LoadBalancingProvider;
   member: ResolvedSubProfile;
@@ -49,18 +50,47 @@ function createProjectionFixture(
     getDefaultModel: () => 'test-model',
     projectPromptEnvelope: async (options) => {
       projections.push(options);
-      return undefined;
+      if (!rotateDuringProjection) return undefined;
+      storedKeys.set('member-key', 'rotated-after-projection');
+      return {
+        model: 'test-model',
+        protocol: 'openai-responses',
+        method: 'responses/v1',
+        projectionRevision: 3,
+        unsupportedMedia: [],
+        transportToken: { credential: options.resolved?.authToken },
+        finalizedProjection: Object.freeze({
+          kind: 'llxprt-provider-prompt-v3',
+          protocol: 'openai-responses',
+          promptText: 'test prompt',
+        }),
+        legacyEstimate: async () => 1,
+      };
     },
-    async *generateChatCompletion(): AsyncGenerator<IContent> {
+    async *generateChatCompletion(options): AsyncGenerator<IContent> {
+      if (Array.isArray(options)) throw new Error('expected delegate options');
+      if (rotateDuringProjection) {
+        expect(options.promptEnvelopeTransportToken).toStrictEqual({
+          credential: options.resolved?.authToken,
+        });
+        expect(options.resolved?.authToken).not.toStrictEqual(
+          storedKeys.get('member-key'),
+        );
+      }
       yield { speaker: 'ai', blocks: [{ type: 'text', text: 'done' }] };
     },
   };
   manager.registerProvider(delegate);
   manager.setTokenizerFactory({
     getTokenizer: () => undefined,
-    estimatePrompt: async () => {
-      throw new Error('An unavailable projection uses the fallback estimator');
-    },
+    estimatePrompt: async (request) => ({
+      count: await request.legacyEstimate(),
+      method: 'calibrated',
+      family: 'legacy-unregistered',
+      estimatorVersion: 'test-v1',
+      assetRevision: 'none',
+      projectionRevision: request.projectionRevision,
+    }),
   });
   const member: ResolvedSubProfile = {
     name: 'key-member',
@@ -162,7 +192,23 @@ describe('load balancer projection credentials', () => {
     },
   );
 
-  it('resolves the current member key again for the compressed projection', async () => {
+  it('carries the projection credential through round-robin transport despite rotation', async () => {
+    const { lb, options, projections } = createProjectionFixture(
+      'round-robin',
+      true,
+    );
+    try {
+      storedKeys.set('member-key', 'projection-credential');
+      expect(await consume(lb, options)).toStrictEqual([
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'done' }] },
+      ]);
+      expect(projections.length).toStrictEqual(1);
+    } finally {
+      storedKeys.clear();
+    }
+  });
+
+  it('retains the attempt credential for the compressed projection', async () => {
     const { lb, member, options, projections } =
       createProjectionFixture('round-robin');
     try {
@@ -188,7 +234,7 @@ describe('load balancer projection credentials', () => {
         })),
       ).toStrictEqual([
         { token: 'before-compression', profileId: 'key-member' },
-        { token: 'after-compression', profileId: 'key-member' },
+        { token: 'before-compression', profileId: 'key-member' },
       ]);
       expect(member.authToken).toStrictEqual(undefined);
     } finally {

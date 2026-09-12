@@ -11,7 +11,10 @@ import type {
   EffectiveToolPolicy,
   PolicyCeiling,
 } from '@vybestack/llxprt-code-core';
-import { ActiveProfileRuntime } from '../activeProfileRuntime.js';
+import {
+  ActiveProfileRuntime,
+  ProfileRuntimeDisposedError,
+} from '../activeProfileRuntime.js';
 import {
   configuredState as requireConfigured,
   type ConfiguredProfileState,
@@ -273,6 +276,52 @@ describe('ActiveProfileRuntime', () => {
       status: 'degraded',
       degradedAspects: ['slow'],
     });
+  });
+
+  it('invalidates role operations on reattachment without widening binding ownership', async () => {
+    const runtime = new ActiveProfileRuntime(
+      configuredState,
+      100,
+      permissivePolicy,
+    );
+    const first = deferredBinding();
+    const second = deferredBinding();
+    runtime.attach(first.binding);
+    const role = { name: 'reader', document: configuredState().document };
+    const child = runtime.createRoleRuntime(role);
+    const descendant = child.createRoleRuntime(role);
+    runtime.attach(first.binding);
+    expect(child.getBinding()).toStrictEqual(first.binding);
+    runtime.attach(second.binding);
+    const operations = [
+      () => child.getState(),
+      () => child.getPolicy(),
+      () => child.getFilteredToolDeclarations([]),
+      () => child.getHealth(),
+      () => child.getBinding(),
+      () => child.getBindingId(),
+      () => child.snapshot(),
+      () => child.attach(second.binding),
+      () => child.createRoleRuntime(role),
+      () => child.reportDegradation(['stale']),
+      () => child.reportRecovery(['stale']),
+      () => child.resupplyState(configuredState),
+      () => child.releaseOwnership(),
+      () => child.inheritHealthFrom(runtime),
+      () => child.retainRoleRuntimesFrom(runtime),
+      () => descendant.getBinding(),
+    ];
+    for (const operation of operations)
+      expect(operation).toThrow(ProfileRuntimeDisposedError);
+    await child[Symbol.asyncDispose]();
+    expect(first.disposeCount()).toStrictEqual(0);
+    const fresh = runtime.createRoleRuntime(role);
+    expect(fresh.getBinding()).toStrictEqual(second.binding);
+    const disposing = runtime[Symbol.asyncDispose]();
+    expect(() => fresh.getBinding()).toThrow(ProfileRuntimeDisposedError);
+    expect(second.disposeCount()).toStrictEqual(1);
+    second.release();
+    await disposing;
   });
 
   it('attach rebinds and keeps current health', () => {

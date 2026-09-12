@@ -146,35 +146,20 @@ export class ProfileManager {
     return parsed.value;
   }
 
-  async saveLoadBalancerProfile(name: string, profile: unknown): Promise<void> {
+  async validateLoadBalancerProfile(
+    name: string,
+    profile: unknown,
+  ): Promise<LoadBalancerProfile> {
     const loadBalancerProfile = parseLoadBalancerProfile(name, profile);
+    await this.validateLoadBalancerReferences(name, loadBalancerProfile);
+    return loadBalancerProfile;
+  }
 
-    const availableProfiles = await this.listProfiles();
-
-    for (const referencedProfile of loadBalancerProfile.profiles) {
-      if (!availableProfiles.includes(referencedProfile)) {
-        throw new Error(
-          `LoadBalancer profile '${name}' references non-existent profile '${referencedProfile}'`,
-        );
-      }
-
-      const referencedProfilePath = path.join(
-        this.profilesDir,
-        `${referencedProfile}.json`,
-      );
-      const referencedContent = await fs.readFile(
-        referencedProfilePath,
-        'utf8',
-      );
-      const referencedProfileData: unknown =
-        ProfileManager.parseProfileContent(referencedContent);
-
-      if (referencedProfileIsLoadBalancer(referencedProfileData)) {
-        throw new Error(
-          `LoadBalancer profile '${name}' cannot reference another LoadBalancer profile '${referencedProfile}'`,
-        );
-      }
-    }
+  async saveLoadBalancerProfile(name: string, profile: unknown): Promise<void> {
+    const loadBalancerProfile = await this.validateLoadBalancerProfile(
+      name,
+      profile,
+    );
 
     await fs.mkdir(this.profilesDir, { recursive: true });
 
@@ -199,6 +184,11 @@ export class ProfileManager {
     const availableProfiles = await this.listProfiles();
 
     for (const referencedProfile of loadBalancerProfile.profiles) {
+      if (referencedProfile === profileName) {
+        throw new Error(
+          `LoadBalancer profile '${profileName}' cannot reference itself`,
+        );
+      }
       if (!availableProfiles.includes(referencedProfile)) {
         throw new Error(
           `LoadBalancer profile '${profileName}' references non-existent profile '${referencedProfile}'`,

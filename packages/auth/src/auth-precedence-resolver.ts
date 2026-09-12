@@ -25,6 +25,7 @@ import {
 import { type OAuthToken } from './types.js';
 import type {
   AuthPrecedenceConfig,
+  ResolveAuthOptions,
   OAuthManager,
   OAuthTokenRequestMetadata,
   RuntimeScopedState,
@@ -43,12 +44,7 @@ import {
   storeRuntimeScopedToken,
 } from './precedence.js';
 
-export interface ResolveAuthOptions {
-  settingsService?: ISettingsService | null;
-  includeOAuth?: boolean;
-  runtimeId?: string;
-  profileId?: string;
-}
+export type { ResolveAuthOptions } from './precedence.js';
 
 interface ResolutionFailure {
   readonly kind: CredentialResolutionErrorKind;
@@ -212,7 +208,10 @@ export class AuthPrecedenceResolver {
       proxyContacted: false,
       remediation: undefined,
     };
-    if (!isAuthOnlyEnabled(settingsService.get('authOnly'))) {
+    if (
+      options?.authIntent !== 'oauth' &&
+      !isAuthOnlyEnabled(settingsService.get('authOnly'))
+    ) {
       const nonOAuthAuth = await this.resolveNonOAuthAuthentication(
         settingsService,
         providerKey,

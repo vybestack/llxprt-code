@@ -54,6 +54,13 @@ function snapshotSummary(state: ProfileState): {
   return { revision: state.revision, identityKind, providerOrLbSummary };
 }
 
+export class ProfileRuntimeDisposedError extends Error {
+  constructor() {
+    super('Profile role runtime is no longer valid');
+    this.name = 'ProfileRuntimeDisposedError';
+  }
+}
+
 /**
  * Wrapper that owns a profile runtime binding and its observed health.
  *
@@ -64,6 +71,8 @@ function snapshotSummary(state: ProfileState): {
  * bound stay construction-time facts. Health is mutable and separate from state.
  */
 export class ActiveProfileRuntime {
+  private invalidated = false;
+  private roleRuntimes = new Set<WeakRef<ActiveProfileRuntime>>();
   private stateSupplier: () => ProfileState;
   private readonly disposeTimeoutMs: number;
   private binding: ProfileRuntimeBinding | undefined;
@@ -87,12 +96,14 @@ export class ActiveProfileRuntime {
   }
 
   getPolicy(): Readonly<EffectiveToolPolicy> {
+    this.ensureValid();
     return this.policy;
   }
 
   getFilteredToolDeclarations(
     declarations: ReadonlyArray<{ name: string; description: string }>,
   ): ReadonlyArray<Readonly<{ name: string; description: string }>> {
+    this.ensureValid();
     return Object.freeze(
       declarations
         .filter(
@@ -140,6 +151,7 @@ export class ActiveProfileRuntime {
       this.restrictedAllowlist || rolePolicy?.allowedTools !== undefined;
     child.binding = this.binding;
     child.ownsBinding = false;
+    this.roleRuntimes.add(new WeakRef(child));
     this.roleRuntimeCount += 1;
     return child;
   }
@@ -148,6 +160,7 @@ export class ActiveProfileRuntime {
    * The workspace state the runtime currently describes, read through the supplier.
    */
   getState(): ProfileState {
+    this.ensureValid();
     return this.stateSupplier();
   }
 
@@ -158,11 +171,13 @@ export class ActiveProfileRuntime {
    * behind the committed workspace, even when the runtime object itself was reused.
    */
   resupplyState(currentState: () => ProfileState): void {
+    this.ensureValid();
     this.stateSupplier = currentState;
   }
 
   /** Current health of the bound runtime. */
   getHealth(): ProfileHealth {
+    this.ensureValid();
     return {
       status: this.health.status,
       degradedAspects: [...this.health.degradedAspects],
@@ -171,15 +186,18 @@ export class ActiveProfileRuntime {
 
   /** The bound runtime, if any. */
   getBinding(): ProfileRuntimeBinding | undefined {
+    this.ensureValid();
     return this.binding;
   }
 
   releaseOwnership(): void {
+    this.ensureValid();
     this.ownsBinding = false;
   }
 
   /** Identifier of the bound runtime. */
   getBindingId(): string | undefined {
+    this.ensureValid();
     return this.binding?.bindingId;
   }
 
@@ -191,6 +209,8 @@ export class ActiveProfileRuntime {
    * attaching never resets health to ok.
    */
   attach(binding: ProfileRuntimeBinding): void {
+    this.ensureValid();
+    if (this.binding !== binding) this.invalidateRoleRuntimes();
     this.binding = binding;
   }
 
@@ -202,6 +222,7 @@ export class ActiveProfileRuntime {
    * survive the wrapper swap.
    */
   inheritHealthFrom(prior: ActiveProfileRuntime): void {
+    this.ensureValid();
     this.health = prior.getHealth();
   }
 
@@ -210,6 +231,7 @@ export class ActiveProfileRuntime {
    * and revision are never touched.
    */
   reportDegradation(aspects: readonly string[]): void {
+    this.ensureValid();
     const merged = new Set(this.health.degradedAspects);
     for (const aspect of aspects) {
       merged.add(aspect);
@@ -224,6 +246,7 @@ export class ActiveProfileRuntime {
    * Clear degraded aspects. Health returns to `'ok'` when none remain.
    */
   reportRecovery(aspects: readonly string[]): void {
+    this.ensureValid();
     const remaining = [...this.health.degradedAspects].filter(
       (aspect) => !aspects.includes(aspect),
     );
@@ -244,6 +267,7 @@ export class ActiveProfileRuntime {
     health: ProfileHealth;
     roleRuntimeCount: number;
   } {
+    this.ensureValid();
     const state = this.stateSupplier();
     // The unconfigured workspace has no source to derive from, so it presents as
     // an underived draft; the committed-result contract requires an identity.
@@ -274,12 +298,16 @@ export class ActiveProfileRuntime {
    * degraded aspect and never rethrown.
    */
   async [Symbol.asyncDispose](): Promise<void> {
-    if (this.disposed || !this.ownsBinding || this.binding === undefined) {
-      this.disposed = true;
-      return;
-    }
+    if (this.disposed) return;
     const binding = this.binding;
     this.disposed = true;
+    this.binding = undefined;
+    this.invalidateRoleRuntimes();
+    if (!this.ownsBinding) {
+      this.invalidated = true;
+      return;
+    }
+    if (binding === undefined) return;
     const disposeResult = binding[Symbol.asyncDispose]();
     try {
       await this.boundedRace(disposeResult);
@@ -288,6 +316,32 @@ export class ActiveProfileRuntime {
         `dispose-failed:${error instanceof Error ? error.message : String(error)}`,
       ]);
     }
+  }
+
+  retainRoleRuntimesFrom(prior: ActiveProfileRuntime): void {
+    this.ensureValid();
+    // Keep child invalidation reachable even if the prior wrapper is collected.
+    this.roleRuntimes = prior.roleRuntimes;
+    this.roleRuntimes.add(new WeakRef(prior));
+  }
+
+  private ensureValid(): void {
+    if (this.invalidated) throw new ProfileRuntimeDisposedError();
+  }
+
+  private invalidateRoleRuntimes(): void {
+    const references = [...this.roleRuntimes];
+    this.roleRuntimes.clear();
+    for (const reference of references) {
+      reference.deref()?.invalidate();
+    }
+  }
+
+  private invalidate(): void {
+    this.invalidated = true;
+    this.disposed = true;
+    this.binding = undefined;
+    this.invalidateRoleRuntimes();
   }
 
   private async boundedRace(dispose: PromiseLike<void>): Promise<void> {

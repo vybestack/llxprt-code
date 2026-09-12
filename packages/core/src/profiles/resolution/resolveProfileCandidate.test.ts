@@ -238,7 +238,128 @@ describe('resolveProfileCandidate standard documents', () => {
   });
 });
 
+const memberRepository = (
+  document: StandardProfileDocument,
+): ProfileRepositoryPort => ({
+  load: async () => ({
+    document,
+    fingerprint: { kind: 'hash', hash: 'member' },
+  }),
+  save: async () => ({ kind: 'hash', hash: 'saved' }),
+  list: async () => [],
+  delete: async () => {},
+  stat: async () => null,
+});
+
 describe('resolveProfileCandidate load balancer documents', () => {
+  it.each([
+    { provider: '', model: 'gpt-4o' },
+    { provider: 'openai', model: '' },
+    { provider: '', model: '' },
+  ])(
+    'rejects unconfigured member %j despite a validating catalog',
+    async (fields) => {
+      const result = await resolveProfileCandidate(
+        { document: lb(['blank']), policyIntent: {} },
+        deps({ repository: memberRepository(standard(fields)) }),
+      );
+      expect(result.status).toStrictEqual('invalid');
+      expect(result.errors).toStrictEqual([
+        'member blank must configure a provider and model',
+      ]);
+      expect(result.resolved.credentialBindings).toStrictEqual([]);
+      expect(Object.keys(result.memberCaptures ?? {})).toStrictEqual([]);
+    },
+  );
+
+  it('rejects a load balancer without members', async () => {
+    const result = await resolveProfileCandidate(
+      { document: lb([]), policyIntent: {} },
+      deps(),
+    );
+    expect(result.status).toStrictEqual('invalid');
+    expect(result.errors).toStrictEqual([
+      'load balancer must include at least one member',
+    ]);
+    expect(result.resolved.credentialBindings).toStrictEqual([]);
+  });
+
+  it.each(['__proto__', 'constructor', 'toString'])(
+    'resolves own member %s without prototype pollution',
+    async (name) => {
+      const member = standard();
+      const result = await resolveProfileCandidate(
+        { document: lb([name]), policyIntent: {} },
+        deps({ repository: memberRepository(member) }),
+      );
+      expect(result.status).toStrictEqual('valid');
+      expect(result.errors).toStrictEqual([]);
+      expect(Object.keys(result.resolved.memberDocuments ?? {})).toStrictEqual([
+        name,
+      ]);
+      expect(Object.keys(result.memberCaptures ?? {})).toStrictEqual([name]);
+      expect(result.resolved.memberDocuments?.[name]).toStrictEqual(member);
+      expect(result.memberCaptures?.[name]).toStrictEqual({
+        revision: 0,
+        provider: 'openai',
+        sourceDocument: member,
+        models: [],
+      });
+      expect(result.resolved.credentialBindings).toStrictEqual([
+        { kind: 'provider-default', provider: 'openai' },
+      ]);
+      expect(
+        Object.getPrototypeOf(result.resolved.memberDocuments),
+      ).toStrictEqual(null);
+      expect(Object.getPrototypeOf(result.memberCaptures)).toStrictEqual(null);
+    },
+  );
+
+  it.each(['__proto__', 'constructor', 'toString'])(
+    'rejects unavailable member %s without reading inherited properties',
+    async (name) => {
+      const result = await resolveProfileCandidate(
+        { document: lb([name]), policyIntent: {} },
+        deps(),
+      );
+      expect(result.status).toStrictEqual('invalid');
+      expect(result.errors).toStrictEqual([
+        `member ${name} could not be loaded`,
+      ]);
+      expect(result.resolved.credentialBindings).toStrictEqual([]);
+    },
+  );
+
+  it.each(['standard', 'loadbalancer'])(
+    'reports rejected model support as unverified for %s',
+    async (kind) => {
+      const rejectingCatalog: ProviderModelCatalogPort = {
+        ...catalog(
+          () => ({ status: 'valid' }),
+          () => [],
+        ),
+        validateModelSupport: async () => {
+          throw new Error('catalog offline');
+        },
+      };
+      const result = await resolveProfileCandidate(
+        {
+          document: kind === 'standard' ? standard() : lb(['alpha']),
+          policyIntent: {},
+        },
+        deps({
+          catalog: rejectingCatalog,
+          repository: memberRepository(standard()),
+        }),
+      );
+      expect(result.status).toStrictEqual('unverified');
+      expect(result.errors).toStrictEqual([]);
+      expect(result.unverifiedConstraints).toStrictEqual([
+        'model support unavailable for provider openai',
+      ]);
+    },
+  );
+
   it('resolves members with distinct per-member bindings and unmutated document', async () => {
     const document = lb(['alpha', 'beta']);
     const alpha = standard({

@@ -69,7 +69,14 @@ function buildDelegateResolvedOptions(
   ctx: OptionsBuildContext,
 ): GenerateChatOptions {
   if (isResolvedSubProfile(subProfile)) {
-    return buildResolvedSubProfileOptions(subProfile, options, ctx);
+    const memberOptions =
+      subProfile.auth === undefined
+        ? options
+        : {
+            ...options,
+            metadata: { ...options.metadata, authIntent: subProfile.auth.type },
+          };
+    return buildResolvedSubProfileOptions(subProfile, memberOptions, ctx);
   }
 
   // LoadBalancerSubProfile (legacy path)

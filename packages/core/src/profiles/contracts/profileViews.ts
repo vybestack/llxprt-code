@@ -45,7 +45,7 @@ export function redactSecrets(message: string): string {
   for (const key of SECRET_SETTING_KEYS) {
     const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     redacted = redacted.replace(
-      new RegExp(`("${escaped}")\\s*:\\s*"[^"]*"`, 'gi'),
+      new RegExp(`("${escaped}")\\s*:\\s*"(?:\\\\.|[^"\\\\])*"`, 'gi'),
       '$1: "[redacted]"',
     );
     redacted = redacted.replace(
@@ -100,6 +100,92 @@ export interface RedactedProfileSnapshot {
   providerOrLbSummary?: string | null;
   health?: ProfileHealth;
   roleRuntimeCount?: number;
+}
+
+function isNamedSource(value: unknown): boolean {
+  if (!isPlainRecord(value) || typeof value['name'] !== 'string') {
+    return false;
+  }
+  const source = value['source'];
+  if (!isPlainRecord(source)) {
+    return false;
+  }
+  if (source['kind'] === 'hash') {
+    return typeof source['hash'] === 'string';
+  }
+  return (
+    source['kind'] === 'stat' &&
+    typeof source['mtimeMs'] === 'number' &&
+    typeof source['size'] === 'number'
+  );
+}
+
+function isWorkingProfileIdentity(
+  value: unknown,
+): value is WorkingProfileIdentity {
+  if (!isPlainRecord(value)) {
+    return false;
+  }
+  if (value['kind'] === 'saved') {
+    return isNamedSource(value);
+  }
+  return (
+    value['kind'] === 'draft' &&
+    (value['derivedFrom'] === undefined || isNamedSource(value['derivedFrom']))
+  );
+}
+
+function isProfileHealth(value: unknown): value is ProfileHealth {
+  if (!isPlainRecord(value)) {
+    return false;
+  }
+  const status = value['status'];
+  if (status !== 'ok' && status !== 'degraded' && status !== 'failed') {
+    return false;
+  }
+  return (
+    Array.isArray(value['degradedAspects']) &&
+    value['degradedAspects'].every(
+      (aspect: unknown) => typeof aspect === 'string',
+    )
+  );
+}
+
+export function isRedactedProfileSnapshot(
+  value: unknown,
+): value is RedactedProfileSnapshot {
+  if (!isPlainRecord(value)) {
+    return false;
+  }
+  if (
+    !isWorkingProfileIdentity(value['identity']) ||
+    typeof value['isLoadBalancer'] !== 'boolean'
+  ) {
+    return false;
+  }
+  if (
+    typeof value['revision'] !== 'number' ||
+    typeof value['provider'] !== 'string' ||
+    typeof value['model'] !== 'string'
+  ) {
+    return false;
+  }
+  if (
+    !['memberCount', 'roleRuntimeCount'].every(
+      (key) => value[key] === undefined || typeof value[key] === 'number',
+    )
+  ) {
+    return false;
+  }
+  return (
+    ['identityKind', 'providerOrLbSummary'].every(
+      (key) =>
+        value[key] === undefined ||
+        value[key] === null ||
+        typeof value[key] === 'string',
+    ) &&
+    (value['health'] === undefined || isProfileHealth(value['health']))
+  );
 }
 
 /**

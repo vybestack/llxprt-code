@@ -69,12 +69,17 @@ function isString(value: unknown): value is string {
 }
 
 const COMMAND_VALIDATORS = {
-  model: (value): boolean => isString(value['model']),
+  model: (value): boolean =>
+    isString(value['model']) &&
+    (value['member'] === undefined || isString(value['member'])),
   provider: (value): boolean =>
     isString(value['provider']) &&
     (value['discardUnsaved'] === undefined ||
       typeof value['discardUnsaved'] === 'boolean'),
-  load: (value): boolean => isString(value['name']),
+  load: (value): boolean =>
+    isString(value['name']) &&
+    (value['discardUnsaved'] === undefined ||
+      typeof value['discardUnsaved'] === 'boolean'),
   setup: (value): boolean =>
     value['discardUnsaved'] === undefined ||
     typeof value['discardUnsaved'] === 'boolean',
@@ -101,14 +106,18 @@ const COMMAND_VALIDATORS = {
   (value: Record<string, unknown>) => boolean
 >;
 
-function isProfileCommandKind(value: unknown): value is ProfileCommandKind {
+export function isProfileCommandKind(
+  value: unknown,
+): value is ProfileCommandKind {
   return (
     isString(value) &&
     Object.prototype.hasOwnProperty.call(COMMAND_VALIDATORS, value)
   );
 }
 
-function isPendingConfirmation(value: unknown): value is PendingConfirmation {
+export function isPendingConfirmation(
+  value: unknown,
+): value is PendingConfirmation {
   if (!isRecord(value)) {
     return false;
   }

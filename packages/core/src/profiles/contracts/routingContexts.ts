@@ -17,47 +17,47 @@
  * Policy surface captured at a routing decision point.
  */
 export type ToolPolicySnapshot = {
-  allowedTools: readonly string[];
-  disabledTools: readonly string[];
-  shellMode: 'allowlist' | 'all' | 'none';
-  approvalCeiling: 'yolo' | 'standard' | 'strict';
+  readonly allowedTools: readonly string[];
+  readonly disabledTools: readonly string[];
+  readonly shellMode: 'allowlist' | 'all' | 'none';
+  readonly approvalCeiling: 'yolo' | 'standard' | 'strict';
 };
 
 /**
  * Identity of the agent a turn is routed to.
  */
 export type AgentRoutingTarget = {
-  agentId: string;
-  parentAgentId?: string;
+  readonly agentId: string;
+  readonly parentAgentId?: string;
 };
 
 /**
  * Identity of a single agent turn.
  */
 export type TurnContext = {
-  target: AgentRoutingTarget;
-  profileRevision: number;
-  startedAt: number;
+  readonly target: AgentRoutingTarget;
+  readonly profileRevision: number;
+  readonly startedAt: number;
 };
 
 /**
  * Routing identity for a single provider call within a turn.
  */
 export type ProviderCallContext = {
-  turn: TurnContext;
-  providerName: string;
-  model: string;
-  capturedPolicy: ToolPolicySnapshot;
+  readonly turn: TurnContext;
+  readonly providerName: string;
+  readonly model: string;
+  readonly capturedPolicy: ToolPolicySnapshot;
 };
 
 /**
  * Routing identity for a single tool invocation within a turn.
  */
 export type ToolInvocationContext = {
-  turn: TurnContext;
-  toolId: string;
-  capturedPolicy: ToolPolicySnapshot;
-  background: boolean;
+  readonly turn: TurnContext;
+  readonly toolId: string;
+  readonly capturedPolicy: ToolPolicySnapshot;
+  readonly background: boolean;
 };
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -88,7 +88,7 @@ export function createTurnContext(
   profileRevision: number,
   startedAt: number,
 ): TurnContext {
-  return deepFreeze({ target, profileRevision, startedAt });
+  return deepFreeze(structuredClone({ target, profileRevision, startedAt }));
 }
 
 /**
@@ -100,7 +100,9 @@ export function createProviderCallContext(
   model: string,
   capturedPolicy: ToolPolicySnapshot,
 ): ProviderCallContext {
-  return deepFreeze({ turn, providerName, model, capturedPolicy });
+  return deepFreeze(
+    structuredClone({ turn, providerName, model, capturedPolicy }),
+  );
 }
 
 /**
@@ -112,5 +114,7 @@ export function createToolInvocationContext(
   capturedPolicy: ToolPolicySnapshot,
   background: boolean,
 ): ToolInvocationContext {
-  return deepFreeze({ turn, toolId, capturedPolicy, background });
+  return deepFreeze(
+    structuredClone({ turn, toolId, capturedPolicy, background }),
+  );
 }

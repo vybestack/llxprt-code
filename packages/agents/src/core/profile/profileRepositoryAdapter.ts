@@ -207,6 +207,9 @@ export class ProfileManagerProfileRepository implements ProfileRepositoryPort {
   ): Promise<SourceFingerprint> {
     this.validateName(name);
     const profile = toSettingsProfile(document);
+    if (profile.type === 'loadbalancer') {
+      await this.profileManager.validateLoadBalancerProfile(name, profile);
+    }
     if (opts?.mustCreate === true) {
       const created = await writeProfileFile(
         this.profilesDir,

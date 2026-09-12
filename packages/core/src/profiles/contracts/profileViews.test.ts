@@ -73,6 +73,19 @@ describe('SECRET_SETTING_KEYS', () => {
 });
 
 describe('redactSecrets', () => {
+  it.each([...SECRET_SETTING_KEYS])(
+    'fully masks escaped JSON credentials for %s',
+    (key) => {
+      const message = JSON.stringify({
+        [key]: String.raw`prefix"credential-tail\secret-tail`,
+        model: 'gpt-4o',
+      });
+      expect(redactSecrets(message)).toStrictEqual(
+        `{"${key}": "[redacted]","model":"gpt-4o"}`,
+      );
+    },
+  );
+
   it('masks a key-value fragment', () => {
     expect(redactSecrets('build failed with auth-key: sk-123 in env')).toBe(
       'build failed with auth-key: [redacted]',

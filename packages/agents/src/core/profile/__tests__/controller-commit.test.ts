@@ -7,6 +7,7 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 import { commitCandidate } from '../controllerCommit.js';
 import { ProfileController } from '../profileController.js';
+import { ProfileRuntimeDisposedError } from '../activeProfileRuntime.js';
 import {
   FakeBinding,
   makeDeps,
@@ -16,6 +17,61 @@ import {
 } from './controllerTestFakes.js';
 
 describe('profile commit ownership', () => {
+  it.each([false, true])(
+    'invalidates retained roles on binding replacement after reuse=%s',
+    async (reuse) => {
+      const harness = makeDeps();
+      harness.repo.seed('first');
+      harness.repo.seed('second', standardProvADocument('m2'));
+      const controller = new ProfileController(harness.deps);
+      await releaseAndAwait(
+        harness,
+        controller.execute({
+          kind: 'startup',
+          profileName: 'first',
+          expectedRevision: 0,
+        }),
+      );
+      const prior = controller.getRuntime();
+      if (prior === undefined) throw new Error('expected runtime');
+      const binding = prior.getBinding();
+      if (!(binding instanceof FakeBinding))
+        throw new Error('expected binding');
+      const roleRef = { name: 'reader', document: standardProvADocument('m1') };
+      const child = prior.createRoleRuntime(roleRef);
+      if (reuse) {
+        await releaseAndAwait(
+          harness,
+          controller.execute({
+            kind: 'load',
+            name: 'first',
+            expectedRevision: 1,
+          }),
+        );
+      }
+      expect(child.getBinding()).toStrictEqual(binding);
+      const result = await releaseAndAwait(
+        harness,
+        controller.execute({
+          kind: 'load',
+          name: 'second',
+          expectedRevision: reuse ? 2 : 1,
+        }),
+      );
+      expect(result.kind).toStrictEqual('committed');
+      expect(binding.disposeCount).toStrictEqual(1);
+      expect(() => child.getBinding()).toThrow(ProfileRuntimeDisposedError);
+      expect(() => child.getState()).toThrow(ProfileRuntimeDisposedError);
+      const current = controller.getRuntime();
+      if (current === undefined) throw new Error('expected replacement');
+      const fresh = current.createRoleRuntime(roleRef);
+      expect(fresh.getBinding()).toStrictEqual(current.getBinding());
+      expect(fresh.getBindingId()).not.toStrictEqual(binding.bindingId);
+      await controller.dispose();
+      expect(() => fresh.getBinding()).toThrow(ProfileRuntimeDisposedError);
+    },
+  );
+
   it('preserves the cancelled outcome when candidate disposal throws synchronously', async () => {
     const harness = makeDeps();
     const abort = new AbortController();

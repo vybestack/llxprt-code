@@ -112,6 +112,10 @@ function enforceLoaded(
     return null;
   }
   if (isStandardProfileDocument(document)) {
+    if (document.provider === '' || document.model === '') {
+      errors.push(`member ${name} must configure a provider and model`);
+      return null;
+    }
     return document;
   }
   errors.push(`member ${name} must be a standard profile`);
@@ -132,7 +136,7 @@ async function resolveMembers(
   deps: ResolveProfileCandidateDeps,
   errors: string[],
 ): Promise<Readonly<Record<string, StandardProfileDocument>>> {
-  const members: Record<string, StandardProfileDocument> = {};
+  const members: Record<string, StandardProfileDocument> = Object.create(null);
   for (const name of document.profiles) {
     const loaded = await rawMember(name, deps.repository, errors);
     if (loaded !== null) {
@@ -168,7 +172,7 @@ async function captureMembers(
   catalog: ProviderModelCatalogPort,
   unverified: string[],
 ): Promise<Readonly<Record<string, CapturedStandardSource>>> {
-  const captures: Record<string, CapturedStandardSource> = {};
+  const captures: Record<string, CapturedStandardSource> = Object.create(null);
   const menus = new Map<string, readonly string[]>();
   const memberEntries = Object.entries(members);
   for (const entry of memberEntries) {
@@ -206,6 +210,36 @@ function flagModelSupport(
   }
 }
 
+async function flagDocumentModel(
+  document: StandardProfileDocument,
+  catalog: ProviderModelCatalogPort,
+  errors: string[],
+  unverified: string[],
+): Promise<void> {
+  let support: Awaited<
+    ReturnType<ProviderModelCatalogPort['validateModelSupport']>
+  >;
+  try {
+    support = await catalog.validateModelSupport(
+      document.provider,
+      document.model,
+      document.modelParams,
+    );
+  } catch {
+    unverified.push(
+      `model support unavailable for provider ${document.provider}`,
+    );
+    return;
+  }
+  flagModelSupport(
+    support,
+    document.model,
+    document.provider,
+    errors,
+    unverified,
+  );
+}
+
 async function flagMemberModels(
   document: LoadBalancerProfileDocument,
   members: Readonly<Record<string, StandardProfileDocument>>,
@@ -215,18 +249,7 @@ async function flagMemberModels(
 ): Promise<void> {
   const memberEntries = Object.entries(members);
   for (const entry of memberEntries) {
-    const support = await catalog.validateModelSupport(
-      entry[1].provider,
-      entry[1].model,
-      entry[1].modelParams,
-    );
-    flagModelSupport(
-      support,
-      entry[1].model,
-      entry[1].provider,
-      errors,
-      unverified,
-    );
+    await flagDocumentModel(entry[1], catalog, errors, unverified);
   }
 }
 
@@ -276,6 +299,9 @@ async function resolveLoadBalancerSpec(
   const warnings: string[] = [];
   const unverified: string[] = [];
   const requestedVsEffective: PolicyExplanation[] = [];
+  if (loadable.profiles.length === 0) {
+    errors.push('load balancer must include at least one member');
+  }
   const members = await resolveMembers(loadable, deps, errors);
   const bindingsOutcome = memberCredentialBindings(loadable, members);
   warnings.push(...bindingsOutcome.warnings);
@@ -371,18 +397,7 @@ async function resolveStandardDocument(
   const bindingsOutcome = deriveCredentialBindings(standardDocument);
   warnings.push(...bindingsOutcome.warnings);
   bindings = bindingsOutcome.bindings;
-  const support = await deps.catalog.validateModelSupport(
-    standardDocument.provider,
-    standardDocument.model,
-    standardDocument.modelParams,
-  );
-  flagModelSupport(
-    support,
-    standardDocument.model,
-    standardDocument.provider,
-    errors,
-    unverified,
-  );
+  await flagDocumentModel(standardDocument, deps.catalog, errors, unverified);
   return {
     status: resultStatus(errors, unverified),
     resolved: {

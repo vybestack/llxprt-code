@@ -89,6 +89,88 @@ describe('ProfileManagerProfileRepository', () => {
     tempDirs.length = 0;
   });
 
+  describe.each(['overwrite', 'create', 'expected'])(
+    'load-balancer %s validation',
+    (mode) => {
+      async function prepare(): Promise<SourceFingerprint | undefined> {
+        await setupRepository();
+        await repository.save('member-a', standardDocument());
+        await repository.save('member-b', standardDocument());
+        return mode === 'expected'
+          ? repository.save('lb', loadBalancerDocument())
+          : undefined;
+      }
+
+      it.each(['unknown', 'nested', 'self'])(
+        'rejects %s references before writing',
+        async (reference) => {
+          const expected = await prepare();
+          await repository.save('nested', loadBalancerDocument());
+          const profiles = reference === 'self' ? ['lb'] : [reference];
+          await expect(
+            repository.save(
+              'lb',
+              { ...loadBalancerDocument(), profiles },
+              expected,
+              { mustCreate: mode === 'create' },
+            ),
+          ).rejects.toThrow(/LoadBalancer profile/);
+          expect(await repository.stat('lb')).toStrictEqual(expected ?? null);
+        },
+      );
+
+      it('saves valid members', async () => {
+        const expected = await prepare();
+        const document = { ...loadBalancerDocument(), contextLimit: 64000 };
+        await repository.save('lb', document, expected, {
+          mustCreate: mode === 'create',
+        });
+        expect((await repository.load('lb')).document).toStrictEqual(document);
+      });
+    },
+  );
+
+  it.each([false, true])(
+    'rejects self-reference when replacing a standard profile with expected=%s',
+    async (anchored) => {
+      await setupRepository();
+      const expected = await repository.save('self', standardDocument());
+      await expect(
+        repository.save(
+          'self',
+          { ...loadBalancerDocument(), profiles: ['self'] },
+          anchored ? expected : undefined,
+        ),
+      ).rejects.toThrow(/cannot reference itself/);
+      expect(await repository.stat('self')).toStrictEqual(expected);
+    },
+  );
+
+  it('preserves load-balancer create conflicts and optimistic concurrency', async () => {
+    await setupRepository();
+    await repository.save('member-a', standardDocument());
+    await repository.save('member-b', standardDocument());
+    const document = loadBalancerDocument();
+    const expected = await repository.save('lb', document, undefined, {
+      mustCreate: true,
+    });
+    await expect(
+      repository.save('lb', document, undefined, { mustCreate: true }),
+    ).rejects.toBeInstanceOf(ProfileRepositoryConflictError);
+    await repository.save(
+      'lb',
+      { ...document, profiles: ['member-a'] },
+      expected,
+    );
+    await expect(
+      repository.save('lb', document, expected),
+    ).rejects.toBeInstanceOf(ProfileRepositoryConflictError);
+    expect((await repository.load('lb')).document).toStrictEqual({
+      ...document,
+      profiles: ['member-a'],
+    });
+  });
+
   it('checks the overwrite anchor after acquiring a contended profiles lock', async () => {
     await setupRepository();
     const expected = await repository.save('contended', standardDocument());

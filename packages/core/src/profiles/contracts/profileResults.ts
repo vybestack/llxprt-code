@@ -8,7 +8,14 @@ import type {
   PendingConfirmation,
   ProfileCommandKind,
 } from './profileCommands.js';
-import type { RedactedProfileSnapshot } from './profileViews.js';
+import {
+  isPendingConfirmation,
+  isProfileCommandKind,
+} from './profileCommands.js';
+import {
+  isRedactedProfileSnapshot,
+  type RedactedProfileSnapshot,
+} from './profileViews.js';
 
 /**
  * Result of running a profile command.
@@ -39,20 +46,27 @@ export type ProfileCommandResult =
   | { kind: 'unverified'; revision: number; constraints: readonly string[] }
   | { kind: 'failed'; revision: number; error: string };
 
+function isNonEmptyStringArray(value: unknown): value is readonly string[] {
+  return (
+    Array.isArray(value) &&
+    value.every((entry: unknown) => isString(entry) && entry.trim().length > 0)
+  );
+}
+
 const RESULT_VALIDATORS = {
-  committed: (value): boolean =>
-    value['snapshot'] !== undefined && value['snapshot'] !== null,
-  'no-op': (): boolean => true,
+  committed: (value): boolean => isRedactedProfileSnapshot(value['snapshot']),
+  'no-op': (value): boolean => isString(value['reason']),
   queued: (value): boolean => typeof value['baseRevision'] === 'number',
-  'confirmation-required': (value): boolean => isRecord(value['pending']),
-  cancelled: (): boolean => true,
-  busy: (value): boolean => isString(value['activeCommandKind']),
+  'confirmation-required': (value): boolean =>
+    isPendingConfirmation(value['pending']),
+  cancelled: (value): boolean => isString(value['reason']),
+  busy: (value): boolean => isProfileCommandKind(value['activeCommandKind']),
   stale: (value): boolean =>
     typeof value['expectedRevision'] === 'number' &&
     typeof value['currentRevision'] === 'number',
   conflict: (value): boolean => isString(value['cause']),
-  invalid: (value): boolean => Array.isArray(value['errors']),
-  unverified: (value): boolean => Array.isArray(value['constraints']),
+  invalid: (value): boolean => isNonEmptyStringArray(value['errors']),
+  unverified: (value): boolean => isNonEmptyStringArray(value['constraints']),
   failed: (value): boolean => isString(value['error']),
 } satisfies Record<
   ProfileCommandResult['kind'],

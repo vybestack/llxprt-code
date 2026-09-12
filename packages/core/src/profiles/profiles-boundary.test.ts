@@ -97,7 +97,8 @@ function collectTsFiles(dir: string): string[] {
  */
 function extractImportSpecifiers(content: string): string[] {
   const specifiers: string[] = [];
-  const statements = /\b(?:from|import)\s+['"]([^'"]+)['"]/g;
+  const statements =
+    /\b(?:(?:from|import)\s+|import\s*\(\s*|import\s+(?:type\s+)?[$\w]+\s*=\s*require\s*\(\s*)['"]([^'"]+)['"]/g;
   for (const match of content.matchAll(statements)) {
     specifiers.push(match[1]);
   }
@@ -134,6 +135,19 @@ function isNodeSpecifier(specifier: string): boolean {
 
 describe('Import boundary scanner', () => {
   for (const forbidden of FORBIDDEN_IMPORT_PACKAGES) {
+    it(`flags dynamic imports and import-equals from ${forbidden}`, () => {
+      const source = `const module = import(
+  '${forbidden}'
+);
+import Provider = require ( "${forbidden}" );
+import type Settings = require('${forbidden}');`;
+      expect(extractImportSpecifiers(source)).toStrictEqual([
+        forbidden,
+        forbidden,
+        forbidden,
+      ]);
+    });
+
     it(`flags multiline imports from ${forbidden}`, () => {
       const source = `import {
   ForbiddenSymbol,
