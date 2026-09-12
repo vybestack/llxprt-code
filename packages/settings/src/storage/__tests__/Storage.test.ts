@@ -57,8 +57,10 @@ describe('Storage — static path methods', () => {
     delete process.env['LLXPRT_DATA_HOME'];
     delete process.env['LLXPRT_CACHE_HOME'];
     delete process.env['LLXPRT_LOG_HOME'];
-    // The unset-fallback legacy-dir case below must hold even when a
-    // storage-isolation preload has set the legacy-home test override.
+    // This block asserts production-path resolution with the isolation marker
+    // cleared and the real-storage opt-in set. Legacy-home cases set their own
+    // environment per test.
+    delete process.env.LLXPRT_TEST_STORAGE_ISOLATED;
     delete process.env['LLXPRT_TEST_LEGACY_HOME'];
     // The platform default IS the subject of this block, so it opts out of the
     // guard that otherwise refuses to resolve an unredirected root in a test
@@ -156,6 +158,14 @@ describe('Storage — static path methods', () => {
     process.env.LLXPRT_TEST_STORAGE_ISOLATED = '1';
     process.env['LLXPRT_TEST_LEGACY_HOME'] = legacyHome;
     expect(Storage.getLegacyLlxprtDir()).toBe(path.join(legacyHome, '.llxprt'));
+  });
+
+  it('getLegacyLlxprtDir fails closed when the isolation marker is set without a legacy home', () => {
+    process.env.LLXPRT_TEST_STORAGE_ISOLATED = '1';
+    delete process.env.LLXPRT_TEST_LEGACY_HOME;
+    expect(() => Storage.getLegacyLlxprtDir()).toThrow(
+      'LLXPRT_TEST_LEGACY_HOME must be set to an absolute path when test storage isolation is active',
+    );
   });
 
   it('getGlobalSettingsPath ends with settings.json', () => {
