@@ -219,7 +219,7 @@ describe('Issue #3567: CodeQL security-and-quality suite plus mechanism query pa
         expect(idCount).toBe(1);
         expect(content.includes(`@id ${expectedId}`)).toBe(true);
         expect(content.includes('@kind problem')).toBe(true);
-        expect(/@problem\.severity\s+\S+/.test(content)).toBe(true);
+        expect(content.includes('@problem.severity warning')).toBe(true);
         expect(content.includes('import javascript')).toBe(true);
       }
     });
