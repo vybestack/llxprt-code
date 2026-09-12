@@ -308,6 +308,54 @@ function configuredImageProfile(
 
 describe('image backend auth validation', () => {
   it.each([
+    {
+      backend: 'codex',
+      auth: { type: 'none' },
+      baseUrl: CODEX_BASE_URL,
+      errorName: 'ImageBackendAuthModeError',
+    },
+    {
+      backend: 'openai-images',
+      auth: { type: 'none' },
+      baseUrl: 'invalid-url',
+      errorName: 'ImageBackendBaseUrlError',
+    },
+  ] as const)(
+    'names the active profile in $errorName',
+    ({ errorName, ...overrides }) => {
+      const resolve = createCodexImageBackendResolver({
+        oauthManager: undefined,
+        getActiveProvider: () => undefined,
+        getActiveImageProfile: () => configuredImageProfile(overrides),
+        getActiveImageProfileName: () => 'offending-art',
+      });
+      expect(resolve).toThrow(
+        expect.objectContaining({
+          name: errorName,
+          profileName: 'offending-art',
+          message: expect.stringContaining('offending-art'),
+        }),
+      );
+    },
+  );
+
+  it('chains the URL parser failure for an invalid remote base URL', () => {
+    expect(() =>
+      validateImageProfileAuth(
+        configuredImageProfile({
+          backend: 'openai-images',
+          baseUrl: 'not-a-url',
+        }),
+        'broken',
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        name: 'ImageBackendBaseUrlError',
+        cause: expect.any(TypeError),
+      }),
+    );
+  });
+  it.each([
     'https://images.example/v1',
     'https://chatgpt.com.evil/backend-api/codex',
     'https://evil/chatgpt.com/backend-api/codex',

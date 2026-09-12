@@ -83,8 +83,8 @@ function resolveAuthContext(
 
   try {
     if (isLocalImageEndpoint(profile.baseUrl)) return 'local';
-  } catch {
-    throw new ImageBackendBaseUrlError(profileName, profile.baseUrl);
+  } catch (cause) {
+    throw new ImageBackendBaseUrlError(profileName, profile.baseUrl, { cause });
   }
   return 'openai';
 }
@@ -140,6 +140,7 @@ export interface CodexImageBackendResolverDeps {
   readonly oauthManager: OAuthManager | undefined;
   readonly getActiveProvider: () => IProvider | undefined;
   readonly getActiveImageProfile?: () => ImageProfile | undefined;
+  readonly getActiveImageProfileName?: () => string | undefined;
   readonly fetchImpl?: typeof fetch;
 }
 
@@ -172,7 +173,10 @@ export function createCodexImageBackendResolver(
     const profileConfig =
       imageProfile === undefined
         ? undefined
-        : resolveImageProfileBackendConfig(imageProfile);
+        : resolveImageProfileBackendConfig(
+            imageProfile,
+            deps.getActiveImageProfileName?.(),
+          );
     if (profileConfig?.backend === 'openai-images') {
       const getImageApiKey = deps.getImageApiKey;
       return new OpenAIImagesBackend({
@@ -199,6 +203,7 @@ export function createCodexImageBackendResolver(
     const getCredential = (): Promise<CodexImageCredential> =>
       resolveCodexImageCredential(oauthManager);
     const backendDeps: CodexImageBackendDeps = {
+      mode: profileConfig === undefined ? 'legacy' : 'profile',
       getCredential,
       getBaseUrl: () => baseUrl,
       ...(profileConfig === undefined

@@ -113,7 +113,8 @@ export function imageResponseError(
 
 const MAX_DOWNLOAD_BYTES = 15 * 1024 * 1024;
 
-async function boundedBody(response: Response): Promise<Buffer> {
+/** Read an image response body without exceeding the transport byte limit. */
+export async function boundedBody(response: Response): Promise<Buffer> {
   if (Number(response.headers.get('content-length')) > MAX_DOWNLOAD_BYTES) {
     await response.body?.cancel();
     throw new ImageBackendError(

@@ -315,6 +315,46 @@ describe('runDirectImageModeAndExit', () => {
     expect(code).toBeNull();
   });
 
+  it.each(['model', 'malformed'] as const)(
+    'reports a %s direct profile as an input error',
+    async (kind) => {
+      const profiles = path.join(workspaceRoot, 'profiles');
+      const manager = new ProfileManager(profiles);
+      await manager.saveProfile('wrong', {
+        version: 1,
+        provider: 'openai',
+        model: 'chat',
+        modelParams: {},
+        ephemeralSettings: {},
+      });
+      if (kind === 'malformed')
+        await fs.promises.writeFile(
+          path.join(profiles, 'wrong.json'),
+          'invalid json',
+        );
+      const state = createImageProfileRuntimeState();
+      const resolveBackend = createImageProfileOperationResolver(
+        manager,
+        state,
+        { oauthManager: undefined, getActiveProvider: () => undefined },
+      );
+      const code = await runDirectImageModeAndExit(
+        makeArgs({
+          imageProfile: 'wrong',
+          imageOutput: 'cat.png',
+          imagePrompt: 'cat',
+        }),
+        {
+          getRunImageOperation: () => (input) =>
+            runImageOperation(input, { workspaceRoot, resolveBackend }),
+        },
+      );
+      expect(code).toBe(ExitCodes.FATAL_INPUT_ERROR);
+      expect(stderrChunks.join('')).toContain('wrong');
+      expect(fs.existsSync(path.join(workspaceRoot, 'cat.png'))).toBe(false);
+    },
+  );
+
   it('reports a dangling direct profile as an input error naming the profile', async () => {
     const manager = new ProfileManager(path.join(workspaceRoot, 'profiles'));
     const state = createImageProfileRuntimeState();

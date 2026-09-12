@@ -43,13 +43,15 @@ export function createImageProfileOperationResolver(
   deps: Omit<CodexImageBackendResolverDeps, 'getActiveImageProfile'>,
 ): ImageOperationBackendResolver {
   return async (name) => {
+    const active = state.getActive();
     const profile =
       name === undefined
-        ? state.getActive()?.profile
+        ? active?.profile
         : await manager.loadImageProfile(name);
     return createCodexImageBackendResolver({
       ...deps,
       getActiveImageProfile: () => profile,
+      getActiveImageProfileName: () => name ?? active?.name,
     })();
   };
 }

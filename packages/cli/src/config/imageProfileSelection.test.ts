@@ -280,6 +280,31 @@ describe('image profile surface selection', () => {
     expect(first.getActive()?.name).toBe('first');
   });
 
+  it.each(['active', 'override'] as const)(
+    'names the offending %s profile when backend auth is invalid',
+    async (surface) => {
+      const state = createImageProfileRuntimeState();
+      const invalid: ImageProfile = {
+        ...localProfile,
+        auth: { type: 'named-key', keyName: 'remote-key' },
+      };
+      state.select({ name: 'active-art', profile: invalid });
+      await manager.saveImageProfile('override-art', invalid);
+      const resolve = createImageProfileOperationResolver(manager, state, {
+        oauthManager: undefined,
+        getActiveProvider: () => undefined,
+      });
+      await expect(
+        resolve(surface === 'override' ? 'override-art' : undefined),
+      ).rejects.toMatchObject({
+        name: 'ImageBackendAuthModeError',
+        profileName: `${surface}-art`,
+        message: expect.stringContaining(`${surface}-art`),
+      });
+      expect(state.getActive()?.name).toBe('active-art');
+    },
+  );
+
   it('rejects a dangling operation override instead of falling back to the active profile', async () => {
     const state = createImageProfileRuntimeState();
     state.select({ name: 'local', profile: localProfile });

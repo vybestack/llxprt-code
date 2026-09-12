@@ -74,6 +74,22 @@ describe('image credential resolution', () => {
     },
   );
 
+  it.each(['', String.fromCharCode(10), String.fromCharCode(13, 10)])(
+    'rejects empty keyfile %j with its path',
+    async (content) => {
+      const path = await keyPath();
+      await writeFile(path, content);
+      await expect(resolveKey({ type: 'keyfile', path })).rejects.toMatchObject(
+        {
+          name: 'ImageCredentialError',
+          code: 'keyfile_empty',
+          reference: path,
+          message: expect.stringContaining(path),
+        },
+      );
+    },
+  );
+
   it('reports unreadable keyfiles without exposing their contents', async () => {
     const path = await keyPath();
     const result = resolveKey({ type: 'keyfile', path });

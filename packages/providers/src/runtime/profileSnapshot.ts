@@ -29,6 +29,7 @@ import {
   _internal as runtimeAccessorsInternal,
 } from './runtimeAccessors.js';
 import { applyProfileWithGuards } from './profileApplication.js';
+import { validateImageProfileAuth } from '../openai/codexImageBackendResolver.js';
 import {
   loadAndApplyProfileTransition,
   applyModelAndImageProfileTransition,
@@ -69,6 +70,7 @@ export function setActiveImageProfile(
     state.reset();
     return;
   }
+  validateImageProfileAuth(profile.profile, profile.name);
   state.select(profile);
 }
 
@@ -589,7 +591,8 @@ async function wireLoadBalancerFailover(
   );
 
   const existingBuckets = getFailoverBuckets(config);
-  const manager = new ProfileManager();
+  const manager =
+    getCliRuntimeServices().profileManager ?? new ProfileManager();
   let shouldClearHandler = false;
 
   for (const subProfileName of subProfileNames) {
@@ -764,7 +767,8 @@ export async function saveLoadBalancerProfile(
   profileName: string,
   profile: LoadBalancerProfile,
 ): Promise<void> {
-  const manager = new ProfileManager();
+  const manager =
+    getCliRuntimeServices().profileManager ?? new ProfileManager();
   await manager.saveLoadBalancerProfile(profileName, profile);
 }
 
@@ -783,7 +787,8 @@ export async function loadProfileByName(
 }
 
 export async function deleteProfileByName(profileName: string): Promise<void> {
-  const manager = new ProfileManager();
+  const manager =
+    getCliRuntimeServices().profileManager ?? new ProfileManager();
   await manager.deleteProfile(profileName);
   const { settingsService } = getCliRuntimeServices();
   const currentProfile =
@@ -856,7 +861,8 @@ export async function listSavedProfiles(
 }
 
 export async function getProfileByName(profileName: string): Promise<Profile> {
-  const manager = new ProfileManager();
+  const manager =
+    getCliRuntimeServices().profileManager ?? new ProfileManager();
   const profile = await manager.loadProfile(profileName);
   if (!isLoadBalancerProfile(profile)) {
     return profile;

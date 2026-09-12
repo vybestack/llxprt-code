@@ -21,12 +21,15 @@ export class ImageBackendBaseUrlError extends Error {
   readonly profileName: string;
   readonly baseUrl: string;
 
-  constructor(profileName: string, baseUrl: string) {
+  constructor(profileName: string, baseUrl: string, options?: ErrorOptions) {
     const parsed = URL.canParse(baseUrl) ? new URL(baseUrl) : undefined;
     const safeUrl = parsed
       ? `${parsed.origin}${parsed.pathname}`
       : '<invalid URL>';
-    super(`Image profile '${profileName}' has an invalid base URL: ${safeUrl}`);
+    super(
+      `Image profile '${profileName}' has an invalid base URL: ${safeUrl}`,
+      options,
+    );
     this.name = 'ImageBackendBaseUrlError';
     this.profileName = profileName;
     this.baseUrl = safeUrl;

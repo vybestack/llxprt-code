@@ -22,6 +22,7 @@ import { readInputImage, PNG_SIGNATURE_BYTES } from './imageInput.js';
 import { MAX_INPUT_IMAGES } from '@vybestack/llxprt-code-core/services/image/imageOperation.js';
 import {
   ImageBackendError,
+  boundedBody,
   imageResponseError,
   parseImageResponse,
   sanitizeImageErrorMessage,
@@ -143,7 +144,7 @@ export class OpenAIImagesBackend implements ImageBackend {
       form.append(
         this.local ? 'image' : 'image[]',
         new Blob([bytes], { type: mimeType }),
-        mimeType === 'image/jpeg' ? 'input.jpg' : 'input.png',
+        `input.${mimeType === 'image/jpeg' ? 'jpg' : mimeType.slice('image/'.length)}`,
       );
     }
     if (!this.local) {
@@ -171,6 +172,8 @@ export class OpenAIImagesBackend implements ImageBackend {
       );
     }
     if (
+      apiKey === '' ||
+      apiKey.trim() !== apiKey ||
       [...apiKey].some((character) => {
         const code = character.charCodeAt(0);
         return code < 32 || code === 127 || code > 0xff;
@@ -221,8 +224,9 @@ export class OpenAIImagesBackend implements ImageBackend {
     }
     let parsed: unknown;
     try {
-      parsed = await response.json();
-    } catch {
+      parsed = JSON.parse((await boundedBody(response)).toString('utf8'));
+    } catch (error) {
+      if (error instanceof ImageBackendError) throw error;
       throw new ImageBackendError(
         'invalid_response',
         'Image endpoint returned an unreadable JSON response.',

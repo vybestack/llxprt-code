@@ -13,6 +13,7 @@ import type { CodexImageCredential } from './openai/codexImageBackend.js';
 export type ImageCredentialErrorCode =
   | 'named_key_missing'
   | 'keyfile_unreadable'
+  | 'keyfile_empty'
   | 'oauth_unavailable';
 
 export class ImageCredentialError extends Error {
@@ -98,9 +99,10 @@ export function createImageApiKeyResolver(
         }
         return key;
       }
-      case 'keyfile':
+      case 'keyfile': {
+        let content: string;
         try {
-          return (await readFile(auth.path, 'utf8')).replace(/\r?\n$/, '');
+          content = await readFile(auth.path, 'utf8');
         } catch {
           throw new ImageCredentialError(
             'keyfile_unreadable',
@@ -108,11 +110,23 @@ export function createImageApiKeyResolver(
             auth.path,
           );
         }
+        const key = content.replace(/\r?\n$/, '');
+        if (key === '') {
+          throw new ImageCredentialError(
+            'keyfile_empty',
+            `Image profile keyfile '${auth.path}' is empty.`,
+            auth.path,
+          );
+        }
+        return key;
+      }
       case 'oauth':
         return (await resolveCodexImageCredential(deps.oauthManager))
           .accessToken;
-      default:
-        throw new Error('Unsupported image credential mode.');
+      default: {
+        const exhaustive: never = auth;
+        throw new Error(`Unsupported image credential mode: ${exhaustive}`);
+      }
     }
   };
 }

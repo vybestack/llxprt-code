@@ -129,6 +129,7 @@ function makeBackend(overrides?: {
   getBaseUrl?: () => string | undefined;
 }): CodexImageBackend {
   return new CodexImageBackend({
+    mode: 'legacy',
     getCredential: async () => ({
       accessToken: 'token-abc',
       accountId: 'account-xyz',
@@ -235,6 +236,7 @@ describe('CodexImageBackend.edit', () => {
       body: { data: [{ b64_json: 'aGVsbG8=' }] },
     });
     const backend = new CodexImageBackend({
+      mode: 'profile',
       getCredential: async () => ({ accessToken: 'token', accountId: 'acct' }),
       model: 'gpt-image-2.5-sunburst',
       defaults: {
@@ -291,7 +293,7 @@ describe('CodexImageBackend.edit', () => {
 
     const { fetchImpl } = makeStubFetch({
       status: 200,
-      body: { data: [{ b64_json: 'aGVsbG8=' }] },
+      body: { data: [{ b64_json: 'aGVsbG8=', revised_prompt: 'edited lake' }] },
     });
     const backend = makeBackend({ fetchImpl });
 
@@ -304,6 +306,7 @@ describe('CodexImageBackend.edit', () => {
     expect(result.encoding).toBe('base64');
     expect(result.data).toBe('aGVsbG8=');
     expect(result.caption).toBe('edit it');
+    expect(result.revisedPrompt).toBe('edited lake');
   });
 
   it('reports read-phase filesystem failures as image validation errors', async () => {

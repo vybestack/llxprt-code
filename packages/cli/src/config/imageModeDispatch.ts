@@ -8,7 +8,10 @@ import type {
   Config,
   ImageOperationRunnerInput,
 } from '@vybestack/llxprt-code-core';
-import { ImageProfileNotFoundError } from '@vybestack/llxprt-code-settings';
+import {
+  ImageProfileNotFoundError,
+  isImageProfileLoadError,
+} from '@vybestack/llxprt-code-settings';
 import {
   ExitCodes,
   writeToStdout,
@@ -173,6 +176,7 @@ export async function runDirectImageModeAndExit(
     writeToStdout(`${output}\n`);
   } catch (error) {
     exitCode =
+      isImageProfileLoadError(error) ||
       error instanceof ImageProfileNotFoundError
         ? ExitCodes.FATAL_INPUT_ERROR
         : 1;

@@ -95,6 +95,7 @@ export interface CodexImageCredential {
  * without mocking the adapter itself.
  */
 export interface CodexImageBackendDeps {
+  readonly mode: 'legacy' | 'profile';
   readonly getCredential: () => Promise<CodexImageCredential>;
   readonly getBaseUrl?: () => string | undefined;
   readonly model?: string;
@@ -146,7 +147,7 @@ export class CodexImageBackend implements ImageBackend {
     this.getBaseUrl = deps.getBaseUrl ?? (() => undefined);
     this.model = deps.model ?? CODEX_IMAGE_MODEL;
     this.defaults = deps.defaults ?? {};
-    this.hasImageProfile = deps.defaults !== undefined;
+    this.hasImageProfile = deps.mode === 'profile';
     this.fetchImpl = deps.fetchImpl ?? fetch;
   }
 
@@ -173,12 +174,7 @@ export class CodexImageBackend implements ImageBackend {
     headers: Record<string, string>,
     signal: AbortSignal,
     operationName: string,
-  ): Promise<{
-    readonly data: string;
-    readonly quality?: string;
-    readonly size?: string;
-    readonly usage?: Readonly<Record<string, unknown>>;
-  }> {
+  ): Promise<Omit<ImageBackendResult, 'caption'>> {
     const response = await this.fetchImpl(endpoint, {
       method: 'POST',
       headers,
@@ -305,15 +301,7 @@ export class CodexImageBackend implements ImageBackend {
         `Generated Codex image via ${endpoint} (model=${body.model}, quality=${response.quality ?? 'unknown'}, size=${response.size ?? 'unknown'}, usage=${JSON.stringify(response.usage ?? {})})`,
     );
 
-    return {
-      mimeType: 'image/png',
-      encoding: 'base64',
-      data: response.data,
-      caption: request.prompt,
-      ...(response.quality !== undefined ? { quality: response.quality } : {}),
-      ...(response.size !== undefined ? { size: response.size } : {}),
-      ...(response.usage !== undefined ? { usage: response.usage } : {}),
-    };
+    return { ...response, caption: request.prompt };
   }
 
   /**
@@ -396,15 +384,7 @@ export class CodexImageBackend implements ImageBackend {
         `Edited Codex image via ${endpoint} (model=${body.model}, quality=${response.quality ?? 'unknown'}, size=${response.size ?? 'unknown'}, usage=${JSON.stringify(response.usage ?? {})})`,
     );
 
-    return {
-      mimeType: 'image/png',
-      encoding: 'base64',
-      data: response.data,
-      caption: request.prompt,
-      ...(response.quality !== undefined ? { quality: response.quality } : {}),
-      ...(response.size !== undefined ? { size: response.size } : {}),
-      ...(response.usage !== undefined ? { usage: response.usage } : {}),
-    };
+    return { ...response, caption: request.prompt };
   }
 }
 

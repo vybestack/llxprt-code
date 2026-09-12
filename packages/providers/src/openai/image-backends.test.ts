@@ -31,6 +31,100 @@ import {
 import type { ImageProfile } from '@vybestack/llxprt-code-settings';
 
 describe('external image responses', () => {
+  it.each(['', ' ', ' secret', 'secret '])(
+    'rejects empty or whitespace-edged credential %j before HTTP',
+    async (key) => {
+      const transport = http();
+      const backend = new OpenAIImagesBackend({
+        config: config('https://example.com/v1'),
+        getApiKey: async () => key,
+        fetchImpl: transport.fetchImpl,
+      });
+      await expect(
+        backend.generate({ prompt: 'lake' }, signal()),
+      ).rejects.toMatchObject({
+        name: 'ImageBackendError',
+        code: 'validation',
+      });
+      expect(transport.requests).toHaveLength(0);
+    },
+  );
+
+  it.each(['length', 'stream'] as const)(
+    'bounds the primary JSON response by %s',
+    async (source) => {
+      let cancelled = false;
+      let chunks = 0;
+      const backend = new OpenAIImagesBackend({
+        config: config(),
+        fetchImpl: async () =>
+          source === 'length'
+            ? Response.json(
+                { data: [{ b64_json: png.toString('base64') }] },
+                { headers: { 'content-length': String(16 * 1024 * 1024) } },
+              )
+            : new Response(
+                new ReadableStream<Uint8Array>({
+                  start(controller) {
+                    controller.enqueue(
+                      new TextEncoder().encode(
+                        JSON.stringify({
+                          data: [{ b64_json: png.toString('base64') }],
+                        }),
+                      ),
+                    );
+                  },
+                  pull(controller) {
+                    if (chunks++ === 16) controller.close();
+                    else
+                      controller.enqueue(new Uint8Array(1024 * 1024).fill(32));
+                  },
+                  cancel() {
+                    cancelled = true;
+                  },
+                }),
+              ),
+      });
+      await expect(
+        backend.generate({ prompt: 'lake' }, signal()),
+      ).rejects.toMatchObject({
+        name: 'ImageBackendError',
+        code: 'materialization',
+      });
+      expect(cancelled).toBe(source === 'stream');
+    },
+  );
+
+  it('names remote WebP multipart parts with the WebP extension', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'issue3627-webp-'));
+    try {
+      const inputPath = join(directory, 'source.webp');
+      await writeFile(
+        inputPath,
+        Buffer.concat([
+          Buffer.from('RIFF'),
+          Buffer.alloc(4),
+          Buffer.from('WEBP'),
+          Buffer.alloc(16),
+        ]),
+      );
+      const transport = http();
+      const backend = new OpenAIImagesBackend({
+        config: config('https://example.com/v1'),
+        getApiKey: async () => 'secret',
+        fetchImpl: transport.fetchImpl,
+      });
+      await backend.edit({ prompt: 'lake', inputPaths: [inputPath] }, signal());
+      const part = (await transport.requests[0].formData()).get('image[]');
+      if (!(part instanceof File)) throw new Error('Expected image file');
+      expect({ name: part.name, type: part.type }).toStrictEqual({
+        name: 'input.webp',
+        type: 'image/webp',
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
   it('rejects non-Latin-1 credentials with a typed validation error', async () => {
     const backend = new OpenAIImagesBackend({
       config: config('https://example.com/v1'),
@@ -47,6 +141,7 @@ describe('external image responses', () => {
 
   it('rejects an invalid Codex profile URL before accessing edit inputs', async () => {
     const backend = new CodexImageBackend({
+      mode: 'profile',
       getCredential: async () => ({
         accessToken: 'secret',
         accountId: 'account',
@@ -467,6 +562,7 @@ describe('shared backend contract and PNG URL materialization', () => {
   ): ImageBackend {
     return kind === 'codex'
       ? new CodexImageBackend({
+          mode: 'legacy',
           getCredential: async () => ({
             accessToken: 'secret',
             accountId: 'account',

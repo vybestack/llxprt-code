@@ -116,7 +116,35 @@ describe('ProfileManager typed image profiles', () => {
       modelParams: {},
       ephemeralSettings: {},
     });
-    expect(await manager.listModelProfiles()).toStrictEqual(['chat']);
+    await manager.saveProfile('second', {
+      version: 1,
+      provider: 'openai',
+      model: 'second',
+      modelParams: {},
+      ephemeralSettings: {},
+    });
+    await manager.saveLoadBalancerProfile('balanced', {
+      version: 1,
+      type: 'loadbalancer',
+      policy: 'roundrobin',
+      profiles: ['chat', 'second'],
+      provider: '',
+      model: '',
+      modelParams: {},
+      ephemeralSettings: {},
+    });
+    expect((await manager.listModelProfiles()).sort()).toStrictEqual([
+      'balanced',
+      'chat',
+      'second',
+    ]);
+    expect(await manager.listProfiles('standard')).toStrictEqual([
+      'chat',
+      'second',
+    ]);
+    expect(await manager.loadProfile('balanced')).toMatchObject({
+      profiles: ['chat', 'second'],
+    });
     expect(await manager.listImageProfiles()).toStrictEqual(['art']);
   });
 
@@ -267,9 +295,11 @@ describe('ProfileManager typed image profiles', () => {
   it('rejects loading an image profile as a model profile', async () => {
     await manager.saveImageProfile('art', imageProfile());
 
-    await expect(manager.loadProfile('art')).rejects.toBeInstanceOf(
-      ProfileTypeConflictError,
-    );
+    await expect(manager.loadProfile('art')).rejects.toMatchObject({
+      name: 'ProfileTypeConflictError',
+      message:
+        "Cannot load model profile 'art' because that name belongs to an image profile",
+    });
   });
 
   it('loads legacy files without a type as model profiles', async () => {

@@ -46,7 +46,7 @@ export class ProfileTypeConflictError extends Error {
     operation: 'save' | 'load' = 'save',
   ) {
     super(
-      `Cannot ${operation} ${requestedType} profile '${profileName}' because that name belongs to a ${existingType} profile`,
+      `Cannot ${operation} ${requestedType} profile '${profileName}' because that name belongs to ${existingType === 'image' ? 'an' : 'a'} ${existingType} profile`,
     );
     this.name = 'ProfileTypeConflictError';
   }
@@ -291,34 +291,7 @@ export class ProfileManager {
   async saveLoadBalancerProfile(name: string, profile: unknown): Promise<void> {
     const loadBalancerProfile = parseLoadBalancerProfile(name, profile);
 
-    const availableProfiles = await this.listProfiles();
-
-    for (const referencedProfile of loadBalancerProfile.profiles) {
-      if (!availableProfiles.includes(referencedProfile)) {
-        throw new Error(
-          `LoadBalancer profile '${name}' references non-existent profile '${referencedProfile}'`,
-        );
-      }
-
-      const referencedProfilePath = path.join(
-        this.profilesDir,
-        `${referencedProfile}.json`,
-      );
-      const referencedContent = await fs.readFile(
-        referencedProfilePath,
-        'utf8',
-      );
-      const referencedProfileData: unknown =
-        ProfileManager.parseProfileContent(referencedContent);
-
-      assertModelMember(name, referencedProfile, referencedProfileData);
-
-      if (referencedProfileIsLoadBalancer(referencedProfileData)) {
-        throw new Error(
-          `LoadBalancer profile '${name}' cannot reference another LoadBalancer profile '${referencedProfile}'`,
-        );
-      }
-    }
+    await this.validateLoadBalancerReferences(name, loadBalancerProfile);
 
     await fs.mkdir(this.profilesDir, { recursive: true });
 
@@ -384,7 +357,12 @@ export class ProfileManager {
 
       const parsed = ProfileManager.parseProfileContent(content);
       if (isPlainObject(parsed) && parsed.type === 'image') {
-        throw new ProfileTypeConflictError(profileName, 'model', 'image');
+        throw new ProfileTypeConflictError(
+          profileName,
+          'model',
+          'image',
+          'load',
+        );
       }
       const profile =
         isPlainObject(parsed) && parsed.type === 'loadbalancer'

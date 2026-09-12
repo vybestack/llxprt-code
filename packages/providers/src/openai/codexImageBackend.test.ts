@@ -82,6 +82,7 @@ function makeBackend(overrides?: {
   credential?: { accessToken: string; accountId: string };
 }): CodexImageBackend {
   return new CodexImageBackend({
+    mode: 'legacy',
     getCredential: async () =>
       overrides?.credential ?? {
         accessToken: 'token-abc',
@@ -158,7 +159,8 @@ describe('CodexImageBackend', () => {
             accountId: 'acct',
           }),
           getBaseUrl: () => undefined,
-          defaults: mode === 'omitted' ? {} : defaults,
+          mode: 'profile',
+          ...(mode === 'omitted' ? {} : { defaults }),
           fetchImpl,
         });
         const request = {
@@ -261,7 +263,7 @@ describe('CodexImageBackend', () => {
           return { accessToken: 'secret', accountId: 'account' };
         },
         getBaseUrl: () => 'https://images.example/v1',
-        defaults: {},
+        mode: 'profile',
         fetchImpl,
       });
       await expect(
@@ -304,6 +306,7 @@ describe('CodexImageBackend', () => {
         body: { data: [{ b64_json: 'aGVsbG8=' }] },
       });
       await new CodexImageBackend({
+        mode: 'profile',
         getCredential: async () => ({
           accessToken: 'secret',
           accountId: 'account',
@@ -363,7 +366,13 @@ describe('CodexImageBackend', () => {
           quality: 'low',
           size: '1254x1254',
           usage: { input_tokens: 14, output_tokens: 515 },
-          data: [{ b64_json: 'aGVsbG8=', generation_id: 'generation-1' }],
+          data: [
+            {
+              b64_json: 'aGVsbG8=',
+              generation_id: 'generation-1',
+              revised_prompt: 'a panda in a tree',
+            },
+          ],
         },
       });
       const backend = makeBackend({ fetchImpl });
@@ -377,6 +386,7 @@ describe('CodexImageBackend', () => {
       expect(result.encoding).toBe('base64');
       expect(result.data).toBe('aGVsbG8=');
       expect(result.caption).toBe('a red panda');
+      expect(result.revisedPrompt).toBe('a panda in a tree');
       expect(result.quality).toBe('low');
       expect(result.size).toBe('1254x1254');
       expect(result.usage).toStrictEqual({

@@ -326,6 +326,7 @@ async function setupRuntimeContext(
   const imageBackendResolver = createCodexImageBackendResolver({
     ...imageBackendDeps,
     getActiveImageProfile: () => imageProfileState.getActive()?.profile,
+    getActiveImageProfileName: () => imageProfileState.getActive()?.name,
   });
   config.setImageBackendResolver(imageBackendResolver);
 
