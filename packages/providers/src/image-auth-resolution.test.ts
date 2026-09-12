@@ -64,9 +64,9 @@ describe('image credential resolution', () => {
     ['secret', 'secret'],
     ['secret\n', 'secret'],
     ['secret\r\n', 'secret'],
-    [' secret \n\n', ' secret \n'],
+    [' secret \n\n', ' secret'],
   ])(
-    'removes at most one trailing newline from keyfile %j',
+    'removes trailing whitespace from keyfile %j',
     async (content, expected) => {
       const path = await keyPath();
       await writeFile(path, content);
@@ -100,11 +100,63 @@ describe('image credential resolution', () => {
     });
   });
 
-  it('passes literal credentials through without trimming', async () => {
+  it('trims literal credentials', async () => {
     expect(await resolveKey({ type: 'api-key', apiKey: ' literal\n' })).toBe(
-      ' literal\n',
+      'literal',
     );
   });
+
+  it.each(['', '  \n'])('rejects empty API keys %j', async (apiKey) => {
+    await expect(resolveKey({ type: 'api-key', apiKey })).rejects.toMatchObject(
+      { code: 'api_key_empty' },
+    );
+  });
+
+  it('rejects empty stored keys', async () => {
+    const resolve = createImageApiKeyResolver({
+      getKeyStorage: () => ({ getKey: async () => '  ' }),
+    });
+    await expect(
+      resolve({ type: 'named-key', keyName: 'blank' }),
+    ).rejects.toMatchObject({ code: 'named_key_missing' });
+  });
+
+  it('rejects embedded control characters without exposing the key', async () => {
+    const path = await keyPath();
+    await writeFile(path, 'secret\nvalue');
+    await expect(resolveKey({ type: 'keyfile', path })).rejects.toMatchObject({
+      code: 'keyfile_invalid',
+      reference: path,
+    });
+  });
+
+  it('chains OAuth source failures', async () => {
+    const cause = new Error('refresh failed');
+    await expect(
+      resolveCodexImageCredential({
+        getOAuthToken: async () => {
+          throw cause;
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'oauth_unavailable', cause });
+  });
+
+  it.each(['access_token', 'account_id'])(
+    'rejects whitespace OAuth %s',
+    async (field) => {
+      await expect(
+        resolveCodexImageCredential({
+          getOAuthToken: async () => ({
+            access_token: 'token',
+            account_id: 'account',
+            expiry: 9999999999,
+            token_type: 'Bearer',
+            [field]: '   ',
+          }),
+        }),
+      ).rejects.toMatchObject({ code: 'oauth_unavailable' });
+    },
+  );
 
   it('returns no credential for none', async () => {
     expect(await resolveKey({ type: 'none' })).toBeUndefined();
