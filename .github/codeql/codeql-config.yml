@@ -1,0 +1,14 @@
+# Issue #3567: CodeQL configuration for non-PR events (push,
+# workflow_dispatch). The security-and-quality suite adds GitHub-maintained
+# correctness, reliability, and maintainability queries for JS/TS on top of
+# the default security queries, and the local pack below holds the
+# mechanism-class rules. This config is selected only for push and
+# workflow_dispatch events via the config-file expression in ci.yml's
+# Initialize CodeQL step. Local query directories are referenced under
+# `queries` with workspace-relative `uses` paths. The local pack is also a
+# valid qlpack root (qlpack.yml), so the CLI can resolve it.
+name: 'LLxprt CodeQL config'
+queries:
+  - uses: 'security-and-quality'
+  - uses: './.github/codeql/queries'
+
