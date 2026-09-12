@@ -13,6 +13,7 @@ import {
   isImageProfileLoadError,
 } from '@vybestack/llxprt-code-settings';
 import {
+  ImageOperationError,
   ExitCodes,
   writeToStdout,
   writeToStderr,
@@ -175,9 +176,11 @@ export async function runDirectImageModeAndExit(
         : formatTextResult(result);
     writeToStdout(`${output}\n`);
   } catch (error) {
+    const profileError =
+      error instanceof ImageOperationError ? error.cause : error;
     exitCode =
-      isImageProfileLoadError(error) ||
-      error instanceof ImageProfileNotFoundError
+      isImageProfileLoadError(profileError) ||
+      profileError instanceof ImageProfileNotFoundError
         ? ExitCodes.FATAL_INPUT_ERROR
         : 1;
     const message = error instanceof Error ? error.message : String(error);

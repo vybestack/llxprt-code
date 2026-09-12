@@ -292,6 +292,20 @@ describe('runImageOperation', () => {
     expect(await fs.promises.readdir(workspaceRoot)).toStrictEqual([]);
   });
 
+  it('tags an untyped resolver failure with the capability stage and cause', async () => {
+    const cause = new Error('resolver unavailable');
+    await expect(
+      runImageOperation(
+        { prompt: 'a cat', outputPath: 'cat.png' },
+        {
+          workspaceRoot,
+          resolveBackend: makeStubResolver({ throwOnResolve: cause }),
+        },
+      ),
+    ).rejects.toMatchObject({ stage: 'capability', cause });
+    expect(await fs.promises.readdir(workspaceRoot)).toStrictEqual([]);
+  });
+
   it('returns a capability error when no backend resolves', async () => {
     expect(
       await captureRejection(

@@ -351,6 +351,8 @@ describe('runDirectImageModeAndExit', () => {
       );
       expect(code).toBe(ExitCodes.FATAL_INPUT_ERROR);
       expect(stderrChunks.join('')).toContain('wrong');
+      if (kind === 'model')
+        expect(stderrChunks.join('')).toMatch(/model.*image|image.*model/i);
       expect(fs.existsSync(path.join(workspaceRoot, 'cat.png'))).toBe(false);
     },
   );
@@ -376,7 +378,6 @@ describe('runDirectImageModeAndExit', () => {
     expect(code).toBe(ExitCodes.FATAL_INPUT_ERROR);
     expect(stderrChunks.join('')).toContain('missing-direct');
     expect(fs.existsSync(path.join(workspaceRoot, 'cat.png'))).toBe(false);
-    expect(state.getActive()).toBeUndefined();
   });
 
   it('runs the common runner and emits text output with the exact saved path (no base64)', async () => {

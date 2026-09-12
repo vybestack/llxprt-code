@@ -172,7 +172,9 @@ export async function runImageOperation(
     () => resolveInputPaths(request.inputPaths, deps.workspaceRoot),
   );
 
-  const backend = await deps.resolveBackend(input.imageProfileName);
+  const backend = await inStage('capability', 'Image backend resolution', () =>
+    deps.resolveBackend(input.imageProfileName),
+  );
   if (backend === null) {
     throw new ImageOperationError(
       'No image-capable backend is registered for the current setup.',

@@ -7,19 +7,12 @@
 import dns from 'node:dns';
 import { type Config, setGitStatsService } from '@vybestack/llxprt-code-core';
 import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
-import {
-  isImageProfileLoadError,
-  type SettingsService,
-} from '@vybestack/llxprt-code-settings';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   loadProfileByName,
   loadImageProfileByName,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import { isImageModeActive } from './config/imageMode.js';
-import {
-  ImageBackendAuthModeError,
-  ImageBackendBaseUrlError,
-} from '@vybestack/llxprt-code-providers';
 import {
   preflightAgentActivation,
   type ProviderActivationIntent,
@@ -213,12 +206,6 @@ export async function reapplyBootstrapProfile(
   try {
     await loadProfileByName(bootstrapProfileName);
   } catch (error) {
-    if (
-      isImageProfileLoadError(error) ||
-      error instanceof ImageBackendAuthModeError ||
-      error instanceof ImageBackendBaseUrlError
-    )
-      throw error;
     const message = error instanceof Error ? error.message : String(error);
     debugLogger.warn(
       `[bootstrap] Failed to reapply profile '${bootstrapProfileName}' after provider manager initialization: ${message}`,
@@ -226,7 +213,14 @@ export async function reapplyBootstrapProfile(
   }
   const imageProfileName = argv.imageProfile?.trim();
   if (imageProfileName && !isImageModeActive(argv)) {
-    await loadImageProfileByName(imageProfileName);
+    try {
+      await loadImageProfileByName(imageProfileName);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      debugLogger.warn(
+        `[bootstrap] Failed to reapply image profile '${imageProfileName}' after provider manager initialization: ${message}`,
+      );
+    }
   }
 }
 

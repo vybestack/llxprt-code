@@ -125,60 +125,74 @@ function applyStartup(profile: StandardProfile, inline: boolean) {
 }
 
 describe('startup image profile transitions', () => {
-  let directory: string;
+  let directory = '';
+  const originalEnv = process.env;
+  const originalArgv = process.argv;
   let manager: ProfileManager;
   let settings: SettingsService;
 
   beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'llxprt-startup-image-'));
-    manager = new ProfileManager(directory);
-    settings = new SettingsService();
-    const config = new Config({
-      sessionId: 'startup-image',
-      targetDir: directory,
-      cwd: directory,
-      debugMode: false,
-      model: 'old-model',
-      settingsService: settings,
-    });
-    const providers = new ProviderManager({
-      settingsService: settings,
-      config,
-    });
-    providers.registerProvider(new OpenAIProvider('test-key'));
-    const messageBus = new MessageBus(config.getPolicyEngine(), false);
-    const oauth = new OAuthManager(createTokenStore(), undefined, {
-      messageBus,
-    });
-    setCliRuntimeContext(settings, config, {
-      runtimeId: 'startup-image',
-      profileManager: manager,
-    });
-    registerCliProviderInfrastructure(providers, oauth, {
-      runtimeId: 'startup-image',
-      messageBus,
-    });
-    await manager.saveImageProfile('art', {
-      version: 1,
-      type: 'image',
-      backend: 'openai-images',
-      model: 'local-image',
-      baseUrl: 'http://localhost:8321/v1',
-      auth: { type: 'none' },
-    });
-    await manager.saveImageProfile(
-      'old-art',
-      await manager.loadImageProfile('art'),
-    );
-    await loadImageProfileByName('old-art');
+    let ready = false;
+    try {
+      directory = await mkdtemp(join(tmpdir(), 'llxprt-startup-image-'));
+      manager = new ProfileManager(directory);
+      settings = new SettingsService();
+      const config = new Config({
+        sessionId: 'startup-image',
+        targetDir: directory,
+        cwd: directory,
+        debugMode: false,
+        model: 'old-model',
+        settingsService: settings,
+      });
+      const providers = new ProviderManager({
+        settingsService: settings,
+        config,
+      });
+      providers.registerProvider(new OpenAIProvider('test-key'));
+      const messageBus = new MessageBus(config.getPolicyEngine(), false);
+      const oauth = new OAuthManager(createTokenStore(), undefined, {
+        messageBus,
+      });
+      setCliRuntimeContext(settings, config, {
+        runtimeId: 'startup-image',
+        profileManager: manager,
+      });
+      registerCliProviderInfrastructure(providers, oauth, {
+        runtimeId: 'startup-image',
+        messageBus,
+      });
+      await manager.saveImageProfile('art', {
+        version: 1,
+        type: 'image',
+        backend: 'openai-images',
+        model: 'local-image',
+        baseUrl: 'http://localhost:8321/v1',
+        auth: { type: 'none' },
+      });
+      await manager.saveImageProfile(
+        'old-art',
+        await manager.loadImageProfile('art'),
+      );
+      await loadImageProfileByName('old-art');
+      ready = true;
+    } finally {
+      if (!ready) await cleanup();
+    }
   });
 
-  afterEach(async () => {
+  async function cleanup(): Promise<void> {
+    process.env = originalEnv;
+    process.argv = originalArgv;
     coreEvents.removeAllListeners(CoreEvent.ModelProfileChanged);
     vi.restoreAllMocks();
     resetCliProviderInfrastructure();
-    await rm(directory, { recursive: true, force: true });
-  });
+    if (directory) {
+      await rm(directory, { recursive: true, force: true });
+      directory = '';
+    }
+  }
+  afterEach(cleanup);
 
   it('keeps standalone image selection after bootstrap model reapplication', async () => {
     await manager.saveProfile('conversation', modelProfile());
@@ -199,23 +213,35 @@ describe('startup image profile transitions', () => {
     }
   });
 
-  it('rethrows invalid bootstrap image authentication before model application', async () => {
+  it('continues to the CLI image profile after invalid bootstrap image authentication', async () => {
     await manager.saveImageProfile('invalid', {
       ...(await manager.loadImageProfile('art')),
       auth: { type: 'named-key', keyName: 'remote-key' },
     });
     await manager.saveProfile('conversation', modelProfile('invalid'));
-    await expect(reapplyBootstrapProfile(argv, settings)).rejects.toMatchObject(
-      { name: 'ImageBackendAuthModeError' },
-    );
-    expect(getActiveImageProfile()?.name).toBe('old-art');
+    await reapplyBootstrapProfile({ ...argv, imageProfile: 'art' }, settings);
+    expect(getActiveImageProfile()?.name).toBe('art');
   });
 
-  it('rethrows a dangling bootstrap image reference', async () => {
+  it('continues to the CLI image profile after a dangling bootstrap image reference', async () => {
     await manager.saveProfile('conversation', modelProfile('missing-image'));
-    await expect(
-      reapplyBootstrapProfile(argv, settings),
-    ).rejects.toBeInstanceOf(ImageProfileNotFoundError);
+    await reapplyBootstrapProfile({ ...argv, imageProfile: 'art' }, settings);
+    expect(getActiveImageProfile()?.name).toBe('art');
+  });
+
+  it('warns when reapplying the standalone image profile fails', async () => {
+    await manager.saveProfile('conversation', modelProfile());
+    const warnings: string[] = [];
+    vi.spyOn(debugLogger, 'warn').mockImplementation((message) => {
+      warnings.push(String(message));
+    });
+    await reapplyBootstrapProfile(
+      { ...argv, imageProfile: 'missing-cli' },
+      settings,
+    );
+    expect(warnings.join('\n')).toContain(
+      "Failed to reapply image profile 'missing-cli'",
+    );
   });
 
   it('warns and continues for a non-image bootstrap failure', async () => {
@@ -244,6 +270,8 @@ describe('startup image profile transitions', () => {
           });
         });
         const profile = modelProfile(image);
+        if (surface === 'file')
+          await manager.saveProfile('conversation', profile);
         if (surface === 'direct') await applyProfileSnapshot(profile);
         else await applyStartup(profile, surface === 'inline');
         expect(observations).toStrictEqual([{ model: 'next-model', image }]);
@@ -256,6 +284,8 @@ describe('startup image profile transitions', () => {
         publications.push(payload.model);
       });
       const profile = modelProfile('missing-image');
+      if (surface === 'file')
+        await manager.saveProfile('conversation', profile);
       const pending =
         surface === 'direct'
           ? applyProfileSnapshot(profile)

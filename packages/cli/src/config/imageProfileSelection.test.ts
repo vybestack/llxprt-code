@@ -35,26 +35,36 @@ const localProfile: ImageProfile = {
 };
 
 describe('image profile surface selection', () => {
-  let directory: string;
+  let directory = '';
   let manager: ProfileManager;
   const originalConfigHome = process.env.LLXPRT_CONFIG_HOME;
   const originalArgv = process.argv;
   beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'llxprt-image-selector-'));
-    process.env.LLXPRT_CONFIG_HOME = directory;
-    process.argv = ['bun', 'cli.ts'];
-    manager = new ProfileManager();
-    await manager.saveImageProfile('local', localProfile);
+    let ready = false;
+    try {
+      directory = await mkdtemp(join(tmpdir(), 'llxprt-image-selector-'));
+      process.env.LLXPRT_CONFIG_HOME = directory;
+      process.argv = ['bun', 'cli.ts'];
+      manager = new ProfileManager();
+      await manager.saveImageProfile('local', localProfile);
+      ready = true;
+    } finally {
+      if (!ready) await cleanup();
+    }
   });
-  afterEach(async () => {
+  async function cleanup(): Promise<void> {
     process.argv = originalArgv;
     if (originalConfigHome === undefined) {
       delete process.env.LLXPRT_CONFIG_HOME;
     } else {
       process.env.LLXPRT_CONFIG_HOME = originalConfigHome;
     }
-    await rm(directory, { recursive: true, force: true });
-  });
+    if (directory) {
+      await rm(directory, { recursive: true, force: true });
+      directory = '';
+    }
+  }
+  afterEach(cleanup);
 
   async function loadFileProfile(imageProfile?: string) {
     await manager.saveProfile('chat', {
