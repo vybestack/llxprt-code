@@ -143,7 +143,7 @@ export class OpenAIImagesBackend implements ImageBackend {
       }
       form.append(
         this.local ? 'image' : 'image[]',
-        new Blob([bytes], { type: mimeType }),
+        new Blob([new Uint8Array(bytes)], { type: mimeType }),
         `input.${mimeType === 'image/jpeg' ? 'jpg' : mimeType.slice('image/'.length)}`,
       );
     }

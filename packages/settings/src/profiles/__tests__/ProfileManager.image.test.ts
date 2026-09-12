@@ -138,7 +138,7 @@ describe('ProfileManager typed image profiles', () => {
       'chat',
       'second',
     ]);
-    expect(await manager.listProfiles('standard')).toStrictEqual([
+    expect((await manager.listProfiles('standard')).sort()).toStrictEqual([
       'chat',
       'second',
     ]);
