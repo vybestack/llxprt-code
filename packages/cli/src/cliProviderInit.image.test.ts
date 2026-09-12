@@ -35,14 +35,12 @@ import {
   getActiveImageProfile,
   loadImageProfileByName,
   applyProfileSnapshot,
+  getCliRuntimeServices,
+  resetCliRuntimeRegistryForTesting,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { reapplyBootstrapProfile } from './cliProviderInit.js';
 import { applyProfileToRuntime } from './config/profileRuntimeApplication.js';
-import {
-  getCliRuntimeServices,
-  resetCliRuntimeRegistryForTesting,
-} from '@vybestack/llxprt-code-providers/runtime.js';
 import { loadCliConfig } from './config/config.js';
 import { parseArguments } from './config/cliArgParser.js';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
