@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { tinyPngBase64 } from './mlx-wire-fixtures.js';
 import { describe, it, expect, vi } from 'bun:test';
 
 import { buildCodexImageGenerateEndpoint } from './codexImageBackend.js';
@@ -66,7 +67,7 @@ function makeImageResponse() {
   return {
     ok: true,
     text: () =>
-      Promise.resolve(JSON.stringify({ data: [{ b64_json: 'aGVsbG8=' }] })),
+      Promise.resolve(JSON.stringify({ data: [{ b64_json: tinyPngBase64 }] })),
   };
 }
 
@@ -164,7 +165,9 @@ describe('createCodexImageBackendResolver', () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       text: () =>
-        Promise.resolve(JSON.stringify({ data: [{ b64_json: 'aGVsbG8=' }] })),
+        Promise.resolve(
+          JSON.stringify({ data: [{ b64_json: tinyPngBase64 }] }),
+        ),
     });
 
     const resolve = createCodexImageBackendResolver({
@@ -189,7 +192,9 @@ describe('createCodexImageBackendResolver', () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       text: () =>
-        Promise.resolve(JSON.stringify({ data: [{ b64_json: 'aGVsbG8=' }] })),
+        Promise.resolve(
+          JSON.stringify({ data: [{ b64_json: tinyPngBase64 }] }),
+        ),
     });
 
     const resolve = createCodexImageBackendResolver({

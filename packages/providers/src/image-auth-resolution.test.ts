@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { tinyPngBase64 } from './openai/mlx-wire-fixtures.js';
 import { afterEach, describe, expect, expectTypeOf, it } from 'bun:test';
 import type { PersistedImageBackendAuth } from '@vybestack/llxprt-code-settings';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -310,7 +311,7 @@ describe('image credential resolution', () => {
       init?: RequestInit,
     ) => {
       headers.push(new Headers(init?.headers));
-      return Response.json({ data: [{ b64_json: 'aGVsbG8=' }] });
+      return Response.json({ data: [{ b64_json: tinyPngBase64 }] });
     };
     const backend = createCodexImageBackendResolver({
       oauthManager: undefined,

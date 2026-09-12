@@ -244,7 +244,9 @@ export class OpenAIImagesBackend implements ImageBackend {
         response.status,
       );
     }
-    const result = await parseImageResponse(parsed, this.fetchImpl, signal);
+    const result = await parseImageResponse(parsed, this.fetchImpl, signal, {
+      allowLocalUrls: this.local,
+    });
     if (
       this.local &&
       !Buffer.from(result.data, 'base64')

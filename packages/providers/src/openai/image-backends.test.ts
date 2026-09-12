@@ -176,10 +176,17 @@ describe('external image responses', () => {
         const error: unknown = await backend
           .generate({ prompt: 'lake' }, signal())
           .catch((error: unknown) => error);
-        expect(error).toBeInstanceOf(ImageBackendError);
+        expect(error).toMatchObject({
+          name:
+            type === 'keyfile' ? 'ImageCredentialError' : 'ImageBackendError',
+        });
         if (!(error instanceof Error))
           throw new Error('Expected credential error');
-        expect(error.message).toContain('contains invalid characters');
+        expect(error.message).toContain(
+          type === 'keyfile'
+            ? 'contains control characters'
+            : 'contains invalid characters',
+        );
         expect(error.message).not.toContain('FAKE-MULTILINE-SECRET');
         expect(transport.requests).toHaveLength(0);
       } finally {

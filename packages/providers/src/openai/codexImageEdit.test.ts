@@ -4,8 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { tinyPngBase64 } from './mlx-wire-fixtures.js';
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import fs from 'node:fs';
+import * as imageInput from './imageInput.js';
 import path from 'node:path';
 import os from 'node:os';
 import {
@@ -171,7 +173,7 @@ describe('CodexImageBackend.edit', () => {
 
     const { fetchImpl, captured } = makeStubFetch({
       status: 200,
-      body: { data: [{ b64_json: 'aGVsbG8=' }] },
+      body: { data: [{ b64_json: tinyPngBase64 }] },
     });
     const backend = makeBackend({ fetchImpl });
 
@@ -233,7 +235,7 @@ describe('CodexImageBackend.edit', () => {
     await fs.promises.writeFile(inputPath, makeRealMinimalPng());
     const { fetchImpl, captured } = makeStubFetch({
       status: 200,
-      body: { data: [{ b64_json: 'aGVsbG8=' }] },
+      body: { data: [{ b64_json: tinyPngBase64 }] },
     });
     const backend = new CodexImageBackend({
       mode: 'profile',
@@ -271,7 +273,7 @@ describe('CodexImageBackend.edit', () => {
     const { fetchImpl, captured } = makeStubFetch({
       status: 200,
 
-      body: { data: [{ b64_json: 'aGVsbG8=' }] },
+      body: { data: [{ b64_json: tinyPngBase64 }] },
     });
     const backend = makeBackend({ fetchImpl });
 
@@ -293,7 +295,9 @@ describe('CodexImageBackend.edit', () => {
 
     const { fetchImpl } = makeStubFetch({
       status: 200,
-      body: { data: [{ b64_json: 'aGVsbG8=', revised_prompt: 'edited lake' }] },
+      body: {
+        data: [{ b64_json: tinyPngBase64, revised_prompt: 'edited lake' }],
+      },
     });
     const backend = makeBackend({ fetchImpl });
 
@@ -304,7 +308,7 @@ describe('CodexImageBackend.edit', () => {
 
     expect(result.mimeType).toBe('image/png');
     expect(result.encoding).toBe('base64');
-    expect(result.data).toBe('aGVsbG8=');
+    expect(result.data).toBe(tinyPngBase64);
     expect(result.caption).toBe('edit it');
     expect(result.revisedPrompt).toBe('edited lake');
   });
@@ -312,8 +316,10 @@ describe('CodexImageBackend.edit', () => {
   it('reports read-phase filesystem failures as image validation errors', async () => {
     const inputPath = path.join(workspaceRoot, 'unreadable.png');
     await fs.promises.writeFile(inputPath, makeRealMinimalPng());
-    const read = spyOn(fs.promises, 'readFile').mockRejectedValue(
-      Object.assign(new Error('Permission denied'), { code: 'EACCES' }),
+    const read = spyOn(imageInput, 'readInputImage').mockRejectedValue(
+      new ImageValidationError(
+        `Input image could not be accessed: ${inputPath}.`,
+      ),
     );
     try {
       await expect(
@@ -432,7 +438,7 @@ describe('CodexImageBackend.edit', () => {
     await fs.promises.writeFile(inputPath, makeRealMinimalPng());
     const { fetchImpl, captured } = makeStubFetch({
       status: 200,
-      body: { data: [{ b64_json: 'aGVsbG8=' }] },
+      body: { data: [{ b64_json: tinyPngBase64 }] },
     });
     const backend = makeBackend({ fetchImpl });
     await backend.edit(
@@ -455,7 +461,7 @@ describe('CodexImageBackend.edit', () => {
     await fs.promises.writeFile(inputPath, makeRealMinimalPng());
     const { fetchImpl } = makeStubFetch({
       status: 200,
-      body: { data: [{ b64_json: 'aGVsbG8=' }] },
+      body: { data: [{ b64_json: tinyPngBase64 }] },
     });
     const backend = makeBackend({ fetchImpl });
     const controller = new AbortController();
@@ -506,7 +512,7 @@ describe('CodexImageBackend.edit', () => {
     await fs.promises.writeFile(inputPath, webpBytes);
     const { fetchImpl, captured } = makeStubFetch({
       status: 200,
-      body: { data: [{ b64_json: 'aGVsbG8=' }] },
+      body: { data: [{ b64_json: tinyPngBase64 }] },
     });
     const backend = makeBackend({ fetchImpl });
 
