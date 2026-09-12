@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { isIP } from 'node:net';
 import { normalizeBaseUrl } from './codexBaseUrl.js';
 
 /** Loopback profiles use the deployed MLX image dialect. */
@@ -11,12 +12,16 @@ export function isLocalImageEndpoint(baseUrl: string): boolean {
   if (!URL.canParse(baseUrl)) return false;
   const url = new URL(baseUrl);
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
-  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const hostname = url.hostname
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '')
+    .replace(/\.$/, '');
+  const ipv4Loopback = isIP(hostname) === 4 && hostname.startsWith('127.');
   return (
     hostname === 'localhost' ||
     hostname.endsWith('.localhost') ||
     hostname === '::1' ||
-    hostname.startsWith('127.')
+    ipv4Loopback
   );
 }
 

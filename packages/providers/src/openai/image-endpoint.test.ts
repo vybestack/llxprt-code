@@ -24,15 +24,25 @@ const profile: ImageProfile = {
 };
 describe('image endpoint policy', () => {
   it.each(['http', 'https'])('recognizes %s loopback endpoints', (scheme) => {
-    for (const host of ['localhost', 'images.localhost', '127.0.0.2', '[::1]'])
+    for (const host of [
+      'localhost',
+      'localhost.',
+      'images.localhost',
+      'images.localhost.',
+      '127.0.0.2',
+      '[::1]',
+    ])
       expect(isLocalImageEndpoint(`${scheme}://${host}`)).toBe(true);
   });
-  it.each(['invalid', '', 'ftp://localhost', 'https://localhost.example'])(
-    'returns false for %j',
-    (url) => {
-      expect(isLocalImageEndpoint(url)).toBe(false);
-    },
-  );
+  it.each([
+    'invalid',
+    '',
+    'ftp://localhost',
+    'https://localhost.example',
+    'https://127.evil.example',
+  ])('returns false for %j', (url) => {
+    expect(isLocalImageEndpoint(url)).toBe(false);
+  });
   it('accepts a trailing slash on the Codex endpoint', () => {
     expect(() =>
       validateCodexImageProfileBaseUrl(
