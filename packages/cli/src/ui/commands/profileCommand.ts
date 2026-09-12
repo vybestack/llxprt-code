@@ -29,6 +29,7 @@ import {
   extractProfileName,
   validateProfileName,
   listProfiles,
+  parseProfileLoadTarget,
 } from './profileSchemas.js';
 import {
   saveModelProfile,
@@ -43,6 +44,21 @@ import {
   logger,
   type ProfileLoadResultView,
 } from './profileLoad.js';
+
+async function loadImageProfileCommand(
+  profileName: string,
+): Promise<MessageActionReturn> {
+  try {
+    await getRuntimeApi().loadImageProfileByName(profileName);
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: `Image profile '${profileName}' loaded`,
+    };
+  } catch (error) {
+    return classifyLoadError(error, profileName);
+  }
+}
 
 /**
  * Profile save subcommand
@@ -74,16 +90,39 @@ const saveCommand: SlashCommand = {
       return saveModelProfile(parts);
     }
 
+    if (profileType === 'image') {
+      const profileName = extractProfileName(parts.slice(1).join(' '));
+      const nameError = validateProfileName(profileName);
+      if (profileName === '' || nameError !== null) {
+        return (
+          nameError ?? {
+            type: 'message',
+            messageType: 'error',
+            content: 'Usage: /profile save image <name>',
+          }
+        );
+      }
+      try {
+        await getRuntimeApi().saveImageProfileSnapshot(profileName);
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `Image profile '${profileName}' saved`,
+        };
+      } catch (error) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Failed to save image profile: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+    }
+
     if (profileType === 'loadbalancer') {
       return saveLoadBalancerProfile(parts);
     }
 
-    return {
-      type: 'message',
-      messageType: 'error',
-      content:
-        'Usage: /profile save model <name> or /profile save loadbalancer <lb-name> <roundrobin|failover> [--context-limit N] <profile1> <profile2> [...]',
-    };
+    return saveModelProfile(['model', ...parts]);
   },
 };
 
@@ -108,7 +147,8 @@ const loadCommand: SlashCommand = {
       };
     }
 
-    const profileName = extractProfileName(trimmedArgs);
+    const { profileType, profileName } =
+      await parseProfileLoadTarget(trimmedArgs);
 
     if (!profileName) {
       return {
@@ -121,6 +161,10 @@ const loadCommand: SlashCommand = {
     const nameError = validateProfileName(profileName);
     if (nameError) {
       return nameError;
+    }
+
+    if (profileType === 'image') {
+      return loadImageProfileCommand(profileName);
     }
 
     try {
@@ -359,7 +403,7 @@ const setDefaultCommand: SlashCommand = {
         };
       }
 
-      const profiles = await listProfiles();
+      const profiles = await listProfiles('model');
       if (!profiles.includes(profileName)) {
         return {
           type: 'message',
@@ -458,7 +502,7 @@ const showCommand: SlashCommand = {
     }
 
     try {
-      const profiles = await listProfiles();
+      const profiles = await listProfiles('model');
       if (!profiles.includes(profileName)) {
         return {
           type: 'message',
@@ -511,7 +555,7 @@ const editCommand: SlashCommand = {
     }
 
     try {
-      const profiles = await listProfiles();
+      const profiles = await listProfiles('model');
       if (!profiles.includes(profileName)) {
         return {
           type: 'message',
@@ -541,6 +585,29 @@ export const profileCommand: SlashCommand = {
   subCommands: [
     saveCommand,
     loadCommand,
+    {
+      name: 'reset-image',
+      description:
+        'restore default image backend without changing the model profile',
+      kind: CommandKind.BUILT_IN,
+      action: async (): Promise<MessageActionReturn> => {
+        try {
+          await Promise.resolve(getRuntimeApi().resetActiveImageProfile());
+        } catch (error) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: `Failed to reset image profile: ${error instanceof Error ? error.message : String(error)}`,
+          };
+        }
+        return {
+          type: 'message',
+          messageType: 'info',
+          content:
+            'Image profile reset. Image operations use the default backend; the model profile is unchanged.',
+        };
+      },
+    },
     createCommand,
     deleteCommand,
     setDefaultCommand,
@@ -556,9 +623,13 @@ export const profileCommand: SlashCommand = {
     messageType: 'info',
     content: `Profile management commands:
   /profile save model <name>    - Save current model configuration
+  /profile save image <name>    - Save the active image configuration
   /profile save loadbalancer <lb-name> <roundrobin|failover> [--context-limit N] <profile1> <profile2> [...]
                                 - Save a load balancer profile
-  /profile load <name>          - Load a saved profile
+  /profile load model <name>    - Load a model profile
+  /profile load image <name>    - Load an image profile
+  /profile reset-image          - Restore the default image backend only
+  /profile load <name>          - Load a model profile (alias)
   /profile show <name>          - View details of a specific profile
   /profile edit <name>          - Edit a specific profile
   /profile create               - Interactive wizard to create a profile

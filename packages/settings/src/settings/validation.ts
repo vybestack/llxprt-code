@@ -3,12 +3,19 @@
  */
 
 import { z } from 'zod';
+import {
+  IMAGE_QUALITIES,
+  IMAGE_SIZES,
+  IMAGE_BACKGROUNDS,
+  IMAGE_OPERATIONS,
+} from '../profiles/types.js';
 import type {
   EphemeralSettings,
   LoadBalancerProfile,
   ModelParams,
   Profile,
   StandardProfile,
+  ImageProfile,
 } from '../profiles/types.js';
 
 /**
@@ -93,12 +100,13 @@ const authConfigSchema = z.discriminatedUnion('type', [
 const standardProfileSchema: z.ZodType<StandardProfile> = z
   .object({
     version: z.literal(1),
-    type: z.literal('standard').optional(),
+    type: z.union([z.literal('standard'), z.literal('model')]).optional(),
     provider: z.string().min(1),
     model: z.string().min(1),
     modelParams: modelParamsSchema,
     ephemeralSettings: ephemeralSettingsSchema,
     auth: authConfigSchema.optional(),
+    imageProfile: z.string().min(1).optional(),
   })
   .passthrough();
 
@@ -276,6 +284,51 @@ export function parseLoadBalancerProfile(
     );
   }
   return loadBalancerProfileSchema.parse(input);
+}
+
+const imageProfileSchema: z.ZodType<ImageProfile> = z
+  .object({
+    version: z.literal(1),
+    type: z.literal('image'),
+    label: z.string().min(1).optional(),
+    description: z.string().min(1).optional(),
+    backend: z.enum(['codex', 'openai-images']),
+    model: z.string().min(1),
+    baseUrl: z.string().url(),
+    auth: z.discriminatedUnion('type', [
+      z.object({ type: z.literal('none') }).strict(),
+      z
+        .object({ type: z.literal('api-key'), apiKey: z.string().min(1) })
+        .strict(),
+      z
+        .object({ type: z.literal('named-key'), keyName: z.string().min(1) })
+        .strict(),
+      z
+        .object({ type: z.literal('keyfile'), path: z.string().min(1) })
+        .strict(),
+      z
+        .object({ type: z.literal('oauth'), provider: z.literal('codex') })
+        .strict(),
+    ]),
+    operations: z
+      .array(z.enum(IMAGE_OPERATIONS))
+      .min(1)
+      .max(2)
+      .refine((operations) => new Set(operations).size === operations.length)
+      .optional(),
+    defaults: z
+      .object({
+        quality: z.enum(IMAGE_QUALITIES).optional(),
+        size: z.enum(IMAGE_SIZES).optional(),
+        background: z.enum(IMAGE_BACKGROUNDS).optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
+export function parseImageProfile(_name: string, input: unknown): ImageProfile {
+  return imageProfileSchema.parse(input);
 }
 
 export function parseProfile(input: unknown): Profile {

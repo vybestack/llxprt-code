@@ -15,6 +15,7 @@
 
 /** Normalized input accepted by the shared image-operation runner. */
 export interface ImageOperationRunnerInput {
+  readonly imageProfileName?: string;
   readonly prompt: string;
   readonly outputPath: string;
   readonly inputPaths?: readonly string[];
@@ -23,6 +24,9 @@ export interface ImageOperationRunnerInput {
 
 /** Bounded result surfaced to capability consumers (no base64). */
 export interface ImageOperationRunnerResult {
+  readonly quality?: string;
+  readonly size?: string;
+  readonly usage?: Readonly<Record<string, unknown>>;
   readonly operation: 'generate' | 'edit';
   readonly absoluteOutputPath: string;
   readonly relativeOutputPath: string;

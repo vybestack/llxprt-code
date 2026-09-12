@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { tinyPngBase64 } from './mlx-wire-fixtures.js';
 import { describe, it, expect } from 'bun:test';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   CodexImageBackend,
   buildCodexImageGenerateEndpoint,
@@ -79,6 +83,7 @@ function makeBackend(overrides?: {
   credential?: { accessToken: string; accountId: string };
 }): CodexImageBackend {
   return new CodexImageBackend({
+    mode: 'legacy',
     getCredential: async () =>
       overrides?.credential ?? {
         accessToken: 'token-abc',
@@ -115,12 +120,92 @@ describe('CodexImageBackend', () => {
     expect(backend.name).toBe('codex');
     expect(CODEX_IMAGE_MODEL).toBe('gpt-image-2');
   });
+  it.each([
+    ['generate', 'omitted'],
+    ['generate', 'defaults'],
+    ['generate', 'overrides'],
+    ['edit', 'omitted'],
+    ['edit', 'defaults'],
+    ['edit', 'overrides'],
+  ] as const)(
+    '%s sends %s image knobs without synthesizing values',
+    async (operation, mode) => {
+      const directory = await mkdtemp(join(tmpdir(), 'issue3627-image-knobs-'));
+      try {
+        const inputPath = join(directory, 'input.png');
+        await writeFile(
+          inputPath,
+          Buffer.from(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=',
+            'base64',
+          ),
+        );
+        const { fetchImpl, captured } = makeStubFetch({
+          status: 200,
+          body: { data: [{ b64_json: tinyPngBase64 }] },
+        });
+        const defaults = {
+          background: 'transparent',
+          quality: 'high',
+          size: '1024x1536',
+        } as const;
+        const overrides = {
+          background: 'opaque',
+          quality: 'low',
+          size: '1536x1024',
+        } as const;
+        const backend = new CodexImageBackend({
+          getCredential: async () => ({
+            accessToken: 'token',
+            accountId: 'acct',
+          }),
+          getBaseUrl: () => undefined,
+          mode: 'profile',
+          ...(mode === 'omitted' ? {} : { defaults }),
+          fetchImpl,
+        });
+        const request = {
+          prompt: 'image knobs',
+          ...(mode === 'overrides' ? overrides : {}),
+        };
+
+        if (operation === 'edit') {
+          await backend.edit(
+            { ...request, inputPaths: [inputPath] },
+            new AbortController().signal,
+          );
+        } else {
+          await backend.generate(request, new AbortController().signal);
+        }
+
+        const body: unknown = JSON.parse(String(captured()?.init.body));
+        const expectedKnobs = mode === 'overrides' ? overrides : defaults;
+        const imageUrl = expect.stringMatching(/^data:image\/png;base64,/);
+        expect(body).toStrictEqual({
+          model: 'gpt-image-2',
+          prompt: request.prompt,
+          ...(operation === 'edit'
+            ? {
+                images: [
+                  {
+                    image_url: imageUrl,
+                  },
+                ],
+              }
+            : { n: 1 }),
+          ...(mode === 'omitted' ? {} : expectedKnobs),
+        });
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
 
   describe('A1 — request shape', () => {
-    it('posts to the generate endpoint with model gpt-image-2 and auto defaults, n:1', async () => {
+    it('pins merge-base no-profile generation wire bytes with auto defaults', async () => {
       const { fetchImpl, captured } = makeStubFetch({
         status: 200,
-        body: { data: [{ b64_json: 'aGVsbG8=' }] },
+        body: { data: [{ b64_json: tinyPngBase64 }] },
       });
       const backend = makeBackend({ fetchImpl });
 
@@ -136,24 +221,106 @@ describe('CodexImageBackend', () => {
         'https://chatgpt.com/backend-api/codex/images/generations',
       );
 
+      expect(req?.init.body).toBe(
+        JSON.stringify({
+          model: 'gpt-image-2',
+          prompt: 'a serene mountain lake at dawn',
+          background: 'auto',
+          quality: 'auto',
+          size: 'auto',
+          n: 1,
+        }),
+      );
       const body = JSON.parse(req?.init.body as string) as Record<
         string,
         unknown
       >;
       expect(body['model']).toBe('gpt-image-2');
       expect(body['prompt']).toBe('a serene mountain lake at dawn');
-      expect(body['background']).toBe('auto');
-      expect(body['quality']).toBe('auto');
-      expect(body['size']).toBe('auto');
+      expect(body.background).toBe('auto');
+      expect(body.quality).toBe('auto');
+      expect(body.size).toBe('auto');
       expect(body['n']).toBe(1);
+
       // The generation contract must NOT include edit-only keys.
       expect(body['images']).toBeUndefined();
       expect(body['image']).toBeUndefined();
       // The body must contain ONLY the documented generation keys — no
       // extra/undocumented fields that the provider might reject.
       expect(Object.keys(body).sort()).toStrictEqual(
-        ['background', 'model', 'n', 'prompt', 'quality', 'size'].sort(),
+        ['model', 'n', 'prompt', 'background', 'quality', 'size'].sort(),
       );
+    });
+
+    it('rejects custom profile origins before credentials or requests', async () => {
+      const { fetchImpl, captured } = makeStubFetch({
+        status: 200,
+        body: { data: [{ b64_json: tinyPngBase64 }] },
+      });
+      let credentials = 0;
+      const backend = new CodexImageBackend({
+        getCredential: async () => {
+          credentials++;
+          return { accessToken: 'secret', accountId: 'account' };
+        },
+        getBaseUrl: () => 'https://images.example/v1',
+        mode: 'profile',
+        fetchImpl,
+      });
+      await expect(
+        backend.generate(
+          { prompt: 'profile driven' },
+          new AbortController().signal,
+        ),
+      ).rejects.toMatchObject({ name: 'ImageBackendBaseUrlError' });
+      expect(credentials).toBe(0);
+      expect(captured()).toBeUndefined();
+    });
+    it('pins merge-base no-profile generation request overrides', async () => {
+      const { fetchImpl, captured } = makeStubFetch({
+        status: 200,
+        body: { data: [{ b64_json: tinyPngBase64 }] },
+      });
+      await makeBackend({ fetchImpl }).generate(
+        {
+          prompt: 'override',
+          background: 'opaque',
+          quality: 'high',
+          size: '512x512',
+        },
+        new AbortController().signal,
+      );
+      expect(captured()?.init.body).toBe(
+        JSON.stringify({
+          model: 'gpt-image-2',
+          prompt: 'override',
+          background: 'opaque',
+          quality: 'high',
+          size: '512x512',
+          n: 1,
+        }),
+      );
+    });
+    it('passes explicit profile auto values through unchanged', async () => {
+      const { fetchImpl, captured } = makeStubFetch({
+        status: 200,
+        body: { data: [{ b64_json: tinyPngBase64 }] },
+      });
+      await new CodexImageBackend({
+        mode: 'profile',
+        getCredential: async () => ({
+          accessToken: 'secret',
+          accountId: 'account',
+        }),
+        defaults: { quality: 'auto' },
+        fetchImpl,
+      }).generate({ prompt: 'auto' }, new AbortController().signal);
+      expect(JSON.parse(String(captured()?.init.body))).toStrictEqual({
+        model: 'gpt-image-2',
+        prompt: 'auto',
+        quality: 'auto',
+        n: 1,
+      });
     });
   });
 
@@ -161,7 +328,7 @@ describe('CodexImageBackend', () => {
     it('sends the full header set without session_id when sessionId is absent', async () => {
       const { fetchImpl, captured } = makeStubFetch({
         status: 200,
-        body: { data: [{ b64_json: 'aGVsbG8=' }] },
+        body: { data: [{ b64_json: tinyPngBase64 }] },
       });
       const backend = makeBackend({ fetchImpl });
 
@@ -178,7 +345,7 @@ describe('CodexImageBackend', () => {
     it('includes session_id when sessionId is provided', async () => {
       const { fetchImpl, captured } = makeStubFetch({
         status: 200,
-        body: { data: [{ b64_json: 'aGVsbG8=' }] },
+        body: { data: [{ b64_json: tinyPngBase64 }] },
       });
       const backend = makeBackend({ fetchImpl });
 
@@ -196,7 +363,18 @@ describe('CodexImageBackend', () => {
     it('normalizes data[0].b64_json into a base64/png ImageResult with the prompt as caption', async () => {
       const { fetchImpl } = makeStubFetch({
         status: 200,
-        body: { data: [{ b64_json: 'aGVsbG8=' }] },
+        body: {
+          quality: 'low',
+          size: '1254x1254',
+          usage: { input_tokens: 14, output_tokens: 515 },
+          data: [
+            {
+              b64_json: tinyPngBase64,
+              generation_id: 'generation-1',
+              revised_prompt: 'a panda in a tree',
+            },
+          ],
+        },
       });
       const backend = makeBackend({ fetchImpl });
 
@@ -207,8 +385,15 @@ describe('CodexImageBackend', () => {
 
       expect(result.mimeType).toBe('image/png');
       expect(result.encoding).toBe('base64');
-      expect(result.data).toBe('aGVsbG8=');
+      expect(result.data).toBe(tinyPngBase64);
       expect(result.caption).toBe('a red panda');
+      expect(result.revisedPrompt).toBe('a panda in a tree');
+      expect(result.quality).toBe('low');
+      expect(result.size).toBe('1254x1254');
+      expect(result.usage).toStrictEqual({
+        input_tokens: 14,
+        output_tokens: 515,
+      });
     });
   });
 
@@ -302,7 +487,7 @@ describe('CodexImageBackend', () => {
     it('forces model gpt-image-2 even when request.model is a different/malicious value', async () => {
       const { fetchImpl, captured } = makeStubFetch({
         status: 200,
-        body: { data: [{ b64_json: 'aGVsbG8=' }] },
+        body: { data: [{ b64_json: tinyPngBase64 }] },
       });
       const backend = makeBackend({ fetchImpl });
 
@@ -327,7 +512,7 @@ describe('CodexImageBackend', () => {
     it('surfaces an abort error when the signal is already aborted', async () => {
       const { fetchImpl } = makeStubFetch({
         status: 200,
-        body: { data: [{ b64_json: 'aGVsbG8=' }] },
+        body: { data: [{ b64_json: tinyPngBase64 }] },
       });
       const backend = makeBackend({ fetchImpl });
       const controller = new AbortController();
@@ -351,9 +536,12 @@ describe('CodexImageBackend', () => {
       ) => {
         capturedSignal = init?.signal;
         return Promise.resolve(
-          new Response(JSON.stringify({ data: [{ b64_json: 'aGVsbG8=' }] }), {
-            status: 200,
-          }),
+          new Response(
+            JSON.stringify({ data: [{ b64_json: tinyPngBase64 }] }),
+            {
+              status: 200,
+            },
+          ),
         );
       }) as typeof fetch;
 

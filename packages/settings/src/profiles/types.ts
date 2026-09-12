@@ -202,12 +202,63 @@ export type EphemeralSettings = ProfileEphemeralSettings;
  */
 export interface StandardProfile {
   version: 1;
-  type?: 'standard';
+  type?: 'standard' | 'model';
+  label?: string;
+  description?: string;
   provider: string;
   model: string;
   modelParams: ModelParams;
   ephemeralSettings: EphemeralSettings;
   auth?: AuthConfig;
+  imageProfile?: string;
+}
+
+export const IMAGE_QUALITIES = [
+  'auto',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+] as const;
+export type ImageQuality = (typeof IMAGE_QUALITIES)[number];
+
+export const IMAGE_SIZES = [
+  'auto',
+  '256x256',
+  '512x512',
+  '1024x1024',
+  '1024x1536',
+  '1536x1024',
+] as const;
+export type ImageSize = (typeof IMAGE_SIZES)[number];
+export const IMAGE_BACKGROUNDS = ['auto', 'transparent', 'opaque'] as const;
+export type ImageBackground = (typeof IMAGE_BACKGROUNDS)[number];
+export const IMAGE_OPERATIONS = ['generate', 'edit'] as const;
+export type ImageOperation = (typeof IMAGE_OPERATIONS)[number];
+
+export type PersistedImageBackendAuth =
+  | { readonly type: 'none' }
+  | { readonly type: 'api-key'; readonly apiKey: string }
+  | { readonly type: 'named-key'; readonly keyName: string }
+  | { readonly type: 'keyfile'; readonly path: string }
+  | { readonly type: 'oauth'; readonly provider: 'codex' };
+
+export interface ImageProfile {
+  version: 1;
+  type: 'image';
+  label?: string;
+  description?: string;
+  backend: 'codex' | 'openai-images';
+  model: string;
+  baseUrl: string;
+  auth: PersistedImageBackendAuth;
+  operations?: readonly ImageOperation[];
+  defaults?: {
+    readonly quality?: ImageQuality;
+    readonly size?: ImageSize;
+    readonly background?: ImageBackground;
+  };
 }
 
 /**

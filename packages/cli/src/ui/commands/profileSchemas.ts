@@ -45,26 +45,34 @@ export function validateBucketName(bucket: string): {
   return { valid: true };
 }
 
-export async function listProfiles(): Promise<string[]> {
-  return getRuntimeApi().listSavedProfiles();
+export async function listProfiles(
+  kind?: 'model' | 'image' | 'standard',
+): Promise<string[]> {
+  return getRuntimeApi().listSavedProfiles(kind);
 }
 
-export const profileNameCompleter: CompleterFn = withFuzzyFilter(async () => {
-  try {
-    const profiles = await listProfiles();
-    return profiles.map((profile) => ({
-      value: profile,
-      description: profileSuggestionDescription,
-    }));
-  } catch {
-    return [];
-  }
-});
+function profileCompleter(kind?: 'model' | 'image' | 'standard'): CompleterFn {
+  return withFuzzyFilter(async () => {
+    try {
+      const profiles = await listProfiles(kind);
+      return profiles.map((profile) => ({
+        value: profile,
+        description: profileSuggestionDescription,
+      }));
+    } catch {
+      return [];
+    }
+  });
+}
+
+export const profileNameCompleter = profileCompleter('model');
+const imageProfileCompleter = profileCompleter('image');
+const allProfileCompleter = profileCompleter();
 
 const lbMemberProfileCompleter: CompleterFn = withFuzzyFilter(
   async (_ctx, _partial, tokens) => {
     try {
-      const profiles = await listProfiles();
+      const profiles = await listProfiles('model');
       // tokens.tokens format: ["save", "loadbalancer", "lb-name", "policy", "prof1", "prof2", ...]
       // Skip first 4 tokens (save, loadbalancer, lb-name, policy) to get already selected profiles
       const alreadySelected = tokens.tokens
@@ -164,6 +172,19 @@ export const profileSaveSchema: CommandArgumentSchema = [
   },
   {
     kind: 'literal',
+    value: 'image',
+    description: 'Save the active image configuration',
+    next: [
+      {
+        kind: 'value',
+        name: 'profile-name',
+        description: 'Enter image profile name',
+        completer: imageProfileCompleter,
+      },
+    ],
+  },
+  {
+    kind: 'literal',
     value: 'loadbalancer',
     description: 'Create a load balancer profile',
     next: [
@@ -193,9 +214,35 @@ export const profileSaveSchema: CommandArgumentSchema = [
 
 export const profileLoadSchema: CommandArgumentSchema = [
   {
+    kind: 'literal',
+    value: 'model',
+    description: 'Load a model profile',
+    next: [
+      {
+        kind: 'value',
+        name: 'profile',
+        description: 'Select model profile to load',
+        completer: profileNameCompleter,
+      },
+    ],
+  },
+  {
+    kind: 'literal',
+    value: 'image',
+    description: 'Load an image profile',
+    next: [
+      {
+        kind: 'value',
+        name: 'profile',
+        description: 'Select image profile to load',
+        completer: imageProfileCompleter,
+      },
+    ],
+  },
+  {
     kind: 'value',
     name: 'profile',
-    description: 'Select profile to load',
+    description: 'Select model profile to load',
     completer: profileNameCompleter,
   },
 ];
@@ -205,7 +252,7 @@ export const profileDeleteSchema: CommandArgumentSchema = [
     kind: 'value',
     name: 'profile',
     description: 'Select profile to delete',
-    completer: profileNameCompleter,
+    completer: allProfileCompleter,
   },
 ];
 
@@ -216,7 +263,7 @@ export const profileSetDefaultSchema: CommandArgumentSchema = [
     description: 'Set default profile or choose none',
     completer: withFuzzyFilter(async () => {
       try {
-        const profiles = await listProfiles();
+        const profiles = await listProfiles('model');
         const candidates = ['none', ...profiles];
         return candidates.map((option) => ({
           value: option,
@@ -266,4 +313,26 @@ export function validateProfileName(
     };
   }
   return null;
+}
+
+/** Resolve typed targets while preserving saved profiles named model or image. */
+export async function parseProfileLoadTarget(args: string): Promise<{
+  readonly profileType: 'model' | 'image';
+  readonly profileName: string;
+}> {
+  const typeSeparator = args.search(/[ \t]/);
+  const possibleType =
+    typeSeparator === -1 ? args : args.slice(0, typeSeparator);
+  const isTypeToken = possibleType === 'model' || possibleType === 'image';
+  const isSavedName =
+    isTypeToken &&
+    typeSeparator === -1 &&
+    (await listProfiles()).includes(args);
+  const isTyped = isTypeToken && !isSavedName;
+  const typedName =
+    typeSeparator === -1 ? '' : args.slice(typeSeparator + 1).trim();
+  return {
+    profileType: isTyped ? possibleType : 'model',
+    profileName: extractProfileName(isTyped ? typedName : args),
+  };
 }

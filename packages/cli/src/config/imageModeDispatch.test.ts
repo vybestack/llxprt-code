@@ -37,7 +37,13 @@ import {
 } from './imageModeDispatch.js';
 import { ImageModeError } from './imageMode.js';
 import type { ParsedCliArgs } from '../cliBootstrap.js';
-import { ExitCodes } from '@vybestack/llxprt-code-core';
+import {
+  ExitCodes,
+  createImageProfileRuntimeState,
+  runImageOperation,
+} from '@vybestack/llxprt-code-core';
+import { ProfileManager } from '@vybestack/llxprt-code-settings';
+import { createImageProfileOperationResolver } from './imageProfileSelection.js';
 
 const PNG_SIGNATURE = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -307,6 +313,74 @@ describe('runDirectImageModeAndExit', () => {
     const config = makeConfigWithRunner(vi.fn());
     const code = await runDirectImageModeAndExit(makeArgs(), config as never);
     expect(code).toBeNull();
+  });
+
+  it.each(['model', 'malformed'] as const)(
+    'reports a %s direct profile as an input error',
+    async (kind) => {
+      const profiles = path.join(workspaceRoot, 'profiles');
+      const manager = new ProfileManager(profiles);
+      await manager.saveProfile('wrong', {
+        version: 1,
+        provider: 'openai',
+        model: 'chat',
+        modelParams: {},
+        ephemeralSettings: {},
+      });
+      if (kind === 'malformed')
+        await fs.promises.writeFile(
+          path.join(profiles, 'wrong.json'),
+          'invalid json',
+        );
+      const state = createImageProfileRuntimeState();
+      const resolveBackend = createImageProfileOperationResolver(
+        manager,
+        state,
+        { oauthManager: undefined, getActiveProvider: () => undefined },
+      );
+      const code = await runDirectImageModeAndExit(
+        makeArgs({
+          imageProfile: 'wrong',
+          imageOutput: 'cat.png',
+          imagePrompt: 'cat',
+        }),
+        {
+          getRunImageOperation: () => (input) =>
+            runImageOperation(input, { workspaceRoot, resolveBackend }),
+        },
+      );
+      expect(code).toBe(ExitCodes.FATAL_INPUT_ERROR);
+      expect(stderrChunks.join('')).toContain('wrong');
+      const expectedDiagnostic =
+        kind === 'model'
+          ? /model.*image|image.*model/i
+          : /could not be loaded/i;
+      expect(stderrChunks.join('')).toMatch(expectedDiagnostic);
+      expect(fs.existsSync(path.join(workspaceRoot, 'cat.png'))).toBe(false);
+    },
+  );
+
+  it('reports a dangling direct profile as an input error naming the profile', async () => {
+    const manager = new ProfileManager(path.join(workspaceRoot, 'profiles'));
+    const state = createImageProfileRuntimeState();
+    const resolveBackend = createImageProfileOperationResolver(manager, state, {
+      oauthManager: undefined,
+      getActiveProvider: () => undefined,
+    });
+    const code = await runDirectImageModeAndExit(
+      makeArgs({
+        imageProfile: 'missing-direct',
+        imageOutput: 'cat.png',
+        imagePrompt: 'cat',
+      }),
+      {
+        getRunImageOperation: () => (input) =>
+          runImageOperation(input, { workspaceRoot, resolveBackend }),
+      },
+    );
+    expect(code).toBe(ExitCodes.FATAL_INPUT_ERROR);
+    expect(stderrChunks.join('')).toContain('missing-direct');
+    expect(fs.existsSync(path.join(workspaceRoot, 'cat.png'))).toBe(false);
   });
 
   it('runs the common runner and emits text output with the exact saved path (no base64)', async () => {

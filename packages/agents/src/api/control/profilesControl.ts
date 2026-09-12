@@ -30,6 +30,7 @@ import type {
 } from '../agent.js';
 
 import { parseProfileJson } from '@vybestack/llxprt-code-settings';
+import { resetActiveImageProfile } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { AgentProviderState } from '../agentImpl.js';
 
 /**
@@ -118,6 +119,11 @@ export class ProfilesControl implements AgentProfileControl {
   private defaultName: string | undefined;
 
   constructor(private readonly deps: ProfilesControlDeps) {}
+
+  /** Clear the runtime image selection without changing the model profile. */
+  resetActiveImageProfile(): void {
+    resetActiveImageProfile();
+  }
 
   /**
    * Returns resolvable profile summaries, merging in-memory saved profiles

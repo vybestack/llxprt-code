@@ -214,6 +214,11 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   const applyCliArgumentOverrides = vi.fn(async () => {});
   const registerCliProviderInfrastructure = vi.fn();
   const getCliRuntimeServices = vi.fn(() => ({
+    profileManager: {
+      loadProfile: vi.fn(),
+      saveProfile: vi.fn(),
+      listProfiles: vi.fn(async () => []),
+    },
     runtime: runtimeStateRef.value.runtime,
     providerManager: runtimeStateRef.value.providerManager,
     config: runtimeConfigRef.value,

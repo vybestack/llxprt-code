@@ -40,7 +40,10 @@ import {
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import { createSessionMessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type {
+  ProfileManager,
+  SettingsService,
+} from '@vybestack/llxprt-code-settings';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import { createProviderManager } from '../composition/index.js';
 import type { ProviderContributionRegistry } from '../composition/runtimePlugins/types.js';
@@ -61,6 +64,7 @@ import { disposeCliRuntimeRegistration } from './runtimeRegistry.js';
 export interface AssembleCliProviderRuntimeInput {
   /** The runtime SettingsService (resolved by the caller). */
   readonly settingsService: SettingsService;
+  readonly profileManager?: ProfileManager;
   /**
    * The resolved Config, when it already exists. During early CLI bootstrap the
    * Config is created later (loadCliConfig), so this is `undefined` and the
@@ -126,6 +130,7 @@ export function assembleCliProviderRuntime(
     setCliRuntimeContext(settingsService, config, {
       runtimeId,
       metadata,
+      profileManager: input.profileManager,
     });
 
     const runtime = {

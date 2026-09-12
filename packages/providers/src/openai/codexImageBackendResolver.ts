@@ -5,22 +5,29 @@
  */
 
 /**
- * Factory that builds a lazy resolveBackend closure for GenerateImageTool.
- *
- * Returns a CodexImageBackend whenever an OAuth manager is available, and null
- * otherwise. Image generation is NOT gated on the active conversational
- * provider: it is a Codex-backed capability usable from any provider. Whether
- * the user actually holds Codex credentials is resolved per operation, so a
- * missing token produces an actionable authentication error rather than the
- * capability appearing absent.
- *
- * The closure is deliberately lazy: it reads the active provider and OAuth
- * state at invocation time (when the model calls generate_image), NOT at
- * registration time. This is critical because the provider manager and OAuth
- * manager are wired onto Config AFTER the tool registry is constructed.
+ * Resolve the active image profile to an OpenAI Images or Codex transport.
+ * Profile selection and the active provider are read when the resolver runs;
+ * the OAuth manager is supplied when the resolver is created. Credentials are
+ * fetched separately for every generate or edit operation.
  */
 
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
+import type {
+  ImageBackend,
+  ImageGenerateRequest,
+} from '@vybestack/llxprt-code-providers/imageBackend.js';
+import { OpenAIImagesBackend } from './openaiImagesBackend.js';
+import {
+  isLocalImageEndpoint,
+  ImageBackendBaseUrlError,
+  validateCodexImageProfileBaseUrl,
+} from './imageEndpoint.js';
+import type { ImageProfile } from '@vybestack/llxprt-code-settings';
+import type { ImageBackendAuth } from '../imageBackendAuth.js';
+import {
+  ImageCredentialError,
+  resolveCodexImageCredential,
+} from '../image-auth-resolution.js';
 
 import {
   CodexImageBackend,
@@ -30,51 +37,122 @@ import {
 import { getBaseUrlFromProvider } from '../baseUrlResolver.js';
 import type { IProvider } from '../IProvider.js';
 
-/**
- * Structural shape the GenerateImageTool expects from a resolved backend.
- * Duplicated here because the tools package is a leaf dependency that cannot
- * be imported from providers. TypeScript structural typing makes the concrete
- * CodexImageBackend assignable to this shape.
- */
-export interface ResolvedImageBackendLike {
-  readonly name: string;
-  readonly provider: string;
+export type ImageProfileOperationOverrides = Pick<
+  ImageGenerateRequest,
+  'quality' | 'size' | 'background'
+>;
+
+export interface ResolvedImageProfileBackendConfig {
+  readonly backend: ImageProfile['backend'];
   readonly model: string;
-  generate(
-    request: {
-      readonly prompt: string;
-      readonly model?: string;
-      readonly background?: string;
-      readonly quality?: string;
-      readonly size?: string;
-      readonly n?: number;
-      readonly sessionId?: string;
-    },
-    signal: AbortSignal,
-  ): Promise<{
-    readonly mimeType: string;
-    readonly data: string;
-    readonly encoding: 'url' | 'base64';
-    readonly caption?: string;
-  }>;
-  edit(
-    request: {
-      readonly prompt: string;
-      readonly inputPaths: readonly string[];
-      readonly sessionId?: string;
-    },
-    signal: AbortSignal,
-  ): Promise<{
-    readonly mimeType: string;
-    readonly data: string;
-    readonly encoding: 'url' | 'base64';
-    readonly caption?: string;
-  }>;
+  readonly baseUrl: string;
+  readonly auth: ImageBackendAuth;
+  readonly overrides: ImageProfileOperationOverrides;
+  readonly operations?: ImageProfile['operations'];
+}
+
+type ImageBackendAuthContext = 'codex' | 'openai' | 'local';
+
+export class ImageBackendAuthModeError extends Error {
+  readonly profileName: string;
+  readonly backend: ImageBackendAuthContext;
+  readonly authType: ImageBackendAuth['type'];
+
+  constructor(
+    profileName: string,
+    backend: ImageBackendAuthContext,
+    authType: ImageBackendAuth['type'],
+  ) {
+    super(
+      `Image profile '${profileName}' cannot use auth mode '${authType}' with the '${backend}' backend`,
+    );
+    this.name = 'ImageBackendAuthModeError';
+    this.profileName = profileName;
+    this.backend = backend;
+    this.authType = authType;
+  }
+}
+
+export { ImageBackendBaseUrlError } from './imageEndpoint.js';
+
+function resolveAuthContext(
+  profile: ImageProfile,
+  profileName: string,
+): ImageBackendAuthContext {
+  if (profile.backend === 'codex') {
+    validateCodexImageProfileBaseUrl(profile.baseUrl, profileName);
+    return 'codex';
+  }
+
+  try {
+    const url = new URL(profile.baseUrl);
+    const local = isLocalImageEndpoint(profile.baseUrl);
+    if (
+      url.username !== '' ||
+      url.password !== '' ||
+      (!local && url.protocol !== 'https:')
+    ) {
+      throw new ImageBackendBaseUrlError(profileName, profile.baseUrl);
+    }
+    if (local) return 'local';
+  } catch (cause) {
+    throw new ImageBackendBaseUrlError(profileName, profile.baseUrl, { cause });
+  }
+  return 'openai';
+}
+
+export function validateImageProfileAuth(
+  profile: ImageProfile,
+  profileName = '<active>',
+): void {
+  const backend = resolveAuthContext(profile, profileName);
+  const authType = profile.auth.type;
+  const allowedModes: Readonly<
+    Record<ImageBackendAuthContext, ReadonlyArray<ImageBackendAuth['type']>>
+  > = {
+    codex: ['oauth'],
+    openai: ['api-key', 'named-key', 'keyfile'],
+    local: ['none'],
+  };
+  const valid = allowedModes[backend].includes(authType);
+  if (!valid) {
+    throw new ImageBackendAuthModeError(profileName, backend, authType);
+  }
+}
+
+export function resolveImageProfileBackendConfig(
+  profile: ImageProfile,
+  profileName = '<active>',
+): ResolvedImageProfileBackendConfig {
+  validateImageProfileAuth(profile, profileName);
+  const defaults = profile.defaults;
+  const overrides: ImageProfileOperationOverrides = {
+    ...(defaults?.quality === undefined ? {} : { quality: defaults.quality }),
+    ...(defaults?.size === undefined ? {} : { size: defaults.size }),
+    ...(defaults?.background === undefined
+      ? {}
+      : { background: defaults.background }),
+  };
+  return {
+    backend: profile.backend,
+    model: profile.model,
+    baseUrl: profile.baseUrl,
+    auth: profile.auth,
+    ...(profile.operations === undefined
+      ? {}
+      : { operations: profile.operations }),
+    overrides,
+  };
 }
 
 export interface CodexImageBackendResolverDeps {
+  readonly getImageApiKey?: (
+    auth: ImageBackendAuth,
+  ) => Promise<string | undefined>;
   readonly oauthManager: OAuthManager | undefined;
   readonly getActiveProvider: () => IProvider | undefined;
+  readonly getActiveImageProfile?: () => ImageProfile | undefined;
+  readonly getActiveImageProfileName?: () => string | undefined;
   readonly fetchImpl?: typeof fetch;
 }
 
@@ -84,76 +162,74 @@ export interface CodexImageBackendResolverDeps {
  */
 const DEFAULT_CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 
-function isCodexBaseUrl(baseUrl: string | undefined): boolean {
+function isCodexBaseUrl(baseUrl: string | undefined): baseUrl is string {
   return baseUrl?.includes('chatgpt.com/backend-api/codex') ?? false;
 }
 
 /**
- * Fetch ONE fresh Codex OAuth token and validate it as a typed Codex token,
- * returning a consistently-paired `{ accessToken, accountId }` credential.
+ * Build a resolver that validates an active image profile and selects its
+ * OpenAI Images or Codex backend. Without a profile, return the default Codex
+ * backend if an OAuth manager exists, or null otherwise. Conversational
+ * provider selection does not gate image capability.
  *
- * Called exactly once per generate()/edit() so the access token and account id
- * always originate from the same token fetch and never diverge.
- */
-async function resolveFreshCredential(
-  oauthManager: NonNullable<OAuthManager>,
-): Promise<CodexImageCredential> {
-  const token = await oauthManager.getOAuthToken?.('codex');
-  if (token === null || token === undefined) {
-    throw new Error(
-      'Codex image generation requires OAuth authentication. Run /auth codex enable.',
-    );
-  }
-  const accessToken = token.access_token;
-  if (typeof accessToken !== 'string' || accessToken === '') {
-    throw new Error(
-      'Codex image generation requires an OAuth token with a non-empty access_token.',
-    );
-  }
-  const accountId = (token as Record<string, unknown>)['account_id'];
-  if (typeof accountId !== 'string' || accountId === '') {
-    throw new Error(
-      'Codex image generation requires an OAuth token with account_id.',
-    );
-  }
-  return { accessToken, accountId };
-}
-
-/**
- * Build a lazy resolver that returns a CodexImageBackend when the active
- * provider is in Codex mode, or null otherwise.
- *
- * Auth is resolved lazily and exactly once per generate()/edit() call via the
- * backend's injected `getCredential` callback, so each operation fetches a
- * fresh, consistently-paired credential object (not cached globally).
+ * Explicit Codex profiles resolve even without OAuth machinery; attempting an
+ * operation then raises an authentication error. Each Codex operation resolves
+ * a fresh paired token and account id. OpenAI Images operations use only the
+ * profile's credential resolver, or no credentials for local endpoints.
  */
 export function createCodexImageBackendResolver(
   deps: CodexImageBackendResolverDeps,
-): () => ResolvedImageBackendLike | null {
+): () => ImageBackend | null {
   return () => {
-    if (deps.oauthManager === undefined) {
+    const imageProfile = deps.getActiveImageProfile?.();
+    const profileConfig =
+      imageProfile === undefined
+        ? undefined
+        : resolveImageProfileBackendConfig(
+            imageProfile,
+            deps.getActiveImageProfileName?.(),
+          );
+    if (profileConfig?.backend === 'openai-images') {
+      const getImageApiKey = deps.getImageApiKey;
+      if (profileConfig.auth.type !== 'none' && getImageApiKey === undefined) {
+        throw new ImageCredentialError(
+          'api_key_empty',
+          `Image profile '${deps.getActiveImageProfileName?.() ?? '<active>'}' requires an API key resolver.`,
+        );
+      }
+      return new OpenAIImagesBackend({
+        config: profileConfig,
+        ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }),
+        ...(getImageApiKey === undefined
+          ? {}
+          : { getApiKey: () => getImageApiKey(profileConfig.auth) }),
+      });
+    }
+
+    const oauthManager = deps.oauthManager;
+    if (oauthManager === undefined && profileConfig === undefined) {
       return null;
     }
 
-    // Image generation is a Codex-backed capability that is INDEPENDENT of the
-    // conversational provider. A user chatting with Anthropic (or any other
-    // provider) can still generate images with their Codex credentials, so the
-    // active provider is deliberately NOT a gate.
-    //
-    // The active provider's base URL is honoured only when it is already a
-    // Codex URL, so a custom Codex endpoint keeps working; otherwise the
-    // canonical endpoint is used.
     const provider = deps.getActiveProvider();
     const activeBaseUrl =
       provider === undefined ? undefined : getBaseUrlFromProvider(provider);
-    const baseUrl = isCodexBaseUrl(activeBaseUrl)
-      ? (activeBaseUrl as string)
-      : DEFAULT_CODEX_BASE_URL;
+    const baseUrl =
+      profileConfig?.baseUrl ??
+      (isCodexBaseUrl(activeBaseUrl) ? activeBaseUrl : DEFAULT_CODEX_BASE_URL);
 
-    const oauthManager = deps.oauthManager;
+    const getCredential = (): Promise<CodexImageCredential> =>
+      resolveCodexImageCredential(oauthManager);
     const backendDeps: CodexImageBackendDeps = {
-      getCredential: () => resolveFreshCredential(oauthManager),
+      mode: profileConfig === undefined ? 'legacy' : 'profile',
+      getCredential,
       getBaseUrl: () => baseUrl,
+      ...(profileConfig === undefined
+        ? {}
+        : {
+            model: profileConfig.model,
+            defaults: profileConfig.overrides,
+          }),
       ...(deps.fetchImpl !== undefined ? { fetchImpl: deps.fetchImpl } : {}),
     };
 

@@ -12,7 +12,6 @@ import {
   STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
   STREAM_IDLE_TIMEOUT_SETTING_KEY,
   type Config,
-  type ImageOperationBackend,
 } from '@vybestack/llxprt-code-core';
 import { setOsKeyringDisabledBySetting } from '@vybestack/llxprt-code-storage';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
@@ -25,9 +24,13 @@ import {
   getCliRuntimeContext,
   setCliRuntimeContext,
   applyCliSetArguments,
+  getCliRuntimeServices,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { createCodexImageBackendResolver } from '@vybestack/llxprt-code-providers';
+import {
+  createCodexImageBackendResolver,
+  createImageApiKeyResolver,
+} from '@vybestack/llxprt-code-providers';
 import { preflightAgentActivation } from '@vybestack/llxprt-code-agents';
 import { createOAuthSettingsAdapter } from '../auth/oauth-settings-adapter.js';
 import {
@@ -45,6 +48,11 @@ import {
   type CliRuntimeOverrides,
 } from './profileBootstrap.js';
 import type { CliArgs } from './cliArgParser.js';
+import { buildImageModeFlags } from './imageModeDispatch.js';
+import {
+  applyStartupImageProfile,
+  createImageProfileOperationResolver,
+} from './imageProfileSelection.js';
 import type { Settings } from './settings.js';
 import type { ProfileLoadResult } from './profileResolution.js';
 import type { ProviderModelResult } from './providerModelResolver.js';
@@ -287,6 +295,7 @@ async function setupRuntimeContext(
   const providerContributions = input.runtimeOverrides.providerContributions;
   const finalRuntime = assembleCliProviderRuntime({
     settingsService,
+    profileManager,
     config,
     runtimeId: bootstrapRuntimeId,
     metadata: baseBootstrapMetadata,
@@ -309,9 +318,16 @@ async function setupRuntimeContext(
   // (when the model invokes generate_image), so even though the tool registry
   // was already created during config.initialize(), the lazy closure reads
   // this resolver at invocation time.
-  const imageBackendResolver = createCodexImageBackendResolver({
+  const imageProfileState = getCliRuntimeServices().imageProfileState;
+  const imageBackendDeps = {
+    getImageApiKey: createImageApiKeyResolver(finalRuntime),
     oauthManager: finalRuntime.oauthManager,
     getActiveProvider: () => runtimeState.providerManager.getActiveProvider(),
+  };
+  const imageBackendResolver = createCodexImageBackendResolver({
+    ...imageBackendDeps,
+    getActiveImageProfile: () => imageProfileState.getActive()?.profile,
+    getActiveImageProfileName: () => imageProfileState.getActive()?.name,
   });
   config.setImageBackendResolver(imageBackendResolver);
 
@@ -320,27 +336,16 @@ async function setupRuntimeContext(
   // is bound to the workspace root and the image backend resolver; it owns
   // request normalization, output/input path validation, provider dispatch,
   // atomic write, and the normalized result.
+  const resolveImageOperationBackend = createImageProfileOperationResolver(
+    profileManager,
+    imageProfileState,
+    imageBackendDeps,
+  );
   config.setRunImageOperation((input) =>
-    runImageOperation(
-      {
-        prompt: input.prompt,
-        outputPath: input.outputPath,
-        ...(input.inputPaths !== undefined
-          ? { inputPaths: input.inputPaths }
-          : {}),
-        ...(input.signal !== undefined ? { signal: input.signal } : {}),
-      },
-      {
-        workspaceRoot: config.getTargetDir(),
-        resolveBackend: () => {
-          const backend = imageBackendResolver();
-          if (backend === null) {
-            return null;
-          }
-          return backend as ImageOperationBackend | null;
-        },
-      },
-    ),
+    runImageOperation(input, {
+      workspaceRoot: config.getTargetDir(),
+      resolveBackend: resolveImageOperationBackend,
+    }),
   );
 
   logger.debug(
@@ -705,6 +710,18 @@ export async function finalizeConfig(input: PostConfigInput): Promise<Config> {
 
   // Steps 12-13: Apply profile + switch provider
   const finalProvider = await activateProviderAndProfile(input);
+  const services = getCliRuntimeServices();
+  if (!services.profileManager) {
+    throw new Error(
+      '[cli] Profile manager should have been initialized by setupRuntimeContext',
+    );
+  }
+  await applyStartupImageProfile(
+    buildImageModeFlags(input.argv),
+    services.profileManager,
+    services.imageProfileState,
+    input.profileLoadResult,
+  );
 
   // Step 14: Reapply CLI overrides after provider switch
   await reapplyCliOverrides(input, finalProvider);

@@ -232,6 +232,11 @@ void vi.mock(
       () => runtimeSettingsState.context?.config ?? null,
     ),
     getCliRuntimeServices: vi.fn(() => ({
+      profileManager: {
+        loadProfile: vi.fn(),
+        saveProfile: vi.fn(),
+        listProfiles: vi.fn(async () => []),
+      },
       config: runtimeSettingsState.context?.config ?? null,
       settingsService:
         runtimeSettingsState.context?.settingsService ?? new SettingsService(),
@@ -342,6 +347,11 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
       () => runtimeSettingsState.context?.config ?? null,
     ),
     getCliRuntimeServices: vi.fn(() => ({
+      profileManager: {
+        loadProfile: vi.fn(),
+        saveProfile: vi.fn(),
+        listProfiles: vi.fn(async () => []),
+      },
       config: runtimeSettingsState.context?.config ?? null,
       settingsService:
         runtimeSettingsState.context?.settingsService ?? new SettingsService(),

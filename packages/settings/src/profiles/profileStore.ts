@@ -824,7 +824,10 @@ export type ProfileWriteResult =
   | { readonly kind: 'written'; readonly path: string }
   | { readonly kind: 'exists'; readonly path: string };
 
-function profileFilePath(profilesDir: string, profileName: string): string {
+export function profileFilePath(
+  profilesDir: string,
+  profileName: string,
+): string {
   const trimmedName = profileName.trim();
   const forbiddenNames = new Set(['', '.', '..']);
   const hasForbiddenSeparator = /[\\/\0]/u.test(profileName);
@@ -866,9 +869,17 @@ export async function writeProfileFile(
   profileName: string,
   data: string,
   mode: ProfileWriteMode = 'overwrite',
+  validateExisting?: (existing: Exclude<ReadResult, { kind: 'error' }>) => void,
 ): Promise<ProfileWriteResult> {
   const filePath = profileFilePath(profilesDir, profileName);
   return withProfilesLock(profilesDir, async () => {
+    if (validateExisting !== undefined) {
+      const existing = readProfileFileSync(filePath);
+      if (existing.kind === 'error') {
+        throw existing.error;
+      }
+      validateExisting(existing);
+    }
     if (mode === 'create') {
       return createProfileExclusive(filePath, data);
     }

@@ -48,6 +48,7 @@ export interface ImageOperationRequest {
  * `/image`, tool) can propagate cancellation from their own context.
  */
 export interface ImageOperationInput {
+  readonly imageProfileName?: string;
   readonly prompt: string;
   readonly outputPath: string;
   readonly inputPaths?: readonly string[];
@@ -55,16 +56,8 @@ export interface ImageOperationInput {
   readonly signal?: AbortSignal;
 }
 
-/**
- * Backend result for a single generated/edited image (raw bytes metadata).
- */
-export interface ImageBackendResult {
-  readonly mimeType: string;
-  readonly encoding: 'base64' | 'url';
-  readonly data: string;
-  readonly caption?: string;
-  readonly revisedPrompt?: string;
-}
+/** Backend result shared by all image adapters. */
+export type { ImageBackendResult } from './imageBackendContract.js';
 
 /**
  * A normalized image-operation result.
@@ -75,6 +68,9 @@ export interface ImageBackendResult {
  */
 export interface ImageOperationResult {
   readonly operation: ImageOperation;
+  readonly quality?: string;
+  readonly size?: string;
+  readonly usage?: Readonly<Record<string, unknown>>;
   readonly absoluteOutputPath: string;
   readonly relativeOutputPath: string;
   readonly mimeType: string;
@@ -90,25 +86,9 @@ export interface ImageOperationResult {
 }
 
 /**
- * Backend capability contract: a backend implements generate and/or edit.
+ * Backend capability contract: a backend implements both generate and edit.
  */
-export interface ImageOperationBackend {
-  readonly name: string;
-  readonly provider: string;
-  readonly model: string;
-  generate(
-    request: { readonly prompt: string; readonly sessionId?: string },
-    signal: AbortSignal,
-  ): Promise<ImageBackendResult>;
-  edit(
-    request: {
-      readonly prompt: string;
-      readonly inputPaths: readonly string[];
-      readonly sessionId?: string;
-    },
-    signal: AbortSignal,
-  ): Promise<ImageBackendResult>;
-}
+export type { ImageBackend as ImageOperationBackend } from './imageBackendContract.js';
 
 /**
  * Error thrown when an image operation fails at a specific stage.

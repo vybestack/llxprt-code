@@ -68,6 +68,7 @@ interface ProviderSwitchOptions {
   autoOAuth?: boolean;
   preserveEphemerals?: string[];
   skipModelDefaults?: boolean;
+  deferProfileNotification?: boolean;
   addItem?: OAuthUICallback;
 }
 
@@ -939,12 +940,14 @@ export async function switchActiveProvider(
   // displayLabel: profile → model → provider name. Must NEVER be empty.
   const displayLabel = profileName ?? effectiveModel;
 
-  coreEvents.emitModelProfileChanged({
-    model: effectiveModel,
-    providerName: context.name,
-    profileName,
-    displayLabel,
-  });
+  if (options.deferProfileNotification !== true) {
+    coreEvents.emitModelProfileChanged({
+      model: effectiveModel,
+      providerName: context.name,
+      profileName,
+      displayLabel,
+    });
+  }
 
   return {
     changed: true,

@@ -24,15 +24,8 @@ import crypto from 'node:crypto';
  * Mirrors the Codex `gpt-image-2` generate endpoint shape; backend-neutral so
  * future backends (OpenRouter, LM Studio, local models) can reuse it.
  */
-export interface ImageGenerateRequest {
-  readonly prompt: string;
-  readonly model?: string;
-  readonly background?: 'auto' | 'transparent' | 'opaque';
-  readonly quality?: 'auto' | 'high' | 'medium' | 'low';
-  readonly size?: 'auto' | '1024x1024' | '1024x1536' | '1536x1024';
-  readonly n?: number;
-  readonly sessionId?: string;
-}
+import type { ImageGenerateRequest } from './imageBackendContract.js';
+export type { ImageGenerateRequest } from './imageBackendContract.js';
 
 /**
  * A normalized image-generation result.
@@ -47,6 +40,9 @@ export interface ImageResult {
   readonly data: string;
   readonly caption?: string;
   readonly revisedPrompt?: string;
+  readonly quality?: string;
+  readonly size?: string;
+  readonly usage?: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -87,8 +83,8 @@ export class ImageGenerationError extends Error {
  * Error thrown when an image-generation request fails input validation.
  */
 export class ImageValidationError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = 'ImageValidationError';
   }
 }
@@ -100,13 +96,7 @@ export class ImageValidationError extends Error {
  * expose a uniform `generate` capability. The capability interface keeps the
  * service and tool decoupled from any specific provider.
  */
-export interface ImageGenerationBackend {
-  readonly name: string;
-  generate(
-    request: ImageGenerateRequest,
-    signal: AbortSignal,
-  ): Promise<ImageResult>;
-}
+export type { ImageBackend as ImageGenerationBackend } from './imageBackendContract.js';
 
 /**
  * The application-level image-generation service.

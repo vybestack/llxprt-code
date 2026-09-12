@@ -28,6 +28,8 @@ import {
   peekActiveProviderRuntimeContext,
   type RuntimeProviderManager,
   type RuntimeAuthScopeFlushResult,
+  createImageProfileRuntimeState,
+  type ImageProfileRuntimeState,
 } from '@vybestack/llxprt-code-core';
 import { clearSettingsProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import type {
@@ -79,6 +81,7 @@ export interface RuntimeRegistryEntry {
   providerManager: RuntimeProviderManager | null;
   oauthManager: OAuthManager | null;
   profileManager: ProfileManager | null;
+  imageProfileState: ImageProfileRuntimeState;
   providerFileLifecycle: ProviderFileLifecycle;
   metadata: Record<string, unknown>;
 }
@@ -257,6 +260,10 @@ export function upsertRuntimeEntry(
       'profileManager',
       current?.profileManager,
     ),
+    imageProfileState:
+      update.imageProfileState ??
+      current?.imageProfileState ??
+      createImageProfileRuntimeState(),
     providerFileLifecycle:
       update.providerFileLifecycle ??
       current?.providerFileLifecycle ??

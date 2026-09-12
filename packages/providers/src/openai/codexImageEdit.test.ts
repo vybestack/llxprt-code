@@ -4,8 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { tinyPngBase64 } from './mlx-wire-fixtures.js';
+import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import fs from 'node:fs';
+import * as imageInput from './imageInput.js';
 import path from 'node:path';
 import os from 'node:os';
 import {
@@ -129,6 +131,7 @@ function makeBackend(overrides?: {
   getBaseUrl?: () => string | undefined;
 }): CodexImageBackend {
   return new CodexImageBackend({
+    mode: 'legacy',
     getCredential: async () => ({
       accessToken: 'token-abc',
       accountId: 'account-xyz',
@@ -163,23 +166,41 @@ describe('CodexImageBackend.edit', () => {
     await fs.promises.rm(workspaceRoot, { recursive: true, force: true });
   });
 
-  it('posts to the edit endpoint with model gpt-image-2 and input images as data URLs', async () => {
+  it('pins merge-base no-profile edit wire bytes with always-auto knobs', async () => {
     const inputPng = makeRealMinimalPng();
     const inputPath = path.join(workspaceRoot, 'input.png');
     await fs.promises.writeFile(inputPath, inputPng);
 
     const { fetchImpl, captured } = makeStubFetch({
       status: 200,
-      body: { data: [{ b64_json: 'aGVsbG8=' }] },
+      body: { data: [{ b64_json: tinyPngBase64 }] },
     });
     const backend = makeBackend({ fetchImpl });
 
     await backend.edit(
-      { prompt: 'add a mouse', inputPaths: [inputPath] },
+      {
+        prompt: 'add a mouse',
+        inputPaths: [inputPath],
+        quality: 'high',
+        background: 'opaque',
+        size: '512x512',
+      },
       new AbortController().signal,
     );
 
     const req = captured();
+    expect(req?.init.body).toBe(
+      JSON.stringify({
+        model: 'gpt-image-2',
+        prompt: 'add a mouse',
+        images: [
+          { image_url: `data:image/png;base64,${inputPng.toString('base64')}` },
+        ],
+        background: 'auto',
+        quality: 'auto',
+        size: 'auto',
+      }),
+    );
     expect(req).toBeDefined();
     expect(req?.init.method).toBe('POST');
     expect(req?.url).toBe('https://chatgpt.com/backend-api/codex/images/edits');
@@ -198,15 +219,51 @@ describe('CodexImageBackend.edit', () => {
     const images = body['images'] as Array<{ image_url: string }>;
     expect(images).toHaveLength(1);
     expect(images[0].image_url).toMatch(/^data:image\/png;base64,/);
-    expect(body['background']).toBe('auto');
-    expect(body['quality']).toBe('auto');
-    expect(body['size']).toBe('auto');
+    expect(body.background).toBe('auto');
+    expect(body.quality).toBe('auto');
+    expect(body.size).toBe('auto');
     // The edit contract must NOT include generate-only keys.
     expect(body['n']).toBeUndefined();
     // The body must contain ONLY the documented edit keys.
     expect(Object.keys(body).sort()).toStrictEqual(
-      ['background', 'images', 'model', 'prompt', 'quality', 'size'].sort(),
+      ['images', 'model', 'prompt', 'background', 'quality', 'size'].sort(),
     );
+  });
+
+  it('uses configured model and defaults for edits', async () => {
+    const inputPath = path.join(workspaceRoot, 'configured.png');
+    await fs.promises.writeFile(inputPath, makeRealMinimalPng());
+    const { fetchImpl, captured } = makeStubFetch({
+      status: 200,
+      body: { data: [{ b64_json: tinyPngBase64 }] },
+    });
+    const backend = new CodexImageBackend({
+      mode: 'profile',
+      getCredential: async () => ({ accessToken: 'token', accountId: 'acct' }),
+      model: 'gpt-image-2.5-sunburst',
+      defaults: {
+        quality: 'max',
+        size: '1536x1024',
+        background: 'opaque',
+      },
+      fetchImpl,
+    });
+
+    await backend.edit(
+      { prompt: 'configured edit', inputPaths: [inputPath] },
+      new AbortController().signal,
+    );
+
+    const body = JSON.parse(String(captured()?.init.body)) as Record<
+      string,
+      unknown
+    >;
+    expect(body).toMatchObject({
+      model: 'gpt-image-2.5-sunburst',
+      quality: 'max',
+      size: '1536x1024',
+      background: 'opaque',
+    });
   });
 
   it('includes the full header set on edit', async () => {
@@ -215,7 +272,8 @@ describe('CodexImageBackend.edit', () => {
 
     const { fetchImpl, captured } = makeStubFetch({
       status: 200,
-      body: { data: [{ b64_json: 'aGVsbG8=' }] },
+
+      body: { data: [{ b64_json: tinyPngBase64 }] },
     });
     const backend = makeBackend({ fetchImpl });
 
@@ -237,7 +295,9 @@ describe('CodexImageBackend.edit', () => {
 
     const { fetchImpl } = makeStubFetch({
       status: 200,
-      body: { data: [{ b64_json: 'aGVsbG8=' }] },
+      body: {
+        data: [{ b64_json: tinyPngBase64, revised_prompt: 'edited lake' }],
+      },
     });
     const backend = makeBackend({ fetchImpl });
 
@@ -248,8 +308,32 @@ describe('CodexImageBackend.edit', () => {
 
     expect(result.mimeType).toBe('image/png');
     expect(result.encoding).toBe('base64');
-    expect(result.data).toBe('aGVsbG8=');
+    expect(result.data).toBe(tinyPngBase64);
     expect(result.caption).toBe('edit it');
+    expect(result.revisedPrompt).toBe('edited lake');
+  });
+
+  it('reports read-phase filesystem failures as image validation errors', async () => {
+    const inputPath = path.join(workspaceRoot, 'unreadable.png');
+    await fs.promises.writeFile(inputPath, makeRealMinimalPng());
+    const read = spyOn(imageInput, 'readInputImage').mockRejectedValue(
+      new ImageValidationError(
+        `Input image could not be accessed: ${inputPath}.`,
+      ),
+    );
+    try {
+      await expect(
+        makeBackend().edit(
+          { prompt: 'edit', inputPaths: [inputPath] },
+          new AbortController().signal,
+        ),
+      ).rejects.toMatchObject({
+        name: 'ImageValidationError',
+        message: `Input image could not be accessed: ${inputPath}.`,
+      });
+    } finally {
+      read.mockRestore();
+    }
   });
 
   it('rejects zero input paths for an edit', async () => {
@@ -354,7 +438,7 @@ describe('CodexImageBackend.edit', () => {
     await fs.promises.writeFile(inputPath, makeRealMinimalPng());
     const { fetchImpl, captured } = makeStubFetch({
       status: 200,
-      body: { data: [{ b64_json: 'aGVsbG8=' }] },
+      body: { data: [{ b64_json: tinyPngBase64 }] },
     });
     const backend = makeBackend({ fetchImpl });
     await backend.edit(
@@ -377,7 +461,7 @@ describe('CodexImageBackend.edit', () => {
     await fs.promises.writeFile(inputPath, makeRealMinimalPng());
     const { fetchImpl } = makeStubFetch({
       status: 200,
-      body: { data: [{ b64_json: 'aGVsbG8=' }] },
+      body: { data: [{ b64_json: tinyPngBase64 }] },
     });
     const backend = makeBackend({ fetchImpl });
     const controller = new AbortController();
@@ -428,7 +512,7 @@ describe('CodexImageBackend.edit', () => {
     await fs.promises.writeFile(inputPath, webpBytes);
     const { fetchImpl, captured } = makeStubFetch({
       status: 200,
-      body: { data: [{ b64_json: 'aGVsbG8=' }] },
+      body: { data: [{ b64_json: tinyPngBase64 }] },
     });
     const backend = makeBackend({ fetchImpl });
 

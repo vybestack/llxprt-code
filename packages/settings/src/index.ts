@@ -52,7 +52,14 @@ export {
   resetSettingsService,
 } from './settings/settingsServiceInstance.js';
 
-export { ProfileManager } from './profiles/ProfileManager.js';
+export {
+  ImageProfileNotFoundError,
+  ImageProfileLoadError,
+  LoadBalancerMemberTypeError,
+  isImageProfileLoadError,
+  ProfileManager,
+  ProfileTypeConflictError,
+} from './profiles/ProfileManager.js';
 // Cohesive public profile-lock and write API. Internal lock handle/path/read/
 // temp/delete helpers are NOT re-exported. Consumers that need canonical
 // profile repair use repairCanonicalProfiles (settings-owned cohesive API).
@@ -76,6 +83,7 @@ export type {
 } from './profiles/canonicalProfileRepair.js';
 export {
   parseProfile,
+  parseImageProfile,
   parseProfileJson,
   MIN_LOAD_BALANCER_MEMBERS,
 } from './settings/validation.js';
@@ -92,6 +100,12 @@ export type {
   ReasoningEffortMap,
   ReasoningEnabledMap,
   AuthConfig,
+  ImageProfile,
+  ImageQuality,
+  ImageOperation,
+  PersistedImageBackendAuth,
+  ImageSize,
+  ImageBackground,
 } from './profiles/types.js';
 export {
   AuthConfigSchema,

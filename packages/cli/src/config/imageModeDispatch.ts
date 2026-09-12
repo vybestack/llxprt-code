@@ -4,8 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
+import type {
+  Config,
+  ImageOperationRunnerInput,
+} from '@vybestack/llxprt-code-core';
 import {
+  ImageProfileNotFoundError,
+  isImageProfileLoadError,
+} from '@vybestack/llxprt-code-settings';
+import {
+  ImageOperationError,
   ExitCodes,
   writeToStdout,
   writeToStderr,
@@ -42,6 +50,9 @@ export interface DirectImageResult {
  */
 export function buildImageModeFlags(argv: ParsedCliArgs): ImageModeFlags {
   return {
+    ...(argv.imageProfile?.trim()
+      ? { imageProfile: argv.imageProfile.trim() }
+      : {}),
     ...(argv.imageInput !== undefined && argv.imageInput.length > 0
       ? { imageInput: argv.imageInput }
       : {}),
@@ -116,7 +127,7 @@ Saved to: ${result.absoluteOutputPath}`;
  */
 export async function runDirectImageModeAndExit(
   argv: ParsedCliArgs,
-  config: Config,
+  config: Pick<Config, 'getRunImageOperation'>,
 ): Promise<number | null> {
   let request;
   try {
@@ -154,6 +165,9 @@ export async function runDirectImageModeAndExit(
       outputPath: request.outputPath,
       inputPaths: request.inputPaths,
       signal: controller.signal,
+      ...(request.imageProfileName !== undefined
+        ? { imageProfileName: request.imageProfileName }
+        : {}),
     });
 
     const output =
@@ -162,7 +176,13 @@ export async function runDirectImageModeAndExit(
         : formatTextResult(result);
     writeToStdout(`${output}\n`);
   } catch (error) {
-    exitCode = 1;
+    const profileError =
+      error instanceof ImageOperationError ? error.cause : error;
+    exitCode =
+      isImageProfileLoadError(profileError) ||
+      profileError instanceof ImageProfileNotFoundError
+        ? ExitCodes.FATAL_INPUT_ERROR
+        : 1;
     const message = error instanceof Error ? error.message : String(error);
     if (outputFormat === 'json') {
       writeToStdout(
@@ -183,15 +203,8 @@ export async function runDirectImageModeAndExit(
  * configured (capability-specific error path).
  */
 function resolveRunImageOperation(
-  config: Config,
-):
-  | ((input: {
-      readonly prompt: string;
-      readonly outputPath: string;
-      readonly inputPaths: readonly string[];
-      readonly signal?: AbortSignal;
-    }) => Promise<DirectImageResult>)
-  | null {
+  config: Pick<Config, 'getRunImageOperation'>,
+): ((input: ImageOperationRunnerInput) => Promise<DirectImageResult>) | null {
   // Resolve via the typed public getter only. A config without the getter
   // (or one exposing only a property) is treated as unavailable so the unsafe
   // property cast can never regress.
@@ -208,6 +221,9 @@ function resolveRunImageOperation(
       outputPath: input.outputPath,
       inputPaths: input.inputPaths,
       ...(input.signal !== undefined ? { signal: input.signal } : {}),
+      ...(input.imageProfileName !== undefined
+        ? { imageProfileName: input.imageProfileName }
+        : {}),
     });
 }
 

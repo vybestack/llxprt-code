@@ -87,7 +87,7 @@ export const useLoadProfileDialog = ({
     appDispatch({ type: 'OPEN_DIALOG', payload: 'loadProfile' });
 
     try {
-      const availableProfiles = await runtime.listSavedProfiles();
+      const availableProfiles = await runtime.listSavedProfiles('model');
       setProfiles(availableProfiles);
     } catch (e) {
       addMessage({

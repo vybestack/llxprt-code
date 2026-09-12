@@ -12,3 +12,4 @@
  * the runtime cluster in this package.
  */
 export * from './runtimeSettings.js';
+export { loadAndSelectImageProfile } from './profileSnapshotTransition.js';

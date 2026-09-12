@@ -8,7 +8,11 @@ import dns from 'node:dns';
 import { type Config, setGitStatsService } from '@vybestack/llxprt-code-core';
 import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { loadProfileByName } from '@vybestack/llxprt-code-providers/runtime.js';
+import {
+  loadProfileByName,
+  loadImageProfileByName,
+} from '@vybestack/llxprt-code-providers/runtime.js';
+import { isImageModeActive } from './config/imageMode.js';
 import {
   preflightAgentActivation,
   type ProviderActivationIntent,
@@ -206,6 +210,17 @@ export async function reapplyBootstrapProfile(
     debugLogger.warn(
       `[bootstrap] Failed to reapply profile '${bootstrapProfileName}' after provider manager initialization: ${message}`,
     );
+  }
+  const imageProfileName = argv.imageProfile?.trim();
+  if (imageProfileName && !isImageModeActive(argv)) {
+    try {
+      await loadImageProfileByName(imageProfileName);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      debugLogger.warn(
+        `[bootstrap] Failed to reapply image profile '${imageProfileName}' after provider manager initialization: ${message}`,
+      );
+    }
   }
 }
 
