@@ -213,6 +213,52 @@ function errorMessage(error: unknown): string {
 }
 
 describe('RetryOrchestrator prompt-envelope retry contract (@issue:3444)', () => {
+  it('aborts while a refresh remains pending without waiting for its projection', async () => {
+    const { provider, attempts } = createOneShotProjectedProvider({
+      failFirstSend: true,
+      refreshProjection: 'fresh',
+    });
+    const options = buildOptions(undefined);
+    const original = await mintEnvelope(provider, options);
+    let notifyStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      notifyStarted = resolve;
+    });
+    let rejectRefresh: ((error: Error) => void) | undefined;
+    const pending = new Promise<PromptEnvelopeProjection>(
+      (_resolve, reject) => {
+        rejectRefresh = reject;
+      },
+    );
+    provider.projectPromptEnvelope = () => {
+      if (notifyStarted === undefined)
+        throw new Error('Missing start resolver');
+      notifyStarted();
+      return pending;
+    };
+    const controller = new AbortController();
+    const result = drain(
+      new RetryOrchestrator(provider, {
+        maxAttempts: 2,
+        initialDelayMs: 0,
+      }).generateChatCompletion(
+        { ...options, promptEnvelopeTransportToken: original.transportToken },
+        undefined,
+        controller.signal,
+      ),
+    );
+    await started;
+    controller.abort();
+
+    const { error, chunks } = await result;
+    expect(error instanceof Error && error.name).toBe('AbortError');
+    expect(chunks).toHaveLength(0);
+    expect(attempts).toHaveLength(1);
+    if (rejectRefresh === undefined)
+      throw new Error('Missing refresh rejecter');
+    rejectRefresh(new Error('projection failed after cancellation'));
+  });
+
   it('sends once on entry with pre-consumed shared budget when retries remain only for numbering', async () => {
     const { provider, attempts } = createOneShotProjectedProvider({
       failFirstSend: false,

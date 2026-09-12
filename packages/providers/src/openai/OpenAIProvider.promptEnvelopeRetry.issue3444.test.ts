@@ -158,6 +158,40 @@ describe('OpenAIProvider prompt-envelope retry (@issue:3444)', () => {
     expect(errorMessage(error)).not.toContain(RELEASE_ERROR);
   });
 
+  it('surfaces a refresh projection failure without consuming the released media again', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    mockChatCompletionsCreate.mockRejectedValueOnce(make429RateLimitError());
+    const provider = new OpenAIProvider('test-key');
+    const options = createProviderCallOptions({
+      providerName: provider.name,
+      contents: mediaMessages(),
+      ephemerals: { retries: 2, retrywait: 0 },
+      resolved: { model: 'gpt-4o' },
+    });
+    const projection = await provider.projectPromptEnvelope(options);
+    const failure = new Error('chat refresh projection unavailable');
+    provider.projectPromptEnvelope = async () => {
+      throw failure;
+    };
+    const chunks: IContent[] = [];
+    let caught: unknown;
+    try {
+      for await (const chunk of new RetryOrchestrator(provider, {
+        maxAttempts: 2,
+        initialDelayMs: 0,
+      }).generateChatCompletion({
+        ...options,
+        promptEnvelopeTransportToken: projection.transportToken,
+      }))
+        chunks.push(chunk);
+    } catch (error) {
+      caught = error;
+    }
+    expect(chunks).toHaveLength(0);
+    expect(caught).toBe(failure);
+    expect(errorMessage(caught)).not.toContain(RELEASE_ERROR);
+  });
+
   it('preserves the last transport failure when projected media retries exhaust', async () => {
     process.env.OPENAI_API_KEY = 'test-key';
     const lastFailure = Object.assign(

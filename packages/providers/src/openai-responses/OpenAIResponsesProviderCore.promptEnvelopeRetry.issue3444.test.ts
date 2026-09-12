@@ -191,6 +191,42 @@ describe('OpenAIResponsesProvider prompt-envelope retry (@issue:3444)', () => {
     );
   });
 
+  it('surfaces a refresh projection failure without consuming the released media again', async () => {
+    const provider = new OpenAIResponsesProvider('test-key', undefined, {
+      getEphemeralSettings: () => ({}),
+    });
+    const options = createProviderCallOptions({
+      providerName: provider.name,
+      contents: mediaMessages(),
+      ephemerals: { retrywait: 0 },
+      resolved: { model: 'gpt-5' },
+    });
+    const projection = await provider.projectPromptEnvelope(options);
+    const failure = new Error('responses refresh projection unavailable');
+    provider.projectPromptEnvelope = async () => {
+      throw failure;
+    };
+    const chunks: IContent[] = [];
+    let caught: unknown;
+    try {
+      for await (const chunk of new RetryOrchestrator(provider, {
+        maxAttempts: 7,
+        initialDelayMs: 0,
+      }).generateChatCompletion({
+        ...options,
+        promptEnvelopeTransportToken: projection.transportToken,
+      }))
+        chunks.push(chunk);
+    } catch (error) {
+      caught = error;
+    }
+    expect(chunks).toHaveLength(0);
+    expect(caught).toBe(failure);
+    expect(String(caught)).not.toContain(
+      'Cannot consume media request contents after release',
+    );
+  });
+
   it('preserves the last transport failure when the outer retry exhausts', async () => {
     let sends = 0;
     fetchMock.mockImplementation(() => {

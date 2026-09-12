@@ -6,7 +6,7 @@
 
 import type { GenerateChatOptions, IProvider } from './IProvider.js';
 import type { TransportAttemptBudget } from './transportAttemptBudget.js';
-import { withRequestSignal } from './utils/abortSignal.js';
+import { raceWithAbort, withRequestSignal } from './utils/abortSignal.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 
@@ -80,11 +80,29 @@ export class RetryPromptEnvelopeRefresh {
     const sendOptions =
       this.attempt === 1
         ? { options, releaseIfUnsent: undefined }
-        : await refreshPromptEnvelopeForRetry(provider, options);
+        : await this.refresh(provider, options, signal);
     this.unsentRelease = sendOptions.releaseIfUnsent;
     if (signal.aborted) throw createAbortError(signal.reason);
     this.options = withRequestSignal(sendOptions.options, signal);
     return this.options;
+  }
+
+  private async refresh(
+    provider: IProvider,
+    options: GenerateChatOptions,
+    signal: AbortSignal,
+  ): ReturnType<typeof refreshPromptEnvelopeForRetry> {
+    const pending = refreshPromptEnvelopeForRetry(provider, options);
+    try {
+      return await raceWithAbort(pending, signal);
+    } catch (error) {
+      // Cancellation can abandon a projection that later mints an envelope.
+      // Release that unsent envelope without delaying or replacing the abort.
+      void pending
+        .then((projection) => projection.releaseIfUnsent?.())
+        .catch(() => undefined);
+      throw error;
+    }
   }
 
   async releaseUnsent(attemptError: unknown): Promise<void> {
@@ -95,6 +113,8 @@ export class RetryPromptEnvelopeRefresh {
       await release();
     } catch (cleanupError) {
       if (attemptError === undefined) throw cleanupError;
+      // Cleanup diagnostics are debug-gated by design: DebugLogger also gates
+      // warn/error, and the attempt error must remain the surfaced failure.
       new DebugLogger('llxprt:retry:orchestrator').debug(
         () =>
           `Releasing unsent prompt envelope failed: ${String(cleanupError)}`,
