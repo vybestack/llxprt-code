@@ -328,6 +328,37 @@ describe('projectAnthropicPromptEnvelope (issue #2817)', () => {
     expect(finalized.promptText).not.toContain(png);
   });
 
+  it('records an image entry for an anthropic base64 source with an uppercase media_type (issue #3481)', () => {
+    const png = handcraftedPngBase64(1586, 991);
+
+    const projection = projectAnthropicPromptEnvelope({
+      model: 'claude-3-5-sonnet',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Describe this' },
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'IMAGE/PNG',
+                data: png,
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const finalized =
+      projection.finalizedProjection as ProviderFinalizedPromptProjection;
+    expect(finalizedEntries(finalized)).toStrictEqual([
+      { dimensions: { width: 1586, height: 991 } },
+    ]);
+    expect(finalized.promptText).toContain('[binary media bytes omitted]');
+    expect(finalized.promptText).not.toContain(png);
+  });
+
   it('records no image entry for an anthropic PDF document source (issue #3481)', () => {
     const projection = projectAnthropicPromptEnvelope({
       model: 'claude-3-5-sonnet',

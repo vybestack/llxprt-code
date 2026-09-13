@@ -255,7 +255,12 @@ function recordBase64BinaryField(
 }
 
 function isImageMimeType(mediaType: unknown): mediaType is string {
-  return typeof mediaType === 'string' && mediaType.startsWith('image/');
+  // MIME types are case-insensitive (RFC 2045); provider payloads may carry
+  // e.g. 'IMAGE/PNG' and must still record an image entry.
+  return (
+    typeof mediaType === 'string' &&
+    mediaType.toLowerCase().startsWith('image/')
+  );
 }
 
 function recordImageEntry(
