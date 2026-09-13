@@ -218,6 +218,7 @@ export type DialogType =
   | 'saveProfile'
   | 'subagent'
   | 'models'
+  | 'imageModels'
   | 'profileList'
   | 'profileDetail'
   | 'profileEditor'

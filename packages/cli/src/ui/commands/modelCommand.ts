@@ -13,6 +13,7 @@ import type {
 } from './types.js';
 import { CommandKind } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import { selectImageModel } from './imageModelSelection.js';
 
 /**
  * Parse command arguments for /model command
@@ -94,14 +95,25 @@ function argsToDialogData(args: ModelCommandArgs): ModelsDialogData {
 
 export const modelCommand: SlashCommand = {
   name: 'model',
-  description: 'browse, search, or switch models',
+  description:
+    'browse, search, or switch models; leading text/image selects the model kind',
   kind: CommandKind.BUILT_IN,
   autoExecute: true,
   action: async (
     context: CommandContext,
     args: string,
   ): Promise<OpenDialogActionReturn | MessageActionReturn> => {
-    const parsedArgs = parseArgs(args);
+    const prefix = /^(text|image)(?:\s+|$)/.exec(args.trim());
+    const remaining = prefix
+      ? args.trim().slice(prefix[0].length).trim()
+      : args;
+    if (prefix?.[1] === 'image') {
+      return remaining
+        ? selectImageModel(remaining)
+        : { type: 'dialog', dialog: 'imageModels' };
+    }
+
+    const parsedArgs = parseArgs(remaining);
 
     // Direct switch: positional arg with NO flags
     // e.g., "/model gpt-4o" switches directly
