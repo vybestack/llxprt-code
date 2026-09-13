@@ -39,6 +39,7 @@ import type {
 } from '../interfaces/IShellToolHost.js';
 import {
   applyOutputFilters,
+  appendSurvivorNoticeToResult,
   buildShellSchema,
   collectProcessInfo,
   createShellToolHostFromExecutionService,
@@ -457,9 +458,15 @@ export class ShellToolInvocation extends BaseToolInvocation<
         result.outputTruncation,
       );
 
-      // Append the durable clamp notice AFTER summarization and token
-      // limiting so it survives lossy processing (Issue #3031).
-      return appendClampNoticeToResult(toolResult, resolution);
+      // Durable notices are applied after buildToolResult because
+      // summarizeIfNeeded (not skipped on the aborted:false inactivity
+      // branch) and limitOutputTokens can replace the formatted content
+      // wholesale; only a post-processing append is guaranteed to reach the
+      // model (Issues #3031 and #3517).
+      return appendClampNoticeToResult(
+        appendSurvivorNoticeToResult(toolResult, result, pgid),
+        resolution,
+      );
     } finally {
       fs.rmSync(tempFilePath, { force: true });
     }

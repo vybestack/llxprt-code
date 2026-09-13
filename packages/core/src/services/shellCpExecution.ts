@@ -14,6 +14,7 @@ import { makeInactivityTimer } from './shellOutputUtils.js';
 import {
   isKillablePid,
   killProcessWithEscalation,
+  reapProcessGroup,
 } from './shellProcessKill.js';
 import {
   type CpExecState,
@@ -79,17 +80,34 @@ export function createCpResultPromise(
   };
 
   return new Promise<ShellExecutionResult>((resolve) => {
+    // Armed by the first abort/inactivity kill. The finalizer awaits it so an
+    // abort result is never produced while the spawned process group may
+    // still have live members (Issue #3517). Resolves true when the group is
+    // confirmed empty (or no group reap applies); never rejects.
+    let abortKillChain: Promise<boolean> | null = null;
+    const armAbortKill = (): void => {
+      // Enforce the never-rejecting contract at the arm site: a rejection
+      // from the escalation/reap chain (e.g. a synchronous taskkill spawn
+      // throw on Windows) is converted to `false` — group not confirmed
+      // empty — so the finalizer's gate can always resolve the result.
+      abortKillChain ??= cpKillOnAbort(state, child).catch(
+        (): boolean => false,
+      );
+    };
     setupCpInactivityHandler(
       state,
-      child,
       inactivityTimeoutMs,
       resetInactivityTimer,
+      armAbortKill,
     );
-    const abortHandler = setupCpAbortHandler(state, child);
+    const abortHandler = (): void => {
+      armAbortKill();
+    };
     const handleExit = createCpExitFinalizer(
       state,
       child,
       abortHandler,
+      () => abortKillChain,
       resolve,
     );
 
@@ -128,6 +146,45 @@ function isCpStreamSettled(
 }
 
 /**
+ * Wire the once-'end'/'close' settle listeners for still-open stdio streams
+ * so a pending exit finalizes when the last stream settles (or is proven
+ * already settled). Pure extraction from the finalizer's returned closure:
+ * identical listener registration and finalize condition, no behavior change.
+ */
+function armCpStreamSettleListeners(
+  state: CpExecState,
+  child: ChildProcess,
+  openStreams: Array<NonNullable<ChildProcess['stdout']>>,
+  code: number | null,
+  signal: NodeJS.Signals | null,
+  finalize: (code: number | null, signal: NodeJS.Signals | null) => void,
+  streamSettledListeners: Map<NonNullable<ChildProcess['stdout']>, () => void>,
+): void {
+  for (const stream of openStreams) {
+    const onSettled = (): void => {
+      // Remove both registrations: whichever of 'end'/'close' fires, the
+      // other may never arrive (Bun does not always emit 'close'), and a
+      // lingering once-listener would retain the finalizer closure.
+      stream.removeListener('close', onSettled);
+      stream.removeListener('end', onSettled);
+      streamSettledListeners.delete(stream);
+      if (state.hasResolved) {
+        return;
+      }
+      const stillOpen = [child.stdout, child.stderr].some(
+        (candidate) => candidate !== null && !isCpStreamSettled(candidate),
+      );
+      if (!stillOpen) {
+        finalize(code, signal);
+      }
+    };
+    streamSettledListeners.set(stream, onSettled);
+    stream.once('close', onSettled);
+    stream.once('end', onSettled);
+  }
+}
+
+/**
  * Build the exit/error finalizer for a child_process execution.
  *
  * Node and Bun can emit 'exit' before the final 'data' chunks arrive on the
@@ -148,6 +205,7 @@ function createCpExitFinalizer(
   state: CpExecState,
   child: ChildProcess,
   abortHandler: () => void,
+  getAbortKillChain: () => Promise<boolean> | null,
   resolve: (value: ShellExecutionResult) => void,
 ): (code: number | null, signal: NodeJS.Signals | null) => void {
   const streamSettledListeners = new Map<
@@ -169,10 +227,27 @@ function createCpExitFinalizer(
     }
     streamSettledListeners.clear();
     const { finalBuffer } = cleanupCpResources(state, child, abortHandler);
-    const result = buildCpExitResult(state, child, code, signal, finalBuffer);
-    state.rawCollector = null;
-    state.sniffBuffer = null;
-    resolve(result);
+    const resolveFromKillChain = (groupConfirmedEmpty: boolean): void => {
+      const result = buildCpExitResult(state, child, code, signal, finalBuffer);
+      if (!state.isWindows && !groupConfirmedEmpty) {
+        // The POSIX reap window expired with live group members: carry
+        // that fact so the tool layer can tell the caller children may
+        // still be running (Issue #3517).
+        result.survivingGroupMembersOnAbort = true;
+      }
+      state.rawCollector = null;
+      state.sniffBuffer = null;
+      resolve(result);
+    };
+    const abortKillChain = getAbortKillChain();
+    if (abortKillChain === null) {
+      resolveFromKillChain(true);
+      return;
+    }
+    // Abort/inactivity kill in flight: gate the result on the bounded
+    // group-reap confirmation. The chain never rejects, so resolution cannot
+    // stall past the reap window (Issue #3517).
+    void abortKillChain.then(resolveFromKillChain);
   };
 
   return (code: number | null, signal: NodeJS.Signals | null): void => {
@@ -194,28 +269,15 @@ function createCpExitFinalizer(
       () => finalize(code, signal),
       CP_OUTPUT_DRAIN_GRACE_MS,
     );
-    for (const stream of openStreams) {
-      const onSettled = (): void => {
-        // Remove both registrations: whichever of 'end'/'close' fires, the
-        // other may never arrive (Bun does not always emit 'close'), and a
-        // lingering once-listener would retain the finalizer closure.
-        stream.removeListener('close', onSettled);
-        stream.removeListener('end', onSettled);
-        streamSettledListeners.delete(stream);
-        if (state.hasResolved) {
-          return;
-        }
-        const stillOpen = [child.stdout, child.stderr].some(
-          (candidate) => candidate !== null && !isCpStreamSettled(candidate),
-        );
-        if (!stillOpen) {
-          finalize(code, signal);
-        }
-      };
-      streamSettledListeners.set(stream, onSettled);
-      stream.once('close', onSettled);
-      stream.once('end', onSettled);
-    }
+    armCpStreamSettleListeners(
+      state,
+      child,
+      openStreams,
+      code,
+      signal,
+      finalize,
+      streamSettledListeners,
+    );
   };
 }
 
@@ -225,15 +287,15 @@ function createCpExitFinalizer(
  */
 function setupCpInactivityHandler(
   state: CpExecState,
-  child: ChildProcess,
   inactivityTimeoutMs: number | undefined,
   resetInactivityTimer: () => void,
+  armAbortKill: () => void,
 ): void {
   if (inactivityTimeoutMs === undefined || inactivityTimeoutMs <= 0) {
     return;
   }
   const inactivityAbortHandler = () => {
-    void cpKillOnAbort(state, child);
+    armAbortKill();
   };
   state.inactivityAbortHandler = inactivityAbortHandler;
   state.inactivityAbortController.signal.addEventListener(
@@ -244,29 +306,33 @@ function setupCpInactivityHandler(
   resetInactivityTimer();
 }
 
-function setupCpAbortHandler(
-  state: CpExecState,
-  child: ChildProcess,
-): () => void {
-  return () => {
-    void cpKillOnAbort(state, child);
-  };
-}
-
-/** Kill the child process group on abort or inactivity timeout. */
+/**
+ * Kill the child process group on abort or inactivity timeout, then confirm
+ * within a bounded window that the group has no live members. Resolves false
+ * only when members outlived the SIGTERM→SIGKILL escalation and the reap
+ * window (Issue #3517). Never rejects.
+ */
 async function cpKillOnAbort(
   state: CpExecState,
   child: ChildProcess,
-): Promise<void> {
+): Promise<boolean> {
   // Guard the pid before it can reach process.kill(-pid): pid 0 would signal
   // the caller's own process group. isKillablePid also rejects negative and
   // non-finite pids, which the previous `!== 0` check let through.
-  if (isKillablePid(child.pid) && !state.exitedGuard.isExited()) {
-    await killProcessWithEscalation(
-      child.pid,
-      state.isWindows,
-      () => child.kill('SIGKILL'),
-      state.exitedGuard,
-    );
+  if (!isKillablePid(child.pid) || state.exitedGuard.isExited()) {
+    return true;
   }
+  const pid = child.pid;
+  await killProcessWithEscalation(
+    pid,
+    state.isWindows,
+    () => child.kill('SIGKILL'),
+    state.exitedGuard,
+  );
+  if (state.isWindows) {
+    // The Windows abort uses taskkill /f /t, which already walks the tree;
+    // there is no POSIX process group to reap here.
+    return true;
+  }
+  return reapProcessGroup(pid);
 }

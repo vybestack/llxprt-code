@@ -25,6 +25,19 @@ export function isKillablePid(pid: unknown): pid is number {
 }
 
 /**
+ * Group-target variant of {@link isKillablePid} for every
+ * `process.kill(-pid, ...)` call site. `kill(-1, ...)` is the POSIX
+ * broadcast special case — every signalable process — which is the exact
+ * hazard the chokepoint exists to prevent, reintroduced via negation, so a
+ * group target must additionally be greater than 1. `isKillablePid(1)`
+ * deliberately stays true: pid 1 is a legitimate direct kill target, and
+ * that predicate is used for non-group kills.
+ */
+export function isGroupTargetPid(pid: unknown): pid is number {
+  return typeof pid === 'number' && Number.isInteger(pid) && pid > 1;
+}
+
+/**
  * Fire-and-forget taskkill on Windows.  The arguments are explicit and
  * fully controlled; `sonarjs/no-os-command-from-path` is centrally
  * disabled for this codebase.
@@ -125,24 +138,95 @@ export function boundedTaskkill(
 }
 
 /**
+ * Bounded window for confirming a killed process group has no live members
+ * before an abort result is produced (Issue #3517). Long enough for the
+ * kernel and the reaping parents (this runtime for the direct child, init
+ * for reparented grandchildren) to clear killed members; short enough that
+ * an unkillable survivor cannot stall the tool result.
+ */
+export const GROUP_REAP_WINDOW_MS = 1500;
+
+/** Poll interval for the bounded group-reap liveness probe. */
+export const GROUP_REAP_POLL_INTERVAL_MS = 50;
+
+/**
+ * Signal-0 liveness probe for a POSIX process group. Delivers no signal:
+ * sig 0 only asks the kernel whether the group exists and is signalable.
+ * EPERM still proves liveness (a member exists that we may not signal);
+ * every other failure means the group is gone.
+ */
+export function isProcessGroupAlive(pid: number): boolean {
+  if (!isGroupTargetPid(pid)) {
+    // Rejected by the group-target chokepoint: pid 1 would broadcast to
+    // every signalable process and pid 0 would probe the caller's own
+    // process group.
+    return false;
+  }
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/**
+ * Bounded, never-rejecting confirmation that a process group is empty. Polls
+ * a signal-0 probe (never a real signal) until the group is gone or the
+ * window expires. Resolves true when the group was confirmed empty, false
+ * when members may still be alive after the window (the caller must then say
+ * so in its result — Issue #3517).
+ * Non-group-target pids 0 and 1 return true (treated as already reaped) by
+ * contract because there is no safe negated probe: kill(-1, 0) is the POSIX
+ * broadcast to every signalable process, and kill(-0, 0) probes the caller's
+ * own process group.
+ */
+export async function reapProcessGroup(
+  pid: number,
+  windowMs: number = GROUP_REAP_WINDOW_MS,
+): Promise<boolean> {
+  if (!isGroupTargetPid(pid)) {
+    // Rejected by the group-target chokepoint: probing pid 1 would ask
+    // about every signalable process, and pid 0 the caller's own group.
+    return true;
+  }
+  const deadline = Date.now() + windowMs;
+  for (;;) {
+    if (!isProcessGroupAlive(pid)) {
+      return true;
+    }
+    if (Date.now() >= deadline) {
+      return false;
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, GROUP_REAP_POLL_INTERVAL_MS),
+    );
+  }
+}
+
+/**
  * Send SIGTERM then, after a short grace period, SIGKILL to a Unix
- * process group, guarded by the shared {@link ExitGuard} so that a
- * process that exits during the grace period is not killed again.
+ * process group. Escalation is gated on GROUP liveness, not on the direct
+ * child the {@link ExitGuard} tracks: when the child dies from the SIGTERM
+ * but a grandchild ignores or traps it, the group is still alive and must
+ * still be escalated (Issue #3517). The guard remains authoritative for the
+ * catch/fallback path.
  */
 export async function escalateKillUnix(
   pid: number | undefined,
   exitedGuard: ExitGuard,
   killFallback: () => void,
 ): Promise<void> {
-  if (!isKillablePid(pid)) {
-    // A non-killable pid must never reach process.kill(-pid): pid 0 would
-    // signal the caller's own process group. Treat it as already gone.
+  if (!isGroupTargetPid(pid)) {
+    // A pid that is not a valid group target must never reach
+    // process.kill(-pid): pid 0 would signal the caller's own process group
+    // and pid 1 every signalable process. Treat it as already gone.
     return;
   }
   try {
     process.kill(-pid, 'SIGTERM');
     await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
-    if (!exitedGuard.isExited()) {
+    if (isProcessGroupAlive(pid)) {
       process.kill(-pid, 'SIGKILL');
     }
   } catch {
