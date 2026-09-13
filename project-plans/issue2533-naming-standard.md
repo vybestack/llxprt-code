@@ -351,6 +351,29 @@ touched files, smoke green (tmp/verify2533-r2/, full typecheck/lint/test logs
 therein). OCR budget (2 rounds) exhausted; any further findings become
 documented follow-ups, not new cycles.
 
+## main merge + isolation contract (2026-09-13)
+
+main advanced 98b75929f → 27e58cf64 (#3535, #3567, #3622, #3444); GitHub
+flagged the PR conflicted. One textual conflict (subagent.ts emit-value
+partition): kept our SCOPE_LOCAL_EMIT_TOOL_NAME constant, took main's #3535
+requestMarkers success/error reporting — commit b30ebac7d. Two latent
+interactions surfaced after the merge:
+
+- typecheck failed against stale packages/core/dist artifacts (main's
+  OutputObject addition vs our pre-merge build); a rebuild regenerated them
+  and typecheck/lint/build all exit 0.
+- main's #3622 test-isolation contract pins the declared bun-test roots and
+  their package-workspace mapping; our repo-root eslint-rules root needed
+  registration in knownRoots plus the non-workspace exclusion filter (NOT
+  SETUP_EXCEPTIONS — it isolates via the storage-isolation preload) —
+  commit 24a2bf3e5, contract suite 16/16.
+
+Scoped verification: all 30 subagent/toolGovernance suites in isolation
+(398 tests, 0 fail; the 703-failure raw single-process run of
+packages/agents/src/core/ is one-process pollution, not real). CI at
+24a2bf3e5: 40 pass / 0 fail (media-store locking flake did not recur).
+PR MERGEABLE/CLEAN, zero actionable threads.
+
 ## Known follow-ups (deferred, out of scope here)
 
 
