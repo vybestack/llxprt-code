@@ -196,6 +196,7 @@ export async function buildResponsesRequestContextForProjection(
   deps: ResponsesExecutorDeps,
   invocationEphemerals = resolveInvocationEphemerals(options),
   forceStateless = false,
+  forceParentless = false,
 ): Promise<PreparedResponsesRequestContext> {
   const patchedContent = SyntheticToolResponseHandler.patchMessageHistory(
     options.contents,
@@ -206,6 +207,7 @@ export async function buildResponsesRequestContextForProjection(
     invocationEphemerals,
     deps,
     forceStateless,
+    forceParentless,
   );
 }
 
@@ -319,12 +321,18 @@ export async function* executeOpenAIResponsesRequest(
       'Responses stateful retry was entered without a rejected parent',
     );
   }
+  // The same gate the streaming layer uses to choose the WebSocket branch:
+  // only when the recovery will actually run over the WebSocket do the
+  // connection-scoped parents need the parentless rebuild (#3446).
+  const recoverParentless =
+    requestContext.isCodex && deps.getWebSocketTransport?.() !== undefined;
   yield* retryWithoutStatefulness(
     options,
     deps,
     invocationEphemerals,
     abortSignal,
     rejectedParentId,
+    recoverParentless,
   );
 }
 
@@ -335,6 +343,16 @@ export async function* executeOpenAIResponsesRequest(
  *
  * Extracted from executeOpenAIResponsesRequest to keep it within the project
  * max-lines-per-function budget.
+ *
+ * `recoverParentless` (#3446): over the WebSocket transport every stored
+ * parent is connection-scoped, so after one parent dies the scan falling
+ * through to an OLDER stored parent just spends a second rejection. The
+ * recovery rebuilds parentless (full history) while staying STATEFUL —
+ * `forceStateless` is deliberately NOT used, because disabling statefulness
+ * would stop the recovery response from being stamped stored and the chain
+ * could not re-establish on the next turn. Over HTTP parents are durable, so
+ * the per-id fallthrough is preserved there (`recoverParentless` stays
+ * false).
  */
 async function* retryWithoutStatefulness(
   options: NormalizedGenerateChatOptions,
@@ -342,6 +360,7 @@ async function* retryWithoutStatefulness(
   invocationEphemerals: Record<string, unknown>,
   abortSignal: AbortSignal | undefined,
   rejectedParentId: string,
+  recoverParentless: boolean,
 ): AsyncIterableIterator<IContent> {
   // Retire only the dead id, then rebuild. The retry therefore sends full
   // history with no parent, and — because the parent scan takes the NEWEST
@@ -357,6 +376,8 @@ async function* retryWithoutStatefulness(
     options,
     deps,
     invocationEphemerals,
+    /* forceStateless */ false,
+    /* forceParentless */ recoverParentless,
   );
   const recoveryContext = await resolveResponsesTransportContext(
     options,
@@ -522,6 +543,7 @@ export async function buildRequestContext(
   invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
   forceStateless = false,
+  forceParentless = false,
 ): Promise<PreparedResponsesRequestContext> {
   const {
     rawBaseURL,
@@ -536,6 +558,7 @@ export async function buildRequestContext(
     invocationEphemerals,
     deps,
     forceStateless,
+    forceParentless,
   );
   const mediaRequest = await resolveRequestMedia(
     options.runtime,

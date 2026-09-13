@@ -663,6 +663,9 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
         );
         if (result !== 'retry') return;
         socket = undefined;
+        // An abort landing at the retired-socket handoff must win exactly as
+        // it does at the top of the loop, before any follow-on verdict.
+        throwIfAborted(options.abortSignal);
         // #3446: a previous_response_id only resolves on the socket that
         // minted it, so replaying a stateful request on a fresh connection
         // is dead on arrival. Fail with the renewal verdict instead of

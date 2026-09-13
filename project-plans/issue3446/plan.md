@@ -88,7 +88,11 @@ post-content-no-replay behavior unchanged.
 - Second lifecycle limit after the stateless rebuild: the rebuilt request is
   stateless, so the ordinary bounded #2771 retry applies.
 - Dead parent + LIVE socket (resumed `--continue` session): AC4 path, not
-  AC1 (no lifecycle event); recovery reuses the live socket over WS.
+  AC1 (no lifecycle event); recovery runs over a FRESH connection through
+  the same WebSocket transport. The transport (pre-existing behavior,
+  unchanged in this issue) invalidates any socket whose attempt failed, so
+  the live socket is not preserved. AC4 requires recovery over WebSocket
+  without HTTP, not preservation of the specific socket.
 - Renewal verdict when `rebuildStateless` is unavailable: propagate (same
   optional-dependency semantics as the executor's other deps).
 
@@ -145,10 +149,10 @@ The executor already exposes `markStatefulParentRejected`, `rebuildStateless`,
 - T4 (same block): the turn AFTER T3 sends `previous_response_id` = the id
   minted on socket 2 with trimmed input, and stays on WebSocket (no fetch).
 - T5 (same block): dead parent on a LIVE socket (resumed-session shape) →
-  parent-not-found frame → executor's #3134 recovery re-serves over the SAME
-  WebSocket (fetch NOT called, second envelope on socket 1: no dead parent,
-  full history), dead id marked rejected; next turn chains from the recovery
-  response id.
+  parent-not-found frame → executor's #3134 recovery re-serves over the same
+  WebSocket TRANSPORT on a FRESH connection (fetch NOT called, second
+  envelope on socket 2: no dead parent, full history), dead id marked
+  rejected; next turn chains from the recovery response id.
 
 ## Verification
 
@@ -157,6 +161,12 @@ Full cycle per the issue workflow: `npm run test`, `npm run lint`,
 smoke test. Review: deepthinker compliance review (max 2 rounds). OCR is
 skipped for this effort per standing instruction (disabled until
 re-enabled).
+
+## Known follow-ups (deferred, out of scope)
+
+- `dumpcontext` labels the WS-renewed/recovery request as HTTP-carried
+  (`sentOverHttp=true` on the rebuild seam). Diagnostics-only: no HTTP fetch
+  occurs. Deferred as out of AC scope.
 
 ## Related
 

@@ -132,6 +132,13 @@ function readObservedRetainedTokens(
  *   lets the retry send full history once; that response becomes the newest
  *   stored turn, and because the scan takes the NEWEST eligible parent the
  *   very next turn chains from it. The chain re-establishes itself.
+ * - `forceParentless` — #3446: a parent-not-found rejection over the
+ *   WebSocket transport means every stored parent may be scoped to a dead
+ *   connection, so the one-shot recovery sends full history with no parent
+ *   while remaining stateful (the response is stamped stored and the newest
+ *   turn re-chains immediately). Statefulness otherwise being enabled is
+ *   required; when it would be disabled anyway the regular disabled shape is
+ *   returned.
  */
 export function computeStatefulConversation(
   options: NormalizedGenerateChatOptions,
@@ -143,6 +150,7 @@ export function computeStatefulConversation(
   isRejectedParent: (responseId: string) => boolean,
   statefulTransportSupported: boolean,
   logger: DebugLogger,
+  forceParentless = false,
 ): StatefulConversation {
   // Codex statefulness is bound to the WebSocket transport. The ChatGPT
   // backend rejects `store: true` (400 "Store must be set to false"), so a
@@ -170,6 +178,18 @@ export function computeStatefulConversation(
     : explicitStateful === true;
   if (!requested || explicitUserStore === false) {
     return { enabled: false, parentId: undefined, content };
+  }
+
+  // #3446: the one-shot parent-not-found recovery over the WebSocket skips
+  // the parent scan entirely — every stored parent may be scoped to a dead
+  // connection — while staying stateful so the response stamps stored and
+  // the chain re-establishes on the next turn.
+  if (forceParentless) {
+    logger.debug(
+      () =>
+        'responses-stateful recovery: sending full history with no parent (#3446).',
+    );
+    return { enabled: true, parentId: undefined, content };
   }
 
   // Scan from the newest entry backwards for the most recent stored AI turn

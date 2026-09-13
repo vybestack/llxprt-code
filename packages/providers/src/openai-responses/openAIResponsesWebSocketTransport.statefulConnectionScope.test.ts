@@ -9,11 +9,13 @@ import {
   createCodexResponsesWebSocketTransport,
   isStatefulConnectionRenewalError,
   streamOverWebSocketOrFallback,
+  WEBSOCKET_CONNECTION_LIMIT_CODE,
   type WebSocketTransport,
 } from './openAIResponsesWebSocketTransport.js';
 import {
   SocketHarness,
   completingScript,
+  connectionLimitErrorFrame,
   connectionLimitScript,
   drain,
   fallbackStream,
@@ -161,6 +163,85 @@ describe('Codex Responses WebSocket stateful connection scope @issue:3446', () =
     );
 
     expect(rejection).toBeDefined();
-    expect((rejection as { cause?: unknown }).cause).toBeDefined();
+    expect(
+      (
+        (rejection as { cause?: unknown }).cause as {
+          details?: { providerError?: { code?: unknown } };
+        }
+      ).details?.providerError?.code,
+    ).toBe(WEBSOCKET_CONNECTION_LIMIT_CODE);
+  });
+
+  it('lets an abort at the retired-socket handoff win over the renewal verdict', async () => {
+    // An abort landing while the dead socket is being dropped must surface as
+    // AbortError (the file's contract: abort always wins), not as the
+    // stateful renewal verdict, and must never open a second socket. The
+    // close listener fires from the client-side invalidation after the
+    // attempt reports 'retry' but before the handoff verdict is thrown.
+    const controller = new AbortController();
+    const harness = new SocketHarness([
+      (socket) => {
+        socket.open();
+        socket.onClose(() => controller.abort());
+        socket.onSend = () => socket.message(connectionLimitErrorFrame());
+      },
+      completingScript('recovered'),
+    ]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+    const statefulRequest = {
+      ...request(),
+      previous_response_id: 'resp_parent',
+    };
+
+    const rejection = await drain(
+      transport.streamResponse(
+        statefulRequest,
+        options({ abortSignal: controller.signal }),
+      ),
+    ).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    expect(rejection).toBeDefined();
+    expect(rejection).toMatchObject({ name: 'AbortError' });
+    expect(isStatefulConnectionRenewalError(rejection)).toBe(false);
+    expect(harness.sockets).toHaveLength(1);
+    expect(harness.sockets[0].closedByClient).toBe(true);
+  });
+
+  it('surfaces a stateless handoff abort as AbortError without the renewal verdict (stateless control)', async () => {
+    // Stateless control: the same abort at the retired-socket handoff wins
+    // for a request without a previous_response_id too — the single #2771
+    // replay is abandoned before a second socket opens.
+    const controller = new AbortController();
+    const harness = new SocketHarness([
+      (socket) => {
+        socket.open();
+        socket.onClose(() => controller.abort());
+        socket.onSend = () => socket.message(connectionLimitErrorFrame());
+      },
+      completingScript('recovered'),
+    ]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+
+    const rejection = await drain(
+      transport.streamResponse(
+        request(),
+        options({ abortSignal: controller.signal }),
+      ),
+    ).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    expect(rejection).toBeDefined();
+    expect(rejection).toMatchObject({ name: 'AbortError' });
+    expect(isStatefulConnectionRenewalError(rejection)).toBe(false);
+    expect(harness.sockets).toHaveLength(1);
   });
 });
