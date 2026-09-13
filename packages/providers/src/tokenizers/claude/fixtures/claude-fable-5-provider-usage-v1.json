@@ -5,7 +5,7 @@
     "activeProvider": "claudecode",
     "endpointHost": "api.anthropic.com",
     "protocol": "anthropic-messages",
-    "projectionRevision": 3,
+    "projectionRevision": 4,
     "corpusVersion": "2026-08-04-v1",
     "commitSha": "8f5201115c75",
     "groundTruth": "complete provider promptTokens including cached prompt tokens",

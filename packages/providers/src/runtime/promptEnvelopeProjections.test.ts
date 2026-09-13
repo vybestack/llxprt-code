@@ -19,11 +19,36 @@
 
 import { describe, it, expect } from 'bun:test';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import { parseImageDimensionsFromBase64 } from '@vybestack/llxprt-code-tools/utils/imageDimensions.js';
 import {
   projectAnthropicPromptEnvelope,
   projectOpenAIChatPromptEnvelope,
   projectOpenAIResponsesPromptEnvelope,
+  PROJECTION_REVISION,
+  type ProviderFinalizedPromptProjection,
 } from './promptEnvelopeProjections.js';
+
+/**
+ * Handcrafted minimal PNG whose IHDR declares 1586x991.
+ *
+ * 8-byte signature, then an IHDR chunk: length 13, 'IHDR', width/height as
+ * big-endian uint32, bit depth 8, color type 6 (RGBA), compression/filter/interlace
+ * zero, then a zeroed CRC. parseImageDimensionsFromBase64 reads only the
+ * header, so the missing IDAT is irrelevant.
+ */
+function handcraftedPngBase64(width: number, height: number): string {
+  // prettier-ignore
+  const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, (width >>> 24) & 0xff, (width >>> 16) & 0xff, (width >>> 8) & 0xff, width & 0xff, (height >>> 24) & 0xff, (height >>> 16) & 0xff, (height >>> 8) & 0xff, height & 0xff, 8, 6, 0, 0, 0, 0, 0, 0, 0, 0]);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function finalizedEntries(
+  projection: ProviderFinalizedPromptProjection,
+): ReadonlyArray<{ dimensions?: { width: number; height: number } }> {
+  return projection.imageEntries ?? [];
+}
 
 describe('projectAnthropicPromptEnvelope (issue #2817)', () => {
   it('identifies anthropic-messages protocol, messages/v1 method, and model from the finalized request body', () => {
@@ -38,7 +63,8 @@ describe('projectAnthropicPromptEnvelope (issue #2817)', () => {
     expect(projection.protocol).toBe('anthropic-messages');
     expect(projection.method).toBe('messages/v1');
     expect(projection.model).toBe('claude-3-5-sonnet-20241022');
-    expect(projection.projectionRevision).toBe(3);
+    expect(projection.projectionRevision).toBe(PROJECTION_REVISION);
+    expect(projection.projectionRevision).toBe(4);
     // Assert immutability before toMatchObject: Bun's expect mutates the
     // received object's properties when resolving asymmetric matchers, which
     // would otherwise unfreeze finalizedProjection before this check runs.
@@ -266,6 +292,66 @@ describe('projectAnthropicPromptEnvelope (issue #2817)', () => {
     expect(projection.unsupportedMedia).toHaveLength(1);
     expect(projection.unsupportedMedia[0].kind).toBe('unsupported');
   });
+
+  it('records a base64 image source as an image entry with parsed dimensions (issue #3481)', () => {
+    const png = handcraftedPngBase64(1586, 991);
+    expect(parseImageDimensionsFromBase64(png)).toStrictEqual({
+      width: 1586,
+      height: 991,
+    });
+
+    const projection = projectAnthropicPromptEnvelope({
+      model: 'claude-3-5-sonnet',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Describe this' },
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/png',
+                data: png,
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const finalized =
+      projection.finalizedProjection as ProviderFinalizedPromptProjection;
+    expect(finalizedEntries(finalized)).toStrictEqual([
+      { dimensions: { width: 1586, height: 991 } },
+    ]);
+    expect(finalized.promptText).toContain('[binary media bytes omitted]');
+    expect(finalized.promptText).not.toContain(png);
+  });
+
+  it('records no image entry for an anthropic PDF document source (issue #3481)', () => {
+    const projection = projectAnthropicPromptEnvelope({
+      model: 'claude-3-5-sonnet',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'document',
+              source: {
+                type: 'base64',
+                media_type: 'application/pdf',
+                data: 'JVBERi0xLjQ=',
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const finalized =
+      projection.finalizedProjection as ProviderFinalizedPromptProjection;
+    expect(finalized.imageEntries).toBeUndefined();
+    expect(finalized.promptText).toContain('[binary media bytes omitted]');
+  });
 });
 
 describe('projectOpenAIChatPromptEnvelope (issue #2817)', () => {
@@ -283,7 +369,8 @@ describe('projectOpenAIChatPromptEnvelope (issue #2817)', () => {
     expect(projection.protocol).toBe('openai-chat');
     expect(projection.method).toBe('chat/completions/v1');
     expect(projection.model).toBe('gpt-4o');
-    expect(projection.projectionRevision).toBe(3);
+    expect(projection.projectionRevision).toBe(PROJECTION_REVISION);
+    expect(projection.projectionRevision).toBe(4);
   });
 
   it('counts more tokens for a larger messages payload', async () => {
@@ -431,7 +518,8 @@ describe('projectOpenAIResponsesPromptEnvelope (issue #2817)', () => {
     expect(projection.protocol).toBe('openai-responses');
     expect(projection.method).toBe('responses/v1');
     expect(projection.model).toBe('gpt-4o');
-    expect(projection.projectionRevision).toBe(3);
+    expect(projection.projectionRevision).toBe(PROJECTION_REVISION);
+    expect(projection.projectionRevision).toBe(4);
   });
 
   it('counts more tokens for a larger input payload', async () => {
@@ -547,6 +635,174 @@ describe('projectOpenAIResponsesPromptEnvelope (issue #2817)', () => {
 
     expect(controlTokens).toBe(baselineTokens);
     expect(toolTokens).toBeGreaterThan(baselineTokens);
+  });
+
+  it('records an input_image data URI as an image entry with parsed dimensions (issue #3481)', () => {
+    const png = handcraftedPngBase64(1586, 991);
+    expect(parseImageDimensionsFromBase64(png)).toStrictEqual({
+      width: 1586,
+      height: 991,
+    });
+
+    const projection = projectOpenAIResponsesPromptEnvelope({
+      model: 'gpt-4o',
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            {
+              type: 'input_image',
+              image_url: `data:image/png;base64,${png}`,
+            },
+          ],
+        },
+      ],
+    });
+    const finalized =
+      projection.finalizedProjection as ProviderFinalizedPromptProjection;
+    expect(finalizedEntries(finalized)).toStrictEqual([
+      { dimensions: { width: 1586, height: 991 } },
+    ]);
+    // The canonical text keeps the placeholder, not the raw bytes.
+    expect(finalized.promptText).toContain('[binary media bytes omitted]');
+    expect(finalized.promptText).not.toContain(png);
+  });
+
+  it('records no image entry for a PDF file_data data URI (issue #3481)', () => {
+    const projection = projectOpenAIResponsesPromptEnvelope({
+      model: 'gpt-4o',
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            {
+              type: 'input_file',
+              file_data: `data:application/pdf;base64,${'B'.repeat(4096)}`,
+              filename: 'document.pdf',
+            },
+          ],
+        },
+      ],
+    });
+    const finalized =
+      projection.finalizedProjection as ProviderFinalizedPromptProjection;
+    expect(finalized.imageEntries).toBeUndefined();
+    expect(finalized.promptText).toContain('[binary media bytes omitted]');
+  });
+
+  it('records no image entry for an image data URI with an empty MIME segment (issue #3481)', () => {
+    const projection = projectOpenAIResponsesPromptEnvelope({
+      model: 'gpt-4o',
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            {
+              type: 'input_image',
+              image_url: `data:;base64,${'C'.repeat(1024)}`,
+            },
+          ],
+        },
+      ],
+    });
+    expect(
+      (projection.finalizedProjection as ProviderFinalizedPromptProjection)
+        .imageEntries,
+    ).toBeUndefined();
+  });
+});
+describe('stateful retained-baseline incremental projection (issue #3481)', () => {
+  const INSTRUCTIONS_MARKER =
+    'MARKER-INSTRUCTIONS-DO-NOT-COUNT-AGAIN-unique-string';
+  const TOOLS_MARKER = 'MARKER-TOOLS-SCHEMA-DO-NOT-COUNT-AGAIN-unique-string';
+
+  const buildIncrementalBody = (png: string) => ({
+    model: 'gpt-4o',
+    instructions: INSTRUCTIONS_MARKER,
+    input: [
+      {
+        type: 'message',
+        role: 'user',
+        content: [
+          { type: 'input_text', text: 'New follow-up' },
+          { type: 'input_image', image_url: `data:image/png;base64,${png}` },
+        ],
+      },
+    ],
+    tools: [
+      {
+        type: 'function',
+        name: 'get_weather',
+        description: TOOLS_MARKER,
+        parameters: {
+          type: 'object',
+          properties: { city: { type: 'string' } },
+        },
+      },
+    ],
+  });
+
+  it('excludes instructions and tools from the incremental estimation projection when a retained baseline is observed', () => {
+    const png = handcraftedPngBase64(1586, 991);
+    const body = buildIncrementalBody(png);
+    const projection = projectOpenAIResponsesPromptEnvelope(body, undefined, {
+      statefulParentUsed: true,
+      incrementalRequest: body,
+      retainedBaselineTokens: 9_689,
+    });
+    const accounting = projection.accounting;
+    expect(accounting?.statefulParentUsed).toBe(true);
+    expect(accounting?.retainedBaselineTokens).toBe(9_689);
+    const incrementalFinalized = accounting?.incremental
+      ?.finalizedProjection as ProviderFinalizedPromptProjection | undefined;
+    expect(incrementalFinalized).toBeDefined();
+    // With a server-side parent, instructions and tools are retained inside
+    // the observed parent baseline and are not re-billed, so the
+    // incremental estimate counts only the new input (issue #3481).
+    expect(incrementalFinalized?.promptText).not.toContain(INSTRUCTIONS_MARKER);
+    expect(incrementalFinalized?.promptText).not.toContain(TOOLS_MARKER);
+    expect(incrementalFinalized?.promptSegments ?? []).not.toContain(
+      expect.stringContaining(INSTRUCTIONS_MARKER),
+    );
+    expect(incrementalFinalized?.promptSegments ?? []).not.toContain(
+      expect.stringContaining(TOOLS_MARKER),
+    );
+    // The new input still counts, including its image entry.
+    expect(incrementalFinalized?.promptText).toContain('New follow-up');
+    expect(
+      finalizedEntries(
+        incrementalFinalized as ProviderFinalizedPromptProjection,
+      ),
+    ).toStrictEqual([{ dimensions: { width: 1586, height: 991 } }]);
+  });
+
+  it('keeps instructions and tools in both projections on the full-history fallback branch', () => {
+    const body = buildIncrementalBody(handcraftedPngBase64(1586, 991));
+    const projection = projectOpenAIResponsesPromptEnvelope(body, undefined, {
+      statefulParentUsed: true,
+      incrementalRequest: body,
+      fullHistoryRequest: body,
+    });
+    const accounting = projection.accounting;
+    expect(accounting?.statefulParentUsed).toBe(true);
+    expect(accounting?.retainedBaselineTokens).toBeUndefined();
+    const incrementalText = (
+      accounting?.incremental
+        ?.finalizedProjection as ProviderFinalizedPromptProjection
+    ).promptText;
+    const fullHistoryText = (
+      accounting?.fullHistory
+        ?.finalizedProjection as ProviderFinalizedPromptProjection
+    ).promptText;
+    // Without an observed parent baseline nothing is retained, so both
+    // estimations count the re-sent instructions and tools.
+    expect(incrementalText).toContain(INSTRUCTIONS_MARKER);
+    expect(incrementalText).toContain(TOOLS_MARKER);
+    expect(fullHistoryText).toContain(INSTRUCTIONS_MARKER);
+    expect(fullHistoryText).toContain(TOOLS_MARKER);
   });
 });
 
