@@ -280,19 +280,14 @@ describe('startup image profile transitions', () => {
     expect(getActiveImageProfile()?.name).toBe('art');
   });
 
-  it('warns when reapplying the standalone image profile fails', async () => {
+  it('rejects when reapplying the standalone image profile fails', async () => {
     await manager.saveProfile('conversation', modelProfile());
-    const warnings: string[] = [];
-    vi.spyOn(debugLogger, 'warn').mockImplementation((message) => {
-      warnings.push(String(message));
-    });
-    await reapplyBootstrapProfile(
-      { ...argv, imageProfile: 'missing-cli' },
-      settings,
-    );
-    expect(warnings.join('\n')).toContain(
-      "Failed to reapply image profile 'missing-cli'",
-    );
+    await expect(
+      reapplyBootstrapProfile(
+        { ...argv, imageProfile: 'missing-cli' },
+        settings,
+      ),
+    ).rejects.toBeInstanceOf(ImageProfileNotFoundError);
   });
 
   it('warns and continues for a non-image bootstrap failure', async () => {

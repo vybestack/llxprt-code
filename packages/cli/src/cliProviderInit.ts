@@ -213,14 +213,7 @@ export async function reapplyBootstrapProfile(
   }
   const imageProfileName = argv.imageProfile?.trim();
   if (imageProfileName && !isImageModeActive(argv)) {
-    try {
-      await loadImageProfileByName(imageProfileName);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      debugLogger.warn(
-        `[bootstrap] Failed to reapply image profile '${imageProfileName}' after provider manager initialization: ${message}`,
-      );
-    }
+    await loadImageProfileByName(imageProfileName);
   }
 }
 
