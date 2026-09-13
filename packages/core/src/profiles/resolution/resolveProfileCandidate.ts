@@ -379,8 +379,12 @@ async function resolveStandardDocument(
       requestedVsEffective,
     };
   }
-  if (standardDocument.provider === '') {
-    errors.push('provider is required');
+  if (standardDocument.provider === '' || standardDocument.model === '') {
+    errors.push(
+      standardDocument.provider === ''
+        ? 'provider is required'
+        : 'model is required',
+    );
     return {
       status: 'invalid',
       resolved: {

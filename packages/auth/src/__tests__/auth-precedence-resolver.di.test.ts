@@ -151,6 +151,38 @@ describe('AuthPrecedenceResolver DI behavioral tests', () => {
       },
     );
 
+    it.each(['oauth', 'apikey', undefined])(
+      'honors member auth intent %s when only OAuth credentials exist',
+      async (intent) => {
+        const authIntent =
+          intent === 'oauth' || intent === 'apikey' ? intent : undefined;
+        const resolver = new AuthPrecedenceResolver(
+          {
+            providerId: 'anthropic',
+            oauthProvider: 'anthropic',
+            supportsOAuth: true,
+            isOAuthEnabled: true,
+          },
+          {
+            settingsService: createInMemorySettingsService({ authOnly: false }),
+            oauthManager: createOAuthManager(),
+          },
+        );
+        const result = await resolver.resolveAuthenticationResult({
+          includeOAuth: true,
+          authIntent,
+        });
+        expect(result.token === null).toStrictEqual(authIntent === 'apikey');
+        const failure = result.token === null ? result.failure : undefined;
+        expect(failure?.kind).toStrictEqual(
+          authIntent === 'apikey' ? 'no-credential-configured' : undefined,
+        );
+        expect(failure?.diagnostics.attemptedMechanisms ?? []).not.toContain(
+          'oauth',
+        );
+      },
+    );
+
     it('does not fall back to ambient credentials when member OAuth is missing', async () => {
       const resolver = new AuthPrecedenceResolver(
         {

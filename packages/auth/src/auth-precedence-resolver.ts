@@ -190,7 +190,8 @@ export class AuthPrecedenceResolver {
   async resolveAuthenticationResult(
     options?: ResolveAuthOptions,
   ): Promise<CredentialResolutionResult> {
-    const includeOAuth = options?.includeOAuth ?? false;
+    const includeOAuth =
+      options?.includeOAuth === true && options.authIntent !== 'apikey';
     const settingsService = this.resolveSettingsService(
       options?.settingsService ?? undefined,
     );

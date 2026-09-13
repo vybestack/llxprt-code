@@ -177,7 +177,7 @@ export class ActiveProfileRuntime {
 
   /** Current health of the bound runtime. */
   getHealth(): ProfileHealth {
-    this.ensureValid();
+    if (this.invalidated) throw new ProfileRuntimeDisposedError();
     return {
       status: this.health.status,
       degradedAspects: [...this.health.degradedAspects],
@@ -232,6 +232,10 @@ export class ActiveProfileRuntime {
    */
   reportDegradation(aspects: readonly string[]): void {
     this.ensureValid();
+    this.recordDegradation(aspects);
+  }
+
+  private recordDegradation(aspects: readonly string[]): void {
     const merged = new Set(this.health.degradedAspects);
     for (const aspect of aspects) {
       merged.add(aspect);
@@ -312,7 +316,7 @@ export class ActiveProfileRuntime {
     try {
       await this.boundedRace(disposeResult);
     } catch (error) {
-      this.reportDegradation([
+      this.recordDegradation([
         `dispose-failed:${error instanceof Error ? error.message : String(error)}`,
       ]);
     }
@@ -326,7 +330,8 @@ export class ActiveProfileRuntime {
   }
 
   private ensureValid(): void {
-    if (this.invalidated) throw new ProfileRuntimeDisposedError();
+    if (this.invalidated || this.disposed)
+      throw new ProfileRuntimeDisposedError();
   }
 
   private invalidateRoleRuntimes(): void {

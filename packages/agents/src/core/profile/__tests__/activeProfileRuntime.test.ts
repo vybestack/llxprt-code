@@ -411,6 +411,32 @@ describe('ActiveProfileRuntime', () => {
     });
   });
 
+  it('rejects attachment during and after owner disposal without adopting a leaked binding', async () => {
+    const runtime = new ActiveProfileRuntime(
+      configuredState,
+      100,
+      permissivePolicy,
+    );
+    const original = deferredBinding();
+    const replacement = deferredBinding();
+    runtime.attach(original.binding);
+    const disposing = runtime[Symbol.asyncDispose]();
+    expect(() => runtime.attach(replacement.binding)).toThrow(
+      ProfileRuntimeDisposedError,
+    );
+    original.release();
+    await disposing;
+    expect(() => runtime.attach(replacement.binding)).toThrow(
+      ProfileRuntimeDisposedError,
+    );
+    await runtime[Symbol.asyncDispose]();
+    expect(original.disposeCount()).toStrictEqual(1);
+    expect(replacement.disposeCount()).toStrictEqual(0);
+    replacement.release();
+    await replacement.binding[Symbol.asyncDispose]();
+    expect(replacement.disposeCount()).toStrictEqual(1);
+  });
+
   it('asyncDispose disposes the binding exactly once even when it hangs', async () => {
     const fake = deferredBinding();
     const runtime = new ActiveProfileRuntime(
@@ -439,9 +465,22 @@ describe('ActiveProfileRuntime', () => {
       permissivePolicy,
     );
     runtime.attach(failingBinding);
-    await expect(runtime[Symbol.asyncDispose]()).resolves.toBeUndefined();
-    expect(runtime.getHealth().status).toBe('degraded');
-    expect(runtime.getHealth().degradedAspects[0]).toContain('dispose-failed');
+    runtime.reportDegradation(['slow']);
+    await expect(runtime[Symbol.asyncDispose]()).resolves.toStrictEqual(
+      undefined,
+    );
+    expect(runtime.getHealth()).toStrictEqual({
+      status: 'degraded',
+      degradedAspects: ['slow', 'dispose-failed:dispose boom'],
+    });
+    expect(() => runtime.reportDegradation(['late'])).toThrow(
+      ProfileRuntimeDisposedError,
+    );
+    await runtime[Symbol.asyncDispose]();
+    expect(runtime.getHealth()).toStrictEqual({
+      status: 'degraded',
+      degradedAspects: ['slow', 'dispose-failed:dispose boom'],
+    });
   });
 
   it('snapshot exposes no secret keys', () => {

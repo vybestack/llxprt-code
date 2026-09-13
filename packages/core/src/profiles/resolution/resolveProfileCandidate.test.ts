@@ -220,6 +220,41 @@ describe('resolveProfileCandidate standard documents', () => {
     expect(result.warnings).toStrictEqual([]);
   });
 
+  it('rejects an empty model before deriving credentials despite a validating catalog', async () => {
+    const document = standard({
+      model: '',
+      ephemeralSettings: { 'auth-key': 'sk-secret' },
+    });
+    const result = await resolveProfileCandidate(
+      { document, policyIntent: {} },
+      deps(),
+    );
+    expect(result).toStrictEqual({
+      status: 'invalid',
+      resolved: {
+        document,
+        credentialBindings: [],
+        policy: {
+          allowedTools: [],
+          disabledTools: [],
+          shellMode: 'all',
+          approvalCeiling: 'standard',
+        },
+      },
+      errors: ['model is required'],
+      warnings: [],
+      unverifiedConstraints: [],
+      requestedVsEffective: [
+        {
+          aspect: 'approval ceiling',
+          requested: 'yolo',
+          effective: 'standard',
+          note: 'absent intent; values come from environment and session ceilings',
+        },
+      ],
+    });
+  });
+
   it('rejects an empty provider with a non-empty model', async () => {
     const result = await resolveProfileCandidate(
       {
