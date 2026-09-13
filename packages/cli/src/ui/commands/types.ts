@@ -178,6 +178,8 @@ export interface LoggingDialogData {
  * Type-safe dialog data for models dialog.
  */
 export interface ModelsDialogData {
+  /** Use the image configuration selector instead of text model browsing. */
+  imageMode?: boolean;
   /** Pre-fill search term (from positional arg) */
   initialSearch?: string;
   /** Pre-set capability filters */

@@ -28,8 +28,12 @@ import {
   getActiveImageProfile,
   getActiveProfileName,
   loadImageProfileByName,
+  setActiveImageProfile,
+  saveImageProfileSnapshot,
+  saveProfileSnapshot,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import { profileCommand } from './profileCommand.js';
+import { ImageModelWizard } from '../components/imageModelWizard.js';
 import { profileLoadSchema, profileSaveSchema } from './profileSchemas.js';
 import type { CommandArgumentSchema } from './schema/types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -78,6 +82,7 @@ describe('image profile command surfaces', () => {
       runtimeId: 'image-surfaces',
       messageBus,
     });
+    setActiveImageProfile(undefined);
     await manager.saveProfile('conversation', {
       version: 1,
       provider: 'openai',
@@ -97,6 +102,32 @@ describe('image profile command surfaces', () => {
   afterEach(async () => {
     resetCliProviderInfrastructure();
     await rm(directory, { recursive: true, force: true });
+  });
+
+  it('keeps wizard configuration unnamed until explicitly saved as an image profile', async () => {
+    const wizard = new ImageModelWizard('openai-images', setActiveImageProfile);
+    wizard.submit('new-local-image');
+    wizard.submit('http://localhost:8321/v1');
+    wizard.chooseAuth('none');
+    expect(getActiveImageProfile()?.profile.model).toBe('new-local-image');
+    expect(getActiveImageProfile()?.name).toBeUndefined();
+    expect(await manager.listImageProfiles()).toStrictEqual(['art']);
+
+    const chat = await saveProfileSnapshot('chat');
+    expect(chat).not.toHaveProperty('imageProfile');
+    await saveImageProfileSnapshot('new-art');
+    expect(getActiveImageProfile()?.name).toBe('new-art');
+    expect((await manager.loadImageProfile('new-art')).model).toBe(
+      'new-local-image',
+    );
+  });
+
+  it('surfaces runtime auth errors without changing the active image selection', () => {
+    const wizard = new ImageModelWizard('codex', setActiveImageProfile);
+    wizard.submit('gpt-image-2');
+    wizard.submit('https://chatgpt.com/backend-api/codex');
+    expect(() => wizard.chooseAuth('none')).toThrow(/auth/);
+    expect(getActiveImageProfile()).toBeUndefined();
   });
 
   it('resets only image selection and restores the default image backend', async () => {

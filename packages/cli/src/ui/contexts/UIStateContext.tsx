@@ -103,6 +103,7 @@ export interface UIState {
   subagentDialogInitialView?: SubagentView;
   subagentDialogInitialName?: string;
   modelsDialogData?: {
+    imageMode?: boolean;
     initialSearch?: string;
     initialFilters?: {
       tools?: boolean;

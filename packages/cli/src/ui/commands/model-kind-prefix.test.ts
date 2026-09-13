@@ -9,7 +9,7 @@ import { createMockCommandContext } from '../../test-utils/mockCommandContext.js
 
 let textModel: string;
 let imageName: string | undefined;
-mock.module('../contexts/RuntimeContext.js', () => ({
+void mock.module('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => ({
     setActiveModel: async (model: string) => {
       const previousModel = textModel;
@@ -28,12 +28,12 @@ const { modelCommand } = await import('./modelCommand.js');
 const run = (args: string) =>
   modelCommand.action!(createMockCommandContext(), args);
 
-beforeEach(() => {
-  textModel = 'previous';
-  imageName = undefined;
-});
-
 describe('/model kind prefixes', () => {
+  beforeEach(() => {
+    textModel = 'previous';
+    imageName = undefined;
+  });
+
   it.each(['', 'text'])('opens the text wizard for %j', async (args) => {
     expect(await run(args)).toMatchObject({ type: 'dialog', dialog: 'models' });
     expect(textModel).toBe('previous');

@@ -51,6 +51,7 @@ import { LoggingDialog } from './LoggingDialog.js';
 import { SubagentManagerDialog } from './SubagentManagement/index.js';
 import { SubagentView } from './SubagentManagement/types.js';
 import { ModelsDialog } from './ModelDialog.js';
+import { ImageModelsDialog } from './ImageModelsDialog.js';
 import { ModelConfigDialog } from './ModelConfigDialog.js';
 import { PoliciesDialog } from './PoliciesDialog.js';
 import { useModelDialogHandler } from './modelDialogHandler.js';
@@ -711,6 +712,9 @@ function renderDialogBodySecondHalf(
     );
   }
   if (uiState.isModelsDialogOpen) {
+    if (uiState.modelsDialogData?.imageMode === true) {
+      return <ImageModelsDialog onClose={uiActions.closeModelsDialog} />;
+    }
     return renderModelsDialog(
       uiState,
       uiActions,

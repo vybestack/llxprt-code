@@ -17,6 +17,17 @@ Slash commands control the CLI itself — configuration, navigation, session man
 | `/baseurl [url]`       | Set the API base URL                     |
 | `/toolformat [format]` | Set the tool format for the provider     |
 
+`/model` opens the text model browser. `/model text ...` accepts the same search
+and filter arguments. `/model image` lists saved image profiles and offers new
+Codex or OpenAI-compatible image configurations. New configurations are active
+in memory; save one with `/profile save image <name>`. `/model image <name>` loads
+an existing image profile and reports available names if it is missing.
+
+A leading `text` or `image` is always a kind prefix, never a search term.
+Use `/model text text` for a text model named `text`, `/model text image` for a
+text model named `image`, or `/model image image` for an image profile named
+`image`. Commands without a kind prefix keep their existing text-model behavior.
+
 ### Authentication
 
 | Command                      | Description                        |

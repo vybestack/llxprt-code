@@ -7,7 +7,8 @@
 import type { ImageProfile } from '@vybestack/llxprt-code-settings';
 
 export interface ActiveImageProfile {
-  readonly name: string;
+  /** Absent for an in-memory configuration that has not been saved. */
+  readonly name?: string;
   readonly profile: ImageProfile;
 }
 

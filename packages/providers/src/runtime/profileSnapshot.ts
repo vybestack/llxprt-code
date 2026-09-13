@@ -730,7 +730,7 @@ export async function saveProfileSnapshot(
     : {
         ...snapshot,
         type: 'model',
-        ...(activeImageProfile !== undefined
+        ...(activeImageProfile?.name !== undefined
           ? { imageProfile: activeImageProfile.name }
           : {}),
       };

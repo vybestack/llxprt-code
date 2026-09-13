@@ -393,6 +393,7 @@ function buildSimpleDialogActions(
     subagent: (data) => openSubagentDialog(actions, data),
     models: (data) =>
       actions.openModelsDialog(data as ModelsDialogData | undefined),
+    imageModels: () => actions.openModelsDialog({ imageMode: true }),
     welcome: () => actions.openWelcomeDialog(),
     sessionBrowser: () => actions.openSessionBrowserDialog(),
   };
