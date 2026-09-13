@@ -340,6 +340,11 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
     'Ephemeral settings affect the active run configuration',
   ),
   runtime(
+    '/setimage',
+    'agent.setEphemeralSetting',
+    'Image-scoped settings and model parameters affect the active image backend configuration',
+  ),
+  runtime(
     '/dumpcontext',
     'agent.getHistory',
     'Context dump reads the live conversation state for debugging',
