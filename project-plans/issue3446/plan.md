@@ -74,8 +74,12 @@ post-content-no-replay behavior unchanged.
 - No change to stateless lifecycle-retry semantics (one retry, terminal wrap
   on a second limit, abort handling).
 - No session-wide statefulness switch; recovery stays per-id (#3134 design).
-- No `store: true` on Codex; no change to request building,
-  `computeStatefulConversation`, or the provider's sticky-fallback policy.
+- No `store: true` on Codex; no change to the provider's sticky-fallback
+  policy. Request building and `computeStatefulConversation` gained an
+  additive `forceParentless` mode during remediation (see below): the
+  WebSocket parent-not-found recovery rebuilds parentless while staying
+  stateful, because falling through to an older stored parent would only
+  spend a second connection-scoped rejection.
 - Existing suites green (B1–B5 retry tests, #3134 stateful recovery tests,
   #2041/#3034 sticky tests).
 
@@ -125,10 +129,20 @@ post-content-no-replay behavior unchanged.
   context); the renewed attempt's closure is plain `streamOverHttp` for the
   rebuilt (already stateless) context.
 
-### 3. No executor/provider changes
+### 3. Executor and request-shape changes (remediation)
 
-The executor already exposes `markStatefulParentRejected`, `rebuildStateless`,
-`onWebSocketFallback`, `onWebSocketSuccess` through `StreamResponsesDeps`.
+The streaming/transport work needed no executor seam changes initially —
+`markStatefulParentRejected`, `rebuildStateless`, `onWebSocketFallback`, and
+`onWebSocketSuccess` already flow through `StreamResponsesDeps`. The review
+then showed a resumed history can hold SEVERAL stored parents, all scoped to
+a lost connection: the executor's per-id recovery would re-scan and pick the
+next-oldest (also dead) parent, so the turn failed. The recovery now takes a
+`recoverParentless` gate (the same WebSocket gate the streaming layer uses)
+and, when set, `retryWithoutStatefulness` rebuilds through
+`computeStatefulConversation`'s additive `forceParentless` mode — full
+history, no parent, still stateful — so the recovery response is stamped
+stored and the chain re-establishes on the next turn. The HTTP recovery path
+keeps the original per-id older-parent fallthrough (durable parents).
 
 ## Tests (TDD; bun:test, colocated)
 
