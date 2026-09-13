@@ -109,10 +109,29 @@ import {
 } from './subagent-test-helpers.js';
 import { waitForCondition } from '../test-utils/eventLoop.js';
 
+/**
+ * Turn budget for condition waits that gate fake-time advancement or run-entry
+ * observation. The 2000-turn default is only ~10ms of wall-clock headroom,
+ * which the concurrent agents workspace runner's CPU contention was observed to
+ * exhaust; 200_000 turns survives that load while still returning false instead
+ * of hanging when the condition genuinely cannot be met.
+ */
+const CONDITION_WAIT_TURNS = 200_000;
+
 describe('subagent.ts', () => {
   let mockSendMessageStream: Mock;
 
   beforeEach(() => {
+    // Guards against a previous test leaking fake-timer state across test
+    // boundaries. Restore real timers before failing so a leak fails exactly
+    // one test instead of poisoning every later one.
+    if (vi.isFakeTimers()) {
+      vi.useRealTimers();
+      throw new Error(
+        'subagent.ts tests: previous test leaked fake timers into this one',
+      );
+    }
+
     vi.clearAllMocks();
     mockReadTodos.mockReset();
     mockReadTodos.mockResolvedValue([]);
@@ -205,10 +224,11 @@ describe('subagent.ts', () => {
     });
 
     it('should terminate with TIMEOUT if the time limit is reached during an LLM call', async () => {
-      // Use fake timers to reliably test timeouts
-      vi.useFakeTimers();
-
       const { config } = await createMockConfig();
+      // Install fake timers after config creation so config/auth setup runs on
+      // real timers; fake timers freeze Date.now/performance.now/hrtime and
+      // stop Bun's per-test timeout from firing.
+      vi.useFakeTimers();
       const runConfig: RunConfig = { max_time_minutes: 5, max_turns: 100 };
 
       // We need to control the resolution of the sendMessageStream promise to advance the timer during execution.
@@ -224,40 +244,63 @@ describe('subagent.ts', () => {
       // The LLM call will hang until we resolve the promise.
       mockSendMessageStream.mockReturnValue(streamPromise);
 
-      const { overrides: timeoutOverrides } = createRuntimeOverrides();
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        runConfig,
-        undefined,
-        undefined,
-        timeoutOverrides,
-      );
+      // Resolved if the stream promise is still pending at cleanup time, to
+      // unblock a run orphaned by an earlier assertion failure.
+      let streamResolved = false;
+      let scope: SubAgentScope | undefined;
+      let runPromise: Promise<void> | undefined;
+      try {
+        const { overrides: timeoutOverrides } = createRuntimeOverrides();
+        scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          runConfig,
+          undefined,
+          undefined,
+          timeoutOverrides,
+        );
 
-      const runPromise = scope.runNonInteractive(new ContextState());
+        runPromise = scope.runNonInteractive(new ContextState());
 
-      // Advance time beyond the limit (6 minutes) while the agent is awaiting the LLM response.
-      // Wait for the executor to enter the LLM call before advancing time.
-      expect(
-        await waitForCondition(
-          () => mockSendMessageStream.mock.calls.length > 0,
-        ),
-      ).toBe(true);
-      // The timeout callback is synchronous. Avoid the async timer helper here:
-      // its event-loop flush can stall after Bun advances fake time on Linux.
-      vi.advanceTimersByTime(6 * 60 * 1000);
+        // Advance time beyond the limit (6 minutes) while the agent is awaiting the LLM response.
+        // Wait for the executor to enter the LLM call before advancing time.
+        expect(
+          await waitForCondition(
+            () => mockSendMessageStream.mock.calls.length > 0,
+            CONDITION_WAIT_TURNS,
+          ),
+        ).toBe(true);
+        // The timeout callback is synchronous. Avoid the async timer helper here:
+        // its event-loop flush can stall after Bun advances fake time on Linux.
+        vi.advanceTimersByTime(6 * 60 * 1000);
 
-      // Now resolve the stream. The model returns 'stop'.
+        // Now resolve the stream. The model returns 'stop'.
 
-      resolveStream!(createMockStream(['stop'])());
+        resolveStream!(createMockStream(['stop'])());
+        streamResolved = true;
 
-      await runPromise;
+        await runPromise;
 
-      expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);
-
-      vi.useRealTimers();
+        expect(scope.output.terminate_reason).toBe(
+          SubagentTerminateMode.TIMEOUT,
+        );
+      } finally {
+        vi.useRealTimers();
+        // If the run never started (assertion threw first), dispose aborts any
+        // active scope work and resolving the held stream unblocks the orphan so
+        // no async leak survives into the next test. The rejection absorbers
+        // must never be awaited: a stalled chain under fake timers would turn
+        // cleanup into a hang.
+        if (runPromise !== undefined) {
+          runPromise.catch(() => {});
+        }
+        if (!streamResolved) {
+          resolveStream!(createMockStream(['stop'])());
+          scope?.dispose();
+        }
+      }
     });
 
     it('should actively abort a stalled non-interactive response stream before the overall run timeout expires', async () => {
@@ -272,11 +315,13 @@ describe('subagent.ts', () => {
 
     const observeActivelyAbortAStalledNonInteractiveResponseStreamBeforeTheOverallRun =
       async () => {
-        vi.useFakeTimers();
-
         const { config } = await createMockConfig();
         const testTimeoutMs = 30_000; // 30 second timeout for this test
         config.setEphemeralSetting('stream-idle-timeout-ms', testTimeoutMs);
+        // Install fake timers after config creation so config/auth setup runs
+        // on real timers; fake timers freeze Date.now/performance.now/hrtime
+        // and stop Bun's per-test timeout from firing.
+        vi.useFakeTimers();
 
         const runConfig: RunConfig = { max_time_minutes: 5, max_turns: 100 };
         let capturedSignal: AbortSignal | undefined;
@@ -330,20 +375,29 @@ describe('subagent.ts', () => {
           (error: unknown) => error,
         );
 
-        // Wait for the executor's async setup chain to register the
-        // stream-idle-timeout timer before advancing fake time.
-        const signalObserved = await waitForCondition(
-          () => capturedSignal !== undefined,
-        );
+        try {
+          // Wait for the executor's async setup chain to register the
+          // stream-idle-timeout timer before advancing fake time.
+          const signalObserved = await waitForCondition(
+            () => capturedSignal !== undefined,
+            CONDITION_WAIT_TURNS,
+          );
 
-        await advanceTimersByTimeAsync(testTimeoutMs + 1_000);
+          await advanceTimersByTimeAsync(testTimeoutMs + 1_000);
 
-        const abortError = await runRejection;
+          const abortError = await runRejection;
 
-        vi.useRealTimers();
-
-        const abortedObservation = capturedSignal?.aborted;
-        return { signalObserved, scope, abortedObservation, abortError };
+          const abortedObservation = capturedSignal?.aborted;
+          return { signalObserved, scope, abortedObservation, abortError };
+        } finally {
+          vi.useRealTimers();
+          // If the wait failed, runRejection may be abandoned; dispose
+          // aborts the still-in-flight run and the absorbers swallow its
+          // rejection so nothing leaks into the next test. Do not await.
+          runPromise.catch(() => {});
+          runRejection.catch(() => {});
+          scope.dispose();
+        }
       };
 
     it('should terminate with ERROR if the model call throws', async () => {
@@ -379,13 +433,15 @@ describe('subagent.ts', () => {
 
     const observeActivelyAbortAHungNonInteractiveModelCallWhenTheTimeLimit =
       async () => {
-        vi.useFakeTimers();
-
         const { config } = await createMockConfig();
         const runConfig: RunConfig = {
           max_time_minutes: 0.001,
           max_turns: 100,
         };
+        // Install fake timers after config creation so config/auth setup runs
+        // on real timers; fake timers freeze Date.now/performance.now/hrtime
+        // and stop Bun's per-test timeout from firing.
+        vi.useFakeTimers();
         let capturedSignal: AbortSignal | undefined;
 
         mockSendMessageStream.mockImplementation(
@@ -434,17 +490,26 @@ describe('subagent.ts', () => {
           (error: unknown) => error,
         );
 
-        const signalObserved = await waitForCondition(
-          () => capturedSignal !== undefined,
-        );
-        await advanceTimersByTimeAsync(100);
+        try {
+          const signalObserved = await waitForCondition(
+            () => capturedSignal !== undefined,
+            CONDITION_WAIT_TURNS,
+          );
+          await advanceTimersByTimeAsync(100);
 
-        const abortError = await runRejection;
+          const abortError = await runRejection;
 
-        vi.useRealTimers();
-
-        const abortedObservation = capturedSignal?.aborted;
-        return { signalObserved, scope, abortedObservation, abortError };
+          const abortedObservation = capturedSignal?.aborted;
+          return { signalObserved, scope, abortedObservation, abortError };
+        } finally {
+          vi.useRealTimers();
+          // If the wait failed, runRejection may be abandoned; dispose
+          // aborts the still-in-flight run and the absorbers swallow its
+          // rejection so nothing leaks into the next test. Do not await.
+          runPromise.catch(() => {});
+          runRejection.catch(() => {});
+          scope.dispose();
+        }
       };
   });
 
@@ -452,9 +517,11 @@ describe('subagent.ts', () => {
     const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
 
     it('should time out while waiting for interactive tool completion', async () => {
-      vi.useFakeTimers();
-
       const { config } = await createMockConfig();
+      // Install fake timers after config creation so config/auth setup runs on
+      // real timers; fake timers freeze Date.now/performance.now/hrtime and
+      // stop Bun's per-test timeout from firing.
+      vi.useFakeTimers();
       const runConfig: RunConfig = {
         max_time_minutes: 0.001,
         max_turns: 100,
@@ -510,19 +577,30 @@ describe('subagent.ts', () => {
         },
       );
 
-      // Wait for the interactive run to enter the scheduler before advancing
-      // time past the timeout.
-      expect(
-        await waitForCondition(
-          () => mockSendMessageStream.mock.calls.length > 0,
-        ),
-      ).toBe(true);
-      await advanceTimersByTimeAsync(100);
+      try {
+        // Wait for the interactive run to enter the scheduler before advancing
+        // time past the timeout.
+        expect(
+          await waitForCondition(
+            () => mockSendMessageStream.mock.calls.length > 0,
+            CONDITION_WAIT_TURNS,
+          ),
+        ).toBe(true);
+        await advanceTimersByTimeAsync(100);
 
-      await runRejection;
-      expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);
-
-      vi.useRealTimers();
+        await runRejection;
+        expect(scope.output.terminate_reason).toBe(
+          SubagentTerminateMode.TIMEOUT,
+        );
+      } finally {
+        vi.useRealTimers();
+        // If the wait failed, runRejection may be abandoned; dispose
+        // aborts the still-in-flight run and the absorbers swallow its
+        // rejection so nothing leaks into the next test. Do not await.
+        runPromise.catch(() => {});
+        runRejection.catch(() => {});
+        scope.dispose();
+      }
     });
   });
 
@@ -637,13 +715,15 @@ describe('subagent.ts', () => {
 
     const observeTimeOutWhenSchedulerScheduleNeverResolvesAfterEmittingAToolCall =
       async () => {
-        vi.useFakeTimers();
-
         const { config } = await createMockConfig();
         const runConfig: RunConfig = {
           max_time_minutes: 0.001, // 0.06 seconds
           max_turns: 100,
         };
+        // Install fake timers after config creation so config/auth setup runs
+        // on real timers; fake timers freeze Date.now/performance.now/hrtime
+        // and stop Bun's per-test timeout from firing.
+        vi.useFakeTimers();
 
         // schedule() hangs until the AbortSignal fires — matching real
         // scheduler where attemptExecutionOfScheduledCalls propagates abort.
@@ -733,19 +813,28 @@ describe('subagent.ts', () => {
           (error: unknown) => error,
         );
 
-        // Wait for the interactive run to enter the hanging scheduler before
-        // advancing time past the timeout.
-        const modelCallObserved = await waitForCondition(
-          () => mockSendMessageStream.mock.calls.length > 0,
-        );
+        try {
+          // Wait for the interactive run to enter the hanging scheduler before
+          // advancing time past the timeout.
+          const modelCallObserved = await waitForCondition(
+            () => mockSendMessageStream.mock.calls.length > 0,
+            CONDITION_WAIT_TURNS,
+          );
 
-        await advanceTimersByTimeAsync(100);
+          await advanceTimersByTimeAsync(100);
 
-        const abortError = await runRejection;
+          const abortError = await runRejection;
 
-        vi.useRealTimers();
-
-        return { modelCallObserved, scope, abortError };
+          return { modelCallObserved, scope, abortError };
+        } finally {
+          vi.useRealTimers();
+          // If the wait failed, runRejection may be abandoned; dispose
+          // aborts the still-in-flight run and the absorbers swallow its
+          // rejection so nothing leaks into the next test. Do not await.
+          runPromise.catch(() => {});
+          runRejection.catch(() => {});
+          scope.dispose();
+        }
       };
   });
 
@@ -865,6 +954,99 @@ describe('subagent.ts', () => {
       // Try to access the private activeAbortController through cancel method
       // If it's null, cancel should be safe
       expect(() => scope.cancel('test')).not.toThrow();
+    });
+
+    it('unblocks a stalled non-interactive run so no async work leaks between tests', async () => {
+      const { config } = await createMockConfig();
+      // Install fake timers after config creation so config/auth setup runs on
+      // real timers; fake timers freeze Date.now/performance.now/hrtime and
+      // stop Bun's per-test timeout from firing.
+      vi.useFakeTimers();
+      // Keep the idle watchdog from firing during the test window so only dispose
+      // can unblock the stalled stream consumption.
+      config.setEphemeralSetting('stream-idle-timeout-ms', 60_000);
+
+      let capturedSignal: AbortSignal | undefined;
+      mockSendMessageStream.mockImplementation(
+        async ({ config: messageConfig }) => {
+          capturedSignal = messageConfig.abortSignal;
+          return (async function* () {
+            yield {
+              type: StreamEventType.CHUNK,
+              value: mockChunk({ text: 'partial' }),
+            };
+            await new Promise<void>(() => {});
+          })();
+        },
+      );
+
+      const runConfig: RunConfig = { max_time_minutes: 5, max_turns: 100 };
+      let scope: SubAgentScope | undefined;
+      let runPromise: Promise<void> | undefined;
+      let runRejection: Promise<unknown> | undefined;
+      try {
+        const runtimeBundle = createStatelessRuntimeBundle();
+        const { overrides } = createRuntimeOverrides({ runtimeBundle });
+
+        scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          { systemPrompt: 'Test agent' },
+          defaultModelConfig,
+          runConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        runPromise = scope.runNonInteractive(new ContextState());
+        runRejection = runPromise.then(
+          () => {
+            throw new Error('Expected dispose to abort the stalled run');
+          },
+          (error: unknown) => error,
+        );
+
+        // Wait for the run to enter stream consumption so the abort signal is
+        // captured against this test's mock before dispose fires.
+        expect(
+          await waitForCondition(
+            () => capturedSignal !== undefined,
+            CONDITION_WAIT_TURNS,
+          ),
+        ).toBe(true);
+
+        let settled = false;
+        runRejection.then(
+          () => {
+            settled = true;
+          },
+          () => {
+            settled = true;
+          },
+        );
+
+        scope.dispose();
+
+        // The stream is stalled after its first chunk and the idle watchdog is
+        // too far out to fire; dispose must abort so the run settles within a
+        // bounded wait instead of hanging the file.
+        expect(
+          await waitForCondition(() => settled, CONDITION_WAIT_TURNS),
+        ).toBe(true);
+
+        const runError = await runRejection;
+        expect(runError).toMatchObject({ name: 'AbortError' });
+      } finally {
+        vi.useRealTimers();
+        // Absorbers guard a failure path: if the run somehow never settles the
+        // bounded wait returns false, the expect throws, and these swallow any late
+        // rejection so it cannot surface as an unhandled error in the next test.
+        // Do not await — a stalled chain under fake timers must not hang cleanup.
+        runPromise?.catch(() => {});
+        runRejection?.catch(() => {});
+        scope?.dispose();
+      }
     });
   });
 });

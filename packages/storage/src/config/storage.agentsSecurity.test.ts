@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as path from 'node:path';
 
 // `os.homedir` is a non-configurable property, so it cannot be spied on with
@@ -22,8 +22,21 @@ void vi.mock('os', () => ({ ...actual, homedir: homedirMock }));
 import { Storage } from './storage.js';
 
 describe('Storage - .agents security: fail-closed home resolution', () => {
+  const originalAgentsHome = process.env.LLXPRT_AGENTS_HOME;
+
   beforeEach(() => {
     homedirMock.mockReset();
+    // The storage-isolation preload sets LLXPRT_AGENTS_HOME; the homedir
+    // fail-closed path only runs when the override is absent.
+    delete process.env.LLXPRT_AGENTS_HOME;
+  });
+
+  afterEach(() => {
+    if (originalAgentsHome === undefined) {
+      delete process.env.LLXPRT_AGENTS_HOME;
+    } else {
+      process.env.LLXPRT_AGENTS_HOME = originalAgentsHome;
+    }
   });
 
   it('throws when os.homedir() is empty rather than returning a relative path', () => {
@@ -66,6 +79,26 @@ describe('Storage - .agents security: fail-closed home resolution', () => {
     );
     expect(Storage.getUserAgentSkillsDir()).toBe(
       path.join('/home/test-user', '.agents', 'skills'),
+    );
+  });
+
+  it('honors an absolute LLXPRT_AGENTS_HOME without consulting the home directory', () => {
+    homedirMock.mockReturnValue('');
+    process.env.LLXPRT_AGENTS_HOME = '/absolute/agents-home';
+    expect(Storage.getGlobalAgentsDir()).toBe('/absolute/agents-home');
+    expect(Storage.getUserAgentSkillsDir()).toBe(
+      path.join('/absolute/agents-home', 'skills'),
+    );
+  });
+
+  it('throws when LLXPRT_AGENTS_HOME is relative rather than producing a relative path', () => {
+    homedirMock.mockReturnValue('/home/test-user');
+    process.env.LLXPRT_AGENTS_HOME = 'relative/agents-home';
+    expect(() => Storage.getGlobalAgentsDir()).toThrow(
+      'LLXPRT_AGENTS_HOME must be an absolute path',
+    );
+    expect(() => Storage.getUserAgentSkillsDir()).toThrow(
+      'LLXPRT_AGENTS_HOME must be an absolute path',
     );
   });
 });

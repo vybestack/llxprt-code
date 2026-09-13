@@ -60,6 +60,7 @@ import {
   finalizeOutput,
   processFunctionCalls,
   buildTodoCompletionPrompt,
+  completeWithGoal,
 } from './subagentToolProcessing.js';
 import {
   canonicalizeToolName,
@@ -530,7 +531,7 @@ export async function dispatchNonInteractiveTurnResult(
         emittedKeysAfterToolCalls.includes(key),
       );
     if (completedDeclaredOutputs) {
-      ctx.output.terminate_reason = SubagentTerminateMode.GOAL;
+      completeWithGoal(ctx.output);
       return null;
     }
     return nextMessages;

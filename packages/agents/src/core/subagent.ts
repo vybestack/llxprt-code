@@ -47,12 +47,15 @@ import {
   createChatObject,
 } from './subagentRuntimeSetup.js';
 import {
-  isFatalToolError,
   buildToolUnavailableMessage,
   finalizeOutput,
   handleEmitValueCall,
   buildPartsFromCompletedCalls,
   buildTodoCompletionPrompt,
+  recordFatalToolError,
+  classifyToolCompletions,
+  type InteractiveToolMarker,
+  recordSuccessfulToolExecution,
 } from './subagentToolProcessing.js';
 import {
   checkTerminationConditions,
@@ -702,30 +705,40 @@ export class SubAgentScope {
   ): {
     manualBlocks: ContentBlock[];
     schedulerRequests: ToolCallRequestInfo[];
+    requestMarkers: InteractiveToolMarker[];
   } {
     const manualBlocks: ContentBlock[] = [];
     const schedulerRequests: ToolCallRequestInfo[] = [];
+    const requestMarkers: InteractiveToolMarker[] = [];
 
     for (const request of toolRequests) {
       const hookRestrictedAllowedTools = request.hookRestrictedAllowedTools;
       if (isToolNameRestricted(request.name, hookRestrictedAllowedTools)) {
+        requestMarkers.push({ status: 'error-nonfatal' });
         continue;
       }
       if (request.name === 'self_emitvalue') {
-        manualBlocks.push(
-          ...handleEmitValueCall(request, {
-            output: this.output,
-            onMessage: this.onMessage,
-            subagentId: this.subagentId,
-            logger: this.logger,
-          }),
-        );
+        const blocks = handleEmitValueCall(request, {
+          output: this.output,
+          onMessage: this.onMessage,
+          subagentId: this.subagentId,
+          logger: this.logger,
+        });
+        manualBlocks.push(...blocks);
+        requestMarkers.push({
+          status: blocks.some(
+            (block) => block.type === 'tool_response' && !block.error,
+          )
+            ? 'success'
+            : 'error-nonfatal',
+        });
       } else {
+        requestMarkers.push({ callId: request.callId });
         schedulerRequests.push(request);
       }
     }
 
-    return { manualBlocks, schedulerRequests };
+    return { manualBlocks, schedulerRequests, requestMarkers };
   }
 
   private async handleInteractiveToolCalls(
@@ -745,10 +758,11 @@ export class SubAgentScope {
   ): Promise<IContent[] | null> {
     if (toolRequests.length === 0) return null;
 
-    const { manualBlocks, schedulerRequests } =
+    const { manualBlocks, schedulerRequests, requestMarkers } =
       this.partitionInteractiveToolRequests(toolRequests);
 
     let responseBlocks: ContentBlock[] = [...manualBlocks];
+    let completedCalls: CompletedToolCall[] = [];
 
     if (schedulerRequests.length > 0) {
       const completionPromise = scheduler.awaitCompletedCalls(
@@ -758,7 +772,7 @@ export class SubAgentScope {
       // completionPromise reject on the same abort signal.
       completionPromise.catch(() => {});
       await scheduler.schedule(schedulerRequests, abortController.signal);
-      const completedCalls = await completionPromise;
+      completedCalls = await completionPromise;
       try {
         chat.recordCompletedToolCalls(this.modelConfig.model, completedCalls);
       } catch (error) {
@@ -777,23 +791,30 @@ export class SubAgentScope {
           logger: this.logger,
         }),
       );
-      const fatalCall = completedCalls.find(
-        (call) =>
-          call.status === 'error' && isFatalToolError(call.response.errorType),
+    }
+    // Manual emit successes are re-derived from markers in request order.
+    const { recovered, fatalCall } = classifyToolCompletions(
+      requestMarkers,
+      completedCalls,
+    );
+    if (recovered) {
+      recordSuccessfulToolExecution(execCtx.output);
+    }
+    if (fatalCall) {
+      const fatalMessage = buildToolUnavailableMessage(
+        fatalCall.request.name,
+        fatalCall.response.resultDisplay,
+        fatalCall.response.error,
       );
-      if (fatalCall) {
-        const fatalMessage = buildToolUnavailableMessage(
-          fatalCall.request.name,
-          fatalCall.response.resultDisplay,
-          fatalCall.response.error,
-        );
-        this.logger.warn(
-          () =>
-            `Subagent ${this.subagentId} cannot use tool '${fatalCall.request.name}': ${fatalMessage}`,
-        );
-        responseBlocks.push({ type: 'text', text: fatalMessage });
-        execCtx.output.final_message = fatalMessage;
-      }
+      recordFatalToolError(execCtx.output, fatalMessage);
+      this.logger.warn(
+        () =>
+          `Subagent ${this.subagentId} cannot use tool '${fatalCall.request.name}': ${fatalMessage}`,
+      );
+      // buildPartsFromCompletedCalls already forwarded the paired response;
+      // this branch adds only the availability diagnostic.
+      responseBlocks.push({ type: 'text', text: fatalMessage });
+      execCtx.output.final_message = fatalMessage;
     }
 
     if (responseBlocks.length === 0) {

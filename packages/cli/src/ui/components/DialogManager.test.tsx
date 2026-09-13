@@ -4,10 +4,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { Config } from '@vybestack/llxprt-code-core';
+import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
+import { DialogManager } from './DialogManager.js';
+import { DialogProvider } from '../stores/dialog/DialogContext.js';
+import { AppCommandsProvider } from '../contexts/AppCommandsContext.js';
+import { createAppCommandBindings } from '../../test-utils/appCommandBindings.js';
+import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { useTextBuffer } from './shared/text-buffer.js';
+
 import { hasDialogRequest } from '../../test-utils/dialogStore.js';
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { renderHook, waitFor } from '../../test-utils/render.js';
+import {
+  renderHook,
+  waitFor,
+  renderWithProviders,
+  createMockSettings,
+} from '../../test-utils/render.js';
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
 
 // Mock the providers runtime barrel to avoid the broken dist dependency chain.
@@ -26,6 +40,7 @@ import { useModelDialogHandler } from './modelDialogHandler.js';
 import {
   createDialogStore,
   type DialogStore,
+  type DialogRequest,
 } from '../stores/dialog/dialogStore.js';
 
 // --- Stateful runtime fake ---
@@ -78,6 +93,7 @@ function createFakeRuntime(overrides: Partial<FakeRuntimeState> = {}) {
       return state.setProviderResult;
     }),
     getActiveProviderStatus: vi.fn(() => state.providerStatus),
+    getActiveProviderName: () => state.providerStatus.providerName,
   };
 }
 
@@ -269,5 +285,165 @@ describe('useModelDialogHandler', () => {
     expect(mockAddItem).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'info' }),
     );
+  });
+});
+
+const FOLDER_TRUST_MARKER = 'Do you trust this folder?';
+const PROVIDER_MARKER = 'Select Provider (';
+const LOAD_PROFILE_MARKER = 'Select Profile (';
+const CREATE_PROFILE_MARKER = 'Create New Profile - Step 1 of 6';
+const TOOLS_MARKER = 'Select a tool to disable:';
+
+function DialogManagerHarness({ store }: { store: DialogStore }) {
+  const buffer = useTextBuffer({
+    viewport: { width: 100, height: 40 },
+    isValidPath: () => false,
+  });
+  const bindings = createAppCommandBindings('DialogManager', {
+    buffer,
+    commandContext: createMockCommandContext(),
+    inputHistory: [],
+  });
+  const standIns = new Map<PropertyKey, ReturnType<typeof vi.fn>>();
+  const commands = new Proxy(bindings, {
+    get(target, property, receiver): unknown {
+      const value: unknown = Reflect.get(target, property, receiver);
+      if (typeof value !== 'function') return value;
+      let standIn = standIns.get(property);
+      if (!standIn) {
+        standIn = vi.fn(() => {
+          throw new Error('Unexpected dispatch: ' + String(property));
+        });
+        standIns.set(property, standIn);
+      }
+      return standIn;
+    },
+  });
+  const config = buildSlashCommandRuntime(
+    new Config({
+      sessionId: 'dialog-dispatch',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      debugMode: false,
+      model: 'test',
+    }),
+  );
+  return (
+    <AppCommandsProvider value={commands}>
+      <DialogProvider store={store}>
+        <DialogManager config={config} settings={createMockSettings({})} />
+      </DialogProvider>
+    </AppCommandsProvider>
+  );
+}
+
+function renderDialogManager(requests: DialogRequest[]): string {
+  const store = createDialogStore();
+  for (const request of requests) store.commands.openDialog(request);
+  const view = renderWithProviders(<DialogManagerHarness store={store} />, {
+    terminal: {
+      terminalWidth: 100,
+      terminalHeight: 40,
+      mainAreaWidth: 100,
+      constrainHeight: false,
+    },
+    settingsProfile: {
+      providerOptions: ['ollama'],
+      profiles: ['alpha', 'beta'],
+      toolsDialogTools: [
+        {
+          name: 'shell',
+          displayName: 'Shell',
+          source: 'builtin',
+          enabled: true,
+        },
+      ],
+      toolsDialogDisabledTools: [],
+    },
+  });
+  const frame = view.lastFrame() ?? '';
+  view.unmount();
+  return frame;
+}
+
+describe('DialogManager render dispatch', () => {
+  it('renders the folder-trust dialog when only its request is open', () => {
+    const frame = renderDialogManager([{ kind: 'folderTrust', payload: {} }]);
+    expect(frame).toContain(FOLDER_TRUST_MARKER);
+    expect(frame).not.toContain(PROVIDER_MARKER);
+    expect(frame).not.toContain(LOAD_PROFILE_MARKER);
+    expect(frame).not.toContain(CREATE_PROFILE_MARKER);
+    expect(frame).not.toContain(TOOLS_MARKER);
+  });
+
+  it('renders the provider dialog when only its request is open', () => {
+    const frame = renderDialogManager([{ kind: 'provider', payload: {} }]);
+    expect(frame).toContain(PROVIDER_MARKER);
+    expect(frame).not.toContain(FOLDER_TRUST_MARKER);
+    expect(frame).not.toContain(LOAD_PROFILE_MARKER);
+    expect(frame).not.toContain(CREATE_PROFILE_MARKER);
+    expect(frame).not.toContain(TOOLS_MARKER);
+  });
+
+  it('renders the load-profile dialog when only its request is open', () => {
+    const frame = renderDialogManager([{ kind: 'loadProfile', payload: {} }]);
+    expect(frame).toContain(LOAD_PROFILE_MARKER);
+    expect(frame).not.toContain(FOLDER_TRUST_MARKER);
+    expect(frame).not.toContain(PROVIDER_MARKER);
+    expect(frame).not.toContain(CREATE_PROFILE_MARKER);
+    expect(frame).not.toContain(TOOLS_MARKER);
+  });
+
+  it('renders the profile-create wizard when only its request is open', () => {
+    const frame = renderDialogManager([{ kind: 'createProfile', payload: {} }]);
+    expect(frame).toContain(CREATE_PROFILE_MARKER);
+    expect(frame).not.toContain(FOLDER_TRUST_MARKER);
+    expect(frame).not.toContain(PROVIDER_MARKER);
+    expect(frame).not.toContain(LOAD_PROFILE_MARKER);
+    expect(frame).not.toContain(TOOLS_MARKER);
+  });
+
+  it('renders the tools dialog when only its request is open', () => {
+    const frame = renderDialogManager([
+      { kind: 'tools', payload: { action: 'disable' } },
+    ]);
+    expect(frame).toContain(TOOLS_MARKER);
+    expect(frame).not.toContain(FOLDER_TRUST_MARKER);
+    expect(frame).not.toContain(PROVIDER_MARKER);
+    expect(frame).not.toContain(LOAD_PROFILE_MARKER);
+    expect(frame).not.toContain(CREATE_PROFILE_MARKER);
+  });
+
+  it('renders exactly the folder-trust dialog when early, first-half, and second-half requests are all open', () => {
+    // Early dialogs win: folder trust beats provider (first half) and tools
+    // (second half).
+    const frame = renderDialogManager([
+      { kind: 'folderTrust', payload: {} },
+      { kind: 'provider', payload: {} },
+      { kind: 'tools', payload: { action: 'disable' } },
+    ]);
+    expect(frame).toContain(FOLDER_TRUST_MARKER);
+    expect(frame).not.toContain(PROVIDER_MARKER);
+    expect(frame).not.toContain(TOOLS_MARKER);
+  });
+
+  it('renders exactly the provider dialog when first-half and second-half requests are both open', () => {
+    // First half beats second half: provider beats tools.
+    const frame = renderDialogManager([
+      { kind: 'provider', payload: {} },
+      { kind: 'tools', payload: { action: 'disable' } },
+    ]);
+    expect(frame).toContain(PROVIDER_MARKER);
+    expect(frame).not.toContain(TOOLS_MARKER);
+  });
+
+  it('renders exactly the load-profile dialog when both profile requests are open', () => {
+    // The store priority gives load precedence over create.
+    const frame = renderDialogManager([
+      { kind: 'loadProfile', payload: {} },
+      { kind: 'createProfile', payload: {} },
+    ]);
+    expect(frame).toContain(LOAD_PROFILE_MARKER);
+    expect(frame).not.toContain(CREATE_PROFILE_MARKER);
   });
 });

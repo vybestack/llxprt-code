@@ -327,7 +327,7 @@ describe('Turn', () => {
       const event1 = events[0] as ServerToolCallRequestEvent;
       expect(event1.value).toMatchObject({
         callId: 'fc1',
-        name: 'undefined_tool_name',
+        name: '',
         args: { arg1: 'val1' },
       });
 
@@ -341,7 +341,7 @@ describe('Turn', () => {
       const event3 = events[2] as ServerToolCallRequestEvent;
       expect(event3.value).toMatchObject({
         callId: 'fc3',
-        name: 'undefined_tool_name',
+        name: '',
         args: {},
       });
     });

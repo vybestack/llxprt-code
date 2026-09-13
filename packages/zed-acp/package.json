@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-code-zed-acp",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "LLxprt Code ACP (Agent Client Protocol) client — the Zed integration, a peer client of the Agent API",
   "license": "Apache-2.0",
   "repository": {

@@ -385,6 +385,18 @@ describe('Interactive UI (tmux harness)', () => {
   );
 
   runTmuxE2E(
+    'profile create wizard cancel confirmation preserves state and restores the composer',
+    () => {
+      const result = runHarness(
+        'tmux-script.profile-create-wizard.json',
+        'profile-create-wizard',
+      );
+      assertHarnessSuccess(result);
+    },
+    300_000,
+  );
+
+  runTmuxE2E(
     'welcome onboarding skips from isolated clean state',
     () => {
       const testName = 'welcome';

@@ -44,29 +44,23 @@ describe('ToolNameValidator', () => {
         'qwen',
         availableTools,
       );
-      expect(result.name).toBe('undefined_tool_name');
+      expect(result.name).toBe('');
       expect(result.isValid).toBe(false);
-      expect(result.warnings).toContain(
-        'Empty or undefined tool name, using fallback',
-      );
+      expect(result.warnings).toContain('Empty or undefined tool name');
     });
 
     it('should handle empty string names', () => {
       const result = validator.validateToolName('', 'qwen', availableTools);
-      expect(result.name).toBe('undefined_tool_name');
+      expect(result.name).toBe('');
       expect(result.isValid).toBe(false);
-      expect(result.warnings).toContain(
-        'Empty or undefined tool name, using fallback',
-      );
+      expect(result.warnings).toContain('Empty or undefined tool name');
     });
 
     it('should handle special symbol names', () => {
       const result = validator.validateToolName('*', 'qwen', availableTools);
-      expect(result.name).toBe('undefined_tool_name');
+      expect(result.warnings).toContain('Unable to normalize tool name: "*"');
+      expect(result.name).toBe('');
       expect(result.isValid).toBe(false);
-      expect(result.warnings).toContain(
-        'Unable to normalize tool name: "*", using fallback',
-      );
     });
 
     it('should normalize tool names with different cases', () => {
@@ -100,17 +94,17 @@ describe('ToolNameValidator', () => {
       expect(result.name).toBe('write_file');
     });
 
-    it('should return fallback when tool not found in available tools', () => {
+    it('should return empty name when tool not found in available tools', () => {
       const result = validator.validateToolName(
         'nonexistent_tool',
         'qwen',
         availableTools,
       );
-      expect(result.name).toBe('undefined_tool_name');
-      expect(result.isValid).toBe(false);
       expect(result.warnings).toContain(
-        'Tool "nonexistent_tool" not found in available tools, using fallback',
+        'Tool "nonexistent_tool" not found in available tools',
       );
+      expect(result.name).toBe('');
+      expect(result.isValid).toBe(false);
     });
 
     it('should work without available tools list', () => {
@@ -131,26 +125,20 @@ describe('ToolNameValidator', () => {
   });
 
   describe('private helper methods (via public interface)', () => {
-    it('should infer tool name from arguments', () => {
-      // Note: ToolNameValidator doesn't actually use the third parameter as args,
-      // but we test the basic functionality
+    it('should return an empty invalid result when the tool name is absent', () => {
       const result = validator.validateToolName(undefined, 'qwen', []);
-      expect(result.name).toBe('undefined_tool_name');
+      expect(result.name).toBe('');
+      expect(result.isValid).toBe(false);
     });
 
-    it('should handle shell tool fallback', () => {
-      const result = validator.validateToolName(undefined, 'qwen', []);
-      expect(result.name).toBe('undefined_tool_name');
-    });
-
-    it('should handle very long tool names in fallback', () => {
+    it('should return empty name for an unavailable very long tool name', () => {
       const longName = 'a'.repeat(150);
       const result = validator.validateToolName(
         longName,
         'qwen',
         availableTools,
       );
-      expect(result.name).toBe('undefined_tool_name');
+      expect(result.name).toBe('');
       expect(result.isValid).toBe(false);
     });
   });
@@ -164,7 +152,7 @@ describe('ToolNameValidator', () => {
 
     it('should reject tool names with invalid characters', () => {
       const result = validator.validateToolName('test@tool', 'qwen', []);
-      expect(result.name).toBe('undefined_tool_name');
+      expect(result.name).toBe('');
       expect(result.isValid).toBe(false);
     });
 
