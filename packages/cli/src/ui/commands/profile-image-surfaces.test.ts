@@ -34,7 +34,11 @@ import {
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import { profileCommand } from './profileCommand.js';
 import { ImageModelWizard } from '../components/imageModelWizard.js';
-import { profileLoadSchema, profileSaveSchema } from './profileSchemas.js';
+import {
+  profileLoadSchema,
+  profileSaveSchema,
+  parseProfileLoadTarget,
+} from './profileSchemas.js';
 import type { CommandArgumentSchema } from './schema/types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 
@@ -104,6 +108,46 @@ describe('image profile command surfaces', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
+  it.each(['model', 'image'])(
+    'loads an image profile named %s',
+    async (name) => {
+      await manager.saveImageProfile(
+        name,
+        await manager.loadImageProfile('art'),
+      );
+      const load = profileCommand.subCommands?.find(
+        (command) => command.name === 'load',
+      );
+      if (!load?.action) throw new Error('Missing load command');
+      await load.action(createMockCommandContext(), name);
+      expect(getActiveImageProfile()?.name).toBe(name);
+    },
+  );
+
+  it('routes a model profile named image to the model store', async () => {
+    await manager.saveProfile(
+      'image',
+      await manager.loadProfile('conversation'),
+    );
+    expect(await parseProfileLoadTarget('image')).toEqual({
+      profileType: 'model',
+      profileName: 'image',
+    });
+  });
+
+  it.each(['model', 'image'])(
+    'reports missing name for bare %s without a saved profile',
+    async (name) => {
+      const load = profileCommand.subCommands?.find(
+        (command) => command.name === 'load',
+      );
+      if (!load?.action) throw new Error('Missing load command');
+      expect(await load.action(createMockCommandContext(), name)).toMatchObject(
+        { messageType: 'error', content: expect.stringContaining('Usage:') },
+      );
+    },
+  );
+
   it('keeps wizard configuration unnamed until explicitly saved as an image profile', async () => {
     const wizard = new ImageModelWizard('openai-images', setActiveImageProfile);
     wizard.submit('new-local-image');
@@ -112,7 +156,6 @@ describe('image profile command surfaces', () => {
     expect(getActiveImageProfile()?.profile.model).toBe('new-local-image');
     expect(getActiveImageProfile()?.name).toBeUndefined();
     expect(await manager.listImageProfiles()).toStrictEqual(['art']);
-
     const chat = await saveProfileSnapshot('chat');
     expect(chat).not.toHaveProperty('imageProfile');
     await saveImageProfileSnapshot('new-art');

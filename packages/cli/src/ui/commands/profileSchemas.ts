@@ -324,11 +324,17 @@ export async function parseProfileLoadTarget(args: string): Promise<{
   const possibleType =
     typeSeparator === -1 ? args : args.slice(0, typeSeparator);
   const isTypeToken = possibleType === 'model' || possibleType === 'image';
-  const isSavedName =
-    isTypeToken &&
-    typeSeparator === -1 &&
-    (await listProfiles()).includes(args);
-  const isTyped = isTypeToken && !isSavedName;
+  if (isTypeToken && typeSeparator === -1) {
+    const [modelNames, imageNames] = await Promise.all([
+      listProfiles('model'),
+      listProfiles('image'),
+    ]);
+    if (modelNames.includes(args))
+      return { profileType: 'model', profileName: args };
+    if (imageNames.includes(args))
+      return { profileType: 'image', profileName: args };
+  }
+  const isTyped = isTypeToken;
   const typedName =
     typeSeparator === -1 ? '' : args.slice(typeSeparator + 1).trim();
   return {
