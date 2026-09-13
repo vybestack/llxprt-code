@@ -439,7 +439,9 @@ describe('#3469 launch resource release', () => {
     proxyPort = await allocateEphemeralPort();
     proxyUrl = `http://127.0.0.1:${proxyPort}`;
     environmentSnapshot = { ...process.env };
-    fixturePath = fs.mkdtempSync(path.join(os.tmpdir(), 'launch-3469-'));
+    // Unix socket fixtures must fit even with a long session-scoped TMPDIR.
+    const socketTempBase = process.platform === 'win32' ? os.tmpdir() : '/tmp';
+    fixturePath = fs.mkdtempSync(path.join(socketTempBase, 'launch-3469-'));
     isolatedCacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue3469-uc-'));
     process.env.LLXPRT_CACHE_HOME = isolatedCacheDir;
     originalCwd = process.cwd();

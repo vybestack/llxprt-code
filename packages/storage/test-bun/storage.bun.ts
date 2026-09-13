@@ -72,6 +72,8 @@ const ENV_KEYS = [
   'LLXPRT_DATA_HOME',
   'LLXPRT_CACHE_HOME',
   'LLXPRT_LOG_HOME',
+  'LLXPRT_TEST_LEGACY_HOME',
+  'LLXPRT_TEST_STORAGE_ISOLATED',
 ] as const;
 const ORIGINAL_ENV: Record<string, string | undefined> = {};
 for (const key of ENV_KEYS) {
@@ -426,6 +428,10 @@ describe('Storage – default platform paths (no overrides)', () => {
 describe('Storage – legacy path', () => {
   beforeEach(() => {
     process.env['LLXPRT_CONFIG_HOME'] = '/tmp/some-override';
+    // The unset-fallback case below must hold even when a storage-isolation
+    // preload has set the legacy-home test override.
+    delete process.env['LLXPRT_TEST_LEGACY_HOME'];
+    delete process.env.LLXPRT_TEST_STORAGE_ISOLATED;
   });
 
   afterEach(restoreEnv);
@@ -434,6 +440,42 @@ describe('Storage – legacy path', () => {
     const expected = path.join(os.homedir(), '.llxprt');
     expect(Storage.getLegacyLlxprtDir()).toBe(expected);
   });
+
+  it('getLegacyLlxprtDir returns <LLXPRT_TEST_LEGACY_HOME>/.llxprt when the test override is set', () => {
+    const legacyHome = path.join(os.tmpdir(), 'llxprt-legacy-home-override');
+    process.env['LLXPRT_TEST_STORAGE_ISOLATED'] = '1';
+    process.env['LLXPRT_TEST_LEGACY_HOME'] = legacyHome;
+    expect(Storage.getLegacyLlxprtDir()).toBe(path.join(legacyHome, '.llxprt'));
+  });
+
+  it('ignores a legacy-home override outside isolated tests', () => {
+    delete process.env.LLXPRT_TEST_STORAGE_ISOLATED;
+    process.env.LLXPRT_TEST_LEGACY_HOME = path.join(
+      os.tmpdir(),
+      'ignored-home',
+    );
+    expect(Storage.getLegacyLlxprtDir()).toBe(
+      path.join(os.homedir(), '.llxprt'),
+    );
+  });
+
+  it.each(['1', '', '0', 'keyring=0'])(
+    'fails closed for invalid legacy homes with marker %j',
+    (marker) => {
+      process.env.LLXPRT_TEST_STORAGE_ISOLATED = marker;
+      for (const home of [undefined, '', 'relative/legacy-home']) {
+        if (home === undefined) delete process.env.LLXPRT_TEST_LEGACY_HOME;
+        else process.env.LLXPRT_TEST_LEGACY_HOME = home;
+        expect(() => Storage.getLegacyLlxprtDir()).toThrow(
+          'LLXPRT_TEST_LEGACY_HOME must be set to an absolute path when test storage isolation is active',
+        );
+      }
+      process.env.LLXPRT_TEST_LEGACY_HOME = os.tmpdir();
+      expect(Storage.getLegacyLlxprtDir()).toBe(
+        path.join(os.tmpdir(), '.llxprt'),
+      );
+    },
+  );
 });
 
 describe('Storage – instance (workspace-local) helpers', () => {
