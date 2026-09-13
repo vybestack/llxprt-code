@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import dns from 'node:dns/promises';
 import { isLocalImageEndpoint } from './imageEndpoint.js';
 
 import {
@@ -194,7 +195,10 @@ async function materializeUrl(
   fetchImpl: typeof fetch,
   signal: AbortSignal,
   allowLocalUrls: boolean,
-): Promise<string> {
+): Promise<{
+  readonly bytes: Buffer;
+  readonly mimeType: ImageBackendResult['mimeType'];
+}> {
   try {
     const parsed = new URL(url);
     const restricted =
@@ -211,6 +215,25 @@ async function materializeUrl(
         'Image download URL must use HTTP(S) without embedded credentials.',
       );
     }
+    if (!allowLocalUrls) {
+      const addresses = await dns
+        .lookup(parsed.hostname.replace(/^\[|\]$/g, ''), { all: true })
+        .catch(() => []);
+      if (
+        addresses.some(({ address }) =>
+          isRestrictedHost(
+            new URL(
+              `https://${address.includes(':') ? `[${address}]` : address}`,
+            ),
+          ),
+        )
+      ) {
+        throw new ImageBackendError(
+          'materialization',
+          'Image download hostname resolves to a restricted address.',
+        );
+      }
+    }
     const response = await fetchImpl(parsed, {
       method: 'GET',
       signal: AbortSignal.any([signal, AbortSignal.timeout(60_000)]),
@@ -226,17 +249,20 @@ async function materializeUrl(
       );
     }
     const bytes = await boundedBody(response);
-    try {
-      validatePngStructure(bytes);
-    } catch (cause) {
-      throw new ImageBackendError(
-        'invalid_png',
-        'Downloaded image is not a structurally valid PNG.',
-        undefined,
-        { cause },
-      );
+    const mimeType = sniffImageMimeType(bytes, 'invalid_png');
+    if (mimeType === 'image/png') {
+      try {
+        validatePngStructure(bytes);
+      } catch (cause) {
+        throw new ImageBackendError(
+          'invalid_png',
+          'Downloaded image is not a structurally valid PNG.',
+          undefined,
+          { cause },
+        );
+      }
     }
-    return bytes.toString('base64');
+    return { bytes, mimeType };
   } catch (error) {
     if (signal.aborted) signal.throwIfAborted();
     if (error instanceof ImageBackendError) throw error;
@@ -258,7 +284,26 @@ async function materializeUrl(
   }
 }
 
-/** Normalize sparse endpoint metadata and materialize URL results as PNG base64. */
+function sniffImageMimeType(
+  bytes: Buffer,
+  errorCode: 'invalid_image' | 'invalid_png',
+): ImageBackendResult['mimeType'] {
+  if (bytes.subarray(0, 4).equals(Buffer.from([137, 80, 78, 71])))
+    return 'image/png';
+  if (bytes.subarray(0, 3).equals(Buffer.from([255, 216, 255])))
+    return 'image/jpeg';
+  if (
+    bytes.toString('ascii', 0, 4) === 'RIFF' &&
+    bytes.toString('ascii', 8, 12) === 'WEBP'
+  )
+    return 'image/webp';
+  throw new ImageBackendError(
+    errorCode,
+    'Image endpoint returned an unrecognized image format. Expected PNG, JPEG, or WebP.',
+  );
+}
+
+/** Normalize sparse endpoint metadata and materialize URL results as image base64. */
 export async function parseImageResponse(
   body: unknown,
   fetchImpl: typeof fetch,
@@ -289,27 +334,19 @@ export async function parseImageResponse(
         'Image endpoint returned invalid base64 image data.',
       );
     }
-    if (bytes.subarray(0, 4).equals(Buffer.from([137, 80, 78, 71])))
-      mimeType = 'image/png';
-    else if (bytes.subarray(0, 3).equals(Buffer.from([255, 216, 255])))
-      mimeType = 'image/jpeg';
-    else if (
-      bytes.toString('ascii', 0, 4) === 'RIFF' &&
-      bytes.toString('ascii', 8, 12) === 'WEBP'
-    )
-      mimeType = 'image/webp';
-    else
-      throw new ImageBackendError(
-        options.allowLocalUrls === true ? 'invalid_png' : 'invalid_image',
-        'Image endpoint returned an unrecognized image format.',
-      );
+    mimeType = sniffImageMimeType(
+      bytes,
+      options.allowLocalUrls === true ? 'invalid_png' : 'invalid_image',
+    );
   } else if (typeof first.url === 'string' && first.url !== '') {
-    data = await materializeUrl(
+    const image = await materializeUrl(
       first.url,
       fetchImpl,
       signal,
       options.allowLocalUrls === true,
     );
+    data = image.bytes.toString('base64');
+    mimeType = image.mimeType;
   } else {
     throw new ImageBackendError(
       'invalid_response',

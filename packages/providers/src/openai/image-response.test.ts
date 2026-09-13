@@ -3,7 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
+import dns from 'node:dns/promises';
 import {
   parseImageResponse,
   imageResponseError,
@@ -13,6 +14,90 @@ const signal = new AbortController().signal;
 const fetchImage: typeof fetch = async () =>
   new Response(Buffer.from(generationSuccess.data[0].b64_json, 'base64'));
 describe('image transport validation', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each(['169.254.169.254', '10.0.0.1', 'fe80::1', '::ffff:169.254.169.254'])(
+    'rejects a public hostname resolving to %s',
+    async (address) => {
+      vi.spyOn(dns, 'lookup').mockResolvedValue([
+        { address: '8.8.8.8', family: 4 },
+        { address, family: address.includes(':') ? 6 : 4 },
+      ]);
+      await expect(
+        parseImageResponse(
+          { data: [{ url: 'https://images.example/image' }] },
+          fetchImage,
+          signal,
+        ),
+      ).rejects.toMatchObject({
+        name: 'ImageBackendError',
+        code: 'materialization',
+      });
+    },
+  );
+
+  it('downloads when DNS resolves only to public addresses', async () => {
+    vi.spyOn(dns, 'lookup').mockResolvedValue([
+      { address: '8.8.8.8', family: 4 },
+    ]);
+    expect(
+      (
+        await parseImageResponse(
+          { data: [{ url: 'https://images.example/image' }] },
+          fetchImage,
+          signal,
+        )
+      ).mimeType,
+    ).toBe('image/png');
+  });
+
+  it('skips DNS validation for opted-in local downloads', async () => {
+    let resolutions = 0;
+    vi.spyOn(dns, 'lookup').mockImplementation(async () => {
+      resolutions++;
+      return [{ address: '169.254.169.254', family: 4 }];
+    });
+    expect(
+      (
+        await parseImageResponse(
+          { data: [{ url: 'http://lan.example/image' }] },
+          fetchImage,
+          signal,
+          { allowLocalUrls: true },
+        )
+      ).mimeType,
+    ).toBe('image/png');
+    expect(resolutions).toBe(0);
+  });
+
+  it.each([
+    ['image/jpeg', Buffer.from([255, 216, 255, 0])],
+    ['image/webp', Buffer.from('RIFF0000WEBP')],
+  ] as const)('sniffs %s URL bytes', async (mimeType, bytes) => {
+    expect(
+      (
+        await parseImageResponse(
+          { data: [{ url: 'https://images.example/image' }] },
+          async () => new Response(bytes),
+          signal,
+        )
+      ).mimeType,
+    ).toBe(mimeType);
+  });
+
+  it('rejects garbage URL bytes with a typed image error', async () => {
+    await expect(
+      parseImageResponse(
+        { data: [{ url: 'https://images.example/image' }] },
+        async () => new Response('garbage'),
+        signal,
+      ),
+    ).rejects.toMatchObject({
+      name: 'ImageBackendError',
+      code: 'invalid_png',
+      message: expect.stringContaining('PNG, JPEG, or WebP'),
+    });
+  });
   it.each([
     ['image/png', Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])],
     ['image/jpeg', Buffer.from([255, 216, 255, 0])],
