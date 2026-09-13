@@ -67,13 +67,16 @@ export async function resolveCodexImageCredential(
       'Codex image generation requires OAuth authentication. Run /auth codex enable.',
     );
   }
-  const accessToken = token.access_token.trim();
-  if (typeof accessToken !== 'string' || accessToken === '') {
+  if (
+    typeof token.access_token !== 'string' ||
+    token.access_token.trim() === ''
+  ) {
     throw new ImageCredentialError(
       'oauth_unavailable',
       'Codex image generation requires an OAuth token with a non-empty access_token.',
     );
   }
+  const accessToken = token.access_token.trim();
   const accountId =
     'account_id' in token && typeof token.account_id === 'string'
       ? token.account_id.trim()

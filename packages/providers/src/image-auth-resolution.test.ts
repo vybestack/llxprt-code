@@ -159,6 +159,22 @@ describe('image credential resolution', () => {
     },
   );
 
+  it('rejects a non-string stored OAuth access token with a typed error', async () => {
+    const token = {
+      access_token: 'token',
+      account_id: 'account',
+      expiry: 9999999999,
+      token_type: 'Bearer',
+    };
+    Object.defineProperty(token, 'access_token', { value: 123 });
+    await expect(
+      resolveCodexImageCredential({ getOAuthToken: async () => token }),
+    ).rejects.toMatchObject({
+      name: 'ImageCredentialError',
+      code: 'oauth_unavailable',
+    });
+  });
+
   it('returns no credential for none', async () => {
     expect(await resolveKey({ type: 'none' })).toBeUndefined();
   });
