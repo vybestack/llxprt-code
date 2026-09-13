@@ -54,6 +54,22 @@ text model named `image`, or `/model image image` for an image profile named
 | `/set unset <key>`              | Clear an ephemeral setting                |
 | `/settings`                     | Open the interactive settings editor      |
 
+`/setimage` configures the active image model/backend in a separate namespace
+from `/set`. Select or configure one with `/model image` first.
+
+| Command                              | Description                      |
+| ------------------------------------ | -------------------------------- |
+| `/setimage <key> <value>`            | Set an image ephemeral setting   |
+| `/setimage modelparam <key> <value>` | Set an image model parameter     |
+| `/setimage unset <key>`              | Clear an image ephemeral setting |
+| `/setimage unset modelparam <key>`   | Clear one image model parameter  |
+| `/setimage unset modelparam`         | Clear all image model parameters |
+
+Save these settings with `/profile save image <name>` and restore them with
+`/profile load image <name>`. These namespaces are stored with the image
+configuration; arbitrary parameters are not yet forwarded to image requests.
+Image request options continue to use the profile's `defaults` fields.
+
 ### Session
 
 | Command                 | Description                                                        |
