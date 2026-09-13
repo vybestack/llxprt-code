@@ -123,6 +123,22 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     return `Update todo list with ${params.todos.length} items`;
   }
 
+  override validateToolParams(params: unknown): string | null {
+    if (params == null || typeof params !== 'object') {
+      return 'todos parameter is required and must be an array';
+    }
+
+    const typedParams = params as Record<string, unknown>;
+    if (!('todos' in typedParams)) {
+      return 'todos parameter is required and must be an array';
+    }
+    if (!Array.isArray(typedParams.todos)) {
+      return 'todos parameter must be an array';
+    }
+
+    return null;
+  }
+
   // Track the active in-progress item for interactive continuation.
   private trackInteractiveUpdate(
     todos: Todo[],
