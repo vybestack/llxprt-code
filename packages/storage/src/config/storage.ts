@@ -134,8 +134,22 @@ export class Storage {
    * Returns the legacy global configuration directory (`~/.llxprt`).
    * Used solely by the startup migration logic to detect and copy
    * pre-migration configuration into the new platform-standard paths.
+   *
+   * When `LLXPRT_TEST_STORAGE_ISOLATED` is defined, an absolute
+   * `LLXPRT_TEST_LEGACY_HOME` is required. Invalid or missing overrides throw
+   * rather than falling back to the real home. Without the marker, production
+   * path resolution is unchanged.
    */
   static getLegacyLlxprtDir(): string {
+    const legacyHome = process.env.LLXPRT_TEST_LEGACY_HOME;
+    if (process.env.LLXPRT_TEST_STORAGE_ISOLATED !== undefined) {
+      if (legacyHome === undefined || !path.isAbsolute(legacyHome)) {
+        throw new Error(
+          'LLXPRT_TEST_LEGACY_HOME must be set to an absolute path when test storage isolation is active',
+        );
+      }
+      return path.join(legacyHome, LLXPRT_DIR);
+    }
     const homeDir = os.homedir();
     if (!homeDir) {
       return path.join(os.tmpdir(), '.llxprt');
@@ -158,14 +172,28 @@ export class Storage {
   }
 
   /**
-   * Returns the global `.agents/` directory under the user's home directory,
-   * matching the cross-tool Agent Skills open standard
-   * (https://agentskills.io). Always resolved against `os.homedir()` so it
-   * never falls back to a world-writable temp directory. If the home
-   * directory cannot be determined, this throws rather than silently
-   * resolving to a relative or temp path (fail-closed for security).
+   * Returns the global `.agents/` directory, matching the cross-tool Agent
+   * Skills open standard (https://agentskills.io).
+   *
+   * Resolution order:
+   * 1. `LLXPRT_AGENTS_HOME` environment variable (must be absolute) — the
+   *    operator's explicit choice, mirroring `LLXPRT_CONFIG_HOME` and the
+   *    other category overrides; test isolation depends on it.
+   * 2. `os.homedir()/.agents` — always resolved against the real home so it
+   *    never falls back to a world-writable temp directory. If the home
+   *    directory cannot be determined, this throws rather than silently
+   *    resolving to a relative or temp path (fail-closed for security).
    */
   static getGlobalAgentsDir(): string {
+    const override = process.env.LLXPRT_AGENTS_HOME;
+    if (override !== undefined && override !== '') {
+      if (!path.isAbsolute(override)) {
+        throw new Error(
+          `LLXPRT_AGENTS_HOME must be an absolute path; refusing relative agents directory '${override}'.`,
+        );
+      }
+      return override;
+    }
     const homeDir = os.homedir();
     if (!homeDir || !path.isAbsolute(homeDir)) {
       throw new Error(

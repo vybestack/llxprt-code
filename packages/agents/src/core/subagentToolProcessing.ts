@@ -38,7 +38,10 @@ import { type CompletedToolCall } from './coreToolScheduler.js';
 import { LocalTodoStore as TodoStore } from '@vybestack/llxprt-code-tools';
 import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
-import { toolFailureMarker } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
+import {
+  createErrorResponse,
+  toolFailureMarker,
+} from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import {
   SubagentTerminateMode,
   type OutputConfig,
@@ -67,6 +70,75 @@ export function isFatalToolError(
     errorType === ToolErrorType.TOOL_DISABLED ||
     errorType === ToolErrorType.TOOL_NOT_REGISTERED
   );
+}
+
+// Issue #3535: a fatal tool error that killed the run must surface as ERROR, not
+// GOAL, unless a later tool call succeeds. The message is recorded on the output
+// so checkGoalCompletion can convert GOAL to ERROR; any successful execution clears it.
+export function recordFatalToolError(
+  output: OutputObject,
+  message: string,
+): void {
+  output.unrecovered_fatal_tool_error = message;
+}
+
+function clearFatalDiagnostic(output: OutputObject): void {
+  if (
+    output.unrecovered_fatal_tool_error !== undefined &&
+    output.final_message === output.unrecovered_fatal_tool_error
+  ) {
+    delete output.final_message;
+  }
+}
+
+export function recordSuccessfulToolExecution(output: OutputObject): void {
+  clearFatalDiagnostic(output);
+  delete output.unrecovered_fatal_tool_error;
+}
+
+/** Complete a satisfied output contract without retaining a stale fatal diagnostic. */
+export function completeWithGoal(output: OutputObject): void {
+  clearFatalDiagnostic(output);
+  delete output.unrecovered_fatal_tool_error;
+  output.terminate_reason = SubagentTerminateMode.GOAL;
+}
+
+export type InteractiveToolMarker =
+  | { callId: string }
+  | { status: 'success' | 'error-nonfatal' };
+
+/**
+ * Request-order classification keeps interactive execution semantically
+ * identical to sequential non-interactive execution, including runtime fatals.
+ */
+export function classifyToolCompletions(
+  markers: readonly InteractiveToolMarker[],
+  completedCalls: readonly CompletedToolCall[],
+): {
+  recovered: boolean;
+  fatalCall?: CompletedToolCall;
+} {
+  const byCallId = new Map(
+    completedCalls.map((call) => [call.request.callId, call]),
+  );
+  let recovered = false;
+  let fatalCall: CompletedToolCall | undefined;
+  for (const marker of markers) {
+    const call = 'callId' in marker ? byCallId.get(marker.callId) : marker;
+    // The scheduler drops duplicate call IDs, so some requests have no completion.
+    if (!call) continue;
+    if (call.status === 'success') {
+      recovered = true;
+      fatalCall = undefined;
+    } else if (
+      call.status === 'error' &&
+      isFatalToolError(call.response.errorType)
+    ) {
+      fatalCall = call;
+      recovered = false;
+    }
+  }
+  return { recovered, fatalCall };
 }
 
 export function extractToolDetail(
@@ -328,6 +400,8 @@ export function handleEmitValueCall(
 
   if (variableName && variableValue) {
     ctx.output.emitted_vars[variableName] = variableValue;
+    // Issue #3535: a successful emitted value is a successful tool execution.
+    recordSuccessfulToolExecution(ctx.output);
     const message = `Emitted variable ${variableName} successfully`;
     if (ctx.onMessage) {
       ctx.onMessage(`[${ctx.subagentId}] ${message}`);
@@ -484,9 +558,13 @@ function getMissingRequiredOutputKeys(
 function terminateAfterSuccessfulTodoPause(
   ctx: ProcessFunctionCallsContext,
 ): void {
+  // Issue #3535: a successful pause-tool termination runs before any other
+  // success-clear branch, so clear the fatal flag here to keep the
+  // output object consistent with a successful execution.
+  recordSuccessfulToolExecution(ctx.output);
   const missingOutputKeys = getMissingRequiredOutputKeys(ctx);
   if (missingOutputKeys.length === 0) {
-    ctx.output.terminate_reason = SubagentTerminateMode.GOAL;
+    completeWithGoal(ctx.output);
     return;
   }
 
@@ -494,6 +572,48 @@ function terminateAfterSuccessfulTodoPause(
   ctx.output.final_message =
     'Subagent paused via todo_pause before completing required outputs: ' +
     `${missingOutputKeys.join(', ')}.`;
+}
+
+function applyNonFatalToolResponse(
+  toolResponse: ToolCallResponseInfo,
+  toolResponseBlocks: ContentBlock[],
+  executionStatus: CompletedToolCall['status'],
+  ctx: ProcessFunctionCallsContext,
+): void {
+  // Issue #3535: only a genuinely successful execution proves recovery.
+  // A non-fatal failure (bad params, execution error, cancellation)
+  // must preserve an existing fatal flag.
+  if (executionStatus === 'success') {
+    recordSuccessfulToolExecution(ctx.output);
+  }
+  pushNonToolCallResponseBlocks(toolResponse.responseParts, toolResponseBlocks);
+}
+
+function recordFatalToolUnavailableError(
+  toolName: string,
+  toolResponse: ToolCallResponseInfo,
+  toolResponseBlocks: ContentBlock[],
+  ctx: ProcessFunctionCallsContext,
+): void {
+  const fatalMessage = buildToolUnavailableMessage(
+    toolName,
+    toolResponse.resultDisplay,
+    toolResponse.error,
+  );
+  // Issue #3535: an unavailable tool is fatal — record it so
+  // checkGoalCompletion converts a resulting stop to ERROR. A later
+  // successful call clears it.
+  recordFatalToolError(ctx.output, fatalMessage);
+  ctx.logger.warn(
+    () =>
+      `Subagent ${ctx.subagentId} cannot use tool '${toolName}': ${fatalMessage}`,
+  );
+  // Issue #3535: the dispatcher already produced a structured tool_response
+  // paired to the doomed call's callId. Forward it so the next provider
+  // request answers the recorded tool_use instead of leaving it dangling.
+  pushNonToolCallResponseBlocks(toolResponse.responseParts, toolResponseBlocks);
+  toolResponseBlocks.push({ type: 'text', text: fatalMessage });
+  ctx.output.final_message = fatalMessage;
 }
 
 export async function processFunctionCalls(
@@ -549,21 +669,18 @@ export async function processFunctionCalls(
       }
 
       if (isFatalToolError(toolResponse.errorType)) {
-        const fatalMessage = buildToolUnavailableMessage(
+        recordFatalToolUnavailableError(
           functionCall.name,
-          toolResponse.resultDisplay,
-          toolResponse.error,
-        );
-        ctx.logger.warn(
-          () =>
-            `Subagent ${ctx.subagentId} cannot use tool '${functionCall.name}': ${fatalMessage}`,
-        );
-        toolResponseBlocks.push({ type: 'text', text: fatalMessage });
-        ctx.output.final_message = fatalMessage;
-      } else {
-        pushNonToolCallResponseBlocks(
-          toolResponse.responseParts,
+          toolResponse,
           toolResponseBlocks,
+          ctx,
+        );
+      } else {
+        applyNonFatalToolResponse(
+          toolResponse,
+          toolResponseBlocks,
+          executionResult.status,
+          ctx,
         );
       }
     }
@@ -626,9 +743,30 @@ async function executeNonInteractiveTool(
   ctx: ProcessFunctionCallsContext,
 ): Promise<NonInteractiveToolExecutionResult> {
   if (functionCall.name === SCOPE_LOCAL_EMIT_TOOL_NAME) {
-    const valName = String(requestInfo.args['emit_variable_name']);
-    const valVal = String(requestInfo.args['emit_variable_value']);
+    const args = asUnknownRecord(requestInfo.args);
+    const valName = args['emit_variable_name'];
+    const valVal = args['emit_variable_value'];
+    const hasName = typeof valName === 'string' && valName !== '';
+    const hasValue = typeof valVal === 'string' && valVal !== '';
+    if (!hasName || !hasValue) {
+      const errorMessage = `${SCOPE_LOCAL_EMIT_TOOL_NAME} requires emit_variable_name and emit_variable_value arguments.`;
+      ctx.logger.warn(
+        () =>
+          `Subagent ${ctx.subagentId} failed to emit value: ${errorMessage}`,
+      );
+      return {
+        status: 'error',
+        response: createErrorResponse(
+          requestInfo,
+          new Error(errorMessage),
+          ToolErrorType.INVALID_TOOL_PARAMS,
+        ),
+      };
+    }
+
     ctx.output.emitted_vars[valName] = valVal;
+    // Issue #3535: a successful emitted value is successful tool execution.
+    recordSuccessfulToolExecution(ctx.output);
 
     const successMessage = `Emitted variable ${valName} successfully`;
     return {

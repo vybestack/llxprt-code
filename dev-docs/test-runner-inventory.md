@@ -392,6 +392,93 @@ bun scripts/run_bun_tests.ts --workspace telemetry
 bun scripts/run_bun_tests.ts --dry-run
 ```
 
+## Test isolation contract (issue #3622)
+
+Every test process the five runners spawn (the shared
+`scripts/run_bun_tests.ts` and the bespoke `packages/{cli,core,agents,auth}/run-bun-tests.ts`)
+runs under one contract:
+
+- **Session root.** Each runner run creates
+  `<tmpdir>/llxprt-tests/<pid-ts-random>/` containing `home/user` (with
+  `.config`, `.cache`, `.local/share`) and `tmp`. Spawned test processes get
+  `HOME`, `TMPDIR`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, and `XDG_DATA_HOME`
+  pointed inside it, plus `LLXPRT_TEST_SESSION_ROOT=<root>`.
+  Bun's `os.homedir()` reads `$HOME` only at process start, so this isolation
+  happens at spawn time in the runners. A preload cannot redirect it. Session roots are
+  removed after children and teardowns finish by default. Set
+  `LLXPRT_TEST_KEEP_SESSION_ROOT=1` to retain them for debugging. The platform-matrix
+  socket fixture uses a short `/tmp` mkdtemp base instead of session `TMPDIR`
+  on Unix because session paths can exceed the Unix socket path budget.
+- **Env precedence.** The runner passes its own env through and overrides
+  only the session keys. Pre-existing `LLXPRT_*` storage-isolation overrides
+  (set by workspace preloads through `isolateStorageRoots()`) keep precedence
+  inside the session: per-workspace roots win over the session root. The
+  builder deletes any inherited `LLXPRT_TEST_STORAGE_ISOLATED` marker. Only
+  the child's storage preload writes `1` after initializing its roots;
+  children without that preload receive no marker.
+- **OS keyring disable.** `buildSessionEnv()` forces
+  `LLXPRT_TEST_DISABLE_OS_KEYRING=1` at spawn time, including credentialed
+  evals and integration-test roots without storage preloads.
+  `isolateStorageRoots()` also sets it for direct preloaded `bun test` runs, so
+  `createDefaultKeyringAdapter()` returns null and SecureStore uses its
+  encrypted-file fallback inside the isolated root. Suites that test the
+  factory itself substitute a fake `@napi-rs/keyring` via `mock.module` and
+  clear the flag in-process (no real store is reachable when the module is
+  faked); the genuine-keyring smoke test
+  (`storage/src/secure-store/secure-store.native-keyring.test.ts`) skips
+  while the flag is set.
+- **Legacy `~/.llxprt` override.** `LLXPRT_TEST_LEGACY_HOME` points at
+  `<storage-root>/home/user`; `Storage.getLegacyLlxprtDir()` resolves
+  `$LLXPRT_TEST_LEGACY_HOME/.llxprt` when the storage-isolation marker is
+  defined and the override is absolute. With any defined
+  `LLXPRT_TEST_STORAGE_ISOLATED` value, a missing or relative override throws
+  instead of falling back to the real home. Without the marker, production
+  path resolution is unchanged.
+- **Real-home sentinel guard.** Runners watch the real `~/.llxprt`,
+  `~/.agents/skills`, and the platform config/log dirs by dropping a
+  per-session sentinel file and diffing directory listings. A run fails if a
+  sentinel changes or disappears, a watched dir appears or vanishes, or a
+  non-sentinel entry is added or removed. Diagnostics identify the file running
+  when the change was first detected; per-file attribution is best-effort.
+  Unrelated real-home activity on a busy machine, including the developer's
+  own running sessions, fails the run by design; `LLXPRT_TEST_SENTINEL_GUARD=0`
+  is the escape hatch. When the runner itself
+  has `LLXPRT_TEST_STORAGE_ISOLATED=1`, platform config/log targets are omitted
+  because those paths resolve to isolated storage; home-derived targets
+  remain watched. Listings exclude all sessions' sentinel filenames.
+  The guard does not detect reads, in-place overwrites of pre-existing files,
+  writes below existing subdirectories, or transient create/delete activity
+  between checks. Session env and storage preloads redirect env-derived writes,
+  but cannot prevent writes through hard-coded absolute paths. The shared
+  runner checks after each file; all bespoke runners, including core, check
+  after each settled file and list active peers. Each distinct change is
+  reported only on first detection; the run's failure remains latched.
+  SIGINT and SIGTERM kill active test process groups on POSIX and finalize
+  the guard before a non-zero exit. SIGKILL cannot be caught, so sentinel
+  cleanup cannot run when the runner itself receives it.
+- **Checklist for a new workspace or runner:** declare the root in
+  `scripts/bun-test-roots.ts` with the storage-isolation preload (which
+  brings keyring disable and legacy-home override), spawn every test process
+  with `createBespokeRunnerIsolation()` (or the shared runner's session env),
+  assert the guard after each settled file, and finalize it at every exit
+  path. `scripts/tests/sentinel-guard-demo.test.ts` demonstrates the failure
+  mode end to end against a deliberately leaking fixture.
+
+| Environment variables                                | Owner and behavior                                                                                                                             |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HOME`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`     | Session env: redirected inside the session home.                                                                                               |
+| `TMPDIR`, `TMP`, `TEMP`                              | Session env: redirected to the session temp directory.                                                                                         |
+| `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `XDG_DATA_HOME` | Session env: redirected inside the session home.                                                                                               |
+| `LLXPRT_TEST_SESSION_ROOT`                           | Session env: identifies the session root.                                                                                                      |
+| `LLXPRT_TEST_DISABLE_OS_KEYRING`                     | Session env: forced to `1`; storage preloads preserve this value.                                                                              |
+| `LLXPRT_TEST_STORAGE_ISOLATED`                       | Preload-owned, not part of the session env. The builder deletes inherited values; the child's storage preload sets `1` with initialized roots. |
+
+A direct `bun test` outside these five runners still gets storage-root,
+legacy-home, and keyring isolation from the workspace preload, but it does not
+get the session-scoped `HOME`/`TMPDIR`/`XDG_*` environment or the sentinel
+guard. CI uses the runners for the repository suites; its few direct Bun test
+commands run with throwaway runner homes.
+
 ## Bun test constraints recorded where test authors will look
 
 These are the Bun-driven patterns that look like a weakened test at first

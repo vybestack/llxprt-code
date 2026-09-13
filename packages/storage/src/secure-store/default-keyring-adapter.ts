@@ -57,9 +57,12 @@ const KEYRING_MODULE_ERROR_CODES = new Set([
  * marker makes the factory return null, and SecureStore then uses its
  * encrypted-file fallback inside the isolated storage root.
  *
- * Deliberately distinct from `LLXPRT_TEST_STORAGE_ISOLATED`: the storage
- * workspace's own suites isolate their roots while still needing the genuine
- * keyring, so the two concerns cannot share one flag.
+ * Since issue #3622 the marker is set centrally by isolateStorageRoots() for
+ * every workspace, so no preloaded suite reaches a real credential store.
+ * Suites that test this factory itself substitute a fake @napi-rs/keyring
+ * via mock.module and clear the marker in-process (no real store is
+ * reachable when the module itself is faked); the genuine-keyring smoke
+ * test skips while the marker is set.
  */
 const DISABLE_OS_KEYRING_ENV = 'LLXPRT_TEST_DISABLE_OS_KEYRING';
 
