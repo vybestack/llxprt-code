@@ -215,6 +215,7 @@ describe('test isolation contract (issue #3622)', () => {
     const knownRoots = [
       'a2a-server',
       'agents',
+      'eslint-rules',
       'providers',
       'tools',
       'mcp',
@@ -247,7 +248,10 @@ describe('test isolation contract (issue #3622)', () => {
     expect([...manifest.workspaces].sort()).toEqual(
       [
         ...knownRoots.filter(
-          (root) => !['scripts-tests', ...SETUP_EXCEPTIONS].includes(root),
+          (root) =>
+            !['scripts-tests', 'eslint-rules', ...SETUP_EXCEPTIONS].includes(
+              root,
+            ),
         ),
         'cli',
         'core',
