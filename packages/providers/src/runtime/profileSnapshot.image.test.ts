@@ -271,6 +271,24 @@ describe('runtime image-profile transitions', () => {
     expect(state.getActive()).toBeUndefined();
   });
 
+  it('round-trips image settings through save and load without changing old profiles', async () => {
+    const state = createImageProfileRuntimeState();
+    const configured = {
+      ...imageProfile('configured'),
+      modelParams: { temperature: 0.4, seed: 42 },
+      ephemeralSettings: { 'socket-timeout': 12000 },
+    };
+    state.select({ profile: configured });
+    await saveAndSelectImageProfile(manager, state, 'configured');
+    state.reset();
+    await loadAndSelectImageProfile(manager, state, 'configured');
+    expect(state.getActive()?.profile).toStrictEqual(configured);
+
+    await manager.saveImageProfile('legacy', imageProfile('legacy'));
+    await loadAndSelectImageProfile(manager, state, 'legacy');
+    expect(state.getActive()?.profile).toStrictEqual(imageProfile('legacy'));
+  });
+
   it('saves and selects the new image profile name', async () => {
     const state = createImageProfileRuntimeState();
     state.select({

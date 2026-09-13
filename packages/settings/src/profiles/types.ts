@@ -253,6 +253,8 @@ export interface ImageProfile {
   model: string;
   baseUrl: string;
   auth: PersistedImageBackendAuth;
+  modelParams?: ModelParams;
+  ephemeralSettings?: EphemeralSettings;
   operations?: readonly ImageOperation[];
   defaults?: {
     readonly quality?: ImageQuality;

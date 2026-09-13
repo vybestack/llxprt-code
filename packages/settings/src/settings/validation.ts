@@ -290,6 +290,8 @@ const imageProfileSchema: z.ZodType<ImageProfile> = z
   .object({
     version: z.literal(1),
     type: z.literal('image'),
+    modelParams: modelParamsSchema.optional(),
+    ephemeralSettings: ephemeralSettingsSchema.optional(),
     label: z.string().min(1).optional(),
     description: z.string().min(1).optional(),
     backend: z.enum(['codex', 'openai-images']),

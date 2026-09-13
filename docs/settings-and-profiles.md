@@ -50,6 +50,12 @@ An image profile stores its model slug, `baseUrl`, auth reference, and defaults 
 
 Profiles are stored in `<config>/profiles/<name>.json` (see [Application Directories](./reference/application-directories.md)).
 
+Image profiles also accept optional `modelParams` and `ephemeralSettings`
+objects in version 1. These belong only to the active image configuration,
+separate from text-model settings. `/profile save image <name>` captures both
+objects and `/profile load image <name>` restores them. Older profiles without
+these fields keep them absent.
+
 ### Set Up an Image Profile
 
 Create the JSON file in `<config>/profiles/` before selecting it. You need a
