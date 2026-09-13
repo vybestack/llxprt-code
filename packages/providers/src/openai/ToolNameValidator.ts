@@ -56,14 +56,12 @@ export class ToolNameValidator {
       isValid: true,
     };
 
-    // Step 1: Handle undefined/null/empty names
+    // Step 1: Handle undefined/null/empty names. Issue #3535: never
+    // fabricate `undefined_tool_name`; invalid results stay empty.
     if (!rawName || rawName.trim() === '') {
-      result.name = 'undefined_tool_name';
-      result.warnings.push('Empty or undefined tool name, using fallback');
+      result.warnings.push('Empty or undefined tool name');
       result.isValid = false;
-      this.logger.debug(
-        () => `Empty tool name detected, using fallback: ${result.name}`,
-      );
+      this.logger.debug(() => 'Empty tool name detected');
       return result;
     }
 
@@ -71,10 +69,7 @@ export class ToolNameValidator {
     const normalized = this.normalizeToolName(rawName);
 
     if (!normalized) {
-      result.name = 'undefined_tool_name';
-      result.warnings.push(
-        `Unable to normalize tool name: "${rawName}", using fallback`,
-      );
+      result.warnings.push(`Unable to normalize tool name: "${rawName}"`);
       result.isValid = false;
       return result;
     }
@@ -91,10 +86,7 @@ export class ToolNameValidator {
         }
         return result;
       }
-      result.name = 'undefined_tool_name';
-      result.warnings.push(
-        `Tool "${normalized}" not found in available tools, using fallback`,
-      );
+      result.warnings.push(`Tool "${normalized}" not found in available tools`);
       result.isValid = false;
       return result;
     }
