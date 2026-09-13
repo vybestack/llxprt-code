@@ -135,6 +135,13 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     if (!Array.isArray(typedParams.todos)) {
       return 'todos parameter must be an array';
     }
+    if (
+      (typedParams.todos as unknown[]).some(
+        (item) => item == null || typeof item !== 'object',
+      )
+    ) {
+      return 'todos items must be objects';
+    }
 
     return null;
   }

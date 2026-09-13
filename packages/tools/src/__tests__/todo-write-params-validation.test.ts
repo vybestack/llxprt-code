@@ -81,6 +81,10 @@ const malformedCases: Array<[string, unknown]> = [
   ['null todos', { todos: null }],
   ['string todos', { todos: 'x' }],
   ['object todos', { todos: {} }],
+  ['null todo item', { todos: [null] }],
+  ['undefined todo item', { todos: [undefined] }],
+  ['number todo item', { todos: [42] }],
+  ['string todo item', { todos: ['str'] }],
 ];
 
 describe('TodoWrite rejects malformed params at the build boundary (issue #3655)', () => {
