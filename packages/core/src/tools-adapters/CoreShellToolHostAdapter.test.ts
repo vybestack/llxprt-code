@@ -122,6 +122,31 @@ const pwshAvailable =
   os.platform() === 'win32' &&
   (await initializeParser()) &&
   isParserAvailable('powershell');
+describe('inactivity termination passthrough @plan:issue3589', () => {
+  it('H: reports a real silent command killed by the inactivity window', async () => {
+    const { config, adapter } = makeAdapter();
+    config.setEphemeralSetting('shell-inactivity-timeout-seconds', 1);
+
+    const result = await adapter.executeShellCommand(
+      os.platform() === 'win32' ? 'Start-Sleep -Seconds 5' : 'sleep 5',
+      os.tmpdir(),
+      () => undefined,
+      new AbortController().signal,
+    );
+
+    expect(result).toHaveProperty('inactivityTimedOut', true);
+  }, 15000);
+
+  it('H: exposes the effective inactivity window in milliseconds', () => {
+    const { config, adapter } = makeAdapter();
+    config.setEphemeralSetting('shell-inactivity-timeout-seconds', 1);
+
+    expect(adapter.getShellExecutionConfig()).toHaveProperty(
+      'inactivityTimeoutMs',
+      1000,
+    );
+  });
+});
 
 describe('CoreShellToolHostAdapter', () => {
   describe.skipIf(os.platform() !== 'win32')(

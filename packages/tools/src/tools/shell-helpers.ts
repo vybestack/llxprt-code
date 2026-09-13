@@ -204,6 +204,63 @@ export function appendSurvivorNoticeToResult(
   };
 }
 
+/**
+ * Names the termination cause without overriding a concurrent timeout or
+ * cancellation. An inactivity flag records a separate fact even when the
+ * caller's abort signal also fired (Issue #3589).
+ */
+export function buildTerminationCauseNotice(
+  result: ShellExecutionResult,
+  inactivityTimeoutMs: number | undefined,
+): string | undefined {
+  if (result.inactivityTimedOut === true) {
+    const window =
+      inactivityTimeoutMs !== undefined &&
+      Number.isFinite(inactivityTimeoutMs) &&
+      inactivityTimeoutMs > 0
+        ? ` (${inactivityTimeoutMs / 1000}s)`
+        : '';
+    return (
+      `Termination cause: the shell tool terminated the command because it produced no output for the inactivity window${window}. ` +
+      'The shell-inactivity-timeout-seconds setting controls this window; -1 disables it. ' +
+      'This is separate from the timeout_seconds total limit.'
+    );
+  }
+  if (
+    result.aborted !== true &&
+    result.signal !== null &&
+    result.signal !== ''
+  ) {
+    return (
+      `Termination cause: signal ${result.signal} originated outside the shell tool; ` +
+      'not a tool timeout, not an inactivity kill, and not a user cancellation.'
+    );
+  }
+  return undefined;
+}
+
+/**
+ * Appends the durable termination-cause notice to BOTH llmContent and
+ * returnDisplay AFTER all lossy processing (summarization, token limiting).
+ * Clean results stay byte-identical (Issue #3589).
+ */
+export function appendTerminationCauseNoticeToResult(
+  toolResult: StringContentToolResult,
+  result: ShellExecutionResult,
+  inactivityTimeoutMs: number | undefined,
+): StringContentToolResult {
+  const notice = buildTerminationCauseNotice(result, inactivityTimeoutMs);
+  if (notice === undefined) {
+    return toolResult;
+  }
+  const suffix = `\n\n${notice}`;
+  return {
+    ...toolResult,
+    llmContent: `${toolResult.llmContent}${suffix}`,
+    returnDisplay: `${toolResult.returnDisplay}${suffix}`,
+  };
+}
+
 export function isShellToolHost(
   host: IShellToolHost | IShellExecutionService,
 ): host is IShellToolHost {

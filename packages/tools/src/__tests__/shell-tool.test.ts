@@ -602,54 +602,52 @@ describe('shell result contracts @plan:issue1995 @plan:issue3200', () => {
     expect(result.error?.message).toContain('not supported');
   });
 
-  describe('timeout survivor warning formatting @plan:issue3517', () => {
-    /**
-     * Builds a host whose foreground execution resolves with an aborted
-     * result only when the combined timeout/user signal fires, so the tool
-     * computes a genuine abort path (timeout-triggered or user-cancelled)
-     * the way production does. The fake result carries its pgid verbatim so
-     * collectProcessInfo never falls through to a real `ps` lookup for the
-     * fabricated pid.
-     */
-    function createTimeoutAbortingHost(
-      resultFields: Partial<ShellExecutionResult>,
-      onEntered: () => void = () => undefined,
-    ): IShellToolHost {
-      const base = createFakeHostWithBackground(() => {
-        throw new Error(
-          'Foreground execution must not launch a background job',
-        );
-      });
-      const buildResult = (): ShellExecutionResult => ({
-        output: 'partial output',
-        exitCode: null,
-        signal: '15',
-        error: null,
-        aborted: true,
-        pid: 4321,
-        pgid: 4321,
-        ...resultFields,
-      });
-      return {
-        ...base,
-        executeShellCommand: (_command, _cwd, _onOutput, signal) =>
-          new Promise<ShellExecutionResult>((resolve) => {
-            onEntered();
-            if (signal.aborted) {
+  /**
+   * Builds a host whose foreground execution resolves with an aborted
+   * result only when the combined timeout/user signal fires, so the tool
+   * computes a genuine abort path (timeout-triggered or user-cancelled)
+   * the way production does. The fake result carries its pgid verbatim so
+   * collectProcessInfo never falls through to a real `ps` lookup for the
+   * fabricated pid.
+   */
+  function createTimeoutAbortingHost(
+    resultFields: Partial<ShellExecutionResult>,
+    onEntered: () => void = () => undefined,
+  ): IShellToolHost {
+    const base = createFakeHostWithBackground(() => {
+      throw new Error('Foreground execution must not launch a background job');
+    });
+    const buildResult = (): ShellExecutionResult => ({
+      output: 'partial output',
+      exitCode: null,
+      signal: '15',
+      error: null,
+      aborted: true,
+      pid: 4321,
+      pgid: 4321,
+      ...resultFields,
+    });
+    return {
+      ...base,
+      executeShellCommand: (_command, _cwd, _onOutput, signal) =>
+        new Promise<ShellExecutionResult>((resolve) => {
+          onEntered();
+          if (signal.aborted) {
+            resolve(buildResult());
+            return;
+          }
+          signal.addEventListener(
+            'abort',
+            () => {
               resolve(buildResult());
-              return;
-            }
-            signal.addEventListener(
-              'abort',
-              () => {
-                resolve(buildResult());
-              },
-              { once: true },
-            );
-          }),
-      };
-    }
+            },
+            { once: true },
+          );
+        }),
+    };
+  }
 
+  describe('timeout survivor warning formatting @plan:issue3517', () => {
     it('a timeout result with surviving group members includes the kill -9 cleanup instruction', async () => {
       const tool = new ShellTool(
         createTimeoutAbortingHost({ survivingGroupMembersOnAbort: true }),

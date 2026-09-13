@@ -36,6 +36,8 @@ export interface ShellExecutionResult {
   error: Error | null;
   /** Whether the command was aborted. */
   aborted: boolean;
+  /** Carries the inactivity-kill cause to the tool's durable notice (#3589). */
+  inactivityTimedOut?: boolean;
   /** Process ID of the spawned process. */
   pid: number | undefined;
   /** Background process IDs discovered for non-Windows shells. */
@@ -84,6 +86,8 @@ export interface ShellExecutionConfig {
   shouldUseNodePty: boolean;
   /** Shell execution options. */
   executionOptions: Record<string, unknown>;
+  /** Effective inactivity window for termination-cause reporting (#3589). */
+  inactivityTimeoutMs?: number;
   /** PTY terminal width. */
   ptyTerminalWidth?: number;
   /** PTY terminal height. */
