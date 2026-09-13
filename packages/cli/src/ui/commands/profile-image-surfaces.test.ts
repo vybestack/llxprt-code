@@ -129,7 +129,7 @@ describe('image profile command surfaces', () => {
       'image',
       await manager.loadProfile('conversation'),
     );
-    expect(await parseProfileLoadTarget('image')).toEqual({
+    expect(await parseProfileLoadTarget('image')).toStrictEqual({
       profileType: 'model',
       profileName: 'image',
     });

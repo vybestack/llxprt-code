@@ -5,6 +5,7 @@
  */
 
 import dns from 'node:dns/promises';
+import type { LookupAddress } from 'node:dns';
 import { isLocalImageEndpoint } from './imageEndpoint.js';
 
 import {
@@ -189,12 +190,36 @@ function isRestrictedHost(url: URL): boolean {
   return a === 100 && b >= 64 && b <= 127;
 }
 
+type HostnameResolver = (hostname: string) => Promise<readonly LookupAddress[]>;
+
+async function validateResolvedHost(
+  parsed: URL,
+  resolveHostname: HostnameResolver,
+): Promise<void> {
+  const addresses = await resolveHostname(
+    parsed.hostname.replace(/^\[|\]$/g, ''),
+  ).catch(() => []);
+  if (
+    addresses.some(({ address }) =>
+      isRestrictedHost(
+        new URL(`https://${address.includes(':') ? `[${address}]` : address}`),
+      ),
+    )
+  ) {
+    throw new ImageBackendError(
+      'materialization',
+      'Image download hostname resolves to a restricted address.',
+    );
+  }
+}
+
 /** Download without credentials or redirects; never include signed URLs in errors. */
 async function materializeUrl(
   url: string,
   fetchImpl: typeof fetch,
   signal: AbortSignal,
   allowLocalUrls: boolean,
+  resolveHostname: HostnameResolver,
 ): Promise<{
   readonly bytes: Buffer;
   readonly mimeType: ImageBackendResult['mimeType'];
@@ -215,25 +240,7 @@ async function materializeUrl(
         'Image download URL must use HTTP(S) without embedded credentials.',
       );
     }
-    if (!allowLocalUrls) {
-      const addresses = await dns
-        .lookup(parsed.hostname.replace(/^\[|\]$/g, ''), { all: true })
-        .catch(() => []);
-      if (
-        addresses.some(({ address }) =>
-          isRestrictedHost(
-            new URL(
-              `https://${address.includes(':') ? `[${address}]` : address}`,
-            ),
-          ),
-        )
-      ) {
-        throw new ImageBackendError(
-          'materialization',
-          'Image download hostname resolves to a restricted address.',
-        );
-      }
-    }
+    if (!allowLocalUrls) await validateResolvedHost(parsed, resolveHostname);
     const response = await fetchImpl(parsed, {
       method: 'GET',
       signal: AbortSignal.any([signal, AbortSignal.timeout(60_000)]),
@@ -308,7 +315,10 @@ export async function parseImageResponse(
   body: unknown,
   fetchImpl: typeof fetch,
   signal: AbortSignal,
-  options: { readonly allowLocalUrls?: boolean } = {},
+  options: {
+    readonly allowLocalUrls?: boolean;
+    readonly resolveHostname?: HostnameResolver;
+  } = {},
 ): Promise<Omit<ImageBackendResult, 'caption'>> {
   const parsed = isRecord(body) ? body : {};
   const first: unknown = Array.isArray(parsed.data)
@@ -344,6 +354,8 @@ export async function parseImageResponse(
       fetchImpl,
       signal,
       options.allowLocalUrls === true,
+      options.resolveHostname ??
+        ((hostname) => dns.lookup(hostname, { all: true })),
     );
     data = image.bytes.toString('base64');
     mimeType = image.mimeType;

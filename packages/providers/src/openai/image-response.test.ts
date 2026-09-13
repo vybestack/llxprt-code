@@ -3,8 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { afterEach, describe, expect, it, vi } from 'bun:test';
-import dns from 'node:dns/promises';
+import { describe, expect, it } from 'bun:test';
 import {
   parseImageResponse,
   imageResponseError,
@@ -14,20 +13,19 @@ const signal = new AbortController().signal;
 const fetchImage: typeof fetch = async () =>
   new Response(Buffer.from(generationSuccess.data[0].b64_json, 'base64'));
 describe('image transport validation', () => {
-  afterEach(() => vi.restoreAllMocks());
-
   it.each(['169.254.169.254', '10.0.0.1', 'fe80::1', '::ffff:169.254.169.254'])(
     'rejects a public hostname resolving to %s',
     async (address) => {
-      vi.spyOn(dns, 'lookup').mockResolvedValue([
+      const resolveHostname = async () => [
         { address: '8.8.8.8', family: 4 },
         { address, family: address.includes(':') ? 6 : 4 },
-      ]);
+      ];
       await expect(
         parseImageResponse(
           { data: [{ url: 'https://images.example/image' }] },
           fetchImage,
           signal,
+          { resolveHostname },
         ),
       ).rejects.toMatchObject({
         name: 'ImageBackendError',
@@ -37,15 +35,14 @@ describe('image transport validation', () => {
   );
 
   it('downloads when DNS resolves only to public addresses', async () => {
-    vi.spyOn(dns, 'lookup').mockResolvedValue([
-      { address: '8.8.8.8', family: 4 },
-    ]);
+    const resolveHostname = async () => [{ address: '8.8.8.8', family: 4 }];
     expect(
       (
         await parseImageResponse(
           { data: [{ url: 'https://images.example/image' }] },
           fetchImage,
           signal,
+          { resolveHostname },
         )
       ).mimeType,
     ).toBe('image/png');
@@ -53,17 +50,17 @@ describe('image transport validation', () => {
 
   it('skips DNS validation for opted-in local downloads', async () => {
     let resolutions = 0;
-    vi.spyOn(dns, 'lookup').mockImplementation(async () => {
+    const resolveHostname = async () => {
       resolutions++;
       return [{ address: '169.254.169.254', family: 4 }];
-    });
+    };
     expect(
       (
         await parseImageResponse(
           { data: [{ url: 'http://lan.example/image' }] },
           fetchImage,
           signal,
-          { allowLocalUrls: true },
+          { allowLocalUrls: true, resolveHostname },
         )
       ).mimeType,
     ).toBe('image/png');

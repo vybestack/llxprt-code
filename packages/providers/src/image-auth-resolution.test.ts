@@ -164,7 +164,7 @@ describe('image credential resolution', () => {
       access_token: 'token',
       account_id: 'account',
       expiry: 9999999999,
-      token_type: 'Bearer',
+      token_type: 'Bearer' as const,
     };
     Object.defineProperty(token, 'access_token', { value: 123 });
     await expect(
