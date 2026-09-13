@@ -37,6 +37,7 @@ import { createStreamInterruptionError } from '@vybestack/llxprt-code-core/utils
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
 import { BoundedJsonBody } from '../utils/boundedJsonBody.js';
+import { isPreviousResponseNotFoundError } from './openAIResponsesStatefulRecovery.js';
 
 export const DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES = 32 * 1024 * 1024;
 export const CODEX_WEBSOCKET_BETA_HEADER = 'responses_websockets=2026-02-06';
@@ -66,6 +67,35 @@ export function isWebSocketConnectionLimitError(error: unknown): boolean {
 }
 
 /**
+ * True only for the #3446 renewal verdict: a lifecycle-limit retry that
+ * carried a connection-scoped `previous_response_id`, which cannot be
+ * replayed on a fresh connection.
+ */
+export function isStatefulConnectionRenewalError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const details = (error as { details?: unknown }).details;
+  if (typeof details !== 'object' || details === null) return false;
+  return (
+    (details as { statefulConnectionRenewal?: unknown })
+      .statefulConnectionRenewal === true
+  );
+}
+
+function createStatefulConnectionRenewalError(
+  parentId: string,
+  cause: unknown,
+): Error {
+  return createStreamInterruptionError(
+    `Codex Responses WebSocket reached the connection lifecycle limit ` +
+      `(${WEBSOCKET_CONNECTION_LIMIT_CODE}); the connection-scoped ` +
+      `previous_response_id ${parentId} cannot be replayed on a fresh ` +
+      'connection (#3446)',
+    { statefulConnectionRenewal: true, retiredParentId: parentId },
+    cause,
+  );
+}
+
+/**
  * Per-request lifecycle state shared between {@link streamResponse} and its
  * single attempt helper so the #2771 retry decision sees what has already
  * been yielded and whether the one allowed retry was spent.
@@ -74,6 +104,9 @@ interface LifecycleAttemptState {
   completed: boolean;
   retryUsed: boolean;
   contentYielded: boolean;
+  // The error that triggered the pending retry, so the caller can carry it as
+  // the cause of a follow-on verdict (#3446).
+  lifecycleError: unknown;
 }
 
 type LifecycleRetryOutcome =
@@ -115,6 +148,9 @@ function decideLifecycleRetry(
       ),
     };
   }
+  // Thread the lifecycle error through so a follow-on verdict can carry it
+  // as its cause (#3446).
+  state.lifecycleError = error;
   return { retry: true };
 }
 
@@ -610,6 +646,7 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
       completed: false,
       retryUsed: false,
       contentYielded: false,
+      lifecycleError: undefined,
     };
     let socket: TransportSocket | undefined;
     try {
@@ -626,6 +663,16 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
         );
         if (result !== 'retry') return;
         socket = undefined;
+        // #3446: a previous_response_id only resolves on the socket that
+        // minted it, so replaying a stateful request on a fresh connection
+        // is dead on arrival. Fail with the renewal verdict instead of
+        // reconnecting; stateless requests keep the single #2771 replay.
+        if (request.previous_response_id !== undefined) {
+          throw createStatefulConnectionRenewalError(
+            request.previous_response_id,
+            state.lifecycleError,
+          );
+        }
       }
     } finally {
       if (!state.completed && socket !== undefined) this.invalidate(socket);
@@ -872,6 +919,16 @@ export async function* streamOverWebSocketOrFallback(
     }
     // Never replay after any IContent has reached the consumer.
     if (contentYielded) {
+      throw error;
+    }
+    // #3446: a stateful connection-renewal verdict and a parent-not-found
+    // rejection are stateful-chain events the executor's per-id recovery must
+    // observe; absorbing them into the HTTP fallback would hide the dead id so
+    // later turns re-discover it and the provider degrades to sticky HTTP.
+    if (
+      isStatefulConnectionRenewalError(error) ||
+      isPreviousResponseNotFoundError(error)
+    ) {
       throw error;
     }
     onFallback?.();
