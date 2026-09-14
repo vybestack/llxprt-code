@@ -269,7 +269,9 @@ export class ModelRegistry {
     }
 
     if (query.capability) {
-      results = results.filter((m) => m.capabilities[query.capability!]);
+      results = results.filter(
+        (m) => m.capabilities[query.capability!] !== undefined,
+      );
     }
 
     if (query.reasoning !== undefined) {
