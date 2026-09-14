@@ -3,125 +3,108 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  ProfileManager,
-  type ImageProfile,
-} from '@vybestack/llxprt-code-settings';
-import { createImageProfileRuntimeState } from '@vybestack/llxprt-code-core';
-import { ImageModelWizard, listImageModelChoices } from './imageModelWizard.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
+import { getModelRegistry } from '@vybestack/llxprt-code-core';
+import { listImageModelChoices } from './imageModelWizard.js';
 
-const profile: ImageProfile = {
-  version: 1,
-  type: 'image',
-  backend: 'openai-images',
-  model: 'local-image',
-  baseUrl: 'http://localhost:8321/v1',
-  auth: { type: 'none' },
-};
 let directory: string;
-let manager: ProfileManager;
-describe('image model wizard', () => {
+let data: ReturnType<typeof spyOn<typeof Storage, 'getGlobalDataDir'>>;
+let cache: ReturnType<typeof spyOn<typeof Storage, 'getGlobalCacheDir'>>;
+describe('provider image model lists', () => {
   beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'llxprt-model-wizard-'));
-    manager = new ProfileManager(directory);
-    await manager.saveImageProfile('art', profile);
+    directory = mkdtempSync(join(tmpdir(), 'llxprt-image-list-'));
+    mkdirSync(join(directory, 'providers'));
+    data = spyOn(Storage, 'getGlobalDataDir').mockReturnValue(directory);
+    cache = spyOn(Storage, 'getGlobalCacheDir').mockReturnValue(directory);
+    writeFileSync(
+      join(directory, 'models.json'),
+      JSON.stringify({
+        openai: {
+          id: 'openai',
+          name: 'OpenAI',
+          env: [],
+          models: {
+            painter: {
+              id: 'painter',
+              name: 'Painter',
+              modalities: { input: ['text'], output: ['image'] },
+              limit: { context: 4096, output: 1024 },
+              release_date: '2026-09-14',
+              open_weights: false,
+            },
+            chat: {
+              id: 'chat',
+              name: 'Chat',
+              modalities: { input: ['image'], output: ['text'] },
+              limit: { context: 4096, output: 1024 },
+              release_date: '2026-09-14',
+              open_weights: false,
+            },
+          },
+        },
+      }),
+    );
+    await getModelRegistry().initialize();
   });
-  afterEach(async () => {
-    await rm(directory, { recursive: true, force: true });
+  afterEach(() => {
+    getModelRegistry().dispose();
+    data.mockRestore();
+    cache.mockRestore();
+    rmSync(directory, { recursive: true, force: true });
   });
 
-  it('lists saved profiles with backend and model alongside both new backend options', async () => {
-    const choices = await listImageModelChoices(manager);
-    expect(choices.map((choice) => choice.label)).toStrictEqual([
-      'art (openai-images: local-image)',
-      'New codex configuration',
-      'New openai-images configuration',
-    ]);
-    expect(choices[0]?.value).toStrictEqual({ kind: 'saved', name: 'art' });
-    expect(choices.slice(1).map((choice) => choice.value)).toStrictEqual([
-      { kind: 'new', backend: 'codex' },
-      { kind: 'new', backend: 'openai-images' },
+  it('uses the Codex static list instead of registry models', async () => {
+    expect(await listImageModelChoices('codex')).toStrictEqual([
+      'gpt-image-2',
+      'gpt-image-1',
     ]);
   });
-  it.each(['none', 'oauth', 'api-key', 'named-key', 'keyfile'] as const)(
-    'configures %s authentication and activates only on completion without persisting',
-    async (authType) => {
-      const state = createImageProfileRuntimeState();
-      const backend = authType === 'oauth' ? 'codex' : 'openai-images';
-      const remoteUrl =
-        backend === 'codex'
-          ? 'https://chatgpt.com/backend-api/codex'
-          : 'https://api.openai.com/v1';
-      const baseUrl =
-        authType === 'none' ? 'http://localhost:8321/v1' : remoteUrl;
-      const wizard = new ImageModelWizard(backend, (active) =>
-        state.select(active),
-      );
-      expect(wizard.step).toBe('model');
-      wizard.submit('gpt-image-2');
-      expect(wizard.step).toBe('baseUrl');
-      wizard.submit(baseUrl);
-      expect(wizard.step).toBe('auth');
-      expect(state.getActive()).toBeUndefined();
-      wizard.chooseAuth(authType);
-      const needsCredential = authType !== 'none' && authType !== 'oauth';
-      expect(wizard.step).toBe(needsCredential ? 'credential' : 'done');
-      expect(state.getActive() === undefined).toBe(needsCredential);
-      if (authType !== 'none' && authType !== 'oauth') {
-        wizard.submit('credential-value');
-      }
-      expect(wizard.step).toBe('done');
-      expect(state.getActive()?.profile).toMatchObject({
-        backend,
-        model: 'gpt-image-2',
-        baseUrl,
-        auth: { type: authType },
-      });
-      const expectedAuth = {
-        none: { type: 'none' },
-        oauth: { type: 'oauth', provider: 'codex' },
-        'api-key': { type: 'api-key', apiKey: 'credential-value' },
-        'named-key': { type: 'named-key', keyName: 'credential-value' },
-        keyfile: { type: 'keyfile', path: 'credential-value' },
-      } satisfies Record<ImageProfile['auth']['type'], ImageProfile['auth']>;
-      expect(state.getActive()?.profile.auth).toStrictEqual(
-        expectedAuth[authType],
-      );
-      expect(state.getActive()?.name).toBeUndefined();
-      expect(await manager.listImageProfiles()).toStrictEqual(['art']);
-    },
-  );
-  it('rejects invalid external input before activation and allows correction', () => {
-    const state = createImageProfileRuntimeState();
-    const wizard = new ImageModelWizard('openai-images', (active) =>
-      state.select(active),
+  it('lists every local endpoint model without capability filtering', async () => {
+    const requests: string[] = [];
+    const fetchImpl: typeof fetch = Object.assign(
+      async (input: string | URL | Request) => {
+        requests.push(String(input));
+        return Response.json({ data: [{ id: 'text-model' }, { id: 'flux' }] });
+      },
+      { preconnect: fetch.preconnect },
     );
-    expect(() => wizard.submit('')).toThrow('A value is required.');
-    expect(wizard.step).toBe('model');
-    wizard.submit('local-image');
-    expect(() => wizard.submit('not-a-url')).toThrow('Invalid url');
-    expect(wizard.step).toBe('baseUrl');
-    wizard.submit('http://localhost:8321/v1');
-    wizard.chooseAuth('api-key');
-    expect(() => wizard.submit('')).toThrow('A value is required.');
-    expect(state.getActive()).toBeUndefined();
-    wizard.submit('secret');
-    expect(state.getActive()?.profile.auth).toStrictEqual({
-      type: 'api-key',
-      apiKey: 'secret',
-    });
+    expect(
+      await listImageModelChoices('LM Studio', { fetchImpl }),
+    ).toStrictEqual(['text-model', 'flux']);
+    expect(requests).toStrictEqual(['http://127.0.0.1:1234/v1/models']);
   });
-  it('leaves the wizard editable when runtime activation rejects the configuration', () => {
-    const wizard = new ImageModelWizard('openai-images', () => {
-      throw new Error('Unsupported image auth');
+  it('uses models.dev image output capabilities for remote providers', async () => {
+    expect(await listImageModelChoices('openai')).toStrictEqual(['painter']);
+  });
+  it('returns an empty list when a registered remote alias has no known image models', async () => {
+    writeFileSync(
+      join(directory, 'providers', 'unknown-models.config'),
+      JSON.stringify({
+        name: 'unknown-models',
+        baseProvider: 'openai',
+        'base-url': 'https://example.com/v1',
+        defaultModel: 'chat',
+      }),
+    );
+    expect(await listImageModelChoices('unknown-models')).toStrictEqual([]);
+  });
+  it('preserves typed local endpoint failures without a manual entry', async () => {
+    const fetchImpl: typeof fetch = Object.assign(
+      async () => new Response(null, { status: 503 }),
+      { preconnect: fetch.preconnect },
+    );
+    await expect(
+      listImageModelChoices('LM Studio', { fetchImpl }),
+    ).rejects.toMatchObject({ name: 'ImageBackendError' });
+  });
+  it('reports an unknown alias with its available aliases', async () => {
+    await expect(listImageModelChoices('missing-alias')).rejects.toMatchObject({
+      name: 'ImageProviderAliasError',
+      aliasName: 'missing-alias',
     });
-    wizard.submit('local-image');
-    wizard.submit('http://localhost:8321/v1');
-    expect(() => wizard.chooseAuth('oauth')).toThrow('Unsupported image auth');
-    expect(wizard.step).toBe('auth');
   });
 });

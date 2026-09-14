@@ -5,115 +5,55 @@
  */
 import { useCallback, useEffect, useState, type JSX } from 'react';
 import { Box, Text } from 'ink';
-import {
-  ProfileManager,
-  type ImageProfile,
-} from '@vybestack/llxprt-code-settings';
+import { buildProviderDerivedImageProfile } from '@vybestack/llxprt-code-providers';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import { useKeypress } from '../hooks/useKeypress.js';
-import { theme } from '../semantic-colors.js';
-import { selectImageModel } from '../commands/imageModelSelection.js';
-import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
-import { TextInput } from './ProfileCreateWizard/TextInput.js';
-import {
-  ImageModelWizard,
-  listImageModelChoices,
-  type ImageModelChoice,
-  type ImageModelOption,
-} from './imageModelWizard.js';
+import { useResponsive } from '../hooks/useResponsive.js';
+import { SemanticColors } from '../colors.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
+import { listImageModelChoices } from './imageModelWizard.js';
 
-const authModes: Array<{ label: string; value: ImageProfile['auth']['type'] }> =
-  [
-    { label: 'No authentication (local backend)', value: 'none' },
-    { label: 'Codex OAuth', value: 'oauth' },
-    { label: 'API key', value: 'api-key' },
-    { label: 'Named key', value: 'named-key' },
-    { label: 'Key file', value: 'keyfile' },
-  ];
-
-function useImageModelDialog() {
+/** Provider-driven selection; configuration and credentials belong to the provider. */
+function useImageModelDialog({
+  onClose,
+  imageProvider,
+  fetchImpl,
+}: {
+  readonly onClose: () => void;
+  readonly imageProvider?: string;
+  readonly fetchImpl?: typeof fetch;
+}) {
   const runtime = useRuntimeApi();
-  const [options, setOptions] = useState<ImageModelOption[]>([]);
-  const [wizard, setWizard] = useState<ImageModelWizard>();
-  const [value, setValue] = useState('');
+  const provider = imageProvider ?? runtime.getActiveProviderName();
+  const [models, setModels] = useState<string[]>([]);
+  const [selected, setSelected] = useState(0);
   const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(true);
-  const [message, setMessage] = useState<string>();
-  const [, refresh] = useState(0);
-
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
     let cancelled = false;
-    const manager =
-      runtime.getCliRuntimeServices().profileManager ?? new ProfileManager();
-    void listImageModelChoices(manager).then(
+    setLoading(true);
+    setError(undefined);
+    setModels([]);
+    setSelected(0);
+    void listImageModelChoices(provider, { fetchImpl }).then(
       (choices) => {
         if (!cancelled) {
-          setOptions(choices);
-          setBusy(false);
+          setModels(choices);
+          setLoading(false);
         }
       },
       (reason: unknown) => {
         if (!cancelled) {
           setError(reason instanceof Error ? reason.message : String(reason));
-          setBusy(false);
+          setLoading(false);
         }
       },
     );
     return () => {
       cancelled = true;
     };
-  }, [runtime]);
+  }, [provider, fetchImpl]);
 
-  const select = async (choice: ImageModelChoice): Promise<void> => {
-    setError(undefined);
-    if (choice.kind === 'new') {
-      setWizard(
-        new ImageModelWizard(choice.backend, runtime.setActiveImageProfile),
-      );
-      return;
-    }
-    setBusy(true);
-    try {
-      const result = await selectImageModel(choice.name);
-      if (result.messageType === 'error') setError(result.content);
-      else setMessage(result.content);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const advance = (action: () => void): void => {
-    try {
-      action();
-      setError(undefined);
-      setValue('');
-      refresh((count) => count + 1);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    }
-  };
-  return {
-    options,
-    wizard,
-    value,
-    setValue,
-    error,
-    busy,
-    message,
-    select,
-    advance,
-  };
-}
-
-/** Interactive image selection and in-memory configuration, separate from text models. */
-export function ImageModelsDialog({
-  onClose,
-}: {
-  readonly onClose: () => void;
-}): JSX.Element {
-  const state = useImageModelDialog();
   useKeypress(
     useCallback(
       (key) => {
@@ -121,108 +61,91 @@ export function ImageModelsDialog({
           onClose();
           return true;
         }
+        if (loading || models.length === 0) return false;
+        if (key.name === 'up' || key.name === 'down') {
+          const direction = key.name === 'up' ? -1 : 1;
+          setSelected(
+            (index) => (index + direction + models.length) % models.length,
+          );
+          return true;
+        }
+        if (key.name === 'return') {
+          const model = models[selected];
+          try {
+            runtime.setActiveImageProfile({
+              profile: { ...buildProviderDerivedImageProfile(provider), model },
+            });
+            onClose();
+          } catch (reason) {
+            setError(reason instanceof Error ? reason.message : String(reason));
+          }
+          return true;
+        }
         return false;
       },
-      [onClose],
+      [loading, models, selected, runtime, provider, onClose],
     ),
     { isActive: true },
   );
 
-  return (
-    <Box flexDirection="column" borderStyle="round" padding={1}>
-      <Text color={theme.text.primary}>Image models</Text>
-      {state.error && <Text color={theme.status.error}>{state.error}</Text>}
-      <ImageModelContent state={state} />
-      <Text color={theme.text.secondary}>
-        Escape to close. Save configuration with /profile save image
-        &lt;name&gt;.
-      </Text>
-    </Box>
-  );
+  return { models, selected, error, loading, provider };
 }
 
-function ImageModelContent({
-  state,
-}: {
-  readonly state: ReturnType<typeof useImageModelDialog>;
+/** Provider-driven image model selection without changing the chat model. */
+export function ImageModelsDialog(props: {
+  readonly onClose: () => void;
+  readonly imageProvider?: string;
+  readonly fetchImpl?: typeof fetch;
 }): JSX.Element {
-  if (state.busy)
-    return <Text color={theme.text.secondary}>Loading image profiles...</Text>;
-  if (state.message)
-    return <Text color={theme.status.success}>{state.message}</Text>;
-  if (state.wizard)
-    return (
-      <ImageWizardFields
-        wizard={state.wizard}
-        value={state.value}
-        onChange={state.setValue}
-        advance={state.advance}
-      />
-    );
+  const { models, selected, error, loading, provider } =
+    useImageModelDialog(props);
+  const { width, isNarrow } = useResponsive();
+  const start = Math.max(0, selected - 9);
   return (
-    <RadioButtonSelect<ImageModelChoice>
-      items={state.options.map((option) => ({
-        ...option,
-        key:
-          option.value.kind === 'saved'
-            ? `saved:${option.value.name}`
-            : `new:${option.value.backend}`,
-      }))}
-      onSelect={(choice) => {
-        void state.select(choice);
-      }}
-    />
-  );
-}
-
-function fieldLabel(wizard: ImageModelWizard): string {
-  if (wizard.step === 'model') return 'Model name';
-  if (wizard.step === 'baseUrl') return 'Base URL';
-  switch (wizard.credentialMode) {
-    case 'api-key':
-      return 'API key';
-    case 'named-key':
-      return 'Key name';
-    default:
-      return 'Key file path';
-  }
-}
-
-function ImageWizardFields({
-  wizard,
-  value,
-  onChange,
-  advance,
-}: {
-  readonly wizard: ImageModelWizard;
-  readonly value: string;
-  readonly onChange: (value: string) => void;
-  readonly advance: (action: () => void) => void;
-}): JSX.Element {
-  if (wizard.step === 'done')
-    return (
-      <Text color={theme.status.success}>
-        Image configuration active (not saved).
+    <Box
+      flexDirection="column"
+      borderStyle={getBorderStyle('round')}
+      borderColor={SemanticColors.border.default}
+      padding={1}
+      width={width}
+    >
+      <Text bold color={SemanticColors.text.primary}>
+        Image models: {provider}
       </Text>
-    );
-  if (wizard.step === 'auth')
-    return (
-      <RadioButtonSelect<ImageProfile['auth']['type']>
-        items={authModes.map((mode) => ({ ...mode, key: mode.value }))}
-        onSelect={(mode) => advance(() => wizard.chooseAuth(mode))}
-      />
-    );
-  return (
-    <Box flexDirection="column">
-      <Text color={theme.text.primary}>{fieldLabel(wizard)}</Text>
-      <TextInput
-        key={wizard.step}
-        value={value}
-        onChange={onChange}
-        onSubmit={() => advance(() => wizard.submit(value))}
-        mask={wizard.credentialMode === 'api-key'}
-        isFocused
-      />
+      {loading && (
+        <Text color={SemanticColors.text.secondary}>
+          Loading image models...
+        </Text>
+      )}
+      {error && <Text color={SemanticColors.status.error}>{error}</Text>}
+      {!loading && !error && models.length === 0 && (
+        <Text color={SemanticColors.text.secondary}>
+          No image models are known for {provider}.
+        </Text>
+      )}
+      {models.slice(start, start + 10).map((model, index) => (
+        <Box key={`${start + index}:${model}`}>
+          <Text
+            color={
+              start + index === selected
+                ? SemanticColors.text.accent
+                : SemanticColors.text.primary
+            }
+            wrap="truncate"
+          >
+            {start + index === selected ? '> ' : '  '}
+            {model}
+          </Text>
+        </Box>
+      ))}
+      <Text color={SemanticColors.text.secondary}>
+        {isNarrow
+          ? '↑/↓ select · Enter apply · Esc close'
+          : '↑/↓ to select, Enter to apply, Escape to close.'}
+      </Text>
+      <Text color={SemanticColors.text.secondary}>
+        Save with /profile save image &lt;name&gt;.
+      </Text>
     </Box>
   );
 }

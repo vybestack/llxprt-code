@@ -4,13 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import {
+  createImageProfileRuntimeState,
+  type ActiveImageProfile,
+} from '@vybestack/llxprt-code-core';
 import { ImageProfileNotFoundError } from '@vybestack/llxprt-code-settings';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 
+const state = createImageProfileRuntimeState();
 let textModel: string;
 let imageName: string | undefined;
 void mock.module('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => ({
+    getActiveProviderName: () => 'codex',
+    setActiveImageProfile: (selection: ActiveImageProfile) =>
+      state.select(selection),
     setActiveModel: async (model: string) => {
       const previousModel = textModel;
       textModel = model;
@@ -30,6 +38,7 @@ const run = (args: string) =>
 
 describe('/model kind prefixes', () => {
   beforeEach(() => {
+    state.reset();
     textModel = 'previous';
     imageName = undefined;
   });
@@ -87,14 +96,25 @@ describe('/model kind prefixes', () => {
       expect(textModel).toBe('previous');
     },
   );
-  it('reports a typed missing-image error and available names without switching text', async () => {
-    const result = await run('image missing');
-    expect(result).toMatchObject({ type: 'message', messageType: 'error' });
-    if (!result || result.type !== 'message')
-      throw new Error('Expected message');
-    expect(result.content).toContain('art, image');
-    expect(result.content).toContain('missing');
-    expect(imageName).toBeUndefined();
+  it('treats a name without a saved profile as an image model id', async () => {
+    const result = await run('image custom-image');
+    expect(result).toMatchObject({ type: 'message', messageType: 'info' });
+    expect(state.getActive()?.profile).toMatchObject({
+      backend: 'codex',
+      model: 'custom-image',
+    });
+    expect(state.getActive()?.name).toBeUndefined();
+    expect(textModel).toBe('previous');
+  });
+  it('uses the configured image provider instead of the active chat provider', async () => {
+    const context = createMockCommandContext();
+    context.services.settings.merged.imageProvider = 'LM Studio';
+    await modelCommand.action!(context, 'image local-image');
+    expect(state.getActive()?.profile).toMatchObject({
+      backend: 'openai-images',
+      model: 'local-image',
+      auth: { type: 'none' },
+    });
     expect(textModel).toBe('previous');
   });
 });

@@ -109,7 +109,10 @@ export const modelCommand: SlashCommand = {
       : args;
     if (prefix?.[1] === 'image') {
       return remaining
-        ? selectImageModel(remaining)
+        ? selectImageModel(
+            remaining,
+            context.services.settings.merged.imageProvider,
+          )
         : { type: 'dialog', dialog: 'imageModels' };
     }
 

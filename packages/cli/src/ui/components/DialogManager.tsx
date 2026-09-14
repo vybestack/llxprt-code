@@ -678,6 +678,7 @@ function renderDialogBodyFirstHalf(
 function renderDialogBodySecondHalf(
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
+  settings: LoadedSettings,
   config: CliUiRuntime,
   addItem: UseHistoryManagerReturn['addItem'],
   state: ReturnType<typeof useDialogManagerState>,
@@ -713,7 +714,12 @@ function renderDialogBodySecondHalf(
   }
   if (uiState.isModelsDialogOpen) {
     if (uiState.modelsDialogData?.imageMode === true) {
-      return <ImageModelsDialog onClose={uiActions.closeModelsDialog} />;
+      return (
+        <ImageModelsDialog
+          imageProvider={settings.merged.imageProvider}
+          onClose={uiActions.closeModelsDialog}
+        />
+      );
     }
     return renderModelsDialog(
       uiState,
@@ -770,7 +776,14 @@ function renderDialogBody(
   const profileDialog = renderProfileDialogs(uiState, uiActions);
   if (profileDialog) return profileDialog;
 
-  return renderDialogBodySecondHalf(uiState, uiActions, config, addItem, state);
+  return renderDialogBodySecondHalf(
+    uiState,
+    uiActions,
+    settings,
+    config,
+    addItem,
+    state,
+  );
 }
 
 // Props for DialogManager

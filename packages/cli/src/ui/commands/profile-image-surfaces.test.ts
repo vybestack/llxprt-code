@@ -33,7 +33,6 @@ import {
   saveProfileSnapshot,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import { profileCommand } from './profileCommand.js';
-import { ImageModelWizard } from '../components/imageModelWizard.js';
 import {
   profileLoadSchema,
   profileSaveSchema,
@@ -148,11 +147,13 @@ describe('image profile command surfaces', () => {
     },
   );
 
-  it('keeps wizard configuration unnamed until explicitly saved as an image profile', async () => {
-    const wizard = new ImageModelWizard('openai-images', setActiveImageProfile);
-    wizard.submit('new-local-image');
-    wizard.submit('http://localhost:8321/v1');
-    wizard.chooseAuth('none');
+  it('keeps model configuration unnamed until explicitly saved as an image profile', async () => {
+    setActiveImageProfile({
+      profile: {
+        ...(await manager.loadImageProfile('art')),
+        model: 'new-local-image',
+      },
+    });
     expect(getActiveImageProfile()?.profile.model).toBe('new-local-image');
     expect(getActiveImageProfile()?.name).toBeUndefined();
     expect(await manager.listImageProfiles()).toStrictEqual(['art']);
@@ -166,10 +167,17 @@ describe('image profile command surfaces', () => {
   });
 
   it('surfaces runtime auth errors without changing the active image selection', () => {
-    const wizard = new ImageModelWizard('codex', setActiveImageProfile);
-    wizard.submit('gpt-image-2');
-    wizard.submit('https://chatgpt.com/backend-api/codex');
-    expect(() => wizard.chooseAuth('none')).toThrow(/auth/);
+    expect(() =>
+      setActiveImageProfile({
+        profile: {
+          version: 1,
+          type: 'image',
+          backend: 'codex',
+          model: 'gpt-image-2',
+          auth: { type: 'none' },
+        },
+      }),
+    ).toThrow(/auth/);
     expect(getActiveImageProfile()).toBeUndefined();
   });
 
