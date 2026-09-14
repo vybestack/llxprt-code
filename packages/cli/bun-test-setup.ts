@@ -139,6 +139,11 @@ Bun.plugin({
 const SUITES_NEEDING_REAL_ALIASES = [
   'test/providers/providerAliases.test.ts',
   'src/ui/commands/providerCommand.test.ts',
+  'src/cliProviderInit.image.test.ts',
+  'src/config/imageProfileSelection.test.ts',
+  'src/ui/commands/model-kind-prefix.test.ts',
+  'src/ui/components/image-model-wizard.test.ts',
+  'src/ui/components/image-models-dialog.test.tsx',
 ];
 // argv carries native separators, so on Windows the path arrives as
 // `test\providers\providerAliases.test.ts` and a raw endsWith against the
