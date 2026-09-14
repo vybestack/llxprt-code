@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import { listOpenAiCompatibleModels } from './compatible-models.js';
+import { listOpenAiCompatibleModels } from './endpoint-models.js';
 import { ImageBackendError } from './imageBackendResponse.js';
 
 function responseFetch(response: Response): typeof fetch {

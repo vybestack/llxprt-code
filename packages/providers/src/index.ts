@@ -22,7 +22,7 @@
 
 // --- Contract interfaces ---
 export { getImageModelsForAlias } from './composition/providerAliases.js';
-export { listOpenAiCompatibleModels } from './openai/compatible-models.js';
+export { listOpenAiCompatibleModels } from './openai/endpoint-models.js';
 export { isLocalImageEndpoint } from './openai/imageEndpoint.js';
 export {
   buildProviderDerivedImageProfile,
