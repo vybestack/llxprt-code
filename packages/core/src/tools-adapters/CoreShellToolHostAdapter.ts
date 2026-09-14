@@ -88,6 +88,7 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
   getShellExecutionConfig(): {
     shouldUseNodePty: boolean;
     executionOptions: Record<string, unknown>;
+    inactivityTimeoutMs?: number;
     ptyTerminalWidth?: number;
     ptyTerminalHeight?: number;
   } {
@@ -98,6 +99,8 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
         unknown
       >,
       ptyTerminalWidth: this.config.getPtyTerminalWidth(),
+      inactivityTimeoutMs:
+        this.config.getShellExecutionConfig().inactivityTimeoutMs,
       ptyTerminalHeight: this.config.getPtyTerminalHeight(),
     };
   }
@@ -164,6 +167,7 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
       signal: result.signal === null ? null : String(result.signal),
       error: result.error,
       aborted: result.aborted,
+      inactivityTimedOut: result.inactivityTimedOut,
       pid: result.pid,
       outputTruncation: result.outputTruncation,
       survivingGroupMembersOnAbort: result.survivingGroupMembersOnAbort,
