@@ -847,12 +847,17 @@ export abstract class BaseProvider implements IProvider {
       providedOptions.invocation?.runtimeId ??
       peekActiveProviderRuntimeContext()?.runtimeId;
     if (resolveAuthentication) {
+      const { authIntent, profileId } = providedOptions.metadata ?? {};
       const authResult = await this.authResolver.resolveAuthenticationResult({
         settingsService: settings,
         includeOAuth: this.isOAuthEligible(
           providedOptions.resolved?.baseURL ?? resolvedBaseURL,
         ),
         ...(runtimeId === undefined ? {} : { runtimeId }),
+        ...(typeof profileId === 'string' ? { profileId } : {}),
+        ...(authIntent === 'oauth' || authIntent === 'apikey'
+          ? { authIntent }
+          : {}),
       });
       resolvedAuth = authResult.token ?? '';
       if (authResult.token === null) {

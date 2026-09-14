@@ -26,7 +26,11 @@ import {
 import fs from 'fs/promises';
 import path from 'path';
 import { Storage } from '@vybestack/llxprt-code-storage';
-import { writeProfileFile, deleteProfileFile } from './profileStore.js';
+import {
+  writeProfileFile,
+  writeProfileFileIfUnchanged,
+  deleteProfileFile,
+} from './profileStore.js';
 
 interface ProfileSettingsServiceLike {
   exportForProfile?: () => Promise<{
@@ -104,6 +108,19 @@ export class ProfileManager {
     );
   }
 
+  async saveProfileIfUnchanged(
+    profileName: string,
+    profile: PersistableProfile,
+    expected: { mtimeMs: number; size: number },
+  ): Promise<boolean> {
+    return writeProfileFileIfUnchanged(
+      this.profilesDir,
+      profileName,
+      JSON.stringify(profile, null, 2),
+      expected,
+    );
+  }
+
   /**
    * Parse raw profile file content through the single shared parse boundary
    * so load/reference/scan paths produce identical results. Malformed JSON
@@ -129,35 +146,20 @@ export class ProfileManager {
     return parsed.value;
   }
 
-  async saveLoadBalancerProfile(name: string, profile: unknown): Promise<void> {
+  async validateLoadBalancerProfile(
+    name: string,
+    profile: unknown,
+  ): Promise<LoadBalancerProfile> {
     const loadBalancerProfile = parseLoadBalancerProfile(name, profile);
+    await this.validateLoadBalancerReferences(name, loadBalancerProfile);
+    return loadBalancerProfile;
+  }
 
-    const availableProfiles = await this.listProfiles();
-
-    for (const referencedProfile of loadBalancerProfile.profiles) {
-      if (!availableProfiles.includes(referencedProfile)) {
-        throw new Error(
-          `LoadBalancer profile '${name}' references non-existent profile '${referencedProfile}'`,
-        );
-      }
-
-      const referencedProfilePath = path.join(
-        this.profilesDir,
-        `${referencedProfile}.json`,
-      );
-      const referencedContent = await fs.readFile(
-        referencedProfilePath,
-        'utf8',
-      );
-      const referencedProfileData: unknown =
-        ProfileManager.parseProfileContent(referencedContent);
-
-      if (referencedProfileIsLoadBalancer(referencedProfileData)) {
-        throw new Error(
-          `LoadBalancer profile '${name}' cannot reference another LoadBalancer profile '${referencedProfile}'`,
-        );
-      }
-    }
+  async saveLoadBalancerProfile(name: string, profile: unknown): Promise<void> {
+    const loadBalancerProfile = await this.validateLoadBalancerProfile(
+      name,
+      profile,
+    );
 
     await fs.mkdir(this.profilesDir, { recursive: true });
 
@@ -182,6 +184,11 @@ export class ProfileManager {
     const availableProfiles = await this.listProfiles();
 
     for (const referencedProfile of loadBalancerProfile.profiles) {
+      if (referencedProfile === profileName) {
+        throw new Error(
+          `LoadBalancer profile '${profileName}' cannot reference itself`,
+        );
+      }
       if (!availableProfiles.includes(referencedProfile)) {
         throw new Error(
           `LoadBalancer profile '${profileName}' references non-existent profile '${referencedProfile}'`,

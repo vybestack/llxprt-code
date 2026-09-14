@@ -645,6 +645,9 @@ export {
   activateSettingsRuntimeContext,
 } from './runtime/settingsRuntimeAdapter.js';
 
+// Export profile contracts and ports
+export * from './profiles/index.js';
+
 export type {
   RuntimeProvider,
   RuntimeProviderManager,
