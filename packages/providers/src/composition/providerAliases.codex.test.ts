@@ -39,17 +39,17 @@ describe('alias image models', () => {
     expect(
       loadProviderAliasEntries().find((entry) => entry.alias === 'codex')
         ?.config.imageModels,
-    ).toEqual(['gpt-image-2', 'gpt-image-1']);
-    expect(getImageModelsForAlias('codex')).toEqual([
+    ).toStrictEqual(['gpt-image-2', 'gpt-image-1']);
+    expect(getImageModelsForAlias('codex')).toStrictEqual([
       'gpt-image-2',
       'gpt-image-1',
     ]);
   });
   it('returns no models for an unknown alias', () => {
-    expect(getImageModelsForAlias('missing-image-alias')).toEqual([]);
+    expect(getImageModelsForAlias('missing-image-alias')).toStrictEqual([]);
   });
   it('returns no models for an alias without imageModels', () => {
-    expect(getImageModelsForAlias('LM Studio')).toEqual([]);
+    expect(getImageModelsForAlias('LM Studio')).toStrictEqual([]);
   });
 });
 

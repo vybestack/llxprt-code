@@ -8,35 +8,32 @@ import { listOpenAiCompatibleModels } from './compatible-models.js';
 import { ImageBackendError } from './imageBackendResponse.js';
 
 function responseFetch(response: Response): typeof fetch {
-  return Object.assign(async () => response, { preconnect: fetch.preconnect });
+  return async () => response;
 }
 
 describe('OpenAI-compatible models', () => {
   for (const suffix of ['', '/', '///']) {
     it(`joins the models endpoint with suffix '${suffix}' and forwards headers`, async () => {
-      const fetchImpl: typeof fetch = Object.assign(
-        async (input: string | URL | Request, init?: RequestInit) => {
-          const request = new Request(input, init);
-          if (
-            request.url !== 'http://localhost:1234/v1/models' ||
-            request.method !== 'GET' ||
-            request.headers.get('Authorization') !== 'Bearer test'
-          ) {
-            return new Response('incorrect request', { status: 400 });
-          }
-          return Response.json({
-            data: [{ id: 'flux', extra: 1 }, { id: 'klein' }],
-          });
-        },
-        { preconnect: fetch.preconnect },
-      );
+      const fetchImpl: typeof fetch = async (input, init) => {
+        const request = new Request(input, init);
+        if (
+          request.url !== 'http://localhost:1234/v1/models' ||
+          request.method !== 'GET' ||
+          request.headers.get('Authorization') !== 'Bearer test'
+        ) {
+          return new Response('incorrect request', { status: 400 });
+        }
+        return Response.json({
+          data: [{ id: 'flux', extra: 1 }, { id: 'klein' }],
+        });
+      };
       expect(
         await listOpenAiCompatibleModels(
           `http://localhost:1234/v1${suffix}`,
           { Authorization: 'Bearer test' },
           { fetchImpl },
         ),
-      ).toEqual(['flux', 'klein']);
+      ).toStrictEqual(['flux', 'klein']);
     });
   }
   for (const body of [{}, { data: [] }]) {
@@ -45,7 +42,7 @@ describe('OpenAI-compatible models', () => {
         await listOpenAiCompatibleModels('https://example.com/v1', undefined, {
           fetchImpl: responseFetch(Response.json(body)),
         }),
-      ).toEqual([]);
+      ).toStrictEqual([]);
     });
   }
   it('throws a typed error on non-OK responses', async () => {
@@ -74,17 +71,14 @@ describe('OpenAI-compatible models', () => {
     ).rejects.toMatchObject({ code: 'invalid_response' });
   });
   it('aborts a stalled request after five seconds with a typed error', async () => {
-    const fetchImpl: typeof fetch = Object.assign(
-      (_input: string | URL | Request, init?: RequestInit): Promise<Response> =>
-        new Promise((_resolve, reject) => {
-          const signal = init?.signal;
-          if (!signal) throw new Error('missing timeout signal');
-          signal.addEventListener('abort', () => reject(signal.reason), {
-            once: true,
-          });
-        }),
-      { preconnect: fetch.preconnect },
-    );
+    const fetchImpl: typeof fetch = (_input, init) =>
+      new Promise((_resolve, reject) => {
+        const signal = init?.signal;
+        if (!signal) throw new Error('missing timeout signal');
+        signal.addEventListener('abort', () => reject(signal.reason), {
+          once: true,
+        });
+      });
     await expect(
       listOpenAiCompatibleModels('https://example.com/v1', undefined, {
         fetchImpl,

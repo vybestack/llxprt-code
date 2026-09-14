@@ -5,6 +5,7 @@
  */
 import { z } from 'zod';
 import { ImageBackendError } from './imageBackendResponse.js';
+import { normalizeBaseUrl } from './codexBaseUrl.js';
 
 const modelListSchema = z.object({
   data: z.array(z.object({ id: z.string() })).optional(),
@@ -27,7 +28,7 @@ export async function listOpenAiCompatibleModels(
   let response: Response;
   try {
     response = await (options.fetchImpl ?? fetch)(
-      `${baseUrl.replace(/\/+$/, '')}/models`,
+      `${normalizeBaseUrl(baseUrl)}/models`,
       {
         method: 'GET',
         headers,

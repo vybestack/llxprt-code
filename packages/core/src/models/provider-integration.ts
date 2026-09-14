@@ -86,7 +86,9 @@ export function listImageOutputModels(providerName: string): string[] {
       getModelsDevProviderIds(providerName).flatMap((providerId) =>
         registry
           .getByProvider(providerId)
-          .filter((model) => model.capabilities.output?.includes('image'))
+          .filter(
+            (model) => model.capabilities.output?.includes('image') === true,
+          )
           .map((model) => model.modelId),
       ),
     ),

@@ -12,7 +12,7 @@ import { getModelRegistry } from './registry.js';
 import { listImageOutputModels } from './provider-integration.js';
 import type { ModelsDevModel, ModelsDevProvider } from './schema.js';
 
-function model(id: string, output: ('text' | 'image')[]): ModelsDevModel {
+function model(id: string, output: Array<'text' | 'image'>): ModelsDevModel {
   return {
     id,
     name: id,
@@ -64,19 +64,19 @@ describe('image output models', () => {
     rmSync(directory, { recursive: true, force: true });
   });
   it('keeps image outputs and excludes text-only models even with image inputs', () => {
-    expect(listImageOutputModels('openai')).toEqual(['painter', 'mixed']);
+    expect(listImageOutputModels('openai')).toStrictEqual(['painter', 'mixed']);
   });
   it('maps aliases to registry providers', () => {
-    expect(listImageOutputModels('codex')).toEqual(['painter', 'mixed']);
+    expect(listImageOutputModels('codex')).toStrictEqual(['painter', 'mixed']);
   });
   it('includes all mapped providers', () => {
-    expect(listImageOutputModels('gemini')).toEqual([
+    expect(listImageOutputModels('gemini')).toStrictEqual([
       'painter',
       'mixed',
       'vertex',
     ]);
   });
   it('returns no models for an unknown provider', () => {
-    expect(listImageOutputModels('not-a-provider')).toEqual([]);
+    expect(listImageOutputModels('not-a-provider')).toStrictEqual([]);
   });
 });

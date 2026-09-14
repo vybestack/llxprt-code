@@ -44,12 +44,12 @@ describe('provider-derived image profiles', () => {
     const profile = buildProviderDerivedImageProfile(name);
     expect(
       parseImageProfile(name, JSON.parse(JSON.stringify(profile))),
-    ).toEqual(profile);
+    ).toStrictEqual(profile);
     return profile;
   }
   it('uses Codex OAuth and its first image model without a URL override', () => {
     const profile = roundTrip('codex');
-    expect(profile).toEqual({
+    expect(profile).toStrictEqual({
       version: 1,
       type: 'image',
       backend: 'codex',
@@ -117,7 +117,7 @@ describe('provider-derived image profiles', () => {
         model: 'image',
         auth: { type: 'none' },
       }),
-    ).toThrow();
+    ).toThrow(/baseUrl/);
   });
   for (const imageModels of [null, 'not-an-array', [3], ['']]) {
     it(`ignores malformed imageModels ${JSON.stringify(imageModels)}`, () => {
@@ -125,7 +125,7 @@ describe('provider-derived image profiles', () => {
         'base-url': 'http://localhost:8080/v1',
         imageModels,
       });
-      expect(getImageModelsForAlias('invalid-models')).toEqual([]);
+      expect(getImageModelsForAlias('invalid-models')).toStrictEqual([]);
       expect(roundTrip('invalid-models').model).toBe('fallback-model');
     });
   }
