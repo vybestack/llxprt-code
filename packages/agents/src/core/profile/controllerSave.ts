@@ -55,7 +55,7 @@ function expectedFingerprint(
 }
 
 function saveGuard(
-  state: ProfileState,
+  stateToRetain: ProfileState,
   revision: number,
   isClosed: () => boolean,
   signal?: AbortSignal,
@@ -63,13 +63,13 @@ function saveGuard(
   if (signal?.aborted === true) {
     return {
       result: { kind: 'cancelled', reason: 'execute cancelled', revision },
-      newState: state,
+      newState: stateToRetain,
     };
   }
   if (isClosed()) {
     return {
       result: { kind: 'failed', error: 'controller disposed', revision },
-      newState: state,
+      newState: stateToRetain,
     };
   }
   return undefined;

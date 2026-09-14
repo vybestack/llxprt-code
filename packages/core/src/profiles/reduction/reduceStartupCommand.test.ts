@@ -68,6 +68,10 @@ const alpha: CapturedStandardSource = {
 const lbEnv: ProfileReductionEnvironment = {
   ...emptyReductionEnvironment(),
   repository: {
+    alpha: {
+      document: alpha.sourceDocument,
+      fingerprint: { kind: 'hash', hash: 'alpha123' },
+    },
     lb: {
       document: {
         version: 1,
@@ -181,7 +185,13 @@ describe('reduceStartupCommand validation', () => {
         modelParams: { temperature: 0.2 },
         ephemeralSettings: { 'base-url': 'https://api.example.com' },
       },
-      identity: { kind: 'draft' },
+      identity: {
+        kind: 'draft',
+        derivedFrom: {
+          name: 'alpha',
+          source: { kind: 'hash', hash: 'alpha123' },
+        },
+      },
       baseRevision: 0,
       nextRevision: 1,
     });
@@ -717,6 +727,10 @@ describe('startup replacement safety', () => {
       const env: ProfileReductionEnvironment = {
         ...lbEnv,
         repository: {
+          beta: {
+            document: beta.sourceDocument,
+            fingerprint: { kind: 'hash', hash: 'beta123' },
+          },
           lbB: {
             document: {
               ...lbEnv.repository.lb.document,
@@ -745,7 +759,13 @@ describe('startup replacement safety', () => {
           : {
               kind: 'candidate',
               document: { ...beta.sourceDocument, model: 'gpt-4o-mini' },
-              identity: { kind: 'draft' },
+              identity: {
+                kind: 'draft',
+                derivedFrom: {
+                  name: 'beta',
+                  source: { kind: 'hash', hash: 'beta123' },
+                },
+              },
               baseRevision: 2,
               nextRevision: 3,
             },

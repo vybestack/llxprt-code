@@ -457,3 +457,32 @@ catalog/trust fakes, one throwing listener. Real core reducer/resolver.
     cleaned.
 18. In-flight captured snapshot (getRuntime state object reference) is not
     mutated by a later commit (background work retains captured contexts).
+
+## Accepted trade-offs (external review)
+
+These minor behaviors are deliberate; no action is planned in this PR.
+
+- OAuth members ignore stray inline `auth-key` values during registration.
+  Explicit OAuth intent wins without a warning log.
+- Immediately executing commands are not cloned or frozen. Only queued commands
+  go through `freezeQueuedCommand`.
+- With `authIntent: 'apikey'` and global `authOnly`, the token-returning resolver
+  returns `null` rather than throwing a typed error. The structured result carries
+  the generic `no-credential-configured` failure, not a dedicated conflict error.
+- Member keyfile and key-name credentials resolve per request so rotation takes
+  effect without re-registration, at the cost of per-request I/O.
+
+### External-review remediation
+
+Startup LB forks retain the selected member's name and fingerprint for anchored
+saves. The existing `loaded.identity` names the LB parent, so copying it directly
+would anchor the wrong file. The environment now retains each member's repository
+entry from the same read as its capture; startup uses that fingerprint with
+`toDraftIdentity`.
+
+Member captures refresh on explicit load/startup, including loads of another LB
+with the same first-member name. Reusing the committed first-member capture is
+limited to commands without a loaded target, preserving `/model` fork behavior.
+This is a local environment-builder fix, so no known-limitation deferral is needed.
+The save guard parameter is renamed `stateToRetain`; persistence behavior is
+unchanged.

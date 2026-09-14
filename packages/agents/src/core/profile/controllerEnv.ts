@@ -55,8 +55,8 @@ function commandProvider(command: ProfileCommand): string | undefined {
  * startup) loads the repository document and keeps the fingerprint the load returned.
  * Members of any load-balancer document in the current state or in a just-loaded
  * repository document are captured with their model menus, except the active state's
- * first member, whose committed capture is reused so an explicit fork never rereads
- * the file.
+ * first member on commands without a loaded target, whose committed capture is reused
+ * so a model fork never rereads the file. Explicit loads capture members afresh.
  */
 export async function buildReductionEnvironment(
   state: ProfileState,
@@ -115,7 +115,13 @@ export async function buildReductionEnvironment(
       ? []
       : await loadRepositoryEntry(loadedName, repository, deps);
 
-  await captureMembers(state, loadedDocuments, memberCaptures, deps);
+  await captureMembers(
+    state,
+    loadedDocuments,
+    memberCaptures,
+    repository,
+    deps,
+  );
 
   return {
     providerTemplates,
@@ -176,6 +182,7 @@ async function captureMembers(
   state: ProfileState,
   loadedDocuments: ReadonlyArray<{ name: string; document: ProfileDocument }>,
   memberCaptures: Record<string, CapturedStandardSource>,
+  repository: Record<string, ProfileReductionEnvironment['repository'][string]>,
   deps: ProfileControllerDeps,
 ): Promise<void> {
   const memberNames: string[] = [];
@@ -196,7 +203,11 @@ async function captureMembers(
     // The live load-balancer state already holds the immutable capture of its
     // first member: an explicit-member fork of that member must fork the capture
     // the workspace committed with, never a fresh reread of the file.
-    if (state.status === 'configured' && state.activeMember !== undefined) {
+    if (
+      loadedDocuments.length === 0 &&
+      state.status === 'configured' &&
+      state.activeMember !== undefined
+    ) {
       memberCaptures[stateDocument.profiles[0]] = state.activeMember;
     }
   }
@@ -212,25 +223,27 @@ async function captureMembers(
     if (Object.prototype.hasOwnProperty.call(memberCaptures, member) === true) {
       continue;
     }
-    await captureMember(member, memberCaptures, deps);
+    await captureMember(member, memberCaptures, repository, deps);
   }
 }
 
 async function captureMember(
   member: string,
   memberCaptures: Record<string, CapturedStandardSource>,
+  repository: Record<string, ProfileReductionEnvironment['repository'][string]>,
   deps: ProfileControllerDeps,
 ): Promise<void> {
-  let document: ProfileDocument;
+  let entry: ProfileReductionEnvironment['repository'][string];
   try {
-    const entry = await deps.repository.load(member);
-    document = entry.document;
+    entry = await deps.repository.load(member);
   } catch {
     return;
   }
+  const document = entry.document;
   if (!isStandardProfileDocument(document)) {
     return;
   }
+  repository[member] = entry;
   const models = (await catalogModelMenu(document.provider, deps)) ?? [];
   memberCaptures[member] = {
     revision: 0,

@@ -215,7 +215,8 @@ function forkLoadBalancerModel(
   }
   if (
     !profiles.includes(member) ||
-    !Object.prototype.hasOwnProperty.call(env.memberCaptures, member)
+    !Object.prototype.hasOwnProperty.call(env.memberCaptures, member) ||
+    !Object.prototype.hasOwnProperty.call(env.repository, member)
   ) {
     return {
       kind: 'invalid',
@@ -241,7 +242,11 @@ function forkLoadBalancerModel(
   return {
     kind: 'candidate',
     document: { ...captured.sourceDocument, model },
-    identity: { kind: 'draft' },
+    identity: toDraftIdentity({
+      kind: 'saved',
+      name: member,
+      source: env.repository[member].fingerprint,
+    }),
     baseRevision: loaded.baseRevision,
     nextRevision: loaded.nextRevision,
   };
