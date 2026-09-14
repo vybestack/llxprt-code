@@ -13,9 +13,6 @@
     "typecheck": "tsc --noEmit",
     "test:ci": "bun ../../scripts/run_bun_tests.ts --workspace test-utils --junit junit.xml"
   },
-  "dependencies": {
-    "@vybestack/llxprt-code-storage": "file:../storage"
-  },
   "devDependencies": {
     "@lydell/node-pty": "1.1.0",
     "strip-ansi": "^7.1.0",

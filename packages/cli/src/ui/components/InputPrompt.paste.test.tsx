@@ -27,7 +27,6 @@ import { useCommandCompletion } from '../hooks/useCommandCompletion.js';
 import { useInputHistory } from '../hooks/useInputHistory.js';
 import type { UseReverseSearchCompletionReturn } from '../hooks/useReverseSearchCompletion.js';
 import { useReverseSearchCompletion } from '../hooks/useReverseSearchCompletion.js';
-import { useKittyKeyboardProtocol } from '../hooks/useKittyKeyboardProtocol.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import stripAnsi from 'strip-ansi';
 import { StreamingState } from '../types.js';
@@ -48,9 +47,6 @@ const realUseReverseSearchCompletionModule = {
 const realClipboardUtilsModule = {
   ...(await import('../utils/clipboardUtils.js')),
 };
-const realUseKittyKeyboardProtocolModule = {
-  ...(await import('../hooks/useKittyKeyboardProtocol.js')),
-};
 
 void vi.mock('../hooks/useShellHistory.js', () =>
   automock(realUseShellHistoryModule),
@@ -67,11 +63,6 @@ void vi.mock('../hooks/useReverseSearchCompletion.js', () =>
 void vi.mock('../utils/clipboardUtils.js', () =>
   automock(realClipboardUtilsModule),
 );
-void vi.mock('../hooks/useKittyKeyboardProtocol.js', () =>
-  automock(realUseKittyKeyboardProtocolModule),
-);
-
-const KITTY_PROTOCOL_ENABLED = { enabled: true, checking: false };
 
 const mockSlashCommands: SlashCommand[] = [
   {
@@ -154,9 +145,6 @@ describe('InputPrompt', () => {
   const mockedUseInputHistory = useInputHistory as Mock<typeof useInputHistory>;
   const mockedUseReverseSearchCompletion = useReverseSearchCompletion as Mock<
     typeof useReverseSearchCompletion
-  >;
-  const mockedUseKittyKeyboardProtocol = useKittyKeyboardProtocol as Mock<
-    typeof useKittyKeyboardProtocol
   >;
 
   beforeEach(() => {
@@ -273,11 +261,6 @@ describe('InputPrompt', () => {
       mockReverseSearchCompletion,
     );
 
-    mockedUseKittyKeyboardProtocol.mockReturnValue({
-      enabled: false,
-      checking: false,
-    });
-
     props = {
       buffer: mockBuffer,
       onSubmit: vi.fn(),
@@ -311,7 +294,6 @@ describe('InputPrompt', () => {
 
     beforeEach(() => {
       vi.useFakeTimers();
-      mockedUseKittyKeyboardProtocol.mockReturnValue(KITTY_PROTOCOL_ENABLED);
     });
 
     afterEach(() => vi.useRealTimers());
