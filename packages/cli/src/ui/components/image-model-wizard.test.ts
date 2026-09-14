@@ -15,7 +15,7 @@ let directory: string;
 let data: ReturnType<typeof spyOn<typeof Storage, 'getGlobalDataDir'>>;
 let cache: ReturnType<typeof spyOn<typeof Storage, 'getGlobalCacheDir'>>;
 describe('provider image model lists', () => {
-  beforeEach(async () => {
+  beforeEach(() => {
     directory = mkdtempSync(join(tmpdir(), 'llxprt-image-list-'));
     mkdirSync(join(directory, 'providers'));
     data = spyOn(Storage, 'getGlobalDataDir').mockReturnValue(directory);
@@ -48,7 +48,6 @@ describe('provider image model lists', () => {
         },
       }),
     );
-    await getModelRegistry().initialize();
   });
   afterEach(() => {
     getModelRegistry().dispose();
@@ -65,13 +64,10 @@ describe('provider image model lists', () => {
   });
   it('lists every local endpoint model without capability filtering', async () => {
     const requests: string[] = [];
-    const fetchImpl: typeof fetch = Object.assign(
-      async (input: string | URL | Request) => {
-        requests.push(String(input));
-        return Response.json({ data: [{ id: 'text-model' }, { id: 'flux' }] });
-      },
-      { preconnect: fetch.preconnect },
-    );
+    const fetchImpl: typeof fetch = async (input: string | URL | Request) => {
+      requests.push(String(input));
+      return Response.json({ data: [{ id: 'text-model' }, { id: 'flux' }] });
+    };
     expect(
       await listImageModelChoices('LM Studio', { fetchImpl }),
     ).toStrictEqual(['text-model', 'flux']);
@@ -93,10 +89,8 @@ describe('provider image model lists', () => {
     expect(await listImageModelChoices('unknown-models')).toStrictEqual([]);
   });
   it('preserves typed local endpoint failures without a manual entry', async () => {
-    const fetchImpl: typeof fetch = Object.assign(
-      async () => new Response(null, { status: 503 }),
-      { preconnect: fetch.preconnect },
-    );
+    const fetchImpl: typeof fetch = async () =>
+      new Response(null, { status: 503 });
     await expect(
       listImageModelChoices('LM Studio', { fetchImpl }),
     ).rejects.toMatchObject({ name: 'ImageBackendError' });

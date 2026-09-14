@@ -3,7 +3,10 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { listImageOutputModels } from '@vybestack/llxprt-code-core';
+import {
+  initializeModelRegistry,
+  listImageOutputModels,
+} from '@vybestack/llxprt-code-core';
 import { loadProviderAliasEntries } from '@vybestack/llxprt-code-providers/composition.js';
 import { isLocalImageEndpoint } from '@vybestack/llxprt-code-providers/openai/imageEndpoint.js';
 import {
@@ -35,5 +38,6 @@ export async function listImageModelChoices(
   if (baseUrl && isLocalImageEndpoint(baseUrl)) {
     return listOpenAiCompatibleModels(baseUrl, undefined, options);
   }
+  await initializeModelRegistry();
   return listImageOutputModels(provider);
 }
