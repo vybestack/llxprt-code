@@ -380,7 +380,13 @@ describe('stateful Responses finalized-estimate telemetry (issue #3219 AC-6)', (
     expect(serialized).toStrictEqual(accounting);
     expect(serialized.retained).toBeGreaterThan(0);
     expect(serialized.effective).toBeGreaterThan(serialized.transmitted);
-    expect(serialized.transmitted).toBe(serialized.incremental);
+    // The wire body re-sends the system prompt (and tools when present), but
+    // a stateful turn with an observed retained baseline counts only the new
+    // input in the incremental estimate: instructions/tools are retained
+    // server-side inside the parent baseline and are not re-billed, so the
+    // transmitted count strictly exceeds the incremental whenever those keys
+    // carry content (issue #3481).
+    expect(serialized.transmitted).toBeGreaterThan(serialized.incremental);
     expect(serialized.retained + serialized.incremental).toBe(
       serialized.effective,
     );

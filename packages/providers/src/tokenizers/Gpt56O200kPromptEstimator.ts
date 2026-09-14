@@ -9,6 +9,7 @@ import type {
   RuntimePromptEstimateResult,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { RuntimeTokenizer } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizer.js';
+import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
 import {
   PROJECTION_REVISION,
   type ProviderFinalizedPromptProjection,
@@ -25,7 +26,7 @@ import {
 } from './o200kBaseCounter.js';
 
 export const GPT_56_ESTIMATOR_FAMILY = 'openai-gpt-5.6';
-export const GPT_56_ESTIMATOR_VERSION = 'gpt-5.6-o200k-v1';
+export const GPT_56_ESTIMATOR_VERSION = 'gpt-5.6-o200k-v2';
 export const GPT_56_ASSET_REVISION = O200K_BASE_ASSET_REVISION;
 
 export type { TiktokenModuleLoader };
@@ -83,12 +84,24 @@ function createErrorContext(request: RuntimePromptEstimateRequest) {
 function countProjectionTokens(
   encoder: TiktokenEncoder,
   projection: ProviderFinalizedPromptProjection,
+  activeProvider: string,
+  canonicalModel: string,
 ): number {
   const segments = projection.promptSegments ?? [projection.promptText];
-  return segments.reduce(
-    (total, segment) => total + countO200kBaseTokens(encoder, segment),
+  let total = segments.reduce(
+    (sum, segment) => sum + countO200kBaseTokens(encoder, segment),
     0,
   );
+  // Image parts are canonicalized out of the text (issue #3481 DEFECT B),
+  // so their token cost is added here from the parsed header dimensions.
+  for (const entry of projection.imageEntries ?? []) {
+    total += estimateImageTokens({
+      provider: activeProvider,
+      model: canonicalModel,
+      dimensions: entry.dimensions,
+    });
+  }
+  return total;
 }
 
 function formatCausalDetail(error: unknown): string {
@@ -168,7 +181,12 @@ async function estimateGpt56PromptWithEncoder(
   }
   try {
     return {
-      count: countProjectionTokens(encoder, projection),
+      count: countProjectionTokens(
+        encoder,
+        projection,
+        request.activeProvider,
+        request.canonicalModel,
+      ),
       method: 'exact',
       family: GPT_56_ESTIMATOR_FAMILY,
       estimatorVersion: GPT_56_ESTIMATOR_VERSION,

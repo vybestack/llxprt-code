@@ -7,6 +7,8 @@
  * subprofile tokenizer (issue #2207).
  */
 
+import { PROJECTION_REVISION } from '../runtime/promptEnvelopeProjections.js';
+
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -135,7 +137,7 @@ function createProjectedProvider(
         model: options.resolved?.model ?? 'gpt-5.6-sol',
         protocol: 'openai-responses',
         method: 'responses/v1',
-        projectionRevision: 3,
+        projectionRevision: PROJECTION_REVISION,
         unsupportedMedia: [],
         transportToken,
         finalizedProjection: Object.freeze({
@@ -451,7 +453,7 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
     expect(delegate.projectionTokens).toHaveLength(1);
     expect(sentTokens).toStrictEqual(delegate.projectionTokens);
     expect(provider.getTokenAccountingDiagnostics().accountingSource).toBe(
-      'calibrated:legacy-unregistered:core-estimate-tokens-v1:none:projection-3',
+      `calibrated:legacy-unregistered:core-estimate-tokens-v1:none:projection-${PROJECTION_REVISION}`,
     );
   });
 

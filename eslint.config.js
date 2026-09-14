@@ -646,6 +646,20 @@ export default tseslint.config(
     },
   },
   // ============================================================================
+  // Issue #3481: the prompt-envelope projection test suite gained the
+  // issue #3481 image-entry and stateful retained-baseline regression cases,
+  // growing to ~840 effective lines (past the 800 cap); max-lines is raised
+  // to 900 to preserve the pre-existing single-file layout.
+  // ============================================================================
+  {
+    files: [
+      'packages/providers/src/runtime/promptEnvelopeProjections.test.ts',
+    ],
+    rules: {
+      'max-lines': ['error', { max: 900, skipBlankLines: true, skipComments: true }], // eslint-policy-allow-off: #3481 raised from 800
+    },
+  },
+  // ============================================================================
   // Issue #3504: the subagent termination test file was hardened with
   // orphan-proof try/finally cleanup and a dispose regression test, growing it
   // to 838 effective lines (past the 800 cap); max-lines is raised to 900 and
