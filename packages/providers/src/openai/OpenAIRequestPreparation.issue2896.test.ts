@@ -32,10 +32,6 @@ void vi.mock(
   }),
 );
 
-void vi.mock('../utils/userMemory.js', () => ({
-  resolveUserMemory: vi.fn().mockResolvedValue(''),
-}));
-
 function createMockOptions(
   overrides: {
     baseURL?: string;
