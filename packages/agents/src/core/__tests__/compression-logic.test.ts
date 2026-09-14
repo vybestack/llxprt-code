@@ -41,8 +41,8 @@ describe('Compression Logic', () => {
       },
     ];
 
-    // With the new COMPRESSION_PRESERVE_THRESHOLD (0.5), we expect different behavior
-    const preservedFraction = COMPRESSION_PRESERVE_THRESHOLD; // 0.5
+    // With COMPRESSION_PRESERVE_THRESHOLD = 0.3 (2 * (1 - 0.85)), we expect different behavior
+    const preservedFraction = COMPRESSION_PRESERVE_THRESHOLD; // 0.3
     const compressBeforeIndex = findCompressSplitPoint(
       mockHistory,
       1 - preservedFraction,

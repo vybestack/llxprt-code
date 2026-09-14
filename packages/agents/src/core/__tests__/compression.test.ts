@@ -41,7 +41,7 @@ describe('Compression logic tests', () => {
       { speaker: 'human', blocks: [{ type: 'text', text: 'Short message 2' }] },
     ];
 
-    // With COMPRESSION_PRESERVE_THRESHOLD = 0.5, we should preserve 50% of the conversation
+    // With COMPRESSION_PRESERVE_THRESHOLD = 0.3 (2 * (1 - 0.85)), we preserve 30% of the conversation
     const preserveFraction = COMPRESSION_PRESERVE_THRESHOLD;
     const compressBeforeIndex = findCompressSplitPoint(
       mockHistory,
