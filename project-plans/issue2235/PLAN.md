@@ -24,7 +24,7 @@ cleanup for the #2235 package family. No new behavior is added.
 4. Live behavioral and contract test coverage is preserved: tests are deleted
    only when no production contract remains for them; tests that merely
    consumed a removed surface are updated, not deleted.
-5. The full repository verification cycle and the `stepfun-37` CLI smoke pass
+5. The full repository verification cycle and the `zai-glm-flash` CLI smoke pass
    (CLI behavior and packaging are touched).
 
 ## Source recheck results (2026-09-14, branch issue2235 off main @ e5ec3a161)
@@ -121,7 +121,7 @@ Already removed since the inventory (no action, documented): cli
   script starts (short-lived verification, then killed).
 - REQ-5: Verification cycle green: package-level tests/lint/typecheck/build for
   touched workspaces, then repo `npm run test`, `lint`, `typecheck`, `format`,
-  `build`, and `bun scripts/start.ts --profile-load stepfun-37 "write me a haiku
+  `build`, and `bun scripts/start.ts --profile-load zai-glm-flash "write me a haiku
   and nothing else"`.
 
 ## Verification
@@ -129,7 +129,7 @@ Already removed since the inventory (no action, documented): cli
 1. Touched-workspace package checks: cli, agents, ide-integration,
    vscode-ide-companion, test-utils (test/lint/typecheck/build where defined).
 2. Full repository verification cycle (REQ-5 command list).
-3. CLI smoke (stepfun-37) since CLI behavior/packaging is touched.
+3. CLI smoke (zai-glm-flash) since CLI behavior/packaging is touched.
 4. Dependency evidence: post-install `node_modules/.bin/npm-run-all2` resolves;
    root/CLI `gradient-string` declarations gone from both lockfiles;
    root `@xterm/headless` restored at `5.5.0` in both lockfiles;
@@ -194,3 +194,34 @@ All logs below are under `tmp/issue2235/`.
 
 These checks supplement the earlier verification
 rather than claim a new full-repository verification cycle.
+
+### Main merge verification (2026-09-14)
+
+Merged `origin/main` at `a1c466f4a`. Main commit `ae2b58bd9` switched the
+repository smoke profile from `stepfun-37` to `zai-glm-flash`. The earlier
+StepFun blocker above is historical; the new smoke passed without a profile
+fallback.
+
+Logs for this merge are under `tmp/issue2235/merge/` (gitignored, local-only).
+
+- The four resolved agents test files passed: 33 tests, zero failures,
+  637 expectations (`tests.log`, exit 0).
+- Agents workspace typecheck passed both TypeScript configurations
+  (`typecheck.log`, exit 0). The prior `profileRepositoryAdapter.test.ts`
+  errors are absent with main's fix.
+- `npm run lint:eslint-guard` passed (`lint.log`, exit 0); its 648 stale
+  baseline entries are informational and nonblocking.
+- Plain `bun install` regenerated `bun.lock` from the merged manifests
+  (`install.log`, exit 0). `lock-verification.log` confirms `npm-run-all2`
+  8.0.4, root `@xterm/headless` 5.5.0, no nested ide-integration fast-check,
+  and no nested test-utils storage dependency. The auto-merged npm lockfile
+  was left unchanged.
+- Smoke: `bun scripts/start.ts --profile-load zai-glm-flash "write me a haiku and nothing else"`
+  ran detached and passed (`smoke.log`, exit 0). It reported
+  `[zai-glm-flash:glm-5.3-flash]` and returned a three-line haiku.
+- Reference checks found no `tokenUsageTestAssertions`, `compression-config`,
+  `contentBlockHelpers`, `messageStreamModelInfo`, or `bucketFailoverIntegration`
+  hits under `packages/agents`. No unresolved merge entries remain.
+
+This is the requested merge-specific verification, not a new full-repository
+verification cycle.

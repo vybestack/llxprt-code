@@ -28,10 +28,6 @@ void vi.mock('../../prompt-config/subagent-delegation.js', () => ({
   shouldIncludeSubagentDelegation: vi.fn().mockResolvedValue(false),
 }));
 
-void vi.mock('../utils/userMemory.js', () => ({
-  resolveUserMemory: vi.fn().mockResolvedValue(''),
-}));
-
 function createMockOptions(
   overrides: Partial<NormalizedGenerateChatOptions> = {},
   modelParams: Record<string, unknown> = {},

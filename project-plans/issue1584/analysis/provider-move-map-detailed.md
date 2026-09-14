@@ -226,7 +226,7 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 114 | `packages/core/src/providers/openai/OpenAIStreamProcessor.stopReason.test.ts` | `packages/agents/src/core/MessageConverter.stopReason.test.ts` | Agent-owned override | B |
 | 115 | `packages/core/src/providers/openai/ConversationCache.ts` | `packages/providers/src/openai/ConversationCache.ts` | Rule 4 | B |
 | 116 | `packages/core/src/providers/openai/ConversationCache.accumTokens.test.ts` | `packages/providers/src/openai/ConversationCache.accumTokens.test.ts` | Rule 4 | B |
-| 117 | `packages/core/src/providers/openai/IChatGenerateParams.ts` | `packages/providers/src/openai/IChatGenerateParams.ts` | Rule 4 | B |
+| 117 | `packages/core/src/providers/openai/IChatGenerateParams.ts` | `packages/providers/src/openai/OpenAIProvider.ts` | Rule 4 + #2234 deletion override (dead code — zero consumers) | B |
 | 118 | `packages/core/src/providers/openai/RESPONSES_API_MODELS.ts` | `packages/providers/src/openai/RESPONSES_API_MODELS.ts` | Rule 4 | B |
 | 119 | `packages/core/src/providers/openai/ToolCallCollector.ts` | `packages/providers/src/openai/ToolCallCollector.ts` | Rule 4 | B |
 | 120 | `packages/core/src/providers/openai/ToolCallCollector.test.ts` | `packages/providers/src/openai/ToolCallCollector.test.ts` | Rule 4 | B |
@@ -237,20 +237,20 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 125 | `packages/core/src/providers/openai/ToolCallPipeline.integration.test.ts` | `packages/providers/src/openai/ToolCallPipeline.integration.test.ts` | Rule 4 | B |
 | 126 | `packages/core/src/providers/openai/ToolCallPipeline.toolCallId.test.ts` | `packages/providers/src/openai/ToolCallPipeline.toolCallId.test.ts` | Rule 4 | B |
 | 127 | `packages/core/src/providers/openai/ToolNameValidator.ts` | `packages/providers/src/openai/ToolNameValidator.ts` | Rule 4 | B |
-| 128 | `packages/core/src/providers/openai/buildResponsesRequest.ts` | `packages/providers/src/openai/buildResponsesRequest.ts` | Rule 4 | B |
-| 129 | `packages/core/src/providers/openai/buildResponsesRequest.test.ts` | `packages/providers/src/openai/buildResponsesRequest.test.ts` | Rule 4 | B |
-| 130 | `packages/core/src/providers/openai/buildResponsesRequest.stripToolCalls.test.ts` | `packages/providers/src/openai/buildResponsesRequest.stripToolCalls.test.ts` | Rule 4 | B |
-| 131 | `packages/core/src/providers/openai/buildResponsesRequest.toolIdNormalization.test.ts` | `packages/providers/src/openai/buildResponsesRequest.toolIdNormalization.test.ts` | Rule 4 | B |
-| 132 | `packages/core/src/providers/openai/buildResponsesRequest.undefined.test.ts` | `packages/providers/src/openai/buildResponsesRequest.undefined.test.ts` | Rule 4 | B |
+| 128 | `packages/core/src/providers/openai/buildResponsesRequest.ts` | `packages/providers/src/openai/OpenAIProvider.ts` | Rule 4 + #2234 deletion override (dead code — zero consumers) | B |
+| 129 | `packages/core/src/providers/openai/buildResponsesRequest.test.ts` | `packages/providers/src/openai/OpenAIProvider.ts` | Rule 4 + #2234 deletion override (dedicated test of deleted dead helper) | B |
+| 130 | `packages/core/src/providers/openai/buildResponsesRequest.stripToolCalls.test.ts` | `packages/providers/src/openai/OpenAIProvider.ts` | Rule 4 + #2234 deletion override (dedicated test of deleted dead helper) | B |
+| 131 | `packages/core/src/providers/openai/buildResponsesRequest.toolIdNormalization.test.ts` | `packages/providers/src/openai/OpenAIProvider.ts` | Rule 4 + #2234 deletion override (dedicated test of deleted dead helper) | B |
+| 132 | `packages/core/src/providers/openai/buildResponsesRequest.undefined.test.ts` | `packages/providers/src/openai/OpenAIProvider.ts` | Rule 4 + #2234 deletion override (dedicated test of deleted dead helper) | B |
 | 133 | `packages/core/src/providers/openai/codexUsageInfo.ts` | `packages/providers/src/openai/codexUsageInfo.ts` | Rule 4 | B |
 | 134 | `packages/core/src/providers/openai/codexUsageInfo.test.ts` | `packages/providers/src/openai/codexUsageInfo.test.ts` | Rule 4 | B |
-| 135 | `packages/core/src/providers/openai/estimateRemoteTokens.ts` | `packages/providers/src/openai/estimateRemoteTokens.ts` | Rule 4 | B |
-| 136 | `packages/core/src/providers/openai/estimateRemoteTokens.test.ts` | `packages/providers/src/openai/estimateRemoteTokens.test.ts` | Rule 4 | B |
+| 135 | `packages/core/src/providers/openai/estimateRemoteTokens.ts` | `packages/providers/src/openai/OpenAIProvider.ts` | Rule 4 + #2234 deletion override (dead code — zero consumers) | B |
+| 136 | `packages/core/src/providers/openai/estimateRemoteTokens.test.ts` | `packages/providers/src/openai/OpenAIProvider.ts` | Rule 4 + #2234 deletion override (dedicated test of deleted dead helper) | B |
 | 137 | `packages/core/src/providers/openai/finishReasonMapping.ts` | `packages/providers/src/openai/finishReasonMapping.ts` | Rule 4 | B |
 | 138 | `packages/core/src/providers/openai/getOpenAIProviderInfo.ts` | `packages/providers/src/openai/getOpenAIProviderInfo.ts` | Rule 4 | B |
 | 139 | `packages/core/src/providers/openai/getOpenAIProviderInfo.context.test.ts` | `packages/providers/src/openai/getOpenAIProviderInfo.context.test.ts` | Rule 4 | B |
-| 140 | `packages/core/src/providers/openai/openaiRequestParams.ts` | `packages/providers/src/openai/openaiRequestParams.ts` | Rule 4 | B |
-| 141 | `packages/core/src/providers/openai/openaiRequestParams.test.ts` | `packages/providers/src/openai/openaiRequestParams.test.ts` | Rule 4 | B |
+| 140 | `packages/core/src/providers/openai/openaiRequestParams.ts` | `packages/providers/src/openai/OpenAIProvider.ts` | Rule 4 + #2234 deletion override (dead code — zero consumers) | B |
+| 141 | `packages/core/src/providers/openai/openaiRequestParams.test.ts` | `packages/providers/src/openai/OpenAIProvider.ts` | Rule 4 + #2234 deletion override (dedicated test of deleted dead helper) | B |
 | 142 | `packages/core/src/providers/openai/parseResponsesStream.ts` | `packages/providers/src/openai/parseResponsesStream.ts` | Rule 4 | B |
 | 143 | `packages/core/src/providers/openai/parseResponsesStream.test.ts` | `packages/providers/src/openai/parseResponsesStream.test.ts` | Rule 4 | B |
 | 144 | `packages/core/src/providers/openai/parseResponsesStream.issue1844.test.ts` | `packages/providers/src/openai/parseResponsesStream.issue1844.test.ts` | Rule 4 | B |
@@ -259,7 +259,7 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 147 | `packages/core/src/providers/openai/schemaConverter.ts` | `packages/providers/src/openai/schemaConverter.ts` | Rule 4 | B |
 | 148 | `packages/core/src/providers/openai/schemaConverter.issue1844.test.ts` | `packages/providers/src/openai/schemaConverter.issue1844.test.ts` | Rule 4 | B |
 | 149 | `packages/core/src/providers/openai/syntheticToolResponses.ts` | `packages/providers/src/openai/syntheticToolResponses.ts` | Rule 4 | B |
-| 150 | `packages/core/src/providers/openai/test-types.ts` | `packages/providers/src/openai/test-types.ts` | Rule 4 | B |
+| 150 | `packages/core/src/providers/openai/test-types.ts` | `packages/providers/src/openai/OpenAIProvider.ts` | Rule 4 + #2234 deletion override (dead code — zero consumers) | B |
 | 151 | `packages/core/src/providers/openai/toolNameUtils.ts` | `packages/providers/src/openai/toolNameUtils.ts` | Rule 4 | B |
 | 152 | `packages/core/src/providers/openai/toolNameUtils.test.ts` | `packages/providers/src/openai/toolNameUtils.test.ts` | Rule 4 | B |
 | 153 | `packages/core/src/providers/openai/OpenAIProvider.caching.test.ts` | `packages/providers/src/openai/OpenAIProvider.caching.test.ts` | Rule 4 | B |
@@ -298,14 +298,14 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 181 | `packages/core/src/providers/openai-responses/OpenAIResponsesInputBuilder.ts` | `packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts` | Rule 4 | B |
 | 182 | `packages/core/src/providers/openai-responses/OpenAIResponsesTypes.ts` | `packages/providers/src/openai-responses/OpenAIResponsesTypes.ts` | Rule 4 | B |
 | 183 | `packages/core/src/providers/openai-responses/CODEX_MODELS.ts` | `packages/providers/src/composition/aliases/codex.config` | Rule 4 (DELETION / CONSOLIDATION — #2272) | B |
-| 184 | `packages/core/src/providers/openai-responses/buildResponsesInputFromContent.ts` | `packages/providers/src/openai-responses/buildResponsesInputFromContent.ts` | Rule 4 | B |
-| 185 | `packages/core/src/providers/openai-responses/buildResponsesInputFromContent.mediaBlock.test.ts` | `packages/providers/src/openai-responses/buildResponsesInputFromContent.mediaBlock.test.ts` | Rule 4 | B |
+| 184 | `packages/core/src/providers/openai-responses/buildResponsesInputFromContent.ts` | `packages/providers/src/openai-responses/OpenAIResponsesProvider.ts` | Rule 4 + #2234 deletion override (dead code — zero consumers) | B |
+| 185 | `packages/core/src/providers/openai-responses/buildResponsesInputFromContent.mediaBlock.test.ts` | `packages/providers/src/openai-responses/OpenAIResponsesProvider.ts` | Rule 4 + #2234 deletion override (dedicated test of deleted dead helper) | B |
 | 186 | `packages/core/src/providers/openai-responses/OpenAIResponsesProvider.headers.test.ts` | `packages/providers/src/openai-responses/OpenAIResponsesProvider.headers.test.ts` | Rule 4 | B |
 | 187 | `packages/core/src/providers/openai-responses/schemaConverter.ts` | `packages/providers/src/openai-responses/schemaConverter.ts` | Rule 4 | B |
-| 188 | `packages/core/src/providers/openai-responses/index.ts` | `packages/providers/src/openai-responses/index.ts` | Rule 4 | B (barrel export) |
+| 188 | `packages/core/src/providers/openai-responses/index.ts` | `packages/providers/src/openai-responses/OpenAIResponsesProvider.ts` | Rule 4 + #2234 deletion override (dead code — private barrel, zero importers) | B (barrel export) |
 | 189 | `packages/core/src/providers/openai-responses/__tests__/openaiResponses.stateless.test.ts` | `packages/providers/src/openai-responses/__tests__/openaiResponses.stateless.test.ts` | Rule 1 | B |
 | 190 | `packages/core/src/providers/openai-responses/__tests__/OpenAIResponsesProvider.codex.malformedCallId.test.ts` | `packages/providers/src/openai-responses/__tests__/OpenAIResponsesProvider.codex.malformedCallId.test.ts` | Rule 1 | B |
-| 191 | `packages/core/src/providers/openai-responses/__tests__/OpenAIResponsesProvider.ephemerals.toolOutput.test.ts` | `packages/providers/src/openai-responses/__tests__/OpenAIResponsesProvider.ephemerals.toolOutput.test.ts` | Rule 1 | B |
+| 191 | `packages/core/src/providers/openai-responses/__tests__/OpenAIResponsesProvider.ephemerals.toolOutput.test.ts` | `packages/providers/src/openai-responses/__tests__/OpenAIResponsesProvider.toolIdNormalization.test.ts` | Rule 1 + #2234 deletion override (dedicated tests of deleted dead helper) | B |
 | 192 | `packages/core/src/providers/openai-responses/__tests__/OpenAIResponsesProvider.models.test.ts` | `packages/providers/src/openai-responses/__tests__/OpenAIResponsesProvider.models.test.ts` | Rule 1 | B |
 | 193 | `packages/core/src/providers/openai-responses/__tests__/OpenAIResponsesProvider.promptCacheKey.test.ts` | `packages/providers/src/openai-responses/__tests__/OpenAIResponsesProvider.promptCacheKey.test.ts` | Rule 1 | B |
 | 194 | `packages/core/src/providers/openai-responses/__tests__/OpenAIResponsesProvider.reasoningEffort.test.ts` | `packages/providers/src/openai-responses/__tests__/OpenAIResponsesProvider.reasoningEffort.test.ts` | Rule 1 | B |
@@ -385,7 +385,7 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 248 | `packages/core/src/providers/utils/toolNameNormalization.test.ts` | `packages/providers/src/utils/toolNameNormalization.test.ts` | Rule 13 | B |
 | 249 | `packages/core/src/providers/utils/toolResponsePayload.ts` | `packages/providers/src/utils/toolResponsePayload.ts` | Rule 13 | B |
 | 250 | `packages/core/src/providers/utils/toolResponsePayload.test.ts` | `packages/providers/src/utils/toolResponsePayload.test.ts` | Rule 13 | B |
-| 251 | `packages/core/src/providers/utils/userMemory.ts` | `packages/providers/src/utils/userMemory.ts` | Rule 13 | B |
+| 251 | `packages/core/src/providers/utils/userMemory.ts` | `packages/providers/src/utils/request-media-resolution.ts` | Rule 13 + #2234 deletion override (dead code — zero consumers) | B |
 
 **Total: 251 files (matches inventory count)**
 
