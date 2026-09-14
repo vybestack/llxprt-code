@@ -12,13 +12,11 @@ import {
   allowEditorTypeInSandbox,
   checkHasEditorType,
 } from '@vybestack/llxprt-code-core';
-import { useAppDispatch } from '../contexts/AppDispatchContext.js';
-import type { AppState } from '../reducers/appReducer.js';
+import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 
 import { SettingPaths } from '../../config/settingPaths.js';
 
 interface UseEditorSettingsReturn {
-  isEditorDialogOpen: boolean;
   openEditorDialog: () => void;
   handleEditorSelect: (
     editorType: EditorType | undefined,
@@ -29,15 +27,14 @@ interface UseEditorSettingsReturn {
 
 export const useEditorSettings = (
   loadedSettings: LoadedSettings,
-  appState: AppState,
+  dialogs: DialogOpeners,
   addItem: (item: Omit<HistoryItem, 'id'>, timestamp: number) => void,
+  setEditorError: (error: string | null) => void,
 ): UseEditorSettingsReturn => {
-  const appDispatch = useAppDispatch();
-  const isEditorDialogOpen = appState.openDialogs.editor;
-
   const openEditorDialog = useCallback(() => {
-    appDispatch({ type: 'OPEN_DIALOG', payload: 'editor' });
-  }, [appDispatch]);
+    setEditorError(null);
+    dialogs.editor.open({});
+  }, [dialogs, setEditorError]);
 
   const handleEditorSelect = useCallback(
     (editorType: EditorType | undefined, scope: SettingScope) => {
@@ -46,6 +43,7 @@ export const useEditorSettings = (
         (!checkHasEditorType(editorType) ||
           !allowEditorTypeInSandbox(editorType))
       ) {
+        setEditorError(`Editor "${editorType}" is unavailable.`);
         return;
       }
 
@@ -62,24 +60,21 @@ export const useEditorSettings = (
           },
           Date.now(),
         );
-        appDispatch({ type: 'SET_EDITOR_ERROR', payload: null });
-        appDispatch({ type: 'CLOSE_DIALOG', payload: 'editor' });
+        setEditorError(null);
+        dialogs.editor.close();
       } catch (error) {
-        appDispatch({
-          type: 'SET_EDITOR_ERROR',
-          payload: `Failed to set editor preference: ${error}`,
-        });
+        setEditorError(`Failed to set editor preference: ${error}`);
       }
     },
-    [loadedSettings, appDispatch, addItem],
+    [loadedSettings, setEditorError, addItem, dialogs],
   );
 
   const exitEditorDialog = useCallback(() => {
-    appDispatch({ type: 'CLOSE_DIALOG', payload: 'editor' });
-  }, [appDispatch]);
+    setEditorError(null);
+    dialogs.editor.close();
+  }, [dialogs, setEditorError]);
 
   return {
-    isEditorDialogOpen,
     openEditorDialog,
     handleEditorSelect,
     exitEditorDialog,

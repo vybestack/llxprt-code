@@ -12,6 +12,7 @@ import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import type { HistoryItem, ConfirmationRequest } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { ModelsDialogData } from '../commands/types.js';
+import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type {
   ExtensionUpdateState,
   ExtensionUpdateAction,
@@ -80,6 +81,7 @@ export const useSlashCommandProcessor = (
   setIsProcessing: (isProcessing: boolean) => void,
   setLlxprtMdFileCount: (count: number) => void,
   actions: SlashCommandProcessorActions,
+  store: DialogStore,
   extensionsUpdateState: Map<string, ExtensionUpdateState>,
   isConfigInitialized: boolean,
   todoContext?: TodoContextValue,
@@ -98,6 +100,7 @@ export const useSlashCommandProcessor = (
     setIsProcessing,
     setLlxprtMdFileCount,
     actions,
+    store,
     extensionsUpdateState,
     isConfigInitialized,
     todoContext,

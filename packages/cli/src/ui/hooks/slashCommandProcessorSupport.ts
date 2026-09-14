@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { useShallowMemo } from './useShallowMemo.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import process from 'node:process';
@@ -189,7 +190,7 @@ const NEVER_ABORTED_SIGNAL = new AbortController().signal;
 export function useCommandContext(
   inputs: CommandContextInputs,
 ): CommandContext {
-  return useMemo(
+  return useShallowMemo(
     (): CommandContext => ({
       signal: NEVER_ABORTED_SIGNAL,
       services: {
@@ -211,7 +212,11 @@ export function useCommandContext(
       recordingIntegration: inputs.recordingIntegration,
       recordingSwapCallbacks: inputs.recordingSwapCallbacks,
     }),
-    [inputs],
+    {
+      ...inputs,
+      stats: inputs.stats.stats,
+      updateHistoryTokenCount: inputs.stats.updateHistoryTokenCount,
+    },
   );
 }
 

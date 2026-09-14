@@ -7,7 +7,7 @@
 import { useCallback } from 'react';
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
 import type { useRuntimeApi } from '../contexts/RuntimeContext.js';
-import type { useUIActions } from '../contexts/UIActionsContext.js';
+import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 
 interface ModelDialogCommandContext {
@@ -68,7 +68,7 @@ function recordSwitchSideEffects(
 export function useModelDialogHandler(
   runtime: ReturnType<typeof useRuntimeApi>,
   addItem: UseHistoryManagerReturn['addItem'],
-  uiActions: ReturnType<typeof useUIActions>,
+  store: DialogStore,
   currentProvider: string | null,
   commandContext: ModelDialogCommandContext,
 ) {
@@ -130,12 +130,12 @@ export function useModelDialogHandler(
             // addItem failure must not prevent dialog cleanup
           }
         }
-        uiActions.closeModelsDialog();
+        store.commands.closeDialog('models');
         if (switchSucceeded) {
-          uiActions.openModelConfigDialog();
+          store.commands.openDialog({ kind: 'modelConfig', payload: {} });
         }
       })();
     },
-    [runtime, addItem, uiActions, currentProvider, commandContext],
+    [runtime, addItem, store, currentProvider, commandContext],
   );
 }

@@ -4,13 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { selectDialogOpen } from '../stores/dialog/dialogStore.js';
 import { useEffect, useRef } from 'react';
 import { MessageType, type HistoryItemWithoutId } from '../types.js';
+import type { DialogStore } from '../stores/dialog/dialogStore.js';
+import { useStoreSelector } from '../stores/useStoreSelector.js';
 
 export interface UnconfiguredProviderGuidanceOptions {
   hasActiveProvider: boolean;
   addItem: (item: HistoryItemWithoutId, timestamp?: number) => number;
-  isWelcomeDialogOpen: boolean;
+  store: DialogStore;
 }
 
 const UNCONFIGURED_GUIDANCE =
@@ -19,15 +22,18 @@ const UNCONFIGURED_GUIDANCE =
 export function useUnconfiguredProviderGuidance({
   hasActiveProvider,
   addItem,
-  isWelcomeDialogOpen,
+  store,
 }: UnconfiguredProviderGuidanceOptions): void {
+  const isWelcomeDialogOpen = useStoreSelector(store.store, (state) =>
+    selectDialogOpen(state, 'welcome'),
+  );
   const guidanceShown = useRef(false);
 
   useEffect(() => {
     if (guidanceShown.current) {
       return;
     }
-    if (isWelcomeDialogOpen) {
+    if (selectDialogOpen(store.store.getState(), 'welcome')) {
       return;
     }
     if (hasActiveProvider) {
@@ -38,5 +44,5 @@ export function useUnconfiguredProviderGuidance({
       { type: MessageType.INFO, text: UNCONFIGURED_GUIDANCE },
       Date.now(),
     );
-  }, [hasActiveProvider, addItem, isWelcomeDialogOpen]);
+  }, [hasActiveProvider, addItem, isWelcomeDialogOpen, store]);
 }

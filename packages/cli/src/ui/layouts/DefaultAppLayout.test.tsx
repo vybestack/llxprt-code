@@ -1,11 +1,11 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
+import { describe, it, expect, vi } from 'bun:test';
 import { Text } from '../../../test-utils/real-ink.js';
 
 // Unmock ink to use real Ink with ink-testing-library
@@ -17,11 +17,20 @@ const realInkModule = await import('../../../test-utils/real-ink.js');
 void vi.mock('ink', () => realInkModule);
 
 import { DefaultAppLayout } from './DefaultAppLayout.js';
-import { hasActiveDialog } from './DefaultAppLayoutHelpers.js';
-import { useUIState, type UIState } from '../contexts/UIStateContext.js';
-import { useUIActions } from '../contexts/UIActionsContext.js';
-import { StreamingState } from '../types.js';
-import { ApprovalMode } from '@vybestack/llxprt-code-core';
+import { DialogProvider } from '../stores/dialog/DialogContext.js';
+import { TerminalProvider } from '../stores/terminal/TerminalContext.js';
+import { createTerminalStore } from '../stores/terminal/terminalStore.js';
+import { TurnProvider } from '../stores/turn/TurnContext.js';
+import { createTurnStore } from '../stores/turn/turnStore.js';
+import { SettingsProfileProvider } from '../stores/settings/SettingsContext.js';
+import { createSettingsProfileStore } from '../stores/settings/settingsStore.js';
+import { VimModeProvider } from '../contexts/VimModeContext.js';
+import {
+  createDialogStore,
+  DIALOG_PRIORITY,
+  type DialogKind,
+  type DialogStore,
+} from '../stores/dialog/dialogStore.js';
 import {
   buildSlashCommandRuntime,
   buildUiRuntimeFromSource,
@@ -36,14 +45,6 @@ const DialogManagerSentinel = () => (
   <Text color="white">{DIALOG_MANAGER_SENTINEL}</Text>
 );
 const ComposerSentinel = () => <Text color="white">{COMPOSER_SENTINEL}</Text>;
-
-void vi.mock('../contexts/UIStateContext.js', () => ({
-  useUIState: vi.fn(),
-}));
-
-void vi.mock('../contexts/UIActionsContext.js', () => ({
-  useUIActions: vi.fn(),
-}));
 
 void vi.mock('../components/DialogManager.js', () => ({
   DialogManager: DialogManagerSentinel,
@@ -132,9 +133,6 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   }),
 }));
 
-const mockUseUIState = useUIState as Mock<typeof useUIState>;
-const mockUseUIActions = useUIActions as Mock<typeof useUIActions>;
-
 function createConfigStub() {
   return {
     getScreenReader: () => false,
@@ -166,153 +164,85 @@ function createSettingsStub({
   };
 }
 
-function createActionsStub() {
-  return {
-    addItem: vi.fn(),
-    handleUserInputSubmit: vi.fn(),
-    handleClearScreen: vi.fn(),
-    setShellModeActive: vi.fn(),
-    handleEscapePromptChange: vi.fn(),
-    vimHandleInput: vi.fn(),
-    setQueueErrorMessage: vi.fn(),
-  };
-}
+/**
+ * Every dialog kind whose open state lives in the DialogStore. The drift
+ * guard below fails when a kind is added to DIALOG_PRIORITY without this
+ * table (or vice versa), so gating coverage cannot silently regress.
+ */
+const STORE_DRIVEN_DIALOG_KINDS = [
+  'workspaceMigration',
+  'idePrompt',
+  'folderTrust',
+  'welcome',
+  'confirmation',
+  'extensionUpdateConfirm',
+  'theme',
+  'settings',
+  'auth',
+  'oauthCode',
+  'editor',
+  'provider',
+  'loadProfile',
+  'createProfile',
+  'profileList',
+  'profileDetail',
+  'profileEditor',
+  'tools',
+  'privacy',
+  'permissions',
+  'logging',
+  'subagent',
+  'models',
+  'sessionBrowser',
+  'modelConfig',
+  'policies',
+] as const satisfies readonly DialogKind[];
 
-function createBaseUIState() {
-  return {
-    terminalWidth: 120,
-    terminalHeight: 40,
-    mainAreaWidth: 120,
-    inputWidth: 120,
-    suggestionsWidth: 60,
-    isNarrow: false,
-    history: [],
-    pendingHistoryItems: [],
-    streamingState: StreamingState.Idle,
-    quittingMessages: null,
-    constrainHeight: false,
-    showErrorDetails: false,
-    showToolDescriptions: false,
-    isTodoPanelCollapsed: false,
-    consoleMessages: [],
-    slashCommands: [],
-    staticKey: 0,
-    isInputActive: true,
-    ctrlCPressedOnce: false,
-    ctrlDPressedOnce: false,
-    showEscapePrompt: false,
-    ideContextState: undefined,
-    llxprtMdFileCount: 0,
-    elapsedTime: 0,
-    currentLoadingPhrase: undefined,
-    showAutoAcceptIndicator: ApprovalMode.DEFAULT,
-    shellModeActive: false,
-    thought: undefined,
-    branchName: undefined,
-    debugMessage: '',
-    errorCount: 0,
-    historyTokenCount: 0,
-    vimModeEnabled: false,
-    vimMode: undefined,
-    tokenMetrics: {
-      tokensPerMinute: 0,
-      throttleWaitTimeMs: 0,
-      sessionTokenTotal: 0,
-    },
-    currentModel: 'test-model',
-    availableTerminalHeight: 40,
-    activeShellPtyId: null,
-    embeddedShellFocused: false,
-    isQueuedMessagesPanelCollapsed: false,
-    queuedSubmissions: [],
-    coreMemoryFileCount: 0,
-    currentModelLabel: undefined,
-    contextLimit: undefined,
-
-    // dialog flags
-    showWorkspaceMigrationDialog: false,
-    shouldShowIdePrompt: false,
-    isFolderTrustDialogOpen: false,
-    isWelcomeDialogOpen: false,
-    isPermissionsDialogOpen: false,
-    confirmationRequest: null,
-    isThemeDialogOpen: false,
-    isSettingsDialogOpen: false,
-    isAuthDialogOpen: false,
-    isOAuthCodeDialogOpen: false,
-    isEditorDialogOpen: false,
-    isProviderDialogOpen: false,
-    isLoadProfileDialogOpen: false,
-    isCreateProfileDialogOpen: false,
-    isProfileListDialogOpen: false,
-    isProfileDetailDialogOpen: false,
-    isProfileEditorDialogOpen: false,
-    isToolsDialogOpen: false,
-    isLoggingDialogOpen: false,
-    isSubagentDialogOpen: false,
-    isModelsDialogOpen: false,
-    isSessionBrowserDialogOpen: false,
-    isModelConfigDialogOpen: false,
-    isPoliciesDialogOpen: false,
-    showPrivacyNotice: false,
-
-    rootUiRef: { current: null },
-    pendingHistoryItemRef: { current: null },
-  } as never;
-}
-
-const ACTIVE_DIALOG_FLAGS = [
-  'showWorkspaceMigrationDialog',
-  'shouldShowIdePrompt',
-  'isFolderTrustDialogOpen',
-  'isWelcomeDialogOpen',
-  'isPermissionsDialogOpen',
-  'confirmationRequest',
-  'isThemeDialogOpen',
-  'isSettingsDialogOpen',
-  'isAuthDialogOpen',
-  'isOAuthCodeDialogOpen',
-  'isEditorDialogOpen',
-  'isProviderDialogOpen',
-  'isLoadProfileDialogOpen',
-  'isCreateProfileDialogOpen',
-  'isProfileListDialogOpen',
-  'isProfileDetailDialogOpen',
-  'isProfileEditorDialogOpen',
-  'isToolsDialogOpen',
-  'isLoggingDialogOpen',
-  'isSubagentDialogOpen',
-  'isModelsDialogOpen',
-  'isSessionBrowserDialogOpen',
-  'isModelConfigDialogOpen',
-  'isPoliciesDialogOpen',
-  'showPrivacyNotice',
-] as const satisfies ReadonlyArray<keyof UIState>;
-
-type ActiveDialogFlag = (typeof ACTIVE_DIALOG_FLAGS)[number];
-
-function createUIStateWithActiveDialog(flag: ActiveDialogFlag): UIState {
-  const baseState: UIState = createBaseUIState();
-  if (flag === 'confirmationRequest') {
-    return {
-      ...baseState,
-      confirmationRequest: {
-        prompt: null,
-        onConfirm: () => {},
-      },
-    };
+function openStoreDialog(store: DialogStore, kind: DialogKind): void {
+  switch (kind) {
+    case 'workspaceMigration':
+      store.commands.openDialog({ kind, payload: { extensions: [] } });
+      break;
+    case 'idePrompt':
+      store.commands.openDialog({
+        kind,
+        payload: { ide: { name: 'vscode', displayName: 'VS Code' } },
+      });
+      break;
+    case 'confirmation':
+    case 'extensionUpdateConfirm':
+      store.commands.openDialog({
+        kind,
+        payload: { prompt: null, onConfirm: () => {} },
+      });
+      break;
+    case 'profileDetail':
+    case 'profileEditor':
+      store.commands.openDialog({ kind, payload: { profileName: 'p' } });
+      break;
+    case 'tools':
+      store.commands.openDialog({ kind, payload: { action: 'enable' } });
+      break;
+    case 'logging':
+      store.commands.openDialog({ kind, payload: { entries: [] } });
+      break;
+    default:
+      store.commands.openDialog({ kind, payload: {} });
   }
-  return { ...baseState, [flag]: true };
 }
 
-function renderDefaultAppLayout(
-  uiState: UIState,
+interface RenderLayoutOptions {
+  settings?: ReturnType<typeof createSettingsStub>;
+  store?: DialogStore;
+}
+
+function renderDefaultAppLayout({
   settings = createSettingsStub(),
-): ReturnType<typeof render> {
-  mockUseUIState.mockReturnValue(uiState);
+  store = createDialogStore(),
+}: RenderLayoutOptions = {}): ReturnType<typeof render> {
   const config = createConfigStub() as never;
 
-  return render(
+  const inner = (
     <DefaultAppLayout
       uiRuntime={buildUiRuntimeFromSource(config)}
       slashCommandRuntime={buildSlashCommandRuntime(config)}
@@ -321,67 +251,54 @@ function renderDefaultAppLayout(
       version={'0.0.0-test'}
       nightly={false}
       mainControlsRef={{ current: null }}
-      availableTerminalHeight={40}
+      rootUiRef={{ current: null }}
+      pendingHistoryItemRef={{ current: null }}
       contextFileNames={[]}
       updateInfo={null}
-    />,
+    />
+  );
+  // TerminalStore seeding mirrors the dimensions the old UIState fixture
+  // carried (120x40), so layout gating behavior is unchanged. The turn and
+  // settings stores keep their defaults; this suite asserts dialog gating
+  // and buffer selection only.
+  const terminalStore = createTerminalStore({
+    terminalWidth: 120,
+    terminalHeight: 40,
+    mainAreaWidth: 120,
+    inputWidth: 120,
+    suggestionsWidth: 60,
+    isNarrow: false,
+    constrainHeight: false,
+    availableTerminalHeight: 40,
+    isInputActive: true,
+  });
+  return render(
+    <SettingsProfileProvider store={createSettingsProfileStore()}>
+      <VimModeProvider settings={settings as never}>
+        <TerminalProvider store={terminalStore}>
+          <TurnProvider store={createTurnStore()}>
+            <DialogProvider store={store}>{inner}</DialogProvider>
+          </TurnProvider>
+        </TerminalProvider>
+      </VimModeProvider>
+    </SettingsProfileProvider>,
   );
 }
 
 describe('DefaultAppLayout', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockUseUIActions.mockReturnValue(createActionsStub() as never);
+  it('keeps the store-driven dialog table aligned with DIALOG_PRIORITY', () => {
+    // useHasActiveDialog reads only the DialogStore; the drift risk is a new
+    // store kind missing from this table, so guard against DIALOG_PRIORITY.
+    expect([...STORE_DRIVEN_DIALOG_KINDS]).toStrictEqual([...DIALOG_PRIORITY]);
   });
 
-  it('keeps the dialog test table aligned with every property read by the real predicate', () => {
-    const readKeys = new Set<string>();
-    const recordKey = (property: string | symbol): void => {
-      if (typeof property !== 'string') {
-        throw new Error(
-          `hasActiveDialog read the symbol key ${String(property)}. The drift ` +
-            'guard can only account for string keys; update the guard and ' +
-            'ACTIVE_DIALOG_FLAGS together.',
-        );
-      }
-      readKeys.add(property);
-    };
-    // Enumeration would let the predicate reach every flag at once, which
-    // would make the recorded read-set meaningless. Fail loudly instead of
-    // silently passing.
-    const rejectEnumeration = (trap: string): never => {
-      throw new Error(
-        `hasActiveDialog enumerated the UI state via ${trap}. The drift guard ` +
-          'observes discrete property accesses and cannot verify an ' +
-          'enumeration-based predicate; update the guard and ' +
-          'ACTIVE_DIALOG_FLAGS together.',
-      );
-    };
-    const uiState = new Proxy(createBaseUIState(), {
-      get(target, property, receiver) {
-        recordKey(property);
-        return Reflect.get(target, property, receiver);
-      },
-      has(target, property) {
-        recordKey(property);
-        return Reflect.has(target, property);
-      },
-      ownKeys: () => rejectEnumeration('ownKeys'),
-      getOwnPropertyDescriptor: () =>
-        rejectEnumeration('getOwnPropertyDescriptor'),
-    });
+  it.each(STORE_DRIVEN_DIALOG_KINDS.map((kind) => [kind] as const))(
+    'renders DialogManager instead of Composer when the %s dialog is open in the DialogStore',
+    (kind) => {
+      const store = createDialogStore();
+      openStoreDialog(store, kind);
 
-    hasActiveDialog(uiState);
-
-    expect([...readKeys].sort()).toStrictEqual([...ACTIVE_DIALOG_FLAGS].sort());
-  });
-
-  it.each(ACTIVE_DIALOG_FLAGS.map((flag) => [flag] as const))(
-    'renders DialogManager instead of Composer when %s is active',
-    (flag) => {
-      const rendered = renderDefaultAppLayout(
-        createUIStateWithActiveDialog(flag),
-      );
+      const rendered = renderDefaultAppLayout({ store });
       const frame = rendered.lastFrame();
 
       expect(frame).toContain(DIALOG_MANAGER_SENTINEL);
@@ -391,7 +308,7 @@ describe('DefaultAppLayout', () => {
   );
 
   it('renders Composer when no dialog is open', () => {
-    const rendered = renderDefaultAppLayout(createBaseUIState());
+    const rendered = renderDefaultAppLayout();
     const frame = rendered.lastFrame();
 
     expect(frame).toContain(COMPOSER_SENTINEL);
@@ -400,14 +317,13 @@ describe('DefaultAppLayout', () => {
   });
 
   it('renders standard and alternate buffer layout branches according to settings', () => {
-    const alternateBuffer = renderDefaultAppLayout(createBaseUIState());
+    const alternateBuffer = renderDefaultAppLayout();
     const alternateBufferFrame = alternateBuffer.lastFrame();
     alternateBuffer.unmount();
 
-    const standardBuffer = renderDefaultAppLayout(
-      createBaseUIState(),
-      createSettingsStub({ useAlternateBuffer: false }),
-    );
+    const standardBuffer = renderDefaultAppLayout({
+      settings: createSettingsStub({ useAlternateBuffer: false }),
+    });
     const standardBufferFrame = standardBuffer.lastFrame();
     standardBuffer.unmount();
 

@@ -7,7 +7,9 @@
 import { Box, Text, useIsScreenReaderEnabled } from 'ink';
 import type { FC } from 'react';
 import { useEffect, useState } from 'react';
-import { useUIState } from '../contexts/UIStateContext.js';
+import { useSettingsProfileStore } from '../stores/settings/SettingsContext.js';
+import { useTurnStore } from '../stores/turn/TurnContext.js';
+import { useStoreSelector } from '../stores/useStoreSelector.js';
 import { theme } from '../semantic-colors.js';
 import { Colors } from '../colors.js';
 import { StreamingState } from '../types.js';
@@ -144,7 +146,13 @@ export const Notifications: FC<NotificationsProps> = ({
   updateInfo,
   history,
 }) => {
-  const { initError, streamingState } = useUIState();
+  const settingsStore = useSettingsProfileStore();
+  const turnStore = useTurnStore();
+  const initError = useStoreSelector(settingsStore.store, (s) => s.initError);
+  const streamingState = useStoreSelector(
+    turnStore.store,
+    (s) => s.streamingState,
+  );
   const isScreenReaderEnabled = useIsScreenReaderEnabled();
   const [hasSeenScreenReaderNudge] = useScreenReaderNudge(
     isScreenReaderEnabled,

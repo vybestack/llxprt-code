@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -85,6 +85,7 @@ import { MessageType } from '../types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 // import { AppAction } from '../reducers/appReducer.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
+import { createTurnStore } from '../stores/turn/turnStore.js';
 
 function dispatchAvailability(
   contextValue: SessionContextType | undefined,
@@ -258,18 +259,15 @@ describe('SessionController', () => {
     unmount();
   });
 
-  it('should handle ADD_ITEM actions and call addItem on the session', () => {
+  it('performs pending add requests recorded on the TurnStore', async () => {
     mockAddItem.mockReturnValue(1);
 
-    let contextValue: SessionContextType | undefined;
+    const turnStore = createTurnStore();
 
-    const TestComponent = () => {
-      contextValue = React.useContext(SessionContext);
-      return null;
-    };
+    const TestComponent = () => null;
 
-    const { unmount, rerender } = render(
-      <SessionController config={mockConfig as Config}>
+    const { unmount } = render(
+      <SessionController config={mockConfig as Config} turnStore={turnStore}>
         <TestComponent />
       </SessionController>,
     );
@@ -277,21 +275,12 @@ describe('SessionController', () => {
     const itemData = { type: MessageType.USER, text: 'Test message' };
     const baseTimestamp = Date.now();
 
-    // Use appDispatch from the context
-    contextValue?.appDispatch({
-      type: 'ADD_ITEM',
-      payload: { itemData, baseTimestamp },
+    await React.act(async () => {
+      turnStore.commands.requestAddItem(itemData, baseTimestamp);
     });
 
-    // Force a re-render to trigger effects
-    rerender(
-      <SessionController config={mockConfig as Config}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    // The effect should have run synchronously after the re-render
     expect(mockAddItem).toHaveBeenCalledWith(itemData, baseTimestamp);
+    expect(turnStore.store.getState().pendingAddRequest).toBeNull();
 
     unmount();
   });
@@ -635,145 +624,27 @@ describe('SessionController', () => {
     unmount();
   });
 
-  it('should handle warnings from appReducer', async () => {
+  it('propagates theme invalidation and relogin state through the session', () => {
     let contextValue: SessionContextType | undefined;
-
     const TestComponent = () => {
       contextValue = React.useContext(SessionContext);
       return null;
     };
-
     const { unmount, rerender } = render(
       <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
     );
-
-    const warningKey = 'test-warning';
-    const warningMessage = 'This is a test warning';
-
-    // Use the appDispatch from context
-    contextValue?.appDispatch({
-      type: 'SET_WARNING',
-      payload: { key: warningKey, message: warningMessage },
-    });
-
-    // Re-render to get updated state
+    if (!contextValue) throw new Error('Missing session context');
+    contextValue.appDispatch({ type: 'REFRESH_THEME' });
+    contextValue.appDispatch({ type: 'SET_NEEDS_RELOGIN', payload: true });
     rerender(
       <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
     );
-
-    expect(contextValue!.appState.warnings.get(warningKey)).toBe(
-      warningMessage,
-    );
-
-    contextValue?.appDispatch({
-      type: 'CLEAR_WARNING',
-      payload: warningKey,
-    });
-
-    rerender(
-      <SessionController config={mockConfig as Config}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    expect(contextValue!.appState.warnings.has(warningKey)).toBe(false);
-
-    unmount();
-  });
-
-  it('should handle dialog actions from appReducer', async () => {
-    let contextValue: SessionContextType | undefined;
-
-    const TestComponent = () => {
-      contextValue = React.useContext(SessionContext);
-      return null;
-    };
-
-    const { unmount, rerender } = render(
-      <SessionController config={mockConfig as Config}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    // Open dialog
-    contextValue?.appDispatch({
-      type: 'OPEN_DIALOG',
-      payload: 'theme',
-    });
-
-    // Re-render to get updated state
-    rerender(
-      <SessionController config={mockConfig as Config}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    expect(contextValue!.appState.openDialogs.theme).toBe(true);
-
-    // Close dialog
-    contextValue?.appDispatch({
-      type: 'CLOSE_DIALOG',
-      payload: 'theme',
-    });
-
-    rerender(
-      <SessionController config={mockConfig as Config}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    expect(contextValue!.appState.openDialogs.theme).toBe(false);
-
-    unmount();
-  });
-
-  it('should handle error actions from appReducer', async () => {
-    let contextValue: SessionContextType | undefined;
-
-    const TestComponent = () => {
-      contextValue = React.useContext(SessionContext);
-      return null;
-    };
-
-    const { unmount, rerender } = render(
-      <SessionController config={mockConfig as Config}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    const errorMessage = 'Test error message';
-
-    contextValue?.appDispatch({
-      type: 'SET_AUTH_ERROR',
-      payload: errorMessage,
-    });
-
-    // Re-render to get updated state
-    rerender(
-      <SessionController config={mockConfig as Config}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    expect(contextValue!.appState.errors.auth).toBe(errorMessage);
-
-    contextValue?.appDispatch({
-      type: 'SET_AUTH_ERROR',
-      payload: null,
-    });
-
-    rerender(
-      <SessionController config={mockConfig as Config}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    expect(contextValue!.appState.errors.auth).toBe(null);
-
+    expect(contextValue.appState.themeRevision).toBe(1);
+    expect(contextValue.appState.needsRelogin).toBe(true);
     unmount();
   });
 });

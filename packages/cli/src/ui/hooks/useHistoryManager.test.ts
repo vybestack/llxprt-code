@@ -8,16 +8,57 @@ import { describe, it, expect } from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useHistory } from './useHistoryManager.js';
+import { createTurnStore } from '../stores/turn/turnStore.js';
 import { ToolCallStatus, type HistoryItem } from '../types.js';
 
 describe('useHistoryManager', () => {
+  it('does not reset owner limits when an options-less consumer mounts', () => {
+    const store = createTurnStore();
+    const owner = renderHook(() =>
+      useHistory(store, { maxItems: -1, maxBytes: -1 }),
+    );
+    const reader = renderHook(() => useHistory(store));
+    act(() => {
+      for (let index = 0; index < 401; index++)
+        store.commands.addItem({ type: 'info', text: String(index) });
+    });
+    expect(store.store.getState().history).toHaveLength(401);
+    reader.unmount();
+    owner.unmount();
+  });
+
+  it('retains history beyond both default display budgets with unlimited options', () => {
+    const turnStore = createTurnStore();
+    const { result, unmount } = renderHook(() =>
+      useHistory(turnStore, { maxItems: -1, maxBytes: -1 }),
+    );
+    const text = 'x'.repeat(11000);
+    act(() => {
+      for (let index = 0; index < 401; index++) {
+        result.current.addItem(
+          { type: 'user', text: `${index}:${text}` },
+          index,
+        );
+      }
+    });
+    expect(result.current.history).toHaveLength(401);
+    expect(
+      result.current.history.every(
+        (item) => item.type === 'user' && item.text.endsWith(text),
+      ),
+    ).toBe(true);
+    unmount();
+  });
+
   it('should initialize with an empty history', () => {
-    const { result } = renderHook(() => useHistory());
+    const turnStore = createTurnStore();
+    const { result } = renderHook(() => useHistory(turnStore));
     expect(result.current.history).toStrictEqual([]);
   });
 
   it('should add an item to history with a unique ID', () => {
-    const { result } = renderHook(() => useHistory());
+    const turnStore = createTurnStore();
+    const { result } = renderHook(() => useHistory(turnStore));
     const timestamp = Date.now();
     const itemData: Omit<HistoryItem, 'id'> = {
       type: 'user', // Replaced HistoryItemType.User
@@ -40,7 +81,8 @@ describe('useHistoryManager', () => {
   });
 
   it('should generate unique IDs for items added with the same base timestamp', () => {
-    const { result } = renderHook(() => useHistory());
+    const turnStore = createTurnStore();
+    const { result } = renderHook(() => useHistory(turnStore));
     const timestamp = Date.now();
     const itemData1: Omit<HistoryItem, 'id'> = {
       type: 'user', // Replaced HistoryItemType.User
@@ -68,7 +110,8 @@ describe('useHistoryManager', () => {
   });
 
   it('should update an existing history item', () => {
-    const { result } = renderHook(() => useHistory());
+    const turnStore = createTurnStore();
+    const { result } = renderHook(() => useHistory(turnStore));
     const timestamp = Date.now();
     const initialItem: Omit<HistoryItem, 'id'> = {
       type: 'gemini', // Replaced HistoryItemType.Gemini
@@ -96,7 +139,8 @@ describe('useHistoryManager', () => {
   });
 
   it('should not change history if updateHistoryItem is called with a nonexistent ID', () => {
-    const { result } = renderHook(() => useHistory());
+    const turnStore = createTurnStore();
+    const { result } = renderHook(() => useHistory(turnStore));
     const timestamp = Date.now();
     const itemData: Omit<HistoryItem, 'id'> = {
       type: 'user', // Replaced HistoryItemType.User
@@ -117,7 +161,8 @@ describe('useHistoryManager', () => {
   });
 
   it('should clear the history', () => {
-    const { result } = renderHook(() => useHistory());
+    const turnStore = createTurnStore();
+    const { result } = renderHook(() => useHistory(turnStore));
     const timestamp = Date.now();
     const itemData1: Omit<HistoryItem, 'id'> = {
       type: 'user', // Replaced HistoryItemType.User
@@ -143,7 +188,8 @@ describe('useHistoryManager', () => {
   });
 
   it('should not add consecutive duplicate user messages', () => {
-    const { result } = renderHook(() => useHistory());
+    const turnStore = createTurnStore();
+    const { result } = renderHook(() => useHistory(turnStore));
     const timestamp = Date.now();
     const itemData1: Omit<HistoryItem, 'id'> = {
       type: 'user', // Replaced HistoryItemType.User
@@ -176,7 +222,8 @@ describe('useHistoryManager', () => {
   });
 
   it('should add duplicate user messages if they are not consecutive', () => {
-    const { result } = renderHook(() => useHistory());
+    const turnStore = createTurnStore();
+    const { result } = renderHook(() => useHistory(turnStore));
     const timestamp = Date.now();
     const itemData1: Omit<HistoryItem, 'id'> = {
       type: 'user', // Replaced HistoryItemType.User
@@ -204,8 +251,9 @@ describe('useHistoryManager', () => {
   });
 
   it('should trim history when maxItems is reached', () => {
+    const turnStore = createTurnStore();
     const { result } = renderHook(() =>
-      useHistory({ maxItems: 2, maxBytes: -1 }),
+      useHistory(turnStore, { maxItems: 2, maxBytes: -1 }),
     );
     const timestamp = Date.now();
     act(() => {
@@ -220,8 +268,9 @@ describe('useHistoryManager', () => {
   });
 
   it('should trim history based on maxBytes budget', () => {
+    const turnStore = createTurnStore();
     const { result } = renderHook(() =>
-      useHistory({ maxItems: 10, maxBytes: 200 }),
+      useHistory(turnStore, { maxItems: 10, maxBytes: 200 }),
     );
     const timestamp = Date.now();
 
@@ -246,8 +295,9 @@ describe('useHistoryManager', () => {
   });
 
   it('bounds an oversized newest item for display with a UTF-8-safe preview', () => {
+    const turnStore = createTurnStore();
     const { result } = renderHook(() =>
-      useHistory({ maxItems: 10, maxBytes: 400 }),
+      useHistory(turnStore, { maxItems: 10, maxBytes: 400 }),
     );
 
     act(() => {
@@ -271,8 +321,9 @@ describe('useHistoryManager', () => {
   });
 
   it('hard-bounds oversized raw tool output retained by UI history', () => {
+    const turnStore = createTurnStore();
     const { result } = renderHook(() =>
-      useHistory({ maxItems: 10, maxBytes: 500 }),
+      useHistory(turnStore, { maxItems: 10, maxBytes: 500 }),
     );
 
     act(() => {

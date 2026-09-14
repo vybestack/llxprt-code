@@ -12,7 +12,8 @@ import { MarkdownDisplay } from '../../utils/MarkdownDisplay.js';
 import { AnsiOutputText } from '../AnsiOutput.js';
 import { MaxSizedBox } from '../shared/MaxSizedBox.js';
 import { type AnsiOutput } from '@vybestack/llxprt-code-core';
-import { useUIState } from '../../contexts/UIStateContext.js';
+import { useTerminalStore } from '../../stores/terminal/TerminalContext.js';
+import { useStoreSelector } from '../../stores/useStoreSelector.js';
 import { STATUS_INDICATOR_WIDTH } from './ToolShared.js';
 
 const STATIC_HEIGHT = 1;
@@ -280,7 +281,8 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
   terminalWidth,
   renderOutputAsMarkdown = true,
 }) => {
-  const { renderMarkdown } = useUIState();
+  const { store } = useTerminalStore();
+  const renderMarkdown = useStoreSelector(store, (s) => s.renderMarkdown);
 
   const availableHeight =
     availableTerminalHeight !== undefined

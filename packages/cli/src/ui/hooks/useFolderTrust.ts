@@ -4,16 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { ExitCodes } from '@vybestack/llxprt-code-core';
+import { selectDialogOpen } from '../stores/dialog/dialogStore.js';
+import { useCallback, useEffect, useRef } from 'react';
+import { ExitCodes, coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { LoadedSettings } from '../../config/settings.js';
 import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import {
+  isWorkspaceTrusted,
+  TrustLevel,
   loadTrustedFolders,
   resolveLocalWorkspaceTrust,
-  TrustLevel,
-  isWorkspaceTrusted,
   type TrustedFolderSnapshot,
 } from '../../config/trustedFolders.js';
 import { type HistoryItemWithoutId, MessageType } from '../types.js';
@@ -23,16 +24,20 @@ import {
   combineTrustUpdateFailure,
   getTrustCommitErrorMessage,
 } from '../trustDialogHelpers.js';
+import type { DialogStore } from '../stores/dialog/dialogStore.js';
+import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
+import { useStoreSelector } from '../stores/useStoreSelector.js';
+
+import type { SettingsProfileStore } from '../stores/settings/settingsStore.js';
+
+const debug = new DebugLogger('llxprt:ui:useFolderTrust');
 
 export type FolderTrustRuntime = Pick<
   CliUiRuntime,
   'getWorkingDir' | 'setTrustedFolderLive' | 'isTrustedFolder'
 >;
 
-const debug = new DebugLogger('llxprt:ui:useFolderTrust');
-
 type AddItemFn = (item: HistoryItemWithoutId, timestamp: number) => number;
-type SetDialogOpenFn = (open: boolean) => void;
 
 function getTrustLevelFromChoice(choice: FolderTrustChoice): TrustLevel | null {
   switch (choice) {
@@ -48,7 +53,7 @@ function getTrustLevelFromChoice(choice: FolderTrustChoice): TrustLevel | null {
 }
 
 function showStartupMessage(
-  trusted: boolean | undefined = undefined,
+  trusted: boolean | undefined,
   addItem: AddItemFn | undefined,
   startupMessageSent: React.MutableRefObject<boolean>,
 ): void {
@@ -72,7 +77,7 @@ async function applyFolderTrustChoice(
   settings: LoadedSettings,
   config: FolderTrustRuntime | undefined,
   addItem: AddItemFn | undefined,
-  setDialogOpen: SetDialogOpenFn,
+  closeDialog: () => void,
   mountedRef: React.MutableRefObject<boolean>,
 ): Promise<void> {
   const trustLevel = getTrustLevelFromChoice(choice);
@@ -98,7 +103,7 @@ async function applyFolderTrustChoice(
     failedPhase = 'live';
     await config?.setTrustedFolderLive(newIsTrusted);
     if (mountedRef.current) {
-      setDialogOpen(false);
+      closeDialog();
     }
   } catch (error) {
     const rollbackFailures: unknown[] = [];
@@ -135,21 +140,34 @@ async function applyFolderTrustChoice(
   }
 }
 
-export const useFolderTrust = (
-  settings: LoadedSettings,
-  addItem?: AddItemFn,
-  config?: FolderTrustRuntime,
-) => {
-  const { folderTrust } = settings.merged;
-  const initialTrust = isWorkspaceTrusted(
+interface UseFolderTrustParams {
+  settings: LoadedSettings;
+  addItem?: AddItemFn;
+  config?: FolderTrustRuntime;
+  store: DialogStore;
+  settingsStore: SettingsProfileStore;
+  dialogs: DialogOpeners;
+}
+
+export const useFolderTrust = ({
+  settings,
+  addItem,
+  config,
+  store,
+  dialogs,
+  settingsStore,
+}: UseFolderTrustParams) => {
+  useEffectiveFolderTrust(config, settingsStore);
+  const trusted = isWorkspaceTrusted(
     settings.merged,
     config?.getWorkingDir() ?? process.cwd(),
   );
-  const [isFolderTrustDialogOpen, setIsFolderTrustDialogOpen] = useState(
-    initialTrust === undefined,
+  const isFolderTrustDialogOpen = useStoreSelector(store.store, (state) =>
+    selectDialogOpen(state, 'folderTrust'),
   );
   const startupMessageSent = useRef(false);
-  const previousFolderTrust = useRef(folderTrust);
+  const previousFolderTrust = useRef(settings.merged.folderTrust);
+  const initialized = useRef(false);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -159,18 +177,27 @@ export const useFolderTrust = (
     };
   }, []);
 
+  // Persistence can become visible before the live transition finishes.
+  // Only startup and a folderTrust setting change synchronize visibility;
+  // the selection transaction owns dismissal after its awaited work.
   useEffect(() => {
-    const folderTrustChanged = previousFolderTrust.current !== folderTrust;
-    previousFolderTrust.current = folderTrust;
-    const trusted = isWorkspaceTrusted(
-      settings.merged,
-      config?.getWorkingDir() ?? process.cwd(),
-    );
-    if (folderTrustChanged) {
-      setIsFolderTrustDialogOpen(trusted === undefined);
+    if (
+      !initialized.current ||
+      previousFolderTrust.current !== settings.merged.folderTrust
+    ) {
+      initialized.current = true;
+      previousFolderTrust.current = settings.merged.folderTrust;
+      if (trusted === undefined) {
+        dialogs.folderTrust.open({});
+      } else {
+        dialogs.folderTrust.close();
+      }
     }
+  }, [trusted, dialogs, settings.merged.folderTrust]);
+
+  useEffect(() => {
     showStartupMessage(trusted, addItem, startupMessageSent);
-  }, [folderTrust, addItem, config, settings.merged]);
+  }, [trusted, addItem]);
 
   const handleFolderTrustSelect = useCallback(
     (choice: FolderTrustChoice): Promise<void> =>
@@ -179,11 +206,25 @@ export const useFolderTrust = (
         settings,
         config,
         addItem,
-        setIsFolderTrustDialogOpen,
+        dialogs.folderTrust.close,
         mountedRef,
       ),
-    [addItem, config, settings],
+    [addItem, config, settings, dialogs],
   );
 
   return { isFolderTrustDialogOpen, handleFolderTrustSelect };
 };
+
+function useEffectiveFolderTrust(
+  config: FolderTrustRuntime | undefined,
+  settingsStore: SettingsProfileStore,
+): void {
+  useEffect(() => {
+    const publish = settingsStore.commands.setIsTrustedFolder;
+    coreEvents.on(CoreEvent.FolderTrustChanged, publish);
+    publish(config?.isTrustedFolder() ?? false);
+    return () => {
+      coreEvents.off(CoreEvent.FolderTrustChanged, publish);
+    };
+  }, [config, settingsStore]);
+}
