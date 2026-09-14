@@ -6,7 +6,7 @@
 
 // ChatSession — thin coordinator that wires up the decomposed modules.
 
-import { createTokenUsageLogger } from './chatSession-tokenSync-helpers.js';
+import { createTokenUsageLogger } from './TokenUsageLogger.js';
 import type {
   ModelGenerationSettings,
   ModelOutput,
