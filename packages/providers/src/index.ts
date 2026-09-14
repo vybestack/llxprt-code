@@ -22,6 +22,7 @@
 
 // --- Contract interfaces ---
 export { getImageModelsForAlias } from './composition/providerAliases.js';
+export { listOpenAiCompatibleModels } from './openai/compatible-models.js';
 export type {
   IProvider,
   GenerateChatOptions,
