@@ -80,7 +80,10 @@ function resolveAuthContext(
   profileName: string,
 ): ImageBackendAuthContext {
   if (profile.backend === 'codex') {
-    validateCodexImageProfileBaseUrl(profile.baseUrl, profileName);
+    validateCodexImageProfileBaseUrl(
+      profile.baseUrl ?? DEFAULT_CODEX_BASE_URL,
+      profileName,
+    );
     return 'codex';
   }
 
@@ -136,7 +139,7 @@ export function resolveImageProfileBackendConfig(
   return {
     backend: profile.backend,
     model: profile.model,
-    baseUrl: profile.baseUrl,
+    baseUrl: profile.baseUrl ?? DEFAULT_CODEX_BASE_URL,
     auth: profile.auth,
     ...(profile.operations === undefined
       ? {}

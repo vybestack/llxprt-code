@@ -286,7 +286,7 @@ export function parseLoadBalancerProfile(
   return loadBalancerProfileSchema.parse(input);
 }
 
-const imageProfileSchema: z.ZodType<ImageProfile> = z
+const imageProfileFieldsSchema = z
   .object({
     version: z.literal(1),
     type: z.literal('image'),
@@ -294,9 +294,7 @@ const imageProfileSchema: z.ZodType<ImageProfile> = z
     ephemeralSettings: ephemeralSettingsSchema.optional(),
     label: z.string().min(1).optional(),
     description: z.string().min(1).optional(),
-    backend: z.enum(['codex', 'openai-images']),
     model: z.string().min(1),
-    baseUrl: z.string().url(),
     auth: z.discriminatedUnion('type', [
       z.object({ type: z.literal('none') }).strict(),
       z
@@ -328,6 +326,20 @@ const imageProfileSchema: z.ZodType<ImageProfile> = z
       .optional(),
   })
   .strict();
+
+const imageProfileSchema: z.ZodType<ImageProfile> = z.discriminatedUnion(
+  'backend',
+  [
+    imageProfileFieldsSchema.extend({
+      backend: z.literal('codex'),
+      baseUrl: z.string().url().optional(),
+    }),
+    imageProfileFieldsSchema.extend({
+      backend: z.literal('openai-images'),
+      baseUrl: z.string().url(),
+    }),
+  ],
+);
 
 export function parseImageProfile(_name: string, input: unknown): ImageProfile {
   return imageProfileSchema.parse(input);

@@ -244,14 +244,12 @@ export type PersistedImageBackendAuth =
   | { readonly type: 'keyfile'; readonly path: string }
   | { readonly type: 'oauth'; readonly provider: 'codex' };
 
-export interface ImageProfile {
+interface ImageProfileFields {
   version: 1;
   type: 'image';
   label?: string;
   description?: string;
-  backend: 'codex' | 'openai-images';
   model: string;
-  baseUrl: string;
   auth: PersistedImageBackendAuth;
   modelParams?: ModelParams;
   ephemeralSettings?: EphemeralSettings;
@@ -262,6 +260,12 @@ export interface ImageProfile {
     readonly background?: ImageBackground;
   };
 }
+
+export type ImageProfile = ImageProfileFields &
+  (
+    | { backend: 'codex'; baseUrl?: string }
+    | { backend: 'openai-images'; baseUrl: string }
+  );
 
 /**
  * Load balancer profile configuration (multiple profiles)
