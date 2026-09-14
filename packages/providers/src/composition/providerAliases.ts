@@ -116,6 +116,7 @@ export interface ProviderAliasConfig {
    * to restrict the available models to a specific set.
    */
   staticModels?: StaticModelEntry[];
+  imageModels?: string[];
   /**
    * Per-model ephemeral setting overrides. Rules are matched against the model
    * name using RegExp.test() and applied in order — later rules override earlier
@@ -250,6 +251,18 @@ function sanitizeAliasConfigFields(
   aliasConfig: ProviderAliasConfig,
   filePath: string,
 ): void {
+  if (
+    aliasConfig.imageModels !== undefined &&
+    (!Array.isArray(aliasConfig.imageModels) ||
+      !aliasConfig.imageModels.every(
+        (model: unknown) => typeof model === 'string' && model.trim() !== '',
+      ))
+  ) {
+    debugLogger.warn(
+      `[ProviderAliases] Ignoring invalid imageModels in ${filePath}`,
+    );
+    aliasConfig.imageModels = undefined;
+  }
   if (
     Object.prototype.hasOwnProperty.call(aliasConfig, 'sandbox-base-url') &&
     typeof aliasConfig['sandbox-base-url'] !== 'string'
@@ -454,6 +467,14 @@ export function loadProviderAliasEntries(): ProviderAliasEntry[] {
   }
 
   return aliases;
+}
+
+/** Return image model preferences from the first matching alias. */
+export function getImageModelsForAlias(alias: string): string[] {
+  return (
+    loadProviderAliasEntries().find((entry) => entry.alias === alias)?.config
+      .imageModels ?? []
+  );
 }
 
 export function getAliasFilePath(alias: string): string {

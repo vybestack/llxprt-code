@@ -21,6 +21,7 @@
  */
 
 // --- Contract interfaces ---
+export { getImageModelsForAlias } from './composition/providerAliases.js';
 export type {
   IProvider,
   GenerateChatOptions,
