@@ -29,7 +29,7 @@ function getEditorBorderColor(
 interface ProfileInlineEditorProps {
   profileName: string;
   profile: Profile;
-  onSave: (profileName: string, updatedProfile: Profile) => void;
+  onSave: (profileName: string, updatedProfile: unknown) => Promise<void>;
   onCancel: () => void;
   error?: string;
 }
@@ -119,7 +119,7 @@ function handleSaveKeys(
   validateJson: string | null,
   lines: string[],
   profileName: string,
-  onSave: (profileName: string, updatedProfile: Profile) => void,
+  onSave: (profileName: string, updatedProfile: unknown) => Promise<void>,
   setValidationError: React.Dispatch<React.SetStateAction<string | null>>,
 ): boolean {
   if (!(key.ctrl === true && key.name === 's')) return false;
@@ -129,13 +129,13 @@ function handleSaveKeys(
     return true;
   }
   try {
-    const updatedProfile = JSON.parse(lines.join('\n'));
+    const updatedProfile: unknown = JSON.parse(lines.join('\n'));
     const profileError = validateProfile(updatedProfile);
     if (profileError !== null) {
       setValidationError(profileError);
       return true;
     }
-    onSave(profileName, updatedProfile as Profile);
+    void onSave(profileName, updatedProfile);
   } catch (e) {
     setValidationError(e instanceof Error ? e.message : 'Invalid JSON');
   }
@@ -151,7 +151,7 @@ function handleNavModeKeys(
   validateJson: string | null,
   setValidationError: React.Dispatch<React.SetStateAction<string | null>>,
   profileName: string,
-  onSave: (profileName: string, updatedProfile: Profile) => void,
+  onSave: (profileName: string, updatedProfile: unknown) => Promise<void>,
   onCancel: () => void,
   startEditing: () => void,
 ): boolean {
@@ -419,7 +419,7 @@ function useEditorKeypress(
   validateJson: string | null,
   setValidationError: React.Dispatch<React.SetStateAction<string | null>>,
   profileName: string,
-  onSave: (profileName: string, updatedProfile: Profile) => void,
+  onSave: (profileName: string, updatedProfile: unknown) => Promise<void>,
   onCancel: () => void,
   startEditing: () => void,
 ) {

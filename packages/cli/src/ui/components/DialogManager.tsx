@@ -502,9 +502,9 @@ function renderUtilityStoreDialog(
 
 /**
  * Store-backed dialogs: rendered from the active DialogStore entry instead of
- * per-dialog booleans. Dialog data (provider lists, profiles, tools) still
- * flows through UIState until the data-store slices land. The kind groups are
- * disjoint, so the router tries each focused helper until one claims the
+ * per-dialog booleans. Dialog data (provider lists, profiles, tools) comes from
+ * the settings profile store through useSettingsProfileStore selectors. The kind
+ * groups are disjoint, so the router tries each focused helper until one claims the
  * kind. Only renderProfileStoreDialog can return null (profileEditor with no
  * loaded data renders nothing), which the explicit check preserves.
  */

@@ -336,12 +336,7 @@ export function renderProfileEditorDialogView(
       <ProfileInlineEditor
         profileName={uiState.selectedProfileName ?? ''}
         profile={profile}
-        onSave={
-          uiActions.saveProfileFromEditor as (
-            name: string,
-            profile: Profile,
-          ) => void
-        }
+        onSave={uiActions.saveProfileFromEditor}
         onCancel={uiActions.closeProfileEditor}
         error={uiState.profileDialogError ?? undefined}
       />

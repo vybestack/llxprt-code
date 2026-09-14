@@ -374,6 +374,18 @@ identity assertions, coverage for moved side effects).
 
 ### Remaining documented follow-ups (not fixed, with reasons)
 
+- TurnStore's `clearItems` embeds `ConversationContext.startNewConversation()`
+  (final-review note): every caller inherits conversation-reset semantics.
+  Preserved 1:1 from the pre-migration hook (merge-base `useHistoryManager`
+  did the identical reset) and today `/clear` is the only production path,
+  where the reset is the intent. If a future caller needs
+  clear-without-reset, add a `clearItemsOnly` command; the code comment at
+  the command makes the coupling discoverable.
+- `AppCommandsProvider`'s latest-ref (`latest.current = value` during
+  render) could publish bindings from a discarded concurrent render
+  (final-review note). Standard React latest-ref tradeoff; handlers are
+  hook-stable so practical impact is nil. Revisit only if React's
+  concurrent features land in the terminal renderer.
 - Profile dialogs mirror their data one commit after opening (new,
   minor flash of empty list on first open; synchronous seeding in the
   open path is the clean fix if it matters in practice).

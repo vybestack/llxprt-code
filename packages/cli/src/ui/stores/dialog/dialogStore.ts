@@ -20,9 +20,9 @@ export interface DialogPayloadMap {
   workspaceMigration: { extensions: LlxprtExtension[] };
   idePrompt: { ide: IdeInfo };
   folderTrust: Record<string, never>;
-  // Welcome wizard data (state, providers, models) loads asynchronously and
-  // mutates while the dialog is open, so it stays in UIState until the data
-  // store slice; the payload only carries the open request itself.
+  // Welcome wizard data (state, providers, models) lives in the settings
+  // profile store and updates asynchronously while the dialog is open;
+  // the payload only carries the open request itself.
   welcome: Record<string, never>;
   confirmation: ConfirmationRequest;
   extensionUpdateConfirm: ConfirmationRequest;
