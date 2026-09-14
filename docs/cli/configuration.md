@@ -843,6 +843,13 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `false`
   - **Requires restart:** Yes
 
+#### `imageProvider`
+
+- **`imageProvider`** (string):
+  - **Description:** Provider alias for image model selection and operations.
+  - **Default:** `undefined`
+  - **Requires restart:** No
+
 #### `defaultProfile`
 
 - **`defaultProfile`** (string):

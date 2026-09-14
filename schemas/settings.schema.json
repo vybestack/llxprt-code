@@ -1210,6 +1210,12 @@
       },
       "additionalProperties": false
     },
+    "imageProvider": {
+      "title": "Image Provider",
+      "description": "Provider alias for image model selection and operations.",
+      "markdownDescription": "Provider alias for image model selection and operations.\n\n- Category: `Provider`\n- Requires restart: `no`",
+      "type": "string"
+    },
     "defaultProfile": {
       "title": "Default Profile",
       "description": "Default provider profile to use.",
