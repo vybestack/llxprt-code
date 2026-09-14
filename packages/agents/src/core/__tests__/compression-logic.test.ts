@@ -7,7 +7,9 @@
 import { describe, it, expect } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { findCompressSplitPoint } from '../client.js';
-import { COMPRESSION_PRESERVE_THRESHOLD } from '../compression-config.js';
+
+// Sample preservation fraction for the split-point test.
+const COMPRESSION_PRESERVE_THRESHOLD = 0.5;
 
 describe('Compression Logic', () => {
   it('should calculate preservation index with new threshold', () => {

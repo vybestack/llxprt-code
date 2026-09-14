@@ -123,6 +123,86 @@ const RENAMED_DESTINATION_OVERRIDES = new Map<string, string>([
     'packages/core/src/providers/logging/ProviderContentExtractor.ts',
     'packages/providers/src/logging/streamChunkUtils.ts',
   ],
+  // #2234: deleted IChatGenerateParams.ts, unused module with no production consumers.
+  [
+    'packages/core/src/providers/openai/IChatGenerateParams.ts',
+    'packages/providers/src/openai/OpenAIProvider.ts',
+  ],
+  // #2234: deleted index.ts, private barrel with no importers.
+  [
+    'packages/core/src/providers/openai-responses/index.ts',
+    'packages/providers/src/openai-responses/OpenAIResponsesProvider.ts',
+  ],
+  // #2234: deleted userMemory.ts, unused module with no production consumers.
+  [
+    'packages/core/src/providers/utils/userMemory.ts',
+    'packages/providers/src/utils/request-media-resolution.ts',
+  ],
+  // #2234: deleted estimateRemoteTokens.ts, unused module with no production consumers.
+  [
+    'packages/core/src/providers/openai/estimateRemoteTokens.ts',
+    'packages/providers/src/openai/OpenAIProvider.ts',
+  ],
+  // #2234: deleted estimateRemoteTokens.test.ts, dedicated tests of a deleted production-dead helper.
+  [
+    'packages/core/src/providers/openai/estimateRemoteTokens.test.ts',
+    'packages/providers/src/openai/OpenAIProvider.ts',
+  ],
+  // #2234: deleted openaiRequestParams.ts, unused module with no production consumers.
+  [
+    'packages/core/src/providers/openai/openaiRequestParams.ts',
+    'packages/providers/src/openai/OpenAIProvider.ts',
+  ],
+  // #2234: deleted openaiRequestParams.test.ts, dedicated tests of a deleted production-dead helper.
+  [
+    'packages/core/src/providers/openai/openaiRequestParams.test.ts',
+    'packages/providers/src/openai/OpenAIProvider.ts',
+  ],
+  // #2234: deleted test-types.ts, unused module with no production consumers.
+  [
+    'packages/core/src/providers/openai/test-types.ts',
+    'packages/providers/src/openai/OpenAIProvider.ts',
+  ],
+  // #2234: deleted buildResponsesRequest.ts, unused module with no production consumers.
+  [
+    'packages/core/src/providers/openai/buildResponsesRequest.ts',
+    'packages/providers/src/openai/OpenAIProvider.ts',
+  ],
+  // #2234: deleted buildResponsesRequest.test.ts, dedicated tests of a deleted production-dead helper.
+  [
+    'packages/core/src/providers/openai/buildResponsesRequest.test.ts',
+    'packages/providers/src/openai/OpenAIProvider.ts',
+  ],
+  // #2234: deleted buildResponsesRequest.stripToolCalls.test.ts, dedicated tests of a deleted production-dead helper.
+  [
+    'packages/core/src/providers/openai/buildResponsesRequest.stripToolCalls.test.ts',
+    'packages/providers/src/openai/OpenAIProvider.ts',
+  ],
+  // #2234: deleted buildResponsesRequest.toolIdNormalization.test.ts, dedicated tests of a deleted production-dead helper.
+  [
+    'packages/core/src/providers/openai/buildResponsesRequest.toolIdNormalization.test.ts',
+    'packages/providers/src/openai/OpenAIProvider.ts',
+  ],
+  // #2234: deleted buildResponsesRequest.undefined.test.ts, dedicated tests of a deleted production-dead helper.
+  [
+    'packages/core/src/providers/openai/buildResponsesRequest.undefined.test.ts',
+    'packages/providers/src/openai/OpenAIProvider.ts',
+  ],
+  // #2234: deleted buildResponsesInputFromContent.ts, unused module with no production consumers.
+  [
+    'packages/core/src/providers/openai-responses/buildResponsesInputFromContent.ts',
+    'packages/providers/src/openai-responses/OpenAIResponsesProvider.ts',
+  ],
+  // #2234: deleted buildResponsesInputFromContent.mediaBlock.test.ts, dedicated tests of a deleted production-dead helper.
+  [
+    'packages/core/src/providers/openai-responses/buildResponsesInputFromContent.mediaBlock.test.ts',
+    'packages/providers/src/openai-responses/OpenAIResponsesProvider.ts',
+  ],
+  // #2234: deleted OpenAIResponsesProvider.ephemerals.toolOutput.test.ts, dedicated tests of a deleted production-dead helper.
+  [
+    'packages/core/src/providers/openai-responses/__tests__/OpenAIResponsesProvider.ephemerals.toolOutput.test.ts',
+    'packages/providers/src/openai-responses/__tests__/OpenAIResponsesProvider.toolIdNormalization.test.ts',
+  ],
 ]);
 const AGENT_OWNED_DESTINATION_OVERRIDES = new Map<string, string>([
   [

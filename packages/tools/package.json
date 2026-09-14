@@ -81,6 +81,11 @@
       "bun": "./src/utils/timeoutResolution.ts",
       "import": "./dist/src/utils/timeoutResolution.js"
     },
+    "./utils/toolOutputMaxTokens.js": {
+      "types": "./dist/src/utils/toolOutputMaxTokens.d.ts",
+      "bun": "./src/utils/toolOutputMaxTokens.ts",
+      "import": "./dist/src/utils/toolOutputMaxTokens.js"
+    },
     "./acquisition.js": {
       "types": "./dist/src/acquisition/index.d.ts",
       "bun": "./src/acquisition/index.ts",

@@ -24,10 +24,6 @@ void vi.mock(
   }),
 );
 
-void vi.mock('../utils/userMemory.js', () => ({
-  resolveUserMemory: vi.fn().mockResolvedValue(''),
-}));
-
 function createMockOptions(
   overrides: Partial<NormalizedGenerateChatOptions> = {},
   modelBehavior: Record<string, unknown> = {},

@@ -9,8 +9,6 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { buildMessagesWithReasoning } from '../openai/OpenAIRequestBuilder.js';
-import { buildResponsesInputFromContent } from '../openai-responses/buildResponsesInputFromContent.js';
-import { buildResponsesRequest } from '../openai/buildResponsesRequest.js';
 import { convertToAnthropicMessages } from '../anthropic/AnthropicMessageNormalizer.js';
 import { convertToVercelMessages } from '../openai-vercel/messageConversion.js';
 import { buildProviderDumpBody } from './providerRequestConversion.js';
@@ -126,15 +124,6 @@ const CONVERTERS: ReadonlyArray<{
         'openai',
         undefined,
       ),
-  },
-  {
-    name: 'OpenAI Responses (buildResponsesInputFromContent)',
-    convert: (history) => buildResponsesInputFromContent(history),
-  },
-  {
-    name: 'OpenAI Responses legacy (buildResponsesRequest)',
-    convert: (history) =>
-      buildResponsesRequest({ model: 'gpt-5', messages: history }),
   },
   {
     name: 'Anthropic (convertToAnthropicMessages)',

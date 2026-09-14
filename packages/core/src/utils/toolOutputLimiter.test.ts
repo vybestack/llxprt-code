@@ -14,7 +14,6 @@ import {
   DEFAULT_MAX_TOKENS,
   DEFAULT_TRUNCATE_MODE,
 } from './toolOutputLimiter.js';
-import type { Config } from '../config/config.js';
 
 describe('toolOutputLimiter', () => {
   let mockConfig: {
@@ -76,9 +75,9 @@ TAIL`;
 
   describe('getOutputLimits', () => {
     it('should return default values when no settings are provided', () => {
-      const limits = getOutputLimits(mockConfig as unknown as Config);
+      const limits = getOutputLimits(mockConfig);
       expect(limits).toStrictEqual({
-        maxTokens: DEFAULT_MAX_TOKENS,
+        tokenLimit: { kind: 'limited', maxTokens: DEFAULT_MAX_TOKENS },
         truncateMode: DEFAULT_TRUNCATE_MODE,
       });
     });
@@ -89,9 +88,9 @@ TAIL`;
         'tool-output-truncate-mode': 'truncate',
       });
 
-      const limits = getOutputLimits(mockConfig as unknown as Config);
+      const limits = getOutputLimits(mockConfig);
       expect(limits).toStrictEqual({
-        maxTokens: 75000,
+        tokenLimit: { kind: 'limited', maxTokens: 75000 },
         truncateMode: 'truncate',
       });
     });
@@ -102,22 +101,36 @@ TAIL`;
         // truncateMode not set
       });
 
-      const limits = getOutputLimits(mockConfig as unknown as Config);
+      const limits = getOutputLimits(mockConfig);
       expect(limits).toStrictEqual({
-        maxTokens: 100000,
+        tokenLimit: { kind: 'limited', maxTokens: 100000 },
         truncateMode: DEFAULT_TRUNCATE_MODE,
       });
     });
   });
 
   describe('limitOutputTokens', () => {
+    it.each([false, '', 0, NaN, 'abc'])(
+      'passes over-limit content through when the setting is %s',
+      (raw) => {
+        const content = Array.from(
+          { length: 20000 },
+          (_, i) => `word${i}`,
+        ).join(' ');
+        const config = {
+          getEphemeralSettings: () => ({ 'tool-output-max-tokens': raw }),
+        };
+        expect(estimateTokens(content)).toBeGreaterThan(DEFAULT_MAX_TOKENS);
+
+        const result = limitOutputTokens(content, config, 'test-tool');
+
+        expect(result).toStrictEqual({ content, wasTruncated: false });
+      },
+    );
+
     it('should not truncate content within limits', () => {
       const content = 'This is a short message';
-      const result = limitOutputTokens(
-        content,
-        mockConfig as unknown as Config,
-        'test-tool',
-      );
+      const result = limitOutputTokens(content, mockConfig, 'test-tool');
 
       expect(result).toStrictEqual({
         content,
@@ -135,11 +148,7 @@ TAIL`;
         'tool-output-truncate-mode': 'warn',
       });
 
-      const result = limitOutputTokens(
-        content,
-        mockConfig as unknown as Config,
-        'test-tool',
-      );
+      const result = limitOutputTokens(content, mockConfig, 'test-tool');
 
       expect(result.wasTruncated).toBe(true);
       expect(result.content).toBe('');
@@ -162,11 +171,7 @@ TAIL`;
         'tool-output-truncate-mode': 'truncate',
       });
 
-      const result = limitOutputTokens(
-        content,
-        mockConfig as unknown as Config,
-        'test-tool',
-      );
+      const result = limitOutputTokens(content, mockConfig, 'test-tool');
 
       expect(result.wasTruncated).toBe(true);
       expect(result.content.length).toBeLessThan(content.length);
@@ -189,11 +194,7 @@ TAIL`;
         'tool-output-max-tokens': 200, // Force sampling on smaller content set
       });
 
-      const result = limitOutputTokens(
-        content,
-        mockConfig as unknown as Config,
-        'test-tool',
-      );
+      const result = limitOutputTokens(content, mockConfig, 'test-tool');
 
       expect(result.wasTruncated).toBe(true);
       expect(result.content).toContain('[Sampled');
@@ -214,11 +215,7 @@ TAIL`;
         'tool-output-max-tokens': 100,
       });
 
-      const result = limitOutputTokens(
-        content,
-        mockConfig as unknown as Config,
-        'test-tool',
-      );
+      const result = limitOutputTokens(content, mockConfig, 'test-tool');
 
       expect(result.wasTruncated).toBe(true);
       // Verify the sampled content stays within reasonable bounds of the effective limit
@@ -239,11 +236,7 @@ TAIL`;
         'tool-output-truncate-mode': 'sample',
       });
 
-      const result = limitOutputTokens(
-        content,
-        mockConfig as unknown as Config,
-        'test-tool',
-      );
+      const result = limitOutputTokens(content, mockConfig, 'test-tool');
 
       // Should fall back to truncate behavior for single lines
       expect(result.wasTruncated).toBe(true);
@@ -261,11 +254,7 @@ TAIL`;
         'tool-output-truncate-mode': 'warn',
       });
 
-      const result = limitOutputTokens(
-        content,
-        mockConfig as unknown as Config,
-        'test-tool',
-      );
+      const result = limitOutputTokens(content, mockConfig, 'test-tool');
 
       expect(result.wasTruncated).toBe(true);
       expect(result.content).toBe('');

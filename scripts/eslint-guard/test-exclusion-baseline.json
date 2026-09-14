@@ -75,7 +75,6 @@
       "src/core/TokenUsageLogger.integration.test.ts",
       "src/core/__tests__/agentClient.dispose.test.ts",
       "src/core/__tests__/agentClient.runtimeState.test.ts",
-      "src/core/__tests__/bucketFailoverIntegration.spec.ts",
       "src/core/__tests__/chatSession-density.integration.test.ts",
       "src/core/__tests__/chatSession-density.property.test.ts",
       "src/core/__tests__/chatSession-density.test.ts",
