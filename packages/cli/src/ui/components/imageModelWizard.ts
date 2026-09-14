@@ -8,9 +8,9 @@ import {
   listImageOutputModels,
 } from '@vybestack/llxprt-code-core';
 import { loadProviderAliasEntries } from '@vybestack/llxprt-code-providers/composition.js';
-import { isLocalImageEndpoint } from '@vybestack/llxprt-code-providers/openai/imageEndpoint.js';
 import {
   getImageModelsForAlias,
+  isLocalImageEndpoint,
   listOpenAiCompatibleModels,
   ImageProviderAliasError,
 } from '@vybestack/llxprt-code-providers';
