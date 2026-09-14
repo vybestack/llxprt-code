@@ -9,7 +9,6 @@
  * @requirement:REQ-API-001
  * @pseudocode consumer-migration.md lines 10-15
  */
-
 import type {
   SlashCommand,
   CommandContext,
@@ -26,6 +25,9 @@ import {
   writeProviderAliasConfig,
   type ProviderAliasConfig,
 } from '@vybestack/llxprt-code-providers/composition.js';
+import { loadProviderAliasEntries } from '@vybestack/llxprt-code-providers/composition.js';
+import { ImageProviderAliasError } from '@vybestack/llxprt-code-providers';
+import { SettingScope } from '../../config/settings.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
@@ -39,6 +41,38 @@ import {
   hasFunction,
   hasObject,
 } from '../../utils/typeGuards.js';
+
+function handleImageProvider(
+  context: CommandContext,
+  alias: string,
+): MessageActionReturn {
+  try {
+    if (alias) {
+      const aliases = loadProviderAliasEntries().map((entry) => entry.alias);
+      if (!aliases.includes(alias))
+        throw new ImageProviderAliasError(alias, aliases);
+      context.services.settings.setValue(
+        SettingScope.User,
+        'imageProvider',
+        alias,
+      );
+    }
+    const provider =
+      context.services.settings.merged.imageProvider ??
+      getRuntimeApi().getActiveProviderName();
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: `Image provider: ${provider}\nChange it with /provider image <alias>.`,
+    };
+  } catch (error) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
 
 type WrappedProvider = IProvider & { wrappedProvider: IProvider };
 
@@ -397,6 +431,13 @@ export const providerCommand: SlashCommand = {
 
     if (/^save\b/i.test(trimmedArgs)) {
       return handleSaveAlias(getProviderManager(), context, trimmedArgs);
+    }
+
+    if (/^image\b/i.test(trimmedArgs)) {
+      return handleImageProvider(
+        context,
+        trimmedArgs.replace(/^image\b\s*/i, ''),
+      );
     }
 
     try {

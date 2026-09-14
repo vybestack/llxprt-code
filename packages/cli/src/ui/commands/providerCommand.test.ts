@@ -16,6 +16,7 @@ import {
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { LoadedSettings } from '../../config/settings.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type {
   Agent,
@@ -150,6 +151,58 @@ describe('providerCommand /provider save', () => {
     } else {
       process.env['LLXPRT_DATA_HOME'] = originalDataHome;
     }
+  });
+
+  it('reports the active chat provider when no image provider is set', async () => {
+    mocks.runtimeApi.getActiveProviderName.mockReturnValue('anthropic');
+    const result = await providerCommand.action!(
+      createMockCommandContext(),
+      'image',
+    );
+    if (!result || result.type !== 'message')
+      throw new Error('Expected message');
+    expect(result.content).toContain('anthropic');
+    expect(result.content).toContain('/provider image <alias>');
+    expect(result.messageType).toBe('info');
+  });
+
+  it('persists an image alias and reports it instead of the chat provider', async () => {
+    const empty = { settings: {}, path: path.join(tempDir, 'unused.json') };
+    const userPath = path.join(tempDir, 'settings.json');
+    const settings = new LoadedSettings(
+      empty,
+      empty,
+      { settings: {}, path: userPath },
+      empty,
+      true,
+    );
+    const context = createMockCommandContext();
+    context.services.settings = settings;
+    mocks.runtimeApi.getActiveProviderName.mockReturnValue('anthropic');
+    expect(await providerCommand.action!(context, 'image codex')).toMatchObject(
+      { messageType: 'info' },
+    );
+    expect(JSON.parse(fs.readFileSync(userPath, 'utf8'))).toMatchObject({
+      imageProvider: 'codex',
+    });
+    expect(await providerCommand.action!(context, 'image')).toMatchObject({
+      content: expect.stringContaining('codex'),
+    });
+  });
+
+  it('reports unknown image aliases with available aliases without persisting', async () => {
+    const context = createMockCommandContext();
+    const result = await providerCommand.action!(
+      context,
+      'image no-such-alias',
+    );
+    if (!result || result.type !== 'message')
+      throw new Error('Expected message');
+    expect(result.content).toContain('Available aliases:');
+    expect(result.content).toContain('codex');
+    expect(result.messageType).toBe('error');
+
+    expect(context.services.settings.merged.imageProvider).toBeUndefined();
   });
 
   it('saves provider alias configuration and refreshes aliases', async () => {
