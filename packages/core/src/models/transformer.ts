@@ -48,6 +48,7 @@ export function transformModel(
   const inputModalities = model.modalities?.input ?? ['text'];
 
   const capabilities: LlxprtModelCapabilities = {
+    output: model.modalities?.output ?? ['text'],
     vision: inputModalities.includes('image'),
     audio: inputModalities.includes('audio'),
     pdf: inputModalities.includes('pdf'),

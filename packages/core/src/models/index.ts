@@ -84,6 +84,7 @@ export {
 // Provider integration utilities
 export {
   llxprtModelToIModel,
+  listImageOutputModels,
   hasModelInRegistry,
   getExtendedModelInfo,
   getRecommendedModel,
