@@ -46,7 +46,7 @@ The typed forms make the profile kind explicit. The untyped forms remain aliases
 /profile load image <name>
 ```
 
-An image profile stores its model slug, `baseUrl`, auth reference, and defaults for `quality`, `size`, and `background`. Loading an image profile switches the active image backend for `generate_image`, `/image`, and direct CLI image mode. A model profile saved while an image profile is active records `imageProfile: "<name>"`. Loading that model profile resolves the image profile by name and fails if the referenced profile is missing. Model profiles without `imageProfile` continue to use `gpt-image-2` with Codex OAuth.
+An image profile stores its model slug, `baseUrl`, auth reference, and defaults for `quality`, `size`, and `background`. Loading an image profile switches the active image backend for `generate_image`, `/image`, and direct CLI image mode. A model profile saved while an image profile is active records `imageProfile: "<name>"`. Loading that model profile resolves the image profile by name and fails if the referenced profile is missing. Model profiles without `imageProfile` use the configured `imageProvider`, or the existing `gpt-image-2` Codex OAuth default when that setting is absent.
 
 Profiles are stored in `<config>/profiles/<name>.json` (see [Application Directories](./reference/application-directories.md)).
 
@@ -56,9 +56,33 @@ separate from text-model settings. `/profile save image <name>` captures both
 objects and `/profile load image <name>` restores them. Older profiles without
 these fields keep them absent.
 
+### Image Provider Setting
+
+The optional top-level `imageProvider` string names a registered provider alias:
+
+```json
+{
+  "imageProvider": "codex"
+}
+```
+
+Set it with `/provider image <alias>` and inspect it with `/provider image`.
+`/model image` browses that provider's models, or the active chat provider's models
+when the setting is absent. Codex supplies a static list, local loopback endpoints
+supply a live `/models` list, and other providers use models.dev image-output
+capabilities. Selection creates an unnamed configuration; use
+`/profile save image <name>` to persist it.
+
+For image operations, a per-operation profile override wins over the active image
+profile. If neither is present, `imageProvider` supplies the provider-derived
+configuration. With no `imageProvider` and no profile, the legacy Codex default
+is unchanged, regardless of the chat provider. Provider selection does not bypass
+authentication validation: remote endpoints cannot use `auth: none`.
+
 ### Set Up an Image Profile
 
-Create the JSON file in `<config>/profiles/` before selecting it. You need a
+You can also create an explicit JSON file in `<config>/profiles/` to preserve
+custom endpoint, authentication, and operation settings. You need a
 running image server for a local profile, or credentials and an image-capable
 model at a remote endpoint. Image credentials are separate from your chat
 provider's credentials.

@@ -17,11 +17,24 @@ Slash commands control the CLI itself — configuration, navigation, session man
 | `/baseurl [url]`       | Set the API base URL                     |
 | `/toolformat [format]` | Set the tool format for the provider     |
 
+`/provider image` shows the effective image provider: the `imageProvider`
+setting when present, otherwise the active chat provider. `/provider image <alias>`
+saves that alias to user settings without switching the chat provider.
+
 `/model` opens the text model browser. `/model text ...` accepts the same search
-and filter arguments. `/model image` lists saved image profiles and offers new
-Codex or OpenAI-compatible image configurations. New configurations are active
-in memory; save one with `/profile save image <name>`. `/model image <name>` loads
-an existing image profile and reports available names if it is missing.
+and filter arguments. `/model image` opens a selection list for the effective
+image provider. Codex uses its configured static image-model list. Local loopback
+endpoints use a live `/models` request and show every returned model. Other
+providers use models.dev models with image-output capability. A failed request
+shows an error; an empty list reports that no image models are known. Neither
+case offers a free-text fallback.
+
+Selecting a model derives its backend, URL, and authentication from the provider
+alias. The configuration is active but unnamed; save it with
+`/profile save image <name>`. `/model image <name>` loads a saved image profile
+when that name exists, preserving its explicit URL and authentication. Otherwise,
+it selects `<name>` as a model ID on the effective image provider. There are no
+backend, URL, model-text, or authentication wizard steps.
 
 A leading `text` or `image` is always a kind prefix, never a search term.
 Use `/model text text` for a text model named `text`, `/model text image` for a
