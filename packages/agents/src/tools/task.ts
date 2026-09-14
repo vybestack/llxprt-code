@@ -44,6 +44,7 @@ import {
   buildGovernedToolWhitelist,
   filterExcludedFromWhitelist,
   normalizeTaskParams,
+  validateCanonicalTaskParamSpellings,
   validateOutputParams,
   type TaskToolInvocationParams,
 } from './taskToolGovernance.js';
@@ -80,22 +81,11 @@ function resolveOptionalConfigMethod<T>(
 
 export interface TaskToolParams {
   subagent_name?: string;
-  subagentName?: string;
   goal_prompt?: string;
-  goalPrompt?: string;
   behaviour_prompts?: string[];
-  behavior_prompts?: string[];
-  behaviourPrompts?: string[];
-  behaviorPrompts?: string[];
   tool_whitelist?: string[];
-  toolWhitelist?: string[];
-  output_spec?: Record<string, string>;
-  outputSpec?: Record<string, string>;
   expected_outputs?: Record<string, string>;
-  expectedOutputs?: Record<string, string>;
   context?: Record<string, unknown>;
-  context_vars?: Record<string, unknown>;
-  contextVars?: Record<string, unknown>;
   timeout_seconds?: number;
   grace_period_seconds?: number;
   max_turns?: number;
@@ -204,9 +194,7 @@ class TaskToolInvocation extends BaseToolInvocation<
 
     const registry = this.deps.getToolRegistry?.();
     let effectiveWhitelist = toolWhitelist;
-    const hasExplicitWhitelist =
-      Array.isArray(this.params.tool_whitelist) ||
-      Array.isArray(this.params.toolWhitelist);
+    const hasExplicitWhitelist = Array.isArray(this.params.tool_whitelist);
 
     // Issue #2069: no explicit whitelist must preserve omitted toolConfig so
     // the subagent runtime/profile default tools apply. Do NOT synthesize a
@@ -771,15 +759,27 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
     this.dependencies = { ...dependencies, messageBus };
   }
 
+  override validateToolParams(params: TaskToolParams): string | null {
+    const spellingError = validateCanonicalTaskParamSpellings(params);
+    if (spellingError !== null) {
+      return spellingError;
+    }
+    return super.validateToolParams(params);
+  }
+
   protected override validateToolParamValues(
     params: TaskToolParams,
   ): string | null {
-    const subagentName = params.subagent_name ?? params.subagentName;
+    const spellingError = validateCanonicalTaskParamSpellings(params);
+    if (spellingError !== null) {
+      return spellingError;
+    }
+    const subagentName = params.subagent_name;
     if (!subagentName || subagentName.trim().length === 0) {
       return 'Task tool requires a subagent_name.';
     }
 
-    const goalPrompt = params.goal_prompt ?? params.goalPrompt;
+    const goalPrompt = params.goal_prompt;
     if (!goalPrompt || goalPrompt.trim().length === 0) {
       return 'Task tool requires a goal_prompt describing the assignment.';
     }

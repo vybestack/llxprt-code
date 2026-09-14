@@ -13,6 +13,7 @@ import {
   ApprovalMode as ApprovalModeEnum,
   type LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
+import { canonicalizePolicyToolEntry } from '@vybestack/llxprt-code-tools';
 import type { Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
 import type { ContextResolutionResult } from './interactiveContext.js';
@@ -36,7 +37,7 @@ export const READ_ONLY_TOOL_NAMES = [
 export const EDIT_TOOL_NAME = 'replace';
 
 export const normalizeToolNameForPolicy = (name: string): string =>
-  name.trim().toLowerCase();
+  canonicalizePolicyToolEntry(name);
 
 const toEntryList = (value: unknown): unknown[] => {
   if (Array.isArray(value) && value.length > 0) {
@@ -58,18 +59,9 @@ export const buildNormalizedToolSet = (value: unknown): Set<string> => {
 
   for (const entry of entries) {
     if (typeof entry === 'string' && entry.trim().length > 0) {
-      const trimmedEntry = entry.trim();
-      const openParenIndex = trimmedEntry.indexOf('(');
-      const baseName =
-        openParenIndex === -1
-          ? trimmedEntry
-          : trimmedEntry.substring(0, openParenIndex).trim();
-
-      const canonicalName =
-        normalizeToolNameForPolicy(baseName) === 'shelltool'
-          ? 'run_shell_command'
-          : baseName;
-      const normalizedName = normalizeToolNameForPolicy(canonicalName);
+      // Arg-list stripping, legacy aliases, and wildcard passthrough are all
+      // handled by the shared boundary decoder.
+      const normalizedName = normalizeToolNameForPolicy(entry);
       if (normalizedName) {
         normalized.add(normalizedName);
       }

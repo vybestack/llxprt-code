@@ -99,6 +99,8 @@ export {
   isValidToolName as isValidFormatterToolName,
   findMatchingTool,
   canonicalizeToolName,
+  canonicalizePolicyToolEntry,
+  LEGACY_TOOL_NAME_ALIASES,
   INVALID_TOOL_NAME,
 } from './formatters/toolNameUtils.js';
 

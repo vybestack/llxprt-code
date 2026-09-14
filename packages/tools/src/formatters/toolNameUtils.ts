@@ -139,6 +139,55 @@ export function canonicalizeToolName(rawName: string): string {
 }
 
 /**
+ * Legacy policy/CLI spellings mapped to canonical registry names.
+ *
+ * Keys are compared against the lowercased, arg-stripped entry, so both
+ * 'ShellTool' and 'shelltool' decode to the registry name.
+ */
+export const LEGACY_TOOL_NAME_ALIASES: ReadonlyMap<string, string> = new Map([
+  ['shelltool', 'run_shell_command'],
+]);
+
+/**
+ * Decode one user-authored policy/allowlist entry to its canonical registry
+ * name (issue #2533: external input is decoded once at the boundary).
+ *
+ * Order of operations:
+ * 1. Trim; blank input decodes to ''.
+ * 2. Wildcard entries (containing '*') are returned verbatim — policy
+ *    wildcard semantics, not tool names.
+ * 3. Strip a trailing parenthesized arg list ('Tool(args)' -> 'Tool').
+ * 4. Map legacy spellings via {@link LEGACY_TOOL_NAME_ALIASES}.
+ * 5. Otherwise canonicalize via {@link canonicalizeToolName}; unusable names
+ *    decode to '' (never {@link INVALID_TOOL_NAME}).
+ */
+export function canonicalizePolicyToolEntry(entry: string): string {
+  const trimmed = entry.trim();
+  if (!trimmed) {
+    return '';
+  }
+  if (trimmed.includes('*')) {
+    return trimmed;
+  }
+
+  const openParen = trimmed.indexOf('(');
+  const base = (
+    openParen === -1 ? trimmed : trimmed.slice(0, openParen)
+  ).trim();
+  if (!base) {
+    return '';
+  }
+
+  const alias = LEGACY_TOOL_NAME_ALIASES.get(base.toLowerCase());
+  if (alias) {
+    return alias;
+  }
+
+  const canonical = canonicalizeToolName(base);
+  return canonical === INVALID_TOOL_NAME ? '' : canonical;
+}
+
+/**
  * Convert string to snake_case.
  */
 export function toSnakeCase(value: string): string {

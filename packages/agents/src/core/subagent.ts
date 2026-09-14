@@ -27,6 +27,7 @@ import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.
 
 import { type ChatSession } from './chatSession.js';
 import { isToolNameRestricted } from './hookToolRestrictions.js';
+import { SCOPE_LOCAL_EMIT_TOOL_NAME } from './toolGovernance.js';
 import type {
   AgentRuntimeContext,
   ToolRegistryView,
@@ -717,7 +718,7 @@ export class SubAgentScope {
         requestMarkers.push({ status: 'error-nonfatal' });
         continue;
       }
-      if (request.name === 'self_emitvalue') {
+      if (request.name === SCOPE_LOCAL_EMIT_TOOL_NAME) {
         const blocks = handleEmitValueCall(request, {
           output: this.output,
           onMessage: this.onMessage,

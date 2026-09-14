@@ -60,8 +60,7 @@ export function getToolGovernanceEphemerals(config: Config):
   const rawAllowed = config.getEphemeralSetting('tools.allowed');
   const allowedList = readToolList(rawAllowed);
   const disabledList = readToolList(
-    config.getEphemeralSetting('tools.disabled') ??
-      config.getEphemeralSetting('disabled-tools'),
+    config.getEphemeralSetting('tools.disabled'),
   );
 
   const allowedExplicit = Array.isArray(rawAllowed);

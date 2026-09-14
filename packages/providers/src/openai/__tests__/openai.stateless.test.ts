@@ -190,11 +190,11 @@ describe('OpenAI provider stateless contract tests', () => {
     );
     const settingsPrimary = createSettings({ callId: 'runtime-config' });
     settingsPrimary.setProviderSetting('openai', 'temperature', 0.42);
-    settingsPrimary.setProviderSetting('openai', 'max-tokens', 512);
+    settingsPrimary.setProviderSetting('openai', 'max_tokens', 512);
     const configPrimary = createRuntimeConfigStub(settingsPrimary, {
       getEphemeralSettings: () => ({
         temperature: 0.42,
-        'max-tokens': 512,
+        max_tokens: 512,
       }),
     });
     const callOptions = buildCallOptions(provider, {
@@ -211,11 +211,11 @@ describe('OpenAI provider stateless contract tests', () => {
 
     const settingsOverride = createSettings({ callId: 'runtime-config' });
     settingsOverride.setProviderSetting('openai', 'temperature', 0.85);
-    settingsOverride.setProviderSetting('openai', 'max-tokens', 128);
+    settingsOverride.setProviderSetting('openai', 'max_tokens', 128);
     const configOverride = createRuntimeConfigStub(settingsOverride, {
       getEphemeralSettings: () => ({
         temperature: 0.85,
-        'max-tokens': 128,
+        max_tokens: 128,
       }),
     });
     const runtimeOverride = createProviderRuntimeContext({
@@ -237,6 +237,21 @@ describe('OpenAI provider stateless contract tests', () => {
     const secondRequest = FakeOpenAIClass.requests.at(-1)?.request;
     expect(secondRequest?.temperature).toBe(0.85);
     expect(secondRequest?.['max_tokens']).toBe(128);
+  });
+
+  it('does not translate legacy max-tokens ephemerals into max_tokens on the wire', async () => {
+    const provider = new TestOpenAIProvider('token-legacy');
+    const settings = createSettings({ callId: 'legacy-max-tokens' });
+    const callOptions = buildCallOptions(provider, {
+      settings,
+      runtimeId: 'legacy-max-tokens',
+      ephemerals: { 'max-tokens': 999 },
+    });
+
+    await provider.generateChatCompletion(callOptions).next();
+
+    const request = FakeOpenAIClass.requests.at(-1)?.request;
+    expect(request?.['max_tokens']).toBeUndefined();
   });
 
   it('relies on invocation ephemerals instead of config when provided', async () => {

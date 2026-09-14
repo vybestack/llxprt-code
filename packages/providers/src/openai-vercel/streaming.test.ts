@@ -690,7 +690,7 @@ describe('OpenAIVercelProvider - Streaming', () => {
         settings: settingsService,
         settingsOverrides: {
           provider: {
-            maxTokens: 100,
+            max_tokens: 100,
           },
         },
         streaming: true,

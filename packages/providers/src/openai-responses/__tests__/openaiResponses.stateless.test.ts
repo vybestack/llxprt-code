@@ -241,11 +241,11 @@ describe('OpenAI Responses provider stateless contract tests', () => {
 
     const settingsA = createSettings('conversation-A', 'parent-A');
     settingsA.set('temperature', 0.17);
-    settingsA.set('max-output-tokens', 2048);
+    settingsA.set('max_output_tokens', 2048);
     const configA = createRuntimeConfigStub(settingsA, {
       getEphemeralSettings: () => ({
         temperature: 0.17,
-        'max-output-tokens': 2048,
+        max_output_tokens: 2048,
       }),
     });
     const runtimeA = createProviderRuntimeContext({
@@ -269,15 +269,15 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     };
     const firstRequest = Fake.requests.at(-1)?.request;
     expect(firstRequest?.temperature).toBe(0.17);
-    expect(firstRequest?.['max-output-tokens']).toBe(2048);
+    expect(firstRequest?.max_output_tokens).toBe(2048);
 
     const settingsB = createSettings('conversation-B', 'parent-B');
     settingsB.set('temperature', 0.44);
-    settingsB.set('max-output-tokens', 512);
+    settingsB.set('max_output_tokens', 512);
     const configB = createRuntimeConfigStub(settingsB, {
       getEphemeralSettings: () => ({
         temperature: 0.44,
-        'max-output-tokens': 512,
+        max_output_tokens: 512,
       }),
     });
     const runtimeB = createProviderRuntimeContext({
@@ -298,7 +298,7 @@ describe('OpenAI Responses provider stateless contract tests', () => {
 
     const secondRequest = Fake.requests.at(-1)?.request;
     expect(secondRequest?.temperature).toBe(0.44);
-    expect(secondRequest?.['max-output-tokens']).toBe(512);
+    expect(secondRequest?.max_output_tokens).toBe(512);
   });
 
   it('uses invocation ephemerals when config cannot supply overrides', async () => {
@@ -325,7 +325,7 @@ describe('OpenAI Responses provider stateless contract tests', () => {
       providerName: 'openai-responses',
       ephemeralsSnapshot: {
         temperature: 0.11,
-        'max-output-tokens': 1024,
+        max_output_tokens: 1024,
       },
       metadata: { testCase: 'openai-responses-invocation' },
     });
@@ -346,7 +346,7 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     };
     const request = Fake.requests.at(-1)?.request;
     expect(request?.temperature).toBe(0.11);
-    expect(request?.['max-output-tokens']).toBe(1024);
+    expect(request?.max_output_tokens).toBe(1024);
     expect(getEphemerals).not.toHaveBeenCalled();
   });
 });

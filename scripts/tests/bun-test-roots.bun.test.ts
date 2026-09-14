@@ -102,6 +102,7 @@ describe('BUN_TEST_ROOTS structural guarantees', () => {
       'lsp',
       'zed-acp',
       'scripts-tests',
+      'eslint-rules',
       'evals',
       'integration-tests',
     ]);
