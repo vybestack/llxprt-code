@@ -250,7 +250,7 @@ describe('ProfileManagerProfileRepository', () => {
       modelParams: { extra: { nested: ['original'] } },
       ephemeralSettings: {
         'custom-headers': { header: 'original' },
-        'disabled-tools': ['shell'],
+        'tools.disabled': ['shell'],
         'tools.allowed': ['read'],
       },
     };
@@ -265,12 +265,12 @@ describe('ProfileManagerProfileRepository', () => {
       if (typeof headers !== 'object' || headers === null)
         throw new Error('expected headers');
       Object.assign(headers, { header: 'changed' });
-      const tools = value['disabled-tools'];
+      const tools = value['tools.disabled'];
       if (!Array.isArray(tools)) throw new Error('expected tools');
       tools.push('edit');
     }
     expect(original).toStrictEqual(untouched);
-    expect(document.ephemeralSettings['disabled-tools']).toStrictEqual([
+    expect(document.ephemeralSettings['tools.disabled']).toStrictEqual([
       'shell',
       'edit',
     ]);
