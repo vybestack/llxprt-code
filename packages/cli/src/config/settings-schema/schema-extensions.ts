@@ -337,6 +337,15 @@ export const EXTENSION_SETTINGS_SCHEMA = {
   },
 
   // LLxprt-specific provider settings
+  imageProvider: {
+    type: 'string',
+    label: 'Image Provider',
+    category: 'Provider',
+    requiresRestart: false,
+    default: undefined as string | undefined,
+    description: 'Provider alias for image model selection and operations.',
+    showInDialog: false,
+  },
   defaultProfile: {
     type: 'string',
     label: 'Default Profile',
