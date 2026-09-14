@@ -108,7 +108,7 @@ describe('TaskTool', () => {
       goal_prompt: 'Ship the feature',
       behaviour_prompts: ['Respect coding standards'],
       tool_whitelist: ['read_file', 'write_file'],
-      output_spec: { summary: 'Outcome summary' },
+      expected_outputs: { summary: 'Outcome summary' },
       context: { extra: 'value' },
     };
 

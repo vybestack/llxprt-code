@@ -157,6 +157,7 @@ export function resolveResponsesRequestShape(
   invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
   forceStateless: boolean,
+  forceParentless = false,
 ): ResponsesRequestShape {
   const rawBaseURL = resolveResponsesBaseURL(options, deps);
   const isCodex = deps.isCodexBaseURL(rawBaseURL);
@@ -187,6 +188,7 @@ export function resolveResponsesRequestShape(
       (responseId) => deps.isRejectedStatefulParent?.(responseId) ?? false,
       statefulTransportSupported,
       deps.logger,
+      forceParentless,
     ),
   };
 }

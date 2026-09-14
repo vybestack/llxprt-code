@@ -403,18 +403,40 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(8192);
   });
 
-  it('does not allow alias ephemerals to set auth-like keys', async () => {
+  it('does not allow alias ephemerals to set protected canonical keys', async () => {
     const entry = aliasEntries[0] as {
       config?: { ephemeralSettings?: Record<string, unknown> };
     };
     ensureAliasConfig(entry).ephemeralSettings = {
-      'api-key': 'should-not-apply',
+      'auth-key': 'should-not-apply',
+      'auth-keyfile': '/should/not/apply',
+      'base-url': 'https://alias.example/v1',
       max_tokens: 50000,
     };
 
     await switchActiveProvider('qwenvercel');
 
-    expect(stubConfig.getEphemeralSetting('api-key')).toBeUndefined();
+    expect(stubConfig.getEphemeralSetting('auth-key')).toBeUndefined();
+    expect(stubConfig.getEphemeralSetting('auth-keyfile')).toBeUndefined();
+    expect(stubConfig.getEphemeralSetting('base-url')).toBeUndefined();
+    expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(50000);
+  });
+
+  it('does not let a legacy auth spelling reach the canonical auth slot', async () => {
+    // Exact-key semantics (issue #2533): 'api-key' is not resolved to
+    // 'auth-key' anywhere in the runtime, so a legacy spelling in alias
+    // data can never populate the canonical credential slot.
+    const entry = aliasEntries[0] as {
+      config?: { ephemeralSettings?: Record<string, unknown> };
+    };
+    ensureAliasConfig(entry).ephemeralSettings = {
+      'api-key': 'legacy-value',
+      max_tokens: 50000,
+    };
+
+    await switchActiveProvider('qwenvercel');
+
+    expect(stubConfig.getEphemeralSetting('auth-key')).toBeUndefined();
     expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(50000);
   });
 

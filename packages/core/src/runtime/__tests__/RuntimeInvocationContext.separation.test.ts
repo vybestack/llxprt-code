@@ -122,17 +122,18 @@ describe('RuntimeInvocationContext Settings Separation', () => {
     expect(context.cliSettings['temperature']).toBeUndefined();
   });
 
-  it('context with apiKey in ephemerals does not contain apiKey in modelParams', () => {
+  it('context with auth-key in ephemerals does not contain auth-key in modelParams', () => {
     const context = createRuntimeInvocationContext({
       runtime: createMockRuntime(),
       settings: createMockSettings(),
       providerName: 'openai',
       ephemeralsSnapshot: {
-        apiKey: 'sk-test-key',
+        'auth-key': 'sk-test-key',
         temperature: 0.7,
       },
     });
 
+    expect(context.modelParams['auth-key']).toBeUndefined();
     expect(context.modelParams['apiKey']).toBeUndefined();
   });
 
@@ -141,17 +142,18 @@ describe('RuntimeInvocationContext Settings Separation', () => {
    * Tests verify aliases are resolved to canonical keys.
    */
 
-  it('context with max-tokens=4096 in ephemerals returns 4096 from getModelParam using max_tokens', () => {
+  it('context with max_tokens=4096 in ephemerals returns 4096 from getModelParam', () => {
     const context = createRuntimeInvocationContext({
       runtime: createMockRuntime(),
       settings: createMockSettings(),
       providerName: 'openai',
       ephemeralsSnapshot: {
-        'max-tokens': 4096,
+        max_tokens: 4096,
       },
     });
 
     expect(context.getModelParam('max_tokens')).toBe(4096);
+    expect(context.modelParams['max-tokens']).toBeUndefined();
   });
 
   /**
@@ -284,20 +286,21 @@ describe('RuntimeInvocationContext Settings Separation', () => {
     expect(context.modelParams['temperature']).toBe(0.7);
   });
 
-  it('context with multiple settings puts max-tokens in modelParams', () => {
+  it('context with multiple settings puts max_tokens in modelParams', () => {
     const context = createRuntimeInvocationContext({
       runtime: createMockRuntime(),
       settings: createMockSettings(),
       providerName: 'openai',
       ephemeralsSnapshot: {
         temperature: 0.7,
-        'max-tokens': 4096,
+        max_tokens: 4096,
         'shell-replacement': 'none',
         'reasoning.enabled': true,
       },
     });
 
     expect(context.modelParams['max_tokens']).toBe(4096);
+    expect(context.modelParams['max-tokens']).toBeUndefined();
   });
 
   it('context with multiple settings puts shell-replacement in cliSettings', () => {
@@ -354,13 +357,13 @@ describe('RuntimeInvocationContext Settings Separation', () => {
       expect(context.modelBehavior['text.verbosity']).toBe('medium');
     });
 
-    it('does not place streamIdleTimeoutMs into modelParams for any provider', () => {
+    it('does not place stream-idle-timeout-ms into modelParams for any provider', () => {
       for (const provider of ['anthropic', 'codex', 'openai']) {
         const context = createRuntimeInvocationContext({
           runtime: createMockRuntime(),
           settings: createMockSettings(),
           providerName: provider,
-          ephemeralsSnapshot: { streamIdleTimeoutMs: 60_000 },
+          ephemeralsSnapshot: { 'stream-idle-timeout-ms': 60_000 },
         });
 
         expect(context.modelParams['streamIdleTimeoutMs']).toBeUndefined();
@@ -375,7 +378,7 @@ describe('RuntimeInvocationContext Settings Separation', () => {
         settings: createMockSettings(),
         providerName: 'anthropic',
         ephemeralsSnapshot: {
-          streamIdleTimeoutMs: 60_000,
+          'stream-idle-timeout-ms': 60_000,
           text: { verbosity: 'medium' },
           reasoning: { enabled: true, effort: 'high' },
           'prompt-caching': '24h',

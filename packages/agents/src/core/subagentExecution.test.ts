@@ -24,6 +24,11 @@ import type {
   AnsiToken,
 } from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
 
+import {
+  recordFatalToolError,
+  recordSuccessfulToolExecution,
+} from './subagentToolProcessing.js';
+
 function makeOutput(): OutputObject {
   return { emitted_vars: {}, terminate_reason: SubagentTerminateMode.ERROR };
 }
@@ -197,7 +202,76 @@ describe('subagentExecution', () => {
     });
   });
 
-  // --- processInteractiveTextResponse ---
+  describe('checkGoalCompletion fatal-tool-error (issue 3535)', () => {
+    it('suppresses outstanding todo nudges after a fatal tool error', async () => {
+      const output = makeOutput();
+      recordFatalToolError(output, 'Unavailable tool');
+      const result = await checkGoalCompletion(
+        {
+          output,
+          outputConfig: { outputs: { x: 'required' } },
+          subagentId: 'test',
+          logger: new DebugLogger('test'),
+        },
+        'Please finish todos',
+        0,
+      );
+
+      expect(result).toBeNull();
+      expect(output.terminate_reason).toBe(SubagentTerminateMode.ERROR);
+      expect(output.final_message).toBe('Unavailable tool');
+    });
+
+    it('returns ERROR and null when the flag is set', async () => {
+      const output = makeOutput();
+      output.unrecovered_fatal_tool_error =
+        'Tool "" is not available in this environment.';
+      const ctx = {
+        output,
+        outputConfig: undefined,
+        subagentId: 'test',
+        logger: new DebugLogger('test'),
+      };
+      const result = await checkGoalCompletion(ctx, null, 0);
+      expect(result).toBeNull();
+      expect(output.terminate_reason).toBe(SubagentTerminateMode.ERROR);
+    });
+
+    it('returns GOAL and clears a fatal flag when all declared outputs are emitted', async () => {
+      const output = makeOutput();
+      recordFatalToolError(output, 'Unavailable tool');
+      output.emitted_vars = { x: 'value', y: 'other' };
+      const result = await checkGoalCompletion(
+        {
+          output,
+          outputConfig: { outputs: { x: 'first', y: 'second' } },
+          subagentId: 'test',
+          logger: new DebugLogger('test'),
+        },
+        null,
+        0,
+      );
+
+      expect(result).toBeNull();
+      expect(output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
+      expect(output.unrecovered_fatal_tool_error).toBeUndefined();
+    });
+
+    it('returns GOAL when the flag is cleared', async () => {
+      const output = makeOutput();
+      recordFatalToolError(output, 'Unavailable tool');
+      recordSuccessfulToolExecution(output);
+      const ctx = {
+        output,
+        outputConfig: undefined,
+        subagentId: 'test',
+        logger: new DebugLogger('test'),
+      };
+      const result = await checkGoalCompletion(ctx, null, 0);
+      expect(result).toBeNull();
+      expect(output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
+    });
+  });
 
   describe('processInteractiveTextResponse', () => {
     it('should set final_message from text', () => {

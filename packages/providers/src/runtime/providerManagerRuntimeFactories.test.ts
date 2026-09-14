@@ -15,6 +15,8 @@ import { ProviderContentGenerator } from '@vybestack/llxprt-code-providers';
 import { configureProviderRuntimeFactories } from '../composition/index.js';
 import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
 import { ModelPromptEstimatorError } from '../tokenizers/ModelPromptEstimatorError.js';
+import { PROJECTION_REVISION } from '../runtime/promptEnvelopeProjections.js';
+import { GPT_56_ESTIMATOR_VERSION } from '../tokenizers/Gpt56O200kPromptEstimator.js';
 import {
   CLAUDE_FABLE_5_CALIBRATION,
   CLAUDE_FABLE_5_ESTIMATOR_FAMILY,
@@ -135,7 +137,7 @@ describe('configureProviderRuntimeFactories', () => {
           messages: [{ role: 'user', content: 'Explain tokenization.' }],
         }),
       },
-      projectionRevision: 3,
+      projectionRevision: PROJECTION_REVISION,
       legacyEstimate: () => Promise.resolve(1234),
     };
   }
@@ -267,7 +269,7 @@ describe('configureProviderRuntimeFactories', () => {
         protocol: 'openai-responses',
         promptText: 'The quick brown fox jumps over the lazy dog.',
       },
-      projectionRevision: 3,
+      projectionRevision: PROJECTION_REVISION,
       legacyEstimate: () => Promise.resolve(999),
     });
 
@@ -327,7 +329,7 @@ describe('configureProviderRuntimeFactories', () => {
         protocol: 'openai-responses',
         promptText: 'The quick brown fox jumps over the lazy dog.',
       },
-      projectionRevision: 3,
+      projectionRevision: PROJECTION_REVISION,
       legacyEstimate: () => Promise.resolve(999),
     });
 
@@ -475,7 +477,7 @@ describe('configureProviderRuntimeFactories', () => {
         protocol: 'openai-responses' as const,
         promptText: 'The quick brown fox jumps over the lazy dog.',
       },
-      projectionRevision: 3,
+      projectionRevision: PROJECTION_REVISION,
       legacyEstimate: () => Promise.resolve(999),
     };
 
@@ -500,7 +502,7 @@ describe('configureProviderRuntimeFactories', () => {
       method: 'exact',
       family: 'openai-gpt-5.6',
     });
-    expect(result.estimatorVersion).toBe('gpt-5.6-o200k-v1');
+    expect(result.estimatorVersion).toBe(GPT_56_ESTIMATOR_VERSION);
     expect(loadCount).toBe(1);
   });
 

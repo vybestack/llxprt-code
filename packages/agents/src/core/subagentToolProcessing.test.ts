@@ -18,6 +18,8 @@ import {
   handleEmitValueCall,
   buildPartsFromCompletedCalls,
   processFunctionCalls,
+  recordFatalToolError,
+  recordSuccessfulToolExecution,
   type EmitValueContext,
   type BuildPartsContext,
   type ProcessFunctionCallsContext,
@@ -27,7 +29,117 @@ import {
   type OutputObject,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { dispatch } from './subagent-tool-processing-test-helpers.js';
 import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from '@vybestack/llxprt-code-core/config/configTypes.js';
+
+describe('fatal tool flag transitions', () => {
+  function makeOutput(): OutputObject {
+    return { emitted_vars: {}, terminate_reason: SubagentTerminateMode.ERROR };
+  }
+
+  it('records an unrecovered fatal diagnostic', () => {
+    const output = makeOutput();
+    recordFatalToolError(output, 'Unavailable tool');
+    expect(output.unrecovered_fatal_tool_error).toBe('Unavailable tool');
+  });
+
+  it('clears a stale fatal final message after successful execution', () => {
+    const output = makeOutput();
+    recordFatalToolError(output, 'Unavailable tool');
+    output.final_message = 'Unavailable tool';
+
+    recordSuccessfulToolExecution(output);
+
+    expect(output.unrecovered_fatal_tool_error).toBeUndefined();
+    expect(output.final_message).toBeUndefined();
+  });
+
+  it('preserves a different final message after successful execution', () => {
+    const output = makeOutput();
+    recordFatalToolError(output, 'Unavailable tool');
+    output.final_message = 'Task completed';
+
+    recordSuccessfulToolExecution(output);
+
+    expect(output.unrecovered_fatal_tool_error).toBeUndefined();
+    expect(output.final_message).toBe('Task completed');
+  });
+
+  it('deletes the fatal flag after successful execution', () => {
+    const output = makeOutput();
+    recordFatalToolError(output, 'Unavailable tool');
+    recordSuccessfulToolExecution(output);
+    expect(Object.hasOwn(output, 'unrecovered_fatal_tool_error')).toBe(false);
+  });
+
+  it('sets the flag when a real dispatch rejects an unavailable tool', async () => {
+    const output = makeOutput();
+    await dispatch(
+      { type: 'tool_call', id: 'fatal', name: '', parameters: {} },
+      output,
+    );
+    expect(output.unrecovered_fatal_tool_error).toContain(
+      'could not be loaded',
+    );
+  });
+
+  it('preserves a fatal flag after a failed non-fatal execution', async () => {
+    const output = makeOutput();
+    recordFatalToolError(output, 'Unavailable tool');
+    const content = await dispatch(
+      {
+        type: 'tool_call',
+        id: 'failed',
+        name: 'divide',
+        parameters: { divisor: 0 },
+      },
+      output,
+    );
+    expect(content[0].blocks[0]).toMatchObject({
+      type: 'tool_response',
+      error: expect.any(String),
+    });
+    expect(output.unrecovered_fatal_tool_error).toBe('Unavailable tool');
+  });
+
+  it('clears a fatal flag after a successful dispatched execution', async () => {
+    const output = makeOutput();
+    recordFatalToolError(output, 'Unavailable tool');
+    const content = await dispatch(
+      {
+        type: 'tool_call',
+        id: 'success',
+        name: 'divide',
+        parameters: { divisor: 4 },
+      },
+      output,
+    );
+    expect(content[0].blocks[0]).toMatchObject({
+      type: 'tool_response',
+      result: { output: '0.25' },
+    });
+    expect(output.unrecovered_fatal_tool_error).toBeUndefined();
+  });
+
+  it('clears a fatal flag after a successful scope-local emit', async () => {
+    const output = makeOutput();
+    recordFatalToolError(output, 'Unavailable tool');
+    await dispatch(
+      {
+        type: 'tool_call',
+        id: 'emit',
+        name: 'self_emitvalue',
+        parameters: {
+          emit_variable_name: 'result',
+          emit_variable_value: 'ready',
+        },
+      },
+      output,
+    );
+    expect(output.emitted_vars).toStrictEqual({ result: 'ready' });
+    expect(output.unrecovered_fatal_tool_error).toBeUndefined();
+  });
+});
 
 describe('subagentToolProcessing', () => {
   // --- Pure helpers ---

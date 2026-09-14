@@ -30,12 +30,18 @@
  */
 
 import './tests/browser-launch-guard.js';
+import { spawn } from 'node:child_process';
+import {
+  assertRunnerActive,
+  isRunnerActive,
+  installRunnerSignalHandlers,
+  trackRunnerChild,
+  killRunnerChild,
+} from './lib/bespoke-runner-isolation.js';
 import {
   statSync,
   writeFileSync,
   mkdirSync,
-  mkdtempSync,
-  rmSync,
   readFileSync,
   readdirSync,
 } from 'node:fs';
@@ -50,12 +56,25 @@ import {
   wasKilledByTimeoutSignal,
 } from './lib/bun-test-retry.js';
 import {
+  buildSessionEnv,
+  createTestSessionRoot,
+  cleanupTestSession,
+} from './lib/test-session-isolation.js';
+import {
+  createRealHomeSentinelGuard,
+  type SentinelGuard,
+} from './lib/real-home-sentinel.js';
+import {
   buildVitestJsonReport,
   parseJUnitXml,
   type VitestJsonReport,
   type JUnitTestSuites,
   type JUnitTestSuite,
 } from './bun-junit-to-json-report.js';
+import {
+  createJunitTempDirectory,
+  writeJUnitReport,
+} from './lib/junit-report-writer.js';
 
 // The reaper implementation moved to scripts/lib/bun-test-reaper.ts; it is
 // re-exported here so the pre-existing import surface of this module is
@@ -107,61 +126,6 @@ export interface FileTestResult {
    * some other name" — Bun names suites after `describe` blocks, not files.
    */
   readonly junitOutfile?: string;
-}
-
-function escapeXml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-/**
- * Generates a minimal JUnit XML report at the given path. Each test file
- * becomes a testsuite with a single testcase representing the per-file
- * pass/fail outcome. Consumed by CI integrations (dorny/test-reporter).
- */
-export function writeJUnitReport(
-  outputPath: string,
-  files: readonly FileTestResult[],
-): void {
-  const NL = String.fromCharCode(10);
-  const failCount = files.filter((f) => !f.passed).length;
-  const suites = files
-    .map((f) => {
-      const safeName = escapeXml(f.name);
-      const failAttr = f.passed ? '0' : '1';
-      const tag = f.passed
-        ? '<testcase classname="' +
-          safeName +
-          '" name="bun-test (passed)" time="0" />'
-        : '<testcase classname="' +
-          safeName +
-          '" name="bun-test (failed)" time="0"><failure message="failed" /></testcase>';
-      return [
-        '    <testsuite name="' +
-          safeName +
-          '" tests="1" failures="' +
-          failAttr +
-          '" errors="0" skipped="0" time="0">',
-        '      ' + tag,
-        '    </testsuite>',
-      ].join(NL);
-    })
-    .join(NL);
-  const header = '<?xml version="1.0" encoding="UTF-8" ?>';
-  const open =
-    '<testsuites name="bun tests" tests="' +
-    files.length +
-    '" failures="' +
-    failCount +
-    '" errors="0" time="0">';
-  writeFileSync(
-    outputPath,
-    [header, open, suites, '</testsuites>'].join(NL) + NL,
-    'utf-8',
-  );
 }
 
 /**
@@ -390,10 +354,20 @@ export interface BunTestRunnerDependencies {
   readonly spawn: (
     command: readonly string[],
     options: BunTestSpawnOptions,
-  ) => ChildExitInfo;
+  ) => ChildExitInfo | Promise<ChildExitInfo>;
   readonly loadGlobalSetup: (path: string) => Promise<BunGlobalSetupModule>;
   readonly stdout: (line: string) => void;
   readonly stderr: (line: string) => void;
+  /** Registers the signal-path cleanup callback and returns its unsubscriber. */
+  readonly registerSignalCleanup?: (
+    cleanup: () => void | Promise<void>,
+  ) => () => void;
+  /**
+   * Builds the real-home sentinel guard from the runner env. Optional so
+   * existing dependency sets keep compiling; defaults to the shared factory
+   * (which honors `LLXPRT_TEST_SENTINEL_GUARD=0`). Injectable for tests.
+   */
+  readonly createSentinelGuard?: (env: NodeJS.ProcessEnv) => SentinelGuard;
 }
 
 /**
@@ -451,20 +425,21 @@ export interface RunWideOptions {
   readonly testNamePattern: string | null;
 }
 
-function spawnTestFileOnce(
+async function spawnTestFileOnce(
   entry: BunTestFile,
   run: RunWideOptions,
+  sessionEnv: NodeJS.ProcessEnv,
   dependencies: BunTestRunnerDependencies,
   junitOutfile?: string,
-): {
+): Promise<{
   passed: boolean;
   timedOut: boolean;
   stdout: string;
   diagnostic: string;
   junitPath?: string;
-} {
+}> {
   try {
-    const child = dependencies.spawn(
+    const child = await dependencies.spawn(
       buildSpawnArgs(
         dependencies.executable,
         entry,
@@ -475,7 +450,7 @@ function spawnTestFileOnce(
       ),
       {
         cwd: entry.cwd,
-        env: dependencies.environment,
+        env: sessionEnv,
         stdin: 'inherit',
         stdout: 'pipe',
         stderr: 'pipe',
@@ -507,12 +482,13 @@ function spawnTestFileOnce(
   }
 }
 
-function runSingleTestFile(
+async function runSingleTestFile(
   entry: BunTestFile,
   run: RunWideOptions,
+  sessionEnv: NodeJS.ProcessEnv,
   dependencies: BunTestRunnerDependencies,
   junitOutfile?: string,
-): FileTestResult {
+): Promise<FileTestResult> {
   const relativeName = entry.file.replace(entry.cwd + '/', '');
   // Two independent retry budgets: `entry.retries` retries any failure
   // (pre-existing opt-in used by the e2e configs), while the timeout budget
@@ -521,7 +497,9 @@ function runSingleTestFile(
   const failureAttempts = (entry.retries ?? 0) + 1;
   let timeoutRetriesLeft = resolveTimeoutRetryBudget();
   let attempt = 1;
-  let last = spawnTestFileOnce(entry, run, dependencies, junitOutfile);
+  const runAttempt = () =>
+    spawnTestFileOnce(entry, run, sessionEnv, dependencies, junitOutfile);
+  let last = await runAttempt();
   let retry = planNextAttempt(
     last,
     { attempt, failureAttempts, timeoutRetriesLeft },
@@ -533,7 +511,7 @@ function runSingleTestFile(
     }
     dependencies.stderr(retry.message);
     attempt++;
-    last = spawnTestFileOnce(entry, run, dependencies, junitOutfile);
+    last = await runAttempt();
     retry = planNextAttempt(
       last,
       { attempt, failureAttempts, timeoutRetriesLeft },
@@ -602,22 +580,25 @@ export function applyFilters(
   );
 }
 
+async function startGlobalSetups(
+  files: readonly BunTestFile[],
+  started: string[],
+  dependencies: BunTestRunnerDependencies,
+): Promise<void> {
+  for (const setup of collectGlobalSetups(files)) {
+    const module = await dependencies.loadGlobalSetup(setup);
+    started.push(setup);
+    await module.setup?.();
+  }
+}
+
 export async function runBunTests(
   argv: string[],
   dependencies: BunTestRunnerDependencies,
 ): Promise<number> {
   const options = parseArgs(argv);
   const tsconfigOverride = resolveTsconfig(options, dependencies);
-  const files = applyFilters(
-    applyExclusions(
-      dependencies.resolveFiles(
-        dependencies.repoRoot,
-        options.workspace ?? undefined,
-      ),
-      options.exclude,
-    ),
-    options.filters,
-  );
+  const files = resolveSelectedFiles(options, dependencies);
 
   if (files.length === 0) {
     const scope = options.workspace
@@ -630,9 +611,8 @@ export async function runBunTests(
 
   if (options.dryRun) {
     dependencies.stdout(`Dry run: ${files.length} files would be executed:`);
-    for (const entry of files) {
+    for (const entry of files)
       dependencies.stdout(`  [${entry.cwd}] ${entry.file}`);
-    }
     return 0;
   }
 
@@ -640,38 +620,70 @@ export async function runBunTests(
     `Running ${files.length} native Bun test files in isolated processes`,
   );
 
-  const junitTempDir = createJunitTempDir(options, dependencies);
-  const setups = collectGlobalSetups(files);
+  // Session-scoped fake system root (issue #3622): every spawned test process
+  // gets HOME/TMPDIR/XDG_* inside a throwaway root, while the runner keeps
+  // its real environment for the sentinel guard below.
+  const session = createTestSessionRoot();
+  const guard = (
+    dependencies.createSentinelGuard ?? createRealHomeSentinelGuard
+  )(dependencies.environment);
+
+  const junit = options.jsonReport
+    ? createJunitTempDirectory(
+        resolve(dependencies.invocationDirectory),
+        dependencies.stderr,
+      )
+    : null;
+  const junitTempDir = junit?.path ?? null;
   const started: string[] = [];
   let testResults: FileTestResult[] = [];
   let teardownFailures = 0;
+  let sentinelViolations = 0;
+  let teardown: Promise<void> | undefined;
+  const finalizeSession = (): Promise<void> =>
+    (teardown ??= cleanupTestSession(
+      session,
+      guard,
+      () => teardownSetups(started, dependencies),
+      dependencies.stderr,
+    ).then((failures) => {
+      teardownFailures = failures;
+    }));
+  const finalizeGuard = (): Promise<void> =>
+    finalizeSession().finally(() => junit?.cleanup());
+  const unsubscribe = dependencies.registerSignalCleanup?.(finalizeGuard);
   try {
-    for (const setup of setups) {
-      const module = await dependencies.loadGlobalSetup(setup);
-      started.push(setup);
-      await module.setup?.();
-    }
-    testResults = runAllFiles(
+    guard.captureBaseline();
+    await startGlobalSetups(files, started, dependencies);
+    const sessionEnv = buildSessionEnv(dependencies.environment, session);
+    const outcome = await runAllFiles(
       files,
       tsconfigOverride,
       options,
       dependencies,
+      sessionEnv,
+      guard,
       junitTempDir,
     );
+    testResults = outcome.results;
+    sentinelViolations = outcome.sentinelViolations;
+    await finalizeSession();
+    reportResults(testResults, dependencies);
+    writeReports(options, testResults, junitTempDir, dependencies);
   } finally {
-    teardownFailures = await teardownSetups(started, dependencies);
+    try {
+      await finalizeGuard();
+    } finally {
+      unsubscribe?.();
+    }
   }
 
-  reportResults(testResults, dependencies);
-
-  writeReports(options, testResults, junitTempDir, dependencies);
-
-  const passed = testResults.filter((r) => r.passed).length;
-  const failed = testResults.length - passed;
   // A global teardown that throws means the root's cleanup contract was
   // violated (e.g. an eval run's temp storage survived). Vitest fails the run
-  // in that case, so reporting success here would leak the failure.
-  return failed > 0 || teardownFailures > 0 ? 1 : 0;
+  // in that case, so reporting success here would leak the failure. A
+  // sentinel violation means a watched real-home change was detected.
+  const failed = testResults.filter((r) => !r.passed).length;
+  return failed > 0 || teardownFailures > 0 || sentinelViolations > 0 ? 1 : 0;
 }
 
 function resolveTsconfig(
@@ -686,42 +698,65 @@ function resolveTsconfig(
     : null;
 }
 
-function createJunitTempDir(
+function resolveSelectedFiles(
   options: CliOptions,
   dependencies: BunTestRunnerDependencies,
-): string | null {
-  if (!options.jsonReport) return null;
-  return mkdtempSync(
-    join(resolve(dependencies.invocationDirectory, '.'), 'bun-junit-'),
+): readonly BunTestFile[] {
+  return applyFilters(
+    applyExclusions(
+      dependencies.resolveFiles(
+        dependencies.repoRoot,
+        options.workspace ?? undefined,
+      ),
+      options.exclude,
+    ),
+    options.filters,
   );
 }
 
-function runAllFiles(
+interface RunAllFilesOutcome {
+  readonly results: FileTestResult[];
+  readonly sentinelViolations: number;
+}
+
+async function runAllFiles(
   files: readonly BunTestFile[],
   tsconfigOverride: string | null,
   options: CliOptions,
   dependencies: BunTestRunnerDependencies,
+  sessionEnv: NodeJS.ProcessEnv,
+  guard: SentinelGuard,
   junitTempDir: string | null,
-): FileTestResult[] {
+): Promise<RunAllFilesOutcome> {
   const run: RunWideOptions = {
     tsconfig: tsconfigOverride,
     timeout: options.timeout,
     testNamePattern: options.testNamePattern,
   };
   const results: FileTestResult[] = [];
+  let sentinelViolations = 0;
   for (const entry of files) {
-    results.push(
-      runSingleTestFile(
-        entry,
-        run,
-        dependencies,
-        junitTempDir !== null
-          ? join(junitTempDir, `${results.length}.xml`)
-          : undefined,
-      ),
+    const result = await runSingleTestFile(
+      entry,
+      run,
+      sessionEnv,
+      dependencies,
+      junitTempDir !== null
+        ? join(junitTempDir, `${results.length}.xml`)
+        : undefined,
     );
+    results.push(result);
+    // The settled file identifies the detection window, not proven causality.
+    try {
+      if (isRunnerActive()) guard.assertUnchanged(result.name);
+    } catch (error: unknown) {
+      dependencies.stderr(
+        error instanceof Error ? error.message : String(error),
+      );
+      sentinelViolations++;
+    }
   }
-  return results;
+  return { results, sentinelViolations };
 }
 
 /**
@@ -789,7 +824,6 @@ function writeReports(
       dependencies,
     );
     dependencies.stdout(`JSON report written to ${jsonReportPath}`);
-    rmSync(junitTempDir, { recursive: true, force: true });
   }
 }
 
@@ -940,27 +974,6 @@ async function main(): Promise<void> {
     console.error,
   );
 
-  // Register signal handlers so that Ctrl-C or CI cancellation exits promptly.
-  // Since Bun.spawnSync blocks the event loop, these handlers only fire
-  // between files (not during a running child), so they cannot kill an
-  // in-flight child. For SIGKILL (OOM), the pre-run reaping guard above
-  // is the protection mechanism.
-  let terminating = false;
-  const signalExitCodes: Record<string, number> = {
-    SIGTERM: 143,
-    SIGINT: 130,
-    SIGHUP: 129,
-  };
-  const handleSignal = (signal: string): void => {
-    if (terminating) return;
-    terminating = true;
-    console.error(`[run_bun_tests] Received ${signal}, exiting.`);
-    process.exit(signalExitCodes[signal] ?? 130);
-  };
-  process.on('SIGTERM', () => handleSignal('SIGTERM'));
-  process.on('SIGINT', () => handleSignal('SIGINT'));
-  process.on('SIGHUP', () => handleSignal('SIGHUP'));
-
   process.exitCode = await runBunTests(process.argv.slice(2), {
     repoRoot,
     invocationDirectory: process.cwd(),
@@ -970,22 +983,50 @@ async function main(): Promise<void> {
     resolveTsconfig: resolveTsconfigOverride,
     loadGlobalSetup: async (path) =>
       (await import(pathToFileURL(path).href)) as BunGlobalSetupModule,
-    spawn: (command, options) => {
-      const result = Bun.spawnSync([...command], options);
-      const stdoutText = decodeOutput(result.stdout);
-      if (stdoutText) {
-        process.stdout.write(stdoutText);
-      }
-      const stderrText = decodeOutput(result.stderr);
-      if (stderrText) {
-        process.stderr.write(stderrText);
-      }
-      return {
-        exitCode: result.exitCode,
-        signalCode: result.signalCode,
-        stdout: stdoutText,
-        stderr: stderrText,
-      };
+    registerSignalCleanup: installRunnerSignalHandlers,
+    spawn: async (command, options) => {
+      assertRunnerActive();
+      const [executable, ...args] = command;
+      if (executable === undefined) throw new Error('Missing test executable');
+      return new Promise<ChildExitInfo>((resolve, reject) => {
+        const child = spawn(executable, args, {
+          cwd: options.cwd,
+          env: options.env,
+          stdio: ['inherit', 'pipe', 'pipe'],
+          detached: process.platform !== 'win32',
+        });
+        trackRunnerChild(child);
+        let stdout = '';
+        let stderr = '';
+        child.stdout.on('data', (chunk: Buffer) => {
+          stdout += chunk.toString();
+          process.stdout.write(chunk);
+        });
+        child.stderr.on('data', (chunk: Buffer) => {
+          stderr += chunk.toString();
+          process.stderr.write(chunk);
+        });
+        const timer =
+          options.timeout === undefined
+            ? undefined
+            : setTimeout(() => {
+                try {
+                  killRunnerChild(child);
+                } catch (error) {
+                  console.error(
+                    `Failed to kill timed-out test child ${child.pid}: ${String(error)}`,
+                  );
+                }
+              }, options.timeout);
+        child.once('error', (error) => {
+          clearTimeout(timer);
+          reject(error);
+        });
+        child.once('close', (exitCode, signalCode) => {
+          clearTimeout(timer);
+          resolve({ exitCode, signalCode, stdout, stderr });
+        });
+      });
     },
     stdout: console.log,
     stderr: console.error,

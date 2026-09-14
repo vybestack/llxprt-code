@@ -492,3 +492,39 @@ describe('CoreSubagentServiceAdapter inferred explicit whitelist (Issue #2069 di
     expect(launchRequest?.toolConfig?.tools).toStrictEqual(['read_file']);
   });
 });
+
+describe('CoreSubagentServiceAdapter behaviourPrompts (Issue #2533 single spelling)', () => {
+  it('forwards request.behaviourPrompts to the launch request', async () => {
+    const { adapter, launch } = createAdapterWithLaunch();
+
+    await adapter.executeSubagent({
+      name: 'helper',
+      prompt: 'Do work',
+      behaviourPrompts: ['Respect coding standards', 'Emit findings only'],
+    });
+
+    const launchRequest = launch.mock.calls[0]?.[0] as
+      | { behaviourPrompts?: string[] }
+      | undefined;
+    expect(launchRequest).toBeDefined();
+    expect(launchRequest?.behaviourPrompts).toStrictEqual([
+      'Respect coding standards',
+      'Emit findings only',
+    ]);
+  });
+
+  it('omits behaviourPrompts from the launch request when not supplied', async () => {
+    const { adapter, launch } = createAdapterWithLaunch();
+
+    await adapter.executeSubagent({
+      name: 'helper',
+      prompt: 'Do work',
+    });
+
+    const launchRequest = launch.mock.calls[0]?.[0] as
+      | { behaviourPrompts?: string[] }
+      | undefined;
+    expect(launchRequest).toBeDefined();
+    expect(launchRequest).not.toHaveProperty('behaviourPrompts');
+  });
+});

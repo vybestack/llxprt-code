@@ -102,6 +102,7 @@ describe('BUN_TEST_ROOTS structural guarantees', () => {
       'lsp',
       'zed-acp',
       'scripts-tests',
+      'eslint-rules',
       'evals',
       'integration-tests',
     ]);
@@ -196,6 +197,7 @@ describe('discoverTestFilesInDirectory', () => {
     writeFixture(getDir(), 'coverage/covered.test.ts');
     writeFixture(getDir(), 'tmp/temp.test.ts');
     writeFixture(getDir(), 'bundle/packed.test.ts');
+    writeFixture(getDir(), 'research/reference.test.ts');
     writeFixture(getDir(), '__snapshots__/snap.test.ts');
 
     const results = discoverTestFilesInDirectory(

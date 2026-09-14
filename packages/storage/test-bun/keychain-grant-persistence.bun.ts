@@ -25,7 +25,15 @@
  * @plan PLAN-20260805-ISSUE3020
  */
 
-import { beforeEach, afterEach, describe, expect, it, mock } from 'bun:test';
+import {
+  afterAll,
+  beforeEach,
+  afterEach,
+  describe,
+  expect,
+  it,
+  mock,
+} from 'bun:test';
 import type { KeyringAdapter } from '../src/secure-store/secure-store.js';
 import {
   INTERACTIVE_AUTH_THRESHOLD_MS,
@@ -42,6 +50,20 @@ import { resetRuntimeReplacedWarningForTesting } from '../src/secure-store/runti
 import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+
+// Uniform test isolation (issue #3622) sets LLXPRT_TEST_DISABLE_OS_KEYRING=1
+// in every preload, which makes the factory below return null before it ever
+// reaches a keyring module. These suites substitute a fake @napi-rs/keyring
+// (mock.module), so no real credential store is reachable; clearing the flag
+// in-process lets the factory under test construct its adapter around the
+// fake. The original value is restored after the file's tests finish.
+const ORIGINAL_DISABLE_OS_KEYRING = process.env.LLXPRT_TEST_DISABLE_OS_KEYRING;
+delete process.env.LLXPRT_TEST_DISABLE_OS_KEYRING;
+afterAll(() => {
+  if (ORIGINAL_DISABLE_OS_KEYRING !== undefined) {
+    process.env.LLXPRT_TEST_DISABLE_OS_KEYRING = ORIGINAL_DISABLE_OS_KEYRING;
+  }
+});
 
 // ─── Controllable clock (adapter-level timing) ──────────────────────────────
 //

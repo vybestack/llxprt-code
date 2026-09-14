@@ -82,7 +82,7 @@ export function buildContextState(
 
   context.set('task_behaviour_prompts', [
     request.prompt,
-    ...(request.behaviourPrompts ?? request.behaviorPrompts ?? []),
+    ...(request.behaviourPrompts ?? []),
   ]);
   return context;
 }

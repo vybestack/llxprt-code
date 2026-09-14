@@ -1,0 +1,6 @@
+# Issue #3567: CodeQL configuration for the PR path (pull_request,
+# merge_group). Omitting the `queries` key selects the default security
+# suite exactly as before #3567, per the PR-path latency/verdict budgets in
+# #3495/#3187/#2702. No `packs` key: the mechanism-class query pack runs
+# only on non-PR events (see codeql-config.yml).
+name: 'LLxprt CodeQL config (PR path)'

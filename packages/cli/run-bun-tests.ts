@@ -30,6 +30,13 @@ import {
   envPerFileTimeoutMs,
   resolveTestConcurrency,
 } from '../../scripts/lib/bun-test-policy.js';
+import {
+  assertRunnerActive,
+  createBespokeRunnerIsolation,
+  throwWorkerFailures,
+  installRunnerSignalHandlers,
+  trackRunnerChild,
+} from '../../scripts/lib/bespoke-runner-isolation.js';
 
 process.env.LLXPRT_RUNNING_TESTS = 'true';
 
@@ -303,7 +310,12 @@ export async function runTestFileWithTimeoutRetry<
   return runAttempt();
 }
 
-export async function runTestFile(file: string): Promise<TestResult> {
+export async function runTestFile(
+  file: string,
+  env: NodeJS.ProcessEnv = { ...process.env },
+  onTimeout?: () => void,
+): Promise<TestResult> {
+  assertRunnerActive();
   // Resolve the budget before spawning so an invalid override fails fast
   // instead of stranding an already-started child without a timeout.
   const timeoutMs = fileTimeoutForFile(file);
@@ -316,13 +328,14 @@ export async function runTestFile(file: string): Promise<TestResult> {
       {
         cwd: process.cwd(),
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: process.env,
+        env,
         // Own process group so a timeout can take down the whole tree. Tests
         // that spawn the real CLI leave grandchildren which would otherwise
         // survive the kill and hold pipes open into later files.
         detached: process.platform !== 'win32',
       },
     );
+    trackRunnerChild(child);
 
     child.stdout?.on('data', (chunk: Buffer) => {
       output += chunk.toString();
@@ -342,6 +355,11 @@ export async function runTestFile(file: string): Promise<TestResult> {
     const timer = setTimeout(() => {
       killedByTimeout = true;
       killProcessTree(child);
+      try {
+        onTimeout?.();
+      } catch (error) {
+        console.error(`Test timeout callback failed: ${String(error)}`);
+      }
     }, timeoutMs);
 
     child.on('exit', (code) => {
@@ -621,79 +639,106 @@ async function main(): Promise<void> {
     );
   }
 
-  const results: TestResult[] = [];
-  let nextIndex = 0;
-  let completed = 0;
+  // Session-scoped fake system root (issue #3622): every spawned test process
+  // gets HOME/TMPDIR/XDG_* inside a throwaway root while this runner keeps
+  // its real environment for the sentinel guard.
+  const isolation = createBespokeRunnerIsolation(process.env);
+  const removeSignalHandlers = installRunnerSignalHandlers(() => {
+    isolation.finalize();
+  });
+  let exitCode = 1;
+  let failFast = false;
+  try {
+    const results: TestResult[] = [];
+    let nextIndex = 0;
+    let completed = 0;
 
-  async function worker(): Promise<void> {
-    for (;;) {
-      const index = nextIndex++;
-      if (index >= selectedFiles.length) return;
-      const file = selectedFiles[index];
-      const result = await runTestFileWithTimeoutRetry(file, () =>
-        runTestFile(file),
-      );
-      results.push(result);
-      completed++;
-      if (!result.passed) {
-        console.error(
-          `FAIL (${completed}/${selectedFiles.length}) ${result.file}${
-            result.timedOut ? ' [timeout]' : ''
-          }`,
+    async function worker(): Promise<void> {
+      for (;;) {
+        const index = nextIndex++;
+        if (index >= selectedFiles.length) return;
+        const file = selectedFiles[index];
+        const result = await isolation.runFile(file, () =>
+          runTestFileWithTimeoutRetry(file, () =>
+            runTestFile(file, isolation.sessionEnv, () => {
+              failFast = true;
+            }),
+          ),
         );
+        results.push(result);
+        completed++;
+        if (!result.passed) {
+          console.error(
+            `FAIL (${completed}/${selectedFiles.length}) ${result.file}${
+              result.timedOut ? ' [timeout]' : ''
+            }`,
+          );
+        }
       }
     }
-  }
 
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, selectedFiles.length) }, worker),
-  );
-
-  results.sort((a, b) => a.file.localeCompare(b.file));
-  const failed = results.filter((result) => !result.passed);
-
-  for (const result of failed) {
-    console.error(`\n----- ${result.file} -----`);
-    console.error(failureExcerpt(stripAnsi(result.output), 6000));
-  }
-
-  const cases = results.reduce(
-    (total, result) => {
-      const counts = parseCaseCounts(result.output);
-      return {
-        pass: total.pass + counts.pass,
-        fail: total.fail + counts.fail,
-        skip: total.skip + counts.skip,
-        todo: total.todo + counts.todo,
-      };
-    },
-    { pass: 0, fail: 0, skip: 0, todo: 0 },
-  );
-
-  console.log(
-    `Passed ${results.length - failed.length}/${results.length} CLI test files` +
-      (failed.length > 0 ? ` (${failed.length} failed)` : ''),
-  );
-  console.log(
-    `Test cases: ${cases.pass} passed, ${cases.fail} failed, ` +
-      `${cases.skip} skipped, ${cases.todo} todo ` +
-      `(${cases.pass + cases.fail + cases.skip + cases.todo} total)`,
-  );
-
-  // A write failure must not replace the run's verdict with an unhandled
-  // exception, but losing the required CI artifact is still a failed run.
-  let junitWriteFailed = false;
-  try {
-    writeFileSync(join(root, 'junit.xml'), generateJUnit(results));
-  } catch (error) {
-    junitWriteFailed = true;
-    console.error(
-      `Failed to write junit.xml: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+    const workers = await Promise.allSettled(
+      Array.from(
+        { length: Math.min(concurrency, selectedFiles.length) },
+        worker,
+      ),
     );
+    throwWorkerFailures(workers);
+
+    results.sort((a, b) => a.file.localeCompare(b.file));
+    const failed = results.filter((result) => !result.passed);
+
+    for (const result of failed) {
+      console.error(`\n----- ${result.file} -----`);
+      console.error(failureExcerpt(stripAnsi(result.output), 6000));
+    }
+
+    const cases = results.reduce(
+      (total, result) => {
+        const counts = parseCaseCounts(result.output);
+        return {
+          pass: total.pass + counts.pass,
+          fail: total.fail + counts.fail,
+          skip: total.skip + counts.skip,
+          todo: total.todo + counts.todo,
+        };
+      },
+      { pass: 0, fail: 0, skip: 0, todo: 0 },
+    );
+
+    console.log(
+      `Passed ${results.length - failed.length}/${results.length} CLI test files` +
+        (failed.length > 0 ? ` (${failed.length} failed)` : ''),
+    );
+    console.log(
+      `Test cases: ${cases.pass} passed, ${cases.fail} failed, ` +
+        `${cases.skip} skipped, ${cases.todo} todo ` +
+        `(${cases.pass + cases.fail + cases.skip + cases.todo} total)`,
+    );
+
+    // A write failure must not replace the run's verdict with an unhandled
+    // exception, but losing the required CI artifact is still a failed run.
+    let junitWriteFailed = false;
+    try {
+      writeFileSync(join(root, 'junit.xml'), generateJUnit(results));
+    } catch (error) {
+      junitWriteFailed = true;
+      console.error(
+        `Failed to write junit.xml: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+    exitCode = exitCodeForRun(failed.length, junitWriteFailed);
+  } finally {
+    try {
+      if (isolation.finalize() > 0) exitCode = 1;
+    } finally {
+      removeSignalHandlers();
+    }
+    process.exitCode = exitCode;
   }
-  process.exit(exitCodeForRun(failed.length, junitWriteFailed));
+  if (failFast) process.exit(exitCode);
 }
 
 if (import.meta.main) {

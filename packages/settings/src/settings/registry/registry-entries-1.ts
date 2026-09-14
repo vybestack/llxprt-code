@@ -110,7 +110,6 @@ function validateReasoningEnabledMap(value: unknown): ValidationResult {
 export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'auth-key',
-    aliases: ['apiKey', 'api-key'],
     category: 'provider-config',
     owner: 'provider-connection',
     propagation: 'service-reconfigure',
@@ -121,7 +120,6 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   },
   {
     key: 'auth-keyfile',
-    aliases: ['apiKeyfile', 'api-keyfile'],
     category: 'provider-config',
     owner: 'provider-connection',
     propagation: 'service-reconfigure',
@@ -197,7 +195,6 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   },
   {
     key: 'toolFormat',
-    aliases: ['tool-format'],
     category: 'provider-config',
     owner: 'provider-connection',
     propagation: 'service-reconfigure',
@@ -219,7 +216,6 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   },
   {
     key: 'toolFormatOverride',
-    aliases: ['tool-format-override'],
     category: 'provider-config',
     owner: 'provider-connection',
     propagation: 'service-reconfigure',

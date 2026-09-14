@@ -527,18 +527,22 @@ describe('SettingsService — change event redacts sensitive values (Issue #2472
     expect(evt?.newValue).toBe('[REDACTED]');
   });
 
-  it('redacts oldValue and newValue for apiKey alias in change events', () => {
+  it('rejects legacy apiKey writes with canonical guidance', () => {
     const svc = new SettingsService();
-    svc.set('apiKey', 'sk-original');
-    let evt: { key: string; oldValue: unknown; newValue: unknown } | undefined;
-    svc.on('change', (e) => {
-      evt = e;
-    });
-    svc.set('apiKey', 'sk-rotated');
 
-    expect(evt?.key).toBe('apiKey');
-    expect(evt?.oldValue).toBe('[REDACTED]');
-    expect(evt?.newValue).toBe('[REDACTED]');
+    expect(() => svc.set('apiKey', 'sk-secret')).toThrow(
+      "use the canonical 'auth-key'",
+    );
+    expect(svc.get('apiKey')).toBeUndefined();
+  });
+
+  it('rejects legacy disabled-tools clears with canonical guidance', () => {
+    const svc = new SettingsService();
+
+    expect(() => svc.set('disabled-tools', undefined)).toThrow(
+      "use the canonical 'tools.disabled'",
+    );
+    expect(svc.get('disabled-tools')).toBeUndefined();
   });
 
   it('preserves non-sensitive newValue in change events', () => {
@@ -570,19 +574,13 @@ describe('SettingsService — change event redacts sensitive values (Issue #2472
     expect(evt?.newValue).toBe('[REDACTED]');
   });
 
-  it('preserves provider and key metadata in provider-change events for sensitive keys', () => {
+  it('rejects legacy provider-setting writes with canonical guidance', () => {
     const svc = new SettingsService();
-    svc.setProviderSetting('anthropic', 'apiKey', 'sk-original');
-    let evt:
-      | { provider: string; key: string; oldValue: unknown; newValue: unknown }
-      | undefined;
-    svc.on('provider-change', (e) => {
-      evt = e;
-    });
-    svc.setProviderSetting('anthropic', 'apiKey', 'sk-rotated');
 
-    expect(evt?.provider).toBe('anthropic');
-    expect(evt?.key).toBe('apiKey');
+    expect(() =>
+      svc.setProviderSetting('anthropic', 'apiKey', 'sk-secret'),
+    ).toThrow("use the canonical 'auth-key'");
+    expect(svc.getProviderSettings('anthropic')).not.toHaveProperty('apiKey');
   });
 
   it('preserves non-sensitive newValue in provider-change events', () => {

@@ -248,7 +248,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       logChatPayload(logger, materializedMessages, formattedTools ?? undefined);
 
       const aiTools = buildVercelTools(formattedTools);
-      const params = resolveModelCallParams(effectiveOptions, metadata, this);
+      const params = resolveModelCallParams(effectiveOptions, this);
       const rawFieldName = effectiveOptions.settings.get(
         'reasoning.fieldName',
       ) as string | undefined;

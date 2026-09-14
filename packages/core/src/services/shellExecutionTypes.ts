@@ -28,6 +28,14 @@ export interface ShellExecutionResult {
   aborted: boolean;
   /** Whether the command was killed due to an inactivity timeout. */
   inactivityTimedOut?: boolean;
+  /**
+   * True when an abort-timeout kill left live members in the spawned process
+   * group after the bounded reap window expired. Set only on the POSIX
+   * group-kill abort path; absent means the group was confirmed empty (or no
+   * group kill applies). Carried so the tool layer can tell the caller
+   * children may still be running (Issue #3517).
+   */
+  survivingGroupMembersOnAbort?: boolean;
   /** The process ID of the spawned shell. */
   pid: number | undefined;
   /** The method used to execute the shell command. */

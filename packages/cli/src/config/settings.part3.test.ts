@@ -289,7 +289,7 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should leave unresolved environment variables as is', () => {
-      const userSettingsContent = { apiKey: '$UNDEFINED_VAR' };
+      const userSettingsContent = { 'auth-key': '$UNDEFINED_VAR' };
       (
         mockFsExistsSync as Mock<(...args: never[]) => unknown>
       ).mockImplementation((p: fs.PathLike) => p === USER_SETTINGS_PATH);
@@ -302,8 +302,8 @@ describe('Settings Loading and Merging', () => {
       );
 
       const arbitrary = dynamicSettings(loadSettings(MOCK_WORKSPACE_DIR));
-      expect(arbitrary.user.settings.apiKey).toBe('$UNDEFINED_VAR');
-      expect(arbitrary.merged.apiKey).toBe('$UNDEFINED_VAR');
+      expect(arbitrary.user.settings['auth-key']).toBe('$UNDEFINED_VAR');
+      expect(arbitrary.merged['auth-key']).toBe('$UNDEFINED_VAR');
     });
 
     it('should resolve multiple environment variables in a single string', () => {

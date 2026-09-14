@@ -7,7 +7,6 @@
 import {
   getSettingHelp,
   parseSetting,
-  resolveAlias,
   SETTINGS_REGISTRY,
   validateSetting,
 } from '@vybestack/llxprt-code-settings/settings/settingsRegistry.js';
@@ -36,16 +35,15 @@ export function parseEphemeralSettingValue(
   key: string,
   rawValue: string,
 ): EphemeralParseResult {
-  const resolved = resolveAlias(key);
-  if (!validEphemeralKeys.includes(resolved)) {
+  if (!validEphemeralKeys.includes(key)) {
     return {
       success: false,
       message: `Invalid setting key: ${key}. Valid keys are: ${validEphemeralKeys.join(', ')}`,
     };
   }
 
-  const parsed = parseSetting(resolved, rawValue);
-  const validation = validateSetting(resolved, parsed);
+  const parsed = parseSetting(key, rawValue);
+  const validation = validateSetting(key, parsed);
 
   if (!validation.success) {
     return {
@@ -68,11 +66,9 @@ export function parseEphemeralSettingValue(
  * @returns true if the setting is valid, false otherwise
  */
 export function isValidEphemeralSetting(key: string, value: unknown): boolean {
-  // Resolve aliases first so 'max-tokens' etc. work the same as in parseEphemeralSettingValue
-  const resolved = resolveAlias(key);
-  if (!validEphemeralKeys.includes(resolved)) {
+  if (!validEphemeralKeys.includes(key)) {
     return false;
   }
-  const result = parseEphemeralSettingValue(resolved, String(value));
+  const result = parseEphemeralSettingValue(key, String(value));
   return result.success;
 }

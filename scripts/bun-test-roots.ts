@@ -109,6 +109,8 @@ const SKIPPED_DIRECTORY_NAMES: ReadonlySet<string> = new Set([
   'coverage',
   'tmp',
   'bundle',
+  // Gitignored vendored reference trees are never run by any test executor.
+  'research',
   '__snapshots__',
 ]);
 
@@ -235,6 +237,12 @@ export const BUN_TEST_ROOTS: readonly BunTestRoot[] = [
     ],
   },
   {
+    root: 'eslint-rules',
+    cwd: '.',
+    directories: ['eslint-rules'],
+    preload: ['scripts/tests/storage-isolation-guard.ts'],
+  },
+  {
     root: 'evals',
     cwd: 'evals',
     pattern: /\.eval\.ts$/,
@@ -313,8 +321,8 @@ function resolveRealPath(path: string, deps: BunTestRootDependencies): string {
 /**
  * Walks a directory recursively, collecting absolute paths of test files.
  *
- * Skips `node_modules`, `dist`, `coverage`, `tmp`, `bundle`, `__snapshots__`
- * and any directory starting with `.`. Files are selected purely by the
+ * Skips `node_modules`, `dist`, `coverage`, `tmp`, `bundle`, `research`,
+ * `__snapshots__` and any directory starting with `.`. Files are selected purely by the
  * test-file pattern, so a dot-prefixed file that matches (e.g.
  * `.hidden.test.ts`) IS included. Follows directories by real path and visits
  * each real path only once so a symlink cycle terminates.

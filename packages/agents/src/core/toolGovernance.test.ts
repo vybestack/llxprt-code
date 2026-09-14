@@ -97,19 +97,17 @@ describe('buildToolGovernance', () => {
       );
     });
 
-    it('should fallback to disabled-tools if tools.disabled is not present', () => {
+    it('should ignore the legacy disabled-tools key', () => {
       const config = createMockConfig({
         ephemerals: { 'disabled-tools': ['shell', 'write_file'] },
       });
 
       const governance = buildToolGovernance(config);
 
-      expect(governance.disabled).toStrictEqual(
-        new Set(['shell', 'write_file']),
-      );
+      expect(governance.disabled).toStrictEqual(new Set());
     });
 
-    it('should prefer tools.disabled over disabled-tools when both present', () => {
+    it('should ignore legacy disabled-tools when tools.disabled is present', () => {
       const config = createMockConfig({
         ephemerals: {
           'tools.disabled': ['shell'],

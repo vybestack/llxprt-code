@@ -437,7 +437,14 @@ describe('P26: providerContentEnforcement characterization', () => {
         effectiveTokens: initialStateful.estimatedPromptTokens,
         statefulParentUsed: true,
       });
-      expect(initialStateful.incrementalTokens).toBe(
+      // The wire body carries the system instruction (and tools when
+      // present), but a stateful turn with an observed retained baseline
+      // counts only the new input in the incremental estimate: the re-sent
+      // instructions/tools are retained server-side inside the parent
+      // baseline and are not re-billed, so the incremental is strictly
+      // smaller than the transmitted wire body whenever those keys carry
+      // content (issue #3481).
+      expect(initialStateful.incrementalTokens).toBeLessThan(
         initialStateful.transmittedTokens,
       );
       expect(12_050 + initialStateful.incrementalTokens).toBe(

@@ -36,12 +36,22 @@ export interface ShellExecutionResult {
   error: Error | null;
   /** Whether the command was aborted. */
   aborted: boolean;
+  /** Carries the inactivity-kill cause to the tool's durable notice (#3589). */
+  inactivityTimedOut?: boolean;
   /** Process ID of the spawned process. */
   pid: number | undefined;
   /** Background process IDs discovered for non-Windows shells. */
   backgroundPIDs?: number[];
   /** Process group ID discovered for non-Windows shells. */
   pgid?: number | null;
+  /**
+   * True when an abort-timeout kill left live members in the spawned process
+   * group after the bounded reap window expired. Set only on the POSIX
+   * group-kill abort path; absent means the group was confirmed empty (or no
+   * group kill applies). Carried so the tool layer can tell the caller
+   * children may still be running (Issue #3517).
+   */
+  survivingGroupMembersOnAbort?: boolean;
   /**
    * Acquisition-time truncation metadata when output exceeded the retention
    * byte budget. Present (with `truncated: true`) when the output was bounded
@@ -76,6 +86,8 @@ export interface ShellExecutionConfig {
   shouldUseNodePty: boolean;
   /** Shell execution options. */
   executionOptions: Record<string, unknown>;
+  /** Effective inactivity window for termination-cause reporting (#3589). */
+  inactivityTimeoutMs?: number;
   /** PTY terminal width. */
   ptyTerminalWidth?: number;
   /** PTY terminal height. */

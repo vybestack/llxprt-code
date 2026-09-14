@@ -18,7 +18,15 @@
  * @requirement R1
  */
 
-import { beforeEach, afterEach, describe, expect, it, mock } from 'bun:test';
+import {
+  afterAll,
+  beforeEach,
+  afterEach,
+  describe,
+  expect,
+  it,
+  mock,
+} from 'bun:test';
 import type { KeyringAdapter } from '../src/secure-store/secure-store.js';
 import {
   verifyKeyringDelete,
@@ -31,6 +39,20 @@ import {
   forceRuntimeReplacedForTesting,
 } from '../src/secure-store/runtime-identity.js';
 import { resetRuntimeReplacedWarningForTesting } from '../src/secure-store/runtime-replaced-errors.js';
+
+// Uniform test isolation (issue #3622) sets LLXPRT_TEST_DISABLE_OS_KEYRING=1
+// in every preload, which makes the factory return null before it ever
+// reaches a keyring module. This suite substitutes a fake @napi-rs/keyring
+// (mock.module below), so no real credential store is reachable; clearing the
+// flag in-process lets the factory under test construct its adapter around
+// the fake. The original value is restored after the file's tests finish.
+const ORIGINAL_DISABLE_OS_KEYRING = process.env.LLXPRT_TEST_DISABLE_OS_KEYRING;
+delete process.env.LLXPRT_TEST_DISABLE_OS_KEYRING;
+afterAll(() => {
+  if (ORIGINAL_DISABLE_OS_KEYRING !== undefined) {
+    process.env.LLXPRT_TEST_DISABLE_OS_KEYRING = ORIGINAL_DISABLE_OS_KEYRING;
+  }
+});
 
 // ─── Fake @napi-rs/keyring (boundary double) ────────────────────────────────
 //

@@ -6,7 +6,7 @@
  * is captured during profile saves.
  *
  * Before the fix, only settingsService.updateSettings() was called.
- * After the fix, config.setEphemeralSetting('tool-format', value) is also called,
+ * After the fix, config.setEphemeralSetting('toolFormat', value) is also called,
  * mirroring the pattern used by updateActiveProviderBaseUrl.
  */
 
@@ -54,7 +54,7 @@ describe('setActiveToolFormatOverride ephemeral persistence (issue #1943)', () =
       toolFormat: 'openai',
     });
     expect(mockConfig.setEphemeralSetting).toHaveBeenCalledWith(
-      'tool-format',
+      'toolFormat',
       'openai',
     );
   });
@@ -66,7 +66,7 @@ describe('setActiveToolFormatOverride ephemeral persistence (issue #1943)', () =
       toolFormat: 'auto',
     });
     expect(mockConfig.setEphemeralSetting).toHaveBeenCalledWith(
-      'tool-format',
+      'toolFormat',
       'auto',
     );
   });
@@ -78,7 +78,7 @@ describe('setActiveToolFormatOverride ephemeral persistence (issue #1943)', () =
       toolFormat: 'auto',
     });
     expect(mockConfig.setEphemeralSetting).toHaveBeenCalledWith(
-      'tool-format',
+      'toolFormat',
       'auto',
     );
   });
@@ -90,7 +90,7 @@ describe('setActiveToolFormatOverride ephemeral persistence (issue #1943)', () =
       toolFormat: 'kimi',
     });
     expect(mockConfig.setEphemeralSetting).toHaveBeenCalledWith(
-      'tool-format',
+      'toolFormat',
       'kimi',
     );
   });

@@ -45,6 +45,7 @@ import {
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { isToolNameRestricted } from './hookToolRestrictions.js';
+import { completeWithGoal } from './subagentToolProcessing.js';
 
 // ---------------------------------------------------------------------------
 // Shared execution context — all loop helpers receive this instead of `this`
@@ -164,17 +165,38 @@ export function recordTurnOutputTokens(
 }
 
 /**
- * Check whether the loop should terminate (max_turns, max_output, or max_time).
+ * Issue #3535: convert a stop after an unrecovered fatal tool error into an
+ * ERROR termination, restoring the recorded fatal diagnostic as the final
+ * message. Plain stop text from a later turn (e.g. "Done.") may have already
+ * overwritten final_message, which would leave the parent without the
+ * malformed-call detail the ERROR needs to be actionable.
  */
+export function convertToFatalToolErrorTermination(
+  output: OutputObject,
+  subagentId: string,
+  logger: DebugLogger,
+): void {
+  const fatalMessage = output.unrecovered_fatal_tool_error;
+  if (fatalMessage === undefined) {
+    return;
+  }
+  output.terminate_reason = SubagentTerminateMode.ERROR;
+  output.final_message = fatalMessage;
+  logger.warn(
+    () =>
+      `Subagent ${subagentId} stopping with an unrecovered fatal tool error: ${fatalMessage}`,
+  );
+}
+
 /**
  * Check only the aggregate output budget.
  *
  * Split out from {@link checkTerminationConditions} because the budget is the
- * one condition that must be evaluated in the middle of a turn, right after the
- * model's output is counted. The turn and time limits deliberately stay at the
- * top of the loop: re-checking them mid-turn would abandon tool calls the model
- * already emitted on its final allowed turn, which is a behaviour change the
- * budget work has no business making.
+ * one condition that must be evaluated in the middle of a turn, right after
+ * the model's output is counted. The turn and time limits deliberately stay at
+ * the top of the loop: re-checking them mid-turn would abandon tool calls the
+ * model already emitted on its final allowed turn, which is a behaviour change
+ * the budget work has no business making.
  */
 export function checkOutputBudget(
   ctx: Pick<
@@ -293,6 +315,15 @@ export async function checkGoalCompletion(
   currentTurn: number,
 ): Promise<IContent[] | null> {
   if (todoReminder) {
+    // Outstanding todos need tools; do not nudge a model that lost its tool path.
+    if (ctx.output.unrecovered_fatal_tool_error !== undefined) {
+      convertToFatalToolErrorTermination(
+        ctx.output,
+        ctx.subagentId,
+        ctx.logger,
+      );
+      return null;
+    }
     ctx.logger.debug(
       () =>
         `Subagent ${ctx.subagentId} postponing completion until outstanding todos are addressed`,
@@ -303,6 +334,16 @@ export async function checkGoalCompletion(
   }
 
   if (!ctx.outputConfig || Object.keys(ctx.outputConfig.outputs).length === 0) {
+    if (ctx.output.unrecovered_fatal_tool_error !== undefined) {
+      // Issue #3535: an unrecovered fatal tool error must end as ERROR so the
+      // caller can distinguish the failed run instead of GOAL.
+      convertToFatalToolErrorTermination(
+        ctx.output,
+        ctx.subagentId,
+        ctx.logger,
+      );
+      return null;
+    }
     ctx.output.terminate_reason = SubagentTerminateMode.GOAL;
     return null;
   }
@@ -313,11 +354,19 @@ export async function checkGoalCompletion(
   );
 
   if (remainingVars.length === 0) {
-    ctx.output.terminate_reason = SubagentTerminateMode.GOAL;
+    completeWithGoal(ctx.output);
     ctx.logger.debug(
       () =>
         `Subagent ${ctx.subagentId} satisfied output requirements on turn ${currentTurn}`,
     );
+    return null;
+  }
+
+  if (ctx.output.unrecovered_fatal_tool_error !== undefined) {
+    // Issue #3535: the model stopped calling tools after a fatal tool error and
+    // never emitted the remaining outputs. Fail fast — do not nudge a model that
+    // already lost its tool path.
+    convertToFatalToolErrorTermination(ctx.output, ctx.subagentId, ctx.logger);
     return null;
   }
 

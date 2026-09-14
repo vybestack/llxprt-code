@@ -131,6 +131,14 @@ export interface OutputObject {
    */
   output_tokens_budget?: number;
   /**
+   * The fatal tool-error message (TOOL_DISABLED / TOOL_NOT_REGISTERED) that
+   * last killed a tool call in this run without a later successful tool
+   * execution. When set, the run must not terminate with {@link GOAL} (issue
+   * #3535): an unavailable tool that ends the run is an ERROR the parent can
+   * distinguish, while any successful tool call clears this field.
+   */
+  unrecovered_fatal_tool_error?: string;
+  /**
    * The reason for the subagent's termination, indicating whether it completed
    * successfully, timed out, or encountered an error.
    */

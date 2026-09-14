@@ -32,7 +32,6 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   },
   {
     key: 'max_tokens',
-    aliases: ['max-tokens', 'maxTokens'],
     category: 'model-param',
     owner: 'model',
     propagation: 'next-turn',
@@ -42,7 +41,6 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   },
   {
     key: 'max_output_tokens',
-    aliases: ['max-output-tokens'],
     category: 'model-param',
     owner: 'model',
     propagation: 'next-turn',
@@ -52,7 +50,6 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   },
   {
     key: 'maxOutputTokens',
-    aliases: ['max-output'],
     category: 'cli-behavior',
     owner: 'model',
     propagation: 'next-turn',
@@ -117,7 +114,6 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   },
   {
     key: 'response_format',
-    aliases: ['response-format', 'responseFormat'],
     category: 'model-param',
     owner: 'model',
     propagation: 'next-turn',
@@ -136,7 +132,6 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   },
   {
     key: 'tool_choice',
-    aliases: ['tool-choice', 'toolChoice'],
     category: 'model-param',
     owner: 'model',
     propagation: 'next-turn',
@@ -184,7 +179,6 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   },
   {
     key: 'user-agent',
-    aliases: ['User-Agent'],
     category: 'custom-header',
     owner: 'provider-connection',
     propagation: 'service-reconfigure',
@@ -466,10 +460,6 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   },
   {
     key: 'stream-idle-timeout-ms',
-    // settings.json stores this under the camelCase key; the alias keeps it a
-    // recognized CLI setting so it is not treated as an unknown pass-through
-    // model-param and leaked into API request bodies. @issue #2182
-    aliases: ['streamIdleTimeoutMs'],
     category: 'cli-behavior',
     owner: 'model',
     propagation: 'next-turn',
@@ -490,10 +480,6 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   },
   {
     key: 'stream-first-response-timeout-ms',
-    // Mirrors stream-idle-timeout-ms: the alias keeps the camelCase form as a
-    // recognized CLI setting so it is not leaked into API request bodies
-    // (modelParams). @issue #2607
-    aliases: ['streamFirstResponseTimeoutMs'],
     category: 'cli-behavior',
     owner: 'model',
     propagation: 'next-turn',

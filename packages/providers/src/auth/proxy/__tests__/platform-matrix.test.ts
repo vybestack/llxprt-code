@@ -154,7 +154,9 @@ describe('Platform Matrix Tests (Phase 38)', () => {
   let server: CredentialProxyServer | null = null;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-'));
+    // Session-scoped TMPDIR can exceed the Unix socket path budget (#3622).
+    const socketTempBase = isWindows ? os.tmpdir() : '/tmp';
+    tmpDir = fs.mkdtempSync(path.join(socketTempBase, 'pm-'));
   });
 
   afterEach(async () => {
@@ -264,7 +266,14 @@ describe('Platform Matrix Tests (Phase 38)', () => {
        * @when Socket path is generated
        * @then Path uses fs.realpathSync(os.tmpdir())
        */
-      it('socket path uses resolved tmpdir (fs.realpathSync)', async () => {
+      const worstCaseDefaultPath = path.join(
+        fs.realpathSync(os.tmpdir()),
+        `lc-${getWorstCaseUid()}`,
+        `99999-${'A'.repeat(22)}.sock`,
+      );
+      it.skipIf(
+        Buffer.byteLength(worstCaseDefaultPath) >= (isMacOS ? 104 : 108),
+      )('socket path uses resolved tmpdir (fs.realpathSync)', async () => {
         const tokenStore = new InMemoryTokenStore();
         const keyStorage = new InMemoryProviderKeyStorage();
 
@@ -429,8 +438,8 @@ describe('Platform Matrix Tests (Phase 38)', () => {
      * @then Stays within limits
      */
     it('calculates worst-case socket path length', () => {
-      // Simulate worst-case path calculation
-      const resolvedTmpdir = fs.realpathSync(os.tmpdir());
+      // Use the same short base as the real socket fixtures, not session TMPDIR.
+      const resolvedTmpdir = fs.realpathSync(path.dirname(tmpDir));
       const uid = getWorstCaseUid();
       const maxPid = 99999;
       // 128-bit nonce in base64url = 22 chars

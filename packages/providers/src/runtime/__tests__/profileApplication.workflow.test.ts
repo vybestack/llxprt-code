@@ -515,7 +515,7 @@ describe('profile application workflow', () => {
     it('applies profile modelParams and clears stale params', async () => {
       getActiveModelParamsMock.mockReturnValue({
         temperature: 0.5,
-        'max-tokens': 1000,
+        max_tokens: 1000,
         'old-param': 'stale',
       });
 
@@ -539,7 +539,7 @@ describe('profile application workflow', () => {
 
       expect(setActiveModelParamMock).toHaveBeenCalledWith('temperature', 0.9);
       expect(setActiveModelParamMock).toHaveBeenCalledWith('top-p', 0.95);
-      expect(clearActiveModelParamMock).toHaveBeenCalledWith('max-tokens');
+      expect(clearActiveModelParamMock).toHaveBeenCalledWith('max_tokens');
       expect(clearActiveModelParamMock).toHaveBeenCalledWith('old-param');
     });
 

@@ -4,7 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterAll,
+  mock,
+  type Mock,
+} from 'bun:test';
 import EventEmitter from 'events';
 import type {
   ShellOutputEvent,
@@ -31,26 +40,20 @@ void vi.mock('child_process', () => ({
 void vi.mock('../utils/textUtils.js', () => ({
   isBinary: mockIsBinary,
 }));
-void vi.mock('os', () => ({
-  default: {
-    platform: mockPlatform,
-    homedir: () => '/tmp/test-home',
-    constants: {
-      signals: {
-        SIGTERM: 15,
-        SIGKILL: 9,
-      },
-    },
-  },
+// Captured before the vi.mock calls below execute (bun runs vi.mock in
+// statement order). Bun resolves every file in one shared process and
+// default-import bindings snapshot at load time, so the os factory below
+// spreads the real module and stubs only platform/homedir: a leaked hollow
+// os surface would break later files (shellProcessKill.test.ts needs
+// os.tmpdir).
+const actualOsModule = await import('os');
+const realOsSurface = { ...actualOsModule.default };
+const stubOsSurface = () => ({
+  ...realOsSurface,
   platform: mockPlatform,
   homedir: () => '/tmp/test-home',
-  constants: {
-    signals: {
-      SIGTERM: 15,
-      SIGKILL: 9,
-    },
-  },
-}));
+});
+void vi.mock('os', () => ({ ...stubOsSurface(), default: stubOsSurface() }));
 void vi.mock('../utils/runtime.js', () => ({
   isWindows: () => mockPlatform() === 'win32',
 }));
@@ -58,9 +61,35 @@ void vi.mock('../utils/getPty.js', () => ({
   getPty: mockGetPty,
 }));
 
+/**
+ * Group pids that have received SIGKILL (string or numeric 9). Signal-0
+ * liveness probes from the
+ * abort group-reap confirmation (issue #3517) answer "alive" until the
+ * group's SIGKILL is delivered, then ESRCH, mirroring a real process group
+ * dying.
+ */
+const killedGroupPids = new Set<number>();
+const probeOrDeliver = (
+  pid: number,
+  signal?: NodeJS.Signals | number,
+): boolean => {
+  if (signal === 0) {
+    if (killedGroupPids.has(pid)) {
+      throw Object.assign(new Error(`process group ${pid} not found`), {
+        code: 'ESRCH',
+      });
+    }
+    return true;
+  }
+  if (signal === 'SIGKILL' || signal === 9) {
+    killedGroupPids.add(pid);
+  }
+  return true;
+};
+
 const mockProcessKill = vi
   .spyOn(process, 'kill')
-  .mockImplementation(() => true);
+  .mockImplementation(probeOrDeliver);
 
 const shellExecutionConfig: ShellExecutionConfig = {
   terminalWidth: 80,
@@ -81,6 +110,7 @@ describe('ShellExecutionService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    killedGroupPids.clear();
 
     mockIsBinary.mockReturnValue(false);
     mockPlatform.mockReturnValue('linux');
@@ -106,6 +136,22 @@ describe('ShellExecutionService', () => {
     mockPtyProcess.write = vi.fn();
 
     mockPtySpawn.mockReturnValue(mockPtyProcess);
+  });
+
+  // Bun runs every test file in this invocation in one shared process. The
+  // module-level process.kill spy and the vi.mock module replacements leak
+  // into later files, so this file leaves them behaviorally real: the spy is
+  // restored, the leaked platform stub passes through to the real platform,
+  // and child_process is re-registered with the real spawn for live named
+  // bindings resolved after this point (default-import bindings snapshot at
+  // load time, which is why the os factory itself must stay passthrough-real).
+  afterAll(() => {
+    mockProcessKill.mockRestore();
+    mockPlatform.mockReset();
+    mockPlatform.mockImplementation(() => realOsSurface.platform());
+    const realChildProcess = () => ({ ...actual, spawn: actual.spawn });
+    void mock.module('child_process', realChildProcess);
+    void mock.module('node:child_process', realChildProcess);
   });
 
   // Default shell execution config for tests
@@ -145,14 +191,16 @@ describe('ShellExecutionService', () => {
     new Promise<void>((resolve) => {
       mockProcessKill.mockImplementation((pid, signal) => {
         if (signal === 'SIGKILL' && pid === -mockPtyProcess.pid) resolve();
-        return true;
+        return probeOrDeliver(pid, signal);
       });
     });
 
+  // Signal-0 liveness probes from the group-reap confirmation (issue #3517)
+  // are not signal deliveries: ordering is asserted among real signals only.
   const killCallIndex = (signal: NodeJS.Signals): number =>
-    mockProcessKill.mock.calls.findIndex(
-      (call) => call[0] === -mockPtyProcess.pid && call[1] === signal,
-    );
+    mockProcessKill.mock.calls
+      .filter((call) => call[0] === -mockPtyProcess.pid && call[1] !== 0)
+      .findIndex((call) => call[1] === signal);
 
   const emitOutputWhenReady = (): void => {
     mockPtyProcess.onData.mock.calls[0][0]('output\n');

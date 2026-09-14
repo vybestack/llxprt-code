@@ -222,7 +222,7 @@ on the approved list.
 ```json
 {
   "tools": {
-    "core": ["ReadFileTool", "GlobTool", "ShellTool(ls)"]
+    "core": ["read_file", "glob", "run_shell_command(ls)"]
   }
 }
 ```
@@ -237,7 +237,7 @@ environment to a blocklist.
 ```json
 {
   "tools": {
-    "exclude": ["ShellTool(rm -rf)"]
+    "exclude": ["run_shell_command(rm -rf)"]
   }
 }
 ```
@@ -525,11 +525,11 @@ CLI.
   "tools": {
     "sandbox": "docker",
     "core": [
-      "ReadFileTool",
-      "GlobTool",
-      "ShellTool(ls)",
-      "ShellTool(cat)",
-      "ShellTool(grep)"
+      "read_file",
+      "glob",
+      "run_shell_command(ls)",
+      "run_shell_command(cat)",
+      "run_shell_command(grep)"
     ]
   },
   "mcp": {

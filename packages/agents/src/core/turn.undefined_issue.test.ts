@@ -1,335 +1,170 @@
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { Turn } from './turn.js';
-import type { ChatSession } from './chatSession.js';
-import type { FunctionCall } from '../agents/types.js';
-import { AgentEventType } from './turn.js';
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
-describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => {
-  let mockChatSession: ChatSession;
+/**
+ * Issue #3535 — Turn.handlePendingFunctionCall must never substitute the
+ * literal `undefined_tool_name` for an absent or unnormalizable tool name.
+ * These tests drive the real Turn against a mocked chat stream and assert the
+ * emitted ToolCallRequestInfo names and synthetic call ids carry the raw name
+ * (empty stays empty), never the fabricated literal.
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import type { ServerToolCallRequestEvent } from './turn.js';
+import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
+import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type {
+  ContentBlock,
+  IContent,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ChatSession } from './chatSession.js';
+import { StreamEventType } from './chatSession.js';
+
+const { mockSendMessageStream, mockGetHistory } = {
+  mockSendMessageStream: vi.fn(),
+  mockGetHistory: vi.fn(),
+};
+
+void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
+  reportError: vi.fn(),
+}));
+
+describe('Turn tool-call name passthrough (issue 3535)', () => {
+  let turn: Turn;
 
   beforeEach(() => {
-    // Create a more realistic mock for ChatSession
-    mockChatSession = {
-      sendPromise: Promise.resolve(),
-      compressionPromise: Promise.resolve(),
-      logger: {
-        log: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-      },
-      sendMessageStream: vi.fn().mockResolvedValue((async function* () {})()),
-      getHistory: vi.fn().mockReturnValue([]),
-      maybeIncludeSchemaDepthContext: vi.fn().mockResolvedValue(undefined),
-      // Add other required properties with minimal implementations
-      compress: vi.fn(),
-      addMessage: vi.fn(),
-      clear: vi.fn(),
-      getSettings: vi.fn().mockReturnValue({}),
-      setSettings: vi.fn(),
-      getModel: vi.fn().mockReturnValue('gemini-pro'),
-      setModel: vi.fn(),
-      getSystemInstruction: vi.fn().mockReturnValue(''),
-      setSystemInstruction: vi.fn(),
-      getTools: vi.fn().mockReturnValue([]),
-      setTools: vi.fn(),
-      getGenerationConfig: vi.fn().mockReturnValue({}),
-      setGenerationConfig: vi.fn(),
-      getSafetySettings: vi.fn().mockReturnValue([]),
-      setSafetySettings: vi.fn(),
-      // Add any other required properties...
-    } as unknown as ChatSession;
-  });
-
-  describe('Tool Name Normalization Integration', () => {
-    it('should handle Turn construction with different prompt IDs', () => {
-      // Test basic Turn construction
-      const turnWithId = new Turn(mockChatSession, 'different-prompt-id');
-      expect(turnWithId).toBeInstanceOf(Turn);
-    });
-
-    it('should handle Turn with agent ID', () => {
-      // Test Turn construction with agent ID
-      const turnWithAgent = new Turn(
-        mockChatSession,
-        'test-prompt',
-        'agent-123',
-      );
-      expect(turnWithAgent).toBeInstanceOf(Turn);
-    });
-
-    it('should have proper event types for GitHub #305 scenarios', () => {
-      // Verify that the required event types exist
-      expect(AgentEventType.ToolCallRequest).toBe('tool_call_request');
-      expect(AgentEventType.Error).toBe('error');
-    });
-  });
-
-  describe('FunctionCall Processing Scenarios', () => {
-    it('should create proper FunctionCall objects for testing', () => {
-      // Test creating FunctionCall objects that simulate the GitHub #305 issue
-      const validFunctionCall: FunctionCall = {
-        name: 'write_file',
-        args: { filename: 'test.txt', content: 'Hello World' },
-      };
-
-      expect(validFunctionCall.name).toBe('write_file');
-      expect(validFunctionCall.args).toStrictEqual({
-        filename: 'test.txt',
-        content: 'Hello World',
-      });
-    });
-
-    it('should handle FunctionCall with undefined name (GitHub #305 scenario)', () => {
-      // Simulate the problematic FunctionCall from qwen models
-      const problematicFunctionCall: Partial<FunctionCall> = {
-        name: undefined,
-        args: { file: 'output.txt' },
-      };
-
-      expect(problematicFunctionCall.name).toBeUndefined();
-      expect(problematicFunctionCall.args).toStrictEqual({
-        file: 'output.txt',
-      });
-    });
-
-    it('should handle FunctionCall with empty name', () => {
-      const emptyNameFunctionCall: Partial<FunctionCall> = {
-        name: '',
-        args: { data: 'test' },
-      };
-
-      expect(emptyNameFunctionCall.name).toBe('');
-      expect(emptyNameFunctionCall.args).toStrictEqual({ data: 'test' });
-    });
-
-    it('should handle FunctionCall with null name', () => {
-      const nullNameFunctionCall: Partial<FunctionCall> = {
-        name: undefined, // FunctionCall.name is string | undefined, not null
-        args: { content: 'test' },
-      };
-
-      expect(nullNameFunctionCall.name).toBeUndefined();
-      expect(nullNameFunctionCall.args).toStrictEqual({ content: 'test' });
-    });
-
-    it('should handle FunctionCall with malformed args', () => {
-      // Note: FunctionCall args should be Record<string, unknown>, not string
-      // Malformed JSON would be handled at a higher level
-      const malformedArgsFunctionCall: Partial<FunctionCall> = {
-        name: 'test_tool',
-        args: { malformed: 'json would be parsed elsewhere' },
-      };
-
-      expect(malformedArgsFunctionCall.name).toBe('test_tool');
-      expect(malformedArgsFunctionCall.args).toStrictEqual({
-        malformed: 'json would be parsed elsewhere',
-      });
-    });
-
-    it('should handle FunctionCall without args', () => {
-      const noArgsFunctionCall: Partial<FunctionCall> = {
-        name: 'test_tool',
-      };
-
-      expect(noArgsFunctionCall.name).toBe('test_tool');
-      expect(noArgsFunctionCall.args).toBeUndefined();
-    });
-  });
-
-  describe('GitHub #305 Edge Cases', () => {
-    it.each([
+    vi.resetAllMocks();
+    turn = new Turn(
       {
-        description: 'Null name',
-        call: {
-          name: undefined,
-          args: { file: 'test.txt' },
-        } as Partial<FunctionCall>,
-        expectedName: undefined,
-      },
-      {
-        description: 'Explicit undefined name',
-        call: {
-          name: undefined,
-          args: { file: 'test.txt' },
-        } as Partial<FunctionCall>,
-        expectedName: undefined,
-      },
-      {
-        description: 'Null name (duplicate)',
-        call: {
-          name: undefined,
-          args: { file: 'test.txt' },
-        } as Partial<FunctionCall>,
-        expectedName: undefined,
-      },
-      {
-        description: 'Empty string name',
-        call: {
-          name: '',
-          args: { file: 'test.txt' },
-        } as Partial<FunctionCall>,
-        expectedName: '',
-      },
-      {
-        description: 'Whitespace-only name',
-        call: {
-          name: '   \t\n   ',
-          args: { file: 'test.txt' },
-        } as Partial<FunctionCall>,
-        expectedName: '   \t\n   ',
-      },
-    ])(
-      'should simulate qwen model problematic scenario: $description',
-      ({ call, expectedName }) => {
-        // These are the exact scenarios reported in GitHub #305
-        expect(call.args).toStrictEqual({ file: 'test.txt' });
-        expect(call.name).toBe(expectedName);
-      },
+        sendMessageStream: mockSendMessageStream,
+        getHistory: mockGetHistory,
+        getConfig: () => undefined,
+        getResolvedBaseUrl: () => undefined,
+      } as unknown as ChatSession,
+      'prompt-3535',
+      DEFAULT_AGENT_ID,
+      'test',
     );
-
-    it('should test tool name patterns that cause issues', () => {
-      // Test various tool name patterns that might cause normalization issues
-      const problematicNames = [
-        '', // Empty
-        '   ', // Whitespace
-        'tool@name', // Special characters
-        'tool#name', // Special characters
-        'tool$name', // Special characters
-        'tool name', // Space
-        'tool-name', // Hyphen
-        'tool.name', // Dot
-        'a'.repeat(200), // Too long
-      ];
-
-      for (const name of problematicNames) {
-        expect(typeof name).toBe('string');
-      }
-    });
-
-    it('should test valid tool name patterns', () => {
-      // Test tool names that should work correctly
-      const validNames = [
-        'write_file',
-        'read_data',
-        'process_http_request',
-        'delete_file',
-        'create_directory',
-        'list_files',
-        'tool123',
-        'test_tool',
-      ];
-
-      for (const name of validNames) {
-        expect(typeof name).toBe('string');
-        expect(name.length).toBeGreaterThan(0);
-        expect(name.length).toBeLessThanOrEqual(100);
-      }
-    });
+    mockGetHistory.mockReturnValue([]);
   });
 
-  describe('Integration with normalizeToolName', () => {
-    it('should import normalizeToolName correctly', async () => {
-      // Test that we can import the normalizeToolName function
-      const { normalizeToolName } = await import(
-        '@vybestack/llxprt-code-tools'
-      );
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
-      expect(typeof normalizeToolName).toBe('function');
-
-      // Test basic functionality
-      expect(normalizeToolName('writeFile')).toBe('write_file');
-      expect(normalizeToolName('read_data')).toBe('read_data');
-      expect(normalizeToolName('')).toBeNull();
-      expect(normalizeToolName('   ')).toBeNull();
-    });
-
-    it.each([
-      { input: 'writeFile', expected: 'write_file' },
-      { input: 'read_data', expected: 'read_data' },
-      { input: '', expected: null },
-      { input: '   ', expected: null },
-      { input: 'invalid@tool', expected: null },
-    ])(
-      'should handle Turn.ts scenario: input="$input"',
-      async ({ input, expected }) => {
-        const { normalizeToolName } = await import(
-          '@vybestack/llxprt-code-tools'
-        );
-
-        // Test the same logic as in turn.ts:444-456
-        const result = normalizeToolName(input);
-        expect(result).toBe(expected);
-      },
+  function mockStreamYielding(blocks: ContentBlock[]): void {
+    const chunk: ModelStreamChunk = {
+      content: { speaker: 'ai', blocks } as IContent,
+    };
+    mockSendMessageStream.mockResolvedValue(
+      (async function* () {
+        yield { type: StreamEventType.CHUNK, value: chunk };
+      })(),
     );
+  }
 
-    it('should use fallback name for invalid tool names', () => {
-      // Simulate the fallback logic from turn.ts when normalizeToolName returns null
-      const fallbackName = 'undefined_tool_name';
-      expect(fallbackName).toBe('undefined_tool_name');
-    });
+  async function collectToolCallEvents(): Promise<
+    ServerToolCallRequestEvent[]
+  > {
+    const events: ServerToolCallRequestEvent[] = [];
+    for await (const event of turn.run(
+      [{ type: 'text', text: 'call something' }] as ContentBlock[],
+      new AbortController().signal,
+    )) {
+      if (event.type === AgentEventType.ToolCallRequest) {
+        events.push(event);
+      }
+    }
+    return events;
+  }
+
+  it('emits an empty name for an absent tool name and never the fabricated literal', async () => {
+    // The provider block carries NO name field at all.
+    mockStreamYielding([
+      {
+        type: 'tool_call',
+        id: '',
+        parameters: {},
+      } as unknown as ContentBlock,
+    ]);
+
+    const [event] = await collectToolCallEvents();
+    expect(event).toBeDefined();
+    expect(event.value.name).toBe('');
+    expect(event.value.callId).not.toContain('undefined_tool_name');
+    expect(JSON.stringify(event.value)).not.toContain('undefined_tool_name');
   });
 
-  describe('Error Recovery and Robustness', () => {
-    it('should handle malformed JSON in FunctionCall args', () => {
-      // Note: FunctionCall args are Record<string, unknown>, not string
-      // Malformed JSON would be handled at a higher level before creating FunctionCall
-      const malformedCases = [
-        { malformed: 'json would be parsed elsewhere' },
-        { incomplete: 'data' },
-        { null: 'value' },
-        { empty: '' },
-      ];
+  it('stringifies a non-string provider tool name without dropping the request', async () => {
+    const block: ContentBlock = {
+      type: 'tool_call',
+      id: 'numeric-name',
+      name: '',
+      parameters: {},
+    };
+    Object.defineProperty(block, 'name', { value: 42 });
+    mockStreamYielding([block]);
 
-      for (const malformedCase of malformedCases) {
-        const functionCall: Partial<FunctionCall> = {
-          name: 'test_tool',
-          args: malformedCase,
-        };
+    const events = await collectToolCallEvents();
 
-        expect(functionCall.name).toBe('test_tool');
-        expect(functionCall.args).toStrictEqual(malformedCase);
-      }
-    });
+    expect(events).toHaveLength(1);
+    expect(events[0].value.name).toBe('42');
+    expect(events[0].value.callId).toBe('numeric-name');
+  });
 
-    it('should handle extreme tool name lengths', () => {
-      const extremeCases = [
-        'a'.repeat(0), // Empty
-        'a'.repeat(1), // Single character
-        'a'.repeat(100), // Max valid length
-        'a'.repeat(101), // Just over limit
-        'a'.repeat(1000), // Way over limit
-      ];
+  it('passes an unnormalizable garbage name through raw', async () => {
+    const garbage = 'not a tool!!';
+    mockStreamYielding([
+      { type: 'tool_call', id: 'garbage-1', name: garbage, parameters: {} },
+    ]);
 
-      for (const name of extremeCases) {
-        const functionCall: Partial<FunctionCall> = {
-          name,
-          args: {},
-        };
+    const [event] = await collectToolCallEvents();
+    expect(event).toBeDefined();
+    expect(event.value.name).toBe(garbage);
+    expect(event.value.callId).not.toContain('undefined_tool_name');
+  });
 
-        expect(functionCall.name).toBe(name);
-        expect(functionCall.args).toStrictEqual({});
-      }
-    });
+  it('preserves a whitespace-only name as raw whitespace', async () => {
+    const rawWhitespace = '   ';
+    mockStreamYielding([
+      { type: 'tool_call', id: 'ws-1', name: rawWhitespace, parameters: {} },
+    ]);
 
-    it('should handle special Unicode characters', () => {
-      const unicodeCases = [
-        '工具名稱', // Chinese
-        'tôöl_nâmé', // Accented
-        'инструмент', // Cyrillic
-        '🔧_tool', // Emoji
-        '\u0000tool', // Null character
-        '\n\ttool', // Control characters
-      ];
+    const [event] = await collectToolCallEvents();
+    expect(event).toBeDefined();
+    expect(event.value.name).toBe(rawWhitespace);
+  });
 
-      for (const name of unicodeCases) {
-        const functionCall: Partial<FunctionCall> = {
-          name,
-          args: {},
-        };
+  it('embeds the raw name segment in synthetic ids and never the fabricated literal', async () => {
+    const garbage = 'not a tool!!';
+    mockStreamYielding([
+      { type: 'tool_call', id: '', name: garbage, parameters: {} },
+      { type: 'tool_call', id: '', name: '   ', parameters: {} },
+      {
+        type: 'tool_call',
+        id: '',
+        parameters: {},
+      } as unknown as ContentBlock,
+    ]);
 
-        expect(functionCall.name).toBe(name);
-        expect(functionCall.args).toStrictEqual({});
-      }
-    });
+    const events = await collectToolCallEvents();
+    expect(events).toHaveLength(3);
+
+    // Garbage name: the raw name is the id prefix before `-<index>-<digest>`.
+    expect(events[0].value.callId).toContain(garbage);
+    expect(events[0].value.callId).toMatch(
+      new RegExp(`^${garbage.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-0-`),
+    );
+    // Whitespace-only name: raw whitespace is the id prefix.
+    expect(events[1].value.callId).toMatch(/^ {3}-1-/);
+    // Absent name: the id starts with the empty name segment.
+    expect(events[2].value.callId).toMatch(/^-2-/);
+
+    for (const event of events) {
+      expect(event.value.callId).not.toContain('undefined_tool_name');
+    }
   });
 });

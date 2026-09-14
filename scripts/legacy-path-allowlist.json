@@ -35,6 +35,11 @@
     "reason": "Legacy-exclusion sentinel in upward memory traversal: stops walking at ~/.llxprt so a surviving legacy global file is never resurrected as workspace memory. The comment identifies the path as legacy-exclusion (migration-only contract). Scoped to the sentinel line only."
   },
   {
+    "path": "dev-docs/test-runner-inventory.md",
+    "pattern": "~/\\.llxprt",
+    "reason": "The test-isolation contract intentionally names legacy ~/.llxprt as the migration input redirected by LLXPRT_TEST_LEGACY_HOME in tests and as a real-home sentinel-guard watch target. These references identify the path as legacy, not an active application write destination; only the guard's temporary sentinel markers are written there."
+  },
+  {
     "path": "docs/reference/application-directories.md",
     "pattern": "~/\\.llxprt",
     "reason": "Canonical application-directories reference page. Every ~/.llxprt occurrence explicitly identifies the path as legacy migration input ('Older versions...', '~/.llxprt is an input only', 'legacy global ~/.llxprt'). This is the authoritative explanation of the migration story."
@@ -138,5 +143,10 @@
     "path": "packages/cli/src/utils/sandbox-macos-restrictive-proxied.sb",
     "pattern": "\\.llxprt",
     "reason": "Read-only legacy migration grant in macOS Seatbelt profile: startup migration reads ~/.llxprt to copy pre-migration config into canonical roots. No file-write* grant for HOME_DIR/.llxprt exists (write grants use CONFIG_DIR/DATA_DIR/LOG_DIR canonical params). This is the narrowest documented read-only migration grant."
+  },
+  {
+    "path": "scripts/lib/real-home-sentinel.ts",
+    "pattern": "~/\\.llxprt",
+    "reason": "The real-home sentinel guard (issue #3622) intentionally watches the exact legacy ~/.llxprt directory in the runner's real home to detect test processes writing into it; both occurrences are the watcher's own target description and identify the path as legacy. The guard never reads or writes the directory's contents itself — it only drops and removes its own sentinel marker files and compares directory listings."
   }
 ]
