@@ -129,6 +129,7 @@ export interface ProfileEphemeralSettings {
   authOnly?: boolean;
   'tools.allowed'?: string[];
   'tools.disabled'?: string[];
+  'disabled-tools'?: string[];
   GOOGLE_CLOUD_PROJECT?: string;
   GOOGLE_CLOUD_LOCATION?: string;
   'prompt-caching'?: 'off' | '5m' | '1h' | '24h';
