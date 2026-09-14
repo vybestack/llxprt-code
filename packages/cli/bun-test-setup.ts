@@ -154,6 +154,7 @@ if (!wantsRealProviderAliases) {
   void vi.mock(
     '@vybestack/llxprt-code-providers/composition/providerAliases.js',
     () => ({
+      getImageModelsForAlias: () => [],
       loadProviderAliasEntries: () => [
         {
           alias: 'gemini',
