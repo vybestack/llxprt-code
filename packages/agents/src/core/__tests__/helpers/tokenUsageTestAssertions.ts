@@ -22,7 +22,7 @@
 import {
   parseTokenUsageLogRecord,
   type SerializedTokenUsageLogRecord,
-} from './tokenUsageRecords.js';
+} from '../../tokenUsageRecords.js';
 
 function parseOrThrow(value: unknown): SerializedTokenUsageLogRecord {
   const parsed = parseTokenUsageLogRecord(value);

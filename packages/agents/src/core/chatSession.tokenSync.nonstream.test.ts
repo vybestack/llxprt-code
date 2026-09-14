@@ -22,7 +22,7 @@ import {
   createTelemetryAdapterFromConfig,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import { createTokenSyncTestFixture } from './chatSession-tokenSync-helpers.js';
+import { createTokenSyncTestFixture } from './__tests__/helpers/tokenSyncTestFixture.js';
 import { TokenUsageLogger } from './TokenUsageLogger.js';
 
 describe('ChatSession Token Count Sync - Non-streaming responses', () => {

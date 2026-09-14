@@ -6,6 +6,7 @@
 
 import { appendFile, mkdir } from 'node:fs/promises';
 import * as path from 'node:path';
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   TOKEN_USAGE_SCHEMA_VERSION,
@@ -718,4 +719,28 @@ export class TokenUsageLogger {
       reason: event.reason ?? null,
     };
   }
+}
+
+export function createTokenUsageLogger(
+  view: AgentRuntimeContext,
+): TokenUsageLogger {
+  const settingsService = view.providerRuntime.settingsService;
+  const tokenUsageEnabled = settingsService.get('token-usage-log') !== false;
+  const config = view.providerRuntime.config;
+  const sessionId = view.state.sessionId;
+  let logFilePath: string | undefined;
+  if (tokenUsageEnabled && config) {
+    try {
+      const tempDir = config.getProjectTempDir();
+      if (tempDir) {
+        logFilePath = path.join(tempDir, 'token-usage', `${sessionId}.jsonl`);
+      }
+    } catch {
+      // Storage unavailable — logging disabled
+    }
+  }
+  return new TokenUsageLogger(
+    tokenUsageEnabled && logFilePath !== undefined,
+    logFilePath,
+  );
 }
