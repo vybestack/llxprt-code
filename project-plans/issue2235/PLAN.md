@@ -76,7 +76,6 @@ Already removed since the inventory (no action, documented): cli
 | # | Candidate | Recheck evidence | Action |
 |---|---|---|---|
 | C1 | `gradient-string` in root `package.json` and `packages/cli/package.json` | zero source/script/bundle/config references repo-wide | remove both declarations |
-| C2 | `@xterm/headless` in root `package.json` | only core imports it (core declares its own 5.5.0); tools mentions it in comments only; no script/config target reaches the root declaration | remove root declaration |
 | C3 | `fast-check` in `packages/ide-integration/package.json` devDependencies | no ide-integration source or test import. (auth/policy `fast-check` rows are out of the #2235 family and stay untouched.) | remove declaration |
 | C4 | `npm-run-all` in `packages/vscode-ide-companion/package.json` devDependencies | `watch` script invokes `npm-run-all2`, which is neither declared nor installed (watch is broken today); `npm-run-all` itself is referenced by nothing | replace declaration with `npm-run-all2` so the existing script resolves; verify binary resolution and a short watch invocation |
 | C5 | `@vybestack/llxprt-code-storage` in `packages/test-utils/package.json` dependencies | zero references in test-utils source | remove declaration |
@@ -86,6 +85,7 @@ Already removed since the inventory (no action, documented): cli
 
 | Candidate | Reason retained |
 |---|---|
+| `@xterm/headless` in root `package.json` (former C2) | packed-CLI requirement — packages/core source ships inside the published root package and its direct @xterm/headless import resolves via the root dependency declaration in consumer installs (Node Consumer Smoke CI evidence, PR #3674). Restored root spec `5.5.0`; packages/core's own declaration was never touched. |
 | cli `src/services/cliCommandApiMap.ts` | Sole consumer is the live command-map completeness CONTRACT test (`commandApiMapCompleteness.test.ts`, #2203/REQ-021 boundary map) which validates every registered command against the combined map. The contract is current (CONFIG_GATED_COMMANDS matches live commands). Not an obsolete implementation-specific test. |
 | agents `src/core/chatSession-tokenSync-helpers.ts` | SUPERSEDED: production `src/core/chatSession.ts` imports `createTokenUsageLogger` from it. The inventory's test-only classification no longer holds. |
 | agents `src/core/chatSession-runtime-helpers.ts` | Test factory consumed by ~10 live chatSession/ConversationManager behavioral tests. Removing it would force rewriting live behavioral tests (out-of-scope refactor). |
@@ -131,7 +131,8 @@ Already removed since the inventory (no action, documented): cli
 2. Full repository verification cycle (REQ-5 command list).
 3. CLI smoke (stepfun-37) since CLI behavior/packaging is touched.
 4. Dependency evidence: post-install `node_modules/.bin/npm-run-all2` resolves;
-   `gradient-string`, root `@xterm/headless` entries gone from both lockfiles;
+   root/CLI `gradient-string` declarations gone from both lockfiles;
+   root `@xterm/headless` restored at `5.5.0` in both lockfiles;
    `bun install` exit 0 with all workspaces resolving.
 5. Formatting leaves no unrelated changes.
 
