@@ -12,7 +12,9 @@ import {
   estimateGpt56Prompt,
   GPT_56_ASSET_REVISION,
   GPT_56_ESTIMATOR_FAMILY,
+  GPT_56_ESTIMATOR_VERSION,
 } from './Gpt56O200kPromptEstimator.js';
+import { PROJECTION_REVISION } from '../runtime/promptEnvelopeProjections.js';
 import {
   ModelPromptEstimatorRegistry,
   createDefaultEstimatorRegistrations,
@@ -79,7 +81,7 @@ function requestForProtocol(
       protocol,
       promptText: 'The quick brown fox jumps over the lazy dog.',
     },
-    projectionRevision: 3,
+    projectionRevision: PROJECTION_REVISION,
     legacyEstimate: vi.fn(() => Promise.resolve(999)),
   };
 }
@@ -122,8 +124,9 @@ describe('GPT-5.6 o200k fixtures', () => {
       count: 10,
       method: 'exact',
       family: GPT_56_ESTIMATOR_FAMILY,
+      estimatorVersion: GPT_56_ESTIMATOR_VERSION,
       assetRevision: GPT_56_ASSET_REVISION,
-      projectionRevision: 3,
+      projectionRevision: PROJECTION_REVISION,
     });
     expect(input.legacyEstimate).not.toHaveBeenCalled();
   });
@@ -173,6 +176,45 @@ describe('GPT-5.6 o200k fixtures', () => {
     );
     expect(error).toMatchObject({ code: 'tokenization-failed' });
     expect(JSON.stringify(error)).not.toContain(secret);
+  });
+});
+
+describe('GPT-5.6 image entries (issue #3481)', () => {
+  function imageRequest(imageEntries: unknown): ReturnType<typeof request> {
+    const input = request();
+    input.finalizedProjection = {
+      kind: 'llxprt-provider-prompt-v3',
+      protocol: 'openai-responses',
+      promptText: 'The quick brown fox jumps over the lazy dog.',
+      imageEntries,
+    };
+    return input;
+  }
+
+  it('adds the patch-formula image cost on top of the exact text count', async () => {
+    const textOnly = await estimateGpt56Prompt(request()).then((r) => r.count);
+    const withImage = await estimateGpt56Prompt(
+      imageRequest([{ dimensions: { width: 1586, height: 991 } }]),
+    );
+    // 1586x991 -> ceil(1.2 * min(ceil(1586/32)*ceil(991/32), 1536)) = 1844
+    // tokens for the codex/gpt-5.6-sol provider/model pair.
+    expect(withImage.count).toBe(textOnly + 1844);
+    expect(withImage.method).toBe('exact');
+    expect(withImage.estimatorVersion).toBe(GPT_56_ESTIMATOR_VERSION);
+  });
+
+  it('applies the unknown-dimensions fallback when an entry has no dimensions', async () => {
+    const textOnly = await estimateGpt56Prompt(request()).then((r) => r.count);
+    const result = await estimateGpt56Prompt(imageRequest([{}]));
+    expect(result.count).toBe(textOnly + 1844);
+  });
+
+  it('adds the image cost once per entry', async () => {
+    const textOnly = await estimateGpt56Prompt(request()).then((r) => r.count);
+    const result = await estimateGpt56Prompt(
+      imageRequest([{ dimensions: { width: 1586, height: 991 } }, {}]),
+    );
+    expect(result.count).toBe(textOnly + 1844 + 1844);
   });
 });
 describe('GPT-5.6 runtime tokenizer input normalization', () => {
@@ -262,7 +304,7 @@ describe('ModelPromptEstimatorRegistry', () => {
         family: 'legacy-unresolved-identity',
         estimatorVersion: 'core-estimate-tokens-v1',
         assetRevision: 'none',
-        projectionRevision: 3,
+        projectionRevision: PROJECTION_REVISION,
       });
       expect(input.legacyEstimate).toHaveBeenCalledTimes(1);
     },

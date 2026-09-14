@@ -33,6 +33,7 @@ import type {
   RuntimePromptEstimateRequest,
   RuntimeTokenizerFactory,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
+import { PROJECTION_REVISION } from '../../runtime/promptEnvelopeProjections.js';
 
 void vi.mock('openai', () => ({
   default: class FakeOpenAI {
@@ -318,7 +319,7 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
     expect(estimate.retainedBaselineTokens).toBe(1_000);
   });
 
-  it('counts current changed instructions and tools even though prior noncarried configuration may be conservatively overcounted', async () => {
+  it('transmits current changed instructions and tools without re-counting them in the retained-baseline incremental', async () => {
     const provider = new TestResponsesProvider();
     const contents = [
       { speaker: 'human', blocks: [{ type: 'text', text: 'first question' }] },
@@ -386,10 +387,18 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
       requireIncrementalTokens(configuredEstimate);
     const plainIncrementalTokens = requireIncrementalTokens(plainEstimate);
 
-    expect(configuredIncrementalTokens).toBe(
+    // Both projections observed a parent baseline, so both incremental
+    // estimates count only the new input: the re-sent instructions and tools
+    // are retained server-side inside the baseline and are not re-counted
+    // (issue #3481), so the incremental is smaller than the transmitted wire
+    // body even when the body carries the changed configuration.
+    expect(configuredIncrementalTokens).toBeLessThan(
       configuredEstimate.transmittedTokens,
     );
-    expect(configuredIncrementalTokens).toBeGreaterThan(plainIncrementalTokens);
+    expect(plainIncrementalTokens).toBeLessThan(
+      plainEstimate.transmittedTokens,
+    );
+    expect(configuredIncrementalTokens).toBe(plainIncrementalTokens);
   });
 
   it.each([
@@ -514,7 +523,7 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
 
     expect(projection.protocol).toBe('openai-responses');
     expect(projection.method).toBe('responses/v1');
-    expect(projection.projectionRevision).toBe(3);
+    expect(projection.projectionRevision).toBe(PROJECTION_REVISION);
     expect(projection.model).toBe('gpt-4o');
   });
 

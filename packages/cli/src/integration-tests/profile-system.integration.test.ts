@@ -387,7 +387,7 @@ describe('Profile Save/Load Cycle Integration Tests', () => {
           'auth-key': 'azure-key-comprehensive',
           'base-url': 'https://my-deployment.openai.azure.com',
           'api-version': '2024-06-01',
-          'tool-format': 'azure',
+          toolFormat: 'azure',
           'custom-headers': {
             'X-Organization-ID': 'org-123',
             'X-Project-ID': 'proj-456',

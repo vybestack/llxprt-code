@@ -8,6 +8,7 @@ import * as path from 'node:path';
 import fs from 'node:fs/promises';
 import toml from '@iarna/toml';
 import { Storage } from '@vybestack/llxprt-code-settings';
+import { canonicalizePolicyToolEntry } from '@vybestack/llxprt-code-tools';
 import {
   ADMIN_POLICY_TIER,
   DEFAULT_CORE_POLICIES_DIR,
@@ -280,23 +281,12 @@ function addSingleAllowedToolRule(tool: string, rules: PolicyRule[]): void {
     }
   } else {
     rules.push({
-      toolName: normalizeToolName(tool),
+      toolName: canonicalizePolicyToolEntry(tool),
       decision: PolicyDecision.ALLOW,
       priority: 2.3,
       source: 'Settings (Tools Allowed)',
     });
   }
-}
-
-function normalizeToolName(toolName: string): string {
-  if (
-    toolName === 'ShellTool' ||
-    toolName.startsWith('ShellTool(') ||
-    toolName.startsWith('run_shell_command(')
-  ) {
-    return 'run_shell_command';
-  }
-  return toolName;
 }
 
 export const MCP_TRUSTED_POLICY_SOURCE = 'Settings (MCP Trusted)';

@@ -29,10 +29,13 @@ import {
 } from './openAIResponsesWebSocketTransport.js';
 import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import {
+  FakeSocket,
   SocketHarness,
   completingScript,
+  completingWithId,
   connectionLimitScript,
   drain as drainHarness,
+  frame,
   userTextsOf,
 } from './openAIResponsesWebSocketTransport.test-helpers.js';
 
@@ -622,5 +625,270 @@ describe('executeOpenAIResponsesRequest WebSocket handshake identity @issue:2772
     expect(headers['session-id']).toBeUndefined();
     expect(headers['thread-id']).toBeUndefined();
     expect(headers['x-client-request-id']).toBeUndefined();
+  });
+});
+describe('executeOpenAIResponsesRequest WebSocket stateful connection renewal @issue:3446', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getCoreSystemPromptAsyncSpy.mockResolvedValue('system prompt');
+  });
+
+  afterEach(() => {
+    restoreGlobals();
+    vi.restoreAllMocks();
+  });
+
+  function statefulHistoryWithDeadParent(): IContent[] {
+    return [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'first question' }],
+      },
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'first answer' }],
+        metadata: {
+          id: 'resp_dead',
+          responsesStored: true,
+          providerBaseURL: CODEX_BASE_URL,
+        },
+      },
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'second question' }],
+      },
+    ];
+  }
+
+  it('recovers a lifecycle-limit renewal over WebSocket: retires the dead parent, streams full history statelessly, and re-establishes the chain (T2/T3)', async () => {
+    const harness = new SocketHarness([
+      connectionLimitScript(),
+      completingWithId('resp_fresh', 'renewed'),
+    ]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+    const fetchSpy = vi.fn();
+    setGlobal('fetch', fetchSpy);
+    const markStatefulParentRejected = vi.fn();
+    const onWebSocketFallback = vi.fn();
+    const onWebSocketSuccess = vi.fn();
+    const deps = buildDeps({
+      getWebSocketTransport: () => transport,
+      markStatefulParentRejected,
+      onWebSocketFallback,
+      onWebSocketSuccess,
+    });
+
+    // T2: socket 1 reports the lifecycle limit while carrying the dead
+    // parent. The renewal must retire the id and re-stream the full history
+    // statelessly over a FRESH socket — no HTTP, no fallback callback.
+    const first = await drainHarness(
+      executeOpenAIResponsesRequest(
+        buildNormalizedOptions({
+          contents: statefulHistoryWithDeadParent(),
+        }),
+        deps,
+      ),
+    );
+    expect(first[0]).toStrictEqual({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'renewed' }],
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(onWebSocketFallback).not.toHaveBeenCalled();
+    expect(markStatefulParentRejected).toHaveBeenCalledWith('resp_dead');
+    expect(onWebSocketSuccess).toHaveBeenCalled();
+    expect(harness.sockets).toHaveLength(2);
+    expect(harness.sockets[0].closedByClient).toBe(true);
+
+    const renewed = JSON.parse(harness.sockets[1].sent[0]) as Record<
+      string,
+      unknown
+    >;
+    expect(renewed['type']).toBe('response.create');
+    expect(renewed['previous_response_id']).toBeUndefined();
+    expect(userTextsOf(renewed['input'])).toStrictEqual([
+      'first question',
+      'second question',
+    ]);
+
+    // T3: the renewed turn's response (id 'resp_fresh', stamped stored) is
+    // the parent for the NEXT turn: it chains over the SAME fresh socket
+    // with trimmed input, still on WebSocket.
+    const renewedMeta = first.find((message) => message.metadata)?.metadata;
+    expect(renewedMeta?.id).toBe('resp_fresh');
+    expect(renewedMeta?.responsesStored).toBe(true);
+
+    const next = await drainHarness(
+      executeOpenAIResponsesRequest(
+        buildNormalizedOptions({
+          contents: [
+            ...statefulHistoryWithDeadParent(),
+            {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'renewed' }],
+              metadata: {
+                id: 'resp_fresh',
+                responsesStored: true,
+                providerBaseURL: CODEX_BASE_URL,
+              },
+            },
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'third question' }],
+            },
+          ],
+        }),
+        deps,
+      ),
+    );
+
+    expect(next[0]).toStrictEqual({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'renewed' }],
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    // No third socket: the renewed connection is reused.
+    expect(harness.sockets).toHaveLength(2);
+    const chained = JSON.parse(harness.sockets[1].sent[1]) as Record<
+      string,
+      unknown
+    >;
+    expect(chained['previous_response_id']).toBe('resp_fresh');
+    expect(userTextsOf(chained['input'])).toStrictEqual(['third question']);
+
+    transport.close();
+  });
+
+  it('rethrows a parent-not-found frame from a LIVE socket so the executor recovers over WebSocket without HTTP (T4/T5)', async () => {
+    // Reject only the first send (the dead parent) on the initial socket; the
+    // failed attempt invalidates the connection, so the executor's #3134
+    // recovery opens a fresh socket (script 2), which completes.
+    const parentNotFoundScript = (socket: FakeSocket) => {
+      socket.open();
+      let sends = 0;
+      socket.onSend = () => {
+        sends += 1;
+        if (sends === 1) {
+          socket.message(
+            frame({
+              type: 'error',
+              error: {
+                type: 'invalid_request_error',
+                message: "Previous response with id 'resp_dead' not found.",
+              },
+            }),
+          );
+        }
+      };
+    };
+
+    const harness = new SocketHarness([
+      parentNotFoundScript,
+      completingWithId('resp_recovery', 'recovered'),
+    ]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+    const fetchSpy = vi.fn();
+    setGlobal('fetch', fetchSpy);
+    const rejected = new Set<string>();
+    const markStatefulParentRejected = vi.fn((id: string) => {
+      rejected.add(id);
+    });
+    const onWebSocketFallback = vi.fn();
+    const onWebSocketSuccess = vi.fn();
+    const deps = buildDeps({
+      getWebSocketTransport: () => transport,
+      isRejectedStatefulParent: (id) => rejected.has(id),
+      markStatefulParentRejected,
+      onWebSocketFallback,
+      onWebSocketSuccess,
+    });
+
+    // T4: the dead parent rides a LIVE socket (resumed --continue shape).
+    // The parent-not-found rejection must reach the executor's per-id
+    // recovery instead of being absorbed into the HTTP fallback. The failed
+    // attempt invalidates its connection (pre-existing transport behavior),
+    // so the recovery re-enters streaming on a FRESH socket — still no HTTP.
+    const first = await drainHarness(
+      executeOpenAIResponsesRequest(
+        buildNormalizedOptions({
+          contents: statefulHistoryWithDeadParent(),
+        }),
+        deps,
+      ),
+    );
+    expect(first[0]).toStrictEqual({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'recovered' }],
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(onWebSocketFallback).not.toHaveBeenCalled();
+    expect(markStatefulParentRejected).toHaveBeenCalledWith('resp_dead');
+    // TWO sockets: the dead-parent attempt died on socket 1; the stateless
+    // recovery opened socket 2 and completed there.
+    expect(harness.sockets).toHaveLength(2);
+    expect(harness.sockets[0].closedByClient).toBe(true);
+    const firstEnvelope = JSON.parse(harness.sockets[0].sent[0]) as Record<
+      string,
+      unknown
+    >;
+    expect(firstEnvelope['previous_response_id']).toBe('resp_dead');
+    expect(userTextsOf(firstEnvelope['input'])).toStrictEqual([
+      'second question',
+    ]);
+    const recoveryEnvelope = JSON.parse(harness.sockets[1].sent[0]) as Record<
+      string,
+      unknown
+    >;
+    expect(recoveryEnvelope['previous_response_id']).toBeUndefined();
+    expect(userTextsOf(recoveryEnvelope['input'])).toStrictEqual([
+      'first question',
+      'second question',
+    ]);
+
+    // T5: the next turn chains from the recovery response id over the fresh
+    // socket.
+    const recoveryMeta = first.find((message) => message.metadata)?.metadata;
+    expect(recoveryMeta?.id).toBe('resp_recovery');
+    expect(recoveryMeta?.responsesStored).toBe(true);
+
+    await drainHarness(
+      executeOpenAIResponsesRequest(
+        buildNormalizedOptions({
+          contents: [
+            ...statefulHistoryWithDeadParent(),
+            {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'recovered' }],
+              metadata: {
+                id: 'resp_recovery',
+                responsesStored: true,
+                providerBaseURL: CODEX_BASE_URL,
+              },
+            },
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'next question' }],
+            },
+          ],
+        }),
+        deps,
+      ),
+    );
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    // No third socket: the recovery connection is reused for the chain.
+    expect(harness.sockets).toHaveLength(2);
+    const chained = JSON.parse(harness.sockets[1].sent[1]) as Record<
+      string,
+      unknown
+    >;
+    expect(chained['previous_response_id']).toBe('resp_recovery');
+    expect(userTextsOf(chained['input'])).toStrictEqual(['next question']);
+
+    transport.close();
   });
 });

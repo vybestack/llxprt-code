@@ -10,15 +10,38 @@ import type {
   UnsupportedMediaEntry,
 } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import {
+  parseImageDimensionsFromBase64,
+  type ImageDimensions,
+} from '@vybestack/llxprt-code-tools/utils/imageDimensions.js';
 
-export const PROJECTION_REVISION = 3;
+export const PROJECTION_REVISION = 4;
 const BINARY_PAYLOAD_PLACEHOLDER = '[binary media bytes omitted]';
+/**
+ * With a stateful parent (previous_response_id), instructions and tools are
+ * retained server-side and already inside the observed parent baseline, so
+ * counting them again in the incremental estimate double-counts (issue
+ * #3481). Mid-conversation instructions/tools changes would be under-counted.
+ */
+const STATEFUL_INCREMENTAL_PROMPT_KEYS = ['input'] as const;
+
+/**
+ * One image part found while canonicalizing a finalized request.
+ *
+ * `dimensions` is present when the base64 header parsed; estimators fall back
+ * to their unknown-dimensions cost when it is omitted. PDFs and other
+ * non-image binaries produce no entries (issue #3481).
+ */
+export interface ProjectionImageEntry {
+  readonly dimensions?: ImageDimensions;
+}
 
 export interface ProviderFinalizedPromptProjection {
   readonly kind: 'llxprt-provider-prompt-v3';
   readonly protocol: PromptEnvelopeProjection['protocol'];
   readonly promptText: string;
   readonly promptSegments?: readonly string[];
+  readonly imageEntries?: readonly ProjectionImageEntry[];
 }
 const EMPTY_TRANSPORT_TOKEN: object = Object.freeze({});
 const EMPTY_UNSUPPORTED_MEDIA: readonly UnsupportedMediaEntry[] = Object.freeze(
@@ -52,14 +75,23 @@ function buildEstimationProjection(
   promptKeys: readonly string[],
   protocol: PromptEnvelopeProjection['protocol'],
 ): PromptEnvelopeEstimationProjection {
-  const promptText = serializePromptBearingStructure(requestBody, promptKeys);
-  const promptSegments = serializePromptSegments(requestBody, promptKeys);
+  const imageEntries: ProjectionImageEntry[] = [];
+  const canonicalEntries = canonicalPromptEntries(
+    requestBody,
+    promptKeys,
+    imageEntries,
+  );
+  const promptText = serializePromptBearingStructure(canonicalEntries);
+  const promptSegments = serializePromptSegments(canonicalEntries);
   let legacyTokens: number | undefined;
   const finalizedProjection: ProviderFinalizedPromptProjection = Object.freeze({
     kind: 'llxprt-provider-prompt-v3',
     protocol,
     promptText,
     promptSegments,
+    ...(imageEntries.length > 0
+      ? { imageEntries: Object.freeze(imageEntries) }
+      : {}),
   });
   return Object.freeze({
     finalizedProjection,
@@ -144,77 +176,129 @@ function extractModelOrThrow(
 function canonicalPromptEntries(
   requestBody: unknown,
   promptKeys: readonly string[],
+  imageEntries: ProjectionImageEntry[],
 ): ReadonlyArray<[string, unknown]> {
   if (typeof requestBody !== 'object' || requestBody === null) return [];
   const body = requestBody as Record<string, unknown>;
   return promptKeys.flatMap((key) =>
     body[key] === undefined
       ? []
-      : [[key, canonicalizePromptValue(body[key], key)]],
+      : [[key, canonicalizePromptValue(body[key], key, imageEntries)]],
   );
 }
 
 function serializePromptBearingStructure(
-  requestBody: unknown,
-  promptKeys: readonly string[],
+  canonicalEntries: ReadonlyArray<[string, unknown]>,
 ): string {
-  const promptBody = Object.fromEntries(
-    canonicalPromptEntries(requestBody, promptKeys),
-  );
+  const promptBody = Object.fromEntries(canonicalEntries);
   return Object.keys(promptBody).length === 0 ? '' : JSON.stringify(promptBody);
 }
 
 function serializePromptSegments(
-  requestBody: unknown,
-  promptKeys: readonly string[],
+  canonicalEntries: ReadonlyArray<[string, unknown]>,
 ): readonly string[] {
   return Object.freeze(
-    canonicalPromptEntries(requestBody, promptKeys).map(([, canonicalValue]) =>
+    canonicalEntries.map(([, canonicalValue]) =>
       typeof canonicalValue === 'string'
         ? canonicalValue
         : JSON.stringify(canonicalValue),
     ),
   );
 }
-function canonicalizePromptValue(value: unknown, key: string): unknown {
+function canonicalizePromptValue(
+  value: unknown,
+  key: string,
+  imageEntries: ProjectionImageEntry[],
+): unknown {
   if (typeof value === 'string') {
-    return canonicalizePromptString(value);
+    return canonicalizePromptString(value, imageEntries);
   }
   if (Array.isArray(value)) {
-    return value.map((item) => canonicalizePromptValue(item, key));
+    return value.map((item) =>
+      canonicalizePromptValue(item, key, imageEntries),
+    );
   }
   if (typeof value === 'object' && value !== null) {
     const record = value as Record<string, unknown>;
     return Object.fromEntries(
       Object.entries(record).map(([childKey, child]) => [
         childKey,
-        isAnthropicBase64Data(record, childKey)
-          ? BINARY_PAYLOAD_PLACEHOLDER
-          : canonicalizePromptValue(child, childKey),
+        isBinaryPayloadField(record, childKey)
+          ? recordBase64BinaryField(record, child, imageEntries)
+          : canonicalizePromptValue(child, childKey, imageEntries),
       ]),
     );
   }
   return value;
 }
 
-function isAnthropicBase64Data(
+/**
+ * An anthropic-style `{type: 'base64', media_type, data}` field's `data` child
+ * holds raw base64 bytes that must be replaced with a placeholder.
+ */
+function isBinaryPayloadField(
   parent: Record<string, unknown>,
   key: string,
 ): boolean {
   return key === 'data' && parent.type === 'base64';
 }
 
-function canonicalizePromptString(value: string): string {
-  if (!value.toLowerCase().includes(';base64,')) return value;
-  return replaceAllBase64DataUris(value);
+function recordBase64BinaryField(
+  parent: Record<string, unknown>,
+  child: unknown,
+  imageEntries: ProjectionImageEntry[],
+): unknown {
+  if (isImageMimeType(parent.media_type)) {
+    recordImageEntry(child, imageEntries);
+  }
+  return BINARY_PAYLOAD_PLACEHOLDER;
 }
 
-function replaceAllBase64DataUris(value: string): string {
+function isImageMimeType(mediaType: unknown): mediaType is string {
+  // MIME types are case-insensitive (RFC 2045); provider payloads may carry
+  // e.g. 'IMAGE/PNG' and must still record an image entry.
+  return (
+    typeof mediaType === 'string' &&
+    mediaType.toLowerCase().startsWith('image/')
+  );
+}
+
+function recordImageEntry(
+  base64: unknown,
+  imageEntries: ProjectionImageEntry[],
+): void {
+  const entry: ProjectionImageEntry =
+    typeof base64 === 'string'
+      ? { dimensions: parseImageDimensionsFromBase64(base64) }
+      : {};
+  imageEntries.push(Object.freeze(entry));
+}
+
+function canonicalizePromptString(
+  value: string,
+  imageEntries: ProjectionImageEntry[],
+): string {
+  if (!value.toLowerCase().includes(';base64,')) return value;
+  return replaceAllBase64DataUris(value, imageEntries);
+}
+
+function replaceAllBase64DataUris(
+  value: string,
+  imageEntries: ProjectionImageEntry[],
+): string {
   return value.replace(
     /data:(?:[^;,]+)?(?:;[^;,]*)*;base64,[A-Za-z0-9+/=]+/gi,
-    (match) =>
-      match.slice(0, match.toLowerCase().indexOf(';base64,') + 8) +
-      BINARY_PAYLOAD_PLACEHOLDER,
+    (match) => {
+      const base64Start = match.toLowerCase().indexOf(';base64,') + 8;
+      const payload = match.slice(base64Start);
+      // The MIME segment is between `data:` and the first `;`; an empty
+      // segment (RFC 2397 data URL) is not an image.
+      const mimeSegment = match.slice(5, match.indexOf(';')).toLowerCase();
+      if (isImageMimeType(mimeSegment)) {
+        recordImageEntry(payload, imageEntries);
+      }
+      return match.slice(0, base64Start) + BINARY_PAYLOAD_PLACEHOLDER;
+    },
   );
 }
 
@@ -281,7 +365,14 @@ export function projectOpenAIResponsesPromptEnvelope(
 
   const incremental = buildEstimationProjection(
     context.incrementalRequest,
-    PROMPT_KEYS['openai-responses'],
+    // A stateful parent retains instructions and tools server-side (observed
+    // provider usage), so the incremental estimate counts only the new input;
+    // counting the re-sent instructions/tools again would double-count what
+    // the observed parent baseline already includes (issue #3481). Mid-
+    // conversation instructions/tools changes would be under-counted.
+    context.retainedBaselineTokens !== undefined
+      ? STATEFUL_INCREMENTAL_PROMPT_KEYS
+      : PROMPT_KEYS['openai-responses'],
     projection.protocol,
   );
   const fullHistoryRequest = context.fullHistoryRequest;

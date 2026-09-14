@@ -97,6 +97,15 @@ export const TEST_SHARDS: readonly ShardDefinition[] = [
   },
 ];
 
+/**
+ * Bun-native roots owned by the scripts shard. Keep these names synchronized
+ * with `scripts/bun-test-roots.ts`.
+ */
+export const SCRIPTS_SHARD_ROOTS: readonly string[] = [
+  'scripts-tests',
+  'eslint-rules',
+];
+
 /** Name of the special script-harness shard. */
 export const SCRIPTS_SHARD_NAME = 'scripts';
 

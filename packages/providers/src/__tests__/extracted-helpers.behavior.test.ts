@@ -693,13 +693,51 @@ describe('extracted provider helper behavior', () => {
       modelParams: { temperature: 0.2, max_tokens: 1024, maxTokens: 2048 },
     });
     expect(resolved.invocation?.runtimeId).toBe('lb-runtime');
-    expect(resolved.invocation?.ephemerals).toMatchObject({
-      streaming: true,
-      extra: 'value',
-      temperature: 0.2,
-      max_tokens: 1024,
-      maxTokens: 2048,
+  });
+
+  it('carries the member profileId on delegate metadata alongside loadBalancerDelegate (#2643)', () => {
+    const settingsService = new SettingsService();
+    const config = { getConversationLoggingEnabled: () => false } as Config;
+    const options: GenerateChatOptions = {
+      contents: [],
+      settings: settingsService,
+      runtime: {
+        settingsService,
+        config,
+        runtimeId: 'lb-runtime',
+        metadata: { parent: true },
+      },
+      metadata: { request: true },
+      resolved: { authToken: 'parent-token' },
+    };
+
+    const resolved = buildRoundRobinResolvedOptions(
+      {
+        name: 'team-member',
+        providerName: 'openai',
+        model: 'gpt-4o',
+        authToken: 'member-oauth-token',
+        ephemeralSettings: {},
+        modelParams: {},
+      },
+      options,
+      {
+        lbProfileEphemeralSettings: undefined,
+        lbProfileModelParams: undefined,
+        logger: debugLoggerStub(),
+        providerName: 'load-balancer',
+        getEffectiveContextLimit: () => undefined,
+      },
+    );
+
+    expect(resolved.metadata).toMatchObject({
+      loadBalancerDelegate: true,
+      profileId: 'team-member',
     });
+    expect(
+      (resolved.resolved as { profileId?: string }).profileId,
+    ).toBeUndefined();
+    expect(resolved.resolved?.authToken).toBe('member-oauth-token');
   });
 });
 

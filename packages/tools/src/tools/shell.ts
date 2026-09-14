@@ -39,6 +39,8 @@ import type {
 } from '../interfaces/IShellToolHost.js';
 import {
   applyOutputFilters,
+  appendSurvivorNoticeToResult,
+  appendTerminationCauseNoticeToResult,
   buildShellSchema,
   collectProcessInfo,
   createShellToolHostFromExecutionService,
@@ -375,7 +377,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
         signal,
         timeoutController,
         resolution,
-        timeoutId,
         updateOutput,
       );
     } finally {
@@ -391,7 +392,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
     signal: AbortSignal,
     timeoutController: AbortController,
     resolution: TimeoutResolution,
-    _timeoutId: ReturnType<typeof setTimeout> | null,
     updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     const combinedSignal = timeoutController.signal;
@@ -400,14 +400,13 @@ export class ShellToolInvocation extends BaseToolInvocation<
       prepareShellExecution(strippedCommand);
 
     try {
-      const executionResult = await this.host.executeShellCommand(
+      const result = await this.host.executeShellCommand(
         commandToExecute,
         cwd,
         this.createOutputEventHandler(updateOutput),
         combinedSignal,
       );
 
-      const result = executionResult;
       const { backgroundPIDs, pgid } = collectProcessInfo(
         result,
         tempFilePath,
@@ -416,7 +415,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
       const rawOutput = result.output;
       const filterInfo = applyOutputFilters(rawOutput, this.params);
-      const filteredOutput = filterInfo.content;
 
       const timeoutTriggered =
         timeoutController.signal.aborted === true &&
@@ -425,7 +423,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
       const { llmContent, returnDisplayMessage } = this.formatOutputContent(
         result,
         rawOutput,
-        filteredOutput,
+        filterInfo.content,
         commandToExecute,
         backgroundPIDs,
         pgid,
@@ -444,22 +442,30 @@ export class ShellToolInvocation extends BaseToolInvocation<
         timeoutTriggered,
       );
 
-      const llmPayload = await this.summarizeIfNeeded(
-        llmContent,
-        result,
-        signal,
-      );
-
       const toolResult = this.buildToolResult(
-        llmPayload,
+        await this.summarizeIfNeeded(llmContent, result, signal),
         displayWithFilter,
         executionError,
         result.outputTruncation,
       );
 
-      // Append the durable clamp notice AFTER summarization and token
-      // limiting so it survives lossy processing (Issue #3031).
-      return appendClampNoticeToResult(toolResult, resolution);
+      // Durable notices are applied after buildToolResult because
+      // summarizeIfNeeded (not skipped on the aborted:false inactivity
+      // branch) and limitOutputTokens can replace the formatted content
+      // wholesale; only a post-processing append is guaranteed to reach the
+      // model (Issues #3031 and #3517).
+      return appendClampNoticeToResult(
+        appendSurvivorNoticeToResult(
+          appendTerminationCauseNoticeToResult(
+            toolResult,
+            result,
+            this.host.getShellExecutionConfig().inactivityTimeoutMs,
+          ),
+          result,
+          pgid,
+        ),
+        resolution,
+      );
     } finally {
       fs.rmSync(tempFilePath, { force: true });
     }

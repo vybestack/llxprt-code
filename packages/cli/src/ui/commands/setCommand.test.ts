@@ -262,16 +262,35 @@ describe('setCommand runtime integration', () => {
     },
   );
 
-  it('validates through the registry alias, not just the canonical key', async () => {
+  it('rejects a legacy modelparam spelling with canonical-key guidance', async () => {
     const result = await setCommand.action!(
       context,
       'modelparam max-tokens abc',
     );
 
     expect(mockRuntime.setActiveModelParam).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      type: 'message',
+      messageType: 'error',
+    });
     expect((result as { content: string }).content).toContain(
-      'must be a number',
+      "Unknown setting 'max-tokens'. Canonical key: 'max_tokens'.",
     );
+  });
+
+  it('rejects unsetting a legacy modelparam before changing runtime state', async () => {
+    const result = await setCommand.action!(
+      context,
+      'unset modelparam max-tokens',
+    );
+
+    expect(result).toMatchObject({
+      type: 'message',
+      messageType: 'error',
+      content: "Unknown setting 'max-tokens'. Canonical key: 'max_tokens'.",
+    });
+    expect(mockRuntime.clearActiveModelParam).not.toHaveBeenCalled();
+    expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
   });
 
   it('still accepts an unregistered provider-specific param verbatim', async () => {
@@ -402,6 +421,24 @@ describe('setCommand runtime integration', () => {
       type: 'message',
       messageType: 'info',
       content: "Model parameter 'max_tokens' cleared",
+    });
+  });
+
+  it('surfaces ephemeral clear failures without reporting success', async () => {
+    mockRuntime.setEphemeralSetting.mockImplementationOnce(() => {
+      throw new Error('cannot clear ephemeral');
+    });
+
+    const result = await setCommand.action!(
+      context,
+      'unset modelparam max_tokens',
+    );
+
+    expect(result).toStrictEqual({
+      type: 'message',
+      messageType: 'error',
+      content:
+        'Failed to clear ephemeral model parameter: cannot clear ephemeral',
     });
   });
 

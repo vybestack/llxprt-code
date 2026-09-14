@@ -207,6 +207,32 @@ export function completingScript(text?: string): (socket: FakeSocket) => void {
   };
 }
 
+/**
+ * Completes with a known response id so tests can assert what the NEXT stateful
+ * turn chains from (#3446).
+ */
+export function completingWithId(
+  id: string,
+  text?: string,
+): (socket: FakeSocket) => void {
+  return (socket) => {
+    socket.open();
+    socket.onSend = () => {
+      if (text !== undefined) {
+        socket.message(
+          frame({ type: 'response.output_text.delta', delta: text }),
+        );
+      }
+      socket.message(
+        frame({
+          type: 'response.completed',
+          response: { id, status: 'completed' },
+        }),
+      );
+    };
+  };
+}
+
 export function incompleteScript(
   text?: string,
   closeAfter = true,

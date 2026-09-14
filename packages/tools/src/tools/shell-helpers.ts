@@ -140,6 +140,127 @@ ${clamp}`;
   };
 }
 
+/**
+ * Survivor warning appended to an aborted result when the executor's bounded
+ * group-reap window expired with live process-group members (Issue #3517).
+ * Foreground commands have no managed task id, so the explicit kill
+ * instruction is the actionable cleanup the caller can be given. The pgid is
+ * the one already resolved via collectProcessInfo; on POSIX the detached
+ * spawn makes result.pid the process-group id, so it is the fallback.
+ * POSIX-only: core never sets the flag on Windows (taskkill walks the tree),
+ * and a Windows host that ever sets it must not be shown a bash `kill -9`
+ * instruction to run in PowerShell.
+ */
+export function appendAbortSurvivorWarning(
+  content: string,
+  result: ShellExecutionResult,
+  pgid: number | null,
+): string {
+  if (result.survivingGroupMembersOnAbort !== true) {
+    return content;
+  }
+  if (os.platform() === 'win32') {
+    return content;
+  }
+  const cleanupPgid = pgid ?? result.pid;
+  if (
+    cleanupPgid === undefined ||
+    !Number.isInteger(cleanupPgid) ||
+    cleanupPgid <= 1
+  ) {
+    return `${content}\n\nWarning: child processes from the aborted command may still be running; they could not be fully terminated.`;
+  }
+  return (
+    `${content}\n\nWarning: child processes from the aborted command may still be ` +
+    `running (process group ${cleanupPgid} could not be fully terminated). ` +
+    `Kill them with \`kill -9 -- -${cleanupPgid}\`.`
+  );
+}
+
+/**
+ * Appends the durable survivor warning to a foreground result AFTER all
+ * lossy processing (summarization, token limiting), following the clamp
+ * notice pattern: the warning must survive even when the underlying
+ * content is replaced (Issue #3517). Also appended to `returnDisplay` on
+ * flagged results so the human UI shows it. No-op without the flag, so
+ * clean results stay byte-identical.
+ */
+export function appendSurvivorNoticeToResult(
+  toolResult: StringContentToolResult,
+  result: ShellExecutionResult,
+  pgid: number | null,
+): StringContentToolResult {
+  if (result.survivingGroupMembersOnAbort !== true) {
+    return toolResult;
+  }
+  return {
+    ...toolResult,
+    llmContent: appendAbortSurvivorWarning(toolResult.llmContent, result, pgid),
+    returnDisplay: appendAbortSurvivorWarning(
+      toolResult.returnDisplay,
+      result,
+      pgid,
+    ),
+  };
+}
+
+/**
+ * Names the termination cause without overriding a concurrent timeout or
+ * cancellation. An inactivity flag records a separate fact even when the
+ * caller's abort signal also fired (Issue #3589).
+ */
+export function buildTerminationCauseNotice(
+  result: ShellExecutionResult,
+  inactivityTimeoutMs: number | undefined,
+): string | undefined {
+  if (result.inactivityTimedOut === true) {
+    const window =
+      inactivityTimeoutMs !== undefined &&
+      Number.isFinite(inactivityTimeoutMs) &&
+      inactivityTimeoutMs > 0
+        ? ` (${inactivityTimeoutMs / 1000}s)`
+        : '';
+    return (
+      `Termination cause: the shell tool terminated the command because it produced no output for the inactivity window${window}. ` +
+      'The shell-inactivity-timeout-seconds setting controls this window; -1 disables it. ' +
+      'This is separate from the timeout_seconds total limit.'
+    );
+  }
+  if (
+    result.aborted !== true &&
+    result.signal !== null &&
+    result.signal !== ''
+  ) {
+    return (
+      `Termination cause: signal ${result.signal} originated outside the shell tool; ` +
+      'not a tool timeout, not an inactivity kill, and not a user cancellation.'
+    );
+  }
+  return undefined;
+}
+
+/**
+ * Appends the durable termination-cause notice to BOTH llmContent and
+ * returnDisplay AFTER all lossy processing (summarization, token limiting).
+ * Clean results stay byte-identical (Issue #3589).
+ */
+export function appendTerminationCauseNoticeToResult(
+  toolResult: StringContentToolResult,
+  result: ShellExecutionResult,
+  inactivityTimeoutMs: number | undefined,
+): StringContentToolResult {
+  const notice = buildTerminationCauseNotice(result, inactivityTimeoutMs);
+  if (notice === undefined) {
+    return toolResult;
+  }
+  const suffix = `\n\n${notice}`;
+  return {
+    ...toolResult,
+    llmContent: `${toolResult.llmContent}${suffix}`,
+    returnDisplay: `${toolResult.returnDisplay}${suffix}`,
+  };
+}
+
 export function isShellToolHost(
   host: IShellToolHost | IShellExecutionService,
 ): host is IShellToolHost {

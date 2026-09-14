@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { diagnosticsCommand } from './diagnosticsCommand.js';
 import type { MessageActionReturn } from './types.js';
 import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   createTestToken,
   createMockTokenStore,
@@ -417,17 +418,13 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
       expect(content).not.toContain('supersecretapikey123');
     });
 
-    it('masks apiKey values and groups them under Authentication', async () => {
-      setupRuntimeMockWithEphemeral({
-        apiKey: 'sk-secretapikeyvalue1234',
-      });
+    it('rejects legacy apiKey before diagnostics can receive it', () => {
+      const settings = new SettingsService();
 
-      const result = await diagnosticsCommand.action?.(mockContext, '');
-      const content = (result as MessageActionReturn).content;
-
-      expect(content).toContain('Authentication:');
-      expect(content).toContain('apiKey:');
-      expect(content).not.toContain('sk-secretapikeyvalue1234');
+      expect(() => settings.set('apiKey', 'sk-secretapikeyvalue1234')).toThrow(
+        "use the canonical 'auth-key'",
+      );
+      expect(settings.getAllGlobalSettings()).not.toHaveProperty('apiKey');
     });
   });
 });

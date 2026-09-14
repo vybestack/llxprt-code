@@ -21,48 +21,57 @@ import {
   getSettingSpec,
   separateSettings,
 } from '../settings/settingsRegistry.js';
+import { migrateLegacySettingKeys } from '../settings/legacyKeyMigration.js';
 
-describe('issue #2607: streamFirstResponseTimeoutMs camelCase alias', () => {
-  it('resolves streamFirstResponseTimeoutMs to the canonical stream-first-response-timeout-ms', () => {
-    expect(resolveAlias('streamFirstResponseTimeoutMs')).toBe(
+describe('issue #2607: first-response watchdog (canonical key + load-time migration)', () => {
+  it('canonical stream-first-response-timeout-ms resolves exactly', () => {
+    expect(resolveAlias('stream-first-response-timeout-ms')).toBe(
       'stream-first-response-timeout-ms',
     );
   });
 
-  it('finds the cli-behavior spec for streamFirstResponseTimeoutMs via the alias', () => {
-    const spec = getSettingSpec('streamFirstResponseTimeoutMs');
+  it('legacy streamFirstResponseTimeoutMs is migrated at load, not resolved', () => {
+    expect(resolveAlias('streamFirstResponseTimeoutMs')).toBe(
+      'streamFirstResponseTimeoutMs',
+    );
+    const migrated = migrateLegacySettingKeys({
+      streamFirstResponseTimeoutMs: 300_000,
+    });
+    expect(migrated['stream-first-response-timeout-ms']).toBe(300_000);
+    expect('streamFirstResponseTimeoutMs' in migrated).toBe(false);
+  });
+
+  it('finds the cli-behavior spec for the canonical key', () => {
+    const spec = getSettingSpec('stream-first-response-timeout-ms');
     expect(spec?.key).toBe('stream-first-response-timeout-ms');
     expect(spec?.category).toBe('cli-behavior');
   });
 
-  it('classifies streamFirstResponseTimeoutMs into cliSettings (not modelParams) for every provider', () => {
+  it('classifies the canonical key into cliSettings (not modelParams) for every provider', () => {
     for (const provider of ['anthropic', 'codex', 'openai', 'gemini']) {
       const result = separateSettings(
-        { streamFirstResponseTimeoutMs: 300_000 },
+        { 'stream-first-response-timeout-ms': 300_000 },
         provider,
       );
       expect(result.cliSettings['stream-first-response-timeout-ms']).toBe(
         300_000,
       );
       expect(
-        result.modelParams['streamFirstResponseTimeoutMs'],
-      ).toBeUndefined();
-      expect(
         result.modelParams['stream-first-response-timeout-ms'],
       ).toBeUndefined();
     }
   });
 
-  it('treats the canonical hyphenated key identically', () => {
+  it('a migrated legacy value behaves identically to the canonical key', () => {
     const canonical = separateSettings(
       { 'stream-first-response-timeout-ms': 300_000 },
       'anthropic',
     );
-    const camel = separateSettings(
-      { streamFirstResponseTimeoutMs: 300_000 },
+    const migrated = separateSettings(
+      migrateLegacySettingKeys({ streamFirstResponseTimeoutMs: 300_000 }),
       'anthropic',
     );
-    expect(camel.cliSettings['stream-first-response-timeout-ms']).toBe(
+    expect(migrated.cliSettings['stream-first-response-timeout-ms']).toBe(
       canonical.cliSettings['stream-first-response-timeout-ms'],
     );
   });

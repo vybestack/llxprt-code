@@ -348,7 +348,7 @@ describe('LoadBalancingProvider', () => {
     });
 
     describe('issue #2182: cross-provider ephemerals must not leak into modelParams', () => {
-      it('does not surface a nested text object or streamIdleTimeoutMs on the delegate invocation', async () => {
+      it('does not surface a nested text object or stream-idle-timeout-ms on the delegate invocation', async () => {
         const resolvedSubProfiles: ResolvedSubProfile[] = [
           {
             name: 'opusthinking',
@@ -378,13 +378,13 @@ describe('LoadBalancingProvider', () => {
             profileName: 'opusfirst',
             strategy: 'failover',
             subProfiles: resolvedSubProfiles,
-            // LB-level nested object + the global camelCase setting from
-            // settings.json that previously leaked verbatim into the body.
+            // LB-level nested objects plus the stream timeout setting that
+            // previously leaked verbatim into the request body.
             lbProfileEphemeralSettings: {
               reasoning: { enabled: true, effort: 'high' },
               text: { verbosity: 'medium' },
               'prompt-caching': '24h',
-              streamIdleTimeoutMs: 60000,
+              'stream-idle-timeout-ms': 60000,
             },
           },
           providerManager,

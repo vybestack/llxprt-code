@@ -13,7 +13,7 @@ describe('createProviderCallOptions', () => {
     const settings = new SettingsService();
     settings.set('global-setting', 'enabled');
     settings.setProviderSetting('openai', 'temperature', 0.42);
-    settings.setProviderSetting('openai', 'maxTokens', 256);
+    settings.setProviderSetting('openai', 'max_tokens', 256);
 
     const options = createProviderCallOptions({
       providerName: 'openai',
@@ -27,7 +27,7 @@ describe('createProviderCallOptions', () => {
     expect(options.invocation.ephemerals['global-setting']).toBe('enabled');
     expect(options.invocation.ephemerals.openai).toMatchObject({
       temperature: 0.42,
-      maxTokens: 256,
+      max_tokens: 256,
     });
   });
 

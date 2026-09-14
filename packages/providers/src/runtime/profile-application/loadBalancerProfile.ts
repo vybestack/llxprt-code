@@ -9,16 +9,17 @@ import {
   type ResolvedSubProfile,
 } from '../../LoadBalancingProvider.js';
 import {
+  isRecord,
+  type ProfileAuthIntent,
+} from '../../loadBalancing/loadBalancerTypes.js';
+import {
   type LoadBalancerProfile,
   type Profile,
 } from '@vybestack/llxprt-code-settings';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings/profiles/types.js';
-import * as fs from 'node:fs/promises';
-import { homedir } from 'node:os';
-import path from 'node:path';
 import type { getCliRuntimeServices } from '../runtimeSettings.js';
-import { createProviderKeyStorage } from '../runtimeSettings.js';
+
 import {
   getProfileEphemeralSettings,
   getProfileModel,
@@ -72,64 +73,6 @@ function ensureSubProfileIsNotLoadBalancer(
     throw new Error(
       `Load balancer profile "${lbName}" cannot reference another loadbalancer profile "${profileName}"`,
     );
-  }
-}
-
-async function resolveSubProfileAuthToken(
-  profileName: string,
-  subProfileEphemeralSettings: Record<string, unknown>,
-  authKeyfile: string | undefined,
-  deps: LoadBalancerResolutionDeps,
-): Promise<string | undefined> {
-  const authToken = getStringValue(subProfileEphemeralSettings, 'auth-key');
-  if (authToken !== undefined) {
-    return authToken;
-  }
-
-  const authKeyName = getStringValue(
-    subProfileEphemeralSettings,
-    'auth-key-name',
-  );
-  if (authKeyName !== undefined) {
-    try {
-      const resolvedKey = await createProviderKeyStorage().getKey(authKeyName);
-      if (resolvedKey && resolvedKey.trim() !== '') {
-        deps.lbLogger.debug(
-          () =>
-            `Resolved auth-key-name '${authKeyName}' for sub-profile ${profileName}`,
-        );
-        return resolvedKey.trim();
-      }
-      deps.lbLogger.warn(
-        () =>
-          `Key '${authKeyName}' not found in secure storage for sub-profile ${profileName}; falling back.`,
-      );
-    } catch (error) {
-      deps.lbLogger.warn(
-        () =>
-          `Failed to resolve auth-key-name '${authKeyName}' for sub-profile ${profileName}: ${error}`,
-      );
-    }
-  }
-
-  if (authKeyfile === undefined) {
-    return undefined;
-  }
-  try {
-    const keyfilePath = authKeyfile.startsWith('~')
-      ? path.join(homedir(), authKeyfile.slice(1))
-      : authKeyfile;
-    const keyfileToken = (await fs.readFile(keyfilePath, 'utf-8')).trim();
-    deps.lbLogger.debug(
-      () => `Resolved authToken from keyfile for sub-profile ${profileName}`,
-    );
-    return keyfileToken;
-  } catch (error) {
-    deps.lbLogger.warn(
-      () =>
-        `Failed to read auth-keyfile for sub-profile ${profileName}: ${error}`,
-    );
-    return undefined;
   }
 }
 
@@ -197,7 +140,35 @@ async function resolveSubProfileContextWindow(
   }
 }
 
-async function resolveLoadBalancerSubProfile(
+/**
+ * Extracts the member's on-disk `auth` block (issue #2643). Load-balancer
+ * members with their own OAuth buckets must keep that intent so request-time
+ * resolution uses the member identity, not one shared default. Only the intent is
+ * copied; token material continues to flow via authToken/authKeyfile.
+ */
+function resolveSubProfileAuthIntent(
+  subProfile: unknown,
+): ProfileAuthIntent | undefined {
+  if (!isRecord(subProfile)) return undefined;
+  const candidate = subProfile.auth;
+  if (!isRecord(candidate)) {
+    return undefined;
+  }
+  if (candidate.type !== 'oauth' && candidate.type !== 'apikey') {
+    return undefined;
+  }
+  if (!Array.isArray(candidate.buckets)) {
+    return { type: candidate.type };
+  }
+  return {
+    type: candidate.type,
+    buckets: candidate.buckets.filter(
+      (bucket): bucket is string => typeof bucket === 'string',
+    ),
+  };
+}
+
+export async function resolveLoadBalancerSubProfile(
   profileName: string,
   deps: LoadBalancerResolutionDeps,
 ): Promise<ResolvedSubProfile> {
@@ -208,12 +179,16 @@ async function resolveLoadBalancerSubProfile(
     subProfileEphemeralSettings,
     'auth-keyfile',
   );
-  const authToken = await resolveSubProfileAuthToken(
-    profileName,
-    subProfileEphemeralSettings,
-    authKeyfile,
-    deps,
-  );
+  const auth = resolveSubProfileAuthIntent(subProfile);
+  const inlineToken =
+    auth?.type === 'oauth'
+      ? undefined
+      : getStringValue(subProfileEphemeralSettings, 'auth-key');
+  const authKeyName =
+    auth?.type === 'oauth' || inlineToken !== undefined
+      ? undefined
+      : getStringValue(subProfileEphemeralSettings, 'auth-key-name');
+  const authToken = inlineToken;
   const providerName = getProfileProvider(subProfile);
   const model = getProfileModel(subProfile);
   const contextWindow = await resolveSubProfileContextWindow(
@@ -228,8 +203,10 @@ async function resolveLoadBalancerSubProfile(
     model,
     baseURL: getStringValue(subProfileEphemeralSettings, 'base-url'),
     authToken,
+    authKeyName,
     authKeyfile,
     contextWindow,
+    auth,
     ephemeralSettings: subProfileEphemeralSettings,
     modelParams: getProfileModelParams(subProfile),
   };

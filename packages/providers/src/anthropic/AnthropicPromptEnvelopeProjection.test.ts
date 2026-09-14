@@ -24,6 +24,7 @@ import {
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { PROJECTION_REVISION } from '../runtime/promptEnvelopeProjections.js';
 import { AnthropicProvider } from './AnthropicProvider.js';
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -98,7 +99,7 @@ describe('AnthropicProvider.projectPromptEnvelope (issue #2817 A3)', () => {
 
     expect(projection.protocol).toBe('anthropic-messages');
     expect(projection.method).toBe('messages/v1');
-    expect(projection.projectionRevision).toBe(3);
+    expect(projection.projectionRevision).toBe(PROJECTION_REVISION);
     expect(typeof projection.model).toBe('string');
     expect(projection.model.length).toBeGreaterThan(0);
   });

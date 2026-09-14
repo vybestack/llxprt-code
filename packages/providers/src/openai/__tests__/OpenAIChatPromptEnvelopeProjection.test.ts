@@ -25,6 +25,7 @@ import {
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { PROJECTION_REVISION } from '../../runtime/promptEnvelopeProjections.js';
 
 void vi.mock('openai', () => {
   class FakeOpenAI {
@@ -103,7 +104,7 @@ describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
 
     expect(projection.protocol).toBe('openai-chat');
     expect(projection.method).toBe('chat/completions/v1');
-    expect(projection.projectionRevision).toBe(3);
+    expect(projection.projectionRevision).toBe(PROJECTION_REVISION);
     expect(projection.model).toBe('gpt-4o');
   });
 

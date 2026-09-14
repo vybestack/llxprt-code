@@ -247,7 +247,7 @@ describe('populatePreActivationSettings and populatePostActivationSettings', () 
         'context-limit': 12345,
         GOOGLE_CLOUD_LOCATION: 'us-central1',
         GOOGLE_CLOUD_PROJECT: 'project-a',
-        'tool-format': 'xml',
+        toolFormat: 'xml',
         'user-agent': 'subagent-test',
       }),
       modelParams: {
@@ -274,7 +274,7 @@ describe('populatePreActivationSettings and populatePostActivationSettings', () 
     expect(service.get('context-limit')).toBe(12345);
     expect(service.get('GOOGLE_CLOUD_LOCATION')).toBe('us-central1');
     expect(service.get('GOOGLE_CLOUD_PROJECT')).toBe('project-a');
-    expect(service.get('tool-format-override')).toBe('xml');
+    expect(service.get('toolFormatOverride')).toBe('xml');
     expect(service.get('user-agent')).toBe('subagent-test');
   });
 

@@ -61,22 +61,12 @@ export const LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV =
 /**
  * Ephemeral setting key for stream idle timeout.
  * This hyphenated key is the canonical source-of-truth key used by
- * the SettingsService / registry. It takes priority over the camelCase alias.
+ * the SettingsService / registry.
  */
 export const STREAM_IDLE_TIMEOUT_SETTING_KEY = 'stream-idle-timeout-ms';
 
-/**
- * CamelCase alias for the stream idle timeout setting key.
- * settings.json surfaces this key via the CLI schema (see schema-core.ts).
- * Without reading it here, a settings.json value would never reach the
- * watchdog because there is no automatic camelCase→hyphenated conversion
- * in the SettingsService.
- */
-export const STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY = 'streamIdleTimeoutMs';
-
 const STREAM_IDLE_TIMEOUT_CONFIG_KEYS = [
   STREAM_IDLE_TIMEOUT_SETTING_KEY,
-  STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
 ] as const;
 
 /**
@@ -103,22 +93,13 @@ export const LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV =
 
 /**
  * Ephemeral setting key for the first-response timeout.
- * Hyphenated canonical key (mirrors stream-idle-timeout-ms convention);
- * takes priority over the camelCase alias.
+ * Uses the registry spelling.
  */
 export const STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY =
   'stream-first-response-timeout-ms';
 
-/**
- * CamelCase alias for the first-response timeout setting key, surfaced via
- * settings.json through the CLI schema (config-schema.ts).
- */
-export const STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY =
-  'streamFirstResponseTimeoutMs';
-
 const STREAM_FIRST_RESPONSE_CONFIG_KEYS = [
   STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
-  STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,
 ] as const;
 
 function parseTimeoutConfigValue(value: unknown): number {
@@ -158,8 +139,7 @@ function normalizeTimeoutConfigValue(value: unknown): number | undefined {
 /**
  * The provenance of a resolved timeout value, for diagnostics. 'default' means
  * the fallback default was used; 'env' means the environment variable won;
- * otherwise the value is the specific ephemeral setting key (hyphenated or
- * camelCase alias) that supplied the value.
+ * otherwise the value is the registry setting key that supplied the value.
  */
 export type StreamTimeoutSource = 'default' | 'env' | (string & {});
 
@@ -202,12 +182,7 @@ function resolveTimeoutSource(
  * Priority order:
  * 1. Environment variable LLXPRT_STREAM_IDLE_TIMEOUT_MS (if set and valid)
  * 2. Config ephemeral setting 'stream-idle-timeout-ms' (hyphenated; canonical)
- * 3. Config ephemeral setting 'streamIdleTimeoutMs' (camelCase alias from settings.json)
- * 4. DEFAULT_STREAM_IDLE_TIMEOUT_MS (0 — disabled)
- *
- * The hyphenated key takes priority over the camelCase alias for backward
- * compatibility with profiles and code that set 'stream-idle-timeout-ms'
- * directly.
+ * 3. DEFAULT_STREAM_IDLE_TIMEOUT_MS (0 — disabled)
  *
  * Values <= 0 disable the watchdog (return 0).
  * Invalid string values (including empty/whitespace) fall back to the next priority level.
@@ -254,8 +229,7 @@ export function resolveStreamIdleTimeoutMsSource(config?: {
  * Priority order (same semantics as resolveStreamIdleTimeoutMs):
  * 1. Environment variable LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS
  * 2. Config ephemeral setting 'stream-first-response-timeout-ms' (hyphenated)
- * 3. Config ephemeral setting 'streamFirstResponseTimeoutMs' (camelCase alias)
- * 4. DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS (300000 — enabled)
+ * 3. DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS (300000 — enabled)
  *
  * Values <= 0 disable the watchdog (return 0).
  * Invalid/empty string values fall back to the next priority level.
