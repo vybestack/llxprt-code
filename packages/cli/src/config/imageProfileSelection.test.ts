@@ -327,4 +327,41 @@ describe('image profile surface selection', () => {
     await expect(pending).rejects.toThrow('missing-operation');
     expect(state.getActive()?.name).toBe('local');
   });
+  it('derives the default image backend only when an image provider is configured', async () => {
+    const state = createImageProfileRuntimeState();
+    let provider: string | undefined;
+    const resolve = createImageProfileOperationResolver(manager, state, {
+      oauthManager: undefined,
+      getActiveProvider: () => undefined,
+      getImageProvider: () => provider,
+    });
+    expect(await resolve()).toBeNull();
+    provider = 'LM Studio';
+    const backend = await resolve();
+    expect(backend?.model).toBe('gemma-3b-it');
+    expect(backend?.name).toBe('openai-images');
+    expect(state.getActive()).toBeUndefined();
+    provider = 'codex';
+    expect((await resolve())?.model).toBe('gpt-image-2');
+  });
+
+  it('keeps active and per-operation profiles above the provider-derived tier', async () => {
+    const state = createImageProfileRuntimeState();
+    state.select({
+      name: 'active',
+      profile: { ...localProfile, model: 'active-model' },
+    });
+    const resolve = createImageProfileOperationResolver(manager, state, {
+      oauthManager: undefined,
+      getActiveProvider: () => undefined,
+      getImageProvider: () => 'missing-alias',
+    });
+    expect((await resolve())?.model).toBe('active-model');
+    expect((await resolve('local'))?.model).toBe('flux-klein');
+    expect(state.getActive()?.name).toBe('active');
+    state.reset();
+    await expect(resolve()).rejects.toMatchObject({
+      name: 'ImageProviderAliasError',
+    });
+  });
 });

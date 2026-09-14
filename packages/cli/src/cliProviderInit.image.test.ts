@@ -48,9 +48,13 @@ import type { CliArgs } from './config/cliArgParser.js';
 
 describe('profile manager registration during boot', () => {
   afterEach(() => resetCliRuntimeRegistryForTesting());
-  it.each([{ flags: [] }, { flags: ['--experimental-acp'] }])(
+  it.each([
+    { flags: [], imageProvider: undefined },
+    { flags: ['--experimental-acp'], imageProvider: undefined },
+    { flags: [], imageProvider: 'LM Studio' },
+  ])(
     'registers a usable manager without profile flags (%j)',
-    async ({ flags }) => {
+    async ({ flags, imageProvider }) => {
       const directory = await mkdtemp(join(tmpdir(), 'llxprt-plain-boot-'));
       const previousHome = process.env.LLXPRT_CONFIG_HOME;
       const previousArgv = process.argv;
@@ -58,8 +62,8 @@ describe('profile manager registration during boot', () => {
       process.argv = ['bun', 'cli.ts', ...flags];
       resetCliProviderInfrastructure();
       try {
-        await loadCliConfig(
-          {},
+        const config = await loadCliConfig(
+          { imageProvider },
           [],
           new ExtensionEnablementManager(join(directory, 'extensions')),
           'plain-boot',
@@ -67,6 +71,14 @@ describe('profile manager registration during boot', () => {
           undefined,
           { settingsService: new SettingsService() },
         );
+        expect(config.getImageBackendResolver()?.()).toMatchObject({
+          name: imageProvider === undefined ? 'codex' : 'openai-images',
+          model: imageProvider === undefined ? 'gpt-image-2' : 'gemma-3b-it',
+        });
+        getCliRuntimeServices().settingsService.set('imageProvider', 'codex');
+        expect(config.getImageBackendResolver()?.()).toMatchObject({
+          model: 'gpt-image-2',
+        });
         const manager = getCliRuntimeServices().profileManager;
         expect(manager).toBeInstanceOf(ProfileManager);
         if (!manager)

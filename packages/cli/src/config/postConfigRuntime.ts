@@ -81,7 +81,11 @@ export interface PostConfigInput {
 /** Fields consumed by setupRuntimeContext (steps 10-11). */
 type SetupRuntimeContextInput = Pick<
   PostConfigInput,
-  'config' | 'runtimeState' | 'profileSettingsWithTools' | 'runtimeOverrides'
+  | 'config'
+  | 'runtimeState'
+  | 'profileSettingsWithTools'
+  | 'runtimeOverrides'
+  | 'settings'
 >;
 
 /** Fields consumed by reapplyCliOverrides (step 14). */
@@ -319,7 +323,12 @@ async function setupRuntimeContext(
   // was already created during config.initialize(), the lazy closure reads
   // this resolver at invocation time.
   const imageProfileState = getCliRuntimeServices().imageProfileState;
+  settingsService.set('imageProvider', input.settings.imageProvider);
   const imageBackendDeps = {
+    getImageProvider: () => {
+      const provider = settingsService.get('imageProvider');
+      return typeof provider === 'string' ? provider : undefined;
+    },
     getImageApiKey: createImageApiKeyResolver(finalRuntime),
     oauthManager: finalRuntime.oauthManager,
     getActiveProvider: () => runtimeState.providerManager.getActiveProvider(),

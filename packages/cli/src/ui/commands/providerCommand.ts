@@ -19,13 +19,13 @@ import { CommandKind } from './types.js';
 import {
   getProviderManager,
   refreshAliasProviders,
+  loadProviderAliasEntries,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { MessageType } from '../types.js';
 import {
   writeProviderAliasConfig,
   type ProviderAliasConfig,
 } from '@vybestack/llxprt-code-providers/composition.js';
-import { loadProviderAliasEntries } from '@vybestack/llxprt-code-providers/composition.js';
 import { ImageProviderAliasError } from '@vybestack/llxprt-code-providers';
 import { SettingScope } from '../../config/settings.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
@@ -56,6 +56,12 @@ function handleImageProvider(
         'imageProvider',
         alias,
       );
+      getRuntimeApi()
+        .getCliRuntimeServices()
+        .settingsService.set(
+          'imageProvider',
+          context.services.settings.merged.imageProvider,
+        );
     }
     const provider =
       context.services.settings.merged.imageProvider ??

@@ -17,6 +17,7 @@ import type {
   ImageGenerateRequest,
 } from '@vybestack/llxprt-code-providers/imageBackend.js';
 import { OpenAIImagesBackend } from './openaiImagesBackend.js';
+import { buildProviderDerivedImageProfile } from '../composition/provider-derived-image-profile.js';
 import {
   isLocalImageEndpoint,
   ImageBackendBaseUrlError,
@@ -155,6 +156,7 @@ export interface CodexImageBackendResolverDeps {
   readonly oauthManager: OAuthManager | undefined;
   readonly getActiveProvider: () => IProvider | undefined;
   readonly getActiveImageProfile?: () => ImageProfile | undefined;
+  readonly getImageProvider?: () => string | undefined;
   readonly getActiveImageProfileName?: () => string | undefined;
   readonly fetchImpl?: typeof fetch;
 }
@@ -171,9 +173,10 @@ function isCodexBaseUrl(baseUrl: string | undefined): baseUrl is string {
 
 /**
  * Build a resolver that validates an active image profile and selects its
- * OpenAI Images or Codex backend. Without a profile, return the default Codex
- * backend if an OAuth manager exists, or null otherwise. Conversational
- * provider selection does not gate image capability.
+ * OpenAI Images or Codex backend. Without a profile, derive one only when an
+ * image provider is configured. Otherwise return the default Codex backend if
+ * an OAuth manager exists, or null. Conversational provider selection does not
+ * gate image capability.
  *
  * Explicit Codex profiles resolve even without OAuth machinery; attempting an
  * operation then raises an authentication error. Each Codex operation resolves
@@ -184,7 +187,13 @@ export function createCodexImageBackendResolver(
   deps: CodexImageBackendResolverDeps,
 ): () => ImageBackend | null {
   return () => {
-    const imageProfile = deps.getActiveImageProfile?.();
+    let imageProfile = deps.getActiveImageProfile?.();
+    if (imageProfile === undefined) {
+      const imageProvider = deps.getImageProvider?.();
+      if (imageProvider !== undefined) {
+        imageProfile = buildProviderDerivedImageProfile(imageProvider);
+      }
+    }
     const profileConfig =
       imageProfile === undefined
         ? undefined

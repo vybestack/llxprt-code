@@ -16,6 +16,7 @@ import {
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { LoadedSettings } from '../../config/settings.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type {
@@ -48,8 +49,10 @@ interface AgentDouble {
   >;
 }
 
+let imageSettings = new SettingsService();
 const mocks = (() => {
   const runtimeApi = {
+    getCliRuntimeServices: () => ({ settingsService: imageSettings }),
     getActiveProviderName: vi.fn(),
     getActiveModelName: vi.fn(),
   };
@@ -116,6 +119,7 @@ describe('providerCommand /provider save', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    imageSettings = new SettingsService();
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-provider-save-'));
     process.env.HOME = tempDir;
     process.env.USERPROFILE = tempDir;
@@ -182,6 +186,7 @@ describe('providerCommand /provider save', () => {
     expect(await providerCommand.action!(context, 'image codex')).toMatchObject(
       { messageType: 'info' },
     );
+    expect(imageSettings.get('imageProvider')).toBe('codex');
     expect(JSON.parse(fs.readFileSync(userPath, 'utf8'))).toMatchObject({
       imageProvider: 'codex',
     });
