@@ -166,6 +166,15 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   protected readonly cwd!: string;
   protected readonly bugCommand: BugCommandSettings | undefined;
   protected readonly originalModel!: string;
+  /**
+   * #2534 Domain C2: terminal fallback for Configs constructed without an
+   * active provider (pre-activation bootstrap, unit-test fixtures). It is NOT
+   * a second store: the provider-scoped settings store and the
+   * contentGeneratorConfig.model projection always win on read; this field is
+   * only consulted when both are absent, and only the constructor,
+   * setModel, and resetModelToDefault transitions write it.
+   */
+  protected model!: string;
   protected readonly extensionContextFilePaths!: string[];
   protected readonly noBrowser!: boolean;
   protected folderTrust!: boolean;

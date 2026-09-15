@@ -36,6 +36,7 @@ import {
   type ShellReplacementMode,
 } from './configTypes.js';
 import { DEFAULT_FILE_FILTERING_OPTIONS } from './constants.js';
+import { UNCONFIGURED_PROVIDER } from './models.js';
 import { parseLspConfig, type LspState } from './lspIntegration.js';
 import { WorkspaceContext } from '../utils/workspaceContext.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
@@ -138,6 +139,7 @@ export interface ConfigConstructorTarget {
   cwd: string;
   fileDiscoveryService: FileDiscoveryService | null;
   bugCommand: BugCommandSettings | undefined;
+  model: string;
   originalModel: string;
   extensionContextFilePaths: string[];
   maxSessionTurns: number;
@@ -460,9 +462,10 @@ function applyBasicRuntimeFlags(
   config.cwd = params.cwd;
   config.fileDiscoveryService = params.fileDiscoveryService ?? null;
   config.bugCommand = params.bugCommand;
-  // #2534 Domain C2: no Config.model shadow field. The active model lives in
-  // the settings store (providers[P].model); params.model only feeds the
-  // originalModel reset target for the contentGeneratorConfig projection.
+  // #2534 Domain C2: the constructor-seeded model feeds the store seeding in
+  // applyExtensionFlags when a provider is supplied, and the per-instance
+  // terminal fallback for providerless Configs (see ConfigBaseCore.model).
+  config.model = params.model;
   config.originalModel = params.model;
   config.extensionContextFilePaths = params.extensionContextFilePaths ?? [];
   config.maxSessionTurns = params.maxSessionTurns ?? -1;
@@ -498,12 +501,40 @@ function applyExtensionFlags(
   // #2534 Domain C1: activeProvider has one store (the settings global key).
   // applySettingsService has already run, so the store exists. Seed only when
   // absent: a supplied (shared) settings service keeps its active provider
-  // rather than being mutated as a constructor side effect (#2300).
-  if (
+  // rather than being mutated as a constructor side effect (#2300). The
+  // UNCONFIGURED_PROVIDER sentinel is not a provider — seeding it would make
+  // provider managers resolve 'unconfigured' as active, so it never lands in
+  // the store (runtimeStateFactory/prompts re-derive the sentinel when the
+  // store is empty).
+  const seedProvider =
     params.provider !== undefined &&
+    params.provider !== '' &&
+    params.provider !== UNCONFIGURED_PROVIDER
+      ? params.provider
+      : null;
+  if (
+    seedProvider !== null &&
     config.settingsService.get('activeProvider') === undefined
   ) {
-    config.settingsService.set('activeProvider', params.provider);
+    config.settingsService.set('activeProvider', seedProvider);
+    // #2534 Domain C2: constructor paths that seed a model must land in the
+    // store. Seed providers[seedProvider].model only when absent so a
+    // model already resolved into the (possibly shared) settings service by
+    // the bootstrap, or persisted by the user, is never clobbered.
+    if (typeof params.model === 'string' && params.model.length > 0) {
+      const providerSettings =
+        config.settingsService.getProviderSettings(seedProvider);
+      if (
+        typeof providerSettings.model !== 'string' ||
+        providerSettings.model.length === 0
+      ) {
+        config.settingsService.setProviderSetting(
+          seedProvider,
+          'model',
+          params.model,
+        );
+      }
+    }
   }
   config._extensionLoader =
     params.extensionLoader ??

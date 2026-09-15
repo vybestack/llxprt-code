@@ -13,6 +13,7 @@ import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { TaskTool, type TaskToolParams } from './task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
@@ -23,8 +24,12 @@ describe('TaskTool', () => {
   let config: Config;
 
   beforeEach(() => {
+    // #2534 D4: checkAsyncSettings reads async gating through
+    // config.getSettingsService() without fallback probing, so the double
+    // provides a real (empty) settings service — async defaults to enabled.
     config = {
       getSessionId: () => 'session-123',
+      getSettingsService: () => new SettingsService(),
     } as unknown as Config;
   });
 

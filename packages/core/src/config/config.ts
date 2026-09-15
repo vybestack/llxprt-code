@@ -366,7 +366,9 @@ export class Config extends ConfigBase {
   getModel(): string {
     // #2534 Domain C2: single read path — the provider-scoped settings store
     // (providers[P].model) first, then the contentGeneratorConfig.model
-    // derived projection. No shadow field.
+    // derived projection, then the constructor-seeded terminal fallback for
+    // Configs without an active provider (the field is not a second store:
+    // the store and projection always win on read).
     const settingsService = this.getSettingsService();
     const activeProvider = settingsService.get('activeProvider') as string;
     if (typeof activeProvider === 'string' && activeProvider.length > 0) {
@@ -380,14 +382,15 @@ export class Config extends ConfigBase {
       }
     }
     const projected = this.getContentGeneratorConfig()?.model;
-    return projected && projected.length > 0 ? projected : '';
+    return projected && projected.length > 0 ? projected : this.model;
   }
 
   setModel(newModel: string): void {
     // #2534 Domain C2: one transition — a single provider-scoped store write
-    // plus the contentGeneratorConfig.model derived projection. The old
-    // constructor-seeded field equality guard hid absent store entries, so it
-    // is gone: the change event fires for every transition.
+    // plus the contentGeneratorConfig.model derived projection. The terminal
+    // fallback field (providerless Configs) is updated in the same transition
+    // so getModel() keeps returning the last-set model until a provider scope
+    // exists; the change event fires only for actual changes, as on main.
     const settingsService = this.getSettingsService();
     const activeProvider = settingsService.get('activeProvider') as string;
     if (typeof activeProvider === 'string' && activeProvider.length > 0) {
@@ -397,7 +400,10 @@ export class Config extends ConfigBase {
     if (contentConfig) {
       contentConfig.model = newModel;
     }
-    coreEvents.emitModelChanged(newModel);
+    if (this.model !== newModel || this.inFallbackMode) {
+      this.model = newModel;
+      coreEvents.emitModelChanged(newModel);
+    }
     this.setFallbackMode(false);
   }
 
