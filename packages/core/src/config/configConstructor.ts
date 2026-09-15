@@ -138,7 +138,6 @@ export interface ConfigConstructorTarget {
   cwd: string;
   fileDiscoveryService: FileDiscoveryService | null;
   bugCommand: BugCommandSettings | undefined;
-  model: string;
   originalModel: string;
   extensionContextFilePaths: string[];
   maxSessionTurns: number;
@@ -461,7 +460,9 @@ function applyBasicRuntimeFlags(
   config.cwd = params.cwd;
   config.fileDiscoveryService = params.fileDiscoveryService ?? null;
   config.bugCommand = params.bugCommand;
-  config.model = params.model;
+  // #2534 Domain C2: no Config.model shadow field. The active model lives in
+  // the settings store (providers[P].model); params.model only feeds the
+  // originalModel reset target for the contentGeneratorConfig projection.
   config.originalModel = params.model;
   config.extensionContextFilePaths = params.extensionContextFilePaths ?? [];
   config.maxSessionTurns = params.maxSessionTurns ?? -1;

@@ -66,7 +66,6 @@ export abstract class ConfigBase extends ConfigBaseCore {
   resetModelToDefault(): void {
     this.contentGeneratorConfig.model = this.originalModel;
     this.inFallbackMode = false;
-    this.model = this.originalModel;
   }
 
   // #3315 outfile-bound telemetry getters. They read the protected

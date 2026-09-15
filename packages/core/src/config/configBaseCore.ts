@@ -165,7 +165,6 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   protected readonly proxy: string | undefined;
   protected readonly cwd!: string;
   protected readonly bugCommand: BugCommandSettings | undefined;
-  protected model!: string;
   protected readonly originalModel!: string;
   protected readonly extensionContextFilePaths!: string[];
   protected readonly noBrowser!: boolean;
