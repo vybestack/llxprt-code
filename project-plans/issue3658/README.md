@@ -156,3 +156,19 @@ no current consumer; revisit if one appears):
 
 OCR was not run for this effort (paused until re-enabled); the two-cycle
 review requirement was met with the deepthinker and reviewer subagents.
+
+## CodeRabbit follow-up (commit e75c46a59c)
+
+Both inline threads on PR #3684 were fixed (classified In-scope-Fix):
+- clone() metadata fidelity: the wrapper now delegates status/statusText/
+  ok/url/type/redirected/headers to the original response while clone()
+  serves its body from an independent tee branch sharing that metadata
+  source, so immutable fields survive cloning. Moves the round-2 defer
+  item above to fixed; tests cover url delegation via a real local server.
+- Skip-log frameKeys bounding: sorted keys capped at 16 entries, each
+  truncated to 64 chars (mirrors the object-tag cap), with regression
+  tests for a 30-key frame and a 200-char key.
+Also added JSDoc to diff-touched helpers flagged by docstring coverage.
+Full cycle green: red 3-fail -> green 52-pass on touched files, providers
+641/641, lint, typecheck, format, build, full npm test, live smoke —
+all exit 0 (tmp/issue3658/coderabbit1/).
