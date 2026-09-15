@@ -50,7 +50,7 @@ function stripQuotes(value: string): string {
 
 function getSettingsService(context: CommandContext): SettingsService | null {
   const config = context.services.config;
-  if (config && typeof config.getSettingsService === 'function') {
+  if (config) {
     return config.getSettingsService();
   }
   return null;
@@ -61,17 +61,8 @@ function readToolLists(context: CommandContext): {
   allowed: Set<string>;
 } {
   const settings = getSettingsService(context);
-  const config = context.services.config;
 
-  const read = (key: string): unknown => {
-    if (settings) {
-      return settings.get(key);
-    }
-    if (config && typeof config.getEphemeralSetting === 'function') {
-      return config.getEphemeralSetting(key);
-    }
-    return undefined;
-  };
+  const read = (key: string): unknown => settings?.get(key) ?? undefined;
 
   const disabled = Array.isArray(read('tools.disabled'))
     ? new Set((read('tools.disabled') as string[]).map(canonicalizeToolName))
@@ -95,27 +86,11 @@ function persistToolLists(
   const allowedList = Array.from(new Set(allowed)).map((name) =>
     name === INVALID_TOOL_NAME ? '' : name,
   );
-  const config = context.services.config;
   const settings = getSettingsService(context);
 
   if (settings) {
     settings.set('tools.disabled', disabledList);
     settings.set('tools.allowed', allowedList);
-  }
-
-  if (config) {
-    if (typeof config.setEphemeralSetting === 'function') {
-      config.setEphemeralSetting('tools.disabled', disabledList);
-      config.setEphemeralSetting('tools.allowed', allowedList);
-    }
-    if (typeof config.getEphemeralSettings === 'function') {
-      const ephemerals: unknown = config.getEphemeralSettings();
-      if (ephemerals !== null && typeof ephemerals === 'object') {
-        const ephemeralSettings = ephemerals as Record<string, unknown>;
-        ephemeralSettings['tools.disabled'] = disabledList;
-        ephemeralSettings['tools.allowed'] = allowedList;
-      }
-    }
   }
 }
 

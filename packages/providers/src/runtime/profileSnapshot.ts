@@ -17,6 +17,7 @@ import type {
   Profile,
   ModelParams,
   LoadBalancerProfile,
+  SettingsService,
 } from '@vybestack/llxprt-code-settings';
 import {
   getCliRuntimeServices,
@@ -58,9 +59,6 @@ const {
 } = runtimeAccessorsInternal;
 
 type CliRuntimeConfig = ReturnType<typeof getCliRuntimeServices>['config'];
-type CliSettingsService = ReturnType<
-  typeof getCliRuntimeServices
->['settingsService'];
 type CliOAuthManager = NonNullable<ReturnType<typeof maybeGetCliOAuthManager>>;
 
 type RuntimeSnapshotConfig = Omit<
@@ -366,7 +364,7 @@ function hasMultiBucketOAuth(
 }
 
 function setCurrentProfileName(
-  settingsService: CliSettingsService,
+  settingsService: SettingsService,
   profileName?: string,
 ): void {
   if (typeof settingsService.setCurrentProfileName === 'function') {

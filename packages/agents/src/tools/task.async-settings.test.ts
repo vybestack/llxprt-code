@@ -156,7 +156,7 @@ describe('TaskTool', () => {
       expect(result.metadata?.async).toBe(true);
     });
 
-    it('defaults to enabled when settings service is unavailable', async () => {
+    it('defaults to enabled when no subagent settings are configured', async () => {
       const registerTaskMock = vi.fn();
       const mockAsyncTaskManager = {
         canLaunchAsync: () => ({ allowed: true }),
@@ -178,6 +178,9 @@ describe('TaskTool', () => {
       });
       const configWithoutSettings = {
         ...config,
+        getSettingsService: () => ({
+          getAllGlobalSettings: () => ({}),
+        }),
       } as unknown as Config;
       const tool = new TaskTool(configWithoutSettings, {
         orchestratorFactory: () =>
