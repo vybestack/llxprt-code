@@ -11,6 +11,7 @@ import {
   MessageBus,
   type Config,
 } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   ShellTool,
   type IShellToolHost,
@@ -25,12 +26,16 @@ import { buildZedTerminalSetup } from './zed-terminal-setup.js';
 import { RecordingConnection } from './zed-test-helpers.js';
 
 function configFixture(outputLimit?: number): Config {
+  // #2534 D2: ToolRegistry receives the settings service as a direct
+  // constructor argument via config.getSettingsService(), so the double
+  // provides a real (empty) settings service.
   return {
     getPolicyEngine: () => undefined,
     getDebugMode: () => false,
     getTargetDir: () => '/project',
     getEphemeralSetting: (key: string) =>
       key === 'shell-output-retention-max-bytes' ? outputLimit : undefined,
+    getSettingsService: () => new SettingsService(),
   } as unknown as Config;
 }
 
