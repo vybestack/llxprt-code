@@ -38,14 +38,15 @@ import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message
 import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools/tools/tool-registry.js';
 import {
-  BaseTool,
+  BaseDeclarativeTool,
+  BaseToolInvocation,
   Kind,
   type ToolResult,
 } from '@vybestack/llxprt-code-tools/tools/tools.js';
 
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 
-class RuntimeDisabledTool extends BaseTool<
+class RuntimeDisabledTool extends BaseDeclarativeTool<
   Record<string, unknown>,
   ToolResult
 > {
@@ -62,6 +63,21 @@ class RuntimeDisabledTool extends BaseTool<
     );
   }
 
+  protected createInvocation(
+    params: Record<string, unknown>,
+  ): RuntimeDisabledToolInvocation {
+    return new RuntimeDisabledToolInvocation(
+      params,
+      this.messageBus,
+      this.name,
+    );
+  }
+}
+
+class RuntimeDisabledToolInvocation extends BaseToolInvocation<
+  Record<string, unknown>,
+  ToolResult
+> {
   override getDescription(): string {
     return 'Unavailable image backend';
   }
@@ -78,7 +94,7 @@ class RuntimeDisabledTool extends BaseTool<
   }
 }
 
-class UppercaseTool extends BaseTool<{ text: string }, ToolResult> {
+class UppercaseTool extends BaseDeclarativeTool<{ text: string }, ToolResult> {
   constructor() {
     super('uppercase', 'Uppercase', 'Uppercase text', Kind.Think, {
       type: 'object',
@@ -87,14 +103,25 @@ class UppercaseTool extends BaseTool<{ text: string }, ToolResult> {
     });
   }
 
+  protected createInvocation(params: {
+    text: string;
+  }): UppercaseToolInvocation {
+    return new UppercaseToolInvocation(params, this.messageBus, this.name);
+  }
+}
+
+class UppercaseToolInvocation extends BaseToolInvocation<
+  { text: string },
+  ToolResult
+> {
   override getDescription(): string {
     return 'Uppercase text';
   }
 
-  override async execute(params: { text: string }): Promise<ToolResult> {
+  override async execute(): Promise<ToolResult> {
     return {
-      llmContent: params.text.toUpperCase(),
-      returnDisplay: params.text.toUpperCase(),
+      llmContent: this.params.text.toUpperCase(),
+      returnDisplay: this.params.text.toUpperCase(),
     };
   }
 }

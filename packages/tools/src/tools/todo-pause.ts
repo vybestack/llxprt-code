@@ -4,13 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Type } from '../types/schema-type.js';
 import {
-  BaseTool,
+  BaseDeclarativeTool,
+  BaseToolInvocation,
   type ToolResult,
   Kind,
   type LiveOutputUpdate,
 } from './tools.js';
+import type { ContextAwareTool, ToolContext } from '../types/tool-context.js';
+import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
 import type { ITodoService } from '../interfaces/ITodoService.js';
 import type { IToolHost } from '../interfaces/IToolHost.js';
 import { EmojiFilter, isEmojiFilterMode } from '../utils/EmojiFilter.js';
@@ -23,7 +25,11 @@ export interface TodoPauseParams {
  * Tool that allows AI models to explicitly pause the continuation loop when encountering errors or blockers.
  * Provides a clean exit mechanism from the continuation system.
  */
-export class TodoPause extends BaseTool<TodoPauseParams, ToolResult> {
+export class TodoPause
+  extends BaseDeclarativeTool<TodoPauseParams, ToolResult>
+  implements ContextAwareTool
+{
+  context?: ToolContext;
   static readonly Name = 'todo_pause';
 
   constructor(
@@ -43,10 +49,10 @@ export class TodoPause extends BaseTool<TodoPauseParams, ToolResult> {
         'do not place text longer than 500 characters in the reason argument.',
       Kind.Think,
       {
-        type: Type.OBJECT,
+        type: 'object',
         properties: {
           reason: {
-            type: Type.STRING,
+            type: 'string',
             description:
               'Concise explanation of why the task needs to be paused (e.g., missing file, configuration error, blocked dependency). ' +
               'Limited to a maximum of 500 characters; any longer user-facing explanation must be streamed as normal response text separately, not placed in this argument.',
@@ -61,71 +67,51 @@ export class TodoPause extends BaseTool<TodoPauseParams, ToolResult> {
     );
   }
 
-  override getDescription(params: TodoPauseParams): string {
-    return `Pause AI continuation: ${this.getReasonForDisplay(params.reason)}`;
+  protected override validateToolParamValues(
+    params: TodoPauseParams,
+  ): string | null {
+    return params.reason.length > 500
+      ? 'reason exceeds maximum length of 500 characters'
+      : null;
   }
 
-  override validateToolParams(
-    params: unknown,
-  ): (string & { message: string }) | null {
-    // Type guard to ensure params has the expected structure
-    if (params == null || typeof params !== 'object') {
-      const errorString = new String('params must be an object') as string & {
-        message: string;
-      };
-      errorString.message = 'params must be an object';
-      return errorString;
-    }
+  protected createInvocation(
+    params: TodoPauseParams,
+    messageBus?: IToolMessageBus,
+  ): TodoPauseInvocation {
+    return new TodoPauseInvocation(
+      this.todoService,
+      params,
+      this.context,
+      messageBus,
+      this.toolHost,
+    );
+  }
+}
 
-    const typedParams = params as Record<string, unknown>;
+class TodoPauseInvocation extends BaseToolInvocation<
+  TodoPauseParams,
+  ToolResult
+> {
+  constructor(
+    private readonly todoService: ITodoService,
+    params: TodoPauseParams,
+    private readonly context: ToolContext | undefined,
+    messageBus?: IToolMessageBus,
+    private readonly toolHost?: IToolHost,
+  ) {
+    super(params, messageBus, TodoPause.Name);
+  }
 
-    // Check if reason property exists
-    if (!('reason' in typedParams)) {
-      const errorString = new String(
-        'reason parameter is required',
-      ) as string & { message: string };
-      errorString.message = 'reason parameter is required';
-      return errorString;
-    }
-
-    // Check if reason is a string
-    if (typeof typedParams.reason !== 'string') {
-      const errorString = new String('reason must be a string') as string & {
-        message: string;
-      };
-      errorString.message = 'reason must be a string';
-      return errorString;
-    }
-
-    const reason = typedParams.reason;
-
-    // Check if reason is empty
-    if (reason.length === 0) {
-      const errorString = new String(
-        'reason is required and cannot be empty',
-      ) as string & { message: string };
-      errorString.message = 'reason is required and cannot be empty';
-      return errorString;
-    }
-
-    // Check if reason exceeds maximum length
-    if (reason.length > 500) {
-      const errorString = new String(
-        'reason exceeds maximum length of 500 characters',
-      ) as string & { message: string };
-      errorString.message = 'reason exceeds maximum length of 500 characters';
-      return errorString;
-    }
-
-    return null;
+  override getDescription(): string {
+    return `Pause AI continuation: ${this.getReasonForDisplay(this.params.reason)}`;
   }
 
   async execute(
-    params: TodoPauseParams,
     _signal: AbortSignal,
     _updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
-    const reasonResult = this.filterReason(params.reason);
+    const reasonResult = this.filterReason(this.params.reason);
     if (reasonResult.blocked) {
       const message =
         reasonResult.errorMessage ?? 'Emojis detected in pause reason';

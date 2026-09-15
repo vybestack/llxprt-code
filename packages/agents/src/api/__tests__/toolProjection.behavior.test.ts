@@ -223,10 +223,8 @@ describe('ToolControl.get named-tool lookup handle @plan:ISSUE-2376', () => {
   });
 
   it('setContext() is present and mutates context on a context-aware tool', () => {
-    // BaseTool (the legacy superclass) implements ContextAwareTool, so a MockTool
-    // built via BaseDeclarativeTool does NOT carry `context` by default. We
-    // attach a context property to simulate a context-aware tool the way real
-    // tools (extending BaseTool) do.
+    // Context-aware tools declare their own context property; the declarative
+    // base does not add one. Give this fixture the same context contract.
     const tool = new MockTool({ name: 'shell' }) as AnyDeclarativeTool & {
       context?: unknown;
     };

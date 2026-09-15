@@ -231,7 +231,6 @@ export {
   BaseToolInvocation,
   DeclarativeTool,
   BaseDeclarativeTool,
-  BaseTool,
   isTool,
   hasCycleInSchema,
   Kind,

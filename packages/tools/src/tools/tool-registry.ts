@@ -9,11 +9,15 @@ import {
   type AnyDeclarativeTool,
   Kind,
   type ToolResult,
-  BaseTool,
+  BaseDeclarativeTool,
   BaseToolInvocation,
   type LiveOutputUpdate,
 } from './tools.js';
-import { type ToolContext, isContextAwareTool } from '../types/tool-context.js';
+import {
+  type ContextAwareTool,
+  type ToolContext,
+  isContextAwareTool,
+} from '../types/tool-context.js';
 import type { IToolRegistryHost } from '../interfaces/IToolRegistryHost.js';
 import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -77,7 +81,11 @@ function extractParametersSchema(
   return {};
 }
 
-export class DiscoveredTool extends BaseTool<ToolParams, ToolResult> {
+export class DiscoveredTool
+  extends BaseDeclarativeTool<ToolParams, ToolResult>
+  implements ContextAwareTool
+{
+  context?: ToolContext;
   /**
    * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
    * @requirement REQ-D01-001.2
@@ -126,7 +134,16 @@ Signal: Signal number or \`(none)\` if no signal was received.
    * @pseudocode lines 56-72
    */
   override build(params: ToolParams): DiscoveredToolInvocation {
-    return new DiscoveredToolInvocation(this, params, this.requireMessageBus());
+    return this.createInvocation(params);
+  }
+
+  protected createInvocation(params: ToolParams): DiscoveredToolInvocation {
+    return new DiscoveredToolInvocation(
+      this,
+      params,
+      this.requireMessageBus(),
+      this.context,
+    );
   }
 
   async execute(
@@ -379,6 +396,7 @@ class DiscoveredToolInvocation extends BaseToolInvocation<
     private readonly tool: DiscoveredTool,
     params: ToolParams,
     messageBus: IToolMessageBus,
+    readonly context?: ToolContext,
   ) {
     super(params, messageBus);
   }
