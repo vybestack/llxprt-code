@@ -176,8 +176,8 @@ describe('executeOpenAIResponsesRequest onStreamLiveness threading @issue:2607',
         blocks: [],
         metadata: {
           id: 'r1',
-          stopReason: 'end_turn',
-          finishReason: 'completed',
+          rawStopReason: 'completed',
+          finishReason: 'stop',
         },
       },
     ]);

@@ -9,15 +9,6 @@
  * @requirement:HOOK-092,HOOK-093,HOOK-094,HOOK-095,HOOK-096,HOOK-097,HOOK-098,HOOK-099,HOOK-100,HOOK-101,HOOK-102,HOOK-103,HOOK-104,HOOK-105
  */
 
-/**
- * Structural equivalent of @google/genai FunctionCallingConfigMode enum values.
- * Defined locally so core does not import @google/genai.
- */
-const FunctionCallingConfigMode = {
-  AUTO: 'AUTO',
-  ANY: 'ANY',
-  NONE: 'NONE',
-} as const;
 import type {
   HookOutput,
   HookExecutionResult,
@@ -33,6 +24,7 @@ import {
   AfterAgentHookOutput,
 } from './types.js';
 import { HookEventName } from './types.js';
+import type { ToolChoice } from '../llm-types/toolDeclaration.js';
 
 import { canonicalizeToolName } from '@vybestack/llxprt-code-tools';
 
@@ -254,90 +246,74 @@ export class HookAggregator {
   }
 
   /**
-   * Merge tool selection outputs with specific logic for tool config
+   * Merge tool selection outputs over the single neutral toolChoice field.
    *
-   * Tool Selection Strategy:
-   * - If any hook specifies NONE mode, no tools are available (most restrictive wins)
-   * - If any hook specifies ANY mode (and no NONE), ANY mode is used
-   * - Otherwise AUTO mode is used
-   * - Omitted allowedFunctionNames remains unrestricted
-   * - Explicit function-name allow-lists are intersected and sorted for deterministic caching
+   * Tool Selection Strategy (v2):
+   * - If any hook specifies none mode, no tools are available (most restrictive wins)
+   * - If any hook specifies required mode (and no none), required mode is used
+   * - Otherwise auto mode is used
+   * - Omitted allowedToolNames remains unrestricted
+   * - Explicit tool-name allow-lists are intersected and sorted for deterministic caching
    *
    * Hooks can only narrow individually allowed tools; an explicit empty
-   * allow-list remains the most restrictive function-name selection.
-
+   * allow-list remains the most restrictive tool-name selection.
    */
   private mergeToolSelectionOutputs(
     outputs: BeforeToolSelectionOutput[],
   ): BeforeToolSelectionOutput {
     const merged: BeforeToolSelectionOutput = {};
 
-    let allowedFunctionNames: Set<string> | undefined;
+    let allowedToolNames: Set<string> | undefined;
     let hasNoneMode = false;
-    let hasAnyMode = false;
-    let hasExplicitFunctionNames = false;
+    let hasRequiredMode = false;
+    let hasExplicitToolNames = false;
 
     for (const output of outputs) {
-      const toolConfig = output.hookSpecificOutput?.toolConfig;
-      if (!toolConfig) {
+      const toolChoice = output.hookSpecificOutput?.toolChoice;
+      if (!toolChoice) {
         continue;
       }
 
-      // Check mode (using simplified HookToolConfig format)
-      if (toolConfig.mode === 'NONE') {
+      if (toolChoice.mode === 'none') {
         hasNoneMode = true;
-      } else if (toolConfig.mode === 'ANY') {
-        hasAnyMode = true;
+      } else if (toolChoice.mode === 'required') {
+        hasRequiredMode = true;
       }
 
-      // Intersect explicit function-name allow-lists so hooks can only narrow access.
-      if (Array.isArray(toolConfig.allowedFunctionNames)) {
-        hasExplicitFunctionNames = true;
-        const hookNames = new Set<string>(
-          toolConfig.allowedFunctionNames.map((name) =>
-            canonicalizeToolName(name),
-          ),
+      // Intersect explicit tool-name allow-lists so hooks can only narrow access.
+      if (Array.isArray(toolChoice.allowedToolNames)) {
+        hasExplicitToolNames = true;
+        const hookNames = new Set(
+          toolChoice.allowedToolNames.map((name) => canonicalizeToolName(name)),
         );
-        allowedFunctionNames =
-          allowedFunctionNames === undefined
+        allowedToolNames =
+          allowedToolNames === undefined
             ? hookNames
             : new Set(
-                [...allowedFunctionNames].filter((name) => hookNames.has(name)),
+                [...allowedToolNames].filter((name) => hookNames.has(name)),
               );
       }
     }
 
-    // Determine final mode and function names
-    let finalMode: 'AUTO' | 'ANY' | 'NONE';
-    let finalFunctionNames: string[] | undefined;
-
+    // none wins over required; required wins over auto.
+    let finalMode: ToolChoice['mode'] = 'auto';
     if (hasNoneMode) {
-      // NONE mode wins for tool declaration mode, while omitted allowedFunctionNames stays unrestricted.
-      finalMode = FunctionCallingConfigMode.NONE;
-      finalFunctionNames = hasExplicitFunctionNames
-        ? Array.from(allowedFunctionNames ?? []).sort()
-        : undefined;
-    } else if (hasAnyMode) {
-      // ANY mode if present (and no NONE)
-      finalMode = FunctionCallingConfigMode.ANY;
-      // Sort for deterministic output to ensure consistent caching
-      finalFunctionNames = hasExplicitFunctionNames
-        ? Array.from(allowedFunctionNames ?? []).sort()
-        : undefined;
-    } else {
-      // Default to AUTO mode
-      finalMode = FunctionCallingConfigMode.AUTO;
-      // Sort for deterministic output to ensure consistent caching
-      finalFunctionNames = hasExplicitFunctionNames
-        ? Array.from(allowedFunctionNames ?? []).sort()
-        : undefined;
+      finalMode = 'none';
+    } else if (hasRequiredMode) {
+      finalMode = 'required';
     }
+    // Sort for deterministic output to ensure consistent caching
+    const finalToolNames = hasExplicitToolNames
+      ? Array.from(allowedToolNames ?? []).sort()
+      : undefined;
 
     merged.hookSpecificOutput = {
       hookEventName: 'BeforeToolSelection',
-      toolConfig: {
+      toolChoice: {
         mode: finalMode,
-        allowedFunctionNames: finalFunctionNames,
+        ...(finalToolNames !== undefined
+          ? { allowedToolNames: finalToolNames }
+          : {}),
       },
     };
 

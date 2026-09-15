@@ -17,7 +17,10 @@
  * @plan:PLAN-20260707-AGENTNEUTRAL.P06
  */
 
-import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type {
+  ToolDeclaration,
+  CanonicalFinishReason,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { vi, type Mock } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from '../turn.js';
@@ -84,7 +87,7 @@ export function toolCallIContent(
 
 export function terminalIContent(
   text: string | undefined,
-  stopReason: string,
+  finishReason: CanonicalFinishReason,
   usage?: Partial<UsageStats>,
 ): IContent {
   const blocks: ContentBlock[] = [];
@@ -94,7 +97,7 @@ export function terminalIContent(
   const content: IContent = {
     speaker: 'ai',
     blocks,
-    metadata: { stopReason },
+    metadata: { finishReason },
   };
   if (usage) {
     content.metadata!.usage = {

@@ -14,43 +14,37 @@
  * limitations under the License.
  */
 
+import type { FinishInfo } from '@vybestack/llxprt-code-core/llm-types/finishReasons.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 const logger = new DebugLogger('llxprt:providers:openai:finish-reason');
 
-/**
- * Map OpenAI finish_reason to the stopReason format expected by MessageConverter.
- * OpenAI values: stop, length, tool_calls, content_filter, function_call
- * OpenAI Responses API statuses: completed, incomplete, failed
- * MessageConverter expects: end_turn, max_tokens, stop_sequence, tool_use, etc.
- */
-export function mapFinishReasonToStopReason(
-  finishReason: string | null | undefined,
-): string | undefined {
-  if (!finishReason) return undefined;
-  const mapping: Record<string, string> = {
-    stop: 'end_turn',
-    length: 'max_tokens',
-    tool_calls: 'tool_use',
-    content_filter: 'content_filter',
-    function_call: 'tool_use',
-    // OpenAI Responses API terminal statuses
-    completed: 'end_turn',
-    incomplete: 'max_tokens',
-    failed: 'end_turn',
-  };
-  const mappedReason = mapping[finishReason];
+const finishReasons: ReadonlyMap<string, FinishInfo['finishReason']> = new Map([
+  ['stop', 'stop'],
+  ['length', 'max_tokens'],
+  ['tool_calls', 'tool_calls'],
+  ['tool-calls', 'tool_calls'],
+  ['function_call', 'tool_calls'],
+  ['content_filter', 'safety'],
+  ['content-filter', 'safety'],
+  ['refusal', 'refusal'],
+  ['completed', 'stop'],
+  ['incomplete', 'max_tokens'],
+  ['failed', 'error'],
+]);
 
-  if (!mappedReason) {
+/** Maps provider-native terminal reasons while retaining diagnostic detail. */
+export function mapFinishReason(rawStopReason: string): FinishInfo {
+  const mapped = finishReasons.get(rawStopReason);
+  if (mapped === undefined) {
     logger.warn(() => `[stream:finish-reason] unmapped provider finishReason`, {
-      finishReason,
+      rawStopReason,
     });
-    return finishReason;
   }
-
-  logger.debug(() => `[stream:finish-reason] mapped provider finishReason`, {
-    finishReason,
-    stopReason: mappedReason,
-  });
-  return mappedReason;
+  const result: FinishInfo = { finishReason: mapped ?? 'other', rawStopReason };
+  logger.debug(
+    () => `[stream:finish-reason] mapped provider finishReason`,
+    result,
+  );
+  return result;
 }

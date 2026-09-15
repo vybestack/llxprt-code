@@ -50,7 +50,7 @@ import {
   cleanThinkingContent,
   parseStreamingReasoningDelta,
 } from './OpenAIResponseParser.js';
-import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
+import { mapFinishReason } from './finishReasonMapping.js';
 import { type ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import {
   type StreamingState,
@@ -662,7 +662,9 @@ function* emitCombinedTerminalContent(
       blocks: combinedBlocks,
     };
 
-    const stopReason = mapFinishReasonToStopReason(state.lastFinishReason);
+    const finishInfo = state.lastFinishReason
+      ? mapFinishReason(state.lastFinishReason)
+      : undefined;
     deps.logger.debug(
       () => `[stream:terminal] building combined terminal content`,
       {
@@ -672,7 +674,7 @@ function* emitCombinedTerminalContent(
         reasoningToolCallCount: reasoningToolCalls.length,
         pipelineToolCallCount: pipelineToolCallBlocks.length,
         rawFinishReason: state.lastFinishReason,
-        stopReason,
+        ...finishInfo,
         hasStreamingUsage: Boolean(state.streamingUsage),
       },
     );
@@ -680,20 +682,20 @@ function* emitCombinedTerminalContent(
     if (state.streamingUsage !== null) {
       combinedContent.metadata = buildUsageMetadata(
         state.streamingUsage,
-        stopReason,
+        finishInfo,
       );
-    } else if (stopReason) {
-      combinedContent.metadata = { stopReason };
+    } else if (finishInfo) {
+      combinedContent.metadata = finishInfo;
     }
 
-    applyTerminalMetadata(combinedContent, state);
+    applyTerminalMetadata(combinedContent, state, finishInfo);
 
     deps.logger.debug(
       () => `[stream:terminal] emitting combined terminal content`,
       {
         model,
         blockCount: combinedContent.blocks.length,
-        stopReason: combinedContent.metadata?.stopReason,
+        rawStopReason: combinedContent.metadata?.rawStopReason,
         finishReason: combinedContent.metadata?.finishReason,
         hasUsage: Boolean(combinedContent.metadata?.usage),
         hasEmittedTerminalMetadata: state.hasEmittedTerminalMetadata,

@@ -151,8 +151,11 @@ function configWithHooks(
       value: () => ({
         initialize: async () => undefined,
         fireBeforeToolSelectionEvent: async () => ({
-          applyToolConfigModifications: () => ({
-            toolConfig: { allowedFunctionNames },
+          applyToolChoiceModifications: () => ({
+            toolChoice: {
+              mode: 'auto',
+              allowedToolNames: allowedFunctionNames,
+            },
           }),
         }),
         fireBeforeModelEvent: async () => new BeforeModelHookOutput({}),
@@ -167,7 +170,7 @@ function textIContent(text: string): IContent {
   return {
     speaker: 'ai',
     blocks: [{ type: 'text', text }],
-    metadata: { stopReason: 'stop' },
+    metadata: { finishReason: 'stop', rawStopReason: 'stop' },
   };
 }
 
@@ -188,7 +191,8 @@ describe('DirectMessageProcessor AFC sanitization — allowed/disallowed paired'
           speaker: 'ai',
           blocks: [{ type: 'text', text: 'done' }],
           metadata: {
-            stopReason: 'stop',
+            finishReason: 'stop',
+            rawStopReason: 'stop',
             providerMetadata: {
               automaticFunctionCallingHistory: [
                 {
@@ -277,7 +281,8 @@ describe('DirectMessageProcessor AFC sanitization — allowed/disallowed paired'
           speaker: 'ai',
           blocks: [{ type: 'text', text: 'no tools' }],
           metadata: {
-            stopReason: 'stop',
+            finishReason: 'stop',
+            rawStopReason: 'stop',
             providerMetadata: {
               automaticFunctionCallingHistory: [
                 {
@@ -334,7 +339,8 @@ describe('DirectMessageProcessor AFC sanitization — malformed/orphan', () => {
           speaker: 'ai',
           blocks: [{ type: 'text', text: 'text' }],
           metadata: {
-            stopReason: 'stop',
+            finishReason: 'stop',
+            rawStopReason: 'stop',
             providerMetadata: {
               automaticFunctionCallingHistory: 'not-an-array',
             },
@@ -364,7 +370,8 @@ describe('DirectMessageProcessor AFC sanitization — malformed/orphan', () => {
           speaker: 'ai',
           blocks: [{ type: 'text', text: 'orphan' }],
           metadata: {
-            stopReason: 'stop',
+            finishReason: 'stop',
+            rawStopReason: 'stop',
             providerMetadata: {
               automaticFunctionCallingHistory: [
                 {
@@ -431,7 +438,8 @@ describe('DirectMessageProcessor AFC sanitization — malformed/orphan', () => {
           speaker: 'ai',
           blocks: [{ type: 'text', text: 'garbage' }],
           metadata: {
-            stopReason: 'stop',
+            finishReason: 'stop',
+            rawStopReason: 'stop',
             providerMetadata: {
               automaticFunctionCallingHistory: [null, undefined, 42, 'bad'],
             },
@@ -467,7 +475,8 @@ describe('DirectMessageProcessor AFC sanitization — malformed/orphan', () => {
           speaker: 'ai',
           blocks: [{ type: 'text', text: ' continuation' }],
           metadata: {
-            stopReason: 'stop',
+            finishReason: 'stop',
+            rawStopReason: 'stop',
             providerMetadata: {
               automaticFunctionCallingHistory: [
                 { speaker: 'INVALID', blocks: [] },

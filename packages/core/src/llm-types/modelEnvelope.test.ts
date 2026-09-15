@@ -510,7 +510,8 @@ describe('toModelStreamChunk', () => {
       speaker: 'ai',
       blocks: [textBlock('hello')],
       metadata: {
-        stopReason: 'end_turn',
+        finishReason: 'stop',
+        rawStopReason: 'end_turn',
         usage: usage(1, 2, 3),
         id: 'resp-42',
       },
@@ -524,11 +525,11 @@ describe('toModelStreamChunk', () => {
     });
   });
 
-  it('metadata.finishReason length (OpenAI) → max_tokens', () => {
+  it('provider maps length to max_tokens before conversion', () => {
     const ic: IContent = {
       speaker: 'ai',
       blocks: [],
-      metadata: { finishReason: 'length' },
+      metadata: { finishReason: 'max_tokens', rawStopReason: 'length' },
     };
     expect(toModelStreamChunk(ic)).toStrictEqual<ModelStreamChunk>({
       content: ic,
@@ -537,11 +538,11 @@ describe('toModelStreamChunk', () => {
     });
   });
 
-  it('metadata.stopReason MAX_TOKENS (Gemini) → max_tokens', () => {
+  it('provider maps MAX_TOKENS before conversion', () => {
     const ic: IContent = {
       speaker: 'ai',
       blocks: [],
-      metadata: { stopReason: 'MAX_TOKENS' },
+      metadata: { finishReason: 'max_tokens', rawStopReason: 'MAX_TOKENS' },
     };
     const result = toModelStreamChunk(ic);
     expect(result.rawStopReason).toBe('MAX_TOKENS');
@@ -552,7 +553,7 @@ describe('toModelStreamChunk', () => {
     const ic: IContent = {
       speaker: 'ai',
       blocks: [],
-      metadata: { stopReason: 'weird_reason' },
+      metadata: { finishReason: 'other', rawStopReason: 'weird_reason' },
     };
     const result = toModelStreamChunk(ic);
     expect(result.rawStopReason).toBe('weird_reason');
@@ -577,29 +578,29 @@ describe('toModelStreamChunk', () => {
     };
     const result = toModelStreamChunk(ic);
     expect(result.finishReason).toBe('stop');
-    expect(result.rawStopReason).toBe('stop');
+    expect(result.rawStopReason).toBeUndefined();
   });
 
-  it('metadata.finishReason non-canonical value is mapped', () => {
+  it('provider-mapped end_turn passes through', () => {
     const ic: IContent = {
       speaker: 'ai',
       blocks: [],
-      metadata: { finishReason: 'end_turn' },
+      metadata: { finishReason: 'stop', rawStopReason: 'end_turn' },
     };
     const result = toModelStreamChunk(ic);
     expect(result.rawStopReason).toBe('end_turn');
     expect(result.finishReason).toBe('stop');
   });
 
-  it('stopReason preferred over finishReason when both present', () => {
+  it('provider-selected reason is not overridden by the raw reason', () => {
     const ic: IContent = {
       speaker: 'ai',
       blocks: [],
-      metadata: { stopReason: 'end_turn', finishReason: 'length' },
+      metadata: { finishReason: 'other', rawStopReason: 'end_turn' },
     };
     const result = toModelStreamChunk(ic);
     expect(result.rawStopReason).toBe('end_turn');
-    expect(result.finishReason).toBe('stop');
+    expect(result.finishReason).toBe('other');
   });
 
   it('metadata present but no stop/finish/usage/id → bare content chunk', () => {
@@ -617,18 +618,15 @@ describe('toModelStreamChunk', () => {
 describe('toModelStreamChunk property-based', () => {
   it('already-canonical raw passes through unchanged', () =>
     fc.assert(
-      fc.property(
-        fc.constantFrom(...CANONICAL_FINISH_REASONS),
-        (canonical: string) => {
-          const ic: IContent = {
-            speaker: 'ai',
-            blocks: [],
-            metadata: { stopReason: canonical },
-          };
-          const result = toModelStreamChunk(ic);
-          return canonicalChunkPreserved(result, canonical);
-        },
-      ),
+      fc.property(fc.constantFrom(...CANONICAL_FINISH_REASONS), (canonical) => {
+        const ic: IContent = {
+          speaker: 'ai',
+          blocks: [],
+          metadata: { finishReason: canonical, rawStopReason: canonical },
+        };
+        const result = toModelStreamChunk(ic);
+        return canonicalChunkPreserved(result, canonical);
+      }),
     ));
 
   it('any raw stopReason produces a canonical finishReason and preserves raw', () =>
@@ -637,7 +635,7 @@ describe('toModelStreamChunk property-based', () => {
         const ic: IContent = {
           speaker: 'ai',
           blocks: [],
-          metadata: { stopReason: raw },
+          metadata: { finishReason: 'other', rawStopReason: raw },
         };
         const result = toModelStreamChunk(ic);
         expect(typeof result.finishReason).toBe('string');
@@ -653,7 +651,11 @@ describe('toModelStreamChunk property-based', () => {
         const ic: IContent = {
           speaker: 'ai',
           blocks: [textBlock(text)],
-          metadata: { stopReason: 'end_turn', id: 'x' },
+          metadata: {
+            finishReason: 'stop',
+            rawStopReason: 'end_turn',
+            id: 'x',
+          },
         };
         const snapshot = JSON.parse(JSON.stringify(ic));
         toModelStreamChunk(ic);

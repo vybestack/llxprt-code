@@ -16,7 +16,7 @@ import type { StreamLivenessListener } from '@vybestack/llxprt-code-core/utils/s
 import { randomUUID } from 'node:crypto';
 import { isAcceptedTerminalEventType } from './responsesTerminalEvents.js';
 import { createResponsesTerminalError } from './responsesErrorParsing.js';
-import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
+import { mapFinishReason } from './finishReasonMapping.js';
 import type {
   DispatchResult,
   DispatchState,
@@ -428,30 +428,27 @@ function* handleResponseCompleted(
   }
 
   const responseId = event.response?.id;
-  if (event.response?.usage || responseId) {
-    yield {
-      speaker: 'ai',
-      blocks: [],
-      metadata: {
-        ...(event.response?.usage
-          ? {
-              usage: {
-                promptTokens: event.response.usage.input_tokens,
-                completionTokens: event.response.usage.output_tokens,
-                totalTokens: event.response.usage.total_tokens,
-                cachedTokens:
-                  event.response.usage.input_tokens_details?.cached_tokens ?? 0,
-              },
-            }
-          : {}),
-        ...(responseId ? { id: responseId } : {}),
-        ...(responsesStored ? { responsesStored: true } : {}),
-        stopReason: mapFinishReasonToStopReason(terminalReason),
-        finishReason: terminalReason,
-        ...(incompleteReason ? { incompleteReason } : {}),
-      },
-    };
-  }
+  yield {
+    speaker: 'ai',
+    blocks: [],
+    metadata: {
+      ...(event.response?.usage
+        ? {
+            usage: {
+              promptTokens: event.response.usage.input_tokens,
+              completionTokens: event.response.usage.output_tokens,
+              totalTokens: event.response.usage.total_tokens,
+              cachedTokens:
+                event.response.usage.input_tokens_details?.cached_tokens ?? 0,
+            },
+          }
+        : {}),
+      ...(responseId ? { id: responseId } : {}),
+      ...(responsesStored ? { responsesStored: true } : {}),
+      ...mapFinishReason(terminalReason),
+      ...(incompleteReason ? { incompleteReason } : {}),
+    },
+  };
 
   return {
     ...nextState,

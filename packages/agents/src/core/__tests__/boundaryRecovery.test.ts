@@ -471,29 +471,30 @@ describe('applyRequestModifications', () => {
     expect(applyRequestModifications(undefined, rc, 'm')).toBe(rc);
   });
 
-  it('returns converted contents reflecting hook messages when llm_request is present', () => {
+  it('returns hook-supplied contents verbatim when llm_request is present', () => {
+    const replacement: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'replaced one' }] },
+      { speaker: 'human', blocks: [{ type: 'text', text: 'replaced two' }] },
+    ];
     const rc: IContent[] = [histUser('hello'), pendingUser('q')];
     const hook = new BeforeModelHookOutput({
       hookSpecificOutput: {
         hookEventName: 'BeforeModel',
         llm_request: {
           model: 'm',
-          messages: [
-            { role: 'user', content: 'replaced message one' },
-            { role: 'user', content: 'replaced message two' },
-          ],
+          contents: replacement,
         },
       },
     });
     const result = applyRequestModifications(hook, rc, 'm');
     expect(result).not.toBe(rc);
-    expect(result).toHaveLength(2);
-    // After the neutral migration, applyRequestModifications returns IContent[]
-    // (neutral {speaker, blocks}). Assert the observable shape.
+    // F1 (v2): hook contents pass through by reference — no conversion
+    // round-trip that could strip tool calls or ids.
+    expect(result).toBe(replacement);
     const first = result[0];
     expect(first.speaker).toBe('human');
     expect(first.blocks).toStrictEqual([
-      { type: 'text', text: 'replaced message one' },
+      { type: 'text', text: 'replaced one' },
     ]);
   });
 

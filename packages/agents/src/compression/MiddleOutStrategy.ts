@@ -435,7 +435,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
     usage?: UsageStats;
     diagnostics: {
       finishReason?: string;
-      stopReason?: string;
+      rawStopReason?: string;
       blockTypeCounts?: Record<string, number>;
     };
   }> {
@@ -446,7 +446,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
     let lastBlockWasNonText = false;
     let capturedUsage: UsageStats | undefined;
     let finishReason: string | undefined;
-    let stopReason: string | undefined;
+    let rawStopReason: string | undefined;
     const blockTypeCounts: Record<string, number> = {};
 
     try {
@@ -482,15 +482,15 @@ export class MiddleOutStrategy implements CompressionStrategy {
         if (chunk.metadata?.finishReason) {
           finishReason = chunk.metadata.finishReason;
         }
-        if (chunk.metadata?.stopReason) {
-          stopReason = chunk.metadata.stopReason;
+        if (chunk.metadata?.rawStopReason) {
+          rawStopReason = chunk.metadata.rawStopReason;
         }
       }
 
       return {
         text: summary,
         usage: capturedUsage,
-        diagnostics: { finishReason, stopReason, blockTypeCounts },
+        diagnostics: { finishReason, rawStopReason, blockTypeCounts },
       };
     } catch (error) {
       const blocksSummary =
@@ -499,7 +499,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
           .join(',') || 'none';
       throw new CompressionExecutionError(
         'middle-out',
-        `LLM provider call failed: ${error instanceof Error ? error.message : String(error)} [partial diagnostics: finishReason=${finishReason ?? 'none'}, stopReason=${stopReason ?? 'none'}, blocks=${blocksSummary}]`,
+        `LLM provider call failed: ${error instanceof Error ? error.message : String(error)} [partial diagnostics: finishReason=${finishReason ?? 'none'}, rawStopReason=${rawStopReason ?? 'none'}, blocks=${blocksSummary}]`,
         { isTransient: isTransientCompressionError(error) },
       );
     }

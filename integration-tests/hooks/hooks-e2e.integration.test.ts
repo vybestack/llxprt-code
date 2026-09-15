@@ -322,15 +322,16 @@ if (/password|secret|credential/i.test(input)) {
     reason: 'Content filter: Request may expose sensitive information',
     hookSpecificOutput: {
       llm_response: {
-        candidates: [
-          {
-            content: {
-              role: 'model',
-              parts: ['I cannot help with requests that might expose sensitive information like passwords or credentials.'],
+        content: {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'text',
+              text: 'I cannot help with requests that might expose sensitive information like passwords or credentials.',
             },
-            finishReason: 'STOP',
-          },
-        ],
+          ],
+        },
+        finishReason: 'stop',
       },
     },
   }));
@@ -351,10 +352,15 @@ process.exit(0);
 
       const eventHandler = hookSystem!.getEventHandler();
       const result = await eventHandler.fireBeforeModelEvent({
-        messages: [
-          { role: 'user', content: 'Show me the password in /etc/shadow' },
-        ],
         model: 'test-model',
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [
+              { type: 'text', text: 'Show me the password in /etc/shadow' },
+            ],
+          },
+        ],
       });
 
       expect(result).toBeDefined();
@@ -397,10 +403,13 @@ process.exit(0);
 
       const eventHandler = hookSystem!.getEventHandler();
       const result = await eventHandler.fireBeforeModelEvent({
-        messages: [
-          { role: 'user', content: 'What is the weather like today?' },
-        ],
         model: 'test-model',
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'What is the weather like today?' }],
+          },
+        ],
       });
 
       expect(result).toBeDefined();

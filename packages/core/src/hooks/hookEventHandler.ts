@@ -28,6 +28,7 @@ import type {
   NotificationType,
 } from './types.js';
 import { HookEventName } from './types.js';
+import type { HookLLMRequest, HookLLMResponse } from './hookTranslator.js';
 import { DebugLogger } from '../debug/index.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import {
@@ -254,11 +255,12 @@ export class HookEventHandler {
    * @requirement DELTA-HFAIL-001
    */
   async fireBeforeModelEvent(
-    llmRequest: unknown,
+    request: Omit<HookLLMRequest, 'version'>,
   ): Promise<AggregatedHookResult> {
     try {
+      // version is stamped centrally so no call site can forget it
       return await this.executeEventWithFullResult(HookEventName.BeforeModel, {
-        llm_request: llmRequest,
+        llm_request: { ...request, version: 2 },
       });
     } catch (error) {
       return this.buildFailureEnvelope(error, 'fireBeforeModelEvent', {
@@ -274,13 +276,13 @@ export class HookEventHandler {
    * @requirement DELTA-HFAIL-001
    */
   async fireAfterModelEvent(
-    llmRequest: unknown,
-    llmResponse: unknown,
+    request: Omit<HookLLMRequest, 'version'>,
+    response: Omit<HookLLMResponse, 'version'>,
   ): Promise<AggregatedHookResult> {
     try {
       return await this.executeEventWithFullResult(HookEventName.AfterModel, {
-        llm_request: llmRequest,
-        llm_response: llmResponse,
+        llm_request: { ...request, version: 2 },
+        llm_response: { ...response, version: 2 },
       });
     } catch (error) {
       return this.buildFailureEnvelope(error, 'fireAfterModelEvent', {
@@ -296,12 +298,12 @@ export class HookEventHandler {
    * @requirement DELTA-HFAIL-001
    */
   async fireBeforeToolSelectionEvent(
-    llmRequest: unknown,
+    request: Omit<HookLLMRequest, 'version'>,
   ): Promise<AggregatedHookResult> {
     try {
       return await this.executeEventWithFullResult(
         HookEventName.BeforeToolSelection,
-        { llm_request: llmRequest },
+        { llm_request: { ...request, version: 2 } },
       );
     } catch (error) {
       return this.buildFailureEnvelope(error, 'fireBeforeToolSelectionEvent', {

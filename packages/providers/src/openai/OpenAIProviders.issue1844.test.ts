@@ -96,8 +96,8 @@ describe('issue #1844 – OpenAI terminal metadata propagation', () => {
 
     const withMeta = results.find((result) => result.metadata);
     expect(withMeta).toBeDefined();
-    // stopReason is normalized (stop → end_turn), finishReason preserves raw value
-    expect(withMeta!.metadata!.stopReason).toBe('end_turn');
+    // Both the normalized signal and native diagnostic value are retained.
+    expect(withMeta!.metadata!.rawStopReason).toBe('stop');
     expect(withMeta!.metadata!.finishReason).toBe('stop');
   });
 
@@ -123,8 +123,8 @@ describe('issue #1844 – OpenAI terminal metadata propagation', () => {
 
     const withMeta = results.find((result) => result.metadata);
     expect(withMeta).toBeDefined();
-    // stopReason is normalized (tool_calls → tool_use), finishReason preserves raw value
-    expect(withMeta!.metadata!.stopReason).toBe('tool_use');
+    // Both the normalized signal and native diagnostic value are retained.
+    expect(withMeta!.metadata!.rawStopReason).toBe('tool_calls');
     expect(withMeta!.metadata!.finishReason).toBe('tool_calls');
   });
 
@@ -194,7 +194,7 @@ describe('issue #1844 – OpenAI terminal metadata propagation', () => {
     const lastChunk = results[results.length - 1];
 
     expect(continuationRequested).toBe(false);
-    expect(lastChunk.metadata?.stopReason).toBe('end_turn');
+    expect(lastChunk.metadata?.rawStopReason).toBe('stop');
     expect(lastChunk.metadata?.finishReason).toBe('stop');
   });
 
@@ -280,7 +280,7 @@ describe('issue #1844 – OpenAI terminal metadata propagation', () => {
     ]);
     // Final chunk is metadata-only
     expect(results[2].blocks).toStrictEqual([]);
-    expect(results[2].metadata?.stopReason).toBe('end_turn');
+    expect(results[2].metadata?.rawStopReason).toBe('stop');
     expect(results[2].metadata?.finishReason).toBe('stop');
   });
 
@@ -354,8 +354,8 @@ describe('issue #1844 – OpenAI terminal metadata propagation', () => {
       type: 'thinking',
       thought: 'First think through the request.',
     });
-    // stopReason is normalized (stop → end_turn), finishReason preserves raw value
-    expect(results[0].metadata?.stopReason).toBe('end_turn');
+    // Both the normalized signal and native diagnostic value are retained.
+    expect(results[0].metadata?.rawStopReason).toBe('stop');
     expect(results[0].metadata?.finishReason).toBe('stop');
   });
 });

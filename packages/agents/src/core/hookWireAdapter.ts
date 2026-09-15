@@ -6,227 +6,113 @@
 
 /**
  * @plan:PLAN-20260707-AGENTNEUTRAL.P07
+ * @plan PLAN-20260914-HOOKWIREV2 (issue #2624)
  * @requirement:REQ-002.6
  *
  * The SINGLE named boundary module where the hook JSON-wire shape
- * (core-owned HookGenerateContentResponse) is converted to/from neutral
- * agents types. This is the ONLY place in agents where the hook wire shape
- * is read for the purpose of producing neutral ModelStreamChunk values.
+ * (core-owned HookLLMResponse) is converted to neutral agents types. This is
+ * the ONLY place in agents where the hook wire shape is read for the purpose
+ * of producing neutral ModelStreamChunk values.
  *
- * The core hook wire DTO (HookGenerateContentResponse) is a DELIBERATELY
- * PRESERVED external wire boundary (byte-compatible). This adapter converts
- * it to neutral types at this edge so the agents pipeline never touches the
- * wire shape directly.
+ * The v2 hook wire payload is already neutral: content is an IContent that
+ * passes through by reference (tool_call/tool_response/thinking blocks
+ * preserved verbatim), finishReason is the canonical value, and usage is
+ * neutral UsageStats. No provider vocabulary is translated here — hooks are
+ * a trusted extension seam (#2624).
  */
 
-import type { HookGenerateContentResponse } from '@vybestack/llxprt-code-core/hooks/hookTranslator.js';
-import {
-  mapGeminiFinishReason,
-  type ModelStreamChunk,
-  type ModelOutput,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { HookLLMResponse } from '@vybestack/llxprt-code-core/hooks/hookTranslator.js';
 import type {
-  ContentBlock,
-  UsageStats,
-} from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
+  ModelStreamChunk,
+  ModelOutput,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 /**
- * Extracts neutral ContentBlock[] from a hook JSON-wire response.
- *
- * Shared block-extraction logic: prefers candidate parts, then the top-level
- * `text` field, falling back to the provided default blocks when neither is
- * present.
+ * Merge a v2 hook response payload onto a base chunk/output. The hook's
+ * content replaces the base content directly; optional finishReason /
+ * rawStopReason / usage fields override only when the hook supplied them.
  */
-function extractBlocksFromHookResponse(
-  response: HookGenerateContentResponse,
-  fallbackBlocks: ContentBlock[],
-): ContentBlock[] {
-  const candidate = response.candidates?.[0];
-  if (candidate?.content?.parts) {
-    const iContent = ContentConverters.toIContent({
-      role: candidate.content.role ?? 'model',
-      parts: candidate.content.parts,
-    });
-    return iContent.blocks;
+function withHookResponseFields<T extends ModelOutput>(
+  base: T,
+  response: HookLLMResponse,
+): T {
+  const result: T = { ...base, content: response.content };
+  if (response.usage !== undefined) {
+    result.usage = response.usage;
   }
-  if (response.text !== undefined) {
-    return [{ type: 'text', text: response.text }];
+  if (response.finishReason !== undefined) {
+    result.finishReason = response.finishReason;
   }
-  return fallbackBlocks;
+  if (response.rawStopReason !== undefined) {
+    result.rawStopReason = response.rawStopReason;
+  }
+  return result;
 }
 
 /**
- * Maps hook JSON-wire usageMetadata to neutral UsageStats.
- *
- * Returns undefined when the hook response carries no usageMetadata.
- */
-function usageFromHookResponse(
-  response: HookGenerateContentResponse,
-): UsageStats | undefined {
-  const u = response.usageMetadata;
-  if (!u) {
-    return undefined;
-  }
-  const usage: UsageStats = {
-    promptTokens: u.promptTokenCount ?? 0,
-    completionTokens: u.candidatesTokenCount ?? 0,
-    totalTokens: u.totalTokenCount ?? 0,
-  };
-  const cached = u.cachedContentTokenCount;
-  if (cached !== undefined && cached !== null && typeof cached === 'number') {
-    usage.cachedTokens = cached;
-  }
-  return usage;
-}
-function finishReasonFromHookResponse(response: HookGenerateContentResponse): {
-  finishReason: ModelStreamChunk['finishReason'];
-  rawStopReason?: string;
-} {
-  const finishReason = response.candidates?.[0]?.finishReason;
-  if (finishReason === undefined) {
-    return { finishReason: undefined };
-  }
-  const mapped = mapGeminiFinishReason(finishReason);
-  return {
-    finishReason: mapped.finishReason,
-    rawStopReason: mapped.rawStopReason,
-  };
-}
-
-/**
- * Maps a hook-modified JSON-wire response to a neutral ModelStreamChunk.
+ * Maps a hook-modified v2 response payload to a neutral ModelStreamChunk.
  *
  * Called from StreamProcessor._processAfterModelHook when the AfterModel
- * hook returns a MODIFY decision. The hook wire shape is converted to
- * neutral ContentBlock[] at this boundary; no Google-shaped value re-enters
- * the agents pipeline.
+ * hook returns a MODIFY decision. `ModelStreamChunk` is an alias of
+ * `ModelOutput`, so this single mapper also serves the direct
+ * (non-streaming) path in DirectMessageProcessor._applyAfterModelResult.
  *
  * @plan:PLAN-20260707-AGENTNEUTRAL.P07
  * @requirement:REQ-002.6
  * @pseudocode stream-processor-neutral.md lines 16-19
  *
- * @param modified - The hook-modified JSON-wire response (may be undefined if hook did not modify)
- * @param base - The base neutral chunk to derive speaker/usage/finishReason from
+ * @param modified - The hook-modified v2 response (may be undefined if hook did not modify)
+ * @param base - The base neutral chunk to derive optional fields from
  * @returns A neutral ModelStreamChunk reflecting the hook modification, or undefined if not modified
  */
 export function afterModelModifiedToChunk(
-  modified: HookGenerateContentResponse | undefined,
+  modified: HookLLMResponse | undefined,
   base: ModelStreamChunk,
 ): ModelStreamChunk | undefined {
   if (modified === undefined) {
     return undefined;
   }
 
-  const result: ModelStreamChunk = {
-    ...base,
-    content: {
-      speaker: base.content.speaker,
-      blocks: extractBlocksFromHookResponse(modified, base.content.blocks),
-      metadata: base.content.metadata,
-    },
-  };
-
-  const usage = usageFromHookResponse(modified);
-  if (usage) {
-    result.usage = usage;
-  }
-
-  const fr = finishReasonFromHookResponse(modified);
-  if (fr.finishReason !== undefined) {
-    result.finishReason = fr.finishReason;
-  }
-  if (fr.rawStopReason !== undefined) {
-    result.rawStopReason = fr.rawStopReason;
-  }
-
-  return result;
+  return withHookResponseFields(base, modified);
 }
 
 /**
- * Maps a hook-modified JSON-wire response to a neutral ModelOutput.
- *
- * Direct-path counterpart of `afterModelModifiedToChunk`. Used by
- * DirectMessageProcessor._applyAfterModelResult when the AfterModel hook
- * returns a MODIFY decision on the non-streaming path.
- *
- * @plan:PLAN-20260707-AGENTNEUTRAL.P13
- * @requirement:REQ-002.6
- * @requirement:REQ-004.1
- * @pseudocode directmessageprocessor-neutral.md lines 25-30
- *
- * @param modified - The hook-modified JSON-wire response
- * @param base - The base neutral ModelOutput to derive speaker/usage from
- * @returns A neutral ModelOutput reflecting the hook modification, or undefined if not modified
- */
-export function afterModelModifiedToModelOutput(
-  modified: HookGenerateContentResponse | undefined,
-  base: ModelOutput,
-): ModelOutput | undefined {
-  if (modified === undefined) {
-    return undefined;
-  }
-
-  const result: ModelOutput = {
-    ...base,
-    content: {
-      speaker: base.content.speaker,
-      blocks: extractBlocksFromHookResponse(modified, base.content.blocks),
-      metadata: base.content.metadata,
-    },
-  };
-
-  const usage = usageFromHookResponse(modified);
-  if (usage) {
-    result.usage = usage;
-  }
-
-  const fr = finishReasonFromHookResponse(modified);
-  if (fr.finishReason !== undefined) {
-    result.finishReason = fr.finishReason;
-  }
-  if (fr.rawStopReason !== undefined) {
-    result.rawStopReason = fr.rawStopReason;
-  }
-
-  return result;
-}
-
-/**
- * Maps a before-model blocking JSON-wire response to a neutral ModelOutput.
+ * Maps a before-model blocking v2 response to a neutral ModelOutput.
  *
  * Used by DirectMessageProcessor when a BeforeModel hook blocks with a
- * synthetic response. The hook wire shape is converted to neutral
- * ContentBlock[] at this boundary; no Google-shaped value re-enters the
- * agents pipeline.
+ * synthetic response. The hook's content passes through directly; the block
+ * reason text is the fallback when the synthetic response carries no blocks.
  *
  * @plan:PLAN-20260707-AGENTNEUTRAL.P13
  * @requirement:REQ-004.1
  * @pseudocode directmessageprocessor-neutral.md lines 20-22
  *
  * @param reason - The effective block reason (may be undefined)
- * @param synthetic - The hook-supplied synthetic JSON-wire response
- * @returns A neutral ModelOutput carrying the block reason/text
+ * @param synthetic - The hook-supplied synthetic v2 response
+ * @returns A neutral ModelOutput carrying the hook content or the block reason
  */
 export function beforeModelBlockingToModelOutput(
   reason: string | undefined,
-  synthetic: HookGenerateContentResponse,
+  synthetic: HookLLMResponse,
 ): ModelOutput {
   const result: ModelOutput = {
-    content: {
-      speaker: 'ai',
-      blocks: extractBlocksFromHookResponse(
-        synthetic,
-        reason !== undefined
-          ? [{ type: 'text', text: reason }]
-          : [{ type: 'text', text: 'Execution blocked' }],
-      ),
-    },
+    content:
+      synthetic.content.blocks.length > 0
+        ? synthetic.content
+        : {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: reason ?? 'Execution blocked' }],
+          },
   };
 
-  const usage = usageFromHookResponse(synthetic);
-  if (usage) {
-    result.usage = usage;
+  if (synthetic.usage !== undefined) {
+    result.usage = synthetic.usage;
+  }
+  if (synthetic.finishReason !== undefined) {
+    result.finishReason = synthetic.finishReason;
+  }
+  if (synthetic.rawStopReason !== undefined) {
+    result.rawStopReason = synthetic.rawStopReason;
   }
 
   return result;
