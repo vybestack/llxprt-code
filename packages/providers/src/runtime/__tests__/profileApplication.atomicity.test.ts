@@ -108,6 +108,61 @@ describe('applyProfileWithGuards atomicity (#2534 C5)', () => {
     );
   });
 
+  it('rolls back profile tool policy imported mid-cascade when a later step fails', async () => {
+    // Seed the persisted tool policy a prior profile import leaves behind:
+    // both the settings.tools mirror and the global['tools'] copy.
+    await settingsServiceStub.importFromProfile({
+      providers: { openai: { model: 'gpt-4', 'auth-key': 'keep-me' } },
+      tools: { allowed: ['read_file', 'glob'], disabled: [] },
+    });
+    settingsServiceStub.setCurrentProfileName('previous-profile');
+
+    // A provider switch persists the switched-to profile — including its
+    // tool policy — into the settings store; simulate that composition,
+    // then fail the cascade AFTER the import has landed.
+    switchActiveProviderMock.mockImplementation(async () => {
+      await settingsServiceStub.importFromProfile({
+        providers: { anthropic: { model: 'claude-3' } },
+        tools: { allowed: [], disabled: ['write_file', 'run_shell_command'] },
+      });
+      return { infoMessages: [], changed: true };
+    });
+    updateActiveProviderBaseUrlMock.mockRejectedValueOnce(
+      new Error('injected post-import failure'),
+    );
+
+    const error = await applyProfileWithGuards(baseProfile).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe('injected post-import failure');
+
+    // Tool policy is back to the pre-application values on both persisted
+    // surfaces: the settings.tools mirror and the global['tools'] copy.
+    expect(settingsServiceStub.tools).toStrictEqual({
+      allowed: ['read_file', 'glob'],
+      disabled: [],
+    });
+    expect(settingsServiceStub.globalTools).toStrictEqual({
+      allowed: ['read_file', 'glob'],
+      disabled: [],
+    });
+    // The partially-imported provider scope was rolled back away and the
+    // pre-application profile name survived.
+    expect(settingsServiceStub.getProviderSettings('anthropic')).toStrictEqual(
+      {},
+    );
+    expect(settingsServiceStub.getProviderSettings('openai')).toStrictEqual({
+      model: 'gpt-4',
+      'auth-key': 'keep-me',
+    });
+    expect(settingsServiceStub.getCurrentProfileName()).toBe(
+      'previous-profile',
+    );
+  });
+
   it('keeps applied state on the success path (no spurious rollback)', async () => {
     settingsServiceStub.setProviderSetting('openai', 'auth-key', 'old-key');
     updateActiveProviderBaseUrlMock.mockResolvedValue({});

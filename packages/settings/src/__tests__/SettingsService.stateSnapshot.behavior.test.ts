@@ -8,8 +8,9 @@
  * #2534 review Finding 5: direct behavioral tests for
  * SettingsService.exportForStateSnapshot / restoreFromStateSnapshot. The C5
  * atomicity tests cover these APIs only through stub mirrors; these tests
- * exercise the real service: round-trip exactness, deep-clone isolation, and
- * the documented no-event-emission rollback contract.
+ * exercise the real service: round-trip exactness, deep-clone isolation,
+ * tools-mirror coverage (#2534 C5 CodeRabbit finding), and the documented
+ * no-event-emission rollback contract.
  */
 
 import { describe, it, expect } from 'bun:test';
@@ -102,6 +103,116 @@ describe('SettingsService — state snapshot round-trip', () => {
       providers: structuredClone(second.providers),
     });
     expect(svc.get('activeProvider')).toBe('anthropic');
+  });
+});
+
+describe('SettingsService — tools mirror snapshot round-trip', () => {
+  it('restores the tools mirror and the global tools copy after an importFromProfile mutation', async () => {
+    const svc = new SettingsService();
+    await svc.importFromProfile({
+      defaultProvider: 'openai',
+      providers: { openai: { model: 'gpt-4o' } },
+      tools: {
+        allowed: ['read_file', 'glob'],
+        disabled: ['run_shell_command'],
+      },
+    });
+    svc.setCurrentProfileName('previous-profile');
+    const snapshot = svc.exportForStateSnapshot();
+
+    // Mutate tool policy the way a profile transition does: both the
+    // dedicated settings.tools mirror and the global['tools'] copy change.
+    await svc.importFromProfile({
+      defaultProvider: 'anthropic',
+      providers: { anthropic: { model: 'claude-3' } },
+      tools: { allowed: [], disabled: ['write_file', 'run_shell_command'] },
+    });
+    // Sanity: the mutation took effect before the rollback.
+    expect(svc.getAllGlobalSettings()['tools.allowed']).toStrictEqual([]);
+    expect(svc.getAllGlobalSettings()['tools.disabled']).toStrictEqual([
+      'write_file',
+      'run_shell_command',
+    ]);
+
+    svc.restoreFromStateSnapshot(snapshot);
+
+    // The settings.tools mirror itself is back (the snapshot export
+    // captures it, not just the global copy).
+    expect(svc.exportForStateSnapshot().tools).toStrictEqual({
+      allowed: ['read_file', 'glob'],
+      disabled: ['run_shell_command'],
+    });
+    // The global['tools'] copy is back.
+    expect(svc.get('tools')).toStrictEqual({
+      allowed: ['read_file', 'glob'],
+      disabled: ['run_shell_command'],
+    });
+    // The getAllGlobalSettings overlay — including the mirror-driven flat
+    // tools.allowed / tools.disabled keys — reports the pre-mutation policy.
+    const overlay = svc.getAllGlobalSettings();
+    expect(overlay['tools']).toStrictEqual({
+      allowed: ['read_file', 'glob'],
+      disabled: ['run_shell_command'],
+    });
+    expect(overlay['tools.allowed']).toStrictEqual(['read_file', 'glob']);
+    expect(overlay['tools.disabled']).toStrictEqual(['run_shell_command']);
+    // The mid-mutation provider scope is gone again.
+    expect(svc.getProviderSettings('anthropic')).toStrictEqual({});
+  });
+
+  it('leaves the tools mirror absent after rollback when the pre-snapshot state had none', async () => {
+    const svc = new SettingsService();
+    svc.set('activeProvider', 'openai');
+    const snapshot = svc.exportForStateSnapshot();
+    // Control: export omits the tools key when no mirror exists.
+    expect(snapshot.tools).toBeUndefined();
+
+    await svc.importFromProfile({
+      defaultProvider: 'anthropic',
+      providers: { anthropic: { model: 'claude-3' } },
+      tools: { allowed: [], disabled: ['write_file'] },
+    });
+    // Sanity: the import created tool policy on every surface.
+    expect(svc.getAllGlobalSettings()['tools.disabled']).toStrictEqual([
+      'write_file',
+    ]);
+
+    svc.restoreFromStateSnapshot(snapshot);
+
+    // Rollback restores absence exactly: no mirror, no global copy, no
+    // overlay keys — matching what export produced from that state.
+    const overlay = svc.getAllGlobalSettings();
+    expect(overlay['tools']).toBeUndefined();
+    expect(overlay['tools.allowed']).toBeUndefined();
+    expect(overlay['tools.disabled']).toBeUndefined();
+    expect(svc.get('tools')).toBeUndefined();
+    expect(svc.exportForStateSnapshot().tools).toBeUndefined();
+  });
+
+  it('deep-clones the tools mirror in both snapshot directions', async () => {
+    const svc = new SettingsService();
+    await svc.importFromProfile({
+      tools: { allowed: ['read_file'], disabled: [] },
+    });
+
+    // Export direction: the handed-out snapshot shares no state with the
+    // service.
+    const snapshot = svc.exportForStateSnapshot();
+    expect(snapshot.tools).toBeDefined();
+    snapshot.tools?.allowed?.push('tampered');
+    expect(svc.getAllGlobalSettings()['tools.allowed']).toStrictEqual([
+      'read_file',
+    ]);
+
+    // Restore direction: a later import cannot reach a snapshot object
+    // handed out earlier.
+    svc.restoreFromStateSnapshot(snapshot);
+    await svc.importFromProfile({
+      tools: { allowed: ['glob'], disabled: [] },
+    });
+    expect(svc.getAllGlobalSettings()['tools.allowed']).toStrictEqual(['glob']);
+    // The snapshot object kept its own (tampered) copy.
+    expect(snapshot.tools?.allowed).toStrictEqual(['read_file', 'tampered']);
   });
 });
 
