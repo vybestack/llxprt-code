@@ -16,7 +16,6 @@ import type {
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import { toolDeclarationsFromLegacyToolset } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
@@ -69,6 +68,7 @@ import type {
 import {
   toModelStreamChunk,
   emptyModelOutput,
+  toolDeclarationsFromLegacyToolset,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { recordAbandonedStreamAttempt } from './tokenUsageActualLogger.js';
 import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';

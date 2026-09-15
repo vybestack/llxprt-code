@@ -646,7 +646,7 @@ have reviewed, because a BeforeModel/AfterModel hook can rewrite anything the
 model sees or emits, including injecting tool calls that execute with your
 permissions.
 
-### v1 → v2 migration
+### v1 to v2 migration
 
 The v2 wire format is breaking: the runtime no longer decodes v1 hook
 payloads at all (no fallback). Hooks that returned v1 shapes are silently

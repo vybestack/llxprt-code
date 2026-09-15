@@ -20,7 +20,10 @@ import type {
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type {
+  ModelOutput,
+  ToolChoice,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
   toModelStreamChunk,
   emptyModelOutput,
@@ -44,7 +47,6 @@ import {
 import type { HookSystem } from '@vybestack/llxprt-code-core/hooks/hookSystem.js';
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { HookLLMResponse } from '@vybestack/llxprt-code-core/hooks/hookTranslator.js';
-import type { ToolChoice } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 
 type ToolGroupArray = Array<{
   functionDeclarations: Array<{

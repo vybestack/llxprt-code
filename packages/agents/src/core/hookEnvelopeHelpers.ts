@@ -20,11 +20,11 @@ import type {
   HookLLMResponse,
 } from '@vybestack/llxprt-code-core/hooks/hookTranslator.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
   toolDeclarationsFromLegacyToolset,
   type LegacyToolsetLike,
-} from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
+  type ModelOutput,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 /**
  * Request envelope for the BeforeToolSelection fire site: the candidate

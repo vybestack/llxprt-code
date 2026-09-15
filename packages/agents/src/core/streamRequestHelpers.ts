@@ -16,12 +16,12 @@ import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/ty
 import {
   toolDeclarationsFromLegacyToolset,
   type ToolChoice,
-} from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
+  type ModelStreamChunk,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type {
   IContent,
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { SendMessageParams } from './chatSession.js';
 import { logApiRequest } from './turnLogging.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';

@@ -9,7 +9,10 @@ import type {
   ModelStreamChunk,
   ModelOutput,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import {
+  toModelStreamChunk,
+  toolDeclarationsFromLegacyToolset,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { StreamOutputAccumulator } from './streamOutputAccumulator.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { MediaAdmissionRelease } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
@@ -23,7 +26,6 @@ import { flushRuntimeAuthScope } from '@vybestack/llxprt-code-auth';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import { toolDeclarationsFromLegacyToolset } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import type {
   RuntimeGenerateChatOptions as GenerateChatOptions,
   RuntimeProviderToolset as ProviderToolset,
