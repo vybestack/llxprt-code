@@ -357,3 +357,22 @@ agents typecheck error documented above. Response:
   stale local `dist` from the merge and cleared after `npm run build`
   (BUILD_EXIT=0, CORE_TC=0). Logs: `tmp/verify3293/post-merge-verify.log`,
   `tmp/verify3293/rebuild-typecheck.log`.
+
+## Execution log addendum 2 (2026-09-14, review decision)
+
+Removed `packages/tools/src/__tests__/removed-dead-modules.test.ts` at
+Andrew's review. Rationale recorded: a module-absence guard pins a
+historical deletion, not a live contract. Accidental reintroduction of a
+deleted private file is not a plausible failure mode; a deliberate new
+file at those paths is ordinary reviewed work. The live-leaf resolution
+assertions were redundant with the package's own import graph. The
+red-first evidence from the guard remains in the P1 logs
+(`tmp/verify3293-implementation/p1-red.log`, `p1-green.log`); only the
+permanent artifact is gone.
+
+The `requireOne` behavior pins stay: they assert current `validate`
+behavior — an unknown keyword in a schema must not fail validation —
+which is a live contract for externally sourced schemas (MCP tool
+schemas are third-party input and can carry arbitrary keys), not a
+marker of this deletion. Focused suite after removal: 36/36 across the
+four remaining files.
