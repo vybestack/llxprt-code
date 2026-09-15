@@ -123,7 +123,36 @@ bodies through the SDK once the wrapper is wired.
 
 ## Evidence
 
-- Verification logs: `tmp/issue3658/`
+- Verification logs: `tmp/issue3658/` (initial round) and `tmp/issue3658/remediation1/` (remediation + full gates), `tmp/issue3658/review/` and `tmp/issue3658/review2/` (reviewer probes).
+- Commits: d6ab6e7104 (wrapper + skip-log + tests), 1fdee5b844 (review remediation).
 - Related: #3652 (parent), #2450 (retry pin), #1846 (inline consumption),
   #3049 (no mid-stream replay), #584/#764 (continuation path inherits fix),
   #2817 (transport parity suite).
+
+## Review outcome (two rounds, at cap)
+
+Round 1 (deepthinker) REJECT with two findings, both fixed in 1fdee5b844:
+- Blocker-Fix — wrapper captured `response.body` once; after `clone()` the
+  original served a stale stream (empty reads for string-backed bodies,
+  "ReadableStream is locked" for stream-backed, reproduced on Bun 1.3.14).
+  Fix: body state served through a swappable `bodySource` (body getter
+  re-reads + memoizes per reference); `clone()` tees the current body so
+  original and clone each consume their own branch with full bytes.
+- In-scope-Fix — skip-log forwarded unvalidated `chunkRecord.object`; a
+  nested 100k-char payload produced a ~100kB record. Fix: string-only,
+  truncated to 64 chars, non-strings omitted.
+
+Round 2 verdict: APPROVE-WITH-FINDINGS. Fresh reruns: providers 641/641,
+lint:ci, lint-eslint-guard, typecheck all pass; recorded full-test/build/
+smoke evidence audited (exit 0, live haiku). Deferred findings (documented,
+no current consumer; revisit if one appears):
+- `clone()` loses `url`/`type`/`redirected` fidelity (Response constructor
+  cannot restore them); the OpenAI SDK never clones responses.
+- Disturbed-body clone edges diverge from Bun-native behavior (clone after
+  partial read throws per WHATWG where Bun silently succeeds; clone after
+  full consumption yields empty branches where native throws).
+- Rejected: wrapper is not `instanceof Response` — the SDK only
+  instanceof-checks on the upload path, which the wrapper never touches.
+
+OCR was not run for this effort (paused until re-enabled); the two-cycle
+review requirement was met with the deepthinker and reviewer subagents.
