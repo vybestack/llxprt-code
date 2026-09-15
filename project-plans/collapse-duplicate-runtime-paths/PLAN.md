@@ -129,6 +129,14 @@ and Config become readers/caches, never independent persistence).
     legacy `contentGeneratorConfig.model` → `this.model` fallback chain is
     removed once the transition maintains the projection. Constructor paths
     that seed a model must land in the store (same transition).
+  - REMEDIATION NOTE (post full-suite run): the constructor store-seeding
+    covers Configs constructed with a provider; providerless/bootstrap Configs
+    (no activeProvider) keep `protected model` as a TERMINAL read fallback
+    (store → contentGeneratorConfig.model projection → constructor fallback),
+    with exactly main's four write points (constructor/setModel/
+    resetModelToDefault). This is not a second store: reads prefer the store
+    and projection; the field exists because flashFallback and session-isolation
+    behavior depend on a providerless Config returning its constructed model.
 - **C3 ONE provider/model read resolution**: unify
   `runtimeAccessors._internal.resolveActiveProviderName` (config-first chain)
   vs `getActiveProviderName` (manager-first chain) into one exported
