@@ -63,11 +63,6 @@ type CliSettingsService = ReturnType<
 >['settingsService'];
 type CliOAuthManager = NonNullable<ReturnType<typeof maybeGetCliOAuthManager>>;
 
-const resolveRuntimeProfileProviderName = resolveActiveProviderName as (
-  settingsService: CliSettingsService,
-  config: CliRuntimeConfig,
-) => string | null;
-
 type RuntimeSnapshotConfig = Omit<
   CliRuntimeConfig,
   | 'getProvider'
@@ -242,7 +237,7 @@ export function buildRuntimeProfileSnapshot(): Profile {
   const snapshotProviderManager =
     providerManager as RuntimeSnapshotProviderManager;
   const providerName =
-    resolveRuntimeProfileProviderName(settingsService, config) ??
+    resolveActiveProviderName() ??
     snapshotProviderManager.getActiveProviderName?.() ??
     snapshotConfig.getProvider?.() ??
     'openai';
@@ -776,13 +771,13 @@ export function setDefaultProfileName(profileName: string | null): void {
 }
 
 export function getRuntimeDiagnosticsSnapshot(): RuntimeDiagnosticsSnapshot {
-  const { config, settingsService, providerManager } = getCliRuntimeServices();
+  const { config, providerManager } = getCliRuntimeServices();
   const snapshotConfig = config as RuntimeSnapshotConfig;
   const snapshotProviderManager =
     providerManager as RuntimeSnapshotProviderManager;
 
   const providerName =
-    resolveRuntimeProfileProviderName(settingsService, config) ??
+    resolveActiveProviderName() ??
     snapshotProviderManager.getActiveProviderName?.() ??
     null;
   const modelValue = getActiveModelName();

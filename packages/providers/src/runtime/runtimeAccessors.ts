@@ -386,19 +386,30 @@ export function getActiveRuntimeKind(): RuntimeKind | undefined {
 
 const RESERVED_PROVIDER_SETTING_KEYS = new Set(getProviderConfigKeys());
 
-function resolveActiveProviderName(
-  settingsService: SettingsService,
-  config: Config,
-): string | null {
-  if (typeof config.getProvider === 'function') {
-    const provider = config.getProvider();
-    if (provider && provider.trim() !== '') {
-      return provider;
-    }
+/**
+ * #2534 Domain C3: the ONE active-provider resolution. Order: the settings
+ * global 'activeProvider' store (the authoritative owner since C1), then the
+ * ProviderManager runtime cache as fallback. The store can be momentarily
+ * ahead of the manager cache during identity resolution (e.g. a resolved
+ * codex identity while the manager still runs gemini), which is why the
+ * store wins — the pinned contract in runtimeAccessors.spec.
+ */
+export function resolveActiveProviderName(): string | null {
+  const { settingsService, providerManager } = getCliRuntimeServices();
+  const stored = settingsService.get('activeProvider');
+  if (typeof stored === 'string' && stored.trim() !== '') {
+    return stored;
   }
-  const fromSettings = settingsService.get('activeProvider');
-  if (typeof fromSettings === 'string' && fromSettings.trim() !== '') {
-    return fromSettings;
+  // The cache fallback is best-effort: consumers of this resolution
+  // (getActiveProviderStatus) deliberately degrade when the manager itself
+  // is broken, so a throwing cache read must not escape.
+  try {
+    const cached = providerManager.getActiveProviderName();
+    if (cached !== undefined && cached.trim() !== '') {
+      return cached;
+    }
+  } catch {
+    // fall through to null
   }
   return null;
 }
@@ -458,8 +469,8 @@ function getActiveProviderOrThrow() {
 }
 
 export function getActiveModelName(): string {
-  const { config, settingsService, providerManager } = getCliRuntimeServices();
-  const providerName = resolveActiveProviderName(settingsService, config);
+  const { config, settingsService } = getCliRuntimeServices();
+  const providerName = resolveActiveProviderName();
   if (providerName) {
     const providerSettings = getProviderSettingsSnapshot(
       settingsService,
@@ -477,7 +488,7 @@ export function getActiveModelName(): string {
   }
 
   try {
-    const provider = providerManager.getActiveProvider();
+    const provider = getActiveProviderOrThrow();
     return provider?.getDefaultModel?.() ?? '';
   } catch {
     return '';
@@ -545,12 +556,12 @@ function resolveProviderIsPaidMode(
 }
 
 export function getActiveProviderStatus(): ProviderRuntimeStatus {
-  const { config, settingsService, providerManager } = getCliRuntimeServices();
+  const { providerManager } = getCliRuntimeServices();
   const resolvedModel = getActiveModelName();
   const modelName =
     resolvedModel && resolvedModel.trim() !== '' ? resolvedModel : null;
 
-  const resolvedName = resolveActiveProviderName(settingsService, config);
+  const resolvedName = resolveActiveProviderName();
 
   if (resolvedName && resolvedName.trim() !== '') {
     const provider = safeCall('resolve configured provider', () =>
@@ -651,8 +662,8 @@ export function clearSessionSetting(key: string): void {
 }
 
 export function getActiveModelParams(): Record<string, unknown> {
-  const { config, settingsService } = getCliRuntimeServices();
-  const providerName = resolveActiveProviderName(settingsService, config);
+  const { settingsService } = getCliRuntimeServices();
+  const providerName = resolveActiveProviderName();
   if (!providerName) {
     return {};
   }
@@ -664,8 +675,8 @@ export function getActiveModelParams(): Record<string, unknown> {
 }
 
 export function setActiveModelParam(name: string, value: unknown): void {
-  const { config, settingsService } = getCliRuntimeServices();
-  const providerName = resolveActiveProviderName(settingsService, config);
+  const { settingsService } = getCliRuntimeServices();
+  const providerName = resolveActiveProviderName();
   if (!providerName) {
     throw new Error('No active provider available to set model parameters.');
   }
@@ -673,8 +684,8 @@ export function setActiveModelParam(name: string, value: unknown): void {
 }
 
 export function clearActiveModelParam(name: string): void {
-  const { config, settingsService } = getCliRuntimeServices();
-  const providerName = resolveActiveProviderName(settingsService, config);
+  const { settingsService } = getCliRuntimeServices();
+  const providerName = resolveActiveProviderName();
   if (!providerName) {
     throw new Error('No active provider available to clear model parameters.');
   }
@@ -687,8 +698,7 @@ export function clearActiveModelParam(name: string): void {
  * array when the provider/model has no alias rules or no alias config.
  */
 export function getUnallowedParametersForActiveModel(): string[] {
-  const { config, settingsService } = getCliRuntimeServices();
-  const providerName = resolveActiveProviderName(settingsService, config);
+  const providerName = resolveActiveProviderName();
   if (!providerName) {
     return [];
   }
@@ -718,9 +728,8 @@ export const NO_ACTIVE_PROVIDER_ERROR_MESSAGE =
   'No active provider is configured.';
 
 export function getActiveProviderName(): string {
-  const { providerManager } = getCliRuntimeServices();
-  const providerName = providerManager.getActiveProviderName();
-  if (providerName === undefined) {
+  const providerName = resolveActiveProviderName();
+  if (providerName === null) {
     throw new Error(NO_ACTIVE_PROVIDER_ERROR_MESSAGE);
   }
   return providerName;
