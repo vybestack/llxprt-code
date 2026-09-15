@@ -139,6 +139,19 @@ describe('beforeModelBlockingToModelOutput — v2 synthetic response', () => {
     expect(result.usage).toStrictEqual(HOOK_USAGE);
   });
 
+  it('carries hook-supplied finishReason and rawStopReason into the ModelOutput', () => {
+    const synthetic = v2Response({
+      content: toolCallContent,
+      finishReason: 'safety',
+      rawStopReason: 'content_filter',
+      usage: HOOK_USAGE,
+    });
+    const result = beforeModelBlockingToModelOutput('blocked!', synthetic);
+    expect(result.finishReason).toBe('safety');
+    expect(result.rawStopReason).toBe('content_filter');
+    expect(result.usage).toStrictEqual(HOOK_USAGE);
+  });
+
   it('falls back to the block reason text when the synthetic content has no blocks', () => {
     const synthetic = v2Response({
       content: { speaker: 'ai', blocks: [] },

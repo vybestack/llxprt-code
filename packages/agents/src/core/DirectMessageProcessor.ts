@@ -49,7 +49,7 @@ import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/ty
 import type { HookLLMResponse } from '@vybestack/llxprt-code-core/hooks/hookTranslator.js';
 
 type ToolGroupArray = Array<{
-  functionDeclarations: Array<{
+  functionDeclarations?: Array<{
     name: string;
     description?: string;
     parametersJsonSchema?: unknown;
@@ -628,6 +628,9 @@ export class DirectMessageProcessor {
     });
 
     const toolChoice: ToolChoice | undefined = modifiedConfig?.toolChoice;
+    if (toolChoice?.mode === 'none') {
+      return { tools: [], allowedFunctionNames: [] };
+    }
     if (
       toolChoice &&
       'allowedToolNames' in toolChoice &&
@@ -638,9 +641,11 @@ export class DirectMessageProcessor {
       const filteredTools = toolsFromConfig
         .map((toolGroup) => ({
           ...toolGroup,
-          functionDeclarations: toolGroup.functionDeclarations.filter((fn) =>
-            allowedNames.has(canonicalizeToolName(fn.name)),
-          ),
+          functionDeclarations: Array.isArray(toolGroup.functionDeclarations)
+            ? toolGroup.functionDeclarations.filter((fn) =>
+                allowedNames.has(canonicalizeToolName(fn.name)),
+              )
+            : [],
         }))
         .filter((g) => g.functionDeclarations.length > 0) as ToolGroupArray;
       return { tools: filteredTools, allowedFunctionNames: allowedFunctions };
@@ -658,7 +663,7 @@ export class DirectMessageProcessor {
     userIContents: IContent[],
     effectiveToolsFromConfig:
       | Array<{
-          functionDeclarations: Array<{
+          functionDeclarations?: Array<{
             name: string;
             description?: string;
             parametersJsonSchema?: unknown;

@@ -118,6 +118,27 @@ describe('decodeHookLLMRequest', () => {
     expect(decodeHookLLMRequest(null)).toBeUndefined();
     expect(decodeHookLLMRequest('string')).toBeUndefined();
   });
+
+  it('returns undefined when a contents element lacks the minimal IContent shape', () => {
+    expect(
+      decodeHookLLMRequest({
+        model: 'glm-5.3',
+        contents: [{ speaker: 'ai' }],
+      }),
+    ).toBeUndefined();
+    expect(
+      decodeHookLLMRequest({
+        model: 'glm-5.3',
+        contents: [{ blocks: [] }],
+      }),
+    ).toBeUndefined();
+    expect(
+      decodeHookLLMRequest({
+        model: 'glm-5.3',
+        contents: [{ speaker: 'user', blocks: [] }],
+      }),
+    ).toBeUndefined();
+  });
 });
 
 describe('decodeHookLLMResponse', () => {
@@ -151,6 +172,17 @@ describe('decodeHookLLMResponse', () => {
     expect(decodeHookLLMResponse({ finishReason: 'stop' })).toBeUndefined();
     expect(decodeHookLLMResponse({ content: 'plain-text' })).toBeUndefined();
     expect(decodeHookLLMResponse(undefined)).toBeUndefined();
+  });
+
+  it('returns undefined when content lacks the minimal IContent shape (fails cleanly, not downstream)', () => {
+    expect(decodeHookLLMResponse({ content: {} })).toBeUndefined();
+    expect(
+      decodeHookLLMResponse({ content: { speaker: 'ai' } }),
+    ).toBeUndefined();
+    expect(decodeHookLLMResponse({ content: { blocks: [] } })).toBeUndefined();
+    expect(
+      decodeHookLLMResponse({ content: { speaker: 'user', blocks: [] } }),
+    ).toBeUndefined();
   });
 
   it('returns undefined for a non-canonical finishReason', () => {

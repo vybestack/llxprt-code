@@ -93,17 +93,27 @@ export interface HookLLMRequestBoundary {
 // is what must not be trusted.
 // ---------------------------------------------------------------------------
 
+// Minimal IContent shape validated at the hook boundary: speaker must be a
+// canonical speaker and blocks must be an array. Block CONTENTS are left
+// unvalidated (full-fidelity passthrough). This keeps a blocks-less "content"
+// from decoding successfully and crashing later at `content.blocks.length`
+// consumers (e.g. hookWireAdapter synthetic responses).
+const hookContentSchema = z.object({
+  speaker: z.enum(['human', 'ai', 'tool']),
+  blocks: z.array(z.unknown()),
+});
+
 const hookLLMRequestSchema = z.object({
   version: z.literal(2).optional(),
   model: z.string(),
-  contents: z.array(z.unknown()),
+  contents: z.array(hookContentSchema),
   tools: z.array(z.unknown()).optional(),
   settings: z.record(z.unknown()).optional(),
 });
 
 const hookLLMResponseSchema = z.object({
   version: z.literal(2).optional(),
-  content: z.record(z.unknown()),
+  content: hookContentSchema,
   finishReason: z.enum(CANONICAL_FINISH_REASONS).optional(),
   rawStopReason: z.string().optional(),
   usage: z.record(z.unknown()).optional(),

@@ -153,13 +153,27 @@ describe('validateBeforeModelInput @plan:PLAN-20250218-HOOKSYSTEM.P10', () => {
   });
 
   it('rejects llm_request missing model @plan:PLAN-20250218-HOOKSYSTEM.P10', () => {
-    const input = { llm_request: { contents: [] } };
+    const input = { llm_request: { version: 2, contents: [] } };
     expect(validateBeforeModelInput(input)).toBe(false);
   });
 
   it('rejects llm_request with non-array contents @plan:PLAN-20250218-HOOKSYSTEM.P10', () => {
-    const input = { llm_request: { model: 'test-model', contents: 'x' } };
+    const input = {
+      llm_request: { version: 2, model: 'test-model', contents: 'x' },
+    };
     expect(validateBeforeModelInput(input)).toBe(false);
+  });
+
+  it('rejects a non-v2 llm_request envelope (version must be 2) @plan:PLAN-20250218-HOOKSYSTEM.P10', () => {
+    const input = {
+      llm_request: { model: 'test-model', contents: [] },
+    };
+    expect(validateBeforeModelInput(input)).toBe(false);
+    expect(
+      validateBeforeModelInput({
+        llm_request: { version: 1, model: 'test-model', contents: [] },
+      }),
+    ).toBe(false);
   });
 
   it('rejects payload missing llm_request @plan:PLAN-20250218-HOOKSYSTEM.P10', () => {
@@ -176,24 +190,57 @@ describe('validateBeforeModelInput @plan:PLAN-20250218-HOOKSYSTEM.P10', () => {
 describe('validateAfterModelInput @plan:PLAN-20250218-HOOKSYSTEM.P10', () => {
   it('accepts valid payload with llm_request and llm_response @plan:PLAN-20250218-HOOKSYSTEM.P10', () => {
     const input = {
-      llm_request: { model: 'test-model', contents: [] },
+      llm_request: { version: 2, model: 'test-model', contents: [] },
       llm_response: {
+        version: 2,
         content: { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] },
       },
     };
     expect(validateAfterModelInput(input)).toBe(true);
   });
 
-  it('rejects llm_response with non-object content @plan:PLAN-20250218-HOOKSYSTEM.P10', () => {
+  it('rejects a non-v2 llm_request envelope @plan:PLAN-20250218-HOOKSYSTEM.P10', () => {
     const input = {
       llm_request: { model: 'test-model', contents: [] },
-      llm_response: { content: 'plain string' },
+      llm_response: {
+        version: 2,
+        content: { speaker: 'ai', blocks: [] },
+      },
+    };
+    expect(validateAfterModelInput(input)).toBe(false);
+  });
+
+  it('rejects a non-v2 llm_response envelope @plan:PLAN-20250218-HOOKSYSTEM.P10', () => {
+    const input = {
+      llm_request: { version: 2, model: 'test-model', contents: [] },
+      llm_response: {
+        content: { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] },
+      },
+    };
+    expect(validateAfterModelInput(input)).toBe(false);
+    expect(
+      validateAfterModelInput({
+        llm_request: { version: 2, model: 'test-model', contents: [] },
+        llm_response: {
+          version: 1,
+          content: { speaker: 'ai', blocks: [] },
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it('rejects llm_response with non-object content @plan:PLAN-20250218-HOOKSYSTEM.P10', () => {
+    const input = {
+      llm_request: { version: 2, model: 'test-model', contents: [] },
+      llm_response: { version: 2, content: 'plain string' },
     };
     expect(validateAfterModelInput(input)).toBe(false);
   });
 
   it('rejects payload missing llm_response @plan:PLAN-20250218-HOOKSYSTEM.P10', () => {
-    const input = { llm_request: { model: 'm', contents: [] } };
+    const input = {
+      llm_request: { version: 2, model: 'm', contents: [] },
+    };
     expect(validateAfterModelInput(input)).toBe(false);
   });
 });
@@ -211,6 +258,17 @@ describe('validateBeforeToolSelectionInput @plan:PLAN-20250218-HOOKSYSTEM.P10', 
     expect(validateBeforeToolSelectionInput(input)).toBe(true);
   });
 
+  it('accepts the v2 envelope with contents omitted (contents deliberately optional for this event) @plan:PLAN-20250218-HOOKSYSTEM.P10', () => {
+    const input = {
+      llm_request: {
+        version: 2,
+        model: 'test-model',
+        tools: [{ name: 'read_file', parametersJsonSchema: {} }],
+      },
+    };
+    expect(validateBeforeToolSelectionInput(input)).toBe(true);
+  });
+
   it('rejects the legacy bare-tools array envelope @plan:PLAN-20250218-HOOKSYSTEM.P10', () => {
     // v1 sent the bare tools array as the input; v2 wraps it in the
     // llm_request object envelope.
@@ -218,8 +276,50 @@ describe('validateBeforeToolSelectionInput @plan:PLAN-20250218-HOOKSYSTEM.P10', 
     expect(validateBeforeToolSelectionInput(input)).toBe(false);
   });
 
+  it('rejects a non-v2 llm_request envelope (version must be 2) @plan:PLAN-20250218-HOOKSYSTEM.P10', () => {
+    expect(
+      validateBeforeToolSelectionInput({
+        llm_request: {
+          model: 'test-model',
+          tools: [{ name: 'read_file' }],
+        },
+      }),
+    ).toBe(false);
+    expect(
+      validateBeforeToolSelectionInput({
+        llm_request: {
+          version: 1,
+          model: 'test-model',
+          tools: [{ name: 'read_file' }],
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it('rejects llm_request without a model string @plan:PLAN-20250218-HOOKSYSTEM.P10', () => {
+    expect(
+      validateBeforeToolSelectionInput({
+        llm_request: {
+          version: 2,
+          tools: [{ name: 'read_file' }],
+        },
+      }),
+    ).toBe(false);
+    expect(
+      validateBeforeToolSelectionInput({
+        llm_request: {
+          version: 2,
+          model: 42,
+          tools: [{ name: 'read_file' }],
+        },
+      }),
+    ).toBe(false);
+  });
+
   it('rejects llm_request without a tools array @plan:PLAN-20250218-HOOKSYSTEM.P10', () => {
-    const input = { llm_request: { model: 'm', contents: [] } };
+    const input = {
+      llm_request: { version: 2, model: 'm', contents: [] },
+    };
     expect(validateBeforeToolSelectionInput(input)).toBe(false);
   });
 

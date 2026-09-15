@@ -108,6 +108,12 @@ export function beforeModelBlockingToModelOutput(
   if (synthetic.usage !== undefined) {
     result.usage = synthetic.usage;
   }
+  if (synthetic.finishReason !== undefined) {
+    result.finishReason = synthetic.finishReason;
+  }
+  if (synthetic.rawStopReason !== undefined) {
+    result.rawStopReason = synthetic.rawStopReason;
+  }
 
   return result;
 }

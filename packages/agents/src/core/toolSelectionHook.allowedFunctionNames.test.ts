@@ -8,6 +8,7 @@ import { describe, it, expect } from 'bun:test';
 import type { ToolChoice } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
 import { StreamProcessor } from './StreamProcessor.js';
+import { TurnProcessor } from './TurnProcessor.js';
 
 type ToolGroupArray = Array<{
   functionDeclarations: Array<{
@@ -81,7 +82,10 @@ function createTools(): ToolGroupArray {
 /** Real `_applyToolSelectionHook` on a prototype-only processor stub. */
 function makeVariant(
   name: string,
-  ProcessorClass: typeof DirectMessageProcessor | typeof StreamProcessor,
+  ProcessorClass:
+    | typeof DirectMessageProcessor
+    | typeof StreamProcessor
+    | typeof TurnProcessor,
 ): ProcessorVariant {
   return {
     name,
@@ -104,9 +108,17 @@ function makeVariant(
   };
 }
 
+const directVariant = makeVariant(
+  'DirectMessageProcessor',
+  DirectMessageProcessor,
+);
+
+const turnVariant = makeVariant('TurnProcessor', TurnProcessor);
+
 const variants: ProcessorVariant[] = [
-  makeVariant('DirectMessageProcessor', DirectMessageProcessor),
+  directVariant,
   makeVariant('StreamProcessor', StreamProcessor),
+  turnVariant,
 ];
 
 describe.each(variants)(
@@ -169,6 +181,28 @@ describe.each(variants)(
       expect(result.tools).toStrictEqual([]);
     });
 
+    it('returns no tools when mode is none without allowedToolNames (none wins)', async () => {
+      const toolsFromConfig = createTools();
+
+      const result = await applyToolSelectionHook(
+        { mode: 'none' },
+        toolsFromConfig,
+      );
+
+      expect(result.tools).toStrictEqual([]);
+    });
+
+    it('returns no tools when mode is none even with a non-empty allowlist (none wins)', async () => {
+      const toolsFromConfig = createTools();
+
+      const result = await applyToolSelectionHook(
+        { mode: 'none', allowedToolNames: ['alpha', 'beta'] },
+        toolsFromConfig,
+      );
+
+      expect(result.tools).toStrictEqual([]);
+    });
+
     it('filters tools to only the allowed tool names', async () => {
       const toolsFromConfig = createTools();
 
@@ -183,6 +217,21 @@ describe.each(variants)(
         },
         {
           functionDeclarations: [{ name: 'gamma', description: 'gamma tool' }],
+        },
+      ]);
+    });
+
+    it('filters tools to only the allowed tool names in required mode', async () => {
+      const toolsFromConfig = createTools();
+
+      const result = await applyToolSelectionHook(
+        { mode: 'required', allowedToolNames: ['beta'] },
+        toolsFromConfig,
+      );
+
+      expect(result.tools).toStrictEqual([
+        {
+          functionDeclarations: [{ name: 'beta', description: 'beta tool' }],
         },
       ]);
     });
@@ -217,3 +266,37 @@ describe.each(variants)(
     });
   },
 );
+
+describe('DirectMessageProcessor BeforeToolSelection runtime-cast tool groups', () => {
+  it('treats absent or non-array functionDeclarations as empty when filtering', async () => {
+    const toolsFromConfig = [
+      { functionDeclarations: [{ name: 'alpha', description: 'alpha tool' }] },
+      {} as unknown as ToolGroupArray[number],
+      {
+        functionDeclarations: 'not-an-array',
+      } as unknown as ToolGroupArray[number],
+    ];
+
+    const result = await directVariant.applyToolSelectionHook(
+      { mode: 'auto', allowedToolNames: ['alpha'] },
+      toolsFromConfig,
+    );
+
+    expect(result.tools).toStrictEqual([
+      { functionDeclarations: [{ name: 'alpha', description: 'alpha tool' }] },
+    ]);
+  });
+});
+
+describe('TurnProcessor BeforeToolSelection runtime-cast tool groups', () => {
+  it('treats a tool group lacking functionDeclarations as empty when filtering', async () => {
+    const toolsFromConfig = [{} as unknown as ToolGroupArray[number]];
+
+    const result = await turnVariant.applyToolSelectionHook(
+      { mode: 'auto', allowedToolNames: ['alpha'] },
+      toolsFromConfig,
+    );
+
+    expect(result.tools).toStrictEqual([]);
+  });
+});

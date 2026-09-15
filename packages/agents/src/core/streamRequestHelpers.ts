@@ -143,6 +143,9 @@ export async function applyToolSelectionHook(
   });
 
   const toolChoice: ToolChoice | undefined = modifiedConfig?.toolChoice;
+  if (toolChoice?.mode === 'none') {
+    return { tools: [], allowedFunctionNames: [] };
+  }
   const allowedFunctions = extractAllowedToolNames(toolChoice);
   if (allowedFunctions === undefined) {
     return { tools: toolsFromConfig, allowedFunctionNames: undefined };

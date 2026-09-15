@@ -20,6 +20,7 @@ import type { HookAggregator, AggregatedHookResult } from './hookAggregator.js';
 import type { SessionRecordingService } from '../recording/SessionRecordingService.js';
 import { HookEventName } from './types.js';
 import type { IContent } from '../services/history/IContent.js';
+import type { HookLLMRequest } from './hookTranslator.js';
 
 // v2 wire fixtures: fire* signatures take Omit<T,'version'> envelopes; the
 // handler stamps version 2 centrally.
@@ -28,9 +29,9 @@ const aiText = (text: string): IContent => ({
   blocks: [{ type: 'text', text }],
 });
 
-const V2_REQUEST = {
+const V2_REQUEST: Omit<HookLLMRequest, 'version'> = {
   model: 'test-model',
-  contents: [{ speaker: 'user', blocks: [{ type: 'text', text: 'Hello' }] }],
+  contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] }],
 };
 
 import type { HookExecutionResult } from './types.js';

@@ -695,13 +695,23 @@ export type { HookLLMRequestBoundary } from './hookTranslator.js';
 export type { HookLLMRequestBoundaryParseResult } from './hookTranslator.js';
 
 /**
+ * Hook-returned llm_response override shape (BeforeModel synthetic responses
+ * and AfterModel modified responses). `content` is required — decodeHookLLMResponse
+ * keys response presence on content — while `version` is optional on the wire
+ * (a missing version is accepted as v2).
+ */
+export type HookLLMResponseOverride = Omit<HookLLMResponse, 'version'> & {
+  version?: 2;
+};
+
+/**
  * BeforeModel hook output
  */
 export interface BeforeModelOutput extends HookOutput {
   hookSpecificOutput?: {
     hookEventName: 'BeforeModel';
     llm_request?: Partial<HookLLMRequest>;
-    llm_response?: HookLLMResponse;
+    llm_response?: HookLLMResponseOverride;
     llm_request_boundary?: HookLLMRequestBoundary;
   };
 }
@@ -720,7 +730,7 @@ export interface AfterModelInput extends HookInput {
 export interface AfterModelOutput extends HookOutput {
   hookSpecificOutput?: {
     hookEventName: 'AfterModel';
-    llm_response?: Partial<HookLLMResponse>;
+    llm_response?: HookLLMResponseOverride;
   };
 }
 

@@ -115,7 +115,8 @@ export function validateAfterAgentInput(
 
 /**
  * Validates BeforeModel event input.
- * Required fields: llm_request (object with model string + contents array)
+ * Required fields: llm_request (v2 envelope: version 2, model string,
+ * contents array)
  *
  * @plan PLAN-20250218-HOOKSYSTEM.P11
  * @requirement DELTA-HPAY-001, DELTA-HPAY-005
@@ -126,6 +127,7 @@ export function validateBeforeModelInput(
   if (!isObject(input)) return false;
   const llmRequest = input['llm_request'];
   if (!isObject(llmRequest)) return false;
+  if (llmRequest['version'] !== 2) return false;
   if (typeof llmRequest['model'] !== 'string') return false;
   if (!Array.isArray(llmRequest['contents'])) return false;
   return true;
@@ -133,8 +135,8 @@ export function validateBeforeModelInput(
 
 /**
  * Validates AfterModel event input.
- * Required fields: llm_request (object with model string + contents array),
- * llm_response (object with content object)
+ * Required fields: llm_request (v2 envelope: version 2, model string,
+ * contents array), llm_response (v2 envelope: version 2, content object)
  *
  * @plan PLAN-20250218-HOOKSYSTEM.P11
  * @requirement DELTA-HPAY-001, DELTA-HPAY-005
@@ -145,18 +147,21 @@ export function validateAfterModelInput(
   if (!isObject(input)) return false;
   const llmRequest = input['llm_request'];
   if (!isObject(llmRequest)) return false;
+  if (llmRequest['version'] !== 2) return false;
   if (typeof llmRequest['model'] !== 'string') return false;
   if (!Array.isArray(llmRequest['contents'])) return false;
   const llmResponse = input['llm_response'];
   if (!isObject(llmResponse)) return false;
+  if (llmResponse['version'] !== 2) return false;
   if (!isObject(llmResponse['content'])) return false;
   return true;
 }
 
 /**
  * Validates BeforeToolSelection event input.
- * Required fields: llm_request (OBJECT with tools array — tools populated,
- * contents empty/omitted for this event)
+ * Required fields: llm_request (v2 envelope: version 2, model string,
+ * tools array — tools populated, contents deliberately optional/empty
+ * for this event)
  *
  * @plan PLAN-20250218-HOOKSYSTEM.P11
  * @requirement DELTA-HPAY-001, DELTA-HPAY-005
@@ -167,6 +172,8 @@ export function validateBeforeToolSelectionInput(
   if (!isObject(input)) return false;
   const llmRequest = input['llm_request'];
   if (!isObject(llmRequest)) return false;
+  if (llmRequest['version'] !== 2) return false;
+  if (typeof llmRequest['model'] !== 'string') return false;
   if (!Array.isArray(llmRequest['tools'])) return false;
   return true;
 }
