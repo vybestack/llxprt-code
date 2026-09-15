@@ -456,6 +456,15 @@ function processDeltaToolCalls(
 }
 
 /**
+ * Bound externally-controlled frame keys for the skip diagnostic: sorted,
+ * capped to the first 16 keys with each key truncated to 64 characters.
+ */
+function boundFrameKeys(record: Record<string, unknown>): string[] {
+  const keys = Object.keys(record).sort();
+  return keys.slice(0, 16).map((key) => key.slice(0, 64));
+}
+
+/**
  * Process a single streaming chunk and update state / yield content.
  */
 async function* processStreamingChunk(
@@ -486,7 +495,19 @@ async function* processStreamingChunk(
     chunk as { choices?: OpenAI.Chat.Completions.ChatCompletionChunk.Choice[] }
   ).choices;
   const choice = chunkChoices?.[0];
-  if (choice === undefined) return;
+  if (choice === undefined) {
+    deps.logger.debug(() => '[Streaming] Skipping frame without a choice', {
+      chunkCount: state.chunkCount,
+      frameKeys: boundFrameKeys(chunkRecord),
+      hasUsage: Boolean(chunk.usage),
+      // Object tags are unvalidated external data; keep only a short string
+      // so the diagnostic never retains raw frame payloads.
+      ...(typeof chunkRecord.object === 'string'
+        ? { object: chunkRecord.object.slice(0, 64) }
+        : {}),
+    });
+    return;
+  }
 
   // One raw-timing signal per raw choice regardless of how many
   // token-bearing fields the choice carries (issue #3473).
