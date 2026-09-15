@@ -486,7 +486,15 @@ async function* processStreamingChunk(
     chunk as { choices?: OpenAI.Chat.Completions.ChatCompletionChunk.Choice[] }
   ).choices;
   const choice = chunkChoices?.[0];
-  if (choice === undefined) return;
+  if (choice === undefined) {
+    deps.logger.debug(() => '[Streaming] Skipping frame without a choice', {
+      chunkCount: state.chunkCount,
+      frameKeys: Object.keys(chunkRecord).sort(),
+      hasUsage: Boolean(chunk.usage),
+      object: chunkRecord.object,
+    });
+    return;
+  }
 
   // One raw-timing signal per raw choice regardless of how many
   // token-bearing fields the choice carries (issue #3473).

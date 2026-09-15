@@ -241,6 +241,19 @@ describe('OpenAIClientFactory', () => {
   });
 
   describe('instantiateClient', () => {
+    it('installs a callable stream-safe fetch in the SDK options', () => {
+      const client = instantiateClient('test-token');
+      const options: unknown = Reflect.get(client, '_options');
+      if (
+        typeof options !== 'object' ||
+        options === null ||
+        !('fetch' in options)
+      ) {
+        throw new Error('Missing SDK fetch option');
+      }
+      expect(typeof options.fetch).toBe('function');
+    });
+
     it('creates client with authToken as apiKey', () => {
       const client = instantiateClient('test-token-123');
       expect(client).toBeDefined();

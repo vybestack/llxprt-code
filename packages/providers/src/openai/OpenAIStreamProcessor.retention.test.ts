@@ -115,6 +115,70 @@ async function runQwenStream(
 }
 
 describe('OpenAI streaming diagnostic retention', () => {
+  it('logs bounded metadata for empty choices and usage-only frames without changing output', async () => {
+    const records: unknown[] = [];
+    const logger = new DebugLogger('llxprt:test:skipped-frames');
+    logger.debug = (_message, metadata) => {
+      if (
+        typeof metadata === 'object' &&
+        metadata !== null &&
+        'frameKeys' in metadata
+      )
+        records.push(metadata);
+    };
+    const usage = { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 };
+    const usageChunk = { ...createChunk(2), usage };
+    Reflect.deleteProperty(usageChunk, 'choices');
+    const output = await collect(
+      processStreamingResponse(
+        streamChunks([createTextChunk(0, 'hello'), createChunk(1), usageChunk]),
+        'test-model',
+        'openai',
+        undefined,
+        { model: 'test-model', messages: [], stream: true },
+        [],
+        new OpenAI({ apiKey: 'test' }),
+        undefined,
+        undefined,
+        {
+          logger,
+          toolCallPipeline: new ToolCallPipeline(),
+          textToolParser: new GemmaToolCallParser(),
+          getBaseURL: () => undefined,
+        },
+        async function* () {
+          yield* [];
+        },
+      ),
+    );
+    expect(
+      output
+        .flatMap((item) => item.blocks)
+        .filter((block) => block.type === 'text')
+        .map((block) => block.text)
+        .join(''),
+    ).toBe('hello');
+    expect(output[output.length - 1]?.metadata?.usage).toMatchObject({
+      promptTokens: 3,
+      completionTokens: 2,
+      totalTokens: 5,
+    });
+    expect(records).toStrictEqual([
+      {
+        chunkCount: 2,
+        frameKeys: ['choices', 'created', 'id', 'model', 'object'],
+        hasUsage: false,
+        object: 'chat.completion.chunk',
+      },
+      {
+        chunkCount: 3,
+        frameKeys: ['created', 'id', 'model', 'object', 'usage'],
+        hasUsage: true,
+        object: 'chat.completion.chunk',
+      },
+    ]);
+  });
+
   it('reports every received chunk without retaining a chunk array', async () => {
     const chunkCount = 7;
     let reportedChunkCount: number | undefined;
