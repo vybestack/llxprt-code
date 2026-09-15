@@ -431,8 +431,15 @@ export async function setActiveModel(
     settingsService,
     activeProvider.name,
   );
+  // #2534 Domain C2: read the previous model from the store this
+  // transition owns (Config.getModel reads providers[P].model first, the
+  // same store Config.setModel writes). Preferring the provider settings
+  // snapshot goes stale across consecutive transitions because the
+  // collapsed flow no longer duplicates the model write through
+  // SettingsService.updateSettings; a stale previous model skips the
+  // leaving-model default restoration in recomputeAndApplyModelDefaultsDiff.
   const previousModel =
-    (providerSettings.model as string | undefined) ?? config.getModel();
+    config.getModel() || (providerSettings.model as string | undefined);
 
   const authRefreshed = false;
   // #2534 Domain C2: one transition. Config.setModel performs the single
