@@ -16,6 +16,7 @@ import type {
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import { toolDeclarationsFromLegacyToolset } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
@@ -814,12 +815,15 @@ export class TurnProcessor {
     }
 
     await hookSystem.initialize();
-    const toolSelectionResult =
-      await hookSystem.fireBeforeToolSelectionEvent(toolsFromConfig);
-    const modifiedConfig = toolSelectionResult?.applyToolConfigModifications({
+    const toolSelectionResult = await hookSystem.fireBeforeToolSelectionEvent({
+      model: this.runtimeContext.state.model,
+      contents: [],
+      tools: toolDeclarationsFromLegacyToolset(toolsFromConfig),
+    });
+    const modifiedConfig = toolSelectionResult?.applyToolChoiceModifications({
       tools: toolsFromConfig,
     });
-    const allowedFunctions = modifiedConfig?.toolConfig?.allowedFunctionNames;
+    const allowedFunctions = modifiedConfig?.toolChoice?.allowedToolNames;
     if (!Array.isArray(allowedFunctions)) {
       return { tools: toolsFromConfig, allowedFunctionNames: undefined };
     }

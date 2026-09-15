@@ -151,8 +151,11 @@ function configWithHooks(
       value: () => ({
         initialize: async () => undefined,
         fireBeforeToolSelectionEvent: async () => ({
-          applyToolConfigModifications: () => ({
-            toolConfig: { allowedFunctionNames },
+          applyToolChoiceModifications: () => ({
+            toolChoice: {
+              mode: 'auto',
+              allowedToolNames: allowedFunctionNames,
+            },
           }),
         }),
         fireBeforeModelEvent: async () => new BeforeModelHookOutput({}),

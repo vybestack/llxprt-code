@@ -5,20 +5,19 @@
  */
 
 import type {
-  LLMRequest,
-  LLMResponse,
-  HookToolConfig,
+  HookLLMRequest,
+  HookLLMResponse,
   HookLLMRequestBoundary,
   HookLLMRequestBoundaryParseResult,
-  HookGenerateContentParameters,
-  HookGenerateContentResponse,
-  HookSdkToolConfig,
 } from './hookTranslator.js';
 import {
-  defaultHookTranslator,
+  decodeHookLLMResponse,
+  decodeHookToolChoice,
+  mergeHookLLMRequest,
   parseHookLLMRequestBoundary,
   parseHookLLMRequestBoundaryResult,
 } from './hookTranslator.js';
+import type { ToolChoice } from '../llm-types/toolDeclaration.js';
 import type { ConfigSource } from './hookRegistry.js';
 
 type HookToolListUnion = Array<{
@@ -66,17 +65,6 @@ export interface CommandHookConfig {
 }
 
 export type HookConfig = CommandHookConfig;
-
-/**
- * Returns true when `value` is a non-null object. Used to guard hook payload
- * fields that are checked with the `in` operator before being passed to
- * translators, since `in` only confirms key presence, not value shape.
- */
-function isNonNullObjectRecord(
-  value: unknown,
-): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
 
 /**
  * Hook definition with matcher
@@ -201,21 +189,19 @@ export class DefaultHookOutput implements HookOutput {
   /**
    * Apply LLM request modifications (specific method for BeforeModel hooks)
    */
-  applyLLMRequestModifications(
-    target: HookGenerateContentParameters,
-  ): HookGenerateContentParameters {
+  applyLLMRequestModifications(target: HookLLMRequest): HookLLMRequest {
     // Base implementation - overridden by BeforeModelHookOutput
     return target;
   }
 
   /**
-   * Apply tool config modifications (specific method for BeforeToolSelection hooks)
+   * Apply tool choice modifications (specific method for BeforeToolSelection hooks)
    */
-  applyToolConfigModifications(target: {
-    toolConfig?: HookSdkToolConfig;
+  applyToolChoiceModifications(target: {
+    toolChoice?: ToolChoice;
     tools?: HookToolListUnion;
   }): {
-    toolConfig?: HookSdkToolConfig;
+    toolChoice?: ToolChoice;
     tools?: HookToolListUnion;
   } {
     // Base implementation - overridden by BeforeToolSelectionHookOutput
@@ -322,46 +308,23 @@ export class BeforeToolHookOutput extends DefaultHookOutput {
  */
 export class BeforeModelHookOutput extends DefaultHookOutput {
   /**
-   * Get synthetic LLM response if provided by hook
+   * Get synthetic LLM response if provided by hook (v2 envelope).
+   * Presence is keyed on the decoder accepting a content object.
    */
-  getSyntheticResponse(): HookGenerateContentResponse | undefined {
-    if (
-      this.hookSpecificOutput &&
-      isNonNullObjectRecord(this.hookSpecificOutput['llm_response'])
-    ) {
-      const hookResponse = this.hookSpecificOutput[
-        'llm_response'
-      ] as unknown as LLMResponse;
-      // Convert hook format to SDK format
-      return defaultHookTranslator.fromHookLLMResponse(hookResponse);
-    }
-    return undefined;
+  getSyntheticResponse(): HookLLMResponse | undefined {
+    if (!this.hookSpecificOutput) return undefined;
+    return decodeHookLLMResponse(this.hookSpecificOutput['llm_response']);
   }
 
   /**
-   * Apply modifications to LLM request
+   * Apply modifications to LLM request (v2 merge semantics: contents/tools
+   * replace when arrays, model overrides when string, settings shallow-merge).
    */
   override applyLLMRequestModifications(
-    target: HookGenerateContentParameters,
-  ): HookGenerateContentParameters {
-    if (
-      this.hookSpecificOutput &&
-      isNonNullObjectRecord(this.hookSpecificOutput['llm_request'])
-    ) {
-      const hookRequest = this.hookSpecificOutput[
-        'llm_request'
-      ] as Partial<LLMRequest>;
-      // Convert hook format to SDK format
-      const sdkRequest = defaultHookTranslator.fromHookLLMRequest(
-        hookRequest as LLMRequest,
-        target,
-      );
-      return {
-        ...target,
-        ...sdkRequest,
-      };
-    }
-    return target;
+    target: HookLLMRequest,
+  ): HookLLMRequest {
+    if (!this.hookSpecificOutput) return target;
+    return mergeHookLLMRequest(target, this.hookSpecificOutput['llm_request']);
   }
 
   /**
@@ -434,39 +397,22 @@ export class BeforeModelHookOutput extends DefaultHookOutput {
  */
 export class BeforeToolSelectionHookOutput extends DefaultHookOutput {
   /**
-   * Apply tool configuration modifications
-   *
-   * Returns a structure with toolConfig containing allowedFunctionNames directly,
-   * in addition to the SDK-compatible functionCallingConfig structure.
+   * Apply tool choice modifications from hookSpecificOutput.toolChoice.
+   * Returns the target unchanged when the hook supplied no valid toolChoice.
    */
-  override applyToolConfigModifications(target: {
-    toolConfig?: HookSdkToolConfig & { allowedFunctionNames?: string[] };
+  override applyToolChoiceModifications(target: {
+    toolChoice?: ToolChoice;
     tools?: HookToolListUnion;
   }): {
-    toolConfig?: HookSdkToolConfig & { allowedFunctionNames?: string[] };
+    toolChoice?: ToolChoice;
     tools?: HookToolListUnion;
   } {
-    if (
-      this.hookSpecificOutput &&
-      isNonNullObjectRecord(this.hookSpecificOutput['toolConfig'])
-    ) {
-      const hookToolConfig = this.hookSpecificOutput[
-        'toolConfig'
-      ] as HookToolConfig;
-      // Convert hook format to SDK format
-      const sdkToolConfig =
-        defaultHookTranslator.fromHookToolConfig(hookToolConfig);
-      return {
-        ...target,
-        tools: target.tools ?? [],
-        toolConfig: {
-          ...sdkToolConfig,
-          // Also expose allowedFunctionNames directly for easier access
-          allowedFunctionNames: hookToolConfig.allowedFunctionNames,
-        },
-      };
-    }
-    return target;
+    if (!this.hookSpecificOutput) return target;
+    const toolChoice = decodeHookToolChoice(
+      this.hookSpecificOutput['toolChoice'],
+    );
+    if (toolChoice === undefined) return target;
+    return { ...target, toolChoice };
   }
 }
 
@@ -475,25 +421,12 @@ export class BeforeToolSelectionHookOutput extends DefaultHookOutput {
  */
 export class AfterModelHookOutput extends DefaultHookOutput {
   /**
-   * Get modified LLM response if provided by hook
+   * Get modified LLM response if provided by hook (v2 envelope; presence is
+   * keyed on `content`, not candidates).
    */
-  getModifiedResponse(): HookGenerateContentResponse | undefined {
-    if (
-      this.hookSpecificOutput &&
-      isNonNullObjectRecord(this.hookSpecificOutput['llm_response'])
-    ) {
-      const hookResponse = this.hookSpecificOutput[
-        'llm_response'
-      ] as Partial<LLMResponse>;
-      if (hookResponse.candidates?.[0]?.content) {
-        // Convert hook format to SDK format
-        return defaultHookTranslator.fromHookLLMResponse(
-          hookResponse as LLMResponse,
-        );
-      }
-    }
-
-    return undefined;
+  getModifiedResponse(): HookLLMResponse | undefined {
+    if (!this.hookSpecificOutput) return undefined;
+    return decodeHookLLMResponse(this.hookSpecificOutput['llm_response']);
   }
 }
 
@@ -770,10 +703,10 @@ export interface PreCompressOutput {
 }
 
 /**
- * BeforeModel hook input - uses decoupled types
+ * BeforeModel hook input - v2 envelope
  */
 export interface BeforeModelInput extends HookInput {
-  llm_request: LLMRequest;
+  llm_request: HookLLMRequest;
 }
 
 /**
@@ -789,18 +722,18 @@ export type { HookLLMRequestBoundaryParseResult } from './hookTranslator.js';
 export interface BeforeModelOutput extends HookOutput {
   hookSpecificOutput?: {
     hookEventName: 'BeforeModel';
-    llm_request?: Partial<LLMRequest>;
-    llm_response?: LLMResponse;
+    llm_request?: Partial<HookLLMRequest>;
+    llm_response?: HookLLMResponse;
     llm_request_boundary?: HookLLMRequestBoundary;
   };
 }
 
 /**
- * AfterModel hook input - uses decoupled types
+ * AfterModel hook input - v2 envelopes
  */
 export interface AfterModelInput extends HookInput {
-  llm_request: LLMRequest;
-  llm_response: LLMResponse;
+  llm_request: HookLLMRequest;
+  llm_response: HookLLMResponse;
 }
 
 /**
@@ -809,15 +742,16 @@ export interface AfterModelInput extends HookInput {
 export interface AfterModelOutput extends HookOutput {
   hookSpecificOutput?: {
     hookEventName: 'AfterModel';
-    llm_response?: Partial<LLMResponse>;
+    llm_response?: Partial<HookLLMResponse>;
   };
 }
 
 /**
- * BeforeToolSelection hook input - uses decoupled types
+ * BeforeToolSelection hook input - v2 envelope (tools populated, contents
+ * empty/omitted)
  */
 export interface BeforeToolSelectionInput extends HookInput {
-  llm_request: LLMRequest;
+  llm_request: HookLLMRequest;
 }
 
 /**
@@ -826,7 +760,7 @@ export interface BeforeToolSelectionInput extends HookInput {
 export interface BeforeToolSelectionOutput extends HookOutput {
   hookSpecificOutput?: {
     hookEventName: 'BeforeToolSelection';
-    toolConfig?: HookToolConfig;
+    toolChoice?: ToolChoice;
   };
 }
 

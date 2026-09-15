@@ -55,7 +55,7 @@ export interface ToolChoice {
  * @pseudocode lines 42-43
  */
 export type LegacyToolsetLike = ReadonlyArray<{
-  functionDeclarations: ReadonlyArray<{
+  functionDeclarations?: ReadonlyArray<{
     name: string;
     description?: string;
     parametersJsonSchema?: unknown;
@@ -79,7 +79,7 @@ export function toolDeclarationsFromLegacyToolset(
   const result: ToolDeclaration[] = [];
 
   for (const group of toolset) {
-    for (const decl of group.functionDeclarations) {
+    for (const decl of group.functionDeclarations ?? []) {
       const schema: JsonSchema = resolveSchema(
         decl.parametersJsonSchema,
         decl.parameters,

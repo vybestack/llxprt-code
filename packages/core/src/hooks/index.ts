@@ -27,14 +27,18 @@ export type { HookRegistryEntry } from './hookRegistry.js';
 export { ConfigSource } from './hookRegistry.js';
 export type { HookEventContext } from './hookPlanner.js';
 
-// Export translator
+// Export v2 hook wire types and decoders
 export {
-  HookTranslator,
-  HookTranslatorGenAIv1,
-  defaultHookTranslator,
-  type LLMRequest,
-  type LLMResponse,
-  type HookToolConfig,
+  decodeHookLLMRequest,
+  decodeHookLLMResponse,
+  decodeHookToolChoice,
+  mergeHookLLMRequest,
+  parseHookLLMRequestBoundary,
+  parseHookLLMRequestBoundaryResult,
+  type HookLLMRequest,
+  type HookLLMResponse,
+  type HookLLMRequestBoundary,
+  type HookLLMRequestBoundaryParseResult,
 } from './hookTranslator.js';
 
 // Export aggregator types

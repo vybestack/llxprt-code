@@ -1,231 +1,270 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import {
-  HookTranslatorGenAIv1,
-  defaultHookTranslator,
-  type LLMRequest,
-  type LLMResponse,
-  type HookToolConfig,
-  type HookSdkToolConfig,
+  decodeHookLLMRequest,
+  decodeHookLLMResponse,
+  decodeHookToolChoice,
+  mergeHookLLMRequest,
+  parseHookLLMRequestBoundaryResult,
+  type HookLLMRequest,
 } from './hookTranslator.js';
+import type {
+  IContent,
+  ToolCallBlock,
+  ToolResponseBlock,
+  ThinkingBlock,
+} from '../services/history/IContent.js';
+import type { ToolDeclaration } from '../llm-types/toolDeclaration.js';
 
-describe('HookTranslator', () => {
-  let translator: HookTranslatorGenAIv1;
+const toolCallContent: IContent = {
+  speaker: 'ai',
+  blocks: [
+    { type: 'text', text: 'I will check that.' },
+    {
+      type: 'tool_call',
+      id: 'call-1',
+      name: 'get_weather',
+      parameters: { city: 'Oslo' },
+    } satisfies ToolCallBlock,
+  ],
+};
 
-  beforeEach(() => {
-    translator = new HookTranslatorGenAIv1();
+const toolResponseContent: IContent = {
+  speaker: 'tool',
+  blocks: [
+    {
+      type: 'tool_response',
+      callId: 'call-1',
+      toolName: 'get_weather',
+      result: { temperature: 12 },
+    } satisfies ToolResponseBlock,
+  ],
+};
+
+const thinkingContent: IContent = {
+  speaker: 'ai',
+  blocks: [
+    {
+      type: 'thinking',
+      thought: 'internal reasoning',
+    } satisfies ThinkingBlock,
+  ],
+};
+
+describe('decodeHookLLMRequest', () => {
+  it('decodes a v2 envelope preserving tool_call, tool_response and thinking blocks by reference', () => {
+    const contents = [toolCallContent, toolResponseContent, thinkingContent];
+
+    const decoded = decodeHookLLMRequest({
+      version: 2,
+      model: 'glm-5.3',
+      contents,
+    });
+
+    expect(decoded).toBeDefined();
+    expect(decoded?.version).toBe(2);
+    expect(decoded?.model).toBe('glm-5.3');
+    expect(decoded?.contents).toBe(contents);
+    expect(decoded?.contents[0]?.blocks[1]).toBe(toolCallContent.blocks[1]);
+    expect(decoded?.contents[1]?.blocks[0]).toBe(toolResponseContent.blocks[0]);
+    expect(decoded?.contents[2]?.blocks[0]).toBe(thinkingContent.blocks[0]);
   });
 
-  describe('defaultHookTranslator', () => {
-    it('should be an instance of HookTranslatorGenAIv1', () => {
-      expect(defaultHookTranslator).toBeInstanceOf(HookTranslatorGenAIv1);
+  it('accepts a missing version as v2 (no v1 fallback decode)', () => {
+    const decoded = decodeHookLLMRequest({
+      model: 'glm-5.3',
+      contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] }],
+    });
+
+    expect(decoded?.version).toBe(2);
+  });
+
+  it('passes tools and settings through when provided', () => {
+    const tools: ToolDeclaration[] = [
+      {
+        name: 'get_weather',
+        parametersJsonSchema: { type: 'object' },
+      },
+    ];
+
+    const decoded = decodeHookLLMRequest({
+      version: 2,
+      model: 'glm-5.3',
+      contents: [],
+      tools,
+      settings: { temperature: 0.3 },
+    });
+
+    expect(decoded?.tools).toBe(tools);
+    expect(decoded?.settings).toStrictEqual({ temperature: 0.3 });
+  });
+
+  it('returns undefined for a version other than 2', () => {
+    expect(
+      decodeHookLLMRequest({ version: 1, model: 'm', contents: [] }),
+    ).toBeUndefined();
+  });
+
+  it('returns undefined when model is missing or contents is not an array', () => {
+    expect(decodeHookLLMRequest({ contents: [] })).toBeUndefined();
+    expect(
+      decodeHookLLMRequest({ model: 'm', contents: 'not-an-array' }),
+    ).toBeUndefined();
+    expect(decodeHookLLMRequest(null)).toBeUndefined();
+    expect(decodeHookLLMRequest('string')).toBeUndefined();
+  });
+});
+
+describe('decodeHookLLMResponse', () => {
+  it('decodes a v2 response passing content through by reference with optional fields', () => {
+    const content: IContent = {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'hook says hi' }],
+    };
+
+    const decoded = decodeHookLLMResponse({
+      version: 2,
+      content,
+      finishReason: 'stop',
+      rawStopReason: 'STOP',
+      usage: {
+        promptTokens: 10,
+        completionTokens: 5,
+        totalTokens: 15,
+      },
+    });
+
+    expect(decoded).toBeDefined();
+    expect(decoded?.version).toBe(2);
+    expect(decoded?.content).toBe(content);
+    expect(decoded?.finishReason).toBe('stop');
+    expect(decoded?.rawStopReason).toBe('STOP');
+    expect(decoded?.usage?.totalTokens).toBe(15);
+  });
+
+  it('returns undefined when content is missing or not an object', () => {
+    expect(decodeHookLLMResponse({ finishReason: 'stop' })).toBeUndefined();
+    expect(decodeHookLLMResponse({ content: 'plain-text' })).toBeUndefined();
+    expect(decodeHookLLMResponse(undefined)).toBeUndefined();
+  });
+
+  it('returns undefined for a non-canonical finishReason', () => {
+    expect(
+      decodeHookLLMResponse({
+        content: { speaker: 'ai', blocks: [] },
+        finishReason: 'STOP',
+      }),
+    ).toBeUndefined();
+  });
+
+  it('returns undefined for a version other than 2', () => {
+    expect(
+      decodeHookLLMResponse({
+        version: 1,
+        content: { speaker: 'ai', blocks: [] },
+      }),
+    ).toBeUndefined();
+  });
+});
+
+describe('decodeHookToolChoice', () => {
+  it('decodes a valid toolChoice with allowedToolNames', () => {
+    expect(
+      decodeHookToolChoice({
+        mode: 'required',
+        allowedToolNames: ['a', 'b'],
+      }),
+    ).toStrictEqual({ mode: 'required', allowedToolNames: ['a', 'b'] });
+  });
+
+  it('returns undefined for an unknown mode or non-string allowlist', () => {
+    expect(decodeHookToolChoice({ mode: 'ANY' })).toBeUndefined();
+    expect(
+      decodeHookToolChoice({ mode: 'auto', allowedToolNames: 'all' }),
+    ).toBeUndefined();
+    expect(decodeHookToolChoice(undefined)).toBeUndefined();
+  });
+});
+
+describe('mergeHookLLMRequest', () => {
+  const base: HookLLMRequest = {
+    version: 2,
+    model: 'base-model',
+    contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] }],
+    settings: { temperature: 0.1, topP: 0.9 },
+  };
+
+  it('replaces contents and tools when the override provides arrays', () => {
+    const replacement: IContent[] = [{ speaker: 'human', blocks: [] }];
+
+    const merged = mergeHookLLMRequest(base, {
+      contents: replacement,
+      tools: [],
+    });
+
+    expect(merged.contents).toBe(replacement);
+    expect(merged.tools).toStrictEqual([]);
+    expect(merged.model).toBe('base-model');
+  });
+
+  it('overrides model when the override provides a string', () => {
+    expect(mergeHookLLMRequest(base, { model: 'other' }).model).toBe('other');
+  });
+
+  it('shallow-merges settings without clobbering untouched keys', () => {
+    const merged = mergeHookLLMRequest(base, {
+      settings: { temperature: 0.8 },
+    });
+
+    expect(merged.settings).toStrictEqual({ temperature: 0.8, topP: 0.9 });
+  });
+
+  it('leaves target fields untouched for absent or wrong-typed override fields', () => {
+    const merged = mergeHookLLMRequest(base, {
+      model: 42,
+      contents: 'nope',
+      tools: null,
+    });
+
+    expect(merged.model).toBe('base-model');
+    expect(merged.contents).toBe(base.contents);
+    expect(merged.tools).toBeUndefined();
+    expect(merged.settings).toStrictEqual({ temperature: 0.1, topP: 0.9 });
+  });
+
+  it('returns the target unchanged for a non-object override', () => {
+    expect(mergeHookLLMRequest(base, 'junk')).toBe(base);
+    expect(mergeHookLLMRequest(base, null)).toBe(base);
+  });
+});
+
+describe('parseHookLLMRequestBoundaryResult (v2 schema)', () => {
+  it('accepts version 2 as valid', () => {
+    expect(
+      parseHookLLMRequestBoundaryResult({
+        version: 2,
+        pendingMessageStartIndex: 1,
+      }),
+    ).toStrictEqual({
+      status: 'valid',
+      boundary: { version: 2, pendingMessageStartIndex: 1 },
     });
   });
 
-  describe('LLM Request Translation', () => {
-    it('should convert SDK request to hook format', () => {
-      const sdkRequest: Record<string, unknown> = {
-        model: 'gemini-1.5-flash',
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: 'Hello world' }],
-          },
-        ],
-        config: {
-          temperature: 0.7,
-          maxOutputTokens: 1000,
-        },
-      } as unknown as Record<string, unknown>;
-
-      const hookRequest = translator.toHookLLMRequest(sdkRequest);
-
-      expect(hookRequest).toStrictEqual({
-        model: 'gemini-1.5-flash',
-        messages: [
-          {
-            role: 'user',
-            content: 'Hello world',
-          },
-        ],
-        config: {
-          temperature: 0.7,
-          maxOutputTokens: 1000,
-          topP: undefined,
-          topK: undefined,
-        },
-      });
-    });
-
-    it('should handle string contents', () => {
-      const sdkRequest: Record<string, unknown> = {
-        model: 'gemini-1.5-flash',
-        contents: ['Simple string message'],
-      } as unknown as Record<string, unknown>;
-
-      const hookRequest = translator.toHookLLMRequest(sdkRequest);
-
-      expect(hookRequest.messages).toStrictEqual([
-        {
-          role: 'user',
-          content: 'Simple string message',
-        },
-      ]);
-    });
-
-    it('should handle conversion errors gracefully', () => {
-      const sdkRequest: Record<string, unknown> = {
-        model: 'gemini-1.5-flash',
-        contents: [null], // Invalid content
-      };
-
-      const hookRequest = translator.toHookLLMRequest(sdkRequest);
-
-      // When contents are invalid, the translator skips them and returns empty messages
-      expect(hookRequest.messages).toStrictEqual([]);
-      expect(hookRequest.model).toBe('gemini-1.5-flash');
-    });
-
-    it('should convert hook request back to SDK format', () => {
-      const hookRequest: LLMRequest = {
-        model: 'gemini-1.5-flash',
-        messages: [
-          {
-            role: 'user',
-            content: 'Hello world',
-          },
-        ],
-        config: {
-          temperature: 0.7,
-          maxOutputTokens: 1000,
-        },
-      };
-
-      const sdkRequest = translator.fromHookLLMRequest(hookRequest);
-
-      expect(sdkRequest.model).toBe('gemini-1.5-flash');
-      expect(sdkRequest.contents).toStrictEqual([
-        {
-          role: 'user',
-          parts: [{ text: 'Hello world' }],
-        },
-      ]);
-    });
-  });
-
-  describe('LLM Response Translation', () => {
-    it('should convert SDK response to hook format', () => {
-      const sdkResponse: Record<string, unknown> = {
-        text: 'Hello response',
-        candidates: [
-          {
-            content: {
-              role: 'model',
-              parts: [{ text: 'Hello response' }],
-            },
-            finishReason: 'STOP',
-            index: 0,
-          },
-        ],
-        usageMetadata: {
-          promptTokenCount: 10,
-          candidatesTokenCount: 20,
-          totalTokenCount: 30,
-        },
-      } as unknown as Record<string, unknown>;
-
-      const hookResponse = translator.toHookLLMResponse(sdkResponse);
-
-      expect(hookResponse).toStrictEqual({
-        text: 'Hello response',
-        candidates: [
-          {
-            content: {
-              role: 'model',
-              parts: ['Hello response'],
-            },
-            finishReason: 'STOP',
-            index: 0,
-            safetyRatings: undefined,
-          },
-        ],
-        usageMetadata: {
-          promptTokenCount: 10,
-          candidatesTokenCount: 20,
-          totalTokenCount: 30,
-        },
-      });
-    });
-
-    it('should convert hook response back to SDK format', () => {
-      const hookResponse: LLMResponse = {
-        text: 'Hello response',
-        candidates: [
-          {
-            content: {
-              role: 'model',
-              parts: ['Hello response'],
-            },
-            finishReason: 'STOP',
-          },
-        ],
-      };
-
-      const sdkResponse = translator.fromHookLLMResponse(hookResponse);
-
-      expect(sdkResponse.text).toBe('Hello response');
-      expect(sdkResponse.candidates).toHaveLength(1);
-      expect(sdkResponse.candidates?.[0]?.content?.parts?.[0]?.text).toBe(
-        'Hello response',
-      );
-    });
-  });
-
-  describe('Tool Config Translation', () => {
-    it('should convert SDK tool config to hook format', () => {
-      const sdkToolConfig = {
-        functionCallingConfig: {
-          mode: 'ANY',
-          allowedFunctionNames: ['tool1', 'tool2'],
-        },
-      } satisfies HookSdkToolConfig;
-
-      const hookToolConfig = translator.toHookToolConfig(sdkToolConfig);
-
-      expect(hookToolConfig).toStrictEqual({
-        mode: 'ANY',
-        allowedFunctionNames: ['tool1', 'tool2'],
-      });
-    });
-
-    it('should convert hook tool config back to SDK format', () => {
-      const hookToolConfig: HookToolConfig = {
-        mode: 'AUTO',
-        allowedFunctionNames: ['tool1', 'tool2'],
-      };
-
-      const sdkToolConfig = translator.fromHookToolConfig(hookToolConfig);
-
-      expect(sdkToolConfig.functionCallingConfig).toStrictEqual({
-        mode: 'AUTO',
-        allowedFunctionNames: ['tool1', 'tool2'],
-      });
-    });
-
-    it('should handle undefined tool config', () => {
-      const sdkToolConfig = {} as Record<string, unknown>;
-
-      const hookToolConfig = translator.toHookToolConfig(sdkToolConfig);
-
-      expect(hookToolConfig).toStrictEqual({
-        mode: undefined,
-        allowedFunctionNames: undefined,
-      });
+  it('treats version 1 as malformed', () => {
+    expect(
+      parseHookLLMRequestBoundaryResult({
+        version: 1,
+        pendingMessageStartIndex: 1,
+      }),
+    ).toStrictEqual({
+      status: 'malformed',
+      onInvalidBoundary: 'skip-compression',
     });
   });
 });

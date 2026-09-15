@@ -327,8 +327,8 @@ describe('ChatSession hook execution control', () => {
 
   it('emits a neutral blocked chunk carrying the reason when BeforeModel blocks (no tool calls leak)', async () => {
     mockHookSystem.fireBeforeToolSelectionEvent.mockResolvedValueOnce({
-      applyToolConfigModifications: () => ({
-        toolConfig: { allowedFunctionNames: ['read_file'] },
+      applyToolChoiceModifications: () => ({
+        toolChoice: { mode: 'auto', allowedToolNames: ['read_file'] },
       }),
     });
     const beforeModelOutput = new BeforeModelHookOutput({

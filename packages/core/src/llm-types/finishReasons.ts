@@ -15,8 +15,8 @@
  */
 
 /**
- * Neutral finish-reason type layer — provider-agnostic canonical reasons
- * plus the temporary Gemini mapping used by the v1 hook adapter.
+ * Neutral finish-reason type layer — provider-agnostic canonical reasons.
+ * Providers own their raw→canonical mapping tables locally.
  *
  * @plan PLAN-20260702-LLMTYPES.P03
  * @requirement REQ-001
@@ -70,51 +70,6 @@ void _assertAllCovered;
 const CANONICAL_SET: ReadonlySet<string> = new Set<string>(
   CANONICAL_FINISH_REASONS,
 );
-
-/**
- * @plan PLAN-20260702-LLMTYPES.P03
- * @requirement REQ-001.2
- * @pseudocode lines 12-16
- */
-export const GEMINI_FINISH_MAP: Readonly<
-  Record<string, CanonicalFinishReason>
-> = {
-  STOP: 'stop',
-  MAX_TOKENS: 'max_tokens',
-  SAFETY: 'safety',
-  IMAGE_SAFETY: 'safety',
-  RECITATION: 'safety',
-  LANGUAGE: 'other',
-  BLOCKLIST: 'safety',
-  PROHIBITED_CONTENT: 'safety',
-  SPII: 'safety',
-  MALFORMED_FUNCTION_CALL: 'error',
-  UNEXPECTED_TOOL_CALL: 'error',
-  OTHER: 'other',
-  IMAGE_PROHIBITED_CONTENT: 'safety',
-  NO_IMAGE: 'other',
-  FINISH_REASON_UNSPECIFIED: 'other',
-};
-
-/**
- * @plan PLAN-20260702-LLMTYPES.P03
- * @requirement REQ-001.2, REQ-001.5
- * @pseudocode lines 17-18
- */
-export function mapGeminiFinishReason(
-  raw: string | null | undefined,
-): FinishInfo {
-  const rawStopReason = raw ?? '';
-  return {
-    finishReason: Object.prototype.hasOwnProperty.call(
-      GEMINI_FINISH_MAP,
-      rawStopReason,
-    )
-      ? GEMINI_FINISH_MAP[rawStopReason]
-      : 'other',
-    rawStopReason,
-  };
-}
 
 /**
  * @plan PLAN-20260702-LLMTYPES.P03

@@ -175,60 +175,145 @@ interface AfterToolInput extends HookInput {
 
 ```typescript
 interface BeforeModelInput extends HookInput {
-  /** LLM request in simplified hook format */
-  llm_request: LLMRequest;
+  /** LLM request in the v2 hook wire format */
+  llm_request: HookLLMRequest;
+}
+```
+
+The `llm_request` envelope is provider-neutral and versioned. The runtime
+stamps `version: 2` centrally before the hook runs, so every payload a hook
+receives carries the wire version explicitly:
+
+```typescript
+interface HookLLMRequest {
+  /** Wire-format version (always 2, stamped by the runtime) */
+  version: 2;
+
+  /** Model the request is being sent to */
+  model: string;
+
+  /** Conversation contents in neutral IContent form */
+  contents: IContent[];
+
+  /** Tool declarations available for this request */
+  tools?: ToolDeclaration[];
+
+  /** Generation settings (temperature, maxOutputTokens, ...) */
+  settings?: ModelGenerationSettings;
+}
+```
+
+`IContent` is the runtime's universal, provider-agnostic content
+representation — a speaker turn made of typed blocks:
+
+```typescript
+interface IContent {
+  speaker: 'human' | 'ai' | 'tool';
+  blocks: ContentBlock[];
+  metadata?: ContentMetadata;
 }
 
-interface LLMRequest {
-  model?: string;
-  contents?: Array<{
-    role: 'user' | 'model';
-    parts: Array<string | { text: string }>;
-  }>;
-  systemInstruction?: {
-    role: 'system';
-    parts: Array<string | { text: string }>;
-  };
-  generationConfig?: {
-    temperature?: number;
-    maxOutputTokens?: number;
-    topP?: number;
-    topK?: number;
-    stopSequences?: string[];
-  };
+// ContentBlock is a discriminated union on `type`; the common ones:
+// { type: 'text', text: string }
+// { type: 'tool_call', id: string, name: string, args: object }
+// { type: 'tool_response', id: string, name: string, response: object }
+// { type: 'thinking', thought: string }
+```
+
+Tool blocks restricted by the configuration may be filtered out of
+`contents` before the hook sees them.
+
+**Example:**
+
+```json
+{
+  "session_id": "abc123",
+  "hook_event_name": "BeforeModel",
+  "cwd": "/home/user/project",
+  "timestamp": "2026-09-14T16:30:00.000Z",
+  "transcript_path": "",
+  "llm_request": {
+    "version": 2,
+    "model": "glm-5.3",
+    "contents": [
+      {
+        "speaker": "human",
+        "blocks": [{ "type": "text", "text": "Tell me a story" }]
+      }
+    ]
+  }
 }
 ```
 
 ### AfterModelInput
 
+`AfterModel` fires once per streamed response chunk, with both the original
+request and the current chunk:
+
 ```typescript
 interface AfterModelInput extends HookInput {
-  /** Original request */
-  llm_request: LLMRequest;
+  /** Original request (v2 envelope, same shape as BeforeModel) */
+  llm_request: HookLLMRequest;
 
-  /** LLM response */
-  llm_response: LLMResponse;
+  /** LLM response chunk in the v2 hook wire format */
+  llm_response: HookLLMResponse;
 }
 
-interface LLMResponse {
-  candidates?: Array<{
-    content: {
-      role: 'model';
-      parts: Array<string | { text: string }>;
-    };
-    finishReason?: string;
-  }>;
+interface HookLLMResponse {
+  /** Wire-format version (always 2, stamped by the runtime) */
+  version: 2;
+
+  /** Response content as a single neutral IContent */
+  content: IContent;
+
+  /**
+   * Canonical finish reason. Present only on the terminal chunk of a turn;
+   * non-terminal chunks carry none. Values: 'stop' | 'max_tokens' |
+   * 'tool_calls' | 'safety' | 'refusal' | 'error' | 'other'
+   */
+  finishReason?:
+    | 'stop'
+    | 'max_tokens'
+    | 'tool_calls'
+    | 'safety'
+    | 'refusal'
+    | 'error'
+    | 'other';
+
+  /** Provider-native stop reason, retained for diagnostics */
+  rawStopReason?: string;
+
+  /** Token usage for this response */
+  usage?: UsageStats;
+}
+
+interface UsageStats {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  cachedTokens?: number;
+  reasoningTokens?: number;
+  toolTokens?: number;
 }
 ```
+
+`finishReason` uses a fixed canonical vocabulary (lowercase) across all
+providers. The provider's own value, when it differs, is preserved verbatim
+in `rawStopReason` (for example `end_turn` from Anthropic, `length` from
+OpenAI, `MAX_TOKENS` from Gemini).
 
 ### BeforeToolSelectionInput
 
 ```typescript
 interface BeforeToolSelectionInput extends HookInput {
-  /** Current LLM request */
-  llm_request: LLMRequest;
+  /** Current LLM request (v2 envelope) */
+  llm_request: HookLLMRequest;
 }
 ```
+
+At this phase the envelope carries `model` and the available `tools`;
+`contents` is an empty array. In v1 the hook received the bare tools array
+(not an object) — see the [migration table](#v1-to-v2-migration) below.
 
 ### SessionStartInput
 
@@ -365,11 +450,11 @@ interface BeforeModelOutput extends HookOutput {
   hookSpecificOutput?: {
     hookEventName: 'BeforeModel';
 
-    /** Modified LLM request (merged with original) */
-    llm_request?: Partial<LLMRequest>;
+    /** Partial v2 request merged onto the original (see merge semantics) */
+    llm_request?: Partial<HookLLMRequest>;
 
     /** Synthetic response (skips actual LLM call) */
-    llm_response?: LLMResponse;
+    llm_response?: HookLLMResponse;
 
     /** Pending-content boundary for hook-modified contents (enables compression for full-replacement hooks) */
     llm_request_boundary?: HookLLMRequestBoundary;
@@ -377,13 +462,13 @@ interface BeforeModelOutput extends HookOutput {
 }
 
 interface HookLLMRequestBoundary {
-  /** Schema version (currently 1) */
-  version?: 1;
+  /** Schema version (currently 2) */
+  version?: 2;
 
   /** 0-based index where the pending (new, unsent) suffix starts */
   pendingMessageStartIndex: number;
 
-  /** Number of pending messages; defaults to the rest of the messages */
+  /** Number of pending messages; defaults to the rest of the contents */
   pendingMessageCount?: number;
 
   /** Policy when the boundary is invalid: 'skip-compression' (default) or 'throw' */
@@ -391,30 +476,53 @@ interface HookLLMRequestBoundary {
 }
 ```
 
+A returned `llm_request` is a partial v2 envelope merged onto the original
+request with these semantics:
+
+- `contents` (when provided as an array) **replaces** the entire conversation
+- `model` (when provided as a string) **overrides** the target model
+- `settings` (when provided as an object) **shallow-merges** over the
+  existing settings
+- absent or wrongly-typed fields leave the target untouched
+
+There is no v1 fallback decode: a hook-returned `llm_request` is validated
+shallowly against the v2 envelope, and a v1-shaped payload (for example one
+using `messages`) is rejected, leaving the original request unchanged.
+Because `contents` replaces the conversation wholesale, tool_call,
+tool_response, and thinking blocks inside the replacement are preserved
+verbatim (see the [security note](#v2-wire-security-note) below).
+
+A returned `llm_response` short-circuits the LLM call entirely: the runtime
+uses it as a synthetic response instead of calling the provider. Presence is
+keyed on `content` being an object, and `finishReason`, when present, must be
+from the canonical vocabulary.
+
 `llm_request_boundary` is only relevant when the hook modifies
-`llm_request.messages`. When a hook replaces or restructures the conversation,
-the runtime can no longer tell which trailing messages are the new (unsent)
+`llm_request.contents`. When a hook replaces or restructures the conversation,
+the runtime can no longer tell which trailing contents are the new (unsent)
 "pending" content versus prior history. Without that boundary, context
 compression is skipped (the modified contents are sent as-is under the context
 limit, and a clear error is thrown when they exceed it).
 
-The metadata declares that the messages from `pendingMessageStartIndex` onward
+The metadata declares that the contents from `pendingMessageStartIndex` onward
 (`pendingMessageCount` items, defaulting to the rest) are the pending suffix —
-these are preserved verbatim through compression. The prefix **before** that
-index is declared history-semantics: if compression runs, that prefix is
-**replaced** by the compressed real history from the history service. Hooks
-that need history-side rewrites to survive compression must **not** supply this
+these are preserved verbatim through compression. Indices are interpreted over
+the modified `contents` array. The prefix **before** that index is declared
+history-semantics: if compression runs, that prefix is **replaced** by the
+compressed real history from the history service. Hooks that need
+history-side rewrites to survive compression must **not** supply this
 metadata (they should accept skip-compression instead).
 
-The boundary must describe a suffix of the modified messages:
-`pendingMessageStartIndex + pendingMessageCount` must equal `messages.length`.
-Otherwise the boundary is invalid and `onInvalidBoundary` applies
-(`'skip-compression'` by default, or `'throw'`). Malformed (structurally
-invalid) metadata is treated as invalid, not ignored — the hook explicitly
-attempted to control the boundary, so differential recovery is not used.
+The boundary must describe a suffix of the modified contents:
+`pendingMessageStartIndex + pendingMessageCount` must equal
+`contents.length`. Otherwise the boundary is invalid and `onInvalidBoundary`
+applies (`'skip-compression'` by default, or `'throw'`). Malformed
+(structurally invalid) metadata is treated as invalid, not ignored — the hook
+explicitly attempted to control the boundary, so differential recovery is not
+used.
 
 When `llm_request_boundary` is absent, the runtime attempts deterministic
-differential analysis (comparing the pre-hook and post-hook messages) to
+differential analysis (comparing the pre-hook and post-hook contents) to
 recover the boundary automatically. Pending-side modifications — append and
 modify-pending — are recovered without any hook changes. Prepends are
 detected but intentionally left unrecoverable: the prepended content lives on
@@ -428,14 +536,27 @@ compression rebuilt that prefix, so compression is skipped instead.
   "hookSpecificOutput": {
     "hookEventName": "BeforeModel",
     "llm_request": {
-      "messages": [
-        { "role": "user", "content": "Summarized earlier conversation..." },
-        { "role": "model", "content": "Understood." },
-        { "role": "user", "content": "The new (pending) user message" }
+      "contents": [
+        {
+          "speaker": "human",
+          "blocks": [
+            { "type": "text", "text": "Summarized earlier conversation..." }
+          ]
+        },
+        {
+          "speaker": "ai",
+          "blocks": [{ "type": "text", "text": "Understood." }]
+        },
+        {
+          "speaker": "human",
+          "blocks": [
+            { "type": "text", "text": "The new (pending) user message" }
+          ]
+        }
       ]
     },
     "llm_request_boundary": {
-      "version": 1,
+      "version": 2,
       "pendingMessageStartIndex": 2,
       "onInvalidBoundary": "skip-compression"
     }
@@ -450,11 +571,16 @@ interface AfterModelOutput extends HookOutput {
   hookSpecificOutput?: {
     hookEventName: 'AfterModel';
 
-    /** Modified response */
-    llm_response?: Partial<LLMResponse>;
+    /** Replacement response (v2 envelope) */
+    llm_response?: HookLLMResponse;
   };
 }
 ```
+
+A returned `llm_response` replaces the current chunk. Presence is keyed on
+`content` being an object (not on `candidates`); `finishReason`, when
+present, must be from the canonical vocabulary, and `usage` is carried
+through as supplied.
 
 ### BeforeToolSelectionOutput
 
@@ -463,32 +589,86 @@ interface BeforeToolSelectionOutput extends HookOutput {
   hookSpecificOutput?: {
     hookEventName: 'BeforeToolSelection';
 
-    /** Tool configuration */
-    toolConfig?: HookToolConfig;
+    /** Tool choice override */
+    toolChoice?: ToolChoice;
   };
 }
 
-interface HookToolConfig {
+interface ToolChoice {
   /** Tool selection mode */
-  mode?: 'AUTO' | 'ANY' | 'NONE';
+  mode: 'auto' | 'required' | 'none';
 
-  /** Explicitly allowed function names */
-  allowedFunctionNames?: string[];
+  /** Explicitly allowed tool names */
+  allowedToolNames?: string[];
 }
 ```
+
+Semantics:
+
+- `mode: 'auto'` — the model decides freely which tools to call (default)
+- `mode: 'required'` — the model must call a tool
+- `mode: 'none'` — the model may not call any tool
+- `allowedToolNames` restricts the selectable tools to the listed names
+
+When multiple hooks return `toolChoice`, aggregation is most-restrictive-
+wins: `none` beats `required` beats `auto`, and `allowedToolNames` lists are
+intersected (a tool must be allowed by every hook that supplied a list to
+remain selectable).
 
 **Example - Restrict Tools:**
 
 ```json
 {
   "hookSpecificOutput": {
-    "toolConfig": {
-      "mode": "AUTO",
-      "allowedFunctionNames": ["read_file", "list_directory", "glob"]
+    "hookEventName": "BeforeToolSelection",
+    "toolChoice": {
+      "mode": "auto",
+      "allowedToolNames": [
+        "read_file",
+        "read_many_files",
+        "glob",
+        "search_file_content",
+        "list_directory"
+      ]
     }
   }
 }
 ```
+
+### v2 wire security note
+
+Hook-supplied `contents` and `content` pass through to the provider request
+with full fidelity: text, `tool_call`, `tool_response`, `thinking`, and media
+blocks all survive verbatim, and validation of the inner blocks is
+deliberately shallow. Hooks are a trusted extension seam — the same trust
+model as the hook configuration itself. Only install hooks whose code you
+have reviewed, because a BeforeModel/AfterModel hook can rewrite anything the
+model sees or emits, including injecting tool calls that execute with your
+permissions.
+
+### v1 → v2 migration
+
+The v2 wire format is breaking: the runtime no longer decodes v1 hook
+payloads at all (no fallback). Hooks that returned v1 shapes are silently
+ignored on the modification path — the original request/response is kept.
+
+A note on what v1 actually emitted: the **input side was already neutral**.
+Since the hook-system rewrite, hooks received `llm_request` as
+`{contents, tools}` (no version, no model) — the older documentation that
+described Gemini-shaped inputs (`role`/`parts`, `systemInstruction`,
+`generationConfig`) was wrong about the input side. The shapes below that
+changed are the output side and the version/object envelope.
+
+| v1 (what hooks received/returned)                                            | v2                                                                                                                                                   |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Input `llm_request`: `{contents, tools}` (no version)                        | `{version: 2, model, contents, tools?, settings?}`                                                                                                   |
+| `BeforeToolSelection` input: bare `tools` array                              | Object envelope: `llm_request = {version: 2, model, contents: [], tools}`                                                                            |
+| Output `llm_request.messages: [{role, content}]`                             | Output `llm_request.contents: IContent[]` (contents replace wholesale)                                                                               |
+| Output `llm_response.candidates[].content.parts`                             | Output `llm_response.content: IContent` (presence keyed on `content`)                                                                                |
+| `toolConfig` with `mode: 'AUTO' / 'ANY' / 'NONE'` and `allowedFunctionNames` | `toolChoice` with `mode: 'auto' / 'required' / 'none'` and `allowedToolNames`                                                                        |
+| `usageMetadata: {promptTokenCount, candidatesTokenCount, totalTokenCount}`   | `usage: {promptTokens, completionTokens, totalTokens}`                                                                                               |
+| `finishReason` in provider vocabulary (`STOP`, `MAX_TOKENS`, `SAFETY`, ...)  | `finishReason` canonical (`stop`, `max_tokens`, `tool_calls`, `safety`, `refusal`, `error`, `other`) + `rawStopReason` for the provider-native value |
+| `llm_request_boundary.version: 1`, indices over `messages`                   | `llm_request_boundary.version: 2`, indices over `contents`                                                                                           |
 
 ## Aggregated Results
 
@@ -656,13 +836,14 @@ class BeforeToolHookOutput extends DefaultHookOutput {
 
 ```typescript
 class BeforeModelHookOutput extends DefaultHookOutput {
-  /** Get synthetic response if provided */
-  getSyntheticResponse(): GenerateContentResponse | undefined;
+  /** Get synthetic response if provided (v2 envelope) */
+  getSyntheticResponse(): HookLLMResponse | undefined;
 
-  /** Apply modifications to LLM request */
-  applyLLMRequestModifications(
-    target: GenerateContentParameters,
-  ): GenerateContentParameters;
+  /** Apply modifications to the LLM request (v2 merge semantics) */
+  applyLLMRequestModifications(target: HookLLMRequest): HookLLMRequest;
+
+  /** Parse llm_request_boundary metadata (discriminated result) */
+  getLLMRequestBoundaryResult(): HookLLMRequestBoundaryParseResult;
 }
 ```
 
@@ -670,13 +851,10 @@ class BeforeModelHookOutput extends DefaultHookOutput {
 
 ```typescript
 class BeforeToolSelectionHookOutput extends DefaultHookOutput {
-  /** Apply tool configuration modifications */
-  applyToolConfigModifications(target: {
-    toolConfig?: GenAIToolConfig;
-    tools?: ToolListUnion;
-  }): {
-    toolConfig?: GenAIToolConfig;
-    tools?: ToolListUnion;
+  /** Apply tool choice modifications */
+  applyToolChoiceModifications(target: { tools?: unknown[] }): {
+    toolChoice?: ToolChoice;
+    tools?: unknown[];
   };
 }
 ```
@@ -685,8 +863,8 @@ class BeforeToolSelectionHookOutput extends DefaultHookOutput {
 
 ```typescript
 class AfterModelHookOutput extends DefaultHookOutput {
-  /** Get modified response if provided */
-  getModifiedResponse(): GenerateContentResponse | undefined;
+  /** Get modified response if provided (v2 envelope) */
+  getModifiedResponse(): HookLLMResponse | undefined;
 }
 ```
 
@@ -706,7 +884,8 @@ class AfterModelHookOutput extends DefaultHookOutput {
 
 ### Tool Selection (BeforeToolSelection)
 
-- `allowedFunctionNames` are unioned across all hooks
-- `NONE` mode wins if any hook uses it
-- Otherwise `ANY` if any hook uses it, else `AUTO`
+- `allowedToolNames` lists are intersected across all hooks (a tool must be
+  allowed by every hook that supplied a list to remain selectable)
+- `none` mode wins if any hook uses it
+- Otherwise `required` if any hook uses it, else `auto`
 - Results are sorted for deterministic behavior

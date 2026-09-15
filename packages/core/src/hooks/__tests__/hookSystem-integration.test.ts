@@ -191,7 +191,13 @@ describe('Integration: mediated path round-trip (DELTA-HSYS-001)', () => {
     const request: HookExecutionRequest = {
       eventName: HookEventName.BeforeModel,
       input: {
-        llm_request: { messages: [{ role: 'user', content: 'hello' }] },
+        llm_request: {
+          version: 2,
+          model: 'test-model',
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+          ],
+        },
       },
       correlationId,
     };

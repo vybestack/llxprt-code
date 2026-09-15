@@ -252,8 +252,8 @@ describe('ChatSession runtime context', () => {
         value: () => ({
           initialize: async () => undefined,
           fireBeforeToolSelectionEvent: async () => ({
-            applyToolConfigModifications: () => ({
-              toolConfig: { allowedFunctionNames: ['read_file'] },
+            applyToolChoiceModifications: () => ({
+              toolChoice: { mode: 'auto', allowedToolNames: ['read_file'] },
             }),
           }),
         }),
@@ -362,8 +362,8 @@ describe('ChatSession runtime context', () => {
         value: () => ({
           initialize: async () => undefined,
           fireBeforeToolSelectionEvent: async () => ({
-            applyToolConfigModifications: () => ({
-              toolConfig: { allowedFunctionNames: ['read_file'] },
+            applyToolChoiceModifications: () => ({
+              toolChoice: { mode: 'auto', allowedToolNames: ['read_file'] },
             }),
           }),
           fireBeforeModelEvent: async () => new BeforeModelHookOutput({}),

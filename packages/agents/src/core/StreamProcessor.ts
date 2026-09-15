@@ -23,6 +23,7 @@ import { flushRuntimeAuthScope } from '@vybestack/llxprt-code-auth';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import { toolDeclarationsFromLegacyToolset } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import type {
   RuntimeGenerateChatOptions as GenerateChatOptions,
   RuntimeProviderToolset as ProviderToolset,
@@ -73,6 +74,7 @@ import {
   afterModelModifiedToChunk,
   afterModelBlockingToModelOutput,
 } from './hookWireAdapter.js';
+import type { AfterModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 import { withCompressionCallbackCleanup } from './streamCleanup.js';
@@ -580,7 +582,11 @@ export class StreamProcessor {
     configForHooks: AgentRuntimeContext['providerRuntime']['config'],
     tools: AgentClientGenerateConfig['tools'],
   ): Promise<ToolSelectionHookResult> {
-    return applyToolSelectionHook(configForHooks, tools);
+    return applyToolSelectionHook(
+      configForHooks,
+      tools,
+      this.runtimeContext.state.model,
+    );
   }
 
   private _buildRequestContents(
@@ -634,7 +640,7 @@ export class StreamProcessor {
    */
   private async *_convertIContentStream(
     streamResponse: AsyncIterable<IContent>,
-    llmRequest?: Record<string, unknown>,
+    requestPayload?: { contents: IContent[]; tools: unknown },
     telemetryContext?: {
       promptId: string;
       startTime: number;
@@ -670,7 +676,7 @@ export class StreamProcessor {
         const yieldedChunk =
           (await this._processAfterModelHook(
             iContent,
-            llmRequest,
+            requestPayload,
             chunk,
             hookRestrictedAllowedTools,
           )) ?? chunk;
@@ -717,7 +723,7 @@ export class StreamProcessor {
    */
   private async _processAfterModelHook(
     iContent: IContent,
-    llmRequest: Record<string, unknown> | undefined,
+    requestPayload: { contents: IContent[]; tools: unknown } | undefined,
     chunk: ModelStreamChunk,
     hookRestrictedAllowedTools: string[] | undefined,
   ): Promise<ModelStreamChunk | undefined> {
@@ -748,41 +754,41 @@ export class StreamProcessor {
     const hookIContent = iContentFromBlocks(filteredBlocks, iContent.speaker);
 
     const afterModelResult = await hookSystem.fireAfterModelEvent(
-      llmRequest ?? {},
-      hookIContent,
+      {
+        model: this.runtimeContext.state.model,
+        contents: requestPayload?.contents ?? [],
+        ...(Array.isArray(requestPayload?.tools) &&
+        requestPayload.tools.length > 0
+          ? {
+              tools: toolDeclarationsFromLegacyToolset(
+                requestPayload.tools as ProviderToolset,
+              ),
+            }
+          : {}),
+      },
+      {
+        content: hookIContent,
+        // finishReason/rawStopReason live only on terminal chunks; toModelStreamChunk
+        // already lifted them onto the chunk when the provider emitted them.
+        ...(chunk.finishReason !== undefined
+          ? { finishReason: chunk.finishReason }
+          : {}),
+        ...(chunk.rawStopReason !== undefined
+          ? { rawStopReason: chunk.rawStopReason }
+          : {}),
+        ...(chunk.usage !== undefined ? { usage: chunk.usage } : {}),
+      },
     );
 
     if (afterModelResult?.shouldStopExecution() === true) {
-      const effectiveReason = afterModelResult.getEffectiveReason() as
-        | string
-        | undefined;
       throw new AgentExecutionStoppedError(
-        effectiveReason ?? 'Execution stopped by AfterModel hook',
+        afterModelResult.getEffectiveReason(),
         afterModelResult.systemMessage,
       );
     }
 
     if (afterModelResult?.isBlockingDecision() === true) {
-      const effectiveReason = afterModelResult.getEffectiveReason() as
-        | string
-        | undefined;
-      // P13: BLOCK branch now neutral — build a ModelOutput from the
-      // hook-modified response or the current chunk, carrying the block
-      // reason text. No synthetic GenerateContentResponse.
-      const modifiedResponse = afterModelResult.getModifiedResponse();
-      const blockedOutput: ModelOutput = modifiedResponse
-        ? (afterModelModifiedToChunk(modifiedResponse, chunk) ?? { ...chunk })
-        : { ...chunk };
-      // P13: Use the neutral blocking adapter for the block reason text.
-      const finalBlockedOutput = afterModelBlockingToModelOutput(
-        effectiveReason,
-        blockedOutput,
-      );
-      throw new AgentExecutionBlockedError(
-        effectiveReason ?? 'Execution blocked by AfterModel hook',
-        finalBlockedOutput,
-        afterModelResult.systemMessage,
-      );
+      this._throwAfterModelBlocked(afterModelResult, chunk);
     }
 
     // MODIFY branch: convert hook's response to neutral chunk.
@@ -792,6 +798,34 @@ export class StreamProcessor {
     }
 
     return undefined;
+  }
+
+  /**
+   * BLOCK branch of the AfterModel hook: build a ModelOutput from the
+   * hook-modified response or the current chunk, carry the block reason
+   * text, and throw AgentExecutionBlockedError.
+   *
+   * P13: neutral — no synthetic GenerateContentResponse is built here.
+   */
+  private _throwAfterModelBlocked(
+    afterModelResult: AfterModelHookOutput,
+    chunk: ModelStreamChunk,
+  ): never {
+    const effectiveReason = afterModelResult.getEffectiveReason();
+    const modifiedResponse = afterModelResult.getModifiedResponse();
+    const blockedOutput: ModelOutput = modifiedResponse
+      ? (afterModelModifiedToChunk(modifiedResponse, chunk) ?? { ...chunk })
+      : { ...chunk };
+    // P13: Use the neutral blocking adapter for the block reason text.
+    const finalBlockedOutput = afterModelBlockingToModelOutput(
+      effectiveReason,
+      blockedOutput,
+    );
+    throw new AgentExecutionBlockedError(
+      effectiveReason,
+      finalBlockedOutput,
+      afterModelResult.systemMessage,
+    );
   }
 
   /**

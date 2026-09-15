@@ -547,7 +547,7 @@ export type {
 // @requirement REQ-013.1
 // Export neutral llm-types layer. The barrel re-exports IContent types
 // type-only, but also re-exports many runtime value symbols (e.g.
-// CANONICAL_FINISH_REASONS, mapGeminiFinishReason, canonicalizeToolCallId).
+// CANONICAL_FINISH_REASONS, isCanonicalFinishReason, canonicalizeToolCallId).
 // `export *` is safe here ONLY because none of those runtime names collide
 // with IContent's runtime exports today — safety depends on the absence of
 // name collisions between the two barrels, not on type-only re-exports.

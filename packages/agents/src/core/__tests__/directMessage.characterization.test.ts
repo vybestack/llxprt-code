@@ -524,15 +524,11 @@ describe('P12: after-model hook filtering (characterization)', () => {
           new AfterModelHookOutput({
             hookSpecificOutput: {
               llm_response: {
-                candidates: [
-                  {
-                    content: {
-                      role: 'model',
-                      parts: ['hook filtered text'],
-                    },
-                    finishReason: 'STOP',
-                  },
-                ],
+                content: {
+                  speaker: 'ai',
+                  blocks: [{ type: 'text', text: 'hook filtered text' }],
+                },
+                finishReason: 'stop',
               },
             },
           }),
@@ -587,15 +583,11 @@ describe('P12: after-model hook filtering (characterization)', () => {
               new AfterModelHookOutput({
                 hookSpecificOutput: {
                   llm_response: {
-                    candidates: [
-                      {
-                        content: {
-                          role: 'model',
-                          parts: [filteredText],
-                        },
-                        finishReason: 'STOP',
-                      },
-                    ],
+                    content: {
+                      speaker: 'ai',
+                      blocks: [{ type: 'text', text: filteredText }],
+                    },
+                    finishReason: 'stop',
                   },
                 },
               }),

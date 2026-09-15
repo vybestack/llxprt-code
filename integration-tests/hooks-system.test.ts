@@ -317,7 +317,7 @@ process.exit(2);
   describe('BeforeModel Hooks - LLM Request Modification', () => {
     it('should modify LLM requests with BeforeModel hooks', async () => {
       // Create a hook script that replaces the LLM request with a modified version
-      // Note: Providing messages in the hook output REPLACES the entire conversation
+      // Note: Providing contents in the hook output REPLACES the entire conversation
       rig.setup('should modify LLM requests with BeforeModel hooks', {
         fakeResponsesPath: join(
           import.meta.dirname,
@@ -330,10 +330,15 @@ console.log(JSON.stringify({
   hookSpecificOutput: {
     hookEventName: "BeforeModel",
     llm_request: {
-      messages: [
+      contents: [
         {
-          role: "user",
-          content: "Please respond with exactly: The security hook modified this request successfully."
+          speaker: "human",
+          blocks: [
+            {
+              type: "text",
+              text: "Please respond with exactly: The security hook modified this request successfully."
+            }
+          ]
         }
       ]
     }
@@ -486,17 +491,16 @@ console.log(JSON.stringify({
   hookSpecificOutput: {
     hookEventName: "AfterModel",
     llm_response: {
-      candidates: [
-        {
-          content: {
-            role: "model",
-            parts: [
-              "[FILTERED] Response has been filtered for security compliance."
-            ]
-          },
-          finishReason: "STOP"
-        }
-      ]
+      content: {
+        speaker: "ai",
+        blocks: [
+          {
+            type: "text",
+            text: "[FILTERED] Response has been filtered for security compliance."
+          }
+        ]
+      },
+      finishReason: "stop"
     }
   }
 }));`;
@@ -547,7 +551,7 @@ console.log(JSON.stringify({
       });
       // Create inline hook command allowing only read_file, not run_shell_command
       const hookCommand =
-        "node -e \"console.log(JSON.stringify({hookSpecificOutput: {hookEventName: 'BeforeToolSelection', toolConfig: {mode: 'ANY', allowedFunctionNames: ['read_file']}}}))\"";
+        "node -e \"console.log(JSON.stringify({hookSpecificOutput: {hookEventName: 'BeforeToolSelection', toolChoice: {mode: 'required', allowedToolNames: ['read_file']}}}))\"";
 
       rig.setup('should modify tool selection with BeforeToolSelection hooks', {
         settings: {

@@ -158,15 +158,12 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
             new AfterModelHookOutput({
               hookSpecificOutput: {
                 llm_response: {
-                  candidates: [
-                    {
-                      content: {
-                        role: 'model' as const,
-                        parts: ['hook modified text'],
-                      },
-                      finishReason: 'STOP' as const,
-                    },
-                  ],
+                  version: 2,
+                  content: {
+                    speaker: 'ai',
+                    blocks: [{ type: 'text', text: 'hook modified text' }],
+                  },
+                  finishReason: 'stop',
                 },
               },
             }),
@@ -217,18 +214,15 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
 
     const afterModelResult = new AfterModelHookOutput({});
     vi.spyOn(afterModelResult, 'getModifiedResponse').mockReturnValue({
-      candidates: [
-        {
-          content: {
-            role: 'model' as const,
-            parts: [
-              { thought: true, text: 'internal reasoning' },
-              { text: 'visible answer' },
-            ],
-          },
-          finishReason: 'STOP' as const,
-        },
-      ],
+      version: 2,
+      content: {
+        speaker: 'ai',
+        blocks: [
+          { type: 'thinking', thought: 'internal reasoning' },
+          { type: 'text', text: 'visible answer' },
+        ],
+      },
+      finishReason: 'stop',
     } as unknown as ReturnType<AfterModelHookOutput['getModifiedResponse']>);
 
     const hookConfig = Object.create(config) as Config;

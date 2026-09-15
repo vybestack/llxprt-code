@@ -115,7 +115,7 @@ export function validateAfterAgentInput(
 
 /**
  * Validates BeforeModel event input.
- * Required fields: llm_request (object)
+ * Required fields: llm_request (object with model string + contents array)
  *
  * @plan PLAN-20250218-HOOKSYSTEM.P11
  * @requirement DELTA-HPAY-001, DELTA-HPAY-005
@@ -123,12 +123,18 @@ export function validateAfterAgentInput(
 export function validateBeforeModelInput(
   input: unknown,
 ): input is BeforeModelInput {
-  return hasLlmRequest(input);
+  if (!isObject(input)) return false;
+  const llmRequest = input['llm_request'];
+  if (!isObject(llmRequest)) return false;
+  if (typeof llmRequest['model'] !== 'string') return false;
+  if (!Array.isArray(llmRequest['contents'])) return false;
+  return true;
 }
 
 /**
  * Validates AfterModel event input.
- * Required fields: llm_request (object), llm_response (object)
+ * Required fields: llm_request (object with model string + contents array),
+ * llm_response (object with content object)
  *
  * @plan PLAN-20250218-HOOKSYSTEM.P11
  * @requirement DELTA-HPAY-001, DELTA-HPAY-005
@@ -137,24 +143,20 @@ export function validateAfterModelInput(
   input: unknown,
 ): input is AfterModelInput {
   if (!isObject(input)) return false;
-  if (!isObject(input['llm_request'])) return false;
-  if (!isObject(input['llm_response'])) return false;
-  return true;
-}
-
-/**
- * Shared helper: checks if input has a valid llm_request object.
- * Used by validateBeforeModelInput and validateBeforeToolSelectionInput.
- */
-function hasLlmRequest(input: unknown): boolean {
-  if (!isObject(input)) return false;
-  if (!isObject(input['llm_request'])) return false;
+  const llmRequest = input['llm_request'];
+  if (!isObject(llmRequest)) return false;
+  if (typeof llmRequest['model'] !== 'string') return false;
+  if (!Array.isArray(llmRequest['contents'])) return false;
+  const llmResponse = input['llm_response'];
+  if (!isObject(llmResponse)) return false;
+  if (!isObject(llmResponse['content'])) return false;
   return true;
 }
 
 /**
  * Validates BeforeToolSelection event input.
- * Required fields: llm_request (object)
+ * Required fields: llm_request (OBJECT with tools array — tools populated,
+ * contents empty/omitted for this event)
  *
  * @plan PLAN-20250218-HOOKSYSTEM.P11
  * @requirement DELTA-HPAY-001, DELTA-HPAY-005
@@ -162,7 +164,11 @@ function hasLlmRequest(input: unknown): boolean {
 export function validateBeforeToolSelectionInput(
   input: unknown,
 ): input is BeforeToolSelectionInput {
-  return hasLlmRequest(input);
+  if (!isObject(input)) return false;
+  const llmRequest = input['llm_request'];
+  if (!isObject(llmRequest)) return false;
+  if (!Array.isArray(llmRequest['tools'])) return false;
+  return true;
 }
 
 /**

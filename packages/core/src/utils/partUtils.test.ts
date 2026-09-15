@@ -5,11 +5,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import {
-  getResponseText,
-  partToString,
-  partListUnionToString,
-} from './partUtils.js';
+import { partToString, partListUnionToString } from './partUtils.js';
 
 describe('partUtils', () => {
   describe('partToString (default behavior)', () => {
@@ -132,37 +128,6 @@ describe('partUtils', () => {
       expect(partToString(parts, verboseOptions)).toBe(
         'start middle[Function Call: func1] end<audio/mp3>',
       );
-    });
-  });
-
-  describe('getResponseText', () => {
-    it('returns null when there are no candidates', () => {
-      expect(getResponseText({ candidates: [] })).toBeNull();
-    });
-
-    it('returns null when the first candidate has no parts', () => {
-      expect(
-        getResponseText({ candidates: [{ content: { parts: [] } }] }),
-      ).toBeNull();
-    });
-
-    it('returns concatenated text from the first candidate', () => {
-      const response = {
-        candidates: [
-          {
-            content: {
-              role: 'model',
-              parts: [
-                { text: 'alpha' },
-                { inlineData: { mimeType: 'text/plain', data: 'x' } },
-                { text: ' beta' },
-              ],
-            },
-          },
-        ],
-      };
-
-      expect(getResponseText(response)).toBe('alpha beta');
     });
   });
 

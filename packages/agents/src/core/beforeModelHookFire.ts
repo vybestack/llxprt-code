@@ -14,6 +14,7 @@
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProviderToolset as ProviderToolset } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import { toolDeclarationsFromLegacyToolset } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import {
   resolvePendingBoundaryFromHook,
   snapshotContents,
@@ -90,8 +91,11 @@ export async function fireBeforeModelHook(
   // llm_request) are detected by differential recovery (G1, issue #2306).
   const snapshot = snapshotContents(requestContents);
   const beforeModelResult = await hookSystem.fireBeforeModelEvent({
+    model,
     contents: requestContents,
-    tools,
+    ...(tools !== undefined
+      ? { tools: toolDeclarationsFromLegacyToolset(tools) }
+      : {}),
   });
 
   enforceBeforeModelHookDecision(beforeModelResult, hookRestrictedAllowedTools);

@@ -160,6 +160,14 @@ LLxprt Code supports these hook events:
 | `BeforeAgent`         | Before agent processes prompt | Prompt preprocessing                               |
 | `AfterAgent`          | After agent completes         | Response postprocessing                            |
 
+> **Note:** `BeforeModel`, `AfterModel`, and `BeforeToolSelection` exchange
+> versioned, provider-neutral payloads (`llm_request`/`llm_response`
+> envelopes over `IContent` contents, and `toolChoice` for tool selection).
+> The current wire format is **v2**; v1 payload shapes (`messages`,
+> `candidates`, `toolConfig`) are no longer decoded. See the
+> [migration table](./api-reference.md#v1-to-v2-migration) in the API
+> Reference if you are updating existing hooks.
+
 ## Hooks in Extensions
 
 Extensions can bundle hooks alongside MCP servers and prompts. When you install an extension that includes hooks, those hooks are loaded automatically when the extension is enabled.
@@ -217,11 +225,9 @@ request = input_data.get('llm_request', {})
 # Estimate token count from contents (rough approximation: ~4 chars per token)
 total_chars = 0
 for content in request.get('contents', []):
-    for part in content.get('parts', []):
-        if isinstance(part, str):
-            total_chars += len(part)
-        elif isinstance(part, dict) and 'text' in part:
-            total_chars += len(part['text'])
+    for block in content.get('blocks', []):
+        if isinstance(block, dict) and block.get('type') == 'text':
+            total_chars += len(block.get('text', ''))
 
 estimated_tokens = total_chars // 4
 
