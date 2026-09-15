@@ -302,10 +302,6 @@ void vi.mock('../hooks/useExtensionAutoUpdate.js', () => ({
   useExtensionAutoUpdate: vi.fn(),
 }));
 
-void vi.mock('../hooks/useStaticHistoryRefresh.js', () => ({
-  useStaticHistoryRefresh: vi.fn(),
-}));
-
 void vi.mock('../hooks/useBracketedPaste.js', () => ({
   useBracketedPaste: vi.fn(),
 }));
