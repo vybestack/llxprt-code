@@ -807,6 +807,26 @@ export async function applyProfileWithGuards(
   profileInput: Profile,
   options: ProfileApplicationOptions = {},
 ): Promise<ProfileApplicationResult> {
+  const { settingsService } = getCliRuntimeServices();
+  // Atomic profile application (#2534 C5): snapshot the persisted settings
+  // surface before the first cascade mutation. A mid-cascade failure restores
+  // the snapshot and rethrows the ORIGINAL error, so a failed application
+  // never leaves the settings store half-mutated. Residual, deliberately not
+  // rolled back: ProviderManager runtime caches (they are caches over this
+  // store and refresh on next access) and already-emitted core events.
+  const stateSnapshot = settingsService.exportForStateSnapshot();
+  try {
+    return await applyProfileCascade(profileInput, options);
+  } catch (error) {
+    settingsService.restoreFromStateSnapshot(stateSnapshot);
+    throw error;
+  }
+}
+
+async function applyProfileCascade(
+  profileInput: Profile,
+  options: ProfileApplicationOptions = {},
+): Promise<ProfileApplicationResult> {
   const runtimeServices = getCliRuntimeServices();
   const servicesForProfileApplication = {
     ...runtimeServices,

@@ -144,6 +144,27 @@ export const settingsServiceStub = {
     }
     return undefined;
   },
+  // Mirrors the real SettingsService rollback primitives (#2534 C5) over the
+  // stub's own global/profile-scoped surfaces.
+  exportForStateSnapshot() {
+    return {
+      global: { currentProfile: this.currentProfile },
+      providers: structuredClone(Object.fromEntries(this.providerSettings)),
+    };
+  },
+  restoreFromStateSnapshot(snapshot: {
+    global: Record<string, unknown>;
+    providers: Record<string, Record<string, unknown>>;
+  }) {
+    this.currentProfile =
+      (snapshot.global.currentProfile as string | null) ?? null;
+    this.providerSettings = new Map(
+      Object.entries(snapshot.providers).map(([provider, settings]) => [
+        provider,
+        structuredClone(settings),
+      ]),
+    );
+  },
   getProviderSettings(providerName: string) {
     return (
       this.providerSettings.get(providerName) ??
