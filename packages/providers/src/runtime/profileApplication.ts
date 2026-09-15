@@ -9,10 +9,10 @@ import type {
 import * as fs from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import type { getCliRuntimeServices } from './runtimeSettings.js';
 import {
   clearActiveModelParam,
   getActiveModelParams,
-  getCliRuntimeServices,
   isCliRuntimeStatelessReady,
   isCliStatelessProviderModeEnabled,
   setActiveModel,
@@ -797,32 +797,12 @@ async function applyProviderAuthUpdates(
   };
 }
 
-/**
- * @plan PLAN-20251020-STATELESSPROVIDER3.P09
- * @requirement REQ-SP3-002
- * @pseudocode profile-application.md lines 1-22
- */
-export async function applyProfileWithGuards(
-  profileInput: Profile,
-  options: ProfileApplicationOptions = {},
-): Promise<ProfileApplicationResult> {
-  // One runtime-services resolution shared by wrapper and cascade.
-  const runtimeServices = getCliRuntimeServices();
-  // Atomic profile application (#2534 C5): snapshot the persisted settings
-  // surface before the cascade; on failure restore it and rethrow the
-  // ORIGINAL error. Not rolled back: ProviderManager runtime caches (they
-  // are caches over this store and refresh on next access).
-  const stateSnapshot =
-    runtimeServices.settingsService.exportForStateSnapshot();
-  try {
-    return await applyProfileCascade(profileInput, options, runtimeServices);
-  } catch (error) {
-    runtimeServices.settingsService.restoreFromStateSnapshot(stateSnapshot);
-    throw error;
-  }
-}
+// applyProfileWithGuards (the atomic snapshot/rollback wrapper) lives in
+// profileApplicationRollback.ts so this module stays within the max-lines
+// budget; re-exported here because every caller imports it from this module.
+export { applyProfileWithGuards } from './profileApplicationRollback.js';
 
-async function applyProfileCascade(
+export async function applyProfileCascade(
   profileInput: Profile,
   options: ProfileApplicationOptions,
   runtimeServices: ReturnType<typeof getCliRuntimeServices>,

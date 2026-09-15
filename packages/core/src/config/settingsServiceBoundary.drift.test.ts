@@ -30,6 +30,13 @@ describe('SettingsServiceBoundary drift (tools mirror vs settings owner)', () =>
   it('a real SettingsService is assignable to the boundary', () => {
     const service: SettingsServiceBoundary = new SettingsService();
     assertImplements<SettingsServiceBoundary>(service);
+    // The assignment above is enforced only at compile time (bun test does
+    // not typecheck), so also assert the runtime drift result: every member
+    // the boundary declares must exist as a function on the real service.
+    const driftedMembers = (
+      ['get', 'set', 'getAllGlobalSettings'] as const
+    ).filter((member) => typeof service[member] !== 'function');
+    expect(driftedMembers).toStrictEqual([]);
   });
 
   it('the boundary members exist as functions on a real service instance', () => {
