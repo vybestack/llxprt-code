@@ -406,6 +406,7 @@ export const providerCommand: SlashCommand = {
   description:
     'select a provider: /provider [text|image] [name] (omit name for menu; Tab to complete)',
   kind: CommandKind.BUILT_IN,
+  autoExecute: true,
   schema: providerCommandSchema,
   action: async (
     context: CommandContext,

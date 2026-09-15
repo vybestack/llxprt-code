@@ -16,6 +16,7 @@ import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import * as path from 'node:path';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
+import { providerCommand } from '../commands/providerCommand.js';
 import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
 import type { UseShellHistoryReturn } from '../hooks/useShellHistory.js';
 import { useShellHistory } from '../hooks/useShellHistory.js';
@@ -482,6 +483,37 @@ describe('InputPrompt', () => {
       expect(mockCommandCompletion.handleAutocomplete).toHaveBeenCalledWith(0);
     });
     unmount();
+  });
+
+  it('submits /provider on Enter with schema argument suggestions', async () => {
+    const submissions: string[] = [];
+    const suggestions = [{ label: 'fake', value: 'fake' }];
+    props.onSubmit = (text) => submissions.push(text);
+    props.slashCommands = [providerCommand];
+    props.buffer.setText('/provider fake');
+
+    mockedUseCommandCompletion.mockReturnValue({
+      ...mockCommandCompletion,
+      showSuggestions: true,
+      suggestions,
+      activeSuggestionIndex: -1,
+      isArgumentCompletion: true,
+      leafCommand: providerCommand,
+      handleAutocomplete: (index) => `/provider ${suggestions[index].value} `,
+    });
+
+    const { stdin, unmount } = renderWithProviders(<InputPrompt {...props} />);
+    try {
+      await act(async () => {
+        stdin.write('\r');
+      });
+
+      await waitFor(() => {
+        expect(submissions).toStrictEqual(['/provider fake']);
+      });
+    } finally {
+      unmount();
+    }
   });
 
   it('should autocomplete argument completion when command has autoExecute: false', async () => {
