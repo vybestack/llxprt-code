@@ -54,6 +54,8 @@ export const ProviderActivationIntentSchema = z
       .strict()
       .optional(),
     authMode: z.enum(['auto', 'provider-or-oauth', 'none']).optional(),
+    authMethod: z.string().optional(),
+    providerSwitchPolicy: z.enum(['strict', 'best-effort']).optional(),
   })
   .strict();
 

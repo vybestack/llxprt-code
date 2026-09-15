@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { describe, it, expect, vi } from 'bun:test';
 import {
   createProviderAdapterFromManager,
@@ -149,6 +150,7 @@ describe('createToolRegistryViewFromRegistry', () => {
     const registry = new ToolRegistry(
       config as never,
       getTestRuntimeMessageBus(config),
+      new SettingsService(),
     );
     registry.registerTool(
       new MockTool(

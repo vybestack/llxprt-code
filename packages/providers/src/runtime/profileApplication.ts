@@ -9,10 +9,10 @@ import type {
 import * as fs from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import type { getCliRuntimeServices } from './runtimeSettings.js';
 import {
   clearActiveModelParam,
   getActiveModelParams,
-  getCliRuntimeServices,
   isCliRuntimeStatelessReady,
   isCliStatelessProviderModeEnabled,
   setActiveModel,
@@ -68,7 +68,6 @@ export interface ProfileApplicationResult {
 }
 
 const logger = new DebugLogger('llxprt:runtime:profile');
-const lbLogger = new DebugLogger('llxprt:loadbalancer');
 
 /**
  * @plan PLAN-20251020-STATELESSPROVIDER3.P09
@@ -798,16 +797,16 @@ async function applyProviderAuthUpdates(
   };
 }
 
-/**
- * @plan PLAN-20251020-STATELESSPROVIDER3.P09
- * @requirement REQ-SP3-002
- * @pseudocode profile-application.md lines 1-22
- */
-export async function applyProfileWithGuards(
+// applyProfileWithGuards (the atomic snapshot/rollback wrapper) lives in
+// profileApplicationRollback.ts so this module stays within the max-lines
+// budget; re-exported here because every caller imports it from this module.
+export { applyProfileWithGuards } from './profileApplicationRollback.js';
+
+export async function applyProfileCascade(
   profileInput: Profile,
-  options: ProfileApplicationOptions = {},
+  options: ProfileApplicationOptions,
+  runtimeServices: ReturnType<typeof getCliRuntimeServices>,
 ): Promise<ProfileApplicationResult> {
-  const runtimeServices = getCliRuntimeServices();
   const servicesForProfileApplication = {
     ...runtimeServices,
     profileManager: options.profileManager ?? runtimeServices.profileManager,
@@ -817,7 +816,7 @@ export async function applyProfileWithGuards(
     profileInput,
     options,
     servicesForProfileApplication,
-    lbLogger,
+    new DebugLogger('llxprt:loadbalancer'),
   );
   const context = buildProfileApplicationContext(
     profileInput,

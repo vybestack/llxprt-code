@@ -59,6 +59,25 @@ const {
       return this.providers[provider] ?? {};
     }
 
+    // Mirrors the real SettingsService rollback primitives (#2534 C5).
+    exportForStateSnapshot(): {
+      global: Record<string, unknown>;
+      providers: Record<string, Record<string, unknown>>;
+    } {
+      return {
+        global: { ...this.global },
+        providers: structuredClone(this.providers),
+      };
+    }
+
+    restoreFromStateSnapshot(snapshot: {
+      global: Record<string, unknown>;
+      providers: Record<string, Record<string, unknown>>;
+    }): void {
+      this.global = { ...snapshot.global };
+      this.providers = structuredClone(snapshot.providers);
+    }
+
     switchProvider = vi.fn(async (provider: string) => {
       this.set('activeProvider', provider);
     });

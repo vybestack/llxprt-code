@@ -37,14 +37,6 @@ export interface IToolRegistryHost {
   /** Returns the prompt registry boundary used by discovery refreshes. */
   getPromptRegistry?(): { clear(): void } | undefined;
 
-  /** Returns settings used for schema transforms. */
-  getSettingsService?():
-    | {
-        getAllGlobalSettings?(): Record<string, unknown> | undefined;
-        get?(key: string): unknown;
-      }
-    | undefined;
-
   /** Whether a specific tool is enabled. */
   isToolEnabled?(name: string): boolean;
 

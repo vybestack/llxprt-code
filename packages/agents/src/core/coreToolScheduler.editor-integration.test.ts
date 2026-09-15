@@ -23,6 +23,7 @@
  * editor behavior is mocked.
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as fs from 'node:fs';
@@ -184,6 +185,7 @@ function buildTestContext(
       getExcludeTools: () => [],
     },
     new CoreMessageBusAdapter(messageBus),
+    new SettingsService(),
   );
   toolRegistry.registerTool(editTool);
   toolRegistry.registerTool(writeFileTool);

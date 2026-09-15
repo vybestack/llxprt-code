@@ -15,7 +15,6 @@ import { TodoReminderService } from '../utils/todoReminderService.js';
 import type { ITodoService } from '../interfaces/index.js';
 import type { TodoToolCall } from '../types/todo-schemas.js';
 import type { ToolContext } from '../types/tool-context.js';
-import { executeToolForBehavioralAssertion } from './red-test-helpers.js';
 
 function makeToolCall(
   overrides: Partial<TodoToolCall> & { name: string },
@@ -65,12 +64,15 @@ describe('TodoWrite active-todo tracking through the real TodoContextTracker', (
     const writeTool = new TodoWriteTool(service);
     writeTool.context = context;
 
-    await executeToolForBehavioralAssertion(writeTool, {
-      todos: [
-        { id: 'done', content: 'Finished', status: 'completed' },
-        { id: 'active', content: 'Working now', status: 'in_progress' },
-      ],
-    });
+    await writeTool.validateBuildAndExecute(
+      {
+        todos: [
+          { id: 'done', content: 'Finished', status: 'completed' },
+          { id: 'active', content: 'Working now', status: 'in_progress' },
+        ],
+      },
+      new AbortController().signal,
+    );
 
     expect(tracker.getActiveTodo()).toBe('active');
   });
@@ -86,12 +88,15 @@ describe('TodoWrite active-todo tracking through the real TodoContextTracker', (
     const writeTool = new TodoWriteTool(service);
     writeTool.context = context;
 
-    await executeToolForBehavioralAssertion(writeTool, {
-      todos: [
-        { id: 'a', content: 'First', status: 'completed' },
-        { id: 'b', content: 'Second', status: 'completed' },
-      ],
-    });
+    await writeTool.validateBuildAndExecute(
+      {
+        todos: [
+          { id: 'a', content: 'First', status: 'completed' },
+          { id: 'b', content: 'Second', status: 'completed' },
+        ],
+      },
+      new AbortController().signal,
+    );
 
     expect(tracker.getActiveTodo()).toBeNull();
   });
@@ -117,35 +122,38 @@ describe('TodoWrite then TodoRead round-trips persisted toolCalls through real d
     const writeTool = new TodoWriteTool(writeService);
     writeTool.context = { sessionId, agentId, interactiveMode: false };
 
-    const writeResult = await executeToolForBehavioralAssertion(writeTool, {
-      todos: [
-        {
-          id: 't1',
-          content: 'Investigate persistence',
-          status: 'in_progress',
-          toolCalls: [
-            makeToolCall({
-              id: 'top',
-              name: 'read_file',
-              parameters: { path: 'src/index.ts' },
-            }),
-          ],
-          subtasks: [
-            {
-              id: 's1',
-              content: 'Read config',
-              toolCalls: [
-                makeToolCall({
-                  id: 'sub',
-                  name: 'write_file',
-                  parameters: { file_path: 'config.json' },
-                }),
-              ],
-            },
-          ],
-        },
-      ],
-    });
+    const writeResult = await writeTool.validateBuildAndExecute(
+      {
+        todos: [
+          {
+            id: 't1',
+            content: 'Investigate persistence',
+            status: 'in_progress',
+            toolCalls: [
+              makeToolCall({
+                id: 'top',
+                name: 'read_file',
+                parameters: { path: 'src/index.ts' },
+              }),
+            ],
+            subtasks: [
+              {
+                id: 's1',
+                content: 'Read config',
+                toolCalls: [
+                  makeToolCall({
+                    id: 'sub',
+                    name: 'write_file',
+                    parameters: { file_path: 'config.json' },
+                  }),
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      new AbortController().signal,
+    );
 
     expect(writeResult.error).toBeUndefined();
     expect(writeResult.returnDisplay).toContain(
@@ -160,7 +168,10 @@ describe('TodoWrite then TodoRead round-trips persisted toolCalls through real d
     const readTool = new TodoReadTool(readService);
     readTool.context = { sessionId, agentId };
 
-    const readResult = await executeToolForBehavioralAssertion(readTool, {});
+    const readResult = await readTool.validateBuildAndExecute(
+      {},
+      new AbortController().signal,
+    );
     expect(readResult.error).toBeUndefined();
     expect(readResult.llmContent).toContain("read_file(path: 'src/index.ts')");
     expect(readResult.llmContent).toContain(

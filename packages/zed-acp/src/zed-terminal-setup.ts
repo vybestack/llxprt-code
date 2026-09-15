@@ -48,6 +48,7 @@ export function buildZedTerminalSetup(
   const registry = new ToolRegistry(
     new CoreToolRegistryHostAdapter(config),
     messageBusAdapter,
+    config.getSettingsService(),
   );
   const baseTools = baseRegistry.getAllTools();
   let hasShellTool = false;

@@ -26,7 +26,6 @@ import type { ITodoService, TodoStore } from '../interfaces/index.js';
 import type { Todo } from '../types/todo-schemas.js';
 import type { ToolContext } from '../types/tool-context.js';
 import { todoEvents, type TodoUpdateEvent } from '../tools/todo-events.js';
-import { executeToolForBehavioralAssertion } from './red-test-helpers.js';
 
 /**
  * Fake ITodoService with controllable todo state.
@@ -63,25 +62,59 @@ function createFakeTodoService(initialTodos: Todo[] = []): ITodoService {
 }
 
 describe('Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', () => {
+  it('rejects pause reasons exceeding 500 UTF-16 code units', () => {
+    const tool = new TodoPauseTool(createFakeTodoService());
+    expect(() => tool.build({ reason: '😀'.repeat(251) })).toThrow('500');
+    expect(() => tool.build({ reason: '😀'.repeat(250) })).not.toThrow();
+  });
+  describe('Todo invocation context isolation', () => {
+    it('keeps built reads scoped to the original session after the tool is reused', async () => {
+      const service: ITodoService = {
+        ...createFakeTodoService(),
+        getTodoStore: (context) => ({
+          getTodos: () => [
+            {
+              id: '1',
+              content: context?.sessionId ?? 'default',
+              status: 'pending',
+            },
+          ],
+        }),
+      };
+      const tool = new TodoReadTool(service);
+      tool.context = { sessionId: 'first-session' };
+      const first = tool.build({});
+      tool.context = { sessionId: 'second-session' };
+      const second = tool.build({});
+
+      expect(
+        (await first.execute(new AbortController().signal)).llmContent,
+      ).toContain('first-session');
+      expect(
+        (await second.execute(new AbortController().signal)).llmContent,
+      ).toContain('second-session');
+    });
+  });
   describe('TodoWrite writes and TodoRead returns items (observable round-trip)', () => {
     it('after writing todos, subsequent read returns the written items', async () => {
       const service = createFakeTodoService();
-      const writtenTodos = [
+      const writtenTodos: Todo[] = [
         { id: '1', content: 'Task 1', status: 'pending' },
         { id: '2', content: 'Task 2', status: 'in_progress' },
       ];
 
-      const writeResult = await executeToolForBehavioralAssertion(
-        new TodoWriteTool(service),
+      const writeResult = await new TodoWriteTool(
+        service,
+      ).validateBuildAndExecute(
         { todos: writtenTodos },
+        new AbortController().signal,
       );
       expect(writeResult.error).toBeUndefined();
       expect(writeResult.llmContent).toContain('Task 1');
 
-      const readResult = await executeToolForBehavioralAssertion(
-        new TodoReadTool(service),
-        {},
-      );
+      const readResult = await new TodoReadTool(
+        service,
+      ).validateBuildAndExecute({}, new AbortController().signal);
       expect(readResult.error).toBeUndefined();
       expect(readResult.llmContent).toContain('Task 1');
       expect(readResult.llmContent).toContain('Task 2');
@@ -90,20 +123,25 @@ describe('Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', (
     it('after writing multiple batches, read reflects the latest state', async () => {
       const service = createFakeTodoService();
 
-      await executeToolForBehavioralAssertion(new TodoWriteTool(service), {
-        todos: [{ id: '1', content: 'First batch' }],
-      });
-      await executeToolForBehavioralAssertion(new TodoWriteTool(service), {
-        todos: [
-          { id: '2', content: 'Second batch item 1' },
-          { id: '3', content: 'Second batch item 2' },
-        ],
-      });
-
-      const readResult = await executeToolForBehavioralAssertion(
-        new TodoReadTool(service),
-        {},
+      await new TodoWriteTool(service).validateBuildAndExecute(
+        {
+          todos: [{ id: '1', content: 'First batch' }],
+        },
+        new AbortController().signal,
       );
+      await new TodoWriteTool(service).validateBuildAndExecute(
+        {
+          todos: [
+            { id: '2', content: 'Second batch item 1' },
+            { id: '3', content: 'Second batch item 2' },
+          ],
+        },
+        new AbortController().signal,
+      );
+
+      const readResult = await new TodoReadTool(
+        service,
+      ).validateBuildAndExecute({}, new AbortController().signal);
       expect(readResult.error).toBeUndefined();
       expect(readResult.llmContent).toContain('Second batch item 1');
       expect(readResult.llmContent).not.toContain('First batch');
@@ -113,21 +151,23 @@ describe('Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', (
   describe('TodoPause pauses continuation with observable behavioral effect', () => {
     it('after pause, read result reflects paused state', async () => {
       const service = createFakeTodoService();
-      await executeToolForBehavioralAssertion(new TodoWriteTool(service), {
-        todos: [{ id: '1', content: 'Task 1' }],
-      });
+      await new TodoWriteTool(service).validateBuildAndExecute(
+        {
+          todos: [{ id: '1', content: 'Task 1' }],
+        },
+        new AbortController().signal,
+      );
 
-      const result = await executeToolForBehavioralAssertion(
-        new TodoPauseTool(service),
+      const result = await new TodoPauseTool(service).validateBuildAndExecute(
         { reason: 'pause for review' },
+        new AbortController().signal,
       );
 
       expect(result.error).toBeUndefined();
       expect(result.llmContent).toContain('pause');
-      const readResult = await executeToolForBehavioralAssertion(
-        new TodoReadTool(service),
-        {},
-      );
+      const readResult = await new TodoReadTool(
+        service,
+      ).validateBuildAndExecute({}, new AbortController().signal);
       expect(readResult.llmContent).toContain('pause');
     });
   });
@@ -166,7 +206,7 @@ describe('Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', (
       const longReason = 'a'.repeat(501);
       const error = tool.validateToolParams({ reason: longReason });
       expect(error).not.toBeNull();
-      expect(error?.message.toLowerCase()).toContain('500');
+      expect(error?.toLowerCase()).toContain('500');
     });
 
     it('accepts a reason of exactly 500 characters', () => {
@@ -184,9 +224,9 @@ describe('Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', (
         { id: '2', content: 'Run tests', status: 'in_progress' },
       ]);
 
-      const result = await executeToolForBehavioralAssertion(
-        new TodoReadTool(service),
+      const result = await new TodoReadTool(service).validateBuildAndExecute(
         {},
+        new AbortController().signal,
       );
 
       expect(result.error).toBeUndefined();
@@ -240,15 +280,24 @@ describe('Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', (
         readTool.context = context;
         const pauseTool = new TodoPauseTool(service);
         pauseTool.context = context;
-        await executeToolForBehavioralAssertion(writeTool, {
-          todos: [
-            { id: 'active', content: 'Scoped work', status: 'in_progress' },
-          ],
-        });
-        await executeToolForBehavioralAssertion(readTool, {});
-        await executeToolForBehavioralAssertion(pauseTool, {
-          reason: 'scope check',
-        });
+        await writeTool.validateBuildAndExecute(
+          {
+            todos: [
+              { id: 'active', content: 'Scoped work', status: 'in_progress' },
+            ],
+          },
+          new AbortController().signal,
+        );
+        await readTool.validateBuildAndExecute(
+          {},
+          new AbortController().signal,
+        );
+        await pauseTool.validateBuildAndExecute(
+          {
+            reason: 'scope check',
+          },
+          new AbortController().signal,
+        );
         return { contexts, activeTodoRef };
       };
 
@@ -299,11 +348,14 @@ describe('Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', (
           interactiveMode: false,
         };
 
-        await executeToolForBehavioralAssertion(writeTool, {
-          todos: [
-            { id: 'visible', content: 'Visible in panel', status: 'pending' },
-          ],
-        });
+        await writeTool.validateBuildAndExecute(
+          {
+            todos: [
+              { id: 'visible', content: 'Visible in panel', status: 'pending' },
+            ],
+          },
+          new AbortController().signal,
+        );
       } finally {
         todoEvents.offTodoUpdated(listener);
       }

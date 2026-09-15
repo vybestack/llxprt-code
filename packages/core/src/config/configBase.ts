@@ -66,6 +66,8 @@ export abstract class ConfigBase extends ConfigBaseCore {
   resetModelToDefault(): void {
     this.contentGeneratorConfig.model = this.originalModel;
     this.inFallbackMode = false;
+    // #2534 Domain C2: keep the providerless terminal fallback in sync with
+    // the reset so getModel() reflects the default model in every scope.
     this.model = this.originalModel;
   }
 

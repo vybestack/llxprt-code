@@ -185,9 +185,13 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       getProjectRoot: vi.fn().mockReturnValue('/tmp/test-project'),
       getSessionId: vi.fn().mockReturnValue('test-session'),
       getEphemeralSetting: vi.fn().mockReturnValue(undefined),
-      getSettingsService: vi
-        .fn()
-        .mockReturnValue({ get: vi.fn(), set: vi.fn() }),
+      getSettingsService: vi.fn().mockReturnValue({
+        get: vi.fn(),
+        set: vi.fn(),
+        // #2534 D4: the degraded identity path calls getCurrentProfileName()
+        // directly (optional-call probe removed); the double provides it.
+        getCurrentProfileName: vi.fn().mockReturnValue(null),
+      }),
       storage: {
         getDir: vi.fn().mockReturnValue('/tmp/.llxprt'),
       },

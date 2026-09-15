@@ -309,7 +309,11 @@ describe('AgentRuntimeLoader', () => {
   });
 
   it('filters tool registry view using allowed/disabled lists from settings snapshot', async () => {
-    const registry = new ToolRegistry(config, getTestRuntimeMessageBus(config));
+    const registry = new ToolRegistry(
+      config,
+      getTestRuntimeMessageBus(config),
+      new SettingsService(),
+    );
     registry.registerTool(
       new MockTool('alpha', 'alpha', 'Alpha tool for testing.'),
     );

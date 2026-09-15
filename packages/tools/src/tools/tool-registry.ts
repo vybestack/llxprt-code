@@ -9,13 +9,18 @@ import {
   type AnyDeclarativeTool,
   Kind,
   type ToolResult,
-  BaseTool,
+  BaseDeclarativeTool,
   BaseToolInvocation,
   type LiveOutputUpdate,
 } from './tools.js';
-import { type ToolContext, isContextAwareTool } from '../types/tool-context.js';
+import {
+  type ContextAwareTool,
+  type ToolContext,
+  isContextAwareTool,
+} from '../types/tool-context.js';
 import type { IToolRegistryHost } from '../interfaces/IToolRegistryHost.js';
 import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
+import type { SettingsServiceBoundary } from '../interfaces/index.js';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { parse } from 'shell-quote';
@@ -77,7 +82,11 @@ function extractParametersSchema(
   return {};
 }
 
-export class DiscoveredTool extends BaseTool<ToolParams, ToolResult> {
+export class DiscoveredTool
+  extends BaseDeclarativeTool<ToolParams, ToolResult>
+  implements ContextAwareTool
+{
+  context?: ToolContext;
   /**
    * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
    * @requirement REQ-D01-001.2
@@ -126,7 +135,16 @@ Signal: Signal number or \`(none)\` if no signal was received.
    * @pseudocode lines 56-72
    */
   override build(params: ToolParams): DiscoveredToolInvocation {
-    return new DiscoveredToolInvocation(this, params, this.requireMessageBus());
+    return this.createInvocation(params);
+  }
+
+  protected createInvocation(params: ToolParams): DiscoveredToolInvocation {
+    return new DiscoveredToolInvocation(
+      this,
+      params,
+      this.requireMessageBus(),
+      this.context,
+    );
   }
 
   async execute(
@@ -379,6 +397,7 @@ class DiscoveredToolInvocation extends BaseToolInvocation<
     private readonly tool: DiscoveredTool,
     params: ToolParams,
     messageBus: IToolMessageBus,
+    readonly context?: ToolContext,
   ) {
     super(params, messageBus);
   }
@@ -404,15 +423,33 @@ export class ToolRegistry {
 
   private readonly messageBus: IToolMessageBus;
 
+  private readonly settingsService: Pick<
+    SettingsServiceBoundary,
+    'get' | 'getAllGlobalSettings'
+  >;
+
   /**
    * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
    * @requirement REQ-D01-002
    * @requirement REQ-D01-003
    * @pseudocode lines 122-133
+   *
+   * The settings service is a REQUIRED injected dependency (#2534 review
+   * Finding 3): every production construction site injects the real
+   * Config-owned service (config.getSettingsService()); the former optional
+   * parameter silently defaulted to a no-op, hiding missing wiring.
    */
-  constructor(config: IToolRegistryHost, messageBus: IToolMessageBus) {
+  constructor(
+    config: IToolRegistryHost,
+    messageBus: IToolMessageBus,
+    settingsService: Pick<
+      SettingsServiceBoundary,
+      'get' | 'getAllGlobalSettings'
+    >,
+  ) {
     this.config = config;
     this.messageBus = messageBus;
+    this.settingsService = settingsService;
   }
 
   private getToolGovernance(): ToolGovernance {
@@ -764,21 +801,16 @@ export class ToolRegistry {
    * Used to conditionally hide tool parameters that are disabled by settings.
    */
   private getSchemaTransforms(): { hideTaskAsync: boolean } {
-    const settingsService = this.config.getSettingsService?.();
-
     // Global setting from /settings (subagents.asyncEnabled)
-    let globalAsyncEnabled = true;
-    if (settingsService !== undefined) {
-      const globalSettings = settingsService.getAllGlobalSettings?.();
-      const subagentsSettings = globalSettings?.['subagents'] as
-        | { asyncEnabled?: boolean }
-        | undefined;
-      globalAsyncEnabled = subagentsSettings?.asyncEnabled !== false;
-    }
+    const globalSettings = this.settingsService.getAllGlobalSettings();
+    const subagentsSettings = globalSettings['subagents'] as
+      | { asyncEnabled?: boolean }
+      | undefined;
+    const globalAsyncEnabled = subagentsSettings?.asyncEnabled !== false;
 
     // Profile setting from /set (subagents.async.enabled)
     const profileAsyncEnabled =
-      settingsService?.get?.('subagents.async.enabled') !== false;
+      this.settingsService.get('subagents.async.enabled') !== false;
 
     return {
       hideTaskAsync:

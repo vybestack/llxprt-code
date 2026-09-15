@@ -270,13 +270,12 @@ describe('CodeSearchTool', () => {
     const settingsService: NonNullable<
       CodeSearchToolDependencies['settingsService']
     > = {
-      getSetting: (key: string): unknown => {
+      get: (key: string): unknown => {
         if (key === 'tool-output-max-tokens') {
           return 2000;
         }
         return undefined;
       },
-      getSettingsService: () => ({}),
     };
     tool = new CodeSearchTool({
       keyStorage: createKeyStorage(),

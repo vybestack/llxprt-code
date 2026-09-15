@@ -32,11 +32,6 @@ const toolsSchema: CommandArgumentSchema = [
   },
 ];
 
-const normalizeToolName = (name: string): string => {
-  const canonical = canonicalizeToolName(name);
-  return canonical === INVALID_TOOL_NAME ? '' : canonical;
-};
-
 // Tokenizes quoted/unquoted args. The pattern is passed to RegExp via an
 // identifier so it is not a static literal flagged by sonarjs/regular-expr.
 const ARG_TOKEN_PATTERN = '(?:[^\\s"\']+|"[^"]*"|\'[^\']*\')+';
@@ -55,7 +50,7 @@ function stripQuotes(value: string): string {
 
 function getSettingsService(context: CommandContext): SettingsService | null {
   const config = context.services.config;
-  if (config && typeof config.getSettingsService === 'function') {
+  if (config) {
     return config.getSettingsService();
   }
   return null;
@@ -66,24 +61,15 @@ function readToolLists(context: CommandContext): {
   allowed: Set<string>;
 } {
   const settings = getSettingsService(context);
-  const config = context.services.config;
 
-  const read = (key: string): unknown => {
-    if (settings) {
-      return settings.get(key);
-    }
-    if (config && typeof config.getEphemeralSetting === 'function') {
-      return config.getEphemeralSetting(key);
-    }
-    return undefined;
-  };
+  const read = (key: string): unknown => settings?.get(key) ?? undefined;
 
   const disabled = Array.isArray(read('tools.disabled'))
-    ? new Set((read('tools.disabled') as string[]).map(normalizeToolName))
+    ? new Set((read('tools.disabled') as string[]).map(canonicalizeToolName))
     : new Set<string>();
 
   const allowed = Array.isArray(read('tools.allowed'))
-    ? new Set((read('tools.allowed') as string[]).map(normalizeToolName))
+    ? new Set((read('tools.allowed') as string[]).map(canonicalizeToolName))
     : new Set<string>();
 
   return { disabled, allowed };
@@ -94,29 +80,17 @@ function persistToolLists(
   disabled: Set<string>,
   allowed: Set<string>,
 ): void {
-  const disabledList = Array.from(new Set(disabled)).map((name) => name);
-  const allowedList = Array.from(new Set(allowed)).map((name) => name);
-  const config = context.services.config;
+  const disabledList = Array.from(new Set(disabled)).map((name) =>
+    name === INVALID_TOOL_NAME ? '' : name,
+  );
+  const allowedList = Array.from(new Set(allowed)).map((name) =>
+    name === INVALID_TOOL_NAME ? '' : name,
+  );
   const settings = getSettingsService(context);
 
   if (settings) {
     settings.set('tools.disabled', disabledList);
     settings.set('tools.allowed', allowedList);
-  }
-
-  if (config) {
-    if (typeof config.setEphemeralSetting === 'function') {
-      config.setEphemeralSetting('tools.disabled', disabledList);
-      config.setEphemeralSetting('tools.allowed', allowedList);
-    }
-    if (typeof config.getEphemeralSettings === 'function') {
-      const ephemerals: unknown = config.getEphemeralSettings();
-      if (ephemerals !== null && typeof ephemerals === 'object') {
-        const ephemeralSettings = ephemerals as Record<string, unknown>;
-        ephemeralSettings['tools.disabled'] = disabledList;
-        ephemeralSettings['tools.allowed'] = allowedList;
-      }
-    }
   }
 }
 
@@ -126,7 +100,7 @@ function buildStatusLine(
   allowedSet: Set<string>,
   showDescriptions: boolean,
 ): string {
-  const canonical = normalizeToolName(tool.name);
+  const canonical = canonicalizeToolName(tool.name);
   const isExplicitlyAllowed =
     allowedSet.size === 0 || allowedSet.has(canonical);
   const isDisabled = disabledSet.has(canonical) || !isExplicitlyAllowed;
@@ -168,13 +142,13 @@ function resolveToolByName(
   identifier: string,
   tools: readonly ToolInfo[],
 ): ToolInfo | null {
-  const normalized = normalizeToolName(identifier);
+  const normalized = canonicalizeToolName(identifier);
   const canonicalMap = new Map<string, ToolInfo>();
   const friendlyMap = new Map<string, ToolInfo>();
 
   for (const tool of tools) {
-    canonicalMap.set(normalizeToolName(tool.name), tool);
-    friendlyMap.set(normalizeToolName(tool.displayName ?? tool.name), tool);
+    canonicalMap.set(canonicalizeToolName(tool.name), tool);
+    friendlyMap.set(canonicalizeToolName(tool.displayName ?? tool.name), tool);
   }
 
   if (canonicalMap.has(normalized)) {
@@ -220,7 +194,7 @@ async function handleToggleTool(
     return;
   }
 
-  const canonical = normalizeToolName(target.name);
+  const canonical = canonicalizeToolName(target.name);
   const display = target.displayName ?? target.name;
   let feedback: string;
 

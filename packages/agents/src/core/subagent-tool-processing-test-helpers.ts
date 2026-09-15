@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
@@ -13,7 +14,8 @@ import type {
   ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
-  BaseTool,
+  BaseDeclarativeTool,
+  BaseToolInvocation,
   Kind,
   type ToolResult,
 } from '@vybestack/llxprt-code-tools/tools/tools.js';
@@ -27,7 +29,7 @@ import { createToolExecutionConfig } from './subagentRuntimeSetup.js';
 import { createStatelessRuntimeBundle } from './subagent-test-helpers.js';
 import { processFunctionCalls } from './subagentToolProcessing.js';
 
-class DivideTool extends BaseTool<{ divisor: number }, ToolResult> {
+class DivideTool extends BaseDeclarativeTool<{ divisor: number }, ToolResult> {
   constructor() {
     super('divide', 'Divide', 'Divide one by a number', Kind.Think, {
       type: 'object',
@@ -36,12 +38,23 @@ class DivideTool extends BaseTool<{ divisor: number }, ToolResult> {
     });
   }
 
+  protected createInvocation(params: {
+    divisor: number;
+  }): DivideToolInvocation {
+    return new DivideToolInvocation(params, this.messageBus, this.name);
+  }
+}
+
+class DivideToolInvocation extends BaseToolInvocation<
+  { divisor: number },
+  ToolResult
+> {
   override getDescription(): string {
     return 'Divide one by a number';
   }
 
-  override async execute(params: { divisor: number }): Promise<ToolResult> {
-    if (params.divisor === 0) {
+  override async execute(): Promise<ToolResult> {
+    if (this.params.divisor === 0) {
       return {
         llmContent: 'Cannot divide by zero',
         returnDisplay: 'Cannot divide by zero',
@@ -51,7 +64,7 @@ class DivideTool extends BaseTool<{ divisor: number }, ToolResult> {
         },
       };
     }
-    const result = String(1 / params.divisor);
+    const result = String(1 / this.params.divisor);
     return { llmContent: result, returnDisplay: result };
   }
 }
@@ -81,6 +94,7 @@ export async function dispatch(
   const registry = new ToolRegistry(
     config,
     new CoreMessageBusAdapter(messageBus),
+    new SettingsService(),
   );
   registry.registerTool(new DivideTool());
   const toolExecutorContext = createToolExecutionConfig(

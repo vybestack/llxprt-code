@@ -29,16 +29,22 @@ function redactEventValue(key: string, value: unknown): unknown {
   return isSensitiveSettingKey(key) ? REDACTED_VALUE : value;
 }
 
+/**
+ * Tool allow/deny policy. `importFromProfile` writes BOTH the dedicated
+ * `settings.tools` mirror and a `global['tools']` copy; `getAllGlobalSettings`
+ * overlays its flat keys (`tools.allowed`, `tools.disabled`) from the mirror.
+ */
+export interface ToolsSettings {
+  allowed?: string[];
+  disabled?: string[];
+  apiKeys?: Record<string, string>;
+  apiKeyFiles?: Record<string, string>;
+}
+
 interface EphemeralSettings {
   providers: TrustedProvidersMap;
   global: Record<string, unknown>;
-  activeProvider: string | null;
-  tools?: {
-    allowed?: string[];
-    disabled?: string[];
-    apiKeys?: Record<string, string>;
-    apiKeyFiles?: Record<string, string>;
-  };
+  tools?: ToolsSettings;
 }
 
 interface SettingsChangeEvent {
@@ -49,6 +55,18 @@ interface SettingsChangeEvent {
 
 interface ProviderSettingsChangeEvent extends SettingsChangeEvent {
   provider: string;
+}
+
+/**
+ * Immutable, deep-copied snapshot of the entire SettingsService state
+ * (global keys + provider-scoped records + the `settings.tools` mirror).
+ * Used by atomic profile application (#2534 C5): a failed mid-cascade
+ * transition restores the pre-application state from the snapshot.
+ */
+export interface SettingsStateSnapshot {
+  global: Record<string, unknown>;
+  providers: TrustedProvidersMap;
+  tools?: ToolsSettings;
 }
 
 type SettingsEventListener =
@@ -107,7 +125,6 @@ export class SettingsService extends EventEmitter {
     this.settings = {
       providers: {},
       global: {},
-      activeProvider: null,
     };
     this.isSessionOverlayOwner =
       options.sessionSource === undefined || options.sessionSource === null;
@@ -260,9 +277,45 @@ export class SettingsService extends EventEmitter {
     this.settings = {
       providers: {},
       global: {},
-      activeProvider: null,
     };
     this.eventEmitter.emit('cleared');
+  }
+
+  /**
+   * Captures the full persisted-state surface (global keys + provider
+   * records + the `settings.tools` mirror that `importFromProfile` writes
+   * alongside `global['tools']`) as a deep copy. The settings global
+   * `activeProvider` key is the single active-provider store (#2534 C1); it
+   * is captured with the rest of the global keys. The `tools` key is present
+   * exactly when the mirror exists.
+   */
+  exportForStateSnapshot(): SettingsStateSnapshot {
+    const snapshot: SettingsStateSnapshot = {
+      global: structuredClone(this.settings.global),
+      providers: structuredClone(this.settings.providers),
+    };
+    if (this.settings.tools !== undefined) {
+      snapshot.tools = structuredClone(this.settings.tools);
+    }
+    return snapshot;
+  }
+
+  /**
+   * Restores a snapshot taken by {@link exportForStateSnapshot},
+   * replacing all global keys, provider records, and the `settings.tools`
+   * mirror (absent in the snapshot means absent after the restore, matching
+   * what export produces). Emits no change events: this is a rollback
+   * primitive, not a user-facing transition, so listeners must re-read
+   * current values rather than reacting to a synthetic per-key event stream.
+   */
+  restoreFromStateSnapshot(snapshot: SettingsStateSnapshot): void {
+    this.settings = {
+      providers: structuredClone(snapshot.providers),
+      global: structuredClone(snapshot.global),
+    };
+    if (snapshot.tools !== undefined) {
+      this.settings.tools = structuredClone(snapshot.tools);
+    }
   }
 
   getAllGlobalSettings(): Record<string, unknown> {
@@ -481,17 +534,10 @@ export class SettingsService extends EventEmitter {
 
   exportForProfile() {
     const globalActive = this.settings.global.activeProvider;
-    let activeProvider: string;
-    if (typeof globalActive === 'string' && globalActive !== '') {
-      activeProvider = globalActive;
-    } else if (
-      typeof this.settings.activeProvider === 'string' &&
-      this.settings.activeProvider !== ''
-    ) {
-      activeProvider = this.settings.activeProvider;
-    } else {
-      activeProvider = 'openai';
-    }
+    const activeProvider =
+      typeof globalActive === 'string' && globalActive !== ''
+        ? globalActive
+        : 'openai';
 
     const allowedValue = this.get('tools.allowed');
     const disabledValue = this.get('tools.disabled');
@@ -528,7 +574,6 @@ export class SettingsService extends EventEmitter {
 
     if (data.defaultProvider !== undefined) {
       this.set('activeProvider', data.defaultProvider);
-      this.settings.activeProvider = data.defaultProvider;
     }
 
     this.settings.providers = data.providers;
@@ -559,15 +604,10 @@ export class SettingsService extends EventEmitter {
   getDiagnosticsData(): Promise<DiagnosticsData> {
     const globalSettings = this.getAllGlobalSettings();
     const globalActiveProvider = globalSettings.activeProvider;
-    const fallbackActiveProvider =
-      typeof this.settings.activeProvider === 'string' &&
-      this.settings.activeProvider !== ''
-        ? this.settings.activeProvider
-        : 'openai';
     const activeProvider =
       typeof globalActiveProvider === 'string' && globalActiveProvider !== ''
         ? globalActiveProvider
-        : fallbackActiveProvider;
+        : 'openai';
     const providerSettings = this.getProviderSettings(activeProvider);
 
     const model = (providerSettings.model as string) || 'unknown';

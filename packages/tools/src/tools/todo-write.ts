@@ -4,9 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SchemaValidator } from '../utils/schemaValidator.js';
 import { Type } from '../types/schema-type.js';
 import {
-  BaseTool,
+  BaseDeclarativeTool,
+  BaseToolInvocation,
   type ToolResult,
   Kind,
   type LiveOutputUpdate,
@@ -21,15 +23,26 @@ import { TodoReminderService } from '../utils/todoReminderService.js';
 import { todoEvents, type TodoUpdateEvent } from './todo-events.js';
 import { TodoContextTracker } from '../utils/todoContextTracker.js';
 import { formatTodoListForDisplay } from '../utils/todoFormatter.js';
+import type { ContextAwareTool, ToolContext } from '../types/tool-context.js';
+import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
 import type { ITodoService } from '../interfaces/ITodoService.js';
 import type { IToolHost } from '../interfaces/IToolHost.js';
 import { EmojiFilter, isEmojiFilterMode } from '../utils/EmojiFilter.js';
 
 export interface TodoWriteParams {
-  todos: Todo[];
+  todos: Array<
+    Omit<Todo, 'id' | 'status'> & {
+      id?: string | number | null;
+      status?: Todo['status'];
+    }
+  >;
 }
 
-export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
+export class TodoWrite
+  extends BaseDeclarativeTool<TodoWriteParams, ToolResult>
+  implements ContextAwareTool
+{
+  context?: ToolContext;
   static readonly Name = 'todo_write';
 
   private static readonly SCHEMA = {
@@ -119,31 +132,47 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     );
   }
 
-  override getDescription(params: TodoWriteParams): string {
-    return `Update todo list with ${params.todos.length} items`;
-  }
+  private static readonly INPUT_SCHEMA = {
+    type: 'object',
+    required: ['todos'],
+    properties: { todos: { type: 'array', items: { type: 'object' } } },
+  };
 
   override validateToolParams(params: unknown): string | null {
-    if (params == null || typeof params !== 'object') {
-      return 'todos parameter is required and must be an array';
-    }
+    const error = SchemaValidator.validate(TodoWrite.INPUT_SCHEMA, params);
+    return error === null ? null : `Invalid todos: ${error}`;
+  }
 
-    const typedParams = params as Record<string, unknown>;
-    if (!('todos' in typedParams)) {
-      return 'todos parameter is required and must be an array';
-    }
-    if (!Array.isArray(typedParams.todos)) {
-      return 'todos parameter must be an array';
-    }
-    if (
-      (typedParams.todos as unknown[]).some(
-        (item) => item == null || typeof item !== 'object',
-      )
-    ) {
-      return 'todos items must be objects';
-    }
+  protected createInvocation(
+    params: TodoWriteParams,
+    messageBus?: IToolMessageBus,
+  ): TodoWriteInvocation {
+    return new TodoWriteInvocation(
+      this.todoService,
+      params,
+      this.context,
+      messageBus,
+      this.toolHost,
+    );
+  }
+}
 
-    return null;
+class TodoWriteInvocation extends BaseToolInvocation<
+  TodoWriteParams,
+  ToolResult
+> {
+  constructor(
+    private readonly todoService: ITodoService,
+    params: TodoWriteParams,
+    private readonly context: ToolContext | undefined,
+    messageBus?: IToolMessageBus,
+    private readonly toolHost?: IToolHost,
+  ) {
+    super(params, messageBus, TodoWrite.Name);
+  }
+
+  override getDescription(): string {
+    return `Update todo list with ${this.params.todos.length} items`;
   }
 
   // Track the active in-progress item for interactive continuation.
@@ -176,11 +205,10 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
   }
 
   async execute(
-    params: TodoWriteParams,
     _signal: AbortSignal,
     _updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
-    const normalizedTodos = this.normalizeTodos(params.todos);
+    const normalizedTodos = this.normalizeTodos(this.params.todos);
     const validation = this.validateAndFilterTodos(normalizedTodos);
     if ('error' in validation) {
       return validation;
@@ -226,7 +254,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     | { error: { message: string }; llmContent: string; returnDisplay: string }
     | {
         todos: Todo[];
-        emojiResult: ReturnType<TodoWrite['applyEmojiFilter']>;
+        emojiResult: ReturnType<TodoWriteInvocation['applyEmojiFilter']>;
       } {
     const result = TodoArraySchema.safeParse(normalizedTodos);
     if (!result.success) {
@@ -314,7 +342,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
 
   private buildToolResult(
     todos: Todo[],
-    emojiResult: ReturnType<TodoWrite['applyEmojiFilter']>,
+    emojiResult: ReturnType<TodoWriteInvocation['applyEmojiFilter']>,
     shouldGenerateReminder: boolean,
     stateChange: {
       added: unknown[];
