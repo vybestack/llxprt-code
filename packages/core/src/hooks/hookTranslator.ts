@@ -123,18 +123,22 @@ const hookToolChoiceSchema = z.object({
  */
 export function decodeHookLLMRequest(raw: unknown): HookLLMRequest | undefined {
   const parsed = hookLLMRequestSchema.safeParse(raw);
-  if (!parsed.success || !isNonNullObjectRecord(raw)) {
+  if (!parsed.success) {
     return undefined;
   }
+  // zod v3 rebuilds z.array/z.record values, so identity-sensitive fields are
+  // read from the hook-supplied object itself (validated above; the assertion
+  // is compile-time only).
+  const rawRecord = raw as Record<string, unknown>;
   return {
     version: 2,
     model: parsed.data.model,
-    contents: raw['contents'] as IContent[],
-    ...(raw['tools'] !== undefined
-      ? { tools: raw['tools'] as ToolDeclaration[] }
+    contents: rawRecord['contents'] as IContent[],
+    ...(rawRecord['tools'] !== undefined
+      ? { tools: rawRecord['tools'] as ToolDeclaration[] }
       : {}),
-    ...(raw['settings'] !== undefined
-      ? { settings: raw['settings'] as ModelGenerationSettings }
+    ...(rawRecord['settings'] !== undefined
+      ? { settings: rawRecord['settings'] as ModelGenerationSettings }
       : {}),
   };
 }
@@ -149,20 +153,22 @@ export function decodeHookLLMResponse(
   raw: unknown,
 ): HookLLMResponse | undefined {
   const parsed = hookLLMResponseSchema.safeParse(raw);
-  if (!parsed.success || !isNonNullObjectRecord(raw)) {
+  if (!parsed.success) {
     return undefined;
   }
+  // Same rationale as decodeHookLLMRequest: raw reads preserve references.
+  const rawRecord = raw as Record<string, unknown>;
   return {
     version: 2,
-    content: raw['content'] as IContent,
+    content: rawRecord['content'] as IContent,
     ...(parsed.data.finishReason !== undefined
       ? { finishReason: parsed.data.finishReason }
       : {}),
-    ...(raw['rawStopReason'] !== undefined
-      ? { rawStopReason: raw['rawStopReason'] as string }
+    ...(rawRecord['rawStopReason'] !== undefined
+      ? { rawStopReason: rawRecord['rawStopReason'] as string }
       : {}),
-    ...(raw['usage'] !== undefined
-      ? { usage: raw['usage'] as UsageStats }
+    ...(rawRecord['usage'] !== undefined
+      ? { usage: rawRecord['usage'] as UsageStats }
       : {}),
   };
 }
@@ -259,29 +265,6 @@ function readOnInvalidBoundaryPolicy(
   raw: unknown,
 ): 'skip-compression' | 'throw' {
   return raw === 'throw' ? 'throw' : 'skip-compression';
-}
-
-/**
- * Parse and validate llm_request_boundary metadata from an untyped hook
- * payload. Returns undefined for absent or malformed values (fail-open).
- *
- * @deprecated This function conflates 'absent' and 'malformed' into a single
- * `undefined` return, so callers cannot honor `onInvalidBoundary` for
- * malformed metadata and would wrongly fall back to differential analysis.
- * Use {@link parseHookLLMRequestBoundaryResult} instead, which returns a
- * discriminated result distinguishing absent from malformed.
- *
- * Kept for backward compatibility. Callers with key context
- * (BeforeModelHookOutput.getLLMRequestBoundaryResult) perform the presence
- * check themselves via hasOwnProperty.
- */
-export function parseHookLLMRequestBoundary(
-  value: unknown,
-): HookLLMRequestBoundary | undefined {
-  if (value === undefined) return undefined;
-  const parsed = hookLLMRequestBoundarySchema.safeParse(value);
-  if (!parsed.success) return undefined;
-  return parsed.data;
 }
 
 /**

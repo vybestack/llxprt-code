@@ -33,7 +33,6 @@ export {
   decodeHookLLMResponse,
   decodeHookToolChoice,
   mergeHookLLMRequest,
-  parseHookLLMRequestBoundary,
   parseHookLLMRequestBoundaryResult,
   type HookLLMRequest,
   type HookLLMResponse,

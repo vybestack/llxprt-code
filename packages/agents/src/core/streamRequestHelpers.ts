@@ -95,7 +95,7 @@ export function selectRequestTools(
   return params.config?.tools ?? fallbackTools;
 }
 
-export function extractAllowedFunctionNames(
+export function extractAllowedToolNames(
   toolChoice: unknown,
 ): string[] | undefined {
   if (toolChoice === null || toolChoice === undefined) return undefined;
@@ -143,7 +143,7 @@ export async function applyToolSelectionHook(
   });
 
   const toolChoice: ToolChoice | undefined = modifiedConfig?.toolChoice;
-  const allowedFunctions = extractAllowedFunctionNames(toolChoice);
+  const allowedFunctions = extractAllowedToolNames(toolChoice);
   if (allowedFunctions === undefined) {
     return { tools: toolsFromConfig, allowedFunctionNames: undefined };
   }

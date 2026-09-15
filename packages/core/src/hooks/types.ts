@@ -14,7 +14,6 @@ import {
   decodeHookLLMResponse,
   decodeHookToolChoice,
   mergeHookLLMRequest,
-  parseHookLLMRequestBoundary,
   parseHookLLMRequestBoundaryResult,
 } from './hookTranslator.js';
 import type { ToolChoice } from '../llm-types/toolDeclaration.js';
@@ -325,27 +324,6 @@ export class BeforeModelHookOutput extends DefaultHookOutput {
   ): HookLLMRequest {
     if (!this.hookSpecificOutput) return target;
     return mergeHookLLMRequest(target, this.hookSpecificOutput['llm_request']);
-  }
-
-  /**
-   * Get optional explicit boundary metadata supplied by the hook for
-   * full-replacement llm_request payloads. Returns undefined when absent or
-   * malformed (fail-open parse; the caller enforces policy on invalid indices).
-   *
-   * @deprecated This method conflates 'absent' and 'malformed' into a single
-   * `undefined` return, so callers cannot honor `onInvalidBoundary` for
-   * malformed metadata and would wrongly fall back to differential analysis.
-   * Use {@link getLLMRequestBoundaryResult} instead, which returns a
-   * discriminated result distinguishing absent from malformed.
-   *
-   * G2: uses key presence (hasOwnProperty) to decide absence, consistent with
-   * getLLMRequestBoundaryResult.
-   */
-  getLLMRequestBoundary(): HookLLMRequestBoundary | undefined {
-    if (!this.hookSpecificOutput || !this.hasBoundaryValue()) return undefined;
-    return parseHookLLMRequestBoundary(
-      this.hookSpecificOutput['llm_request_boundary'],
-    );
   }
 
   /**
