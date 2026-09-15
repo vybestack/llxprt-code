@@ -456,6 +456,15 @@ function processDeltaToolCalls(
 }
 
 /**
+ * Bound externally-controlled frame keys for the skip diagnostic: sorted,
+ * capped to the first 16 keys with each key truncated to 64 characters.
+ */
+function boundFrameKeys(record: Record<string, unknown>): string[] {
+  const keys = Object.keys(record).sort();
+  return keys.slice(0, 16).map((key) => key.slice(0, 64));
+}
+
+/**
  * Process a single streaming chunk and update state / yield content.
  */
 async function* processStreamingChunk(
@@ -489,7 +498,7 @@ async function* processStreamingChunk(
   if (choice === undefined) {
     deps.logger.debug(() => '[Streaming] Skipping frame without a choice', {
       chunkCount: state.chunkCount,
-      frameKeys: Object.keys(chunkRecord).sort(),
+      frameKeys: boundFrameKeys(chunkRecord),
       hasUsage: Boolean(chunk.usage),
       // Object tags are unvalidated external data; keep only a short string
       // so the diagnostic never retains raw frame payloads.

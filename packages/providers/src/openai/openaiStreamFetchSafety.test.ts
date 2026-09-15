@@ -6,12 +6,15 @@
 
 import { describe, expect, it } from 'bun:test';
 import OpenAI from 'openai';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import {
   createReaderBasedStreamFetch,
   createReaderIteratedBody,
   wrapResponseWithReaderIteratedBody,
 } from './openaiStreamFetchSafety.js';
 
+/** Build a stream that emits two fixed byte chunks. */
 function byteStream(): ReadableStream<Uint8Array> {
   return new ReadableStream({
     start(controller) {
@@ -22,21 +25,25 @@ function byteStream(): ReadableStream<Uint8Array> {
   });
 }
 
+/** Build a fetch stub that always returns the given response. */
 function responseFetch(response: Response): typeof fetch {
   return async () => response;
 }
 
+/** Return the response body, failing the test when it is absent. */
 function requireBody(response: Response): ReadableStream<Uint8Array> {
   if (!response.body) throw new Error('Expected response body');
   return response.body;
 }
 
+/** Type guard for bodies carrying an async iterator. */
 function isIterableBody(
   body: ReadableStream<Uint8Array>,
 ): body is ReadableStream<Uint8Array> & AsyncIterable<Uint8Array> {
   return typeof Reflect.get(body, Symbol.asyncIterator) === 'function';
 }
 
+/** Consume a response body through its async iterator, collecting raw bytes. */
 async function readBodyBytes(response: Response): Promise<readonly number[]> {
   const body = requireBody(response);
   if (!isIterableBody(body)) throw new Error('Expected iterable body');
@@ -148,6 +155,38 @@ describe('reader-based OpenAI fetch', () => {
     expect(await wrapped.json()).toStrictEqual({ answer: 42 });
     expect(wrapped.bodyUsed).toBe(true);
     expect(await clone.text()).toBe('{"answer":42}');
+  });
+
+  it('preserves url, type, and redirected on clones of fetched responses', async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(200, { 'content-type': 'text/plain' });
+      response.end('abc');
+    });
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+    try {
+      const port = (server.address() as AddressInfo).port;
+      const original = await fetch(`http://127.0.0.1:${String(port)}/chat`);
+      const wrapped = wrapResponseWithReaderIteratedBody(original);
+      const clone = wrapped.clone();
+      expect(clone.url).toBe(original.url);
+      expect(clone.type).toBe(original.type);
+      expect(clone.redirected).toBe(original.redirected);
+      expect(clone.status).toBe(original.status);
+      expect(clone.statusText).toBe(original.statusText);
+      expect(clone.bodyUsed).toBe(false);
+      const [originalBytes, cloneBytes] = await Promise.all([
+        readBodyBytes(wrapped),
+        readBodyBytes(clone),
+      ]);
+      expect(originalBytes).toStrictEqual([97, 98, 99]);
+      expect(cloneBytes).toStrictEqual([97, 98, 99]);
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
   });
 
   it('cancels and unlocks on iterator return and remains done', async () => {

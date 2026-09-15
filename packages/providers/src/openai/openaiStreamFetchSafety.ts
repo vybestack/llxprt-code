@@ -22,34 +22,48 @@ export function createReaderBasedStreamFetch(
 export function wrapResponseWithReaderIteratedBody(
   response: Response,
 ): Response {
-  const initialBody = response.body;
-  if (!initialBody) return response;
+  return createBodyDelegatingWrapper(response, response);
+}
+
+/**
+ * Build the wrapper behind wrapResponseWithReaderIteratedBody: metadata stays
+ * delegated to metadataSource while body state is served through bodySource.
+ * clone() reuses this factory so a clone keeps the original response's
+ * immutable url/type/redirected, which the Response constructor cannot
+ * restore, while its body consumes an independent tee branch.
+ */
+function createBodyDelegatingWrapper(
+  metadataSource: Response,
+  initialBodySource: Response,
+): Response {
+  const initialBody = initialBodySource.body;
+  if (!initialBody) return metadataSource;
   // Body content is served through bodySource so clone() can swap it without
   // disturbing immutable metadata, which stays delegated to the original.
-  let bodySource = response;
+  let bodySource = initialBodySource;
   let currentBody = initialBody;
   let wrappedBody = createReaderIteratedBody(currentBody);
   return {
     get status() {
-      return response.status;
+      return metadataSource.status;
     },
     get statusText() {
-      return response.statusText;
+      return metadataSource.statusText;
     },
     get ok() {
-      return response.ok;
+      return metadataSource.ok;
     },
     get url() {
-      return response.url;
+      return metadataSource.url;
     },
     get type() {
-      return response.type;
+      return metadataSource.type;
     },
     get redirected() {
-      return response.redirected;
+      return metadataSource.redirected;
     },
     get headers() {
-      return response.headers;
+      return metadataSource.headers;
     },
     get bodyUsed() {
       return bodySource.bodyUsed;
@@ -70,17 +84,20 @@ export function wrapResponseWithReaderIteratedBody(
     // materialized stream (observed on Bun: string-backed bodies keep the
     // same reference but are closed, stream-backed ones get replaced), so
     // tee our current body instead and serve each side from its own branch.
+    // The clone shares this wrapper's metadata source so immutable fields
+    // like url survive, which a reconstructed Response would drop.
     clone: () => {
       const [originalBranch, cloneBranch] = currentBody.tee();
       const responseInit = {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers,
+        status: metadataSource.status,
+        statusText: metadataSource.statusText,
+        headers: metadataSource.headers,
       };
       bodySource = new Response(originalBranch, responseInit);
       currentBody = originalBranch;
       wrappedBody = createReaderIteratedBody(originalBranch);
-      return wrapResponseWithReaderIteratedBody(
+      return createBodyDelegatingWrapper(
+        metadataSource,
         new Response(cloneBranch, responseInit),
       );
     },
