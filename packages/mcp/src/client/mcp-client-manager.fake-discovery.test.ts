@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { waitFor } from '../../../test-utils/src/wait-for.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -75,6 +76,7 @@ describe('McpClientManager fake discovery lifecycle', () => {
       {
         requestConfirmation: async () => false,
       },
+      new SettingsService(),
     );
     return {
       manager: new McpClientManager('0.0.1', toolRegistry, config),

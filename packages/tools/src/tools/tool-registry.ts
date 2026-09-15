@@ -423,25 +423,33 @@ export class ToolRegistry {
 
   private readonly messageBus: IToolMessageBus;
 
+  private readonly settingsService: Pick<
+    SettingsServiceBoundary,
+    'get' | 'getAllGlobalSettings'
+  >;
+
   /**
    * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
    * @requirement REQ-D01-002
    * @requirement REQ-D01-003
    * @pseudocode lines 122-133
+   *
+   * The settings service is a REQUIRED injected dependency (#2534 review
+   * Finding 3): every production construction site injects the real
+   * Config-owned service (config.getSettingsService()); the former optional
+   * parameter silently defaulted to a no-op, hiding missing wiring.
    */
   constructor(
     config: IToolRegistryHost,
     messageBus: IToolMessageBus,
-    private readonly settingsService: Pick<
+    settingsService: Pick<
       SettingsServiceBoundary,
       'get' | 'getAllGlobalSettings'
-    > = {
-      get: () => undefined,
-      getAllGlobalSettings: () => ({}),
-    },
+    >,
   ) {
     this.config = config;
     this.messageBus = messageBus;
+    this.settingsService = settingsService;
   }
 
   private getToolGovernance(): ToolGovernance {

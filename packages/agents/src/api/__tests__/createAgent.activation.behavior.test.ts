@@ -75,6 +75,73 @@ describe('createAgent single activation transition (#2534)', () => {
     expect(legacy.keyfile).toBeUndefined();
   });
 
+  it('legacy provider switch + credentials persist into the post-switch ACTIVE provider scope, matching an explicit intent (#2534 review)', async () => {
+    const auth = { apiKey: 'switch-key', baseUrl: 'https://switch.example/v1' };
+    // Under the fake seam only FakeProvider registers, so the legacy switch to
+    // 'gemini' degrades best-effort and 'fake' remains the post-switch active
+    // provider — the persistence target for the credentials. (The successful
+    // real-switch case is covered at the executor level in
+    // providerActivation.behavior.test.ts (h).)
+    const captureScopeState = async (overrides: Partial<AgentConfig>) => {
+      const { agent, cleanup } = await buildAgent(
+        'plain-text.jsonl',
+        overrides,
+      );
+      try {
+        const config = internalConfig(agent);
+        const settings = config.getSettingsService();
+        return {
+          activeProvider: config.getProviderManager()?.getActiveProviderName(),
+          activeScope: settings.getProviderSettings('fake'),
+          requestedScope: settings.getProviderSettings('gemini'),
+          ephemeralKey: config.getEphemeralSetting('auth-key'),
+          ephemeralBaseUrl: config.getEphemeralSetting('base-url'),
+        };
+      } finally {
+        await cleanup();
+      }
+    };
+
+    const legacy = await captureScopeState({
+      provider: 'gemini',
+      model: PLACEHOLDER_MODEL,
+      auth,
+    });
+    expect(legacy.activeProvider).toBe('fake');
+    // Credentials persisted into the post-switch ACTIVE provider's scope —
+    // the scope that the NEXT session loads — not the outgoing one's.
+    expect(legacy.activeScope['auth-key']).toBe(auth.apiKey);
+    expect(legacy.activeScope['base-url']).toBe(auth.baseUrl);
+    expect(legacy.requestedScope['auth-key']).toBeUndefined();
+    expect(legacy.requestedScope['base-url']).toBeUndefined();
+    // Session-level overrides identical either way.
+    expect(legacy.ephemeralKey).toBe(auth.apiKey);
+    expect(legacy.ephemeralBaseUrl).toBe(auth.baseUrl);
+
+    // Legacy synthesis and an equivalent explicit intent produce the SAME
+    // persisted + ephemeral state for the switch + credentials shape. The
+    // explicit build carries the SAME legacy provider/model fields so the
+    // Config constructor seeds identical pre-switch state (the comparison
+    // isolates the activation shape; with divergent ctor inputs the
+    // switch-time previous-provider wipe would land in different scopes).
+    // The explicit intent omits the model, matching what legacy synthesis
+    // keeps after filtering the PLACEHOLDER_MODEL sentinel.
+    const explicit = await captureScopeState({
+      provider: 'gemini',
+      model: PLACEHOLDER_MODEL,
+      activation: {
+        provider: 'gemini',
+        providerSwitchPolicy: 'best-effort',
+        cliOverrides: { key: auth.apiKey, baseUrl: auth.baseUrl },
+      },
+    });
+    expect(legacy.activeScope).toStrictEqual(explicit.activeScope);
+    expect(legacy.requestedScope).toStrictEqual(explicit.requestedScope);
+    expect(legacy.activeProvider).toBe(explicit.activeProvider);
+    expect(legacy.ephemeralKey).toBe(explicit.ephemeralKey);
+    expect(legacy.ephemeralBaseUrl).toBe(explicit.ephemeralBaseUrl);
+  });
+
   it('the A2A unconfigured shape remains usable without writing the placeholder model', async () => {
     const result = await activationSnapshot({
       provider: UNCONFIGURED_PROVIDER,

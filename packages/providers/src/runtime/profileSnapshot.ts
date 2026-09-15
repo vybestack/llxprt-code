@@ -234,11 +234,11 @@ export function buildRuntimeProfileSnapshot(): Profile {
   const snapshotConfig = config as RuntimeSnapshotConfig;
   const snapshotProviderManager =
     providerManager as RuntimeSnapshotProviderManager;
-  const providerName =
-    resolveActiveProviderName() ??
-    snapshotProviderManager.getActiveProviderName?.() ??
-    snapshotConfig.getProvider?.() ??
-    'openai';
+  // #2534 C3/Domain-5: resolveActiveProviderName IS the one resolution
+  // (settings store → manager cache). The former manager/config.getProvider
+  // probe tails read the same two sources a second time; 'openai' is the
+  // documented snapshot default when nothing resolves.
+  const providerName = resolveActiveProviderName() ?? 'openai';
 
   if (providerName === 'load-balancer') {
     return buildLoadBalancerProfileSnapshot(snapshotProviderManager);
@@ -769,15 +769,12 @@ export function setDefaultProfileName(profileName: string | null): void {
 }
 
 export function getRuntimeDiagnosticsSnapshot(): RuntimeDiagnosticsSnapshot {
-  const { config, providerManager } = getCliRuntimeServices();
+  const { config } = getCliRuntimeServices();
   const snapshotConfig = config as RuntimeSnapshotConfig;
-  const snapshotProviderManager =
-    providerManager as RuntimeSnapshotProviderManager;
 
-  const providerName =
-    resolveActiveProviderName() ??
-    snapshotProviderManager.getActiveProviderName?.() ??
-    null;
+  // #2534 C3/Domain-5: single active-provider resolution (store → manager
+  // cache); the former manager probe tail read the same cache twice.
+  const providerName = resolveActiveProviderName();
   const modelValue = getActiveModelName();
   const modelName =
     modelValue && modelValue.trim() !== ''

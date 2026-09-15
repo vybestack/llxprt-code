@@ -499,12 +499,20 @@ function applyExtensionFlags(
   config._activeExtensions = params.activeExtensions ?? [];
   config.providerManager = params.providerManager;
   // #2534 Domain C1: activeProvider has one store (the settings global key).
-  // applySettingsService has already run, so the store exists. Seed only when
-  // absent: a supplied (shared) settings service keeps its active provider
-  // rather than being mutated as a constructor side effect (#2300). The
-  // UNCONFIGURED_PROVIDER sentinel is not a provider — seeding it would make
-  // provider managers resolve 'unconfigured' as active, so it never lands in
-  // the store (runtimeStateFactory/prompts re-derive the sentinel when the
+  // applySettingsService has already run, so the store exists. Seeding is
+  // restricted to Config-OWNED settings services: either applySettingsService
+  // created a provably fresh one (params.settingsService undefined), or the
+  // caller explicitly delegated ownership of the service it injected
+  // (params.settingsServiceOwnership === 'delegated' — the CLI bootstrap
+  // creates its service for this Config's exclusive use and declares it).
+  // A shared/injected service without that declaration — even one that merely
+  // lacks an activeProvider key — is never mutated as a constructor side
+  // effect: "no activeProvider" is not proof of freshness for an injected
+  // service, which may carry other state (global keys, provider records,
+  // profile selection) owned by its injector (#2300, #2534 review Finding 6).
+  // The UNCONFIGURED_PROVIDER sentinel is not a provider — seeding it would
+  // make provider managers resolve 'unconfigured' as active, so it never lands
+  // in the store (runtimeStateFactory/prompts re-derive the sentinel when the
   // store is empty).
   const seedProvider =
     params.provider !== undefined &&
@@ -512,15 +520,19 @@ function applyExtensionFlags(
     params.provider !== UNCONFIGURED_PROVIDER
       ? params.provider
       : null;
+  const configOwnsSettingsService =
+    params.settingsService === undefined ||
+    params.settingsServiceOwnership === 'delegated';
   if (
     seedProvider !== null &&
+    configOwnsSettingsService &&
     config.settingsService.get('activeProvider') === undefined
   ) {
     config.settingsService.set('activeProvider', seedProvider);
     // #2534 Domain C2: constructor paths that seed a model must land in the
-    // store. Seed providers[seedProvider].model only when absent so a
-    // model already resolved into the (possibly shared) settings service by
-    // the bootstrap, or persisted by the user, is never clobbered.
+    // store. The ownership guard above means this branch only runs on a
+    // Config-owned fresh service; the absence check still guards against a
+    // model seeded earlier in construction.
     if (typeof params.model === 'string' && params.model.length > 0) {
       const providerSettings =
         config.settingsService.getProviderSettings(seedProvider);

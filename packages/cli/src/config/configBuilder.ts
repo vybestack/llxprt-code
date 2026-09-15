@@ -209,6 +209,14 @@ function buildSessionBaseArgs(
   return {
     sessionId,
     settingsService,
+    // #2534 review Finding 6: the service above is injected, but it was
+    // created by this CLI bootstrap for this Config's exclusive use
+    // (cliSessionBootstrap → runtimeOverrides → prepareRuntimeForProfile —
+    // never an externally-shared service), so Config construction is
+    // authorized to seed the activeProvider store (Domain C1). Without the
+    // delegation declaration the ownership guard correctly refuses to seed,
+    // and CLI/env provider precedence collapses to defaults.
+    settingsServiceOwnership: 'delegated',
     embeddingModel: undefined,
     sandbox: sandboxConfig,
     targetDir: cwd,

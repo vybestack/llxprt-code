@@ -97,9 +97,9 @@ export interface ProviderActivationResult {
  *   provider overrides (auth-key/auth-keyfile/base-url) and profile model
  *   params before auth.
  * - 'auto' (default): the CLI path — no-provider falls back to defaultProvider
- *   and swallows auth errors; provider-case applies CLI overrides, switches
- *   (preserving profile auth ephemerals), refreshes auth, then resolves model
- *   + model params.
+ *   and swallows auth errors; provider-case switches (preserving profile auth
+ *   ephemerals), applies CLI overrides into the switched-to provider's scope,
+ *   refreshes auth, then resolves model + model params.
  */
 export async function executeProviderActivation(
   config: Config,
@@ -346,10 +346,12 @@ async function executeAutoNoProvider(
 }
 
 /**
- * Provider branch: apply CLI overrides BEFORE the switch, snapshot profile auth
- * ephemerals, switch (reapplying ephemerals) only when needed, refresh auth,
- * then resolve model + params. Errors are fatal except provider-switch errors
- * under the explicit best-effort policy used by legacy construction inputs.
+ * Provider branch: snapshot profile auth ephemerals, switch (reapplying
+ * ephemerals) only when needed, apply CLI overrides AFTER the switch so their
+ * provider-scoped persistence lands in the TARGET provider's scope (#2534
+ * review Finding 1; main legacy order), refresh auth, then resolve model +
+ * params. Errors are fatal except provider-switch errors under the explicit
+ * best-effort policy used by legacy construction inputs.
  */
 async function executeAutoProvider(
   config: Config,
@@ -368,11 +370,6 @@ async function executeAutoProvider(
         infoMessages: [],
       };
     }
-
-    await applyCliArgumentOverrides(
-      toArgvShape(intent),
-      toBootstrapArgsShape(intent),
-    );
 
     const profileAuthEphemerals = snapshotProfileAuthEphemerals(config);
     let infoMessages: readonly string[] = [];
@@ -398,6 +395,21 @@ async function executeAutoProvider(
         reapplyProfileAuthEphemerals(config, profileAuthEphemerals);
       }
     }
+    // #2534 review Finding 1: CLI overrides apply AFTER the provider switch so
+    // the provider-scoped credential persistence (auth-key/base-url via
+    // applyCliArgumentOverrides → updateActiveProviderApiKey/BaseUrl) lands in
+    // the TARGET provider's scope — main's legacy activation order and the
+    // CLI bootstrap's own postConfigRuntime step 14 ("reapply CLI arg
+    // overrides after the provider switch"). Applying them pre-switch
+    // persisted the credentials into the OUTGOING provider's scope while the
+    // session still saw them via preserved ephemerals, so next-session
+    // persistence diverged from main. Override precedence over profile
+    // ephemerals is unchanged: they apply on top of the reapplied profile
+    // ephemerals, still before refreshAuth.
+    await applyCliArgumentOverrides(
+      toArgvShape(intent),
+      toBootstrapArgsShape(intent),
+    );
     // Always refresh auth in the 'auto' path. The non-interactive flow runs
     // postConfigRuntime step 13 with authMode 'none' (which skips refreshAuth)
     // and step 14 (applyCliArgumentOverrides, which sets the key but does NOT

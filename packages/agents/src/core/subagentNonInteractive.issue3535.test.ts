@@ -20,6 +20,7 @@
  * which is how the structured tool_response pairing is verified.
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type {
   ContentBlock,
@@ -189,6 +190,7 @@ function createEmptyRegistryConfig(): Config {
       getExcludeTools: () => [],
     },
     messageBusAdapter,
+    new SettingsService(),
   );
   const sessionId = `issue-3535-session-${sessionCounter++}`;
   lastSessionId = sessionId;

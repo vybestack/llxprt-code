@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Config } from './test-support/mcpClientTestSupport.js';
 import { PromptRegistry } from './test-support/mcpClientTestSupport.js';
@@ -66,7 +67,11 @@ describe('McpClientManager partial discovery failure', () => {
       getBlockedMcpServers: () => undefined,
       refreshMcpContext: vi.fn(),
     } as unknown as Config;
-    const toolRegistry = new ToolRegistry(config);
+    const toolRegistry = new ToolRegistry(
+      config,
+      { requestConfirmation: async () => false },
+      new SettingsService(),
+    );
     const removeTools = vi.spyOn(toolRegistry, 'removeMcpToolsByServer');
     const removePrompts = vi.spyOn(promptRegistry, 'removePromptsByServer');
     const removeResources = vi.spyOn(

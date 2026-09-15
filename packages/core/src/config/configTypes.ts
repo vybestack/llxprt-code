@@ -439,6 +439,17 @@ export interface ConfigParameters {
   enablePromptCompletion?: boolean;
   eventEmitter?: EventEmitter;
   settingsService?: SettingsService;
+  /**
+   * #2534 review Finding 6: explicit ownership declaration for an injected
+   * settingsService. 'delegated' asserts the CALLER created the service for
+   * this Config's exclusive use (the CLI bootstrap's pattern: the service is
+   * constructed by the bootstrap and handed to Config construction), so the
+   * constructor's activeProvider/model store seeding applies. The default
+   * (omitted, or 'shared') keeps an injected service untouched — absence of
+   * an activeProvider key is not proof of freshness for a service carrying
+   * injector-owned state (#2300).
+   */
+  settingsServiceOwnership?: 'shared' | 'delegated';
   policyEngineConfig?: PolicyEngineConfig;
   truncateToolOutputThreshold?: number;
   truncateToolOutputLines?: number;

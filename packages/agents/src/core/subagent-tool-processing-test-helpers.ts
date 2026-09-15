@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
@@ -93,6 +94,7 @@ export async function dispatch(
   const registry = new ToolRegistry(
     config,
     new CoreMessageBusAdapter(messageBus),
+    new SettingsService(),
   );
   registry.registerTool(new DivideTool());
   const toolExecutorContext = createToolExecutionConfig(

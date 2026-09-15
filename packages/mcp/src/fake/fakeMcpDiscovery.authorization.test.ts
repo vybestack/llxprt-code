@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { advanceTimersByTimeAsync } from '../../../test-utils/src/async-timers.js';
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
@@ -21,7 +22,11 @@ import {
 } from './fakeMcpDiscovery.js';
 
 function createToolRegistry(): ToolRegistry {
-  return new ToolRegistry({}, { requestConfirmation: async () => false });
+  return new ToolRegistry(
+    {},
+    { requestConfirmation: async () => false },
+    new SettingsService(),
+  );
 }
 
 function fixtureWithTool(name: string, latencyMs?: number): FakeMcpFixture {
