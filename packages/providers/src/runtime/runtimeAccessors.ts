@@ -120,11 +120,12 @@ export function getCliRuntimeContext() {
       );
     }
 
-    // Fallback path for legacy compatibility (disabled under stateless hardening)
-    const resolvedSettings =
-      settingsService ?? entry.config.getSettingsService();
+    // Single resolution path (#2534 C6): the runtime registry entry is the
+    // only owner of the settings service. When stateless hardening is off
+    // and the entry predates registry settings registration, the context is
+    // built without one rather than probing config for a second owner.
     return createSettingsProviderRuntimeContext({
-      settingsService: resolvedSettings,
+      settingsService,
       config: entry.config,
       runtimeId: identity.runtimeId,
       metadata: identity.metadata,
