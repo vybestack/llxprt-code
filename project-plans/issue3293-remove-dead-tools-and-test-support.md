@@ -328,3 +328,32 @@ Raw logs: `tmp/verify3293/` (full-test.log, full-test-main.log,
 fails-with-changes.txt, fails-main.txt, lint-typecheck-build.log,
 typecheck2.log, format.log, smoke.log); implementation-phase logs in
 `tmp/verify3293-implementation/`.
+
+## Execution log addendum (2026-09-14, post-PR)
+
+PR #3675 opened; its first CI run failed the `core` shard on
+`local-media-store-locking > LocalMediaStore quota enforcement >
+deduplicates the same blob across concurrent child processes` (plus two
+nested runner-fixture lines that are expected output of passing
+runner-policy tests). No code path connects this change to media-store
+locking; the canonical core suite passes locally.
+
+While the PR ran, main advanced past this branch's base (e5ec3a161):
+#3671 merged sibling issue #3294, which independently deleted the same
+four tools modules this plan removes, and #3666 fixed the pre-existing
+agents typecheck error documented above. Response:
+
+- Merged `origin/main` into `issue3293` — clean, no conflicts. Upstream
+  added no competing guard test, so `removed-dead-modules.test.ts`
+  remains the only pin on those deletions.
+- Post-merge unique diff vs main: 9 files (+421/−105) — the requireOne
+  removal (both validator copies + `buildSchema` strip), behavior pins,
+  schemaIdentity/compileCache updates, the guard test, and this plan.
+  The four module deletions no longer appear (already in main via #3671).
+- Post-merge verification: focused 44/44 green; canonical tools suite
+  exit 0; canonical core suite exit 0 (media-store test green locally);
+  tools/core/agents typechecks all exit 0 (agents fixed by #3666). A
+  transient core typecheck failure (`toolOutputMaxTokens` TS2307) was
+  stale local `dist` from the merge and cleared after `npm run build`
+  (BUILD_EXIT=0, CORE_TC=0). Logs: `tmp/verify3293/post-merge-verify.log`,
+  `tmp/verify3293/rebuild-typecheck.log`.
