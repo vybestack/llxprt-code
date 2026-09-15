@@ -50,6 +50,7 @@ export type HintFn = (
 export interface ValueArgument {
   readonly kind: 'value';
   readonly name: string;
+  readonly literalAlternative?: boolean;
   readonly description?: string;
   readonly options?: readonly Option[];
   readonly completer?: CompleterFn;

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { listTextProviders } from '../commands/providerSelection.js';
 import { useCallback, useState } from 'react';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
@@ -116,7 +117,7 @@ export const useProviderDialog = ({
     let loadedProviders: string[];
     let activeProvider: string;
     try {
-      loadedProviders = runtime.listProviders();
+      loadedProviders = listTextProviders(runtime);
       activeProvider = resolveActiveProviderName(runtime);
     } catch (e) {
       addProviderError(addMessage, 'Failed to load providers', e);

@@ -381,6 +381,7 @@ function buildSimpleDialogActions(
     permissions: () => actions.openPermissionsDialog(),
     policies: () => actions.openPoliciesDialog(),
     provider: () => actions.openProviderDialog(),
+    imageProvider: () => actions.openImageProviderDialog(),
     loadProfile: () => actions.openLoadProfileDialog(),
     createProfile: () => actions.openCreateProfileDialog(),
     profileList: () => {

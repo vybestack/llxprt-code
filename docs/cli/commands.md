@@ -10,16 +10,25 @@ Slash commands control the CLI itself — configuration, navigation, session man
 
 ### Provider and Model
 
-| Command                | Description                              |
-| ---------------------- | ---------------------------------------- |
-| `/provider [name]`     | Switch provider (e.g., `/provider kimi`) |
-| `/model [name]`        | Switch model (e.g., `/model grok-4`)     |
-| `/baseurl [url]`       | Set the API base URL                     |
-| `/toolformat [format]` | Set the tool format for the provider     |
+| Command                          | Description                          |
+| -------------------------------- | ------------------------------------ |
+| `/provider [text\|image] [name]` | Select a provider or open its menu   |
+| `/model [name]`                  | Switch model (e.g., `/model grok-4`) |
+| `/baseurl [url]`                 | Set the API base URL                 |
+| `/toolformat [format]`           | Set the tool format for the provider |
 
-`/provider image` shows the effective image provider: the `imageProvider`
-setting when present, otherwise the active chat provider. `/provider image <alias>`
-saves that alias to user settings without switching the chat provider.
+`/provider` and `/provider text` open the text provider menu. `/provider <name>`
+and `/provider text <name>` switch the chat provider. `/provider image` opens
+an image provider menu containing provider aliases, with the `imageProvider`
+setting selected when present, otherwise the active chat provider.
+`/provider image <alias>` saves that alias to user settings without switching
+the chat provider; selecting an alias in the image menu does the same.
+
+Press Tab after `/provider ` for `text`, `image`, `save`, and bare provider
+names. After `text` or `image`, Tab completes the same provider list shown in
+that kind's menu. `/provider save <alias>` still saves the current provider
+configuration as an alias. A leading `text` or `image` token selects the kind;
+use `/provider text text` to select a provider named `text`.
 
 `/model` opens the text model browser. `/model text ...` accepts the same search
 and filter arguments. `/model image` opens a selection list for the effective

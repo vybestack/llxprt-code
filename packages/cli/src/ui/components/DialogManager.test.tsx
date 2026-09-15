@@ -347,6 +347,9 @@ function makeDialogManagerUiState(
     isOAuthCodeDialogOpen: false,
     isEditorDialogOpen: false,
     isProviderDialogOpen: false,
+    isImageProviderDialogOpen: false,
+    imageProviderOptions: ['codex', 'local-art'],
+    selectedImageProvider: 'local-art',
     // Profile tier.
     isLoadProfileDialogOpen: false,
     isCreateProfileDialogOpen: false,
@@ -394,6 +397,14 @@ function renderDialogManager(flags: Record<string, unknown>): string {
 }
 
 describe('DialogManager render dispatch', () => {
+  it('renders image aliases and the effective image selection without chat providers', () => {
+    const frame = renderDialogManager({ isImageProviderDialogOpen: true });
+    expect(frame).toContain('Image provider');
+    expect(frame).toContain('Selected: local-art');
+    expect(frame).toContain('codex');
+    expect(frame).not.toContain('ollama');
+  });
+
   it('renders the folder-trust dialog when only its flag is set', () => {
     const frame = renderDialogManager({ isFolderTrustDialogOpen: true });
     expect(frame).toContain(FOLDER_TRUST_MARKER);

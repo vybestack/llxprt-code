@@ -221,6 +221,7 @@ export type DialogType =
   | 'subagent'
   | 'models'
   | 'imageModels'
+  | 'imageProvider'
   | 'profileList'
   | 'profileDetail'
   | 'profileEditor'

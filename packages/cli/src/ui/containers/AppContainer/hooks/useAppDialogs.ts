@@ -15,6 +15,7 @@ import { useEditorSettings } from '../../../hooks/useEditorSettings.js';
 import { useExtensionUpdates } from '../../../hooks/useExtensionUpdates.js';
 import { useOAuthOrchestration } from '../../../hooks/useOAuthOrchestration.js';
 import { useSettingsCommand } from '../../../hooks/useSettingsCommand.js';
+import { useImageProviderDialog } from '../../../hooks/useImageProviderDialog.js';
 import { useProviderDialog } from '../../../hooks/useProviderDialog.js';
 import { useLoadProfileDialog } from '../../../hooks/useLoadProfileDialog.js';
 import { useCreateProfileDialog } from '../../../hooks/useCreateProfileDialog.js';
@@ -186,6 +187,27 @@ function useIdeTrustEffect(
   });
 }
 
+function useImageProviderSelection({
+  settings,
+  appState,
+  addItem,
+}: AppDialogsParams) {
+  const imageProvider = useImageProviderDialog({
+    settings,
+    appState,
+    addMessage: (msg) =>
+      addItem({ type: msg.type, text: msg.content }, msg.timestamp.getTime()),
+  });
+  return {
+    isImageProviderDialogOpen: imageProvider.showDialog,
+    imageProviderOptions: imageProvider.providers,
+    selectedImageProvider: imageProvider.currentProvider,
+    openImageProviderDialog: imageProvider.openDialog,
+    handleImageProviderSelect: imageProvider.handleSelect,
+    exitImageProviderDialog: imageProvider.closeDialog,
+  };
+}
+
 function useDialogsAuthProviders(
   p: AppDialogsParams,
   st: ReturnType<typeof useDialogsState>,
@@ -216,6 +238,7 @@ function useDialogsAuthProviders(
     setAuthError: st.setAuthError,
   });
   const editor = useEditorSettings(settings, appState, addItem);
+  const imageProvider = useImageProviderSelection(p);
   const provider = useProviderDialog({
     addMessage: (msg) =>
       addItem({ type: msg.type, text: msg.content }, msg.timestamp.getTime()),
@@ -248,6 +271,7 @@ function useDialogsAuthProviders(
     openEditorDialog: editor.openEditorDialog,
     handleEditorSelect: editor.handleEditorSelect,
     exitEditorDialog: editor.exitEditorDialog,
+    ...imageProvider,
     isProviderDialogOpen: provider.showDialog,
     openProviderDialog: provider.openDialog,
     handleProviderSelect: provider.handleSelect,

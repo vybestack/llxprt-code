@@ -15,6 +15,7 @@ import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 const PRINTABLE_ASCII = /[\x20-\x7E]/;
 
 interface ProviderDialogProps {
+  title?: string;
   providers: string[];
   currentProvider?: string;
   onSelect: (providerName: string) => void;
@@ -22,6 +23,7 @@ interface ProviderDialogProps {
 }
 
 interface ProviderDialogViewProps {
+  title?: string;
   providers: string[];
   filteredProviders: string[];
   index: number;
@@ -205,7 +207,7 @@ function NarrowProviderDialogContent(props: ProviderDialogViewProps) {
   return (
     <Box flexDirection="column">
       <Text bold color={SemanticColors.text.primary}>
-        Select Provider
+        {props.title ?? 'Select Provider'}
       </Text>
       <Box marginY={1}>
         <Text color={SemanticColors.text.primary}>
@@ -230,9 +232,10 @@ function WideProviderDialogContent(props: ProviderDialogViewProps) {
   return (
     <Box flexDirection="column">
       <Text bold color={SemanticColors.text.primary}>
-        {isSearching
-          ? 'Search Providers'
-          : 'Select Provider (←/→/↑/↓, Enter to choose, Esc to cancel)'}
+        {props.title ??
+          (isSearching
+            ? 'Search Providers'
+            : 'Select Provider (←/→/↑/↓, Enter to choose, Esc to cancel)')}
       </Text>
       <ProviderSearchHeader
         searchTerm={searchTerm}
@@ -332,6 +335,7 @@ function createProviderDialogKeypressHandler({
 }
 
 function useProviderDialogController({
+  title,
   providers,
   currentProvider,
   onSelect,
@@ -396,6 +400,7 @@ function useProviderDialogController({
   return {
     onKeypress,
     viewProps: {
+      title,
       providers,
       filteredProviders,
       index,

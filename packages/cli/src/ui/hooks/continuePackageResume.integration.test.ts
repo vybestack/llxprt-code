@@ -193,6 +193,7 @@ function createActions(): SlashCommandProcessorActions {
     openPermissionsDialog: () => {},
     openPoliciesDialog: () => {},
     openProviderDialog: () => {},
+    openImageProviderDialog: () => {},
     openLoadProfileDialog: () => {},
     openCreateProfileDialog: () => {},
     openProfileListDialog: () => {},

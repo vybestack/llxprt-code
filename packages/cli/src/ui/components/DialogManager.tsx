@@ -669,6 +669,19 @@ function renderDialogBodyFirstHalf(
   if (uiState.isEditorDialogOpen) {
     return renderEditorDialog(uiState, uiActions, settings);
   }
+  if (uiState.isImageProviderDialogOpen) {
+    return (
+      <Box flexDirection="column" marginBottom={1}>
+        <ProviderDialog
+          title="Image provider"
+          providers={uiState.imageProviderOptions}
+          currentProvider={uiState.selectedImageProvider}
+          onSelect={uiActions.handleImageProviderSelect}
+          onClose={uiActions.exitImageProviderDialog}
+        />
+      </Box>
+    );
+  }
   if (uiState.isProviderDialogOpen) {
     return renderProviderDialog(uiState, uiActions, state.handleProviderSelect);
   }

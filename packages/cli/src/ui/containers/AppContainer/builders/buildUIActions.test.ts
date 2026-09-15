@@ -41,6 +41,9 @@ const makeParams = (): UIActionsParams => ({
 
   // Provider dialog
   openProviderDialog: vi.fn(),
+  openImageProviderDialog: vi.fn(),
+  handleImageProviderSelect: vi.fn(),
+  exitImageProviderDialog: vi.fn(),
   handleProviderSelect: vi.fn(),
   exitProviderDialog: vi.fn(),
 
@@ -275,6 +278,11 @@ describe('buildUIActions', () => {
     expect(result.handleEditorSelect).toBe(params.handleEditorSelect);
     expect(result.exitEditorDialog).toBe(params.exitEditorDialog);
     expect(result.openProviderDialog).toBe(params.openProviderDialog);
+    expect(result.openImageProviderDialog).toBe(params.openImageProviderDialog);
+    expect(result.handleImageProviderSelect).toBe(
+      params.handleImageProviderSelect,
+    );
+    expect(result.exitImageProviderDialog).toBe(params.exitImageProviderDialog);
     expect(result.handleProviderSelect).toBe(params.handleProviderSelect);
     expect(result.exitProviderDialog).toBe(params.exitProviderDialog);
     expect(result.openLoadProfileDialog).toBe(params.openLoadProfileDialog);

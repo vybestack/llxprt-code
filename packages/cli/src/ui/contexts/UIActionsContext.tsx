@@ -62,6 +62,9 @@ export interface UIActions {
 
   // Provider dialog
   openProviderDialog: () => void;
+  openImageProviderDialog: () => void;
+  handleImageProviderSelect: (provider: string) => void;
+  exitImageProviderDialog: () => void;
   handleProviderSelect: (provider: string) => Promise<void>;
   exitProviderDialog: () => void;
 

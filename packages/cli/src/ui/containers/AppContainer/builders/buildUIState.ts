@@ -67,6 +67,9 @@ export interface UIStateParams {
   isAuthDialogOpen: boolean;
   isEditorDialogOpen: boolean;
   isProviderDialogOpen: boolean;
+  isImageProviderDialogOpen: boolean;
+  imageProviderOptions: string[];
+  selectedImageProvider: string;
   isLoadProfileDialogOpen: boolean;
   isCreateProfileDialogOpen: boolean;
   isProfileListDialogOpen: boolean;
@@ -269,6 +272,9 @@ function buildDialogStates(p: UIStateParams) {
     isAuthDialogOpen: p.isAuthDialogOpen,
     isEditorDialogOpen: p.isEditorDialogOpen,
     isProviderDialogOpen: p.isProviderDialogOpen,
+    isImageProviderDialogOpen: p.isImageProviderDialogOpen,
+    imageProviderOptions: p.imageProviderOptions,
+    selectedImageProvider: p.selectedImageProvider,
     isLoadProfileDialogOpen: p.isLoadProfileDialogOpen,
     isCreateProfileDialogOpen: p.isCreateProfileDialogOpen,
     isProfileListDialogOpen: p.isProfileListDialogOpen,

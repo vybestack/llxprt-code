@@ -80,6 +80,7 @@ export interface AppInputParams {
   openPermissionsDialog: AppDialogsResult['openPermissionsDialog'];
   openPoliciesDialog: AppDialogsResult['openPoliciesDialog'];
   openProviderDialog: AppDialogsResult['openProviderDialog'];
+  openImageProviderDialog: AppDialogsResult['openImageProviderDialog'];
   openLoadProfileDialog: AppDialogsResult['openLoadProfileDialog'];
   openCreateProfileDialog: AppDialogsResult['openCreateProfileDialog'];
   openProfileListDialog: AppDialogsResult['openProfileListDialog'];
@@ -165,6 +166,7 @@ function useSlashActions(
     openPermissionsDialog: p.openPermissionsDialog,
     openPoliciesDialog: p.openPoliciesDialog,
     openProviderDialog: p.openProviderDialog,
+    openImageProviderDialog: p.openImageProviderDialog,
     openLoadProfileDialog: p.openLoadProfileDialog,
     openCreateProfileDialog: p.openCreateProfileDialog,
     openProfileListDialog: p.openProfileListDialog,

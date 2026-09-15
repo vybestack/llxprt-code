@@ -71,6 +71,7 @@ describe('useEditorSettings', () => {
         auth: false,
         editor: false,
         provider: false,
+        imageProvider: false,
         privacy: false,
         loadProfile: false,
         createProfile: false,

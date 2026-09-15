@@ -204,6 +204,7 @@ export function resolveActiveStep(
       }
 
       const matched = consumeLiteralMatch(literals, remainingArgs);
+      const alternative = currentSchema[nextIndex];
 
       if (matched) {
         remainingArgs.shift();
@@ -214,16 +215,22 @@ export function resolveActiveStep(
             ? []
             : currentSchema.slice(nextIndex);
         currentSchema = mergeSchemas(matched.next, remainingSchema);
-        continue;
+      } else if (
+        currentSchema.length > nextIndex &&
+        alternative.kind === 'value' &&
+        alternative.literalAlternative === true
+      ) {
+        currentSchema = currentSchema.slice(nextIndex);
+      } else {
+        return {
+          kind: 'literal',
+          nodes: literals,
+          remainingSchema: currentSchema.slice(nextIndex),
+          consumedCount,
+          consumedLiterals,
+        };
       }
-
-      return {
-        kind: 'literal',
-        nodes: literals,
-        remainingSchema: currentSchema.slice(nextIndex),
-        consumedCount,
-        consumedLiterals,
-      };
+      continue;
     }
 
     const valueNode = firstNode;

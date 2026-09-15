@@ -24,6 +24,7 @@ describe('useSlashCommandActions', () => {
       openPermissionsDialog: createCallback(),
       openPoliciesDialog: createCallback(),
       openProviderDialog: createCallback(),
+      openImageProviderDialog: createCallback(),
       openLoadProfileDialog: createCallback(),
       openCreateProfileDialog: createCallback(),
       openProfileListDialog: createCallback(),
@@ -41,6 +42,9 @@ describe('useSlashCommandActions', () => {
 
     const { result } = renderHook(() => useSlashCommandActions(callbacks));
 
+    expect(result.current.openImageProviderDialog).toBe(
+      callbacks.openImageProviderDialog,
+    );
     expect(result.current.openAuthDialog).toBe(callbacks.openAuthDialog);
     expect(result.current.openThemeDialog).toBe(callbacks.openThemeDialog);
     expect(result.current.openEditorDialog).toBe(callbacks.openEditorDialog);
@@ -106,6 +110,7 @@ describe('useSlashCommandActions', () => {
       openPermissionsDialog: createCallback(),
       openPoliciesDialog: createCallback(),
       openProviderDialog: createCallback(),
+      openImageProviderDialog: createCallback(),
       openLoadProfileDialog: createCallback(),
       openCreateProfileDialog: createCallback(),
       openProfileListDialog: createCallback(),

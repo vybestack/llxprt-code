@@ -67,6 +67,9 @@ export interface UIState {
   isAuthDialogOpen: boolean;
   isEditorDialogOpen: boolean;
   isProviderDialogOpen: boolean;
+  isImageProviderDialogOpen: boolean;
+  imageProviderOptions: string[];
+  selectedImageProvider: string;
   isLoadProfileDialogOpen: boolean;
   isCreateProfileDialogOpen: boolean;
   isProfileListDialogOpen: boolean;

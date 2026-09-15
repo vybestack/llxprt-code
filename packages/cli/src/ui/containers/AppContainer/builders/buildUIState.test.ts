@@ -39,6 +39,9 @@ const makeParams = (): UIStateParams => ({
   isAuthDialogOpen: false,
   isEditorDialogOpen: false,
   isProviderDialogOpen: false,
+  isImageProviderDialogOpen: false,
+  imageProviderOptions: [],
+  selectedImageProvider: '',
   isLoadProfileDialogOpen: false,
   isCreateProfileDialogOpen: false,
   isProfileListDialogOpen: false,
@@ -259,6 +262,9 @@ describe('buildUIState', () => {
     params.isAuthDialogOpen = true;
     params.isEditorDialogOpen = true;
     params.isProviderDialogOpen = true;
+    params.isImageProviderDialogOpen = true;
+    params.imageProviderOptions = ['codex'];
+    params.selectedImageProvider = 'codex';
     params.isLoadProfileDialogOpen = true;
     params.isCreateProfileDialogOpen = true;
     params.isProfileListDialogOpen = true;
@@ -284,6 +290,9 @@ describe('buildUIState', () => {
     expect(result.isAuthDialogOpen).toBe(true);
     expect(result.isEditorDialogOpen).toBe(true);
     expect(result.isProviderDialogOpen).toBe(true);
+    expect(result.isImageProviderDialogOpen).toBe(true);
+    expect(result.imageProviderOptions).toStrictEqual(['codex']);
+    expect(result.selectedImageProvider).toBe('codex');
     expect(result.isLoadProfileDialogOpen).toBe(true);
     expect(result.isCreateProfileDialogOpen).toBe(true);
     expect(result.isProfileListDialogOpen).toBe(true);

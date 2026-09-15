@@ -61,6 +61,7 @@ export function hasActiveDialog(uiState: UIState): boolean {
     uiState.isOAuthCodeDialogOpen,
     uiState.isEditorDialogOpen,
     uiState.isProviderDialogOpen,
+    uiState.isImageProviderDialogOpen,
     uiState.isLoadProfileDialogOpen,
     uiState.isCreateProfileDialogOpen,
     uiState.isProfileListDialogOpen,

@@ -18,6 +18,7 @@ export type AppAction =
         | 'auth'
         | 'editor'
         | 'provider'
+        | 'imageProvider'
         | 'privacy'
         | 'loadProfile'
         | 'createProfile'
@@ -34,6 +35,7 @@ export type AppAction =
         | 'auth'
         | 'editor'
         | 'provider'
+        | 'imageProvider'
         | 'privacy'
         | 'loadProfile'
         | 'createProfile'
@@ -56,6 +58,7 @@ export interface AppState {
     auth: boolean;
     editor: boolean;
     provider: boolean;
+    imageProvider: boolean;
     privacy: boolean;
     loadProfile: boolean;
     createProfile: boolean;
@@ -84,6 +87,7 @@ export const initialAppState: AppState = {
     auth: false,
     editor: false,
     provider: false,
+    imageProvider: false,
     privacy: false,
     loadProfile: false,
     createProfile: false,

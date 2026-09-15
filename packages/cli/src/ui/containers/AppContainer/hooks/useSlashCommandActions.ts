@@ -31,6 +31,7 @@ interface UseSlashCommandActionsParams {
   openPermissionsDialog: () => void;
   openPoliciesDialog: () => void;
   openProviderDialog: () => void;
+  openImageProviderDialog: () => void;
   openLoadProfileDialog: () => void | Promise<void>;
   openCreateProfileDialog: () => void;
   openProfileListDialog: () => void | Promise<void>;
@@ -68,6 +69,7 @@ export interface SlashCommandActions {
   openPermissionsDialog: () => void;
   openPoliciesDialog: () => void;
   openProviderDialog: () => void;
+  openImageProviderDialog: () => void;
   openLoadProfileDialog: () => void | Promise<void>;
   openCreateProfileDialog: () => void;
   openProfileListDialog: () => void | Promise<void>;

@@ -59,6 +59,9 @@ export interface UIActionsParams {
 
   // Provider dialog
   openProviderDialog: () => void;
+  openImageProviderDialog: () => void;
+  handleImageProviderSelect: (provider: string) => void;
+  exitImageProviderDialog: () => void;
   handleProviderSelect: (provider: string) => Promise<void>;
   exitProviderDialog: () => void;
 
@@ -210,6 +213,17 @@ function policiesActions(p: UIActionsParams) {
   };
 }
 
+function buildProviderActions(params: UIActionsParams) {
+  return {
+    openProviderDialog: params.openProviderDialog,
+    openImageProviderDialog: params.openImageProviderDialog,
+    handleImageProviderSelect: params.handleImageProviderSelect,
+    exitImageProviderDialog: params.exitImageProviderDialog,
+    handleProviderSelect: params.handleProviderSelect,
+    exitProviderDialog: params.exitProviderDialog,
+  };
+}
+
 /**
  * @builder buildUIActions
  * @description Pure function assembling UIActions from callbacks
@@ -252,9 +266,7 @@ export function buildUIActions(params: UIActionsParams): UIActions {
     exitEditorDialog: params.exitEditorDialog,
 
     // Provider dialog
-    openProviderDialog: params.openProviderDialog,
-    handleProviderSelect: params.handleProviderSelect,
-    exitProviderDialog: params.exitProviderDialog,
+    ...buildProviderActions(params),
 
     // Load profile dialog
     openLoadProfileDialog: params.openLoadProfileDialog,

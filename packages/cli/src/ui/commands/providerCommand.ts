@@ -19,15 +19,14 @@ import { CommandKind } from './types.js';
 import {
   getProviderManager,
   refreshAliasProviders,
-  loadProviderAliasEntries,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { MessageType } from '../types.js';
 import {
   writeProviderAliasConfig,
   type ProviderAliasConfig,
 } from '@vybestack/llxprt-code-providers/composition.js';
-import { ImageProviderAliasError } from '@vybestack/llxprt-code-providers';
-import { SettingScope } from '../../config/settings.js';
+import { pinImageProvider } from './providerSelection.js';
+import { providerCommandSchema } from './providerCommandSchema.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
@@ -47,29 +46,11 @@ function handleImageProvider(
   alias: string,
 ): MessageActionReturn {
   try {
-    if (alias) {
-      const aliases = loadProviderAliasEntries().map((entry) => entry.alias);
-      if (!aliases.includes(alias))
-        throw new ImageProviderAliasError(alias, aliases);
-      context.services.settings.setValue(
-        SettingScope.User,
-        'imageProvider',
-        alias,
-      );
-      getRuntimeApi()
-        .getCliRuntimeServices()
-        .settingsService.set(
-          'imageProvider',
-          context.services.settings.merged.imageProvider,
-        );
-    }
-    const provider =
-      context.services.settings.merged.imageProvider ??
-      getRuntimeApi().getActiveProviderName();
+    pinImageProvider(context.services.settings, getRuntimeApi(), alias);
     return {
       type: 'message',
       messageType: 'info',
-      content: `Image provider: ${provider}\nChange it with /provider image <alias>.`,
+      content: `Image provider set to ${alias}`,
     };
   } catch (error) {
     return {
@@ -423,31 +404,34 @@ async function switchProvider(
 export const providerCommand: SlashCommand = {
   name: 'provider',
   description:
-    'switch between different AI providers (openai, anthropic, etc.)',
+    'select a provider: /provider [text|image] [name] (omit name for menu; Tab to complete)',
   kind: CommandKind.BUILT_IN,
+  schema: providerCommandSchema,
   action: async (
     context: CommandContext,
     args: string,
   ): Promise<OpenDialogActionReturn | MessageActionReturn | void> => {
     const trimmedArgs = args.trim();
+    const kindMatch = /^(text|image)(?:\s+|$)/.exec(trimmedArgs);
+    const providerName = kindMatch
+      ? trimmedArgs.slice(kindMatch[0].length).trim()
+      : trimmedArgs;
+    if (kindMatch?.[1] === 'image') {
+      return providerName
+        ? handleImageProvider(context, providerName)
+        : { type: 'dialog', dialog: 'imageProvider' };
+    }
 
-    if (!trimmedArgs) {
+    if (!providerName) {
       return { type: 'dialog', dialog: 'provider' };
     }
 
-    if (/^save\b/i.test(trimmedArgs)) {
+    if (!kindMatch && /^save\b/i.test(trimmedArgs)) {
       return handleSaveAlias(getProviderManager(), context, trimmedArgs);
     }
 
-    if (/^image\b/i.test(trimmedArgs)) {
-      return handleImageProvider(
-        context,
-        trimmedArgs.replace(/^image\b\s*/i, ''),
-      );
-    }
-
     try {
-      return await switchProvider(context, trimmedArgs);
+      return await switchProvider(context, providerName);
     } catch (error) {
       return {
         type: 'message',

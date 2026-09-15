@@ -87,6 +87,7 @@ function makeAppState(loadProfileOpen: boolean): AppState {
       auth: false,
       editor: false,
       provider: false,
+      imageProvider: false,
       privacy: false,
       loadProfile: loadProfileOpen,
       createProfile: false,
