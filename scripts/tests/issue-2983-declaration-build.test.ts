@@ -330,9 +330,11 @@ describe('issue #2983 — declaration-only emit', () => {
   }, 180_000);
 
   it('adds --emitDeclarationOnly only in declaration-only mode', () => {
+    // Issue #3536 added --force so declaration builds self-heal a wiped dist.
     expect(buildTscArgs('tsconfig.json', true)).toEqual([
       '--build',
       '--emitDeclarationOnly',
+      '--force',
       'tsconfig.json',
     ]);
     expect(buildTscArgs('tsconfig.json', false)).toEqual([

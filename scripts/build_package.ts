@@ -64,13 +64,16 @@ export function isDeclarationsOnly(
  *
  * `--emitDeclarationOnly` is accepted in build mode, so declaration-only emit
  * needs no parallel tsconfig tree — one pipeline, two emit modes.
+ * --force guarantees re-emission when a surviving .tsbuildinfo claims outputs
+ * that are gone (a wiped or partial dist), which plain incremental build
+ * silently skips (issue #3536).
  */
 export function buildTscArgs(
   tsconfig: string,
   declarationsOnly: boolean,
 ): string[] {
   return declarationsOnly
-    ? ['--build', '--emitDeclarationOnly', tsconfig]
+    ? ['--build', '--emitDeclarationOnly', '--force', tsconfig]
     : ['--build', tsconfig];
 }
 
@@ -95,7 +98,13 @@ function main(): void {
   // by letting TypeScript regenerate a fresh cache right after the clean.
   // This avoids TS6305 ("output file has not been built") when dist is wiped
   // but the .tsbuildinfo still references old artifacts.
-  execSync(`tsc --build --clean ${tsconfig}`, { stdio: 'inherit' });
+  // Declaration-only builds skip cleaning to preserve compiled JavaScript from
+  // a prior full build: a partial dist breaks subsequent tests (issue #3536).
+  // --force pairs with the skipped clean: declarations are refreshed in place
+  // and the compiled JavaScript of a prior full build is left intact.
+  if (!declarationsOnly) {
+    execSync(`tsc --build --clean ${tsconfig}`, { stdio: 'inherit' });
+  }
 
   // Re-build the project (this creates a new .tsbuildinfo for subsequent
   // fast incremental compilations).
