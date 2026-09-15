@@ -25,6 +25,7 @@ import {
 import {
   computeModelDefaults,
   extractProviderBaseUrl,
+  updateActiveProviderBaseUrl,
 } from './providerMutations.js';
 import {
   loadProviderAliasEntries,
@@ -413,18 +414,6 @@ function resolveProviderBaseUrlFromProvider(
   return extractProviderBaseUrl(context.providerForBaseUrl);
 }
 
-function applyProviderBaseUrlSettings(
-  context: ProviderSwitchContext,
-  finalBaseUrl: string | undefined,
-): void {
-  context.config.setEphemeralSetting('base-url', finalBaseUrl);
-  context.settingsService.setProviderSetting(
-    context.name,
-    'base-url',
-    finalBaseUrl,
-  );
-}
-
 function applyAliasProviderSettings(context: ProviderSwitchContext): void {
   const aliasConfig = context.aliasConfig;
   if (aliasConfig?.['sandbox-base-url']) {
@@ -473,7 +462,9 @@ function applyModelSettings(
   context.config.setModel(modelToApply);
 }
 
-function resolveProviderBaseUrl(context: ProviderSwitchContext): void {
+async function resolveProviderBaseUrl(
+  context: ProviderSwitchContext,
+): Promise<void> {
   const { providerSettingsBefore, storedModelSetting, storedBaseUrlSetting } =
     getProviderSettingsAndStoredValues(context);
   const { explicitConfigModel, explicitConfigBaseUrl } =
@@ -490,7 +481,12 @@ function resolveProviderBaseUrl(context: ProviderSwitchContext): void {
       : undefined);
   const finalBaseUrl = explicitBaseUrl ?? providerBaseUrl ?? undefined;
 
-  applyProviderBaseUrlSettings(context, finalBaseUrl);
+  // Single mutation path (#2534 C4): activateProviderContext already wrote
+  // this provider into the activeProvider store and the ProviderManager
+  // cache, so the canonical mutation resolves to context.name here. Its
+  // result message is intentionally discarded — the switch cascade reports
+  // through its own infoMessages.
+  await updateActiveProviderBaseUrl(finalBaseUrl ?? null);
   applyAliasProviderSettings(context);
 
   context.modelToApply = resolveModelToApply(
@@ -908,7 +904,7 @@ export async function switchActiveProvider(
   clearPreviousProviderSettings(context);
   activateProviderContext(context);
   switchSettingsProvider(context);
-  resolveProviderBaseUrl(context);
+  await resolveProviderBaseUrl(context);
   await handleClaudeCodeOAuth(context);
   applyClaudeCodeOAuthDefaults(context);
   applyAliasEphemeralSettings(context);
