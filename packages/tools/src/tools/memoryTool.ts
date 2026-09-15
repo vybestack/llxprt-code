@@ -20,9 +20,9 @@ import process from 'node:process';
 import * as Diff from 'diff';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from '../utils/diffOptions.js';
 import type {
-  ISettingsService,
   IStorageService,
   IToolMessageBus,
+  SettingsServiceBoundary,
 } from '../interfaces/index.js';
 import { shortenPath } from '../utils/paths.js';
 import {
@@ -163,7 +163,7 @@ export function getProjectCoreMemoryFilePath(workingDir: string): string {
 
 export interface MemoryToolDependencies {
   storageService: IStorageService;
-  settingsService?: Pick<ISettingsService, 'getSetting'>;
+  settingsService?: Pick<SettingsServiceBoundary, 'get'>;
   getWorkingDir?: () => string;
   messageBus?: IToolMessageBus;
 }
@@ -460,7 +460,7 @@ export class MemoryTool
   static readonly Name: string = memoryToolSchemaData.name!;
 
   private readonly storageService: IStorageService;
-  private readonly settingsService?: Pick<ISettingsService, 'getSetting'>;
+  private readonly settingsService?: Pick<SettingsServiceBoundary, 'get'>;
   private readonly getWorkingDir?: () => string;
 
   /**
@@ -501,7 +501,7 @@ export class MemoryTool
     // Core scopes require model.canSaveCore to be enabled
     if (isCoreScope(params.scope)) {
       try {
-        const canSaveCore = this.settingsService?.getSetting(
+        const canSaveCore = this.settingsService?.get(
           'model.canSaveCore',
         ) as boolean | undefined;
         if (canSaveCore !== true) {

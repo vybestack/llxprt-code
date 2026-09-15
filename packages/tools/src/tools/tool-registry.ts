@@ -20,6 +20,7 @@ import {
 } from '../types/tool-context.js';
 import type { IToolRegistryHost } from '../interfaces/IToolRegistryHost.js';
 import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
+import type { SettingsServiceBoundary } from '../interfaces/index.js';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { parse } from 'shell-quote';
@@ -428,7 +429,17 @@ export class ToolRegistry {
    * @requirement REQ-D01-003
    * @pseudocode lines 122-133
    */
-  constructor(config: IToolRegistryHost, messageBus: IToolMessageBus) {
+  constructor(
+    config: IToolRegistryHost,
+    messageBus: IToolMessageBus,
+    private readonly settingsService: Pick<
+      SettingsServiceBoundary,
+      'get' | 'getAllGlobalSettings'
+    > = {
+      get: () => undefined,
+      getAllGlobalSettings: () => ({}),
+    },
+  ) {
     this.config = config;
     this.messageBus = messageBus;
   }
@@ -782,21 +793,16 @@ export class ToolRegistry {
    * Used to conditionally hide tool parameters that are disabled by settings.
    */
   private getSchemaTransforms(): { hideTaskAsync: boolean } {
-    const settingsService = this.config.getSettingsService?.();
-
     // Global setting from /settings (subagents.asyncEnabled)
-    let globalAsyncEnabled = true;
-    if (settingsService !== undefined) {
-      const globalSettings = settingsService.getAllGlobalSettings?.();
-      const subagentsSettings = globalSettings?.['subagents'] as
-        | { asyncEnabled?: boolean }
-        | undefined;
-      globalAsyncEnabled = subagentsSettings?.asyncEnabled !== false;
-    }
+    const globalSettings = this.settingsService.getAllGlobalSettings();
+    const subagentsSettings = globalSettings['subagents'] as
+      | { asyncEnabled?: boolean }
+      | undefined;
+    const globalAsyncEnabled = subagentsSettings?.asyncEnabled !== false;
 
     // Profile setting from /set (subagents.async.enabled)
     const profileAsyncEnabled =
-      settingsService?.get?.('subagents.async.enabled') !== false;
+      this.settingsService.get('subagents.async.enabled') !== false;
 
     return {
       hideTaskAsync:
