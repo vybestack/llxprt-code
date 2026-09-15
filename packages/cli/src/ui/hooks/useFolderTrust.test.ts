@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { hasDialogRequest } from '../../test-utils/dialogStore.js';
+
 import {
   advanceTimersByTimeAsync,
   waitFor,
@@ -29,6 +31,10 @@ import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import type { LoadedTrustedFolders } from '../../config/trustedFolders.js';
 import { TrustLevel } from '../../config/trustedFolders.js';
 import * as trustedFolders from '../../config/trustedFolders.js';
+import { createDialogStore } from '../stores/dialog/dialogStore.js';
+import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
+import { createDialogOpeners } from '../stores/dialog/dialogOpeners.js';
+import { createSettingsProfileStore } from '../stores/settings/settingsStore.js';
 import { createDeferred } from '../../test-utils/async.js';
 
 const realNodeProcessModule = { ...(await import('node:process')) };
@@ -64,8 +70,12 @@ describe('useFolderTrust', () => {
   let mockConfig: FolderTrustRuntime & {
     setTrustedFolderLive: Mock<(...args: never[]) => unknown>;
   };
+  let mockStore: ReturnType<typeof createDialogStore>;
+  let mockDialogs: DialogOpeners;
+  let settingsStore: ReturnType<typeof createSettingsProfileStore>;
 
   beforeEach(() => {
+    settingsStore = createSettingsProfileStore();
     mockSettings = {
       merged: {
         folderTrust: true,
@@ -111,6 +121,8 @@ describe('useFolderTrust', () => {
     isWorkspaceTrustedSpy = vi.spyOn(trustedFolders, 'isWorkspaceTrusted');
     mockedCwd.mockReturnValue('/test/path');
     addItem = vi.fn();
+    mockStore = createDialogStore();
+    mockDialogs = createDialogOpeners(mockStore);
     mockConfig = {
       setTrustedFolderLive: vi.fn().mockResolvedValue(undefined),
       getWorkingDir: () => '/test/path',
@@ -125,33 +137,102 @@ describe('useFolderTrust', () => {
     }
   });
 
+  it('keeps completion blocked after persistence while the live transition is pending', async () => {
+    isWorkspaceTrustedSpy.mockImplementation(() =>
+      !Object.hasOwn(mockTrustedFolders.user.config, '/test/path')
+        ? undefined
+        : true,
+    );
+    const transition = createDeferred<void>();
+    mockConfig.setTrustedFolderLive.mockImplementation(
+      () => transition.promise,
+    );
+    const { result, rerender, unmount } = renderHook(() =>
+      useFolderTrust({
+        settings: mockSettings,
+        config: mockConfig,
+        store: mockStore,
+        settingsStore,
+        dialogs: mockDialogs,
+      }),
+    );
+    let pending: Promise<void> | undefined;
+    act(() => {
+      pending = result.current.handleFolderTrustSelect(
+        FolderTrustChoice.TRUST_FOLDER,
+      );
+    });
+    expect(mockTrustedFolders.user.config['/test/path']).toBe(
+      TrustLevel.TRUST_FOLDER,
+    );
+    rerender();
+    expect(result.current.isFolderTrustDialogOpen).toBe(true);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(true);
+    await act(async () => {
+      transition.resolve();
+      await pending;
+    });
+    expect(result.current.isFolderTrustDialogOpen).toBe(false);
+    unmount();
+  });
+
   it('should not open dialog when folder is already trusted', async () => {
     isWorkspaceTrustedSpy.mockReturnValue(true);
-    const { result } = renderHook(() =>
-      useFolderTrust(mockSettings, addItem, mockConfig),
+    renderHook(() =>
+      useFolderTrust({
+        settings: mockSettings,
+        addItem,
+        config: mockConfig,
+        store: mockStore,
+        settingsStore,
+        dialogs: mockDialogs,
+      }),
     );
-    expect(result.current.isFolderTrustDialogOpen).toBe(false);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(false);
   });
 
   it('should not open dialog when folder is already untrusted', async () => {
     isWorkspaceTrustedSpy.mockReturnValue(false);
-    const { result } = renderHook(() =>
-      useFolderTrust(mockSettings, addItem, mockConfig),
+    renderHook(() =>
+      useFolderTrust({
+        settings: mockSettings,
+        addItem,
+        config: mockConfig,
+        store: mockStore,
+        settingsStore,
+        dialogs: mockDialogs,
+      }),
     );
-    expect(result.current.isFolderTrustDialogOpen).toBe(false);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(false);
   });
 
   it('should open dialog when folder trust is undefined', async () => {
     isWorkspaceTrustedSpy.mockReturnValue(undefined);
-    const { result } = renderHook(() =>
-      useFolderTrust(mockSettings, addItem, mockConfig),
+    renderHook(() =>
+      useFolderTrust({
+        settings: mockSettings,
+        addItem,
+        config: mockConfig,
+        store: mockStore,
+        settingsStore,
+        dialogs: mockDialogs,
+      }),
     );
-    expect(result.current.isFolderTrustDialogOpen).toBe(true);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(true);
   });
 
   it('should send a message if the folder is untrusted', async () => {
     isWorkspaceTrustedSpy.mockReturnValue(false);
-    renderHook(() => useFolderTrust(mockSettings, addItem, mockConfig));
+    renderHook(() =>
+      useFolderTrust({
+        settings: mockSettings,
+        addItem,
+        config: mockConfig,
+        store: mockStore,
+        settingsStore,
+        dialogs: mockDialogs,
+      }),
+    );
     expect(addItem).toHaveBeenCalledWith(
       {
         text: 'This folder is not trusted. Some features may be disabled. Use the `/permissions` command to change the trust level.',
@@ -163,14 +244,30 @@ describe('useFolderTrust', () => {
 
   it('should not send a message if the folder is trusted', () => {
     isWorkspaceTrustedSpy.mockReturnValue(true);
-    renderHook(() => useFolderTrust(mockSettings, addItem, mockConfig));
+    renderHook(() =>
+      useFolderTrust({
+        settings: mockSettings,
+        addItem,
+        config: mockConfig,
+        store: mockStore,
+        settingsStore,
+        dialogs: mockDialogs,
+      }),
+    );
     expect(addItem).not.toHaveBeenCalled();
   });
 
   it('should close dialog and call setTrustedFolderLive(true) for TRUST_FOLDER', async () => {
     isWorkspaceTrustedSpy.mockReturnValue(undefined);
     const { result } = renderHook(() =>
-      useFolderTrust(mockSettings, addItem, mockConfig),
+      useFolderTrust({
+        settings: mockSettings,
+        addItem,
+        config: mockConfig,
+        store: mockStore,
+        settingsStore,
+        dialogs: mockDialogs,
+      }),
     );
 
     await act(async () => {
@@ -184,7 +281,7 @@ describe('useFolderTrust', () => {
       mockConfig.getWorkingDir(),
       TrustLevel.TRUST_FOLDER,
     );
-    expect(result.current.isFolderTrustDialogOpen).toBe(false);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(false);
     expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(true);
   });
 
@@ -193,7 +290,14 @@ describe('useFolderTrust', () => {
     mockConfig.getWorkingDir = () => workingDirectory;
     isWorkspaceTrustedSpy.mockReturnValue(undefined);
     const { result } = renderHook(() =>
-      useFolderTrust(mockSettings, addItem, mockConfig),
+      useFolderTrust({
+        settings: mockSettings,
+        addItem,
+        config: mockConfig,
+        store: mockStore,
+        settingsStore,
+        dialogs: mockDialogs,
+      }),
     );
     workingDirectory = '/test/changed-path';
 
@@ -212,7 +316,14 @@ describe('useFolderTrust', () => {
   it('should close dialog and call setTrustedFolderLive(true) for TRUST_PARENT', async () => {
     isWorkspaceTrustedSpy.mockReturnValue(undefined);
     const { result } = renderHook(() =>
-      useFolderTrust(mockSettings, addItem, mockConfig),
+      useFolderTrust({
+        settings: mockSettings,
+        addItem,
+        config: mockConfig,
+        store: mockStore,
+        settingsStore,
+        dialogs: mockDialogs,
+      }),
     );
 
     await act(async () => {
@@ -226,14 +337,21 @@ describe('useFolderTrust', () => {
       mockConfig.getWorkingDir(),
       TrustLevel.TRUST_PARENT,
     );
-    expect(result.current.isFolderTrustDialogOpen).toBe(false);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(false);
     expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(true);
   });
 
   it('should close dialog and call setTrustedFolderLive(false) for DO_NOT_TRUST', async () => {
     isWorkspaceTrustedSpy.mockReturnValue(undefined);
     const { result } = renderHook(() =>
-      useFolderTrust(mockSettings, addItem, mockConfig),
+      useFolderTrust({
+        settings: mockSettings,
+        addItem,
+        config: mockConfig,
+        store: mockStore,
+        settingsStore,
+        dialogs: mockDialogs,
+      }),
     );
 
     await act(async () => {
@@ -248,14 +366,21 @@ describe('useFolderTrust', () => {
       mockConfig.getWorkingDir(),
       TrustLevel.DO_NOT_TRUST,
     );
-    expect(result.current.isFolderTrustDialogOpen).toBe(false);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(false);
     expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(false);
   });
 
   it('should do nothing for default choice', async () => {
     isWorkspaceTrustedSpy.mockReturnValue(undefined);
     const { result } = renderHook(() =>
-      useFolderTrust(mockSettings, addItem, mockConfig),
+      useFolderTrust({
+        settings: mockSettings,
+        addItem,
+        config: mockConfig,
+        store: mockStore,
+        settingsStore,
+        dialogs: mockDialogs,
+      }),
     );
 
     await act(async () => {
@@ -266,14 +391,21 @@ describe('useFolderTrust', () => {
 
     expect(mockTrustedFolders.setValue).not.toHaveBeenCalled();
     expect(mockSettings.setValue).not.toHaveBeenCalled();
-    expect(result.current.isFolderTrustDialogOpen).toBe(true);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(true);
     expect(mockConfig.setTrustedFolderLive).not.toHaveBeenCalled();
   });
 
   it('should call setTrustedFolderLive(true) when gaining trust', async () => {
     isWorkspaceTrustedSpy.mockReturnValue(false);
     const { result } = renderHook(() =>
-      useFolderTrust(mockSettings, addItem, mockConfig),
+      useFolderTrust({
+        settings: mockSettings,
+        addItem,
+        config: mockConfig,
+        store: mockStore,
+        settingsStore,
+        dialogs: mockDialogs,
+      }),
     );
 
     await act(async () => {
@@ -284,13 +416,20 @@ describe('useFolderTrust', () => {
     });
 
     expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(true);
-    expect(result.current.isFolderTrustDialogOpen).toBe(false);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(false);
   });
 
   it('should call setTrustedFolderLive(false) when revoking trust', async () => {
     isWorkspaceTrustedSpy.mockReturnValue(true);
     const { result } = renderHook(() =>
-      useFolderTrust(mockSettings, addItem, mockConfig),
+      useFolderTrust({
+        settings: mockSettings,
+        addItem,
+        config: mockConfig,
+        store: mockStore,
+        settingsStore,
+        dialogs: mockDialogs,
+      }),
     );
 
     await act(async () => {
@@ -301,12 +440,20 @@ describe('useFolderTrust', () => {
     });
 
     expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(false);
-    expect(result.current.isFolderTrustDialogOpen).toBe(false);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(false);
   });
 
   it('persists trust when no live config is provided', async () => {
     isWorkspaceTrustedSpy.mockReturnValue(undefined);
-    const { result } = renderHook(() => useFolderTrust(mockSettings, addItem));
+    const { result } = renderHook(() =>
+      useFolderTrust({
+        settings: mockSettings,
+        addItem,
+        store: mockStore,
+        settingsStore,
+        dialogs: mockDialogs,
+      }),
+    );
 
     await act(async () => {
       await result.current.handleFolderTrustSelect(
@@ -318,7 +465,7 @@ describe('useFolderTrust', () => {
       mockedCwd(),
       TrustLevel.TRUST_FOLDER,
     );
-    expect(result.current.isFolderTrustDialogOpen).toBe(false);
+    expect(hasDialogRequest(mockStore, 'folderTrust')).toBe(false);
   });
 
   it('classifies local trust resolution failures as persistence errors', async () => {
@@ -331,7 +478,14 @@ describe('useFolderTrust', () => {
           throw new Error('cannot resolve local trust');
         });
       const { result } = renderHook(() =>
-        useFolderTrust(mockSettings, addItem, mockConfig),
+        useFolderTrust({
+          settings: mockSettings,
+          addItem,
+          config: mockConfig,
+          store: mockStore,
+          settingsStore,
+          dialogs: mockDialogs,
+        }),
       );
 
       await act(async () => {
@@ -361,7 +515,14 @@ describe('useFolderTrust', () => {
         throw new Error('cannot read trusted folders');
       });
       const { result } = renderHook(() =>
-        useFolderTrust(mockSettings, addItem, mockConfig),
+        useFolderTrust({
+          settings: mockSettings,
+          addItem,
+          config: mockConfig,
+          store: mockStore,
+          settingsStore,
+          dialogs: mockDialogs,
+        }),
       );
 
       await act(async () => {
@@ -398,7 +559,14 @@ describe('useFolderTrust', () => {
         .mockRejectedValueOnce(new Error('live update failed'))
         .mockResolvedValueOnce(undefined);
       const { result } = renderHook(() =>
-        useFolderTrust(mockSettings, addItem, mockConfig),
+        useFolderTrust({
+          settings: mockSettings,
+          addItem,
+          config: mockConfig,
+          store: mockStore,
+          settingsStore,
+          dialogs: mockDialogs,
+        }),
       );
 
       await act(async () => {
@@ -433,7 +601,14 @@ describe('useFolderTrust', () => {
         .mockReturnValueOnce(liveUpdate.promise)
         .mockResolvedValueOnce(undefined);
       const { result, unmount } = renderHook(() =>
-        useFolderTrust(mockSettings, addItem, mockConfig),
+        useFolderTrust({
+          settings: mockSettings,
+          addItem,
+          config: mockConfig,
+          store: mockStore,
+          settingsStore,
+          dialogs: mockDialogs,
+        }),
       );
 
       const selection = result.current.handleFolderTrustSelect(
@@ -462,7 +637,14 @@ describe('useFolderTrust', () => {
         .mockRejectedValueOnce(new Error('live update failed'))
         .mockRejectedValueOnce(new Error('live rollback failed'));
       const { result } = renderHook(() =>
-        useFolderTrust(mockSettings, addItem, mockConfig),
+        useFolderTrust({
+          settings: mockSettings,
+          addItem,
+          config: mockConfig,
+          store: mockStore,
+          settingsStore,
+          dialogs: mockDialogs,
+        }),
       );
 
       await act(async () => {
@@ -506,7 +688,14 @@ describe('useFolderTrust', () => {
         mockConfig.getWorkingDir = () => workspaceLink;
 
         const { result } = renderHook(() =>
-          useFolderTrust(mockSettings, addItem, mockConfig),
+          useFolderTrust({
+            settings: mockSettings,
+            addItem,
+            config: mockConfig,
+            store: mockStore,
+            settingsStore,
+            dialogs: mockDialogs,
+          }),
         );
         await act(async () => {
           await result.current.handleFolderTrustSelect(
@@ -533,9 +722,16 @@ describe('useFolderTrust', () => {
       workingDirectory === configuredWorkingDirectory ? undefined : true,
     );
     const { result } = renderHook(() =>
-      useFolderTrust(mockSettings, addItem, mockConfig),
+      useFolderTrust({
+        settings: mockSettings,
+        addItem,
+        config: mockConfig,
+        store: mockStore,
+        settingsStore,
+        dialogs: mockDialogs,
+      }),
     );
-    const isDialogOpen = result.current.isFolderTrustDialogOpen;
+    const isDialogOpen = hasDialogRequest(mockStore, 'folderTrust');
 
     await act(async () => {
       await result.current.handleFolderTrustSelect(

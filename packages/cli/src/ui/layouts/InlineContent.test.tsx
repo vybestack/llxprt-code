@@ -15,12 +15,35 @@ import { renderWithProviders } from '../../test-utils/render.js';
 import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
 import { StreamingState } from '../types.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
-import type { UIState } from '../contexts/UIStateContext.js';
-import {
-  UIActionsContext,
-  type UIActions,
-} from '../contexts/UIActionsContext.js';
+import { AppCommandsProvider } from '../contexts/AppCommandsContext.js';
+import { useTextBuffer } from '../components/shared/text-buffer.js';
+import { createAppCommandBindings } from '../../test-utils/appCommandBindings.js';
+import { useTerminalStore } from '../stores/terminal/TerminalContext.js';
 import { InlineContent, type InlineContentProps } from './InlineContent.js';
+
+function ComposerHarness(props: InlineContentProps) {
+  const terminal = useTerminalStore();
+  const buffer = useTextBuffer({
+    viewport: { width: 80, height: 24 },
+    isValidPath: () => false,
+  });
+  const commands = createAppCommandBindings(
+    'InlineContent',
+    {
+      buffer,
+      commandContext: createMockCommandContext(),
+      inputHistory: [],
+    },
+    { handleEscapePromptChange: terminal.commands.setShowEscapePrompt },
+  );
+  return (
+    <AppCommandsProvider value={commands}>
+      <StreamingContext.Provider value={props.streamingState}>
+        <InlineContent {...props} />
+      </StreamingContext.Provider>
+    </AppCommandsProvider>
+  );
+}
 
 const activeRenders: Array<ReturnType<typeof render>> = [];
 
@@ -100,101 +123,63 @@ function createProps(): InlineContentProps {
   };
 }
 
-function createComposerUIState(overrides: Partial<UIState> = {}): UIState {
-  return {
-    buffer: {
-      text: '',
-      lines: [''],
-      cursor: [0, 0],
-      transformationsByLine: [[]],
-      visualToTransformedMap: [0],
-      viewportVisualLines: [''],
-      allVisualLines: [''],
-      visualCursor: [0, 0],
-      visualScrollRow: 0,
-      visualToLogicalMap: [[0, 0]],
-      setText: vi.fn(),
-      replaceRangeByOffset: vi.fn(),
-      moveToVisualPosition: vi.fn(),
-    },
-    inputWidth: 80,
-    suggestionsWidth: 80,
-    shellModeActive: false,
-    isFocused: true,
-    vimModeEnabled: false,
-    showAutoAcceptIndicator: ApprovalMode.DEFAULT,
-    placeholder: '',
-    slashCommands: [],
-    commandContext: createMockCommandContext(),
-    inputHistory: [],
-    streamingState: StreamingState.Idle,
-    queueErrorMessage: null,
-    embeddedShellFocused: false,
-    queuedSubmissions: [],
-    ...overrides,
-  } as never;
-}
-
-function createUIActions(): UIActions {
-  return {
-    handleUserInputSubmit: vi.fn(),
-    handleClearScreen: vi.fn(),
-    handleSteer: vi.fn(),
-    setShellModeActive: vi.fn(),
-    vimHandleInput: vi.fn(),
-    handleEscapePromptChange: vi.fn(),
-    setQueueErrorMessage: vi.fn(),
-    sendAllQueuedSubmissions: vi.fn(),
-    steerAllQueuedSubmissions: vi.fn(),
-    clearQueuedSubmissions: vi.fn(),
-  } as never;
-}
-
-function renderComposer(
-  uiStateOverrides: Partial<UIState> = {},
-  isInputActive = true,
-): ReturnType<typeof render> {
-  const props = {
-    ...createProps(),
-    isInputActive,
-    shellModeActive: uiStateOverrides.shellModeActive ?? false,
-  };
-  const rendered = renderWithProviders(
-    <UIActionsContext.Provider value={createUIActions()}>
-      <StreamingContext.Provider value={props.streamingState}>
-        <InlineContent {...props} />
-      </StreamingContext.Provider>
-    </UIActionsContext.Provider>,
-    {
-      settings: props.settings,
-      uiState: createComposerUIState(uiStateOverrides),
-    },
+function createVimSettings(): LoadedSettings {
+  return new LoadedSettings(
+    { path: '/system/settings.json', settings: {} },
+    { path: '/system/defaults.json', settings: {} },
+    { path: '/user/settings.json', settings: { ui: { vimMode: true } } },
+    { path: '/workspace/settings.json', settings: {} },
+    true,
   );
-  activeRenders.push(rendered);
-  return rendered;
 }
 
+/** Composer mode variants: shell mode is a terminal store flag, vim mode a
+ * user setting read through VimModeProvider. */
 const COMPOSER_MODES = [
   {
     mode: 'default',
-    uiState: {},
+    composerOptions: {},
     placeholder: 'Type your message or @path/to/file',
   },
   {
     mode: 'vim',
-    uiState: { vimModeEnabled: true },
+    composerOptions: { vimEnabled: true },
     placeholder: "Press 'i' for INSERT mode",
   },
   {
     mode: 'shell',
-    uiState: { shellModeActive: true },
+    composerOptions: { shellModeActive: true },
     placeholder: 'Type your shell command',
   },
 ] satisfies Array<{
   mode: string;
-  uiState: Partial<UIState>;
+  composerOptions: { vimEnabled?: boolean; shellModeActive?: boolean };
   placeholder: string;
 }>;
+
+interface ComposerOptions {
+  vimEnabled?: boolean;
+  shellModeActive?: boolean;
+}
+
+function renderComposer(
+  options: ComposerOptions = {},
+  isInputActive = true,
+): ReturnType<typeof render> {
+  const settings =
+    options.vimEnabled === true ? createVimSettings() : createProps().settings;
+  const props = {
+    ...createProps(),
+    isInputActive,
+    settings,
+  };
+  const rendered = renderWithProviders(<ComposerHarness {...props} />, {
+    settings: props.settings,
+    terminal: { shellModeActive: options.shellModeActive ?? false },
+  });
+  activeRenders.push(rendered);
+  return rendered;
+}
 
 describe('InlineContent', () => {
   beforeEach(() => {
@@ -254,8 +239,8 @@ describe('InlineContent', () => {
 
   it.each(COMPOSER_MODES)(
     'renders the $mode placeholder through the composer input surface when input is active',
-    ({ uiState, placeholder }) => {
-      const { lastFrame } = renderComposer(uiState);
+    ({ composerOptions, placeholder }) => {
+      const { lastFrame } = renderComposer(composerOptions);
 
       expect(lastFrame()).toContain(placeholder);
     },
@@ -263,8 +248,8 @@ describe('InlineContent', () => {
 
   it.each(COMPOSER_MODES)(
     'does not render the $mode placeholder when input is inactive',
-    ({ uiState, placeholder }) => {
-      const { lastFrame } = renderComposer(uiState, false);
+    ({ composerOptions, placeholder }) => {
+      const { lastFrame } = renderComposer(composerOptions, false);
 
       expect(lastFrame()).not.toContain(placeholder);
     },

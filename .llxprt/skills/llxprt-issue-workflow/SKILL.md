@@ -1,6 +1,6 @@
 ---
 name: llxprt-issue-workflow
-description: Use this skill when asked to address, fix, or work on a GitHub issue in the llxprt-code repository. Covers the complete issue lifecycle - branch setup, gh CLI usage, test-first planning, subagent delegation and review loops, the full verification cycle (including the stepfun-37 smoke test), open code review (ocr), PR creation, and CI/CodeRabbit watching.
+description: Use this skill when asked to address, fix, or work on a GitHub issue in the llxprt-code repository. Covers the complete issue lifecycle - branch setup, gh CLI usage, test-first planning, subagent delegation and review loops, the full verification cycle (including the zai-glm-flash smoke test), open code review (ocr), PR creation, and CI/CodeRabbit watching.
 ---
 
 # LLxprt Issue Workflow
@@ -69,12 +69,12 @@ npm run lint
 npm run typecheck
 npm run format
 npm run build
-bun scripts/start.ts --profile-load stepfun-37 "write me a haiku and nothing else"
+bun scripts/start.ts --profile-load zai-glm-flash "write me a haiku and nothing else"
 ```
 
 Notes on the smoke test (last command):
 
-- Profile: `stepfun-37` (profile name is tracked in .llxprt/LLXPRT.md).
+- Profile: `zai-glm-flash` (profile name is tracked in .llxprt/LLXPRT.md).
 - There is NO scripts/start.js — only scripts/start.ts — so the runner must be
   `bun`, not `node`.
 - Run it as part of the verification cycle, and again whenever anything that

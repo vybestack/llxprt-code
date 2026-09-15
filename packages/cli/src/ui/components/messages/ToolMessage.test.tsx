@@ -15,7 +15,8 @@ import { ShellCommandDisplayProvider } from '../../contexts/ShellCommandDisplayC
 import { KeypressProvider } from '../../contexts/KeypressContext.js';
 import { MouseProvider } from '../../contexts/MouseContext.js';
 import { SettingsContext } from '../../contexts/SettingsContext.js';
-import { UIStateContext, type UIState } from '../../contexts/UIStateContext.js';
+import { TerminalProvider } from '../../stores/terminal/TerminalContext.js';
+import { createTerminalStore } from '../../stores/terminal/terminalStore.js';
 import {
   createMockSettings,
   render as actRender,
@@ -474,12 +475,13 @@ describe('<ToolMessage />', () => {
       const settings = createMockSettings({
         ui: { alwaysDisplayFullShellCommand: true },
       });
-      const uiState: Partial<UIState> = { renderMarkdown: true };
       // The provider stack must be identical across initial render and every
       // rerender so React reconciles in place instead of remounting the tree.
       const wrapWithStatus = (status: ToolCallStatus) => (
         <SettingsContext.Provider value={settings}>
-          <UIStateContext.Provider value={uiState as UIState}>
+          <TerminalProvider
+            store={createTerminalStore({ renderMarkdown: true })}
+          >
             <KeypressProvider>
               <MouseProvider mouseEventsEnabled={false}>
                 <ShellCommandDisplayProvider
@@ -491,7 +493,7 @@ describe('<ToolMessage />', () => {
                 </ShellCommandDisplayProvider>
               </MouseProvider>
             </KeypressProvider>
-          </UIStateContext.Provider>
+          </TerminalProvider>
         </SettingsContext.Provider>
       );
 

@@ -22,7 +22,7 @@ import { recordProviderOrModelSwitch } from './tokenUsageEstimateLogger.js';
 import {
   expectModelSwitchRecord,
   expectProviderSwitchRecord,
-} from './tokenUsageTestAssertions.js';
+} from './__tests__/helpers/tokenUsageTestAssertions.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 

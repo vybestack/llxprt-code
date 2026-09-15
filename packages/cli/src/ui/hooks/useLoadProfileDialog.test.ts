@@ -14,17 +14,14 @@ import { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { createDeferred } from '../../test-utils/async.js';
 import { MessageType } from '../types.js';
-import type { AppAction, AppState } from '../reducers/appReducer.js';
+import { createDialogStore } from '../stores/dialog/dialogStore.js';
+import { createDialogOpeners } from '../stores/dialog/dialogOpeners.js';
+import { hasDialogRequest } from '../../test-utils/dialogStore.js';
 
 const useRuntimeApiMock = vi.fn();
-const useAppDispatchMock = vi.fn();
 
 void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: useRuntimeApiMock,
-}));
-
-void vi.mock('../contexts/AppDispatchContext.js', () => ({
-  useAppDispatch: useAppDispatchMock,
 }));
 
 // Import after mocks are set up
@@ -80,54 +77,29 @@ interface AddMessageCall {
   timestamp: Date;
 }
 
-function makeAppState(loadProfileOpen: boolean): AppState {
-  return {
-    openDialogs: {
-      theme: false,
-      auth: false,
-      editor: false,
-      provider: false,
-      imageProvider: false,
-      privacy: false,
-      loadProfile: loadProfileOpen,
-      createProfile: false,
-      profileList: false,
-      profileDetail: false,
-      profileEditor: false,
-      tools: false,
-      oauthCode: false,
-    },
-    warnings: new Map(),
-    errors: { theme: null, auth: null, editor: null },
-    needsRelogin: false,
-    lastAddItemAction: null,
-  };
-}
-
 function renderLoadProfileDialog(
   runtime: RuntimeDouble,
-  appState: AppState,
-): {
-  result: { current: ReturnType<typeof useLoadProfileDialog> };
-  dispatchCalls: AppAction[];
-  addMessage: ReturnType<typeof vi.fn>;
-} {
-  const dispatchCalls: AppAction[] = [];
-  const dispatch = (action: AppAction): void => {
-    dispatchCalls.push(action);
-  };
-  const addMessage = vi.fn();
-  useRuntimeApiMock.mockReturnValue(runtime);
-  useAppDispatchMock.mockReturnValue(dispatch);
-  const { result } = renderHook(() =>
-    useLoadProfileDialog({ addMessage, appState }),
+  loadProfileOpen: boolean,
+) {
+  const store = createDialogStore();
+  const dialogs = createDialogOpeners(store);
+  if (loadProfileOpen) dialogs.loadProfile.open({});
+  const visibility: boolean[] = [];
+  store.store.subscribe(() =>
+    visibility.push(hasDialogRequest(store, 'loadProfile')),
   );
-  return { result, dispatchCalls, addMessage };
+  const addMessage = vi.fn<(message: AddMessageCall) => void>();
+  useRuntimeApiMock.mockReturnValue(runtime);
+  const { result } = renderHook(() =>
+    useLoadProfileDialog({ addMessage, dialogs }),
+  );
+  return { result, store, visibility, addMessage };
 }
 
-function errorMessages(addMessage: ReturnType<typeof vi.fn>): AddMessageCall[] {
-  const calls = addMessage.mock.calls as unknown as AddMessageCall[][];
-  return calls
+function errorMessages(
+  addMessage: ReturnType<typeof renderLoadProfileDialog>['addMessage'],
+): AddMessageCall[] {
+  return addMessage.mock.calls
     .map((args) => args[0])
     .filter((m) => m.type === MessageType.ERROR);
 }
@@ -139,10 +111,7 @@ describe('useLoadProfileDialog', () => {
 
   it('opens the dialog, loads profiles, and clears the loading flag', async () => {
     const runtime = createProfileRuntimeDouble(['zai', 'stepfun']);
-    const { result, dispatchCalls } = renderLoadProfileDialog(
-      runtime,
-      makeAppState(false),
-    );
+    const { result, visibility } = renderLoadProfileDialog(runtime, false);
 
     expect(result.current.isLoading).toBe(false);
     expect(result.current.profiles).toStrictEqual([]);
@@ -151,10 +120,7 @@ describe('useLoadProfileDialog', () => {
       await result.current.openDialog();
     });
 
-    expect(dispatchCalls).toContainEqual({
-      type: 'OPEN_DIALOG',
-      payload: 'loadProfile',
-    });
+    expect(visibility).toContain(true);
     // Assert the loaded outcome; the loading flag's true→false transition is
     // covered by the in-flight test below.
     expect(result.current.profiles).toStrictEqual(['zai', 'stepfun']);
@@ -164,7 +130,7 @@ describe('useLoadProfileDialog', () => {
     const runtime = createProfileRuntimeDouble(['zai']);
     const deferred = createDeferred<string[]>();
     runtime.listSavedProfiles.mockImplementation(() => deferred.promise);
-    const { result } = renderLoadProfileDialog(runtime, makeAppState(false));
+    const { result } = renderLoadProfileDialog(runtime, false);
 
     let opened: Promise<void> = Promise.resolve();
     act(() => {
@@ -190,9 +156,9 @@ describe('useLoadProfileDialog', () => {
     runtime.listSavedProfiles.mockImplementation(() => {
       throw new Error('profile registry unreadable');
     });
-    const { result, dispatchCalls, addMessage } = renderLoadProfileDialog(
+    const { result, visibility, addMessage } = renderLoadProfileDialog(
       runtime,
-      makeAppState(false),
+      false,
     );
 
     await act(async () => {
@@ -203,14 +169,8 @@ describe('useLoadProfileDialog', () => {
     expect(errors).toHaveLength(1);
     expect(errors[0]?.content).toContain('Failed to load profiles');
     expect(errors[0]?.content).toContain('profile registry unreadable');
-    expect(dispatchCalls).toContainEqual({
-      type: 'OPEN_DIALOG',
-      payload: 'loadProfile',
-    });
-    expect(dispatchCalls).toContainEqual({
-      type: 'CLOSE_DIALOG',
-      payload: 'loadProfile',
-    });
+    expect(visibility).toContain(true);
+    expect(visibility).toStrictEqual([true, false]);
     expect(result.current.isLoading).toBe(false);
     expect(result.current.profiles).toStrictEqual([]);
   });
@@ -223,17 +183,16 @@ describe('useLoadProfileDialog', () => {
         warnings: ['model pinned to old value', 'context limit lowered'],
       },
     });
-    const { result, dispatchCalls, addMessage } = renderLoadProfileDialog(
+    const { result, visibility, addMessage } = renderLoadProfileDialog(
       runtime,
-      makeAppState(true),
+      true,
     );
 
     await act(async () => {
       await result.current.handleSelect('zai');
     });
 
-    const calls = addMessage.mock.calls as unknown as AddMessageCall[][];
-    const contents = calls.map((args) => args[0]);
+    const contents = addMessage.mock.calls.map((args) => args[0]);
     expect(
       contents.find(
         (m) =>
@@ -253,9 +212,7 @@ describe('useLoadProfileDialog', () => {
     expect(warningMessages[0]?.content).toBe('⚠ model pinned to old value');
     expect(warningMessages[1]?.content).toBe('⚠ context limit lowered');
     expect(errorMessages(addMessage)).toStrictEqual([]);
-    expect(dispatchCalls).toStrictEqual([
-      { type: 'CLOSE_DIALOG', payload: 'loadProfile' },
-    ]);
+    expect(visibility).toStrictEqual([false]);
   });
 
   describe('handleSelect error classification', () => {
@@ -306,9 +263,9 @@ describe('useLoadProfileDialog', () => {
       it(`${testCase.description} and closes the dialog`, async () => {
         const runtime = createProfileRuntimeDouble();
         storedFailure(runtime, testCase.failure);
-        const { result, dispatchCalls, addMessage } = renderLoadProfileDialog(
+        const { result, visibility, addMessage } = renderLoadProfileDialog(
           runtime,
-          makeAppState(true),
+          true,
         );
 
         await act(async () => {
@@ -319,9 +276,7 @@ describe('useLoadProfileDialog', () => {
         expect(errors).toHaveLength(1);
         expect(errors[0]?.content).toContain(testCase.expectedFragment);
         // The dialog always closes after a selection attempt, even on error.
-        expect(dispatchCalls).toStrictEqual([
-          { type: 'CLOSE_DIALOG', payload: 'loadProfile' },
-        ]);
+        expect(visibility).toStrictEqual([false]);
       });
     }
   });

@@ -16,6 +16,10 @@ import {
 import { useCallback, useEffect, useMemo, useReducer } from 'react';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import { MessageType, type ConfirmationRequest } from '../types.js';
+import type {
+  DialogStore,
+  DialogRequest,
+} from '../stores/dialog/dialogStore.js';
 import {
   checkForAllExtensionUpdates,
   updateExtension,
@@ -24,31 +28,7 @@ import {
   requestConsentInteractive,
   type ExtensionUpdateInfo,
 } from '../../config/extension.js';
-import { checkExhaustive } from '../../utils/checks.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-
-type ConfirmationRequestWrapper = {
-  prompt: React.ReactNode;
-  onConfirm: (confirmed: boolean) => void;
-};
-
-type ConfirmationRequestAction =
-  | { type: 'add'; request: ConfirmationRequestWrapper }
-  | { type: 'remove'; request: ConfirmationRequestWrapper };
-
-function confirmationRequestsReducer(
-  state: ConfirmationRequestWrapper[],
-  action: ConfirmationRequestAction,
-): ConfirmationRequestWrapper[] {
-  switch (action.type) {
-    case 'add':
-      return [...state, action.request];
-    case 'remove':
-      return state.filter((r) => r !== action.request);
-    default:
-      checkExhaustive(action);
-  }
-}
 
 function shouldDoUpdate(
   extension: LlxprtExtension,
@@ -275,33 +255,32 @@ export const useExtensionUpdates = (
   extensions: LlxprtExtension[],
   addItem: UseHistoryManagerReturn['addItem'],
   cwd: string,
+  store: DialogStore,
 ) => {
   const [extensionsUpdateState, dispatchExtensionStateUpdate] = useReducer(
     extensionUpdatesReducer,
     initialExtensionUpdatesState,
   );
-  const [
-    confirmUpdateExtensionRequests,
-    dispatchConfirmUpdateExtensionRequests,
-  ] = useReducer(confirmationRequestsReducer, []);
+  // Extension-update consents queue in the DialogStore FIFO; resolving one
+  // removes it from the queue before the domain callback runs.
   const addConfirmUpdateExtensionRequest = useCallback(
     (original: ConfirmationRequest) => {
-      const wrappedRequest = {
-        prompt: original.prompt,
-        onConfirm: (confirmed: boolean) => {
-          dispatchConfirmUpdateExtensionRequests({
-            type: 'remove',
-            request: wrappedRequest,
-          });
-          original.onConfirm(confirmed);
+      const request: Extract<
+        DialogRequest,
+        { kind: 'extensionUpdateConfirm' }
+      > = {
+        kind: 'extensionUpdateConfirm',
+        payload: {
+          prompt: original.prompt,
+          onConfirm: (confirmed: boolean) => {
+            store.commands.resolveConfirmUpdateExtensionRequest(request);
+            original.onConfirm(confirmed);
+          },
         },
       };
-      dispatchConfirmUpdateExtensionRequests({
-        type: 'add',
-        request: wrappedRequest,
-      });
+      store.commands.addConfirmUpdateExtensionRequest(request);
     },
-    [dispatchConfirmUpdateExtensionRequests],
+    [store],
   );
 
   useCheckForUpdates(
@@ -337,7 +316,6 @@ export const useExtensionUpdates = (
     extensionsUpdateState: extensionsUpdateStateComputed,
     extensionsUpdateStateInternal: extensionsUpdateState.extensionStatuses,
     dispatchExtensionStateUpdate,
-    confirmUpdateExtensionRequests,
     addConfirmUpdateExtensionRequest,
   };
 };

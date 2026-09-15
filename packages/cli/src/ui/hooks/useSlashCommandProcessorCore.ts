@@ -6,6 +6,7 @@
 
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useCallback, useState } from 'react';
+import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type {
   RecordingIntegration,
   Todo,
@@ -59,10 +60,6 @@ export type SlashCommandProcessorCoreResult = {
   slashCommands: readonly SlashCommand[] | undefined;
   pendingHistoryItems: HistoryItemWithoutId[];
   commandContext: ReturnType<typeof useCommandContext>;
-  confirmationRequest: {
-    prompt: React.ReactNode;
-    onConfirm: (confirmed: boolean) => void;
-  } | null;
   /** Aborts every in-flight slash command. Returns true iff any was aborted. */
   cancelActiveSlashCommand: () => boolean;
 };
@@ -79,6 +76,7 @@ export interface UseSlashCommandProcessorCoreArgs {
   setIsProcessing: (isProcessing: boolean) => void;
   setLlxprtMdFileCount: (count: number) => void;
   actions: SlashCommandProcessorActions;
+  store: DialogStore;
   extensionsUpdateState: Map<string, ExtensionUpdateState>;
   isConfigInitialized: boolean;
   todoContext?: TodoContextValue;
@@ -95,16 +93,6 @@ interface SlashCommandProcessorState {
   setLocalIsProcessing: (isProcessing: boolean) => void;
   sessionShellAllowlist: Set<string>;
   setSessionShellAllowlist: React.Dispatch<React.SetStateAction<Set<string>>>;
-  confirmationRequest: {
-    prompt: React.ReactNode;
-    onConfirm: (confirmed: boolean) => void;
-  } | null;
-  setConfirmationRequest: (
-    request: {
-      prompt: React.ReactNode;
-      onConfirm: (confirmed: boolean) => void;
-    } | null,
-  ) => void;
 }
 
 function useSlashCommandProcessorState(
@@ -121,10 +109,6 @@ function useSlashCommandProcessorState(
   const [sessionShellAllowlist, setSessionShellAllowlist] = useState(
     new Set<string>(),
   );
-  const [confirmationRequest, setConfirmationRequest] = useState<null | {
-    prompt: React.ReactNode;
-    onConfirm: (confirmed: boolean) => void;
-  }>(null);
   const reloadCommands = useCallback(() => {
     setReloadTrigger((v) => v + 1);
   }, []);
@@ -137,8 +121,6 @@ function useSlashCommandProcessorState(
     setLocalIsProcessing,
     sessionShellAllowlist,
     setSessionShellAllowlist,
-    confirmationRequest,
-    setConfirmationRequest,
   };
 }
 
@@ -160,7 +142,9 @@ function buildHandlerDeps(
     setLocalIsProcessing: state.setLocalIsProcessing,
     setPendingItem: pending.setPendingItem,
     setSessionShellAllowlist: state.setSessionShellAllowlist,
-    setConfirmationRequest: state.setConfirmationRequest,
+    setConfirmationRequest: (request) => {
+      args.store.commands.setConfirmationRequest(request);
+    },
     recordingIntegration: args.recordingIntegration,
     recordingSwapCallbacks: args.recordingSwapCallbacks,
     confirmationLogger,
@@ -231,7 +215,6 @@ export function useSlashCommandProcessorCore(
     slashCommands: state.commands,
     pendingHistoryItems: pending.pendingHistoryItems,
     commandContext,
-    confirmationRequest: state.confirmationRequest,
     cancelActiveSlashCommand: cancellation.cancelActiveSlashCommand,
   };
 }

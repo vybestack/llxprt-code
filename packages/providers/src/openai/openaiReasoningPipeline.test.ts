@@ -36,10 +36,6 @@ void vi.mock(
   }),
 );
 
-void vi.mock('../utils/userMemory.js', () => ({
-  resolveUserMemory: vi.fn().mockResolvedValue(''),
-}));
-
 const PROVIDER = 'openai';
 
 /**

@@ -27,7 +27,6 @@
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { render } from 'ink-testing-library';
-import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import type { DOMElement } from 'ink';
 
 const realInkModule = {
@@ -36,8 +35,35 @@ const realInkModule = {
 
 void vi.mock('ink', () => realInkModule);
 
-// Leaf components unrelated to layout branching. None of their output is
-// asserted on; they are stubbed only to keep the tree renderable.
+// Closed dialog-store stubs and omitted child components isolate layout geometry
+// and history rendering. The Bun runner gives each test file its own process.
+void vi.mock('../stores/dialog/DialogContext.js', () => ({
+  useDialogStore: () => createDialogStore(),
+  DialogProvider: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
+void vi.mock('../stores/dialog/dialogStore.js', () => ({
+  createDialogStore: () => ({
+    store: {
+      getState: () => ({
+        requests: [],
+        confirmationRequest: null,
+        confirmUpdateLlxprtExtensionRequests: [],
+      }),
+      subscribe: () => () => {},
+      getInitialState: () => undefined,
+    },
+    commands: {
+      openDialog: () => {},
+      closeDialog: () => {},
+      updateDialogPayload: () => {},
+      setConfirmationRequest: () => {},
+      addConfirmUpdateExtensionRequest: () => {},
+      resolveConfirmUpdateExtensionRequest: () => {},
+    },
+  }),
+}));
 void vi.mock('../components/DialogManager.js', () => ({
   DialogManager: () => null,
 }));
@@ -75,7 +101,6 @@ void vi.mock('../components/shared/ScrollableList.js', () => ({
 void vi.mock('../components/shared/VirtualizedList.js', () => ({
   SCROLL_TO_ITEM_END: -1,
 }));
-
 // The CLI runtime context is process-global infrastructure that the layout
 // only reads to hand a message bus to the (stubbed) bucket-auth confirmation.
 const providersRuntime = await import(
@@ -95,14 +120,19 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
 }));
 
 const { DefaultAppLayout } = await import('./DefaultAppLayout.js');
-const { UIStateContext } = await import('../contexts/UIStateContext.js');
-const { UIActionsContext } = await import('../contexts/UIActionsContext.js');
-const { StreamingState } = await import('../types.js');
+import { createDialogStore } from '../stores/dialog/dialogStore.js';
+import { TerminalProvider } from '../stores/terminal/TerminalContext.js';
+import { createTerminalStore } from '../stores/terminal/terminalStore.js';
+import { TurnProvider } from '../stores/turn/TurnContext.js';
+import { createTurnStore } from '../stores/turn/turnStore.js';
+import type { HistoryItem } from '../types.js';
+import { SettingsProfileProvider } from '../stores/settings/SettingsContext.js';
+import { createSettingsProfileStore } from '../stores/settings/settingsStore.js';
+import { VimModeProvider } from '../contexts/VimModeContext.js';
 const { buildSlashCommandRuntime, buildUiRuntimeFromSource } = await import(
   '../cliUiRuntime.js'
 );
 
-const TERMINAL_WIDTH = 80;
 const TERMINAL_HEIGHT = 24;
 
 /** Sentinel supplied as history-item input; never produced by a stub. */
@@ -157,114 +187,6 @@ function createSettings(useAlternateBuffer: boolean) {
   };
 }
 
-/** UI actions the layout hands to its children; none are asserted on. */
-function createActions() {
-  return {
-    addItem: vi.fn(),
-    handleUserInputSubmit: vi.fn(),
-    handleClearScreen: vi.fn(),
-    setShellModeActive: vi.fn(),
-    handleEscapePromptChange: vi.fn(),
-    vimHandleInput: vi.fn(),
-    setQueueErrorMessage: vi.fn(),
-  };
-}
-
-/**
- * UI state for a render. `rootUiRef` is threaded in so the caller can observe
- * whether the layout actually mounted its root.
- */
-function createUIState(
-  rootUiRef: { current: DOMElement | null },
-  historyText: string | undefined,
-) {
-  return {
-    terminalWidth: TERMINAL_WIDTH,
-    terminalHeight: TERMINAL_HEIGHT,
-    mainAreaWidth: TERMINAL_WIDTH,
-    inputWidth: TERMINAL_WIDTH,
-    suggestionsWidth: 60,
-    isNarrow: false,
-    history:
-      historyText === undefined
-        ? []
-        : [{ id: 1, type: 'user', text: historyText }],
-    pendingHistoryItems: [],
-    streamingState: StreamingState.Idle,
-    quittingMessages: null,
-    constrainHeight: false,
-    showErrorDetails: false,
-    showToolDescriptions: false,
-    isTodoPanelCollapsed: false,
-    consoleMessages: [],
-    slashCommands: [],
-    staticKey: 0,
-    isInputActive: true,
-    ctrlCPressedOnce: false,
-    ctrlDPressedOnce: false,
-    showEscapePrompt: false,
-    ideContextState: undefined,
-    llxprtMdFileCount: 0,
-    elapsedTime: 0,
-    currentLoadingPhrase: undefined,
-    showAutoAcceptIndicator: ApprovalMode.DEFAULT,
-    shellModeActive: false,
-    thought: undefined,
-    branchName: undefined,
-    debugMessage: '',
-    errorCount: 0,
-    historyTokenCount: 0,
-    vimModeEnabled: false,
-    vimMode: undefined,
-    tokenMetrics: {
-      tokensPerMinute: 0,
-      throttleWaitTimeMs: 0,
-      sessionTokenTotal: 0,
-    },
-    currentModel: 'test-model',
-    availableTerminalHeight: TERMINAL_HEIGHT,
-    activeShellPtyId: null,
-    embeddedShellFocused: false,
-    isQueuedMessagesPanelCollapsed: false,
-    queuedSubmissions: [],
-    coreMemoryFileCount: 0,
-    currentModelLabel: undefined,
-    contextLimit: undefined,
-
-    showWorkspaceMigrationDialog: false,
-    shouldShowIdePrompt: false,
-    isFolderTrustDialogOpen: false,
-    isWelcomeDialogOpen: false,
-    isPermissionsDialogOpen: false,
-    confirmationRequest: null,
-    isThemeDialogOpen: false,
-    isSettingsDialogOpen: false,
-    isAuthDialogOpen: false,
-    isOAuthCodeDialogOpen: false,
-    isEditorDialogOpen: false,
-    isProviderDialogOpen: false,
-    isImageProviderDialogOpen: false,
-    imageProviderOptions: [],
-    selectedImageProvider: '',
-    isLoadProfileDialogOpen: false,
-    isCreateProfileDialogOpen: false,
-    isProfileListDialogOpen: false,
-    isProfileDetailDialogOpen: false,
-    isProfileEditorDialogOpen: false,
-    isToolsDialogOpen: false,
-    isLoggingDialogOpen: false,
-    isSubagentDialogOpen: false,
-    isModelsDialogOpen: false,
-    isSessionBrowserDialogOpen: false,
-    isModelConfigDialogOpen: false,
-    isPoliciesDialogOpen: false,
-    showPrivacyNotice: false,
-
-    rootUiRef,
-    pendingHistoryItemRef: { current: null },
-  };
-}
-
 /** Renders DefaultAppLayout through real Ink and returns what tests assert on. */
 function renderLayout({
   useAlternateBuffer,
@@ -273,27 +195,60 @@ function renderLayout({
 }: RenderOptions): RenderedLayout {
   const mainControlsRef: { current: DOMElement | null } = { current: null };
   const rootUiRef: { current: DOMElement | null } = { current: null };
+  const pendingHistoryItemRef: { current: DOMElement | null } = {
+    current: null,
+  };
   const configSource = createConfigSource(screenReader);
+  const settings = createSettings(useAlternateBuffer) as never;
+
+  // Turn-plane state lives in the TurnStore; only the history content this
+  // suite asserts on is seeded, everything else keeps store defaults.
+  const turnStore = createTurnStore(
+    historyText === undefined
+      ? {}
+      : {
+          history: [{ id: 1, type: 'user', text: historyText } as HistoryItem],
+        },
+  );
 
   const rendered = render(
-    <UIStateContext.Provider
-      value={createUIState(rootUiRef, historyText) as never}
-    >
-      <UIActionsContext.Provider value={createActions() as never}>
-        <DefaultAppLayout
-          uiRuntime={buildUiRuntimeFromSource(configSource as never)}
-          slashCommandRuntime={buildSlashCommandRuntime(configSource as never)}
-          settings={createSettings(useAlternateBuffer) as never}
-          startupWarnings={[]}
-          version={'0.0.0-test'}
-          nightly={false}
-          mainControlsRef={mainControlsRef}
-          availableTerminalHeight={TERMINAL_HEIGHT}
-          contextFileNames={[]}
-          updateInfo={null}
-        />
-      </UIActionsContext.Provider>
-    </UIStateContext.Provider>,
+    <SettingsProfileProvider store={createSettingsProfileStore()}>
+      <VimModeProvider settings={settings}>
+        {/* Terminal-plane state lives in the TerminalStore; the 80x24
+            seeding mirrors the geometry this suite asserts on. */}
+        <TerminalProvider
+          store={createTerminalStore({
+            terminalWidth: 80,
+            terminalHeight: TERMINAL_HEIGHT,
+            mainAreaWidth: 80,
+            inputWidth: 80,
+            suggestionsWidth: 60,
+            isNarrow: false,
+            constrainHeight: false,
+            availableTerminalHeight: TERMINAL_HEIGHT,
+            isInputActive: true,
+          })}
+        >
+          <TurnProvider store={turnStore}>
+            <DefaultAppLayout
+              uiRuntime={buildUiRuntimeFromSource(configSource as never)}
+              slashCommandRuntime={buildSlashCommandRuntime(
+                configSource as never,
+              )}
+              settings={settings}
+              startupWarnings={[]}
+              version={'0.0.0-test'}
+              nightly={false}
+              mainControlsRef={mainControlsRef}
+              rootUiRef={rootUiRef}
+              pendingHistoryItemRef={pendingHistoryItemRef}
+              contextFileNames={[]}
+              updateInfo={null}
+            />
+          </TurnProvider>
+        </TerminalProvider>
+      </VimModeProvider>
+    </SettingsProfileProvider>,
   );
 
   const frame = rendered.lastFrame() ?? '';

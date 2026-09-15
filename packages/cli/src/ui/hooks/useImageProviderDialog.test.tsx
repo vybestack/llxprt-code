@@ -5,7 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import React, { act, useReducer } from 'react';
+import { act } from 'react';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,8 +13,11 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { renderHook } from '../../test-utils/render.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
-import { appReducer, initialAppState } from '../reducers/appReducer.js';
+import {
+  createDialogStore,
+  selectDialogOpen,
+} from '../stores/dialog/dialogStore.js';
+import { createDialogOpeners } from '../stores/dialog/dialogOpeners.js';
 import { createCompletionHandler } from '../commands/schema/index.js';
 import { MessageType } from '../types.js';
 
@@ -38,11 +41,6 @@ void vi.mock('../contexts/RuntimeContext.js', () => ({
 import { useImageProviderDialog } from './useImageProviderDialog.js';
 import { useProviderDialog } from './useProviderDialog.js';
 import { providerCommandSchema } from '../commands/providerCommandSchema.js';
-
-function useDialogHarness(settings: LoadedSettings) {
-  const [state, dispatch] = useReducer(appReducer, initialAppState);
-  return { state, dispatch, settings };
-}
 
 describe('image provider selection', () => {
   let directory: string;
@@ -70,29 +68,24 @@ describe('image provider selection', () => {
 
   function renderDialogs() {
     const messages: Array<{ type: MessageType; content: string }> = [];
-    const state = renderHook(() => useDialogHarness(settings));
-    function Wrapper({ children }: { children: React.ReactNode }) {
-      return (
-        <AppDispatchProvider value={state.result.current.dispatch}>
-          {children}
-        </AppDispatchProvider>
-      );
-    }
-    const dialogs = renderHook(
-      () => ({
-        image: useImageProviderDialog({
-          settings,
-          appState: state.result.current.state,
-          addMessage: (message) => messages.push(message),
-        }),
-        text: useProviderDialog({
-          appState: state.result.current.state,
-          addMessage: (message) => messages.push(message),
-        }),
+    const dialogStore = createDialogStore();
+    const dialogs = createDialogOpeners(dialogStore);
+    const dialogs_ = renderHook(() => ({
+      image: useImageProviderDialog({
+        settings,
+        addMessage: (message) => messages.push(message),
+        dialogs,
       }),
-      { wrapper: Wrapper },
-    );
-    return { ...dialogs, state, messages };
+      text: useProviderDialog({
+        addMessage: (message) => messages.push(message),
+        dialogs,
+      }),
+    }));
+    return { ...dialogs_, dialogStore, messages };
+  }
+
+  function imageDialogOpen(dialogStore: ReturnType<typeof createDialogStore>) {
+    return selectDialogOpen(dialogStore.store.getState(), 'imageProvider');
   }
 
   it('offers exactly the same aliases and text providers as completion and selects the effective provider', async () => {
@@ -100,13 +93,13 @@ describe('image provider selection', () => {
       baseProvider: 'openai',
       'base-url': 'http://localhost:8321/v1',
     });
-    const { result, state, rerender, unmount } = renderDialogs();
+    const { result, rerender, dialogStore, unmount } = renderDialogs();
     act(() => {
       result.current.image.openDialog();
       result.current.text.openDialog();
     });
     rerender();
-    expect(result.current.image.showDialog).toBe(true);
+    expect(imageDialogOpen(dialogStore)).toBe(true);
     expect(result.current.image.currentProvider).toBe('anthropic');
     const complete = createCompletionHandler(providerCommandSchema);
     for (const kind of ['image', 'text'] as const) {
@@ -126,11 +119,10 @@ describe('image provider selection', () => {
     act(() => result.current.image.openDialog());
     expect(result.current.image.currentProvider).toBe('local-art');
     unmount();
-    state.unmount();
   });
 
   it('persists the selection, syncs runtime settings, reports success and closes', () => {
-    const { result, state, messages, unmount } = renderDialogs();
+    const { result, messages, dialogStore, unmount } = renderDialogs();
     act(() => result.current.image.openDialog());
     act(() => result.current.image.handleSelect('codex'));
     expect(settings.merged.imageProvider).toBe('codex');
@@ -141,9 +133,8 @@ describe('image provider selection', () => {
     expect(messages).toMatchObject([
       { type: MessageType.INFO, content: 'Image provider set to codex' },
     ]);
-    expect(state.result.current.state.openDialogs.imageProvider).toBe(false);
+    expect(imageDialogOpen(dialogStore)).toBe(false);
     unmount();
-    state.unmount();
   });
 
   it('syncs the merged setting when a workspace override takes precedence over the user pin', () => {
@@ -158,7 +149,7 @@ describe('image provider selection', () => {
       },
       true,
     );
-    const { result, state, unmount } = renderDialogs();
+    const { result, unmount } = renderDialogs();
     act(() => result.current.image.handleSelect('codex'));
     expect(
       JSON.parse(readFileSync(join(directory, 'settings.json'), 'utf8')),
@@ -166,11 +157,10 @@ describe('image provider selection', () => {
     expect(runtimeSettings.get('imageProvider')).toBe('openai');
     expect(settings.merged.imageProvider).toBe('openai');
     unmount();
-    state.unmount();
   });
 
   it('reports invalid selections without pinning and closes', () => {
-    const { result, state, messages, unmount } = renderDialogs();
+    const { result, messages, dialogStore, unmount } = renderDialogs();
     act(() => result.current.image.openDialog());
     act(() => result.current.image.handleSelect('not-an-alias'));
     expect(settings.merged.imageProvider).toBeUndefined();
@@ -181,8 +171,7 @@ describe('image provider selection', () => {
         content: expect.stringContaining('Available aliases:'),
       },
     ]);
-    expect(state.result.current.state.openDialogs.imageProvider).toBe(false);
+    expect(imageDialogOpen(dialogStore)).toBe(false);
     unmount();
-    state.unmount();
   });
 });

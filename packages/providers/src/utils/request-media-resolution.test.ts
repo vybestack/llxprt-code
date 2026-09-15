@@ -23,7 +23,6 @@ import {
   RequestMediaResolutionError,
   RequestMediaResolver,
 } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import { buildResponsesInputFromContent } from '../openai-responses/buildResponsesInputFromContent.js';
 import { buildMessagesWithReasoning } from '../openai/OpenAIRequestBuilder.js';
 import { convertToAnthropicMessages } from '../anthropic/AnthropicMessageNormalizer.js';
 import * as mediaFormatConverter from '../gemini/GeminiMessageConverter.js';
@@ -138,7 +137,6 @@ describe('request-media-resolution', () => {
       logger: { debug: (_message: () => string): void => undefined },
     };
     return {
-      responses: JSON.stringify(buildResponsesInputFromContent(contents)),
       chat: JSON.stringify(
         buildMessagesWithReasoning(contents, { settings }, 'openai', undefined),
       ),
@@ -473,9 +471,6 @@ describe('request-media-resolution', () => {
           logger: { debug: (_message: () => string): void => undefined },
         };
 
-        expect(() => buildResponsesInputFromContent(contents)).toThrow(
-          reference.contentId,
-        );
         expect(() =>
           buildMessagesWithReasoning(
             contents,

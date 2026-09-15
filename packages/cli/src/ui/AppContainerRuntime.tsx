@@ -19,26 +19,45 @@ import type { LoadedSettings } from '../config/settings.js';
 import type { AppState, AppAction } from './reducers/appReducer.js';
 import type { OperationLifecycleRegistry } from './hooks/agentStream/operationLifecycle.js';
 import type { MemoryTelemetryController } from './hooks/memoryTrend/memoryTelemetry.js';
-import { UIStateProvider } from './contexts/UIStateContext.js';
-import { UIActionsProvider } from './contexts/UIActionsContext.js';
-import { DefaultAppLayout } from './layouts/DefaultAppLayout.js';
-import { useUIStateBuilder } from './containers/AppContainer/builders/useUIStateBuilder.js';
-import { useUIActionsBuilder } from './containers/AppContainer/builders/useUIActionsBuilder.js';
+import {
+  DefaultAppLayout,
+  type DefaultAppLayoutProps,
+} from './layouts/DefaultAppLayout.js';
 import { useAppBootstrap } from './containers/AppContainer/hooks/useAppBootstrap.js';
 import type { AppBootstrapResult } from './containers/AppContainer/hooks/useAppBootstrap.js';
 import { useAppDialogs } from './containers/AppContainer/hooks/useAppDialogs.js';
 import type { AppDialogsResult } from './containers/AppContainer/hooks/useAppDialogs.js';
 import { useAppInput } from './containers/AppContainer/hooks/useAppInput.js';
-import type {
-  AppInputParams,
-  AppInputResult,
-} from './containers/AppContainer/hooks/useAppInput.js';
+import type { AppInputResult } from './containers/AppContainer/hooks/useAppInput.js';
 import { useAppLayout } from './containers/AppContainer/hooks/useAppLayout.js';
-import type {
-  AppLayoutParams,
-  AppLayoutResult,
-} from './containers/AppContainer/hooks/useAppLayout.js';
+import type { AppLayoutResult } from './containers/AppContainer/hooks/useAppLayout.js';
 import { useUnconfiguredProviderGuidance } from './hooks/useUnconfiguredProviderGuidance.js';
+import {
+  createDialogStore,
+  type DialogStore,
+} from './stores/dialog/dialogStore.js';
+import {
+  createDialogOpeners,
+  type DialogOpeners,
+} from './stores/dialog/dialogOpeners.js';
+import { DialogProvider } from './stores/dialog/DialogContext.js';
+import {
+  createTerminalStore,
+  type TerminalStore,
+} from './stores/terminal/terminalStore.js';
+import { TerminalProvider } from './stores/terminal/TerminalContext.js';
+import { createTurnStore, type TurnStore } from './stores/turn/turnStore.js';
+import { TurnProvider } from './stores/turn/TurnContext.js';
+import {
+  createSettingsProfileStore,
+  type SettingsProfileStore,
+} from './stores/settings/settingsStore.js';
+import { SettingsProfileProvider } from './stores/settings/SettingsContext.js';
+import {
+  AppCommandsProvider,
+  type AppCommandBindings,
+} from './contexts/AppCommandsContext.js';
+import { useRef, useMemo } from 'react';
 
 const debug = new DebugLogger('llxprt:ui:appcontainer');
 
@@ -70,446 +89,282 @@ export interface AppContainerRuntimeProps {
   memoryController?: MemoryTelemetryController;
 }
 
-type HookResults = {
-  bootstrap: AppBootstrapResult;
-  dialogs: AppDialogsResult;
-  input: AppInputResult;
-  layout: AppLayoutResult;
-};
+/** Stores retain identity across renders and StrictMode effect replay. */
+export function useAppStores(runtime: Pick<SlashCommandRuntime, 'getModel'>): {
+  dialogStore: DialogStore;
+  terminalStore: TerminalStore;
+  turnStore: TurnStore;
+  settingsStore: SettingsProfileStore;
+  dialogOpeners: DialogOpeners;
+} {
+  const storesRef = useRef<{
+    dialogStore: DialogStore;
+    terminalStore: TerminalStore;
+    turnStore: TurnStore;
+    settingsStore: SettingsProfileStore;
+  } | null>(null);
+  storesRef.current ??= {
+    dialogStore: createDialogStore(),
+    terminalStore: createTerminalStore(),
+    turnStore: createTurnStore(),
+    settingsStore: createSettingsProfileStore({
+      currentModel: runtime.getModel(),
+    }),
+  };
+  const stores = storesRef.current;
+  const dialogOpeners = useMemo(
+    () => createDialogOpeners(stores.dialogStore),
+    [stores],
+  );
+  return { ...stores, dialogOpeners };
+}
 
-function buildInputParams(
+/** Guidance nudge for sessions without an active provider configured. */
+function useUnconfiguredGuidance(
+  props: AppContainerRuntimeProps,
+  turnStore: TurnStore,
+  dialogStore: DialogStore,
+): void {
+  useUnconfiguredProviderGuidance({
+    hasActiveProvider:
+      props.uiRuntime.model.getProviderManager()?.hasActiveProvider() ?? false,
+    addItem: turnStore.commands.addItem,
+    store: dialogStore,
+  });
+}
+
+/** Dialog-data runtime: wiring only; every param is bootstrap/store-owned. */
+function useAppDialogsRuntime(
+  props: AppContainerRuntimeProps,
   bootstrap: AppBootstrapResult,
-  dialogs: AppDialogsResult,
-  appState: AppState,
-  appDispatch: React.Dispatch<AppAction>,
-  slashCommandRuntime: SlashCommandRuntime,
-): AppInputParams {
-  return {
-    streamRuntime: bootstrap.streamRuntime,
-    slashCommandRuntime,
-    agent: bootstrap.agent,
-    settings: bootstrap.settings,
-    runtime: bootstrap.runtime,
-    subagentManager: bootstrap.uiRuntime.app.getSubagentManager(),
-    history: bootstrap.history,
-    addItem: bootstrap.addItem,
-    removeItems: bootstrap.removeItems,
-    clearItems: bootstrap.clearItems,
-    loadHistory: bootstrap.loadHistory,
-    todos: bootstrap.todos,
-    updateTodos: bootstrap.updateTodos,
-    recordingIntegrationRef: bootstrap.recordingIntegrationRef,
-    recordingSwapCallbacks: bootstrap.recordingSwapCallbacks,
-    recordingIntegration: bootstrap.recordingIntegration,
-    runtimeMessageBus: bootstrap.runtimeMessageBus,
-    stdin: bootstrap.stdin,
-    setRawMode: bootstrap.setRawMode,
-    stdout: bootstrap.stdout,
-    setIdePromptAnswered: bootstrap.setIdePromptAnswered,
-    setLlxprtMdFileCount: bootstrap.setLlxprtMdFileCount,
-    openAuthDialog: dialogs.openAuthDialog,
-    openThemeDialog: dialogs.openThemeDialog,
-    openEditorDialog: dialogs.openEditorDialog,
-    openPrivacyNotice: dialogs.openPrivacyNotice,
-    openSettingsDialog: dialogs.openSettingsDialog,
-    openLoggingDialog: dialogs.openLoggingDialog,
-    openSubagentDialog: dialogs.openSubagentDialog,
-    openModelsDialog: dialogs.openModelsDialog,
-    openPermissionsDialog: dialogs.openPermissionsDialog,
-    openPoliciesDialog: dialogs.openPoliciesDialog,
-    openProviderDialog: dialogs.openProviderDialog,
-    openImageProviderDialog: dialogs.openImageProviderDialog,
-    openLoadProfileDialog: dialogs.openLoadProfileDialog,
-    openCreateProfileDialog: dialogs.openCreateProfileDialog,
-    openProfileListDialog: dialogs.openProfileListDialog,
-    viewProfileDetail: dialogs.viewProfileDetail,
-    openProfileEditor: dialogs.openProfileEditor,
-    openSessionBrowserDialog: dialogs.openSessionBrowserDialog,
-    setDebugMessage: dialogs.setDebugMessage,
-    toggleCorgiMode: dialogs.toggleCorgiMode,
-    toggleDebugProfiler: dialogs.toggleDebugProfiler,
-    dispatchExtensionStateUpdate: dialogs.dispatchExtensionStateUpdate,
-    addConfirmUpdateExtensionRequest: dialogs.addConfirmUpdateExtensionRequest,
-    welcomeActions: dialogs.welcomeActions,
-    extensionsUpdateState: dialogs.extensionsUpdateState,
-    setIsProcessing: dialogs.setIsProcessing,
-    isProcessing: dialogs.isProcessing,
-    setEmbeddedShellFocused: dialogs.setEmbeddedShellFocused,
-    embeddedShellFocused: dialogs.embeddedShellFocused,
-    setAuthError: dialogs.setAuthError,
-    shellModeActive: dialogs.shellModeActive,
-    performMemoryRefresh: dialogs.performMemoryRefresh,
-    handleExternalEditorOpen: dialogs.handleExternalEditorOpen,
-    refreshStatic: dialogs.refreshStatic,
-    appState,
-    appDispatch,
-  };
-}
-
-function buildLayoutParams(
-  bootstrap: AppBootstrapResult,
-  dialogs: AppDialogsResult,
-  input: AppInputResult,
-): AppLayoutParams {
-  return {
-    uiRuntime: bootstrap.uiRuntime,
-    settings: bootstrap.settings,
-    runtimeMessageBus: bootstrap.runtimeMessageBus,
-    consoleMessages: bootstrap.consoleMessages,
-    clearConsoleMessagesState: bootstrap.clearConsoleMessagesState,
-    addItem: bootstrap.addItem,
-    clearItems: bootstrap.clearItems,
-    history: bootstrap.history,
-    constrainHeight: dialogs.constrainHeight,
-    setConstrainHeight: dialogs.setConstrainHeight,
-    refreshStatic: dialogs.refreshStatic,
-    showErrorDetails: dialogs.showErrorDetails,
-    setShowErrorDetails: dialogs.setShowErrorDetails,
-    showToolDescriptions: dialogs.showToolDescriptions,
-    setShowToolDescriptions: dialogs.setShowToolDescriptions,
-    renderMarkdown: dialogs.renderMarkdown,
-    setRenderMarkdown: dialogs.setRenderMarkdown,
-    isTodoPanelCollapsed: dialogs.isTodoPanelCollapsed,
-    setIsTodoPanelCollapsed: dialogs.setIsTodoPanelCollapsed,
-    isQueuedMessagesPanelCollapsed: dialogs.isQueuedMessagesPanelCollapsed,
-    setIsQueuedMessagesPanelCollapsed:
-      dialogs.setIsQueuedMessagesPanelCollapsed,
-    setFooterHeight: dialogs.setFooterHeight,
-    footerHeight: dialogs.footerHeight,
-    copyModeEnabled: dialogs.copyModeEnabled,
-    setCopyModeEnabled: dialogs.setCopyModeEnabled,
-    useAlternateBuffer: dialogs.useAlternateBuffer,
-    ideContextState: dialogs.ideContextState,
-    setDebugMessage: dialogs.setDebugMessage,
-    isAuthDialogOpen: dialogs.isAuthDialogOpen,
-    isThemeDialogOpen: dialogs.isThemeDialogOpen,
-    isEditorDialogOpen: dialogs.isEditorDialogOpen,
-    isProviderDialogOpen:
-      dialogs.isProviderDialogOpen || dialogs.isImageProviderDialogOpen,
-    isToolsDialogOpen: dialogs.isToolsDialogOpen,
-    isCreateProfileDialogOpen: dialogs.isCreateProfileDialogOpen,
-    showPrivacyNotice: dialogs.showPrivacyNotice,
-    isWelcomeDialogOpen: dialogs.isWelcomeDialogOpen,
-    isFolderTrustDialogOpen: dialogs.isFolderTrustDialogOpen,
-    embeddedShellFocused: dialogs.embeddedShellFocused,
-    setEmbeddedShellFocused: dialogs.setEmbeddedShellFocused,
-    startupGuardsInitialized: dialogs.startupGuardsInitialized,
-    streamingState: input.streamingState,
-    pendingHistoryItems: input.pendingHistoryItems,
-    confirmationRequest: input.confirmationRequest,
-    cancelOngoingRequest: input.cancelOngoingRequest,
-    activeShellPtyId: input.activeShellPtyId,
-    ctrlCPressedOnce: input.ctrlCPressedOnce,
-    requestCtrlCExit: input.requestCtrlCExit,
-    requestCtrlDExit: input.requestCtrlDExit,
-    handleSlashCommand: input.handleSlashCommand,
-    inputHistoryStore: input.inputHistoryStore,
-    handleUserInputSubmit: input.handleUserInputSubmit,
-    handleSteer: input.handleSteer,
-    interactiveRuntimeReady: input.interactiveRuntimeReady,
-    vimModeEnabled: input.vimModeEnabled,
-    terminalHeight: input.terminalHeight,
-    terminalWidth: input.terminalWidth,
-    buffer: input.buffer,
-  };
-}
-
-function buildUIStateParamsCore(
-  r: HookResults,
-  slashCommandRuntime: SlashCommandRuntime,
-) {
-  const { bootstrap: b, dialogs: d, input: i } = r;
-  return {
-    slashCommandRuntime,
-    settings: b.settings,
-    settingsNonce: d.settingsNonce,
-    terminalWidth: i.terminalWidth,
-    terminalHeight: i.terminalHeight,
-    inputWidth: i.inputWidth,
-    suggestionsWidth: i.suggestionsWidth,
-    terminalBackgroundColor: b.uiRuntime.shell.getTerminalBackground(),
-    history: b.history,
-    pendingHistoryItems: i.pendingHistoryItems,
-    streamingState: i.streamingState,
-    thought: i.thought,
-    buffer: i.buffer,
-    shellModeActive: d.shellModeActive,
-    isThemeDialogOpen: d.isThemeDialogOpen,
-    isSettingsDialogOpen: d.isSettingsDialogOpen,
-    isAuthDialogOpen: d.isAuthDialogOpen,
-    isEditorDialogOpen: d.isEditorDialogOpen,
-    isProviderDialogOpen: d.isProviderDialogOpen,
-    isImageProviderDialogOpen: d.isImageProviderDialogOpen,
-    imageProviderOptions: d.imageProviderOptions,
-    selectedImageProvider: d.selectedImageProvider,
-    isLoadProfileDialogOpen: d.isLoadProfileDialogOpen,
-    isCreateProfileDialogOpen: d.isCreateProfileDialogOpen,
-    isProfileListDialogOpen: d.isProfileListDialogOpen,
-    isProfileDetailDialogOpen: d.isProfileDetailDialogOpen,
-    isProfileEditorDialogOpen: d.isProfileEditorDialogOpen,
-    isToolsDialogOpen: d.isToolsDialogOpen,
-    isFolderTrustDialogOpen: d.isFolderTrustDialogOpen,
-    showWorkspaceMigrationDialog: d.showWorkspaceMigrationDialog,
-    showPrivacyNotice: d.showPrivacyNotice,
-    isOAuthCodeDialogOpen: d.isOAuthCodeDialogOpen,
-    isPermissionsDialogOpen: d.isPermissionsDialogOpen,
-    isLoggingDialogOpen: d.isLoggingDialogOpen,
-    isSubagentDialogOpen: d.isSubagentDialogOpen,
-    isModelsDialogOpen: d.isModelsDialogOpen,
-    isSessionBrowserDialogOpen: d.isSessionBrowserDialogOpen,
-    isModelConfigDialogOpen: d.isModelConfigDialogOpen,
-    isPoliciesDialogOpen: d.isPoliciesDialogOpen,
-    providerOptions: d.isCreateProfileDialogOpen
-      ? d.createProfileProviders
-      : d.providerOptions,
-    selectedProvider: d.selectedProvider,
-    currentModel: d.currentModel,
-    currentModelLabel: d.currentModelLabel,
-    contextLimit: d.contextLimit,
-    profiles: d.profiles,
-    toolsDialogAction: d.toolsDialogAction,
-    toolsDialogTools: d.toolsDialogTools,
-    toolsDialogDisabledTools: d.toolsDialogDisabledTools,
-    workspaceLlxprtExtensions: d.workspaceLlxprtExtensions,
-    loggingDialogData: d.loggingDialogData,
-    subagentDialogInitialView: d.subagentDialogInitialView,
-    subagentDialogInitialName: d.subagentDialogInitialName,
-    modelsDialogData: d.modelsDialogData,
-  };
-}
-
-function buildUIStateParamsExtra(r: HookResults) {
-  const { bootstrap: b, dialogs: d, input: i, layout: l } = r;
-  return {
-    profileListItems: d.profileListItems,
-    selectedProfileName: d.selectedProfileName,
-    selectedProfileData: d.selectedProfileData,
-    defaultProfileName: d.defaultProfileName,
-    activeProfileName: d.activeProfileName,
-    profileDialogError: d.profileDialogError,
-    profileDialogLoading: d.profileDialogLoading,
-    confirmationRequest: i.confirmationRequest,
-    confirmUpdateLlxprtExtensionRequests: d.confirmUpdateExtensionRequests,
-    ctrlCPressedOnce: i.ctrlCPressedOnce,
-    ctrlDPressedOnce: i.ctrlDPressedOnce,
-    showEscapePrompt: d.showEscapePrompt,
-    quittingMessages: i.quittingMessages,
-    constrainHeight: d.constrainHeight,
-    showErrorDetails: d.showErrorDetails,
-    showToolDescriptions: d.showToolDescriptions,
-    isTodoPanelCollapsed: d.isTodoPanelCollapsed,
-    isQueuedMessagesPanelCollapsed: d.isQueuedMessagesPanelCollapsed,
-    queuedSubmissions: i.queuedSubmissions,
-    isNarrow: b.isNarrow,
-    vimModeEnabled: i.vimModeEnabled,
-    vimMode: i.vimMode,
-    ideContextState: d.ideContextState,
-    llxprtMdFileCount: b.llxprtMdFileCount,
-    coreMemoryFileCount: b.coreMemoryFileCount,
-    mainAreaWidth: l.mainAreaWidth,
-    branchName: l.branchName,
-    branchIsDirty: l.branchIsDirty,
-    errorCount: d.errorCount,
-    activeHooks: l.activeHooks,
-    consoleMessages: l.filteredConsoleMessages,
-    elapsedTime: i.elapsedTime,
-    currentLoadingPhrase: i.currentLoadingPhrase,
-    showAutoAcceptIndicator: i.showAutoAcceptIndicator,
-    tokenMetrics: b.tokenMetrics,
-    historyTokenCount: b.sessionStats.historyTokenCount,
-    initError: i.initError,
-    authError: d.authError,
-    themeError: d.themeError,
-    editorError: d.editorError,
-    isProcessing: d.isProcessing,
-    isInputActive: i.isInputActive,
-    isFocused: b.isFocused,
-    rootUiRef: l.rootUiRef,
-    pendingHistoryItemRef: l.pendingHistoryItemRef,
-    slashCommands: i.slashCommands,
-    commandContext: i.commandContext,
-    shouldShowIdePrompt: b.shouldShowIdePrompt === true,
-    currentIDE: b.currentIDE,
-    isTrustedFolder: b.uiRuntime.app.isTrustedFolder(),
-    isWelcomeDialogOpen: d.isWelcomeDialogOpen,
-    welcomeState: d.welcomeState,
-    welcomeAvailableProviders: d.welcomeAvailableProviders,
-    welcomeAvailableModels: d.welcomeAvailableModels,
-    inputHistory: i.inputHistoryStore.inputHistory,
-    staticKey: d.staticKey,
-    debugMessage: d.debugMessage,
-    showDebugProfiler: d.showDebugProfiler,
-    copyModeEnabled: d.copyModeEnabled,
-    footerHeight: d.footerHeight,
-    placeholder: l.placeholder,
-    availableTerminalHeight: l.availableTerminalHeight,
-    queueErrorMessage: d.queueErrorMessage,
-    renderMarkdown: d.renderMarkdown,
-    activeShellPtyId: i.activeShellPtyId,
-    embeddedShellFocused: d.embeddedShellFocused,
-  };
-}
-
-function extraDialogActions(d: AppDialogsResult) {
-  return {
-    openModelConfigDialog: d.openModelConfigDialog,
-    closeModelConfigDialog: d.closeModelConfigDialog,
-    openPoliciesDialog: d.openPoliciesDialog,
-    closePoliciesDialog: d.closePoliciesDialog,
-  };
-}
-
-function dialogActionsParams(d: HookResults['dialogs']) {
-  return {
-    refreshStatic: d.refreshStatic,
-    openThemeDialog: d.openThemeDialog,
-    handleThemeSelect: d.handleThemeSelect,
-    handleThemeHighlight: d.handleThemeHighlight,
-    openSettingsDialog: d.openSettingsDialog,
-    closeSettingsDialog: d.closeSettingsDialog,
-    openAuthDialog: d.openAuthDialog,
-    handleAuthSelect: d.handleAuthSelect,
-    openEditorDialog: d.openEditorDialog,
-    handleEditorSelect: d.handleEditorSelect,
-    exitEditorDialog: d.exitEditorDialog,
-    openProviderDialog: d.openProviderDialog,
-    openImageProviderDialog: d.openImageProviderDialog,
-    handleImageProviderSelect: d.handleImageProviderSelect,
-    exitImageProviderDialog: d.exitImageProviderDialog,
-    handleProviderSelect: d.handleProviderSelect,
-    exitProviderDialog: d.exitProviderDialog,
-    openLoadProfileDialog: d.openLoadProfileDialog,
-    handleProfileSelect: d.handleProfileSelect,
-    exitLoadProfileDialog: d.exitLoadProfileDialog,
-    openCreateProfileDialog: d.openCreateProfileDialog,
-    exitCreateProfileDialog: d.exitCreateProfileDialog,
-    openProfileListDialog: d.openProfileListDialog,
-    closeProfileListDialog: d.closeProfileListDialog,
-    viewProfileDetail: d.viewProfileDetail,
-    closeProfileDetailDialog: d.closeProfileDetailDialog,
-    loadProfileFromDetail: d.loadProfileFromDetail,
-    deleteProfileFromDetail: d.deleteProfileFromDetail,
-    deleteProfileFromList: d.deleteProfileFromList,
-    setProfileAsDefault: d.setProfileAsDefault,
-    openProfileEditor: d.openProfileEditor,
-    closeProfileEditor: d.closeProfileEditor,
-    saveProfileFromEditor: d.saveProfileFromEditor,
-    openToolsDialog: d.openToolsDialog,
-    handleToolsSelect: d.handleToolsSelect,
-    exitToolsDialog: d.exitToolsDialog,
-    handleFolderTrustSelect: d.handleFolderTrustSelect,
-    welcomeActions: d.welcomeActions,
-    triggerWelcomeAuth: d.triggerWelcomeAuth,
-    openPermissionsDialog: d.openPermissionsDialog,
-    closePermissionsDialog: d.closePermissionsDialog,
-    openLoggingDialog: d.openLoggingDialog,
-    closeLoggingDialog: d.closeLoggingDialog,
-    openSubagentDialog: d.openSubagentDialog,
-    closeSubagentDialog: d.closeSubagentDialog,
-    openModelsDialog: d.openModelsDialog,
-    closeModelsDialog: d.closeModelsDialog,
-
-    ...extraDialogActions(d),
-
-    openSessionBrowserDialog: d.openSessionBrowserDialog,
-    closeSessionBrowserDialog: d.closeSessionBrowserDialog,
-    onWorkspaceMigrationDialogOpen: d.onWorkspaceMigrationDialogOpen,
-    onWorkspaceMigrationDialogClose: d.onWorkspaceMigrationDialogClose,
-    openPrivacyNotice: d.openPrivacyNotice,
-    handlePrivacyNoticeExit: d.handlePrivacyNoticeExit,
-    performMemoryRefresh: d.performMemoryRefresh,
-    setShowErrorDetails: d.setShowErrorDetails,
-    setShowToolDescriptions: d.setShowToolDescriptions,
-    setConstrainHeight: d.setConstrainHeight,
-    setShellModeActive: d.setShellModeActive,
-    handleEscapePromptChange: d.handleEscapePromptChange,
-    setQueueErrorMessage: d.setQueueErrorMessage,
-  };
-}
-
-function buildUIActionsParams(r: HookResults) {
-  const { bootstrap: b, input: i, layout: l } = r;
-  return {
-    addItem: b.addItem,
-    clearItems: b.clearItems,
-    loadHistory: b.loadHistory,
-    handleUserInputSubmit: i.handleUserInputSubmit,
-    handleSteer: i.handleSteer,
-    handleClearScreen: l.handleClearScreen,
-    handleSettingsRestart: i.handleSettingsRestart,
-    handleAuthTimeout: i.handleAuthTimeout,
-    handleConfirmationSelect: l.handleConfirmationSelect,
-    handleIdePromptComplete: i.handleIdePromptComplete,
-    vimHandleInput: i.vimHandleInput,
-    toggleVimEnabled: i.toggleVimEnabled,
-    handleSlashCommand: i.handleSlashCommand,
-    handleOAuthCodeDialogClose: i.handleOAuthCodeDialogClose,
-    handleOAuthCodeSubmit: i.handleOAuthCodeSubmit,
-    cancelOngoingRequest: i.cancelOngoingRequest,
-    sendAllQueuedSubmissions: i.sendAllQueuedSubmissions,
-    steerAllQueuedSubmissions: i.steerAllQueuedSubmissions,
-    clearQueuedSubmissions: i.clearQueuedSubmissions,
-    ...dialogActionsParams(r.dialogs),
-  };
-}
-
-export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
-  debug.debug('AppContainer architecture active (v2)');
-  const bootstrap = useAppBootstrap(props);
-  const dialogs = useAppDialogs({
+  dialogStore: DialogStore,
+  dialogOpeners: DialogOpeners,
+  terminalStore: TerminalStore,
+  settingsStore: SettingsProfileStore,
+  turnStore: TurnStore,
+): AppDialogsResult {
+  return useAppDialogs({
     config: props.slashCommandRuntime,
     agent: props.agent,
     settings: bootstrap.settings,
-    appState: props.appState,
+    store: dialogStore,
+    dialogs: dialogOpeners,
+    terminalStore,
+    settingsStore,
+    turnStore,
     appDispatch: props.appDispatch,
-    addItem: bootstrap.addItem,
     handleNewMessage: bootstrap.handleNewMessage,
     recordingIntegration: bootstrap.recordingIntegration,
     recordingIntegrationRef: bootstrap.recordingIntegrationRef,
     runtime: bootstrap.runtime,
-    consoleMessages: bootstrap.consoleMessages,
-    setLlxprtMdFileCount: bootstrap.setLlxprtMdFileCount,
     suppressStartupWelcome: props.suppressStartupWelcome,
+    shouldShowIdePrompt: bootstrap.shouldShowIdePrompt,
+    currentIDE: bootstrap.currentIDE,
   });
+}
+
+/**
+ * Current domain bindings, including changing input snapshots. The provider
+ * separates these snapshots from the stable view-facing command callbacks.
+ */
+export function buildAppCommands(
+  dialogs: Pick<
+    AppDialogsResult,
+    keyof AppCommandBindings & keyof AppDialogsResult
+  >,
+  input: Pick<
+    AppInputResult,
+    keyof AppCommandBindings & keyof AppInputResult
+  > & {
+    inputHistoryStore: Pick<
+      AppInputResult['inputHistoryStore'],
+      'inputHistory'
+    >;
+  },
+  layout: Pick<AppLayoutResult, 'handleClearScreen'>,
+  terminalStore: TerminalStore,
+): AppCommandBindings {
+  const { commands: terminalCommands } = terminalStore;
+  return {
+    buffer: input.buffer,
+    commandContext: input.commandContext,
+    inputHistory: input.inputHistoryStore.inputHistory,
+    handleUserInputSubmit: input.handleUserInputSubmit,
+    handleSteer: input.handleSteer,
+    handleClearScreen: layout.handleClearScreen,
+    vimHandleInput: input.vimHandleInput,
+    sendAllQueuedSubmissions: input.sendAllQueuedSubmissions,
+    steerAllQueuedSubmissions: input.steerAllQueuedSubmissions,
+    clearQueuedSubmissions: input.clearQueuedSubmissions,
+    setShellModeActive: terminalCommands.setShellModeActive,
+    handleEscapePromptChange: terminalCommands.setShowEscapePrompt,
+    setQueueErrorMessage: terminalCommands.setQueueErrorMessage,
+    onWorkspaceMigrationDialogOpen: dialogs.onWorkspaceMigrationDialogOpen,
+    handleIdePromptComplete: input.handleIdePromptComplete,
+    handleFolderTrustSelect: dialogs.handleFolderTrustSelect,
+    welcomeActions: dialogs.welcomeActions,
+    triggerWelcomeAuth: dialogs.triggerWelcomeAuth,
+    handleThemeSelect: dialogs.handleThemeSelect,
+    handleThemeHighlight: dialogs.handleThemeHighlight,
+    handleAuthSelect: dialogs.handleAuthSelect,
+    handleOAuthCodeDialogClose: input.handleOAuthCodeDialogClose,
+    handleOAuthCodeSubmit: input.handleOAuthCodeSubmit,
+    handleEditorSelect: dialogs.handleEditorSelect,
+    handleProviderSelect: dialogs.handleProviderSelect,
+    handleImageProviderSelect: dialogs.handleImageProviderSelect,
+    handleProfileSelect: (...args) => {
+      void dialogs.handleProfileSelect(...args);
+    },
+    viewProfileDetail: (...args) => {
+      void dialogs.viewProfileDetail(...args);
+    },
+    closeProfileDetailDialog: () => {
+      void dialogs.closeProfileDetailDialog();
+    },
+    loadProfileFromDetail: (...args) => {
+      void dialogs.loadProfileFromDetail(...args);
+    },
+    deleteProfileFromDetail: (...args) => {
+      void dialogs.deleteProfileFromDetail(...args);
+    },
+    deleteProfileFromList: (...args) => {
+      void dialogs.deleteProfileFromList(...args);
+    },
+    setProfileAsDefault: (...args) => {
+      void dialogs.setProfileAsDefault(...args);
+    },
+    openProfileEditor: (...args) => {
+      void dialogs.openProfileEditor(...args);
+    },
+    closeProfileEditor: () => {
+      void dialogs.closeProfileEditor();
+    },
+    saveProfileFromEditor: dialogs.saveProfileFromEditor,
+    handleToolsSelect: dialogs.handleToolsSelect,
+    handleSettingsRestart: input.handleSettingsRestart,
+  };
+}
+
+function useAppCommands(
+  dialogs: AppDialogsResult,
+  input: AppInputResult,
+  layout: AppLayoutResult,
+  terminalStore: TerminalStore,
+): AppCommandBindings {
+  return useMemo(
+    () => buildAppCommands(dialogs, input, layout, terminalStore),
+    [dialogs, input, layout, terminalStore],
+  );
+}
+
+export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
+  debug.debug('AppContainer architecture active (v2)');
+  const {
+    dialogStore,
+    terminalStore,
+    turnStore,
+    settingsStore,
+    dialogOpeners,
+  } = useAppStores(props.slashCommandRuntime);
+  const bootstrap = useAppBootstrap({
+    ...props,
+    terminalStore,
+    turnStore,
+    settingsStore,
+  });
+  const dialogs = useAppDialogsRuntime(
+    props,
+    bootstrap,
+    dialogStore,
+    dialogOpeners,
+    terminalStore,
+    settingsStore,
+    turnStore,
+  );
   const input = useAppInput({
-    ...buildInputParams(
-      bootstrap,
-      dialogs,
-      props.appState,
-      props.appDispatch,
-      props.slashCommandRuntime,
-    ),
+    uiRuntime: props.uiRuntime,
+    streamRuntime: bootstrap.streamRuntime,
+    slashCommandRuntime: props.slashCommandRuntime,
+    agent: props.agent,
+    settings: props.settings,
+    runtime: bootstrap.runtime,
+    subagentManager: props.uiRuntime.app.getSubagentManager(),
+    turnStore,
+    recordingIntegrationRef: bootstrap.recordingIntegrationRef,
+    recordingSwapCallbacks: bootstrap.recordingSwapCallbacks,
+    recordingIntegration: props.recordingIntegration,
+    runtimeMessageBus: props.runtimeMessageBus,
+    setIdePromptAnswered: bootstrap.setIdePromptAnswered,
+    setLlxprtMdFileCount: bootstrap.setLlxprtMdFileCount,
+    dialogs: dialogOpeners,
+    store: dialogStore,
+    terminalStore,
+    settingsStore,
+    appState: props.appState,
+    appDispatch: props.appDispatch,
     operationLifecycle: props.operationLifecycle,
   });
-  const layout = useAppLayout(buildLayoutParams(bootstrap, dialogs, input));
-  useUnconfiguredProviderGuidance({
-    hasActiveProvider:
-      props.uiRuntime.model.getProviderManager()?.hasActiveProvider() ?? false,
-    addItem: bootstrap.addItem,
-    isWelcomeDialogOpen: dialogs.isWelcomeDialogOpen,
+  const layout = useAppLayout({
+    uiRuntime: bootstrap.uiRuntime,
+    settings: props.settings,
+    clearConsoleMessagesState: bootstrap.clearConsoleMessagesState,
+    turnStore,
+    store: dialogStore,
+    terminalStore,
+    settingsStore,
   });
-  const r: HookResults = { bootstrap, dialogs, input, layout };
-  const uiState = useUIStateBuilder({
-    ...buildUIStateParamsCore(r, props.slashCommandRuntime),
-    ...buildUIStateParamsExtra(r),
-  });
-  const uiActions = useUIActionsBuilder(buildUIActionsParams(r));
+  useUnconfiguredGuidance(props, turnStore, dialogStore);
+  const appCommands = useAppCommands(dialogs, input, layout, terminalStore);
   return (
-    <UIStateProvider value={uiState}>
-      <UIActionsProvider value={uiActions}>
-        <DefaultAppLayout
-          uiRuntime={bootstrap.uiRuntime}
-          slashCommandRuntime={props.slashCommandRuntime}
-          settings={bootstrap.settings}
-          startupWarnings={bootstrap.startupWarnings}
-          version={props.version}
-          nightly={bootstrap.nightly}
-          mainControlsRef={layout.mainControlsRef}
-          availableTerminalHeight={layout.availableTerminalHeight}
-          contextFileNames={layout.contextFileNames}
-          updateInfo={bootstrap.updateInfo}
-        />
-      </UIActionsProvider>
-    </UIStateProvider>
+    <AppRuntimeView
+      runtimeMessageBus={props.runtimeMessageBus}
+      slashCommandRuntime={props.slashCommandRuntime}
+      version={props.version}
+      uiRuntime={bootstrap.uiRuntime}
+      settings={bootstrap.settings}
+      startupWarnings={bootstrap.startupWarnings}
+      nightly={bootstrap.nightly}
+      updateInfo={bootstrap.updateInfo}
+      mainControlsRef={layout.mainControlsRef}
+      rootUiRef={layout.rootUiRef}
+      pendingHistoryItemRef={layout.pendingHistoryItemRef}
+      contextFileNames={layout.contextFileNames}
+      appCommands={appCommands}
+      dialogStore={dialogStore}
+      terminalStore={terminalStore}
+      turnStore={turnStore}
+      settingsStore={settingsStore}
+    />
   );
 };
+
+interface AppRuntimeViewProps extends DefaultAppLayoutProps {
+  appCommands: AppCommandBindings;
+  dialogStore: DialogStore;
+  terminalStore: TerminalStore;
+  turnStore: TurnStore;
+  settingsStore: SettingsProfileStore;
+}
+
+function AppRuntimeView({
+  appCommands,
+  dialogStore,
+  terminalStore,
+  turnStore,
+  settingsStore,
+  ...layoutProps
+}: AppRuntimeViewProps): React.ReactNode {
+  return (
+    <TerminalProvider store={terminalStore}>
+      <TurnProvider store={turnStore}>
+        <SettingsProfileProvider store={settingsStore}>
+          <DialogProvider store={dialogStore}>
+            <AppCommandsProvider value={appCommands}>
+              <DefaultAppLayout {...layoutProps} />
+            </AppCommandsProvider>
+          </DialogProvider>
+        </SettingsProfileProvider>
+      </TurnProvider>
+    </TerminalProvider>
+  );
+}

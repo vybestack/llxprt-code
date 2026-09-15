@@ -3,7 +3,7 @@
 - DO NOT COMMIT .llxprt/LLXPRT.md if you have added issue-specific memories. We do not need to save them permanently in the context for all agents.
 - When working on a GitHub issue in this repo, use the llxprt-issue-workflow skill (.llxprt/skills/llxprt-issue-workflow) — it covers branch setup, gh usage, planning placement, subagent delegation, the verification cycle, ocr review, PR creation, CI/CodeRabbit watching, and merge policy.
 - When writing or modifying tests in this repo, use the typescript-test-writing skill (.llxprt/skills/typescript-test-writing); dev-docs/RULES.md is its source of truth.
-- Smoke test profile: stepfun-37. The exact command and when to run it are in the llxprt-issue-workflow skill (verification cycle section).
+- Smoke test profile: zai-glm-flash. The exact command and when to run it are in the llxprt-issue-workflow skill (verification cycle section).
 - DO NOT MERGE PRs YOURSELF. Wait until the user explicitly says to merge. Always report PR status (CI green, threads resolved, ready to merge) and ask for confirmation before merging.
 - When asked to create an issue, do not assign it to the user unless specifically asked.
 - This project is moving to bun/Typescript so no new js files or vitest/node tests should be created, everything should be TS/Bun and a bun test.

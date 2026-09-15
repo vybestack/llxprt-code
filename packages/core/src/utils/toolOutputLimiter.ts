@@ -7,12 +7,18 @@
 import { encoding_for_model } from '@dqbd/tiktoken';
 import { TextDecoder } from 'node:util';
 
+import {
+  parseToolOutputMaxTokens,
+  type ParsedToolOutputMaxTokens,
+} from '@vybestack/llxprt-code-tools/utils/toolOutputMaxTokens.js';
+
+export { DEFAULT_MAX_TOKENS } from '@vybestack/llxprt-code-tools/utils/toolOutputMaxTokens.js';
+
 export interface ToolOutputSettingsProvider {
   getEphemeralSettings(): Record<string, unknown>;
 }
 
 // Default limits
-export const DEFAULT_MAX_TOKENS = 50000;
 export const DEFAULT_TRUNCATE_MODE = 'warn';
 
 export interface MiddleClipResult {
@@ -83,7 +89,7 @@ export function getEffectiveTokenLimit(maxTokens: number): number {
 }
 
 export interface OutputLimitConfig {
-  maxTokens?: number;
+  tokenLimit: ParsedToolOutputMaxTokens;
   truncateMode?: 'warn' | 'truncate' | 'sample';
 }
 
@@ -181,9 +187,9 @@ export function getOutputLimits(
   const ephemeralSettings = config.getEphemeralSettings();
 
   return {
-    maxTokens:
-      (ephemeralSettings['tool-output-max-tokens'] as number | undefined) ??
-      DEFAULT_MAX_TOKENS,
+    tokenLimit: parseToolOutputMaxTokens(
+      ephemeralSettings['tool-output-max-tokens'],
+    ),
     truncateMode:
       (ephemeralSettings['tool-output-truncate-mode'] as
         | 'warn'
@@ -191,26 +197,6 @@ export function getOutputLimits(
         | 'sample'
         | undefined) ?? DEFAULT_TRUNCATE_MODE,
   };
-}
-
-function isDisabledMaxTokens(
-  rawMaxTokens: unknown,
-  maxTokens: number,
-): boolean {
-  return rawMaxTokens === false || rawMaxTokens === '' || maxTokens === 0;
-}
-
-function shouldSkipTruncation(
-  rawMaxTokens: unknown,
-  maxTokens: number,
-  tokens: number,
-  effectiveLimit: number,
-): boolean {
-  return (
-    isDisabledMaxTokens(rawMaxTokens, maxTokens) ||
-    Number.isNaN(maxTokens) ||
-    tokens <= effectiveLimit
-  );
 }
 
 function truncateWarn(
@@ -257,7 +243,7 @@ function sampleLines(
   content: string,
   originalTokens: number,
   effectiveLimit: number,
-  maxTokens: number | undefined,
+  maxTokens: number,
   tokens: number,
   encodedContent: Uint32Array | null,
 ): TruncatedOutput {
@@ -305,23 +291,24 @@ export function limitOutputTokens(
   config: ToolOutputSettingsProvider,
   toolName: string,
 ): TruncatedOutput {
-  const limits = getOutputLimits(config);
-  const maxTokens = limits.maxTokens ?? DEFAULT_MAX_TOKENS;
-  const rawMaxTokens = limits.maxTokens as unknown;
-  const effectiveLimit = getEffectiveTokenLimit(maxTokens);
+  const { tokenLimit, truncateMode } = getOutputLimits(config);
+  if (tokenLimit.kind === 'disabled') {
+    return { content, wasTruncated: false };
+  }
+  const effectiveLimit = getEffectiveTokenLimit(tokenLimit.maxTokens);
 
   const encodedContent = encodeText(content);
   const tokens = encodedContent?.length ?? Math.ceil(content.length / 3);
 
-  if (shouldSkipTruncation(rawMaxTokens, maxTokens, tokens, effectiveLimit)) {
+  if (tokens <= effectiveLimit) {
     return { content, wasTruncated: false };
   }
 
   const originalTokens = tokens;
 
-  if (limits.truncateMode === 'warn') {
+  if (truncateMode === 'warn') {
     return truncateWarn(originalTokens, effectiveLimit, toolName);
-  } else if (limits.truncateMode === 'truncate') {
+  } else if (truncateMode === 'truncate') {
     return truncateHard(
       content,
       originalTokens,
@@ -335,7 +322,7 @@ export function limitOutputTokens(
     content,
     originalTokens,
     effectiveLimit,
-    limits.maxTokens,
+    tokenLimit.maxTokens,
     tokens,
     encodedContent,
   );

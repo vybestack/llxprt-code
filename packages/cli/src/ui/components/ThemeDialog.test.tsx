@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,8 +9,8 @@ import { render } from 'ink-testing-library';
 import { ThemeDialog } from './ThemeDialog.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import { SettingScope } from '../../config/settings.js';
-import { UIStateProvider } from '../contexts/UIStateContext.js';
-import type { UIState } from '../contexts/UIStateContext.js';
+import { TerminalProvider } from '../stores/terminal/TerminalContext.js';
+import { createTerminalStore } from '../stores/terminal/terminalStore.js';
 import { KeypressProvider } from '../contexts/KeypressContext.js';
 
 // Mock theme manager
@@ -199,139 +199,23 @@ describe('ThemeDialog', () => {
 
   const mockSettings = createMockSettings();
 
-  const createMockUIState = (
-    terminalBackgroundColor?: string,
-  ): Partial<UIState> => ({
-    terminalBackgroundColor,
-    terminalWidth: 120,
-    terminalHeight: 40,
-    slashCommandRuntime: {} as unknown as UIState['slashCommandRuntime'],
-    settings: mockSettings,
-    history: [],
-    pendingHistoryItems: [],
-    streamingState: {
-      isStreaming: false,
-    } as unknown as UIState['streamingState'],
-    thought: null,
-    buffer: {} as unknown as UIState['buffer'],
-    shellModeActive: false,
-    isThemeDialogOpen: true,
-    isSettingsDialogOpen: false,
-    isAuthDialogOpen: false,
-    isEditorDialogOpen: false,
-    isProviderDialogOpen: false,
-    isImageProviderDialogOpen: false,
-    imageProviderOptions: [],
-    selectedImageProvider: '',
-    isLoadProfileDialogOpen: false,
-    isCreateProfileDialogOpen: false,
-    isProfileListDialogOpen: false,
-    isProfileDetailDialogOpen: false,
-    isProfileEditorDialogOpen: false,
-    isToolsDialogOpen: false,
-    isFolderTrustDialogOpen: false,
-    showWorkspaceMigrationDialog: false,
-    showPrivacyNotice: false,
-    isOAuthCodeDialogOpen: false,
-    isPermissionsDialogOpen: false,
-    isLoggingDialogOpen: false,
-    isSubagentDialogOpen: false,
-    isModelsDialogOpen: false,
-    isSessionBrowserDialogOpen: false,
-    providerOptions: [],
-    selectedProvider: '',
-    currentModel: '',
-    profiles: [],
-    toolsDialogAction: 'enable',
-    toolsDialogTools: [],
-    toolsDialogDisabledTools: [],
-    workspaceLlxprtExtensions: [],
-    loggingDialogData: { entries: [] },
-    profileListItems: [],
-    selectedProfileName: null,
-    selectedProfileData: null,
-    defaultProfileName: null,
-    activeProfileName: null,
-    profileDialogError: null,
-    profileDialogLoading: false,
-    confirmationRequest: null,
-    confirmUpdateLlxprtExtensionRequests: [],
-    ctrlCPressedOnce: false,
-    ctrlDPressedOnce: false,
-    showEscapePrompt: false,
-    quittingMessages: null,
-    constrainHeight: false,
-    showErrorDetails: false,
-    showToolDescriptions: false,
-    isTodoPanelCollapsed: false,
-    isNarrow: false,
-    vimModeEnabled: false,
-    vimMode: undefined,
-    ideContextState: undefined,
-    llxprtMdFileCount: 0,
-    branchName: undefined,
-    errorCount: 0,
-    consoleMessages: [],
-    elapsedTime: 0,
-    currentLoadingPhrase: undefined,
-    showAutoAcceptIndicator:
-      'off' as unknown as UIState['showAutoAcceptIndicator'],
-    tokenMetrics: {
-      tokensPerMinute: 0,
-      throttleWaitTimeMs: 0,
-      sessionTokenTotal: 0,
-    },
-    historyTokenCount: 0,
-    initError: null,
-    authError: null,
-    themeError: null,
-    editorError: null,
-    isProcessing: false,
-    isInputActive: false,
-    isFocused: true,
-    rootUiRef: { current: null },
-    pendingHistoryItemRef: { current: null },
-    slashCommands: undefined,
-    commandContext: {} as unknown as UIState['commandContext'],
-    shouldShowIdePrompt: false,
-    currentIDE: undefined,
-    isTrustedFolder: true,
-    isWelcomeDialogOpen: false,
-    welcomeState: 'initial' as unknown as UIState['welcomeState'],
-    welcomeAvailableProviders: [],
-    welcomeAvailableModels: [],
-    inputHistory: [],
-    staticKey: 0,
-    debugMessage: '',
-    showDebugProfiler: false,
-    copyModeEnabled: false,
-    footerHeight: 0,
-    placeholder: '',
-    availableTerminalHeight: 40,
-    queueErrorMessage: null,
-    renderMarkdown: true,
-    activeShellPtyId: null,
-    embeddedShellFocused: false,
-    mainAreaWidth: 120,
-    inputWidth: 120,
-    suggestionsWidth: 120,
-  });
-
-  const renderThemeDialog = (terminalBackgroundColor?: string) => {
-    const uiState = createMockUIState(terminalBackgroundColor);
-    return render(
+  // ThemeDialog reads the background color from the TerminalStore; every
+  // other store field keeps its default.
+  const renderThemeDialog = (terminalBackgroundColor?: string) =>
+    render(
       <KeypressProvider>
-        <UIStateProvider value={uiState as UIState}>
+        <TerminalProvider
+          store={createTerminalStore({ terminalBackgroundColor })}
+        >
           <ThemeDialog
             onSelect={mockOnSelect}
             onHighlight={mockOnHighlight}
             settings={mockSettings}
             terminalWidth={120}
           />
-        </UIStateProvider>
+        </TerminalProvider>
       </KeypressProvider>,
     );
-  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -431,17 +315,18 @@ describe('ThemeDialog', () => {
     };
 
     const settingsWithCustomTheme = createMockSettings(customThemes);
-    const uiState = createMockUIState('#1E1E2E');
     const { lastFrame } = render(
       <KeypressProvider>
-        <UIStateProvider value={uiState as UIState}>
+        <TerminalProvider
+          store={createTerminalStore({ terminalBackgroundColor: '#1E1E2E' })}
+        >
           <ThemeDialog
             onSelect={mockOnSelect}
             onHighlight={mockOnHighlight}
             settings={settingsWithCustomTheme}
             terminalWidth={120}
           />
-        </UIStateProvider>
+        </TerminalProvider>
       </KeypressProvider>,
     );
 

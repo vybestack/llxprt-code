@@ -14,32 +14,8 @@ import { useKeypress } from '../hooks/useKeypress.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
 import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
-interface LogEntry {
-  timestamp: string;
-  type: 'request' | 'response' | 'tool_call';
-  provider: string;
-  model?: string;
-  conversationId?: string;
-  messages?: Array<{
-    role: string;
-    content: string;
-  }>;
-  response?: string;
-  tokens?: {
-    input?: number;
-    output?: number;
-  };
-  error?: string;
-  // Tool call specific fields
-  tool?: string;
-  duration?: number;
-  success?: boolean;
-  gitStats?: {
-    linesAdded: number;
-    linesRemoved: number;
-    filesChanged: number;
-  };
-}
+export type { LogEntry } from '../utils/logEntry.js';
+import type { LogEntry } from '../utils/logEntry.js';
 
 interface LoggingDialogProps {
   entries: LogEntry[];
@@ -125,7 +101,14 @@ function getEntryMainContent(entry: LogEntry, contentWidth: number): string {
   if (entry.type === 'request' && entry.messages) {
     const lastMessage = entry.messages.at(-1);
     if (lastMessage) {
-      return formatContent(lastMessage.content, contentWidth);
+      const text =
+        'blocks' in lastMessage
+          ? lastMessage.blocks
+              .filter((block) => block.type === 'text')
+              .map((block) => block.text ?? '')
+              .join('\n')
+          : lastMessage.content;
+      return formatContent(text, contentWidth);
     }
   } else if (entry.type === 'response' && entry.response) {
     return formatContent(entry.response, contentWidth);

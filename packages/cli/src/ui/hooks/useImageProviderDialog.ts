@@ -10,65 +10,52 @@ import {
   listImageProviders,
   pinImageProvider,
 } from '../commands/providerSelection.js';
-import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
-import type { AppState } from '../reducers/appReducer.js';
 import { MessageType } from '../types.js';
+import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 
 interface UseImageProviderDialogParams {
   settings: LoadedSettings;
-  appState: AppState;
-  addMessage: (message: {
+  addMessage: (msg: {
     type: MessageType;
     content: string;
     timestamp: Date;
   }) => void;
+  dialogs: DialogOpeners;
 }
 
-interface ImageProviderDialogState {
-  showDialog: boolean;
-  providers: string[];
-  currentProvider: string;
-  openDialog: () => void;
-  closeDialog: () => void;
-  handleSelect: (alias: string) => void;
-}
-
-export function useImageProviderDialog({
+/**
+ * Image-provider picker mirroring useProviderDialog: the alias menu comes
+ * from loadProviderAliasEntries(), the effective selection is the pinned
+ * imageProvider setting falling back to the active text provider, and a
+ * selection pins through the shared pinImageProvider path.
+ */
+export const useImageProviderDialog = ({
   settings,
-  appState,
   addMessage,
-}: UseImageProviderDialogParams): ImageProviderDialogState {
-  const dispatch = useAppDispatch();
+  dialogs,
+}: UseImageProviderDialogParams) => {
   const runtime = useRuntimeApi();
   const [providers, setProviders] = useState<string[]>([]);
-  const [currentProvider, setCurrentProvider] = useState('');
-  const closeDialog = useCallback(
-    () => dispatch({ type: 'CLOSE_DIALOG', payload: 'imageProvider' }),
-    [dispatch],
-  );
-  const reportError = useCallback(
-    (error: unknown) => {
-      addMessage({
-        type: MessageType.ERROR,
-        content: error instanceof Error ? error.message : String(error),
-        timestamp: new Date(),
-      });
-    },
-    [addMessage],
-  );
+  const [currentProvider, setCurrentProvider] = useState<string>('');
+
   const openDialog = useCallback(() => {
     try {
       setProviders(listImageProviders());
       setCurrentProvider(
         settings.merged.imageProvider ?? runtime.getActiveProviderName(),
       );
-      dispatch({ type: 'OPEN_DIALOG', payload: 'imageProvider' });
-    } catch (error) {
-      reportError(error);
-      closeDialog();
+    } catch (e) {
+      addMessage({
+        type: MessageType.ERROR,
+        content: e instanceof Error ? e.message : String(e),
+        timestamp: new Date(),
+      });
+      return;
     }
-  }, [settings, runtime, dispatch, reportError, closeDialog]);
+    dialogs.imageProvider.open({});
+  }, [addMessage, dialogs, runtime, settings]);
+
   const handleSelect = useCallback(
     (alias: string) => {
       try {
@@ -78,20 +65,23 @@ export function useImageProviderDialog({
           content: `Image provider set to ${alias}`,
           timestamp: new Date(),
         });
-      } catch (error) {
-        reportError(error);
+      } catch (e) {
+        addMessage({
+          type: MessageType.ERROR,
+          content: e instanceof Error ? e.message : String(e),
+          timestamp: new Date(),
+        });
       } finally {
-        closeDialog();
+        dialogs.imageProvider.close();
       }
     },
-    [settings, runtime, addMessage, reportError, closeDialog],
+    [addMessage, dialogs, runtime, settings],
   );
+
   return {
-    showDialog: appState.openDialogs.imageProvider,
+    openDialog,
     providers,
     currentProvider,
-    openDialog,
-    closeDialog,
     handleSelect,
   };
-}
+};

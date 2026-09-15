@@ -7,11 +7,10 @@
 import { listTextProviders } from '../commands/providerSelection.js';
 import { useCallback, useState } from 'react';
 import { MessageType } from '../types.js';
-import { useAppDispatch } from '../contexts/AppDispatchContext.js';
-import { type AppState } from '../reducers/appReducer.js';
+import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import { type RecordingIntegration } from '@vybestack/llxprt-code-core';
 import { NO_ACTIVE_PROVIDER_ERROR_MESSAGE } from '@vybestack/llxprt-code-providers/runtime.js';
-import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 
 interface UseProviderDialogParams {
   addMessage: (msg: {
@@ -19,55 +18,16 @@ interface UseProviderDialogParams {
     content: string;
     timestamp: Date;
   }) => void;
-  onProviderChange?: () => void;
-  appState: AppState;
-  onClear?: () => void;
+  dialogs: DialogOpeners;
   recordingIntegration?: RecordingIntegration;
-}
-
-type AddMessage = UseProviderDialogParams['addMessage'];
-type RuntimeApi = ReturnType<typeof useRuntimeApi>;
-type ProviderSwitchResult = Awaited<ReturnType<RuntimeApi['setProvider']>>;
-
-interface ProviderSwitchNotificationParams {
-  addMessage: AddMessage;
-  prevProvider: string;
-  providerName: string;
-  result: ProviderSwitchResult;
-  runtime: RuntimeApi;
-  recordingIntegration?: RecordingIntegration;
-}
-
-function notifyProviderSwitch({
-  addMessage,
-  prevProvider,
-  providerName,
-  result,
-  runtime,
-  recordingIntegration,
-}: ProviderSwitchNotificationParams) {
-  addMessage({
-    type: MessageType.INFO,
-    content: `Switched from ${prevProvider || 'none'} to ${providerName}`,
-    timestamp: new Date(),
-  });
-
-  for (const info of result.infoMessages) {
-    addMessage({
-      type: MessageType.INFO,
-      content: info,
-      timestamp: new Date(),
-    });
-  }
-
-  recordingIntegration?.recordProviderSwitch(
-    result.nextProvider,
-    result.defaultModel ?? runtime.getActiveModelName(),
-  );
 }
 
 function addProviderError(
-  addMessage: AddMessage,
+  addMessage: (msg: {
+    type: MessageType;
+    content: string;
+    timestamp: Date;
+  }) => void,
   message: string,
   error: unknown,
 ) {
@@ -89,7 +49,9 @@ function isNoActiveProviderSignal(error: unknown): boolean {
  * empty-state signal thrown by getActiveProviderName() is treated as "no
  * selection"; any other runtime failure propagates so callers can report it.
  */
-function resolveActiveProviderName(runtime: RuntimeApi): string {
+function resolveActiveProviderName(
+  runtime: ReturnType<typeof useRuntimeApi>,
+): string {
   try {
     return runtime.getActiveProviderName();
   } catch (e) {
@@ -102,14 +64,10 @@ function resolveActiveProviderName(runtime: RuntimeApi): string {
 
 export const useProviderDialog = ({
   addMessage,
-  onProviderChange,
-  appState,
-  onClear,
+  dialogs,
   recordingIntegration,
 }: UseProviderDialogParams) => {
-  const appDispatch = useAppDispatch();
   const runtime = useRuntimeApi();
-  const showDialog = appState.openDialogs.provider;
   const [providers, setProviders] = useState<string[]>([]);
   const [currentProvider, setCurrentProvider] = useState<string>('');
 
@@ -125,13 +83,8 @@ export const useProviderDialog = ({
     }
     setProviders(loadedProviders);
     setCurrentProvider(activeProvider);
-    appDispatch({ type: 'OPEN_DIALOG', payload: 'provider' });
-  }, [addMessage, appDispatch, runtime]);
-
-  const closeDialog = useCallback(
-    () => appDispatch({ type: 'CLOSE_DIALOG', payload: 'provider' }),
-    [appDispatch],
-  );
+    dialogs.provider.open({});
+  }, [addMessage, dialogs, runtime]);
 
   const handleSelect = useCallback(
     async (providerName: string) => {
@@ -143,38 +96,55 @@ export const useProviderDialog = ({
          * @pseudocode:cli-runtime.md line 9
          */
         const result = await runtime.setProvider(providerName);
-        onClear?.();
+        recordingIntegration?.recordProviderSwitch(
+          result.nextProvider,
+          result.defaultModel ?? runtime.getActiveModelName(),
+        );
         notifyProviderSwitch({
           addMessage,
           prevProvider: prev,
-          providerName,
-          result,
-          runtime,
-          recordingIntegration,
+          infoMessages: result.infoMessages,
+          providerName: result.nextProvider,
         });
         setCurrentProvider(result.nextProvider);
-        onProviderChange?.();
       } catch (e) {
         addProviderError(addMessage, 'Failed to switch provider', e);
       }
-      appDispatch({ type: 'CLOSE_DIALOG', payload: 'provider' });
+      dialogs.provider.close();
     },
-    [
-      addMessage,
-      onProviderChange,
-      appDispatch,
-      onClear,
-      runtime,
-      recordingIntegration,
-    ],
+    [addMessage, dialogs, runtime, recordingIntegration],
   );
 
   return {
-    showDialog,
     openDialog,
-    closeDialog,
     providers,
     currentProvider,
     handleSelect,
   };
 };
+
+function notifyProviderSwitch({
+  addMessage,
+  prevProvider,
+  providerName,
+  infoMessages,
+}: {
+  addMessage: (msg: {
+    type: MessageType;
+    content: string;
+    timestamp: Date;
+  }) => void;
+  infoMessages: readonly string[];
+  prevProvider: string;
+  providerName: string;
+}) {
+  const from = prevProvider || 'none';
+  addMessage({
+    type: MessageType.INFO,
+    content: `Switched from ${from} to ${providerName}`,
+    timestamp: new Date(),
+  });
+  for (const content of infoMessages) {
+    addMessage({ type: MessageType.INFO, content, timestamp: new Date() });
+  }
+}
