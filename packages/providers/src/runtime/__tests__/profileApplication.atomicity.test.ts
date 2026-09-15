@@ -34,10 +34,7 @@ import {
   isCliStatelessProviderModeEnabledMock,
   isCliRuntimeStatelessReadyMock,
   createProviderKeyStorageMock,
-  keyStorageStub,
-  configStub,
   settingsServiceStub,
-  providerManagerStub,
   resetProfileApplicationStubs,
   restoreGcpEnvVars,
 } from './profileApplicationTestSetup.js';
@@ -103,10 +100,10 @@ describe('applyProfileWithGuards atomicity (#2534 C5)', () => {
     expect((error as Error).message).toBe('injected cascade failure');
 
     // The settings store is byte-identical to the pre-application snapshot.
-    expect(settingsServiceStub.exportForStateSnapshot()).toEqual(
+    expect(settingsServiceStub.exportForStateSnapshot()).toStrictEqual(
       snapshotBefore,
     );
-    expect(settingsServiceStub.getProviderSettings('openai')).toEqual({
+    expect(settingsServiceStub.getProviderSettings('openai')).toStrictEqual({
       'auth-key': 'keep-me',
       model: 'gpt-4',
     });
@@ -129,7 +126,7 @@ describe('applyProfileWithGuards atomicity (#2534 C5)', () => {
     expect(
       settingsServiceStub.getProviderSettings('anthropic')['base-url'],
     ).toBe('https://injected.example');
-    expect(settingsServiceStub.getProviderSettings('openai')).toEqual({
+    expect(settingsServiceStub.getProviderSettings('openai')).toStrictEqual({
       'auth-key': 'old-key',
     });
   });

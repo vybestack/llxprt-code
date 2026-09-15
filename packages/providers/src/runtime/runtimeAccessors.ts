@@ -490,7 +490,7 @@ export function getActiveModelName(): string {
 
   try {
     const provider = getActiveProviderOrThrow();
-    return provider?.getDefaultModel?.() ?? '';
+    return provider.getDefaultModel?.() ?? '';
   } catch {
     return '';
   }
