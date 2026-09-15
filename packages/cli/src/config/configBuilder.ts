@@ -9,6 +9,7 @@ import {
   Config,
   normalizeShellReplacement,
   type ApprovalMode,
+  type ConfigParameters,
   type OutputFormat,
   type SandboxConfig,
   type PolicyEngineConfig,
@@ -180,12 +181,16 @@ function buildToolConfig(
   };
 }
 
+// An explicit ConfigParameters return type keeps literal-typed properties
+// (settingsServiceOwnership) from widening to string; the widened type passes
+// noEmit typecheck but is rejected by declaration emit at the Config
+// constructor boundary (#2534).
 function buildSessionBaseArgs(
   input: ConfigBuildInput,
   toolConfig: ReturnType<typeof buildToolConfig>,
   telemetry: ReturnType<typeof buildTelemetryConfig>,
   sanitizationConfig: ReturnType<typeof buildSanitizationConfig>,
-) {
+): ConfigParameters {
   const {
     sessionId,
     cwd,
