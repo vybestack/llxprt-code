@@ -132,25 +132,6 @@ describe('SchemaValidator compiled-validator retention', () => {
   });
 
   /** @plan PLAN-20260826-AJVCACHE.P02 @requirement REQ-3361-02 */
-  it('keeps requireOne enforcement across repeated validations', () => {
-    const schema = {
-      type: 'object',
-      properties: {
-        old_string: { type: 'string' },
-        new_string: { type: 'string' },
-      },
-      requireOne: [['old_string', 'new_string']],
-    };
-
-    for (let index = 0; index < 5; index += 1) {
-      expect(SchemaValidator.validate(schema, { old_string: 'a' })).toBeNull();
-    }
-
-    const error = SchemaValidator.validate(schema, {});
-    expect(error).toContain('at least one of required properties');
-  });
-
-  /** @plan PLAN-20260826-AJVCACHE.P02 @requirement REQ-3361-02 */
   it('keeps draft-07 dialect selection across repeated validations', () => {
     const schema = {
       $schema: 'http://json-schema.org/draft-07/schema#',

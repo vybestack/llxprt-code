@@ -8,6 +8,23 @@ import { describe, expect, it } from 'bun:test';
 import { SchemaValidator } from './schemaValidator.js';
 
 describe('SchemaValidator', () => {
+  /** @plan:PLAN-20260914-ISSUE3293.P2 @requirement:REQ-3293-02 */
+  it('treats requireOne as an unknown keyword, not an enforced constraint', () => {
+    // Issue #3293: the keyword is no longer recognized; schemas must use
+    // standard JSON Schema keywords (anyOf/required) to express constraints.
+    const schema = {
+      type: 'object',
+      properties: {
+        old_string: { type: 'string' },
+        new_string: { type: 'string' },
+      },
+      requireOne: [['old_string', 'new_string']],
+    };
+
+    expect(SchemaValidator.validate(schema, {})).toBeNull();
+    expect(SchemaValidator.validate(schema, { old_string: 'a' })).toBeNull();
+  });
+
   // Upstream tests for relaxed validation
   it('should allow any params if schema is undefined', () => {
     const params = {

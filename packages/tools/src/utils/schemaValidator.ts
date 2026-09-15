@@ -242,7 +242,6 @@ interface ExtendedSchema {
   type?: string;
   properties?: Record<string, unknown>;
   required?: string[];
-  requireOne?: string[][];
   [key: string]: unknown;
 }
 
@@ -260,12 +259,11 @@ interface ExtendedSchema {
  */
 const ajvSchemaCache = new WeakMap<ExtendedSchema, ExtendedSchema>();
 
-/** Strips the internal keywords Ajv must not see. */
+/** Strips `$schema` so Ajv does not resolve unrecognized draft URIs. */
 function deriveAjvSchema(schema: unknown): ExtendedSchema {
   // Spreading a primitive yields `{}`, which is what this code has always
   // produced for a boolean schema. Preserved deliberately.
   const ajvSchema = { ...(schema as ExtendedSchema) };
-  delete ajvSchema.requireOne;
   delete ajvSchema.$schema;
   return ajvSchema;
 }
@@ -321,19 +319,6 @@ export class SchemaValidator {
     }
 
     const extSchema = schema as ExtendedSchema;
-    if (extSchema.requireOne) {
-      for (const oneOfGroup of extSchema.requireOne) {
-        const hasOne = oneOfGroup.some(
-          (prop) =>
-            (data as Record<string, unknown>)[prop] !== undefined &&
-            (data as Record<string, unknown>)[prop] !== null &&
-            (data as Record<string, unknown>)[prop] !== '',
-        );
-        if (!hasOne) {
-          return `params must have at least one of required properties: ${oneOfGroup.join(', ')}`;
-        }
-      }
-    }
 
     const declaredSchemaUri = extSchema.$schema;
     const instance = isDraft07SchemaUri(declaredSchemaUri)

@@ -22,7 +22,6 @@ const PARAMETER_SCHEMA = {
     new_string: { type: 'string' },
   },
   required: ['path'],
-  requireOne: [['old_string', 'new_string']],
 };
 
 class ProbeTool extends BaseDeclarativeTool<Params, ToolResult> {
@@ -50,21 +49,16 @@ describe('BaseDeclarativeTool schema identity', () => {
     expect(second.parametersJsonSchema).toBe(first.parametersJsonSchema);
   });
 
-  /** @plan PLAN-20260826-AJVCACHE.P03 @requirement REQ-3361-03 */
-  it('still strips requireOne from the schema sent to the model', () => {
+  /** @plan:PLAN-20260914-ISSUE3293.P2 @requirement:REQ-3293-02 */
+  it('sends the declared parameter schema content to the model', () => {
+    const declaredSchema = structuredClone(PARAMETER_SCHEMA);
     const tool = new ProbeTool();
 
-    const parameters = tool.schema.parametersJsonSchema as Record<
-      string,
-      unknown
-    >;
+    const parameters = tool.schema.parametersJsonSchema;
 
-    expect(parameters['requireOne']).toBeUndefined();
-    expect(parameters['required']).toStrictEqual(['path']);
+    expect(parameters).toStrictEqual(PARAMETER_SCHEMA);
     // The source schema must not be mutated by the derivation.
-    expect(
-      (PARAMETER_SCHEMA as Record<string, unknown>)['requireOne'],
-    ).toBeDefined();
+    expect(PARAMETER_SCHEMA).toStrictEqual(declaredSchema);
   });
 
   /** @plan PLAN-20260826-AJVCACHE.P03 @requirement REQ-3361-03 */
@@ -83,23 +77,6 @@ describe('BaseDeclarativeTool schema identity', () => {
     expect(missingRequired).not.toBeNull();
     expect(missingRequired).toContain('path');
     expect(tool.validateToolParams({} as Params)).toBe(missingRequired);
-  });
-
-  /**
-   * Characterises existing behaviour rather than endorsing it: the `schema`
-   * getter strips `requireOne` before returning, and `validateToolParams`
-   * validates against that stripped schema, so `SchemaValidator`'s `requireOne`
-   * branch is unreachable through this path. Pre-existing on `main` and out of
-   * scope for issue #3361; pinned here so the memoisation cannot be blamed for
-   * it and so a future change is deliberate.
-   *
-   * @plan PLAN-20260826-AJVCACHE.P03
-   * @requirement REQ-3361-03
-   */
-  it('does not enforce requireOne through validateToolParams', () => {
-    const tool = new ProbeTool();
-
-    expect(tool.validateToolParams({ path: '.' } as Params)).toBeNull();
   });
 
   /** @plan PLAN-20260826-AJVCACHE.P03 @requirement REQ-3361-03 */
