@@ -37,7 +37,44 @@ function isIterableBody(
   return typeof Reflect.get(body, Symbol.asyncIterator) === 'function';
 }
 
+async function readBodyBytes(response: Response): Promise<readonly number[]> {
+  const body = requireBody(response);
+  if (!isIterableBody(body)) throw new Error('Expected iterable body');
+  const bytes: number[] = [];
+  for await (const chunk of body) bytes.push(...chunk);
+  return bytes;
+}
+
 describe('reader-based OpenAI fetch', () => {
+  it('serves full payload bytes from both original and clone bodies when string-backed', async () => {
+    const wrapped = wrapResponseWithReaderIteratedBody(new Response('abc'));
+    const clone = wrapped.clone();
+    const [originalBytes, cloneBytes] = await Promise.all([
+      readBodyBytes(wrapped),
+      readBodyBytes(clone),
+    ]);
+    expect(originalBytes).toStrictEqual([97, 98, 99]);
+    expect(cloneBytes).toStrictEqual([97, 98, 99]);
+  });
+
+  it('serves full payload bytes from both original and clone bodies when stream-backed', async () => {
+    const wrapped = wrapResponseWithReaderIteratedBody(
+      new Response(byteStream()),
+    );
+    const clone = wrapped.clone();
+    const [originalBytes, cloneBytes] = await Promise.all([
+      readBodyBytes(wrapped),
+      readBodyBytes(clone),
+    ]);
+    expect(originalBytes).toStrictEqual([0, 255, 195, 184, 10]);
+    expect(cloneBytes).toStrictEqual([0, 255, 195, 184, 10]);
+  });
+
+  it('returns the same wrapped body reference while the underlying body is unchanged', () => {
+    const wrapped = wrapResponseWithReaderIteratedBody(new Response('abc'));
+    expect(wrapped.body).toBe(wrapped.body);
+  });
+
   it('replaces native iteration while preserving every byte', async () => {
     const original = new Response(byteStream());
     const wrapped = await createReaderBasedStreamFetch(responseFetch(original))(

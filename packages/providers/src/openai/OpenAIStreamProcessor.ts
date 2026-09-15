@@ -491,7 +491,11 @@ async function* processStreamingChunk(
       chunkCount: state.chunkCount,
       frameKeys: Object.keys(chunkRecord).sort(),
       hasUsage: Boolean(chunk.usage),
-      object: chunkRecord.object,
+      // Object tags are unvalidated external data; keep only a short string
+      // so the diagnostic never retains raw frame payloads.
+      ...(typeof chunkRecord.object === 'string'
+        ? { object: chunkRecord.object.slice(0, 64) }
+        : {}),
     });
     return;
   }

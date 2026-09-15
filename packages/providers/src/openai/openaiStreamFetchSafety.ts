@@ -22,7 +22,13 @@ export function createReaderBasedStreamFetch(
 export function wrapResponseWithReaderIteratedBody(
   response: Response,
 ): Response {
-  if (!response.body) return response;
+  const initialBody = response.body;
+  if (!initialBody) return response;
+  // Body content is served through bodySource so clone() can swap it without
+  // disturbing immutable metadata, which stays delegated to the original.
+  let bodySource = response;
+  let currentBody = initialBody;
+  let wrappedBody = createReaderIteratedBody(currentBody);
   return {
     get status() {
       return response.status;
@@ -46,16 +52,44 @@ export function wrapResponseWithReaderIteratedBody(
       return response.headers;
     },
     get bodyUsed() {
-      return response.bodyUsed;
+      return bodySource.bodyUsed;
     },
-    body: createReaderIteratedBody(response.body),
-    clone: () => wrapResponseWithReaderIteratedBody(response.clone()),
-    text: () => response.text(),
-    json: () => response.json(),
-    arrayBuffer: () => response.arrayBuffer(),
-    bytes: () => response.bytes(),
-    blob: () => response.blob(),
-    formData: () => response.formData(),
+    // Re-read bodySource.body at access time and re-wrap when the underlying
+    // stream reference changed, memoizing per reference so wrapper identity
+    // stays stable while the underlying body is unchanged.
+    get body() {
+      const body = bodySource.body;
+      if (body === null) return null;
+      if (body !== currentBody) {
+        currentBody = body;
+        wrappedBody = createReaderIteratedBody(body);
+      }
+      return wrappedBody;
+    },
+    // Delegating to response.clone() lets the runtime strand the original's
+    // materialized stream (observed on Bun: string-backed bodies keep the
+    // same reference but are closed, stream-backed ones get replaced), so
+    // tee our current body instead and serve each side from its own branch.
+    clone: () => {
+      const [originalBranch, cloneBranch] = currentBody.tee();
+      const responseInit = {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      };
+      bodySource = new Response(originalBranch, responseInit);
+      currentBody = originalBranch;
+      wrappedBody = createReaderIteratedBody(originalBranch);
+      return wrapResponseWithReaderIteratedBody(
+        new Response(cloneBranch, responseInit),
+      );
+    },
+    text: () => bodySource.text(),
+    json: () => bodySource.json(),
+    arrayBuffer: () => bodySource.arrayBuffer(),
+    bytes: () => bodySource.bytes(),
+    blob: () => bodySource.blob(),
+    formData: () => bodySource.formData(),
   };
 }
 
