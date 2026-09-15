@@ -24,7 +24,9 @@ import {
  * Resolves the active image-operation backend, or null when none is available.
  * This is the capability seam all three entry points share.
  */
-export type ImageOperationBackendResolver = () => ImageOperationBackend | null;
+export type ImageOperationBackendResolver = (
+  imageProfileName?: string,
+) => ImageOperationBackend | null | Promise<ImageOperationBackend | null>;
 
 /**
  * Dependencies for {@link runImageOperation}.
@@ -170,7 +172,9 @@ export async function runImageOperation(
     () => resolveInputPaths(request.inputPaths, deps.workspaceRoot),
   );
 
-  const backend = deps.resolveBackend();
+  const backend = await inStage('capability', 'Image backend resolution', () =>
+    deps.resolveBackend(input.imageProfileName),
+  );
   if (backend === null) {
     throw new ImageOperationError(
       'No image-capable backend is registered for the current setup.',
@@ -221,6 +225,13 @@ export async function runImageOperation(
     backend: backend.name,
     provider: backend.provider,
     model: backend.model,
+    ...(backendResult.quality === undefined
+      ? {}
+      : { quality: backendResult.quality }),
+    ...(backendResult.size === undefined ? {} : { size: backendResult.size }),
+    ...(backendResult.usage === undefined
+      ? {}
+      : { usage: backendResult.usage }),
     inputPaths: resolvedInputPaths,
     media: {
       mimeType: backendResult.mimeType,

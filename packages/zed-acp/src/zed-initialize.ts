@@ -65,5 +65,5 @@ export async function authenticateZedAgent(
 }
 
 async function getAvailableProfileNames(config: Config): Promise<string[]> {
-  return (await config.getProfileManager()?.listProfiles()) ?? [];
+  return (await config.getProfileManager()?.listModelProfiles()) ?? [];
 }

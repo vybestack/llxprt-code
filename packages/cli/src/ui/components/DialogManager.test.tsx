@@ -42,6 +42,7 @@ import {
   type DialogStore,
   type DialogRequest,
 } from '../stores/dialog/dialogStore.js';
+import type { SettingsProfileState } from '../stores/settings/settingsStore.js';
 
 // --- Stateful runtime fake ---
 interface FakeRuntimeState {
@@ -337,7 +338,10 @@ function DialogManagerHarness({ store }: { store: DialogStore }) {
   );
 }
 
-function renderDialogManager(requests: DialogRequest[]): string {
+function renderDialogManager(
+  requests: DialogRequest[],
+  settingsProfile?: Partial<SettingsProfileState>,
+): string {
   const store = createDialogStore();
   for (const request of requests) store.commands.openDialog(request);
   const view = renderWithProviders(<DialogManagerHarness store={store} />, {
@@ -359,6 +363,7 @@ function renderDialogManager(requests: DialogRequest[]): string {
         },
       ],
       toolsDialogDisabledTools: [],
+      ...settingsProfile,
     },
   });
   const frame = view.lastFrame() ?? '';
@@ -383,6 +388,21 @@ describe('DialogManager render dispatch', () => {
     expect(frame).not.toContain(LOAD_PROFILE_MARKER);
     expect(frame).not.toContain(CREATE_PROFILE_MARKER);
     expect(frame).not.toContain(TOOLS_MARKER);
+  });
+
+  it('renders image aliases and the effective image selection without chat providers', () => {
+    const frame = renderDialogManager(
+      [{ kind: 'imageProvider', payload: {} }],
+      {
+        imageProviderOptions: ['codex', 'local-art'],
+        selectedImageProvider: 'local-art',
+      },
+    );
+    expect(frame).toContain('Image provider');
+    expect(frame).toContain('Selected: local-art');
+    expect(frame).toContain('codex');
+    expect(frame).not.toContain(PROVIDER_MARKER);
+    expect(frame).not.toContain('ollama');
   });
 
   it('renders the load-profile dialog when only its request is open', () => {

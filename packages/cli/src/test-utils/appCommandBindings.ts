@@ -61,6 +61,7 @@ export function createAppCommandBindings(
     handleOAuthCodeSubmit: unusedCommand,
     handleEditorSelect: unusedCommand,
     handleProviderSelect: unusedCommand,
+    handleImageProviderSelect: unusedCommand,
     handleProfileSelect: unusedCommand,
     viewProfileDetail: unusedCommand,
     closeProfileDetailDialog: unusedCommand,

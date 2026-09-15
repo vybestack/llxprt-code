@@ -276,7 +276,7 @@ describe('ZedAgent.authenticate credential cache', () => {
   function createAgent(): InstanceType<typeof ZedAgent> {
     const mockConfig = {
       getProfileManager: () => ({
-        listProfiles: async () => ['alpha', 'beta'],
+        listModelProfiles: async () => ['alpha', 'beta'],
       }),
       getEphemeralSetting: () => undefined,
     };

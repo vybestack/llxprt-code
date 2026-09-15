@@ -211,6 +211,7 @@ export function buildAppCommands(
     handleOAuthCodeSubmit: input.handleOAuthCodeSubmit,
     handleEditorSelect: dialogs.handleEditorSelect,
     handleProviderSelect: dialogs.handleProviderSelect,
+    handleImageProviderSelect: dialogs.handleImageProviderSelect,
     handleProfileSelect: (...args) => {
       void dialogs.handleProfileSelect(...args);
     },

@@ -256,6 +256,18 @@ describe('providerSwitch', () => {
       );
     });
 
+    it('defers ModelProfileChanged publication when a profile owns the transition', async () => {
+      const { switchActiveProvider } = await import('./providerSwitch.js');
+      const emitSpy = vi.spyOn(coreEvents, 'emitModelProfileChanged');
+
+      const result = await switchActiveProvider('gemini', {
+        deferProfileNotification: true,
+      });
+
+      expect(result.changed).toBe(true);
+      expect(emitSpy).not.toHaveBeenCalled();
+    });
+
     it('emits ModelProfileChanged with resolved model when modelToApply is empty', async () => {
       const { switchActiveProvider } = await import('./providerSwitch.js');
       const emitSpy = vi.spyOn(coreEvents, 'emitModelProfileChanged');

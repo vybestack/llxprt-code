@@ -103,6 +103,11 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
     'agent.profiles.apply',
     'Loading a profile rebinds the active runtime',
   ),
+  runtime(
+    '/profile reset-image',
+    'agent.profiles.resetActiveImageProfile',
+    'Resetting the image profile restores the active runtime default image backend',
+  ),
   subpath(
     '/profile save',
     'saveCurrentProfile',
@@ -333,6 +338,11 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
     '/set',
     'agent.setEphemeralSetting',
     'Ephemeral settings affect the active run configuration',
+  ),
+  runtime(
+    '/setimage',
+    'agent.setEphemeralSetting',
+    'Image-scoped settings and model parameters affect the active image backend configuration',
   ),
   runtime(
     '/dumpcontext',

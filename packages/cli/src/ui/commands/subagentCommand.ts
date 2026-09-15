@@ -189,13 +189,13 @@ const subagentSchema = [
       const profileManager = ctx.services.profileManager;
       if (
         !profileManager ||
-        typeof profileManager.listProfiles !== 'function'
+        typeof profileManager.listModelProfiles !== 'function'
       ) {
         return [];
       }
 
       try {
-        const profiles = await profileManager.listProfiles();
+        const profiles = await profileManager.listModelProfiles();
 
         return profiles.map((name) => ({
           value: name,

@@ -366,7 +366,7 @@ export async function saveLoadBalancerProfile(
 
   try {
     const runtime = getRuntimeApi();
-    const availableProfiles = await runtime.listSavedProfiles();
+    const availableProfiles = await runtime.listSavedProfiles('standard');
 
     const missing = findMissingProfile(selectedProfiles, availableProfiles);
     if (missing !== null) {

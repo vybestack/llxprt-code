@@ -26,6 +26,7 @@
 import {
   type Config,
   DebugLogger,
+  type ImageProfileRuntimeState,
   type RuntimeProviderManager,
   type RuntimeProvider,
   peekActiveProviderRuntimeContext,
@@ -71,6 +72,7 @@ export interface CliRuntimeServices {
   config: Config;
   providerManager: RuntimeProviderManager;
   profileManager?: ProfileManager;
+  imageProfileState: ImageProfileRuntimeState;
 }
 
 /**
@@ -179,7 +181,13 @@ export function getCliRuntimeServices(): CliRuntimeServices {
     );
   }
   const profileManager = entry.profileManager ?? undefined;
-  return { settingsService, config, providerManager, profileManager };
+  return {
+    settingsService,
+    config,
+    providerManager,
+    profileManager,
+    imageProfileState: entry.imageProfileState,
+  };
 }
 
 function registerAddItemCallback(

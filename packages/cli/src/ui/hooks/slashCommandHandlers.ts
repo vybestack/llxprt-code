@@ -379,6 +379,7 @@ function buildSimpleDialogActions(
     permissions: () => actions.openPermissionsDialog(),
     policies: () => actions.openPoliciesDialog(),
     provider: () => actions.openProviderDialog(),
+    imageProvider: () => actions.openImageProviderDialog(),
     loadProfile: () => actions.openLoadProfileDialog(),
     createProfile: () => actions.openCreateProfileDialog(),
     profileList: () => {
@@ -391,6 +392,7 @@ function buildSimpleDialogActions(
     subagent: (data) => openSubagentDialog(actions, data),
     models: (data) =>
       actions.openModelsDialog(data as ModelsDialogData | undefined),
+    imageModels: () => actions.openModelsDialog({ imageMode: true }),
     welcome: () => actions.openWelcomeDialog(),
     sessionBrowser: () => actions.openSessionBrowserDialog(),
   };

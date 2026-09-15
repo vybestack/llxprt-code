@@ -106,6 +106,9 @@ export type ModelsDevApiResponse = z.infer<typeof ModelsDevApiResponseSchema>;
  */
 
 export const LlxprtModelCapabilitiesSchema = z.object({
+  output: z
+    .array(z.enum(['text', 'audio', 'image', 'video', 'pdf']))
+    .optional(),
   vision: z.boolean(),
   audio: z.boolean(),
   pdf: z.boolean(),

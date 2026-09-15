@@ -14,6 +14,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { createImageProfileRuntimeState } from '@vybestack/llxprt-code-core';
 import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 import type { LoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 
@@ -22,15 +23,28 @@ const realLlxprtCodeSettingsModule = {
 };
 
 const saveProfileMock = vi.fn();
+const injectedManager = {
+  saveLoadBalancerProfile: vi.fn(),
+  deleteProfile: vi.fn(),
+  loadProfile: vi.fn(),
+  saveProfile: saveProfileMock,
+};
+const oauthManager = {
+  configureProactiveRenewalsForProfile: vi.fn(async () => undefined),
+  clearSessionBucket: vi.fn(),
+  getOAuthToken: vi.fn(async () => null),
+};
 
 const runtimeServicesState = {
   activeProviderName: 'load-balancer' as string,
   lbConfig: null as unknown,
   ephemerals: {} as Record<string, unknown>,
+  imageProfileState: createImageProfileRuntimeState(),
 };
 
 void vi.mock('../runtimeAccessors.js', () => ({
   getCliRuntimeServices: vi.fn(() => ({
+    profileManager: injectedManager,
     config: {
       getEphemeralSettings: () => runtimeServicesState.ephemerals,
       getProvider: () => runtimeServicesState.activeProviderName,
@@ -50,8 +64,9 @@ void vi.mock('../runtimeAccessors.js', () => ({
             }
           : null,
     },
+    imageProfileState: runtimeServicesState.imageProfileState,
   })),
-  maybeGetCliOAuthManager: vi.fn(() => null),
+  maybeGetCliOAuthManager: vi.fn(() => oauthManager),
   getActiveModelName: vi.fn(() => 'test-model'),
   getActiveModelParams: vi.fn(() => ({})),
   _internal: {
@@ -71,7 +86,15 @@ void vi.mock('../runtimeAccessors.js', () => ({
 }));
 
 void vi.mock('../profileApplication.js', () => ({
-  applyProfileWithGuards: vi.fn(),
+  applyProfileWithGuards: vi.fn(async () => ({
+    providerName: 'load-balancer',
+    modelName: 'balanced',
+    infoMessages: [],
+    warnings: [],
+    providerChanged: false,
+    didFallback: false,
+    requestedProvider: null,
+  })),
 }));
 
 void vi.mock('@vybestack/llxprt-code-settings', () => {
@@ -86,13 +109,20 @@ void vi.mock('@vybestack/llxprt-code-settings', () => {
   };
 });
 
-const { buildRuntimeProfileSnapshot, saveProfileSnapshot } = await import(
-  '../profileSnapshot.js'
-);
+const {
+  buildRuntimeProfileSnapshot,
+  saveProfileSnapshot,
+  setActiveImageProfile,
+  saveLoadBalancerProfile,
+  getProfileByName,
+  deleteProfileByName,
+  applyProfileSnapshot,
+} = await import('../profileSnapshot.js');
 
 describe('profile save while load balancer is active (issue #2479)', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    setActiveImageProfile(undefined);
     runtimeServicesState.activeProviderName = 'load-balancer';
     runtimeServicesState.ephemerals = {};
     runtimeServicesState.lbConfig = {
@@ -106,6 +136,71 @@ describe('profile save while load balancer is active (issue #2479)', () => {
       lbProfileEphemeralSettings: { 'context-limit': 200000 },
       lbProfileModelParams: {},
     };
+  });
+
+  it('validates direct image selection before replacing runtime state', () => {
+    const profile = {
+      version: 1,
+      type: 'image',
+      backend: 'codex',
+      model: 'gpt-image-2',
+      baseUrl: 'https://chatgpt.com/backend-api/codex',
+      auth: { type: 'oauth', provider: 'codex' },
+    } as const;
+    setActiveImageProfile({ name: 'valid', profile });
+    expect(() =>
+      setActiveImageProfile({
+        name: 'invalid',
+        profile: { ...profile, auth: { type: 'none' } },
+      }),
+    ).toThrow(
+      expect.objectContaining({
+        name: 'ImageBackendAuthModeError',
+        profileName: 'invalid',
+      }),
+    );
+    expect(runtimeServicesState.imageProfileState.getActive()?.name).toBe(
+      'valid',
+    );
+    setActiveImageProfile(undefined);
+    expect(runtimeServicesState.imageProfileState.getActive()).toBeUndefined();
+  });
+
+  it('uses the injected manager for save, get and delete', async () => {
+    const profile = buildRuntimeProfileSnapshot();
+    if (!isLoadBalancerProfile(profile))
+      throw new Error('Expected load balancer');
+    await saveLoadBalancerProfile('balanced', profile);
+    expect(injectedManager.saveLoadBalancerProfile).toHaveBeenCalledWith(
+      'balanced',
+      profile,
+    );
+    injectedManager.loadProfile.mockResolvedValue({
+      version: 1,
+      provider: 'openai',
+      model: 'chat',
+      modelParams: {},
+      ephemeralSettings: {},
+    });
+    await getProfileByName('chat');
+    expect(injectedManager.loadProfile).toHaveBeenCalledWith('chat');
+    await deleteProfileByName('chat');
+    expect(injectedManager.deleteProfile).toHaveBeenCalledWith('chat');
+  });
+
+  it('loads failover members through the injected manager', async () => {
+    injectedManager.loadProfile.mockResolvedValue({
+      version: 1,
+      provider: 'anthropic',
+      model: 'chat',
+      modelParams: {},
+      ephemeralSettings: {},
+      auth: { type: 'oauth', buckets: ['one', 'two'] },
+    });
+    await applyProfileSnapshot(buildRuntimeProfileSnapshot());
+    expect(injectedManager.loadProfile).toHaveBeenCalledWith('glm-a');
+    expect(injectedManager.loadProfile).toHaveBeenCalledWith('glm-b');
+    expect(oauthManager.getOAuthToken).toHaveBeenCalledWith('anthropic');
   });
 
   it('serializes the active load balancer as a genuine loadbalancer profile', () => {
@@ -165,6 +260,37 @@ describe('profile save while load balancer is active (issue #2479)', () => {
       } as never),
     ).rejects.toThrow(/corrupt profile/);
     expect(saveProfileMock).not.toHaveBeenCalled();
+  });
+
+  it('captures the active image profile reference in a model profile', async () => {
+    runtimeServicesState.activeProviderName = 'anthropic';
+    setActiveImageProfile({
+      name: 'artwork',
+      profile: {
+        version: 1,
+        type: 'image',
+        backend: 'codex',
+        model: 'gpt-image-2.5-flare',
+        baseUrl: 'https://chatgpt.com/backend-api/codex',
+        auth: { type: 'oauth', provider: 'codex' },
+        defaults: { quality: 'high', size: 'auto', background: 'auto' },
+      },
+    });
+
+    const saved = await saveProfileSnapshot('chat');
+
+    expect(saved).toMatchObject({ type: 'model', imageProfile: 'artwork' });
+  });
+
+  it('preserves an explicitly standard profile type when saving', async () => {
+    runtimeServicesState.activeProviderName = 'anthropic';
+
+    const saved = await saveProfileSnapshot('standard-chat', {
+      type: 'standard',
+    });
+
+    expect(saved.type).toBe('standard');
+    expect(saveProfileMock).toHaveBeenCalledWith('standard-chat', saved);
   });
 
   it('standard-provider saves are unaffected', async () => {

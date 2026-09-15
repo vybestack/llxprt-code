@@ -29,6 +29,7 @@ import { LoggingDialog } from './LoggingDialog.js';
 import { SubagentManagerDialog } from './SubagentManagement/index.js';
 import { SubagentView } from './SubagentManagement/types.js';
 import { ModelConfigDialog } from './ModelConfigDialog.js';
+import { ImageModelsDialog } from './ImageModelsDialog.js';
 import { PoliciesDialog } from './PoliciesDialog.js';
 import { useModelDialogHandler } from './modelDialogHandler.js';
 import {
@@ -38,6 +39,7 @@ import {
   renderCreateProfileDialog,
   renderEarlyStoreDialog,
   renderEditorDialog,
+  renderImageProviderDialog,
   renderLoadProfileDialog,
   renderModelsDialog,
   renderOAuthCodeDialog,
@@ -91,6 +93,14 @@ function useDialogData(): DialogData {
   const authError = useStoreSelector(store, (s) => s.authError);
   const providerOptions = useStoreSelector(store, (s) => s.providerOptions);
   const selectedProvider = useStoreSelector(store, (s) => s.selectedProvider);
+  const imageProviderOptions = useStoreSelector(
+    store,
+    (s) => s.imageProviderOptions,
+  );
+  const selectedImageProvider = useStoreSelector(
+    store,
+    (s) => s.selectedImageProvider,
+  );
   const profiles = useStoreSelector(store, (s) => s.profiles);
   const createProfileProviders = useStoreSelector(
     store,
@@ -132,6 +142,8 @@ function useDialogData(): DialogData {
     editorError,
     providerOptions,
     selectedProvider,
+    imageProviderOptions,
+    selectedImageProvider,
     profiles,
     createProfileProviders,
     profileListItems,
@@ -281,6 +293,13 @@ function useDialogManagerState(
     [uiActions],
   );
 
+  const handleImageProviderSelect = useCallback(
+    (alias: string) => {
+      uiActions.handleImageProviderSelect(alias);
+    },
+    [uiActions],
+  );
+
   const handleModelsDialogSelect = useModelDialogHandler(
     runtime,
     addItem,
@@ -307,6 +326,7 @@ function useDialogManagerState(
     handleAuthSelect,
     handleOAuthCodeSubmit,
     handleProviderSelect,
+    handleImageProviderSelect,
     handleModelsDialogSelect,
     handleSessionBrowserSelect,
     activeStoreDialog,
@@ -447,6 +467,12 @@ function renderAccountStoreDialog(
       return renderProviderDialog(uiState, state.handleProviderSelect, () =>
         close('provider'),
       );
+    case 'imageProvider':
+      return renderImageProviderDialog(
+        uiState,
+        state.handleImageProviderSelect,
+        () => close('imageProvider'),
+      );
     default:
       return undefined;
   }
@@ -468,6 +494,16 @@ function renderUtilityStoreDialog(
     case 'privacy':
       return <PrivacyNotice onExit={() => close('privacy')} config={config} />;
     case 'models':
+      if (active.payload.imageMode === true) {
+        return (
+          <Box flexDirection="column">
+            <ImageModelsDialog
+              imageProvider={ctx.settings.merged.imageProvider}
+              onClose={() => close('models')}
+            />
+          </Box>
+        );
+      }
       return renderModelsDialog(
         active.payload,
         state.handleModelsDialogSelect,

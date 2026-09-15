@@ -182,6 +182,7 @@ const STORE_DRIVEN_DIALOG_KINDS = [
   'oauthCode',
   'editor',
   'provider',
+  'imageProvider',
   'loadProfile',
   'createProfile',
   'profileList',

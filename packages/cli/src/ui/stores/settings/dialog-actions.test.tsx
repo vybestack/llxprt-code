@@ -23,6 +23,7 @@ describe('dialog command store flow', () => {
       actions.openThemeDialog,
       actions.openEditorDialog,
       actions.openProviderDialog,
+      actions.openImageProviderDialog,
       actions.openLoadProfileDialog,
       actions.openCreateProfileDialog,
       actions.openProfileListDialog,

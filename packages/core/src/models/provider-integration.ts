@@ -78,6 +78,23 @@ export function getModelsDevProviderIds(providerName: string): string[] {
   return PROVIDER_ID_MAP[providerName] ?? [providerName];
 }
 
+/** Return short model IDs with image outputs for the mapped providers. */
+export function listImageOutputModels(providerName: string): string[] {
+  const registry = getModelRegistry();
+  return [
+    ...new Set(
+      getModelsDevProviderIds(providerName).flatMap((providerId) =>
+        registry
+          .getByProvider(providerId)
+          .filter(
+            (model) => model.capabilities.output?.includes('image') === true,
+          )
+          .map((model) => model.modelId),
+      ),
+    ),
+  ];
+}
+
 /**
  * Check if a specific model ID exists in the registry for a provider
  */

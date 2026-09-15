@@ -15,6 +15,13 @@ import { assertDefined } from '../test-utils/assertions.js';
 
 describe('settings-validation', () => {
   describe('validateSettings - valid settings', () => {
+    it('accepts an image provider alias and rejects non-string values', () => {
+      expect(validateSettings({ imageProvider: 'codex' }).success).toBe(true);
+      for (const imageProvider of [42, null, false, []]) {
+        expect(validateSettings({ imageProvider }).success).toBe(false);
+      }
+    });
+
     it('should accept empty settings object', () => {
       const result = validateSettings({});
       expect(result.success).toBe(true);

@@ -47,7 +47,7 @@ export async function listProfiles(
   input: ListProfilesInput = {},
 ): Promise<ListProfilesResult> {
   const manager = createManager(input.profilesDir);
-  const profiles = await manager.listProfiles();
+  const profiles = await manager.listModelProfiles();
   return { profiles };
 }
 

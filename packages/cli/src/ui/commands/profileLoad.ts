@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { isImageProfileLoadError } from '@vybestack/llxprt-code-settings';
 import type { CommandContext, MessageActionReturn } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
@@ -47,7 +48,10 @@ export function classifyLoadError(
       content: `Failed to load profile: ${String(error)}`,
     };
   }
-  if (error.message.includes('OAuth bucket')) {
+  if (
+    error.message.includes('OAuth bucket') ||
+    isImageProfileLoadError(error)
+  ) {
     return { type: 'message', messageType: 'error', content: error.message };
   }
   if (error.message.includes('not found')) {

@@ -37,7 +37,190 @@ llxprt --profile-load kimi-k3
 /profile set-default none       # Clear auto-load
 ```
 
+The typed forms make the profile kind explicit. The untyped forms remain aliases for model profiles.
+
+```
+/profile save model <name>
+/profile load model <name>
+/profile save image <name>
+/profile load image <name>
+```
+
+An image profile stores its model slug, `baseUrl`, auth reference, and defaults for `quality`, `size`, and `background`. Loading an image profile switches the active image backend for `generate_image`, `/image`, and direct CLI image mode. A model profile saved while an image profile is active records `imageProfile: "<name>"`. Loading that model profile resolves the image profile by name and fails if the referenced profile is missing. Model profiles without `imageProfile` use the configured `imageProvider`, or the existing `gpt-image-2` Codex OAuth default when that setting is absent.
+
 Profiles are stored in `<config>/profiles/<name>.json` (see [Application Directories](./reference/application-directories.md)).
+
+Image profiles also accept optional `modelParams` and `ephemeralSettings`
+objects in version 1. These belong only to the active image configuration,
+separate from text-model settings. `/profile save image <name>` captures both
+objects and `/profile load image <name>` restores them. Older profiles without
+these fields keep them absent.
+
+### Image Provider Setting
+
+The optional top-level `imageProvider` string names a registered provider alias:
+
+```json
+{
+  "imageProvider": "codex"
+}
+```
+
+Set it with `/provider image <alias>` and inspect it with `/provider image`.
+`/model image` browses that provider's models, or the active chat provider's models
+when the setting is absent. Codex supplies a static list, local loopback endpoints
+supply a live `/models` list, and other providers use models.dev image-output
+capabilities. Selection creates an unnamed configuration; use
+`/profile save image <name>` to persist it.
+
+For image operations, a per-operation profile override wins over the active image
+profile. If neither is present, `imageProvider` supplies the provider-derived
+configuration. With no `imageProvider` and no profile, the legacy Codex default
+is unchanged, regardless of the chat provider. Provider selection does not bypass
+authentication validation: remote endpoints cannot use `auth: none`.
+
+### Set Up an Image Profile
+
+You can also create an explicit JSON file in `<config>/profiles/` to preserve
+custom endpoint, authentication, and operation settings. You need a
+running image server for a local profile, or credentials and an image-capable
+model at a remote endpoint. Image credentials are separate from your chat
+provider's credentials.
+
+For a local mlx-openai-server running the `flux2-klein-4b` text-to-image
+configuration on port 8321, save this as `mlx-generate.json`:
+
+```json
+{
+  "version": 1,
+  "type": "image",
+  "backend": "openai-images",
+  "model": "black-forest-labs/FLUX.2-klein-4B",
+  "baseUrl": "http://127.0.0.1:8321/v1",
+  "auth": { "type": "none" },
+  "operations": ["generate"],
+  "defaults": { "size": "512x512" }
+}
+```
+
+Select it for the session or run a direct image operation:
+
+```bash
+llxprt --image-profile mlx-generate
+llxprt --image-profile mlx-generate -P "A red sailboat on a blue lake" -O sailboat.png
+```
+
+The direct command writes `sailboat.png` without requiring conversational
+provider authentication. In a REPL, use `/profile load image mlx-generate`.
+Selection changes image operations, not the conversation model.
+
+MLX generation sizes are `256x256`, `512x512`, and `1024x1024`. Omit `size` to
+use the server default. Do not use `auto`. The MLX adapter does not send
+`quality` or `background`, which the verified server does not implement.
+
+The Klein text-to-image configuration ignores edit inputs. Use a separate
+server running `flux2-klein-edit-4b` for edits, and a separate profile such as
+`mlx-edit.json` (this example assumes that server listens on port 8322):
+
+```json
+{
+  "version": 1,
+  "type": "image",
+  "backend": "openai-images",
+  "model": "black-forest-labs/FLUX.2-klein-4B",
+  "baseUrl": "http://127.0.0.1:8322/v1",
+  "auth": { "type": "none" },
+  "operations": ["edit"]
+}
+```
+
+Klein edits accept one PNG or JPEG input. Edit sizes are controlled by the
+server, so omit `defaults.size`. The edit configuration cannot generate
+without an input image. The `operations` field restricts the profile to
+`generate`, `edit`, or both on local MLX-style endpoints; requests outside the
+declaration fail before network I/O. If omitted, both operations are allowed.
+Remote `openai-images` and `codex` endpoints serve both operations regardless of
+this field. For local endpoints, declare only what your server actually supports.
+
+For a remote OpenAI Images endpoint, save this as `remote-images.json` after
+storing your key with `/key save image-api <your-key>`:
+
+```json
+{
+  "version": 1,
+  "type": "image",
+  "backend": "openai-images",
+  "model": "gpt-image-2",
+  "baseUrl": "https://api.openai.com/v1",
+  "auth": { "type": "named-key", "keyName": "image-api" },
+  "operations": ["generate", "edit"],
+  "defaults": { "quality": "high", "size": "1024x1024" }
+}
+```
+
+Select it with `/profile load image remote-images` or
+`llxprt --image-profile remote-images`. For a key stored in a file, replace the
+`auth` object with:
+
+```json
+{ "type": "keyfile", "path": "/absolute/path/to/image-api-key" }
+```
+
+Literal keys are also supported:
+
+```json
+{ "type": "api-key", "apiKey": "replace-with-your-image-api-key" }
+```
+
+A literal key is stored in plain text in the profile. Prefer named keys, and
+do not commit profiles containing secrets. Named keys and keyfiles are resolved
+for each image operation; a missing credential fails without borrowing chat
+credentials. Remote `openai-images` profiles require one of these three keyed
+auth modes. Local loopback endpoints use `none`.
+
+The other backend is `codex`, which uses
+`"auth": { "type": "oauth", "provider": "codex" }` and
+`"baseUrl": "https://chatgpt.com/backend-api/codex"`. It requires Codex login
+and does not support custom OAuth origins. Configured model slugs are requests,
+not proof of which model served a result: the Codex image endpoint does not
+report its model and may ignore the requested slug.
+
+### Save, Link, and Reset Image Selection
+
+`/profile save image <name>` copies the active image configuration to disk and
+selects the saved name. It requires an image profile to be active. Loading an
+image profile replaces the previous selection; it does not merge defaults.
+Omitted defaults stay omitted rather than becoming `auto`. Supported quality
+values are `auto`, `low`, `medium`, `high`, `xhigh`, and `max`, subject to the
+backend's support; background values are `auto`, `opaque`, and `transparent`.
+
+To link your chat setup to the selected image profile:
+
+```
+/profile load image mlx-generate
+/profile save model chat-with-images
+```
+
+The saved model JSON contains `"imageProfile": "mlx-generate"`. The reference
+is resolved when the model profile loads, including inline `--profile` JSON.
+Missing, invalid, or wrong-type linked files fail the load. Loading a model
+profile without a reference restores the default image behavior.
+
+`--image-profile <name>` overrides the model profile's image selection for a
+session. With direct `-P`/`-O` mode it selects the backend for that operation
+without changing the session selection.
+
+To return to `gpt-image-2` with Codex OAuth without changing the selected model
+profile or conversation, run:
+
+```
+/profile reset-image
+```
+
+Reset changes only session image selection. It does not delete image files or
+rewrite the selected model's saved reference. Save the model again after reset
+to remove that reference from disk; otherwise loading the saved model restores
+its linked image profile.
 
 ### CLI Flags Override Profiles
 

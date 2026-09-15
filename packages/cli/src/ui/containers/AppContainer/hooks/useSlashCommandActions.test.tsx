@@ -46,6 +46,7 @@ function baseCallbacks() {
     openThemeDialog: createCallback(),
     openEditorDialog: createCallback(),
     openProviderDialog: createCallback(),
+    openImageProviderDialog: createCallback(),
     openLoadProfileDialog: createCallback(),
     openCreateProfileDialog: createCallback(),
     openProfileListDialog: createCallback(),

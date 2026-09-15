@@ -50,7 +50,7 @@ function useDataLoader(
       const [subagentNames, profileNames] = await Promise.all([
         subagentManager.listSubagents(),
         profileManager !== undefined
-          ? profileManager.listProfiles()
+          ? profileManager.listModelProfiles()
           : Promise.resolve([]),
       ]);
       const subagents: SubagentInfo[] = await Promise.all(

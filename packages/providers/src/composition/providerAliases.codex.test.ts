@@ -8,6 +8,7 @@ import { describe, it, expect } from 'bun:test';
 
 import {
   computeUnallowedParameters,
+  getImageModelsForAlias,
   loadProviderAliasEntries,
   type ProviderAliasEntry,
 } from './providerAliases.js';
@@ -32,6 +33,25 @@ const SAMPLING_PARAMETERS = [
   'top_k',
   'top_p',
 ] as const;
+
+describe('alias image models', () => {
+  it('loads the Codex image model preference order', () => {
+    expect(
+      loadProviderAliasEntries().find((entry) => entry.alias === 'codex')
+        ?.config.imageModels,
+    ).toStrictEqual(['gpt-image-2', 'gpt-image-1']);
+    expect(getImageModelsForAlias('codex')).toStrictEqual([
+      'gpt-image-2',
+      'gpt-image-1',
+    ]);
+  });
+  it('returns no models for an unknown alias', () => {
+    expect(getImageModelsForAlias('missing-image-alias')).toStrictEqual([]);
+  });
+  it('returns no models for an alias without imageModels', () => {
+    expect(getImageModelsForAlias('LM Studio')).toStrictEqual([]);
+  });
+});
 
 describe('Codex provider alias', () => {
   it('should have a codex.config file (not .json extension)', () => {

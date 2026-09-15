@@ -54,6 +54,7 @@ function dialogCommands(): Parameters<typeof buildAppCommands>[0] {
     handleAuthSelect: asyncNoop,
     handleEditorSelect: noop,
     handleProviderSelect: asyncNoop,
+    handleImageProviderSelect: noop,
     handleProfileSelect: asyncNoop,
     viewProfileDetail: asyncNoop,
     closeProfileDetailDialog: asyncNoop,

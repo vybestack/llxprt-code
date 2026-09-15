@@ -14,6 +14,7 @@ import {
   type ImageOperationInput,
 } from './imageOperationDispatch.js';
 import { ImageOperationError } from './imageOperation.js';
+import type { ImageOperationRunnerResult } from './imageCapability.js';
 
 /**
  * Runs `operation` expecting rejection and returns the rejection reason.
@@ -178,6 +179,64 @@ describe('runImageOperation', () => {
     await fs.promises.rm(workspaceRoot, { recursive: true, force: true });
   });
 
+  it.each([true, false])(
+    'preserves reported metadata presence=%s through dispatch',
+    async (reported) => {
+      const metadata = reported
+        ? { quality: 'high', size: '512x512', usage: { output_tokens: 7 } }
+        : {};
+      const result: ImageOperationRunnerResult = await runImageOperation(
+        { prompt: 'lake', outputPath: 'metadata.png' },
+        {
+          workspaceRoot,
+          resolveBackend: () => ({
+            name: 'test',
+            provider: 'test',
+            model: 'test',
+            generate: async () => ({
+              mimeType: 'image/png',
+              encoding: 'base64',
+              data: VALID_PNG_BASE64,
+              ...metadata,
+            }),
+            edit: async () => {
+              throw new Error('unexpected edit');
+            },
+          }),
+        },
+      );
+      for (const field of ['quality', 'size', 'usage'] as const) {
+        expect(Object.hasOwn(result, field)).toBe(reported);
+        expect(result[field]).toStrictEqual(metadata[field]);
+      }
+    },
+  );
+
+  it('resolves an operation override without changing the active backend', async () => {
+    const resolveBackend: ImageOperationBackendResolver = async (name) => {
+      const backend = await makeStubResolver({})();
+      if (backend === null) throw new Error('Missing test backend');
+      return {
+        ...backend,
+        model: name === 'local' ? 'local-model' : 'active-model',
+      };
+    };
+    const override = await runImageOperation(
+      {
+        prompt: 'a cat',
+        outputPath: 'override.png',
+        imageProfileName: 'local',
+      },
+      { workspaceRoot, resolveBackend },
+    );
+    const active = await runImageOperation(
+      { prompt: 'a cat', outputPath: 'active.png' },
+      { workspaceRoot, resolveBackend },
+    );
+    expect(override.model).toBe('local-model');
+    expect(active.model).toBe('active-model');
+  });
+
   it('generates an image and writes it to the resolved output path', async () => {
     const input: ImageOperationInput = {
       prompt: 'a cat',
@@ -214,6 +273,37 @@ describe('runImageOperation', () => {
 
     expect(result.operation).toBe('edit');
     expect(result.inputPaths).toStrictEqual([inputPath]);
+  });
+
+  it('propagates a typed resolver failure without producing an artifact', async () => {
+    const failure = new ImageOperationError(
+      'Image profile unavailable',
+      'capability',
+    );
+    await expect(
+      runImageOperation(
+        { prompt: 'a cat', outputPath: 'cat.png' },
+        {
+          workspaceRoot,
+          resolveBackend: makeStubResolver({ throwOnResolve: failure }),
+        },
+      ),
+    ).rejects.toBe(failure);
+    expect(await fs.promises.readdir(workspaceRoot)).toStrictEqual([]);
+  });
+
+  it('tags an untyped resolver failure with the capability stage and cause', async () => {
+    const cause = new Error('resolver unavailable');
+    await expect(
+      runImageOperation(
+        { prompt: 'a cat', outputPath: 'cat.png' },
+        {
+          workspaceRoot,
+          resolveBackend: makeStubResolver({ throwOnResolve: cause }),
+        },
+      ),
+    ).rejects.toMatchObject({ stage: 'capability', cause });
+    expect(await fs.promises.readdir(workspaceRoot)).toStrictEqual([]);
   });
 
   it('returns a capability error when no backend resolves', async () => {

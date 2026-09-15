@@ -32,6 +32,7 @@ export interface DialogPayloadMap {
   oauthCode: Record<string, never>;
   editor: Record<string, never>;
   provider: Record<string, never>;
+  imageProvider: Record<string, never>;
   loadProfile: Record<string, never>;
   createProfile: Record<string, never>;
   profileList: Record<string, never>;
@@ -110,6 +111,7 @@ export const DIALOG_PRIORITY = [
   'oauthCode',
   'editor',
   'provider',
+  'imageProvider',
   'loadProfile',
   'createProfile',
   'profileList',

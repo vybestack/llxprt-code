@@ -26,7 +26,7 @@ const PROFILE_NAMES = ['default', 'stepfun-37'];
 function buildConfig(profileNames: string[] = PROFILE_NAMES): Config {
   return {
     getProfileManager: () => ({
-      listProfiles: async () => profileNames,
+      listModelProfiles: async () => profileNames,
     }),
   } as unknown as Config;
 }

@@ -55,7 +55,7 @@ const createContext = () =>
         deleteSubagent: vi.fn(async () => undefined),
       },
       profileManager: {
-        listProfiles: vi.fn(async () => mockProfiles),
+        listModelProfiles: vi.fn(async () => mockProfiles),
       },
     },
   });

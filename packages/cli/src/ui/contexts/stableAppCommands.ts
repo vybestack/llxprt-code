@@ -83,6 +83,8 @@ export function createStableAppCommands(
     handleEditorSelect: (...args) => latest.current.handleEditorSelect(...args),
     handleProviderSelect: (...args) =>
       latest.current.handleProviderSelect(...args),
+    handleImageProviderSelect: (...args) =>
+      latest.current.handleImageProviderSelect(...args),
     handleProfileSelect: (...args) =>
       latest.current.handleProfileSelect(...args),
     viewProfileDetail: (...args) => latest.current.viewProfileDetail(...args),

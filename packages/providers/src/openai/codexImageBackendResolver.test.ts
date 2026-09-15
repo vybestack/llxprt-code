@@ -4,11 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { tinyPngBase64 } from './mlx-wire-fixtures.js';
 import { describe, it, expect, vi } from 'bun:test';
 
 import { buildCodexImageGenerateEndpoint } from './codexImageBackend.js';
-import { createCodexImageBackendResolver } from './codexImageBackendResolver.js';
+import {
+  createCodexImageBackendResolver,
+  ImageBackendAuthModeError,
+  resolveImageProfileBackendConfig,
+  validateImageProfileAuth,
+} from './codexImageBackendResolver.js';
 import type { CodexImageBackendResolverDeps } from './codexImageBackendResolver.js';
+import type { ImageProfile } from '@vybestack/llxprt-code-settings';
 import type { IProvider } from '../IProvider.js';
 
 /**
@@ -60,7 +67,7 @@ function makeImageResponse() {
   return {
     ok: true,
     text: () =>
-      Promise.resolve(JSON.stringify({ data: [{ b64_json: 'aGVsbG8=' }] })),
+      Promise.resolve(JSON.stringify({ data: [{ b64_json: tinyPngBase64 }] })),
   };
 }
 
@@ -158,7 +165,9 @@ describe('createCodexImageBackendResolver', () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       text: () =>
-        Promise.resolve(JSON.stringify({ data: [{ b64_json: 'aGVsbG8=' }] })),
+        Promise.resolve(
+          JSON.stringify({ data: [{ b64_json: tinyPngBase64 }] }),
+        ),
     });
 
     const resolve = createCodexImageBackendResolver({
@@ -183,7 +192,9 @@ describe('createCodexImageBackendResolver', () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       text: () =>
-        Promise.resolve(JSON.stringify({ data: [{ b64_json: 'aGVsbG8=' }] })),
+        Promise.resolve(
+          JSON.stringify({ data: [{ b64_json: tinyPngBase64 }] }),
+        ),
     });
 
     const resolve = createCodexImageBackendResolver({
@@ -247,5 +258,208 @@ describe('createCodexImageBackendResolver', () => {
       await captureRejection(backend.generate({ prompt: 'a cat' }, signal)),
     ).toMatchObject({ message: expect.stringMatching(/account_id/i) });
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+  it('configures the backend from the active image profile', async () => {
+    const fetchImpl = vi.fn(async () => makeImageResponse());
+    const resolve = createCodexImageBackendResolver({
+      oauthManager: makeStubOAuthManager(VALID_TOKEN),
+      getActiveProvider: () => undefined,
+      getActiveImageProfile: () => ({
+        version: 1,
+        type: 'image',
+        backend: 'codex',
+        model: 'gpt-image-2.5-flare',
+        baseUrl: CODEX_BASE_URL,
+        auth: { type: 'oauth', provider: 'codex' },
+        defaults: {
+          quality: 'xhigh',
+          size: '1024x1536',
+          background: 'transparent',
+        },
+      }),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    await resolve()?.generate(
+      { prompt: 'a cat' },
+      new AbortController().signal,
+    );
+
+    const [url, init] = fetchImpl.mock.calls[0] ?? [];
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    expect(String(url)).toBe(`${CODEX_BASE_URL}/images/generations`);
+    expect(body).toMatchObject({
+      model: 'gpt-image-2.5-flare',
+      quality: 'xhigh',
+      size: '1024x1536',
+      background: 'transparent',
+    });
+  });
+});
+
+function configuredImageProfile(
+  overrides: Partial<ImageProfile>,
+): ImageProfile {
+  return {
+    version: 1,
+    type: 'image',
+    backend: 'codex',
+    model: 'gpt-image-2',
+    baseUrl: CODEX_BASE_URL,
+    auth: { type: 'oauth', provider: 'codex' },
+    ...overrides,
+  };
+}
+
+describe('image backend auth validation', () => {
+  it.each([
+    {
+      backend: 'codex',
+      auth: { type: 'none' },
+      baseUrl: CODEX_BASE_URL,
+      errorName: 'ImageBackendAuthModeError',
+    },
+    {
+      backend: 'openai-images',
+      auth: { type: 'none' },
+      baseUrl: 'invalid-url',
+      errorName: 'ImageBackendBaseUrlError',
+    },
+  ] as const)(
+    'names the active profile in $errorName',
+    ({ errorName, ...overrides }) => {
+      const resolve = createCodexImageBackendResolver({
+        oauthManager: undefined,
+        getActiveProvider: () => undefined,
+        getActiveImageProfile: () => configuredImageProfile(overrides),
+        getActiveImageProfileName: () => 'offending-art',
+      });
+      expect(resolve).toThrow(
+        expect.objectContaining({
+          name: errorName,
+          profileName: 'offending-art',
+          message: expect.stringContaining('offending-art'),
+        }),
+      );
+    },
+  );
+
+  it('chains the URL parser failure for an invalid remote base URL', () => {
+    expect(() =>
+      validateImageProfileAuth(
+        configuredImageProfile({
+          backend: 'openai-images',
+          baseUrl: 'not-a-url',
+        }),
+        'broken',
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        name: 'ImageBackendBaseUrlError',
+        cause: expect.any(TypeError),
+      }),
+    );
+  });
+  it.each([
+    'https://images.example/v1',
+    'https://chatgpt.com.evil/backend-api/codex',
+    'https://evil/chatgpt.com/backend-api/codex',
+    'http://chatgpt.com/backend-api/codex',
+    'https://user:secret@chatgpt.com/backend-api/codex',
+  ])('rejects custom Codex profile URL %s during resolution', (baseUrl) => {
+    expect(() =>
+      resolveImageProfileBackendConfig(configuredImageProfile({ baseUrl })),
+    ).toThrow(expect.objectContaining({ name: 'ImageBackendBaseUrlError' }));
+  });
+  it('accepts Codex OAuth', () => {
+    const profile = configuredImageProfile({
+      backend: 'codex',
+      auth: { type: 'oauth', provider: 'codex' },
+    });
+
+    expect(() => validateImageProfileAuth(profile, 'codex-art')).not.toThrow();
+  });
+
+  it('rejects non-OAuth auth for Codex', () => {
+    const profile = configuredImageProfile({
+      backend: 'codex',
+      auth: { type: 'none' },
+    });
+
+    expect(() => validateImageProfileAuth(profile, 'codex-art')).toThrow(
+      ImageBackendAuthModeError,
+    );
+  });
+
+  it('accepts every key mode for api.openai.com', () => {
+    const profiles: readonly ImageProfile[] = [
+      configuredImageProfile({
+        backend: 'openai-images',
+        baseUrl: 'https://api.openai.com/v1',
+        auth: { type: 'api-key', apiKey: 'literal-key' },
+      }),
+      configuredImageProfile({
+        backend: 'openai-images',
+        baseUrl: 'https://api.openai.com/v1',
+        auth: { type: 'named-key', keyName: 'openai-images' },
+      }),
+      configuredImageProfile({
+        backend: 'openai-images',
+        baseUrl: 'https://api.openai.com/v1',
+        auth: { type: 'keyfile', path: '/keys/openai' },
+      }),
+    ];
+
+    for (const profile of profiles) {
+      expect(() =>
+        validateImageProfileAuth(profile, 'openai-art'),
+      ).not.toThrow();
+    }
+  });
+
+  it('rejects unauthenticated api.openai.com profiles', () => {
+    const profile = configuredImageProfile({
+      backend: 'openai-images',
+      baseUrl: 'https://api.openai.com/v1',
+      auth: { type: 'none' },
+    });
+
+    expect(() => validateImageProfileAuth(profile, 'openai-art')).toThrow(
+      ImageBackendAuthModeError,
+    );
+  });
+
+  it('accepts no auth for a local MLX endpoint', () => {
+    const profile = configuredImageProfile({
+      backend: 'openai-images',
+      baseUrl: 'http://127.0.0.1:8321/v1',
+      auth: { type: 'none' },
+    });
+
+    expect(() => validateImageProfileAuth(profile, 'mlx-art')).not.toThrow();
+  });
+
+  it('rejects credentials for a local MLX endpoint', () => {
+    const profile = configuredImageProfile({
+      backend: 'openai-images',
+      baseUrl: 'http://localhost:8321/v1',
+      auth: { type: 'named-key', keyName: 'unused' },
+    });
+
+    expect(() => validateImageProfileAuth(profile, 'mlx-art')).toThrow(
+      ImageBackendAuthModeError,
+    );
+  });
+
+  it('preserves omitted operation overrides at the backend request seam', () => {
+    const profile = configuredImageProfile({
+      defaults: { quality: 'high' },
+    });
+
+    const config = resolveImageProfileBackendConfig(profile, 'codex-art');
+
+    expect(config.overrides).toStrictEqual({ quality: 'high' });
+    expect(Object.hasOwn(config.overrides, 'size')).toBe(false);
+    expect(Object.hasOwn(config.overrides, 'background')).toBe(false);
   });
 });

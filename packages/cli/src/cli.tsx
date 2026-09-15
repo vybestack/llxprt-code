@@ -410,14 +410,15 @@ export async function main() {
   // BEFORE any provider activation or Agent construction when no provider is
   // active and we are NOT in interactive mode. Uses the shared
   // guardUnconfiguredProvider helper (single message, single exit code).
-  await guardUnconfiguredProvider(config, runExitCleanup);
+  const directImageMode = isImageModeActive(buildImageModeFlags(argv));
+  if (!directImageMode) {
+    await guardUnconfiguredProvider(config, runExitCleanup);
+  }
 
-  // Declarative provider-activation PREFLIGHT runs PRE-AGENT (#2374/#2378).
-  const providerActivation = await activateConfiguredProvider(
-    config,
-    providerManager,
-    argv,
-  );
+  // Image operations resolve their own credentials, independently of chat auth.
+  const providerActivation = directImageMode
+    ? { authFailed: false }
+    : await activateConfiguredProvider(config, providerManager, argv);
   const initialAuthFailed = providerActivation.authFailed;
 
   // hop into sandbox if outside and sandboxing is enabled

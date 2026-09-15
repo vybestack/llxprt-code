@@ -6,8 +6,18 @@
 
 import process from 'node:process';
 import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
-import { ProfileManager } from '@vybestack/llxprt-code-settings';
+import {
+  ProfileManager,
+  isImageProfileLoadError,
+  ImageProfileLoadError,
+} from '@vybestack/llxprt-code-settings';
 import type { Profile } from '@vybestack/llxprt-code-settings';
+import {
+  validateImageProfileAuth,
+  ImageBackendAuthModeError,
+  ImageBackendBaseUrlError,
+} from '@vybestack/llxprt-code-providers';
+import type { ActiveImageProfile } from '@vybestack/llxprt-code-core';
 import type { MergedSettings, Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
 import {
@@ -16,6 +26,14 @@ import {
 } from './profileBootstrap.js';
 
 const logger = new DebugLogger('llxprt:config:profileResolution');
+
+function isImageProfileFailure(error: unknown): boolean {
+  return (
+    isImageProfileLoadError(error) ||
+    error instanceof ImageBackendAuthModeError ||
+    error instanceof ImageBackendBaseUrlError
+  );
+}
 
 // ─── DTOs ───────────────────────────────────────────────────────────────────
 
@@ -42,6 +60,8 @@ export interface ProfileResolutionResult {
 }
 
 export interface ProfileLoadResult {
+  /** Absent preserves selection; explicit undefined resets it after bootstrap. */
+  readonly activeImageProfile?: ActiveImageProfile | undefined;
   readonly profileMergedSettings: MergedSettings;
   readonly profileModel: string | undefined;
   readonly profileProvider: string | undefined;
@@ -158,16 +178,37 @@ function isTemporaryDebugMode(argv: CliArgs): boolean {
   );
 }
 
-function applyInlineProfile(
+async function resolveImageReference(
+  manager: ProfileManager,
+  profile: Profile,
+): Promise<ActiveImageProfile | undefined> {
+  const name = 'imageProfile' in profile ? profile.imageProfile : undefined;
+  if (name === undefined) return undefined;
+  if (typeof name !== 'string' || name.length === 0) {
+    throw new ImageProfileLoadError(
+      '<reference>',
+      new Error('imageProfile must be a non-empty string'),
+    );
+  }
+  const imageProfile = await manager.loadImageProfile(name);
+  validateImageProfileAuth(imageProfile, name);
+  return { name, profile: imageProfile };
+}
+
+async function applyInlineProfile(
   profileJson: string,
   argv: CliArgs,
   settings: Settings,
-): Omit<ProfileLoadResult, 'profileToLoad' | 'profileWarnings'> {
+): Promise<Omit<ProfileLoadResult, 'profileToLoad' | 'profileWarnings'>> {
   const validationResult = parseInlineProfile(profileJson);
   if (validationResult.error !== undefined) {
     throw new Error(validationResult.error);
   }
   const profile = JSON.parse(profileJson) as Profile;
+  const activeImageProfile = await resolveImageReference(
+    new ProfileManager(),
+    profile,
+  );
   const prepared = prepareProfileForApplication(
     profile,
     'inline',
@@ -182,6 +223,7 @@ function applyInlineProfile(
     );
   }
   return {
+    activeImageProfile,
     profileMergedSettings: prepared.profileMergedSettings,
     profileModel: prepared.profileModel,
     profileProvider: prepared.profileProvider,
@@ -204,6 +246,10 @@ async function applyFileProfile(
   try {
     const profileManager = new ProfileManager();
     const profile = await profileManager.loadProfile(profileToLoad);
+    const activeImageProfile = await resolveImageReference(
+      profileManager,
+      profile,
+    );
     const prepared = prepareProfileForApplication(
       profile,
       profileToLoad,
@@ -223,6 +269,7 @@ async function applyFileProfile(
     }
 
     return {
+      activeImageProfile,
       profileMergedSettings: prepared.profileMergedSettings,
       profileModel: prepared.profileModel,
       profileProvider: prepared.profileProvider,
@@ -240,7 +287,7 @@ async function applyFileProfile(
     });
     debugLogger.error(failureSummary);
 
-    if (profileExplicitlySpecified) {
+    if (profileExplicitlySpecified || isImageProfileFailure(error)) {
       throw error;
     }
 
@@ -274,16 +321,18 @@ export async function loadAndPrepareProfile(input: {
   let profileModelParams: Record<string, unknown> | undefined;
   let profileBaseUrl: string | undefined;
   let loadedProfile: Profile | null = null;
+  let imageProfileSelection: Pick<ProfileLoadResult, 'activeImageProfile'> = {};
   const profileWarnings: string[] = [];
 
   // Handle inline profile from --profile flag
   if (bootstrapArgs.profileJson != null) {
     try {
-      const result = applyInlineProfile(
+      const result = await applyInlineProfile(
         bootstrapArgs.profileJson,
         argv,
         settings,
       );
+      imageProfileSelection = { activeImageProfile: result.activeImageProfile };
       ({
         profileMergedSettings,
         profileModel,
@@ -293,6 +342,7 @@ export async function loadAndPrepareProfile(input: {
         loadedProfile,
       } = result);
     } catch (err) {
+      if (isImageProfileFailure(err)) throw err;
       throw new Error(
         `Failed to parse inline profile: ${err instanceof Error ? err.message : String(err)}`,
       );
@@ -309,6 +359,7 @@ export async function loadAndPrepareProfile(input: {
       profileWarnings,
     );
     if (result) {
+      imageProfileSelection = { activeImageProfile: result.activeImageProfile };
       ({
         profileMergedSettings,
         profileModel,
@@ -327,6 +378,7 @@ export async function loadAndPrepareProfile(input: {
     profileModelParams,
     profileBaseUrl,
     loadedProfile,
+    ...imageProfileSelection,
     profileWarnings,
     profileToLoad,
   };

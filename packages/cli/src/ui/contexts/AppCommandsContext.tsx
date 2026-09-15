@@ -74,6 +74,7 @@ export interface AppCommands {
     scope: SettingScope,
   ) => void;
   handleProviderSelect: (provider: string) => Promise<void>;
+  handleImageProviderSelect: (alias: string) => void;
   handleProfileSelect: (profile: string) => void;
   viewProfileDetail: (profileName: string, openedDirectly?: boolean) => void;
   closeProfileDetailDialog: () => void;

@@ -13,8 +13,14 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
-import type { Profile } from '@vybestack/llxprt-code-settings';
+import {
+  coreEvents,
+  CoreEvent,
+  createImageProfileRuntimeState,
+} from '@vybestack/llxprt-code-core';
+import type { ImageProfile, Profile } from '@vybestack/llxprt-code-settings';
+
+let imageProfileState: ReturnType<typeof createImageProfileRuntimeState>;
 
 // Mock external dependencies of applyProfileSnapshot so we can verify
 // emission without bootstrapping the entire CLI runtime.
@@ -25,6 +31,7 @@ const realLlxprtCodeSettingsModule = {
 void vi.mock('./runtimeAccessors.js', () => ({
   getCliRuntimeServices: vi.fn(() => ({
     config: {},
+    imageProfileState,
     settingsService: { setCurrentProfileName: vi.fn() },
     providerManager: {},
   })),
@@ -55,6 +62,7 @@ void vi.mock('./profileApplication.js', () => ({
 }));
 
 const profileManagerLoadProfileMock = vi.fn();
+const profileManagerLoadImageProfileMock = vi.fn();
 
 void vi.mock('@vybestack/llxprt-code-settings', () => {
   const actual = realLlxprtCodeSettingsModule;
@@ -62,6 +70,7 @@ void vi.mock('@vybestack/llxprt-code-settings', () => {
     ...actual,
     ProfileManager: vi.fn(() => ({
       loadProfile: profileManagerLoadProfileMock,
+      loadImageProfile: profileManagerLoadImageProfileMock,
       listProfiles: vi.fn(),
     })),
   };
@@ -77,6 +86,7 @@ const {
   applyProfileSnapshot,
   buildRuntimeProfileSnapshot,
   getProfileByName,
+  loadProfileByName,
 } = await import('./profileSnapshot.js');
 
 describe('buildModelProfileInfoPayload', () => {
@@ -225,13 +235,58 @@ describe('buildModelProfileInfoPayload', () => {
 describe('ModelProfileChanged emission from applyProfileSnapshot', () => {
   beforeEach(() => {
     coreEvents.removeAllListeners();
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    imageProfileState = createImageProfileRuntimeState();
   });
 
   afterEach(() => {
     coreEvents.removeAllListeners();
+    imageProfileState.reset();
     vi.restoreAllMocks();
   });
+
+  for (const linkedImage of ['next-image', undefined]) {
+    it(`emits ModelProfileChanged only after the paired image selection is committed (${linkedImage ?? 'reset-to-none'})`, async () => {
+      const image: ImageProfile = {
+        version: 1,
+        type: 'image',
+        backend: 'codex',
+        model: 'image-model',
+        baseUrl: 'https://chatgpt.com/backend-api/codex',
+        auth: { type: 'oauth', provider: 'codex' },
+      };
+      imageProfileState.select({ name: 'old-image', profile: image });
+      const profile: Profile = {
+        version: 1,
+        type: 'model',
+        provider: 'openai',
+        model: 'next-model',
+        modelParams: {},
+        ephemeralSettings: {},
+        ...(linkedImage === undefined ? {} : { imageProfile: linkedImage }),
+      };
+      profileManagerLoadProfileMock.mockResolvedValue(profile);
+      profileManagerLoadImageProfileMock.mockResolvedValue(image);
+      const observations: Array<{ model: string; image: string | undefined }> =
+        [];
+      coreEvents.on(CoreEvent.ModelProfileChanged, (payload) => {
+        observations.push({
+          model: payload.model,
+          image: imageProfileState.getActive()?.name,
+        });
+      });
+
+      await loadProfileByName('next');
+
+      expect(profileManagerLoadProfileMock).toHaveBeenCalledWith('next');
+      expect(profileManagerLoadImageProfileMock.mock.calls).toStrictEqual(
+        linkedImage === undefined ? [] : [[linkedImage]],
+      );
+      expect(observations).toStrictEqual([
+        { model: 'next-model', image: linkedImage },
+      ]);
+    });
+  }
 
   it('emits ModelProfileChanged event with model, provider, and profile from application result', async () => {
     const listener = vi.fn();
@@ -304,7 +359,8 @@ describe('ModelProfileChanged emission from applyProfileSnapshot', () => {
 
 describe('buildRuntimeProfileSnapshot', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    imageProfileState = createImageProfileRuntimeState();
   });
 
   it('includes registered reasoning wire settings while excluding internal settings', () => {
@@ -398,7 +454,8 @@ async function loadProfileWithBalancerMembers(
 
 describe('getProfileByName', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    imageProfileState = createImageProfileRuntimeState();
   });
 
   it('adds load balancer member details from referenced profiles', async () => {

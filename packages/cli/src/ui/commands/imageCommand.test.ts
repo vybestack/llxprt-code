@@ -121,6 +121,20 @@ describe('imageCommand', () => {
     expect(desc.length).toBeGreaterThan(0);
   });
 
+  it('includes the backend and configured model alongside the saved path', async () => {
+    const ctx = makeMockContext({
+      runImageOperation: async () => ({
+        absoluteOutputPath: '/workspace/local.png',
+        backend: 'openai-images',
+        model: 'flux-klein',
+      }),
+    });
+    await imageCommand.action?.(ctx, 'local.png "a cat"');
+    expect(
+      JSON.stringify((ctx.ui.addItem as ReturnType<typeof vi.fn>).mock.calls),
+    ).toContain('via openai-images (configured model: flux-klein)');
+  });
+
   it('shows an error item for malformed input (missing prompt)', async () => {
     const ctx = makeMockContext();
     await imageCommand.action?.(ctx, 'out.png');

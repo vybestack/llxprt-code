@@ -16,6 +16,8 @@ import {
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { LoadedSettings } from '../../config/settings.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type {
   Agent,
@@ -47,10 +49,13 @@ interface AgentDouble {
   >;
 }
 
+let imageSettings = new SettingsService();
 const mocks = (() => {
   const runtimeApi = {
+    getCliRuntimeServices: () => ({ settingsService: imageSettings }),
     getActiveProviderName: vi.fn(),
     getActiveModelName: vi.fn(),
+    listProviders: () => ['text', 'anthropic', 'qwen'],
   };
   const agent: AgentDouble = {
     setProvider: vi.fn(),
@@ -93,6 +98,7 @@ void vi.mock('../contexts/RuntimeContext.js', () => ({
 
 // Import after mocks are set up
 import { providerCommand } from './providerCommand.js';
+import { createCompletionHandler } from './schema/index.js';
 import { assertDefined } from '../../test-utils/assertions.js';
 
 function baseUrlSetting(key: string, baseUrl: string): string | undefined {
@@ -115,6 +121,7 @@ describe('providerCommand /provider save', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    imageSettings = new SettingsService();
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-provider-save-'));
     process.env.HOME = tempDir;
     process.env.USERPROFILE = tempDir;
@@ -150,6 +157,101 @@ describe('providerCommand /provider save', () => {
     } else {
       process.env['LLXPRT_DATA_HOME'] = originalDataHome;
     }
+  });
+
+  it.each(['', 'text', 'image'])(
+    'opens the provider menu for %s',
+    async (kind) => {
+      expect(
+        await providerCommand.action!(createMockCommandContext(), kind),
+      ).toStrictEqual({
+        type: 'dialog',
+        dialog: kind === 'image' ? 'imageProvider' : 'provider',
+      });
+    },
+  );
+
+  it('completes kinds and bare providers, then the matching provider lists', async () => {
+    if (!providerCommand.schema) throw new Error('Missing provider schema');
+    const complete = createCompletionHandler(providerCommand.schema);
+    const ctx = createMockCommandContext();
+    const first = await complete(ctx, '', '/provider ');
+    for (const value of ['text', 'image', 'save']) {
+      expect(
+        first.suggestions.find((item) => item.value === value)?.description,
+      ).toBeTruthy();
+    }
+    expect(first.suggestions.map((item) => item.value)).toContain('qwen');
+    expect(
+      first.suggestions.filter((item) => item.value === 'text'),
+    ).toHaveLength(1);
+    expect(
+      (await complete(ctx, '', '/provider qw')).suggestions.map(
+        (item) => item.value,
+      ),
+    ).toStrictEqual(['qwen']);
+    expect(
+      (await complete(ctx, '', '/provider qwen ')).suggestions,
+    ).toStrictEqual([]);
+    expect(
+      (await complete(ctx, '', '/provider text text ')).suggestions,
+    ).toStrictEqual([]);
+    expect(
+      (await complete(ctx, '', '/provider save ')).suggestions,
+    ).toStrictEqual([]);
+
+    const text = await complete(ctx, '', '/provider text ');
+    expect(text.suggestions.map((item) => item.value)).toStrictEqual(
+      mocks.runtimeApi.listProviders(),
+    );
+    const image = await complete(ctx, '', '/provider image ');
+    expect(image.suggestions.map((item) => item.value)).toStrictEqual(
+      realProviderAliasesModule
+        .loadProviderAliasEntries()
+        .map((entry) => entry.alias),
+    );
+    expect(image.suggestions.map((item) => item.value)).not.toContain('text');
+  });
+
+  it('persists an image alias and reports it instead of the chat provider', async () => {
+    const empty = { settings: {}, path: path.join(tempDir, 'unused.json') };
+    const userPath = path.join(tempDir, 'settings.json');
+    const settings = new LoadedSettings(
+      empty,
+      empty,
+      { settings: {}, path: userPath },
+      empty,
+      true,
+    );
+    const context = createMockCommandContext();
+    context.services.settings = settings;
+    mocks.runtimeApi.getActiveProviderName.mockReturnValue('anthropic');
+    expect(await providerCommand.action!(context, 'image codex')).toMatchObject(
+      { messageType: 'info' },
+    );
+    expect(imageSettings.get('imageProvider')).toBe('codex');
+    expect(JSON.parse(fs.readFileSync(userPath, 'utf8'))).toMatchObject({
+      imageProvider: 'codex',
+    });
+    expect(await providerCommand.action!(context, 'image')).toMatchObject({
+      type: 'dialog',
+      dialog: 'imageProvider',
+    });
+  });
+
+  it('reports unknown image aliases with available aliases without persisting', async () => {
+    const context = createMockCommandContext();
+    const result = await providerCommand.action!(
+      context,
+      'image no-such-alias',
+    );
+    if (!result || result.type !== 'message')
+      throw new Error('Expected message');
+    expect(result.content).toContain('Available aliases:');
+    expect(result.content).toContain('codex');
+    expect(result.messageType).toBe('error');
+
+    expect(context.services.settings.merged.imageProvider).toBeUndefined();
   });
 
   it('saves provider alias configuration and refreshes aliases', async () => {
@@ -228,41 +330,61 @@ describe('providerCommand /provider switch', () => {
     });
   });
 
-  it('delegates provider switching to the agent facade and surfaces info messages', async () => {
-    const providerManager = {
-      getActiveProviderName: vi.fn(() => 'openai'),
-    };
-    mocks.getProviderManagerMock.mockReturnValue(providerManager);
+  it.each(['qwen', 'text qwen'])(
+    'switches providers and surfaces info messages for %s',
+    async (args) => {
+      const providerManager = {
+        getActiveProviderName: vi.fn(() => 'openai'),
+      };
+      mocks.getProviderManagerMock.mockReturnValue(providerManager);
 
-    const context = createMockCommandContext({
-      services: {
-        agent: mocks.agent as unknown as Agent,
-      },
-    });
+      const context = createMockCommandContext({
+        services: {
+          agent: mocks.agent as unknown as Agent,
+        },
+      });
 
-    assertDefined(providerCommand.action);
+      assertDefined(providerCommand.action);
 
-    const result = await providerCommand.action(context, 'qwen');
+      const result = await providerCommand.action(context, args);
 
-    expect(mocks.runtimeApi.getActiveProviderName).toHaveBeenCalledTimes(1);
-    expect(mocks.agent.setProvider).toHaveBeenCalledWith(
-      'qwen',
-      undefined,
-      expect.objectContaining({ addItem: expect.any(Function) }),
-    );
-    expect(context.ui.addItem).toHaveBeenCalledWith(
-      {
-        type: 'info',
-        text: 'Use /key to set API key if needed.',
-      },
-      expect.any(Number),
-    );
-    expect(result).toStrictEqual({
-      type: 'message',
-      messageType: 'info',
-      content: 'Switched from openai to qwen',
-    });
-  });
+      expect(mocks.runtimeApi.getActiveProviderName).toHaveBeenCalledTimes(1);
+      expect(mocks.agent.setProvider).toHaveBeenCalledWith(
+        'qwen',
+        undefined,
+        expect.objectContaining({ addItem: expect.any(Function) }),
+      );
+      expect(context.ui.addItem).toHaveBeenCalledWith(
+        {
+          type: 'info',
+          text: 'Use /key to set API key if needed.',
+        },
+        expect.any(Number),
+      );
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'info',
+        content: 'Switched from openai to qwen',
+      });
+    },
+  );
+
+  it.each(['text', 'image', 'save', 'image-custom'])(
+    'selects a text provider named %s through an explicit kind',
+    async (name) => {
+      mocks.runtimeApi.getActiveProviderName.mockReturnValue(name);
+      expect(
+        await providerCommand.action!(
+          createMockCommandContext(),
+          `text ${name}`,
+        ),
+      ).toStrictEqual({
+        type: 'message',
+        messageType: 'info',
+        content: `Already using provider: ${name}`,
+      });
+    },
+  );
 
   it('returns an error message when agent switching fails', async () => {
     const providerManager = {

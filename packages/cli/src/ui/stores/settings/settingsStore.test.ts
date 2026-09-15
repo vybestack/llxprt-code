@@ -45,6 +45,8 @@ describe('createSettingsProfileStore', () => {
       providerOptions: [],
       createProfileProviders: [],
       selectedProvider: '',
+      imageProviderOptions: [],
+      selectedImageProvider: '',
       profiles: [],
       profileListItems: [],
       selectedProfileName: null,

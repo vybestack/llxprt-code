@@ -83,7 +83,7 @@ export const useLoadProfileDialog = ({
     dialogs.loadProfile.open({});
 
     try {
-      const availableProfiles = await runtime.listSavedProfiles();
+      const availableProfiles = await runtime.listSavedProfiles('model');
       setProfiles(availableProfiles);
     } catch (e) {
       addMessage({

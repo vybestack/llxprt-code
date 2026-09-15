@@ -629,7 +629,7 @@ export class SubagentManager {
 
     // Check if profile exists using the injected ProfileManager instance.
     try {
-      const availableProfiles = await this.profileManager.listProfiles();
+      const availableProfiles = await this.profileManager.listModelProfiles();
       return availableProfiles.includes(profileName);
     } catch (error) {
       // If ProfileManager fails, we cannot validate

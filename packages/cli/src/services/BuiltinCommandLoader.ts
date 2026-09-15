@@ -57,6 +57,7 @@ import { baseurlCommand } from '../ui/commands/baseurlCommand.js';
 import { toolformatCommand } from '../ui/commands/toolformatCommand.js';
 import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
 import { setCommand } from '../ui/commands/setCommand.js';
+import { setimageCommand } from '../ui/commands/setimageCommand.js';
 import { profileCommand } from '../ui/commands/profileCommand.js';
 import { diagnosticsCommand } from '../ui/commands/diagnosticsCommand.js';
 import { terminalSetupCommand } from '../ui/commands/terminalSetupCommand.js';
@@ -176,6 +177,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       toolformatCommand,
       setupGithubCommand,
       setCommand,
+      setimageCommand,
       profileCommand,
       diagnosticsCommand,
       terminalSetupCommand,

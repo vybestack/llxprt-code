@@ -843,6 +843,13 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `false`
   - **Requires restart:** Yes
 
+#### `imageProvider`
+
+- **`imageProvider`** (string):
+  - **Description:** Provider alias for image model selection and operations. When unset, image selection uses the active chat provider. Set it with `/provider image <alias>` or choose an alias from the `/provider image` menu. Both persist the user setting and apply it immediately without switching the chat provider. `/provider [text|image] [name]` opens the selected kind's menu when the name is omitted; bare `/provider` opens the text menu. Tab completes kinds and provider names using the same list as each menu.
+  - **Default:** `undefined`
+  - **Requires restart:** No
+
 #### `defaultProfile`
 
 - **`defaultProfile`** (string):

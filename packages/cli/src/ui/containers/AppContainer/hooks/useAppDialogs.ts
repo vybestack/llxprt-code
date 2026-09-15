@@ -18,6 +18,7 @@ import { useEditorSettings } from '../../../hooks/useEditorSettings.js';
 import { useShallowMemo } from '../../../hooks/useShallowMemo.js';
 import { useOAuthOrchestration } from '../../../hooks/useOAuthOrchestration.js';
 import { useProviderDialog } from '../../../hooks/useProviderDialog.js';
+import { useImageProviderDialog } from '../../../hooks/useImageProviderDialog.js';
 import { useLoadProfileDialog } from '../../../hooks/useLoadProfileDialog.js';
 import { useCreateProfileDialog } from '../../../hooks/useCreateProfileDialog.js';
 import { useProfileManagement } from '../../../hooks/useProfileManagement.js';
@@ -195,6 +196,11 @@ function useDialogsAuthProviders(
     dialogs,
     recordingIntegration,
   });
+  const imageProvider = useImageProviderDialog({
+    settings,
+    addMessage,
+    dialogs,
+  });
   useModelRuntimeSync({
     config,
     currentModel,
@@ -218,10 +224,10 @@ function useDialogsAuthProviders(
     handleEditorSelect: editor.handleEditorSelect,
     openEditorDialog: editor.openEditorDialog,
     handleProviderSelect: provider.handleSelect,
-    providerData: {
-      providers: provider.providers,
-      currentProvider: provider.currentProvider,
-    },
+    providerData: dialogData(provider),
+    openImageProviderDialog: imageProvider.openDialog,
+    handleImageProviderSelect: imageProvider.handleSelect,
+    imageProviderData: dialogData(imageProvider),
   };
 }
 
@@ -324,6 +330,14 @@ function useDialogHistoryMessage(turnStore: TurnStore) {
   );
 }
 
+/** Provider and image-provider hooks share this projected dialog-data shape. */
+function dialogData(hook: { providers: string[]; currentProvider: string }): {
+  providers: string[];
+  currentProvider: string;
+} {
+  return { providers: hook.providers, currentProvider: hook.currentProvider };
+}
+
 function useDialogsProfiles(p: AppDialogsParams) {
   const { config, agent, dialogs } = p;
   const addMessage = useDialogHistoryMessage(p.turnStore);
@@ -384,6 +398,7 @@ function useDialogDataSync(
   settingsStore: SettingsProfileStore,
   welcome: UseWelcomeOnboardingReturn,
   providerData: { providers: string[]; currentProvider: string },
+  imageProviderData: { providers: string[]; currentProvider: string },
   profileData: ProfileDialogsData,
   errorCount: number,
 ): void {
@@ -403,6 +418,12 @@ function useDialogDataSync(
   useEffect(() => {
     commands.setSelectedProvider(providerData.currentProvider);
   }, [commands, providerData.currentProvider]);
+  useEffect(() => {
+    commands.setImageProviderOptions(imageProviderData.providers);
+  }, [commands, imageProviderData.providers]);
+  useEffect(() => {
+    commands.setSelectedImageProvider(imageProviderData.currentProvider);
+  }, [commands, imageProviderData.currentProvider]);
   useEffect(() => {
     commands.setProfiles(profileData.profiles);
   }, [commands, profileData.profiles]);
@@ -474,6 +495,7 @@ function useDialogActionsSync(
       openThemeDialog: auth.openThemeDialog,
       openEditorDialog: auth.openEditorDialog,
       openProviderDialog: auth.openProviderDialog,
+      openImageProviderDialog: auth.openImageProviderDialog,
       openLoadProfileDialog: profiles.openLoadProfileDialog,
       openCreateProfileDialog: profiles.openCreateProfileDialog,
       openProfileListDialog: profiles.openProfileListDialog,
@@ -485,6 +507,7 @@ function useDialogActionsSync(
       authTheme: auth.openThemeDialog,
       authEditor: auth.openEditorDialog,
       authProvider: auth.openProviderDialog,
+      authImageProvider: auth.openImageProviderDialog,
       load: profiles.openLoadProfileDialog,
       create: profiles.openCreateProfileDialog,
       list: profiles.openProfileListDialog,
@@ -518,6 +541,7 @@ export function useAppDialogs(params: AppDialogsParams) {
     params.settingsStore,
     auth.welcome,
     auth.providerData,
+    auth.imageProviderData,
     profiles.data,
     core.errorCount,
   );
@@ -530,11 +554,13 @@ export function useAppDialogs(params: AppDialogsParams) {
     // Dialog domain handlers for the view command surface
     openThemeDialog: auth.openThemeDialog,
     openProviderDialog: auth.openProviderDialog,
+    openImageProviderDialog: auth.openImageProviderDialog,
     handleThemeSelect: auth.handleThemeSelect,
     handleThemeHighlight: auth.handleThemeHighlight,
     handleAuthSelect: auth.handleAuthSelect,
     handleEditorSelect: auth.handleEditorSelect,
     handleProviderSelect: auth.handleProviderSelect,
+    handleImageProviderSelect: auth.handleImageProviderSelect,
     handleProfileSelect: profiles.handleProfileSelect,
     openLoadProfileDialog: profiles.openLoadProfileDialog,
     openCreateProfileDialog: profiles.openCreateProfileDialog,

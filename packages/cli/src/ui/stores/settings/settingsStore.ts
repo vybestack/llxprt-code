@@ -55,6 +55,8 @@ export interface SettingsProfileState {
   providerOptions: string[];
   createProfileProviders: string[];
   selectedProvider: string;
+  imageProviderOptions: string[];
+  selectedImageProvider: string;
 
   // Load-profile and profile-management dialog data
   profiles: string[];
@@ -113,6 +115,8 @@ export interface SettingsProfileCommands {
   setProviderOptions: (providers: string[]) => void;
   setCreateProfileProviders: (providers: string[]) => void;
   setSelectedProvider: (provider: string) => void;
+  setImageProviderOptions: (providers: string[]) => void;
+  setSelectedImageProvider: (provider: string) => void;
   setProfiles: (profiles: string[]) => void;
   setProfileListItems: (items: ProfileListItem[]) => void;
   setSelectedProfileName: (name: string | null) => void;
@@ -162,6 +166,8 @@ function initialSettingsProfileState(): SettingsProfileState {
     providerOptions: [],
     createProfileProviders: [],
     selectedProvider: '',
+    imageProviderOptions: [],
+    selectedImageProvider: '',
     profiles: [],
     profileListItems: [],
     selectedProfileName: null,
@@ -237,6 +243,10 @@ export function createSettingsProfileStore(
     setCreateProfileProviders: (providers) =>
       assign('createProfileProviders', providers),
     setSelectedProvider: (provider) => assign('selectedProvider', provider),
+    setImageProviderOptions: (providers) =>
+      assign('imageProviderOptions', providers),
+    setSelectedImageProvider: (provider) =>
+      assign('selectedImageProvider', provider),
     setProfiles: (profiles) => assign('profiles', profiles),
     setProfileListItems: (items) => assign('profileListItems', items),
     setSelectedProfileName: (name) => assign('selectedProfileName', name),

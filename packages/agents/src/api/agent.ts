@@ -730,6 +730,7 @@ export interface AgentSessionControl {
 }
 
 export interface AgentProfileControl {
+  resetActiveImageProfile(): void;
   list(): readonly ProfileSummary[];
   get(name: string): ProfileDetail | undefined;
   create(

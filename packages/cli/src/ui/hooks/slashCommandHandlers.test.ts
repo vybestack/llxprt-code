@@ -26,6 +26,24 @@ describe('slashCommandHandlers', () => {
     performResumeMock.mockReset();
   });
 
+  it('dispatches image provider dialog actions to the image menu', async () => {
+    let opened = false;
+    const deps = createDeps(vi.fn(), {
+      commands: createCommands(async () => ({
+        type: 'dialog',
+        dialog: 'imageProvider',
+      })),
+    });
+    deps.actions = {
+      ...deps.actions,
+      openImageProviderDialog: () => {
+        opened = true;
+      },
+    };
+    await processSlashCommand(deps, '/help');
+    expect(opened).toBe(true);
+  });
+
   type HistoryCall = [{ type: MessageType; text: string }, number];
 
   function createCommands(

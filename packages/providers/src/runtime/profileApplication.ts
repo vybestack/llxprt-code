@@ -659,6 +659,8 @@ async function switchProviderForProfile(targetProviderName: string): Promise<{
   const providerSwitch = await switchActiveProvider(targetProviderName, {
     autoOAuth: false,
     skipModelDefaults: false,
+    // The snapshot owner publishes after the entire profile is committed.
+    deferProfileNotification: true,
     preserveEphemerals: PRESERVED_PROFILE_EPHEMERALS,
   });
   return {

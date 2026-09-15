@@ -11,8 +11,11 @@ import type { CommandContext } from './types.js';
 import { testRegex } from '../../test-utils/regex.js';
 
 const runtimeMocks = {
+  resetActiveImageProfile: vi.fn(),
   saveProfileSnapshot: vi.fn(),
+  saveImageProfileSnapshot: vi.fn(),
   loadProfileByName: vi.fn(),
+  loadImageProfileByName: vi.fn(),
   deleteProfileByName: vi.fn(),
   listSavedProfiles: vi.fn(),
   setDefaultProfileName: vi.fn(),
@@ -84,6 +87,21 @@ describe('profileCommand', () => {
       );
     });
 
+    it('keeps the untyped save form as a model alias', async () => {
+      await save.action!(context, 'demo');
+      expect(runtimeMocks.saveProfileSnapshot).toHaveBeenCalledWith(
+        'demo',
+        undefined,
+      );
+    });
+
+    it('saves the active image profile by name', async () => {
+      await save.action!(context, 'image artwork');
+      expect(runtimeMocks.saveImageProfileSnapshot).toHaveBeenCalledWith(
+        'artwork',
+      );
+    });
+
     it('shows usage when no args provided', async () => {
       const result = await save.action!(context, '');
       expect(result).toBeDefined();
@@ -143,10 +161,45 @@ describe('profileCommand', () => {
     });
   });
 
+  it('reports an asynchronous image reset failure', async () => {
+    const reset = profileCommand.subCommands!.find(
+      (command) => command.name === 'reset-image',
+    )!;
+    runtimeMocks.resetActiveImageProfile.mockImplementation(async () => {
+      throw new Error('reset unavailable');
+    });
+    expect(await reset.action!(context, '')).toMatchObject({
+      messageType: 'error',
+      content: expect.stringContaining('reset unavailable'),
+    });
+  });
+
   describe('load subcommand', () => {
     const load = profileCommand.subCommands!.find(
       (cmd) => cmd.name === 'load',
     )!;
+
+    it.each(['image', 'model'])(
+      'requires a name after bare %s unless saved',
+      async (kind) => {
+        expect(await load.action!(context, kind)).toMatchObject({
+          messageType: 'error',
+          content: expect.stringContaining('Usage:'),
+        });
+      },
+    );
+
+    it.each(['model', 'image'])(
+      'loads a model profile named %s',
+      async (name) => {
+        runtimeMocks.listSavedProfiles.mockResolvedValue([name]);
+        runtimeMocks.loadProfileByName.mockResolvedValue({ infoMessages: [] });
+        expect(await load.action!(context, name)).toMatchObject({
+          messageType: 'info',
+          content: expect.stringContaining(`Profile '${name}' loaded`),
+        });
+      },
+    );
 
     it('loads profile and surfaces info messages', async () => {
       runtimeMocks.loadProfileByName.mockResolvedValue({
@@ -166,6 +219,25 @@ describe('profileCommand', () => {
       expect((result as { content: string }).content).toContain(
         'fallback provider used',
       );
+    });
+
+    it('loads an explicitly typed model profile', async () => {
+      runtimeMocks.loadProfileByName.mockResolvedValue({ infoMessages: [] });
+      await load.action!(context, 'model demo');
+      expect(runtimeMocks.loadProfileByName).toHaveBeenCalledWith('demo');
+    });
+
+    it('loads an image profile without switching the chat provider', async () => {
+      runtimeMocks.loadImageProfileByName.mockResolvedValue({
+        name: 'artwork',
+        profile: { model: 'gpt-image-2.5-flare' },
+      });
+      const result = await load.action!(context, 'image artwork');
+      expect(runtimeMocks.loadImageProfileByName).toHaveBeenCalledWith(
+        'artwork',
+      );
+      expect(agentMocks.setProvider).not.toHaveBeenCalled();
+      expect((result as { content: string }).content).toContain('artwork');
     });
 
     it('refreshes Gemini tools after profile load', async () => {

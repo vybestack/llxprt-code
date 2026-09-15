@@ -39,6 +39,7 @@ export interface SlashCommandProcessorActions {
   openPermissionsDialog: () => void;
   openPoliciesDialog: () => void;
   openProviderDialog: () => void;
+  openImageProviderDialog: () => void;
   openLoadProfileDialog: () => void;
   openCreateProfileDialog: () => void;
   openProfileListDialog: () => void;

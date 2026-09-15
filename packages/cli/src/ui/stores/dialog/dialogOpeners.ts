@@ -58,6 +58,7 @@ function createVoidPayloadOpeners(
   | 'oauthCode'
   | 'editor'
   | 'provider'
+  | 'imageProvider'
   | 'loadProfile'
   | 'createProfile'
   | 'profileList'
@@ -76,6 +77,7 @@ function createVoidPayloadOpeners(
     oauthCode: createKindOpener(store, 'oauthCode'),
     editor: createKindOpener(store, 'editor'),
     provider: createKindOpener(store, 'provider'),
+    imageProvider: createKindOpener(store, 'imageProvider'),
     loadProfile: createKindOpener(store, 'loadProfile'),
     createProfile: createKindOpener(store, 'createProfile'),
     profileList: createKindOpener(store, 'profileList'),

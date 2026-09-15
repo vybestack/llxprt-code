@@ -9,32 +9,21 @@ import {
   ImageGenerationError,
   ImageValidationError,
   validateImagePrompt,
-  type ImageGenerateRequest,
-  type ImageGenerationBackend,
-  type ImageResult,
 } from '@vybestack/llxprt-code-core/services/image/ImageGenerationService.js';
+import type {
+  ImageBackend,
+  ImageGenerateRequest,
+  ImageEditRequest,
+  ImageBackendResult,
+} from '@vybestack/llxprt-code-providers/imageBackend.js';
+import { readInputImage } from './imageInput.js';
+import { parseImageResponse } from './imageBackendResponse.js';
+import { validateCodexImageProfileBaseUrl } from './imageEndpoint.js';
 import { normalizeBaseUrl } from './codexBaseUrl.js';
 
 const logger = new DebugLogger('llxprt:openai:codex:image');
 
 const MAX_EDIT_INPUTS = 5;
-
-const MAX_INPUT_IMAGE_BYTES = 20 * 1024 * 1024;
-
-const PNG_SIGNATURE_BYTES = Buffer.from([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-]);
-
-const JPEG_SIGNATURE_BYTES_PREFIX = Buffer.from([0xff, 0xd8, 0xff]);
-
-const WEBP_SIGNATURE_BYTES = Buffer.from([
-  0x52,
-  0x49,
-  0x46,
-  0x46, // "RIFF"
-]);
-
-const WEBP_FOURCC_BYTES = Buffer.from([0x57, 0x45, 0x42, 0x50]); // "WEBP"
 
 /**
  * Model identifier for the Codex image-generation backend.
@@ -106,13 +95,15 @@ export interface CodexImageCredential {
  * without mocking the adapter itself.
  */
 export interface CodexImageBackendDeps {
+  readonly mode: 'legacy' | 'profile';
   readonly getCredential: () => Promise<CodexImageCredential>;
   readonly getBaseUrl?: () => string | undefined;
+  readonly model?: string;
+  readonly defaults?: Pick<
+    ImageGenerateRequest,
+    'quality' | 'size' | 'background'
+  >;
   readonly fetchImpl?: typeof fetch;
-}
-
-interface CodexImageGenerateResponse {
-  readonly data?: ReadonlyArray<{ readonly b64_json?: string }>;
 }
 
 const MAX_BODY_SNIPPET_LENGTH = 500;
@@ -126,9 +117,10 @@ function truncateForSnippet(text: string): string {
 /**
  * Codex OAuth adapter for the backend-neutral image-generation service.
  *
- * Implements {@link ImageGenerationBackend} using the same standalone-fetch
+ * Implements {@link ImageBackend} using the same standalone-fetch
  * pattern as `fetchCodexUsage`: a direct `fetch` with `Authorization: Bearer`,
  * `ChatGPT-Account-Id`, `originator: codex_cli_rs`, and an `AbortSignal`
+
  * passed straight through so cancellation propagates.
  *
  * A single fresh credential object (`{ accessToken, accountId }`) is resolved
@@ -136,18 +128,26 @@ function truncateForSnippet(text: string): string {
  * the access token and account id always originate from the same OAuth token
  * fetch and never diverge.
  */
-export class CodexImageBackend implements ImageGenerationBackend {
+export class CodexImageBackend implements ImageBackend {
   readonly name = 'codex';
   readonly provider = 'codex';
-  readonly model = CODEX_IMAGE_MODEL;
+  readonly model: string;
 
   private readonly getCredential: () => Promise<CodexImageCredential>;
   private readonly getBaseUrl: () => string | undefined;
+  private readonly defaults: Pick<
+    ImageGenerateRequest,
+    'quality' | 'size' | 'background'
+  >;
+  private readonly hasImageProfile: boolean;
   private readonly fetchImpl: typeof fetch;
 
   constructor(deps: CodexImageBackendDeps) {
     this.getCredential = deps.getCredential;
     this.getBaseUrl = deps.getBaseUrl ?? (() => undefined);
+    this.model = deps.model ?? CODEX_IMAGE_MODEL;
+    this.defaults = deps.defaults ?? {};
+    this.hasImageProfile = deps.mode === 'profile';
     this.fetchImpl = deps.fetchImpl ?? fetch;
   }
 
@@ -158,9 +158,9 @@ export class CodexImageBackend implements ImageGenerationBackend {
   ): Record<string, string> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${accessToken}`,
-      'ChatGPT-Account-ID': accountId,
       originator: 'codex_cli_rs',
       'Content-Type': 'application/json',
+      'ChatGPT-Account-ID': accountId,
     };
     if (sessionId !== undefined) {
       headers['session_id'] = sessionId;
@@ -174,7 +174,7 @@ export class CodexImageBackend implements ImageGenerationBackend {
     headers: Record<string, string>,
     signal: AbortSignal,
     operationName: string,
-  ): Promise<string> {
+  ): Promise<Omit<ImageBackendResult, 'caption'>> {
     const response = await this.fetchImpl(endpoint, {
       method: 'POST',
       headers,
@@ -219,9 +219,9 @@ export class CodexImageBackend implements ImageGenerationBackend {
         },
       );
     }
-    let parsed: CodexImageGenerateResponse;
+    let parsed: unknown;
     try {
-      parsed = JSON.parse(rawBody) as CodexImageGenerateResponse;
+      parsed = JSON.parse(rawBody);
     } catch (jsonError) {
       throw new ImageGenerationError(
         `Codex image ${operationName} returned a non-JSON response.`,
@@ -234,20 +234,22 @@ export class CodexImageBackend implements ImageGenerationBackend {
       );
     }
 
-    const b64 = parsed.data?.[0]?.b64_json;
-    if (typeof b64 !== 'string' || b64 === '') {
-      throw new ImageGenerationError(
-        `Codex image ${operationName} returned no image data.`,
-        { status: response.status, endpoint },
-      );
-    }
-    return b64;
+    return parseImageResponse(parsed, this.fetchImpl, signal);
+  }
+
+  private buildEndpoint(suffix: 'generations' | 'edits'): string {
+    const baseUrl = this.getBaseUrl();
+    if (this.hasImageProfile && baseUrl !== undefined)
+      validateCodexImageProfileBaseUrl(baseUrl);
+    return suffix === 'generations'
+      ? buildCodexImageGenerateEndpoint(baseUrl)
+      : buildCodexImageEditEndpoint(baseUrl);
   }
 
   async generate(
     request: ImageGenerateRequest,
     signal: AbortSignal,
-  ): Promise<ImageResult> {
+  ): Promise<ImageBackendResult> {
     validateImagePrompt(request.prompt);
 
     if (request.n !== undefined && request.n !== 1) {
@@ -256,15 +258,27 @@ export class CodexImageBackend implements ImageGenerationBackend {
       );
     }
 
+    const endpoint = this.buildEndpoint('generations');
     const credential = await this.getCredential();
-    const endpoint = buildCodexImageGenerateEndpoint(this.getBaseUrl());
 
+    const background =
+      request.background ??
+      this.defaults.background ??
+      (this.hasImageProfile ? undefined : 'auto');
+    const quality =
+      request.quality ??
+      this.defaults.quality ??
+      (this.hasImageProfile ? undefined : 'auto');
+    const size =
+      request.size ??
+      this.defaults.size ??
+      (this.hasImageProfile ? undefined : 'auto');
     const body = {
-      model: CODEX_IMAGE_MODEL,
+      model: this.model,
       prompt: request.prompt,
-      background: request.background ?? 'auto',
-      quality: request.quality ?? 'auto',
-      size: request.size ?? 'auto',
+      ...(background !== undefined ? { background } : {}),
+      ...(quality !== undefined ? { quality } : {}),
+      ...(size !== undefined ? { size } : {}),
       n: request.n ?? 1,
     };
 
@@ -274,7 +288,7 @@ export class CodexImageBackend implements ImageGenerationBackend {
       request.sessionId,
     );
 
-    const b64 = await this.postAndParse(
+    const response = await this.postAndParse(
       endpoint,
       body,
       headers,
@@ -283,15 +297,11 @@ export class CodexImageBackend implements ImageGenerationBackend {
     );
 
     logger.debug(
-      () => `Generated Codex image via ${endpoint} (model=${body.model})`,
+      () =>
+        `Generated Codex image via ${endpoint} (model=${body.model}, quality=${response.quality ?? 'unknown'}, size=${response.size ?? 'unknown'}, usage=${JSON.stringify(response.usage ?? {})})`,
     );
 
-    return {
-      mimeType: 'image/png',
-      encoding: 'base64',
-      data: b64,
-      caption: request.prompt,
-    };
+    return { ...response, caption: request.prompt };
   }
 
   /**
@@ -302,13 +312,9 @@ export class CodexImageBackend implements ImageGenerationBackend {
    * `image` array. A fresh credential object is resolved once per operation.
    */
   async edit(
-    request: {
-      readonly prompt: string;
-      readonly inputPaths: readonly string[];
-      readonly sessionId?: string;
-    },
+    request: ImageEditRequest,
     signal: AbortSignal,
-  ): Promise<ImageResult> {
+  ): Promise<ImageBackendResult> {
     validateImagePrompt(request.prompt);
 
     if (request.inputPaths.length === 0) {
@@ -327,24 +333,36 @@ export class CodexImageBackend implements ImageGenerationBackend {
         cause: new Error('Aborted'),
       });
     }
+    const endpoint = this.buildEndpoint('edits');
     const dataUrls = await Promise.all(
-      request.inputPaths.map(readAndEncodeInputImage),
+      request.inputPaths.map(async (inputPath) => {
+        const { bytes, mimeType } = await readInputImage(inputPath);
+        return `data:${mimeType};base64,${bytes.toString('base64')}`;
+      }),
     );
 
     const credential = await this.getCredential();
-    const endpoint = buildCodexImageEditEndpoint(this.getBaseUrl());
 
     // The Codex `/images/edits` contract requires `images` to be an array of
     // `{ image_url }` objects, NOT an array of bare data-URL strings and not
     // the singular `image` key. Anything else is rejected by the service with
     // `400 missing_required_parameter: images`.
+    const background = this.hasImageProfile
+      ? (request.background ?? this.defaults.background)
+      : 'auto';
+    const quality = this.hasImageProfile
+      ? (request.quality ?? this.defaults.quality)
+      : 'auto';
+    const size = this.hasImageProfile
+      ? (request.size ?? this.defaults.size)
+      : 'auto';
     const body = {
-      model: CODEX_IMAGE_MODEL,
+      model: this.model,
       prompt: request.prompt,
       images: dataUrls.map((imageUrl) => ({ image_url: imageUrl })),
-      background: 'auto',
-      quality: 'auto',
-      size: 'auto',
+      ...(background !== undefined ? { background } : {}),
+      ...(quality !== undefined ? { quality } : {}),
+      ...(size !== undefined ? { size } : {}),
     };
 
     const headers = this.buildHeaders(
@@ -353,7 +371,7 @@ export class CodexImageBackend implements ImageGenerationBackend {
       request.sessionId,
     );
 
-    const b64 = await this.postAndParse(
+    const response = await this.postAndParse(
       endpoint,
       body,
       headers,
@@ -361,118 +379,13 @@ export class CodexImageBackend implements ImageGenerationBackend {
       'edit',
     );
 
-    logger.debug(() => `Edited Codex image via ${endpoint}`);
-
-    return {
-      mimeType: 'image/png',
-      encoding: 'base64',
-      data: b64,
-      caption: request.prompt,
-    };
-  }
-}
-
-/**
- * Read an input image from the filesystem, validate it (no URLs, no escaping
- * symlinks, valid image signature, bounded size), and encode it as a data URL.
- *
- * Never logs the image bytes or data URL.
- */
-async function readAndEncodeInputImage(inputPath: string): Promise<string> {
-  // Reject URLs — only local file inputs are supported initially.
-  if (/^https?:\/\//i.test(inputPath) || /^file:\/\//i.test(inputPath)) {
-    throw new ImageValidationError(
-      `Remote URL input images are not supported: ${inputPath}. Use a local workspace file.`,
+    logger.debug(
+      () =>
+        `Edited Codex image via ${endpoint} (model=${body.model}, quality=${response.quality ?? 'unknown'}, size=${response.size ?? 'unknown'}, usage=${JSON.stringify(response.usage ?? {})})`,
     );
-  }
 
-  const { promises: fs } = await import('node:fs');
-  const path = await import('node:path');
-
-  // Reject symlinks before reading.
-  try {
-    const stat = await fs.lstat(inputPath);
-    if (stat.isSymbolicLink()) {
-      throw new ImageValidationError(
-        `Input image is a symbolic link and cannot be used safely: ${inputPath}.`,
-      );
-    }
-    if (!stat.isFile()) {
-      throw new ImageValidationError(
-        `Input image is not a regular file: ${inputPath}.`,
-      );
-    }
-    if (stat.size > MAX_INPUT_IMAGE_BYTES) {
-      throw new ImageValidationError(
-        `Input image exceeds the maximum size: ${inputPath}.`,
-      );
-    }
-  } catch (error) {
-    if (error instanceof ImageValidationError) {
-      throw error;
-    }
-    throw new ImageValidationError(
-      `Input image could not be accessed: ${inputPath}.`,
-    );
+    return { ...response, caption: request.prompt };
   }
-
-  const bytes = await fs.readFile(inputPath);
-
-  // Validate the image signature by extension and magic bytes.
-  const ext = path.extname(inputPath).toLowerCase();
-  const mimeType = detectImageMimeType(ext, bytes);
-  if (mimeType === null) {
-    throw new ImageValidationError(
-      `Input image has an unsupported or unrecognized format: ${inputPath}.`,
-    );
-  }
-
-  const base64 = bytes.toString('base64');
-  return `data:${mimeType};base64,${base64}`;
-}
-
-function detectImageMimeType(ext: string, bytes: Buffer): string | null {
-  if (ext === '.png') {
-    if (
-      bytes.length >= PNG_SIGNATURE_BYTES.length &&
-      bytes.subarray(0, PNG_SIGNATURE_BYTES.length).equals(PNG_SIGNATURE_BYTES)
-    ) {
-      return 'image/png';
-    }
-    return null;
-  }
-  if (ext === '.jpg' || ext === '.jpeg') {
-    if (
-      bytes.length >= 3 &&
-      bytes.subarray(0, 3).equals(JPEG_SIGNATURE_BYTES_PREFIX)
-    ) {
-      return 'image/jpeg';
-    }
-    return null;
-  }
-  if (ext === '.webp') {
-    // Verify BOTH the RIFF container prefix AND the WEBP fourCC at byte
-    // offset 8, so a RIFF file that is NOT WebP (e.g. WAV/AVI renamed .webp)
-    // is rejected instead of being misclassified as image/webp.
-    if (
-      bytes.length >= WEBP_SIGNATURE_BYTES.length &&
-      bytes
-        .subarray(0, WEBP_SIGNATURE_BYTES.length)
-        .equals(WEBP_SIGNATURE_BYTES)
-    ) {
-      const fourccStart = WEBP_SIGNATURE_BYTES.length + 4; // skip RIFF(4) + size(4)
-      if (
-        bytes.length >= fourccStart + WEBP_FOURCC_BYTES.length &&
-        bytes
-          .subarray(fourccStart, fourccStart + WEBP_FOURCC_BYTES.length)
-          .equals(WEBP_FOURCC_BYTES)
-      ) {
-        return 'image/webp';
-      }
-    }
-    return null;
-  }
-  return null;
 }
 
 export { ImageGenerationError, ImageValidationError };

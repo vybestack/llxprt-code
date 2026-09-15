@@ -72,6 +72,8 @@ export interface DialogData {
   authError: string | null;
   providerOptions: string[];
   selectedProvider: string;
+  imageProviderOptions: string[];
+  selectedImageProvider: string;
   profiles: string[];
   createProfileProviders: string[];
   profileListItems: ProfileListItem[];
@@ -244,6 +246,24 @@ export function renderProviderDialog(
         providers={uiState.providerOptions}
         currentProvider={uiState.selectedProvider}
         onSelect={handleProviderSelect}
+        onClose={onClose}
+      />
+    </Box>
+  );
+}
+
+export function renderImageProviderDialog(
+  uiState: DialogData,
+  handleImageProviderSelect: (alias: string) => void,
+  onClose: () => void,
+) {
+  return (
+    <Box flexDirection="column">
+      <ProviderDialog
+        title="Image provider"
+        providers={uiState.imageProviderOptions}
+        currentProvider={uiState.selectedImageProvider}
+        onSelect={handleImageProviderSelect}
         onClose={onClose}
       />
     </Box>

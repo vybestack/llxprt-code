@@ -377,6 +377,24 @@ export function createCompletionHandler(schema: CommandArgumentSchema) {
         active.nodes,
         normalized.partialArg,
       );
+      const alternative = active.remainingSchema[0];
+      if (
+        active.remainingSchema.length > 0 &&
+        alternative.kind === 'value' &&
+        alternative.literalAlternative === true
+      ) {
+        const values = await suggestForValue(
+          ctx,
+          alternative,
+          normalized.partialArg,
+          argumentTokenInfo,
+        );
+        const literals = new Set(suggestions.map((option) => option.value));
+        suggestions = [
+          ...suggestions,
+          ...values.filter((option) => !literals.has(option.value)),
+        ];
+      }
       hint = inferLiteralHint(active.nodes);
     }
 

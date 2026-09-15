@@ -9,6 +9,7 @@ export interface DialogActions {
   openThemeDialog: () => void;
   openEditorDialog: () => void;
   openProviderDialog: () => void;
+  openImageProviderDialog: () => void;
   openLoadProfileDialog: () => void | Promise<void>;
   openCreateProfileDialog: () => void;
   openProfileListDialog: () => void | Promise<void>;
@@ -33,6 +34,7 @@ export function initialDialogActions(): DialogActions {
     openThemeDialog: uninitializedDialogAction,
     openEditorDialog: uninitializedDialogAction,
     openProviderDialog: uninitializedDialogAction,
+    openImageProviderDialog: uninitializedDialogAction,
     openLoadProfileDialog: uninitializedDialogAction,
     openCreateProfileDialog: uninitializedDialogAction,
     openProfileListDialog: uninitializedDialogAction,

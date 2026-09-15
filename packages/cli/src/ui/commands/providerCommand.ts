@@ -9,7 +9,6 @@
  * @requirement:REQ-API-001
  * @pseudocode consumer-migration.md lines 10-15
  */
-
 import type {
   SlashCommand,
   CommandContext,
@@ -26,6 +25,8 @@ import {
   writeProviderAliasConfig,
   type ProviderAliasConfig,
 } from '@vybestack/llxprt-code-providers/composition.js';
+import { pinImageProvider } from './providerSelection.js';
+import { providerCommandSchema } from './providerCommandSchema.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
@@ -39,6 +40,26 @@ import {
   hasFunction,
   hasObject,
 } from '../../utils/typeGuards.js';
+
+function handleImageProvider(
+  context: CommandContext,
+  alias: string,
+): MessageActionReturn {
+  try {
+    pinImageProvider(context.services.settings, getRuntimeApi(), alias);
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: `Image provider set to ${alias}`,
+    };
+  } catch (error) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
 
 type WrappedProvider = IProvider & { wrappedProvider: IProvider };
 
@@ -383,24 +404,35 @@ async function switchProvider(
 export const providerCommand: SlashCommand = {
   name: 'provider',
   description:
-    'switch between different AI providers (openai, anthropic, etc.)',
+    'select a provider: /provider [text|image] [name] (omit name for menu; Tab to complete)',
   kind: CommandKind.BUILT_IN,
+  autoExecute: true,
+  schema: providerCommandSchema,
   action: async (
     context: CommandContext,
     args: string,
   ): Promise<OpenDialogActionReturn | MessageActionReturn | void> => {
     const trimmedArgs = args.trim();
+    const kindMatch = /^(text|image)(?:\s+|$)/.exec(trimmedArgs);
+    const providerName = kindMatch
+      ? trimmedArgs.slice(kindMatch[0].length).trim()
+      : trimmedArgs;
+    if (kindMatch?.[1] === 'image') {
+      return providerName
+        ? handleImageProvider(context, providerName)
+        : { type: 'dialog', dialog: 'imageProvider' };
+    }
 
-    if (!trimmedArgs) {
+    if (!providerName) {
       return { type: 'dialog', dialog: 'provider' };
     }
 
-    if (/^save\b/i.test(trimmedArgs)) {
+    if (!kindMatch && /^save\b/i.test(trimmedArgs)) {
       return handleSaveAlias(getProviderManager(), context, trimmedArgs);
     }
 
     try {
-      return await switchProvider(context, trimmedArgs);
+      return await switchProvider(context, providerName);
     } catch (error) {
       return {
         type: 'message',

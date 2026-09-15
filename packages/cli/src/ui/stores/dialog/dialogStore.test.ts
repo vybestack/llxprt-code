@@ -28,6 +28,7 @@ const bodyOrder: ListDialogKind[] = [
   'oauthCode',
   'editor',
   'provider',
+  'imageProvider',
   'loadProfile',
   'createProfile',
   'profileList',

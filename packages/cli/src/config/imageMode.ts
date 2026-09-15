@@ -20,6 +20,7 @@ export const IMAGE_MODE_MAX_INPUTS = 5;
  * Raw image-mode flags as parsed by yargs.
  */
 export interface ImageModeFlags {
+  readonly imageProfile?: string;
   readonly imageInput?: readonly string[];
   readonly imageOutput?: string;
   readonly imagePrompt?: string;
@@ -36,6 +37,7 @@ export interface ImageModeConflicts {
 }
 
 export interface ValidatedImageMode {
+  readonly imageProfileName?: string;
   readonly operation: 'generate' | 'edit';
   readonly outputPath: string;
   readonly prompt: string;
@@ -152,5 +154,8 @@ export function validateImageModeArgs(
     outputPath: output,
     prompt,
     inputPaths: [...inputs],
+    ...(flags.imageProfile?.trim()
+      ? { imageProfileName: flags.imageProfile.trim() }
+      : {}),
   };
 }

@@ -88,7 +88,7 @@ export const imageCommand: SlashCommand = {
       context.ui.addItem(
         {
           type: MessageType.INFO,
-          text: `${verb} image.\nSaved to: ${result.absoluteOutputPath}`,
+          text: `${verb} image via ${result.backend} (configured model: ${result.model}).\nSaved to: ${result.absoluteOutputPath}`,
         },
         Date.now(),
       );

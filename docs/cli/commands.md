@@ -10,12 +10,45 @@ Slash commands control the CLI itself — configuration, navigation, session man
 
 ### Provider and Model
 
-| Command                | Description                              |
-| ---------------------- | ---------------------------------------- |
-| `/provider [name]`     | Switch provider (e.g., `/provider kimi`) |
-| `/model [name]`        | Switch model (e.g., `/model grok-4`)     |
-| `/baseurl [url]`       | Set the API base URL                     |
-| `/toolformat [format]` | Set the tool format for the provider     |
+| Command                          | Description                          |
+| -------------------------------- | ------------------------------------ |
+| `/provider [text\|image] [name]` | Select a provider or open its menu   |
+| `/model [name]`                  | Switch model (e.g., `/model grok-4`) |
+| `/baseurl [url]`                 | Set the API base URL                 |
+| `/toolformat [format]`           | Set the tool format for the provider |
+
+`/provider` and `/provider text` open the text provider menu. `/provider <name>`
+and `/provider text <name>` switch the chat provider. `/provider image` opens
+an image provider menu containing provider aliases, with the `imageProvider`
+setting selected when present, otherwise the active chat provider.
+`/provider image <alias>` saves that alias to user settings without switching
+the chat provider; selecting an alias in the image menu does the same.
+
+Press Tab after `/provider ` for `text`, `image`, `save`, and bare provider
+names. After `text` or `image`, Tab completes the same provider list shown in
+that kind's menu. `/provider save <alias>` still saves the current provider
+configuration as an alias. A leading `text` or `image` token selects the kind;
+use `/provider text text` to select a provider named `text`.
+
+`/model` opens the text model browser. `/model text ...` accepts the same search
+and filter arguments. `/model image` opens a selection list for the effective
+image provider. Codex uses its configured static image-model list. Local loopback
+endpoints use a live `/models` request and show every returned model. Other
+providers use models.dev models with image-output capability. A failed request
+shows an error; an empty list reports that no image models are known. Neither
+case offers a free-text fallback.
+
+Selecting a model derives its backend, URL, and authentication from the provider
+alias. The configuration is active but unnamed; save it with
+`/profile save image <name>`. `/model image <name>` loads a saved image profile
+when that name exists, preserving its explicit URL and authentication. Otherwise,
+it selects `<name>` as a model ID on the effective image provider. There are no
+backend, URL, model-text, or authentication wizard steps.
+
+A leading `text` or `image` is always a kind prefix, never a search term.
+Use `/model text text` for a text model named `text`, `/model text image` for a
+text model named `image`, or `/model image image` for an image profile named
+`image`. Commands without a kind prefix keep their existing text-model behavior.
 
 ### Authentication
 
@@ -42,6 +75,22 @@ Slash commands control the CLI itself — configuration, navigation, session man
 | `/set modelparam <key> <value>` | Set a model parameter                     |
 | `/set unset <key>`              | Clear an ephemeral setting                |
 | `/settings`                     | Open the interactive settings editor      |
+
+`/setimage` configures the active image model/backend in a separate namespace
+from `/set`. Select or configure one with `/model image` first.
+
+| Command                              | Description                      |
+| ------------------------------------ | -------------------------------- |
+| `/setimage <key> <value>`            | Set an image ephemeral setting   |
+| `/setimage modelparam <key> <value>` | Set an image model parameter     |
+| `/setimage unset <key>`              | Clear an image ephemeral setting |
+| `/setimage unset modelparam <key>`   | Clear one image model parameter  |
+| `/setimage unset modelparam`         | Clear all image model parameters |
+
+Save these settings with `/profile save image <name>` and restore them with
+`/profile load image <name>`. These namespaces are stored with the image
+configuration; arbitrary parameters are not yet forwarded to image requests.
+Image request options continue to use the profile's `defaults` fields.
 
 ### Session
 

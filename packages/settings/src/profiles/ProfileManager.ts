@@ -13,12 +13,14 @@ import type {
   StandardProfile,
   EphemeralSettings,
   ModelParams,
+  ImageProfile,
 } from './types.js';
 import { isLoadBalancerProfile } from './types.js';
 import {
   isPlainObject,
   parseLoadBalancerProfile,
   parseProfile,
+  parseImageProfile,
   parseProfileJson,
   parsePromptCaching,
 } from '../settings/validation.js';
@@ -30,8 +32,104 @@ import { Storage } from '@vybestack/llxprt-code-storage';
 import {
   writeProfileFile,
   writeProfileFileIfUnchanged,
+  profileFilePath,
   deleteProfileFile,
+  hasErrnoCode,
+  type ReadResult,
 } from './profileStore.js';
+
+type StoredProfileKind = 'model' | 'image' | 'invalid';
+
+export class ProfileTypeConflictError extends Error {
+  constructor(
+    readonly profileName: string,
+    readonly requestedType: 'model' | 'image',
+    readonly existingType: string,
+    operation: 'save' | 'load' = 'save',
+  ) {
+    super(
+      `Cannot ${operation} ${requestedType} profile '${profileName}' because that name belongs to ${existingType === 'image' ? 'an' : 'a'} ${existingType} profile`,
+    );
+    this.name = 'ProfileTypeConflictError';
+  }
+}
+
+export class ImageProfileNotFoundError extends Error {
+  constructor(readonly profileName: string) {
+    super(`Image profile '${profileName}' not found`);
+    this.name = 'ImageProfileNotFoundError';
+  }
+}
+
+export class LoadBalancerMemberTypeError extends Error {
+  constructor(
+    readonly profileName: string,
+    readonly memberName: string,
+  ) {
+    super(
+      `LoadBalancer profile '${profileName}' cannot reference image profile '${memberName}'`,
+    );
+    this.name = 'LoadBalancerMemberTypeError';
+  }
+}
+
+export class ImageProfileLoadError extends Error {
+  constructor(
+    readonly profileName: string,
+    cause: unknown,
+  ) {
+    super(`Image profile '${profileName}' could not be loaded`, { cause });
+    this.name = 'ImageProfileLoadError';
+  }
+}
+
+export function isImageProfileLoadError(error: unknown): boolean {
+  return (
+    error instanceof ImageProfileNotFoundError ||
+    error instanceof ImageProfileLoadError ||
+    (error instanceof ProfileTypeConflictError &&
+      error.requestedType === 'image')
+  );
+}
+
+function storedProfileKind(content: string): StoredProfileKind {
+  const parsed = parseProfileJson(content);
+  if (parsed.kind !== 'parsed' || !isPlainObject(parsed.value)) {
+    return 'invalid';
+  }
+  try {
+    if (parsed.value.type === 'image') {
+      parseImageProfile('<stored>', parsed.value);
+      return 'image';
+    }
+    if (parsed.value.type === 'loadbalancer') {
+      parseLoadBalancerProfile('<stored>', parsed.value);
+    } else {
+      parseProfile(parsed.value);
+    }
+    return 'model';
+  } catch {
+    return 'invalid';
+  }
+}
+
+function assertCompatibleStoredProfile(
+  profileName: string,
+  requestedType: 'model' | 'image',
+  existing: Exclude<ReadResult, { kind: 'error' }>,
+): void {
+  if (existing.kind === 'absent') {
+    return;
+  }
+  const existingType = storedProfileKind(existing.content);
+  if (existingType !== 'invalid' && existingType !== requestedType) {
+    throw new ProfileTypeConflictError(
+      profileName,
+      requestedType,
+      existingType,
+    );
+  }
+}
 
 interface ProfileSettingsServiceLike {
   exportForProfile?: () => Promise<{
@@ -65,6 +163,22 @@ function optionalNumber(value: unknown): number | undefined {
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
+}
+
+function storedProfileType(profile: unknown): string {
+  if (!isPlainObject(profile)) return 'unknown';
+  if (typeof profile.type === 'string') return profile.type;
+  return typeof profile.provider === 'string' ? 'model' : 'unknown';
+}
+
+function assertModelMember(
+  profileName: string,
+  memberName: string,
+  profile: unknown,
+): void {
+  if (isPlainObject(profile) && profile.type === 'image') {
+    throw new LoadBalancerMemberTypeError(profileName, memberName);
+  }
 }
 
 function referencedProfileIsLoadBalancer(profile: unknown): boolean {
@@ -106,7 +220,49 @@ export class ProfileManager {
       profileName,
       JSON.stringify(profile, null, 2),
       'overwrite',
+      (existing) =>
+        assertCompatibleStoredProfile(profileName, 'model', existing),
     );
+  }
+
+  async saveImageProfile(
+    profileName: string,
+    profile: ImageProfile,
+  ): Promise<void> {
+    const validated = parseImageProfile(profileName, profile);
+    await writeProfileFile(
+      this.profilesDir,
+      profileName,
+      JSON.stringify(validated, null, 2),
+      'overwrite',
+      (existing) =>
+        assertCompatibleStoredProfile(profileName, 'image', existing),
+    );
+  }
+
+  async loadImageProfile(profileName: string): Promise<ImageProfile> {
+    try {
+      const filePath = profileFilePath(this.profilesDir, profileName);
+      const content = await fs.readFile(filePath, 'utf8');
+      const parsed = ProfileManager.parseProfileContent(content);
+      if (!isPlainObject(parsed) || parsed.type !== 'image') {
+        throw new ProfileTypeConflictError(
+          profileName,
+          'image',
+          storedProfileType(parsed),
+          'load',
+        );
+      }
+      return parseImageProfile(profileName, parsed);
+    } catch (error) {
+      if (hasErrnoCode(error, 'ENOENT')) {
+        throw new ImageProfileNotFoundError(profileName);
+      }
+      if (isImageProfileLoadError(error)) {
+        throw error;
+      }
+      throw new ImageProfileLoadError(profileName, error);
+    }
   }
 
   async saveProfileIfUnchanged(
@@ -169,6 +325,7 @@ export class ProfileManager {
       name,
       JSON.stringify(loadBalancerProfile, null, 2),
       'overwrite',
+      (existing) => assertCompatibleStoredProfile(name, 'model', existing),
     );
   }
 
@@ -207,6 +364,8 @@ export class ProfileManager {
       const referencedProfileData: unknown =
         ProfileManager.parseProfileContent(referencedContent);
 
+      assertModelMember(profileName, referencedProfile, referencedProfileData);
+
       if (referencedProfileIsLoadBalancer(referencedProfileData)) {
         throw new Error(
           `LoadBalancer profile '${profileName}' cannot reference another LoadBalancer profile '${referencedProfile}'`,
@@ -227,6 +386,14 @@ export class ProfileManager {
       const content = await fs.readFile(filePath, 'utf8');
 
       const parsed = ProfileManager.parseProfileContent(content);
+      if (isPlainObject(parsed) && parsed.type === 'image') {
+        throw new ProfileTypeConflictError(
+          profileName,
+          'model',
+          'image',
+          'load',
+        );
+      }
       const profile =
         isPlainObject(parsed) && parsed.type === 'loadbalancer'
           ? parseLoadBalancerProfile(profileName, parsed)
@@ -273,10 +440,18 @@ export class ProfileManager {
   }
 
   /**
-   * List all available profile names.
-   * @returns Array of profile names (without .json extension)
+   * List conversational profiles, including load balancers and legacy files.
+   * @returns Model profile names without the .json extension.
    */
-  async listProfiles(): Promise<string[]> {
+  async listModelProfiles(): Promise<string[]> {
+    return this.listProfiles('model');
+  }
+
+  async listImageProfiles(): Promise<string[]> {
+    return this.listProfiles('image');
+  }
+
+  async listProfiles(kind?: 'model' | 'image' | 'standard'): Promise<string[]> {
     try {
       await fs.mkdir(this.profilesDir, { recursive: true });
 
@@ -286,7 +461,31 @@ export class ProfileManager {
         .filter((file) => file.endsWith('.json'))
         .map((file) => file.slice(0, -5));
 
-      return profileNames;
+      if (kind === undefined) return profileNames;
+      const matching = await Promise.all(
+        profileNames.map(async (name) => {
+          let content: string;
+          try {
+            content = await fs.readFile(
+              path.join(this.profilesDir, `${name}.json`),
+              'utf8',
+            );
+          } catch {
+            return [];
+          }
+          const parsed = parseProfileJson(content);
+          if (parsed.kind !== 'parsed' || !isPlainObject(parsed.value))
+            return [];
+          const type = parsed.value.type;
+          const isStandard =
+            type === undefined || type === 'model' || type === 'standard';
+          const isModel =
+            isStandard || (kind === 'model' && type === 'loadbalancer');
+          const matches = kind === 'image' ? type === 'image' : isModel;
+          return matches ? [name] : [];
+        }),
+      );
+      return matching.flat();
     } catch {
       return [];
     }

@@ -596,6 +596,15 @@ export type {
   ProviderRuntimeContext,
   ProviderRuntimeContextInit,
 } from './runtime/providerRuntimeContext.js';
+export type {
+  ImageBackend,
+  ImageEditRequest,
+} from './services/image/imageBackendContract.js';
+export {
+  createImageProfileRuntimeState,
+  type ActiveImageProfile,
+  type ImageProfileRuntimeState,
+} from './runtime/ImageProfileRuntimeState.js';
 
 // @plan PLAN-20251027-STATELESS5.P06
 // Export AgentRuntimeState types and functions for CLI adapter integration
