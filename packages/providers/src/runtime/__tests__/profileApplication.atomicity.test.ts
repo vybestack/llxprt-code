@@ -12,13 +12,7 @@
  * to the caller.
  */
 
-import {
-  beforeEach,
-  describe,
-  expect,
-  it,
-  mock,
-} from 'bun:test';
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import {
   switchActiveProviderMock,

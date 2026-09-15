@@ -812,7 +812,8 @@ export async function applyProfileWithGuards(
   // surface before the cascade; on failure restore it and rethrow the
   // ORIGINAL error. Not rolled back: ProviderManager runtime caches (they
   // are caches over this store and refresh on next access).
-  const stateSnapshot = runtimeServices.settingsService.exportForStateSnapshot();
+  const stateSnapshot =
+    runtimeServices.settingsService.exportForStateSnapshot();
   try {
     return await applyProfileCascade(profileInput, options, runtimeServices);
   } catch (error) {

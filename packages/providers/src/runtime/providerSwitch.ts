@@ -340,9 +340,7 @@ function activateProviderContext(context: ProviderSwitchContext): void {
   );
 }
 
-function switchSettingsProvider(
-  context: ProviderSwitchContext,
-): void {
+function switchSettingsProvider(context: ProviderSwitchContext): void {
   const { name, settingsService, providerManager } = context;
   const activeProvider = providerManager.getActiveProvider();
   const providerSettings = getProviderSettingsSnapshot(settingsService, name);

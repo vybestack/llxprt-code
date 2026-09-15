@@ -501,9 +501,9 @@ export class MemoryTool
     // Core scopes require model.canSaveCore to be enabled
     if (isCoreScope(params.scope)) {
       try {
-        const canSaveCore = this.settingsService?.get(
-          'model.canSaveCore',
-        ) as boolean | undefined;
+        const canSaveCore = this.settingsService?.get('model.canSaveCore') as
+          | boolean
+          | undefined;
         if (canSaveCore !== true) {
           return (
             'Core memory scopes (core.global, core.project) are disabled. ' +
