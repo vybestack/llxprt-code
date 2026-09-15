@@ -1212,8 +1212,8 @@
     },
     "imageProvider": {
       "title": "Image Provider",
-      "description": "Provider alias for image model selection and operations.",
-      "markdownDescription": "Provider alias for image model selection and operations.\n\n- Category: `Provider`\n- Requires restart: `no`",
+      "description": "Provider alias for image model selection and operations. When unset, image selection uses the active chat provider. Set it with `/provider image <alias>` or choose an alias from the `/provider image` menu. Both persist the user setting and apply it immediately without switching the chat provider. `/provider [text|image] [name]` opens the selected kind's menu when the name is omitted; bare `/provider` opens the text menu. Tab completes kinds and provider names using the same list as each menu.",
+      "markdownDescription": "Provider alias for image model selection and operations. When unset, image selection uses the active chat provider. Set it with `/provider image <alias>` or choose an alias from the `/provider image` menu. Both persist the user setting and apply it immediately without switching the chat provider. `/provider [text|image] [name]` opens the selected kind's menu when the name is omitted; bare `/provider` opens the text menu. Tab completes kinds and provider names using the same list as each menu.\n\n- Category: `Provider`\n- Requires restart: `no`",
       "type": "string"
     },
     "defaultProfile": {

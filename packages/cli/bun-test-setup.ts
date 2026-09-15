@@ -144,6 +144,7 @@ const SUITES_NEEDING_REAL_ALIASES = [
   'src/ui/commands/model-kind-prefix.test.ts',
   'src/ui/components/image-model-wizard.test.ts',
   'src/ui/components/image-models-dialog.test.tsx',
+  'src/ui/hooks/useImageProviderDialog.test.tsx',
 ];
 // argv carries native separators, so on Windows the path arrives as
 // `test\providers\providerAliases.test.ts` and a raw endsWith against the

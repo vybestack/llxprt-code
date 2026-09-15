@@ -343,7 +343,8 @@ export const EXTENSION_SETTINGS_SCHEMA = {
     category: 'Provider',
     requiresRestart: false,
     default: undefined as string | undefined,
-    description: 'Provider alias for image model selection and operations.',
+    description:
+      "Provider alias for image model selection and operations. When unset, image selection uses the active chat provider. Set it with `/provider image <alias>` or choose an alias from the `/provider image` menu. Both persist the user setting and apply it immediately without switching the chat provider. `/provider [text|image] [name]` opens the selected kind's menu when the name is omitted; bare `/provider` opens the text menu. Tab completes kinds and provider names using the same list as each menu.",
     showInDialog: false,
   },
   defaultProfile: {
