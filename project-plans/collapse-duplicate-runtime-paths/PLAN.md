@@ -201,10 +201,12 @@ and Config become readers/caches, never independent persistence).
   config ephemerals ARE settings global keys, so it writes global twice)
   collapse to single reads/writes.
 - **D6** `config.ts setModel` multi-store write — resolved by C2.
-- **Boundary enforcement**: `scripts/check-settings-boundary.ts` must stay
-  green (it is green on baseline; headlessFactory/discovery construction sites
-  are currently tolerated — leave their status unchanged unless trivially
-  routable, and say which in the PR).
+- **Boundary enforcement**: `scripts/check-settings-boundary.ts` FAILS on main
+  (verified in a main worktree during review: 13 sites, no-storage-package +
+  adapter-single-owner). The branch requirement is STATUS UNCHANGED vs main —
+  no new violations, no sites worsened; the same 13-site set fails identically
+  on the branch. The tolerated construction sites (headlessFactory/discovery
+  etc.) are unchanged; PR must disclose the real (failing) baseline.
 - **Prove with**: settings package tests, `settingsRuntimeAdapter.test.ts`,
   `adapter-integration.test.ts`, auth interface-compat tests, updated
   interface-contracts/codesearch/memoryTool tests, tool-registry tests,
@@ -290,3 +292,14 @@ the full cycle runs before push.
 At most 2 review rounds (initial + one remediation). Findings classified
 Blocker-Fix / In-scope-Fix / Reject / Defer. OCR only if re-enabled by Andrew
 (currently disabled). Do not merge — Andrew merges.
+
+## Known follow-ups (review Defers, out of this PR)
+
+- `SettingsService.switchProvider` (SettingsService.ts) is caller-less public
+  API after C1; removal needs a release note — next cleanup pass.
+- profileSnapshot.ts pre-existing `setCurrentProfileName` typeof probe and
+  DiscoveredTool's public `execute()` delegation are legacy-shaped cosmetic
+  residue — untouched.
+- E1: ToolCallNormalizer's normalizer is a distinct algorithm from the shared
+  Kimi owner (divergent tested behavior, documented on #2534); unification
+  needs a behavior decision from the owner, not a refactor.
