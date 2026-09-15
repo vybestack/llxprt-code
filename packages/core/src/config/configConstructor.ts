@@ -146,7 +146,6 @@ export interface ConfigConstructorTarget {
   listExtensions: boolean;
   _activeExtensions: ActiveExtension[];
   providerManager: RuntimeProviderManager | undefined;
-  provider: string | undefined;
   _extensionLoader: ExtensionLoader;
   noBrowser: boolean;
   summarizeToolOutput: Record<string, SummarizeToolOutputSettings> | undefined;
@@ -495,7 +494,16 @@ function applyExtensionFlags(
   config.listExtensions = params.listExtensions ?? false;
   config._activeExtensions = params.activeExtensions ?? [];
   config.providerManager = params.providerManager;
-  config.provider = params.provider;
+  // #2534 Domain C1: activeProvider has one store (the settings global key).
+  // applySettingsService has already run, so the store exists. Seed only when
+  // absent: a supplied (shared) settings service keeps its active provider
+  // rather than being mutated as a constructor side effect (#2300).
+  if (
+    params.provider !== undefined &&
+    config.settingsService.get('activeProvider') === undefined
+  ) {
+    config.settingsService.set('activeProvider', params.provider);
+  }
   config._extensionLoader =
     params.extensionLoader ??
     new SimpleExtensionLoader(params.extensions ?? []);

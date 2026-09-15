@@ -189,7 +189,6 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   protected onAuthErrorHandler?: OnAuthErrorHandler;
   // Track all potential tools for settings UI
   protected allPotentialTools: ToolRecord[] = [];
-  protected provider?: string;
   protected readonly summarizeToolOutput:
     | Record<string, SummarizeToolOutputSettings>
     | undefined;
@@ -777,11 +776,18 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   getExtensionEvents(): EventEmitter | undefined {
     return this.eventEmitter;
   }
+  /**
+   * #2534 Domain C1: the settings global 'activeProvider' key is the single
+   * active-provider store. Config is a reader/writer of that store, never an
+   * independent field owner.
+   */
   getProvider(): string | undefined {
-    return this.provider;
+    const value = this.settingsService.get('activeProvider');
+    return typeof value === 'string' && value !== '' ? value : undefined;
   }
+
   setProvider(provider: string): void {
-    this.provider = provider;
+    this.settingsService.set('activeProvider', provider);
   }
   getNoBrowser(): boolean {
     return this.noBrowser;
