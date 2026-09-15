@@ -20,10 +20,6 @@ import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clien
 import { createIsolatedRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime.js';
 import {
-  switchActiveProvider,
-  setActiveModel,
-  updateActiveProviderApiKey,
-  updateActiveProviderBaseUrl,
   getActiveProviderName,
   getActiveModelName,
 } from '@vybestack/llxprt-code-providers/runtime.js';
@@ -158,33 +154,13 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
   // @pseudocode createAgent.md step 57-58: ACTIVATE (ASYNC — must be awaited)
   await handle.activate();
 
-  // @plan:PLAN-20270104-ISSUE2374.P01 @requirement:REQ-001
-  // Declarative provider-activation intent (#2374): when config.activation is
-  // present, execute it via executeProviderActivation AFTER initialize, letting
-  // the intent drive the final provider/auth state. This REPLACES the legacy
-  // applyInitialProviderModelAuth + refreshAuth sequence — the intent takes
-  // precedence over the parsed-provider path where they conflict. When omitted,
-  // the legacy path runs byte-identically (backward compatibility).
-  //
-  // #2374 round-3 Fix 1: when the activation intent changes the runtime
-  // provider/model, the POST-activation truth (manager active provider + active
-  // model) may differ from the ORIGINAL parsed.provider/parsed.model. We derive
-  // the finalized provider/model from the post-activation runtime so the
-  // facade's getProvider()/getModel() report what was actually activated.
-  const activationOutcome = await applyActivationOrLegacy(
+  const activationOutcome = await applyActivation(
     parsed,
     resolvedAuth,
     config,
     messageBus,
   );
-  const finalizedParsed =
-    activationOutcome !== undefined
-      ? {
-          ...parsed,
-          provider: activationOutcome.provider,
-          model: activationOutcome.model,
-        }
-      : parsed;
+  const finalizedParsed = { ...parsed, ...activationOutcome };
 
   // @pseudocode createAgent.md steps 105-166: finalize agent (runtime state,
   // client bind, loop build, ownership, facade, session-start hook)
@@ -502,23 +478,8 @@ function resolveSchedulerFactory(
   return defaultSchedulerFactory;
 }
 
-/**
- * Applies either the declarative activation intent (#2374) or the legacy
- * provider/model/auth bootstrap sequence. When `parsed.activation` is present,
- * the intent takes precedence — it is executed via executeProviderActivation
- * after initialize(), replacing the legacy applyInitialProviderModelAuth +
- * refreshAuth path where they'd conflict. When omitted, the legacy path runs
- * byte-identically (backward compatibility).
- *
- * #2374 round-3 Fix 1: returns the POST-activation provider/model when the
- * activation intent ran, so the caller can finalize the Agent facade with the
- * runtime truth instead of the stale parsed-config values. Returns undefined
- * for the legacy path (parsed values are already correct).
- *
- * @plan:PLAN-20270104-ISSUE2374.P01
- * @requirement:REQ-001
- */
-async function applyActivationOrLegacy(
+/** Applies the explicit or synthesized intent and returns the activated state. */
+async function applyActivation(
   parsed: {
     readonly activation?: ProviderActivationIntent;
     readonly provider: string;
@@ -531,94 +492,56 @@ async function applyActivationOrLegacy(
   },
   config: Config,
   messageBus: MessageBus,
-): Promise<{ readonly provider: string; readonly model: string } | void> {
-  if (parsed.activation !== undefined) {
-    await config.initialize({ messageBus });
-    const activationResult = await executeProviderActivation(
-      config,
-      parsed.activation,
-    );
-    if (activationResult.authFailed) {
-      const underlying = activationResult.authError;
-      throw new AgentBootstrapError(
-        `createAgent activation failed: ${
-          underlying instanceof Error ? underlying.message : String(underlying)
-        }`,
-        { cause: underlying },
-      );
-    }
-    // Derive the POST-activation provider/model from the runtime truth so the
-    // facade's getProvider()/getModel() reflect what was actually activated,
-    // not the stale parsed-config values. The executor may switch the provider
-    // without updating config.getProvider() (skip-when-already-active path), so
-    // the runtime accessors are the reliable source (#2374 round-3 Fix 1).
-    const runtimeProvider =
-      activationResult.activeProvider ??
-      config.getProviderManager()?.getActiveProviderName() ??
-      safeActiveProviderName();
-    const postProvider = runtimeProvider || parsed.provider;
-    // Filter out the placeholder-model sentinel — switchActiveProvider sets the
-    // active model to that placeholder while auth initializes, but the
-    // externally observable provider/model snapshot should reflect the REAL
-    // model once activation resolves (#2374).
-    const configModel = config.getModel();
-    const resolvedConfigModel =
-      configModel !== PLACEHOLDER_MODEL ? configModel : '';
-
-    const activeModel = safeActiveModelName();
-    const runtimeModel = resolvedConfigModel || activeModel;
-    const postModel = runtimeModel || parsed.model;
-    return { provider: postProvider, model: postModel };
-  }
-  // @pseudocode createAgent.md steps 61-79: apply provider/model/auth via real mutators
-  await applyInitialProviderModelAuth(parsed, resolvedAuth, config);
-  // @pseudocode createAgent.md step 81-82: initialize (creates transient pre-auth client)
+): Promise<{ readonly provider: string; readonly model: string }> {
+  const intent: ProviderActivationIntent = parsed.activation ?? {
+    provider: parsed.provider,
+    providerSwitchPolicy: 'best-effort',
+    ...(parsed.model.trim() && parsed.model !== PLACEHOLDER_MODEL
+      ? { model: parsed.model }
+      : {}),
+    authMethod: resolvedAuth.authMethod,
+    ...(resolvedAuth.apiKey !== undefined || resolvedAuth.baseUrl !== undefined
+      ? {
+          cliOverrides: {
+            key: resolvedAuth.apiKey,
+            baseUrl: resolvedAuth.baseUrl,
+          },
+        }
+      : {}),
+  };
   await config.initialize({ messageBus });
-  // @pseudocode createAgent.md step 95-96: refreshAuth (creates post-auth client)
-  await config.refreshAuth(resolvedAuth.authMethod);
-  return undefined;
-}
+  const activationResult = await executeProviderActivation(config, intent);
+  if (activationResult.authFailed) {
+    const underlying = activationResult.authError;
+    throw new AgentBootstrapError(
+      `createAgent activation failed: ${
+        underlying instanceof Error ? underlying.message : String(underlying)
+      }`,
+      { cause: underlying },
+    );
+  }
+  // Explicit intents report the activated provider; legacy inputs retain their
+  // public provider label when fake responses or an unconfigured start are used.
+  const runtimeProvider =
+    activationResult.activeProvider ??
+    config.getProviderManager()?.getActiveProviderName() ??
+    safeActiveProviderName();
+  const postProvider =
+    parsed.activation === undefined
+      ? parsed.provider
+      : runtimeProvider || parsed.provider;
+  // Filter out the placeholder-model sentinel — switchActiveProvider sets the
+  // active model to that placeholder while auth initializes, but the
+  // externally observable provider/model snapshot should reflect the REAL
+  // model once activation resolves (#2374).
+  const configModel = config.getModel();
+  const resolvedConfigModel =
+    configModel !== PLACEHOLDER_MODEL ? configModel : '';
 
-/**
- * Applies the initial provider, model, and auth fields through the real runtime
- * mutators after the context is active.
- * @pseudocode createAgent.md steps 61-79
- */
-async function applyInitialProviderModelAuth(
-  parsed: {
-    readonly provider: string;
-    readonly model: string;
-  },
-  resolvedAuth: {
-    readonly apiKey: string | undefined;
-    readonly baseUrl: string | undefined;
-  },
-  config: Config,
-): Promise<void> {
-  const activeProvider = safeActiveProviderName();
-  if (parsed.provider !== activeProvider) {
-    // switchActiveProvider rebuilds the content generator internally; NO model arg.
-    // Under LLXPRT_FAKE_RESPONSES only FakeProvider is registered; switching to a
-    // named provider that is not registered is a no-op (the active FakeProvider
-    // handles all requests). This is the intended fake-seam behavior.
-    try {
-      await switchActiveProvider(parsed.provider);
-    } catch {
-      // Provider not registered (e.g. fake mode) — continue with the active provider.
-    }
-  }
   const activeModel = safeActiveModelName();
-  if (parsed.model !== activeModel) {
-    // setActiveModel does NOT rebuild — explicit initializeContentGeneratorConfig required.
-    await setActiveModel(parsed.model);
-    await config.initializeContentGeneratorConfig();
-  }
-  if (resolvedAuth.apiKey !== undefined) {
-    await updateActiveProviderApiKey(resolvedAuth.apiKey);
-  }
-  if (resolvedAuth.baseUrl !== undefined) {
-    await updateActiveProviderBaseUrl(resolvedAuth.baseUrl);
-  }
+  const runtimeModel = resolvedConfigModel || activeModel;
+  const postModel = runtimeModel || parsed.model;
+  return { provider: postProvider, model: postModel };
 }
 
 /** Reads the active provider name without throwing when unset. */

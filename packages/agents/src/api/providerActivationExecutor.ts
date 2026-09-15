@@ -326,7 +326,7 @@ async function executeAutoNoProvider(
 
   try {
     await switchActiveProvider(fallbackDefault);
-    await config.refreshAuth();
+    await config.refreshAuth(intent.authMethod);
   } catch {
     // Log but don't fail — auth will be triggered lazily on the first API call.
   }
@@ -348,7 +348,8 @@ async function executeAutoNoProvider(
 /**
  * Provider branch: apply CLI overrides BEFORE the switch, snapshot profile auth
  * ephemerals, switch (reapplying ephemerals) only when needed, refresh auth,
- * then resolve model + params. Any thrown error is fatal (authFailed true).
+ * then resolve model + params. Errors are fatal except provider-switch errors
+ * under the explicit best-effort policy used by legacy construction inputs.
  */
 async function executeAutoProvider(
   config: Config,
@@ -359,7 +360,7 @@ async function executeAutoProvider(
     const manager = config.getProviderManager();
     const alreadyActive = manager?.getActiveProviderName() === provider;
     if (isPureAlreadyActiveRefresh(intent, alreadyActive)) {
-      await config.refreshAuth();
+      await config.refreshAuth(intent.authMethod);
       const activeName = resolveActiveProviderName(config);
       return {
         authFailed: false,
@@ -375,6 +376,7 @@ async function executeAutoProvider(
 
     const profileAuthEphemerals = snapshotProfileAuthEphemerals(config);
     let infoMessages: readonly string[] = [];
+    let switchError: string | undefined;
     if (!alreadyActive) {
       const switchResult = await switchActiveProvider(provider, {
         skipModelDefaults: true,
@@ -384,8 +386,14 @@ async function executeAutoProvider(
           'auth-key-name',
           'base-url',
         ],
+      }).catch((error: unknown) => {
+        if (intent.providerSwitchPolicy !== 'best-effort') {
+          throw error;
+        }
+        switchError = error instanceof Error ? error.message : String(error);
+        return undefined;
       });
-      infoMessages = switchResult.infoMessages;
+      infoMessages = switchResult?.infoMessages ?? [];
       if (hasProfileAuthEphemerals(profileAuthEphemerals)) {
         reapplyProfileAuthEphemerals(config, profileAuthEphemerals);
       }
@@ -399,7 +407,7 @@ async function executeAutoProvider(
     // E2E regression). refreshAuth is idempotent — it re-derives auth from the
     // current ephemeral settings — so calling it when the interactive path
     // already refreshed (via activateConfiguredProvider) is harmless.
-    await config.refreshAuth();
+    await config.refreshAuth(intent.authMethod);
 
     await applyModelAndParams(config, intent);
     const activeName = resolveActiveProviderName(config);
@@ -407,6 +415,7 @@ async function executeAutoProvider(
       authFailed: false,
       ...(activeName !== undefined ? { activeProvider: activeName } : {}),
       infoMessages,
+      ...(switchError !== undefined ? { switchError } : {}),
     };
   } catch (error) {
     // The CLI maps a provider-case failure to FATAL_AUTHENTICATION_ERROR.

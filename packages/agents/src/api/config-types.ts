@@ -69,6 +69,10 @@ export interface ProviderActivationIntent {
    * - 'none': skip auth refresh entirely (external auth / --use-external-auth).
    */
   readonly authMode?: 'auto' | 'provider-or-oauth' | 'none';
+  /** Auth method passed to refreshAuth in auto mode. */
+  readonly authMethod?: string;
+  /** In auto mode, retain the active provider if a requested switch fails. */
+  readonly providerSwitchPolicy?: 'strict' | 'best-effort';
 }
 
 export interface AgentAuth extends ProviderAuth {
@@ -316,17 +320,9 @@ export interface AgentConfig {
   readonly interactive?: boolean;
   readonly lsp?: boolean | AgentLspConfig;
   /**
-   * Declarative provider-activation / auth intent (#2374, part of #1595). When
-   * present, this intent SUPPLANTS the legacy provider/model/auth application
-   * path: createAgent still runs `config.initialize()` first, but then executes
-   * the intent via executeProviderActivation INSTEAD of the legacy
-   * applyInitialProviderModelAuth + refreshAuth sequence. The intent drives the
-   * final provider/auth state: when `activation.provider` is set it wins over
-   * `config.provider` for the runtime switch; when `activation.model` is set it
-   * wins over `config.model`; `activation.modelParams` replaces the active
-   * provider's params (clearing stale entries). When omitted, createAgent
-   * preserves its current (backward-compatible) parsed-provider + refreshAuth
-   * behavior byte-for-byte.
+   * Explicit activation intent takes precedence over provider/model/auth fields.
+   * When omitted, createAgent synthesizes an intent from those fields and uses
+   * the same executor. Model params on an explicit intent replace active params.
    */
   readonly activation?: ProviderActivationIntent;
   /**
