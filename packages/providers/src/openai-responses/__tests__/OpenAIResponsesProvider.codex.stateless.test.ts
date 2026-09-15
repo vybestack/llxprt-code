@@ -70,8 +70,8 @@ class RecordingTransport implements WebSocketTransport {
       metadata: {
         id: 'resp_completed',
         ...(options.responsesStored === true ? { responsesStored: true } : {}),
-        stopReason: 'end_turn',
-        finishReason: 'completed',
+        rawStopReason: 'completed',
+        finishReason: 'stop',
       },
     };
   }

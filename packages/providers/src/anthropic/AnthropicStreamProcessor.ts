@@ -5,6 +5,7 @@
  * @issue #1572 - Decomposing AnthropicProvider (Step 4 - Part B)
  */
 
+import { mapStopReason } from './finishReasonMapping.js';
 import type Anthropic from '@anthropic-ai/sdk';
 import type {
   ToolUseBlock,
@@ -648,7 +649,7 @@ function* handleMessageDelta(
         speaker: 'ai',
         blocks: [],
         metadata: {
-          stopReason,
+          ...mapStopReason(stopReason),
         },
       } as IContent;
     }
@@ -681,7 +682,7 @@ function* handleMessageDelta(
         cache_read_input_tokens: cacheRead,
         cache_creation_input_tokens: cacheCreation,
       },
-      stopReason,
+      ...(stopReason ? mapStopReason(stopReason) : {}),
     },
   } as IContent;
 }

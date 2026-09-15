@@ -57,7 +57,7 @@ describe('Codex Responses WebSocket transport close-dispatch ordering', () => {
       transport.streamResponse(request(), options()),
     );
 
-    expect(metadataOf(messages)?.finishReason).toBe('incomplete');
+    expect(metadataOf(messages)?.finishReason).toBe('max_tokens');
   });
 });
 

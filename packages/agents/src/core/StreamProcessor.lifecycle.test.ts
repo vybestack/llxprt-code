@@ -31,7 +31,7 @@ function makeFinishChunk(text: string): ModelStreamChunk {
   return toModelStreamChunk({
     speaker: 'ai',
     blocks: [{ type: 'text', text }],
-    metadata: { stopReason: 'STOP' },
+    metadata: { finishReason: 'stop', rawStopReason: 'STOP' },
   } as IContent);
 }
 

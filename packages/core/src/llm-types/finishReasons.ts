@@ -16,7 +16,7 @@
 
 /**
  * Neutral finish-reason type layer — provider-agnostic canonical reasons
- * plus mapping helpers for Gemini, OpenAI, and Anthropic raw stop strings.
+ * plus the temporary Gemini mapping used by the v1 hook adapter.
  *
  * @plan PLAN-20260702-LLMTYPES.P03
  * @requirement REQ-001
@@ -98,88 +98,22 @@ export const GEMINI_FINISH_MAP: Readonly<
 
 /**
  * @plan PLAN-20260702-LLMTYPES.P03
- * @requirement REQ-001.3
- * @pseudocode lines 19-20
- */
-export const OPENAI_FINISH_MAP: Readonly<
-  Record<string, CanonicalFinishReason>
-> = {
-  stop: 'stop',
-  length: 'max_tokens',
-  tool_calls: 'tool_calls',
-  function_call: 'tool_calls',
-  content_filter: 'safety',
-  refusal: 'refusal',
-};
-
-/**
- * @plan PLAN-20260702-LLMTYPES.P03
- * @requirement REQ-001.4
- * @pseudocode lines 22-23
- */
-export const ANTHROPIC_STOP_MAP: Readonly<
-  Record<string, CanonicalFinishReason>
-> = {
-  end_turn: 'stop',
-  max_tokens: 'max_tokens',
-  tool_use: 'tool_calls',
-  refusal: 'refusal',
-  stop_sequence: 'stop',
-};
-
-function mapWithTable(
-  raw: string,
-  table: Readonly<Record<string, CanonicalFinishReason>>,
-): FinishInfo {
-  // Guard against nullish runtime values (JS interop / any-typed callers).
-  // Without this, null/undefined are coerced to the strings "null"/"undefined".
-  // The nullishToEmpty helper routes through unknown so the TS-aware lint rule
-  // does not flag the nullish check as unnecessary on a string-typed param.
-  const key = nullishToEmpty(raw);
-  const mapped = Object.prototype.hasOwnProperty.call(table, key)
-    ? table[key]
-    : undefined;
-  return {
-    // Unmapped provider strings default to 'other' (benign unknown). Callers
-    // needing diagnostics should inspect rawStopReason rather than relying on
-    // finishReason alone.
-    finishReason: mapped ?? 'other',
-    rawStopReason: key,
-  };
-}
-
-function nullishToEmpty(value: unknown): string {
-  if (value === null || value === undefined) {
-    return '';
-  }
-  return typeof value === 'string' ? value : String(value);
-}
-
-/**
- * @plan PLAN-20260702-LLMTYPES.P03
  * @requirement REQ-001.2, REQ-001.5
  * @pseudocode lines 17-18
  */
-export function mapGeminiFinishReason(raw: string): FinishInfo {
-  return mapWithTable(raw, GEMINI_FINISH_MAP);
-}
-
-/**
- * @plan PLAN-20260702-LLMTYPES.P03
- * @requirement REQ-001.3, REQ-001.5
- * @pseudocode line 21
- */
-export function mapOpenAIFinishReason(raw: string): FinishInfo {
-  return mapWithTable(raw, OPENAI_FINISH_MAP);
-}
-
-/**
- * @plan PLAN-20260702-LLMTYPES.P03
- * @requirement REQ-001.4, REQ-001.5
- * @pseudocode line 24
- */
-export function mapAnthropicStopReason(raw: string): FinishInfo {
-  return mapWithTable(raw, ANTHROPIC_STOP_MAP);
+export function mapGeminiFinishReason(
+  raw: string | null | undefined,
+): FinishInfo {
+  const rawStopReason = raw ?? '';
+  return {
+    finishReason: Object.prototype.hasOwnProperty.call(
+      GEMINI_FINISH_MAP,
+      rawStopReason,
+    )
+      ? GEMINI_FINISH_MAP[rawStopReason]
+      : 'other',
+    rawStopReason,
+  };
 }
 
 /**

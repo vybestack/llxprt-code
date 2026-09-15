@@ -25,6 +25,7 @@ import type {
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import * as fc from 'fast-check';
+import type { CanonicalFinishReason } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 // ---------------------------------------------------------------------------
 // IContent chunk factories
@@ -32,13 +33,14 @@ import * as fc from 'fast-check';
 
 function textTerminalIContent(
   text: string,
-  stopReason: string,
+  rawStopReason: string,
   usage?: Partial<UsageStats>,
+  finishReason: CanonicalFinishReason = 'stop',
 ): IContent {
   const content: IContent = {
     speaker: 'ai',
     blocks: [{ type: 'text', text }],
-    metadata: { stopReason },
+    metadata: { finishReason, rawStopReason },
   };
   if (usage) {
     content.metadata!.usage = {
@@ -91,7 +93,12 @@ describe('P10: #2329 stop-reason characterization', () => {
   it('surfaces a refusal stop reason on the Finished event', async () => {
     const mock = vi.fn(() =>
       makeProviderStream([
-        textTerminalIContent('I cannot help with that.', 'refusal'),
+        textTerminalIContent(
+          'I cannot help with that.',
+          'refusal',
+          undefined,
+          'refusal',
+        ),
       ]),
     ) as Mock;
     const harness = createFullLoopHarness(mock);
@@ -127,7 +134,14 @@ describe('P10: #2329 stop-reason characterization', () => {
 
   it('surfaces a max_tokens stop reason on the Finished event', async () => {
     const mock = vi.fn(() =>
-      makeProviderStream([textTerminalIContent('partial...', 'max_tokens')]),
+      makeProviderStream([
+        textTerminalIContent(
+          'partial...',
+          'max_tokens',
+          undefined,
+          'max_tokens',
+        ),
+      ]),
     ) as Mock;
     const harness = createFullLoopHarness(mock);
     const events = await runFullLoop(harness.turn, 'hello');
@@ -161,7 +175,9 @@ describe('P10: #2329 stop-reason characterization', () => {
         fc.string({ minLength: 1 }).filter((s) => s.trim().length > 0),
         async (stopReason: string) => {
           const mock = vi.fn(() =>
-            makeProviderStream([textTerminalIContent('text', stopReason)]),
+            makeProviderStream([
+              textTerminalIContent('text', stopReason, undefined, 'other'),
+            ]),
           ) as Mock;
           const harness = createFullLoopHarness(mock);
           const events = await runFullLoop(harness.turn, 'test');

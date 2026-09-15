@@ -7,12 +7,8 @@ import { describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
 import {
   mapGeminiFinishReason,
-  mapOpenAIFinishReason,
-  mapAnthropicStopReason,
   isCanonicalFinishReason,
   GEMINI_FINISH_MAP,
-  OPENAI_FINISH_MAP,
-  ANTHROPIC_STOP_MAP,
   CANONICAL_FINISH_REASONS,
   type CanonicalFinishReason,
   type FinishInfo,
@@ -48,53 +44,6 @@ function mappedToExpected(
   expected: CanonicalFinishReason,
 ): boolean {
   return result.finishReason === expected && result.rawStopReason === raw;
-}
-
-/**
- * True when every provider mapper yields a canonical finish reason for the given raw
- * string. Guards the single-character boundary against crashes.
- */
-function allMappersCanonicalFor(raw: string): boolean {
-  return (
-    ALL_CANONICAL.includes(mapGeminiFinishReason(raw).finishReason) &&
-    ALL_CANONICAL.includes(mapOpenAIFinishReason(raw).finishReason) &&
-    ALL_CANONICAL.includes(mapAnthropicStopReason(raw).finishReason)
-  );
-}
-
-/**
- * Describes every shared raw key across the provider maps for which the maps disagree
- * on the canonical target. If a future map addition introduces a conflicting shared key,
- * the fix-list is non-empty and the invoking test fails loudly.
- */
-function conflictingSharedKeyDescriptions(
-  tables: ReadonlyArray<
-    [string, Readonly<Record<string, CanonicalFinishReason>>]
-  >,
-): string[] {
-  const tablePairs = tables.flatMap(([nameA, mapA], i) =>
-    tables
-      .slice(i + 1)
-      .map(([nameB, mapB]): [string, typeof mapA, string, typeof mapB] => [
-        nameA,
-        mapA,
-        nameB,
-        mapB,
-      ]),
-  );
-
-  return tablePairs.flatMap(([nameA, mapA, nameB, mapB]) =>
-    Object.keys(mapA)
-      .filter(
-        (key) =>
-          Object.prototype.hasOwnProperty.call(mapB, key) &&
-          mapA[key] !== mapB[key],
-      )
-      .map(
-        (key) =>
-          `${nameA}[${key}]=${mapA[key]} vs ${nameB}[${key}]=${mapB[key]}`,
-      ),
-  );
 }
 
 describe('mapGeminiFinishReason', () => {
@@ -218,101 +167,6 @@ describe('mapGeminiFinishReason', () => {
   });
 });
 
-describe('mapOpenAIFinishReason', () => {
-  it('maps stop to stop', () => {
-    expect(mapOpenAIFinishReason('stop')).toStrictEqual({
-      finishReason: 'stop',
-      rawStopReason: 'stop',
-    });
-  });
-
-  it('maps length to max_tokens', () => {
-    expect(mapOpenAIFinishReason('length')).toStrictEqual({
-      finishReason: 'max_tokens',
-      rawStopReason: 'length',
-    });
-  });
-
-  it('maps tool_calls to tool_calls', () => {
-    expect(mapOpenAIFinishReason('tool_calls')).toStrictEqual({
-      finishReason: 'tool_calls',
-      rawStopReason: 'tool_calls',
-    });
-  });
-
-  it('maps function_call to tool_calls', () => {
-    expect(mapOpenAIFinishReason('function_call')).toStrictEqual({
-      finishReason: 'tool_calls',
-      rawStopReason: 'function_call',
-    });
-  });
-
-  it('maps content_filter to safety', () => {
-    expect(mapOpenAIFinishReason('content_filter')).toStrictEqual({
-      finishReason: 'safety',
-      rawStopReason: 'content_filter',
-    });
-  });
-
-  it('maps refusal to refusal', () => {
-    expect(mapOpenAIFinishReason('refusal')).toStrictEqual({
-      finishReason: 'refusal',
-      rawStopReason: 'refusal',
-    });
-  });
-
-  it('falls back to other for unrecognized strings', () => {
-    expect(mapOpenAIFinishReason('whatever')).toStrictEqual({
-      finishReason: 'other',
-      rawStopReason: 'whatever',
-    });
-  });
-});
-
-describe('mapAnthropicStopReason', () => {
-  it('maps end_turn to stop', () => {
-    expect(mapAnthropicStopReason('end_turn')).toStrictEqual({
-      finishReason: 'stop',
-      rawStopReason: 'end_turn',
-    });
-  });
-
-  it('maps max_tokens to max_tokens', () => {
-    expect(mapAnthropicStopReason('max_tokens')).toStrictEqual({
-      finishReason: 'max_tokens',
-      rawStopReason: 'max_tokens',
-    });
-  });
-
-  it('maps tool_use to tool_calls', () => {
-    expect(mapAnthropicStopReason('tool_use')).toStrictEqual({
-      finishReason: 'tool_calls',
-      rawStopReason: 'tool_use',
-    });
-  });
-
-  it('maps refusal to refusal', () => {
-    expect(mapAnthropicStopReason('refusal')).toStrictEqual({
-      finishReason: 'refusal',
-      rawStopReason: 'refusal',
-    });
-  });
-
-  it('maps stop_sequence to stop', () => {
-    expect(mapAnthropicStopReason('stop_sequence')).toStrictEqual({
-      finishReason: 'stop',
-      rawStopReason: 'stop_sequence',
-    });
-  });
-
-  it('falls back to other for unrecognized strings', () => {
-    expect(mapAnthropicStopReason('pause_turn')).toStrictEqual({
-      finishReason: 'other',
-      rawStopReason: 'pause_turn',
-    });
-  });
-});
-
 describe('isCanonicalFinishReason', () => {
   it('returns true for every canonical value', () => {
     expect(ALL_CANONICAL.length).toBeGreaterThan(0);
@@ -362,41 +216,6 @@ describe('mapping tables export', () => {
       [...expected].sort(),
     );
   });
-
-  it('OPENAI_FINISH_MAP covers known strings', () => {
-    expect(OPENAI_FINISH_MAP['stop']).toBe('stop');
-    expect(OPENAI_FINISH_MAP['length']).toBe('max_tokens');
-    expect(OPENAI_FINISH_MAP['tool_calls']).toBe('tool_calls');
-    expect(OPENAI_FINISH_MAP['function_call']).toBe('tool_calls');
-    expect(OPENAI_FINISH_MAP['content_filter']).toBe('safety');
-    expect(OPENAI_FINISH_MAP['refusal']).toBe('refusal');
-  });
-
-  it('ANTHROPIC_STOP_MAP covers known strings', () => {
-    expect(ANTHROPIC_STOP_MAP['end_turn']).toBe('stop');
-    expect(ANTHROPIC_STOP_MAP['max_tokens']).toBe('max_tokens');
-    expect(ANTHROPIC_STOP_MAP['tool_use']).toBe('tool_calls');
-    expect(ANTHROPIC_STOP_MAP['refusal']).toBe('refusal');
-    expect(ANTHROPIC_STOP_MAP['stop_sequence']).toBe('stop');
-  });
-
-  // tryAllMappers (modelEnvelope.ts) probes the provider maps in a fixed
-  // order (OpenAI → Anthropic → Gemini) and documents that this order is
-  // irrelevant because no shared key maps to different canonical values.
-  // This test ENFORCES that invariant: if a future map addition introduces
-  // a conflicting shared key, order would silently start to matter for
-  // unattributed stop reasons — fail loudly here instead.
-  it('provider maps never disagree on a shared raw key (tryAllMappers order-independence)', () => {
-    const tables: ReadonlyArray<
-      [string, Readonly<Record<string, CanonicalFinishReason>>]
-    > = [
-      ['OPENAI_FINISH_MAP', OPENAI_FINISH_MAP],
-      ['ANTHROPIC_STOP_MAP', ANTHROPIC_STOP_MAP],
-      ['GEMINI_FINISH_MAP', GEMINI_FINISH_MAP],
-    ];
-
-    expect(conflictingSharedKeyDescriptions(tables)).toStrictEqual([]);
-  });
 });
 
 // ============================================================================
@@ -408,20 +227,6 @@ describe('finishReasons property-based', () => {
     fc.assert(
       fc.property(fc.string({ maxLength: 50 }), (raw: string) =>
         preservesRawWithCanonical(mapGeminiFinishReason(raw), raw),
-      ),
-    ));
-
-  it('for any string, mapOpenAIFinishReason preserves rawStopReason and yields a canonical reason', () =>
-    fc.assert(
-      fc.property(fc.string({ maxLength: 50 }), (raw: string) =>
-        preservesRawWithCanonical(mapOpenAIFinishReason(raw), raw),
-      ),
-    ));
-
-  it('for any string, mapAnthropicStopReason preserves rawStopReason and yields a canonical reason', () =>
-    fc.assert(
-      fc.property(fc.string({ maxLength: 50 }), (raw: string) =>
-        preservesRawWithCanonical(mapAnthropicStopReason(raw), raw),
       ),
     ));
 
@@ -458,26 +263,6 @@ describe('finishReasons property-based', () => {
       }),
     ));
 
-  it('mapOpenAIFinishReason is pure: same input always yields same output', () =>
-    fc.assert(
-      fc.property(fc.string({ maxLength: 30 }), (raw) =>
-        sameMappingResult(
-          mapOpenAIFinishReason(raw),
-          mapOpenAIFinishReason(raw),
-        ),
-      ),
-    ));
-
-  it('mapAnthropicStopReason is pure: same input always yields same output', () =>
-    fc.assert(
-      fc.property(fc.string({ maxLength: 30 }), (raw) =>
-        sameMappingResult(
-          mapAnthropicStopReason(raw),
-          mapAnthropicStopReason(raw),
-        ),
-      ),
-    ));
-
   it('every known Gemini FinishReason maps to a canonical value via GEMINI_FINISH_MAP', () =>
     fc.assert(
       fc.property(
@@ -488,39 +273,6 @@ describe('finishReasons property-based', () => {
             raw,
             GEMINI_FINISH_MAP[raw],
           ),
-      ),
-    ));
-
-  it('every known OpenAI finish reason maps via OPENAI_FINISH_MAP', () =>
-    fc.assert(
-      fc.property(
-        fc.constantFrom(...Object.keys(OPENAI_FINISH_MAP)),
-        (raw: string) =>
-          mappedToExpected(
-            mapOpenAIFinishReason(raw),
-            raw,
-            OPENAI_FINISH_MAP[raw],
-          ),
-      ),
-    ));
-
-  it('every known Anthropic stop reason maps via ANTHROPIC_STOP_MAP', () =>
-    fc.assert(
-      fc.property(
-        fc.constantFrom(...Object.keys(ANTHROPIC_STOP_MAP)),
-        (raw: string) =>
-          mappedToExpected(
-            mapAnthropicStopReason(raw),
-            raw,
-            ANTHROPIC_STOP_MAP[raw],
-          ),
-      ),
-    ));
-
-  it('single-char strings never crash any mapper and always return canonical', () =>
-    fc.assert(
-      fc.property(fc.string({ maxLength: 1 }), (raw: string) =>
-        allMappersCanonicalFor(raw),
       ),
     ));
 });

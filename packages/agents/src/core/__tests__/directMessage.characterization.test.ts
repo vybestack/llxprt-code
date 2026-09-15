@@ -68,7 +68,7 @@ function textTerminalIContent(text: string): IContent {
   return {
     speaker: 'ai',
     blocks: [{ type: 'text', text }],
-    metadata: { stopReason: 'stop' },
+    metadata: { finishReason: 'stop', rawStopReason: 'stop' },
   };
 }
 
@@ -84,7 +84,8 @@ function textWithUsageIContent(
     speaker: 'ai',
     blocks: [{ type: 'text', text }],
     metadata: {
-      stopReason: 'stop',
+      finishReason: 'stop',
+      rawStopReason: 'stop',
       usage: {
         promptTokens: usage.promptTokens,
         completionTokens: usage.completionTokens,
@@ -379,7 +380,7 @@ describe('P12: normal completion path (characterization)', () => {
             { type: 'thinking', thought, sourceField: 'thought' },
             { type: 'text', text },
           ],
-          metadata: { stopReason: 'stop' },
+          metadata: { finishReason: 'stop', rawStopReason: 'stop' },
         };
       }
       const mock = vi.fn(() =>
@@ -428,7 +429,7 @@ describe('P12: normal completion path (characterization)', () => {
             parameters: { path: '/test' },
           },
         ],
-        metadata: { stopReason: 'tool_call' },
+        metadata: { finishReason: 'tool_calls', rawStopReason: 'tool_call' },
       };
     }
     const mock = vi.fn(() =>

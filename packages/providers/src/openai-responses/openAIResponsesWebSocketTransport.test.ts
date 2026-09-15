@@ -403,8 +403,8 @@ describe('Codex Responses WebSocket transport', () => {
 
     expect(messages).toContainEqual(textContent('Hello'));
     expect(metadataOf(messages)).toMatchObject({
-      finishReason: 'incomplete',
-      stopReason: 'max_tokens',
+      finishReason: 'max_tokens',
+      rawStopReason: 'incomplete',
       incompleteReason: 'max_output_tokens',
       id: 'resp_incomplete',
     });
@@ -422,8 +422,8 @@ describe('Codex Responses WebSocket transport', () => {
 
     expect(messages).toContainEqual(textContent('Done text'));
     expect(metadataOf(messages)).toMatchObject({
-      finishReason: 'completed',
-      stopReason: 'end_turn',
+      finishReason: 'stop',
+      rawStopReason: 'completed',
       id: 'resp_done',
     });
   });

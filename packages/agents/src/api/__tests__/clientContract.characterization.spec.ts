@@ -165,7 +165,8 @@ describe('clientContract.characterization — @plan:PLAN-20260707-AGENTNEUTRAL.P
             blocks: [{ type: 'text', text: 'Direct reply' }],
             metadata: {
               usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
-              stopReason: 'stop',
+              finishReason: 'stop',
+              rawStopReason: 'stop',
             },
           } satisfies IContent;
         }),
@@ -189,7 +190,8 @@ describe('clientContract.characterization — @plan:PLAN-20260707-AGENTNEUTRAL.P
                 completionTokens: 50,
                 totalTokens: 150,
               },
-              stopReason: 'stop',
+              finishReason: 'stop',
+              rawStopReason: 'stop',
             },
           } satisfies IContent;
         }),
@@ -216,7 +218,7 @@ describe('clientContract.characterization — @plan:PLAN-20260707-AGENTNEUTRAL.P
           yield {
             speaker: 'ai',
             blocks: [],
-            metadata: { stopReason: 'stop' },
+            metadata: { finishReason: 'stop', rawStopReason: 'stop' },
           } satisfies IContent;
         }),
       );
@@ -238,7 +240,7 @@ describe('clientContract.characterization — @plan:PLAN-20260707-AGENTNEUTRAL.P
           yield {
             speaker: 'ai',
             blocks: [],
-            metadata: { stopReason: 'stop' },
+            metadata: { finishReason: 'stop', rawStopReason: 'stop' },
           } satisfies IContent;
         }),
       );

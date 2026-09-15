@@ -570,8 +570,8 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
 
     const usageMessage = messages.find((m) => m.metadata?.usage);
     expect(usageMessage).toBeDefined();
-    expect(usageMessage?.metadata?.stopReason).toBe('max_tokens');
-    expect(usageMessage?.metadata?.finishReason).toBe('incomplete');
+    expect(usageMessage?.metadata?.rawStopReason).toBe('incomplete');
+    expect(usageMessage?.metadata?.finishReason).toBe('max_tokens');
   });
 
   /**

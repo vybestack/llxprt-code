@@ -25,7 +25,8 @@ describe('issue #1844 – toModelStreamChunk finishReason/stopReason mapping', (
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'done' }],
       metadata: {
-        stopReason: 'end_turn',
+        finishReason: 'stop',
+        rawStopReason: 'end_turn',
       },
     };
 
@@ -51,7 +52,8 @@ describe('issue #1844 – toModelStreamChunk finishReason/stopReason mapping', (
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'truncated' }],
       metadata: {
-        finishReason: 'length',
+        finishReason: 'max_tokens',
+        rawStopReason: 'length',
       },
     };
 
@@ -77,7 +79,8 @@ describe('issue #1844 – toModelStreamChunk finishReason/stopReason mapping', (
       speaker: 'ai',
       blocks: [{ type: 'text', text: '' }],
       metadata: {
-        finishReason: 'function_call',
+        finishReason: 'tool_calls',
+        rawStopReason: 'function_call',
       },
     };
 
@@ -90,7 +93,8 @@ describe('issue #1844 – toModelStreamChunk finishReason/stopReason mapping', (
       speaker: 'ai',
       blocks: [{ type: 'text', text: '' }],
       metadata: {
-        finishReason: 'content_filter',
+        finishReason: 'safety',
+        rawStopReason: 'content_filter',
       },
     };
 
@@ -103,8 +107,8 @@ describe('issue #1844 – toModelStreamChunk finishReason/stopReason mapping', (
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'done' }],
       metadata: {
-        stopReason: 'end_turn',
         finishReason: 'stop',
+        rawStopReason: 'end_turn',
       },
     };
 
@@ -114,16 +118,17 @@ describe('issue #1844 – toModelStreamChunk finishReason/stopReason mapping', (
     expect(chunk.rawStopReason).toBe('end_turn');
   });
 
-  it('should map "completed" (OpenAI Responses status) to other', () => {
+  it('preserves the provider-mapped completed status', () => {
     const input: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'done' }],
       metadata: {
-        stopReason: 'completed',
+        finishReason: 'stop',
+        rawStopReason: 'completed',
       },
     };
 
     const chunk = toModelStreamChunk(input);
-    expect(chunk.finishReason).toBe('other');
+    expect(chunk.finishReason).toBe('stop');
   });
 });

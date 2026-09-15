@@ -6,7 +6,7 @@
  * Behavioral tests for issue #2329: Claude Fable 5 returns safety-classifier
  * refusals as a successful HTTP 200 with stop_reason: 'refusal'. The streaming
  * path (message_delta.stop_reason === 'refusal') must propagate the raw value
- * into IContent metadata.stopReason so downstream consumers can surface a
+ * into IContent metadata.finishReason so downstream consumers can surface a
  * refusal-specific notice. The non-streaming path is covered in
  * AnthropicResponseParser.issue1844.test.ts.
  */
@@ -129,9 +129,9 @@ describe('AnthropicProvider issue #2329 – streaming refusal propagation', () =
 
     // The terminal metadata (stop_reason === 'refusal') must be propagated.
     const refusalChunk = chunks.find(
-      (c) => c.metadata?.stopReason === 'refusal',
+      (c) => c.metadata?.finishReason === 'refusal',
     );
     expect(refusalChunk).toBeDefined();
-    expect(refusalChunk?.metadata?.stopReason).toBe('refusal');
+    expect(refusalChunk?.metadata?.finishReason).toBe('refusal');
   });
 });

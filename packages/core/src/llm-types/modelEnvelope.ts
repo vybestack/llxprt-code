@@ -29,12 +29,6 @@ import type {
 } from '../services/history/IContent.js';
 import type { ToolCallRequest } from './toolCall.js';
 import type { CanonicalFinishReason } from './finishReasons.js';
-import {
-  isCanonicalFinishReason,
-  OPENAI_FINISH_MAP,
-  ANTHROPIC_STOP_MAP,
-  GEMINI_FINISH_MAP,
-} from './finishReasons.js';
 import { isRecord } from './jsonSchema.js';
 import {
   extractAfcHistory,
@@ -212,8 +206,8 @@ export function getToolCalls(output: ModelOutput): ToolCallRequest[] {
 }
 
 /**
- * Maps streamed IContent metadata (stopReason/finishReason/usage/id) into a
- * neutral {@link ModelStreamChunk}. stopReason is preferred (provider-native).
+ * Copies provider-owned finish metadata and usage into a
+ * neutral {@link ModelStreamChunk}.
  *
  * Preserves response-level provider metadata (responseId, providerMetadata
  * under `gemini.*` keys) per OQ-16 — NOT silently dropped. Block-level
@@ -273,12 +267,11 @@ export function toModelStreamChunk(icontent: IContent): ModelStreamChunk {
       semanticMediaPurgeCacheWriteEvidence;
   }
 
-  const raw = meta?.stopReason ?? meta?.finishReason;
-  if (raw !== undefined) {
-    result.rawStopReason = raw;
-    result.finishReason = isCanonicalFinishReason(raw)
-      ? raw
-      : tryAllMappers(raw);
+  if (meta?.finishReason !== undefined) {
+    result.finishReason = meta.finishReason;
+  }
+  if (meta?.rawStopReason !== undefined) {
+    result.rawStopReason = meta.rawStopReason;
   }
 
   if (meta?.usage) {
@@ -304,26 +297,4 @@ export function toModelStreamChunk(icontent: IContent): ModelStreamChunk {
   }
 
   return result;
-}
-
-/**
- * @plan PLAN-20260702-LLMTYPES.P04
- * @requirement REQ-005.5
- * @pseudocode lines 49-52
- */
-function tryAllMappers(raw: string): CanonicalFinishReason {
-  // Priority: OpenAI → Anthropic → Gemini. The maps have no conflicting keys
-  // today, so the order does not affect results for any known stop reason.
-  // hasOwnProperty is used (rather than `??`) to correctly handle keys whose
-  // mapped value could be falsy, though all values here are non-empty strings.
-  if (Object.prototype.hasOwnProperty.call(OPENAI_FINISH_MAP, raw)) {
-    return OPENAI_FINISH_MAP[raw];
-  }
-  if (Object.prototype.hasOwnProperty.call(ANTHROPIC_STOP_MAP, raw)) {
-    return ANTHROPIC_STOP_MAP[raw];
-  }
-  if (Object.prototype.hasOwnProperty.call(GEMINI_FINISH_MAP, raw)) {
-    return GEMINI_FINISH_MAP[raw];
-  }
-  return 'other';
 }

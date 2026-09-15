@@ -85,7 +85,7 @@ describe('MiddleOutStrategy enriched EmptySummaryError diagnostics (issue #2333)
    * output-token budget on thinking blocks and produces zero text. The stream
    * yields only thinking blocks with finishReason=incomplete. The strategy
    * must throw EmptySummaryError carrying diagnostics that reveal the root
-   * cause (finishReason: incomplete, thinking block count > 0).
+   * cause (finishReason: max_tokens, thinking block count > 0).
    */
   it('includes finishReason and thinkingBlockCount when provider yields only thinking blocks', async () => {
     const thinkingOnlyProvider: IProvider = {
@@ -108,8 +108,8 @@ describe('MiddleOutStrategy enriched EmptySummaryError diagnostics (issue #2333)
           speaker: 'ai' as const,
           blocks: [],
           metadata: {
-            finishReason: 'incomplete',
-            stopReason: 'max_tokens',
+            finishReason: 'max_tokens',
+            rawStopReason: 'incomplete',
           },
         };
       },
@@ -128,12 +128,12 @@ describe('MiddleOutStrategy enriched EmptySummaryError diagnostics (issue #2333)
 
     expect(thrownError).toBeInstanceOf(EmptySummaryError);
     const emptyError = thrownError as EmptySummaryError;
-    expect(emptyError.finishReason).toBe('incomplete');
-    expect(emptyError.stopReason).toBe('max_tokens');
+    expect(emptyError.finishReason).toBe('max_tokens');
+    expect(emptyError.rawStopReason).toBe('incomplete');
     expect(emptyError.thinkingBlockCount).toBeGreaterThan(0);
     expect(emptyError.blockTypeCounts?.['thinking']).toBeGreaterThan(0);
     expect(isTransientCompressionError(thrownError)).toBe(false);
-    expect(emptyError.message).toContain('finishReason: incomplete');
+    expect(emptyError.message).toContain('finishReason: max_tokens');
     expect(emptyError.message).toContain('thinking:');
   });
 

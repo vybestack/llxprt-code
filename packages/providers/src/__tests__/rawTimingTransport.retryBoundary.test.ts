@@ -268,8 +268,7 @@ function hasNoVisiblePayload(chunk: IContent): boolean {
   return (
     chunk.blocks.length === 0 &&
     chunk.metadata?.usage === undefined &&
-    chunk.metadata?.finishReason === undefined &&
-    chunk.metadata?.stopReason === undefined
+    chunk.metadata?.finishReason === undefined
   );
 }
 

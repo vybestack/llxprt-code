@@ -5,6 +5,7 @@
  * @issue #1572 - Decomposing AnthropicProvider (Step 4 - Part B)
  */
 
+import { mapStopReason } from './finishReasonMapping.js';
 import type Anthropic from '@anthropic-ai/sdk';
 import type {
   IContent,
@@ -178,8 +179,10 @@ export function parseAnthropicResponse(
   // Propagate stop_reason so downstream turn handling and telemetry
   // receive a terminal signal (issue #1844).
   if (message.stop_reason) {
-    result.metadata ??= {};
-    result.metadata.stopReason = message.stop_reason;
+    result.metadata = {
+      ...result.metadata,
+      ...mapStopReason(message.stop_reason),
+    };
   }
 
   return result;
