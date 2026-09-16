@@ -455,14 +455,14 @@ function processDeltaToolCalls(
   }
 }
 
+const cutKey = (key: string): string => key.slice(0, 64);
+
 /**
  * Bound externally-controlled frame keys for the skip diagnostic: sorted,
  * capped to the first 16 keys with each key truncated to 64 characters.
  */
-function boundFrameKeys(record: Record<string, unknown>): string[] {
-  const keys = Object.keys(record).sort();
-  return keys.slice(0, 16).map((key) => key.slice(0, 64));
-}
+const boundFrameKeys = (record: Record<string, unknown>): string[] =>
+  Object.keys(record).sort().slice(0, 16).map(cutKey);
 
 /**
  * Process a single streaming chunk and update state / yield content.
