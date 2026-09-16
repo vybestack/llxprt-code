@@ -5,23 +5,28 @@
  */
 
 import {
-  BaseTool,
+  BaseDeclarativeTool,
+  BaseToolInvocation,
   type ToolResult,
   Kind,
   type LiveOutputUpdate,
 } from './tools.js';
 import { type Todo } from '../types/todo-schemas.js';
-import { Type } from '../types/schema-type.js';
 import { TodoReminderService } from '../utils/todoReminderService.js';
 import { formatTodoListForDisplay } from '../utils/todoFormatter.js';
 import { resolveTodoRead } from './todo-store.js';
+import type { ContextAwareTool, ToolContext } from '../types/tool-context.js';
+import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
 import type { ITodoService } from '../interfaces/ITodoService.js';
 
 export type TodoReadParams = Record<string, never>;
 
-export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
+export class TodoRead
+  extends BaseDeclarativeTool<TodoReadParams, ToolResult>
+  implements ContextAwareTool
+{
+  context?: ToolContext;
   static readonly Name = 'todo_read';
-  private reminderService = new TodoReminderService();
 
   constructor(private readonly todoService: ITodoService) {
     super(
@@ -30,7 +35,7 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
       'Read the current todo list for the session. Returns all todos with their status and content.',
       Kind.Think,
       {
-        type: Type.OBJECT,
+        type: 'object',
         properties: {},
       },
       true, // isOutputMarkdown
@@ -38,12 +43,38 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
     );
   }
 
-  override getDescription(_params: TodoReadParams): string {
+  protected createInvocation(
+    params: TodoReadParams,
+    messageBus?: IToolMessageBus,
+  ): TodoReadInvocation {
+    return new TodoReadInvocation(
+      this.todoService,
+      params,
+      this.context,
+      messageBus,
+    );
+  }
+}
+
+class TodoReadInvocation extends BaseToolInvocation<
+  TodoReadParams,
+  ToolResult
+> {
+  private readonly reminderService = new TodoReminderService();
+  constructor(
+    private readonly todoService: ITodoService,
+    params: TodoReadParams,
+    private readonly context: ToolContext | undefined,
+    messageBus?: IToolMessageBus,
+  ) {
+    super(params, messageBus, TodoRead.Name);
+  }
+
+  override getDescription(): string {
     return 'Read current todo list';
   }
 
   async execute(
-    _params: TodoReadParams,
     _signal: AbortSignal,
     _updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {

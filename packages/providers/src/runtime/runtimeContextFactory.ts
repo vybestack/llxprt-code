@@ -524,12 +524,15 @@ export function createIsolatedRuntimeContext(
     source: 'cli-isolated-runtime-factory',
     ...(options.metadata ?? {}),
   };
+  // Single resolution path (#2534 C6): resolve the settings service exactly
+  // once. When the caller supplies a config its service wins; otherwise the
+  // runtime settings resolution provides it, and the built config carries
+  // the same instance — no second read back out of the config.
   const settingsService =
     options.config?.getSettingsService() ??
     resolveRuntimeSettingsService(options.settingsService);
 
   const config = resolveRuntimeConfig(options, runtimeId, settingsService);
-  const resolvedSettingsService = config.getSettingsService();
   // @plan:PLAN-20260617-COREAPI.P15
   // @requirement:REQ-001
   // Use the caller-provided bus when present so the context-created
@@ -543,7 +546,7 @@ export function createIsolatedRuntimeContext(
   );
 
   const initialRuntimeContext = createSettingsProviderRuntimeContext({
-    settingsService: resolvedSettingsService,
+    settingsService,
     config,
     runtimeId,
     metadata: baseMetadata,
@@ -561,7 +564,7 @@ export function createIsolatedRuntimeContext(
     options.providerManager ??
     new ProviderManager({
       runtime: initialRuntimeContext,
-      settingsService: resolvedSettingsService,
+      settingsService,
       config,
     });
 
@@ -569,7 +572,7 @@ export function createIsolatedRuntimeContext(
     runtimeId,
     baseMetadata,
     activationState,
-    resolvedSettingsService,
+    settingsService,
     config,
     providerManager,
     oauthManager,
@@ -579,7 +582,7 @@ export function createIsolatedRuntimeContext(
 
   const cleanup = buildCleanupClosure(
     activationState,
-    resolvedSettingsService,
+    settingsService,
     config,
     providerManager,
     options,
@@ -588,7 +591,7 @@ export function createIsolatedRuntimeContext(
   return {
     runtimeId,
     metadata: baseMetadata,
-    settingsService: resolvedSettingsService,
+    settingsService,
     config,
     providerManager,
     oauthManager,

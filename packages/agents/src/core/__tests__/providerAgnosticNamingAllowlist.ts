@@ -155,13 +155,9 @@ export const ALLOWED_GEMINI_PAIRS_EXTENDED: readonly string[] = [
 
 /** Exact (relPath, moduleSpecifier, importedSymbol, localName) 4-tuples. */
 export const ALLOWED_IMPORT_TUPLES: readonly string[] = [
-  'agents/src/core/hookWireAdapter.ts::@vybestack/llxprt-code-core/llm-types/index.js::mapGeminiFinishReason::mapGeminiFinishReason',
   'cli/src/ui/privacy/PrivacyNotice.tsx::./GeminiPrivacyNotice.js::GeminiPrivacyNotice::GeminiPrivacyNotice',
   'core/src/config/__tests__/models.test.ts::../models.js::isGemini2Model::isGemini2Model',
   'core/src/config/__tests__/models.test.ts::../models.js::isGemini3Model::isGemini3Model',
-  'core/src/llm-types/finishReasons.test.ts::./finishReasons.js::GEMINI_FINISH_MAP::GEMINI_FINISH_MAP',
-  'core/src/llm-types/finishReasons.test.ts::./finishReasons.js::mapGeminiFinishReason::mapGeminiFinishReason',
-  'core/src/llm-types/modelEnvelope.ts::./finishReasons.js::GEMINI_FINISH_MAP::GEMINI_FINISH_MAP',
   'core/src/services/history/ContentConverters.test.ts::../../llm-types/geminiContent.js::GeminiContent::GeminiContent',
   'core/src/services/history/ContentConverters.ts::../../llm-types/geminiContent.js::GeminiContent::GeminiContent',
   'core/src/services/history/ContentConverters.ts::../../llm-types/geminiContent.js::GeminiContentPart::GeminiContentPart',

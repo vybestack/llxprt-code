@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { mapCandidateFinishReason } from './finishReasonMapping.js';
 import type { Content, FunctionCall, Part } from './geminiWireTypes.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
@@ -267,6 +268,18 @@ export function createGeminiResponseMapper(): ResponseToChunksMapper {
     pushTextAndToolCallChunks(chunks, text, functionCalls, usageMetadata);
     pushFallbackChunks(chunks, text, functionCalls, usageMetadata);
     attachAfcHistory(chunks, response.automaticFunctionCallingHistory);
+    const rawStopReason = response.candidates?.[0]?.finishReason;
+    if (rawStopReason !== undefined) {
+      const lastIndex = chunks.length - 1;
+      const terminal = chunks[lastIndex];
+      chunks[lastIndex] = {
+        ...terminal,
+        metadata: {
+          ...terminal.metadata,
+          ...mapCandidateFinishReason(rawStopReason),
+        },
+      };
+    }
     return chunks;
   };
 }

@@ -61,6 +61,23 @@ function collectGarbage(): void {
 }
 
 describe('SchemaValidator compiled-validator retention', () => {
+  /** @plan:PLAN-20260914-ISSUE3293.P2 @requirement:REQ-3293-02 */
+  it('treats requireOne as an unknown keyword, not an enforced constraint', () => {
+    // Issue #3293: the keyword is no longer recognized; schemas must use
+    // standard JSON Schema keywords (anyOf/required) to express constraints.
+    const schema = {
+      type: 'object',
+      properties: {
+        old_string: { type: 'string' },
+        new_string: { type: 'string' },
+      },
+      requireOne: [['old_string', 'new_string']],
+    };
+
+    expect(SchemaValidator.validate(schema, {})).toBeNull();
+    expect(SchemaValidator.validate(schema, { old_string: 'a' })).toBeNull();
+  });
+
   it('validates a boolean schema without throwing', () => {
     // `true` and `false` are valid JSON Schema and reach the derivation path.
     // A WeakMap key must be an object, so caching them would throw
@@ -129,25 +146,6 @@ describe('SchemaValidator compiled-validator retention', () => {
     const error = SchemaValidator.validate(schema, { depth: 1 });
     expect(error).not.toBeNull();
     expect(error).toContain('path');
-  });
-
-  /** @plan PLAN-20260826-AJVCACHE.P01 @requirement REQ-3361-02 */
-  it('keeps requireOne enforcement across repeated validations', () => {
-    const schema = {
-      type: 'object',
-      properties: {
-        old_string: { type: 'string' },
-        new_string: { type: 'string' },
-      },
-      requireOne: [['old_string', 'new_string']],
-    };
-
-    for (let index = 0; index < 5; index += 1) {
-      expect(SchemaValidator.validate(schema, { old_string: 'a' })).toBeNull();
-    }
-
-    const error = SchemaValidator.validate(schema, {});
-    expect(error).toContain('at least one of required properties');
   });
 
   /** @plan PLAN-20260826-AJVCACHE.P01 @requirement REQ-3361-02 */

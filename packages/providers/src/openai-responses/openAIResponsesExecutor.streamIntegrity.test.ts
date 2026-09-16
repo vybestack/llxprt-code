@@ -335,7 +335,7 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049', () => {
     expect(messages.some((m) => m.blocks.some((b) => b.type === 'text'))).toBe(
       true,
     );
-    expect(messages.some((m) => m.metadata?.finishReason === 'completed')).toBe(
+    expect(messages.some((m) => m.metadata?.finishReason === 'stop')).toBe(
       true,
     );
   });
@@ -366,21 +366,21 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049', () => {
     {
       label: 'response.completed',
       event: TERMINAL_EVENT,
-      finishReason: 'completed',
+      finishReason: 'stop',
     },
     {
       label: 'response.done',
       event: sse(
         '{"type":"response.done","response":{"id":"resp_1","status":"completed"}}',
       ),
-      finishReason: 'completed',
+      finishReason: 'stop',
     },
     {
       label: 'response.incomplete',
       event: sse(
         '{"type":"response.incomplete","response":{"id":"resp_1","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}}',
       ),
-      finishReason: 'incomplete',
+      finishReason: 'max_tokens',
     },
   ];
 

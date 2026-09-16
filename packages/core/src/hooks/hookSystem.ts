@@ -30,6 +30,7 @@ import {
   AfterModelHookOutput,
   BeforeToolSelectionHookOutput,
 } from './types.js';
+import type { HookLLMRequest, HookLLMResponse } from './hookTranslator.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:hooks:system');
 
@@ -282,11 +283,10 @@ export class HookSystem {
    * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
    */
   async fireBeforeModelEvent(
-    llmRequest: unknown,
+    request: Omit<HookLLMRequest, 'version'>,
   ): Promise<BeforeModelHookOutput | undefined> {
     try {
-      const result =
-        await this.getEventHandler().fireBeforeModelEvent(llmRequest);
+      const result = await this.getEventHandler().fireBeforeModelEvent(request);
       if (result.finalOutput) {
         return new BeforeModelHookOutput(result.finalOutput);
       }
@@ -305,13 +305,13 @@ export class HookSystem {
    * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
    */
   async fireAfterModelEvent(
-    llmRequest: unknown,
-    llmResponse: unknown,
+    request: Omit<HookLLMRequest, 'version'>,
+    response: Omit<HookLLMResponse, 'version'>,
   ): Promise<AfterModelHookOutput | undefined> {
     try {
       const result = await this.getEventHandler().fireAfterModelEvent(
-        llmRequest,
-        llmResponse,
+        request,
+        response,
       );
       if (result.finalOutput) {
         return new AfterModelHookOutput(result.finalOutput);
@@ -331,11 +331,11 @@ export class HookSystem {
    * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
    */
   async fireBeforeToolSelectionEvent(
-    llmRequest: unknown,
+    request: Omit<HookLLMRequest, 'version'>,
   ): Promise<BeforeToolSelectionHookOutput | undefined> {
     try {
       const result =
-        await this.getEventHandler().fireBeforeToolSelectionEvent(llmRequest);
+        await this.getEventHandler().fireBeforeToolSelectionEvent(request);
       if (result.finalOutput) {
         return new BeforeToolSelectionHookOutput(result.finalOutput);
       }

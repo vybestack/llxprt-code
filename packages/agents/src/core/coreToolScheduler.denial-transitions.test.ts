@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { describe, expect, it } from 'bun:test';
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
@@ -50,6 +51,7 @@ function createHarness(defaultDecision: PolicyDecision): SchedulerHarness {
       getExcludeTools: (): string[] => [],
     },
     messageBusAdapter,
+    new SettingsService(),
   );
   const tool = new MockTool({
     name: 'approval_tool',

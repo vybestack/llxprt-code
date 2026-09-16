@@ -168,6 +168,72 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
     }
   });
 
+  it('(h) #2534 review Finding 1: switch + cliOverrides persist credentials into the TARGET provider scope (main parity)', async () => {
+    const built = await buildCliStyleConfig('plain-text.jsonl');
+    try {
+      // Register a second provider so the auto path performs a REAL switch
+      // (buildCliStyleConfig leaves 'fake' active). The provider itself is
+      // inert test data: the component under test is the ORDER of override
+      // application relative to the switch, not provider behavior.
+      const switchTargetProvider = {
+        name: 'gemini',
+        async getModels() {
+          return [];
+        },
+        async *generateChatCompletion() {
+          yield {
+            speaker: 'ai' as const,
+            blocks: [{ type: 'text' as const, text: 'target scope ok' }],
+          };
+        },
+      };
+      built.config.getProviderManager()?.registerProvider(switchTargetProvider);
+
+      const intent: ProviderActivationIntent = {
+        provider: 'gemini',
+        cliOverrides: {
+          key: 'sk-target-scope-key',
+          baseUrl: 'https://target-scope.example/v1',
+        },
+        authMode: 'auto',
+      };
+      const result: ProviderActivationResult = await executeProviderActivation(
+        built.config,
+        intent,
+      );
+      expect(result.authFailed).toBe(false);
+      expect(result.activeProvider).toBe('gemini');
+      expect(configActiveProvider(built.config)).toBe('gemini');
+
+      // Main's legacy activation order (switchActiveProvider FIRST, then
+      // updateActiveProviderApiKey/updateActiveProviderBaseUrl) persisted
+      // credentials into the switched-to provider's scope. The executor must
+      // preserve that persistence target: auth-key/base-url land in the
+      // TARGET provider's provider-scoped settings.
+      const settings = built.config.getSettingsService();
+      const targetScope = settings.getProviderSettings('gemini');
+      expect(targetScope['auth-key']).toBe('sk-target-scope-key');
+      expect(targetScope['base-url']).toBe('https://target-scope.example/v1');
+      // And NOT into the outgoing provider's scope (the pre-switch active
+      // 'fake' must stay clean — this assertion fails if overrides run before
+      // the switch).
+      const outgoingScope = settings.getProviderSettings('fake');
+      expect(outgoingScope['auth-key']).toBeUndefined();
+      expect(outgoingScope['base-url']).toBeUndefined();
+      // The session still sees the credentials through the ephemerals set by
+      // the override application (identical in both orders — this pins the
+      // session-level behavior that must not regress through the reorder).
+      expect(built.config.getEphemeralSetting('auth-key')).toBe(
+        'sk-target-scope-key',
+      );
+      expect(built.config.getEphemeralSetting('base-url')).toBe(
+        'https://target-scope.example/v1',
+      );
+    } finally {
+      await built.cleanup();
+    }
+  });
+
   it('(c) no-provider case falls back to defaultProvider; auth errors swallowed (authFailed false), config remains usable', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {

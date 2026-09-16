@@ -47,6 +47,26 @@ function createMockAgent(tools: readonly ToolInfo[] = mockTools): Agent {
 }
 
 describe('toolsCommand', () => {
+  it('keeps blank governance entries blank when toggling another tool', async () => {
+    const settings = new SettingsService();
+    settings.set('tools.disabled', ['  ']);
+    settings.set('tools.allowed', ['\t']);
+    const context = createMockCommandContext({
+      services: {
+        agent: createMockAgent(),
+        config: {
+          getSettingsService: () => settings,
+          getEphemeralSettings: () => ({}),
+        },
+      },
+    });
+
+    await toolsCommand.action!(context, 'disable "File Reader"');
+
+    expect(settings.get('tools.disabled')).toStrictEqual(['', 'file-reader']);
+    expect(settings.get('tools.allowed')).toStrictEqual(['']);
+  });
+
   it('reports missing tools from the agent', async () => {
     const mockContext = createMockCommandContext({
       services: {

@@ -193,7 +193,11 @@ describe('subagent.ts', () => {
         telemetryAdapter: runtimeContext.telemetry,
         toolsView: runtimeContext.tools,
         contentGenerator: {} as ContentGenerator,
-        toolRegistry: new ToolRegistry(config, mockMessageBus),
+        toolRegistry: new ToolRegistry(
+          config,
+          mockMessageBus,
+          new SettingsService(),
+        ),
       };
     };
 
@@ -230,7 +234,11 @@ describe('subagent.ts', () => {
 
       const overrides: SubAgentRuntimeOverrides = {
         runtimeBundle: createRuntimeBundle(configWithTimeout),
-        toolRegistry: new ToolRegistry(configWithTimeout, mockMessageBus),
+        toolRegistry: new ToolRegistry(
+          configWithTimeout,
+          mockMessageBus,
+          new SettingsService(),
+        ),
       };
 
       const scope = await SubAgentScope.create(
@@ -316,7 +324,11 @@ describe('subagent.ts', () => {
 
       const overrides: SubAgentRuntimeOverrides = {
         runtimeBundle: createRuntimeBundle(configWithTimeout),
-        toolRegistry: new ToolRegistry(configWithTimeout, mockMessageBus),
+        toolRegistry: new ToolRegistry(
+          configWithTimeout,
+          mockMessageBus,
+          new SettingsService(),
+        ),
       };
 
       const scope = await SubAgentScope.create(
@@ -441,7 +453,11 @@ describe('subagent.ts', () => {
 
       const overrides: SubAgentRuntimeOverrides = {
         runtimeBundle: createRuntimeBundle(configWithTimeout),
-        toolRegistry: new ToolRegistry(configWithTimeout, mockMessageBus),
+        toolRegistry: new ToolRegistry(
+          configWithTimeout,
+          mockMessageBus,
+          new SettingsService(),
+        ),
       };
 
       const scope = await SubAgentScope.create(

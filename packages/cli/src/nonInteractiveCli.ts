@@ -98,13 +98,8 @@ export function createProfileNameWriter(
           () =>
             `[nonInteractiveCli] resolveContentPrefixIdentity failed; using bare profile name: ${error}`,
         );
-        const settingsService = config.getSettingsService() as Omit<
-          ReturnType<Config['getSettingsService']>,
-          'getCurrentProfileName'
-        > & {
-          getCurrentProfileName?: () => string | null;
-        };
-        return settingsService.getCurrentProfileName?.() ?? null;
+        const settingsService = config.getSettingsService();
+        return settingsService.getCurrentProfileName();
       }
     });
   let firstEventInTurn = true;

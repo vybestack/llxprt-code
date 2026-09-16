@@ -262,12 +262,13 @@ function createHookConfig(config: Config, mode: HookMode): Config {
           initialize: async () => undefined,
           isInitialized: () => true,
           fireBeforeToolSelectionEvent: async () => ({
-            applyToolConfigModifications: () =>
+            applyToolChoiceModifications: () =>
               mode.allowedFunctionNames === undefined
-                ? { toolConfig: {} }
+                ? { toolChoice: { mode: 'auto' } }
                 : {
-                    toolConfig: {
-                      allowedFunctionNames: [...mode.allowedFunctionNames],
+                    toolChoice: {
+                      mode: 'auto',
+                      allowedToolNames: [...mode.allowedFunctionNames],
                     },
                   },
           }),

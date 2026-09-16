@@ -66,7 +66,7 @@ export class ToolNameValidator {
     }
 
     // Step 2: Attempt to normalize and validate against available tools
-    const normalized = this.normalizeToolName(rawName);
+    const normalized = normalizeToolName(rawName);
 
     if (!normalized) {
       result.warnings.push(`Unable to normalize tool name: "${rawName}"`);
@@ -100,13 +100,6 @@ export class ToolNameValidator {
     }
 
     return result;
-  }
-
-  /**
-   * Normalize tool name using shared utility function
-   */
-  private normalizeToolName(name: string): string | null {
-    return normalizeToolName(name);
   }
 
   /**

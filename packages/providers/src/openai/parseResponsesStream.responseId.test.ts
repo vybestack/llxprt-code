@@ -86,7 +86,7 @@ describe('parseResponsesStream captures response.id @issue:207', () => {
     expect(idMessage?.metadata?.usage).toBeUndefined();
   });
 
-  it('emits no metadata chunk when response.completed lacks both id and usage', async () => {
+  it('emits finish metadata when response.completed lacks both id and usage', async () => {
     const chunks = [
       'data: {"type":"response.output_text.delta","delta":"Hi"}\n\n',
       'data: {"type":"response.completed","response":{"object":"response","model":"gpt-4o","status":"completed"}}\n\n',
@@ -101,7 +101,10 @@ describe('parseResponsesStream captures response.id @issue:207', () => {
     }
 
     const metadataMessage = messages.find((m) => m.metadata);
-    expect(metadataMessage).toBeUndefined();
+    expect(metadataMessage?.metadata).toStrictEqual({
+      finishReason: 'stop',
+      rawStopReason: 'completed',
+    });
   });
 
   it('tags metadata chunk with responsesStored=true when option is set', async () => {

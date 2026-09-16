@@ -50,7 +50,7 @@ import {
   cleanThinkingContent,
   parseStreamingReasoningDelta,
 } from './OpenAIResponseParser.js';
-import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
+import { mapFinishReason } from './finishReasonMapping.js';
 import { type ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import {
   type StreamingState,
@@ -456,6 +456,15 @@ function processDeltaToolCalls(
 }
 
 /**
+ * Bound externally-controlled frame keys for the skip diagnostic: sorted,
+ * capped to the first 16 keys with each key truncated to 64 characters.
+ */
+function boundFrameKeys(record: Record<string, unknown>): string[] {
+  const keys = Object.keys(record).sort();
+  return keys.slice(0, 16).map((key) => key.slice(0, 64));
+}
+
+/**
  * Process a single streaming chunk and update state / yield content.
  */
 async function* processStreamingChunk(
@@ -486,7 +495,19 @@ async function* processStreamingChunk(
     chunk as { choices?: OpenAI.Chat.Completions.ChatCompletionChunk.Choice[] }
   ).choices;
   const choice = chunkChoices?.[0];
-  if (choice === undefined) return;
+  if (choice === undefined) {
+    deps.logger.debug(() => '[Streaming] Skipping frame without a choice', {
+      chunkCount: state.chunkCount,
+      frameKeys: boundFrameKeys(chunkRecord),
+      hasUsage: Boolean(chunk.usage),
+      // Object tags are unvalidated external data; keep only a short string
+      // so the diagnostic never retains raw frame payloads.
+      ...(typeof chunkRecord.object === 'string'
+        ? { object: chunkRecord.object.slice(0, 64) }
+        : {}),
+    });
+    return;
+  }
 
   // One raw-timing signal per raw choice regardless of how many
   // token-bearing fields the choice carries (issue #3473).
@@ -662,7 +683,9 @@ function* emitCombinedTerminalContent(
       blocks: combinedBlocks,
     };
 
-    const stopReason = mapFinishReasonToStopReason(state.lastFinishReason);
+    const finishInfo = state.lastFinishReason
+      ? mapFinishReason(state.lastFinishReason)
+      : undefined;
     deps.logger.debug(
       () => `[stream:terminal] building combined terminal content`,
       {
@@ -672,7 +695,7 @@ function* emitCombinedTerminalContent(
         reasoningToolCallCount: reasoningToolCalls.length,
         pipelineToolCallCount: pipelineToolCallBlocks.length,
         rawFinishReason: state.lastFinishReason,
-        stopReason,
+        ...finishInfo,
         hasStreamingUsage: Boolean(state.streamingUsage),
       },
     );
@@ -680,20 +703,20 @@ function* emitCombinedTerminalContent(
     if (state.streamingUsage !== null) {
       combinedContent.metadata = buildUsageMetadata(
         state.streamingUsage,
-        stopReason,
+        finishInfo,
       );
-    } else if (stopReason) {
-      combinedContent.metadata = { stopReason };
+    } else if (finishInfo) {
+      combinedContent.metadata = finishInfo;
     }
 
-    applyTerminalMetadata(combinedContent, state);
+    applyTerminalMetadata(combinedContent, state, finishInfo);
 
     deps.logger.debug(
       () => `[stream:terminal] emitting combined terminal content`,
       {
         model,
         blockCount: combinedContent.blocks.length,
-        stopReason: combinedContent.metadata?.stopReason,
+        rawStopReason: combinedContent.metadata?.rawStopReason,
         finishReason: combinedContent.metadata?.finishReason,
         hasUsage: Boolean(combinedContent.metadata?.usage),
         hasEmittedTerminalMetadata: state.hasEmittedTerminalMetadata,

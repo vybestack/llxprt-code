@@ -40,7 +40,7 @@ import type {
   IStorageService,
   IToolKeyStorage,
   ITodoService,
-  ISettingsService,
+  SettingsServiceBoundary,
   IPromptRegistryService,
   PublishSubscribeCapable,
   PolicyUpdateOptions,
@@ -486,20 +486,17 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
     });
   });
 
-  describe('ISettingsService contract', () => {
-    it('requires getSettingsService, getSetting, setSetting', async () => {
-      const service: ISettingsService = {
-        getSettingsService: () => ({
-          get: settingsLookup({ theme: 'dark' }),
-          set: () => {},
-        }),
-        getSetting: settingsLookup({ theme: 'dark' }),
-        setSetting: async () => {},
+  describe('SettingsServiceBoundary contract', () => {
+    it('requires get, set, getAllGlobalSettings', async () => {
+      const service: SettingsServiceBoundary = {
+        get: settingsLookup({ theme: 'dark' }),
+        set: () => {},
+        getAllGlobalSettings: () => ({ theme: 'dark' }),
       };
-      assertImplements<ISettingsService>(service);
+      assertImplements<SettingsServiceBoundary>(service);
 
-      expect(service.getSetting('theme')).toBe('dark');
-      expect(service.getSetting('nonexistent')).toBeUndefined();
+      expect(service.get('theme')).toBe('dark');
+      expect(service.get('nonexistent')).toBeUndefined();
     });
   });
 

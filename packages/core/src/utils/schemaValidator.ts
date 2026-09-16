@@ -292,7 +292,6 @@ interface ExtendedSchema {
   type?: string;
   properties?: Record<string, unknown>;
   required?: string[];
-  requireOne?: string[][]; // Array of arrays - at least one property from each array must be present
   [key: string]: unknown;
 }
 
@@ -310,12 +309,11 @@ interface ExtendedSchema {
  */
 const ajvSchemaCache = new WeakMap<ExtendedSchema, ExtendedSchema>();
 
-/** Strips the internal keywords Ajv must not see. */
+/** Strips `$schema` so Ajv does not resolve unrecognized draft URIs. */
 function deriveAjvSchema(schema: unknown): ExtendedSchema {
   // Spreading a primitive yields `{}`, which is what this code has always
   // produced for a boolean schema. Preserved deliberately.
   const ajvSchema = { ...(schema as ExtendedSchema) };
-  delete ajvSchema.requireOne;
   delete ajvSchema.$schema;
   return ajvSchema;
 }
@@ -412,21 +410,7 @@ export class SchemaValidator {
       return 'Value of params must be an object';
     }
 
-    // Handle our custom requireOne validation first
     const extSchema = schema as ExtendedSchema;
-    if (extSchema.requireOne) {
-      for (const oneOfGroup of extSchema.requireOne) {
-        const hasOne = oneOfGroup.some(
-          (prop) =>
-            (data as Record<string, unknown>)[prop] !== undefined &&
-            (data as Record<string, unknown>)[prop] !== null &&
-            (data as Record<string, unknown>)[prop] !== '',
-        );
-        if (!hasOne) {
-          return `params must have at least one of required properties: ${oneOfGroup.join(', ')}`;
-        }
-      }
-    }
 
     // Pick the Ajv instance whose dialect matches the schema's `$schema`.
     // draft-07 schemas MUST go through ajValidator07 so tuple `items: [...]`
@@ -440,8 +424,7 @@ export class SchemaValidator {
       ? ajValidator07
       : ajValidator2020;
 
-    // Create a copy of the schema without our custom properties for AJV.
-    // We also strip `$schema` before compiling so that unrecognized draft
+    // Strip `$schema` before compiling so that unrecognized draft
     // URIs (e.g. draft-2019-09 routed through the 2020 instance, or a
     // hypothetical future draft) don't fail with
     // `no schema with key or ref "<uri>"` when Ajv tries to resolve the

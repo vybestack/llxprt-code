@@ -677,8 +677,11 @@ describe('HookRunner', () => {
       const mockBeforeModelInput = {
         ...mockInput,
         llm_request: {
+          version: 2,
           model: 'gemini-1.5-pro',
-          messages: [{ role: 'user', content: 'Hello' }],
+          contents: [
+            { speaker: 'user', blocks: [{ type: 'text', text: 'Hello' }] },
+          ],
         },
       };
 
@@ -686,7 +689,7 @@ describe('HookRunner', () => {
         decision: 'allow' as const,
         hookSpecificOutput: {
           llm_request: {
-            temperature: 0.7,
+            settings: { temperature: 0.7 },
           },
         },
       };
@@ -708,7 +711,8 @@ describe('HookRunner', () => {
           .calls[1][0],
       );
       expect(secondHookInput.llm_request.model).toBe('gemini-1.5-pro');
-      expect(secondHookInput.llm_request.temperature).toBe(0.7);
+      expect(secondHookInput.llm_request.settings.temperature).toBe(0.7);
+      expect(secondHookInput.llm_request.contents).toHaveLength(1);
     });
 
     it('should not modify input if hook fails', async () => {

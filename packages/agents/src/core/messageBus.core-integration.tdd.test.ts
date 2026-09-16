@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -147,7 +148,11 @@ describe('MessageBus core integration TDD', () => {
     const config = new Config(baseConfigParams);
     const decoyBus = new MessageBus(config.getPolicyEngine(), false);
     const injectedBus = new MessageBus(config.getPolicyEngine(), false);
-    const injectedRegistry = new ToolRegistry(config, injectedBus);
+    const injectedRegistry = new ToolRegistry(
+      config,
+      injectedBus,
+      new SettingsService(),
+    );
     injectedRegistry.registerTool(new Phase04BusAwareTool(injectedBus));
 
     const injectedConfirmationRequests: ToolConfirmationRequest[] = [];

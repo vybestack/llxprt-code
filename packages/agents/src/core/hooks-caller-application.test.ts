@@ -577,7 +577,7 @@ describe('Hook Caller Application', () => {
       //
       // This MUST be changed to:
       //   const hookResult = await triggerBeforeToolSelectionHook(...);
-      //   if (hookResult) { tools = hookResult.applyToolConfigModifications(tools); }
+      //   if (hookResult) { tools = hookResult.applyToolChoiceModifications(tools); }
 
       const fs = await import('node:fs/promises');
       const chatSessionPath = fileURLToPath(

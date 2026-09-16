@@ -17,7 +17,8 @@
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { type ToolCallPipeline } from './ToolCallPipeline.js';
 import { extractCacheMetrics } from '../utils/cacheMetricsExtractor.js';
-import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
+import type { FinishInfo } from '@vybestack/llxprt-code-core/llm-types/finishReasons.js';
+import { mapFinishReason } from './finishReasonMapping.js';
 
 /**
  * Mutable state accumulated during streaming response processing.
@@ -282,7 +283,7 @@ export function parseChunkData(
  */
 export function buildUsageMetadata(
   streamingUsage: NonNullable<StreamingState['streamingUsage']>,
-  stopReason: string | undefined,
+  finishInfo: FinishInfo | undefined,
 ): IContent['metadata'] {
   const cacheMetrics = extractCacheMetrics(streamingUsage);
   const promptTokensVal = streamingUsage.prompt_tokens;
@@ -311,7 +312,7 @@ export function buildUsageMetadata(
       cacheCreationTokens: cacheMetrics.cacheCreationTokens,
       cacheMissTokens: cacheMetrics.cacheMissTokens,
     },
-    ...(stopReason && { stopReason }),
+    ...finishInfo,
   };
 }
 
@@ -321,12 +322,13 @@ export function buildUsageMetadata(
 export function applyTerminalMetadata(
   content: IContent,
   state: StreamingState,
+  finishInfo: FinishInfo | undefined,
 ): void {
-  if (state.lastFinishReason) {
-    content.metadata ??= {};
-    // stopReason was already set to the normalized value; do NOT
-    // overwrite it with the raw provider string.
-    content.metadata.finishReason = state.lastFinishReason;
+  if (finishInfo) {
+    content.metadata = {
+      ...content.metadata,
+      ...finishInfo,
+    };
     state.hasEmittedTerminalMetadata = true;
   }
 }
@@ -420,23 +422,19 @@ export function* emitFinishOnlyMetadata(
     getToolCallCount() === 0
   ) {
     state.hasEmittedTerminalMetadata = true;
-    const normalizedStopReason = mapFinishReasonToStopReason(
-      state.lastFinishReason,
-    );
+    const finishInfo = mapFinishReason(state.lastFinishReason);
     logger.debug(
       () => `[stream:terminal] emitting metadata-only terminal chunk`,
       {
         model,
-        stopReason: normalizedStopReason,
-        finishReason: state.lastFinishReason,
+        ...finishInfo,
       },
     );
     yield {
       speaker: 'ai',
       blocks: [],
       metadata: {
-        stopReason: normalizedStopReason,
-        finishReason: state.lastFinishReason,
+        ...finishInfo,
       },
     } as IContent;
   } else if (state.lastFinishReason && !state.streamingUsage) {
@@ -466,24 +464,22 @@ export function* emitUsageOnlyMetadata(
     state.accumulatedReasoningContent.length === 0 &&
     getToolCallCount() === 0
   ) {
-    const stopReason = mapFinishReasonToStopReason(state.lastFinishReason);
+    const finishInfo = state.lastFinishReason
+      ? mapFinishReason(state.lastFinishReason)
+      : undefined;
     const metaOnlyContent: IContent = {
       speaker: 'ai',
       blocks: [],
-      metadata: buildUsageMetadata(state.streamingUsage, stopReason),
+      metadata: buildUsageMetadata(state.streamingUsage, finishInfo),
     };
 
-    // Propagate terminal metadata on usage-only chunk (issue #1844).
-    if (state.lastFinishReason && metaOnlyContent.metadata) {
-      metaOnlyContent.metadata.finishReason = state.lastFinishReason;
-      state.hasEmittedTerminalMetadata = true;
-    }
+    applyTerminalMetadata(metaOnlyContent, state, finishInfo);
 
     logger.debug(
       () => `[stream:terminal] emitting usage-only terminal metadata chunk`,
       {
         model,
-        stopReason: metaOnlyContent.metadata?.stopReason,
+        rawStopReason: metaOnlyContent.metadata?.rawStopReason,
         finishReason: metaOnlyContent.metadata?.finishReason,
         hasUsage: Boolean(metaOnlyContent.metadata?.usage),
         hasEmittedTerminalMetadata: state.hasEmittedTerminalMetadata,

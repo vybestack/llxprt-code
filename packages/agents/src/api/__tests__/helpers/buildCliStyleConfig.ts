@@ -36,17 +36,14 @@ import { randomUUID } from 'node:crypto';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { Config as ConfigType } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import {
-  createIsolatedRuntimeContext,
-  switchActiveProvider,
-  setActiveModel,
-  getActiveProviderName,
-  getActiveModelName,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+import { createIsolatedRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime.js';
 import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
 import { stripSandboxSegment } from './fixtureRoot.js';
-import { toConfigParameters } from '@vybestack/llxprt-code-agents';
+import {
+  toConfigParameters,
+  executeProviderActivation,
+} from '@vybestack/llxprt-code-agents';
 import {
   AgentClient,
   CoreToolScheduler,
@@ -215,9 +212,14 @@ export async function buildCliStyleConfig(
 
   try {
     await handle.activate();
-    await applyProviderModel(baseConfig, config);
     await config.initialize({ messageBus });
-    await config.refreshAuth(undefined);
+    const activation = await executeProviderActivation(config, {
+      provider: baseConfig.provider,
+      model: baseConfig.model,
+    });
+    if (activation.authFailed) {
+      throw activation.authError;
+    }
   } catch (error) {
     await cleanupHandle(handle, prev);
     throw error;
@@ -242,45 +244,6 @@ async function cleanupHandle(
     delete process.env.LLXPRT_FAKE_RESPONSES;
   } else {
     process.env.LLXPRT_FAKE_RESPONSES = prev;
-  }
-}
-
-/**
- * Applies the initial provider/model through the real runtime mutators
- * (mirrors createAgent's applyInitialProviderModelAuth).
- */
-async function applyProviderModel(
-  parsed: { readonly provider: string; readonly model: string },
-  config: ConfigType,
-): Promise<void> {
-  const activeProvider = safeActiveProviderName();
-  if (parsed.provider !== activeProvider) {
-    try {
-      await switchActiveProvider(parsed.provider);
-    } catch {
-      /* Provider not registered (fake mode) — continue with active. */
-    }
-  }
-  const activeModel = safeActiveModelName();
-  if (parsed.model !== activeModel) {
-    await setActiveModel(parsed.model);
-    await config.initializeContentGeneratorConfig();
-  }
-}
-
-function safeActiveProviderName(): string {
-  try {
-    return getActiveProviderName();
-  } catch {
-    return '';
-  }
-}
-
-function safeActiveModelName(): string {
-  try {
-    return getActiveModelName();
-  } catch {
-    return '';
   }
 }
 

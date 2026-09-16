@@ -97,9 +97,9 @@ export interface ProviderActivationResult {
  *   provider overrides (auth-key/auth-keyfile/base-url) and profile model
  *   params before auth.
  * - 'auto' (default): the CLI path — no-provider falls back to defaultProvider
- *   and swallows auth errors; provider-case applies CLI overrides, switches
- *   (preserving profile auth ephemerals), refreshes auth, then resolves model
- *   + model params.
+ *   and swallows auth errors; provider-case switches (preserving profile auth
+ *   ephemerals), applies CLI overrides into the switched-to provider's scope,
+ *   refreshes auth, then resolves model + model params.
  */
 export async function executeProviderActivation(
   config: Config,
@@ -326,7 +326,7 @@ async function executeAutoNoProvider(
 
   try {
     await switchActiveProvider(fallbackDefault);
-    await config.refreshAuth();
+    await config.refreshAuth(intent.authMethod);
   } catch {
     // Log but don't fail — auth will be triggered lazily on the first API call.
   }
@@ -346,9 +346,12 @@ async function executeAutoNoProvider(
 }
 
 /**
- * Provider branch: apply CLI overrides BEFORE the switch, snapshot profile auth
- * ephemerals, switch (reapplying ephemerals) only when needed, refresh auth,
- * then resolve model + params. Any thrown error is fatal (authFailed true).
+ * Provider branch: snapshot profile auth ephemerals, switch (reapplying
+ * ephemerals) only when needed, apply CLI overrides AFTER the switch so their
+ * provider-scoped persistence lands in the TARGET provider's scope (#2534
+ * review Finding 1; main legacy order), refresh auth, then resolve model +
+ * params. Errors are fatal except provider-switch errors under the explicit
+ * best-effort policy used by legacy construction inputs.
  */
 async function executeAutoProvider(
   config: Config,
@@ -359,7 +362,7 @@ async function executeAutoProvider(
     const manager = config.getProviderManager();
     const alreadyActive = manager?.getActiveProviderName() === provider;
     if (isPureAlreadyActiveRefresh(intent, alreadyActive)) {
-      await config.refreshAuth();
+      await config.refreshAuth(intent.authMethod);
       const activeName = resolveActiveProviderName(config);
       return {
         authFailed: false,
@@ -368,13 +371,9 @@ async function executeAutoProvider(
       };
     }
 
-    await applyCliArgumentOverrides(
-      toArgvShape(intent),
-      toBootstrapArgsShape(intent),
-    );
-
     const profileAuthEphemerals = snapshotProfileAuthEphemerals(config);
     let infoMessages: readonly string[] = [];
+    let switchError: string | undefined;
     if (!alreadyActive) {
       const switchResult = await switchActiveProvider(provider, {
         skipModelDefaults: true,
@@ -384,12 +383,33 @@ async function executeAutoProvider(
           'auth-key-name',
           'base-url',
         ],
+      }).catch((error: unknown) => {
+        if (intent.providerSwitchPolicy !== 'best-effort') {
+          throw error;
+        }
+        switchError = error instanceof Error ? error.message : String(error);
+        return undefined;
       });
-      infoMessages = switchResult.infoMessages;
+      infoMessages = switchResult?.infoMessages ?? [];
       if (hasProfileAuthEphemerals(profileAuthEphemerals)) {
         reapplyProfileAuthEphemerals(config, profileAuthEphemerals);
       }
     }
+    // #2534 review Finding 1: CLI overrides apply AFTER the provider switch so
+    // the provider-scoped credential persistence (auth-key/base-url via
+    // applyCliArgumentOverrides → updateActiveProviderApiKey/BaseUrl) lands in
+    // the TARGET provider's scope — main's legacy activation order and the
+    // CLI bootstrap's own postConfigRuntime step 14 ("reapply CLI arg
+    // overrides after the provider switch"). Applying them pre-switch
+    // persisted the credentials into the OUTGOING provider's scope while the
+    // session still saw them via preserved ephemerals, so next-session
+    // persistence diverged from main. Override precedence over profile
+    // ephemerals is unchanged: they apply on top of the reapplied profile
+    // ephemerals, still before refreshAuth.
+    await applyCliArgumentOverrides(
+      toArgvShape(intent),
+      toBootstrapArgsShape(intent),
+    );
     // Always refresh auth in the 'auto' path. The non-interactive flow runs
     // postConfigRuntime step 13 with authMode 'none' (which skips refreshAuth)
     // and step 14 (applyCliArgumentOverrides, which sets the key but does NOT
@@ -399,7 +419,7 @@ async function executeAutoProvider(
     // E2E regression). refreshAuth is idempotent — it re-derives auth from the
     // current ephemeral settings — so calling it when the interactive path
     // already refreshed (via activateConfiguredProvider) is harmless.
-    await config.refreshAuth();
+    await config.refreshAuth(intent.authMethod);
 
     await applyModelAndParams(config, intent);
     const activeName = resolveActiveProviderName(config);
@@ -407,6 +427,7 @@ async function executeAutoProvider(
       authFailed: false,
       ...(activeName !== undefined ? { activeProvider: activeName } : {}),
       infoMessages,
+      ...(switchError !== undefined ? { switchError } : {}),
     };
   } catch (error) {
     // The CLI maps a provider-case failure to FATAL_AUTHENTICATION_ERROR.

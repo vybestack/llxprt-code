@@ -118,7 +118,7 @@ describe('Issue 2329: direct-path refusal preservation @issue:2329', () => {
       yield {
         speaker: 'ai',
         blocks: [],
-        metadata: { stopReason: 'refusal' },
+        metadata: { finishReason: 'refusal', rawStopReason: 'refusal' },
       };
     });
 
@@ -149,7 +149,7 @@ describe('Issue 2329: direct-path refusal preservation @issue:2329', () => {
       yield {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Declined.' }],
-        metadata: { stopReason: 'refusal' },
+        metadata: { finishReason: 'refusal', rawStopReason: 'refusal' },
       };
     });
 

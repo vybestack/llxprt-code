@@ -10,6 +10,7 @@
  * construction, publication-order tracking, and a real-tool host factory.
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { beforeEach, afterEach } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -199,7 +200,11 @@ export function toolRequest(
 export function buildRegistry(
   tools: readonly AnyDeclarativeTool[],
 ): ToolRegistry {
-  const registry = new ToolRegistry({}, createSessionMessageBus());
+  const registry = new ToolRegistry(
+    {},
+    createSessionMessageBus(),
+    new SettingsService(),
+  );
   for (const tool of tools) {
     registry.registerTool(tool);
   }

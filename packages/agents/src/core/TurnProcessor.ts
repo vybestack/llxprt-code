@@ -68,6 +68,7 @@ import type {
 import {
   toModelStreamChunk,
   emptyModelOutput,
+  toolDeclarationsFromLegacyToolset,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { recordAbandonedStreamAttempt } from './tokenUsageActualLogger.js';
 import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
@@ -88,7 +89,7 @@ import {
   wrapStreamGeneratorLifecycle,
 } from './turnMediaAdmissionLifecycle.js';
 type ToolGroupArray = Array<{
-  functionDeclarations: Array<{ name: string }>;
+  functionDeclarations?: Array<{ name: string }>;
 }>;
 
 interface ToolSelectionHookResult {
@@ -785,9 +786,11 @@ export class TurnProcessor {
 
   private _normalizeRequestTools(
     params: SendMessageParams,
-  ): ToolGroupArray | undefined {
+  ): Array<{ functionDeclarations: Array<{ name: string }> }> | undefined {
     const tools = this._selectRequestTools(params);
-    return Array.isArray(tools) ? (tools as ToolGroupArray) : undefined;
+    return Array.isArray(tools)
+      ? (tools as Array<{ functionDeclarations: Array<{ name: string }> }>)
+      : undefined;
   }
 
   private async _applyToolSelectionHook(
@@ -814,12 +817,19 @@ export class TurnProcessor {
     }
 
     await hookSystem.initialize();
-    const toolSelectionResult =
-      await hookSystem.fireBeforeToolSelectionEvent(toolsFromConfig);
-    const modifiedConfig = toolSelectionResult?.applyToolConfigModifications({
+    const toolSelectionResult = await hookSystem.fireBeforeToolSelectionEvent({
+      model: this.runtimeContext.state.model,
+      contents: [],
+      tools: toolDeclarationsFromLegacyToolset(toolsFromConfig),
+    });
+    const modifiedConfig = toolSelectionResult?.applyToolChoiceModifications({
       tools: toolsFromConfig,
     });
-    const allowedFunctions = modifiedConfig?.toolConfig?.allowedFunctionNames;
+    const toolChoice = modifiedConfig?.toolChoice;
+    if (toolChoice?.mode === 'none') {
+      return { tools: [], allowedFunctionNames: [] };
+    }
+    const allowedFunctions = toolChoice?.allowedToolNames;
     if (!Array.isArray(allowedFunctions)) {
       return { tools: toolsFromConfig, allowedFunctionNames: undefined };
     }
@@ -828,9 +838,11 @@ export class TurnProcessor {
     const filteredTools = toolsFromConfig
       .map((toolGroup) => ({
         ...toolGroup,
-        functionDeclarations: toolGroup.functionDeclarations.filter((fn) =>
-          allowedNames.has(canonicalizeToolName(fn.name)),
-        ),
+        functionDeclarations: Array.isArray(toolGroup.functionDeclarations)
+          ? toolGroup.functionDeclarations.filter((fn) =>
+              allowedNames.has(canonicalizeToolName(fn.name)),
+            )
+          : [],
       }))
       .filter((toolGroup) => toolGroup.functionDeclarations.length > 0);
     return { tools: filteredTools, allowedFunctionNames: allowedFunctions };

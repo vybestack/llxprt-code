@@ -35,7 +35,7 @@ describe('ChatSession facade — sendMessageStream (characterization)', () => {
     it('emits Content then Finished for a simple text turn', async () => {
       const mock = providerMock([
         textIContent('Hello world'),
-        terminalIContent('Hello world', 'end_turn'),
+        terminalIContent('Hello world', 'stop'),
       ]);
       const harness = createFullLoopHarness(mock);
       const events = await runFullLoop(harness.turn, 'test prompt');
@@ -46,7 +46,7 @@ describe('ChatSession facade — sendMessageStream (characterization)', () => {
     });
 
     it('always emits a terminal Finished event', async () => {
-      const mock = providerMock([terminalIContent('Done', 'end_turn')]);
+      const mock = providerMock([terminalIContent('Done', 'stop')]);
       const harness = createFullLoopHarness(mock);
       const events = await runFullLoop(harness.turn, 'prompt 1');
       expect(findFinished(events)).toBeDefined();
@@ -55,7 +55,7 @@ describe('ChatSession facade — sendMessageStream (characterization)', () => {
     it('emits content text that accumulates the provider text', async () => {
       const mock = providerMock([
         textIContent('Accumulated text'),
-        terminalIContent('Accumulated text', 'end_turn'),
+        terminalIContent('Accumulated text', 'stop'),
       ]);
       const harness = createFullLoopHarness(mock);
       const events = await runFullLoop(harness.turn, 'prompt');
@@ -72,7 +72,7 @@ describe('ChatSession facade — sendMessageStream (characterization)', () => {
           async (prompt) => {
             const mock = providerMock([
               textIContent('Response to: ' + prompt),
-              terminalIContent('Response to: ' + prompt, 'end_turn'),
+              terminalIContent('Response to: ' + prompt, 'stop'),
             ]);
             const harness = createFullLoopHarness(mock);
             const events = await runFullLoop(harness.turn, prompt);
@@ -90,7 +90,7 @@ describe('ChatSession facade — sendMessageStream (characterization)', () => {
           async (text) => {
             const mock = providerMock([
               textIContent(text),
-              terminalIContent(text, 'end_turn'),
+              terminalIContent(text, 'stop'),
             ]);
             const harness = createFullLoopHarness(mock);
             const events = await runFullLoop(harness.turn, 'prompt');
@@ -109,7 +109,7 @@ describe('ChatSession facade — sendMessageStream (characterization)', () => {
     it('handles two sequential turns with different prompts', async () => {
       const mock1 = providerMock([
         textIContent('First response'),
-        terminalIContent('First response', 'end_turn'),
+        terminalIContent('First response', 'stop'),
       ]);
       const harness1 = createFullLoopHarness(mock1);
       const events1 = await runFullLoop(harness1.turn, 'first prompt');
@@ -117,7 +117,7 @@ describe('ChatSession facade — sendMessageStream (characterization)', () => {
 
       const mock2 = providerMock([
         textIContent('Second response'),
-        terminalIContent('Second response', 'end_turn'),
+        terminalIContent('Second response', 'stop'),
       ]);
       const harness2 = createFullLoopHarness(mock2);
       const events2 = await runFullLoop(harness2.turn, 'second prompt');

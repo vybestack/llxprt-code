@@ -95,7 +95,9 @@ function providerOutput(options: {
         data: OUTPUT_JPEG,
       },
     ],
-    ...(options.finish ? { metadata: { stopReason: 'STOP' } } : {}),
+    ...(options.finish
+      ? { metadata: { finishReason: 'stop' as const, rawStopReason: 'STOP' } }
+      : {}),
   };
 }
 

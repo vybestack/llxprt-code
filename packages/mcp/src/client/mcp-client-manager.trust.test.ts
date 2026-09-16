@@ -7,6 +7,7 @@ const mockedMcpClient = (): Mock<(...args: never[]) => unknown> =>
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { waitFor } from '../../../test-utils/src/wait-for.js';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { Mock } from 'bun:test';
@@ -61,9 +62,13 @@ function createMockConfig(overrides?: Partial<Config>): Config {
 }
 
 function createToolRegistry(config: Config): ToolRegistry {
-  return new ToolRegistry(config, {
-    requestConfirmation: async () => false,
-  });
+  return new ToolRegistry(
+    config,
+    {
+      requestConfirmation: async () => false,
+    },
+    new SettingsService(),
+  );
 }
 
 interface Deferred<T> {

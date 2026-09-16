@@ -26,7 +26,7 @@ describe('Issue 2329: refusal finish-reason mapping @issue:2329', () => {
     const icontent: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'I cannot help with that.' }],
-      metadata: { stopReason: 'refusal' },
+      metadata: { finishReason: 'refusal', rawStopReason: 'refusal' },
     };
 
     const chunk = toModelStreamChunk(icontent);
@@ -38,7 +38,7 @@ describe('Issue 2329: refusal finish-reason mapping @issue:2329', () => {
     const icontent: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'declined' }],
-      metadata: { stopReason: 'refusal' },
+      metadata: { finishReason: 'refusal', rawStopReason: 'refusal' },
     };
 
     const chunk = toModelStreamChunk(icontent);
@@ -50,7 +50,7 @@ describe('Issue 2329: refusal finish-reason mapping @issue:2329', () => {
     const icontent: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'Here is the answer.' }],
-      metadata: { stopReason: 'end_turn' },
+      metadata: { finishReason: 'stop', rawStopReason: 'end_turn' },
     };
 
     const chunk = toModelStreamChunk(icontent);
@@ -63,7 +63,7 @@ describe('Issue 2329: refusal finish-reason mapping @issue:2329', () => {
     const icontent: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'truncated' }],
-      metadata: { stopReason: 'max_tokens' },
+      metadata: { finishReason: 'max_tokens', rawStopReason: 'max_tokens' },
     };
 
     const chunk = toModelStreamChunk(icontent);
@@ -89,7 +89,7 @@ describe('Issue 2329: refusal finish-reason mapping @issue:2329', () => {
     const icontent: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'text' }],
-      metadata: { stopReason: 'some_future_reason' },
+      metadata: { finishReason: 'other', rawStopReason: 'some_future_reason' },
     };
 
     const chunk = toModelStreamChunk(icontent);
@@ -102,13 +102,13 @@ describe('Issue 2329: refusal finish-reason mapping @issue:2329', () => {
     const icontent: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'declined' }],
-      metadata: { stopReason: 'refusal' },
+      metadata: { finishReason: 'refusal', rawStopReason: 'refusal' },
     };
 
     const chunk = toModelStreamChunk(icontent);
 
     expect(chunk.content).toBe(icontent);
-    expect(icontent.metadata?.stopReason).toBe('refusal');
+    expect(icontent.metadata?.rawStopReason).toBe('refusal');
     expect(chunk.rawStopReason).toBe('refusal');
   });
 });

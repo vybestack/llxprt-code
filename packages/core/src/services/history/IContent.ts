@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import type { CanonicalFinishReason } from '../../llm-types/finishReasons.js';
+
 /**
  * Universal content representation that is provider-agnostic.
  * All conversation content is represented as blocks within a speaker's turn.
@@ -157,11 +159,11 @@ export interface ContentMetadata {
    */
   promptId?: string;
 
-  /** Stop reason from provider (e.g., end_turn, max_tokens) */
-  stopReason?: string;
+  /** REQUIRED on terminal chunks from every provider (runtime contract). */
+  finishReason?: CanonicalFinishReason;
 
-  /** Finish reason from OpenAI-style providers (e.g., stop, length, tool_calls) */
-  finishReason?: string;
+  /** Provider-native stop reason retained for diagnostics. */
+  rawStopReason?: string;
 
   /** Reason the response was incomplete (e.g., max_output_tokens) */
   incompleteReason?: string;

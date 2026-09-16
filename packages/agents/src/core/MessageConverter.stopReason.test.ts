@@ -25,7 +25,8 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
             completionTokens: 5,
             totalTokens: 15,
           },
-          stopReason: 'end_turn',
+          finishReason: 'stop',
+          rawStopReason: 'end_turn',
         },
       };
 
@@ -43,7 +44,8 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
             completionTokens: 100,
             totalTokens: 110,
           },
-          stopReason: 'max_tokens',
+          finishReason: 'max_tokens',
+          rawStopReason: 'max_tokens',
         },
       };
 
@@ -68,7 +70,8 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
             completionTokens: 20,
             totalTokens: 30,
           },
-          stopReason: 'tool_use',
+          finishReason: 'tool_calls',
+          rawStopReason: 'tool_use',
         },
       };
 
@@ -81,7 +84,8 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Filtered content' }],
         metadata: {
-          stopReason: 'end_turn',
+          finishReason: 'stop',
+          rawStopReason: 'end_turn',
         },
       };
 
@@ -101,7 +105,8 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
             completionTokens: 10,
             totalTokens: 15,
           },
-          stopReason: 'end_turn',
+          finishReason: 'stop',
+          rawStopReason: 'end_turn',
         },
       };
 
@@ -115,7 +120,8 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Truncated' }],
         metadata: {
-          stopReason: 'max_tokens',
+          finishReason: 'max_tokens',
+          rawStopReason: 'max_tokens',
         },
       };
 
@@ -143,7 +149,8 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
             completionTokens: 100,
             totalTokens: 150,
           },
-          stopReason: 'end_turn',
+          finishReason: 'stop',
+          rawStopReason: 'end_turn',
         },
       };
 
@@ -169,7 +176,8 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
           },
         ],
         metadata: {
-          stopReason: 'end_turn',
+          finishReason: 'stop',
+          rawStopReason: 'end_turn',
         },
       };
 
@@ -223,7 +231,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Done' }],
-        metadata: { stopReason: 'stop' },
+        metadata: { finishReason: 'stop', rawStopReason: 'stop' },
       };
 
       const chunk = toModelStreamChunk(icontent);
@@ -234,7 +242,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Too long' }],
-        metadata: { stopReason: 'length' },
+        metadata: { finishReason: 'max_tokens', rawStopReason: 'length' },
       };
 
       const chunk = toModelStreamChunk(icontent);
@@ -252,7 +260,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
             parameters: {},
           },
         ],
-        metadata: { stopReason: 'tool_calls' },
+        metadata: { finishReason: 'tool_calls', rawStopReason: 'tool_calls' },
       };
 
       const chunk = toModelStreamChunk(icontent);
@@ -263,7 +271,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Filtered' }],
-        metadata: { stopReason: 'content_filter' },
+        metadata: { finishReason: 'safety', rawStopReason: 'content_filter' },
       };
 
       const chunk = toModelStreamChunk(icontent);

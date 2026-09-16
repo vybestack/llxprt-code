@@ -198,7 +198,7 @@ describe('AnthropicProvider', () => {
 
       const firstChunk = await generator.next();
       expect(firstChunk.done).toBe(false);
-      expect(firstChunk.value.metadata?.stopReason).toBe('end_turn');
+      expect(firstChunk.value.metadata?.finishReason).toBe('stop');
 
       await expect(generator.next()).rejects.toThrow(
         'Connection terminated after terminal metadata',

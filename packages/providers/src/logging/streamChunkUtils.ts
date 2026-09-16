@@ -24,9 +24,7 @@ export function extractChunkMetadata(
   if (content.metadata?.usage) {
     onUsage(content.metadata.usage);
   }
-  const metaFinishReason =
-    (content.metadata as Record<string, unknown> | undefined)?.finishReason ??
-    content.metadata?.stopReason;
+  const metaFinishReason = content.metadata?.finishReason;
   if (typeof metaFinishReason === 'string') {
     onFinishReason(metaFinishReason);
   }

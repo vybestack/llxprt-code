@@ -9,9 +9,9 @@
  */
 
 import type {
-  ISettingsService,
   IToolKeyStorage,
   IToolMessageBus,
+  SettingsServiceBoundary,
 } from '../interfaces/index.js';
 import { ToolErrorType } from '../types/tool-error.js';
 import { ensureJsonSafe } from '../utils/unicodeUtils.js';
@@ -89,7 +89,7 @@ type ParsedCodeLine =
 
 export interface CodeSearchToolDependencies {
   keyStorage?: Pick<IToolKeyStorage, 'resolveKey'>;
-  settingsService?: Pick<ISettingsService, 'getSetting' | 'getSettingsService'>;
+  settingsService?: Pick<SettingsServiceBoundary, 'get'>;
 }
 
 export class CodeSearchTool extends BaseDeclarativeTool<
@@ -350,14 +350,9 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
   }
 
   private getSettingMaxTokens(): number | undefined {
-    const directValue = this.dependencies.settingsService?.getSetting(
+    const value = this.dependencies.settingsService?.get(
       'tool-output-max-tokens',
     );
-    if (typeof directValue === 'number') return directValue;
-
-    const nestedValue = this.dependencies.settingsService
-      ?.getSettingsService()
-      .get?.('tool-output-max-tokens');
-    return typeof nestedValue === 'number' ? nestedValue : undefined;
+    return typeof value === 'number' ? value : undefined;
   }
 }

@@ -33,7 +33,8 @@ describe('toModelStreamChunk — AFC boundary extraction', () => {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'done' }],
       metadata: {
-        stopReason: 'stop',
+        finishReason: 'stop',
+        rawStopReason: 'stop',
         providerMetadata: {
           automaticFunctionCallingHistory: [
             {
@@ -76,7 +77,8 @@ describe('toModelStreamChunk — AFC boundary extraction', () => {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'done' }],
       metadata: {
-        stopReason: 'stop',
+        finishReason: 'stop',
+        rawStopReason: 'stop',
         providerMetadata: {
           automaticFunctionCallingHistory: [
             {
@@ -122,7 +124,8 @@ describe('toModelStreamChunk — AFC boundary extraction', () => {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'done' }],
       metadata: {
-        stopReason: 'stop',
+        finishReason: 'stop',
+        rawStopReason: 'stop',
         providerMetadata: {
           automaticFunctionCallingHistory: [
             {
@@ -172,7 +175,8 @@ describe('toModelStreamChunk — AFC boundary extraction', () => {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'done' }],
       metadata: {
-        stopReason: 'stop',
+        finishReason: 'stop',
+        rawStopReason: 'stop',
         providerMetadata: {
           automaticFunctionCallingHistory: [
             {
@@ -211,7 +215,7 @@ describe('toModelStreamChunk — AFC boundary extraction', () => {
     const content: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'plain response' }],
-      metadata: { stopReason: 'stop' },
+      metadata: { finishReason: 'stop', rawStopReason: 'stop' },
     };
     const chunk = toModelStreamChunk(content);
     expect(chunk.afcHistory).toBeUndefined();
@@ -222,7 +226,8 @@ describe('toModelStreamChunk — AFC boundary extraction', () => {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'bad' }],
       metadata: {
-        stopReason: 'stop',
+        finishReason: 'stop',
+        rawStopReason: 'stop',
         providerMetadata: {
           automaticFunctionCallingHistory: 'not-an-array',
         },
@@ -237,7 +242,8 @@ describe('toModelStreamChunk — AFC boundary extraction', () => {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'orphan' }],
       metadata: {
-        stopReason: 'stop',
+        finishReason: 'stop',
+        rawStopReason: 'stop',
         providerMetadata: {
           automaticFunctionCallingHistory: [
             {
@@ -279,7 +285,8 @@ describe('toModelStreamChunk — AFC boundary extraction', () => {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'done' }],
       metadata: {
-        stopReason: 'stop',
+        finishReason: 'stop',
+        rawStopReason: 'stop',
         usage: {
           promptTokens: 100,
           completionTokens: 50,

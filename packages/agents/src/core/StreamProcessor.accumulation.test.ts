@@ -65,11 +65,11 @@ function makeChunk(text: string): ModelStreamChunk {
   } as IContent);
 }
 
-function makeFinishChunk(text: string, finishReason: string): ModelStreamChunk {
+function makeFinishChunk(text: string): ModelStreamChunk {
   return toModelStreamChunk({
     speaker: 'ai',
     blocks: [{ type: 'text', text }],
-    metadata: { stopReason: finishReason },
+    metadata: { finishReason: 'stop', rawStopReason: 'STOP' },
   } as IContent);
 }
 
@@ -116,7 +116,7 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
         for (let i = 0; i < chunkCount; i++) {
           yield makeChunk(words[i]);
         }
-        yield makeFinishChunk('END', 'STOP');
+        yield makeFinishChunk('END');
       }
 
       const yielded: string[] = [];
@@ -187,7 +187,7 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
       for (let i = 0; i < chunkCount; i++) {
         yield makeChunk(payload);
       }
-      yield makeFinishChunk('', 'STOP');
+      yield makeFinishChunk('');
     }
 
     const start = performance.now();
@@ -226,7 +226,7 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
       yield textChunk;
       yield toolCallChunk;
       yield afterChunk;
-      yield makeFinishChunk('', 'STOP');
+      yield makeFinishChunk('');
     }
 
     const types: string[] = [];
@@ -265,7 +265,7 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
 
     async function* tinyStream(): AsyncGenerator<ModelStreamChunk> {
       yield makeChunk('a');
-      yield makeFinishChunk('', 'STOP');
+      yield makeFinishChunk('');
     }
 
     for await (const _chunk of processor.processStreamResponse(

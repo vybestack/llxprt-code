@@ -28,6 +28,7 @@ import * as https from 'https';
 import * as net from 'net';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { OPENAI_TRANSPORT_SELECTOR_KEYS } from './openaiModelPolicy.js';
+import { createReaderBasedStreamFetch } from './openaiStreamFetchSafety.js';
 
 /**
  * Create HTTP/HTTPS agents with socket configuration for local AI servers
@@ -177,6 +178,8 @@ export function instantiateClient(
     apiKey: authToken || '',
     maxRetries: 0,
   };
+
+  clientOptions.fetch = createReaderBasedStreamFetch();
 
   if (headers && Object.keys(headers).length > 0) {
     // Ensure headers like User-Agent are applied even if the SDK call-site

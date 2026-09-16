@@ -36,6 +36,7 @@ import {
   type ShellReplacementMode,
 } from './configTypes.js';
 import { DEFAULT_FILE_FILTERING_OPTIONS } from './constants.js';
+import { UNCONFIGURED_PROVIDER } from './models.js';
 import { parseLspConfig, type LspState } from './lspIntegration.js';
 import { WorkspaceContext } from '../utils/workspaceContext.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
@@ -146,7 +147,6 @@ export interface ConfigConstructorTarget {
   listExtensions: boolean;
   _activeExtensions: ActiveExtension[];
   providerManager: RuntimeProviderManager | undefined;
-  provider: string | undefined;
   _extensionLoader: ExtensionLoader;
   noBrowser: boolean;
   summarizeToolOutput: Record<string, SummarizeToolOutputSettings> | undefined;
@@ -462,6 +462,9 @@ function applyBasicRuntimeFlags(
   config.cwd = params.cwd;
   config.fileDiscoveryService = params.fileDiscoveryService ?? null;
   config.bugCommand = params.bugCommand;
+  // #2534 Domain C2: the constructor-seeded model feeds the store seeding in
+  // applyExtensionFlags when a provider is supplied, and the per-instance
+  // terminal fallback for providerless Configs (see ConfigBaseCore.model).
   config.model = params.model;
   config.originalModel = params.model;
   config.extensionContextFilePaths = params.extensionContextFilePaths ?? [];
@@ -495,7 +498,56 @@ function applyExtensionFlags(
   config.listExtensions = params.listExtensions ?? false;
   config._activeExtensions = params.activeExtensions ?? [];
   config.providerManager = params.providerManager;
-  config.provider = params.provider;
+  // #2534 Domain C1: activeProvider has one store (the settings global key).
+  // applySettingsService has already run, so the store exists. Seeding is
+  // restricted to Config-OWNED settings services: either applySettingsService
+  // created a provably fresh one (params.settingsService undefined), or the
+  // caller explicitly delegated ownership of the service it injected
+  // (params.settingsServiceOwnership === 'delegated' — the CLI bootstrap
+  // creates its service for this Config's exclusive use and declares it).
+  // A shared/injected service without that declaration — even one that merely
+  // lacks an activeProvider key — is never mutated as a constructor side
+  // effect: "no activeProvider" is not proof of freshness for an injected
+  // service, which may carry other state (global keys, provider records,
+  // profile selection) owned by its injector (#2300, #2534 review Finding 6).
+  // The UNCONFIGURED_PROVIDER sentinel is not a provider — seeding it would
+  // make provider managers resolve 'unconfigured' as active, so it never lands
+  // in the store (runtimeStateFactory/prompts re-derive the sentinel when the
+  // store is empty).
+  const seedProvider =
+    params.provider !== undefined &&
+    params.provider !== '' &&
+    params.provider !== UNCONFIGURED_PROVIDER
+      ? params.provider
+      : null;
+  const configOwnsSettingsService =
+    params.settingsService === undefined ||
+    params.settingsServiceOwnership === 'delegated';
+  if (
+    seedProvider !== null &&
+    configOwnsSettingsService &&
+    config.settingsService.get('activeProvider') === undefined
+  ) {
+    config.settingsService.set('activeProvider', seedProvider);
+    // #2534 Domain C2: constructor paths that seed a model must land in the
+    // store. The ownership guard above means this branch only runs on a
+    // Config-owned fresh service; the absence check still guards against a
+    // model seeded earlier in construction.
+    if (typeof params.model === 'string' && params.model.length > 0) {
+      const providerSettings =
+        config.settingsService.getProviderSettings(seedProvider);
+      if (
+        typeof providerSettings.model !== 'string' ||
+        providerSettings.model.length === 0
+      ) {
+        config.settingsService.setProviderSetting(
+          seedProvider,
+          'model',
+          params.model,
+        );
+      }
+    }
+  }
   config._extensionLoader =
     params.extensionLoader ??
     new SimpleExtensionLoader(params.extensions ?? []);

@@ -33,7 +33,7 @@ import {
   buildThinkingBlock,
   extractNonStreamingThinking,
 } from './vercelNonStreamingResponse.js';
-import { mapUsageToMetadata } from './vercelMetadataMapper.js';
+import { buildMetadata, mapUsageToMetadata } from './vercelMetadataMapper.js';
 import { getAiTool } from './vercelModelClient.js';
 
 type VercelTools = Record<string, Tool<unknown, never>>;
@@ -116,11 +116,12 @@ export async function* handleNonStreamingResponse(
   const usageMeta = mapUsageToMetadata(
     result.usage as LanguageModelUsage | undefined,
   );
-  if (blocks.length > 0 || usageMeta != null) {
+  const metadata = buildMetadata(usageMeta, result.finishReason);
+  if (blocks.length > 0 || metadata !== undefined) {
     yield {
       speaker: 'ai',
       blocks,
-      ...(usageMeta != null ? { metadata: { usage: usageMeta } } : {}),
-    } as IContent;
+      ...(metadata ? { metadata } : {}),
+    };
   }
 }

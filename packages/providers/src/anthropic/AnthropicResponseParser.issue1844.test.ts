@@ -175,7 +175,7 @@ describe('issue #1844 – Anthropic non-streaming stopReason propagation', () =>
     const result = parseAnthropicResponse(message, options);
 
     expect(result.metadata).toBeDefined();
-    expect(result.metadata!.stopReason).toBe('end_turn');
+    expect(result.metadata!.finishReason).toBe('stop');
   });
 
   it('should include stopReason in metadata when stop_reason is "tool_use"', () => {
@@ -195,7 +195,7 @@ describe('issue #1844 – Anthropic non-streaming stopReason propagation', () =>
     const result = parseAnthropicResponse(message, options);
 
     expect(result.metadata).toBeDefined();
-    expect(result.metadata!.stopReason).toBe('tool_use');
+    expect(result.metadata!.finishReason).toBe('tool_calls');
   });
 
   it('should include stopReason in metadata when stop_reason is "max_tokens"', () => {
@@ -210,7 +210,7 @@ describe('issue #1844 – Anthropic non-streaming stopReason propagation', () =>
     const result = parseAnthropicResponse(message, options);
 
     expect(result.metadata).toBeDefined();
-    expect(result.metadata!.stopReason).toBe('max_tokens');
+    expect(result.metadata!.finishReason).toBe('max_tokens');
   });
 
   it('should still propagate usage alongside stopReason', () => {
@@ -225,12 +225,12 @@ describe('issue #1844 – Anthropic non-streaming stopReason propagation', () =>
     expect(result.metadata!.usage).toBeDefined();
     expect(result.metadata!.usage!.promptTokens).toBe(10);
     expect(result.metadata!.usage!.completionTokens).toBe(5);
-    expect(result.metadata!.stopReason).toBe('end_turn');
+    expect(result.metadata!.finishReason).toBe('stop');
   });
 
   // Fable 5 returns refusals as a successful HTTP 200 with stop_reason:
   // 'refusal' (not an error). This only verifies the parser propagates the
-  // value into metadata.stopReason without throwing — it does NOT verify any
+  // value into metadata.finishReason without throwing — it does NOT verify any
   // user-visible refusal notice. Surfacing a notice (and optional fallback) is
   // tracked separately in #2329.
   it('should propagate stopReason "refusal" without throwing @issue:2329', () => {
@@ -243,6 +243,6 @@ describe('issue #1844 – Anthropic non-streaming stopReason propagation', () =>
     const result = parseAnthropicResponse(message, options);
 
     expect(result.metadata).toBeDefined();
-    expect(result.metadata!.stopReason).toBe('refusal');
+    expect(result.metadata!.finishReason).toBe('refusal');
   });
 });

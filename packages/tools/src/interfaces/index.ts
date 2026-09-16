@@ -89,7 +89,7 @@ export type {
   TodoReminderService,
   TodoContextTracker,
 } from './ITodoService.js';
-export type { ISettingsService, SettingsService } from './ISettingsService.js';
+export type { SettingsServiceBoundary } from './SettingsServiceBoundary.js';
 export type {
   IShellToolHost,
   ShellExecutionResult,
