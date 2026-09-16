@@ -28,7 +28,7 @@ import {
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { RAW_TOKEN_DELTA_SINK_KEY } from '@vybestack/llxprt-code-providers';
-import { createTokenSyncTestFixture } from './chatSession-tokenSync-helpers.js';
+import { createTokenSyncTestFixture } from './__tests__/helpers/tokenSyncTestFixture.js';
 
 function makeTempLogPath(): string {
   return path.join(

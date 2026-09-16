@@ -21,6 +21,7 @@ import { describe, it, expect } from 'bun:test';
 import { act } from 'react';
 import { renderHook } from '../../../test-utils/render.js';
 import { useRetractableHistory } from '../useHistoryManager.js';
+import { createTurnStore } from '../../stores/turn/turnStore.js';
 
 function addItem(
   result: { current: ReturnType<typeof useRetractableHistory> },
@@ -44,7 +45,8 @@ function textsOf(result: {
 
 describe('useRetractableHistory().removeItems (issue #3048 REQ-3048-009)', () => {
   it('removes exactly the given ids and preserves order', () => {
-    const { result } = renderHook(() => useRetractableHistory());
+    const turnStore = createTurnStore();
+    const { result } = renderHook(() => useRetractableHistory(turnStore));
     const a = addItem(result, 'a');
     const b = addItem(result, 'b');
     const c = addItem(result, 'c');
@@ -61,7 +63,8 @@ describe('useRetractableHistory().removeItems (issue #3048 REQ-3048-009)', () =>
   });
 
   it('removes multiple ids at once while preserving order', () => {
-    const { result } = renderHook(() => useRetractableHistory());
+    const turnStore = createTurnStore();
+    const { result } = renderHook(() => useRetractableHistory(turnStore));
     const a = addItem(result, 'a');
     const b = addItem(result, 'b');
     const c = addItem(result, 'c');
@@ -77,7 +80,8 @@ describe('useRetractableHistory().removeItems (issue #3048 REQ-3048-009)', () =>
   });
 
   it('ignores unknown ids without disturbing existing entries', () => {
-    const { result } = renderHook(() => useRetractableHistory());
+    const turnStore = createTurnStore();
+    const { result } = renderHook(() => useRetractableHistory(turnStore));
     const a = addItem(result, 'a');
     addItem(result, 'b');
 
@@ -89,7 +93,8 @@ describe('useRetractableHistory().removeItems (issue #3048 REQ-3048-009)', () =>
   });
 
   it('is a no-op for an empty id list (state identity preserved)', () => {
-    const { result } = renderHook(() => useRetractableHistory());
+    const turnStore = createTurnStore();
+    const { result } = renderHook(() => useRetractableHistory(turnStore));
     addItem(result, 'a');
     addItem(result, 'b');
     const before = result.current.history;
@@ -103,7 +108,8 @@ describe('useRetractableHistory().removeItems (issue #3048 REQ-3048-009)', () =>
   });
 
   it('is a no-op when no id matches (state identity preserved)', () => {
-    const { result } = renderHook(() => useRetractableHistory());
+    const turnStore = createTurnStore();
+    const { result } = renderHook(() => useRetractableHistory(turnStore));
     addItem(result, 'a');
     addItem(result, 'b');
     const before = result.current.history;
@@ -119,7 +125,10 @@ describe('useRetractableHistory().removeItems (issue #3048 REQ-3048-009)', () =>
   it('recomputes the item budget so a later add is not trimmed against stale state', () => {
     // maxItems: 2 — a third add would normally trim the oldest. Removing one
     // must free that slot so the next add is retained alongside the survivor.
-    const { result } = renderHook(() => useRetractableHistory({ maxItems: 2 }));
+    const turnStore = createTurnStore();
+    const { result } = renderHook(() =>
+      useRetractableHistory(turnStore, { maxItems: 2 }),
+    );
     addItem(result, 'a');
     const b = addItem(result, 'b');
 
@@ -135,7 +144,8 @@ describe('useRetractableHistory().removeItems (issue #3048 REQ-3048-009)', () =>
   });
 
   it('retracts ids committed during an abandoned attempt without touching unrelated items', () => {
-    const { result } = renderHook(() => useRetractableHistory());
+    const turnStore = createTurnStore();
+    const { result } = renderHook(() => useRetractableHistory(turnStore));
     // Earlier, completed items (a user turn, a prior assistant message).
     let user = -1;
     act(() => {

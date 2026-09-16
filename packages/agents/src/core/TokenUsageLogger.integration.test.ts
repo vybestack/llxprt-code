@@ -25,7 +25,7 @@ import {
   createTelemetryAdapterFromConfig,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import { createTokenSyncTestFixture } from './chatSession-tokenSync-helpers.js';
+import { createTokenSyncTestFixture } from './__tests__/helpers/tokenSyncTestFixture.js';
 
 function makeTempLogPath(): string {
   return path.join(

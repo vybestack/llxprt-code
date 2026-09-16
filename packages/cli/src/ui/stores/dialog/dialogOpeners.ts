@@ -1,0 +1,121 @@
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import type {
+  ListDialogKind,
+  DialogPayloadMap,
+  DialogRequest,
+  DialogStore,
+} from './dialogStore.js';
+
+/**
+ * A single stable open/close handle per dialog kind routed through the
+ * DialogStore. The AppContainerRuntime builds one DialogOpeners object once
+ * from the store commands and threads it through the slash-command pipeline.
+ */
+export type DialogOpeners = {
+  [Kind in ListDialogKind]: {
+    open: (payload: DialogPayloadMap[Kind]) => void;
+    close: () => void;
+  };
+};
+
+/**
+ * One stable open/close handle routed through the DialogStore for a single
+ * dialog kind. The payload type follows DialogPayloadMap so a kind cannot
+ * be opened with the wrong payload shape.
+ */
+function createKindOpener<K extends ListDialogKind>(
+  store: DialogStore,
+  kind: K,
+): {
+  open: (payload: DialogPayloadMap[K]) => void;
+  close: () => void;
+} {
+  return {
+    open: (payload) =>
+      store.commands.openDialog({ kind, payload } as DialogRequest),
+    close: () => store.commands.closeDialog(kind),
+  };
+}
+
+/**
+ * Openers for kinds whose payload is only the open request itself
+ * (Record<string, never> in DialogPayloadMap).
+ */
+function createVoidPayloadOpeners(
+  store: DialogStore,
+): Pick<
+  DialogOpeners,
+  | 'folderTrust'
+  | 'welcome'
+  | 'theme'
+  | 'settings'
+  | 'auth'
+  | 'oauthCode'
+  | 'editor'
+  | 'provider'
+  | 'loadProfile'
+  | 'createProfile'
+  | 'profileList'
+  | 'permissions'
+  | 'privacy'
+  | 'sessionBrowser'
+  | 'modelConfig'
+  | 'policies'
+> {
+  return {
+    folderTrust: createKindOpener(store, 'folderTrust'),
+    welcome: createKindOpener(store, 'welcome'),
+    theme: createKindOpener(store, 'theme'),
+    settings: createKindOpener(store, 'settings'),
+    auth: createKindOpener(store, 'auth'),
+    oauthCode: createKindOpener(store, 'oauthCode'),
+    editor: createKindOpener(store, 'editor'),
+    provider: createKindOpener(store, 'provider'),
+    loadProfile: createKindOpener(store, 'loadProfile'),
+    createProfile: createKindOpener(store, 'createProfile'),
+    profileList: createKindOpener(store, 'profileList'),
+    permissions: createKindOpener(store, 'permissions'),
+    privacy: createKindOpener(store, 'privacy'),
+    sessionBrowser: createKindOpener(store, 'sessionBrowser'),
+    modelConfig: createKindOpener(store, 'modelConfig'),
+    policies: createKindOpener(store, 'policies'),
+  };
+}
+
+/** Openers for kinds that carry a typed payload. */
+function createPayloadOpeners(
+  store: DialogStore,
+): Pick<
+  DialogOpeners,
+  | 'workspaceMigration'
+  | 'idePrompt'
+  | 'profileDetail'
+  | 'profileEditor'
+  | 'tools'
+  | 'logging'
+  | 'subagent'
+  | 'models'
+> {
+  return {
+    workspaceMigration: createKindOpener(store, 'workspaceMigration'),
+    idePrompt: createKindOpener(store, 'idePrompt'),
+    profileDetail: createKindOpener(store, 'profileDetail'),
+    profileEditor: createKindOpener(store, 'profileEditor'),
+    tools: createKindOpener(store, 'tools'),
+    logging: createKindOpener(store, 'logging'),
+    subagent: createKindOpener(store, 'subagent'),
+    models: createKindOpener(store, 'models'),
+  };
+}
+
+export function createDialogOpeners(store: DialogStore): DialogOpeners {
+  return {
+    ...createVoidPayloadOpeners(store),
+    ...createPayloadOpeners(store),
+  };
+}

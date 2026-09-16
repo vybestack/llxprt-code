@@ -4,11 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  parseToolOutputMaxTokens,
+  type ParsedToolOutputMaxTokens,
+} from './toolOutputMaxTokens.js';
+
+export { DEFAULT_MAX_TOKENS } from './toolOutputMaxTokens.js';
+
 export interface ToolOutputSettingsProvider {
   getEphemeralSettings(): Record<string, unknown>;
 }
 
-export const DEFAULT_MAX_TOKENS = 50000;
 export const DEFAULT_TRUNCATE_MODE = 'warn';
 export const ESCAPE_BUFFER_PERCENTAGE = 0.8;
 
@@ -28,7 +34,7 @@ export function getEffectiveTokenLimit(maxTokens: number): number {
 }
 
 export interface OutputLimitConfig {
-  maxTokens?: number;
+  tokenLimit: ParsedToolOutputMaxTokens;
   truncateMode?: 'warn' | 'truncate' | 'sample';
 }
 
@@ -38,9 +44,9 @@ export function getOutputLimits(
   const ephemeralSettings = config.getEphemeralSettings();
 
   return {
-    maxTokens:
-      (ephemeralSettings['tool-output-max-tokens'] as number | undefined) ??
-      DEFAULT_MAX_TOKENS,
+    tokenLimit: parseToolOutputMaxTokens(
+      ephemeralSettings['tool-output-max-tokens'],
+    ),
     truncateMode:
       (ephemeralSettings['tool-output-truncate-mode'] as
         | 'warn'
@@ -48,22 +54,6 @@ export function getOutputLimits(
         | 'sample'
         | undefined) ?? DEFAULT_TRUNCATE_MODE,
   };
-}
-
-function shouldSkipTruncation(
-  rawMaxTokens: unknown,
-  maxTokens: number,
-  tokens: number,
-  effectiveLimit: number,
-): boolean {
-  const skipConditions = [
-    rawMaxTokens === false,
-    rawMaxTokens === '',
-    maxTokens === 0,
-    Number.isNaN(maxTokens),
-    tokens <= effectiveLimit,
-  ];
-  return skipConditions.some((condition) => condition);
 }
 
 function truncateWarn(
@@ -99,7 +89,7 @@ function sampleLines(
   content: string,
   originalTokens: number,
   effectiveLimit: number,
-  maxTokens: number | undefined,
+  maxTokens: number,
 ): TruncatedOutput {
   const lines = content.split('\n');
   if (lines.length > 1) {
@@ -135,24 +125,25 @@ export function limitOutputTokens(
   config: ToolOutputSettingsProvider,
   toolName: string,
 ): TruncatedOutput {
-  const limits = getOutputLimits(config);
-  const maxTokens = limits.maxTokens ?? DEFAULT_MAX_TOKENS;
-  const rawMaxTokens = limits.maxTokens as unknown;
-  const effectiveLimit = getEffectiveTokenLimit(maxTokens);
+  const { tokenLimit, truncateMode } = getOutputLimits(config);
+  if (tokenLimit.kind === 'disabled') {
+    return { content, wasTruncated: false };
+  }
+  const effectiveLimit = getEffectiveTokenLimit(tokenLimit.maxTokens);
   const tokens = estimateTokens(content);
 
-  if (shouldSkipTruncation(rawMaxTokens, maxTokens, tokens, effectiveLimit)) {
+  if (tokens <= effectiveLimit) {
     return { content, wasTruncated: false };
   }
 
-  if (limits.truncateMode === 'warn') {
+  if (truncateMode === 'warn') {
     return truncateWarn(tokens, effectiveLimit, toolName);
   }
-  if (limits.truncateMode === 'truncate') {
+  if (truncateMode === 'truncate') {
     return truncateHard(content, tokens, effectiveLimit);
   }
 
-  return sampleLines(content, tokens, effectiveLimit, limits.maxTokens);
+  return sampleLines(content, tokens, effectiveLimit, tokenLimit.maxTokens);
 }
 
 export function formatLimitedOutput(result: TruncatedOutput): {

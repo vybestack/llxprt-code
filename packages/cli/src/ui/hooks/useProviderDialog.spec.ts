@@ -1,8 +1,10 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import { hasDialogRequest } from '../../test-utils/dialogStore.js';
 
 // Enable React's act() environment so hook state updates are flushed.
 (
@@ -14,18 +16,20 @@ import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { MessageType } from '../types.js';
 import { NO_ACTIVE_PROVIDER_ERROR_MESSAGE } from '@vybestack/llxprt-code-providers/runtime.js';
-import type { AppAction } from '../reducers/appReducer.js';
 import type { AgentProviderSwitchResult } from '@vybestack/llxprt-code-agents';
+import {
+  createDialogStore,
+  type DialogStore,
+} from '../stores/dialog/dialogStore.js';
+import {
+  createDialogOpeners,
+  type DialogOpeners,
+} from '../stores/dialog/dialogOpeners.js';
 
 const useRuntimeApiMock = vi.fn();
-const useAppDispatchMock = vi.fn();
 
 void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: useRuntimeApiMock,
-}));
-
-void vi.mock('../contexts/AppDispatchContext.js', () => ({
-  useAppDispatch: useAppDispatchMock,
 }));
 
 // Import after mocks are set up
@@ -46,7 +50,8 @@ interface RuntimeApiStub {
 
 function createRuntimeApiStub(overrides?: Partial<RuntimeApiStub>): {
   api: RuntimeApiStub;
-  dispatch: React.Dispatch<AppAction>;
+  store: DialogStore;
+  dialogs: DialogOpeners;
   addMessage: ReturnType<typeof vi.fn>;
 } {
   const api: RuntimeApiStub = {
@@ -56,41 +61,22 @@ function createRuntimeApiStub(overrides?: Partial<RuntimeApiStub>): {
     getActiveModelName: vi.fn(() => 'gpt-4'),
     ...overrides,
   };
-  const dispatch = vi.fn();
-  return { api, dispatch, addMessage: vi.fn() };
+  const store = createDialogStore();
+  const dialogs = createDialogOpeners(store);
+  return { api, store, dialogs, addMessage: vi.fn() };
 }
 
 function renderProviderDialog(
   api: RuntimeApiStub,
-  dispatch: React.Dispatch<AppAction>,
+  dialogs: DialogOpeners,
   addMessage: ReturnType<typeof vi.fn>,
 ) {
   useRuntimeApiMock.mockReturnValue(api);
-  useAppDispatchMock.mockReturnValue(dispatch);
 
   return renderHook(() =>
     useProviderDialog({
       addMessage,
-      appState: {
-        openDialogs: {
-          theme: false,
-          auth: false,
-          editor: false,
-          provider: false,
-          privacy: false,
-          loadProfile: false,
-          createProfile: false,
-          profileList: false,
-          profileDetail: false,
-          profileEditor: false,
-          tools: false,
-          oauthCode: false,
-        },
-        warnings: new Map(),
-        errors: { theme: null, auth: null, editor: null },
-        needsRelogin: false,
-        lastAddItemAction: null,
-      },
+      dialogs,
     }),
   );
 }
@@ -106,8 +92,8 @@ describe('useProviderDialog', () => {
 
   describe('openDialog with an active provider', () => {
     it('loads providers, records the active provider, and opens the dialog', () => {
-      const { api, dispatch, addMessage } = createRuntimeApiStub();
-      const { result } = renderProviderDialog(api, dispatch, addMessage);
+      const { api, store, dialogs, addMessage } = createRuntimeApiStub();
+      const { result } = renderProviderDialog(api, dialogs, addMessage);
 
       act(() => {
         result.current.openDialog();
@@ -115,34 +101,28 @@ describe('useProviderDialog', () => {
 
       expect(api.listProviders).toHaveBeenCalledTimes(1);
       expect(api.getActiveProviderName).toHaveBeenCalledTimes(1);
-      expect(dispatch).toHaveBeenCalledWith({
-        type: 'OPEN_DIALOG',
-        payload: 'provider',
-      });
+      expect(hasDialogRequest(store, 'provider')).toBe(true);
       expect(addMessage).not.toHaveBeenCalled();
     });
   });
 
   describe('openDialog with NO active provider (issue #2776)', () => {
     it('opens the selector and surfaces an empty current-provider selection', () => {
-      const { api, dispatch, addMessage } = createRuntimeApiStub({
+      const { api, store, dialogs, addMessage } = createRuntimeApiStub({
         // getActiveProviderName intentionally throws its documented
         // empty-state signal in this scenario.
         getActiveProviderName: vi.fn(() => {
           throw new Error(NO_ACTIVE_PROVIDER_ERROR_MESSAGE);
         }),
       });
-      const { result } = renderProviderDialog(api, dispatch, addMessage);
+      const { result } = renderProviderDialog(api, dialogs, addMessage);
 
       act(() => {
         result.current.openDialog();
       });
 
       expect(api.listProviders).toHaveBeenCalledTimes(1);
-      expect(dispatch).toHaveBeenCalledWith({
-        type: 'OPEN_DIALOG',
-        payload: 'provider',
-      });
+      expect(hasDialogRequest(store, 'provider')).toBe(true);
       expect(result.current.providers).toStrictEqual([
         'anthropic',
         'openai',
@@ -154,18 +134,18 @@ describe('useProviderDialog', () => {
     });
 
     it('still reports an error when listing providers genuinely fails', () => {
-      const { api, dispatch, addMessage } = createRuntimeApiStub({
+      const { api, store, dialogs, addMessage } = createRuntimeApiStub({
         listProviders: vi.fn(() => {
           throw new Error('runtime not registered');
         }),
       });
-      const { result } = renderProviderDialog(api, dispatch, addMessage);
+      const { result } = renderProviderDialog(api, dialogs, addMessage);
 
       act(() => {
         result.current.openDialog();
       });
 
-      expect(dispatch).not.toHaveBeenCalled();
+      expect(hasDialogRequest(store, 'provider')).toBe(false);
       const calls = addMessage.mock.calls as unknown as AddMessageCall[][];
       expect(calls).toHaveLength(1);
       const message = calls[0][0];
@@ -184,14 +164,19 @@ describe('useProviderDialog', () => {
         defaultModel: 'claude-opus',
         infoMessages: [],
       };
-      const { api, dispatch, addMessage } = createRuntimeApiStub({
+      const { api, store, dialogs, addMessage } = createRuntimeApiStub({
         // Before the switch there is no active provider.
         getActiveProviderName: vi.fn(() => {
           throw new Error(NO_ACTIVE_PROVIDER_ERROR_MESSAGE);
         }),
         setProvider: vi.fn().mockResolvedValue(switchResult),
       });
-      const { result } = renderProviderDialog(api, dispatch, addMessage);
+      const { result } = renderProviderDialog(api, dialogs, addMessage);
+
+      act(() => {
+        result.current.openDialog();
+      });
+      expect(hasDialogRequest(store, 'provider')).toBe(true);
 
       await act(async () => {
         await result.current.handleSelect('anthropic');
@@ -199,10 +184,7 @@ describe('useProviderDialog', () => {
 
       expect(api.setProvider).toHaveBeenCalledWith('anthropic');
       expect(result.current.currentProvider).toBe('anthropic');
-      expect(dispatch).toHaveBeenCalledWith({
-        type: 'CLOSE_DIALOG',
-        payload: 'provider',
-      });
+      expect(hasDialogRequest(store, 'provider')).toBe(false);
       // The notification message should fire, not a switch error. With no
       // prior provider the message reports the "none" origin explicitly.
       const calls = addMessage.mock.calls as unknown as AddMessageCall[][];
@@ -222,10 +204,14 @@ describe('useProviderDialog', () => {
     });
 
     it('reports an error when switching genuinely fails', async () => {
-      const { api, dispatch, addMessage } = createRuntimeApiStub({
+      const { api, store, dialogs, addMessage } = createRuntimeApiStub({
         setProvider: vi.fn().mockRejectedValue(new Error('network down')),
       });
-      const { result } = renderProviderDialog(api, dispatch, addMessage);
+      const { result } = renderProviderDialog(api, dialogs, addMessage);
+
+      act(() => {
+        result.current.openDialog();
+      });
 
       await act(async () => {
         await result.current.handleSelect('anthropic');
@@ -238,16 +224,13 @@ describe('useProviderDialog', () => {
       expect(errors).toHaveLength(1);
       expect(errors[0].content).toContain('Failed to switch provider');
       expect(errors[0].content).toContain('network down');
-      expect(dispatch).toHaveBeenCalledWith({
-        type: 'CLOSE_DIALOG',
-        payload: 'provider',
-      });
+      expect(hasDialogRequest(store, 'provider')).toBe(false);
     });
   });
 
   describe('unexpected runtime failures during openDialog (issue #2776)', () => {
     it('reports the error when getActiveProviderName throws a non-empty-state error', () => {
-      const { api, dispatch, addMessage } = createRuntimeApiStub({
+      const { api, store, dialogs, addMessage } = createRuntimeApiStub({
         // A genuine runtime failure that is NOT the documented empty-state
         // signal must still surface the existing error message rather than
         // being silently treated as "no selection".
@@ -255,13 +238,13 @@ describe('useProviderDialog', () => {
           throw new Error('runtime registry corrupted');
         }),
       });
-      const { result } = renderProviderDialog(api, dispatch, addMessage);
+      const { result } = renderProviderDialog(api, dialogs, addMessage);
 
       act(() => {
         result.current.openDialog();
       });
 
-      expect(dispatch).not.toHaveBeenCalled();
+      expect(hasDialogRequest(store, 'provider')).toBe(false);
       const calls = addMessage.mock.calls as unknown as AddMessageCall[][];
       expect(calls).toHaveLength(1);
       const message = calls[0][0];

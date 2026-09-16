@@ -1,15 +1,26 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import { Config } from '@vybestack/llxprt-code-core';
+import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
+import { DialogManager } from './DialogManager.js';
+import { DialogProvider } from '../stores/dialog/DialogContext.js';
+import { AppCommandsProvider } from '../contexts/AppCommandsContext.js';
+import { createAppCommandBindings } from '../../test-utils/appCommandBindings.js';
+import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { useTextBuffer } from './shared/text-buffer.js';
+
+import { hasDialogRequest } from '../../test-utils/dialogStore.js';
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import {
   renderHook,
   waitFor,
-  createMockSettings,
   renderWithProviders,
+  createMockSettings,
 } from '../../test-utils/render.js';
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
 
@@ -26,9 +37,11 @@ void vi.mock('@vybestack/llxprt-code-providers', () => ({
 }));
 
 import { useModelDialogHandler } from './modelDialogHandler.js';
-import { DialogManager } from './DialogManager.js';
-import { KeypressProvider } from '../contexts/KeypressContext.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import {
+  createDialogStore,
+  type DialogStore,
+  type DialogRequest,
+} from '../stores/dialog/dialogStore.js';
 
 // --- Stateful runtime fake ---
 interface FakeRuntimeState {
@@ -42,7 +55,6 @@ interface FakeRuntimeState {
     infoMessages: string[];
   };
   providerStatus: { providerName: string | null };
-  activeProviderName: string | null;
   setActiveModelShouldFail: boolean;
   setProviderShouldFail: boolean;
 }
@@ -59,7 +71,6 @@ function createFakeRuntime(overrides: Partial<FakeRuntimeState> = {}) {
       infoMessages: [],
     },
     providerStatus: { providerName: 'openai' },
-    activeProviderName: 'openai',
     setActiveModelShouldFail: false,
     setProviderShouldFail: false,
     ...overrides,
@@ -82,32 +93,16 @@ function createFakeRuntime(overrides: Partial<FakeRuntimeState> = {}) {
       return state.setProviderResult;
     }),
     getActiveProviderStatus: vi.fn(() => state.providerStatus),
-    getActiveProviderName: vi.fn(() => state.activeProviderName),
+    getActiveProviderName: () => state.providerStatus.providerName,
   };
 }
 
 let fakeRuntime: ReturnType<typeof createFakeRuntime>;
-let mockUiActions: {
-  closeModelsDialog: ReturnType<typeof vi.fn>;
-  openModelConfigDialog: ReturnType<typeof vi.fn>;
-};
 let mockAddItem: ReturnType<typeof vi.fn>;
 let callSequence: string[];
-// Per-test UIState for the render-dispatch tests. The vi.mock factory is
-// hoisted above this declaration, so it must dereference the holder at CALL
-// time, never at factory-definition time.
-let mockUiState: Record<string, unknown>;
 
 void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => fakeRuntime,
-}));
-
-void vi.mock('../contexts/UIActionsContext.js', () => ({
-  useUIActions: () => mockUiActions,
-}));
-
-void vi.mock('../contexts/UIStateContext.js', () => ({
-  useUIState: () => mockUiState,
 }));
 
 function makeModel(provider: string, id: string): HydratedModel {
@@ -118,29 +113,27 @@ function makeModel(provider: string, id: string): HydratedModel {
   } as HydratedModel;
 }
 
+/** Store seeded the way the /models flow leaves it: models dialog open. */
+function createSeededStore(): DialogStore {
+  const store = createDialogStore();
+  store.commands.openDialog({ kind: 'models', payload: {} });
+  return store;
+}
+
 describe('useModelDialogHandler', () => {
   beforeEach(() => {
     mockAddItem = vi.fn();
     callSequence = [];
-    mockUiActions = {
-      closeModelsDialog: vi.fn(),
-      openModelConfigDialog: vi.fn(),
-    };
-    mockUiState = {
-      constrainHeight: false,
-      terminalHeight: 40,
-      mainAreaWidth: 100,
-      commandContext: {},
-    };
     fakeRuntime = createFakeRuntime();
   });
 
   it('opens config dialog after successful same-provider model switch', async () => {
+    const store = createSeededStore();
     const { result } = renderHook(() =>
       useModelDialogHandler(
         fakeRuntime as never,
         mockAddItem,
-        mockUiActions as never,
+        store,
         'openai',
         {},
       ),
@@ -149,19 +142,20 @@ describe('useModelDialogHandler', () => {
     result.current(makeModel('openai', 'gpt-5'));
 
     await waitFor(() => {
-      expect(mockUiActions.openModelConfigDialog).toHaveBeenCalledTimes(1);
+      expect(hasDialogRequest(store, 'modelConfig')).toBe(true);
     });
     expect(fakeRuntime.setActiveModel).toHaveBeenCalledWith('gpt-5');
-    expect(mockUiActions.closeModelsDialog).toHaveBeenCalledTimes(1);
+    expect(hasDialogRequest(store, 'models')).toBe(false);
   });
 
   it('opens config dialog after successful cross-provider model switch', async () => {
     const recordProviderSwitch = vi.fn();
+    const store = createSeededStore();
     const { result } = renderHook(() =>
       useModelDialogHandler(
         fakeRuntime as never,
         mockAddItem,
-        mockUiActions as never,
+        store,
         'openai',
         { recordingIntegration: { recordProviderSwitch } },
       ),
@@ -170,9 +164,9 @@ describe('useModelDialogHandler', () => {
     result.current(makeModel('anthropic', 'claude-sonnet'));
 
     await waitFor(() => {
-      expect(mockUiActions.openModelConfigDialog).toHaveBeenCalledTimes(1);
+      expect(hasDialogRequest(store, 'modelConfig')).toBe(true);
     });
-    expect(mockUiActions.closeModelsDialog).toHaveBeenCalledTimes(1);
+    expect(hasDialogRequest(store, 'models')).toBe(false);
     expect(fakeRuntime.setProvider).toHaveBeenCalledWith('anthropic');
     expect(fakeRuntime.setActiveModel).toHaveBeenCalledWith('claude-sonnet');
     expect(callSequence).toStrictEqual(['setProvider', 'setActiveModel']);
@@ -184,12 +178,12 @@ describe('useModelDialogHandler', () => {
 
   it('does NOT open config dialog when setActiveModel fails', async () => {
     fakeRuntime = createFakeRuntime({ setActiveModelShouldFail: true });
-
+    const store = createSeededStore();
     const { result } = renderHook(() =>
       useModelDialogHandler(
         fakeRuntime as never,
         mockAddItem,
-        mockUiActions as never,
+        store,
         'openai',
         {},
       ),
@@ -202,18 +196,18 @@ describe('useModelDialogHandler', () => {
         expect.objectContaining({ type: 'error' }),
       );
     });
-    expect(mockUiActions.openModelConfigDialog).not.toHaveBeenCalled();
-    expect(mockUiActions.closeModelsDialog).toHaveBeenCalledTimes(1);
+    expect(hasDialogRequest(store, 'modelConfig')).toBe(false);
+    expect(hasDialogRequest(store, 'models')).toBe(false);
   });
 
   it('does NOT open config dialog when cross-provider setProvider fails', async () => {
     fakeRuntime = createFakeRuntime({ setProviderShouldFail: true });
-
+    const store = createSeededStore();
     const { result } = renderHook(() =>
       useModelDialogHandler(
         fakeRuntime as never,
         mockAddItem,
-        mockUiActions as never,
+        store,
         'openai',
         {},
       ),
@@ -226,8 +220,8 @@ describe('useModelDialogHandler', () => {
         expect.objectContaining({ type: 'error' }),
       );
     });
-    expect(mockUiActions.openModelConfigDialog).not.toHaveBeenCalled();
-    expect(mockUiActions.closeModelsDialog).toHaveBeenCalledTimes(1);
+    expect(hasDialogRequest(store, 'modelConfig')).toBe(false);
+    expect(hasDialogRequest(store, 'models')).toBe(false);
   });
 
   it('does NOT open config dialog when cross-provider setProvider succeeds but setActiveModel fails', async () => {
@@ -235,12 +229,12 @@ describe('useModelDialogHandler', () => {
     // model switch fails. The error must be reported and the config dialog
     // must NOT open (switchSucceeded stays false).
     fakeRuntime = createFakeRuntime({ setActiveModelShouldFail: true });
-
+    const store = createSeededStore();
     const { result } = renderHook(() =>
       useModelDialogHandler(
         fakeRuntime as never,
         mockAddItem,
-        mockUiActions as never,
+        store,
         'openai',
         {},
       ),
@@ -254,8 +248,8 @@ describe('useModelDialogHandler', () => {
       );
     });
     expect(fakeRuntime.setProvider).toHaveBeenCalledTimes(1);
-    expect(mockUiActions.openModelConfigDialog).not.toHaveBeenCalled();
-    expect(mockUiActions.closeModelsDialog).toHaveBeenCalledTimes(1);
+    expect(hasDialogRequest(store, 'modelConfig')).toBe(false);
+    expect(hasDialogRequest(store, 'models')).toBe(false);
   });
 
   it('STILL opens config dialog when addItem fails after successful switch', async () => {
@@ -269,11 +263,12 @@ describe('useModelDialogHandler', () => {
       throw new Error('addItem failed');
     });
 
+    const store = createSeededStore();
     const { result } = renderHook(() =>
       useModelDialogHandler(
         fakeRuntime as never,
         mockAddItem,
-        mockUiActions as never,
+        store,
         'openai',
         { recordingIntegration: { recordProviderSwitch } },
       ),
@@ -282,7 +277,7 @@ describe('useModelDialogHandler', () => {
     result.current(makeModel('openai', 'gpt-5'));
 
     await waitFor(() => {
-      expect(mockUiActions.openModelConfigDialog).toHaveBeenCalledTimes(1);
+      expect(hasDialogRequest(store, 'modelConfig')).toBe(true);
     });
 
     // Verify the error path was genuinely exercised: addItem WAS invoked
@@ -293,109 +288,87 @@ describe('useModelDialogHandler', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Render dispatch: which dialog frame the real DialogManager paints.
-// ---------------------------------------------------------------------------
-
-// Distinctive strings each dialog paints, verified against the components.
 const FOLDER_TRUST_MARKER = 'Do you trust this folder?';
 const PROVIDER_MARKER = 'Select Provider (';
 const LOAD_PROFILE_MARKER = 'Select Profile (';
 const CREATE_PROFILE_MARKER = 'Create New Profile - Step 1 of 6';
 const TOOLS_MARKER = 'Select a tool to disable:';
 
-/**
- * A UIActions stand-in for render tests. Every action property any dialog
- * branch may reference resolves to a fresh vi.fn(); nothing here drives
- * behavior, the dialogs under test never call them during a static render.
- */
-function makeRenderUiActions(): Record<string, ReturnType<typeof vi.fn>> {
-  const store: Record<string, ReturnType<typeof vi.fn>> = {};
-  return new Proxy(store, {
-    get(target, prop: string) {
-      if (!(prop in target)) {
-        target[prop] = vi.fn();
+function DialogManagerHarness({ store }: { store: DialogStore }) {
+  const buffer = useTextBuffer({
+    viewport: { width: 100, height: 40 },
+    isValidPath: () => false,
+  });
+  const bindings = createAppCommandBindings('DialogManager', {
+    buffer,
+    commandContext: createMockCommandContext(),
+    inputHistory: [],
+  });
+  const standIns = new Map<PropertyKey, ReturnType<typeof vi.fn>>();
+  const commands = new Proxy(bindings, {
+    get(target, property, receiver): unknown {
+      const value: unknown = Reflect.get(target, property, receiver);
+      if (typeof value !== 'function') return value;
+      let standIn = standIns.get(property);
+      if (!standIn) {
+        standIn = vi.fn(() => {
+          throw new Error('Unexpected dispatch: ' + String(property));
+        });
+        standIns.set(property, standIn);
       }
-      return target[prop];
+      return standIn;
     },
   });
-}
-
-/**
- * Baseline UIState with every dialog flag closed plus the data fields the
- * rendered dialogs consume. Per-test flag overrides replace entries.
- */
-function makeDialogManagerUiState(
-  flagOverrides: Record<string, unknown>,
-): Record<string, unknown> {
-  return {
-    constrainHeight: false,
-    terminalHeight: 40,
-    mainAreaWidth: 100,
-    commandContext: {},
-    // Early tier.
-    showWorkspaceMigrationDialog: false,
-    shouldShowIdePrompt: false,
-    isFolderTrustDialogOpen: false,
-    isWelcomeDialogOpen: false,
-    confirmationRequest: null,
-    confirmUpdateLlxprtExtensionRequests: [],
-    // First half.
-    isThemeDialogOpen: false,
-    isSettingsDialogOpen: false,
-    isAuthDialogOpen: false,
-    isOAuthCodeDialogOpen: false,
-    isEditorDialogOpen: false,
-    isProviderDialogOpen: false,
-    // Profile tier.
-    isLoadProfileDialogOpen: false,
-    isCreateProfileDialogOpen: false,
-    isProfileListDialogOpen: false,
-    isProfileDetailDialogOpen: false,
-    isProfileEditorDialogOpen: false,
-    // Second half.
-    isToolsDialogOpen: false,
-    showPrivacyNotice: false,
-    isPermissionsDialogOpen: false,
-    isLoggingDialogOpen: false,
-    isSubagentDialogOpen: false,
-    isModelsDialogOpen: false,
-    isSessionBrowserDialogOpen: false,
-    isModelConfigDialogOpen: false,
-    isPoliciesDialogOpen: false,
-    // Data consumed by the dialogs these tests render.
-    providerOptions: ['ollama'],
-    selectedProvider: undefined,
-    profiles: ['alpha', 'beta'],
-    toolsDialogTools: [{ name: 'shell', displayName: 'Shell' }],
-    toolsDialogAction: 'disable',
-    toolsDialogDisabledTools: [],
-    ...flagOverrides,
-  };
-}
-
-function renderDialogManager(flags: Record<string, unknown>): string {
-  mockUiState = makeDialogManagerUiState(flags);
-  mockUiActions = makeRenderUiActions() as typeof mockUiActions;
-  const configStub = {
-    getWorkingDir: () => '/workspace/project',
-  } as CliUiRuntime;
-  const { lastFrame } = renderWithProviders(
-    <KeypressProvider>
-      <DialogManager
-        addItem={mockAddItem}
-        terminalWidth={100}
-        config={configStub}
-        settings={createMockSettings({})}
-      />
-    </KeypressProvider>,
+  const config = buildSlashCommandRuntime(
+    new Config({
+      sessionId: 'dialog-dispatch',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      debugMode: false,
+      model: 'test',
+    }),
   );
-  return lastFrame() ?? '';
+  return (
+    <AppCommandsProvider value={commands}>
+      <DialogProvider store={store}>
+        <DialogManager config={config} settings={createMockSettings({})} />
+      </DialogProvider>
+    </AppCommandsProvider>
+  );
+}
+
+function renderDialogManager(requests: DialogRequest[]): string {
+  const store = createDialogStore();
+  for (const request of requests) store.commands.openDialog(request);
+  const view = renderWithProviders(<DialogManagerHarness store={store} />, {
+    terminal: {
+      terminalWidth: 100,
+      terminalHeight: 40,
+      mainAreaWidth: 100,
+      constrainHeight: false,
+    },
+    settingsProfile: {
+      providerOptions: ['ollama'],
+      profiles: ['alpha', 'beta'],
+      toolsDialogTools: [
+        {
+          name: 'shell',
+          displayName: 'Shell',
+          source: 'builtin',
+          enabled: true,
+        },
+      ],
+      toolsDialogDisabledTools: [],
+    },
+  });
+  const frame = view.lastFrame() ?? '';
+  view.unmount();
+  return frame;
 }
 
 describe('DialogManager render dispatch', () => {
-  it('renders the folder-trust dialog when only its flag is set', () => {
-    const frame = renderDialogManager({ isFolderTrustDialogOpen: true });
+  it('renders the folder-trust dialog when only its request is open', () => {
+    const frame = renderDialogManager([{ kind: 'folderTrust', payload: {} }]);
     expect(frame).toContain(FOLDER_TRUST_MARKER);
     expect(frame).not.toContain(PROVIDER_MARKER);
     expect(frame).not.toContain(LOAD_PROFILE_MARKER);
@@ -403,8 +376,8 @@ describe('DialogManager render dispatch', () => {
     expect(frame).not.toContain(TOOLS_MARKER);
   });
 
-  it('renders the provider dialog when only its flag is set', () => {
-    const frame = renderDialogManager({ isProviderDialogOpen: true });
+  it('renders the provider dialog when only its request is open', () => {
+    const frame = renderDialogManager([{ kind: 'provider', payload: {} }]);
     expect(frame).toContain(PROVIDER_MARKER);
     expect(frame).not.toContain(FOLDER_TRUST_MARKER);
     expect(frame).not.toContain(LOAD_PROFILE_MARKER);
@@ -412,8 +385,8 @@ describe('DialogManager render dispatch', () => {
     expect(frame).not.toContain(TOOLS_MARKER);
   });
 
-  it('renders the load-profile dialog when only its flag is set', () => {
-    const frame = renderDialogManager({ isLoadProfileDialogOpen: true });
+  it('renders the load-profile dialog when only its request is open', () => {
+    const frame = renderDialogManager([{ kind: 'loadProfile', payload: {} }]);
     expect(frame).toContain(LOAD_PROFILE_MARKER);
     expect(frame).not.toContain(FOLDER_TRUST_MARKER);
     expect(frame).not.toContain(PROVIDER_MARKER);
@@ -421,8 +394,8 @@ describe('DialogManager render dispatch', () => {
     expect(frame).not.toContain(TOOLS_MARKER);
   });
 
-  it('renders the profile-create wizard when only its flag is set', () => {
-    const frame = renderDialogManager({ isCreateProfileDialogOpen: true });
+  it('renders the profile-create wizard when only its request is open', () => {
+    const frame = renderDialogManager([{ kind: 'createProfile', payload: {} }]);
     expect(frame).toContain(CREATE_PROFILE_MARKER);
     expect(frame).not.toContain(FOLDER_TRUST_MARKER);
     expect(frame).not.toContain(PROVIDER_MARKER);
@@ -430,8 +403,10 @@ describe('DialogManager render dispatch', () => {
     expect(frame).not.toContain(TOOLS_MARKER);
   });
 
-  it('renders the tools dialog when only its flag is set', () => {
-    const frame = renderDialogManager({ isToolsDialogOpen: true });
+  it('renders the tools dialog when only its request is open', () => {
+    const frame = renderDialogManager([
+      { kind: 'tools', payload: { action: 'disable' } },
+    ]);
     expect(frame).toContain(TOOLS_MARKER);
     expect(frame).not.toContain(FOLDER_TRUST_MARKER);
     expect(frame).not.toContain(PROVIDER_MARKER);
@@ -439,36 +414,35 @@ describe('DialogManager render dispatch', () => {
     expect(frame).not.toContain(CREATE_PROFILE_MARKER);
   });
 
-  it('renders exactly the folder-trust dialog when early, first-half, and second-half flags are all set', () => {
+  it('renders exactly the folder-trust dialog when early, first-half, and second-half requests are all open', () => {
     // Early dialogs win: folder trust beats provider (first half) and tools
     // (second half).
-    const frame = renderDialogManager({
-      isFolderTrustDialogOpen: true,
-      isProviderDialogOpen: true,
-      isToolsDialogOpen: true,
-    });
+    const frame = renderDialogManager([
+      { kind: 'folderTrust', payload: {} },
+      { kind: 'provider', payload: {} },
+      { kind: 'tools', payload: { action: 'disable' } },
+    ]);
     expect(frame).toContain(FOLDER_TRUST_MARKER);
     expect(frame).not.toContain(PROVIDER_MARKER);
     expect(frame).not.toContain(TOOLS_MARKER);
   });
 
-  it('renders exactly the provider dialog when first-half and second-half flags are both set', () => {
+  it('renders exactly the provider dialog when first-half and second-half requests are both open', () => {
     // First half beats second half: provider beats tools.
-    const frame = renderDialogManager({
-      isProviderDialogOpen: true,
-      isToolsDialogOpen: true,
-    });
+    const frame = renderDialogManager([
+      { kind: 'provider', payload: {} },
+      { kind: 'tools', payload: { action: 'disable' } },
+    ]);
     expect(frame).toContain(PROVIDER_MARKER);
     expect(frame).not.toContain(TOOLS_MARKER);
   });
 
-  it('renders exactly the load-profile dialog when both profile flags are set', () => {
-    // Inside the profile tier, load beats create (declaration order in
-    // renderProfileDialogs).
-    const frame = renderDialogManager({
-      isLoadProfileDialogOpen: true,
-      isCreateProfileDialogOpen: true,
-    });
+  it('renders exactly the load-profile dialog when both profile requests are open', () => {
+    // The store priority gives load precedence over create.
+    const frame = renderDialogManager([
+      { kind: 'loadProfile', payload: {} },
+      { kind: 'createProfile', payload: {} },
+    ]);
     expect(frame).toContain(LOAD_PROFILE_MARKER);
     expect(frame).not.toContain(CREATE_PROFILE_MARKER);
   });

@@ -4,20 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
+import { useEffect, useCallback, useMemo } from 'react';
 import { getWorkspaceExtensions } from '../../config/extension.js';
 import { type LoadedSettings, SettingScope } from '../../config/settings.js';
 import process from 'node:process';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
+import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 
-export function useWorkspaceMigration(settings: LoadedSettings) {
-  const [showWorkspaceMigrationDialog, setShowWorkspaceMigrationDialog] =
-    useState(false);
-  const [workspaceExtensions, setWorkspaceExtensions] = useState<
-    LlxprtExtension[]
-  >([]);
-
+export function useWorkspaceMigration(
+  settings: LoadedSettings,
+  dialogs: DialogOpeners,
+) {
   useEffect(() => {
     if (settings.merged.extensionManagement !== true) {
       return;
@@ -29,11 +26,14 @@ export function useWorkspaceMigration(settings: LoadedSettings) {
       settings.merged.extensions.workspacesWithMigrationNudge?.includes(cwd) !==
         true
     ) {
-      setWorkspaceExtensions(extensions);
-      setShowWorkspaceMigrationDialog(true);
+      dialogs.workspaceMigration.open({ extensions });
       debugLogger.log(JSON.stringify(settings.merged.extensions));
     }
-  }, [settings.merged.extensions, settings.merged.extensionManagement]);
+  }, [
+    settings.merged.extensions,
+    settings.merged.extensionManagement,
+    dialogs,
+  ]);
 
   const onWorkspaceMigrationDialogOpen = useCallback(() => {
     const userSettings = settings.forScope(SettingScope.User);
@@ -53,22 +53,10 @@ export function useWorkspaceMigration(settings: LoadedSettings) {
     settings.setValue(SettingScope.User, 'extensions', extensionSettings);
   }, [settings]);
 
-  const onWorkspaceMigrationDialogClose = useCallback(() => {
-    setShowWorkspaceMigrationDialog(false);
-  }, [setShowWorkspaceMigrationDialog]);
-
   return useMemo(
     () => ({
-      showWorkspaceMigrationDialog,
-      workspaceLlxprtExtensions: workspaceExtensions,
       onWorkspaceMigrationDialogOpen,
-      onWorkspaceMigrationDialogClose,
     }),
-    [
-      showWorkspaceMigrationDialog,
-      workspaceExtensions,
-      onWorkspaceMigrationDialogOpen,
-      onWorkspaceMigrationDialogClose,
-    ],
+    [onWorkspaceMigrationDialogOpen],
   );
 }

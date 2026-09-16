@@ -8,6 +8,9 @@ import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useStdin, useStdout } from 'ink';
 import { useResponsive } from '../../../hooks/useResponsive.js';
+import type { TerminalStore } from '../../../stores/terminal/terminalStore.js';
+import type { SettingsProfileStore } from '../../../stores/settings/settingsStore.js';
+import type { TurnStore } from '../../../stores/turn/turnStore.js';
 import { useBracketedPaste } from '../../../hooks/useBracketedPaste.js';
 import { useConsoleMessages } from '../../../hooks/useConsoleMessages.js';
 import { useExtensionAutoUpdate } from '../../../hooks/useExtensionAutoUpdate.js';
@@ -16,7 +19,10 @@ import {
   DEFAULT_HISTORY_MAX_BYTES,
   DEFAULT_HISTORY_MAX_ITEMS,
 } from '../../../../constants/historyLimits.js';
-import { useRetractableHistory } from '../../../hooks/useHistoryManager.js';
+import {
+  useRetractableHistory,
+  type UseHistoryManagerReturn,
+} from '../../../hooks/useHistoryManager.js';
 import { useMemoryMonitor } from '../../../hooks/useMemoryMonitor.js';
 import {
   type IContent,
@@ -43,7 +49,6 @@ import { registerCleanup } from '../../../../utils/cleanup.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { MemoryTelemetryController } from '../../../hooks/memoryTrend/memoryTelemetry.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
-import type { HistoryItem } from '../../../types.js';
 import type {
   AgentClientSource,
   StreamRuntime,
@@ -68,6 +73,15 @@ export interface AppBootstrapProps {
   initialLockHandle?: LockHandle | null;
   /** P12: optional memory telemetry controller (perf+memory enabled only). */
   memoryController?: MemoryTelemetryController;
+  /** Terminal store; bootstrap owns the focus/narrow writer effects. */
+  terminalStore: TerminalStore;
+  /** Settings/profile store; bootstrap mirrors session context readouts. */
+  settingsStore: SettingsProfileStore;
+  /**
+   * Turn store owning history and streamed-turn state; bootstrap binds the
+   * history commands and applies the history display limits.
+   */
+  turnStore: TurnStore;
 }
 
 export interface AppBootstrapResult {
@@ -85,30 +99,11 @@ export interface AppBootstrapResult {
   agentClientSource: AgentClientSource;
   settings: LoadedSettings;
   runtime: ReturnType<typeof useRuntimeApi>;
-  isFocused: boolean;
-  isNarrow: boolean;
-  history: HistoryItem[];
-  addItem: (
-    item: Omit<HistoryItem, 'id'>,
-    baseTimestamp?: number,
-    isResuming?: boolean,
-  ) => number;
-  removeItems: (ids: readonly number[]) => void;
-  clearItems: () => void;
-  loadHistory: (newHistory: HistoryItem[]) => void;
-  llxprtMdFileCount: number;
   setLlxprtMdFileCount: (count: number) => void;
-  coreMemoryFileCount: number;
-  consoleMessages: ReturnType<typeof useConsoleMessages>['consoleMessages'];
   handleNewMessage: ReturnType<typeof useConsoleMessages>['handleNewMessage'];
   clearConsoleMessagesState: ReturnType<
     typeof useConsoleMessages
   >['clearConsoleMessages'];
-  sessionStats: ReturnType<typeof useSessionStats>['stats'];
-  updateHistoryTokenCount: ReturnType<
-    typeof useSessionStats
-  >['updateHistoryTokenCount'];
-  tokenMetrics: ReturnType<typeof useTokenMetricsTracking>['tokenMetrics'];
   todos: ReturnType<typeof useTodoContext>['todos'];
   updateTodos: ReturnType<typeof useTodoContext>['updateTodos'];
   recordingIntegrationRef: React.MutableRefObject<RecordingIntegration | null>;
@@ -138,6 +133,21 @@ function useBootstrapHistory(props: AppBootstrapProps) {
   const isFocused = useFocus();
   const { isNarrow } = useResponsive();
   useBracketedPaste();
+  // Focus and narrow-width detection stay here (they own the effects and
+  // platform reads); the values move to the TerminalStore via writer effects.
+  useEffect(() => {
+    props.terminalStore.commands.setFocus(isFocused);
+  }, [props.terminalStore, isFocused]);
+  useEffect(() => {
+    props.terminalStore.commands.setNarrow(isNarrow);
+  }, [props.terminalStore, isNarrow]);
+  // The background color is not reactive upstream; re-sync after each render
+  // so theme switches propagate. The command guards equal writes.
+  useEffect(() => {
+    props.terminalStore.commands.setTerminalBackgroundColor(
+      props.uiRuntime.shell.getTerminalBackground(),
+    );
+  });
   const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null);
   const { stdout } = useStdout();
   const { stdin, setRawMode } = useStdin();
@@ -155,8 +165,10 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     }),
     [settings.merged.ui.historyMaxItems, settings.merged.ui.historyMaxBytes],
   );
-  const { history, addItem, removeItems, clearItems, loadHistory } =
-    useRetractableHistory(historyLimits);
+  const { addItem, loadHistory } = useRetractableHistory(
+    props.turnStore,
+    historyLimits,
+  );
   const {
     llxprtMdFileCount,
     setLlxprtMdFileCount,
@@ -169,25 +181,24 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     loadHistory,
     resumedHistory,
   });
+  // Store mirrors: the context summary renders from the settings store.
+  useEffect(() => {
+    props.settingsStore.commands.setLlxprtMdFileCount(llxprtMdFileCount);
+  }, [props.settingsStore, llxprtMdFileCount]);
+  useEffect(() => {
+    props.settingsStore.commands.setCoreMemoryFileCount(coreMemoryFileCount);
+  }, [props.settingsStore, coreMemoryFileCount]);
   useMemoryMonitor({ addItem, memoryController: props.memoryController });
   return {
     runtime,
-    isFocused,
-    isNarrow,
     updateInfo,
     setUpdateInfo,
     stdout,
     stdin,
     setRawMode,
     nightly,
-    history,
     addItem,
-    removeItems,
-    clearItems,
-    loadHistory,
-    llxprtMdFileCount,
     setLlxprtMdFileCount,
-    coreMemoryFileCount,
   };
 }
 
@@ -200,7 +211,7 @@ function useBootstrapTodo() {
 /** Initializes recording, IDE prompt, messages, and token metrics */
 function useBootstrapEvents(
   props: AppBootstrapProps,
-  addItem: AppBootstrapResult['addItem'],
+  addItem: UseHistoryManagerReturn['addItem'],
   setUpdateInfo: React.Dispatch<React.SetStateAction<UpdateObject | null>>,
   runtime: ReturnType<typeof useRuntimeApi>,
 ) {
@@ -258,6 +269,15 @@ function useBootstrapEvents(
     updateHistoryTokenCount,
     recordingIntegrationRef,
   });
+  // Store mirrors: the footer renders token metrics from the settings store.
+  useEffect(() => {
+    props.settingsStore.commands.setTokenMetrics(tokenMetrics);
+  }, [props.settingsStore, tokenMetrics]);
+  useEffect(() => {
+    props.settingsStore.commands.setHistoryTokenCount(
+      sessionStats.historyTokenCount,
+    );
+  }, [props.settingsStore, sessionStats.historyTokenCount]);
   return {
     recordingIntegrationRef,
     recordingSwapCallbacks,
@@ -268,9 +288,6 @@ function useBootstrapEvents(
     consoleMessages,
     handleNewMessage,
     clearConsoleMessagesState,
-    sessionStats,
-    updateHistoryTokenCount,
-    tokenMetrics,
   };
 }
 
@@ -280,6 +297,9 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
   const h = useBootstrapHistory(props);
   const t = useBootstrapTodo();
   const e = useBootstrapEvents(props, h.addItem, h.setUpdateInfo, h.runtime);
+  useEffect(() => {
+    props.settingsStore.commands.setRawConsoleMessages(e.consoleMessages);
+  }, [props.settingsStore, e.consoleMessages]);
   return {
     uiRuntime,
     streamRuntime,
@@ -292,16 +312,7 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     recordingIntegration: props.recordingIntegration,
     nightly: h.nightly,
     runtime: h.runtime,
-    isFocused: h.isFocused,
-    isNarrow: h.isNarrow,
-    history: h.history,
-    addItem: h.addItem,
-    removeItems: h.removeItems,
-    clearItems: h.clearItems,
-    loadHistory: h.loadHistory,
-    llxprtMdFileCount: h.llxprtMdFileCount,
     setLlxprtMdFileCount: h.setLlxprtMdFileCount,
-    coreMemoryFileCount: h.coreMemoryFileCount,
     updateInfo: h.updateInfo,
     setUpdateInfo: h.setUpdateInfo,
     stdin: h.stdin,
@@ -315,11 +326,7 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     setIdePromptAnswered: e.setIdePromptAnswered,
     currentIDE: e.currentIDE,
     shouldShowIdePrompt: e.shouldShowIdePrompt,
-    consoleMessages: e.consoleMessages,
     handleNewMessage: e.handleNewMessage,
     clearConsoleMessagesState: e.clearConsoleMessagesState,
-    sessionStats: e.sessionStats,
-    updateHistoryTokenCount: e.updateHistoryTokenCount,
-    tokenMetrics: e.tokenMetrics,
   };
 }

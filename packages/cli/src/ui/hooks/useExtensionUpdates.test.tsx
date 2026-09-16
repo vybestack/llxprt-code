@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { act, type ReactNode } from 'react';
+import { hasDialogRequest } from '../../test-utils/dialogStore.js';
 import { vi, type Mock } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -20,6 +22,7 @@ import {
   type LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
 import { renderHook, waitFor } from '../../test-utils/render.js';
+import { createDialogStore } from '../stores/dialog/dialogStore.js';
 import { MessageType } from '../types.js';
 import { ExtensionEnablementManager } from '../../config/extensions/extensionEnablement.js';
 import {
@@ -60,6 +63,51 @@ describe('useExtensionUpdates', () => {
     fs.rmSync(tempHomeDir, { recursive: true, force: true });
   });
 
+  it('retains consent requests across rerenders and dequeues before delivering each answer', () => {
+    const store = createDialogStore();
+    const extensions: LlxprtExtension[] = [];
+    const addItem = (): number => 0;
+    const { result, rerender, unmount } = renderHook(() =>
+      useExtensionUpdates(extensions, addItem, tempHomeDir, store),
+    );
+    const answers: Array<{ confirmed: boolean; remaining: ReactNode[] }> = [];
+    const onConfirm = (confirmed: boolean): void => {
+      answers.push({
+        confirmed,
+        remaining: store.store
+          .getState()
+          .confirmUpdateLlxprtExtensionRequests.map(
+            (request) => request.payload.prompt,
+          ),
+      });
+    };
+    act(() => {
+      result.current.addConfirmUpdateExtensionRequest({
+        prompt: 'First',
+        onConfirm,
+      });
+      result.current.addConfirmUpdateExtensionRequest({
+        prompt: 'Second',
+        onConfirm,
+      });
+    });
+    rerender();
+    expect(hasDialogRequest(store, 'extensionUpdateConfirm')).toBe(true);
+    const [first, second] =
+      store.store.getState().confirmUpdateLlxprtExtensionRequests;
+    expect(first.payload.prompt).toBe('First');
+    expect(second.payload.prompt).toBe('Second');
+    act(() => first.payload.onConfirm(true));
+    expect(answers).toStrictEqual([{ confirmed: true, remaining: ['Second'] }]);
+    act(() => second.payload.onConfirm(false));
+    expect(answers).toStrictEqual([
+      { confirmed: true, remaining: ['Second'] },
+      { confirmed: false, remaining: [] },
+    ]);
+    expect(hasDialogRequest(store, 'extensionUpdateConfirm')).toBe(false);
+    unmount();
+  });
+
   it('should check for updates and log a message if an update is available', async () => {
     const extensions = [
       {
@@ -91,8 +139,9 @@ describe('useExtensionUpdates', () => {
       });
     });
 
+    const store = createDialogStore();
     renderHook(() =>
-      useExtensionUpdates(extensions as LlxprtExtension[], addItem, cwd),
+      useExtensionUpdates(extensions as LlxprtExtension[], addItem, cwd, store),
     );
 
     await waitFor(() => {
@@ -143,7 +192,10 @@ describe('useExtensionUpdates', () => {
       name: '',
     });
 
-    renderHook(() => useExtensionUpdates([extension], addItem, tempHomeDir));
+    const store = createDialogStore();
+    renderHook(() =>
+      useExtensionUpdates([extension], addItem, tempHomeDir, store),
+    );
 
     await waitFor(
       () => {
@@ -225,7 +277,10 @@ describe('useExtensionUpdates', () => {
       }),
     );
 
-    renderHook(() => useExtensionUpdates(extensions, addItem, tempHomeDir));
+    const store = createDialogStore();
+    renderHook(() =>
+      useExtensionUpdates(extensions, addItem, tempHomeDir, store),
+    );
 
     await waitFor(
       () => {

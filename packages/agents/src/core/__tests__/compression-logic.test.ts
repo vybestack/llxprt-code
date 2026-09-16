@@ -7,7 +7,10 @@
 import { describe, it, expect } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { findCompressSplitPoint } from '../client.js';
-import { COMPRESSION_PRESERVE_THRESHOLD } from '../compression-config.js';
+
+// Preserve the test's 2 * (1 - 0.85) fraction; client.ts only re-exports
+// findCompressSplitPoint, whose fraction argument in clientHelpers.ts is required.
+const COMPRESSION_PRESERVE_THRESHOLD = 2 * (1 - 0.85);
 
 describe('Compression Logic', () => {
   it('should calculate preservation index with new threshold', () => {
@@ -38,8 +41,8 @@ describe('Compression Logic', () => {
       },
     ];
 
-    // With the new COMPRESSION_PRESERVE_THRESHOLD (0.5), we expect different behavior
-    const preservedFraction = COMPRESSION_PRESERVE_THRESHOLD; // 0.5
+    // With COMPRESSION_PRESERVE_THRESHOLD = 0.3 (2 * (1 - 0.85)), we expect different behavior
+    const preservedFraction = COMPRESSION_PRESERVE_THRESHOLD; // 0.3
     const compressBeforeIndex = findCompressSplitPoint(
       mockHistory,
       1 - preservedFraction,

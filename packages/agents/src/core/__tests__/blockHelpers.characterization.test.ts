@@ -8,13 +8,6 @@
  * @plan:PLAN-20260707-AGENTNEUTRAL.P16
  * @requirement:REQ-011.1
  *
- * CATEGORY (b): Tests against the PLANNED neutral block-helpers API that
- * FAIL NOW (P16) because the agents package does not yet export
- * `getToolCallBlocks`, `getResponseTextFromBlocks`, or
- * `analyzeResponseOutcome` from `contentBlockHelpers.ts`. These tests will
- * START PASSING in P17 after the googlePartHelpers.ts → contentBlockHelpers.ts
- * rename + neutralization is complete.
- *
  * Covers:
  *  - getToolCallBlocks(blocks) returns ToolCallBlock[] in order
  *  - getResponseTextFromBlocks(blocks) concatenates TextBlock texts
@@ -28,14 +21,12 @@
 import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 
-// P17 will rename googlePartHelpers.ts → contentBlockHelpers.ts and replace
-// Part[]-based helpers with ContentBlock[]-based equivalents. These imports
-// will resolve only after P17 is complete.
 import {
   getToolCallBlocks,
   getResponseTextFromBlocks,
   analyzeResponseOutcome,
-} from '../contentBlockHelpers.js';
+  type ResponseOutcome,
+} from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 
 import type {
   ContentBlock,
@@ -169,7 +160,7 @@ describe('blockHelpers characterization — analyzeResponseOutcome', () => {
   it('detects visible text only', () => {
     const blocks: ContentBlock[] = [makeTextBlock('response text')];
 
-    const outcome = analyzeResponseOutcome(blocks);
+    const outcome: ResponseOutcome = analyzeResponseOutcome(blocks);
     expect(outcome.hasVisibleText).toBe(true);
     expect(outcome.hasThinking).toBe(false);
     expect(outcome.hasToolCalls).toBe(false);

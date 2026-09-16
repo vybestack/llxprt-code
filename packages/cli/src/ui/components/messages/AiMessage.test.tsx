@@ -84,10 +84,7 @@ describe('<AiMessage />', () => {
       const { lastFrame } = renderWithProviders(
         <AiMessage {...baseProps} model="gemini-pro" />,
         {
-          uiState: {
-            renderMarkdown: true,
-            streamingState: StreamingState.Idle,
-          },
+          turn: { streamingState: StreamingState.Idle },
         },
       );
 
@@ -98,10 +95,7 @@ describe('<AiMessage />', () => {
       const { lastFrame } = renderWithProviders(
         <AiMessage {...baseProps} model={undefined} />,
         {
-          uiState: {
-            renderMarkdown: true,
-            streamingState: StreamingState.Idle,
-          },
+          turn: { streamingState: StreamingState.Idle },
         },
       );
 
@@ -124,10 +118,7 @@ describe('<AiMessage />', () => {
       const { lastFrame } = renderWithProviders(
         <AiMessage {...baseProps} thinkingBlocks={thinkingBlocks} />,
         {
-          uiState: {
-            renderMarkdown: true,
-            streamingState: StreamingState.Idle,
-          },
+          turn: { streamingState: StreamingState.Idle },
         },
       );
 
@@ -144,10 +135,7 @@ describe('<AiMessage />', () => {
           thinkingBlocks={thinkingBlocks}
         />,
         {
-          uiState: {
-            renderMarkdown: true,
-            streamingState: StreamingState.Responding,
-          },
+          turn: { streamingState: StreamingState.Responding },
         },
       );
 
@@ -164,10 +152,7 @@ describe('<AiMessage />', () => {
           thinkingBlocks={thinkingBlocks}
         />,
         {
-          uiState: {
-            renderMarkdown: true,
-            streamingState: StreamingState.Idle,
-          },
+          turn: { streamingState: StreamingState.Idle },
         },
       );
 
@@ -190,10 +175,7 @@ describe('<AiMessage />', () => {
           ]}
         />,
         {
-          uiState: {
-            renderMarkdown: true,
-            streamingState: StreamingState.Idle,
-          },
+          turn: { streamingState: StreamingState.Idle },
         },
       );
 
@@ -207,10 +189,7 @@ describe('<AiMessage />', () => {
       const { lastFrame } = renderWithProviders(
         <AiMessage {...baseProps} thinkingBlocks={undefined} />,
         {
-          uiState: {
-            renderMarkdown: true,
-            streamingState: StreamingState.Idle,
-          },
+          turn: { streamingState: StreamingState.Idle },
         },
       );
 

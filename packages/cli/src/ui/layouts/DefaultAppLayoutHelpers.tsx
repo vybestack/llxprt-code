@@ -4,40 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { selectDialogOpen } from '../stores/dialog/dialogStore.js';
 import React from 'react';
-import { Box } from 'ink';
-import type {
-  MessageBus,
-  IdeContext,
-  ThoughtSummary,
-  ApprovalMode,
-} from '@vybestack/llxprt-code-core';
-import type {
-  StreamingState,
-  HistoryItem,
-  ConsoleMessageItem,
-} from '../types.js';
-import type { SlashCommandRuntime, UiRuntime } from '../cliUiRuntime.js';
-import type { QueuedSubmission } from '../hooks/agentStream/types.js';
+import { Box, type DOMElement } from 'ink';
+import type { HistoryItem, HistoryItemWithoutId } from '../types.js';
+import type { SlashCommandRuntime } from '../cliUiRuntime.js';
 import type { LoadedSettings } from '../../config/settings.js';
-import type { UpdateObject } from '../utils/updateCheck.js';
-import type { UIState } from '../contexts/UIStateContext.js';
-import type { UIActions } from '../contexts/UIActionsContext.js';
 import { OverflowProvider } from '../contexts/OverflowContext.js';
-import { getCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
-import { themeManager } from '../themes/theme-manager.js';
 import type { SlashCommand } from '../commands/types.js';
+import { useDialogStore } from '../stores/dialog/DialogContext.js';
+import { useStoreSelector } from '../stores/useStoreSelector.js';
+import type { DialogState } from '../stores/dialog/dialogStore.js';
 
 import { AppHeader } from '../components/AppHeader.js';
 import { HistoryItemDisplay } from '../components/HistoryItemDisplay.js';
 import { ShowMoreLines } from '../components/ShowMoreLines.js';
-import { Notifications } from '../components/Notifications.js';
-import { TodoPanel } from '../components/TodoPanel.js';
-import { QueuedMessagesPanel } from '../components/QueuedMessagesPanel.js';
 import { Footer } from '../components/Footer.js';
-import { DialogManager } from '../components/DialogManager.js';
-import { BucketAuthConfirmation } from '../components/BucketAuthConfirmation.js';
-import { InlineContent } from './InlineContent.js';
 
 export type { ScrollableMainContentItem } from './scrollableMainContent.js';
 export {
@@ -47,91 +29,21 @@ export {
 } from './scrollableMainContent.js';
 import type { ScrollableMainContentItem } from './scrollableMainContent.js';
 
-export function hasActiveDialog(uiState: UIState): boolean {
-  const dialogFlags = [
-    uiState.showWorkspaceMigrationDialog,
-    uiState.shouldShowIdePrompt,
-    uiState.isFolderTrustDialogOpen,
-    uiState.isWelcomeDialogOpen,
-    uiState.isPermissionsDialogOpen,
-    Boolean(uiState.confirmationRequest),
-    uiState.isThemeDialogOpen,
-    uiState.isSettingsDialogOpen,
-    uiState.isAuthDialogOpen,
-    uiState.isOAuthCodeDialogOpen,
-    uiState.isEditorDialogOpen,
-    uiState.isProviderDialogOpen,
-    uiState.isLoadProfileDialogOpen,
-    uiState.isCreateProfileDialogOpen,
-    uiState.isProfileListDialogOpen,
-    uiState.isProfileDetailDialogOpen,
-    uiState.isProfileEditorDialogOpen,
-    uiState.isToolsDialogOpen,
-    uiState.isLoggingDialogOpen,
-    uiState.isSubagentDialogOpen,
-    uiState.isModelsDialogOpen,
-    uiState.isSessionBrowserDialogOpen,
-    uiState.isModelConfigDialogOpen,
-    uiState.isPoliciesDialogOpen,
-    uiState.showPrivacyNotice,
-  ];
-  return dialogFlags.some(Boolean);
+/**
+ * True when any dialog currently owns the input surface. All dialog kinds
+ * live in the DialogStore, so this is purely a store read.
+ */
+function hasOpenDialog(state: DialogState): boolean {
+  return (
+    state.requests.length > 0 ||
+    state.confirmationRequest !== null ||
+    state.confirmUpdateLlxprtExtensionRequests.length > 0
+  );
 }
 
-export interface LayoutSettings {
-  showTodoPanelSetting: boolean;
-  hideContextSummary: boolean;
-  hideFooter: boolean;
-  showMemoryUsage: boolean;
-  disableLoadingPhrases: boolean;
-  currentThemeName: string;
-  isNarrow: boolean;
-  useAlternateBuffer: boolean;
-  debugConsoleMaxHeight: number;
-  staticAreaMaxItemHeight: number;
-  effectiveAvailableHeight: number;
-}
-
-export function useLayoutSettings(
-  config: UiRuntime,
-  settings: LoadedSettings,
-  availableTerminalHeight: number,
-  terminalHeight: number,
-  constrainHeight: boolean,
-  uiAvailableTerminalHeight: number,
-  isNarrow: boolean,
-): LayoutSettings {
-  const showTodoPanelSetting = settings.merged.ui.showTodoPanel ?? true;
-  const hideContextSummary = settings.merged.ui.hideContextSummary ?? false;
-  const hideFooter = settings.merged.ui.hideFooter ?? false;
-  const showMemoryUsage =
-    config.app.getDebugMode() || (settings.merged.ui.showMemoryUsage ?? false);
-  const disableLoadingPhrases =
-    config.app.getAccessibility().disableLoadingPhrases === true ||
-    config.app.getScreenReader();
-  const currentThemeName = themeManager.getActiveTheme().name;
-  const useAlternateBuffer =
-    settings.merged.ui.useAlternateBuffer === true &&
-    !config.app.getScreenReader();
-  const debugConsoleMaxHeight = Math.floor(Math.max(terminalHeight * 0.2, 5));
-  const staticAreaMaxItemHeight = Math.max(terminalHeight * 4, 100);
-  const effectiveAvailableHeight = constrainHeight
-    ? uiAvailableTerminalHeight
-    : availableTerminalHeight;
-
-  return {
-    showTodoPanelSetting,
-    hideContextSummary,
-    hideFooter,
-    showMemoryUsage,
-    disableLoadingPhrases,
-    currentThemeName,
-    isNarrow,
-    useAlternateBuffer,
-    debugConsoleMaxHeight,
-    staticAreaMaxItemHeight,
-    effectiveAvailableHeight,
-  };
+export function useHasActiveDialog(): boolean {
+  const store = useDialogStore();
+  return useStoreSelector(store.store, hasOpenDialog);
 }
 
 function useHistoryItemDisplayProps(
@@ -270,7 +182,7 @@ export function useStaticItems(
 }
 
 export function usePendingItems(
-  uiState: UIState,
+  pendingHistoryItems: HistoryItemWithoutId[],
   config: SlashCommandRuntime,
   mainAreaWidth: number,
   constrainHeight: boolean,
@@ -288,10 +200,15 @@ export function usePendingItems(
     activeShellPtyId,
     embeddedShellFocused,
   );
+  const dialogStore = useDialogStore();
+  const editorDialogOpen = useStoreSelector(
+    dialogStore.store,
+    (state: DialogState) => selectDialogOpen(state, 'editor'),
+  );
 
   return React.useMemo(
     () =>
-      uiState.pendingHistoryItems.map((item, i) => (
+      pendingHistoryItems.map((item, i) => (
         <HistoryItemDisplay
           key={i}
           {...base}
@@ -300,21 +217,22 @@ export function usePendingItems(
           }
           item={{ ...item, id: 0 }}
           isPending={true}
-          isFocused={!uiState.isEditorDialogOpen}
+          isFocused={!editorDialogOpen}
         />
       )),
     [
-      uiState.pendingHistoryItems,
+      pendingHistoryItems,
       base,
       constrainHeight,
       effectiveAvailableHeight,
-      uiState.isEditorDialogOpen,
+      editorDialogOpen,
     ],
   );
 }
 
 export function usePendingElement(
-  uiState: UIState,
+  pendingHistoryItems: HistoryItemWithoutId[],
+  pendingHistoryItemRef: React.RefObject<DOMElement | null>,
   config: SlashCommandRuntime,
   mainAreaWidth: number,
   constrainHeight: boolean,
@@ -325,7 +243,7 @@ export function usePendingElement(
   embeddedShellFocused: boolean,
 ): React.ReactElement {
   const pendingItems = usePendingItems(
-    uiState,
+    pendingHistoryItems,
     config,
     mainAreaWidth,
     constrainHeight,
@@ -339,17 +257,21 @@ export function usePendingElement(
   return React.useMemo(
     () => (
       <OverflowProvider>
-        <Box ref={uiState.pendingHistoryItemRef} flexDirection="column">
+        <Box ref={pendingHistoryItemRef} flexDirection="column">
           {pendingItems}
           <ShowMoreLines constrainHeight={constrainHeight} />
         </Box>
       </OverflowProvider>
     ),
-    [uiState.pendingHistoryItemRef, pendingItems, constrainHeight],
+    [pendingHistoryItemRef, pendingItems, constrainHeight],
   );
 }
 
-export function useScrollableContent(
+/**
+ * Center column of the scrollable layout: app header, pending overlay and
+ * the virtualized list built from them.
+ */
+function useScrollableCenterItems(
   config: SlashCommandRuntime,
   settings: LoadedSettings,
   version: string,
@@ -360,7 +282,9 @@ export function useScrollableContent(
   constrainHeight: boolean,
   effectiveAvailableHeight: number,
   showTodoPanelSetting: boolean,
-  uiState: UIState,
+  history: HistoryItem[],
+  pendingHistoryItems: HistoryItemWithoutId[],
+  pendingHistoryItemRef: React.RefObject<DOMElement | null>,
   slashCommands: readonly SlashCommand[] | undefined,
   activeShellPtyId: number | null,
   embeddedShellFocused: boolean,
@@ -379,7 +303,8 @@ export function useScrollableContent(
   );
 
   const pendingElement = usePendingElement(
-    uiState,
+    pendingHistoryItems,
+    pendingHistoryItemRef,
     config,
     mainAreaWidth,
     constrainHeight,
@@ -390,15 +315,53 @@ export function useScrollableContent(
     embeddedShellFocused,
   );
 
-  const listItems = useListItems(
+  return useListItems(
     headerElement,
     pendingElement,
-    uiState.history,
+    history,
     config,
     mainAreaWidth,
     staticAreaMaxItemHeight,
     slashCommands,
     showTodoPanelSetting,
+    activeShellPtyId,
+    embeddedShellFocused,
+  );
+}
+
+export function useScrollableContent(
+  config: SlashCommandRuntime,
+  settings: LoadedSettings,
+  version: string,
+  nightly: boolean,
+  terminalWidth: number,
+  mainAreaWidth: number,
+  staticAreaMaxItemHeight: number,
+  constrainHeight: boolean,
+  effectiveAvailableHeight: number,
+  showTodoPanelSetting: boolean,
+  history: HistoryItem[],
+  pendingHistoryItems: HistoryItemWithoutId[],
+  pendingHistoryItemRef: React.RefObject<DOMElement | null>,
+  slashCommands: readonly SlashCommand[] | undefined,
+  activeShellPtyId: number | null,
+  embeddedShellFocused: boolean,
+) {
+  const listItems = useScrollableCenterItems(
+    config,
+    settings,
+    version,
+    nightly,
+    terminalWidth,
+    mainAreaWidth,
+    staticAreaMaxItemHeight,
+    constrainHeight,
+    effectiveAvailableHeight,
+    showTodoPanelSetting,
+    history,
+    pendingHistoryItems,
+    pendingHistoryItemRef,
+    slashCommands,
     activeShellPtyId,
     embeddedShellFocused,
   );
@@ -409,7 +372,7 @@ export function useScrollableContent(
     version,
     nightly,
     terminalWidth,
-    uiState.history,
+    history,
     mainAreaWidth,
     staticAreaMaxItemHeight,
     slashCommands,
@@ -419,7 +382,7 @@ export function useScrollableContent(
   );
 
   const pendingItems = usePendingItems(
-    uiState,
+    pendingHistoryItems,
     config,
     mainAreaWidth,
     constrainHeight,
@@ -434,6 +397,7 @@ export function useScrollableContent(
 }
 
 export interface FooterProps {
+  isTrustedFolder: boolean;
   config: SlashCommandRuntime;
   settings: LoadedSettings;
   hideFooter: boolean;
@@ -499,7 +463,7 @@ export function FooterSection(props: FooterProps) {
       nightly={nightly}
       vimMode={vimModeEnabled ? vimMode : undefined}
       contextLimit={contextLimit}
-      isTrustedFolder={config.isTrustedFolder()}
+      isTrustedFolder={props.isTrustedFolder}
       tokensPerMinute={tokenMetrics.tokensPerMinute}
       throttleWaitTimeMs={tokenMetrics.throttleWaitTimeMs}
       sessionTokenTotal={tokenMetrics.sessionTokenTotal}
@@ -507,173 +471,6 @@ export function FooterSection(props: FooterProps) {
       hideSandboxStatus={settings.merged.hideSandboxStatus}
       hideModelInfo={settings.merged.hideModelInfo}
       themeName={currentThemeName}
-    />
-  );
-}
-
-export interface MainControlsProps {
-  config: SlashCommandRuntime;
-  settings: LoadedSettings;
-  startupWarnings: string[];
-  updateInfo: UpdateObject | null;
-  history: HistoryItem[];
-  inputWidth: number;
-  isTodoPanelCollapsed: boolean;
-  isQueuedMessagesPanelCollapsed: boolean;
-  queuedSubmissions: readonly QueuedSubmission[];
-  showTodoPanelSetting: boolean;
-  dialogsVisible: boolean;
-  hideContextSummary: boolean;
-  hideFooter: boolean;
-  showMemoryUsage: boolean;
-  currentThemeName: string;
-  nightly: boolean;
-  constrainHeight: boolean;
-  debugConsoleMaxHeight: number;
-  effectiveAvailableHeight: number;
-  disableLoadingPhrases: boolean;
-  streamingState: StreamingState;
-  thought: ThoughtSummary | null;
-  currentLoadingPhrase: string | undefined;
-  elapsedTime: number;
-  isNarrow: boolean;
-  ctrlCPressedOnce: boolean;
-  ctrlDPressedOnce: boolean;
-  showEscapePrompt: boolean;
-  ideContextState: IdeContext | undefined;
-  llxprtMdFileCount: number;
-  coreMemoryFileCount: number;
-  contextFileNames: string[];
-  showToolDescriptions: boolean;
-  showAutoAcceptIndicator: ApprovalMode;
-  shellModeActive: boolean;
-  showErrorDetails: boolean;
-  consoleMessages: ConsoleMessageItem[];
-  isInputActive: boolean;
-  vimModeEnabled: boolean;
-  vimMode: string | undefined;
-  currentModel: string;
-  currentModelLabel?: string;
-  contextLimit: number | undefined;
-  branchName: string | undefined;
-  branchIsDirty: boolean;
-  debugMessage: string;
-  errorCount: number;
-  historyTokenCount: number;
-  tokenMetrics: {
-    tokensPerMinute: number;
-    throttleWaitTimeMs: number;
-    sessionTokenTotal: number;
-  };
-  uiActions: UIActions;
-  terminalWidth: number;
-  onSuggestionsVisibilityChange: (visible: boolean) => void;
-}
-
-export function MainControls(props: MainControlsProps) {
-  const { dialogsVisible, hideFooter } = props;
-
-  return (
-    <>
-      <NotificationsSection {...props} />
-      <TodoPanelSection
-        showTodoPanelSetting={props.showTodoPanelSetting}
-        inputWidth={props.inputWidth}
-        isTodoPanelCollapsed={props.isTodoPanelCollapsed}
-      />
-      <QueuedMessagesPanelSection
-        inputWidth={props.inputWidth}
-        isQueuedMessagesPanelCollapsed={props.isQueuedMessagesPanelCollapsed}
-        queuedSubmissions={props.queuedSubmissions}
-      />
-      <BucketAuthSection dialogsVisible={dialogsVisible} />
-      {dialogsVisible ? (
-        <DialogManager
-          config={props.config}
-          settings={props.settings}
-          addItem={props.uiActions.addItem}
-          terminalWidth={props.terminalWidth}
-        />
-      ) : (
-        <InlineContent {...props} />
-      )}
-      <FooterSection
-        config={props.config}
-        settings={props.settings}
-        hideFooter={hideFooter}
-        showMemoryUsage={props.showMemoryUsage}
-        currentThemeName={props.currentThemeName}
-        nightly={props.nightly}
-        vimModeEnabled={props.vimModeEnabled}
-        vimMode={props.vimMode}
-        currentModel={props.currentModel}
-        currentModelLabel={props.currentModelLabel}
-        contextLimit={props.contextLimit}
-        branchName={props.branchName}
-        branchIsDirty={props.branchIsDirty}
-        debugMessage={props.debugMessage}
-        errorCount={props.errorCount}
-        showErrorDetails={props.showErrorDetails}
-        historyTokenCount={props.historyTokenCount}
-        tokenMetrics={props.tokenMetrics}
-      />
-    </>
-  );
-}
-
-function NotificationsSection(props: MainControlsProps) {
-  return (
-    <Notifications
-      startupWarnings={props.startupWarnings}
-      updateInfo={props.updateInfo}
-      history={props.history}
-    />
-  );
-}
-
-function TodoPanelSection({
-  showTodoPanelSetting,
-  inputWidth,
-  isTodoPanelCollapsed,
-}: {
-  showTodoPanelSetting: boolean;
-  inputWidth: number;
-  isTodoPanelCollapsed: boolean;
-}) {
-  if (!showTodoPanelSetting) {
-    return null;
-  }
-  return <TodoPanel width={inputWidth} collapsed={isTodoPanelCollapsed} />;
-}
-
-function QueuedMessagesPanelSection({
-  inputWidth,
-  isQueuedMessagesPanelCollapsed,
-  queuedSubmissions,
-}: {
-  inputWidth: number;
-  isQueuedMessagesPanelCollapsed: boolean;
-  queuedSubmissions: readonly QueuedSubmission[];
-}) {
-  if (queuedSubmissions.length === 0) {
-    return null;
-  }
-  return (
-    <QueuedMessagesPanel
-      width={inputWidth}
-      collapsed={isQueuedMessagesPanelCollapsed}
-      messages={queuedSubmissions}
-    />
-  );
-}
-
-function BucketAuthSection({ dialogsVisible }: { dialogsVisible: boolean }) {
-  return (
-    <BucketAuthConfirmation
-      messageBus={
-        (getCliRuntimeContext() as { messageBus?: MessageBus }).messageBus
-      }
-      isFocused={!dialogsVisible}
     />
   );
 }

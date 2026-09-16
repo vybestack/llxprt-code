@@ -12,7 +12,7 @@ The provider-agnostic conversation model — `IContent` / `ContentBlock` in `pac
 
 - **Neutral type layer:** `packages/core/src/llm-types/` — the new `ModelOutput` / `ModelStreamChunk` envelope, finish-reason union + provider mappers, `JsonSchema`, `ToolDeclaration` / `ToolChoice`, `ToolCallRequest`, `ToolResultContent` + conversion rules, neutral request types, `ReasoningConfig`, `ProviderApiError`, count/embed types, and grounding/citation types.
 - **Exported from the core package:** `@vybestack/llxprt-code-core` re-exports the barrel (`packages/core/src/index.ts` → `export * from './llm-types/index.js'`), and the dedicated subpath `@vybestack/llxprt-code-core/llm-types/index.js` is declared in `packages/core/package.json`.
-- **Gemini boundary:** `packages/providers/src/gemini/**` is the only source subtree permitted to import `@google/genai`. Its `neutralConverters.ts` module contains additive lossless converters for fileData/MediaBlock-url, executableCode/codeExecutionResult, finish reasons, usage, grounding, `ApiError` to `ProviderApiError`, and `toolDeclarationsToGemini`.
+- **Gemini boundary:** `packages/providers/src/gemini/**` is the only source subtree permitted to import `@google/genai`. Its `neutralConverters.ts` module was deleted in #2234 as dead code: it had zero production importers and only its own tests referenced it. Those converters no longer exist, reducing the Gemini subtree's `@google/genai` surface.
 
 ## Anti-regression rule
 
@@ -108,7 +108,7 @@ The leaf packages migrate independently once core/agents/providers settle. Migra
 `dev-docs/genai-import-baseline.md` is the **#2352 ratchet baseline**: the generated inventory of every tracked `@google/genai` importer, each classified to the issue that removes it. The count may only ever DECREASE as #2348–#2351 land. `scripts/genai-import-inventory.ts --check` regenerates the table in memory and diffs against the checked-in baseline; any drift (a new importer, an unclassified path, or a reclassification) exits non-zero. When #2352 completes:
 
 - Only `packages/providers/src/gemini/**` may import `@google/genai`. Every other importer has been migrated or deleted.
-- **`ContentConverters.ts`** (`packages/core/src/services/history/`) — a pre-existing importer that sits outside the end-state enclaves — moves out of `services/history` into an enclave (Google conversion living in a history service is misleading), or is deleted if fully superseded by the additive lossless helpers in `packages/providers/src/gemini/neutralConverters.ts`.
+- **`ContentConverters.ts`** (`packages/core/src/services/history/`), a pre-existing importer outside the end-state enclaves, moves out of `services/history` into an enclave (Google conversion living in a history service is misleading), or is deleted if dead or replaced by live neutral helpers where they actually exist. `packages/providers/src/gemini/neutralConverters.ts` was deleted in #2234 and is not a supersession path; supersession of `ContentConverters.ts` must be judged independently.
 - **Among workspace manifests, only `@vybestack/llxprt-code-providers` declares `@google/genai`.** The root `package.json` keeps the published-artifact packaging bridge.
 
 ## How to use the new types
