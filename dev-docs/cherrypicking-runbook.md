@@ -472,9 +472,4 @@ Open a PR against `main` that:
 
 ## Troubleshooting Notes
 
-- If `npm run typecheck` fails in a workspace due to stale `@vybestack/llxprt-code-core` types after core changes, run:
-  ```bash
-  npm run build --workspace @vybestack/llxprt-code-core
-  ```
-
-Then rerun `npm run typecheck`.
+- `npm run typecheck` now regenerates workspace declarations (`npm run build:types`) before the workspace checks without removing compiled JavaScript, so a following `npm run test` keeps passing on a built checkout (issue #3536). Rerun `npm run typecheck` to clear stale-declaration failures. A failure that persists reflects current source, not stale output. Warning: on a checkout that has never been built, `npm run typecheck` first generates declaration-only output under `packages/*/dist` (no compiled JavaScript), so a following `npm run test` fails on dist-mapped imports until `npm run build` runs.
