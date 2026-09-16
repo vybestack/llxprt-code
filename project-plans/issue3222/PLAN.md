@@ -176,3 +176,14 @@ Full verification cycle from root, all green:
 Review agent note: deepthinker/reviewer/architect unavailable (provider rate
 limits); adversarial review performed by tscoder-zai with tscoder-flash as
 independent second opinion. Two review rounds total, per policy cap.
+
+## Shipped (2026-09-16)
+
+PR #3705 (branch issue3222): commit b70307228 (implementation, 60 files)
++ 19a67c4c9 (CodeRabbit triage: fixture Config disposal, mock settings
+source, orchestrator failure-path ownedConfig). CI green on both commits
+(39 pass / 0 fail / 3 expected skips, incl. CodeRabbit + LLxprt review).
+All 3 CodeRabbit threads resolved with triage evidence (CR-3 success
+paths rejected on HEAD parity — pre-existing, documented in-thread and
+offered a follow-up issue). Merge awaiting explicit user approval per
+standing policy.
