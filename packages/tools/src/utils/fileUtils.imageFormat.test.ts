@@ -346,9 +346,26 @@ describe('processSingleFileContent image format normalization (#3693)', () => {
       );
     });
 
-    it('replaces an ICO file (sharp cannot decode ICO)', async () => {
+    it('replaces a BMP whose pixel offset points inside its headers', async () => {
+      // bfOffBits sits at offset 10; valid files point it at 54 (file header
+      // + info header). Declaring it inside that header block would make the
+      // pixel array overlap the headers, so the decoder must reject it.
+      const bmp = makeBmp();
+      bmp.writeUInt32LE(20, 10);
+      const filePath = await writeFixture(getDir(), 'bad-offset.bmp', bmp);
+
+      const result = await processSingleFileContent(filePath, getDir());
+
+      expect(result.llmContent).toBe(
+        'Cannot display content of binary file: bad-offset.bmp',
+      );
+    });
+
+    it('replaces an ICO whose bytes sharp cannot decode', async () => {
       // Valid ICO directory header pointing at 16x16 32-bit BMP data, but the
-      // payload bytes are zero — no decoder accepts it.
+      // payload bytes are zero. The zeroed payload makes these specific bytes
+      // undecodable, so the file degrades to the binary placeholder; the case
+      // does not claim anything about sharp's ICO support for valid files.
       const ico = Buffer.alloc(22 + 40, 0);
       ico.writeUInt16LE(0, 0);
       ico.writeUInt16LE(1, 2);

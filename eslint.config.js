@@ -678,7 +678,7 @@ export default tseslint.config(
   // CI lint runs never visited the file). The #3693 branch does not modify
   // the file, but its full-repo verification lint must run green, so
   // max-lines is raised to 900 to preserve the pre-existing state, matching
-  // the #3240 precedent. A proper split remains to be tracked.
+  // the #3504 precedent. A proper split remains to be tracked.
   // ============================================================================
   {
     files: ['packages/providers/src/openai/OpenAIStreamProcessor.ts'],

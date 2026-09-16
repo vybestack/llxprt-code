@@ -47,6 +47,9 @@ export function decodeBmpToRawRgb(content: Buffer): BmpRawImage | null {
   if (headerSize < BITMAPINFOHEADER_SIZE || planes !== 1) {
     return null;
   }
+  if (pixelOffset < BMP_FILE_HEADER_SIZE + headerSize) {
+    return null;
+  }
   if (bitsPerPixel !== 24 && bitsPerPixel !== 32) {
     return null;
   }
