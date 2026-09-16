@@ -296,21 +296,6 @@ describe('ReadManyFilesTool real behavioral filtering', () => {
           0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
         ]),
     },
-    {
-      name: 'unsupported',
-      extension: 'tiff',
-      create: async () =>
-        sharp({
-          create: {
-            width: 200,
-            height: 100,
-            channels: 3,
-            background: { r: 20, g: 40, b: 60 },
-          },
-        })
-          .tiff()
-          .toBuffer(),
-    },
   ])(
     'returns a clear ToolResult error for $name image resizing',
     async (fixture) => {
@@ -330,6 +315,35 @@ describe('ReadManyFilesTool real behavioral filtering', () => {
       expect(result.returnDisplay).toContain('Image Resize Error');
     },
   );
+
+  it('transcodes a tiff to png and resizes it instead of erroring (#3693)', async () => {
+    // Before #3693 a tiff under a resize policy failed with "resizing does
+    // not support image/tiff source"; the ingest transcode now normalizes it
+    // to png first, so the shared resize path handles it.
+    const tiff = await sharp({
+      create: {
+        width: 200,
+        height: 100,
+        channels: 3,
+        background: { r: 20, g: 40, b: 60 },
+      },
+    })
+      .tiff()
+      .toBuffer();
+    writeFileSync(join(tempDir, 'unsupported.tiff'), tiff);
+    const host = createHostWithSettings(tempDir, {
+      'image-resize.maxLongEdge': 50,
+    });
+
+    const result = await new ReadManyFilesTool(host).execute({
+      paths: ['unsupported.tiff'],
+    });
+
+    expect(result.error).toBeUndefined();
+    const metadata = await sharp(findInlineImage(result)).metadata();
+    expect(metadata.format).toBe('png');
+    expect(metadata.autoOrient).toStrictEqual({ width: 50, height: 25 });
+  });
 
   it('skips an image whose estimate exceeds tool-output-max-tokens under the new estimator', async () => {
     // Any image under the default family costs DEFAULT_IMAGE_TOKEN_ESTIMATE
