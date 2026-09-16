@@ -25,6 +25,7 @@ import {
 import {
   computeModelDefaults,
   extractProviderBaseUrl,
+  updateActiveProviderBaseUrl,
 } from './providerMutations.js';
 import {
   loadProviderAliasEntries,
@@ -325,20 +326,21 @@ function clearEphemeralsForSwitch(
 
 function activateProviderContext(context: ProviderSwitchContext): void {
   const { name, config, providerManager } = context;
+  // Runtime cache update only — ProviderManager never persists (#2534 C1).
   void providerManager.setActiveProvider(name);
   configureProviderRuntimeFactories(config, providerManager);
-  config.setProvider(name);
-  logger.debug(() => `[cli-runtime] set config provider=${name}`);
+  // Single store write: settings global 'activeProvider' via the config
+  // ephemeral transition. config.setProvider() delegates to this same store,
+  // so a second write there (or in settingsService.switchProvider) would be a
+  // duplicate of the same key, not a distinct scope.
   config.setEphemeralSetting('activeProvider', name);
   logger.debug(
     () =>
-      `[cli-runtime] config ephemeral activeProvider=${config.getEphemeralSetting('activeProvider')}`,
+      `[cli-runtime] settings activeProvider=${config.getEphemeralSetting('activeProvider')}`,
   );
 }
 
-async function switchSettingsProvider(
-  context: ProviderSwitchContext,
-): Promise<void> {
+function switchSettingsProvider(context: ProviderSwitchContext): void {
   const { name, settingsService, providerManager } = context;
   const activeProvider = providerManager.getActiveProvider();
   const providerSettings = getProviderSettingsSnapshot(settingsService, name);
@@ -347,11 +349,10 @@ async function switchSettingsProvider(
     settingsService.setProviderSetting(name, key, undefined);
   }
 
-  await settingsService.switchProvider(name);
-  logger.debug(
-    () =>
-      `[cli-runtime] settingsService activeProvider now=${settingsService.get('activeProvider')}`,
-  );
+  // The 'activeProvider' store write happened once in
+  // activateProviderContext; settingsService.switchProvider would only repeat
+  // it (#2534 C1). The param wipe above (#2626) stays: it clears the target
+  // provider's stale model params so its defaults can apply.
 
   context.activeProvider = activeProvider;
   context.providerForBaseUrl = getProviderForBaseUrl(context);
@@ -411,18 +412,6 @@ function resolveProviderBaseUrlFromProvider(
   return extractProviderBaseUrl(context.providerForBaseUrl);
 }
 
-function applyProviderBaseUrlSettings(
-  context: ProviderSwitchContext,
-  finalBaseUrl: string | undefined,
-): void {
-  context.config.setEphemeralSetting('base-url', finalBaseUrl);
-  context.settingsService.setProviderSetting(
-    context.name,
-    'base-url',
-    finalBaseUrl,
-  );
-}
-
 function applyAliasProviderSettings(context: ProviderSwitchContext): void {
   const aliasConfig = context.aliasConfig;
   if (aliasConfig?.['sandbox-base-url']) {
@@ -471,7 +460,9 @@ function applyModelSettings(
   context.config.setModel(modelToApply);
 }
 
-function resolveProviderBaseUrl(context: ProviderSwitchContext): void {
+async function resolveProviderBaseUrl(
+  context: ProviderSwitchContext,
+): Promise<void> {
   const { providerSettingsBefore, storedModelSetting, storedBaseUrlSetting } =
     getProviderSettingsAndStoredValues(context);
   const { explicitConfigModel, explicitConfigBaseUrl } =
@@ -488,7 +479,12 @@ function resolveProviderBaseUrl(context: ProviderSwitchContext): void {
       : undefined);
   const finalBaseUrl = explicitBaseUrl ?? providerBaseUrl ?? undefined;
 
-  applyProviderBaseUrlSettings(context, finalBaseUrl);
+  // Single mutation path (#2534 C4): activateProviderContext already wrote
+  // this provider into the activeProvider store and the ProviderManager
+  // cache, so the canonical mutation resolves to context.name here. Its
+  // result message is intentionally discarded — the switch cascade reports
+  // through its own infoMessages.
+  await updateActiveProviderBaseUrl(finalBaseUrl ?? null);
   applyAliasProviderSettings(context);
 
   context.modelToApply = resolveModelToApply(
@@ -905,8 +901,8 @@ export async function switchActiveProvider(
 
   clearPreviousProviderSettings(context);
   activateProviderContext(context);
-  await switchSettingsProvider(context);
-  resolveProviderBaseUrl(context);
+  switchSettingsProvider(context);
+  await resolveProviderBaseUrl(context);
   await handleClaudeCodeOAuth(context);
   applyClaudeCodeOAuthDefaults(context);
   applyAliasEphemeralSettings(context);

@@ -431,22 +431,22 @@ export async function setActiveModel(
     settingsService,
     activeProvider.name,
   );
+  // #2534 Domain C2: read the previous model from the store this
+  // transition owns (Config.getModel reads providers[P].model first, the
+  // same store Config.setModel writes). Preferring the provider settings
+  // snapshot goes stale across consecutive transitions because the
+  // collapsed flow no longer duplicates the model write through
+  // SettingsService.updateSettings; a stale previous model skips the
+  // leaving-model default restoration in recomputeAndApplyModelDefaultsDiff.
   const previousModel =
-    (providerSettings.model as string | undefined) ?? config.getModel();
+    config.getModel() || (providerSettings.model as string | undefined);
 
   const authRefreshed = false;
-  try {
-    settingsService.set('activeProvider', activeProvider.name);
-    await settingsService.updateSettings(activeProvider.name, {
-      model: modelName,
-    });
-  } catch (error) {
-    logger.warn(
-      () =>
-        `[cli-runtime] Failed to persist model change via SettingsService: ${error}`,
-    );
-  }
-
+  // #2534 Domain C2: one transition. Config.setModel performs the single
+  // provider-scoped store write (providers[P].model) and maintains the
+  // contentGeneratorConfig.model projection. The removed duplicates
+  // (settingsService.set('activeProvider') + updateSettings) wrote the same
+  // store keys this transition owns.
   config.setModel(modelName);
 
   // Load alias config for the current provider to apply model defaults

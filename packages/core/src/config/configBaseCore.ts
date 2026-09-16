@@ -165,8 +165,16 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   protected readonly proxy: string | undefined;
   protected readonly cwd!: string;
   protected readonly bugCommand: BugCommandSettings | undefined;
-  protected model!: string;
   protected readonly originalModel!: string;
+  /**
+   * #2534 Domain C2: terminal fallback for Configs constructed without an
+   * active provider (pre-activation bootstrap, unit-test fixtures). It is NOT
+   * a second store: the provider-scoped settings store and the
+   * contentGeneratorConfig.model projection always win on read; this field is
+   * only consulted when both are absent, and only the constructor,
+   * setModel, and resetModelToDefault transitions write it.
+   */
+  protected model!: string;
   protected readonly extensionContextFilePaths!: string[];
   protected readonly noBrowser!: boolean;
   protected folderTrust!: boolean;
@@ -189,7 +197,6 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   protected onAuthErrorHandler?: OnAuthErrorHandler;
   // Track all potential tools for settings UI
   protected allPotentialTools: ToolRecord[] = [];
-  protected provider?: string;
   protected readonly summarizeToolOutput:
     | Record<string, SummarizeToolOutputSettings>
     | undefined;
@@ -777,11 +784,18 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   getExtensionEvents(): EventEmitter | undefined {
     return this.eventEmitter;
   }
+  /**
+   * #2534 Domain C1: the settings global 'activeProvider' key is the single
+   * active-provider store. Config is a reader/writer of that store, never an
+   * independent field owner.
+   */
   getProvider(): string | undefined {
-    return this.provider;
+    const value = this.settingsService.get('activeProvider');
+    return typeof value === 'string' && value !== '' ? value : undefined;
   }
+
   setProvider(provider: string): void {
-    this.provider = provider;
+    this.settingsService.set('activeProvider', provider);
   }
   getNoBrowser(): boolean {
     return this.noBrowser;

@@ -84,20 +84,10 @@ export function normalizeSubagentStreamingText(text: string): string {
 /**
  * Reads global + ephemeral settings to determine whether async subagents are
  * enabled. Returns an error `ToolResult` when disabled, otherwise `undefined`.
- *
- * Uses boundary-validation for `getSettingsService` because partial config
- * mocks omit the method even though the static `Config` type requires it.
  */
 export function checkAsyncSettings(config: Config): ToolResult | undefined {
-  const settingsService =
-    typeof config.getSettingsService === 'function'
-      ? config.getSettingsService()
-      : undefined;
-  const globalSettings =
-    settingsService &&
-    typeof settingsService.getAllGlobalSettings === 'function'
-      ? settingsService.getAllGlobalSettings()
-      : {};
+  const settingsService = config.getSettingsService();
+  const globalSettings = settingsService.getAllGlobalSettings();
   const subagentsSettings = globalSettings['subagents'] as
     | { asyncEnabled?: boolean; maxAsync?: number }
     | undefined;

@@ -77,6 +77,26 @@ const configStub = {
 
 const settingsServiceStub = {
   providerSettings: new Map<string, Record<string, unknown>>(),
+  // Mirrors the real SettingsService rollback primitives (#2534 C5); this
+  // stub has no mutable global surface, so only provider scopes round-trip.
+  exportForStateSnapshot() {
+    return {
+      global: {},
+      providers: structuredClone(Object.fromEntries(this.providerSettings)),
+    };
+  },
+  restoreFromStateSnapshot(snapshot: {
+    global: Record<string, unknown>;
+    providers: Record<string, Record<string, unknown>>;
+  }) {
+    void snapshot.global;
+    this.providerSettings = new Map(
+      Object.entries(snapshot.providers).map(([provider, settings]) => [
+        provider,
+        structuredClone(settings),
+      ]),
+    );
+  },
   getProviderSettings(providerName: string) {
     return (
       this.providerSettings.get(providerName) ??

@@ -12,6 +12,7 @@
  * whose declaration reflects the new skill set.
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { describe, it, expect } from 'bun:test';
 import {
   ACTIVATE_SKILL_TOOL_NAME,
@@ -92,7 +93,7 @@ class FakeSkillService implements ISkillService {
 }
 
 function createRegistry(): ToolRegistry {
-  return new ToolRegistry({}, messageBus);
+  return new ToolRegistry({}, messageBus, new SettingsService());
 }
 
 function activateSkillDeclaration(registry: ToolRegistry) {

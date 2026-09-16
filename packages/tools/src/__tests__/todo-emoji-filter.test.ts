@@ -11,13 +11,11 @@
 
 import { describe, it, expect } from 'bun:test';
 import { TodoPauseTool, TodoWriteTool, TodoReadTool } from '../index.js';
-import type {
-  IToolHost,
-  ITodoService,
-  TodoStore,
-} from '../interfaces/index.js';
-import type { Todo } from '../types/todo-schemas.js';
-import { executeToolForBehavioralAssertion } from './red-test-helpers.js';
+import {
+  createFakeTodoService,
+  createToolHostWithEmojiMode,
+  createToolHostWithEmptySettings,
+} from './todo-emoji-filter-helpers.js';
 
 const CHECK_MARK_EMOJI = '✅';
 const MEMO_EMOJI = '📝';
@@ -30,70 +28,6 @@ const CLEAN_TODO_ITEM = '[OK] Fix the bug in parser';
 // 📝 is decorative-only, gets stripped entirely
 const CLEAN_SUBTASK_ITEM = ' Write unit tests';
 
-/**
- * Minimal IToolHost stub. Only provides what TodoWrite needs.
- */
-function createToolHostWithEmojiMode(mode: string): IToolHost {
-  return {
-    getTargetDir: () => '/tmp',
-    getWorkspaceRoots: () => [],
-    getApprovalMode: () => 'default' as const,
-    setApprovalMode: () => {},
-    isInteractive: () => false,
-    hasFeatureFlag: () => false,
-    getFileService: () => ({
-      shouldGitIgnoreFile: () => false,
-      shouldLlxprtIgnoreFile: () => false,
-      shouldIgnoreFile: () => false,
-      filterFiles: (paths: string[]) => paths,
-    }),
-    getFileFilteringOptions: () => ({
-      respectGitIgnore: true,
-      respectLlxprtIgnore: true,
-    }),
-    getFileExclusions: () => [],
-    getReadManyFilesExclusions: () => [],
-    getFileFilteringRespectLlxprtIgnore: () => true,
-    getLlxprtIgnoreFilePath: () => null,
-    recordFileRead: () => {},
-    getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({ emojifilter: mode }),
-    getDebugMode: () => false,
-  };
-}
-
-function createToolHostWithEmptySettings() {
-  const host = createToolHostWithEmojiMode('');
-  host.getEphemeralSettings = () => ({});
-  return host;
-}
-
-function createFakeTodoService(
-  initialTodos: Todo[] = [],
-): ITodoService & { getStoredTodos: () => Todo[] } {
-  let todos = [...initialTodos];
-
-  const store: TodoStore = {
-    getTodos: () => todos,
-    setTodos: (newTodos: Todo[]) => {
-      todos = [...newTodos];
-    },
-  };
-
-  return {
-    getTodoStore: () => store,
-    getReminderService: () => ({
-      shouldGenerateReminder: () => false,
-      getReminderForStateChange: () => undefined,
-    }),
-    getContextTracker: () => ({
-      setActiveTodo: () => {},
-    }),
-    getDefaultAgentId: () => 'test-agent',
-    getStoredTodos: () => todos,
-  };
-}
-
 describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
   describe('auto mode: silently filters emojis from todo content', () => {
     it('filters emojis from todo content before storing', async () => {
@@ -101,9 +35,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('auto');
       const tool = new TodoWriteTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
-      });
+      const result = await tool
+        .build({
+          todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
       const stored = service.getStoredTodos();
@@ -117,16 +53,18 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('auto');
       const tool = new TodoWriteTool(service, host);
 
-      await executeToolForBehavioralAssertion(tool, {
-        todos: [
-          {
-            id: '1',
-            content: EMOJI_TODO_ITEM,
-            status: 'pending',
-            subtasks: [{ id: '1-1', content: EMOJI_SUBTASK_ITEM }],
-          },
-        ],
-      });
+      await tool
+        .build({
+          todos: [
+            {
+              id: '1',
+              content: EMOJI_TODO_ITEM,
+              status: 'pending',
+              subtasks: [{ id: '1-1', content: EMOJI_SUBTASK_ITEM }],
+            },
+          ],
+        })
+        .execute(new AbortController().signal);
 
       const stored = service.getStoredTodos();
       const subtask = stored[0].subtasks;
@@ -139,9 +77,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('auto');
       const tool = new TodoWriteTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
-      });
+      const result = await tool
+        .build({
+          todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
       expect(result.llmContent).not.toContain('system-reminder');
@@ -155,9 +95,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('warn');
       const tool = new TodoWriteTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
-      });
+      const result = await tool
+        .build({
+          todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
       const stored = service.getStoredTodos();
@@ -169,9 +111,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('warn');
       const tool = new TodoWriteTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
-      });
+      const result = await tool
+        .build({
+          todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
       expect(result.llmContent).toContain('system-reminder');
@@ -182,16 +126,18 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const service = createFakeTodoService();
       const host = createToolHostWithEmojiMode('warn');
       const tool = new TodoWriteTool(service, host);
-      await executeToolForBehavioralAssertion(tool, {
-        todos: [
-          {
-            id: '1',
-            content: 'Task without emoji',
-            status: 'pending',
-            subtasks: [{ id: '1-1', content: EMOJI_SUBTASK_ITEM }],
-          },
-        ],
-      });
+      await tool
+        .build({
+          todos: [
+            {
+              id: '1',
+              content: 'Task without emoji',
+              status: 'pending',
+              subtasks: [{ id: '1-1', content: EMOJI_SUBTASK_ITEM }],
+            },
+          ],
+        })
+        .execute(new AbortController().signal);
       const stored = service.getStoredTodos();
       const subtask = stored[0].subtasks;
       if (!subtask) throw new Error('Expected subtasks');
@@ -211,9 +157,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('error');
       const tool = new TodoWriteTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
-      });
+      const result = await tool
+        .build({
+          todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeDefined();
       expect(result.error?.message.toLowerCase()).toContain('emoji');
@@ -224,9 +172,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('error');
       const tool = new TodoWriteTool(service, host);
 
-      await executeToolForBehavioralAssertion(tool, {
-        todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
-      });
+      await tool
+        .build({
+          todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
+        })
+        .execute(new AbortController().signal);
 
       const stored = service.getStoredTodos();
       expect(stored.length).toBe(0);
@@ -237,11 +187,13 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('error');
       const tool = new TodoWriteTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [
-          { id: '1', content: 'Fix the bug in parser', status: 'pending' },
-        ],
-      });
+      const result = await tool
+        .build({
+          todos: [
+            { id: '1', content: 'Fix the bug in parser', status: 'pending' },
+          ],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
       expect(result.llmContent).toContain('Fix the bug in parser');
@@ -252,16 +204,18 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('error');
       const tool = new TodoWriteTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [
-          {
-            id: '1',
-            content: 'Clean task',
-            status: 'pending',
-            subtasks: [{ id: '1-1', content: EMOJI_SUBTASK_ITEM }],
-          },
-        ],
-      });
+      const result = await tool
+        .build({
+          todos: [
+            {
+              id: '1',
+              content: 'Clean task',
+              status: 'pending',
+              subtasks: [{ id: '1-1', content: EMOJI_SUBTASK_ITEM }],
+            },
+          ],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeDefined();
     });
@@ -273,9 +227,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('allowed');
       const tool = new TodoWriteTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
-      });
+      const result = await tool
+        .build({
+          todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
       const stored = service.getStoredTodos();
@@ -287,16 +243,18 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const service = createFakeTodoService();
       const host = createToolHostWithEmojiMode('allowed');
       const tool = new TodoWriteTool(service, host);
-      await executeToolForBehavioralAssertion(tool, {
-        todos: [
-          {
-            id: '1',
-            content: EMOJI_TODO_ITEM,
-            status: 'pending',
-            subtasks: [{ id: '1-1', content: EMOJI_SUBTASK_ITEM }],
-          },
-        ],
-      });
+      await tool
+        .build({
+          todos: [
+            {
+              id: '1',
+              content: EMOJI_TODO_ITEM,
+              status: 'pending',
+              subtasks: [{ id: '1-1', content: EMOJI_SUBTASK_ITEM }],
+            },
+          ],
+        })
+        .execute(new AbortController().signal);
       const stored = service.getStoredTodos();
       const subtask = stored[0].subtasks;
       if (!subtask) throw new Error('Expected subtasks');
@@ -313,9 +271,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('allowed');
       const tool = new TodoWriteTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
-      });
+      const result = await tool
+        .build({
+          todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.llmContent).not.toContain('system-reminder');
     });
@@ -328,11 +288,15 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const writeTool = new TodoWriteTool(service, host);
       const readTool = new TodoReadTool(service);
 
-      await executeToolForBehavioralAssertion(writeTool, {
-        todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
-      });
+      await writeTool
+        .build({
+          todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
+        })
+        .execute(new AbortController().signal);
 
-      const readResult = await executeToolForBehavioralAssertion(readTool, {});
+      const readResult = await readTool
+        .build({})
+        .execute(new AbortController().signal);
       expect(readResult.llmContent).toContain(CLEAN_TODO_ITEM);
       expect(readResult.llmContent).not.toContain(CHECK_MARK_EMOJI);
     });
@@ -343,9 +307,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const service = createFakeTodoService();
       const tool = new TodoWriteTool(service);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
-      });
+      const result = await tool
+        .build({
+          todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
       const stored = service.getStoredTodos();
@@ -361,9 +327,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
 
       const multiEmojiContent =
         CHECK_MARK_EMOJI + ' ' + STAR_EMOJI + ' Fix bugs and ship';
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [{ id: '1', content: multiEmojiContent, status: 'pending' }],
-      });
+      const result = await tool
+        .build({
+          todos: [{ id: '1', content: multiEmojiContent, status: 'pending' }],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
       const stored = service.getStoredTodos();
@@ -379,11 +347,17 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('warn');
       const tool = new TodoWriteTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [
-          { id: '1', content: 'Clean task without emojis', status: 'pending' },
-        ],
-      });
+      const result = await tool
+        .build({
+          todos: [
+            {
+              id: '1',
+              content: 'Clean task without emojis',
+              status: 'pending',
+            },
+          ],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
       expect(result.llmContent).not.toContain('system-reminder');
@@ -396,9 +370,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('auto');
       const tool = new TodoWriteTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [{ id: '1', content: 'No emojis here', status: 'pending' }],
-      });
+      const result = await tool
+        .build({
+          todos: [{ id: '1', content: 'No emojis here', status: 'pending' }],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
       const stored = service.getStoredTodos();
@@ -410,9 +386,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('warn');
       const tool = new TodoWriteTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
-      });
+      const result = await tool
+        .build({
+          todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
       expect(typeof result.returnDisplay).toBe('string');
@@ -427,16 +405,18 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('warn');
       const tool = new TodoWriteTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [
-          {
-            id: '1',
-            content: 'Clean parent task',
-            status: 'pending',
-            subtasks: [{ id: '1-1', content: EMOJI_SUBTASK_ITEM }],
-          },
-        ],
-      });
+      const result = await tool
+        .build({
+          todos: [
+            {
+              id: '1',
+              content: 'Clean parent task',
+              status: 'pending',
+              subtasks: [{ id: '1-1', content: EMOJI_SUBTASK_ITEM }],
+            },
+          ],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
       expect(result.llmContent).toContain('system-reminder');
@@ -457,9 +437,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmptySettings();
       const tool = new TodoWriteTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
-      });
+      const result = await tool
+        .build({
+          todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
       const stored = service.getStoredTodos();
@@ -474,9 +456,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('error');
       const tool = new TodoWriteTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
-      });
+      const result = await tool
+        .build({
+          todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeDefined();
       expect(service.getStoredTodos().length).toBe(0);
@@ -486,9 +470,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const service = createFakeTodoService();
       const tool = new TodoWriteTool(service);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
-      });
+      const result = await tool
+        .build({
+          todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
       expect(service.getStoredTodos()[0].content).toBe(EMOJI_TODO_ITEM);
@@ -500,9 +486,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
         const host = createToolHostWithEmojiMode('auto');
         const tool = new TodoWriteTool(service, host);
 
-        await executeToolForBehavioralAssertion(tool, {
-          todos: [{ id: '1', content: 'Plain task', status: 'pending' }],
-        });
+        await tool
+          .build({
+            todos: [{ id: '1', content: 'Plain task', status: 'pending' }],
+          })
+          .execute(new AbortController().signal);
 
         const stored = service.getStoredTodos();
         expect(stored.length).toBe(1);
@@ -517,16 +505,18 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
         const host = createToolHostWithEmojiMode('auto');
         const tool = new TodoWriteTool(service, host);
 
-        await executeToolForBehavioralAssertion(tool, {
-          todos: [
-            {
-              id: '1',
-              content: 'Parent task',
-              status: 'pending',
-              subtasks: [{ id: '1-1', content: 'Child task' }],
-            },
-          ],
-        });
+        await tool
+          .build({
+            todos: [
+              {
+                id: '1',
+                content: 'Parent task',
+                status: 'pending',
+                subtasks: [{ id: '1-1', content: 'Child task' }],
+              },
+            ],
+          })
+          .execute(new AbortController().signal);
 
         const stored = service.getStoredTodos();
         const subtasks = stored[0].subtasks;
@@ -540,9 +530,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
         const host = createToolHostWithEmojiMode('warn');
         const tool = new TodoWriteTool(service, host);
 
-        await executeToolForBehavioralAssertion(tool, {
-          todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
-        });
+        await tool
+          .build({
+            todos: [{ id: '1', content: EMOJI_TODO_ITEM, status: 'pending' }],
+          })
+          .execute(new AbortController().signal);
 
         const stored = service.getStoredTodos();
         expect(
@@ -557,24 +549,26 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
         const host = createToolHostWithEmojiMode('warn');
         const tool = new TodoWriteTool(service, host);
 
-        const result = await executeToolForBehavioralAssertion(tool, {
-          todos: [
-            {
-              id: '1',
-              content: EMOJI_TODO_ITEM,
-              status: 'pending',
-              subtasks: [{ id: '1-1', content: EMOJI_SUBTASK_ITEM }],
-            },
-            {
-              id: '2',
-              content: CHECK_MARK_EMOJI + ' Second task',
-              status: 'pending',
-              subtasks: [
-                { id: '2-1', content: MEMO_EMOJI + ' Another subtask' },
-              ],
-            },
-          ],
-        });
+        const result = await tool
+          .build({
+            todos: [
+              {
+                id: '1',
+                content: EMOJI_TODO_ITEM,
+                status: 'pending',
+                subtasks: [{ id: '1-1', content: EMOJI_SUBTASK_ITEM }],
+              },
+              {
+                id: '2',
+                content: CHECK_MARK_EMOJI + ' Second task',
+                status: 'pending',
+                subtasks: [
+                  { id: '2-1', content: MEMO_EMOJI + ' Another subtask' },
+                ],
+              },
+            ],
+          })
+          .execute(new AbortController().signal);
 
         expect(result.error).toBeUndefined();
         expect(result.llmContent).toContain('system-reminder');
@@ -593,33 +587,35 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
         const host = createToolHostWithEmojiMode('auto');
         const tool = new TodoWriteTool(service, host);
 
-        await executeToolForBehavioralAssertion(tool, {
-          todos: [
-            {
-              id: '1',
-              content: CHECK_MARK_EMOJI + ' Task with tool calls',
-              status: 'pending',
-              subtasks: [
-                {
-                  id: '1-1',
-                  content: MEMO_EMOJI + ' Subtask with tool call',
-                  toolCalls: [
-                    {
-                      id: 'tc-1',
-                      name: 'write_file',
-                      parameters: {
-                        file_path: '/some/path',
-                        content: CHECK_MARK_EMOJI + ' emoji in params',
-                        description: STAR_EMOJI + ' emoji in description',
+        await tool
+          .build({
+            todos: [
+              {
+                id: '1',
+                content: CHECK_MARK_EMOJI + ' Task with tool calls',
+                status: 'pending',
+                subtasks: [
+                  {
+                    id: '1-1',
+                    content: MEMO_EMOJI + ' Subtask with tool call',
+                    toolCalls: [
+                      {
+                        id: 'tc-1',
+                        name: 'write_file',
+                        parameters: {
+                          file_path: '/some/path',
+                          content: CHECK_MARK_EMOJI + ' emoji in params',
+                          description: STAR_EMOJI + ' emoji in description',
+                        },
+                        timestamp: new Date(),
                       },
-                      timestamp: new Date(),
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        });
+                    ],
+                  },
+                ],
+              },
+            ],
+          })
+          .execute(new AbortController().signal);
 
         const stored = service.getStoredTodos();
         expect(stored[0].content).not.toContain(CHECK_MARK_EMOJI);
@@ -645,29 +641,31 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
         const host = createToolHostWithEmojiMode('warn');
         const tool = new TodoWriteTool(service, host);
 
-        const result = await executeToolForBehavioralAssertion(tool, {
-          todos: [
-            {
-              id: '1',
-              content: 'Clean task',
-              status: 'pending',
-              subtasks: [
-                {
-                  id: '1-1',
-                  content: CHECK_MARK_EMOJI + ' Subtask',
-                  toolCalls: [
-                    {
-                      id: 'tc-1',
-                      name: 'shell',
-                      parameters: { command: 'echo ' + ROCKET_EMOJI },
-                      timestamp: new Date(),
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        });
+        const result = await tool
+          .build({
+            todos: [
+              {
+                id: '1',
+                content: 'Clean task',
+                status: 'pending',
+                subtasks: [
+                  {
+                    id: '1-1',
+                    content: CHECK_MARK_EMOJI + ' Subtask',
+                    toolCalls: [
+                      {
+                        id: 'tc-1',
+                        name: 'shell',
+                        parameters: { command: 'echo ' + ROCKET_EMOJI },
+                        timestamp: new Date(),
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          })
+          .execute(new AbortController().signal);
 
         expect(result.error).toBeUndefined();
         const stored = service.getStoredTodos();
@@ -685,29 +683,31 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
         const host = createToolHostWithEmojiMode('error');
         const tool = new TodoWriteTool(service, host);
 
-        const result = await executeToolForBehavioralAssertion(tool, {
-          todos: [
-            {
-              id: '1',
-              content: 'Clean task',
-              status: 'pending',
-              subtasks: [
-                {
-                  id: '1-1',
-                  content: 'Clean subtask',
-                  toolCalls: [
-                    {
-                      id: 'tc-1',
-                      name: 'shell',
-                      parameters: { command: 'echo ' + ROCKET_EMOJI },
-                      timestamp: new Date(),
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        });
+        const result = await tool
+          .build({
+            todos: [
+              {
+                id: '1',
+                content: 'Clean task',
+                status: 'pending',
+                subtasks: [
+                  {
+                    id: '1-1',
+                    content: 'Clean subtask',
+                    toolCalls: [
+                      {
+                        id: 'tc-1',
+                        name: 'shell',
+                        parameters: { command: 'echo ' + ROCKET_EMOJI },
+                        timestamp: new Date(),
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          })
+          .execute(new AbortController().signal);
 
         expect(result.error).toBeUndefined();
         const stored = service.getStoredTodos();
@@ -727,9 +727,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('auto');
       const tool = new TodoWriteTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [{ id: '1', content: ROCKET_EMOJI, status: 'pending' }],
-      });
+      const result = await tool
+        .build({
+          todos: [{ id: '1', content: ROCKET_EMOJI, status: 'pending' }],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeDefined();
       expect(result.error?.message).toContain(
@@ -743,9 +745,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('warn');
       const tool = new TodoWriteTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [{ id: '1', content: ROCKET_EMOJI, status: 'pending' }],
-      });
+      const result = await tool
+        .build({
+          todos: [{ id: '1', content: ROCKET_EMOJI, status: 'pending' }],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeDefined();
       expect(result.error?.message).toContain(
@@ -759,16 +763,18 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('auto');
       const tool = new TodoWriteTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [
-          {
-            id: '1',
-            content: 'Valid parent task',
-            status: 'pending',
-            subtasks: [{ id: '1-1', content: MEMO_EMOJI }],
-          },
-        ],
-      });
+      const result = await tool
+        .build({
+          todos: [
+            {
+              id: '1',
+              content: 'Valid parent task',
+              status: 'pending',
+              subtasks: [{ id: '1-1', content: MEMO_EMOJI }],
+            },
+          ],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeDefined();
       expect(result.error?.message).toContain(
@@ -782,16 +788,18 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('warn');
       const tool = new TodoWriteTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        todos: [
-          {
-            id: '1',
-            content: 'Valid parent task',
-            status: 'pending',
-            subtasks: [{ id: '1-1', content: ROCKET_EMOJI }],
-          },
-        ],
-      });
+      const result = await tool
+        .build({
+          todos: [
+            {
+              id: '1',
+              content: 'Valid parent task',
+              status: 'pending',
+              subtasks: [{ id: '1-1', content: ROCKET_EMOJI }],
+            },
+          ],
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeDefined();
       expect(result.error?.message).toContain(
@@ -807,9 +815,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('auto');
       const tool = new TodoPauseTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        reason: 'Blocked by ' + CHECK_MARK_EMOJI + ' sample placeholder',
-      });
+      const result = await tool
+        .build({
+          reason: 'Blocked by ' + CHECK_MARK_EMOJI + ' sample placeholder',
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
       expect(result.returnDisplay).toContain('[OK] sample placeholder');
@@ -822,9 +832,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('auto');
       const tool = new TodoPauseTool(service, host);
 
-      const description = tool.getDescription({
-        reason: 'Blocked by ' + CHECK_MARK_EMOJI + ' sample placeholder',
-      });
+      const description = tool
+        .build({
+          reason: 'Blocked by ' + CHECK_MARK_EMOJI + ' sample placeholder',
+        })
+        .getDescription();
 
       expect(description).toContain('[OK] sample placeholder');
       expect(description).not.toContain(CHECK_MARK_EMOJI);
@@ -836,7 +848,7 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const tool = new TodoPauseTool(service, host);
       const dogSequence = '\u{1F415}\u{1F436}\u{1F415}\u{1F436}';
 
-      const description = tool.getDescription({ reason: dogSequence });
+      const description = tool.build({ reason: dogSequence }).getDescription();
 
       expect(description).toContain(
         'Pause reason is empty after emoji filtering',
@@ -849,9 +861,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('warn');
       const tool = new TodoPauseTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        reason: 'Blocked by ' + CHECK_MARK_EMOJI + ' sample placeholder',
-      });
+      const result = await tool
+        .build({
+          reason: 'Blocked by ' + CHECK_MARK_EMOJI + ' sample placeholder',
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
       expect(result.returnDisplay).toContain('[OK] sample placeholder');
@@ -865,9 +879,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('error');
       const tool = new TodoPauseTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        reason: 'Blocked by ' + CHECK_MARK_EMOJI + ' sample placeholder',
-      });
+      const result = await tool
+        .build({
+          reason: 'Blocked by ' + CHECK_MARK_EMOJI + ' sample placeholder',
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeDefined();
       expect(result.error?.message.toLowerCase()).toContain('emoji');
@@ -880,9 +896,11 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
       const host = createToolHostWithEmojiMode('allowed');
       const tool = new TodoPauseTool(service, host);
 
-      const result = await executeToolForBehavioralAssertion(tool, {
-        reason: 'Blocked by ' + CHECK_MARK_EMOJI + ' sample placeholder',
-      });
+      const result = await tool
+        .build({
+          reason: 'Blocked by ' + CHECK_MARK_EMOJI + ' sample placeholder',
+        })
+        .execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
       expect(result.returnDisplay).toContain(CHECK_MARK_EMOJI);

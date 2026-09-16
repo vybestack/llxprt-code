@@ -222,9 +222,17 @@ describe('runtimeAccessors', () => {
 
   describe('getUnallowedParametersForActiveModel', () => {
     const useProviderModel = (provider: string, model: string) => {
+      // #2534 C1/C3: config.getProvider() is a projection of the settings
+      // store, so the provider identity is modeled on the store mock.
       (
         mockConfig.getProvider as Mock<typeof mockConfig.getProvider>
       ).mockReturnValue(provider);
+      (
+        mockSettingsService.get as Mock<typeof mockSettingsService.get>
+      ).mockImplementation((key: string) => {
+        if (key === 'activeProvider') return provider;
+        return undefined;
+      });
       (mockConfig.getModel as Mock<typeof mockConfig.getModel>).mockReturnValue(
         model,
       );
@@ -344,6 +352,10 @@ describe('runtimeAccessors', () => {
       model?: string;
       providerSettingsModel?: string;
     }): void => {
+      // #2534 C1/C3: config.getProvider() reads the settings store, so the
+      // resolved identity is modeled on the store mock; opts.activeProvider
+      // models the ProviderManager runtime cache (which may still hold the
+      // previous provider while the store carries the resolved identity).
       (
         mockConfig.getProvider as Mock<typeof mockConfig.getProvider>
       ).mockReturnValue(opts.providerName ?? '');
@@ -353,10 +365,15 @@ describe('runtimeAccessors', () => {
       (
         mockSettingsService.get as Mock<typeof mockSettingsService.get>
       ).mockImplementation((key: string) =>
-        key === 'activeProvider'
-          ? (opts.activeProvider ?? opts.providerName)
-          : undefined,
+        key === 'activeProvider' ? (opts.providerName ?? '') : undefined,
       );
+      if (opts.activeProvider !== undefined) {
+        (
+          mockRuntimeProviderManager.getActiveProviderName as Mock<
+            typeof mockRuntimeProviderManager.getActiveProviderName
+          >
+        ).mockReturnValue(opts.activeProvider);
+      }
       (
         mockSettingsService.getProviderSettings as Mock<
           typeof mockSettingsService.getProviderSettings
@@ -476,6 +493,13 @@ describe('runtimeAccessors', () => {
       ).mockImplementation(() => {
         throw new Error('boom');
       });
+      (
+        mockRuntimeProviderManager.getActiveProviderName as Mock<
+          typeof mockRuntimeProviderManager.getActiveProviderName
+        >
+      ).mockImplementation(() => {
+        throw new Error('boom');
+      });
       configureFor({ providerName: '', model: '' });
 
       const status = getActiveProviderStatus();
@@ -527,6 +551,21 @@ describe('runtimeAccessors', () => {
           baseURL: 'https://gemini.example/v1',
           throwing: 'getBaseURL',
         }),
+      );
+      (
+        mockRuntimeProviderManager.getProviderByName as Mock<
+          typeof mockRuntimeProviderManager.getProviderByName
+        >
+      ).mockImplementation((name: string) =>
+        name === 'gemini'
+          ? makeProvider({
+              name: 'gemini',
+              defaultModel: 'gemini-2.5-pro',
+              paid: true,
+              baseURL: 'https://gemini.example/v1',
+              throwing: 'getBaseURL',
+            })
+          : undefined,
       );
       configureFor({ providerName: '', model: '' });
 

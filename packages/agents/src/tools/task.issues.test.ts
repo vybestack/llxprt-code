@@ -12,6 +12,7 @@
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { TaskTool, type TaskToolParams } from './task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import {
@@ -25,8 +26,11 @@ describe('TaskTool', () => {
   let config: Config;
 
   beforeEach(() => {
+    // #2534 D4: async gating reads config.getSettingsService() without
+    // fallback probing; the double provides a real (empty) settings service.
     config = {
       getSessionId: () => 'session-123',
+      getSettingsService: () => new SettingsService(),
     } as unknown as Config;
   });
 

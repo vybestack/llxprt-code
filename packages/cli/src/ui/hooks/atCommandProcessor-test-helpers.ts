@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { vi, type Mock } from 'bun:test';
 import {
   type AnyDeclarativeTool,
@@ -219,7 +220,11 @@ export async function setupAtCommandTest(): Promise<AtCommandTestSetup> {
     listenerCount: vi.fn().mockReturnValue(0),
   } as unknown as MessageBus;
   const toolHost = new CoreToolHostAdapter(mockConfig);
-  const registry = new ToolRegistry(mockConfig, mockMessageBus);
+  const registry = new ToolRegistry(
+    mockConfig,
+    mockMessageBus,
+    new SettingsService(),
+  );
   registry.registerTool(new ReadManyFilesTool(toolHost));
   registry.registerTool(new GlobTool(toolHost));
   (

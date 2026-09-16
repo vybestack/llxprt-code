@@ -19,6 +19,20 @@ export type ProfileApplicationResult = {
   didFallback?: boolean;
 };
 
+/**
+ * Tool allow/deny policy shape mirrored from the real SettingsService
+ * tools surfaces (#2534 C5): the dedicated settings.tools mirror and the
+ * global['tools'] copy importFromProfile writes alongside it.
+ */
+export interface StubToolsPolicy {
+  allowed?: string[];
+  disabled?: string[];
+}
+
+function isStubToolsPolicy(value: unknown): value is StubToolsPolicy {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export const switchActiveProviderMock = vi.fn<
   (
     providerName: string,
@@ -60,6 +74,16 @@ export const getCliRuntimeServicesMock = vi.fn<
       getCurrentProfileName?: () => string | null;
       set: (key: string, value: unknown) => void;
       get: (key: string) => unknown;
+      exportForStateSnapshot: () => {
+        global: Record<string, unknown>;
+        providers: Record<string, Record<string, unknown>>;
+        tools?: StubToolsPolicy;
+      };
+      restoreFromStateSnapshot: (snapshot: {
+        global: Record<string, unknown>;
+        providers: Record<string, Record<string, unknown>>;
+        tools?: StubToolsPolicy;
+      }) => void;
       getProviderSettings: (providerName: string) => Record<string, unknown>;
       setProviderSetting: (
         providerName: string,
@@ -113,6 +137,11 @@ export const configStub = {
 export const settingsServiceStub = {
   currentProfile: null as string | null,
   providerSettings: new Map<string, Record<string, unknown>>(),
+  // Tool-policy surfaces importFromProfile writes on the real
+  // SettingsService: the settings.tools mirror plus the global['tools']
+  // copy (#2534 C5).
+  tools: undefined as StubToolsPolicy | undefined,
+  globalTools: undefined as StubToolsPolicy | undefined,
   setCurrentProfileName(name: string | null) {
     this.currentProfile = name;
   },
@@ -129,6 +158,59 @@ export const settingsServiceStub = {
       return this.currentProfile;
     }
     return undefined;
+  },
+  importFromProfile(data: {
+    providers?: Record<string, Record<string, unknown>>;
+    tools?: StubToolsPolicy;
+  }) {
+    this.providerSettings = new Map(
+      Object.entries(data.providers ?? {}).map(([provider, settings]) => [
+        provider,
+        structuredClone(settings),
+      ]),
+    );
+    this.tools =
+      data.tools !== undefined ? structuredClone(data.tools) : undefined;
+    this.globalTools =
+      data.tools !== undefined ? structuredClone(data.tools) : undefined;
+    return Promise.resolve();
+  },
+  // Mirrors the real SettingsService rollback primitives (#2534 C5) over the
+  // stub's own global/profile-scoped/tool-policy surfaces.
+  exportForStateSnapshot() {
+    return {
+      global: {
+        currentProfile: this.currentProfile,
+        ...(this.globalTools !== undefined && {
+          tools: structuredClone(this.globalTools),
+        }),
+      },
+      providers: structuredClone(Object.fromEntries(this.providerSettings)),
+      ...(this.tools !== undefined && {
+        tools: structuredClone(this.tools),
+      }),
+    };
+  },
+  restoreFromStateSnapshot(snapshot: {
+    global: Record<string, unknown>;
+    providers: Record<string, Record<string, unknown>>;
+    tools?: StubToolsPolicy;
+  }) {
+    this.currentProfile =
+      (snapshot.global.currentProfile as string | null) ?? null;
+    this.globalTools = isStubToolsPolicy(snapshot.global.tools)
+      ? structuredClone(snapshot.global.tools)
+      : undefined;
+    this.providerSettings = new Map(
+      Object.entries(snapshot.providers).map(([provider, settings]) => [
+        provider,
+        structuredClone(settings),
+      ]),
+    );
+    this.tools =
+      snapshot.tools !== undefined
+        ? structuredClone(snapshot.tools)
+        : undefined;
   },
   getProviderSettings(providerName: string) {
     return (
@@ -234,6 +316,8 @@ export function resetProfileApplicationStubs(): {
   configStub.ephemerals.clear();
   settingsServiceStub.currentProfile = null;
   settingsServiceStub.providerSettings.clear();
+  settingsServiceStub.tools = undefined;
+  settingsServiceStub.globalTools = undefined;
   providerManagerStub.available = ['openai', 'anthropic'];
   providerManagerStub.activeProviderName = 'openai';
   providerManagerStub.providerLookup = new Map([

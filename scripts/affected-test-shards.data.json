@@ -87,7 +87,7 @@
     "core": ["providers", "test-utils"],
     "providers": ["test-utils"],
     "tools": ["settings", "storage", "test-utils"],
-    "zed-acp": ["test-utils"]
+    "zed-acp": ["settings", "test-utils"]
   },
   "observers": {
     "agents": [

@@ -6,6 +6,7 @@
  * @requirement REQ-3329-05
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { describe, expect, it, vi } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
@@ -121,6 +122,7 @@ function createHarness(): SchedulerHarness {
       getExcludeTools: () => [],
     },
     messageBusAdapter,
+    new SettingsService(),
   );
   const tool = new CountingTool(messageBusAdapter);
   toolRegistry.registerTool(tool);

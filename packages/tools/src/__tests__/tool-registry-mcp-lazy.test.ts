@@ -12,6 +12,7 @@ import { BaseDeclarativeTool, Kind } from '../tools/tools.js';
 import type {
   IToolRegistryHost,
   IToolMessageBus,
+  SettingsServiceBoundary,
   ToolInvocation,
   ToolResult,
 } from '../index.js';
@@ -92,6 +93,20 @@ function createMessageBus(): IToolMessageBus & PublishSubscribeCapable {
   };
 }
 
+function createSettingsBoundary(): Pick<
+  SettingsServiceBoundary,
+  'get' | 'getAllGlobalSettings'
+> {
+  // ToolRegistry's settings dependency is a REQUIRED injected boundary
+  // (#2534 review Finding 3). This empty literal matches the former no-op
+  // default so these declaration tests keep asserting on governance state,
+  // not settings content.
+  return {
+    get: () => undefined,
+    getAllGlobalSettings: () => ({}),
+  };
+}
+
 function namesOf(decls: Array<{ name?: string }>): string[] {
   return decls
     .map((d) => d.name)
@@ -145,6 +160,7 @@ describe('ToolRegistry — MCP lazy schema deferral', () => {
         const registry = new ToolRegistry(
           createHost(ephemerals),
           createMessageBus(),
+          createSettingsBoundary(),
         );
         registry.registerTool(builtinTool('read_file'));
         registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
@@ -161,6 +177,7 @@ describe('ToolRegistry — MCP lazy schema deferral', () => {
       const registry = new ToolRegistry(
         createHost({ 'mcp.lazy': true }),
         createMessageBus(),
+        createSettingsBoundary(),
       );
       registry.registerTool(builtinTool('read_file'));
 
@@ -175,6 +192,7 @@ describe('ToolRegistry — MCP lazy schema deferral', () => {
       const registry = new ToolRegistry(
         createHost({ 'mcp.lazy': true }),
         createMessageBus(),
+        createSettingsBoundary(),
       );
       registry.registerTool(builtinTool('read_file'));
       registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
@@ -192,6 +210,7 @@ describe('ToolRegistry — MCP lazy schema deferral', () => {
       const registry = new ToolRegistry(
         createHost({ 'mcp.lazy': true, 'mcp.eagerServers': ['alpha'] }),
         createMessageBus(),
+        createSettingsBoundary(),
       );
       registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
       registry.registerTool(mcpTool('mcp__beta__lookup', 'beta'));
@@ -216,6 +235,7 @@ describe('ToolRegistry — MCP lazy schema deferral', () => {
         const registry = new ToolRegistry(
           createHost(ephemerals),
           createMessageBus(),
+          createSettingsBoundary(),
         );
         registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
         const decls = registry.getFunctionDeclarations();
@@ -240,6 +260,7 @@ describe('ToolRegistry — MCP lazy schema deferral', () => {
         'tools.disabled': ['mcp__alpha__search'],
       }),
       createMessageBus(),
+      createSettingsBoundary(),
     );
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 
@@ -251,6 +272,7 @@ describe('ToolRegistry — MCP lazy schema deferral', () => {
     const registry = new ToolRegistry(
       createHost({ 'mcp.lazy': true }),
       createMessageBus(),
+      createSettingsBoundary(),
     );
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 
@@ -264,6 +286,7 @@ describe('ToolRegistry — MCP lazy schema deferral', () => {
     const registry = new ToolRegistry(
       createHost({ 'mcp.lazy': true, 'mcp.eagerServers': ['gamma'] }),
       createMessageBus(),
+      createSettingsBoundary(),
     );
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
     registry.registerTool(mcpTool('mcp__beta__lookup', 'beta'));
@@ -273,7 +296,11 @@ describe('ToolRegistry — MCP lazy schema deferral', () => {
   });
 
   it('listDeferredMcpServers returns empty when lazy mode is off', () => {
-    const registry = new ToolRegistry(createHost({}), createMessageBus());
+    const registry = new ToolRegistry(
+      createHost({}),
+      createMessageBus(),
+      createSettingsBoundary(),
+    );
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 
     expect(registry.listDeferredMcpServers()).toStrictEqual([]);
@@ -283,6 +310,7 @@ describe('ToolRegistry — MCP lazy schema deferral', () => {
     const registry = new ToolRegistry(
       createHost({ 'mcp.lazy': true }),
       createMessageBus(),
+      createSettingsBoundary(),
     );
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 
@@ -295,6 +323,7 @@ describe('ToolRegistry — activation lifecycle (B5, B7, C1-C3)', () => {
     const registry = new ToolRegistry(
       createHost({ 'mcp.lazy': true }),
       createMessageBus(),
+      createSettingsBoundary(),
     );
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 
@@ -308,6 +337,7 @@ describe('ToolRegistry — activation lifecycle (B5, B7, C1-C3)', () => {
     const registry = new ToolRegistry(
       createHost({ 'mcp.lazy': true }),
       createMessageBus(),
+      createSettingsBoundary(),
     );
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 
@@ -325,6 +355,7 @@ describe('ToolRegistry — activation lifecycle (B5, B7, C1-C3)', () => {
     const registry = new ToolRegistry(
       createHost({ 'mcp.lazy': true }),
       createMessageBus(),
+      createSettingsBoundary(),
     );
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 
@@ -340,6 +371,7 @@ describe('ToolRegistry — activation lifecycle (B5, B7, C1-C3)', () => {
     const registry = new ToolRegistry(
       createHost({ 'mcp.lazy': true }),
       createMessageBus(),
+      createSettingsBoundary(),
     );
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 
@@ -357,6 +389,7 @@ describe('ActivateMcpServerTool — schema and description', () => {
     const registry = new ToolRegistry(
       createHost({ 'mcp.lazy': true }),
       createMessageBus(),
+      createSettingsBoundary(),
     );
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
     registry.registerTool(mcpTool('mcp__beta__lookup', 'beta'));
@@ -376,6 +409,7 @@ describe('ActivateMcpServerTool — schema and description', () => {
     const registry = new ToolRegistry(
       createHost({ 'mcp.lazy': true }),
       createMessageBus(),
+      createSettingsBoundary(),
     );
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
     registry.registerTool(mcpTool('mcp__alpha__insert', 'alpha'));
@@ -400,6 +434,7 @@ describe('ActivateMcpServerTool — schema and description', () => {
     const registry = new ToolRegistry(
       createHost({ 'mcp.lazy': true }),
       createMessageBus(),
+      createSettingsBoundary(),
     );
     for (let i = 0; i < 15; i++) {
       registry.registerTool(mcpTool(`mcp__alpha__tool_${i}`, 'alpha'));
@@ -421,6 +456,7 @@ describe('ActivateMcpServerTool — schema and description', () => {
     const registry = new ToolRegistry(
       createHost({ 'mcp.lazy': true }),
       createMessageBus(),
+      createSettingsBoundary(),
     );
 
     expect(
@@ -433,6 +469,7 @@ describe('ActivateMcpServerTool — schema and description', () => {
     const registry = new ToolRegistry(
       createHost({ 'mcp.lazy': true }),
       createMessageBus(),
+      createSettingsBoundary(),
     );
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 
@@ -451,6 +488,7 @@ describe('ActivateMcpServerTool — schema and description', () => {
     const registry = new ToolRegistry(
       createHost({ 'mcp.lazy': true }),
       createMessageBus(),
+      createSettingsBoundary(),
     );
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
     registry.registerTool(mcpTool('mcp__beta__lookup', 'beta'));
@@ -488,7 +526,11 @@ describe('E1/E2: lazy mode produces smaller serialized payload', () => {
     const alpha = mcpTool('mcp__alpha__search', 'alpha');
     const beta = mcpTool('mcp__beta__lookup', 'beta');
 
-    const eagerRegistry = new ToolRegistry(createHost({}), createMessageBus());
+    const eagerRegistry = new ToolRegistry(
+      createHost({}),
+      createMessageBus(),
+      createSettingsBoundary(),
+    );
     eagerRegistry.registerTool(builtin);
     eagerRegistry.registerTool(alpha);
     eagerRegistry.registerTool(beta);
@@ -497,6 +539,7 @@ describe('E1/E2: lazy mode produces smaller serialized payload', () => {
     const lazyRegistry = new ToolRegistry(
       createHost({ 'mcp.lazy': true }),
       createMessageBus(),
+      createSettingsBoundary(),
     );
     lazyRegistry.registerTool(builtin);
     lazyRegistry.registerTool(alpha);
@@ -527,6 +570,7 @@ describe('E1/E2: lazy mode produces smaller serialized payload', () => {
     const registry = new ToolRegistry(
       createHost({ 'mcp.lazy': true }),
       createMessageBus(),
+      createSettingsBoundary(),
     );
     registry.registerTool(builtin);
     registry.registerTool(alphaSearch);
@@ -541,7 +585,11 @@ describe('E1/E2: lazy mode produces smaller serialized payload', () => {
     expect(decls.find((d) => d.name === 'mcp__beta__lookup')).toBeDefined();
     expect(decls.find((d) => d.name === 'mcp__alpha__search')).toBeUndefined();
 
-    const eagerRegistry = new ToolRegistry(createHost({}), createMessageBus());
+    const eagerRegistry = new ToolRegistry(
+      createHost({}),
+      createMessageBus(),
+      createSettingsBoundary(),
+    );
     eagerRegistry.registerTool(builtin);
     eagerRegistry.registerTool(alphaSearch);
     eagerRegistry.registerTool(alphaInsert);

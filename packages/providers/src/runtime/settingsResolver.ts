@@ -26,7 +26,12 @@ export { resolveNamedKey } from './keyResolution.js';
 
 /**
  * Apply CLI argument overrides to configuration.
- * Must be called AFTER provider manager creation but BEFORE provider switching.
+ * Must be called AFTER provider manager creation and AFTER provider switching
+ * (#2534 review Finding 1): the overrides persist provider-scoped credentials
+ * (auth-key/base-url) into the CURRENTLY active provider's scope, so the
+ * switch must already have selected the target provider. This matches the CLI
+ * bootstrap's postConfigRuntime step 14, which reapplies these overrides
+ * after the provider switch.
  *
  * Precedence order (highest first):
  * 1. --key (overrides profile auth-key)

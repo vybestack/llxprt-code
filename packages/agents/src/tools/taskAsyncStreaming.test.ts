@@ -16,6 +16,7 @@
 import { describe, it, expect, vi } from 'bun:test';
 import { TaskTool, type TaskToolParams } from './task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
@@ -123,7 +124,10 @@ function createAsyncStreamingHarness(
 
   const tool = new TaskTool(
     {
+      // #2534 D4: async gating reads config.getSettingsService() without
+      // fallback probing; provide a real (empty) settings service.
       getSessionId: () => 'session-async-stream',
+      getSettingsService: () => new SettingsService(),
     } as unknown as Config,
     {
       messageBus: new MessageBus(),

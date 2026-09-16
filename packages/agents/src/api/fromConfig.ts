@@ -234,6 +234,7 @@ async function resolveActivation(
       );
     }
   } else if (!hasPostAuthClient(config)) {
+    // Construct the auth client for an already-activated Config.
     await config.refreshAuth(undefined);
   }
 }

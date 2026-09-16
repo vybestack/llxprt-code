@@ -29,8 +29,10 @@ import {
   UnauthorizedError,
   toFriendlyError,
 } from '@vybestack/llxprt-code-core/utils/errors.js';
-import { normalizeToolName } from '@vybestack/llxprt-code-tools/formatters/toolNameUtils.js';
-import { canonicalizeToolName } from './toolGovernance.js';
+import {
+  normalizeToolName,
+  canonicalizeToolName,
+} from '@vybestack/llxprt-code-tools';
 import type { ChatSession } from './chatSession.js';
 import {
   InvalidStreamError,

@@ -119,7 +119,11 @@ function findActivationTool(registry: ToolRegistry) {
 
 describe('syncActivateMcpServerTool — collision and default-mode preservation', () => {
   it('preserves a foreign activate_mcp_server tool when lazy mode is off', async () => {
-    const registry = new ToolRegistry(createHost({}), createMessageBus());
+    const registry = new ToolRegistry(
+      createHost({}),
+      createMessageBus(),
+      new SettingsService(),
+    );
     registry.registerTool(new TestForeignTool());
     const before = JSON.stringify(registry.getFunctionDeclarations());
 
@@ -132,6 +136,7 @@ describe('syncActivateMcpServerTool — collision and default-mode preservation'
     const registry = new ToolRegistry(
       createHost({ 'mcp.lazy': true }),
       createMessageBus(),
+      new SettingsService(),
     );
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
     registry.registerTool(new TestForeignTool());
@@ -145,6 +150,7 @@ describe('syncActivateMcpServerTool — collision and default-mode preservation'
     const registry = new ToolRegistry(
       createHost({ 'mcp.lazy': true }),
       createMessageBus(),
+      new SettingsService(),
     );
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 
@@ -165,6 +171,7 @@ describe('syncActivateMcpServerTool — collision and default-mode preservation'
     const registry = new ToolRegistry(
       createHost({ 'mcp.lazy': true }),
       createMessageBus(),
+      new SettingsService(),
     );
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 
@@ -180,6 +187,7 @@ describe('syncActivateMcpServerTool — collision and default-mode preservation'
     const registry = new ToolRegistry(
       createHost({ 'mcp.lazy': true }),
       createMessageBus(),
+      new SettingsService(),
     );
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 

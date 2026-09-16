@@ -16,15 +16,16 @@ import {
   AgentEventType,
   type ServerCitationEvent,
 } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
 interface ConfigWithSettings {
-  getSettingsService(): { get(key: string): unknown } | undefined;
+  getSettingsService(): Pick<SettingsService, 'get'>;
 }
 
 export function shouldShowCitations(
   config: ConfigWithSettings | undefined,
 ): boolean {
-  return config?.getSettingsService()?.get('ui.showCitations') === true;
+  return config?.getSettingsService().get('ui.showCitations') === true;
 }
 
 export function buildCitationEvent(

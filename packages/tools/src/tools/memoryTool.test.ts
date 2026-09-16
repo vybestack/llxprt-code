@@ -98,7 +98,7 @@ describe('MemoryTool', () => {
   };
 
   const mockSettingsService = {
-    getSetting: vi.fn().mockReturnValue(undefined),
+    get: vi.fn().mockReturnValue(undefined),
   };
 
   const createMemoryTool = (getWorkingDir?: () => string): MemoryTool =>
@@ -669,7 +669,7 @@ describe('MemoryTool', () => {
     });
 
     it('should reject core scopes when model.canSaveCore is disabled', () => {
-      mockSettingsService.getSetting.mockReturnValue(undefined);
+      mockSettingsService.get.mockReturnValue(undefined);
       expect(() =>
         coreMemoryTool.build({
           fact: 'some directive',
@@ -679,7 +679,7 @@ describe('MemoryTool', () => {
     });
 
     it('should resolve core.global file path to .LLXPRT_SYSTEM in global dir', async () => {
-      mockSettingsService.getSetting.mockReturnValue(true);
+      mockSettingsService.get.mockReturnValue(true);
       (fs.readFile as Mock<typeof fs.readFile>).mockResolvedValue('');
 
       const params: SaveMemoryParams = {
@@ -699,7 +699,7 @@ describe('MemoryTool', () => {
     });
 
     it('should resolve core.project file path to .LLXPRT_SYSTEM in project dir', async () => {
-      mockSettingsService.getSetting.mockReturnValue(true);
+      mockSettingsService.get.mockReturnValue(true);
       (fs.readFile as Mock<typeof fs.readFile>).mockResolvedValue('');
 
       const params: SaveMemoryParams = {

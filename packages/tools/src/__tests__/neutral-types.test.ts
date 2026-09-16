@@ -52,22 +52,22 @@ describe('todo tools schema preserves exact runtime values', () => {
     expect(jsonSchema['type']).toBe('OBJECT');
   });
 
-  it('TodoRead schema has type: "OBJECT"', () => {
+  it('TodoRead schema has type: "object"', () => {
     const tool = new TodoRead(neutralTodoService);
     const schema = tool.schema;
     const jsonSchema = schema.parametersJsonSchema as Record<string, unknown>;
-    expect(jsonSchema['type']).toBe('OBJECT');
+    expect(jsonSchema['type']).toBe('object');
   });
 
-  it('TodoPause schema has type: "OBJECT" and reason.type: "STRING"', () => {
+  it('TodoPause schema has type: "object" and reason.type: "string"', () => {
     const tool = new TodoPause(neutralTodoService);
     const schema = tool.schema;
     const jsonSchema = schema.parametersJsonSchema as {
       type: string;
       properties: { reason: { type: string } };
     };
-    expect(jsonSchema.type).toBe('OBJECT');
-    expect(jsonSchema.properties.reason.type).toBe('STRING');
+    expect(jsonSchema.type).toBe('object');
+    expect(jsonSchema.properties.reason.type).toBe('string');
   });
 });
 

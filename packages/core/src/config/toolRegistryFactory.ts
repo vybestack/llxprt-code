@@ -45,7 +45,6 @@ import { CoreToolHostAdapter } from '../tools-adapters/CoreToolHostAdapter.js';
 import { CoreIdeServiceAdapter } from '../tools-adapters/CoreIdeServiceAdapter.js';
 import { CoreLspServiceAdapter } from '../tools-adapters/CoreLspServiceAdapter.js';
 import { CoreToolKeyStorageAdapter } from '../tools-adapters/CoreToolKeyStorageAdapter.js';
-import { CoreSettingsServiceAdapter } from '../tools-adapters/CoreSettingsServiceAdapter.js';
 import { coreStorageServiceAdapter } from '../tools-adapters/CoreStorageServiceAdapter.js';
 import { CoreMessageBusAdapter } from '../tools-adapters/CoreMessageBusAdapter.js';
 import { CoreShellToolHostAdapter } from '../tools-adapters/CoreShellToolHostAdapter.js';
@@ -365,7 +364,7 @@ function registerStandardTools(
   const ideServiceAdapter = new CoreIdeServiceAdapter(config);
   const lspServiceAdapter = new CoreLspServiceAdapter(config);
   const toolKeyStorageAdapter = new CoreToolKeyStorageAdapter();
-  const settingsServiceAdapter = new CoreSettingsServiceAdapter(config);
+  const settingsService = config.getSettingsService();
   const storageServiceAdapter = coreStorageServiceAdapter;
   const messageBusAdapter = new CoreMessageBusAdapter(messageBus);
   const todoServiceAdapter = new CoreTodoServiceAdapter(() =>
@@ -412,7 +411,7 @@ function registerStandardTools(
   );
   registerCoreTool(MemoryTool, {
     storageService: storageServiceAdapter,
-    settingsService: settingsServiceAdapter,
+    settingsService,
     getWorkingDir: () => config.getWorkingDir(),
     messageBus: messageBusAdapter,
   });
@@ -430,7 +429,7 @@ function registerStandardTools(
   registerCoreTool(TodoPause, todoServiceAdapter, toolHostAdapter);
   registerCoreTool(CodeSearchTool, {
     keyStorage: toolKeyStorageAdapter,
-    settingsService: settingsServiceAdapter,
+    settingsService,
   });
   registerCoreTool(DirectWebFetchTool, toolHostAdapter);
 
@@ -606,6 +605,7 @@ export async function createToolRegistry(
   const registry = new ToolRegistry(
     new CoreToolRegistryHostAdapter(config as Config),
     new CoreMessageBusAdapter(messageBus),
+    config.getSettingsService(),
   );
   const allPotentialTools: ToolRecord[] = [];
 
