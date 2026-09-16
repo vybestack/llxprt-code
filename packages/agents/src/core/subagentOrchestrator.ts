@@ -903,11 +903,15 @@ export class SubagentOrchestrator {
         },
       );
     } catch (error) {
-      // A cleanup failure must not replace the original bootstrap error.
+      // A cleanup failure must not replace the original bootstrap error. The
+      // isolated Config is agent-owned (built above) and the activation's
+      // refreshAuth may already have constructed an AgentClient on it —
+      // dispose it after the handle so a failed bootstrap leaks nothing.
       return cleanupFailedRuntimeBootstrap(
         handle,
         error,
         'SubagentOrchestrator.createIsolatedRuntime',
+        { ownedConfig: isolatedConfig },
       );
     }
 

@@ -235,7 +235,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
           return {
             runtimeId: options.runtimeId ?? 'agent-owned-isolated',
             metadata: options.metadata ?? { source: 'test' },
-            settingsService: options.settingsService,
+            settingsService: options.config.getSettingsService(),
             config: options.config,
             providerManager: {},
             oauthManager: {},

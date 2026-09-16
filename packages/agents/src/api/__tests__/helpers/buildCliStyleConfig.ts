@@ -144,7 +144,9 @@ export interface BuiltFactoryLessConfig {
  * honoring them (caller-wins).
  *
  * The FakeProvider env seam stays set until cleanup so the turn driven after
- * adoption uses the fixture.
+ * adoption uses the fixture. Because fromConfig ADOPTS the Config
+ * (caller-owned), agent.dispose() skips it — cleanup() disposes the Config
+ * itself (safe even when adoption failed before initialization).
  */
 export async function buildFactoryLessConfig(
   fixtureRelPath: string,
@@ -179,10 +181,17 @@ export async function buildFactoryLessConfig(
       config.getDebugMode(),
     );
     const cleanup = async (): Promise<void> => {
-      if (prev === undefined) {
-        delete process.env.LLXPRT_FAKE_RESPONSES;
-      } else {
-        process.env.LLXPRT_FAKE_RESPONSES = prev;
+      // fromConfig ADOPTS this Config (caller-owned), so agent.dispose()
+      // never tears it down — dispose it here or the initialized client
+      // leaks across tests.
+      try {
+        await config.dispose();
+      } finally {
+        if (prev === undefined) {
+          delete process.env.LLXPRT_FAKE_RESPONSES;
+        } else {
+          process.env.LLXPRT_FAKE_RESPONSES = prev;
+        }
       }
     };
     return { config, messageBus, cleanup };
