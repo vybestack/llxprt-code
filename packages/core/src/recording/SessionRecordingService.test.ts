@@ -619,6 +619,80 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
   });
 
   // -------------------------------------------------------------------------
+  // Pending-record retention (issue #3432)
+  // -------------------------------------------------------------------------
+
+  describe('Pending-record retention @issue:3432', () => {
+    it('pre-content pending records do not retain the payload object graph', async () => {
+      const config = makeConfig({ chatsDir });
+      service = new SessionRecordingService(config);
+
+      const marker = 'retention-probe-3432';
+      const enqueueProbe = (svc: SessionRecordingService): WeakRef<object> => {
+        const payload = {
+          severity: 'info',
+          message: marker,
+          blob: 'x'.repeat(8192),
+        };
+        const ref = new WeakRef<object>(payload);
+        const line = svc.enqueue('session_event', payload);
+        expect(line?.type).toBe('session_event');
+        return ref;
+      };
+      const ref = enqueueProbe(service);
+
+      // The record is still pending, but must not pin the payload.
+      expect(service.getPendingRecordCount()).toBeGreaterThan(0);
+      expect(service.getPendingByteCount()).toBeGreaterThan(0);
+      Bun.gc(true);
+      expect(ref.deref()).toBeUndefined();
+
+      // The serialized record still drains to disk intact.
+      service.recordContent(makeContent('trigger'));
+      await service.flush();
+      const filePath = service.getFilePath();
+      if (filePath === null) {
+        throw new Error('session file was not materialized');
+      }
+      const raw = await fs.readFile(filePath, 'utf-8');
+      expect(raw).toContain(marker);
+      const events = await readJsonlFile(filePath);
+      expect(events.map((event) => event.type)).toStrictEqual([
+        'session_start',
+        'session_event',
+        'content',
+      ]);
+    });
+
+    it('on-disk JSONL keeps byte format and ordering (v, seq, ts, type, payload)', async () => {
+      const config = makeConfig({ chatsDir });
+      service = new SessionRecordingService(config);
+      service.recordSessionEvent('info', 'first');
+      service.recordContent(makeContent('payload'));
+      service.recordSessionEvent('info', 'after');
+      await service.flush();
+
+      const filePath = service.getFilePath();
+      if (filePath === null) {
+        throw new Error('session file was not materialized');
+      }
+      const raw = await fs.readFile(filePath, 'utf-8');
+      expect(raw.endsWith('\x0a')).toBe(true);
+      const lines = raw.split('\x0a');
+      expect(lines[0]?.startsWith('{"v":1,"seq":1,"ts":"')).toBe(true);
+      expect(lines[0]?.includes('"type":"session_start"')).toBe(true);
+      expect(lines[1]?.startsWith('{"v":1,"seq":2,"ts":"')).toBe(true);
+      expect(lines[1]?.includes('"type":"session_event"')).toBe(true);
+      expect(lines[2]?.startsWith('{"v":1,"seq":3,"ts":"')).toBe(true);
+      expect(lines[2]?.includes('"type":"content"')).toBe(true);
+      expect(lines[3]?.startsWith('{"v":1,"seq":4,"ts":"')).toBe(true);
+      expect(lines[3]?.includes('"type":"session_event"')).toBe(true);
+      const events = await readJsonlFile(filePath);
+      expect(events.map((event) => event.seq)).toStrictEqual([1, 2, 3, 4]);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Event Type Payloads
   // -------------------------------------------------------------------------
 });
