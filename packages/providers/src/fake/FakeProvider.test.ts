@@ -162,7 +162,7 @@ describe('FakeProvider', () => {
           {
             speaker: 'ai',
             blocks: [],
-            metadata: { stopReason: 'stop' },
+            metadata: { finishReason: 'stop', rawStopReason: 'stop' },
           },
         ],
       }),
@@ -179,10 +179,10 @@ describe('FakeProvider', () => {
     expect(chunks).toHaveLength(1);
     const first = chunks[0] as {
       blocks: unknown[];
-      metadata?: { stopReason?: string };
+      metadata?: { rawStopReason?: string };
     };
     expect(first.blocks).toStrictEqual([]);
-    expect(first.metadata?.stopReason).toBe('stop');
+    expect(first.metadata?.rawStopReason).toBe('stop');
   });
 
   it('replays usage through to the chunk', async () => {

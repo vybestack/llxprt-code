@@ -691,8 +691,8 @@ describe('ChatSession runtime history and tool-call behavior', () => {
 
   it.each([
     {
-      label: 'stopReason',
-      metadata: { stopReason: 'end_turn' },
+      label: 'finishReason with rawStopReason',
+      metadata: { finishReason: 'stop', rawStopReason: 'end_turn' },
     },
     {
       label: 'finishReason',

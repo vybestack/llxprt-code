@@ -20,7 +20,10 @@ import type {
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type {
+  ModelOutput,
+  ToolChoice,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
   toModelStreamChunk,
   emptyModelOutput,
@@ -43,9 +46,10 @@ import {
 } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { HookSystem } from '@vybestack/llxprt-code-core/hooks/hookSystem.js';
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
+import type { HookLLMResponse } from '@vybestack/llxprt-code-core/hooks/hookTranslator.js';
 
 type ToolGroupArray = Array<{
-  functionDeclarations: Array<{
+  functionDeclarations?: Array<{
     name: string;
     description?: string;
     parametersJsonSchema?: unknown;
@@ -65,9 +69,15 @@ import {
   filterAfcByHookRestrictions,
 } from './hookToolRestrictions.js';
 import {
-  afterModelModifiedToModelOutput,
+  afterModelModifiedToChunk,
   beforeModelBlockingToModelOutput,
 } from './hookWireAdapter.js';
+import {
+  afterModelRequestEnvelope,
+  afterModelResponseEnvelope,
+  beforeModelRequestEnvelope,
+  toolSelectionRequest,
+} from './hookEnvelopeHelpers.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
 
@@ -610,30 +620,35 @@ export class DirectMessageProcessor {
       return { tools: toolsFromConfig, allowedFunctionNames: undefined };
     }
     await hookSystem.initialize();
-    const toolSelectionResult =
-      await hookSystem.fireBeforeToolSelectionEvent(toolsFromConfig);
-    const modifiedConfig = toolSelectionResult?.applyToolConfigModifications({
+    const toolSelectionResult = await hookSystem.fireBeforeToolSelectionEvent(
+      toolSelectionRequest(this.runtimeContext.state.model, toolsFromConfig),
+    );
+    const modifiedConfig = toolSelectionResult?.applyToolChoiceModifications({
       tools: toolsFromConfig,
     });
+
+    const toolChoice: ToolChoice | undefined = modifiedConfig?.toolChoice;
+    if (toolChoice?.mode === 'none') {
+      return { tools: [], allowedFunctionNames: [] };
+    }
     if (
-      modifiedConfig?.toolConfig &&
-      'allowedFunctionNames' in modifiedConfig.toolConfig
+      toolChoice &&
+      'allowedToolNames' in toolChoice &&
+      Array.isArray(toolChoice.allowedToolNames)
     ) {
-      const allowedFunctions = modifiedConfig.toolConfig.allowedFunctionNames;
-      if (Array.isArray(allowedFunctions)) {
-        const allowedNames = new Set(
-          allowedFunctions.map(canonicalizeToolName),
-        );
-        const filteredTools = toolsFromConfig
-          .map((toolGroup) => ({
-            ...toolGroup,
-            functionDeclarations: toolGroup.functionDeclarations.filter((fn) =>
-              allowedNames.has(canonicalizeToolName(fn.name)),
-            ),
-          }))
-          .filter((g) => g.functionDeclarations.length > 0) as ToolGroupArray;
-        return { tools: filteredTools, allowedFunctionNames: allowedFunctions };
-      }
+      const allowedFunctions = toolChoice.allowedToolNames;
+      const allowedNames = new Set(allowedFunctions.map(canonicalizeToolName));
+      const filteredTools = toolsFromConfig
+        .map((toolGroup) => ({
+          ...toolGroup,
+          functionDeclarations: Array.isArray(toolGroup.functionDeclarations)
+            ? toolGroup.functionDeclarations.filter((fn) =>
+                allowedNames.has(canonicalizeToolName(fn.name)),
+              )
+            : [],
+        }))
+        .filter((g) => g.functionDeclarations.length > 0) as ToolGroupArray;
+      return { tools: filteredTools, allowedFunctionNames: allowedFunctions };
     }
     return { tools: toolsFromConfig, allowedFunctionNames: undefined };
   }
@@ -648,7 +663,7 @@ export class DirectMessageProcessor {
     userIContents: IContent[],
     effectiveToolsFromConfig:
       | Array<{
-          functionDeclarations: Array<{
+          functionDeclarations?: Array<{
             name: string;
             description?: string;
             parametersJsonSchema?: unknown;
@@ -659,13 +674,11 @@ export class DirectMessageProcessor {
     blockedOutput?: ModelOutput;
     modifiedContents?: IContent[];
   }> {
-    const requestForHook = {
-      contents: userIContents,
-      tools:
-        effectiveToolsFromConfig && effectiveToolsFromConfig.length > 0
-          ? (effectiveToolsFromConfig as ProviderToolset)
-          : undefined,
-    };
+    const requestForHook = beforeModelRequestEnvelope(
+      this.runtimeContext.state.model,
+      userIContents,
+      effectiveToolsFromConfig,
+    );
 
     let beforeModelResult = undefined;
     if (resolveHooksEnabled(configForHooks)) {
@@ -709,15 +722,14 @@ export class DirectMessageProcessor {
   /**
    * Apply hook-supplied llm_request modifications to contents.
    *
-   * H2: only round-trip through the translator when the hook actually supplied
-   * replacement messages (hookProvidedMessages). A messages-less llm_request
-   * (model/config only) must NOT trigger the text-only translator round-trip,
-   * which would destroy tool calls, IDs, and metadata.
+   * H2: only merge when the hook actually supplied replacement contents
+   * (hookProvidedContents). A contents-less llm_request (model/settings only)
+   * must preserve the original contents reference.
    *
    * Delegates to the shared `applyRequestModifications` helper
-   * (streamRequestHelpers) so the guard semantics (empty-messages guard,
-   * messages-less preservation, empty-array guard) cannot drift between the
-   * stream and direct-message paths.
+   * (streamRequestHelpers) so the guard semantics (contents-less
+   * preservation, empty-array guard) cannot drift between the stream and
+   * direct-message paths.
    *
    * Returns the modified IContent[] when the hook changed contents, or
    * undefined when no content modification occurred.
@@ -746,7 +758,7 @@ export class DirectMessageProcessor {
     lastResponse: IContent,
     aggregatedText: string,
     config: Config | undefined,
-    llmRequest?: Record<string, unknown>,
+    llmRequest?: { contents: IContent[]; tools?: unknown },
     allowedFunctionNames?: string[],
   ): Promise<ModelOutput> {
     const baseOutput = toModelStreamChunk(lastResponse);
@@ -772,39 +784,18 @@ export class DirectMessageProcessor {
       );
     }
 
-    let afterModelModifiedResponse = false;
-    let afterModelModifiedText = false;
-
-    if (resolveHooksEnabled(config)) {
-      const hookSystem = resolveHookSystem(config);
-      if (hookSystem) {
-        await hookSystem.initialize();
-        const filteredBlocks = filterHookRestrictedBlocks(
-          directOutput.content.blocks,
-          allowedFunctionNames,
-        );
-        const filteredIContent = iContentFromBlocks(filteredBlocks, 'ai');
-        const afterModelResult = await hookSystem.fireAfterModelEvent(
-          llmRequest ?? {},
-          filteredIContent,
-        );
-        if (afterModelResult) {
-          const outcome = this._applyAfterModelResult(
-            afterModelResult,
-            directOutput,
-            allowedFunctionNames,
-          );
-          directOutput = outcome.directOutput;
-          afterModelModifiedResponse = outcome.responseModified;
-          afterModelModifiedText = outcome.aggregatedText !== undefined;
-          aggregatedText = outcome.aggregatedText ?? aggregatedText;
-        }
-      }
-    }
+    const afterModel = await this._fireAfterModelAndApply(
+      directOutput,
+      llmRequest,
+      config,
+      allowedFunctionNames,
+    );
+    directOutput = afterModel.directOutput;
+    aggregatedText = afterModel.aggregatedText ?? aggregatedText;
 
     const canAppendAggregatedText =
       aggregatedText.trim() !== '' &&
-      (!afterModelModifiedResponse || afterModelModifiedText);
+      (!afterModel.responseModified || afterModel.aggregatedText !== undefined);
 
     if (canAppendAggregatedText) {
       this._ensureResponseText(directOutput, aggregatedText);
@@ -814,13 +805,74 @@ export class DirectMessageProcessor {
   }
 
   /**
+   * Fire the AfterModel hook (when enabled) and apply its decision to the
+   * direct-path output. Extracted from _processDirectResponse so the
+   * response-assembly flow stays readable.
+   *
+   * @plan:PLAN-20260707-AGENTNEUTRAL.P13
+   * @requirement:REQ-004.1
+   */
+  private async _fireAfterModelAndApply(
+    directOutput: ModelOutput,
+    llmRequest: { contents: IContent[]; tools?: unknown } | undefined,
+    config: Config | undefined,
+    allowedFunctionNames: string[] | undefined,
+  ): Promise<{
+    directOutput: ModelOutput;
+    responseModified: boolean;
+    aggregatedText: string | undefined;
+  }> {
+    if (!resolveHooksEnabled(config)) {
+      return {
+        directOutput,
+        responseModified: false,
+        aggregatedText: undefined,
+      };
+    }
+    const hookSystem = resolveHookSystem(config);
+    if (!hookSystem) {
+      return {
+        directOutput,
+        responseModified: false,
+        aggregatedText: undefined,
+      };
+    }
+    await hookSystem.initialize();
+    const filteredBlocks = filterHookRestrictedBlocks(
+      directOutput.content.blocks,
+      allowedFunctionNames,
+    );
+    const filteredIContent = iContentFromBlocks(filteredBlocks, 'ai');
+    const afterModelResult = await hookSystem.fireAfterModelEvent(
+      afterModelRequestEnvelope(
+        this.runtimeContext.state.model,
+        llmRequest?.contents,
+        llmRequest?.tools,
+      ),
+      afterModelResponseEnvelope(filteredIContent, directOutput),
+    );
+    if (!afterModelResult) {
+      return {
+        directOutput,
+        responseModified: false,
+        aggregatedText: undefined,
+      };
+    }
+    return this._applyAfterModelResult(
+      afterModelResult,
+      directOutput,
+      allowedFunctionNames,
+    );
+  }
+
+  /**
    * @plan:PLAN-20260707-AGENTNEUTRAL.P13
    * @requirement:REQ-004.1
    * @pseudocode lines 25-30
    */
   private _applyAfterModelResult(
     afterModelResult: {
-      getModifiedResponse(): unknown;
+      getModifiedResponse(): HookLLMResponse | undefined;
     },
     currentOutput: ModelOutput,
     allowedFunctionNames: string[] | undefined,
@@ -830,14 +882,14 @@ export class DirectMessageProcessor {
     aggregatedText: string | undefined;
   } {
     const modifiedResponse = afterModelResult.getModifiedResponse();
-    if (modifiedResponse === undefined || modifiedResponse === null) {
+    if (modifiedResponse === undefined) {
       return {
         directOutput: currentOutput,
         responseModified: false,
         aggregatedText: undefined,
       };
     }
-    const modifiedOutput = afterModelModifiedToModelOutput(
+    const modifiedOutput = afterModelModifiedToChunk(
       modifiedResponse,
       currentOutput,
     );

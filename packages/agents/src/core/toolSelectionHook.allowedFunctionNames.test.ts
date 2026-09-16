@@ -1,12 +1,14 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { describe, it, expect } from 'bun:test';
+import type { ToolChoice } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
 import { StreamProcessor } from './StreamProcessor.js';
+import { TurnProcessor } from './TurnProcessor.js';
 
 type ToolGroupArray = Array<{
   functionDeclarations: Array<{
@@ -16,38 +18,49 @@ type ToolGroupArray = Array<{
   }>;
 }>;
 
-type HookToolConfig = {
-  allowedFunctionNames?: string[];
+type V2ToolSelectionRequest = {
+  model: string;
+  contents: unknown[];
+  tools: Array<{
+    name: string;
+    description?: string;
+    parametersJsonSchema: unknown;
+  }>;
 };
 
 type ProcessorVariant = {
   name: string;
   applyToolSelectionHook: (
-    hookToolConfig: HookToolConfig,
+    toolChoice: ToolChoice | undefined,
     toolsFromConfig: ToolGroupArray,
-  ) => Promise<ToolGroupArray>;
+  ) => Promise<{
+    tools: ToolGroupArray;
+    firedRequest?: V2ToolSelectionRequest;
+  }>;
 };
 
-function createHookConfig(hookToolConfig: HookToolConfig): {
+const STUB_MODEL = 'stub-model';
+
+function createHookConfig(
+  toolChoice: ToolChoice | undefined,
+  firedRequest: { request?: V2ToolSelectionRequest },
+): {
   getEnableHooks: () => boolean;
-  getHookSystem: () => {
-    initialize: () => Promise<void>;
-    fireBeforeToolSelectionEvent: (_tools: ToolGroupArray) => Promise<{
-      applyToolConfigModifications: (_request: { tools: ToolGroupArray }) => {
-        toolConfig: HookToolConfig;
-      };
-    }>;
-  };
+  getHookSystem: () => object;
 } {
   return {
     getEnableHooks: () => true,
     getHookSystem: () => ({
       initialize: async () => undefined,
-      fireBeforeToolSelectionEvent: async () => ({
-        applyToolConfigModifications: () => ({
-          toolConfig: hookToolConfig,
-        }),
-      }),
+      fireBeforeToolSelectionEvent: async (request: V2ToolSelectionRequest) => {
+        firedRequest.request = request;
+        return {
+          applyToolChoiceModifications: () => ({
+            tools: [],
+            ...(toolChoice !== undefined ? { toolChoice } : {}),
+          }),
+        };
+      },
     }),
   };
 }
@@ -66,103 +79,139 @@ function createTools(): ToolGroupArray {
   ];
 }
 
-const variants: ProcessorVariant[] = [
-  {
-    name: 'DirectMessageProcessor',
-    applyToolSelectionHook: async (
-      hookToolConfig: HookToolConfig,
-      toolsFromConfig: ToolGroupArray,
-    ) => {
-      const processor = Object.create(
-        DirectMessageProcessor.prototype,
-      ) as DirectMessageProcessor;
-      const applyHook = (
-        processor as unknown as {
-          _applyToolSelectionHook: (
-            configForHooks: unknown,
-            tools: ToolGroupArray,
-          ) => Promise<{ tools: ToolGroupArray }>;
-        }
-      )._applyToolSelectionHook;
-
-      const result = await applyHook.call(
-        processor,
-        createHookConfig(hookToolConfig),
+/** Real `_applyToolSelectionHook` on a prototype-only processor stub. */
+function makeVariant(
+  name: string,
+  ProcessorClass:
+    | typeof DirectMessageProcessor
+    | typeof StreamProcessor
+    | typeof TurnProcessor,
+): ProcessorVariant {
+  return {
+    name,
+    applyToolSelectionHook: async (toolChoice, toolsFromConfig) => {
+      const processor = Object.create(ProcessorClass.prototype) as unknown as {
+        runtimeContext: { state: { model: string } };
+        _applyToolSelectionHook: (
+          configForHooks: unknown,
+          tools: ToolGroupArray,
+        ) => Promise<{ tools: ToolGroupArray }>;
+      };
+      processor.runtimeContext = { state: { model: STUB_MODEL } };
+      const firedRequest: { request?: V2ToolSelectionRequest } = {};
+      const result = await processor._applyToolSelectionHook(
+        createHookConfig(toolChoice, firedRequest),
         toolsFromConfig,
       );
-      return result.tools;
+      return { tools: result.tools, firedRequest: firedRequest.request };
     },
-  },
-  {
-    name: 'StreamProcessor',
-    applyToolSelectionHook: async (
-      hookToolConfig: HookToolConfig,
-      toolsFromConfig: ToolGroupArray,
-    ) => {
-      const processor = Object.create(
-        StreamProcessor.prototype,
-      ) as StreamProcessor;
-      const applyHook = (
-        processor as unknown as {
-          _applyToolSelectionHook: (
-            configForHooks: unknown,
-            tools: unknown,
-          ) => Promise<unknown>;
-        }
-      )._applyToolSelectionHook;
+  };
+}
 
-      const result = (await applyHook.call(
-        processor,
-        createHookConfig(hookToolConfig),
-        toolsFromConfig,
-      )) as { tools: ToolGroupArray };
-      return result.tools;
-    },
-  },
+const directVariant = makeVariant(
+  'DirectMessageProcessor',
+  DirectMessageProcessor,
+);
+
+const turnVariant = makeVariant('TurnProcessor', TurnProcessor);
+
+const variants: ProcessorVariant[] = [
+  directVariant,
+  makeVariant('StreamProcessor', StreamProcessor),
+  turnVariant,
 ];
 
 describe.each(variants)(
-  '$name BeforeToolSelection allowedFunctionNames',
+  '$name BeforeToolSelection allowedToolNames',
   ({ applyToolSelectionHook }) => {
-    it('leaves tools unchanged when allowedFunctionNames is omitted', async () => {
+    it('fires the v2 envelope: model from scope, empty contents, flattened tool declarations', async () => {
       const toolsFromConfig = createTools();
 
-      const result = await applyToolSelectionHook({}, toolsFromConfig);
-
-      expect(result).toStrictEqual(toolsFromConfig);
-    });
-
-    it('leaves tools unchanged when allowedFunctionNames is explicitly undefined', async () => {
-      const toolsFromConfig = createTools();
-
-      const result = await applyToolSelectionHook(
-        { allowedFunctionNames: undefined },
+      const { firedRequest } = await applyToolSelectionHook(
+        undefined,
         toolsFromConfig,
       );
 
-      expect(result).toStrictEqual(toolsFromConfig);
+      expect(firedRequest).toStrictEqual({
+        model: STUB_MODEL,
+        contents: [],
+        tools: [
+          {
+            name: 'alpha',
+            parametersJsonSchema: {},
+            description: 'alpha tool',
+          },
+          { name: 'beta', parametersJsonSchema: {}, description: 'beta tool' },
+          {
+            name: 'gamma',
+            parametersJsonSchema: {},
+            description: 'gamma tool',
+          },
+        ],
+      });
     });
 
-    it('returns no tools when allowedFunctionNames is an empty array', async () => {
+    it('leaves tools unchanged when the hook supplies no toolChoice', async () => {
+      const toolsFromConfig = createTools();
+
+      const result = await applyToolSelectionHook(undefined, toolsFromConfig);
+
+      expect(result.tools).toStrictEqual(toolsFromConfig);
+    });
+
+    it('leaves tools unchanged when allowedToolNames is omitted', async () => {
       const toolsFromConfig = createTools();
 
       const result = await applyToolSelectionHook(
-        { allowedFunctionNames: [] },
+        { mode: 'auto' },
         toolsFromConfig,
       );
 
-      expect(result).toStrictEqual([]);
+      expect(result.tools).toStrictEqual(toolsFromConfig);
     });
 
-    it('filters tools to only the allowed function names', async () => {
+    it('returns no tools when allowedToolNames is an empty array', async () => {
       const toolsFromConfig = createTools();
 
       const result = await applyToolSelectionHook(
-        { allowedFunctionNames: ['beta', 'gamma'] },
+        { mode: 'none', allowedToolNames: [] },
         toolsFromConfig,
       );
 
-      expect(result).toStrictEqual([
+      expect(result.tools).toStrictEqual([]);
+    });
+
+    it('returns no tools when mode is none without allowedToolNames (none wins)', async () => {
+      const toolsFromConfig = createTools();
+
+      const result = await applyToolSelectionHook(
+        { mode: 'none' },
+        toolsFromConfig,
+      );
+
+      expect(result.tools).toStrictEqual([]);
+    });
+
+    it('returns no tools when mode is none even with a non-empty allowlist (none wins)', async () => {
+      const toolsFromConfig = createTools();
+
+      const result = await applyToolSelectionHook(
+        { mode: 'none', allowedToolNames: ['alpha', 'beta'] },
+        toolsFromConfig,
+      );
+
+      expect(result.tools).toStrictEqual([]);
+    });
+
+    it('filters tools to only the allowed tool names', async () => {
+      const toolsFromConfig = createTools();
+
+      const result = await applyToolSelectionHook(
+        { mode: 'auto', allowedToolNames: ['beta', 'gamma'] },
+        toolsFromConfig,
+      );
+
+      expect(result.tools).toStrictEqual([
         {
           functionDeclarations: [{ name: 'beta', description: 'beta tool' }],
         },
@@ -172,15 +221,82 @@ describe.each(variants)(
       ]);
     });
 
-    it('leaves tools unchanged when allowedFunctionNames is not an array', async () => {
+    it('filters tools to only the allowed tool names in required mode', async () => {
       const toolsFromConfig = createTools();
 
       const result = await applyToolSelectionHook(
-        { allowedFunctionNames: 'beta' as unknown as string[] },
+        { mode: 'required', allowedToolNames: ['beta'] },
         toolsFromConfig,
       );
 
-      expect(result).toStrictEqual(toolsFromConfig);
+      expect(result.tools).toStrictEqual([
+        {
+          functionDeclarations: [{ name: 'beta', description: 'beta tool' }],
+        },
+      ]);
+    });
+
+    it('filters using canonicalized names', async () => {
+      const toolsFromConfig = createTools();
+
+      const result = await applyToolSelectionHook(
+        { mode: 'auto', allowedToolNames: ['BETA'] },
+        toolsFromConfig,
+      );
+
+      expect(result.tools).toStrictEqual([
+        {
+          functionDeclarations: [{ name: 'beta', description: 'beta tool' }],
+        },
+      ]);
+    });
+
+    it('leaves tools unchanged when allowedToolNames is not an array', async () => {
+      const toolsFromConfig = createTools();
+
+      const result = await applyToolSelectionHook(
+        {
+          mode: 'auto',
+          allowedToolNames: 'beta' as unknown as string[],
+        },
+        toolsFromConfig,
+      );
+
+      expect(result.tools).toStrictEqual(toolsFromConfig);
     });
   },
 );
+
+describe('DirectMessageProcessor BeforeToolSelection runtime-cast tool groups', () => {
+  it('treats absent or non-array functionDeclarations as empty when filtering', async () => {
+    const toolsFromConfig = [
+      { functionDeclarations: [{ name: 'alpha', description: 'alpha tool' }] },
+      {} as unknown as ToolGroupArray[number],
+      {
+        functionDeclarations: 'not-an-array',
+      } as unknown as ToolGroupArray[number],
+    ];
+
+    const result = await directVariant.applyToolSelectionHook(
+      { mode: 'auto', allowedToolNames: ['alpha'] },
+      toolsFromConfig,
+    );
+
+    expect(result.tools).toStrictEqual([
+      { functionDeclarations: [{ name: 'alpha', description: 'alpha tool' }] },
+    ]);
+  });
+});
+
+describe('TurnProcessor BeforeToolSelection runtime-cast tool groups', () => {
+  it('treats a tool group lacking functionDeclarations as empty when filtering', async () => {
+    const toolsFromConfig = [{} as unknown as ToolGroupArray[number]];
+
+    const result = await turnVariant.applyToolSelectionHook(
+      { mode: 'auto', allowedToolNames: ['alpha'] },
+      toolsFromConfig,
+    );
+
+    expect(result.tools).toStrictEqual([]);
+  });
+});

@@ -17,7 +17,7 @@ let parseResponsesStream: typeof import('./parseResponsesStream.js').parseRespon
 
 function hasTerminalMetadata(message: IContent): boolean {
   return (
-    message.metadata?.usage != null || message.metadata?.stopReason != null
+    message.metadata?.usage != null || message.metadata?.rawStopReason != null
   );
 }
 
@@ -69,9 +69,9 @@ describe('issue #1844 – parseResponsesStream terminal metadata', () => {
       cachedTokens: 0,
     });
 
-    // stopReason is normalized (completed → end_turn), finishReason preserves raw value
-    expect(terminalMessage!.metadata!.stopReason).toBe('end_turn');
-    expect(terminalMessage!.metadata!.finishReason).toBe('completed');
+    // The normalized signal is separate from the native diagnostic value.
+    expect(terminalMessage!.metadata!.rawStopReason).toBe('completed');
+    expect(terminalMessage!.metadata!.finishReason).toBe('stop');
   });
 
   it('should emit stopReason on response.done', async () => {
@@ -90,8 +90,8 @@ describe('issue #1844 – parseResponsesStream terminal metadata', () => {
 
     const terminalMessage = messages.find(hasTerminalMetadata);
     expect(terminalMessage).toBeDefined();
-    // stopReason is normalized (completed → end_turn), finishReason preserves raw value
-    expect(terminalMessage!.metadata!.stopReason).toBe('end_turn');
-    expect(terminalMessage!.metadata!.finishReason).toBe('completed');
+    // The normalized signal is separate from the native diagnostic value.
+    expect(terminalMessage!.metadata!.rawStopReason).toBe('completed');
+    expect(terminalMessage!.metadata!.finishReason).toBe('stop');
   });
 });

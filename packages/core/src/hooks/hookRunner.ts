@@ -22,7 +22,7 @@ import type {
   BeforeModelOutput,
   BeforeToolInput,
 } from './types.js';
-import type { LLMRequest } from './hookTranslator.js';
+import { mergeHookLLMRequest } from './hookTranslator.js';
 import { DebugLogger } from '../debug/index.js';
 import type { Config } from '../config/config.js';
 import { sanitizeEnvironment } from '../services/environmentSanitization.js';
@@ -235,12 +235,13 @@ export class HookRunner {
       'llm_request' in modifiedInput
     ) {
       const currentRequest = (modifiedInput as BeforeModelInput).llm_request;
-      const partialRequest =
-        hookBeforeModelOutput.hookSpecificOutput.llm_request;
-      (modifiedInput as BeforeModelInput).llm_request = {
-        ...currentRequest,
-        ...partialRequest,
-      } as LLMRequest;
+      // v2 merge semantics: contents/tools replace when arrays, model
+      // overrides when string, settings shallow-merge; wrong-typed or absent
+      // fields leave the target value untouched.
+      (modifiedInput as BeforeModelInput).llm_request = mergeHookLLMRequest(
+        currentRequest,
+        hookBeforeModelOutput.hookSpecificOutput.llm_request,
+      );
     }
   }
 

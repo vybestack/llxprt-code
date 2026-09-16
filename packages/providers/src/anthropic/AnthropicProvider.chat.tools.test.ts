@@ -488,7 +488,7 @@ describe('AnthropicProvider tool payload handling', () => {
       }
 
       const stopReasonChunk = chunks.find(
-        (c) => c.metadata?.stopReason === 'end_turn',
+        (c) => c.metadata?.finishReason === 'stop',
       );
       expect(stopReasonChunk).toBeDefined();
       expect(stopReasonChunk?.metadata?.usage).toBeUndefined();

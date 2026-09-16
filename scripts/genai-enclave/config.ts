@@ -223,19 +223,6 @@ export const GEMINI_NAME_EXPLICIT_ALLOWLIST: readonly GeminiNameAllowlistEntry[]
       name: 'isGemini3Model',
       justification: 'Model-ID predicate in core config/models.',
     },
-    // ── Finish-reason mapping (genuine converter/boundary module) ─────
-    {
-      path: 'packages/core/src/llm-types/finishReasons.ts',
-      name: 'GEMINI_FINISH_MAP',
-      justification:
-        'Gemini finish-reason mapping table in core llm-types/finishReasons.',
-    },
-    {
-      path: 'packages/core/src/llm-types/finishReasons.ts',
-      name: 'mapGeminiFinishReason',
-      justification:
-        'Gemini finish-reason mapper in core llm-types/finishReasons.',
-    },
     // ── Neutral structural Gemini-content types (llm-types layer) ─────
     {
       path: 'packages/core/src/llm-types/geminiContent.ts',

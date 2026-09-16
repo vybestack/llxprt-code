@@ -1,2 +1,2 @@
-{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_read_file","name":"read_file","parameters":{"file_path":"{{CWD}}/new_file_data.txt"}},{"type":"tool_call","id":"call_run_shell_command","name":"run_shell_command","parameters":{"command":"echo test data","description":"Echo the test file content"}}],"metadata":{"stopReason":"tool_calls"}}]}
-{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"Done."}],"metadata":{"stopReason":"stop"}}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_read_file","name":"read_file","parameters":{"file_path":"{{CWD}}/new_file_data.txt"}},{"type":"tool_call","id":"call_run_shell_command","name":"run_shell_command","parameters":{"command":"echo test data","description":"Echo the test file content"}}],"metadata":{"finishReason":"tool_calls"}}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"Done."}],"metadata":{"finishReason":"stop"}}]}

@@ -35,7 +35,7 @@ describe('Codex Responses WebSocket connection-lifecycle retry @issue:2771', () 
 
     expect(messages).toContainEqual(textContent('recovered'));
     expect(metadataOf(messages)).toMatchObject({
-      finishReason: 'completed',
+      finishReason: 'stop',
     });
     expect(harness.sockets).toHaveLength(2);
     expect(harness.sockets[0].closedByClient).toBe(true);

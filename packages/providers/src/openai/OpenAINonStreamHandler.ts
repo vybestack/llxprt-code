@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import type { FinishInfo } from '@vybestack/llxprt-code-core/llm-types/finishReasons.js';
 import type OpenAI from 'openai';
 import {
   type IContent,
@@ -36,7 +37,7 @@ import {
   sanitizeToolArgumentsString,
   extractKimiToolCallsFromText,
 } from './OpenAIResponseParser.js';
-import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
+import { mapFinishReason } from './finishReasonMapping.js';
 
 /**
  * Helper to convert token value preserving old || 0 behavior:
@@ -71,14 +72,6 @@ function isDefined<T>(value: T | null | undefined): value is T {
   return value !== undefined && value !== null;
 }
 
-/**
- * Helper predicate: checks if a value is a non-empty string.
- * Preserves old truthy behavior: empty string treated as missing (not spread/emitted).
- */
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value !== '';
-}
-
 export interface NonStreamHandlerDeps {
   toolCallPipeline: ToolCallPipeline;
   textToolParser: GemmaToolCallParser;
@@ -90,7 +83,7 @@ export interface NonStreamHandlerDeps {
  */
 function buildUsageMetadata(
   usage: OpenAI.CompletionUsage,
-  stopReason: string | undefined,
+  finishInfo: FinishInfo | undefined,
 ): IContent['metadata'] {
   const cacheMetrics = extractCacheMetrics(usage);
   const promptTokens = toTokenCount(usage.prompt_tokens);
@@ -109,20 +102,8 @@ function buildUsageMetadata(
       cacheCreationTokens: cacheMetrics.cacheCreationTokens,
       cacheMissTokens: cacheMetrics.cacheMissTokens,
     },
-    ...(isNonEmptyString(stopReason) && { stopReason }),
+    ...finishInfo,
   };
-}
-
-/**
- * Apply finishReason to response metadata (issue #1844 propagation).
- */
-function applyFinishReason(
-  content: IContent,
-  finishReason: string | null | undefined,
-): void {
-  if (!isDefined(finishReason)) return;
-  content.metadata ??= {};
-  content.metadata.finishReason = finishReason;
 }
 
 /**
@@ -233,66 +214,19 @@ function logFinishReason(
   }
 }
 
-/**
- * Yield the response content, handling blocks-present, usage-only,
- * finish-reason-only, and stop-reason-only paths.
- */
 function yieldResponseContent(
   blocks: Array<TextBlock | ToolCallBlock>,
   completion: OpenAI.Chat.Completions.ChatCompletion,
-  choice: OpenAI.Chat.Completions.ChatCompletion['choices'][number],
-  stopReason: string | undefined,
+  finishInfo: FinishInfo | undefined,
 ): IContent | null {
-  if (blocks.length > 0) {
-    const responseContent: IContent = {
-      speaker: 'ai',
-      blocks,
-    };
-
-    if (completion.usage) {
-      responseContent.metadata = buildUsageMetadata(
-        completion.usage,
-        stopReason,
-      );
-    } else if (isNonEmptyString(stopReason)) {
-      responseContent.metadata = { stopReason };
-    }
-
-    applyFinishReason(responseContent, choice.finish_reason);
-    return responseContent;
-  }
-
-  if (completion.usage) {
-    const metadataOnly: IContent = {
-      speaker: 'ai',
-      blocks: [],
-      metadata: buildUsageMetadata(completion.usage, stopReason),
-    };
-
-    applyFinishReason(metadataOnly, choice.finish_reason);
-    return metadataOnly;
-  }
-
-  if (isDefined(choice.finish_reason)) {
-    return {
-      speaker: 'ai',
-      blocks: [],
-      metadata: {
-        stopReason,
-        finishReason: choice.finish_reason,
-      },
-    } as IContent;
-  }
-
-  if (isNonEmptyString(stopReason)) {
-    return {
-      speaker: 'ai',
-      blocks: [],
-      metadata: { stopReason },
-    } as IContent;
-  }
-
-  return null;
+  if (blocks.length === 0 && !completion.usage && !finishInfo) return null;
+  return {
+    speaker: 'ai',
+    blocks,
+    metadata: completion.usage
+      ? buildUsageMetadata(completion.usage, finishInfo)
+      : finishInfo,
+  };
 }
 
 /**
@@ -352,8 +286,10 @@ export async function* handleNonStreamingResponse(
   }
 
   // Emit the complete response
-  const stopReason = mapFinishReasonToStopReason(choice.finish_reason);
-  const content = yieldResponseContent(blocks, completion, choice, stopReason);
+  const finishInfo = isDefined(choice.finish_reason)
+    ? mapFinishReason(choice.finish_reason)
+    : undefined;
+  const content = yieldResponseContent(blocks, completion, finishInfo);
   if (content) {
     yield content;
   }

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { mapFinishReason } from '../openai/finishReasonMapping.js';
 import type { LanguageModelUsage } from 'ai';
 
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -81,14 +82,14 @@ export function mapUsageToMetadata(
 /**
  * Builds a metadata object from usage and finishReason if either is present.
  */
-function buildMetadata(
+export function buildMetadata(
   usageMeta: UsageMetadata | undefined,
   finishReason: string | undefined,
-): Record<string, unknown> | undefined {
+): IContent['metadata'] {
   return usageMeta || finishReason
     ? {
         ...(usageMeta ? { usage: usageMeta } : {}),
-        ...(finishReason ? { finishReason } : {}),
+        ...(finishReason ? mapFinishReason(finishReason) : {}),
       }
     : undefined;
 }

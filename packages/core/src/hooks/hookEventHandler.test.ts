@@ -19,6 +19,21 @@ import type { HookRunner } from './hookRunner.js';
 import type { HookAggregator, AggregatedHookResult } from './hookAggregator.js';
 import type { SessionRecordingService } from '../recording/SessionRecordingService.js';
 import { HookEventName } from './types.js';
+import type { IContent } from '../services/history/IContent.js';
+import type { HookLLMRequest } from './hookTranslator.js';
+
+// v2 wire fixtures: fire* signatures take Omit<T,'version'> envelopes; the
+// handler stamps version 2 centrally.
+const aiText = (text: string): IContent => ({
+  speaker: 'ai',
+  blocks: [{ type: 'text', text }],
+});
+
+const V2_REQUEST: Omit<HookLLMRequest, 'version'> = {
+  model: 'test-model',
+  contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] }],
+};
+
 import type { HookExecutionResult } from './types.js';
 import { coreEvents } from '../utils/events.js';
 
@@ -159,14 +174,12 @@ describe('HookEventHandler', () => {
   describe('fireBeforeModelEvent', () => {
     it('should return empty success result when no hooks match', async () => {
       // @requirement:HOOK-145
-      const result = await eventHandler.fireBeforeModelEvent({
-        messages: [{ role: 'user', content: 'Hello' }],
-      });
+      const result = await eventHandler.fireBeforeModelEvent(V2_REQUEST);
       expect(result).toStrictEqual(EMPTY_SUCCESS_RESULT);
     });
 
     it('should call planner with BeforeModel event name', async () => {
-      await eventHandler.fireBeforeModelEvent({ messages: [] });
+      await eventHandler.fireBeforeModelEvent(V2_REQUEST);
       expect(mockPlanner.createExecutionPlan).toHaveBeenCalledWith(
         'BeforeModel',
         undefined,
@@ -184,7 +197,7 @@ describe('HookEventHandler', () => {
         throw new Error('Planner error');
       });
 
-      const result = await eventHandler.fireBeforeModelEvent({ messages: [] });
+      const result = await eventHandler.fireBeforeModelEvent(V2_REQUEST);
       expect(result.success).toBe(false);
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0].message).toBe('Planner error');
@@ -194,15 +207,16 @@ describe('HookEventHandler', () => {
   describe('fireAfterModelEvent', () => {
     it('should return empty success result when no hooks match', async () => {
       // @requirement:HOOK-145
-      const result = await eventHandler.fireAfterModelEvent(
-        { messages: [] },
-        { text: 'Response text' },
-      );
+      const result = await eventHandler.fireAfterModelEvent(V2_REQUEST, {
+        content: aiText('Response text'),
+      });
       expect(result).toStrictEqual(EMPTY_SUCCESS_RESULT);
     });
 
     it('should call planner with AfterModel event name', async () => {
-      await eventHandler.fireAfterModelEvent({ messages: [] }, { text: 'Hi' });
+      await eventHandler.fireAfterModelEvent(V2_REQUEST, {
+        content: aiText('Hi'),
+      });
       expect(mockPlanner.createExecutionPlan).toHaveBeenCalledWith(
         'AfterModel',
         undefined,
@@ -220,10 +234,9 @@ describe('HookEventHandler', () => {
         throw new Error('Unexpected error');
       });
 
-      const result = await eventHandler.fireAfterModelEvent(
-        { messages: [] },
-        { text: 'Response' },
-      );
+      const result = await eventHandler.fireAfterModelEvent(V2_REQUEST, {
+        content: aiText('Response'),
+      });
       expect(result.success).toBe(false);
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0].message).toBe('Unexpected error');
@@ -233,14 +246,13 @@ describe('HookEventHandler', () => {
   describe('fireBeforeToolSelectionEvent', () => {
     it('should return empty success result when no hooks match', async () => {
       // @requirement:HOOK-145
-      const result = await eventHandler.fireBeforeToolSelectionEvent({
-        messages: [],
-      });
+      const result =
+        await eventHandler.fireBeforeToolSelectionEvent(V2_REQUEST);
       expect(result).toStrictEqual(EMPTY_SUCCESS_RESULT);
     });
 
     it('should call planner with BeforeToolSelection event name', async () => {
-      await eventHandler.fireBeforeToolSelectionEvent({ messages: [] });
+      await eventHandler.fireBeforeToolSelectionEvent(V2_REQUEST);
       expect(mockPlanner.createExecutionPlan).toHaveBeenCalledWith(
         'BeforeToolSelection',
         undefined,
@@ -258,9 +270,8 @@ describe('HookEventHandler', () => {
         throw new Error('Tool selection error');
       });
 
-      const result = await eventHandler.fireBeforeToolSelectionEvent({
-        messages: [],
-      });
+      const result =
+        await eventHandler.fireBeforeToolSelectionEvent(V2_REQUEST);
       expect(result.success).toBe(false);
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0].message).toBe('Tool selection error');
@@ -281,7 +292,7 @@ describe('HookEventHandler', () => {
         >
       ).mockReturnValue(plan);
 
-      await eventHandler.fireBeforeModelEvent({ messages: [] });
+      await eventHandler.fireBeforeModelEvent(V2_REQUEST);
 
       expect(mockRunner.executeHooksParallel).toHaveBeenCalledWith(
         plan.hookConfigs,
@@ -308,7 +319,7 @@ describe('HookEventHandler', () => {
         >
       ).mockReturnValue(plan);
 
-      await eventHandler.fireBeforeModelEvent({ messages: [] });
+      await eventHandler.fireBeforeModelEvent(V2_REQUEST);
 
       expect(mockRunner.executeHooksParallel).toHaveBeenCalledWith(
         plan.hookConfigs,
@@ -336,7 +347,7 @@ describe('HookEventHandler', () => {
         >
       ).mockReturnValue(plan);
 
-      await eventHandler.fireBeforeModelEvent({ messages: [] });
+      await eventHandler.fireBeforeModelEvent(V2_REQUEST);
 
       expect(mockRunner.executeHooksParallel).toHaveBeenCalled();
       expect(mockRunner.executeHooksSequential).not.toHaveBeenCalled();
@@ -353,7 +364,7 @@ describe('HookEventHandler', () => {
         >
       ).mockReturnValue(plan);
 
-      await eventHandler.fireBeforeModelEvent({ messages: [] });
+      await eventHandler.fireBeforeModelEvent(V2_REQUEST);
 
       expect(mockRunner.executeHooksSequential).toHaveBeenCalled();
       expect(mockRunner.executeHooksParallel).not.toHaveBeenCalled();
@@ -378,7 +389,7 @@ describe('HookEventHandler', () => {
         >
       ).mockResolvedValue(executionResults);
 
-      await eventHandler.fireBeforeModelEvent({ messages: [] });
+      await eventHandler.fireBeforeModelEvent(V2_REQUEST);
 
       expect(mockAggregator.aggregateResults).toHaveBeenCalledWith(
         executionResults,
@@ -402,7 +413,7 @@ describe('HookEventHandler', () => {
 
       // The debug logger is mocked, so we just verify no errors
       await expect(
-        eventHandler.fireBeforeModelEvent({ messages: [] }),
+        eventHandler.fireBeforeModelEvent(V2_REQUEST),
       ).resolves.toBeDefined();
     });
   });
@@ -522,7 +533,7 @@ describe('HookEventHandler', () => {
       ).mockReturnValue(plan);
 
       // ACT
-      await eventHandler.fireBeforeModelEvent({ messages: [] });
+      await eventHandler.fireBeforeModelEvent(V2_REQUEST);
 
       // ASSERT
       expect(mockRunner.executeHooksParallel).toHaveBeenCalledWith(
@@ -553,7 +564,7 @@ describe('HookEventHandler', () => {
       ).mockReturnValue(undefined);
 
       // ACT
-      await eventHandler.fireBeforeModelEvent({ messages: [] });
+      await eventHandler.fireBeforeModelEvent(V2_REQUEST);
 
       // ASSERT
       expect(mockRunner.executeHooksParallel).toHaveBeenCalledWith(
@@ -585,7 +596,7 @@ describe('HookEventHandler', () => {
       } as unknown as SessionRecordingService);
 
       // ACT
-      await eventHandler.fireBeforeModelEvent({ messages: [] });
+      await eventHandler.fireBeforeModelEvent(V2_REQUEST);
 
       // ASSERT
       expect(mockRunner.executeHooksParallel).toHaveBeenCalledWith(

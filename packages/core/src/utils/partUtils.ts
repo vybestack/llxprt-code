@@ -87,45 +87,6 @@ export function partToString(
 }
 
 /**
- * Structural shape for a legacy GenerateContentResponse — operates on `unknown`
- * with structural checks so NO @google/genai import is needed in this file.
- * @phase3 — hookTranslator (Phase 3) calls this; full retirement removes it.
- */
-interface LegacyGenerateContentResponseLike {
-  candidates?:
-    | Array<{
-        content?: { parts?: Array<{ text?: string }> } | undefined;
-      }>
-    | undefined;
-}
-
-/**
- * Safely extracts text from a legacy GenerateContentResponse-shaped object.
- * Unlike the SDK's .text getter, this function handles cases where the
- * response has no candidates or is safety-blocked without throwing errors.
- *
- * @param response — Legacy GenerateContentResponse-shaped object
- * @returns The concatenated text from the first candidate's parts, or null
- * @phase3 — Retire when hookTranslator migrates to neutral ModelOutput (#2348 hooks phase)
- */
-export function getResponseText(
-  response: LegacyGenerateContentResponseLike,
-): string | null {
-  if (
-    response.candidates &&
-    response.candidates.length > 0 &&
-    response.candidates[0].content?.parts &&
-    response.candidates[0].content.parts.length > 0
-  ) {
-    return response.candidates[0].content.parts
-      .filter((part) => part.text)
-      .map((part) => part.text)
-      .join('');
-  }
-  return null;
-}
-
-/**
  * Convert a legacy PartListUnion-shaped value to a verbose string representation.
  * This is the canonical replacement for the retired geminiRequest.partListUnionToString.
  */

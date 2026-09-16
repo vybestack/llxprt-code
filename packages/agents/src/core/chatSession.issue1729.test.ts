@@ -100,7 +100,8 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
         speaker: 'ai',
         blocks: [thinkingBlock],
         metadata: {
-          stopReason: 'end_turn',
+          finishReason: 'stop',
+          rawStopReason: 'end_turn',
         },
       };
 
@@ -115,7 +116,8 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Some text' }],
         metadata: {
-          stopReason: 'max_tokens',
+          finishReason: 'max_tokens',
+          rawStopReason: 'max_tokens',
         },
       };
 
@@ -128,7 +130,8 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Some text' }],
         metadata: {
-          stopReason: 'stop_sequence',
+          finishReason: 'stop',
+          rawStopReason: 'stop_sequence',
         },
       };
 
@@ -141,7 +144,8 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Some text' }],
         metadata: {
-          stopReason: 'tool_use',
+          finishReason: 'tool_calls',
+          rawStopReason: 'tool_use',
         },
       };
 
@@ -231,12 +235,15 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
     });
   });
 
-  describe('stopReason mapping completeness', () => {
-    it('should map model_context_window_exceeded to other (unknown reason)', () => {
+  describe('provider finish metadata preservation', () => {
+    it('should preserve model_context_window_exceeded to other (unknown reason)', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'truncated' }],
-        metadata: { stopReason: 'model_context_window_exceeded' },
+        metadata: {
+          finishReason: 'other',
+          rawStopReason: 'model_context_window_exceeded',
+        },
       };
 
       // model_context_window_exceeded is not in any known stop-reason map, so
@@ -248,11 +255,11 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
       expect(chunk.rawStopReason).toBe('model_context_window_exceeded');
     });
 
-    it('should map pause_turn to other (unknown reason)', () => {
+    it('should preserve pause_turn to other (unknown reason)', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'paused' }],
-        metadata: { stopReason: 'pause_turn' },
+        metadata: { finishReason: 'other', rawStopReason: 'pause_turn' },
       };
 
       // pause_turn is not in any known stop-reason map; it canonicalizes to
@@ -266,11 +273,11 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
     // provider stop reason is preserved on the neutral rawStopReason carrier
     // so consumers can distinguish a safety-classifier refusal from a normal
     // completion.
-    it('should map refusal to refusal and preserve rawStopReason @issue:2329', () => {
+    it('should preserve refusal to refusal and preserve rawStopReason @issue:2329', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'refused' }],
-        metadata: { stopReason: 'refusal' },
+        metadata: { finishReason: 'refusal', rawStopReason: 'refusal' },
       };
 
       const chunk = toModelStreamChunk(icontent);
@@ -278,11 +285,14 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
       expect(chunk.rawStopReason).toBe('refusal');
     });
 
-    it('should map unknown stop reasons to other', () => {
+    it('should preserve unknown stop reasons to other', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'text' }],
-        metadata: { stopReason: 'some_future_reason' },
+        metadata: {
+          finishReason: 'other',
+          rawStopReason: 'some_future_reason',
+        },
       };
 
       // Unknown provider stop reasons canonicalize to 'other' (benign

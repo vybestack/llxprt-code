@@ -291,8 +291,8 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
         blocks: [],
         metadata: {
           id: 'r1',
-          stopReason: 'end_turn',
-          finishReason: 'completed',
+          rawStopReason: 'completed',
+          finishReason: 'stop',
         },
       },
     ]);
@@ -375,8 +375,8 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
         metadata: {
           id: 'r1',
           responsesStored: true,
-          stopReason: 'end_turn',
-          finishReason: 'completed',
+          rawStopReason: 'completed',
+          finishReason: 'stop',
         },
       },
     ]);
@@ -393,8 +393,8 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
         metadata: {
           id: 'r1',
           responsesStored: true,
-          stopReason: 'end_turn',
-          finishReason: 'completed',
+          rawStopReason: 'completed',
+          finishReason: 'stop',
         },
       },
     ]);

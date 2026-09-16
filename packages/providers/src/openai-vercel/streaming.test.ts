@@ -339,7 +339,8 @@ describe('OpenAIVercelProvider - Streaming', () => {
       expect(toolCallBlock?.id).toBe('hist_tool_1');
 
       const lastChunk = chunks[chunks.length - 1];
-      expect(lastChunk.metadata?.finishReason).toBe('tool-calls');
+      expect(lastChunk.metadata?.finishReason).toBe('tool_calls');
+      expect(lastChunk.metadata?.rawStopReason).toBe('tool-calls');
     });
 
     it('should handle multiple concurrent tool calls', async () => {

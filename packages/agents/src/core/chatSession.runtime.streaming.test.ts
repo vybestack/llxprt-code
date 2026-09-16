@@ -102,8 +102,8 @@ describe('ChatSession runtime streaming and abort behavior', () => {
           isInitialized: () => true,
 
           fireBeforeToolSelectionEvent: async () => ({
-            applyToolConfigModifications: () => ({
-              toolConfig: { allowedFunctionNames: ['read_file'] },
+            applyToolChoiceModifications: () => ({
+              toolChoice: { mode: 'auto', allowedToolNames: ['read_file'] },
             }),
           }),
           fireBeforeModelEvent: async () => new BeforeModelHookOutput({}),

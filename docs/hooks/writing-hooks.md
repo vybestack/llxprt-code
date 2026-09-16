@@ -125,6 +125,17 @@ Every hook is a command (typically a shell script) that receives JSON input on
 JSON output, LLxprt Code can block an operation, modify a tool input, inject
 context, or simply continue.
 
+### Model-hook payloads use the v2 wire format
+
+The `BeforeModel`, `AfterModel`, and `BeforeToolSelection` events exchange
+versioned, provider-neutral payloads (`llm_request`/`llm_response` envelopes
+over `IContent` contents, and `toolChoice` for tool selection). The envelope
+is stamped `version: 2` by the runtime, and v1 payload shapes (such as
+`llm_request.messages`, `llm_response.candidates`, or `toolConfig`) are no
+longer decoded. See the
+[v2 wire format and migration table](api-reference.md#v1-to-v2-migration) in
+the API Reference before writing hooks that read or modify these payloads.
+
 ### Exit codes and output streams
 
 | Exit code | Meaning                                              |
@@ -462,9 +473,9 @@ cwd=$(echo "$input" | jq -r '.cwd')
 if [[ "$cwd" == */production/* || "$cwd" == */prod/* ]]; then
   echo '{
     "hookSpecificOutput": {
-      "toolConfig": {
-        "mode": "AUTO",
-        "allowedFunctionNames": ["read_file", "read_many_files", "glob", "search_file_content", "list_directory"]
+      "toolChoice": {
+        "mode": "auto",
+        "allowedToolNames": ["read_file", "read_many_files", "glob", "search_file_content", "list_directory"]
       }
     }
   }'

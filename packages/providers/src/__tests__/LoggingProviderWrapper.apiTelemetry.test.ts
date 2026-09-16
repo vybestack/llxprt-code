@@ -369,7 +369,7 @@ describe('LoggingProviderWrapper API Telemetry', () => {
     });
 
     it('should populate finish_reasons via processStreamForMetrics path (logging disabled)', async () => {
-      const provider = new FinishReasonProvider('length');
+      const provider = new FinishReasonProvider('max_tokens');
       const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
 
       const settings = new SettingsService();
@@ -394,11 +394,11 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       const call = (
         loggers.logApiResponse as Mock<typeof loggers.logApiResponse>
       ).mock.calls[0];
-      expect(call[1].finish_reasons).toStrictEqual(['length']);
+      expect(call[1].finish_reasons).toStrictEqual(['max_tokens']);
     });
 
-    // Issue #1844: stopReason fallback when finishReason is absent
-    it('should populate finish_reasons from metadata.stopReason when finishReason is absent (logResponseStream path)', async () => {
+    // Issue #1844: stopReason fallback with a provider-native rawStopReason
+    it('should populate finish_reasons from metadata.finishReason with a provider-native rawStopReason (logResponseStream path)', async () => {
       // Provider that emits stopReason but NOT finishReason (e.g., Anthropic/parseResponsesStream)
       const provider = new (class implements IProvider {
         name = 'stopreason-provider';
@@ -420,7 +420,8 @@ describe('LoggingProviderWrapper API Telemetry', () => {
                 completionTokens: 5,
                 totalTokens: 15,
               },
-              stopReason: 'end_turn',
+              finishReason: 'stop',
+              rawStopReason: 'end_turn',
             },
           } as IContent;
         }
@@ -449,10 +450,10 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       const call = (
         loggers.logApiResponse as Mock<typeof loggers.logApiResponse>
       ).mock.calls[0];
-      expect(call[1].finish_reasons).toStrictEqual(['end_turn']);
+      expect(call[1].finish_reasons).toStrictEqual(['stop']);
     });
 
-    it('should populate finish_reasons from metadata.stopReason via processStreamForMetrics path', async () => {
+    it('should populate finish_reasons from metadata.finishReason via processStreamForMetrics path', async () => {
       const provider = new (class implements IProvider {
         name = 'stopreason-metrics-provider';
         async getModels(): Promise<never[]> {
@@ -473,7 +474,8 @@ describe('LoggingProviderWrapper API Telemetry', () => {
                 completionTokens: 5,
                 totalTokens: 15,
               },
-              stopReason: 'completed',
+              finishReason: 'stop',
+              rawStopReason: 'completed',
             },
           } as IContent;
         }
@@ -502,7 +504,7 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       const call = (
         loggers.logApiResponse as Mock<typeof loggers.logApiResponse>
       ).mock.calls[0];
-      expect(call[1].finish_reasons).toStrictEqual(['completed']);
+      expect(call[1].finish_reasons).toStrictEqual(['stop']);
     });
   });
 });

@@ -6,6 +6,7 @@
  * Shared test helpers for LoggingProviderWrapper telemetry tests.
  */
 
+import type { CanonicalFinishReason } from '@vybestack/llxprt-code-core/llm-types/finishReasons.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -48,7 +49,7 @@ export class StubProvider {
 export class FinishReasonProvider {
   name = 'finish-reason-provider';
 
-  constructor(private finishReason: string) {}
+  constructor(private finishReason: CanonicalFinishReason) {}
 
   async getModels(): Promise<never[]> {
     return [];

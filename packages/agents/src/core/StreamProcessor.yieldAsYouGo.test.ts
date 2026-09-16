@@ -53,11 +53,11 @@ function makeChunk(text: string): ModelStreamChunk {
   } as IContent);
 }
 
-function makeFinishChunk(text: string, finishReason: string): ModelStreamChunk {
+function makeFinishChunk(text: string): ModelStreamChunk {
   return toModelStreamChunk({
     speaker: 'ai',
     blocks: [{ type: 'text', text }],
-    metadata: { stopReason: finishReason },
+    metadata: { finishReason: 'stop', rawStopReason: 'STOP' },
   } as IContent);
 }
 
@@ -100,7 +100,7 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
       timeline.push('source:yield:2');
       yield makeChunk(' world');
       timeline.push('source:yield:3');
-      yield makeFinishChunk('!', 'STOP');
+      yield makeFinishChunk('!');
       timeline.push('source:done');
     }
 
@@ -169,7 +169,7 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
         yield makeChunk('first chunk');
         // Simulate an API stall — the stream just stops producing
         await stallPromise;
-        yield makeFinishChunk('resumed', 'STOP');
+        yield makeFinishChunk('resumed');
       }
 
       const userInput: IContent = {
@@ -250,7 +250,7 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
     async function* threeChunks(): AsyncGenerator<ModelStreamChunk> {
       yield makeChunk('a');
       yield makeChunk('b');
-      yield makeFinishChunk('c', 'STOP');
+      yield makeFinishChunk('c');
     }
 
     const userInput: IContent = {
