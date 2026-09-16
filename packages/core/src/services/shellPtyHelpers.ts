@@ -162,10 +162,7 @@ export function serializeTerminalForRender(
   if (showColor === true) {
     return serializeTerminalToObject(terminal);
   }
-  const serialized = serializeTerminalToObject(terminal);
-  return (Array.isArray(serialized) ? serialized : [])
-    .filter((line): line is AnsiLine => Array.isArray(line))
-    .map((line) => line.map((token) => ({ ...token, fg: '', bg: '' })));
+  return serializeTerminalToObject(terminal, { colorless: true });
 }
 
 /** Find the last non-empty line index in an AnsiOutput, capped by cursorY. */
@@ -196,6 +193,70 @@ export function findLastNonEmptyLineIndex(
 }
 
 /**
+ * Structural equality between the previous and next rendered outputs.
+ *
+ * Equal exactly when a JSON.stringify comparison of both sides would be
+ * equal: every AnsiToken is built with a fixed key order and primitive
+ * fields only, so deep structural equality is equivalent to JSON string
+ * equality. Staged so the no-change path performs zero serialization and
+ * zero allocation: reference identity, then previous-output shape, line
+ * count, per-line token count, per-token text length, then
+ * text/flags/colors. Cursor position is deliberately not consulted
+ * directly — it reaches the emitted content only through the token
+ * inverse flag, so a cursor move outside the emitted region is not a
+ * change (matching the previous string-comparison decision).
+ */
+function outputsEqual(
+  previous: string | AnsiOutput | null,
+  next: AnsiOutput,
+): boolean {
+  if (previous === next) {
+    return true;
+  }
+  if (previous === null || typeof previous === 'string') {
+    return false;
+  }
+  if (previous.length !== next.length) {
+    return false;
+  }
+  for (let y = 0; y < next.length; y++) {
+    const previousLine = previous[y];
+    const nextLine = next[y];
+    if (previousLine.length !== nextLine.length) {
+      return false;
+    }
+    for (let t = 0; t < nextLine.length; t++) {
+      const previousToken = previousLine[t];
+      const nextToken = nextLine[t];
+      if (previousToken.text.length !== nextToken.text.length) {
+        return false;
+      }
+      if (
+        previousToken.text !== nextToken.text ||
+        previousToken.bold !== nextToken.bold ||
+        previousToken.italic !== nextToken.italic
+      ) {
+        return false;
+      }
+      if (
+        previousToken.underline !== nextToken.underline ||
+        previousToken.dim !== nextToken.dim ||
+        previousToken.inverse !== nextToken.inverse
+      ) {
+        return false;
+      }
+      if (
+        previousToken.fg !== nextToken.fg ||
+        previousToken.bg !== nextToken.bg
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+/**
  * Emit the output event if the terminal content has changed.
  *
  * The mutable output reference is threaded as a parameter so that the
@@ -207,9 +268,7 @@ export function maybeEmitRenderedOutput(
   finalOutput: AnsiOutput,
   buffer: { cursorY: number; cursorX: number },
 ): void {
-  const finalJson = JSON.stringify(finalOutput);
-  const outputJson = JSON.stringify(outputRef.current);
-  if (outputJson !== finalJson) {
+  if (!outputsEqual(outputRef.current, finalOutput)) {
     const cursorLine = finalOutput[buffer.cursorY] as AnsiLine | undefined;
     const cursorLineText =
       cursorLine !== undefined

@@ -72,10 +72,10 @@ type RecordingLifecycle =
  * A record that has already been serialised. Serialising at enqueue time keeps
  * byte accounting free and means each record — including large media payloads —
  * is stringified exactly once instead of once for accounting and again for the
- * write (issue #2852).
+ * write (issue #2852). Only the serialized form is retained: the live payload
+ * object graph is not pinned until drain (issue #3432).
  */
 interface PendingRecord {
-  readonly line: SessionRecordLine;
   readonly json: string;
   readonly bytes: number;
 }
@@ -88,7 +88,7 @@ export interface PreparedContentBatch {
 
 function toPendingRecord(line: SessionRecordLine): PendingRecord {
   const json = JSON.stringify(line);
-  return { line, json, bytes: Buffer.byteLength(json, 'utf8') + 1 };
+  return { json, bytes: Buffer.byteLength(json, 'utf8') + 1 };
 }
 
 function totalRecordBytes(records: readonly PendingRecord[]): number {
@@ -210,7 +210,10 @@ export class SessionRecordingService {
    * @requirement REQ-REC-004
    * @pseudocode session-recording-service.md lines 69-79
    */
-  private bufferPreContent(type: SessionEventType, payload: unknown): void {
+  private bufferPreContent(
+    type: SessionEventType,
+    payload: unknown,
+  ): SessionRecordLine {
     const line: SessionRecordLine = {
       v: type === 'semantic_media_purge' ? 2 : recordingVersion(payload),
       seq: this.seq + 1,
@@ -224,6 +227,7 @@ export class SessionRecordingService {
     this.preContentBuffer.push(record);
     this.preContentBytes += record.bytes;
     this.reportHighWater();
+    return line;
   }
 
   /**
@@ -237,10 +241,7 @@ export class SessionRecordingService {
   enqueue(type: SessionEventType, payload: unknown): SessionRecordLine | null {
     if (this.lifecycle.status !== 'active') return null;
     if (!this.materialized && !MATERIALIZING_EVENT_TYPES.has(type)) {
-      this.bufferPreContent(type, payload);
-      return (
-        this.preContentBuffer[this.preContentBuffer.length - 1]?.line ?? null
-      );
+      return this.bufferPreContent(type, payload);
     }
 
     const line: SessionRecordLine = {
