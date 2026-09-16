@@ -65,7 +65,12 @@ export function isZaiAnthropicEndpoint(baseURL?: string): boolean {
     return false;
   }
   try {
-    const host = new URL(baseURL.trim()).hostname.toLowerCase();
+    // Strip the DNS root label: WHATWG URL parsing preserves a terminal dot
+    // ('https://api.z.ai./' → hostname 'api.z.ai.'), which would otherwise
+    // fail the suffix match and skip the zai media restrictions.
+    const host = new URL(baseURL.trim()).hostname
+      .toLowerCase()
+      .replace(/\.$/, '');
     return (
       matchesHostSuffix(host, 'z.ai') || matchesHostSuffix(host, 'bigmodel.cn')
     );
