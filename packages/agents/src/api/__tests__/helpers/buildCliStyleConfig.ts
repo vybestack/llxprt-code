@@ -50,7 +50,9 @@ import {
 } from '@vybestack/llxprt-code-agents/internals.js';
 import type { AgentEvent, DoneReason } from '@vybestack/llxprt-code-agents';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ToolSchedulerFactory } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
+import type { TaskToolRegistration } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
 import {
   wrapRegistryWithConfirmation,
   injectConfirmationForcingPolicy,
@@ -114,6 +116,84 @@ export interface BuiltCliConfig {
   readonly config: ConfigType;
   readonly messageBus: MessageBus;
   readonly cleanup: () => Promise<void>;
+}
+
+/**
+ * Caller-supplied agent runtime factories a non-CLI API consumer may install
+ * on its own Config before adoption. Mirrors the three ConfigParameters seams
+ * fromConfig installs agent-owned defaults into (issue #3222).
+ */
+export interface CallerAgentRuntimeFactories {
+  readonly agentClientFactory?: AgentClientFactory;
+  readonly toolSchedulerFactory?: ToolSchedulerFactory;
+  readonly taskToolRegistration?: TaskToolRegistration;
+}
+
+export interface BuiltFactoryLessConfig {
+  readonly config: ConfigType;
+  readonly messageBus: MessageBus;
+  readonly cleanup: () => Promise<void>;
+}
+
+/**
+ * Builds the MINIMAL Config a non-CLI API consumer constructs (issue #3222):
+ * toConfigParameters + `new Config(params)` with NO agentClientFactory,
+ * NO toolSchedulerFactory, NO taskToolRegistration, and NO runtime
+ * activation/initialization — fromConfig owns those steps during adoption.
+ * Optionally installs caller-supplied factories so adoption can be observed
+ * honoring them (caller-wins).
+ *
+ * The FakeProvider env seam stays set until cleanup so the turn driven after
+ * adoption uses the fixture.
+ */
+export async function buildFactoryLessConfig(
+  fixtureRelPath: string,
+  callerFactories: Readonly<CallerAgentRuntimeFactories> = {},
+): Promise<BuiltFactoryLessConfig> {
+  const prev = process.env.LLXPRT_FAKE_RESPONSES;
+  const fixturePath = resolve(FIXTURES_DIR, fixtureRelPath);
+  process.env.LLXPRT_FAKE_RESPONSES = fixturePath;
+
+  const baseConfig: AgentConfig = {
+    provider: 'fake',
+    model: 'fake-model',
+    workingDir: resolve(HARNESS_DIR, '..'),
+  };
+
+  const frozenParams = toConfigParameters(baseConfig);
+  const params = { ...frozenParams };
+  if (callerFactories.agentClientFactory !== undefined) {
+    params.agentClientFactory = callerFactories.agentClientFactory;
+  }
+  if (callerFactories.toolSchedulerFactory !== undefined) {
+    params.toolSchedulerFactory = callerFactories.toolSchedulerFactory;
+  }
+  if (callerFactories.taskToolRegistration !== undefined) {
+    params.taskToolRegistration = callerFactories.taskToolRegistration;
+  }
+
+  try {
+    const config = new Config(params);
+    const messageBus = new MessageBus(
+      config.getPolicyEngine(),
+      config.getDebugMode(),
+    );
+    const cleanup = async (): Promise<void> => {
+      if (prev === undefined) {
+        delete process.env.LLXPRT_FAKE_RESPONSES;
+      } else {
+        process.env.LLXPRT_FAKE_RESPONSES = prev;
+      }
+    };
+    return { config, messageBus, cleanup };
+  } catch (error) {
+    if (prev === undefined) {
+      delete process.env.LLXPRT_FAKE_RESPONSES;
+    } else {
+      process.env.LLXPRT_FAKE_RESPONSES = prev;
+    }
+    throw error;
+  }
 }
 
 /**
@@ -194,16 +274,13 @@ export async function buildCliStyleConfig(
     config.getPolicyEngine(),
     config.getDebugMode(),
   );
-  const settingsService = config.getSettingsService();
 
   // SHARED runtime context — adopts OUR Config/MessageBus (mirrors createAgent
   // steps 41-58). The prepare callback registers providers (including
   // FakeProvider under LLXPRT_FAKE_RESPONSES) onto the isolated manager.
   const handle: IsolatedRuntimeContextHandle = createIsolatedRuntimeContext({
     runtimeId,
-    settingsService,
     config,
-    model: baseConfig.model,
     messageBus,
     prepare: (ctx) => {
       registerProvidersOntoManager(ctx.providerManager, ctx, ctx.config);

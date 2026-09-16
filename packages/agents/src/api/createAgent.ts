@@ -59,6 +59,11 @@ import {
 } from './loop/rebuildLoop.js';
 import { buildAgent } from './agentImpl.js';
 import { executeProviderActivation } from './providerActivationExecutor.js';
+import { createTaskRegistration } from './runtimeFactories.js';
+import {
+  ensureRuntimeManagers,
+  cleanupFailedRuntimeBootstrap,
+} from './agentRuntimeAssembly.js';
 import { PLACEHOLDER_MODEL, UNCONFIGURED_PROVIDER } from './constants.js';
 import {
   resolveAuthType,
@@ -103,6 +108,11 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
   // to inject the agentClientFactory and optional toolSchedulerFactory.
   const params = { ...frozenParams };
   params.agentClientFactory = agentClientFactory;
+  // The shipped TaskTool registration is agent-owned assembly (issue #3222):
+  // without it, TaskTool availability silently depended on a CLI composition
+  // root registering factories globally — in a process that never imported
+  // the CLI the model simply had no task tool.
+  params.taskToolRegistration = createTaskRegistration();
   // Without this the model never learns which skills exist: Config cannot
   // construct ActivateSkillTool itself (issue #2417), so a composition root
   // that omits the hook silently produces an agent with no skill activation
@@ -126,11 +136,14 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
     parsed,
     forceConfirmations,
   );
+  // Agent-owned runtime managers (issue #3222): the Config constructor does
+  // not attach ProfileManager/SubagentManager, and TaskTool registration
+  // (and skill discovery) need them at initialize() time.
+  ensureRuntimeManagers(config);
   // Apply typed stream-timeout AgentConfig fields as runtime Config ephemerals.
   // These drive the idle/first-response watchdogs but are not ConfigParameters
   // fields, so they are pushed after Config construction (issue #2607 Finding 2).
   applyRuntimeEphemerals(config, parsed);
-  const settingsService = config.getSettingsService();
 
   // @pseudocode createAgent.md steps 41-58
   // SHARED runtime context — adopts OUR Config/MessageBus. DO NOT pass
@@ -139,9 +152,7 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
   // FakeProvider under LLXPRT_FAKE_RESPONSES) onto the isolated manager.
   const handle: IsolatedRuntimeContextHandle = createIsolatedRuntimeContext({
     runtimeId,
-    settingsService,
     config,
-    model: parsed.model,
     messageBus,
     prepare: (ctx) => {
       registerProvidersOntoManager(ctx.providerManager, ctx, ctx.config);
@@ -151,37 +162,57 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
   const oauthManager = handle.oauthManager;
   const sharedSettingsService = handle.settingsService;
 
-  // @pseudocode createAgent.md step 57-58: ACTIVATE (ASYNC — must be awaited)
-  await handle.activate();
+  // Set once finalizeAgent succeeds: a failure AFTER that point (e.g.
+  // session-start) prefers the facade's own idempotent dispose() as the
+  // complete teardown over piecemeal cleanup.
+  let agent: Agent | undefined;
+  try {
+    // @pseudocode createAgent.md step 57-58: ACTIVATE (ASYNC — must be awaited)
+    await handle.activate();
 
-  const activationOutcome = await applyActivation(
-    parsed,
-    resolvedAuth,
-    config,
-    messageBus,
-  );
-  const finalizedParsed = { ...parsed, ...activationOutcome };
+    const activationOutcome = await applyActivation(
+      parsed,
+      resolvedAuth,
+      config,
+      messageBus,
+    );
+    const finalizedParsed = { ...parsed, ...activationOutcome };
 
-  // @pseudocode createAgent.md steps 105-166: finalize agent (runtime state,
-  // client bind, loop build, ownership, facade, session-start hook)
-  const agent = await finalizeAgent(
-    finalizedParsed,
-    resolvedAuth,
-    config,
-    manager,
-    oauthManager,
-    sharedSettingsService,
-    runtimeId,
-    handle,
-    messageBus,
-    onApproval,
-    onOAuthPrompt,
-    editorCallbacks,
-    injectedSchedulerHandles,
-    'agent',
-  );
-  await agent.hooks.triggerSessionStart();
-  return agent;
+    // @pseudocode createAgent.md steps 105-166: finalize agent (runtime state,
+    // client bind, loop build, ownership, facade, session-start hook)
+    agent = await finalizeAgent(
+      finalizedParsed,
+      resolvedAuth,
+      config,
+      manager,
+      oauthManager,
+      sharedSettingsService,
+      runtimeId,
+      handle,
+      messageBus,
+      onApproval,
+      onOAuthPrompt,
+      editorCallbacks,
+      injectedSchedulerHandles,
+      'agent',
+    );
+    await agent.hooks.triggerSessionStart();
+    return agent;
+  } catch (primaryError) {
+    // Any bootstrap failure after the isolated runtime exists must dispose
+    // that runtime (AC5: the handle previously leaked on activation failure)
+    // AND the agent-owned Config — initialize() (run inside applyActivation,
+    // before activation can fail) starts MCP discovery, the extension loader,
+    // LSP and the AgentClient, and only Config.dispose() releases them.
+    // createAgent always constructs its own Config, so it is disposed
+    // unconditionally; the handle is cleaned up first (children before
+    // parents), and once the facade exists its dispose() covers both plus
+    // the hook teardown. The ORIGINAL error always surfaces; a failing
+    // cleanup step is aggregated, never substituted.
+    return cleanupFailedRuntimeBootstrap(handle, primaryError, 'createAgent', {
+      ...(agent !== undefined ? { facade: agent } : { ownedConfig: config }),
+    });
+  }
 }
 
 /**

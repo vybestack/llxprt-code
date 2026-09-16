@@ -21,10 +21,13 @@
  * assertions pass with no rewrite.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, vi } from 'bun:test';
 import * as fc from 'fast-check';
 import {
   fromConfig,
+  createAgentClient,
+  createToolScheduler,
+  createTaskRegistration,
   type Agent,
   type AgentEvent,
 } from '@vybestack/llxprt-code-agents';
@@ -37,6 +40,8 @@ import {
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
   buildCliStyleConfig,
+  buildFactoryLessConfig,
+  type CallerAgentRuntimeFactories,
   type MessageBus,
 } from './helpers/buildCliStyleConfig.js';
 import {
@@ -659,5 +664,141 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
       );
     },
     IDENTITY_PROPERTY_TIMEOUT_MS,
+  );
+});
+
+// ─── Agent-owned runtime factory defaults on adoption (issue #3222) ─────────
+//
+// A non-CLI API consumer builds a MINIMAL Config with no agent runtime
+// factories (buildFactoryLessConfig mirrors exactly that). fromConfig must
+// adopt it into a working agent by installing agent-owned defaults for
+// anything absent — while NEVER overriding caller-supplied factories.
+
+describe('fromConfig agent-owned assembly @plan:ISSUE-3222 @requirement:REQ-3222-AC2', () => {
+  it('T2a adopting a factory-less minimal Config yields a working agent: the client initializes, a scheduler is creatable, and the shipped task tool is registered @requirement:REQ-3222-AC2 @scenario:factory-less-adoption @given:a minimal Config carrying NO agentClientFactory, toolSchedulerFactory, or taskToolRegistration @when:fromConfig({ config, sessionId, messageBus }) @then:the Config agent client reports initialized, getOrCreateScheduler produces a scheduler, and the tool surface lists the shipped "task" tool', async () => {
+    const built = await buildFactoryLessConfig('plain-text.jsonl');
+    const runtimeId = 'issue3222-fromconfig-factoryless';
+    try {
+      const agent: Agent = await fromConfig({
+        config: built.config,
+        sessionId: runtimeId,
+        messageBus: built.messageBus,
+      });
+      try {
+        const config = internalConfig(agent);
+
+        const scheduler = await config.getOrCreateScheduler(
+          runtimeId,
+          {
+            outputUpdateHandler: vi.fn(),
+            onAllToolCallsComplete: vi.fn(),
+            getPreferredEditor: vi.fn(),
+            onEditorClose: vi.fn(),
+          },
+          undefined,
+          { messageBus: built.messageBus },
+        );
+        expect(scheduler).toBeDefined();
+
+        const names = agent.tools.list().map((tool) => tool.name);
+        expect(names).toContain('task');
+
+        // The client reports initialized through the public readiness
+        // signal once a turn has driven it — chat creation is lazy by
+        // design in AgentClient (same as the CLI-style adoption path).
+        const events: AgentEvent[] = await drain(agent.stream('hello'));
+        expect(countType(events, 'done')).toBe(1);
+        expect(config.getAgentClient().isInitialized()).toBe(true);
+      } finally {
+        await agent.dispose();
+      }
+    } finally {
+      await disposeCliRuntime(runtimeId);
+      await built.cleanup();
+    }
+  });
+
+  it('T2b caller-supplied factories WIN: adoption keeps exactly the caller instances (identity) and the agent still drives a turn @requirement:REQ-3222-AC2 @scenario:caller-wins @given:a minimal Config carrying caller-supplied agentClientFactory, toolSchedulerFactory, and taskToolRegistration @when:fromConfig({ config, sessionId }) @then:all three Config getters return the SAME caller instances after adoption and a stream turn completes', async () => {
+    const runtimeId = 'issue3222-fromconfig-callercwins';
+    const callerFactories: CallerAgentRuntimeFactories = {
+      agentClientFactory: (config, runtimeState) =>
+        createAgentClient(config, runtimeState),
+      toolSchedulerFactory: (options) => createToolScheduler(options),
+      taskToolRegistration: createTaskRegistration(),
+    };
+    const built = await buildFactoryLessConfig(
+      'plain-text.jsonl',
+      callerFactories,
+    );
+    try {
+      const agent: Agent = await fromConfig({
+        config: built.config,
+        sessionId: runtimeId,
+      });
+      try {
+        const config = internalConfig(agent);
+        expect(config.getAgentClientFactory()).toBe(
+          callerFactories.agentClientFactory,
+        );
+        expect(config.getToolSchedulerFactory()).toBe(
+          callerFactories.toolSchedulerFactory,
+        );
+        expect(config.getTaskToolRegistration()).toBe(
+          callerFactories.taskToolRegistration,
+        );
+
+        const events: AgentEvent[] = await drain(agent.stream('hello'));
+        expect(countType(events, 'done')).toBe(1);
+      } finally {
+        await agent.dispose();
+      }
+    } finally {
+      await disposeCliRuntime(runtimeId);
+      await built.cleanup();
+    }
+  });
+
+  it(
+    'T2b-PROP for any non-empty sessionId, caller-supplied factories keep their identity through adoption @requirement:REQ-3222-AC2 @scenario:caller-wins @given:any non-empty sessionId and a minimal Config with caller factories @when:fromConfig({ config, sessionId }) @then:every Config factory getter returns the caller instance',
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
+          const callerFactories: CallerAgentRuntimeFactories = {
+            agentClientFactory: (config, runtimeState) =>
+              createAgentClient(config, runtimeState),
+            toolSchedulerFactory: (options) => createToolScheduler(options),
+            taskToolRegistration: createTaskRegistration(),
+          };
+          const built = await buildFactoryLessConfig(
+            'plain-text.jsonl',
+            callerFactories,
+          );
+          try {
+            const agent: Agent = await fromConfig({
+              config: built.config,
+              sessionId,
+            });
+            try {
+              const config = internalConfig(agent);
+              return (
+                config.getAgentClientFactory() ===
+                  callerFactories.agentClientFactory &&
+                config.getToolSchedulerFactory() ===
+                  callerFactories.toolSchedulerFactory &&
+                config.getTaskToolRegistration() ===
+                  callerFactories.taskToolRegistration
+              );
+            } finally {
+              await agent.dispose();
+            }
+          } finally {
+            await disposeCliRuntime(sessionId);
+            await built.cleanup();
+          }
+        }),
+        { numRuns: 5 },
+      );
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
   );
 });

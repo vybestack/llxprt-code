@@ -68,6 +68,10 @@ import {
 import { applyProfileWithGuards } from '@vybestack/llxprt-code-providers/runtime/profileApplication.js';
 import { registerProvidersOntoManager } from '../api/createAgent.js';
 import { executeProviderActivation } from '../api/providerActivationExecutor.js';
+import {
+  buildIsolatedAgentConfig,
+  cleanupFailedRuntimeBootstrap,
+} from '../api/agentRuntimeAssembly.js';
 import { AggregateDisposeError } from '../api/disposeErrors.js';
 
 const LOAD_BALANCER_PROVIDER_NAME = 'load-balancer';
@@ -819,12 +823,20 @@ export class SubagentOrchestrator {
     // parent's (Issue #2410). Load-balancer profiles intentionally activate via
     // the foreground profile-application path inside this isolated runtime so
     // the real load-balancer provider is registered and selected.
-    const handle = createIsolatedRuntimeContext({
-      runtimeId: agentRuntimeId,
+    // The Config is built through the AGENT-owned assembly (issue #3222):
+    // providers no longer constructs one or stamps CLI-registered agent
+    // factories onto it, so in a process with no CLI import the subagent
+    // still gets working agent factories and runtime managers.
+    const isolatedConfig = buildIsolatedAgentConfig({
+      sessionId: agentRuntimeId,
+      model: activationProfile.model,
       settingsService,
       profileManager: this.options.profileManager,
+    });
+    const handle = createIsolatedRuntimeContext({
+      runtimeId: agentRuntimeId,
+      config: isolatedConfig,
       messageBus: this.options.messageBus,
-      model: activationProfile.model,
       metadata: {
         source: 'SubagentOrchestrator',
         subagent: subagentName,
@@ -891,8 +903,12 @@ export class SubagentOrchestrator {
         },
       );
     } catch (error) {
-      await handle.cleanup();
-      throw error;
+      // A cleanup failure must not replace the original bootstrap error.
+      return cleanupFailedRuntimeBootstrap(
+        handle,
+        error,
+        'SubagentOrchestrator.createIsolatedRuntime',
+      );
     }
 
     return handle;

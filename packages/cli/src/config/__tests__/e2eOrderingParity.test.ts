@@ -276,8 +276,6 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
     } as unknown as ProviderManager);
 
   return {
-    registerAgentRuntimeFactories: vi.fn(),
-    resetAgentRuntimeFactories: vi.fn(),
     ephemeralSettingHelp: {},
     parseEphemeralSettingValue: vi.fn((_key: string, rawValue: string) => ({
       success: true,

@@ -476,9 +476,7 @@ async function* processStreamingChunk(
   abortSignal: AbortSignal | undefined,
   deps: StreamProcessorDeps,
 ): AsyncGenerator<IContent, void, unknown> {
-  if (abortSignal?.aborted === true) {
-    return;
-  }
+  if (abortSignal?.aborted === true) return;
   state.chunkCount++;
 
   const chunkRecord = chunk as unknown as Record<string, unknown>;

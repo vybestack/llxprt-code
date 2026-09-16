@@ -482,6 +482,18 @@ export function subscribeToAgentRuntimeState(
 }
 
 /**
+ * Diagnostics accessor for the live subscription count of a runtime ID.
+ * Complements {@link getAgentRuntimeStateSnapshot}: it makes the registry's
+ * registered-cleanup state observable (a subscriber that unsubscribed on
+ * dispose drops the count), which bootstrap-failure teardown tests assert on.
+ */
+export function getAgentRuntimeStateSubscriptionCount(
+  runtimeId: string,
+): number {
+  return subscriptionRegistry.get(runtimeId)?.size ?? 0;
+}
+
+/**
  * @plan PLAN-20251027-STATELESS5.P05
  * @requirement REQ-STAT5-003.2
  * @pseudocode runtime-state.md lines 308-316

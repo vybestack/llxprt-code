@@ -26,15 +26,11 @@ import type { HydratedModel } from '@vybestack/llxprt-code-core';
 
 // Mock the providers runtime barrel to avoid the broken dist dependency chain.
 void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  registerAgentRuntimeFactories: vi.fn(),
-  resetAgentRuntimeFactories: vi.fn(),
   parseEphemeralSettingValue: vi.fn(),
   applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
 }));
 
-void vi.mock('@vybestack/llxprt-code-providers', () => ({
-  registerAgentRuntimeFactories: vi.fn(),
-}));
+void vi.mock('@vybestack/llxprt-code-providers', () => ({}));
 
 import { useModelDialogHandler } from './modelDialogHandler.js';
 import {

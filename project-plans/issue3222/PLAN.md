@@ -1,0 +1,178 @@
+# Issue #3222: Agent API runtime assembly self-contained; delete provider-held agent factory registration
+
+Branch: `issue3222`. Parent epic: #2619. Sibling owners: #2615 (Config slices E/F),
+#2616 (ambient globals), #2635/#2637 (profiles/role runtimes), #2758 (provider
+contribution seam, closed), #2320 (MessageBus seam, closed).
+
+## Current state (verified on main @ 5bedbd238)
+
+- `packages/cli/src/config/configBuilder.ts:40-43` builds
+  `createAgentRuntimeFactoryBindings()` at module load and calls providers'
+  `registerAgentRuntimeFactories(...)`; `buildConfig` also injects
+  `agentClientFactory`, `toolSchedulerFactory`, `taskToolRegistration` into
+  `new Config(...)`.
+- `packages/providers/src/runtime/runtimeContextFactory.ts` holds the mutable
+  module-global `agentRuntimeFactoryBindings`, exports register/reset, and
+  `attachAgentRuntimeFactories` fires inside `resolveRuntimeConfig`, which also
+  CONSTRUCTS a Config for callers that pass none (the subagent path).
+- `packages/agents/src/api/createAgent.ts` supplies `agentClientFactory` and
+  `toolSchedulerFactory` itself but NOT `taskToolRegistration` — TaskTool
+  availability silently depends on the CLI having registered factories first.
+- `packages/agents/src/core/subagentOrchestrator.ts:822` calls
+  `createIsolatedRuntimeContext` WITHOUT a config — providers builds the
+  subagent's Config and stamps CLI-registered agent factories onto it.
+- `packages/agents/src/api/fromConfig.ts` requires the adopted Config to carry
+  factories (CLI supplies them today via buildConfig).
+- CLI foreground order (verified): buildConfig → preflight (no client) →
+  `createForegroundAgent` → `fromConfig` (owns `config.initialize`) →
+  recording/UI (may call `config.getAgentClient()` / `getOrCreateScheduler`).
+- MCP host routing: `packages/mcp/src/host/hostServices.ts` still has the
+  process-global registry; #2615 slice F has NOT landed (no E/F-ready evidence
+  on #2615). Per this issue's own text, the global registry replacement and its
+  deletion are owned by F and land "when their replacement lands".
+
+## Acceptance criteria (shaped)
+
+AC1 (characterization, Bun/bun:test, through public Agent API):
+provider/model/auth activation; ONE shared bus across loop/scheduler/tools/
+subagents; foreground vs isolated separation; shipped tool registration
+(incl. TaskTool) from declarative config alone; child-runtime ownership +
+disposal; caller-owned (fromConfig) vs agent-owned (createAgent) resources;
+typed failure when runtime collaborators cannot be constructed.
+
+AC2 (one agent-owned assembly): createAgent supplies ALL agent-owned factories
+itself; internal assembly helpers are instance-owned inside agents (no
+cross-package registration API); fromConfig installs agent-owned defaults on an
+adopted Config when absent and never overrides caller-supplied ones (D2 adoption
+seam preserved: adopted caller resources are not disposed).
+
+AC3 (providers stop building agent graphs): `createIsolatedRuntimeContext`
+requires a caller-supplied Config (typed error when missing); providers holds no
+agent-owned factory in mutable state; subagent/compression runtimes build their
+Config through the agent-owned assembly. #2320 bus invariant preserved.
+
+AC4 (deletions): providers register/reset/attach + state + barrel re-exports
+gone; CLI module-load registration and direct factory injection into Config
+gone; agents `createAgentRuntimeFactoryBindings` gone; core
+`AgentRuntimeFactoryBindings` contract gone; surface guards updated; mocks
+updated; grep negative control clean.
+
+AC5 (deterministic disposal): dispose idempotent; owned children before parent
+collaborators; adopted caller resources untouched; createAgent failure path
+cleans up the isolated runtime handle (currently leaks — no try/catch).
+
+AC6: full verification cycle + smoke pass on the PR head.
+
+OUT OF SCOPE (gated/owned elsewhere): MCP hostServices registry replacement and
+two-host routing tests (#2615 F — not landed; `wireMcpHostServices` stays
+as-is); profile semantics (#2635); role-runtime cutover (#2637); CLI or A2A as
+composition root; any new global registry/service bag/bridge; Config residue
+beyond the factory seams named above.
+
+## Implementation phases
+
+P1 Tests first (RED where behavior is missing):
+- extend `createAgent.harness.behavior.test.ts`: no-CLI-import process →
+  TaskTool registered via public tool surface.
+- extend `fromConfig.behavior.test.ts`: adoption of a factory-less Config
+  yields a working agent (client initialized through public readiness signal).
+- extend `runtimeSeam.behavior.test.ts` / `agentMessageBus.behavior.test.ts`:
+  subagent runtime construction via agent-owned path; same bus threads to child
+  scheduling.
+- new focused cases: typed error from `createIsolatedRuntimeContext` without
+  config; createAgent activation failure cleans up runtime handle.
+- extend `disposal.spec.ts` only if ordering/idempotency gaps exist for the new
+  paths.
+
+P2 Agent-owned assembly module `packages/agents/src/api/agentRuntimeAssembly.ts`
+(instance-owned factories + `ensureAgentRuntimeFactories(config)` +
+`buildIsolatedAgentConfig(...)` replicating the exact defaults
+`resolveRuntimeConfig` used: managers under `Storage.getGlobalConfigDir()`,
+model/debug/cwd fallbacks preserved). createAgent adds taskToolRegistration;
+fromConfig ensures factories post-adoption.
+
+P3 Providers: `config` required on `IsolatedRuntimeContextOptions`; delete
+`resolveRuntimeConfig` + attach; subagentOrchestrator builds Config via the
+agent-owned module; update every caller/test.
+
+P4 Deletions per AC4 incl. `expected-root-surface.json`,
+`publicSurface.nonbreaking.test.ts`, core contract, mocks in cli/zed tests.
+
+P5 Disposal failure-path + ordering tests per AC5.
+
+P6 Documented deferral of MCP host routing (gated on #2615 F).
+
+## Verification
+
+Per-phase: affected package bun tests + `npm run lint` + `npm run typecheck`.
+Final: full `npm run test`, `npm run lint`, `npm run typecheck`, `npm run
+format`, `npm run build`, smoke `bun scripts/start.ts --profile-load
+zai-glm-flash "write me a haiku and nothing else"`.
+
+## Review
+
+typescriptexpert implements; deepthinker reviews (max 2 rounds); OCR per
+workflow skill at final stage only if re-enabled — NOTE: Andrew suspended OCR
+until further notice (2026-09-13 memory); do NOT run OCR unless he re-enables.
+
+## Implementation + review status (2026-09-16)
+
+Implementation complete in tree (subagent runs: tscoder-zai x2 + remediation).
+Verified green before review: cli 755/755 files (9746 cases), agents 413/413,
+providers 650/650, root typecheck 0 errors, root lint 0 errors (after fixing a
+pre-existing main merge artifact: OpenAIStreamProcessor.ts max-lines 801->799
+via single guard collapse; adjudicated bounded scope expansion for a green PR).
+
+Regression found and fixed during verification: preflightAgentActivation ran
+before fromConfig on the CLI path and required agentClientFactory (via
+config.refreshAuth); main relied on CLI-injected factories. Fix: preflight now
+installs agent-owned factories via ensureAgentRuntimeFactories (instance-owned).
+Behavioral regression tests added (preflightAgentActivation.behavior.test.ts);
+manual CLI repro verified to match main output.
+
+Review (round 1, tscoder-zai adversarial; deepthinker/reviewer/architect all
+provider rate-limited): NO BLOCKERS. 1 MAJOR + 4 MINOR, all classified
+In-scope-Fix:
+- F1 MAJOR: dead superseded-path residue — IsolatedRuntimeContextOptions still
+  declares settingsService?/profileManager?/model?/debugMode?/workspaceDir?
+  (read nowhere after resolveRuntimeConfig deletion) and callers still pass
+  them (createAgent, fromConfig, subagentOrchestrator). Binding landing
+  discipline requires removal in the same PR.
+- F2 MINOR: fromConfig duplicates cleanupFailedRuntimeBootstrap as private
+  cleanupFailedBootstrap; reuse the shared helper.
+- F3 MINOR: subagentOrchestrator failure path lets cleanup error replace the
+  original error; apply the shared AggregateError discipline.
+- F4 MINOR: createAgent failure path never disposes the agent-owned Config
+  after config.initialize; dispose owned Config on failure (aggregate errors).
+- F5 MINOR: authRuntimeScope.test.ts Config fixture omits required model field
+  (dir not covered by typecheck projects); add it.
+Second-opinion review (tscoder-flash) running; findings to be folded into the
+same remediation pass (stays review round 1).
+
+## Final status (2026-09-16): READY FOR PR
+
+Round-1 remediation applied (all six findings In-scope-Fix): F1 dead options
+deleted from IsolatedRuntimeContextOptions + call sites (structural type pin
+test); F4 createAgent failure path now disposes agent-owned Config (or full
+facade dispose) via extended cleanupFailedRuntimeBootstrap, children-first,
+original error preserved, AggregateError only on cleanup failure; F2 fromConfig
+reuses shared helper; F3 orchestrator failure path uses shared helper (no error
+masking); F5 test fixture model field; F6 lazy per-field factory install.
+Round-2 verification review: 6/6 PASS, no regressions.
+
+Full verification cycle from root, all green:
+- npm run test (all workspaces incl. core 458/458, cli 755/755 files 9746
+  cases, providers 650/650, agents 413/413) — the only "(fail)" log lines are
+  intentional fixture files inside passing runner-classification tests.
+- npm run lint (20 targets): 0 errors.
+- npm run typecheck (build:types + workspaces + scripts + evals): 0 errors.
+- prettier --check repo-wide: clean (4 of our files reformatted; cli suite
+  re-run after: 755/755).
+- npm run build: success (lazy-MCP registry coherence verified).
+- Smoke: bun scripts/start.ts --profile-load zai-glm-flash haiku prompt ->
+  valid haiku from glm-5.3-flash (stepfun-37 profile retired with the
+  StepFun subscription cancellation).
+
+Review agent note: deepthinker/reviewer/architect unavailable (provider rate
+limits); adversarial review performed by tscoder-zai with tscoder-flash as
+independent second opinion. Two review rounds total, per policy cap.
