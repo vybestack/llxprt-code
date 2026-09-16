@@ -20,14 +20,47 @@ import * as os from 'node:os';
 import { TokenUsageLogger } from './TokenUsageLogger.js';
 import { recordProviderOrModelSwitch } from './tokenUsageEstimateLogger.js';
 import {
-  expectModelSwitchRecord,
-  expectProviderSwitchRecord,
-} from './__tests__/helpers/tokenUsageTestAssertions.js';
+  parseTokenUsageLogRecord,
+  type SerializedTokenUsageLogRecord,
+} from './tokenUsageRecords.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 
 const SESSION_ID = 'switch-session';
 const TURN_ID = 'turn-under-test';
+
+function parseOrThrow(value: unknown): SerializedTokenUsageLogRecord {
+  const parsed = parseTokenUsageLogRecord(value);
+  if (parsed === null) {
+    throw new Error(
+      `Expected a parseable token-usage record, got ${JSON.stringify(value)}`,
+    );
+  }
+  return parsed;
+}
+
+function wrongType(
+  expected: string,
+  actual: SerializedTokenUsageLogRecord,
+): Error {
+  return new Error(
+    `Expected a ${expected} record, got record_type=${actual.record_type}`,
+  );
+}
+
+function expectProviderSwitchRecord(value: unknown) {
+  const parsed = parseOrThrow(value);
+  if (parsed.record_type !== 'provider_switch')
+    throw wrongType('provider_switch', parsed);
+  return parsed;
+}
+
+function expectModelSwitchRecord(value: unknown) {
+  const parsed = parseOrThrow(value);
+  if (parsed.record_type !== 'model_switch')
+    throw wrongType('model_switch', parsed);
+  return parsed;
+}
 
 function makeTempLogPath(): string {
   return path.join(

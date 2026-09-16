@@ -8,8 +8,9 @@ import { describe, it, expect } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { findCompressSplitPoint } from '../client.js';
 
-// Sample preservation fraction for the split-point test.
-const COMPRESSION_PRESERVE_THRESHOLD = 0.5;
+// Preserve the test's 2 * (1 - 0.85) fraction; client.ts only re-exports
+// findCompressSplitPoint, whose fraction argument in clientHelpers.ts is required.
+const COMPRESSION_PRESERVE_THRESHOLD = 2 * (1 - 0.85);
 
 describe('Compression logic tests', () => {
   it('should calculate preservation index correctly', () => {
@@ -40,7 +41,7 @@ describe('Compression logic tests', () => {
       { speaker: 'human', blocks: [{ type: 'text', text: 'Short message 2' }] },
     ];
 
-    // With COMPRESSION_PRESERVE_THRESHOLD = 0.5, we should preserve 50% of the conversation
+    // With COMPRESSION_PRESERVE_THRESHOLD = 0.3 (2 * (1 - 0.85)), we preserve 30% of the conversation
     const preserveFraction = COMPRESSION_PRESERVE_THRESHOLD;
     const compressBeforeIndex = findCompressSplitPoint(
       mockHistory,

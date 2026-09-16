@@ -25,6 +25,7 @@ import {
   getToolCallBlocks,
   getResponseTextFromBlocks,
   analyzeResponseOutcome,
+  type ResponseOutcome,
 } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 
 import type {
@@ -159,7 +160,7 @@ describe('blockHelpers characterization — analyzeResponseOutcome', () => {
   it('detects visible text only', () => {
     const blocks: ContentBlock[] = [makeTextBlock('response text')];
 
-    const outcome = analyzeResponseOutcome(blocks);
+    const outcome: ResponseOutcome = analyzeResponseOutcome(blocks);
     expect(outcome.hasVisibleText).toBe(true);
     expect(outcome.hasThinking).toBe(false);
     expect(outcome.hasToolCalls).toBe(false);

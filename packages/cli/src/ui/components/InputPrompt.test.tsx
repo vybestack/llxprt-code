@@ -28,7 +28,6 @@ import { useInputHistory } from '../hooks/useInputHistory.js';
 import type { UseReverseSearchCompletionReturn } from '../hooks/useReverseSearchCompletion.js';
 import { useReverseSearchCompletion } from '../hooks/useReverseSearchCompletion.js';
 import * as clipboardUtils from '../utils/clipboardUtils.js';
-import { useKittyKeyboardProtocol } from '../hooks/useKittyKeyboardProtocol.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { StreamingState } from '../types.js';
 import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
@@ -48,9 +47,6 @@ const realUseReverseSearchCompletionModule = {
 const realClipboardUtilsModule = {
   ...(await import('../utils/clipboardUtils.js')),
 };
-const realUseKittyKeyboardProtocolModule = {
-  ...(await import('../hooks/useKittyKeyboardProtocol.js')),
-};
 
 void vi.mock('../hooks/useShellHistory.js', () =>
   automock(realUseShellHistoryModule),
@@ -66,9 +62,6 @@ void vi.mock('../hooks/useReverseSearchCompletion.js', () =>
 );
 void vi.mock('../utils/clipboardUtils.js', () =>
   automock(realClipboardUtilsModule),
-);
-void vi.mock('../hooks/useKittyKeyboardProtocol.js', () =>
-  automock(realUseKittyKeyboardProtocolModule),
 );
 
 const mockSlashCommands: SlashCommand[] = [
@@ -149,9 +142,6 @@ describe('InputPrompt', () => {
   const mockedUseInputHistory = useInputHistory as Mock<typeof useInputHistory>;
   const mockedUseReverseSearchCompletion = useReverseSearchCompletion as Mock<
     typeof useReverseSearchCompletion
-  >;
-  const mockedUseKittyKeyboardProtocol = useKittyKeyboardProtocol as Mock<
-    typeof useKittyKeyboardProtocol
   >;
 
   beforeEach(() => {
@@ -267,11 +257,6 @@ describe('InputPrompt', () => {
     mockedUseReverseSearchCompletion.mockReturnValue(
       mockReverseSearchCompletion,
     );
-
-    mockedUseKittyKeyboardProtocol.mockReturnValue({
-      enabled: false,
-      checking: false,
-    });
 
     props = {
       buffer: mockBuffer,
