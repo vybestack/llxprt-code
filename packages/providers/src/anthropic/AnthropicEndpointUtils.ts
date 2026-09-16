@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { MediaBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  isUrlEncodedMediaBlock,
+  type MediaCategory,
+} from '../utils/mediaUtils.js';
+
 /**
  * The default Anthropic API endpoint used when no explicit base URL is
  * configured. The AnthropicProvider falls back to this in executeApiCall;
@@ -39,4 +45,58 @@ export function isAnthropicOAuthBaseURL(baseURL?: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Determines whether a base URL points at zai's Anthropic-compatible API
+ * (z.ai or bigmodel.cn, including subdomains such as api.z.ai and
+ * open.bigmodel.cn).
+ *
+ * Unlike {@link isAnthropicOAuthBaseURL}, an undefined/empty base URL returns
+ * `false`: the zai capability restrictions keyed off this test never apply to
+ * the default native Anthropic endpoint.
+ *
+ * zai rejects `source:{type:'url'}` image blocks with a 400 (#3693), so
+ * request preparation uses this test to swap url-encoded image blocks for the
+ * unsupported-media text placeholder on zai hosts only.
+ */
+export function isZaiAnthropicEndpoint(baseURL?: string): boolean {
+  if (baseURL === undefined || baseURL.trim() === '') {
+    return false;
+  }
+  try {
+    const host = new URL(baseURL.trim()).hostname.toLowerCase();
+    return (
+      matchesHostSuffix(host, 'z.ai') || matchesHostSuffix(host, 'bigmodel.cn')
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Media-support predicate for `collectUnsupportedMedia` on the Anthropic
+ * path: pdf and image blocks are supported, except that url-encoded image
+ * blocks count as unsupported on zai endpoints (#3693), where the converter
+ * serializes them as placeholders and the projection must match. Takes the
+ * endpoint base URL and applies the zai test itself so call sites stay a
+ * single expression.
+ */
+export function createMediaSupportPredicate(
+  baseURL: string | undefined,
+): (block: MediaBlock, category: MediaCategory) => boolean {
+  const zaiEndpoint = isZaiAnthropicEndpoint(baseURL);
+  return (block, category) => {
+    if (category === 'pdf') {
+      return true;
+    }
+    if (category !== 'image') {
+      return false;
+    }
+    return !(zaiEndpoint && isUrlEncodedMediaBlock(block));
+  };
+}
+
+function matchesHostSuffix(hostname: string, suffix: string): boolean {
+  return hostname === suffix || hostname.endsWith(`.${suffix}`);
 }

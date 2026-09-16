@@ -33,13 +33,13 @@ export function classifyMediaBlock(media: MediaBlock): MediaCategory {
 }
 export function collectUnsupportedMedia(
   contents: readonly IContent[],
-  isSupported: (category: MediaCategory) => boolean,
+  isSupported: (block: MediaBlock, category: MediaCategory) => boolean,
 ): readonly UnsupportedMediaEntry[] {
   return contents.flatMap((content) =>
     content.blocks.flatMap((block) => {
       if (block.type !== 'media') return [];
       const category = classifyMediaBlock(block);
-      if (isSupported(category)) return [];
+      if (isSupported(block, category)) return [];
       return [
         {
           kind: 'unsupported' as const,
@@ -49,6 +49,16 @@ export function collectUnsupportedMedia(
       ];
     }),
   );
+}
+
+/**
+ * True when the media block carries its payload as a URL reference rather
+ * than inline bytes. Anthropic-compatible endpoints differ in url-image
+ * support (zai rejects them, #3693), so serializers and the unsupported-media
+ * projection need to key off the encoding, not just the mime.
+ */
+export function isUrlEncodedMediaBlock(media: MediaBlock): boolean {
+  return requireInlineMediaBlock(media).encoding === 'url';
 }
 
 const PNG_SIGNATURE: readonly number[] = [0x89, 0x50, 0x4e, 0x47];
