@@ -17,6 +17,7 @@ import {
   ProviderStreamProtocolError,
 } from '../streamLimits.js';
 
+/** Build a minimal choices-less chunk with the given index. */
 function createChunk(
   index: number,
 ): OpenAI.Chat.Completions.ChatCompletionChunk {
@@ -29,6 +30,7 @@ function createChunk(
   };
 }
 
+/** Yield the given number of choices-less chunks as a stream. */
 async function* createChunkStream(
   count: number,
 ): AsyncGenerator<OpenAI.Chat.Completions.ChatCompletionChunk> {
@@ -37,6 +39,7 @@ async function* createChunkStream(
   }
 }
 
+/** Build a chunk whose only choice carries a text delta. */
 function createTextChunk(
   index: number,
   text: string,
@@ -54,12 +57,14 @@ function createTextChunk(
   };
 }
 
+/** Yield the given chunks as an async generator. */
 async function* streamChunks(
   chunks: readonly OpenAI.Chat.Completions.ChatCompletionChunk[],
 ): AsyncGenerator<OpenAI.Chat.Completions.ChatCompletionChunk> {
   yield* chunks;
 }
 
+/** Drain a content stream into an array. */
 async function collect(
   stream: AsyncIterable<IContent>,
 ): Promise<readonly IContent[]> {
@@ -70,6 +75,7 @@ async function collect(
   return content;
 }
 
+/** Track the most recent totalChunksReceived reported by logger metadata. */
 function retainTotalChunksReceived(
   currentCount: number | undefined,
   metadata: unknown,
@@ -85,6 +91,73 @@ function retainTotalChunksReceived(
   return currentCount;
 }
 
+type SkipRecord = {
+  chunkCount: number;
+  frameKeys: readonly string[];
+  hasUsage: boolean;
+  object?: unknown;
+};
+
+/** Type guard for the skip diagnostic record emitted for choices-less frames. */
+function isSkipRecord(metadata: unknown): metadata is SkipRecord {
+  return (
+    typeof metadata === 'object' && metadata !== null && 'frameKeys' in metadata
+  );
+}
+
+/** Build a logger that records skip metadata instead of writing it. */
+function createRecordingLogger(): {
+  logger: DebugLogger;
+  records: readonly unknown[];
+} {
+  const records: unknown[] = [];
+  const logger = new DebugLogger('llxprt:test:skipped-frames');
+  logger.debug = (_message, metadata) => {
+    if (isSkipRecord(metadata)) records.push(metadata);
+  };
+  return { logger, records };
+}
+
+/** Stream the given chunks through processStreamingResponse with the logger installed. */
+async function runStreamWithLogger(
+  logger: DebugLogger,
+  chunks: readonly OpenAI.Chat.Completions.ChatCompletionChunk[],
+): Promise<readonly IContent[]> {
+  return collect(
+    processStreamingResponse(
+      streamChunks(chunks),
+      'test-model',
+      'openai',
+      undefined,
+      { model: 'test-model', messages: [], stream: true },
+      [],
+      new OpenAI({ apiKey: 'test' }),
+      undefined,
+      undefined,
+      {
+        logger,
+        toolCallPipeline: new ToolCallPipeline(),
+        textToolParser: new GemmaToolCallParser(),
+        getBaseURL: () => undefined,
+      },
+      async function* () {
+        yield* [];
+      },
+    ),
+  );
+}
+
+/** Find the recorded skip metadata for the given chunk count. */
+function findSkipRecord(
+  records: readonly unknown[],
+  chunkCount: number,
+): SkipRecord | undefined {
+  return records
+    .filter(isSkipRecord)
+    .find((record) => record.chunkCount === chunkCount);
+}
+
+/** Stream chunks through processStreamingResponse with qwen-model defaults. */
 async function runQwenStream(
   chunks: readonly OpenAI.Chat.Completions.ChatCompletionChunk[],
 ): Promise<readonly IContent[]> {
@@ -115,6 +188,161 @@ async function runQwenStream(
 }
 
 describe('OpenAI streaming diagnostic retention', () => {
+  it('logs bounded metadata for empty choices and usage-only frames without changing output', async () => {
+    const records: unknown[] = [];
+    const logger = new DebugLogger('llxprt:test:skipped-frames');
+    logger.debug = (_message, metadata) => {
+      if (
+        typeof metadata === 'object' &&
+        metadata !== null &&
+        'frameKeys' in metadata
+      )
+        records.push(metadata);
+    };
+    const usage = { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 };
+    const usageChunk = { ...createChunk(2), usage };
+    Reflect.deleteProperty(usageChunk, 'choices');
+    const output = await collect(
+      processStreamingResponse(
+        streamChunks([createTextChunk(0, 'hello'), createChunk(1), usageChunk]),
+        'test-model',
+        'openai',
+        undefined,
+        { model: 'test-model', messages: [], stream: true },
+        [],
+        new OpenAI({ apiKey: 'test' }),
+        undefined,
+        undefined,
+        {
+          logger,
+          toolCallPipeline: new ToolCallPipeline(),
+          textToolParser: new GemmaToolCallParser(),
+          getBaseURL: () => undefined,
+        },
+        async function* () {
+          yield* [];
+        },
+      ),
+    );
+    expect(
+      output
+        .flatMap((item) => item.blocks)
+        .filter((block) => block.type === 'text')
+        .map((block) => block.text)
+        .join(''),
+    ).toBe('hello');
+    expect(output[output.length - 1]?.metadata?.usage).toMatchObject({
+      promptTokens: 3,
+      completionTokens: 2,
+      totalTokens: 5,
+    });
+    expect(records).toStrictEqual([
+      {
+        chunkCount: 2,
+        frameKeys: ['choices', 'created', 'id', 'model', 'object'],
+        hasUsage: false,
+        object: 'chat.completion.chunk',
+      },
+      {
+        chunkCount: 3,
+        frameKeys: ['created', 'id', 'model', 'object', 'usage'],
+        hasUsage: true,
+        object: 'chat.completion.chunk',
+      },
+    ]);
+  });
+
+  it('omits unvalidated nested object tags from skip metadata without retaining payloads', async () => {
+    const { logger, records } = createRecordingLogger();
+    const payload = 'x'.repeat(100_000);
+    const frame = {
+      id: 'weird',
+      object: { kind: 'chat.completion.chunk', payload },
+      created: 1,
+      model: 'test-model',
+    } as unknown as OpenAI.Chat.Completions.ChatCompletionChunk;
+    await runStreamWithLogger(logger, [createTextChunk(0, 'hello'), frame]);
+    const skip = findSkipRecord(records, 2);
+    expect(skip).toBeDefined();
+    const serialized = JSON.stringify(skip);
+    expect(serialized.length).toBeLessThan(2048);
+    expect(serialized).not.toContain(payload);
+    const objectTag = skip?.object;
+    expect(
+      objectTag === undefined ||
+        (typeof objectTag === 'string' && objectTag.length <= 64),
+    ).toBe(true);
+  });
+
+  it('truncates oversized string object tags to the diagnostic cap', async () => {
+    const { logger, records } = createRecordingLogger();
+    const frame = {
+      id: 'oversized',
+      object: 'y'.repeat(200),
+      created: 2,
+      model: 'test-model',
+    } as unknown as OpenAI.Chat.Completions.ChatCompletionChunk;
+    await runStreamWithLogger(logger, [createTextChunk(0, 'hello'), frame]);
+    expect(findSkipRecord(records, 2)?.object).toBe('y'.repeat(64));
+  });
+
+  it('caps frameKeys to the diagnostic limit for wide frames', async () => {
+    const { logger, records } = createRecordingLogger();
+    const frame: Record<string, unknown> = {};
+    for (let index = 0; index < 30; index++) {
+      frame[`key${String(index).padStart(2, '0')}`] = index;
+    }
+    await runStreamWithLogger(logger, [
+      createTextChunk(0, 'hello'),
+      frame as unknown as OpenAI.Chat.Completions.ChatCompletionChunk,
+    ]);
+    expect(findSkipRecord(records, 2)).toStrictEqual({
+      chunkCount: 2,
+      frameKeys: Array.from(
+        { length: 16 },
+        (_, index) => `key${String(index).padStart(2, '0')}`,
+      ),
+      hasUsage: false,
+    });
+  });
+
+  it('truncates oversized frame keys in skip metadata', async () => {
+    const { logger, records } = createRecordingLogger();
+    const longKey = 'k'.repeat(200);
+    const frame = {
+      id: 'long-key',
+      created: 3,
+      model: 'test-model',
+      [longKey]: 'value',
+    } as unknown as OpenAI.Chat.Completions.ChatCompletionChunk;
+    await runStreamWithLogger(logger, [createTextChunk(0, 'hello'), frame]);
+    const skip = findSkipRecord(records, 2);
+    expect(JSON.stringify(skip)).not.toContain(longKey);
+    expect(skip).toStrictEqual({
+      chunkCount: 2,
+      frameKeys: ['created', 'id', 'k'.repeat(64), 'model'],
+      hasUsage: false,
+    });
+  });
+
+  it('still records chat.completion.chunk for normal choices-less frames', async () => {
+    const { logger, records } = createRecordingLogger();
+    const output = await runStreamWithLogger(logger, [
+      createTextChunk(0, 'hello'),
+      createChunk(1),
+    ]);
+    expect(
+      output
+        .flatMap((item) => item.blocks)
+        .filter((block) => block.type === 'text')
+        .map((block) => block.text)
+        .join(''),
+    ).toBe('hello');
+    const skip = findSkipRecord(records, 2);
+    expect(skip?.object).toBe('chat.completion.chunk');
+    expect(skip?.frameKeys).toContain('object');
+  });
+
   it('reports every received chunk without retaining a chunk array', async () => {
     const chunkCount = 7;
     let reportedChunkCount: number | undefined;
