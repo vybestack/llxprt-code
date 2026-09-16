@@ -45,15 +45,10 @@ function classifyPartType(part: GeminiContentPart): string {
 }
 
 /**
- * Converts between Gemini Content format and IContent format
+ * Converts Gemini-shaped Content into the neutral IContent format
  */
 export class ContentConverters {
   private static logger = new DebugLogger('llxprt:content:converters');
-
-  private static blocksOrEmpty(iContent: IContent): ContentBlock[] {
-    const blocks = (iContent as { blocks?: ContentBlock[] | null }).blocks;
-    return blocks ?? [];
-  }
 
   private static hasLegacyTruthyValue(value: unknown): boolean {
     if (value === null || value === undefined) {
@@ -63,193 +58,6 @@ export class ContentConverters {
       return false;
     }
     return !(typeof value === 'number' && Number.isNaN(value));
-  }
-
-  /** Resolve the Gemini role from an IContent speaker. */
-  private static resolveRole(speaker: string): 'user' | 'model' {
-    if (speaker === 'tool' || speaker === 'human') {
-      return 'user';
-    }
-    return 'model';
-  }
-
-  private static toolCallBlockToPart(
-    toolCall: Extract<ContentBlock, { type: 'tool_call' }>,
-  ): GeminiContentPart {
-    this.logger.debug('Converting tool_call block to functionCall:', {
-      id: toolCall.id,
-      name: toolCall.name,
-      hasParameters: ContentConverters.hasLegacyTruthyValue(
-        toolCall.parameters,
-      ),
-    });
-    return {
-      functionCall: {
-        name: toolCall.name,
-        args: toolCall.parameters as Record<string, unknown>,
-        id: toolCall.id,
-      },
-    };
-  }
-
-  private static toolResponseBlockToPart(
-    toolResponse: Extract<ContentBlock, { type: 'tool_response' }>,
-  ): GeminiContentPart {
-    this.logger.debug('Converting tool_response block to functionResponse:', {
-      callId: toolResponse.callId,
-      toolName: toolResponse.toolName,
-      hasResult: ContentConverters.hasLegacyTruthyValue(toolResponse.result),
-      hasError: ContentConverters.hasLegacyTruthyValue(toolResponse.error),
-    });
-    if (ContentConverters.hasLegacyTruthyValue(toolResponse.error)) {
-      return ContentConverters.buildFailureFunctionResponse(toolResponse);
-    }
-    return {
-      functionResponse: {
-        name: toolResponse.toolName,
-        response: toolResponse.result as Record<string, unknown>,
-        id: toolResponse.callId,
-      },
-    };
-  }
-
-  /**
-   * Gemini-shaped encoding of a failed tool response (issue #3076).
-   *
-   * ContentConverters is the hook-wire converter: hook responses arrive as
-   * Gemini-shaped parts and are decoded to IContent via toIContent, while
-   * history writes encode symmetrically back. This outbound encoding turns a
-   * `tool_response` into that Gemini `functionResponse` shape so an
-   * IContent → Gemini → IContent round trip restores the failure verbatim. The
-   * matching inbound decoder (decodeFailureEnvelope) exists so the Gemini-shaped
-   * representation stays symmetric and lossless as #3076 requires. The part
-   * carries the `llxprtToolFailure` flag so a successful tool whose result
-   * merely happens to be shaped like `{ status: 'error', ... }` is never
-   * misdecoded.
-   *
-   * The legacy representation carries `callId`, `toolName`, `result` and the
-   * `error` marker and nothing else: `isComplete` and `providerMetadata` are
-   * local bookkeeping with no Gemini representation, so they are deliberately
-   * dropped rather than encoded into a payload the model would then see.
-   */
-  private static buildFailureFunctionResponse(
-    toolResponse: Extract<ContentBlock, { type: 'tool_response' }>,
-  ): GeminiContentPart {
-    const response: Record<string, unknown> = {
-      status: 'error',
-      error: toolResponse.error,
-    };
-    if (toolResponse.result !== undefined) {
-      response.result = toolResponse.result;
-    }
-    return {
-      functionResponse: {
-        name: toolResponse.toolName,
-        response,
-        id: toolResponse.callId,
-      },
-      llxprtToolFailure: true,
-    };
-  }
-
-  private static thinkingBlockToPart(
-    thinkingBlock: Extract<ContentBlock, { type: 'thinking' }>,
-  ): GeminiContentPart {
-    const thinkingPart: GeminiContentPart = {
-      thought: true,
-      text: thinkingBlock.thought,
-    };
-    if (ContentConverters.hasLegacyTruthyValue(thinkingBlock.signature)) {
-      thinkingPart.thoughtSignature = thinkingBlock.signature;
-    }
-    if (ContentConverters.hasLegacyTruthyValue(thinkingBlock.sourceField)) {
-      thinkingPart.llxprtSourceField = thinkingBlock.sourceField;
-    }
-    if (ContentConverters.hasLegacyTruthyValue(thinkingBlock.streamId)) {
-      thinkingPart.llxprtThoughtBlockId = thinkingBlock.streamId;
-    }
-    if (ContentConverters.hasLegacyTruthyValue(thinkingBlock.streamStatus)) {
-      thinkingPart.llxprtThoughtBlockStatus = thinkingBlock.streamStatus;
-    }
-    if (thinkingBlock.isHidden !== undefined) {
-      thinkingPart.llxprtThoughtIsHidden = thinkingBlock.isHidden;
-    }
-    return thinkingPart;
-  }
-
-  private static codeBlockToPart(
-    codeBlock: Extract<ContentBlock, { type: 'code' }>,
-  ): GeminiContentPart {
-    const codeText = codeBlock.language
-      ? `\`\`\`${codeBlock.language}\n${codeBlock.code}\n\`\`\``
-      : codeBlock.code;
-    return { text: codeText };
-  }
-
-  /** Convert a single IContent block to a Gemini Part. */
-  private static blockToPart(block: ContentBlock): GeminiContentPart | null {
-    switch (block.type) {
-      case 'text':
-        return { text: block.text };
-      case 'tool_call':
-        return this.toolCallBlockToPart(block);
-      case 'tool_response':
-        return this.toolResponseBlockToPart(block);
-      case 'thinking':
-        return this.thinkingBlockToPart(block);
-      case 'media':
-        return null;
-      case 'code':
-        return this.codeBlockToPart(block);
-      default:
-        return null;
-    }
-  }
-
-  /**
-   * Convert IContent to Gemini Content format
-   */
-  static toGeminiContent(iContent: IContent): GeminiContent {
-    const blocksForDebug = ContentConverters.blocksOrEmpty(iContent);
-    this.logger.debug('Converting IContent to Gemini Content:', {
-      speaker: iContent.speaker,
-      blockCount: blocksForDebug.length,
-      blockTypes: blocksForDebug.map((b) => b.type),
-      toolCallIds: blocksForDebug
-        .filter((b) => b.type === 'tool_call')
-        .map((b) => b.id),
-      toolResponseCallIds: blocksForDebug
-        .filter((b) => b.type === 'tool_response')
-        .map((b) => b.callId),
-    });
-
-    const role = this.resolveRole(iContent.speaker);
-    const parts: GeminiContentPart[] = [];
-
-    for (const block of iContent.blocks) {
-      const part = this.blockToPart(block);
-      if (part !== null) {
-        parts.push(part);
-      }
-    }
-
-    const result = { role, parts };
-    this.logger.debug('Converted to Gemini Content:', {
-      role,
-      partCount: parts.length,
-      partTypes: parts.map(classifyPartType),
-      functionCallIds: parts
-        .filter((p) => 'functionCall' in p)
-        .map((p) => (p as { functionCall?: { id?: string } }).functionCall?.id),
-      functionResponseIds: parts
-        .filter((p) => 'functionResponse' in p)
-        .map(
-          (p) =>
-            (p as { functionResponse?: { id?: string } }).functionResponse?.id,
-        ),
-    });
-
-    return result;
   }
 
   /** Convert a thinking/thought Part into a ThinkingBlock. */
@@ -287,9 +95,12 @@ export class ContentConverters {
   }
 
   /**
-   * Detect the canonical failure envelope produced by
-   * `buildFailureFunctionResponse` (issue #3076) and decode it verbatim.
-   * Returns null for any non-envelope response so the caller keeps the
+   * Detect the Gemini-shaped failure envelope (issue #3076) and decode it
+   * verbatim. The envelope is only trusted when the part carries the
+   * `llxprtToolFailure` discriminant (checked by the caller); a successful
+   * tool whose result merely happens to be shaped like
+   * `{ status: 'error', ... }` is never misdecoded. Returns null for any
+   * non-envelope response so the caller keeps the
    * existing string/JSON coercion path untouched. The envelope's `result`
    * is restored verbatim — it must NOT go through parseFunctionResponseResult,
    * the whole point being fidelity to the original block. The one normalization
@@ -655,35 +466,6 @@ export class ContentConverters {
                 ?.id,
           ) ?? [],
     });
-  }
-
-  /**
-   * Convert array of IContent to array of Gemini Content
-   */
-  static toGeminiContents(iContents: IContent[]): GeminiContent[] {
-    this.logger.debug('Converting IContent array to Gemini Contents:', {
-      count: iContents.length,
-      speakers: iContents.map((ic) => ic.speaker),
-      totalToolCalls: iContents.reduce(
-        (acc, ic) =>
-          acc + ic.blocks.filter((b) => b.type === 'tool_call').length,
-        0,
-      ),
-      totalToolResponses: iContents.reduce(
-        (acc, ic) =>
-          acc + ic.blocks.filter((b) => b.type === 'tool_response').length,
-        0,
-      ),
-    });
-
-    const results = iContents.map((ic) => this.toGeminiContent(ic));
-
-    this.logger.debug('Conversion complete:', {
-      resultCount: results.length,
-      roles: results.map((r) => r.role),
-    });
-
-    return results;
   }
 
   /**

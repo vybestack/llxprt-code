@@ -14,8 +14,9 @@
  *
  * 2. **Dependency-manifest allowlist** — the exact workspace directories and
  *    version specifiers that may declare `@google/genai` as a dependency.
- *    The root packaging bridge and the providers enclave are required;
- *    every other workspace is forbidden.
+ *    The set is EMPTY: since PR #3380 no workspace may declare the SDK. The
+ *    required-manifests list ('.' and 'packages/providers') exists only so
+ *    the guard can READ those manifests and prove the absence.
  *
  * 3. **Gemini-name export allowlist** — exported identifiers containing
  *    "Gemini" sanctioned outside the name enclaves, each scoped to an exact
@@ -128,10 +129,11 @@ export interface DependencyManifestAllowlistEntry {
 }
 
 /**
- * The authoritative dependency-manifest allowlist. Only these workspace
- * directories may declare `@google/genai`, and only at the exact version
- * shown. The root declaration is a packaging bridge for the root artifact;
- * source imports remain confined to the implementation enclaves.
+ * The authoritative dependency-manifest allowlist. EMPTY since PR #3380:
+ * no workspace may declare `@google/genai` as a dependency. Source imports
+ * remain confined to the implementation enclaves, and
+ * REQUIRED_MANIFEST_WORKSPACE_DIRS keeps the guard reading the root and
+ * providers manifests so a restored declaration cannot pass silently.
  */
 export const SANCTIONED_GENAI_VERSION = '1.30.0';
 
@@ -190,17 +192,6 @@ export const GEMINI_NAME_EXPLICIT_ALLOWLIST: readonly GeminiNameAllowlistEntry[]
         'Public Gemini provider class exported from the providers package index.',
     },
     {
-      path: 'packages/providers/src/index.ts',
-      name: 'buildGeminiDumpContents',
-      justification:
-        'Provider dump utility exported from the providers package index.',
-    },
-    {
-      path: 'packages/providers/src/utils/providerRequestConversion.ts',
-      name: 'buildGeminiDumpContents',
-      justification: 'Provider dump utility implementation in providers utils.',
-    },
-    {
       path: 'packages/providers/src/composition/aliasProviderFactory.ts',
       name: 'createGeminiAliasProvider',
       justification:
@@ -212,42 +203,10 @@ export const GEMINI_NAME_EXPLICIT_ALLOWLIST: readonly GeminiNameAllowlistEntry[]
       justification:
         'Provider factory re-exported from providers composition index.',
     },
-    // ── Model-ID constants (genuine env-var / default model IDs) ───────
-    {
-      path: 'packages/core/src/config/models.ts',
-      name: 'isGemini2Model',
-      justification: 'Model-ID predicate in core config/models.',
-    },
-    {
-      path: 'packages/core/src/config/models.ts',
-      name: 'isGemini3Model',
-      justification: 'Model-ID predicate in core config/models.',
-    },
     // ── Neutral structural Gemini-content types (llm-types layer) ─────
-    {
-      path: 'packages/core/src/llm-types/geminiContent.ts',
-      name: 'GeminiFunctionCall',
-      justification:
-        'Neutral structural Gemini FunctionCall type in core llm-types/geminiContent.',
-    },
-    {
-      path: 'packages/core/src/llm-types/geminiContent.ts',
-      name: 'GeminiFunctionResponse',
-      justification:
-        'Neutral structural Gemini FunctionResponse type in core llm-types/geminiContent.',
-    },
-    {
-      path: 'packages/core/src/llm-types/geminiContent.ts',
-      name: 'GeminiInlineData',
-      justification:
-        'Neutral structural Gemini Blob/InlineData type in core llm-types/geminiContent.',
-    },
-    {
-      path: 'packages/core/src/llm-types/geminiContent.ts',
-      name: 'GeminiPartExtension',
-      justification:
-        'Neutral structural Gemini part-extension type in core llm-types/geminiContent.',
-    },
+    // Only the inbound parse direction survives (#2628): the member-shape
+    // types and the outbound-only symbols were deleted or moved into the
+    // providers/src/gemini/ name enclave.
     {
       path: 'packages/core/src/llm-types/geminiContent.ts',
       name: 'GeminiContentPart',
@@ -259,19 +218,6 @@ export const GEMINI_NAME_EXPLICIT_ALLOWLIST: readonly GeminiNameAllowlistEntry[]
       name: 'GeminiContent',
       justification:
         'Neutral structural Gemini Content type in core llm-types/geminiContent.',
-    },
-    // ── Privacy notice UI component ───────────────────────────────────
-    {
-      path: 'packages/cli/src/ui/privacy/GeminiPrivacyNotice.tsx',
-      name: 'GeminiPrivacyNotice',
-      justification:
-        'Gemini privacy-notice UI component exported from cli (gemini-cli compat surface).',
-    },
-    {
-      path: 'packages/core/test/models/__fixtures__/mock-data.ts',
-      name: 'geminiModel',
-      justification:
-        'Test fixture data exported from core test models fixtures (shared test infrastructure).',
     },
   ];
 

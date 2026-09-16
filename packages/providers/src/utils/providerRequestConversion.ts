@@ -9,7 +9,10 @@ import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/uti
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { convertToAnthropicMessages } from '../anthropic/AnthropicMessageNormalizer.js';
-import { convertHistoryToGeminiFormat } from '../gemini/GeminiMessageConverter.js';
+import {
+  buildGeminiDumpContents,
+  isGeminiCompatibleProvider,
+} from '../gemini/geminiDumpConversion.js';
 import {
   buildMessagesWithReasoning,
   type ReasoningMessageOptions,
@@ -85,14 +88,6 @@ export function buildAnthropicDumpMessages(
   });
 }
 
-export function buildGeminiDumpContents(
-  history: IContent[],
-  model?: string,
-  config?: ToolOutputSettingsProvider,
-): unknown[] {
-  return convertHistoryToGeminiFormat(history, model, config);
-}
-
 function normalizeProviderName(providerName: string): string {
   return providerName.toLowerCase().trim();
 }
@@ -109,11 +104,6 @@ function isOpenAICompatibleProvider(providerName: string): boolean {
 function isAnthropicCompatibleProvider(providerName: string): boolean {
   const provider = normalizeProviderName(providerName);
   return provider === 'anthropic' || provider.startsWith('anthropic-');
-}
-
-function isGeminiCompatibleProvider(providerName: string): boolean {
-  const provider = normalizeProviderName(providerName);
-  return provider === 'gemini' || provider.startsWith('gemini-');
 }
 
 function withModel(

@@ -154,7 +154,7 @@ function resolveApprovalAndProvider(
     profileModel: profileResult.profileModel,
     settingsModel: profileMergedSettings.model,
     envDefaultModel: process.env.LLXPRT_DEFAULT_MODEL,
-    envGeminiModel: process.env.GEMINI_MODEL,
+    envProviderModel: process.env.GEMINI_MODEL,
     providerDefaultModel: runtimeState.providerManager
       .getProviderByName('gemini')
       ?.getDefaultModel(),

@@ -726,7 +726,6 @@ describe('Provider-Agnostic Naming Regression', () => {
     // "geminiContent.ts" in the wrong directory must NOT be allowed.
     const ALLOWED_EXACT_PATHS = new Set([
       'core/src/llm-types/geminiContent.ts',
-      'cli/src/ui/privacy/GeminiPrivacyNotice.tsx',
       'core/src/llm-types/finishReasons.ts',
     ]);
     it('no Gemini-named source file outside provider/allowed exact paths', () => {

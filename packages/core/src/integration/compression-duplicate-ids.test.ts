@@ -1,10 +1,102 @@
 /**
  * Test to reproduce duplicate tool call IDs during compression
+ *
+ * The outbound wire encoder (ContentConverters.toGeminiContents) was removed
+ * with the obsolete provider-request direction (#2628). The wire fixtures
+ * below are produced by a local encoder that mirrors the subset of the
+ * Gemini provider tree's outbound wire shape these fixtures use: role
+ * 'user'/'model', text parts, functionCall parts carrying the history id,
+ * and functionResponse parts carrying the callId. The preserved parse
+ * direction (ContentConverters.toIContent/toIContents) accepts any
+ * structurally compatible Content shape, so the compression round-trip under
+ * test is unchanged.
  */
 
 import { describe, it, expect } from 'bun:test';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
+import type { IContent } from '../services/history/IContent.js';
+
+/** Wire shapes mirroring the provider encoder's Content/Part output. */
+interface WireToolCallPart {
+  functionCall: { id?: string; name?: string; args?: Record<string, unknown> };
+}
+
+interface WireToolResponsePart {
+  functionResponse: {
+    id?: string;
+    name?: string;
+    response?: Record<string, unknown>;
+  };
+}
+
+interface WireTextPart {
+  text: string;
+}
+
+type WirePart = WireTextPart | WireToolCallPart | WireToolResponsePart;
+
+interface WireContent {
+  role: string;
+  parts: WirePart[];
+}
+
+/**
+ * Tool parameters are `unknown` on IContent; the wire shape requires a JSON
+ * object (the same invariant the deleted encoder asserted). Guarded
+ * narrowing with an empty-object fallback for non-object values.
+ */
+function argsAsRecord(parameters: unknown): Record<string, unknown> {
+  if (typeof parameters === 'object' && parameters !== null) {
+    return parameters as Record<string, unknown>;
+  }
+  return {};
+}
+
+/** Encode one IContent into the provider wire shape (mirrors the deleted outbound encoder). */
+function encodeContentForProvider(content: IContent): WireContent | null {
+  const parts: WirePart[] = [];
+  for (const block of content.blocks) {
+    if (block.type === 'text') {
+      parts.push({ text: block.text });
+    } else if (block.type === 'tool_call') {
+      parts.push({
+        functionCall: {
+          id: block.id,
+          name: block.name,
+          args: argsAsRecord(block.parameters),
+        },
+      });
+    } else if (block.type === 'tool_response') {
+      parts.push({
+        functionResponse: {
+          id: block.callId,
+          name: block.toolName,
+          response: { status: 'success', result: block.result },
+        },
+      });
+    }
+  }
+  if (parts.length === 0) {
+    return null;
+  }
+  return {
+    role: content.speaker === 'ai' ? 'model' : 'user',
+    parts,
+  };
+}
+
+/** Encode curated history into the provider wire shape. */
+function encodeForProvider(contents: IContent[]): WireContent[] {
+  const encoded: WireContent[] = [];
+  for (const content of contents) {
+    const wire = encodeContentForProvider(content);
+    if (wire !== null) {
+      encoded.push(wire);
+    }
+  }
+  return encoded;
+}
 
 describe('Compression and duplicate tool call IDs', () => {
   it('should not create duplicate tool IDs when rebuilding history after compression', () => {
@@ -53,8 +145,9 @@ describe('Compression and duplicate tool call IDs', () => {
     // Step 1: Get curated history as IContent
     const curatedIContent = historyService.getCurated();
 
-    // Step 2: Convert to Content[] (Gemini format) - this is what getHistory(true) does
-    const curatedContent = ContentConverters.toGeminiContents(curatedIContent);
+    // Step 2: Encode to the provider wire Content[] format, mirroring what
+    // the Gemini provider's outbound converter produces for request history.
+    const curatedContent = encodeForProvider(curatedIContent);
 
     // Step 3: Simulate compression - split history
     // Check what we have before slicing
@@ -66,7 +159,7 @@ describe('Compression and duplicate tool call IDs', () => {
     // Verify historyToKeep contains all the tool-related messages
     expect(historyToKeep.length).toBe(3);
     expect(historyToKeep[0].role).toBe('model'); // AI with tool call
-    expect(historyToKeep[1].role).toBe('user'); // Tool response (user role in Gemini)
+    expect(historyToKeep[1].role).toBe('user'); // Tool response (user role in wire format)
     expect(historyToKeep[2].role).toBe('model'); // AI final response
 
     // Step 4: Create new history service (what startChat does)
@@ -152,7 +245,7 @@ describe('Compression and duplicate tool call IDs', () => {
 
     // Simulate first compression
     let curated = historyService.getCurated();
-    let contents = ContentConverters.toGeminiContents(curated);
+    let contents = encodeForProvider(curated);
 
     // Clear and rebuild
     historyService.clear();
@@ -195,7 +288,7 @@ describe('Compression and duplicate tool call IDs', () => {
 
     // Simulate second compression
     curated = historyService.getCurated();
-    contents = ContentConverters.toGeminiContents(curated);
+    contents = encodeForProvider(curated);
 
     // Clear and rebuild again
     historyService.clear();

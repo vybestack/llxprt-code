@@ -36,6 +36,10 @@ export * from './modelRequest.js';
 export * from './providerApiError.js';
 export * from './tokensAndEmbeddings.js';
 export * from './grounding.js';
+// geminiContent.ts now declares only the two surviving inbound-parse types
+// (GeminiContent/GeminiContentPart, #2628); the star re-export is kept
+// because explicit named re-exports would trip the genai-enclave export
+// guard for this barrel file.
 export * from './geminiContent.js';
 export * from './afcHistory.js';
 

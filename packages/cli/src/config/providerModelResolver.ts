@@ -30,7 +30,7 @@ export interface ProviderModelInput {
   profileModel: string | undefined;
   settingsModel: string | undefined;
   envDefaultModel: string | undefined;
-  envGeminiModel: string | undefined;
+  envProviderModel: string | undefined;
   /**
    * Base-provider default model (level-6 fallback), sourced from the
    * provider registry by the caller (e.g. the registered gemini
@@ -84,7 +84,7 @@ export function resolveProviderAndModel(
     profileModel,
     settingsModel,
     envDefaultModel,
-    envGeminiModel,
+    envProviderModel,
   } = input;
 
   let provider: string | undefined;
@@ -118,7 +118,7 @@ export function resolveProviderAndModel(
   // GEMINI_MODEL env is only relevant for the gemini provider — it must
   // never leak to non-Gemini providers.
   const scopedEnvModel =
-    provider === 'gemini' ? trimIfString(envGeminiModel) : undefined;
+    provider === 'gemini' ? trimIfString(envProviderModel) : undefined;
   const environmentModel = firstNonEmptyString(
     trimIfString(envDefaultModel),
     scopedEnvModel,

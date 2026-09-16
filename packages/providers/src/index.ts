@@ -190,7 +190,6 @@ export type { DumpMode } from './utils/dumpContext.js';
 export { dumpRequestContext } from './utils/dumpContext.js';
 export {
   buildAnthropicDumpMessages,
-  buildGeminiDumpContents,
   buildOpenAIDumpMessages,
   buildProviderDumpBody,
 } from './utils/providerRequestConversion.js';

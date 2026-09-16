@@ -4,10 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  isGemini2Model,
-  isGemini3Model,
-} from '@vybestack/llxprt-code-core/config/models.js';
+import { isGemini2Model, isGemini3Model } from './modelClassification.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ReasoningEffort } from '@vybestack/llxprt-code-settings';
 import {

@@ -11,7 +11,7 @@ import {
   type MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { isGemini3Model } from '@vybestack/llxprt-code-core/config/models.js';
+import { isGemini3Model } from './modelClassification.js';
 import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
 
 export function convertMediaBlockToGeminiParts(block: MediaBlock): Part[] {

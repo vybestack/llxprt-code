@@ -50,6 +50,19 @@ describe('MultiProviderPrivacyNotice', () => {
       expect(lastFrame()).toContain('anthropic.com');
     });
 
+    it('should show the Gemini consent terms and all Gemini URLs', () => {
+      const { lastFrame } = renderComponent('gemini');
+
+      expect(lastFrame()).toContain('Active Provider: Gemini');
+      expect(lastFrame()).toContain('Gemini API Additional Terms of Service');
+      expect(lastFrame()).toContain('https://developers.google.com/terms');
+      expect(lastFrame()).toContain('https://ai.google.dev/gemini-api/terms');
+      expect(lastFrame()).toContain(
+        'https://ai.google.dev/docs/gemini_api_overview',
+      );
+      expect(lastFrame()).toContain('https://aistudio.google.com/');
+    });
+
     it('should show provider-specific links for Fireworks', () => {
       const { lastFrame } = renderComponent('fireworks');
 

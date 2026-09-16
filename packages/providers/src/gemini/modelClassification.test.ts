@@ -1,11 +1,11 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { describe, it, expect } from 'bun:test';
-import { isGemini2Model, isGemini3Model } from '../models.js';
+import { isGemini2Model, isGemini3Model } from './modelClassification.js';
 
 describe('isGemini2Model()', () => {
   it('returns true for gemini-2.5-pro', () => {
