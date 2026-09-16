@@ -60,6 +60,21 @@ class AuthAttemptCancelledError extends OAuthError {
   }
 }
 
+/**
+ * Runtime fail-fast: JavaScript callers can bypass the required-parameter
+ * type contract, so the constructor re-checks the store before any work.
+ */
+function assertTokenStore(
+  store: TokenStore | undefined | null,
+): asserts store is TokenStore {
+  if (store === undefined || store === null) {
+    throw new Error(
+      `AnthropicOAuthProvider (claudecode) requires a TokenStore for token ` +
+        `persistence. Please provide a valid TokenStore instance.`,
+    );
+  }
+}
+
 export class AnthropicOAuthProvider implements OAuthProvider {
   name = 'claudecode';
   private deviceFlow: AnthropicDeviceFlow;
@@ -69,6 +84,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
   private errorHandler: GracefulErrorHandler;
   private retryHandler: RetryHandler;
   private logger: DebugLogger;
+  private tokenStore: TokenStore;
   private currentAuthAttemptId?: string;
   private addItem?: OAuthUICallback;
   private currentAuthBucket?: string;
@@ -80,29 +96,16 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    *
    * Constructor completes synchronously - no async calls
    */
-  constructor(
-    private _tokenStore?: TokenStore,
-    addItem?: OAuthUICallback,
-  ) {
+  constructor(tokenStore: TokenStore, addItem?: OAuthUICallback) {
+    assertTokenStore(tokenStore);
     this.deviceFlow = new AnthropicDeviceFlow();
     this.retryHandler = new RetryHandler();
     this.errorHandler = new GracefulErrorHandler(this.retryHandler);
     this.logger = new DebugLogger('llxprt:auth:claudecode');
+    this.tokenStore = tokenStore;
     this.addItem = addItem;
     this.initGuard = new InitializationGuard('wrap', this.name);
     this.dialog = new AuthCodeDialog();
-
-    /**
-     * @plan PLAN-20250823-AUTHFIXES.P16
-     * @requirement REQ-004.2
-     * Deprecation warning for missing TokenStore
-     */
-    if (!_tokenStore) {
-      debugLogger.warn(
-        `DEPRECATION: ${this.name} OAuth provider created without TokenStore. ` +
-          `Token persistence will not work. Please update your code.`,
-      );
-    }
 
     // DO NOT call initializeToken() - lazy initialization pattern
   }
@@ -431,14 +434,10 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * @pseudocode lines 17-25
    */
   async initializeToken(): Promise<void> {
-    if (!this._tokenStore) {
-      return;
-    }
-
     await this.errorHandler.handleGracefully(
       async () => {
         // @pseudocode line 19: Load saved token from store
-        const savedToken = await this._tokenStore!.getToken('claudecode');
+        const savedToken = await this.tokenStore.getToken('claudecode');
         // @pseudocode lines 20-22: Check if token exists and not expired
         if (savedToken && !isTokenExpired(savedToken)) {
           return undefined; // Token is valid, ready to use
@@ -459,13 +458,10 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    */
   async getToken(): Promise<OAuthToken | null> {
     await this.ensureInitialized();
-    if (!this._tokenStore) {
-      return null;
-    }
 
     return this.errorHandler.handleGracefully(
       // Issue #1378: Return token as-is; OAuthManager owns all refresh operations
-      async () => this._tokenStore!.getToken('claudecode'),
+      async () => this.tokenStore.getToken('claudecode'),
       null, // Return null on error
       this.name,
       'getToken',
