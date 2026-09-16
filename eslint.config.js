@@ -672,20 +672,6 @@ export default tseslint.config(
       'max-lines': ['error', { max: 900, skipBlankLines: true, skipComments: true }], // eslint-policy-allow-off: #3504 raised from 800, split tracked in #3613
     },
   },
-  // ============================================================================
-  // Issue #3693: OpenAIStreamProcessor.ts already sits at 801 effective lines
-  // on main (the #2624 merge, PR #3689, pushed it past the 800 cap; scoped
-  // CI lint runs never visited the file). The #3693 branch does not modify
-  // the file, but its full-repo verification lint must run green, so
-  // max-lines is raised to 900 to preserve the pre-existing state, matching
-  // the #3504 precedent. A proper split remains to be tracked.
-  // ============================================================================
-  {
-    files: ['packages/providers/src/openai/OpenAIStreamProcessor.ts'],
-    rules: {
-      'max-lines': ['error', { max: 900, skipBlankLines: true, skipComments: true }], // eslint-policy-allow-off: #3693 raised from 800, overage pre-exists on main from #2624
-    },
-  },
   // Issue #2605: Apply strict code-quality lint rules to eval TypeScript
   // ============================================================================
   // The eval suite (evals/**/*.ts) is real source executed by the nightly
