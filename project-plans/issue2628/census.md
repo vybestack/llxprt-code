@@ -73,3 +73,7 @@ Reviewer: `reviewer`-class agent (gpt56solhigh window unavailable; deepthinker/a
 - Note: stale `buildGeminiDumpContents` in packages/providers/dist/ is gitignored build output, not in the diff.
 
 Reviewer-rerun verification: enclave guard exit 0; gate:agents-neutral exit 0; naming suites 194 pass; ContentConverters+compression+modelClassification 44 pass; LB suites 42 pass; DirectMessageProcessor suites 18 pass; typecheck exit 0.
+
+## CI fix record (2026-09-17)
+
+- PR #3702 scripts shard failed `publish-integrity.test.ts` S6 "#2352: ships every exported subpath entry of internal workspace dependencies": B3's deletion of `core/src/utils/messageInspectors.ts` left the `./utils/messageInspectors.js` exports entry dangling in `packages/core/package.json` (the entry ships `src/utils/messageInspectors.ts` under the bun condition). Removed the dead subpath entry (4 lines) — the packaging surface of the deleted path dies with it, per the same-PR deletion rule. `bun test scripts/tests/publish-integrity.test.ts` → 19 pass / 0 fail after the fix.

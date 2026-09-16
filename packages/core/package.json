@@ -529,10 +529,6 @@
       "bun": "./src/utils/generateContentResponseUtilities.ts",
       "import": "./dist/src/utils/generateContentResponseUtilities.js"
     },
-    "./utils/messageInspectors.js": {
-      "bun": "./src/utils/messageInspectors.ts",
-      "import": "./dist/src/utils/messageInspectors.js"
-    },
     "./utils/quotaErrorDetection.js": {
       "bun": "./src/utils/quotaErrorDetection.ts",
       "import": "./dist/src/utils/quotaErrorDetection.js"
