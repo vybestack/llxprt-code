@@ -152,10 +152,9 @@ function parseBufferText(
   }
   workingText = kimiParsed.cleanedText;
 
-  const parsingText = sanitizeProviderText(workingText);
-  let cleanedText = parsingText;
+  let cleanedText = sanitizeProviderText(workingText);
   try {
-    const parsedResult = deps.textToolParser.parse(parsingText);
+    const parsedResult = deps.textToolParser.parse(cleanedText);
     if (parsedResult.toolCalls.length > 0) {
       parsedToolCalls.push(
         ...parsedResult.toolCalls.map((call) => ({
