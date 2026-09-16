@@ -25,11 +25,9 @@ type MessageToolCallWithOptionalFunction = Omit<
   OpenAI.Chat.Completions.ChatCompletionMessageToolCall,
   'function'
 > & {
-  function?: {
-    name?: string;
-    arguments?: string;
-  };
+  function?: { name?: string; arguments?: string };
 };
+type ChunkDelta = OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta;
 
 import { type DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { type ToolCallPipeline } from './ToolCallPipeline.js';
@@ -409,9 +407,7 @@ function processDeltaToolCalls(
 ): void {
   let addedFragments = false;
   // Cast to allow for runtime undefined delta (external API boundary)
-  const delta = choice.delta as
-    | OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta
-    | undefined;
+  const delta = choice.delta as ChunkDelta | undefined;
   const deltaToolCalls = delta?.tool_calls;
   if (deltaToolCalls && deltaToolCalls.length > 0) {
     for (const deltaToolCall of deltaToolCalls) {
@@ -429,9 +425,7 @@ function processDeltaToolCalls(
 
   const choiceMessage = (
     choice as {
-      message?: {
-        tool_calls?: MessageToolCallWithOptionalFunction[];
-      };
+      message?: { tool_calls?: MessageToolCallWithOptionalFunction[] };
     }
   ).message;
   const messageToolCalls = choiceMessage?.tool_calls;
@@ -538,9 +532,7 @@ async function* processStreamingChunk(
   }
 
   // Handle text content
-  const delta = choice.delta as
-    | OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta
-    | undefined;
+  const delta = choice.delta as ChunkDelta | undefined;
   const rawDeltaContent = coerceMessageContentToString(
     delta?.content as unknown,
   );
@@ -746,19 +738,11 @@ function* emitTerminalChunks(
   model: string,
   deps: StreamProcessorDeps,
 ): Generator<IContent, void, unknown> {
+  const totalCalls = () =>
+    deps.toolCallPipeline.getStats().collector.totalCalls;
   yield* emitCombinedTerminalContent(state, model, deps);
-  yield* emitUsageOnlyMetadata(
-    state,
-    model,
-    deps.logger,
-    () => deps.toolCallPipeline.getStats().collector.totalCalls,
-  );
-  yield* emitFinishOnlyMetadata(
-    state,
-    model,
-    deps.logger,
-    () => deps.toolCallPipeline.getStats().collector.totalCalls,
-  );
+  yield* emitUsageOnlyMetadata(state, model, deps.logger, totalCalls);
+  yield* emitFinishOnlyMetadata(state, model, deps.logger, totalCalls);
 }
 
 /**
