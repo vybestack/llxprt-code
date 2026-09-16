@@ -25,10 +25,7 @@ type MessageToolCallWithOptionalFunction = Omit<
   OpenAI.Chat.Completions.ChatCompletionMessageToolCall,
   'function'
 > & {
-  function?: {
-    name?: string;
-    arguments?: string;
-  };
+  function?: { name?: string; arguments?: string };
 };
 
 import { type DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
