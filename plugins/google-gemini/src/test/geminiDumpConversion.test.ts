@@ -128,8 +128,10 @@ describe('buildGeminiDumpContents', () => {
       config,
     ) as Array<{ parts: Array<Record<string, unknown>> }>;
 
-    const functionResponse = contents[0].parts[0]
-      .functionResponse as Record<string, unknown>;
+    const functionResponse = contents[0].parts[0].functionResponse as Record<
+      string,
+      unknown
+    >;
     expect(functionResponse.response).toMatchObject({
       status: 'success',
       truncated: true,
@@ -150,10 +152,10 @@ describe('GeminiProvider.buildContextDumpBody', () => {
       { speaker: 'human', blocks: [{ type: 'text', text: 'Ping' }] },
     ];
 
-    const body = provider.buildContextDumpBody(
-      history,
-      'gemini-2.5-pro',
-    ) as { model?: string; contents?: unknown[] };
+    const body = provider.buildContextDumpBody(history, 'gemini-2.5-pro') as {
+      model?: string;
+      contents?: unknown[];
+    };
 
     expect(body.model).toBe('gemini-2.5-pro');
     expect(body.contents).toStrictEqual([

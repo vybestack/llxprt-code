@@ -149,7 +149,10 @@ function readMarkerManifest(
     typeof marker === 'object' &&
     marker !== null &&
     (marker as Record<string, unknown>)['runtimePlugin'] === true;
-  return { isPlugin, name: typeof record['name'] === 'string' ? record['name'] : undefined };
+  return {
+    isPlugin,
+    name: typeof record['name'] === 'string' ? record['name'] : undefined,
+  };
 }
 
 function declaresRuntimePlugin(
@@ -157,10 +160,8 @@ function declaresRuntimePlugin(
   searchRoot: string,
   packageName: string,
 ): boolean {
-  return readMarkerManifest(
-    deps,
-    join(searchRoot, packageName, 'package.json'),
-  ).isPlugin;
+  return readMarkerManifest(deps, join(searchRoot, packageName, 'package.json'))
+    .isPlugin;
 }
 
 /**
@@ -242,8 +243,10 @@ export function discoverRuntimePluginPackages(
   }
 
   // One predicate keeps the guard order explicit: a dot-entry is skipped
-  // before its manifest is ever read, and a plugin already loaded from its
-  // installed package is never re-discovered from the checkout.
+  // before its manifest is ever read, a marker-declaring checkout plugin is
+  // discovered only when it is actually installed, and a plugin already
+  // loaded from its installed package is never re-discovered from the
+  // checkout.
   const isLoadableCheckoutEntry = (entry: string): boolean => {
     if (entry.startsWith('.')) {
       return false;
@@ -253,6 +256,14 @@ export function discoverRuntimePluginPackages(
       join(checkoutRoot, entry, 'package.json'),
     );
     if (!manifest.isPlugin) {
+      return false;
+    }
+    // A checkout plugin without its own node_modules was never installed,
+    // and handing it to the fail-fast loader would crash CLI startup in
+    // environments that never installed plugin deps. Installing — a
+    // plugin-local install creating node_modules — is what makes a provider
+    // available.
+    if (!deps.exists(join(checkoutRoot, entry, 'node_modules'))) {
       return false;
     }
     return manifest.name === undefined || !installedNames.has(manifest.name);

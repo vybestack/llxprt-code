@@ -529,7 +529,9 @@ describe('dumpcontextCommand', () => {
             role: 'model',
             parts: [
               { text: 'Pong' },
-              { functionCall: { id: 'call_1', name: 'lookup', args: { id: 7 } } },
+              {
+                functionCall: { id: 'call_1', name: 'lookup', args: { id: 7 } },
+              },
             ],
           },
         ],
@@ -542,7 +544,10 @@ describe('dumpcontextCommand', () => {
                 getAll: vi
                   .fn()
                   .mockReturnValue([
-                    { speaker: 'human', blocks: [{ type: 'text', text: 'Ping' }] },
+                    {
+                      speaker: 'human',
+                      blocks: [{ type: 'text', text: 'Ping' }],
+                    },
                   ]),
                 getChronologyTrace: vi.fn().mockReturnValue([]),
               }),
@@ -551,9 +556,7 @@ describe('dumpcontextCommand', () => {
               getActiveProviderName: vi.fn().mockReturnValue('gemini'),
               getActiveProvider: vi.fn().mockReturnValue({
                 getCurrentModel: vi.fn().mockReturnValue('gemini-2.5-pro'),
-                buildContextDumpBody: vi
-                  .fn()
-                  .mockReturnValue(pluginBuiltBody),
+                buildContextDumpBody: vi.fn().mockReturnValue(pluginBuiltBody),
               }),
             }),
           } as unknown as CommandContext['services']['config'],
@@ -598,7 +601,8 @@ describe('dumpcontextCommand', () => {
       await dumpcontextAction(ctxWithHistory, 'now');
 
       const buildContextDumpBody = (
-        ctxWithHistory.services.config.getProviderManager()
+        ctxWithHistory.services.config
+          .getProviderManager()
           .getActiveProvider() as unknown as {
           buildContextDumpBody: Mock;
         }
@@ -611,8 +615,8 @@ describe('dumpcontextCommand', () => {
       // seam's config identity is the context's config, not the literal
       // argument passed to the factory; production passes
       // context.services.config unchanged.
-      const [historyArg, modelArg, configArg] = buildContextDumpBody.mock
-        .calls[0];
+      const [historyArg, modelArg, configArg] =
+        buildContextDumpBody.mock.calls[0];
       expect(historyArg).toBe(history);
       expect(modelArg).toBe('gemini-3-pro');
       expect(configArg).toBe(ctxWithHistory.services.config);
@@ -639,7 +643,10 @@ describe('dumpcontextCommand', () => {
                 getAll: vi
                   .fn()
                   .mockReturnValue([
-                    { speaker: 'human', blocks: [{ type: 'text', text: 'Hi' }] },
+                    {
+                      speaker: 'human',
+                      blocks: [{ type: 'text', text: 'Hi' }],
+                    },
                   ]),
                 getChronologyTrace: vi.fn().mockReturnValue([]),
               }),
@@ -665,7 +672,6 @@ describe('dumpcontextCommand', () => {
         ),
       });
     });
-
 
     it('should keep raw history for unknown providers', async () => {
       const history = [

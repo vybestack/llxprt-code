@@ -14,7 +14,19 @@
       "@vybestack/llxprt-code-providers/composition.js": [
         "../../packages/providers/src/composition/index.ts"
       ],
-      "@vybestack/llxprt-code-providers/*": ["../../packages/providers/src/*"]
+      "@vybestack/llxprt-code-providers/*": ["../../packages/providers/src/*"],
+      "@vybestack/llxprt-code-auth": ["../../packages/auth/index.ts"],
+      "@vybestack/llxprt-code-auth/*": ["../../packages/auth/src/*"],
+      "@vybestack/llxprt-code-ide-integration": [
+        "../../packages/ide-integration/index.ts"
+      ],
+      "@vybestack/llxprt-code-ide-integration/*": [
+        "../../packages/ide-integration/src/*"
+      ],
+      "@vybestack/llxprt-code-mcp": ["../../packages/mcp/index.ts"],
+      "@vybestack/llxprt-code-mcp/*": ["../../packages/mcp/src/*"],
+      "@vybestack/llxprt-code-tools": ["../../packages/tools/index.ts"],
+      "@vybestack/llxprt-code-tools/*": ["../../packages/tools/src/*"]
     }
   },
   "include": ["src/**/*.ts"]

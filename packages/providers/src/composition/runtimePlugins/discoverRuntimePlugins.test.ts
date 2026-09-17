@@ -241,7 +241,9 @@ describe('checkout plugin discovery', () => {
         dirs: {
           [`${CHECKOUT}/packages/providers`]: [],
           [`${CHECKOUT}/plugins`]: ['zeta-provider', 'alpha-provider'],
+          [`${CHECKOUT}/plugins/zeta-provider/node_modules`]: [],
           [`${CHECKOUT}/plugins/zeta-provider/src`]: ['index.ts'],
+          [`${CHECKOUT}/plugins/alpha-provider/node_modules`]: [],
           [`${CHECKOUT}/plugins/alpha-provider/src`]: ['index.ts'],
         },
         files: {
@@ -275,6 +277,7 @@ describe('checkout plugin discovery', () => {
           dirs: {
             [`${CHECKOUT}/packages/providers`]: [],
             [`${CHECKOUT}/plugins`]: ['kookoo'],
+            [`${CHECKOUT}/plugins/kookoo/node_modules`]: [],
           },
           files: {
             [`${CHECKOUT}/plugins/kookoo/package.json`]: manifest(
@@ -300,6 +303,7 @@ describe('checkout plugin discovery', () => {
             [`${CHECKOUT}/packages/providers`]: [],
             [`${CHECKOUT}/packages/providers/node_modules`]: ['kookoo'],
             [`${CHECKOUT}/plugins`]: ['kookoo'],
+            [`${CHECKOUT}/plugins/kookoo/node_modules`]: [],
             [`${CHECKOUT}/plugins/kookoo/src`]: ['index.ts'],
           },
           files: {
@@ -314,6 +318,30 @@ describe('checkout plugin discovery', () => {
         }),
       ),
     ).toStrictEqual(['kookoo']);
+  });
+
+  it('does not discover a checkout plugin that was never installed', () => {
+    // A marker-declaring checkout plugin whose own node_modules is absent
+    // has no installed dependencies; handing it to the fail-fast loader
+    // would crash CLI startup, so discovery skips it silently until a
+    // plugin-local install creates node_modules.
+    expect(
+      discoverRuntimePluginPackages(
+        deps({
+          dirs: {
+            [`${CHECKOUT}/packages/providers`]: [],
+            [`${CHECKOUT}/plugins`]: ['uninstalled'],
+          },
+          files: {
+            [`${CHECKOUT}/plugins/uninstalled/package.json`]: manifest(
+              'uninstalled',
+              true,
+            ),
+          },
+          fromPath: CHECKOUT_FROM,
+        }),
+      ),
+    ).toStrictEqual([]);
   });
 
   it('does not scan a consumer project whose packages tree lacks the host', () => {
@@ -332,7 +360,8 @@ describe('checkout plugin discovery', () => {
               true,
             ),
           },
-          fromPath: '/opt/app/node_modules/@vybestack/llxprt-code-providers/dist/x.js',
+          fromPath:
+            '/opt/app/node_modules/@vybestack/llxprt-code-providers/dist/x.js',
         }),
       ),
     ).toStrictEqual([]);
