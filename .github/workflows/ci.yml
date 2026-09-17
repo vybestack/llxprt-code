@@ -1690,7 +1690,7 @@ jobs:
   runtime_plugins:
     name: 'Runtime Plugins (build, typecheck, test)'
     runs-on: 'ubuntu-latest'
-    timeout-minutes: 20
+    timeout-minutes: 30
     needs:
       - 'skip_check'
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
@@ -1734,6 +1734,13 @@ jobs:
         run: |-
           bun install
           git checkout -- bun.lock
+
+      # Plugin build programs resolve host types via root node_modules links
+      # into packages/*/dist (tsconfig.build.json paths only externalize the
+      # composition contract), so the host must be built first, exactly like
+      # release.yml's plugin phase runs after the base-CLI build.
+      - name: 'Build host packages'
+        run: 'npm run build'
 
       - name: 'Install, typecheck, test, build, and pack-smoke each plugin'
         run: |

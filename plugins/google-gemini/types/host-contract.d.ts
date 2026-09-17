@@ -12,8 +12,10 @@
  * `bun run typecheck` does NOT use this file: it maps host specifiers to the
  * real host source via tsconfig paths, so any drift between the host
  * contract and this stand-in fails typecheck in CI. This file exists only so
- * `bun run build` can emit dist without host source inside the emit program
- * (a plugin-local build must not need the host repo built).
+ * `bun run build` can emit dist without host source inside the emit program;
+ * host types still resolve through the built host (root node_modules links
+ * into the packages' dist output), which is why CI and release build the
+ * base first.
  */
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
