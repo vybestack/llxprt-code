@@ -592,17 +592,26 @@ describe('dumpcontextCommand', () => {
           }),
         }),
       } as unknown as CommandContext['services']['config'];
+      if (!config) {
+        throw new Error('Expected services.config fixture');
+      }
       const ctxWithHistory = createMockCommandContext({
         services: { config },
       });
+      const ctxConfig = ctxWithHistory.services.config;
+      if (!ctxConfig) {
+        throw new Error('Expected services.config on mock context');
+      }
+      const providerManager = ctxConfig.getProviderManager();
+      if (!providerManager) {
+        throw new Error('Expected provider manager on mock context config');
+      }
 
       await dumpcontextAction(ctxWithHistory, 'now');
 
       const buildContextDumpBody = (
-        ctxWithHistory.services.config
-          .getProviderManager()
-          .getActiveProvider() as unknown as {
-          buildContextDumpBody: Mock;
+        providerManager.getActiveProvider() as unknown as {
+          buildContextDumpBody: ReturnType<typeof vi.fn>;
         }
       ).buildContextDumpBody;
       expect(buildContextDumpBody).toHaveBeenCalledOnce();
@@ -617,7 +626,7 @@ describe('dumpcontextCommand', () => {
         buildContextDumpBody.mock.calls[0];
       expect(historyArg).toBe(history);
       expect(modelArg).toBe('gemini-3-pro');
-      expect(configArg).toBe(ctxWithHistory.services.config);
+      expect(configArg).toBe(ctxConfig);
       // The derived config still carries this test's provider-manager wiring.
       expect(configArg.getProviderManager).toBe(config.getProviderManager);
       const requestArg = (dumpRequestContext as ReturnType<typeof vi.fn>).mock
