@@ -55,8 +55,7 @@ function updateFilesGlobContext(state: DiffState, content: string) {
   }
   const isOpenLine =
     state.filesArrayBracketDepth === null && isFilesArrayOpenLine(content);
-  const inCollection =
-    state.filesArrayBracketDepth !== null && !isOpenLine;
+  const inCollection = state.filesArrayBracketDepth !== null && !isOpenLine;
   if (!isOpenLine && !inCollection) {
     return;
   }

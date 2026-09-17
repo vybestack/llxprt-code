@@ -8693,7 +8693,9 @@ describe('eslint-guard ceiling override guard (#3718)', () => {
   it('allows a baseline-listed scripts tests max-lines-per-function waiver', () => {
     const diff = filesScopedConfigDiff(
       'scripts/tests/**/*.{ts,tsx,js,mjs,cjs}',
-      ["      'max-lines-per-function': 'off', // eslint-policy-allow-off: #2282"],
+      [
+        "      'max-lines-per-function': 'off', // eslint-policy-allow-off: #2282",
+      ],
     );
     expect(checkDiff(diff)).toEqual([]);
   });

@@ -116,12 +116,7 @@ function checkInlineCeilingOverride(
   content: string,
   currentLine: number,
 ) {
-  const waiver = describeCeilingWaiver(
-    added.content,
-    added.key,
-    null,
-    false,
-  );
+  const waiver = describeCeilingWaiver(added.content, added.key, null, false);
   if (waiver === null) {
     return;
   }

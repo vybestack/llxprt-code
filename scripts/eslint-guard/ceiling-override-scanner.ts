@@ -100,10 +100,7 @@ export function describeCeilingWaiver(
       return { ruleKey, kind: 'off', threshold: null };
     }
     const threshold = extractThresholdValue(content, ruleKey);
-    if (
-      threshold !== null &&
-      exceedsRepoBase(ruleKey, threshold.value)
-    ) {
+    if (threshold !== null && exceedsRepoBase(ruleKey, threshold.value)) {
       return { ruleKey, kind: 'threshold', threshold: threshold.value };
     }
     return null;
@@ -120,7 +117,9 @@ export function describeCeilingWaiver(
   const stripped = stripTrailingLineComment(content);
   const isMaxForm =
     isStandaloneMaxLine(stripped) || isObjectFormMaxLine(stripped);
-  const maxValue = isMaxForm ? extractMaxValueFromStandaloneLine(stripped) : null;
+  const maxValue = isMaxForm
+    ? extractMaxValueFromStandaloneLine(stripped)
+    : null;
   const numericValue =
     expectingThreshold && isStandaloneNumericThresholdLine(stripped)
       ? extractStandaloneNumericThresholdValue(stripped)
@@ -208,9 +207,7 @@ export function parseCeilingOverrideBaseline(
     }
     const key = baselineKey(files, rule);
     if (seen.has(key)) {
-      throw new Error(
-        `Baseline contains duplicate entry ${files} / ${rule}.`,
-      );
+      throw new Error(`Baseline contains duplicate entry ${files} / ${rule}.`);
     }
     seen.add(key);
     entries.push({ files, rule });
@@ -340,7 +337,8 @@ function updateRuleEntryState(state: ConfigScanState, line: string) {
   state.ruleEntryDepth = countDiffBracketAndBraceDelta(line);
   state.expectingFirstSeverityElement = openerExpectsFirstArrayElement(line);
   state.expectingCeilingThreshold =
-    !state.expectingFirstSeverityElement && state.currentCeilingRuleKey !== null;
+    !state.expectingFirstSeverityElement &&
+    state.currentCeilingRuleKey !== null;
 }
 
 function updateSeverityExpectation(state: ConfigScanState, line: string) {
@@ -374,34 +372,41 @@ export function extractConfigCeilingOverrides(
   const lines = configSource.split('\n');
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (isCommentOnlyLine(line)) {
-      continue;
-    }
-    if (state.rulesBraceDepth === null) {
-      if (state.filesArrayBracketDepth !== null || isFilesArrayOpenLine(line)) {
-        updateFilesArrayCollection(state, line);
-        continue;
-      }
-      if (isRulesBlockOpen(line)) {
-        state.rulesBraceDepth = 0;
-        state.activeFilesGlobs = state.filesGlobs;
-        resetRuleEntryState(state);
-      } else {
-        continue;
-      }
-    }
-    recordCeilingWaiverLine(state, line, i + 1, overrides);
-    updateRuleEntryState(state, line);
-    state.rulesBraceDepth += countDiffBraceDelta(line);
-    if (state.rulesBraceDepth <= 0) {
-      state.rulesBraceDepth = null;
-      state.filesGlobs = [];
-      state.activeFilesGlobs = [];
-      resetRuleEntryState(state);
-    }
+    processConfigScanLine(state, lines[i], i + 1, overrides);
   }
   return overrides;
+}
+
+function processConfigScanLine(
+  state: ConfigScanState,
+  line: string,
+  lineNumber: number,
+  overrides: ConfigCeilingOverride[],
+) {
+  if (isCommentOnlyLine(line)) {
+    return;
+  }
+  if (state.rulesBraceDepth === null) {
+    if (state.filesArrayBracketDepth !== null || isFilesArrayOpenLine(line)) {
+      updateFilesArrayCollection(state, line);
+      return;
+    }
+    if (!isRulesBlockOpen(line)) {
+      return;
+    }
+    state.rulesBraceDepth = 0;
+    state.activeFilesGlobs = state.filesGlobs;
+    resetRuleEntryState(state);
+  }
+  recordCeilingWaiverLine(state, line, lineNumber, overrides);
+  updateRuleEntryState(state, line);
+  state.rulesBraceDepth += countDiffBraceDelta(line);
+  if (state.rulesBraceDepth <= 0) {
+    state.rulesBraceDepth = null;
+    state.filesGlobs = [];
+    state.activeFilesGlobs = [];
+    resetRuleEntryState(state);
+  }
 }
 
 function recordCeilingWaiverLine(
@@ -438,9 +443,7 @@ function recordCeilingWaiverLine(
  * Current-state guard: every per-file ceiling waiver in eslint.config.js must
  * be listed in the checked-in baseline, regardless of any comment tag.
  */
-export function scanConfigCeilingOverrides(
-  configSource: string,
-): Violation[] {
+export function scanConfigCeilingOverrides(configSource: string): Violation[] {
   const baselined = ceilingOverrideBaselineKeys();
   const violations: Violation[] = [];
   for (const override of extractConfigCeilingOverrides(configSource)) {
