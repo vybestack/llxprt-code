@@ -26,11 +26,42 @@ import {
 } from '../utils/memoryDiscovery.js';
 import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
-import {
-  getOrCreateScheduler as _getOrCreateScheduler,
-  type SchedulerCallbacks,
-  type SchedulerOptions,
-} from './schedulerSingleton.js';
+import { type SchedulerHandle } from '../session/sessionExecutionServices.js';
+import type {
+  SchedulerPurpose,
+  SessionSchedulerRegistry,
+} from '../session/sessionSchedulerRegistry.js';
+import { createSessionSchedulerRegistry } from '../session/sessionSchedulerRegistryImpl.js';
+import type { LiveOutputUpdate } from '../utils/terminalSerializer.js';
+
+/**
+ * Callbacks the scheduler consumers hand to Config.getOrCreateScheduler.
+ * Moved here from the deleted process-global scheduler singleton module;
+ * consumers import them from this module (or the package barrel) directly.
+ */
+export interface SchedulerCallbacks {
+  outputUpdateHandler?: (toolCallId: string, update: LiveOutputUpdate) => void;
+  onAllToolCallsComplete?: (
+    completedToolCalls: CompletedToolCall[],
+  ) => Promise<void>;
+  onToolCallsUpdate?: (toolCalls: ToolCall[]) => void;
+  getPreferredEditor: () => EditorType | undefined;
+  onEditorClose: () => void;
+  onEditorOpen?: () => void;
+}
+
+/**
+ * Options for scheduler acquisition through Config.getOrCreateScheduler.
+ */
+export interface SchedulerOptions {
+  /**
+   * Whether the scheduler operates in interactive mode.
+   * When false, the scheduler is configured for non-interactive/subagent contexts
+   * (e.g., no live progress display, no editor support).
+   * Defaults to true for backward compatibility.
+   */
+  interactiveMode?: boolean;
+}
 import { initializeLsp } from './lspIntegration.js';
 import * as configConstructor from './configConstructor.js';
 import { ConfigBase } from './configBase.js';
@@ -111,7 +142,11 @@ import {
 } from '../policy/config.js';
 
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
-import type { ToolSchedulerContract } from '../core/toolSchedulerContract.js';
+import type {
+  CompletedToolCall,
+  ToolCall,
+} from '../core/toolSchedulerContract.js';
+import type { EditorType } from '../utils/editor.js';
 
 export class Config extends ConfigBase {
   private static readonly logger = new DebugLogger('llxprt:config');
@@ -832,30 +867,78 @@ export class Config extends ConfigBase {
   }
 
   /**
-   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
-   * @requirement REQ-D01-001.1
-   * @requirement REQ-D01-001.2
-   * @pseudocode lines 56-72
+   * TEMPORARY with the schedulerRegistry field on ConfigBase (deletion
+   * criterion in that field's comment): both die when SessionRuntime takes
+   * registry ownership. The createScheduler closure captures the FIRST
+   * acquiring call's deps and the tool scheduler factory; every acquisition
+   * refreshes callbacks through handle.setCallbacks with that call's own
+   * deps, so the captured deps only shape scheduler construction.
+   */
+  private getSchedulerRegistry(
+    messageBus: MessageBus,
+    toolRegistry: ToolRegistry,
+  ): SessionSchedulerRegistry {
+    this.schedulerRegistry ??= createSessionSchedulerRegistry({
+      createScheduler: async (options) => {
+        const factory = this.getToolSchedulerFactory();
+        if (!factory) {
+          throw new Error(
+            'toolSchedulerFactory is required before Config.getOrCreateScheduler() can create a CoreToolScheduler',
+          );
+        }
+        return factory({
+          config: this,
+          messageBus,
+          toolRegistry,
+          toolContextInteractiveMode: options.interactiveMode ?? true,
+          // Creation-time callback stubs: the delegate always applies the
+          // acquiring call's real callbacks via setCallbacks before the
+          // scheduler can run anything.
+          getPreferredEditor: () => undefined,
+          onEditorClose: () => {},
+        });
+      },
+    });
+    return this.schedulerRegistry;
+  }
+
+  /**
+   * TEMPORARY delegate (#2615 slice E, see ConfigBase.schedulerRegistry).
+   * Owner is an object whose identity keys the scheduler entry (never a
+   * string): two consumers with colliding labels get distinct schedulers.
+   * The registry captures this call's deps on first use; every acquisition,
+   * fresh or reused, applies the latest caller's callbacks and deps through
+   * setCallbacks before returning.
    */
   async getOrCreateScheduler(
-    sessionId: string,
+    owner: object,
+    purpose: SchedulerPurpose,
     callbacks: SchedulerCallbacks,
     options?: SchedulerOptions,
     dependencies?: {
       messageBus?: MessageBus;
       toolRegistry?: ToolRegistry;
     },
-  ): Promise<ToolSchedulerContract> {
+  ): Promise<SchedulerHandle> {
     const schedulerMessageBus = dependencies?.messageBus;
     if (!schedulerMessageBus) {
       throw new Error(
         'Config.getOrCreateScheduler requires an explicit session/runtime MessageBus dependency.',
       );
     }
-    return _getOrCreateScheduler(this, sessionId, callbacks, options, {
+    const toolRegistry = dependencies.toolRegistry ?? this.getToolRegistry();
+    const registry = this.getSchedulerRegistry(
+      schedulerMessageBus,
+      toolRegistry,
+    );
+    const handle = await registry.getOrCreate(owner, purpose, options);
+    handle.setCallbacks({
+      config: this,
       messageBus: schedulerMessageBus,
-      toolRegistry: dependencies.toolRegistry ?? this.getToolRegistry(),
+      toolRegistry,
+      ...callbacks,
     });
+    return handle;
   }
 
   /**
@@ -1011,6 +1094,3 @@ function throwFailures(failures: unknown[]): void {
     throw new AggregateError(failures, 'Config disposal failed');
   }
 }
-
-// Re-export scheduler types for external use
-export { type SchedulerCallbacks, type SchedulerOptions };

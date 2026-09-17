@@ -4,11 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'bun:test';
 import { AgenticLoop } from '../AgenticLoop.js';
 import type { AgenticLoopEvent } from '../types.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
-import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
@@ -29,13 +28,6 @@ import {
 } from './agenticLoop-test-helpers.js';
 
 describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
-  beforeEach(() => {
-    clearAllSchedulers();
-  });
-  afterEach(() => {
-    clearAllSchedulers();
-  });
-
   it('abort during the model stream stops the loop cleanly with no tools scheduled', async () => {
     const tool = new MockTool({ name: 'tool_x' });
     tool.executeFn.mockResolvedValue({
@@ -155,8 +147,12 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
         event.kind === 'tool_update' ? [event] : [],
       );
 
+      // Fresh owner object: the loop released its own entry, so this proves
+      // the registry hands out a working scheduler for a new acquisition.
+      const freshOwner = { label: 'post-abort-scheduler' };
       const fresh = await config.getOrCreateScheduler(
-        config.getSessionId(),
+        freshOwner,
+        'session',
         {
           onAllToolCallsComplete: async () => {},
           getPreferredEditor: () => undefined,
@@ -166,7 +162,7 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
         { messageBus, toolRegistry },
       );
 
-      config.disposeScheduler(config.getSessionId());
+      config.disposeScheduler(freshOwner, 'session');
 
       return { toolUpdates, fresh };
     };
@@ -231,8 +227,12 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
         }
       }
 
+      // Fresh owner object: the loop released its own entry, so this proves
+      // the registry hands out a working scheduler for a new acquisition.
+      const freshOwner = { label: 'post-abort-scheduler' };
       const fresh = await config.getOrCreateScheduler(
-        config.getSessionId(),
+        freshOwner,
+        'session',
         {
           onAllToolCallsComplete: async () => {},
           getPreferredEditor: () => undefined,
@@ -242,7 +242,7 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
         { messageBus, toolRegistry },
       );
 
-      config.disposeScheduler(config.getSessionId());
+      config.disposeScheduler(freshOwner, 'session');
 
       return { sawTool, fresh, termination };
     };
@@ -317,11 +317,11 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
     };
 
   it('early generator return while a tool is running disposes the scheduler', async () => {
-    const { sawRunningTool, iterator, disposedSessionIds } =
+    const { sawRunningTool, iterator, disposedOwners } =
       await observeEarlyGeneratorReturnWhileAToolIsRunningDisposesTheScheduler();
     expect(sawRunningTool).toBe(true);
     await expect(iterator.return(undefined)).resolves.toBeDefined();
-    expect(disposedSessionIds.some((id) => id.includes('#agentic-loop#'))).toBe(
+    expect(disposedOwners.some((owner) => owner instanceof AgenticLoop)).toBe(
       true,
     );
   });
@@ -340,12 +340,14 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
         interactive: false,
         approvalMode: ApprovalMode.YOLO,
       });
-      const disposedSessionIds: string[] = [];
+      const disposedOwners: object[] = [];
       const originalDisposeScheduler = config.disposeScheduler.bind(config);
-      vi.spyOn(config, 'disposeScheduler').mockImplementation((sessionId) => {
-        disposedSessionIds.push(sessionId);
-        originalDisposeScheduler(sessionId);
-      });
+      vi.spyOn(config, 'disposeScheduler').mockImplementation(
+        (owner, purpose) => {
+          disposedOwners.push(owner);
+          originalDisposeScheduler(owner, purpose);
+        },
+      );
 
       const { client } = createScriptedAgentClient([
         [
@@ -367,7 +369,7 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
         }
       }
 
-      return { sawRunningTool, iterator, disposedSessionIds };
+      return { sawRunningTool, iterator, disposedOwners };
     };
 
   it('tool_output emitted just before completion is observed by the consumer', async () => {

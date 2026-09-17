@@ -14,21 +14,29 @@ import type { SchedulerHandle } from './sessionExecutionServices.js';
 export type SchedulerPurpose = 'session' | 'agentic-loop' | 'subagent';
 
 /**
- * Session-owned scheduler registry carrying the semantics
- * schedulerSingleton.ts implements today: get-or-create with in-flight
- * deduplication and acquire counting. Binding constraint: keys are owner
- * objects, never strings; two sessions with the same label string never
- * share an entry.
+ * Session-owned scheduler registry carrying the semantics the deleted
+ * process-global scheduler singleton implements today: get-or-create with
+ * in-flight deduplication and acquire counting. Binding constraint: keys
+ * are owner objects, never strings; two sessions with the same label
+ * string never share an entry.
  */
 export interface SessionSchedulerRegistry {
   /**
    * Get-or-create the scheduler for one owner and purpose. Concurrent
    * calls with the same key await the same creation rather than building
    * a duplicate.
+   *
+   * `options.interactiveMode` is a creation argument, not a purpose-derived
+   * one: it feeds `toolContextInteractiveMode` at scheduler construction.
+   * Consumer trace: interactiveToolScheduler passes true, nonInteractiveToolExecutor
+   * passes false, subagentExecution passes nothing (defaults true). The first
+   * acquisition of a key fixes the mode; later acquisitions with a different
+   * mode reuse the existing scheduler unchanged.
    */
   getOrCreate(
     owner: object,
     purpose: SchedulerPurpose,
+    options?: { interactiveMode?: boolean },
   ): Promise<SchedulerHandle>;
   /**
    * Release one acquisition of the entry; dispose its scheduler when the

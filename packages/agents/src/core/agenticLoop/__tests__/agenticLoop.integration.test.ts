@@ -4,11 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'bun:test';
 import { AgenticLoop } from '../AgenticLoop.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { MockModifiableTool } from '@vybestack/llxprt-code-core/test-utils/tools.js';
-import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
@@ -43,13 +42,6 @@ void vi.mock('@vybestack/llxprt-code-tools', () => {
 });
 
 describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
-  beforeEach(() => {
-    clearAllSchedulers();
-  });
-  afterEach(() => {
-    clearAllSchedulers();
-  });
-
   it('ProceedOnce continues the loop and the tool executes (side effect observable)', async () => {
     const tool = new MockTool({
       name: 'record_tool',

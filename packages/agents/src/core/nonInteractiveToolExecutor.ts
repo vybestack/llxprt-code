@@ -11,16 +11,15 @@ import {
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { type Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SchedulerHandle } from '@vybestack/llxprt-code-core/session/sessionExecutionServices.js';
 import { toolFailureMarker } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
-import {
-  type CompletedToolCall,
-  type CoreToolScheduler,
-} from './coreToolScheduler.js';
+import { type CompletedToolCall } from './coreToolScheduler.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 
 /**
  * Configuration subset required for non-interactive tool execution.
- * Uses the scheduler singleton via getOrCreateScheduler/disposeScheduler.
+ * Acquires and releases the session scheduler registry through
+ * getOrCreateScheduler/disposeScheduler.
  */
 export type ToolExecutionConfig = Pick<
   Config,
@@ -36,10 +35,13 @@ export type ToolExecutionConfig = Pick<
   Partial<Pick<Config, 'getAllowedTools' | 'getApprovalMode'>>;
 
 /**
- * Executes a single tool call non-interactively by leveraging the CoreToolScheduler singleton.
+ * Executes a single tool call non-interactively by acquiring the shared
+ * CoreToolScheduler from the session scheduler registry.
  *
  * This wrapper:
- * 1. Uses the scheduler singleton (via config.getOrCreateScheduler) with interactiveMode: false
+ * 1. Acquires the registry scheduler (via config.getOrCreateScheduler) with
+ *    interactiveMode: false under the caller-supplied owner object and the
+ *    'subagent' purpose
  * 2. Schedules the tool call
  * 3. Returns the completed result
  *
@@ -47,7 +49,7 @@ export type ToolExecutionConfig = Pick<
  * - The scheduler uses toolContextInteractiveMode: false so tools know they're non-interactive
  * - No live output updates are provided
  *
- * Benefits of using the singleton scheduler:
+ * Benefits of sharing one scheduler per owner:
  * - Avoids MessageBus subscription spam from repeated scheduler creation
  * - Proper refcount-based lifecycle management
  * - Consistent tool governance path with interactive mode
@@ -55,29 +57,15 @@ export type ToolExecutionConfig = Pick<
  * Note: Emoji filtering is handled by the individual tools (edit.ts, write-file.ts)
  * so it is not duplicated here.
  */
-type SchedulerConfig = ToolExecutionConfig & {
-  getOrCreateScheduler(
-    sessionId: string,
-    callbacks: {
-      getPreferredEditor: () => undefined;
-      onEditorClose: () => void;
-      onAllToolCallsComplete: (
-        completedToolCalls: CompletedToolCall[],
-      ) => Promise<void>;
-    },
-    options?: { interactiveMode?: boolean },
-    extraDependencies?: { messageBus?: MessageBus },
-  ): Promise<CoreToolScheduler>;
-};
-
 async function createScheduler(
   config: ToolExecutionConfig,
-  sessionId: string,
+  owner: object,
   completionResolver: ((calls: CompletedToolCall[]) => void) | null,
   dependencies?: { messageBus?: MessageBus },
-): Promise<CoreToolScheduler> {
-  return (config as SchedulerConfig).getOrCreateScheduler(
-    sessionId,
+): Promise<SchedulerHandle> {
+  return config.getOrCreateScheduler(
+    owner,
+    'subagent',
     {
       getPreferredEditor: () => undefined,
       onEditorClose: () => {},
@@ -104,6 +92,14 @@ export async function executeToolCall(
   abortSignal?: AbortSignal,
   dependencies?: {
     messageBus?: MessageBus;
+    /**
+     * Registry owner for the scheduler acquisition: the object identifying
+     * the executing context (e.g. the subagent processing context). Identity,
+     * not any label string, keys the entry, and the same object must be
+     * supplied for every call of one execution so acquire and release
+     * balance.
+     */
+    owner: object;
   },
 ): Promise<CompletedToolCall> {
   const startTime = Date.now();
@@ -135,11 +131,18 @@ export async function executeToolCall(
     completionResolver = resolve;
   });
 
-  const sessionId = config.getSessionId();
+  // Fail fast: the owner is the registry key and only the caller knows the
+  // executing context; there is no valid derivation from the config alone.
+  const owner = dependencies?.owner;
+  if (owner === undefined || owner === null) {
+    throw new Error(
+      'executeToolCall requires an owner object identifying the executing context.',
+    );
+  }
 
   const scheduler = await createScheduler(
     config,
-    sessionId,
+    owner,
     completionResolver,
     dependencies,
   );
@@ -177,7 +180,7 @@ export async function executeToolCall(
     if (internalAbortController.signal.aborted) {
       scheduler.cancelAll();
     }
-    config.disposeScheduler(sessionId);
+    config.disposeScheduler(owner, 'subagent');
   }
 }
 

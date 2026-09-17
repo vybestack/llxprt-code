@@ -21,10 +21,7 @@ import { CoreToolScheduler } from '../../coreToolScheduler.js';
 import type { AgenticLoop } from '../AgenticLoop.js';
 import type { ApprovalHandler, AgenticLoopEvent } from '../types.js';
 import type { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
-import {
-  getOrCreateScheduler,
-  disposeScheduler,
-} from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
+import { createSchedulerRegistryDelegate } from '../../scheduler-registry-test-helpers.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
@@ -266,8 +263,10 @@ function testBoundaryConfig(fixture: Record<string, unknown>): Config {
 }
 
 /**
- * Builds a real-ish Config wired to the scheduler singleton with a REAL
- * CoreToolScheduler factory.
+ * Builds a real-ish Config wired to a per-fixture scheduler registry with a
+ * REAL CoreToolScheduler factory. The registry is keyed by owner object
+ * identity plus purpose exactly like the Config delegate, so loop-level
+ * scheduler isolation behaves as it does in production.
  */
 export function createTestConfig(options: {
   messageBus: MessageBus;
@@ -305,32 +304,27 @@ export function createTestConfig(options: {
         opts: ConstructorParameters<typeof CoreToolScheduler>[0],
       ): CoreToolScheduler =>
         new CoreToolScheduler(opts),
-    getOrCreateScheduler: (
-      sessionId: string,
-      callbacks: Parameters<Config['getOrCreateScheduler']>[1],
-      schedulerOptions: Parameters<Config['getOrCreateScheduler']>[2],
-      deps: Parameters<Config['getOrCreateScheduler']>[3],
-    ) => {
-      const schedulerMessageBus = deps?.messageBus;
-      if (!schedulerMessageBus) {
-        throw new Error(
-          'Test config requires an explicit scheduler MessageBus dependency.',
-        );
-      }
-      return getOrCreateScheduler(
-        testBoundaryConfig(fixture),
-        sessionId,
-        callbacks,
-        schedulerOptions,
-        {
-          messageBus: schedulerMessageBus,
-          toolRegistry: deps.toolRegistry ?? toolRegistry,
-        },
-      );
-    },
-    disposeScheduler: (sessionId: string) => disposeScheduler(sessionId),
   };
-  return testBoundaryConfig(fixture);
+
+  const delegate = createSchedulerRegistryDelegate({
+    config: testBoundaryConfig(fixture),
+    messageBus,
+    toolRegistry,
+    // Mirrors the Config delegate's createScheduler closure: build the real
+    // scheduler with creation-time stub callbacks; the delegate refreshes
+    // the acquiring call's real callbacks via setCallbacks right after.
+    createScheduler: (schedulerOptions) =>
+      fixture.getToolSchedulerFactory()({
+        config: testBoundaryConfig(fixture),
+        messageBus,
+        toolRegistry,
+        toolContextInteractiveMode: schedulerOptions.interactiveMode ?? true,
+        getPreferredEditor: () => undefined,
+        onEditorClose: () => {},
+      }),
+  });
+
+  return testBoundaryConfig({ ...fixture, ...delegate });
 }
 
 /**

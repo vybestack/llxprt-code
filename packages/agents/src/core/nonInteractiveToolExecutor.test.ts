@@ -4,15 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  afterEach,
-  type Mock,
-} from 'bun:test';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import {
   executeToolCall,
   type ToolExecutionConfig,
@@ -35,12 +27,8 @@ import { MockTool } from '@vybestack/llxprt-code-core/test-utils/tools.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import {
-  getOrCreateScheduler,
-  disposeScheduler,
-  clearAllSchedulers,
-} from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
+import { createSchedulerRegistryDelegate } from './scheduler-registry-test-helpers.js';
 
 describe('executeToolCall', () => {
   let mockToolRegistry: ToolRegistry;
@@ -50,10 +38,11 @@ describe('executeToolCall', () => {
   let policyEngine: PolicyEngine;
   let messageBus: MessageBus;
   const testSessionId = 'test-session-id';
+  // Stable per-suite registry owner: executeToolCall acquires and releases
+  // on this same object, so the per-config registry refcount balances.
+  const executionOwner = { label: 'non-interactive-executor' };
 
   beforeEach(() => {
-    clearAllSchedulers();
-
     policyEngine = new PolicyEngine({
       rules: [],
       defaultDecision: PolicyDecision.ALLOW,
@@ -69,8 +58,10 @@ describe('executeToolCall', () => {
       getAllTools: vi.fn().mockReturnValue([]),
     } as unknown as ToolRegistry;
 
-    // Create a base config object that we'll extend with scheduler methods
-    const baseConfig = {
+    // Build the config fixture, then attach a per-config scheduler registry
+    // delegate: acquisitions key on owner object identity plus purpose, with
+    // callbacks refreshed on every acquisition, matching production Config.
+    const fixture = {
       getToolRegistry: () => mockToolRegistry,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getAllowedTools: () => [],
@@ -94,22 +85,24 @@ describe('executeToolCall', () => {
           new CoreToolScheduler(schedulerOptions),
     };
 
-    // Add scheduler singleton methods - they need the full config reference
-    mockConfig = {
-      ...baseConfig,
-      getOrCreateScheduler: (sessionId, callbacks, options) =>
-        getOrCreateScheduler(mockConfig, sessionId, callbacks, options, {
+    const delegate = createSchedulerRegistryDelegate({
+      config: fixture as unknown as Config,
+      messageBus,
+      toolRegistry: mockToolRegistry,
+      createScheduler: (schedulerOptions) =>
+        fixture.getToolSchedulerFactory()({
+          config: fixture as unknown as Config,
           messageBus,
-          toolRegistry: mockConfig.getToolRegistry(),
+          toolRegistry: mockToolRegistry,
+          toolContextInteractiveMode: schedulerOptions.interactiveMode ?? true,
+          getPreferredEditor: () => undefined,
+          onEditorClose: () => {},
         }),
-      disposeScheduler: (sessionId) => disposeScheduler(sessionId),
-    } as unknown as Config;
+    });
+
+    mockConfig = { ...fixture, ...delegate } as unknown as Config;
 
     abortController = new AbortController();
-  });
-
-  afterEach(() => {
-    clearAllSchedulers();
   });
 
   it('should execute a tool successfully', async () => {
@@ -133,6 +126,7 @@ describe('executeToolCall', () => {
       mockConfig,
       request,
       abortController.signal,
+      { owner: executionOwner },
     );
 
     // Behavior verified via response structure - no mock interaction checks needed
@@ -167,7 +161,9 @@ describe('executeToolCall', () => {
     };
 
     await expect(
-      executeToolCall(mockConfig, request, abortController.signal),
+      executeToolCall(mockConfig, request, abortController.signal, {
+        owner: executionOwner,
+      }),
     ).rejects.toThrow('disabled by hook restrictions');
     expect(mockToolRegistry.getTool).not.toHaveBeenCalled();
   });
@@ -193,6 +189,7 @@ describe('executeToolCall', () => {
       mockConfig,
       request,
       abortController.signal,
+      { owner: executionOwner },
     );
 
     expect(response.callId).toBe('call2');
@@ -228,6 +225,7 @@ describe('executeToolCall', () => {
       mockConfig,
       request,
       abortController.signal,
+      { owner: executionOwner },
     );
 
     expect(response.callId).toBe('call3');
@@ -262,6 +260,7 @@ describe('executeToolCall', () => {
       mockConfig,
       request,
       abortController.signal,
+      { owner: executionOwner },
     );
     expect(response.callId).toBe('call4');
     expect(response.errorType).toBe(ToolErrorType.EXECUTION_FAILED);
@@ -301,6 +300,7 @@ describe('executeToolCall', () => {
       mockConfig,
       request,
       abortController.signal,
+      { owner: executionOwner },
     );
 
     expect(response.callId).toBe('call5');
@@ -360,6 +360,7 @@ describe('executeToolCall', () => {
       mockConfig,
       request,
       abortController.signal,
+      { owner: executionOwner },
     );
 
     // Behavior verified via response structure - tool was blocked
@@ -400,6 +401,7 @@ describe('executeToolCall', () => {
       mockConfig,
       request,
       abortController.signal,
+      { owner: executionOwner },
     );
 
     // Behavior verified via response structure - tool was blocked by policy
@@ -442,6 +444,7 @@ describe('executeToolCall', () => {
       mockConfig,
       request,
       abortController.signal,
+      { owner: executionOwner },
     );
 
     expect(response).toStrictEqual({
@@ -472,6 +475,9 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
   let abortController: AbortController;
   let request: ToolCallRequestInfo;
   const testSessionId = 'test-session-structure';
+  // Stable per-suite registry owner: executeToolCall acquires and releases
+  // on this same object, so the per-config registry refcount balances.
+  const executionOwner = { label: 'non-interactive-executor' };
 
   function createMockConfig(options?: {
     ephemerals?: Record<string, unknown>;
@@ -504,8 +510,10 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
       return policyEngine;
     };
 
-    // Create base config first, then add scheduler methods that reference it
-    const baseConfig = {
+    // Build the base config fixture, then attach a per-config scheduler
+    // registry delegate keyed by owner object identity, matching production
+    // Config semantics.
+    const fixture = {
       getToolRegistry: () => mockToolRegistry,
       getSessionId: () => testSessionId,
       getTelemetryLogPromptsEnabled: () => false,
@@ -524,23 +532,30 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
           new CoreToolScheduler(schedulerOptions),
     };
 
-    // Add scheduler singleton methods
-    const config: ToolExecutionConfig = {
-      ...baseConfig,
-      getOrCreateScheduler: (sessionId, callbacks, opts) =>
-        getOrCreateScheduler(config as Config, sessionId, callbacks, opts, {
-          messageBus: (config as Config).getMessageBus(),
-          toolRegistry: (config as Config).getToolRegistry(),
+    const delegate = createSchedulerRegistryDelegate({
+      config: fixture as unknown as Config,
+      messageBus,
+      toolRegistry: mockToolRegistry,
+      createScheduler: (schedulerOptions) =>
+        fixture.getToolSchedulerFactory()({
+          config: fixture as unknown as Config,
+          messageBus,
+          toolRegistry: mockToolRegistry,
+          toolContextInteractiveMode: schedulerOptions.interactiveMode ?? true,
+          getPreferredEditor: () => undefined,
+          onEditorClose: () => {},
         }),
-      disposeScheduler: (sessionId) => disposeScheduler(sessionId),
-    };
+    });
+
+    const config: ToolExecutionConfig = {
+      ...fixture,
+      ...delegate,
+    } as unknown as ToolExecutionConfig;
 
     return config;
   }
 
   beforeEach(() => {
-    clearAllSchedulers();
-
     mockTool = new MockTool('testTool');
 
     mockToolRegistry = {
@@ -560,10 +575,6 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
     };
   });
 
-  afterEach(() => {
-    clearAllSchedulers();
-  });
-
   describe('response structure validation', () => {
     it('should return ToolCallResponseInfo with correct structure', async () => {
       (
@@ -578,6 +589,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         createMockConfig(),
         request,
         abortController.signal,
+        { owner: executionOwner },
       );
 
       expect(response.callId).toBe('call1');
@@ -603,6 +615,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         createMockConfig(),
         request,
         abortController.signal,
+        { owner: executionOwner },
       );
 
       const parts = response.responseParts;
@@ -634,6 +647,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         createMockConfig(),
         requestWithAgentId,
         abortController.signal,
+        { owner: executionOwner },
       );
 
       expect(response.agentId).toBe(customAgentId);
@@ -654,6 +668,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         createMockConfig(),
         requestWithoutAgentId,
         abortController.signal,
+        { owner: executionOwner },
       );
 
       expect(response.agentId).toBe(DEFAULT_AGENT_ID);
@@ -676,6 +691,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
           createMockConfig(),
           { ...request, callId: `call${i}` },
           abortController.signal,
+          { owner: executionOwner },
         );
         results.push(response);
       }
@@ -707,6 +723,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
             createMockConfig(),
             { ...request, callId: `call-${i}` },
             abortController.signal,
+            { owner: executionOwner },
           );
           expect(response.error).toBeUndefined();
         }
@@ -737,6 +754,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         createMockConfig(),
         { ...request, callId: 'fail' },
         abortController.signal,
+        { owner: executionOwner },
       );
       expect(failedResult.error).toBeDefined();
 
@@ -748,6 +766,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         createMockConfig(),
         { ...request, callId: 'success' },
         abortController.signal,
+        { owner: executionOwner },
       );
       expect(successResult.error).toBeUndefined();
     });
@@ -798,6 +817,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         createMockConfig(),
         request,
         localAbortController.signal,
+        { owner: executionOwner },
       );
       await startedPromise;
       localAbortController.abort();
@@ -821,6 +841,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         createMockConfig(),
         request,
         abortController.signal,
+        { owner: executionOwner },
       );
 
       expect(response.error).toBeDefined();
@@ -839,6 +860,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         createMockConfig(),
         request,
         abortController.signal,
+        { owner: executionOwner },
       );
 
       const parts = response.responseParts;
@@ -859,6 +881,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         createMockConfig(),
         { ...request, name: 'nonexistent_tool' },
         abortController.signal,
+        { owner: executionOwner },
       );
 
       expect(response.error).toBeDefined();
@@ -877,6 +900,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         createMockConfig(),
         { ...request, args: {} },
         abortController.signal,
+        { owner: executionOwner },
       );
 
       expect(response.error).toBeDefined();

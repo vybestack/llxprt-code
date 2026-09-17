@@ -22,6 +22,7 @@ import {
   type SchedulerCallbacks,
   type SchedulerOptions,
 } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SchedulerPurpose } from '@vybestack/llxprt-code-core/session/sessionSchedulerRegistry.js';
 import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
@@ -273,13 +274,19 @@ export function createToolExecutionConfig(
     getSessionId: () => runtimeBundle.runtimeContext.state.sessionId,
     getTelemetryLogPromptsEnabled: () =>
       Boolean(settingsSnapshot?.telemetry?.enabled),
-    getOrCreateScheduler: (sessionId, callbacks, options, dependencies) =>
-      foregroundConfig.getOrCreateScheduler(sessionId, callbacks, options, {
-        messageBus: dependencies?.messageBus ?? messageBus,
-        toolRegistry: dependencies?.toolRegistry ?? toolRegistry,
-      }),
-    disposeScheduler: (sessionId) =>
-      foregroundConfig.disposeScheduler(sessionId),
+    getOrCreateScheduler: (owner, purpose, callbacks, options, dependencies) =>
+      foregroundConfig.getOrCreateScheduler(
+        owner,
+        purpose,
+        callbacks,
+        options,
+        {
+          messageBus: dependencies?.messageBus ?? messageBus,
+          toolRegistry: dependencies?.toolRegistry ?? toolRegistry,
+        },
+      ),
+    disposeScheduler: (owner, purpose) =>
+      foregroundConfig.disposeScheduler(owner, purpose),
   };
 }
 
@@ -667,12 +674,13 @@ export function createSchedulerConfig(
     getAllowedTools?: () => string[] | undefined;
     getToolRegistry?: () => unknown;
     getOrCreateScheduler?: (
-      sessionId: string,
+      owner: object,
+      purpose: SchedulerPurpose,
       callbacks: unknown,
       options: unknown,
       deps: unknown,
     ) => Promise<ToolSchedulerContract>;
-    disposeScheduler?: (sessionId: string) => void;
+    disposeScheduler?: (owner: object, purpose: SchedulerPurpose) => void;
     getEnableHooks?: () => boolean;
     getHooks?: () => unknown;
     getHookSystem?: () => unknown;
@@ -696,7 +704,8 @@ export function createSchedulerConfig(
         : ApprovalMode.DEFAULT,
     getPolicyEngine: () => foregroundConfig.getPolicyEngine(),
     getOrCreateScheduler: (
-      sessionId: string,
+      owner: object,
+      purpose: SchedulerPurpose,
       callbacks: SchedulerCallbacks,
       schedulerOptions?: SchedulerOptions,
       dependencies?: {
@@ -705,13 +714,14 @@ export function createSchedulerConfig(
       },
     ) =>
       toolExecutorContext.getOrCreateScheduler(
-        sessionId,
+        owner,
+        purpose,
         callbacks,
         { ...schedulerOptions, interactiveMode: isInteractive },
         dependencies,
       ),
-    disposeScheduler: (sessionId: string) => {
-      toolExecutorContext.disposeScheduler(sessionId);
+    disposeScheduler: (owner: object, purpose: SchedulerPurpose) => {
+      toolExecutorContext.disposeScheduler(owner, purpose);
     },
     getEnableHooks: () => defensiveConfig.getEnableHooks?.() ?? false,
     getHooks: () => defensiveConfig.getHooks?.(),
