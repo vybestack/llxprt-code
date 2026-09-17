@@ -21,11 +21,20 @@
  * naming convention, so a package cannot be picked up by accident and a plugin
  * may be named anything.
  *
- * Only ONE directory is searched: the `node_modules` that contains this
- * package. Those are the packages installed alongside the CLI, which is
- * exactly what `-g` installs produce, and searching one directory keeps
- * startup cost bounded. Nothing is executed during discovery; this module only
- * reads directory entries and manifests.
+ * Install-driven discovery searches ONE directory: the `node_modules` that
+ * contains this package. Those are the packages installed alongside the CLI,
+ * which is exactly what `-g` installs produce, and searching one directory
+ * keeps startup cost bounded.
+ *
+ * Running from a source checkout adds exactly one more scan: the checkout's
+ * own `plugins/` directory (#2759), whose first-party plugin packages sit
+ * outside every `node_modules` and would otherwise be invisible to the
+ * install-driven scan even with their dependencies installed. The checkout is
+ * recognized by the host's own `packages/providers` tree, so a consumer
+ * project that merely has a `plugins/` directory is never scanned.
+ *
+ * Nothing is executed during discovery; this module only reads directory
+ * entries and manifests.
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -110,52 +119,155 @@ function packageNamesIn(
   return names;
 }
 
-function declaresRuntimePlugin(
+/**
+ * Read one candidate package manifest and report whether it declares the
+ * runtime-plugin marker, together with the declared package name.
+ *
+ * A neighbouring package with an unreadable manifest is not this feature's
+ * problem and must not stop the CLI from starting. It simply is not a plugin,
+ * because a plugin has to declare the marker to be one.
+ */
+function readMarkerManifest(
   deps: RuntimePluginDiscoveryDeps,
-  searchRoot: string,
-  packageName: string,
-): boolean {
-  const manifestPath = join(searchRoot, packageName, 'package.json');
+  manifestPath: string,
+): { isPlugin: boolean; name: string | undefined } {
   if (!deps.exists(manifestPath)) {
-    return false;
+    return { isPlugin: false, name: undefined };
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(deps.readFile(manifestPath));
   } catch {
-    // A neighbouring package with an unreadable manifest is not this feature's
-    // problem and must not stop the CLI from starting. It simply is not a
-    // plugin, because a plugin has to declare the marker to be one.
-    return false;
+    return { isPlugin: false, name: undefined };
   }
   if (typeof parsed !== 'object' || parsed === null) {
-    return false;
+    return { isPlugin: false, name: undefined };
   }
-  const marker = (parsed as Record<string, unknown>)[
-    RUNTIME_PLUGIN_MANIFEST_MARKER
-  ];
-  if (typeof marker !== 'object' || marker === null) {
-    return false;
-  }
-  return (marker as Record<string, unknown>)['runtimePlugin'] === true;
+  const record = parsed as Record<string, unknown>;
+  const marker = record[RUNTIME_PLUGIN_MANIFEST_MARKER];
+  const isPlugin =
+    typeof marker === 'object' &&
+    marker !== null &&
+    (marker as Record<string, unknown>)['runtimePlugin'] === true;
+  return { isPlugin, name: typeof record['name'] === 'string' ? record['name'] : undefined };
+}
+
+function declaresRuntimePlugin(
+  deps: RuntimePluginDiscoveryDeps,
+  searchRoot: string,
+  packageName: string,
+): boolean {
+  return readMarkerManifest(
+    deps,
+    join(searchRoot, packageName, 'package.json'),
+  ).isPlugin;
 }
 
 /**
- * Discover the installed packages that declare themselves runtime plugins.
+ * Resolve the repo-local `plugins/` directory when this module runs from a
+ * source checkout of this repository, or undefined in any installed layout.
  *
- * Returns package names sorted alphabetically so plugin load order, and
- * therefore contributed-alias order, is deterministic across machines and
- * filesystem listing orders.
+ * The checkout layout is recognized by the host's own `packages/providers`
+ * tree next to a `plugins/` directory. Requiring both keeps this a no-op for
+ * installed layouts — including a consumer project that happens to keep a
+ * `plugins/` directory but does not host the providers package.
+ */
+export function resolveRepoCheckoutPluginRoot(
+  deps: RuntimePluginDiscoveryDeps,
+): string | undefined {
+  let dir = dirname(deps.fromPath);
+  for (;;) {
+    if (
+      deps.exists(join(dir, 'packages', 'providers')) &&
+      deps.exists(join(dir, 'plugins'))
+    ) {
+      return join(dir, 'plugins');
+    }
+    const parent = dirname(dir);
+    if (parent === dir) {
+      return undefined;
+    }
+    dir = parent;
+  }
+}
+
+/**
+ * The specifier a checkout plugin loads from. A checkout executes Bun-native
+ * from TypeScript source (#2983) and a plugin's `dist/` build is optional
+ * there, so the source entry is preferred when present. Without one, the
+ * package directory itself is handed to the loader, which resolves the built
+ * entry from the plugin's manifest.
+ */
+function checkoutPluginSpecifier(
+  deps: RuntimePluginDiscoveryDeps,
+  pluginDir: string,
+): string {
+  const sourceEntry = join(pluginDir, 'src', 'index.ts');
+  return deps.exists(sourceEntry) ? sourceEntry : pluginDir;
+}
+
+/**
+ * Discover the packages that declare themselves runtime plugins.
+ *
+ * Two sources, both deterministic so plugin load order — and therefore
+ * contributed-alias order — does not depend on filesystem listing order:
+ *
+ *   1. the install-driven `node_modules` scan, returned as bare package names
+ *      sorted alphabetically;
+ *   2. when running from a source checkout, the checkout's own `plugins/`
+ *      directory (#2759), returned as importable specifiers sorted by
+ *      directory name.
+ *
+ * A plugin that is both installed and present in the checkout loads once,
+ * from its installed package: installing a package is what makes a provider
+ * available (#2758), and loading the same plugin twice would collide on its
+ * contributed ids and aliases.
  */
 export function discoverRuntimePluginPackages(
   deps: RuntimePluginDiscoveryDeps = defaultDeps(),
 ): readonly string[] {
   const searchRoot = resolvePluginSearchRoot(deps);
-  if (searchRoot === undefined || !deps.exists(searchRoot)) {
-    return [];
+  const discovered =
+    searchRoot === undefined || !deps.exists(searchRoot)
+      ? []
+      : packageNamesIn(deps, searchRoot).filter((name) =>
+          declaresRuntimePlugin(deps, searchRoot, name),
+        );
+  const installed = [...discovered].sort((a, b) => a.localeCompare(b));
+  const installedNames = new Set(installed);
+
+  const checkoutRoot = resolveRepoCheckoutPluginRoot(deps);
+  if (checkoutRoot === undefined || !deps.exists(checkoutRoot)) {
+    return installed;
   }
-  const discovered = packageNamesIn(deps, searchRoot).filter((name) =>
-    declaresRuntimePlugin(deps, searchRoot, name),
-  );
-  return [...discovered].sort((a, b) => a.localeCompare(b));
+
+  // One predicate keeps the guard order explicit: a dot-entry is skipped
+  // before its manifest is ever read, and a plugin already loaded from its
+  // installed package is never re-discovered from the checkout.
+  const isLoadableCheckoutEntry = (entry: string): boolean => {
+    if (entry.startsWith('.')) {
+      return false;
+    }
+    const manifest = readMarkerManifest(
+      deps,
+      join(checkoutRoot, entry, 'package.json'),
+    );
+    if (!manifest.isPlugin) {
+      return false;
+    }
+    return manifest.name === undefined || !installedNames.has(manifest.name);
+  };
+
+  const checkout: Array<{ orderKey: string; specifier: string }> = [];
+  for (const entry of deps.listDir(checkoutRoot)) {
+    if (!isLoadableCheckoutEntry(entry)) {
+      continue;
+    }
+    checkout.push({
+      orderKey: entry,
+      specifier: checkoutPluginSpecifier(deps, join(checkoutRoot, entry)),
+    });
+  }
+  checkout.sort((a, b) => a.orderKey.localeCompare(b.orderKey));
+  return [...installed, ...checkout.map((c) => c.specifier)];
 }

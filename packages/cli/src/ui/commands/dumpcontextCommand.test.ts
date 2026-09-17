@@ -504,62 +504,56 @@ describe('dumpcontextCommand', () => {
       });
     });
 
-    it('should shape immediate dump body for Gemini history', async () => {
+    it('should dump the plugin-built Gemini body verbatim when the active provider owns the conversion', async () => {
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
         getSessionSetting: vi.fn(() => 'off'),
         setSessionSetting: vi.fn(),
       } as never);
 
+      // Since #2763 the Gemini wire shaping lives in
+      // @vybestack/llxprt-plugin-google-gemini and reaches the command as the
+      // active provider's buildContextDumpBody seam (the shaping itself is
+      // covered by the plugin's own suite). The body below is a stand-in for
+      // what the plugin builds; the command must write it through unmodified.
+      const pluginBuiltBody = {
+        model: 'gemini-2.5-pro',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: 'Ping' },
+              { inlineData: { mimeType: 'image/png', data: 'abc123' } },
+            ],
+          },
+          {
+            role: 'model',
+            parts: [
+              { text: 'Pong' },
+              { functionCall: { id: 'call_1', name: 'lookup', args: { id: 7 } } },
+            ],
+          },
+        ],
+      };
       const ctxWithHistory = createMockCommandContext({
         services: {
           config: {
             getAgentClient: vi.fn().mockReturnValue({
               getHistoryService: vi.fn().mockReturnValue({
-                getAll: vi.fn().mockReturnValue([
-                  {
-                    speaker: 'human',
-                    blocks: [
-                      { type: 'text', text: 'Ping' },
-                      {
-                        type: 'media',
-                        mimeType: 'image/png',
-                        encoding: 'base64',
-                        data: 'abc123',
-                      },
-                    ],
-                  },
-                  {
-                    speaker: 'ai',
-                    blocks: [
-                      { type: 'text', text: 'Pong' },
-                      {
-                        type: 'tool_call',
-                        id: 'call_1',
-                        name: 'lookup',
-                        parameters: { id: 7 },
-                      },
-                    ],
-                  },
-                  {
-                    speaker: 'tool',
-                    blocks: [
-                      {
-                        type: 'tool_response',
-                        callId: 'call_1',
-                        toolName: 'lookup',
-                        result: { ok: true },
-                      },
-                    ],
-                  },
-                ]),
+                getAll: vi
+                  .fn()
+                  .mockReturnValue([
+                    { speaker: 'human', blocks: [{ type: 'text', text: 'Ping' }] },
+                  ]),
                 getChronologyTrace: vi.fn().mockReturnValue([]),
               }),
             }),
-            getEphemeralSettings: vi.fn().mockReturnValue({}),
             getProviderManager: vi.fn().mockReturnValue({
               getActiveProviderName: vi.fn().mockReturnValue('gemini'),
               getActiveProvider: vi.fn().mockReturnValue({
                 getCurrentModel: vi.fn().mockReturnValue('gemini-2.5-pro'),
+                buildContextDumpBody: vi
+                  .fn()
+                  .mockReturnValue(pluginBuiltBody),
               }),
             }),
           } as unknown as CommandContext['services']['config'],
@@ -570,36 +564,7 @@ describe('dumpcontextCommand', () => {
 
       const requestArg = (dumpRequestContext as ReturnType<typeof vi.fn>).mock
         .calls[0][0];
-      expect(requestArg.body.model).toBe('gemini-2.5-pro');
-
-      expect(requestArg.body.contents).toStrictEqual([
-        {
-          role: 'user',
-          parts: [
-            { text: 'Ping' },
-            { inlineData: { mimeType: 'image/png', data: 'abc123' } },
-          ],
-        },
-        {
-          role: 'model',
-          parts: [
-            { text: 'Pong' },
-            { functionCall: { id: 'call_1', name: 'lookup', args: { id: 7 } } },
-          ],
-        },
-        {
-          role: 'user',
-          parts: [
-            {
-              functionResponse: {
-                id: 'call_1',
-                name: 'lookup',
-                response: expect.objectContaining({ result: '{"ok":true}' }),
-              },
-            },
-          ],
-        },
-      ]);
+      expect(requestArg.body).toStrictEqual(pluginBuiltBody);
     });
 
     it('should pass active config and model into Gemini immediate dump conversion', async () => {
@@ -608,32 +573,13 @@ describe('dumpcontextCommand', () => {
         setSessionSetting: vi.fn(),
       } as never);
 
-      const longResult = Array.from(
-        { length: 200 },
-        (_, i) => `line-${i}`,
-      ).join('\n');
+      const history = [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'Ping' }] },
+      ];
       const config = {
         getAgentClient: vi.fn().mockReturnValue({
           getHistoryService: vi.fn().mockReturnValue({
-            getAll: vi.fn().mockReturnValue([
-              {
-                speaker: 'tool',
-                blocks: [
-                  {
-                    type: 'tool_response',
-                    callId: 'call_1',
-                    toolName: 'search',
-                    result: longResult,
-                  },
-                  {
-                    type: 'media',
-                    mimeType: 'image/png',
-                    encoding: 'base64',
-                    data: 'image-data',
-                  },
-                ],
-              },
-            ]),
+            getAll: vi.fn().mockReturnValue(history),
             getChronologyTrace: vi.fn().mockReturnValue([]),
           }),
         }),
@@ -641,11 +587,8 @@ describe('dumpcontextCommand', () => {
           getActiveProviderName: vi.fn().mockReturnValue('gemini'),
           getActiveProvider: vi.fn().mockReturnValue({
             getCurrentModel: vi.fn().mockReturnValue('gemini-3-pro'),
+            buildContextDumpBody: vi.fn().mockReturnValue({ contents: [] }),
           }),
-        }),
-        getEphemeralSettings: vi.fn().mockReturnValue({
-          'tool-output-max-tokens': 5,
-          'tool-output-truncate-mode': 'warn',
         }),
       } as unknown as CommandContext['services']['config'];
       const ctxWithHistory = createMockCommandContext({
@@ -654,21 +597,75 @@ describe('dumpcontextCommand', () => {
 
       await dumpcontextAction(ctxWithHistory, 'now');
 
+      const buildContextDumpBody = (
+        ctxWithHistory.services.config.getProviderManager()
+          .getActiveProvider() as unknown as {
+          buildContextDumpBody: Mock;
+        }
+      ).buildContextDumpBody;
+      expect(buildContextDumpBody).toHaveBeenCalledOnce();
+      // Identity assertions: the command threads the SAME history and active
+      // model through to the plugin-owned seam, plus the context's ACTIVE
+      // config object. createMockCommandContext deep-merges the config given
+      // to the factory with its own defaults into a derived instance, so the
+      // seam's config identity is the context's config, not the literal
+      // argument passed to the factory; production passes
+      // context.services.config unchanged.
+      const [historyArg, modelArg, configArg] = buildContextDumpBody.mock
+        .calls[0];
+      expect(historyArg).toBe(history);
+      expect(modelArg).toBe('gemini-3-pro');
+      expect(configArg).toBe(ctxWithHistory.services.config);
+      // The derived config still carries this test's provider-manager wiring.
+      expect(configArg.getProviderManager).toBe(config.getProviderManager);
       const requestArg = (dumpRequestContext as ReturnType<typeof vi.fn>).mock
         .calls[0][0];
-      const functionResponse =
-        requestArg.body.contents[0].parts[0].functionResponse;
-      expect(functionResponse.response).toMatchObject({
-        status: 'success',
-        truncated: true,
-        limitMessage: expect.stringContaining(
-          'search output exceeded token limit',
+      expect(requestArg.body).toStrictEqual({ contents: [] });
+    });
+
+    it('should return an actionable error when a Gemini provider lacks the plugin-owned conversion', async () => {
+      (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
+        getSessionSetting: vi.fn(() => 'off'),
+        setSessionSetting: vi.fn(),
+      } as never);
+
+      // A base-only install without the google-gemini plugin: the provider
+      // name is Gemini-family but no plugin-owned conversion exists.
+      const ctxWithoutPlugin = createMockCommandContext({
+        services: {
+          config: {
+            getAgentClient: vi.fn().mockReturnValue({
+              getHistoryService: vi.fn().mockReturnValue({
+                getAll: vi
+                  .fn()
+                  .mockReturnValue([
+                    { speaker: 'human', blocks: [{ type: 'text', text: 'Hi' }] },
+                  ]),
+                getChronologyTrace: vi.fn().mockReturnValue([]),
+              }),
+            }),
+            getProviderManager: vi.fn().mockReturnValue({
+              getActiveProviderName: vi.fn().mockReturnValue('gemini'),
+              getActiveProvider: vi.fn().mockReturnValue({
+                getCurrentModel: vi.fn().mockReturnValue('gemini-2.5-pro'),
+              }),
+            }),
+          } as unknown as CommandContext['services']['config'],
+        },
+      });
+
+      const result = await dumpcontextAction(ctxWithoutPlugin, 'now');
+
+      expect(dumpRequestContext).not.toHaveBeenCalled();
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'error',
+        content: expect.stringContaining(
+          '@vybestack/llxprt-plugin-google-gemini',
         ),
       });
-      expect(functionResponse.parts).toStrictEqual([
-        { inlineData: { mimeType: 'image/png', data: 'image-data' } },
-      ]);
     });
+
 
     it('should keep raw history for unknown providers', async () => {
       const history = [

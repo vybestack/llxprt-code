@@ -1140,8 +1140,18 @@ jobs:
       - name: 'Install dependencies for testing'
         # Bun re-normalizes `bun.lock` on every install (dev-docs/bun.md);
         # restore the committed lockfile so no downstream step sees a dirty one.
+        # The plugin installs give the gemini integration suites their
+        # runtime-plugin dependency: the CLI discovers the checkout's
+        # plugins/ directory (#2759), and the google-gemini plugin imports
+        # @ai-sdk/google from its own node_modules at load time.
         run: |-
           bun install
+          git checkout -- bun.lock
+          for plugin in plugins/*/; do
+            if [ -f "${plugin}package.json" ]; then
+              (cd "$plugin" && bun install --omit=peer)
+            fi
+          done
           git checkout -- bun.lock
       # Issue #2983: tests never read compiled output. Every workspace declares
       # a `bun` export condition resolving to TypeScript source, and Bun's
@@ -1712,6 +1722,19 @@ jobs:
       # it mirrors FIRST_PARTY_RUNTIME_PLUGIN_RELEASES and is never derived by
       # scanning. Full plugin CI coverage (artifact suites, affected
       # selection) lands with issue #2762.
+      #
+      # The root install runs FIRST: plugin tsconfig paths resolve host source
+      # under ../../packages/*, and that source imports other workspace
+      # packages (@vybestack/llxprt-code-ide-integration, -auth, -tools,
+      # -mcp) resolvable only through root node_modules.
+      - name: 'Install root dependencies'
+        # Bun re-normalizes `bun.lock` on every install (dev-docs/bun.md);
+        # restore the committed lockfile so no downstream step sees a dirty
+        # one (mirrors the smoke and test-shard jobs).
+        run: |-
+          bun install
+          git checkout -- bun.lock
+
       - name: 'Install, typecheck, test, build, and pack-smoke each plugin'
         run: |
           set -euo pipefail

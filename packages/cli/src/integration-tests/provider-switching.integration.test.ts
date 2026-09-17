@@ -196,6 +196,10 @@ describe('Runtime Provider Switching Integration', () => {
     // openai's alias config is the base-package representative here.
     const openaiProvider = createMockProvider('openai');
     providerManager.registerProvider(openaiProvider as never);
+    // The switch source must be a registered provider; 'other' plays that role
+    // the same way it does in the gemini-settings-clearing test above.
+    const otherProvider = createMockProvider('other');
+    providerManager.registerProvider(otherProvider as never);
 
     providerManager.setActiveProvider('other');
     await switchActiveProvider('openai');
