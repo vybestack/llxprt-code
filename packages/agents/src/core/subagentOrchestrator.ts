@@ -167,6 +167,23 @@ export class SubagentOrchestrator {
     this.idFactory = options.idFactory ?? randomUUID;
   }
 
+  /**
+   * Disposes the orchestrator-constructed isolated Config (from
+   * buildIsolatedAgentConfig) AFTER its runtime handle cleanup — children
+   * first. The isolated runtime factory treats the Config as caller-owned
+   * and never disposes it (buildCleanupClosure only resets bindings), and
+   * SubAgentScope.dispose does not touch it, so this orchestrator is its
+   * only disposer: without this, the AgentClient constructed by the
+   * activation's refreshAuth leaks. Config.dispose() is idempotent here
+   * (AgentClient.dispose guards on its unsubscribe handle; the trust
+   * lifecycle tolerates a repeated beginDisposal), so re-entry is a no-op.
+   */
+  private disposeIsolatedConfig(
+    isolatedHandle: IsolatedRuntimeContextHandle,
+  ): Promise<void> {
+    return isolatedHandle.config.dispose();
+  }
+
   private buildScopeDispose(
     scope: SubAgentScope,
     runtimeResult: AgentRuntimeLoaderResult,
@@ -185,6 +202,7 @@ export class SubagentOrchestrator {
         },
         () => disposeHistoryLike(history),
         () => isolatedHandle.cleanup(),
+        () => this.disposeIsolatedConfig(isolatedHandle),
       ]);
     };
   }
@@ -332,9 +350,14 @@ export class SubagentOrchestrator {
     runtimeResult: AgentRuntimeLoaderResult,
     isolatedHandle: IsolatedRuntimeContextHandle,
   ): Promise<void> {
+    // Reached when the scope was never created (e.g. scope construction
+    // failed) AFTER createIsolatedRuntime already activated the config and
+    // ran provider activation — the Config can therefore hold a constructed
+    // AgentClient and needs the same children-first dispose.
     await runCleanupSteps([
       () => disposeHistoryLike(runtimeResult.history),
       () => isolatedHandle.cleanup(),
+      () => this.disposeIsolatedConfig(isolatedHandle),
     ]);
   }
 
@@ -349,6 +372,20 @@ export class SubagentOrchestrator {
           cleanupError instanceof Error
             ? cleanupError.message
             : String(cleanupError)
+        }`,
+      );
+    }
+    // The runtime loader failed after activation already ran, so the Config
+    // may hold a constructed AgentClient. Dispose even when the handle
+    // cleanup above failed — a leaked client is worse than a warn.
+    try {
+      await this.disposeIsolatedConfig(isolatedHandle);
+    } catch (configDisposeError) {
+      debugLogger.warn(
+        `SubagentOrchestrator: isolated config dispose failed: ${
+          configDisposeError instanceof Error
+            ? configDisposeError.message
+            : String(configDisposeError)
         }`,
       );
     }

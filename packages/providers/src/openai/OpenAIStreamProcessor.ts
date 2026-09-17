@@ -476,7 +476,9 @@ async function* processStreamingChunk(
   abortSignal: AbortSignal | undefined,
   deps: StreamProcessorDeps,
 ): AsyncGenerator<IContent, void, unknown> {
-  if (abortSignal?.aborted === true) return;
+  if (abortSignal?.aborted === true) {
+    return;
+  }
   state.chunkCount++;
 
   const chunkRecord = chunk as unknown as Record<string, unknown>;
@@ -744,19 +746,11 @@ function* emitTerminalChunks(
   model: string,
   deps: StreamProcessorDeps,
 ): Generator<IContent, void, unknown> {
+  const totalToolCalls = () =>
+    deps.toolCallPipeline.getStats().collector.totalCalls;
   yield* emitCombinedTerminalContent(state, model, deps);
-  yield* emitUsageOnlyMetadata(
-    state,
-    model,
-    deps.logger,
-    () => deps.toolCallPipeline.getStats().collector.totalCalls,
-  );
-  yield* emitFinishOnlyMetadata(
-    state,
-    model,
-    deps.logger,
-    () => deps.toolCallPipeline.getStats().collector.totalCalls,
-  );
+  yield* emitUsageOnlyMetadata(state, model, deps.logger, totalToolCalls);
+  yield* emitFinishOnlyMetadata(state, model, deps.logger, totalToolCalls);
 }
 
 /**

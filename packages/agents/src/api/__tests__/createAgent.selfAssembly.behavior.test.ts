@@ -23,7 +23,6 @@
 
 import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
-import { getAgentRuntimeStateSubscriptionCount } from '@vybestack/llxprt-code-core';
 import {
   disposeCliRuntime,
   getCliRuntimeServices,
@@ -113,20 +112,15 @@ describe('createAgent self-contained assembly @plan:ISSUE-3222 @requirement:REQ-
     }
   });
 
-  // The AgentClient constructed during config.initialize() is the ONLY
-  // production subscriber to the module-global agent runtime-state registry,
-  // and it unsubscribes only from AgentClient.dispose() — which runs solely
-  // inside Config.dispose(). The subscription count for the runtimeId is
-  // therefore a behavioral observable of agent-owned Config disposal that
-  // needs no mock: 0 before bootstrap, and back to 0 after the failed
-  // createAgent only if the failure path disposed the Config (a leak leaves
-  // it at 1). The AggregateError-when-cleanup-also-fails branch of the shared
-  // helper is not triggered here: forcing handle.cleanup() to fail requires
-  // swapping the process-global isolated-runtime bindings mid-suite, which
-  // would poison every sibling test's runtime teardown.
-  it('T6 a post-initialize activation failure disposes the agent-owned Config and still surfaces the original error @requirement:REQ-3222-AC5 @scenario:activation-failure-config-dispose @given:createAgent with a strict activation intent that fails AFTER config.initialize() subscribed the AgentClient to the runtime-state registry @when:createAgent rejects @then:the runtime-state subscription count for the runtimeId is back to 0 (the agent-owned Config was disposed) and the rejection names the activation failure', async () => {
+  // The agent-owned Config disposal that this scenario exercises is asserted
+  // in core's in-package suite (runtime/__tests__/AgentRuntimeState.configDispose.test.ts):
+  // Config.dispose() releases the runtime-state subscription held by the
+  // constructed AgentClient. Observable here through the public surface: the
+  // original bootstrap error still surfaces after config.initialize() ran
+  // (the client, MCP discovery and extensions were started and had to be
+  // torn down before the rejection propagated).
+  it('T6 a post-initialize activation failure still surfaces the original error @requirement:REQ-3222-AC5 @scenario:activation-failure-post-initialize @given:createAgent with a strict activation intent that fails AFTER config.initialize() ran @when:createAgent rejects @then:the rejection names the activation failure and its underlying provider-not-found cause', async () => {
     const runtimeId = 'issue3222-createagent-failure-config-dispose';
-    expect(getAgentRuntimeStateSubscriptionCount(runtimeId)).toBe(0);
     try {
       await expect(
         buildAgent('plain-text.jsonl', {
@@ -136,8 +130,6 @@ describe('createAgent self-contained assembly @plan:ISSUE-3222 @requirement:REQ-
       ).rejects.toThrow(
         /createAgent activation failed.*definitely-not-a-registered-provider/,
       );
-
-      expect(getAgentRuntimeStateSubscriptionCount(runtimeId)).toBe(0);
     } finally {
       await disposeCliRuntime(runtimeId);
     }

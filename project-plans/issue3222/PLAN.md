@@ -187,3 +187,31 @@ All 3 CodeRabbit threads resolved with triage evidence (CR-3 success
 paths rejected on HEAD parity — pre-existing, documented in-thread and
 offered a follow-up issue). Merge awaiting explicit user approval per
 standing policy.
+
+## Post-review cleanup round (2026-09-17, in-PR per owner direction)
+
+Four side effects flagged post-ship were cleaned up IN this PR (not deferred):
+1. OpenAIStreamProcessor.ts: reverted the drive-by abort-guard collapse; the
+   max-lines budget now comes from deduplicating the totalToolCalls closure
+   that emitTerminalChunks passed twice (real dedup, behavior identical).
+2. getAgentRuntimeStateSubscriptionCount removed from the core public barrel;
+   the Config-disposal observability moved to an in-package core test
+   (runtime/__tests__/AgentRuntimeState.configDispose.test.ts) with a real
+   Config + real subscribing client; the agents-side test keeps its
+   error-surface assertions.
+3. Orchestrator now disposes the agent-owned isolated Config on ALL teardown
+   paths (success, scope-creation failure, loader failure) children-first;
+   previously only the bootstrap-failure path did (asymmetry: the isolated
+   runtime treats the Config as caller-owned, so the orchestrator is its
+   only disposer). Behavioral tests: subagentOrchestrator.isolatedConfigDispose
+   .test.ts (real collaborators, subscription-handle probe) + spy-supplemented
+   runtime test.
+4. createAgent's 'no post-auth agent client' fail-fast characterized
+   behaviorally (finalizeAgent.postAuthClient.behavior.test.ts): unreachable
+   from createAgent (always injects a real factory), reachable from fromConfig
+   via caller-supplied undefined-returning factory + authMode 'none' — real
+   collaborators, no mocks.
+Also: filed #3708 for the pre-branch createTaskToolRegistration() alias.
+Verification: root typecheck 0 errors, root lint clean, full npm run test
+green (core 459/459 on stable-tree rerun; one mid-run file-edit race during
+the first pass), prettier/eslint clean on all touched files.

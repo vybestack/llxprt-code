@@ -615,7 +615,6 @@ export {
   updateAgentRuntimeStateBatch,
   getAgentRuntimeStateSnapshot,
   subscribeToAgentRuntimeState,
-  getAgentRuntimeStateSubscriptionCount,
 } from './runtime/AgentRuntimeState.js';
 export type { RuntimeStateFromConfigOptions } from './runtime/runtimeStateFactory.js';
 export { createAgentRuntimeStateFromConfig as createRuntimeStateFromConfig } from './runtime/runtimeStateFactory.js';

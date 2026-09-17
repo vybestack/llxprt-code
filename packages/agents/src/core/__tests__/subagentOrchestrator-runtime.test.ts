@@ -156,13 +156,17 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const loadProfile = vi.fn().mockResolvedValue(profile);
     const cleanup = vi.fn().mockResolvedValue(undefined);
     const activate = vi.fn().mockResolvedValue(undefined);
+    const isolatedConfigDispose = vi.fn().mockResolvedValue(undefined);
     const createIsolatedRuntimeContextSpy = vi
       .spyOn(runtimeModule, 'createIsolatedRuntimeContext')
       .mockReturnValue({
         runtimeId: 'isolated-runtime',
         metadata: { source: 'test' },
         settingsService: undefined,
-        config: makeForegroundConfig(),
+        config: {
+          ...makeForegroundConfig(),
+          dispose: isolatedConfigDispose,
+        } as unknown as Config,
         providerManager: {},
         oauthManager: {},
         activate,
@@ -200,6 +204,9 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       expect(cleanup).toHaveBeenCalledTimes(1);
       expect(activate).toHaveBeenCalledTimes(1);
       expect(executeProviderActivationSpy).toHaveBeenCalledTimes(1);
+      // The orchestrator owns the isolated Config it constructed, so its
+      // teardown disposes it after the handle cleanup (children first).
+      expect(isolatedConfigDispose).toHaveBeenCalledTimes(1);
     } finally {
       createIsolatedRuntimeContextSpy.mockRestore();
       executeProviderActivationSpy.mockRestore();
