@@ -26,7 +26,10 @@ import * as fc from 'fast-check';
 import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
 import { ProviderPerformanceTracker } from '@vybestack/llxprt-code-providers/logging/ProviderPerformanceTracker.js';
 import { LoggingProviderWrapper } from '@vybestack/llxprt-code-providers/LoggingProviderWrapper.js';
-import { OpenAIProvider, AnthropicProvider } from '@vybestack/llxprt-code-providers';
+import {
+  OpenAIProvider,
+  AnthropicProvider,
+} from '@vybestack/llxprt-code-providers';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RedactionConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';

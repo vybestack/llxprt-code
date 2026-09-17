@@ -22,32 +22,8 @@ import {
   clearActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { makeFakeConfig } from '@vybestack/llxprt-code-core/test-utils/config.js';
-import type { RedactionConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
-
-/** Redaction config that disables all redaction for deterministic extraction. */
-function noRedactionConfig(): RedactionConfig {
-  return {
-    redactApiKeys: false,
-    redactCredentials: false,
-    redactFilePaths: false,
-    redactUrls: false,
-    redactEmails: false,
-    redactPersonalInfo: false,
-  };
-}
-
-/** Minimal config object the LoggingProviderWrapper constructor accepts. */
-function loggingConfig(): {
-  getRedactionConfig: () => RedactionConfig;
-  getConversationLoggingEnabled: () => boolean;
-} {
-  return {
-    getRedactionConfig: () => noRedactionConfig(),
-    getConversationLoggingEnabled: () => false,
-  };
-}
 
 describe('gemini token tracking', () => {
   let manager: ProviderManager;
@@ -114,10 +90,7 @@ describe('gemini token tracking', () => {
 
   describe('per-provider token extraction via LoggingProviderWrapper', () => {
     it('extracts cached content tokens from a Gemini usage object', () => {
-      const wrapper = new LoggingProviderWrapper(
-        new GeminiProvider(),
-        loggingConfig(),
-      );
+      const wrapper = new LoggingProviderWrapper(new GeminiProvider(), null);
       const counts = wrapper.extractTokenCountsFromResponse({
         candidates: [
           {
@@ -144,10 +117,7 @@ describe('gemini token tracking', () => {
     });
 
     it('yields zeros for missing or incomplete usage data for the Gemini provider', () => {
-      const wrapper = new LoggingProviderWrapper(
-        new GeminiProvider(),
-        loggingConfig(),
-      );
+      const wrapper = new LoggingProviderWrapper(new GeminiProvider(), null);
       const incomplete = [{}, { usage: {} }, { headers: {} }, null, undefined];
 
       for (const response of incomplete) {
