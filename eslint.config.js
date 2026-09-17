@@ -1557,3 +1557,5 @@ export default tseslint.config(
   // jest/prefer-strict-equal has been removed. The rules are enabled in the
   // package-source test block, so a package-specific override is redundant.
 );
+
+// probe: policy-path gate negative test
