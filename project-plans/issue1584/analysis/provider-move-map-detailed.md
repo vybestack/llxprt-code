@@ -188,17 +188,17 @@ Each entry includes: source path, destination path, classification rule, and imp
 
 | # | Source Path | Destination Path | Rule | Import Rewrite Category |
 |---|------------|------------------|------|------------------------|
-| 89 | `packages/core/src/providers/gemini/GeminiProvider.ts` | `packages/providers/src/gemini/GeminiProvider.ts` | Rule 4 | B |
+| 89 | `packages/core/src/providers/gemini/GeminiProvider.ts` | `plugins/google-gemini/src/gemini/GeminiProvider.ts` | Plugin-owned override (#2763) | B |
 | 90 | `packages/core/src/providers/gemini/GeminiProvider.test.ts` | `plugins/google-gemini/src/test/GeminiProvider.test.ts` | Plugin-owned override (#2762) | B |
 | 91 | `packages/core/src/providers/gemini/GeminiProvider.e2e.test.ts` | `plugins/google-gemini/src/test/GeminiProvider.e2e.test.ts` | Plugin-owned override (#2762) | B |
 | 92 | `packages/core/src/providers/gemini/GeminiProvider.mediaBlock.test.ts` | `plugins/google-gemini/src/test/GeminiProvider.mediaBlock.test.ts` | Plugin-owned override (#2762) | B |
-| 93 | `packages/core/src/providers/gemini/thoughtSignatures.ts` | `packages/providers/src/gemini/thoughtSignatures.ts` | Rule 4 | B |
-| 94 | `packages/core/src/providers/gemini/usageInfo.ts` | `packages/providers/src/gemini/geminiModels.ts` | Rule 4 + #2398 deletion override | B |
+| 93 | `packages/core/src/providers/gemini/thoughtSignatures.ts` | `plugins/google-gemini/src/gemini/thoughtSignatures.ts` | Plugin-owned override (#2763) | B |
+| 94 | `packages/core/src/providers/gemini/usageInfo.ts` | `plugins/google-gemini/src/gemini/geminiModels.ts` | Rule 4 + #2398 deletion override + #2763 | B |
 | 95 | `packages/core/src/providers/gemini/__tests__/gemini.stateless.test.ts` | `plugins/google-gemini/src/test/gemini.stateless.test.ts` | Plugin-owned override (#2762) | B |
 | 96 | `packages/core/src/providers/gemini/__tests__/gemini.thinkingLevel.test.ts` | `plugins/google-gemini/src/test/gemini.thinkingLevel.test.ts` | Plugin-owned override (#2762) | B |
 | 97 | `packages/core/src/providers/gemini/__tests__/gemini.thoughtSignature.test.ts` | `plugins/google-gemini/src/test/gemini.thoughtSignature.test.ts` | Plugin-owned override (#2762) | B |
 | 98 | `packages/core/src/providers/gemini/__tests__/gemini.userMemory.test.ts` | `plugins/google-gemini/src/test/gemini.userMemory.test.ts` | Plugin-owned override (#2762) | B |
-| 99 | `packages/core/src/providers/gemini/__fixtures__/test.pdf` | `packages/providers/src/gemini/__fixtures__/test.pdf` | Rule 3 | N/A (binary fixture) |
+| 99 | `packages/core/src/providers/gemini/__fixtures__/test.pdf` | `plugins/google-gemini/src/gemini/__fixtures__/test.pdf` | Plugin-owned override (#2763) | N/A (binary fixture) |
 
 ### kimi/ (Rule 4)
 
