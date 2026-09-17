@@ -186,7 +186,23 @@ export const useMockRuntimeApi = (): MockRuntimeApi => {
   return context.api;
 };
 
-export const renderWithProviders = (
+export interface RenderWithProvidersOptions extends RenderStoreSeeds {
+  settings?: LoadedSettings;
+  /**
+   * MouseProvider only attaches its stdin listener when this is true, so
+   * tests that drive SGR mouse sequences have to opt in.
+   */
+  mouseEventsEnabled?: boolean;
+}
+
+/**
+ * Builds the provider-wrapped tree for a component without rendering it.
+ * `renderWithProviders` renders this same tree; rerender-driven tests call
+ * this helper again for each rerender so the provider stack is present on
+ * every update (rerendering a bare element drops the providers). The stack,
+ * including its stores, is rebuilt on every call.
+ */
+export const wrapWithProviders = (
   component: React.ReactElement,
   {
     settings = mockSettings,
@@ -194,45 +210,41 @@ export const renderWithProviders = (
     turn,
     settingsProfile,
     mouseEventsEnabled = false,
-  }: RenderStoreSeeds & {
-    settings?: LoadedSettings;
-    /**
-     * MouseProvider only attaches its stdin listener when this is true, so
-     * tests that drive SGR mouse sequences have to opt in.
-     */
-    mouseEventsEnabled?: boolean;
-  } = {},
-): ReturnType<typeof render> =>
-  render(
-    <SettingsContext.Provider value={settings}>
-      <SettingsProfileProvider
-        store={createSettingsProfileStore(settingsProfile)}
-      >
-        <VimModeProvider settings={settings}>
-          <TerminalProvider store={createTerminalStore(terminal)}>
-            <TurnProvider store={createTurnStore(turn)}>
-              <DialogProvider store={createDialogStore()}>
-                <MockRuntimeContextProvider>
-                  <KeypressProvider>
-                    <MouseProvider mouseEventsEnabled={mouseEventsEnabled}>
-                      <ShellCommandDisplayProvider
-                        alwaysDisplayFullShellCommand={
-                          settings.merged.ui.alwaysDisplayFullShellCommand ??
-                          true
-                        }
-                      >
-                        {component}
-                      </ShellCommandDisplayProvider>
-                    </MouseProvider>
-                  </KeypressProvider>
-                </MockRuntimeContextProvider>
-              </DialogProvider>
-            </TurnProvider>
-          </TerminalProvider>
-        </VimModeProvider>
-      </SettingsProfileProvider>
-    </SettingsContext.Provider>,
-  );
+  }: RenderWithProvidersOptions = {},
+): React.ReactElement => (
+  <SettingsContext.Provider value={settings}>
+    <SettingsProfileProvider
+      store={createSettingsProfileStore(settingsProfile)}
+    >
+      <VimModeProvider settings={settings}>
+        <TerminalProvider store={createTerminalStore(terminal)}>
+          <TurnProvider store={createTurnStore(turn)}>
+            <DialogProvider store={createDialogStore()}>
+              <MockRuntimeContextProvider>
+                <KeypressProvider>
+                  <MouseProvider mouseEventsEnabled={mouseEventsEnabled}>
+                    <ShellCommandDisplayProvider
+                      alwaysDisplayFullShellCommand={
+                        settings.merged.ui.alwaysDisplayFullShellCommand ?? true
+                      }
+                    >
+                      {component}
+                    </ShellCommandDisplayProvider>
+                  </MouseProvider>
+                </KeypressProvider>
+              </MockRuntimeContextProvider>
+            </DialogProvider>
+          </TurnProvider>
+        </TerminalProvider>
+      </VimModeProvider>
+    </SettingsProfileProvider>
+  </SettingsContext.Provider>
+);
+
+export const renderWithProviders = (
+  component: React.ReactElement,
+  options: RenderWithProvidersOptions = {},
+): ReturnType<typeof render> => render(wrapWithProviders(component, options));
 
 interface RenderHookResult<T> {
   result: { current: T; all: T[] };
