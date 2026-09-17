@@ -443,6 +443,12 @@ jobs:
           for plugin in plugins/google-gemini plugins/google-mcp-auth; do
             npm version "$RELEASE_VERSION" --no-git-tag-version --allow-same-version --prefix "$plugin"
           done
+          # The version loop above stamps each plugin manifest; this keeps the
+          # host peer ranges (@vybestack/llxprt-code-core,
+          # @vybestack/llxprt-code-providers) at the same release version so a
+          # published plugin cannot ship with a trailing ^X.Y.0 range that npm
+          # treats as excluding the matching host release.
+          bun scripts/bind-plugin-peers.ts "$RELEASE_VERSION"
 
       - name: Set up Bun for plugin builds
         uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2

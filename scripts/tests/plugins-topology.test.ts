@@ -18,15 +18,31 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { parse as parseJsonc, type ParseError } from 'jsonc-parser';
+import { bindPluginPeerDeps } from '../bind-plugin-peers.ts';
 import {
   FIRST_PARTY_RUNTIME_PLUGIN_RELEASES,
   RELEASE_PUBLISH_STEP_PREFIX,
+  type FirstPartyRuntimePluginRelease,
 } from '../utils/release-packages.ts';
-import { asString } from './typed-test-helpers.ts';
+import {
+  asRecord,
+  asString,
+  jobSteps,
+  parseWorkflowYaml,
+  workflowJobOptional,
+} from './typed-test-helpers.ts';
 
 const thisFile = fileURLToPath(import.meta.url);
 const repoRoot = resolve(thisFile, '..', '..', '..');
@@ -341,5 +357,184 @@ describe('release automation publishes plugins from the explicit list', () => {
   it('does not derive the plugin list by scanning the plugins directory', () => {
     expect(releaseYml).not.toMatch(/plugins\/\*/);
     expect(releaseYml).not.toMatch(/ls plugins/);
+  });
+});
+
+describe('release automation rewrites plugin host peer ranges', () => {
+  const releaseYml = readFileSync(
+    join(repoRoot, '.github', 'workflows', 'release.yml'),
+    'utf8',
+  );
+  const releaseSteps = jobSteps(
+    workflowJobOptional(parseWorkflowYaml(releaseYml), 'release'),
+  );
+  const versionStep = releaseSteps.find(
+    (step) => step.name === 'Version runtime plugin packages',
+  );
+
+  const TARGET_VERSION = '0.13.0';
+
+  function writePluginFixture(
+    rootDir: string,
+    release: FirstPartyRuntimePluginRelease,
+    manifest: Record<string, unknown>,
+  ): void {
+    mkdirSync(join(rootDir, release.dir), { recursive: true });
+    writeFileSync(
+      join(rootDir, release.dir, 'package.json'),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+    );
+  }
+
+  /**
+   * A plugin manifest as the release pipeline sees it right after the
+   * `npm version` loop: version already stamped to the release, host peers
+   * still at the stale checked-in caret ranges.
+   */
+  function versionedManifest(
+    release: FirstPartyRuntimePluginRelease,
+  ): Record<string, unknown> {
+    return {
+      name: release.name,
+      version: TARGET_VERSION,
+      peerDependencies: {
+        '@vybestack/llxprt-code-core': '^0.12.0',
+        '@vybestack/llxprt-code-providers': '^0.12.0',
+      },
+      dependencies: { '@ai-sdk/google': '4.0.56' },
+      devDependencies: { typescript: '5.8.3' },
+    };
+  }
+
+  function readPluginManifest(
+    rootDir: string,
+    release: FirstPartyRuntimePluginRelease,
+  ): Record<string, unknown> {
+    return JSON.parse(
+      readFileSync(join(rootDir, release.dir, 'package.json'), 'utf8'),
+    ) as Record<string, unknown>;
+  }
+
+  it('binds host peer ranges in the versioning step, after the npm version loop', () => {
+    if (versionStep === undefined) {
+      throw new Error("missing step: 'Version runtime plugin packages'");
+    }
+    const run = asString(versionStep.run);
+    const versionLoopEnd = run.indexOf('done');
+    const bindCall = run.indexOf(
+      'bun scripts/bind-plugin-peers.ts "$RELEASE_VERSION"',
+    );
+    expect(versionLoopEnd).toBeGreaterThan(-1);
+    expect(bindCall).toBeGreaterThan(versionLoopEnd);
+    // The bind consumes the same release version output the loop stamps
+    // the plugin manifests with, so peers can never trail the version.
+    expect(asRecord(versionStep.env)?.RELEASE_VERSION).toBe(
+      '${{ steps.version.outputs.RELEASE_VERSION }}',
+    );
+  });
+
+  it('rewrites both host peer ranges to the release version and leaves other sections untouched', () => {
+    const rootDir = mkdtempSync(join(tmpdir(), 'plugin-peer-bind-'));
+    try {
+      for (const release of FIRST_PARTY_RUNTIME_PLUGIN_RELEASES) {
+        writePluginFixture(rootDir, release, versionedManifest(release));
+      }
+
+      const changed = bindPluginPeerDeps({
+        version: TARGET_VERSION,
+        rootDir,
+      });
+
+      expect(changed).toBe(FIRST_PARTY_RUNTIME_PLUGIN_RELEASES.length);
+      for (const release of FIRST_PARTY_RUNTIME_PLUGIN_RELEASES) {
+        const pkg = readPluginManifest(rootDir, release);
+        expect(pkg['peerDependencies']).toStrictEqual({
+          '@vybestack/llxprt-code-core': '^0.13.0',
+          '@vybestack/llxprt-code-providers': '^0.13.0',
+        });
+        // Only the host peer ranges move; the stamped version and every
+        // other manifest section stay exactly as the release wrote them.
+        expect(pkg['version']).toBe(TARGET_VERSION);
+        expect(pkg['dependencies']).toStrictEqual({
+          '@ai-sdk/google': '4.0.56',
+        });
+        expect(pkg['devDependencies']).toStrictEqual({
+          typescript: '5.8.3',
+        });
+      }
+    } finally {
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports no changes when the peer ranges already match the release version', () => {
+    const rootDir = mkdtempSync(join(tmpdir(), 'plugin-peer-bind-'));
+    try {
+      for (const release of FIRST_PARTY_RUNTIME_PLUGIN_RELEASES) {
+        writePluginFixture(rootDir, release, versionedManifest(release));
+      }
+      bindPluginPeerDeps({ version: TARGET_VERSION, rootDir });
+
+      const secondPass = bindPluginPeerDeps({
+        version: TARGET_VERSION,
+        rootDir,
+      });
+
+      expect(secondPass).toBe(0);
+    } finally {
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails fast without writing when a plugin manifest lacks a host peer dependency', () => {
+    const rootDir = mkdtempSync(join(tmpdir(), 'plugin-peer-bind-'));
+    try {
+      const gemini = FIRST_PARTY_RUNTIME_PLUGIN_RELEASES.find(
+        (release) => release.dir === 'plugins/google-gemini',
+      );
+      if (gemini === undefined) {
+        throw new Error(
+          'expected plugins/google-gemini in the first-party release list',
+        );
+      }
+      const incomplete = versionedManifest(gemini);
+      delete (incomplete['peerDependencies'] as Record<string, unknown>)[
+        '@vybestack/llxprt-code-providers'
+      ];
+      for (const release of FIRST_PARTY_RUNTIME_PLUGIN_RELEASES) {
+        writePluginFixture(rootDir, release, incomplete);
+      }
+
+      expect(() =>
+        bindPluginPeerDeps({ version: TARGET_VERSION, rootDir }),
+      ).toThrow('does not peer-depend on @vybestack/llxprt-code-providers');
+
+      // The failure raised before any manifest was written.
+      const pkg = readPluginManifest(rootDir, gemini);
+      expect(
+        (pkg['peerDependencies'] as Record<string, unknown>)[
+          '@vybestack/llxprt-code-core'
+        ],
+      ).toBe('^0.12.0');
+    } finally {
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails fast when a plugin manifest is not yet at the release version', () => {
+    const rootDir = mkdtempSync(join(tmpdir(), 'plugin-peer-bind-'));
+    try {
+      for (const release of FIRST_PARTY_RUNTIME_PLUGIN_RELEASES) {
+        const unversioned = versionedManifest(release);
+        unversioned['version'] = '0.12.0';
+        writePluginFixture(rootDir, release, unversioned);
+      }
+
+      expect(() =>
+        bindPluginPeerDeps({ version: TARGET_VERSION, rootDir }),
+      ).toThrow('Run the plugin npm version loop before binding peers');
+    } finally {
+      rmSync(rootDir, { recursive: true, force: true });
+    }
   });
 });
