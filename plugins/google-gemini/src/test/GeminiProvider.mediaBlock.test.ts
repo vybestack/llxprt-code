@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { assertInstanceOf } from '@vybestack/llxprt-code-test-utils';
+import { assertInstanceOf } from '@vybestack/llxprt-code-test-utils/index.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
-import { GeminiProvider } from './GeminiProvider.js';
+import { GeminiProvider } from '@vybestack/llxprt-code-providers/gemini/GeminiProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type {
@@ -36,7 +36,7 @@ const googleGenAIConstructor = vi.fn().mockImplementation(() => ({
   },
 }));
 
-import type { CreateGeminiApiClient } from './GeminiProvider.js';
+import type { CreateGeminiApiClient } from '@vybestack/llxprt-code-providers/gemini/GeminiProvider.js';
 // The factory is injected into GeminiProvider rather than module-mocked:
 // `vi.mock` registers process-wide and bun hoists it ahead of the whole
 // run, so the stub leaked into every suite loaded alongside this one.

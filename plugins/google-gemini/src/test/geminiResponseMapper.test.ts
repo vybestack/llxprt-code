@@ -28,7 +28,7 @@ import type {
   Candidate,
   Content,
   GenerateContentResponse,
-} from './geminiWireTypes.js';
+} from '@vybestack/llxprt-code-providers/gemini/geminiWireTypes.js';
 import type {
   ContentBlock,
   IContent,
@@ -37,7 +37,7 @@ import {
   toModelStreamChunk,
   type ModelStreamChunk,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { createGeminiResponseMapper } from './geminiResponseMapper.js';
+import { createGeminiResponseMapper } from '@vybestack/llxprt-code-providers/gemini/geminiResponseMapper.js';
 
 // ---------------------------------------------------------------------------
 // Module-scope helpers (kept outside `it` blocks to satisfy

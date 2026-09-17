@@ -5,17 +5,17 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
-import { ProviderManager } from './ProviderManager.js';
-import type { IProvider } from './IProvider.js';
-import { ContentGeneratorRole } from './ContentGeneratorRole.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
+import type { IProvider } from '@vybestack/llxprt-code-providers/IProvider.js';
+import { ContentGeneratorRole } from '@vybestack/llxprt-code-providers/ContentGeneratorRole.js';
 import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { GeminiProvider } from './gemini/GeminiProvider.js';
-import { OpenAIProvider } from './openai/OpenAIProvider.js';
+import { GeminiProvider } from '@vybestack/llxprt-code-providers/gemini/GeminiProvider.js';
+import { OpenAIProvider } from '@vybestack/llxprt-code-providers/openai/OpenAIProvider.js';
 import { makeFakeConfig } from '@vybestack/llxprt-code-core/test-utils/config.js';
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({

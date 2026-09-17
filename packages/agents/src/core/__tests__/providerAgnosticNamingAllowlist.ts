@@ -27,8 +27,6 @@ export const GENUINE_GEMINI_FILES: readonly string[] = [
   'core/src/llm-types/finishReasons.ts',
   'providers/src/auth/gemini-oauth-provider.ts',
   'providers/src/auth/gemini-oauth-provider.test.ts',
-  'providers/src/ProviderManager.gemini-switch.test.ts',
-  'providers/src/composition/provider-gemini-switching.test.ts',
 ];
 
 /** Exact (relativePath, identifier) pairs for declared identifiers. */

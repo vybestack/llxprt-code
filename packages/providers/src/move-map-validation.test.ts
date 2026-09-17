@@ -210,6 +210,44 @@ const AGENT_OWNED_DESTINATION_OVERRIDES = new Map<string, string>([
     'packages/agents/src/core/MessageConverter.stopReason.test.ts',
   ],
 ]);
+// #2762: the Gemini provider test suites moved to the google-gemini plugin,
+// which is their single home after the root copies were removed. Each
+// override maps the inventory source to the surviving plugin test so the
+// move-map destination-exists assertion still resolves.
+const PLUGIN_OWNED_DESTINATION_OVERRIDES = new Map<string, string>([
+  [
+    'packages/core/src/providers/ProviderManager.gemini-switch.test.ts',
+    'plugins/google-gemini/src/test/ProviderManager.gemini-switch.test.ts',
+  ],
+  [
+    'packages/core/src/providers/gemini/GeminiProvider.e2e.test.ts',
+    'plugins/google-gemini/src/test/GeminiProvider.e2e.test.ts',
+  ],
+  [
+    'packages/core/src/providers/gemini/GeminiProvider.mediaBlock.test.ts',
+    'plugins/google-gemini/src/test/GeminiProvider.mediaBlock.test.ts',
+  ],
+  [
+    'packages/core/src/providers/gemini/GeminiProvider.test.ts',
+    'plugins/google-gemini/src/test/GeminiProvider.test.ts',
+  ],
+  [
+    'packages/core/src/providers/gemini/__tests__/gemini.stateless.test.ts',
+    'plugins/google-gemini/src/test/gemini.stateless.test.ts',
+  ],
+  [
+    'packages/core/src/providers/gemini/__tests__/gemini.thinkingLevel.test.ts',
+    'plugins/google-gemini/src/test/gemini.thinkingLevel.test.ts',
+  ],
+  [
+    'packages/core/src/providers/gemini/__tests__/gemini.thoughtSignature.test.ts',
+    'plugins/google-gemini/src/test/gemini.thoughtSignature.test.ts',
+  ],
+  [
+    'packages/core/src/providers/gemini/__tests__/gemini.userMemory.test.ts',
+    'plugins/google-gemini/src/test/gemini.userMemory.test.ts',
+  ],
+]);
 const CORE_OWNED_DESTINATION_OVERRIDES = new Map<string, string>([
   [
     'packages/core/src/providers/openai-vercel/toolIdUtils.ts',
@@ -276,15 +314,23 @@ function parseMoveMapRows(
   return rows;
 }
 
+const DESTINATION_OVERRIDE_TABLES: Array<Map<string, string>> = [
+  CORE_OWNED_DESTINATION_OVERRIDES,
+  AGENT_OWNED_DESTINATION_OVERRIDES,
+  PLUGIN_OWNED_DESTINATION_OVERRIDES,
+  RENAMED_DESTINATION_OVERRIDES,
+];
+
 function destinationForSource(sourcePath: string): string {
-  return (
-    CORE_OWNED_DESTINATION_OVERRIDES.get(sourcePath) ??
-    AGENT_OWNED_DESTINATION_OVERRIDES.get(sourcePath) ??
-    RENAMED_DESTINATION_OVERRIDES.get(sourcePath) ??
-    sourcePath.replace(
-      'packages/core/src/providers/',
-      'packages/providers/src/',
-    )
+  for (const table of DESTINATION_OVERRIDE_TABLES) {
+    const override = table.get(sourcePath);
+    if (override) {
+      return override;
+    }
+  }
+  return sourcePath.replace(
+    'packages/core/src/providers/',
+    'packages/providers/src/',
   );
 }
 

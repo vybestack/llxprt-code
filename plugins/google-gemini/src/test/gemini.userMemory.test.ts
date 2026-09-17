@@ -22,7 +22,7 @@ import {
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { GeminiProvider } from '../GeminiProvider.js';
+import { GeminiProvider } from '@vybestack/llxprt-code-providers/gemini/GeminiProvider.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
 const googleGenAIState = {
@@ -32,7 +32,7 @@ const googleGenAIState = {
   streamPlans: [] as Array<Array<Record<string, unknown>>>,
 };
 
-import type { CreateGeminiApiClient } from '../GeminiProvider.js';
+import type { CreateGeminiApiClient } from '@vybestack/llxprt-code-providers/gemini/GeminiProvider.js';
 // Injected into GeminiProvider rather than module-mocked. `vi.mock` registers
 // process-wide and bun hoists it ahead of the whole run, so this stub used to
 // leak into every suite loaded alongside this one.

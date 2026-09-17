@@ -5,10 +5,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import * as dumpSDKContextModule from '../utils/dumpSDKContext.js';
-import * as geminiGenerationExecutionModule from './geminiGenerationExecution.js';
-import type { GeminiGenerationSetup } from './geminiGenerationSetup.js';
-import type { ReasoningConfig } from './geminiReasoningConfig.js';
+import * as dumpSDKContextModule from '@vybestack/llxprt-code-providers/utils/dumpSDKContext.js';
+import * as geminiGenerationExecutionModule from '@vybestack/llxprt-code-providers/gemini/geminiGenerationExecution.js';
+import type { GeminiGenerationSetup } from '@vybestack/llxprt-code-providers/gemini/geminiGenerationSetup.js';
+import type { ReasoningConfig } from '@vybestack/llxprt-code-providers/gemini/geminiReasoningConfig.js';
 
 describe('Gemini non-OAuth non-streaming generate separate dump', () => {
   let dumpSDKRequestContextSpy: ReturnType<typeof vi.spyOn>;
@@ -77,7 +77,7 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
         { speaker: 'ai', blocks: [{ type: 'text', text: 'Hello' }] },
       ]);
 
-    const { GeminiProvider } = await import('./GeminiProvider.js');
+    const { GeminiProvider } = await import('@vybestack/llxprt-code-providers/gemini/GeminiProvider.js');
     const provider = new GeminiProvider('test-api-key');
 
     const result = await provider['nonOAuthNonStreamingGenerate'](
@@ -122,7 +122,7 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
 
     const mapResponseToChunks = vi.fn();
 
-    const { GeminiProvider } = await import('./GeminiProvider.js');
+    const { GeminiProvider } = await import('@vybestack/llxprt-code-providers/gemini/GeminiProvider.js');
     const provider = new GeminiProvider('test-api-key');
 
     await expect(
@@ -160,7 +160,7 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
       .mockReturnValue([
         { speaker: 'ai', blocks: [{ type: 'text', text: 'Hello' }] },
       ]);
-    const { GeminiProvider } = await import('./GeminiProvider.js');
+    const { GeminiProvider } = await import('@vybestack/llxprt-code-providers/gemini/GeminiProvider.js');
     const provider = new GeminiProvider('test-api-key');
 
     await provider['nonOAuthNonStreamingGenerate'](
@@ -195,7 +195,7 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
       }),
     };
     const mapResponseToChunks = vi.fn();
-    const { GeminiProvider } = await import('./GeminiProvider.js');
+    const { GeminiProvider } = await import('@vybestack/llxprt-code-providers/gemini/GeminiProvider.js');
     const provider = new GeminiProvider('test-api-key');
 
     await expect(
@@ -221,7 +221,7 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
   });
 
   it('should keep a caller-supplied x-goog-api-key header over the synthesized one (issue #3159)', async () => {
-    const { GeminiProvider } = await import('./GeminiProvider.js');
+    const { GeminiProvider } = await import('@vybestack/llxprt-code-providers/gemini/GeminiProvider.js');
     const provider = new GeminiProvider('test-api-key');
 
     expect(
@@ -255,7 +255,7 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
     const { createProviderCallOptions } = await import(
       '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js'
     );
-    const { GeminiProvider } = await import('./GeminiProvider.js');
+    const { GeminiProvider } = await import('@vybestack/llxprt-code-providers/gemini/GeminiProvider.js');
     const provider = new GeminiProvider('test-api-key');
 
     const reasoningConfig: ReasoningConfig = {
@@ -354,7 +354,7 @@ describe('Gemini non-OAuth streaming generate separate dump', () => {
       config: {},
     };
 
-    const { GeminiProvider } = await import('./GeminiProvider.js');
+    const { GeminiProvider } = await import('@vybestack/llxprt-code-providers/gemini/GeminiProvider.js');
     const provider = new GeminiProvider('test-api-key');
 
     const result = await provider['nonOAuthStreamingGenerate'](
@@ -413,7 +413,7 @@ describe('Gemini non-OAuth streaming generate separate dump', () => {
       config: {},
     };
 
-    const { GeminiProvider } = await import('./GeminiProvider.js');
+    const { GeminiProvider } = await import('@vybestack/llxprt-code-providers/gemini/GeminiProvider.js');
     const provider = new GeminiProvider('test-api-key');
 
     const result = await provider['nonOAuthStreamingGenerate'](
@@ -466,7 +466,7 @@ describe('Gemini non-OAuth streaming generate separate dump', () => {
       config: {},
     };
 
-    const { GeminiProvider } = await import('./GeminiProvider.js');
+    const { GeminiProvider } = await import('@vybestack/llxprt-code-providers/gemini/GeminiProvider.js');
     const provider = new GeminiProvider('test-api-key');
 
     const result = await provider['nonOAuthStreamingGenerate'](
@@ -516,7 +516,7 @@ describe('Gemini non-OAuth streaming generate separate dump', () => {
       config: {},
     };
 
-    const { GeminiProvider } = await import('./GeminiProvider.js');
+    const { GeminiProvider } = await import('@vybestack/llxprt-code-providers/gemini/GeminiProvider.js');
     const provider = new GeminiProvider('test-api-key');
 
     await expect(

@@ -5,12 +5,12 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import type { Part } from '../geminiWireTypes.js';
+import type { Part } from '@vybestack/llxprt-code-providers/gemini/geminiWireTypes.js';
 import {
   ensureActiveLoopHasThoughtSignatures,
   stripThoughtsFromHistory,
   SYNTHETIC_THOUGHT_SIGNATURE,
-} from '../thoughtSignatures.js';
+} from '@vybestack/llxprt-code-providers/gemini/thoughtSignatures.js';
 
 /**
  * Tests for Gemini 3.x thought signature handling.

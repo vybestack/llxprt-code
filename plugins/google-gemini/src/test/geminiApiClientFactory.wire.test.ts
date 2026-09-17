@@ -20,8 +20,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { createGeminiApiClient } from './geminiApiClientFactory.js';
-import { SchemaType } from './geminiWireTypes.js';
+import { createGeminiApiClient } from '@vybestack/llxprt-code-providers/gemini/geminiApiClientFactory.js';
+import { SchemaType } from '@vybestack/llxprt-code-providers/gemini/geminiWireTypes.js';
 
 interface CapturedRequest {
   readonly path: string;

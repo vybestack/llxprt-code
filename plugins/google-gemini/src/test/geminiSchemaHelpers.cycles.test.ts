@@ -14,8 +14,8 @@
 
 import { describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
-import { cleanGeminiSchema } from './geminiSchemaHelpers.js';
-import { sortedJson } from './__tests__/sortedJson.js';
+import { cleanGeminiSchema } from '@vybestack/llxprt-code-providers/gemini/geminiSchemaHelpers.js';
+import { sortedJson } from '@vybestack/llxprt-code-providers/gemini/__tests__/sortedJson.js';
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (typeof value === 'object' && value !== null && !Array.isArray(value)) {

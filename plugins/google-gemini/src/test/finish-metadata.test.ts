@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import { createGeminiResponseMapper } from './geminiResponseMapper.js';
+import { createGeminiResponseMapper } from '@vybestack/llxprt-code-providers/gemini/geminiResponseMapper.js';
 
 describe('Gemini terminal finish metadata', () => {
   it.each([

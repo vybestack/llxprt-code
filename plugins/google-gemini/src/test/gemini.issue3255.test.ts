@@ -9,9 +9,9 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
-import { buildRequestConfig } from '../geminiRequestBuilding.js';
-import { extractReasoningConfig } from '../geminiReasoningConfig.js';
+import type { NormalizedGenerateChatOptions } from '@vybestack/llxprt-code-providers/BaseProvider.js';
+import { buildRequestConfig } from '@vybestack/llxprt-code-providers/gemini/geminiRequestBuilding.js';
+import { extractReasoningConfig } from '@vybestack/llxprt-code-providers/gemini/geminiReasoningConfig.js';
 
 interface WarningEntry {
   readonly message: string;

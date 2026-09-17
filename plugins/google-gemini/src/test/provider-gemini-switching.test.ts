@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, vi } from 'bun:test';
-import { createProviderManager } from './providerManagerInstance.js';
-import type { IProvider, IModel } from './index.js';
+import { createProviderManager } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
+import type { IProvider, IModel } from '@vybestack/llxprt-code-providers/composition/index.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
