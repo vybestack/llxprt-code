@@ -28,6 +28,8 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
+import { DebugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
+
 import type {
   RequestHandler,
   ValidationError,
@@ -51,6 +53,26 @@ const execFileAsync = promisify(execFile);
 
 /** maxBuffer: 8 MiB, deliberately larger than the 4 MiB frame cap. */
 const MAX_BUFFER = 8 * 1024 * 1024;
+
+/**
+ * Failure-path observability for gh invocations. The #3453 incident (gh
+ * intermittently failing with "not a git repository" on parallel calls
+ * despite an explicit repo) left no diagnostics because the classified
+ * broker error carries no argv: this logger records the final argv, the
+ * repo target in effect, and the (redacted) failure message so a
+ * recurrence can be read straight off the debug log.
+ *
+ * @issue 3453
+ */
+const logger = new DebugLogger('llxprt:github:broker');
+
+/**
+ * Marker logged in place of a repo target when none was in effect, so a
+ * log reader can tell "no repo requested" apart from "repo unknown".
+ *
+ * @issue 3453
+ */
+const REPO_TARGET_ABSENT = '(absent)';
 
 // ─── Environment for the child process (pseudocode lines 32-37) ──────────────
 
@@ -127,9 +149,25 @@ type GhResult = GhSuccess | GhFailure;
  * Runs `gh` with the given argv via execFile (shell: false), parsing stdout
  * as JSON. Classifies failures into structured broker errors.
  *
+ * `repoTarget` pins `GH_REPO` in the child environment (#3453): when a
+ * caller named a repository, every fallback gh might otherwise take —
+ * including git-remote resolution against the CLI process cwd, which dies
+ * with "not a git repository" in a non-git workspace — is replaced by the
+ * caller's target. An explicit `--repo` argv flag still takes precedence
+ * over `GH_REPO` (gh flag > env), so pinning cannot alter an invocation
+ * that already carries one; it only removes the git fallback. When absent,
+ * `GH_REPO` stays unset so gh's documented current-repository resolution
+ * keeps working for repo-less ops.
+ *
+ * A failed invocation additionally emits one debug log line with the final
+ * argv, the repo target in effect, and the redacted failure message; a
+ * recurrence of a dropped-repo failure is then readable from the debug
+ * log instead of invisible (#3453).
+ *
  * @plan PLAN-20260731-GHBROKER.P08, PLAN-20260731-GHBROKER.P10
  * @requirement REQ-001, REQ-002
  * @pseudocode 003-github-broker.md lines 56-66
+ * @issue 3453
  */
 async function runGh(
   argv: readonly string[],
@@ -137,9 +175,16 @@ async function runGh(
   options?: {
     rawOutput?: boolean;
     tolerateNonZeroExit?: boolean;
+    repoTarget?: string;
   },
 ): Promise<GhResult> {
   const env = buildMinimalEnv();
+  // Deliberately NOT a PASSTHROUGH entry: an ambient GH_REPO from the
+  // caller's shell must never leak into the child env. The value is set
+  // only when the dispatcher derived it from validated op params.
+  if (options?.repoTarget !== undefined) {
+    env.GH_REPO = options.repoTarget;
+  }
   const rawOutput = options?.rawOutput === true;
   const tolerateNonZeroExit = options?.tolerateNonZeroExit === true;
   try {
@@ -156,7 +201,14 @@ async function runGh(
       const recovered = tryRecoverFromNonZeroExit(err, rawOutput);
       if (recovered !== null) return recovered;
     }
-    return classifyExecError(err);
+    const failure = classifyExecError(err);
+    logger.debug(
+      () =>
+        `gh invocation failed. argv=${JSON.stringify(argv)} repoTarget=${
+          options?.repoTarget ?? REPO_TARGET_ABSENT
+        } error=${redactTokenShaped(failure.error.message)}`,
+    );
+    return failure;
   }
 }
 
@@ -353,10 +405,22 @@ export async function executeGitHubOp(
     );
   }
 
+  // #3453: derive the repo target once, after validation and before any gh
+  // invocation, so single-call ops and every step of a multi-step `execute`
+  // op run with the same pinned GH_REPO. Derived only from a non-empty
+  // string: an absent or empty `repo` means the caller wants gh's
+  // documented current-repository resolution, which GH_REPO would override.
+  const repoTarget =
+    typeof opParams.repo === 'string' && opParams.repo.length > 0
+      ? opParams.repo
+      : undefined;
+
   // Resolves parsed output and throws on failure, so multi-step ops read as
   // straight-line code and a failed step aborts the sequence.
   const run: GhRunner = async (argv, options) => {
-    const outcome = await runGh(argv, signal, options);
+    // repoTarget is merged ON TOP of what the op module passed so op
+    // options (rawOutput, tolerateNonZeroExit) pass through untouched.
+    const outcome = await runGh(argv, signal, { ...options, repoTarget });
     if (outcome.kind === 'failure') {
       throw new BrokerErrorException(
         descriptor.augmentError !== undefined
@@ -383,6 +447,7 @@ export async function executeGitHubOp(
     runGh(descriptor.buildArgv(p), signal, {
       rawOutput: descriptor.rawOutput === true,
       tolerateNonZeroExit: descriptor.tolerateNonZeroExit === true,
+      repoTarget,
     }),
   );
   if (result.kind === 'failure') {
