@@ -5,20 +5,25 @@
  */
 
 /**
- * Test-only scheduler registry delegate carrying the delegate semantics of
- * Config.getOrCreateScheduler/disposeScheduler: entries keyed by owner object
- * identity plus purpose, real schedulers built through the fixture's own
- * factory, callbacks refreshed on every acquisition, and disposal when the
- * acquisition count reaches zero. Agent test fixtures wire this in where the
- * deleted process-global scheduler singleton used to sit; every scheduler
- * handed out is the real scheduler the fixture's factory builds, so loop,
- * scheduler, and disposal behavior stays fully exercised.
+ * Per-fixture scheduler registry delegate for cli engine tests. Carries the
+ * delegate semantics of Config.getOrCreateScheduler/disposeScheduler for the
+ * hand-built Config fixtures these tests assemble: entries keyed by owner
+ * object identity plus purpose, real schedulers built through the fixture's
+ * own factory, callbacks refreshed on every acquisition, and disposal when
+ * the acquisition count reaches zero. Stands in where the deleted
+ * process-global scheduler singleton used to sit; every scheduler handed out
+ * is the real scheduler the fixture's factory builds, so loop, scheduler,
+ * and disposal behavior stays fully exercised. Each fixture builds its own
+ * delegate, so there is no cross-test shared registry state to clear.
  */
 
-import type { SchedulerHandle } from '@vybestack/llxprt-code-core/session/sessionExecutionServices.js';
-import type { SchedulerPurpose } from '@vybestack/llxprt-code-core/session/sessionSchedulerRegistry.js';
-import type { Config, SchedulerCallbacks } from '@vybestack/llxprt-code-core/config/config.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type {
+  Config,
+  MessageBus,
+  SchedulerCallbacks,
+  SchedulerHandle,
+  SchedulerPurpose,
+} from '@vybestack/llxprt-code-core';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 
 export interface SchedulerRegistryDelegateOptions {

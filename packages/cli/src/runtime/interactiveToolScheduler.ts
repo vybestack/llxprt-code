@@ -26,6 +26,7 @@ import {
   type SubagentSchedulerFactory,
   type SchedulerHandle,
   type SchedulerPurpose,
+  type SchedulerCallbacks,
   hasInteractiveSubagentScheduler,
   DEFAULT_AGENT_ID,
   type LiveOutputUpdate,
@@ -172,7 +173,7 @@ function createMainSchedulerCallbacks(
   mainSchedulerId: symbol,
   refs: SchedulerRefs,
   mounted: React.MutableRefObject<boolean>,
-): Parameters<ExplicitMessageBusScheduler['getOrCreateScheduler']>[2] {
+): SchedulerCallbacks {
   return {
     outputUpdateHandler: (toolCallId, update) => {
       if (!mounted.current) return;
@@ -205,7 +206,7 @@ function createSubagentCallbacks(
   schedulerId: symbol,
   refs: SchedulerRefs,
   args: Parameters<SubagentSchedulerFactory>[0],
-): Parameters<ExplicitMessageBusScheduler['getOrCreateScheduler']>[2] {
+): SchedulerCallbacks {
   return {
     outputUpdateHandler: (toolCallId, update) => {
       refs.updateToolCallOutput(schedulerId, toolCallId, update);

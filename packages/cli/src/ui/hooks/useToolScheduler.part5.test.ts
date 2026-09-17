@@ -31,6 +31,7 @@ import {
   DebugLogger,
   PolicyDecision,
   type SchedulerCallbacks as SchedulerCallbacksCore,
+  type SchedulerPurpose,
   type ToolCall,
   ToolConfirmationOutcome,
   type ToolCallConfirmationDetails,
@@ -298,7 +299,7 @@ type MockScheduler = Pick<
   toolRegistry: ToolRegistry;
 };
 
-const createdSchedulers = new Map<string, MockScheduler>();
+const createdSchedulers = new Map<object, MockScheduler>();
 
 const buildMockScheduler = (
   config: Config,
@@ -416,8 +417,12 @@ const mockConfig = {
     evaluate: vi.fn(() => PolicyDecision.ASK_USER),
   })),
   getOrCreateScheduler: vi.fn(
-    (sessionId: string, callbacks: SchedulerCallbacks) => {
-      const existing = createdSchedulers.get(sessionId);
+    (
+      owner: object,
+      _purpose: SchedulerPurpose,
+      callbacks: SchedulerCallbacks,
+    ) => {
+      const existing = createdSchedulers.get(owner);
       if (existing) {
         existing.setCallbacks({
           ...callbacks,
@@ -429,14 +434,14 @@ const mockConfig = {
       }
 
       const scheduler = buildMockScheduler(mockConfig, callbacks);
-      createdSchedulers.set(sessionId, scheduler);
+      createdSchedulers.set(owner, scheduler);
       return Promise.resolve(scheduler);
     },
   ),
-  disposeScheduler: vi.fn((sessionId: string) => {
-    const scheduler = createdSchedulers.get(sessionId);
+  disposeScheduler: vi.fn((owner: object, _purpose: SchedulerPurpose) => {
+    const scheduler = createdSchedulers.get(owner);
     scheduler?.dispose();
-    createdSchedulers.delete(sessionId);
+    createdSchedulers.delete(owner);
   }),
   setInteractiveSubagentSchedulerFactory: vi.fn(),
 } as unknown as Config;
@@ -535,9 +540,9 @@ describe('useReactToolScheduler (split)', () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
-    for (const [sessionId, scheduler] of createdSchedulers.entries()) {
+    for (const [owner, scheduler] of createdSchedulers.entries()) {
       scheduler.dispose();
-      createdSchedulers.delete(sessionId);
+      createdSchedulers.delete(owner);
     }
     DebugLogger.disposeAll();
   });
