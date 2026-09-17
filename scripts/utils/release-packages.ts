@@ -35,16 +35,17 @@ export interface FirstPartyRuntimePluginRelease {
   readonly dir: string;
 }
 
-export const FIRST_PARTY_RUNTIME_PLUGIN_RELEASES: readonly FirstPartyRuntimePluginRelease[] = [
-  {
-    name: '@vybestack/llxprt-plugin-google-gemini',
-    dir: 'plugins/google-gemini',
-  },
-  {
-    name: '@vybestack/llxprt-plugin-google-mcp-auth',
-    dir: 'plugins/google-mcp-auth',
-  },
-];
+export const FIRST_PARTY_RUNTIME_PLUGIN_RELEASES: readonly FirstPartyRuntimePluginRelease[] =
+  [
+    {
+      name: '@vybestack/llxprt-plugin-google-gemini',
+      dir: 'plugins/google-gemini',
+    },
+    {
+      name: '@vybestack/llxprt-plugin-google-mcp-auth',
+      dir: 'plugins/google-mcp-auth',
+    },
+  ];
 
 /**
  * The release.yml step-name prefix for a plugin publish step. The topology

@@ -546,8 +546,7 @@ describe('Provider package build configuration', () => {
 
 describe('Gemini provider exclusion (plugin-era contract)', () => {
   /** The Google generation SDK is declared ONLY by the plugin (#2763). */
-  const FORBIDDEN_GOOGLE_SDK_IMPORT =
-    /from\s+['"]@ai-sdk\/google['"]/;
+  const FORBIDDEN_GOOGLE_SDK_IMPORT = /from\s+['"]@ai-sdk\/google['"]/;
 
   it('providers package declares no @ai-sdk/google dependency in any section', () => {
     const pkg = readJson<

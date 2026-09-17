@@ -170,9 +170,7 @@ describe('each plugin context is a self-contained release unit', () => {
         '@vybestack/llxprt-code-providers',
       ]);
       expect(peers['@vybestack/llxprt-code-core']).toMatch(/^\^0\.12\.0$/);
-      expect(peers['@vybestack/llxprt-code-providers']).toMatch(
-        /^\^0\.12\.0$/,
-      );
+      expect(peers['@vybestack/llxprt-code-providers']).toMatch(/^\^0\.12\.0$/);
       // A non-host runtime dependencies section is part of the contract:
       // google-gemini must ship @ai-sdk/google (it owns the Gemini provider
       // since #2763), google-mcp-auth must keep the section empty. Either

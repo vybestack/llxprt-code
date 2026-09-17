@@ -161,7 +161,8 @@ export function parsePluginManifestLiteral(
   source: string,
 ): ParsedPluginManifest | string {
   const objectText = literalAfter(source, 'llxprtRuntimePlugin', '{');
-  if (objectText === null) return 'llxprtRuntimePlugin manifest literal not found';
+  if (objectText === null)
+    return 'llxprtRuntimePlugin manifest literal not found';
   const providersArray = literalAfter(objectText, 'providers', '[');
   if (providersArray === null) return 'providers array not found in manifest';
   return parseProviderEntries(providersArray);
@@ -183,9 +184,7 @@ function parseProviderEntries(
   return { contributions };
 }
 
-function parseProviderEntry(
-  elementText: string,
-): PluginContribution | string {
+function parseProviderEntry(elementText: string): PluginContribution | string {
   const idMatch = /providerId\s*:\s*(['"])([\s\S]*?)\1/.exec(elementText);
   if (idMatch === null) {
     return 'providers entry without a providerId in manifest';
@@ -246,7 +245,8 @@ export function parseProviderHints(
     'PLUGIN_PROVIDED_PROVIDER_HINTS',
     '{',
   );
-  if (objectText === null) return 'PLUGIN_PROVIDED_PROVIDER_HINTS literal not found';
+  if (objectText === null)
+    return 'PLUGIN_PROVIDED_PROVIDER_HINTS literal not found';
   return parseHintEntries(objectText);
 }
 
@@ -291,10 +291,7 @@ function readPluginManifestEntry(
   return { dir, name, manifest };
 }
 
-function discoverPlugins(
-  root: string,
-  errors: string[],
-): DiscoveredPlugin[] {
+function discoverPlugins(root: string, errors: string[]): DiscoveredPlugin[] {
   const plugins: DiscoveredPlugin[] = [];
   let entries;
   try {
@@ -361,8 +358,7 @@ function checkHintedPackage(
 ): void {
   const hinted = state.hints[providerId];
   if (hinted === plugin.name) return;
-  const where =
-    hinted === undefined ? 'absent from' : `hinted to ${hinted} by`;
+  const where = hinted === undefined ? 'absent from' : `hinted to ${hinted} by`;
   state.violations.push(
     envelopeViolation(
       plugin,

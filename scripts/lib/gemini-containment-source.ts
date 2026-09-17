@@ -409,7 +409,13 @@ function linearStatementHits(text: string, mode: ScanMode): StatementHit[] {
     const hit =
       mode === 'type-only'
         ? typeOnlyHitAt(text, anchor, anchor + keyword.length, scanEnd)
-        : fallbackHitAt(text, anchor, keyword, anchor + keyword.length, scanEnd);
+        : fallbackHitAt(
+            text,
+            anchor,
+            keyword,
+            anchor + keyword.length,
+            scanEnd,
+          );
     if (hit !== null) {
       hits.push(hit);
       resumeAfter = hit.end;
@@ -469,10 +475,7 @@ function skipWhitespace(text: string, from: number): number {
 }
 
 /** First quoted string after `callee(` at `from`, or null when absent. */
-function specifierArgAfterCall(
-  text: string,
-  from: number,
-): string | null {
+function specifierArgAfterCall(text: string, from: number): string | null {
   const parenIndex = skipWhitespace(text, from);
   if (text[parenIndex] !== '(') return null;
   const openQuote = skipWhitespace(text, parenIndex + 1);
@@ -585,7 +588,11 @@ export function checkImportLayer(
 export function checkResidencyLayer(root: string): LayerResult {
   const violations: GateViolation[] = [];
   const out: WalkOutput = { files: [], errors: [] };
-  walkFiles(join(root, 'packages', 'providers', 'src'), 'packages/providers/src', out);
+  walkFiles(
+    join(root, 'packages', 'providers', 'src'),
+    'packages/providers/src',
+    out,
+  );
   const errors = [...out.errors];
   for (const rel of out.files) {
     const basename = rel.slice(rel.lastIndexOf('/') + 1);

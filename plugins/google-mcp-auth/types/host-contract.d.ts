@@ -17,10 +17,7 @@
  */
 
 /** Mirrors providers/src/composition/runtimePlugins/types.ts. */
-export type ProviderAliasFactory = (
-  entry: never,
-  context: never,
-) => never;
+export type ProviderAliasFactory = (entry: never, context: never) => never;
 
 /** Mirrors providers/src/composition/runtimePlugins/types.ts. */
 export interface RuntimePluginManifest {

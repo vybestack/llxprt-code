@@ -44,8 +44,8 @@ describe('@vybestack/llxprt-plugin-google-mcp-auth manifest', () => {
     expect(createProvider).toBeDefined();
     // The reserved stub contractually never reads its arguments; the context
     // arguments carry `never` for that reason.
-    expect(() => createProvider?.(undefined as never, undefined as never)).toThrow(
-      /google-mcp-auth|reserved/i,
-    );
+    expect(() =>
+      createProvider?.(undefined as never, undefined as never),
+    ).toThrow(/google-mcp-auth|reserved/i);
   });
 });

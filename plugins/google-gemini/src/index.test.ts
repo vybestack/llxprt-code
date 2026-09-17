@@ -55,7 +55,7 @@ describe('@vybestack/llxprt-plugin-google-gemini manifest', () => {
         openaiApiKey: undefined,
         openaiBaseUrl: undefined,
         openaiProviderConfig: {},
-          oauthManager: undefined as unknown as OAuthManager,
+        oauthManager: undefined as unknown as OAuthManager,
         config: undefined,
         authOnlyEnabled: false,
       },
@@ -101,9 +101,9 @@ describe('@vybestack/llxprt-plugin-google-gemini manifest', () => {
           openaiApiKey: undefined,
           openaiBaseUrl: undefined,
           openaiProviderConfig: {},
-        // The gemini factory never reads the OAuth manager, so undefined stands
-        // in for it; the context type requires a value, hence the cast.
-        oauthManager: undefined as unknown as OAuthManager,
+          // The gemini factory never reads the OAuth manager, so undefined stands
+          // in for it; the context type requires a value, hence the cast.
+          oauthManager: undefined as unknown as OAuthManager,
           config: undefined,
           authOnlyEnabled: false,
         },

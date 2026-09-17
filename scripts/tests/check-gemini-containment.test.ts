@@ -23,7 +23,13 @@
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import {
@@ -179,7 +185,9 @@ function pluginIndexSource(
   ].join('\n');
 }
 
-function hintsSource(entries: ReadonlyArray<readonly [string, string]>): string {
+function hintsSource(
+  entries: ReadonlyArray<readonly [string, string]>,
+): string {
   // Keys that are not plain identifiers are quoted, exactly as real
   // TypeScript requires (e.g. 'google-mcp-auth').
   const lines = entries
@@ -209,7 +217,7 @@ const A2A_MESSAGES_SOURCE = [
   "  kind: 'message' | 'task';",
   '  messageId: string;',
   '  taskId?: string;',
-  "  metadata?: { provider?: string; geminiMessageId?: string };",
+  '  metadata?: { provider?: string; geminiMessageId?: string };',
   '}',
   '',
   'export function geminiTagged(messageId: string): A2aMessageEnvelope {',
@@ -238,10 +246,7 @@ function buildCleanTree(): FixtureTree {
     'plugins/google-gemini/src/gemini/GeminiProvider.ts',
     `import { createGoogleGenerativeAI } from '${SDK}';\nexport const provider = 1;\n`,
   );
-  tree.write(
-    'plugins/google-gemini/types/host-contract.d.ts',
-    'export {};\n',
-  );
+  tree.write('plugins/google-gemini/types/host-contract.d.ts', 'export {};\n');
   tree.write(
     'plugins/google-mcp-auth/package.json',
     manifestJson(MCP_AUTH_PLUGIN_PKG, {}),
@@ -251,7 +256,10 @@ function buildCleanTree(): FixtureTree {
     pluginIndexSource(MCP_AUTH_PLUGIN_PKG, [{ providerId: 'google-mcp-auth' }]),
   );
   tree.write(HINTS_REL, hintsSource([['gemini', GEMINI_PLUGIN_PKG]]));
-  tree.write('packages/providers/src/neutral.ts', 'export const neutral = 1;\n');
+  tree.write(
+    'packages/providers/src/neutral.ts',
+    'export const neutral = 1;\n',
+  );
   // Compat parse-direction types live in core llm-types, outside the
   // provider workspace: L3 must not flag them.
   tree.write(

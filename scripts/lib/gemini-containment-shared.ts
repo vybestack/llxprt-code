@@ -342,7 +342,11 @@ function visitManifestEntry(
 ): void {
   if (entry.isDirectory()) {
     if (PRUNE_DIRS.has(entry.name)) return;
-    visitManifestDir(join(absDir, entry.name), joinRel(relBase, entry.name), out);
+    visitManifestDir(
+      join(absDir, entry.name),
+      joinRel(relBase, entry.name),
+      out,
+    );
     return;
   }
   if (entry.isFile() && entry.name === 'package.json') {
@@ -436,7 +440,9 @@ function checkManifestSection(
   const deps = pkg[section];
   if (deps === undefined) return;
   if (!isRecord(deps)) {
-    errors.push(`${rel}: "${section}" must be an object when present — fail-closed.`);
+    errors.push(
+      `${rel}: "${section}" must be an object when present — fail-closed.`,
+    );
     return;
   }
   for (const [name, version] of Object.entries(deps)) {
@@ -471,7 +477,14 @@ function checkOneManifest(
     return;
   }
   for (const section of DEPENDENCY_SECTIONS) {
-    checkManifestSection(parsed.value, rel, read.text, section, violations, errors);
+    checkManifestSection(
+      parsed.value,
+      rel,
+      read.text,
+      section,
+      violations,
+      errors,
+    );
   }
 }
 
@@ -693,10 +706,8 @@ function checkRootPackageLock(raw: string): LayerResult {
     errors.push('package-lock.json: missing or malformed "packages".');
     return { violations, errors };
   }
-  checkPackageLockEntries(
-    lockPackages,
-    addViolation,
-    (message) => errors.push(message),
+  checkPackageLockEntries(lockPackages, addViolation, (message) =>
+    errors.push(message),
   );
   return { violations, errors };
 }

@@ -649,9 +649,10 @@ describe('Gemini implementation lives only in the google-gemini plugin', () => {
     ];
     const violations: string[] = [];
     for (const manifestPath of manifestPaths) {
-      const pkg = JSON.parse(
-        fs.readFileSync(manifestPath, 'utf-8'),
-      ) as Record<string, unknown>;
+      const pkg = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as Record<
+        string,
+        unknown
+      >;
       const sections = [
         pkg.dependencies,
         pkg.devDependencies,
