@@ -835,6 +835,7 @@ export function convertToAnthropicMessages(
   messages = ensureValidMessageSequence(
     messages,
     options.reasoningEnabled,
+    options.currentModel,
     options.logger,
   );
   messages = stripEmptyTextBlocks(messages, options.logger);
