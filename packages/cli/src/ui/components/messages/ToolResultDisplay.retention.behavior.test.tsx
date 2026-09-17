@@ -174,6 +174,35 @@ function rerenderRepeatedBody(root: RenderedRoot): void {
   }
 }
 
+/**
+ * Builds the unbroken bodies, renders each once, renders each again, and
+ * reports the settled heap after each pass. The bodies and everything they
+ * anchor live only inside this call, so once it returns the component, not
+ * the test, is the only possible retainer of them. The two pass readings
+ * are taken while the bodies are still held, so the revisit delta between
+ * them compares like-for-like measurements and the first-sight storage of
+ * the bodies cancels out of it.
+ */
+function cycleUnbrokenBodies(root: RenderedRoot): {
+  afterFirstPass: number;
+  afterRevisit: number;
+} {
+  const bodies = Array.from({ length: CYCLE_BODY_COUNT }, (_, index) =>
+    makeUnbrokenResult(1_000_000, index + 1),
+  );
+  for (const body of bodies) {
+    root.rerender(wrapWithProviders(buildResultElement(body)));
+    root.lastFrame();
+  }
+  const afterFirstPass = settledRetainedHeapBytes();
+  for (const body of bodies) {
+    root.rerender(wrapWithProviders(buildResultElement(body)));
+    root.lastFrame();
+  }
+  const afterRevisit = settledRetainedHeapBytes();
+  return { afterFirstPass, afterRevisit };
+}
+
 function renderResult(resultDisplay: string): { frame: string } {
   const { lastFrame, unmount } = renderWithProviders(
     buildResultElement(resultDisplay),
@@ -190,14 +219,18 @@ function renderResult(resultDisplay: string): { frame: string } {
 //   component made to pin its bodies measured 18.06 MiB (reference pinning)
 //   and 8.33 MiB (trim bypassed, layout retained per render).
 // - repeating one body retains 0.43-0.47 MiB; pinning it measured 2.48 MiB.
-// - revisiting flattened unbroken bodies retains 0.86-0.90 MiB; paying the
-//   first-sight cost again per render measured 17.2-17.3 MiB (probe evidence
-//   from issue #3457), and a trim bypass also runs each render into the
-//   seconds.
+// - cycling unbroken bodies twice and unmounting retains 1.40-1.43 MiB
+//   against a baseline from before the bodies exist; a component made to
+//   pin unbroken bodies on first sight measured 17.47 MiB. Revisiting the
+//   flattened bodies retains 0.87-0.90 MiB while they are held; paying the
+//   first-sight cost again per render measured 17.2-17.3 MiB (probe
+//   evidence from issue #3457), and a trim bypass also runs each render
+//   into the seconds, past the test timeout.
 // - one unbroken body while mounted costs 2.20-2.25 MiB, mostly the body
 //   itself; laying it out untrimmed measured 12.45 MiB.
 const CYCLED_RETENTION_LIMIT_BYTES = 4 * MIB;
 const REPEATED_BODY_RETENTION_LIMIT_BYTES = 1 * MIB;
+const UNBROKEN_RETENTION_LIMIT_BYTES = 4 * MIB;
 const UNBROKEN_REVISIT_LIMIT_BYTES = 2 * MIB;
 const UNBROKEN_MOUNT_LIMIT_BYTES = 6 * MIB;
 
@@ -218,29 +251,25 @@ describe('ToolResultDisplay — large results cost only what they display', () =
     expect(retainedBytes).toBeLessThan(REPEATED_BODY_RETENTION_LIMIT_BYTES);
   });
 
-  it('retains nothing new when cycled unbroken bodies are seen again', () => {
-    // First render of a rope-built unbroken body flattens it in place, which
-    // is a cost of first use the test's own strings pay, not something the
-    // component retained. The baseline below is read after that first pass,
-    // with the bodies still held by the test so their storage appears on
-    // both sides of the comparison. What must not happen is paying again on
-    // every render: the second pass over the same bodies retains nothing
-    // further.
+  it('retains nothing when cycled unbroken bodies are seen again', () => {
+    // Two bounds guard the two ways unbroken bodies can be kept. The
+    // absolute bound reads its baseline before the bodies exist and
+    // compares it to the settled heap after both passes, the root shrunk
+    // and unmounted, and the helper's own references to the bodies gone,
+    // so a component that retains first sight of an unbroken body fails
+    // it: the flattened storage of the test's rope-built strings dies with
+    // those references unless the component kept a copy. The revisit bound
+    // then catches a cost paid again on every later render of the same
+    // bodies. Its readings come from inside the helper, where the bodies
+    // are still held, because a first render flattens a rope-built
+    // unbroken body in place, a cost of first use the test's own strings
+    // pay; holding the bodies on both sides of that delta is what cancels
+    // the first-sight storage out of it.
     const root = mountWarmup();
-    const bodies = Array.from({ length: CYCLE_BODY_COUNT }, (_, index) =>
-      makeUnbrokenResult(1_000_000, index + 1),
-    );
-    for (const body of bodies) {
-      root.rerender(wrapWithProviders(buildResultElement(body)));
-      root.lastFrame();
-    }
-    const afterFirstPass = settledRetainedHeapBytes();
-    for (const body of bodies) {
-      root.rerender(wrapWithProviders(buildResultElement(body)));
-      root.lastFrame();
-    }
-    const afterRevisit = settledRetainedHeapBytes();
-    finishCycle(root);
+    const baseline = settledRetainedHeapBytes();
+    const { afterFirstPass, afterRevisit } = cycleUnbrokenBodies(root);
+    const retainedBytes = finishCycle(root) - baseline;
+    expect(retainedBytes).toBeLessThan(UNBROKEN_RETENTION_LIMIT_BYTES);
     const revisitBytes = afterRevisit - afterFirstPass;
     expect(revisitBytes).toBeLessThan(UNBROKEN_REVISIT_LIMIT_BYTES);
   });
