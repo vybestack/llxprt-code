@@ -40,7 +40,11 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { runContainmentScan, type ScanResult } from '../check-gemini-containment.ts';
+import {
+  runContainmentScan,
+  type GateLayer,
+  type ScanResult,
+} from '../check-gemini-containment.ts';
 
 const REPO_ROOT = resolve(import.meta.dir, '..', '..');
 const NEW_SDK = '@ai-sdk/google';
@@ -90,11 +94,13 @@ const SOURCE_SHAPES: readonly InjectionShape[] = [
   },
   {
     id: 'mock specifier',
-    source: (sdk) => `import { mock } from 'bun:test';\nmock.module('${sdk}', () => ({}));\n`,
+    source: (sdk) =>
+      `import { mock } from 'bun:test';\nmock.module('${sdk}', () => ({}));\n`,
   },
   {
     id: 'vi.mock specifier',
-    source: (sdk) => `import { vi } from 'vitest';\nvi.mock('${sdk}', () => ({}));\n`,
+    source: (sdk) =>
+      `import { vi } from 'vitest';\nvi.mock('${sdk}', () => ({}));\n`,
   },
 ];
 
@@ -219,7 +225,9 @@ function pluginIndexSource(
   ].join('\n');
 }
 
-function hintsSource(entries: ReadonlyArray<readonly [string, string]>): string {
+function hintsSource(
+  entries: ReadonlyArray<readonly [string, string]>,
+): string {
   const lines = entries.map(([id, pkg]) => `    '${id}': '${pkg}',`).join('\n');
   return [
     '/** fixture base hint table */',
@@ -246,7 +254,10 @@ function buildBaseTree(label: string): FixtureTree {
     'plugins/google-gemini/package.json',
     manifestJson(GEMINI_PLUGIN_PKG, { [NEW_SDK]: '4.0.56' }),
   );
-  tree.write('plugins/google-gemini/bun.lock', pluginBunLockSource(NEW_SDK, '4.0.56'));
+  tree.write(
+    'plugins/google-gemini/bun.lock',
+    pluginBunLockSource(NEW_SDK, '4.0.56'),
+  );
   tree.write(
     'plugins/google-gemini/src/index.ts',
     pluginIndexSource(GEMINI_PLUGIN_PKG, 'gemini', ['gemini']),
@@ -265,11 +276,18 @@ function buildBaseTree(label: string): FixtureTree {
     'packages/providers/package.json',
     manifestJson('@fixture/providers', {}),
   );
-  tree.write('packages/providers/src/neutral.ts', 'export const neutral = 1;\n');
+  tree.write(
+    'packages/providers/src/neutral.ts',
+    'export const neutral = 1;\n',
+  );
   return tree;
 }
 
-function writeAliasManifest(tree: FixtureTree, sdk: string, manifestRel: string): void {
+function writeAliasManifest(
+  tree: FixtureTree,
+  sdk: string,
+  manifestRel: string,
+): void {
   tree.write(
     manifestRel,
     manifestJson('@fixture/foo', { [ALIAS_NAME]: `npm:${sdk}@4` }),
@@ -288,7 +306,7 @@ function scanWithInjection(
 
 function assertSingleViolation(
   result: ScanResult,
-  expectedLayer: string,
+  expectedLayer: GateLayer,
   expectedFile: string,
 ): void {
   expect(result.errors).toEqual([]);
@@ -341,11 +359,7 @@ describe('gemini containment parity — new gate flags every injection shape x c
           context.site(shape),
           shape.source(NEW_SDK),
         );
-        assertSingleViolation(
-          result,
-          'L2-import',
-          context.site(shape),
-        );
+        assertSingleViolation(result, 'L2-import', context.site(shape));
       });
     }
 
@@ -372,7 +386,10 @@ describe('gemini containment parity — sanctioned zones pass (intentional scope
       'plugins/google-gemini/dist/bundle.js',
       `import { createGoogleGenerativeAI } from '${NEW_SDK}';\nexport const provider = createGoogleGenerativeAI;\n`,
     );
-    expectCleanTree(runContainmentScan(tree.root), 'plugin dist/ is the sanctioned consumption zone');
+    expectCleanTree(
+      runContainmentScan(tree.root),
+      'plugin dist/ is the sanctioned consumption zone',
+    );
   });
 
   it('passes an SDK import inside plugins/google-gemini/src (the sanctioned owner)', () => {
@@ -381,18 +398,30 @@ describe('gemini containment parity — sanctioned zones pass (intentional scope
       'plugins/google-gemini/src/deeper/provider.ts',
       `import { createGoogleGenerativeAI } from '${NEW_SDK}';\nexport const provider = createGoogleGenerativeAI;\n`,
     );
-    expectCleanTree(runContainmentScan(tree.root), 'plugin src/ is the sanctioned owner zone');
+    expectCleanTree(
+      runContainmentScan(tree.root),
+      'plugin src/ is the sanctioned owner zone',
+    );
   });
 
   it('passes the SDK in the plugin-local bun.lock (separate install context)', () => {
     const tree = buildBaseTree('pluglock');
-    tree.write('plugins/google-gemini/bun.lock', pluginBunLockSource(NEW_SDK, '9.9.9'));
-    expectCleanTree(runContainmentScan(tree.root), 'plugin-local lockfile is a sanctioned install context');
+    tree.write(
+      'plugins/google-gemini/bun.lock',
+      pluginBunLockSource(NEW_SDK, '9.9.9'),
+    );
+    expectCleanTree(
+      runContainmentScan(tree.root),
+      'plugin-local lockfile is a sanctioned install context',
+    );
   });
 
   it('flags the SDK in the ROOT bun.lock (old guards had no lockfile layer)', () => {
     const tree = buildBaseTree('rootlock');
-    tree.write('bun.lock', rootBunLockSource({ [NEW_SDK]: '^4.0.0' }, [NEW_SDK, 'lodash']));
+    tree.write(
+      'bun.lock',
+      rootBunLockSource({ [NEW_SDK]: '^4.0.0' }, [NEW_SDK, 'lodash']),
+    );
     // Both lockfile surfaces fire: the workspace dependency entry and the
     // packages["<sdk>"] resolution entry.
     const result = runContainmentScan(tree.root);
@@ -432,7 +461,10 @@ describe('gemini containment parity — sanctioned zones pass (intentional scope
 
 describe('gemini containment parity — negative control and SDK retargeting', () => {
   it('clean tree (no injection) passes every layer', () => {
-    expectCleanTree(runContainmentScan(buildBaseTree('clean').root), 'negative control');
+    expectCleanTree(
+      runContainmentScan(buildBaseTree('clean').root),
+      'negative control',
+    );
   });
 
   it('the retired guards\u2019 SDK (@google/genai) is NOT the new gate\u2019s target — documented retargeting, not a coverage claim', () => {
@@ -442,7 +474,10 @@ describe('gemini containment parity — negative control and SDK retargeting', (
     // not police the legacy specifier; the differential matrix in the parity
     // doc records the old guards\u2019 measured verdicts on the same fixtures.
     const tree = buildBaseTree('legacy');
-    tree.write(PROD_SITE, `import { GoogleGenAI } from '${OLD_SDK}';\nexport const ai = GoogleGenAI;\n`);
+    tree.write(
+      PROD_SITE,
+      `import { GoogleGenAI } from '${OLD_SDK}';\nexport const ai = GoogleGenAI;\n`,
+    );
     tree.write(TEST_SITE, `import type { Content } from '${OLD_SDK}';\n`);
     expectCleanTree(
       runContainmentScan(tree.root),

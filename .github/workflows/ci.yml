@@ -369,9 +369,9 @@ jobs:
           npm run lint:cli-boundary
           npm run lint:a2a-boundary
 
-      - name: 'Run genai-enclave boundary guard'
+      - name: 'Run Gemini containment guard'
         run: |-
-          npm run lint:genai-enclave
+          npm run lint:gemini-containment
 
       - name: 'Run runtime-dependency declaration guard (#3305)'
         # Fails if any published workspace package imports, at runtime, a
@@ -416,13 +416,6 @@ jobs:
       - name: 'Run doc-placement guard (#2654)'
         run: |-
           npm run lint:doc-placement
-
-      - name: 'Run GenAI importer ratchet'
-        run: |-
-          npm run lint:genai-inventory
-      - name: 'Run agents neutral gate (anti-#2424 enforcement)'
-        run: |-
-          npm run gate:agents-neutral
 
       - name: 'Run affected-test-shards graph drift guard (#2709)'
         # Verifies the checked-in import graph matches the real AST-derived
