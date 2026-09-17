@@ -17,9 +17,10 @@
  * @pseudocode 003-github-broker.md lines 38-55
  */
 
-import { describe, it, expect } from 'bun:test';
-import { readdir, readFile } from 'node:fs/promises';
+import { afterEach, beforeEach, describe, it, expect } from 'bun:test';
+import { access, mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { OP_REGISTRY } from '../github-broker-ops.js';
 import {
   validateParams,
@@ -268,14 +269,26 @@ describe('P11a write operations', () => {
   });
 
   describe('body temp-file lifecycle', () => {
-    async function tmpBodyDirs(): Promise<string[]> {
-      const entries = await readdir(tmpdir());
+    let root = '';
+
+    beforeEach(async () => {
+      root = await mkdtemp(join(tmpdir(), 'gh-body-root-'));
+    });
+
+    afterEach(async () => {
+      await rm(root, { recursive: true, force: true });
+    });
+
+    /** Lists `llxprt-gh-body-*` entries directly under `dir`. */
+    async function bodyDirsIn(dir: string): Promise<string[]> {
+      const entries = await readdir(dir);
       return entries.filter((e) => e.startsWith('llxprt-gh-body-'));
     }
 
     /**
      * @plan PLAN-20260731-GHBROKER.P11
      * @requirement REQ-002
+     * @issue 3492
      */
     it('writes body text to a file and exposes its path', async () => {
       let seenPath = '';
@@ -289,36 +302,120 @@ describe('P11a write operations', () => {
         },
       );
       expect(seenPath).toContain('llxprt-gh-body-');
+      // seenPath is <root>/llxprt-gh-body-*/body.md, so two dirnames up is
+      // the default root: os.tmpdir() itself.
+      expect(dirname(dirname(seenPath))).toBe(tmpdir());
       expect(contents).toBe('line one\nline two');
     });
 
     /**
+     * A caller-supplied root keeps this test's artifacts out of the shared
+     * tmpdir namespace, where concurrent processes churn the same prefix.
+     *
+     * @plan project-plans/issue3492.md
+     * @requirement AC-1
+     * @issue 3492
+     */
+    it('creates the body dir inside a caller-supplied tempRoot and removes it after', async () => {
+      let seenPath = '';
+      await withBodyFiles(
+        ['body'],
+        { body: 'x' },
+        async (p) => {
+          seenPath = p.body as string;
+        },
+        root,
+      );
+      expect(seenPath.startsWith(root)).toBe(true);
+      expect(seenPath).toContain('llxprt-gh-body-');
+      expect(await bodyDirsIn(root)).toStrictEqual([]);
+    });
+
+    /**
      * The failure path is the one that leaks, and gh failures surface as
-     * exceptions routinely.
+     * exceptions routinely. The recorded dir is this operation's own
+     * artifact, so the assertions read nothing from the shared tmpdir.
      *
      * @plan PLAN-20260731-GHBROKER.P11
      * @requirement REQ-002
+     * @issue 3492
      */
     it('removes the temp directory even when the operation throws', async () => {
-      const before = await tmpBodyDirs();
+      let createdDir = '';
       await expect(
-        withBodyFiles(['body'], { body: 'x' }, async () => {
-          throw new Error('gh failed');
-        }),
+        withBodyFiles(
+          ['body'],
+          { body: 'x' },
+          async (p) => {
+            createdDir = dirname(p.body as string);
+            throw new Error('gh failed');
+          },
+          root,
+        ),
       ).rejects.toThrow('gh failed');
-      const after = await tmpBodyDirs();
-      expect(after.length).toBe(before.length);
+      await expect(access(createdDir)).rejects.toThrow('ENOENT');
+      expect(await bodyDirsIn(root)).toStrictEqual([]);
     });
 
     /**
      * @plan PLAN-20260731-GHBROKER.P11
      * @requirement REQ-002
+     * @issue 3492
      */
     it('is a no-op when no body parameter is present', async () => {
-      const before = await tmpBodyDirs();
-      const out = await withBodyFiles(['body'], { number: 1 }, async (p) => p);
+      const out = await withBodyFiles(
+        ['body'],
+        { number: 1 },
+        async (p) => p,
+        root,
+      );
       expect(out).toStrictEqual({ number: 1 });
-      expect((await tmpBodyDirs()).length).toBe(before.length);
+      expect(await bodyDirsIn(root)).toStrictEqual([]);
+    });
+
+    /**
+     * Issue #3492: concurrent LLxprt checkouts share os.tmpdir(), and a
+     * foreign llxprt-gh-body-* dir appearing or vanishing between the old
+     * before/after snapshots flipped the count assertions. This recreates
+     * that interference around both scenarios and verifies the
+     * operation-local evidence still holds.
+     *
+     * @plan project-plans/issue3492.md
+     * @requirement AC-5
+     * @issue 3492
+     */
+    it('stays deterministic when a foreign llxprt-gh-body dir churns in the shared tmpdir (issue #3492)', async () => {
+      const foreign = await mkdtemp(join(tmpdir(), 'llxprt-gh-body-'));
+      try {
+        const out = await withBodyFiles(
+          ['body'],
+          { number: 1 },
+          async (p) => p,
+          root,
+        );
+        expect(out).toStrictEqual({ number: 1 });
+        expect(await bodyDirsIn(root)).toStrictEqual([]);
+
+        // The interfering process removes its dir between the old
+        // before/after snapshots.
+        await rm(foreign, { recursive: true, force: true });
+
+        let createdDir = '';
+        await expect(
+          withBodyFiles(
+            ['body'],
+            { body: 'x' },
+            async (p) => {
+              createdDir = dirname(p.body as string);
+              throw new Error('gh failed');
+            },
+            root,
+          ),
+        ).rejects.toThrow('gh failed');
+        await expect(access(createdDir)).rejects.toThrow('ENOENT');
+      } finally {
+        await rm(foreign, { recursive: true, force: true });
+      }
     });
   });
 });
