@@ -461,6 +461,54 @@ describe.skipIf(process.platform === 'win32')(
     });
 
     /**
+     * AC-6 (argv redaction): a title rides argv via appendString (the
+     * body does not — it goes to --body-file), so a token-shaped
+     * substring pasted into a title reaches the raw argv JSON of the
+     * failure line. The whole composed line must be token-redacted, not
+     * just the failure message.
+     *
+     * @plan project-plans/issue3453.md
+     * @requirement AC-6
+     * @issue 3453
+     */
+    it('redacts a token-shaped title from the failure argv log line', async () => {
+      // ghp_ + 36 alphanumerics: comfortably inside the
+      // gh[pousrx]_[A-Za-z0-9]{20,} pattern redactTokenShaped matches.
+      const token = 'ghp_0123456789abcdefghijklmnopqrstuvwxyz';
+      const replies = standardReplies().map((reply) =>
+        reply.fragment === 'issue create'
+          ? { fragment: reply.fragment, failStderr: 'gh blew up 3453\n' }
+          : reply,
+      );
+      const shim = await makeGhShim(replies);
+      const debug = patchDebugLogger();
+      try {
+        const caught = await withGhOnPath(shim.binDir, () =>
+          captureRejection(() =>
+            executeGitHubOp(
+              'issue.create',
+              { title: `leak ${token}`, body: 'x', repo: 'owner/name' },
+              SIGNAL,
+            ),
+          ),
+        );
+
+        expect(asBrokerError(caught).brokerError.code).toBe('GITHUB_ERROR');
+
+        const brokerLines = debug.calls.filter(
+          (call) => call.namespace === 'llxprt:github:broker',
+        );
+        expect(brokerLines).toHaveLength(1);
+        expect(brokerLines[0].message).toContain('["issue","create"');
+        expect(brokerLines[0].message).toContain('owner/name');
+        expect(brokerLines[0].message).toContain('[REDACTED]');
+        expect(brokerLines[0].message).not.toContain(token);
+      } finally {
+        debug.restore();
+      }
+    });
+
+    /**
      * AC-6 (repo absent): the same failure line records the explicit
      * absent marker, so a log reader can tell "no repo requested" apart
      * from "repo unknown".

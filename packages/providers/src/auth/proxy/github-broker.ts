@@ -160,9 +160,11 @@ type GhResult = GhSuccess | GhFailure;
  * keeps working for repo-less ops.
  *
  * A failed invocation additionally emits one debug log line with the final
- * argv, the repo target in effect, and the redacted failure message; a
- * recurrence of a dropped-repo failure is then readable from the debug
- * log instead of invisible (#3453).
+ * argv, the repo target in effect, and the failure message, with the whole
+ * composed line token-redacted (argv inlines caller free text, so
+ * redaction cannot stop at the message); a recurrence of a dropped-repo
+ * failure is then readable from the debug log instead of invisible
+ * (#3453).
  *
  * @plan PLAN-20260731-GHBROKER.P08, PLAN-20260731-GHBROKER.P10
  * @requirement REQ-001, REQ-002
@@ -202,11 +204,17 @@ async function runGh(
       if (recovered !== null) return recovered;
     }
     const failure = classifyExecError(err);
-    logger.debug(
-      () =>
+    // argv inlines caller free text (issue titles, search queries), so a
+    // token-shaped substring pasted into such a param would ride the raw
+    // argv JSON into the log. Redact the WHOLE composed line, not just the
+    // message; flags, paths, and owner/name repo targets survive
+    // token-shaped redaction unchanged.
+    logger.debug(() =>
+      redactTokenShaped(
         `gh invocation failed. argv=${JSON.stringify(argv)} repoTarget=${
           options?.repoTarget ?? REPO_TARGET_ABSENT
-        } error=${redactTokenShaped(failure.error.message)}`,
+        } error=${failure.error.message}`,
+      ),
     );
     return failure;
   }

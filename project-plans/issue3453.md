@@ -135,7 +135,10 @@ shim; align with existing platform-skip precedent in the proxy tests).
      `env.GH_REPO = repoTarget` in the child env.
    - In `runGh`'s catch path (before classification returns), emit
      `logger.debug(() => ...)` with the final argv (JSON), the repo target in
-     effect, and the failure message run through `redactTokenShaped`.
+     effect, and the failure message — the whole composed log line (argv
+     JSON + repo target + message) run through `redactTokenShaped`, since
+     argv inlines caller free text (titles, search queries) that may carry a
+     token-shaped value.
    - `executeGitHubOp`: derive
      `repoTarget = typeof opParams.repo === 'string' && opParams.repo.length > 0 ? opParams.repo : undefined`
      and thread it into both the `run` closure's `runGh` options and the
