@@ -75,9 +75,10 @@ type PortHasExactlyFiveMembers = Expect<
 type RegistryKeysAreOwnerObjects = Expect<
   Equal<
     Parameters<SessionSchedulerRegistry['getOrCreate']>[0],
-    Parameters<SessionSchedulerRegistry['release']>[0]
-  > &
-    Equal<Parameters<SessionSchedulerRegistry['release']>[0], object>
+    object
+  > extends true
+    ? Equal<Parameters<SessionSchedulerRegistry['release']>[0], object>
+    : false
 >;
 
 type PurposesAreTheObservedSet = Expect<
