@@ -17,7 +17,10 @@
 
 import type { SchedulerHandle } from '@vybestack/llxprt-code-core/session/sessionExecutionServices.js';
 import type { SchedulerPurpose } from '@vybestack/llxprt-code-core/session/sessionSchedulerRegistry.js';
-import type { Config, SchedulerCallbacks } from '@vybestack/llxprt-code-core/config/config.js';
+import type {
+  Config,
+  SchedulerCallbacks,
+} from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 

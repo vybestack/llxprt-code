@@ -239,7 +239,7 @@ function createTestConfig(opts: {
     config: narrowConfig(fixture),
     messageBus,
     toolRegistry,
-    createScheduler: (schedulerOptions) =>
+    createScheduler: async (schedulerOptions) =>
       fixture.getToolSchedulerFactory()({
         config: narrowConfig(fixture),
         messageBus,

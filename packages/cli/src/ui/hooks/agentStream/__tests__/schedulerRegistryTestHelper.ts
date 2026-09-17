@@ -18,7 +18,6 @@
  */
 
 import type {
-  Config,
   MessageBus,
   SchedulerCallbacks,
   SchedulerHandle,
@@ -26,9 +25,18 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 
+/**
+ * The setCallbacks payload the acquired scheduler expects. The config field
+ * below borrows the payload's config type so this UI-tree helper stays off
+ * the core config class surface (#2373).
+ */
+type SchedulerSetCallbacksPayload = Parameters<
+  SchedulerHandle['setCallbacks']
+>[0];
+
 export interface SchedulerRegistryDelegateOptions {
-  /** The Config recorded on the scheduler's setCallbacks payload. */
-  config: Config;
+  /** The config recorded on the scheduler's setCallbacks payload. */
+  config: SchedulerSetCallbacksPayload['config'];
   /** Fallback MessageBus when an acquisition supplies none. */
   messageBus: MessageBus;
   /** Fallback tool registry when an acquisition supplies none. */

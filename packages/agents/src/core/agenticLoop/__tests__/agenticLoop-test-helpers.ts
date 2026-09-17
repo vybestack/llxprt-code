@@ -313,7 +313,7 @@ export function createTestConfig(options: {
     // Mirrors the Config delegate's createScheduler closure: build the real
     // scheduler with creation-time stub callbacks; the delegate refreshes
     // the acquiring call's real callbacks via setCallbacks right after.
-    createScheduler: (schedulerOptions) =>
+    createScheduler: async (schedulerOptions) =>
       fixture.getToolSchedulerFactory()({
         config: testBoundaryConfig(fixture),
         messageBus,
