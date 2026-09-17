@@ -59,6 +59,18 @@ export interface ToolCallEvent {
   confirmationDetails: ToolCallConfirmationDetails | undefined;
 }
 
+/**
+ * Display-retention metadata for a tool result (issue #3428). Set when the
+ * retained display body was bounded at the shared retention boundary; the
+ * uncapped body remains in the core history and the session transcript.
+ */
+export interface ToolResultRetention {
+  capped: boolean;
+  /** UTF-8 bytes of the full string body; absent when the body was a
+   * structured result serialized under a budget. */
+  originalLength?: number;
+}
+
 export interface IndividualToolCallDisplay {
   callId: string;
   name: string;
@@ -70,6 +82,7 @@ export interface IndividualToolCallDisplay {
   isFocused?: boolean;
   outputFile?: string;
   ptyId?: number;
+  retention?: ToolResultRetention;
 }
 
 export interface CompressionProps {

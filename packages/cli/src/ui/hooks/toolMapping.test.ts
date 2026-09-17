@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { Buffer } from 'node:buffer';
 import {
   DEFAULT_AGENT_ID,
   type AnyDeclarativeTool,
@@ -384,6 +385,93 @@ describe('toolMapping', () => {
 
         const result = mapToDisplay([toolCallWithNoAgent, toolCallWithAgent]);
         expect(result.agentId).toBe('sub-agent-1');
+      });
+    });
+
+    describe('retention cap at display commit (issue #3428)', () => {
+      it('caps a large string result display to the retention cap and records retention', () => {
+        const body = 'x'.repeat(200 * 1024);
+        const toolCall: SuccessfulToolCall = {
+          status: 'success',
+          request: mockRequest,
+          tool: mockTool,
+          invocation: mockInvocation,
+          response: { ...mockResponse, resultDisplay: body },
+        };
+
+        const displayTool = mapToDisplay(toolCall).tools[0];
+        const display = displayTool.resultDisplay;
+
+        expect(typeof display).toBe('string');
+        expect(
+          Buffer.byteLength(display as string, 'utf8'),
+        ).toBeLessThanOrEqual(64 * 1024);
+        expect(display).toContain('session transcript');
+        expect(displayTool.retention).toStrictEqual({
+          capped: true,
+          originalLength: 200 * 1024,
+        });
+        // The scheduler's response is the model-facing copy; it is untouched.
+        expect(toolCall.response.resultDisplay).toBe(body);
+      });
+
+      it('leaves small string results uncapped with no retention metadata', () => {
+        const toolCall: SuccessfulToolCall = {
+          status: 'success',
+          request: mockRequest,
+          tool: mockTool,
+          invocation: mockInvocation,
+          response: { ...mockResponse, resultDisplay: 'Success output' },
+        };
+
+        const displayTool = mapToDisplay(toolCall).tools[0];
+
+        expect(displayTool.resultDisplay).toBe('Success output');
+        expect(displayTool.retention).toBeUndefined();
+      });
+
+      it('passes structured result displays through untouched', () => {
+        const fileDiffDisplay = {
+          fileDiff: '--- a' + String.fromCharCode(10) + '+++ b',
+          fileName: 'a.ts',
+          originalContent: 'a',
+          newContent: 'b',
+        };
+        const toolCall: SuccessfulToolCall = {
+          status: 'success',
+          request: mockRequest,
+          tool: mockTool,
+          invocation: mockInvocation,
+          response: { ...mockResponse, resultDisplay: fileDiffDisplay },
+        };
+
+        const displayTool = mapToDisplay(toolCall).tools[0];
+
+        expect(displayTool.resultDisplay).toBe(fileDiffDisplay);
+        expect(displayTool.retention).toBeUndefined();
+      });
+
+      it('caps large error result displays too', () => {
+        const body = 'y'.repeat(150 * 1024);
+        const toolCall: ToolCall = {
+          status: 'error',
+          request: mockRequest,
+          tool: mockTool,
+          invocation: mockInvocation,
+          response: {
+            ...mockResponse,
+            error: new Error('boom'),
+            resultDisplay: body,
+          },
+        };
+
+        const displayTool = mapToDisplay(toolCall).tools[0];
+
+        expect(
+          Buffer.byteLength(displayTool.resultDisplay as string),
+        ).toBeLessThanOrEqual(64 * 1024);
+        expect(displayTool.retention?.capped).toBe(true);
+        expect(toolCall.response.resultDisplay).toBe(body);
       });
     });
   });

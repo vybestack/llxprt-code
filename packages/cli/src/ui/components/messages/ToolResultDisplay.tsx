@@ -100,6 +100,12 @@ function renderFileDiffContent(
 
 /**
  * Render content display with metadata.
+ *
+ * When a height constraint exists, the content string is bounded to the
+ * visible window before layout (#3428): the full-body processors this path
+ * feeds (MarkdownDisplay) lay out everything they are handed, so a large
+ * `{ content }` result costs what its visible window costs instead of its
+ * full body, mirroring the string path's pre-layout trim (#3426).
  */
 function renderContentWithMetadata(
   displayContent: { content: string; metadata?: Record<string, unknown> },
@@ -111,8 +117,19 @@ function renderContentWithMetadata(
   const language = metadata?.language;
   const declarationsCount = metadata?.declarationsCount;
 
+  const { text, hiddenDisplayLines } =
+    availableHeight === undefined
+      ? { text: displayContent.content, hiddenDisplayLines: 0 }
+      : trimToVisibleTail(displayContent.content, availableHeight, childWidth);
+
   return (
     <Box flexDirection="column">
+      {hiddenDisplayLines > 0 && (
+        <Text color={Colors.Gray} wrap="truncate">
+          ... first {hiddenDisplayLines} line
+          {hiddenDisplayLines === 1 ? '' : 's'} hidden ...
+        </Text>
+      )}
       <Box marginBottom={1} flexDirection="column">
         {typeof language === 'string' && (
           <Text color={Colors.AccentGreen}>Language: {language}</Text>
@@ -124,7 +141,7 @@ function renderContentWithMetadata(
         )}
       </Box>
       <MarkdownDisplay
-        text={displayContent.content}
+        text={text}
         isPending={false}
         availableTerminalHeight={availableHeight}
         terminalWidth={childWidth}

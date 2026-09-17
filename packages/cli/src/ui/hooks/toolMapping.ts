@@ -13,7 +13,9 @@ import {
   ToolCallStatus,
   type HistoryItemToolGroup,
   type IndividualToolCallDisplay,
+  type ToolResultRetention,
 } from '../types.js';
+import { boundResultDisplayForRetention } from '../utils/toolResultRetention.js';
 import type {
   TrackedCompletedToolCall,
   TrackedExecutingToolCall,
@@ -24,6 +26,29 @@ import type {
 } from './useReactToolScheduler.js';
 
 const logger = DebugLogger.getLogger('llxprt:cli:tool-mapping');
+
+/**
+ * Bounds a string display body to the shared retention cap at the moment it
+ * is committed to UI state (issue #3428). Only the display copy is capped;
+ * the scheduler response that feeds the model is never touched here.
+ */
+function boundDisplayForRetention(
+  resultDisplay: IndividualToolCallDisplay['resultDisplay'],
+): {
+  resultDisplay: IndividualToolCallDisplay['resultDisplay'];
+  retention: ToolResultRetention | undefined;
+} {
+  if (typeof resultDisplay !== 'string') {
+    return { resultDisplay, retention: undefined };
+  }
+  const bounded = boundResultDisplayForRetention(resultDisplay);
+  return {
+    resultDisplay: bounded.text,
+    retention: bounded.wasCapped
+      ? { capped: true, originalLength: bounded.originalLength }
+      : undefined,
+  };
+}
 
 /**
  * Maps a CoreToolScheduler status to the UI's ToolCallStatus enum.
@@ -126,10 +151,14 @@ function buildSuccessDisplay(
     `mapToDisplay: success call ${trackedCall.request.callId}, toolName=${trackedCall.request.name}, resultDisplay type: ${typeof trackedCall.response.resultDisplay}, hasValue: ${Boolean(trackedCall.response.resultDisplay)}`,
   );
   const baseProperties = getBaseDisplayProperties(trackedCall);
+  const { resultDisplay, retention } = boundDisplayForRetention(
+    trackedCall.response.resultDisplay,
+  );
   return {
     ...baseProperties,
     status: mapCoreStatusToDisplayStatus(trackedCall.status),
-    resultDisplay: trackedCall.response.resultDisplay,
+    resultDisplay,
+    retention,
     confirmationDetails: undefined,
     outputFile: trackedCall.response.outputFile,
   };
@@ -142,10 +171,14 @@ function buildErrorCancelledDisplay(
   >,
 ): IndividualToolCallDisplay {
   const baseProperties = getBaseDisplayProperties(trackedCall);
+  const { resultDisplay, retention } = boundDisplayForRetention(
+    trackedCall.response.resultDisplay,
+  );
   return {
     ...baseProperties,
     status: mapCoreStatusToDisplayStatus(trackedCall.status),
-    resultDisplay: trackedCall.response.resultDisplay,
+    resultDisplay,
+    retention,
     confirmationDetails: undefined,
   };
 }

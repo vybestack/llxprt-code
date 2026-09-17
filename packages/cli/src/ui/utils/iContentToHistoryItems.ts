@@ -18,9 +18,14 @@ import {
   type HistoryItemAiContent,
   type HistoryItemWithoutId,
   type IndividualToolCallDisplay,
+  type ToolResultRetention,
   MessageType,
   ToolCallStatus,
 } from '../types.js';
+import {
+  boundResultDisplayForRetention,
+  stringifyForDisplayDetailed,
+} from './toolResultRetention.js';
 
 const NEWLINE = String.fromCharCode(10);
 
@@ -159,14 +164,34 @@ export function filterHistoryItems(
   });
 }
 
-function safeToolResultToString(result: unknown): string {
+/**
+ * Display text for a replayed tool response, bounded at the shared retention
+ * cap (issue #3428). Strings are capped head/tail; structured results go
+ * through the budgeted serializer instead of materializing the full
+ * prettified body. The recorded `result` itself is never modified — it is the
+ * model-facing copy replayed from the session transcript.
+ */
+function safeToolResultToDisplayText(result: unknown): {
+  text: string;
+  retention: ToolResultRetention | undefined;
+} {
   if (typeof result === 'string') {
-    return result;
+    const bounded = boundResultDisplayForRetention(result);
+    return {
+      text: bounded.text,
+      retention: bounded.wasCapped
+        ? { capped: true, originalLength: bounded.originalLength }
+        : undefined,
+    };
   }
   try {
-    return JSON.stringify(result, null, 2);
+    const serialized = stringifyForDisplayDetailed(result);
+    return {
+      text: serialized.text,
+      retention: serialized.wasCapped ? { capped: true } : undefined,
+    };
   } catch {
-    return String(result);
+    return { text: String(result), retention: undefined };
   }
 }
 
@@ -263,15 +288,18 @@ function processAiContent(
   if (toolCallBlocks.length > 0) {
     const tools: IndividualToolCallDisplay[] = toolCallBlocks.map((tc) => {
       const response = responseMap.get(tc.id);
+      const display =
+        response !== undefined
+          ? safeToolResultToDisplayText(response.result)
+          : undefined;
       return {
         callId: tc.id,
         name: tc.name,
         description: tc.description ?? tc.name,
-        resultDisplay: response
-          ? safeToolResultToString(response.result)
-          : undefined,
+        resultDisplay: display?.text,
         status: toToolCallStatus(response),
         confirmationDetails: undefined,
+        retention: display?.retention,
       };
     });
     items.push({ type: 'tool_group', tools });
