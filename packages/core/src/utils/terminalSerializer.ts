@@ -70,32 +70,43 @@ export const enum ColorMode {
 }
 
 class Cell {
-  private readonly cell: IBufferCell | null;
-  private readonly x: number;
-  private readonly y: number;
-  private readonly cursorX: number;
-  private readonly cursorY: number;
-  private readonly attributes: number = 0;
+  private cell: IBufferCell | null = null;
+  private x: number = 0;
+  private y: number = 0;
+  private cursorX: number = 0;
+  private cursorY: number = 0;
+  private attributes: number = 0;
   fg = 0;
   bg = 0;
   fgColorMode: ColorMode = ColorMode.DEFAULT;
   bgColorMode: ColorMode = ColorMode.DEFAULT;
 
-  constructor(
+  /**
+   * Reset this scratch instance and re-extract state from the buffer cell.
+   * A null cell reproduces the per-line null seed (attributes 0, fg 0, bg 0,
+   * DEFAULT color modes, never the cursor). Scratch reuse keeps the
+   * serializer at a constant number of Cell allocations per call (#3432).
+   */
+  load(
     cell: IBufferCell | null,
     x: number,
     y: number,
     cursorX: number,
     cursorY: number,
-  ) {
+  ): this {
     this.cell = cell;
     this.x = x;
     this.y = y;
     this.cursorX = cursorX;
     this.cursorY = cursorY;
+    this.attributes = 0;
+    this.fg = 0;
+    this.bg = 0;
+    this.fgColorMode = ColorMode.DEFAULT;
+    this.bgColorMode = ColorMode.DEFAULT;
 
     if (!cell) {
-      return;
+      return this;
     }
 
     if (cell.isInverse() !== 0) {
@@ -145,6 +156,7 @@ class Cell {
     } else {
       this.bg = cell.getBgColor();
     }
+    return this;
   }
 
   isCursor(): boolean {
@@ -188,6 +200,7 @@ function buildTokenFromCell(
   text: string,
   defaultFg: string,
   defaultBg: string,
+  colorless: boolean,
 ): AnsiToken {
   return {
     text,
@@ -196,12 +209,30 @@ function buildTokenFromCell(
     underline: cell.isAttribute(Attribute.underline),
     dim: cell.isAttribute(Attribute.dim),
     inverse: cell.isAttribute(Attribute.inverse) || cell.isCursor(),
-    fg: convertColorToHex(cell.fg, cell.fgColorMode, defaultFg),
-    bg: convertColorToHex(cell.bg, cell.bgColorMode, defaultBg),
+    fg: colorless
+      ? ''
+      : convertColorToHex(cell.fg, cell.fgColorMode, defaultFg),
+    bg: colorless
+      ? ''
+      : convertColorToHex(cell.bg, cell.bgColorMode, defaultBg),
   };
 }
 
-export function serializeTerminalToObject(terminal: Terminal): AnsiOutput {
+export interface SerializeTerminalOptions {
+  /**
+   * Produce colorless output directly: every token carries fg:'' and bg:''
+   * with all other fields identical to the colored serialization. Equivalent
+   * to serializing with colors and stripping fg/bg per token, without the
+   * per-token copy (issue #3432).
+   */
+  readonly colorless?: boolean;
+}
+
+export function serializeTerminalToObject(
+  terminal: Terminal,
+  options?: SerializeTerminalOptions,
+): AnsiOutput {
+  const colorless = options?.colorless === true;
   const buffer = terminal.buffer.active;
   const cursorX = buffer.cursorX;
   const cursorY = buffer.cursorY;
@@ -209,6 +240,8 @@ export function serializeTerminalToObject(terminal: Terminal): AnsiOutput {
   const defaultBg = '';
 
   const result: AnsiOutput = [];
+  const scratchA = new Cell();
+  const scratchB = new Cell();
 
   for (let y = 0; y < terminal.rows; y++) {
     const line = buffer.getLine(buffer.viewportY + y);
@@ -218,12 +251,20 @@ export function serializeTerminalToObject(terminal: Terminal): AnsiOutput {
       continue;
     }
 
-    let lastCell = new Cell(null, -1, -1, cursorX, cursorY);
+    let lastCell = scratchA.load(null, -1, -1, cursorX, cursorY);
     let currentText = '';
 
     for (let x = 0; x < terminal.cols; x++) {
       const cellData = line.getCell(x);
-      const cell = new Cell(cellData ?? null, x, y, cursorX, cursorY);
+      // Ping-pong between the two scratch cells: the one lastCell does not
+      // reference is free to be reloaded for this column.
+      const cell = (lastCell === scratchA ? scratchB : scratchA).load(
+        cellData ?? null,
+        x,
+        y,
+        cursorX,
+        cursorY,
+      );
 
       if (x === 0 || cell.equals(lastCell)) {
         currentText += cell.getChars();
@@ -233,7 +274,13 @@ export function serializeTerminalToObject(terminal: Terminal): AnsiOutput {
 
       if (currentText) {
         currentLine.push(
-          buildTokenFromCell(lastCell, currentText, defaultFg, defaultBg),
+          buildTokenFromCell(
+            lastCell,
+            currentText,
+            defaultFg,
+            defaultBg,
+            colorless,
+          ),
         );
       }
       currentText = cell.getChars();
@@ -242,7 +289,13 @@ export function serializeTerminalToObject(terminal: Terminal): AnsiOutput {
 
     if (currentText) {
       currentLine.push(
-        buildTokenFromCell(lastCell, currentText, defaultFg, defaultBg),
+        buildTokenFromCell(
+          lastCell,
+          currentText,
+          defaultFg,
+          defaultBg,
+          colorless,
+        ),
       );
     }
 

@@ -303,6 +303,12 @@ describe('AnthropicOAuthProvider', () => {
     expect(ClipboardService.copyToClipboard).toHaveBeenCalled();
   });
 
+  it('throws when constructed without a TokenStore', () => {
+    expect(
+      () => new AnthropicOAuthProvider(undefined as unknown as TokenStore),
+    ).toThrow(/TokenStore/);
+  });
+
   describe('claudecode identity (@issue:2274)', () => {
     it('exposes claudecode as its public runtime identity name', () => {
       expect(provider.name).toBe('claudecode');
