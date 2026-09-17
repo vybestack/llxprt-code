@@ -87,6 +87,11 @@ export * from './commands/types.js';
 // Export Core Logic (contracts only — implementations moved to the agents package)
 export * from './core/clientContract.js';
 export * from './core/toolSchedulerContract.js';
+
+// Issue #2615 slice E interface contracts: session execution ports.
+export * from './session/sessionExecutionServices.js';
+export * from './session/sessionSchedulerRegistry.js';
+export * from './session/cancellationTree.js';
 export type {
   CancelledToolCall,
   CompletedToolCall,
