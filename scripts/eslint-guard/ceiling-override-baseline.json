@@ -1,0 +1,40 @@
+{
+  "issue": 3718,
+  "entries": [
+    {
+      "files": "packages/*/src/**/*.{test,spec,bun}.{ts,tsx}",
+      "rule": "max-lines-per-function",
+      "reason": "#2970 test files use large setup blocks"
+    },
+    {
+      "files": "scripts/test-audit/scan.ts",
+      "rule": "complexity",
+      "reason": "#3240 single-file AST scanner"
+    },
+    {
+      "files": "scripts/test-audit/scan.ts",
+      "rule": "max-lines",
+      "reason": "#3240 single-file AST scanner"
+    },
+    {
+      "files": "scripts/test-audit/scan.ts",
+      "rule": "max-lines-per-function",
+      "reason": "#3240 single-file AST scanner"
+    },
+    {
+      "files": "scripts/test-audit/scan.ts",
+      "rule": "sonarjs/cognitive-complexity",
+      "reason": "#3240 single-file AST scanner"
+    },
+    {
+      "files": "scripts/tests/**/*.{ts,tsx,js,mjs,cjs}",
+      "rule": "max-lines-per-function",
+      "reason": "#2282 test parity with packages test-file policy"
+    },
+    {
+      "files": "scripts/tests/eslint-guard.test.ts",
+      "rule": "max-lines",
+      "reason": "#2282 exhaustive guard fixture"
+    }
+  ]
+}

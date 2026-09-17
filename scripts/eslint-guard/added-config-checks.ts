@@ -6,6 +6,11 @@
 
 import { CEILING_RULES, SEVERITY_RANK } from './constants.ts';
 import {
+  ceilingOverrideMessage,
+  describeCeilingWaiver,
+  isBaselinedCeilingOverride,
+} from './ceiling-override-scanner.ts';
+import {
   buildRuleState,
   compareRuleConfigChanges,
   extractRuleKey,
@@ -83,6 +88,11 @@ export function checkInlineRulesEntries(
   if (addedInlineEntries.length === 0) {
     return detected;
   }
+  if (state.currentFilesGlobs.length > 0) {
+    for (const added of addedInlineEntries) {
+      checkInlineCeilingOverride(state, added, content, currentLine);
+    }
+  }
   for (const added of addedInlineEntries) {
     detected = checkSingleInlineEntry(
       state,
@@ -93,6 +103,75 @@ export function checkInlineRulesEntries(
     );
   }
   return detected;
+}
+
+/**
+ * #3718: an inline `rules: { 'max-lines': 'off' }` entry in a files-scoped
+ * config block is a per-file ceiling waiver and cannot be excused by a
+ * comment tag unless the files-glob + rule pair is in the baseline.
+ */
+function checkInlineCeilingOverride(
+  state: DiffState,
+  added: { key: string; content: string },
+  content: string,
+  currentLine: number,
+) {
+  const waiver = describeCeilingWaiver(
+    added.content,
+    added.key,
+    null,
+    false,
+  );
+  if (waiver === null) {
+    return;
+  }
+  if (isBaselinedCeilingOverride(state.currentFilesGlobs, waiver.ruleKey)) {
+    return;
+  }
+  addViolation(
+    state.violations,
+    state.file,
+    currentLine,
+    ceilingOverrideMessage(waiver.ruleKey, state.currentFilesGlobs),
+    content,
+  );
+}
+
+/**
+ * #3718: a ceiling rule inside a files-scoped config block that is off, gains
+ * a threshold, or carries a threshold above the repo base violates the guard
+ * EVEN WHEN tagged eslint-policy-allow-off; comments cannot waive it. Only
+ * baseline-listed files-glob + rule pairs are exempt.
+ */
+export function checkFilesScopedCeilingOverride(
+  state: DiffState,
+  content: string,
+  currentLine: number,
+) {
+  if (state.currentFilesGlobs.length === 0) {
+    return;
+  }
+  if (state.rulesBraceDepth !== null) {
+    const waiver = describeCeilingWaiver(
+      content,
+      extractRuleKey(content),
+      state.currentCeilingRuleKey,
+      state.expectingCeilingThreshold,
+    );
+    if (waiver === null) {
+      return;
+    }
+    if (isBaselinedCeilingOverride(state.currentFilesGlobs, waiver.ruleKey)) {
+      return;
+    }
+    addViolation(
+      state.violations,
+      state.file,
+      currentLine,
+      ceilingOverrideMessage(waiver.ruleKey, state.currentFilesGlobs),
+      content,
+    );
+  }
 }
 
 function checkSingleInlineEntry(
