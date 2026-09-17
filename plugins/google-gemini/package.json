@@ -1,0 +1,50 @@
+{
+  "name": "@vybestack/llxprt-plugin-google-gemini",
+  "version": "0.12.0",
+  "description": "Optional LLxprt Code runtime plugin contributing the Google Gemini provider.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24",
+    "bun": ">=1.4.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vybestack/llxprt-code.git",
+    "directory": "plugins/google-gemini"
+  },
+  "llxprt": {
+    "runtimePlugin": true
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "lint": "eslint . --ext .ts",
+    "pack:smoke": "npm pack --dry-run"
+  },
+  "peerDependencies": {
+    "@vybestack/llxprt-code-core": "^0.12.0",
+    "@vybestack/llxprt-code-providers": "^0.12.0"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "@types/node": "^24.2.1",
+    "typescript": "5.8.3"
+  }
+}

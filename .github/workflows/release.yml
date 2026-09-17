@@ -428,6 +428,49 @@ jobs:
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
+      # Runtime plugins (issue #2759) live OUTSIDE the root workspaces, so
+      # they cannot be published with --workspace. They publish from their own
+      # directories, driven by the explicit first-party list in
+      # scripts/utils/release-packages.ts (FIRST_PARTY_RUNTIME_PLUGIN_RELEASES):
+      # base packages first, then plugins, in list order, never by scanning
+      # the plugins/ directory. Plugins peer-depend on host packages, so they
+      # publish only after the CLI step above.
+      - name: Version runtime plugin packages
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.RELEASE_VERSION }}
+        run: |
+          for plugin in plugins/google-gemini plugins/google-mcp-auth; do
+            npm version "$RELEASE_VERSION" --no-git-tag-version --allow-same-version --prefix "$plugin"
+          done
+
+      - name: Set up Bun for plugin builds
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
+        with:
+          # Plugin lockfiles are lockfileVersion 2 (bun >= 1.4.2) because
+          # plugin-local installs need bun 1.4.2's handling of unresolved
+          # root peers (see plugins/README.md). Everything after this point
+          # is plugin builds and npm publishes; the base-CLI build above
+          # already ran under the repo-wide .bun-version pin.
+          bun-version: '1.4.2'
+
+      - name: Build runtime plugin packages
+        if: ${{ steps.duplicate_check.outputs.is_duplicate != 'true' }}
+        run: |
+          for plugin in plugins/google-gemini plugins/google-mcp-auth; do
+            (cd "$plugin" && bun install --omit=peer && bun run build)
+          done
+
+      - name: Publish @vybestack/llxprt-plugin-google-gemini
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
+        working-directory: plugins/google-gemini
+        run: npm publish --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+
+      - name: Publish @vybestack/llxprt-plugin-google-mcp-auth
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
+        working-directory: plugins/google-mcp-auth
+        run: npm publish --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+
       - name: Wait for npm propagation
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.vars.outputs.is_nightly == 'false' }}
         run: |

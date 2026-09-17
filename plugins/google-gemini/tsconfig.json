@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "incremental": false,
+    "noEmit": true,
+    "lib": ["DOM", "DOM.Iterable", "ES2021", "ES2022.Error"],
+    "types": ["node", "bun-types/test", "bun-types/test-globals"],
+    "baseUrl": ".",
+    "paths": {
+      "@vybestack/llxprt-code-core": ["../../packages/core/index.ts"],
+      "@vybestack/llxprt-code-core/*": ["../../packages/core/src/*"],
+      "@vybestack/llxprt-code-providers": ["../../packages/providers/index.ts"],
+      "@vybestack/llxprt-code-providers/composition.js": [
+        "../../packages/providers/src/composition/index.ts"
+      ],
+      "@vybestack/llxprt-code-providers/*": ["../../packages/providers/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}
