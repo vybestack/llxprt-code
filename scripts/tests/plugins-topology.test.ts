@@ -26,9 +26,39 @@ import {
   FIRST_PARTY_RUNTIME_PLUGIN_RELEASES,
   RELEASE_PUBLISH_STEP_PREFIX,
 } from '../utils/release-packages.ts';
+import { asString } from './typed-test-helpers.ts';
 
 const thisFile = fileURLToPath(import.meta.url);
 const repoRoot = resolve(thisFile, '..', '..', '..');
+
+/**
+ * The runtime (non-host) dependency contract per plugin. Since #2763 the
+ * google-gemini plugin is the single home of the Gemini provider, so it owns
+ * the `@ai-sdk/google` dependency; google-mcp-auth stays dependency-free.
+ * Host packages appear ONLY under peerDependencies — never here, never under
+ * devDependencies.
+ */
+const EXPECTED_RUNTIME_DEPENDENCIES: Readonly<
+  Record<string, Readonly<Record<string, string>>>
+> = {
+  '@vybestack/llxprt-plugin-google-gemini': {
+    '@ai-sdk/google': '4.0.56',
+  },
+  '@vybestack/llxprt-plugin-google-mcp-auth': {},
+};
+
+function expectedRuntimeDependencies(
+  releaseName: string,
+): Readonly<Record<string, string>> {
+  const expected = EXPECTED_RUNTIME_DEPENDENCIES[releaseName];
+  if (expected === undefined) {
+    throw new Error(
+      `no expected runtime-dependency contract for '${releaseName}'; ` +
+        'extend EXPECTED_RUNTIME_DEPENDENCIES alongside the release list.',
+    );
+  }
+  return expected;
+}
 
 interface RootManifest {
   workspaces?: unknown;
@@ -129,7 +159,7 @@ describe('each plugin context is a self-contained release unit', () => {
     }
   });
 
-  it('declares host packages as peerDependencies, never runtime dependencies', () => {
+  it('declares host packages only under peerDependencies; runtime dependencies carry no host packages', () => {
     for (const release of FIRST_PARTY_RUNTIME_PLUGIN_RELEASES) {
       const manifest = readJson(
         join(pluginDir(release.dir), 'package.json'),
@@ -143,10 +173,20 @@ describe('each plugin context is a self-contained release unit', () => {
       expect(peers['@vybestack/llxprt-code-providers']).toMatch(
         /^\^0\.12\.0$/,
       );
-      const runtimeDeps = Object.keys(
-        (manifest.dependencies as Record<string, string>) ?? {},
+      // A non-host runtime dependencies section is part of the contract:
+      // google-gemini must ship @ai-sdk/google (it owns the Gemini provider
+      // since #2763), google-mcp-auth must keep the section empty. Either
+      // way, no host package may appear as a runtime dependency.
+      const runtimeDeps = (manifest.dependencies ?? {}) as Record<
+        string,
+        string
+      >;
+      expect(runtimeDeps).toStrictEqual(
+        expectedRuntimeDependencies(release.name),
       );
-      expect(runtimeDeps).toStrictEqual([]);
+      expect(
+        Object.keys(runtimeDeps).filter((dep) => dep.startsWith('@vybestack/')),
+      ).toStrictEqual([]);
     }
   });
 
@@ -166,7 +206,8 @@ describe('each plugin context is a self-contained release unit', () => {
       // Host packages must NOT be linked here: a relative file: dev link
       // makes bun re-resolve the host packages' own unpublished workspace
       // dependencies and the install fails (issue #2759). The repo context
-      // provides host types via tsconfig paths instead.
+      // provides host types via tsconfig paths instead. Runtime dependencies
+      // are pinned per release by the peerDependencies test above.
       expect(devDeps['@vybestack/llxprt-code-core']).toBeUndefined();
       expect(devDeps['@vybestack/llxprt-code-providers']).toBeUndefined();
       expect(Object.keys(devDeps).sort()).toStrictEqual([
@@ -174,9 +215,6 @@ describe('each plugin context is a self-contained release unit', () => {
         '@types/node',
         'typescript',
       ]);
-      expect(
-        Object.keys((manifest.dependencies as Record<string, string>) ?? {}),
-      ).toStrictEqual([]);
     }
   });
 
@@ -210,15 +248,17 @@ describe('each plugin context is a self-contained release unit', () => {
           string,
           {
             name?: string;
+            dependencies?: Record<string, unknown>;
             devDependencies?: Record<string, unknown>;
+            peerDependencies?: Record<string, unknown>;
           }
         >;
         packages?: Record<string, unknown>;
       };
       const rootEntry = lock.workspaces?.[''];
       expect(rootEntry?.name).toBe(release.name);
-      // The install is toolchain-only: `bun install --omit=peer` inside the
-      // plugin directory (issue #2759). Peers are provided by the host at
+      // The dev install is toolchain-only: `bun install --omit=peer` inside
+      // the plugin directory (issue #2759). Peers are provided by the host at
       // real runtime; no registry publish of the host packages at these
       // caret ranges exists to resolve them during development.
       const rootDevDeps = (rootEntry?.devDependencies ?? {}) as Record<
@@ -230,15 +270,20 @@ describe('each plugin context is a self-contained release unit', () => {
         '@types/node',
         'typescript',
       ]);
+      // Runtime dependencies in the lock mirror the manifest contract:
+      // google-gemini pins @ai-sdk/google, google-mcp-auth stays empty.
+      const rootDeps = (rootEntry?.dependencies ?? {}) as Record<
+        string,
+        unknown
+      >;
+      expect(rootDeps).toStrictEqual(expectedRuntimeDependencies(release.name));
       // Peers stay recorded as the consumer-facing contract on the root
       // workspace entry, and the resolved-package graph contains NO host
       // resolutions at all: neither registry entries (the caret ranges can
       // never truthfully resolve today) nor repo-relative file: links
       // (linking hosts re-resolves their unpublished workspace deps and
       // breaks the install).
-      const rootPeers = (rootEntry as unknown as {
-        peerDependencies?: Record<string, unknown>;
-      }).peerDependencies;
+      const rootPeers = rootEntry?.peerDependencies;
       expect(Object.keys(rootPeers ?? {}).sort()).toStrictEqual([
         '@vybestack/llxprt-code-core',
         '@vybestack/llxprt-code-providers',
@@ -246,6 +291,27 @@ describe('each plugin context is a self-contained release unit', () => {
       const packages = (lock.packages ?? {}) as Record<string, unknown>;
       const serialized = JSON.stringify(packages);
       expect(serialized).not.toContain('@vybestack/');
+      // Where the manifest declares the Google SDK, the lock resolves it at
+      // the pinned version together with its transitive provider packages.
+      const expectedDeps = expectedRuntimeDependencies(release.name);
+      const pinnedSdk = expectedDeps['@ai-sdk/google'];
+      if (pinnedSdk !== undefined) {
+        for (const required of [
+          '@ai-sdk/google',
+          '@ai-sdk/provider',
+          '@ai-sdk/provider-utils',
+        ]) {
+          expect(required in packages).toBe(true);
+        }
+        const sdkEntry = packages['@ai-sdk/google'] as unknown;
+        if (!Array.isArray(sdkEntry) || sdkEntry.length === 0) {
+          throw new Error(
+            `plugin bun.lock for '${release.name}' has no resolved ` +
+              '@ai-sdk/google entry',
+          );
+        }
+        expect(asString(sdkEntry[0])).toBe(`@ai-sdk/google@${pinnedSdk}`);
+      }
     }
   });
 });

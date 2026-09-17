@@ -60,7 +60,9 @@ export function createBuiltinProviderContributionRegistry(): ProviderContributio
  * Builds an immutable provider contribution registry from loaded runtime plugins.
  * Built-in contributions come first (in their declaration order), then plugin
  * contributions in plugin order (import order). Every collision class is rejected
- * with an error naming the colliding ids and the contributing plugins or specifiers.
+ * with an error naming the colliding ids and the contributing plugins or specifiers;
+ * the one exemption is a contributed alias reusing a provider id contributed by the
+ * SAME plugin, which is that provider surfaced to users rather than a shadow of it.
  * Provider id lookups and collisions are case-insensitive, matching the existing
  * `entry.config.baseProvider.toLowerCase()` dispatch.
  */
@@ -132,9 +134,19 @@ function collectPluginAliases(
             `plugin '${owner}' and plugin '${plugin.manifest.id}'.`,
         );
       }
-      if (providers.has(aliasKey)) {
-        // ProviderManager keys providers by name, so an alias that shadows a
-        // provider id would replace that provider outright.
+      // ProviderManager keys providers by name, so an alias that shadows a
+      // provider id would replace that provider outright — unless the id
+      // was contributed by this same plugin: raw contributions never
+      // register a provider by name (they surface only through alias
+      // construction), so such an alias IS the plugin's provider surfaced
+      // to users. The google-gemini plugin depends on this shape: it
+      // contributes provider id 'gemini' and the built-in 'gemini' alias
+      // (#2763). Other plugins' ids and built-in ids stay rejected.
+      const registered = providers.get(aliasKey);
+      const samePluginProvider =
+        registered?.origin.kind === 'plugin' &&
+        registered.origin.pluginId === plugin.manifest.id;
+      if (providers.has(aliasKey) && !samePluginProvider) {
         throw new Error(
           `Contributed alias '${alias.alias}' from plugin ` +
             `'${plugin.manifest.id}' collides with provider id ` +

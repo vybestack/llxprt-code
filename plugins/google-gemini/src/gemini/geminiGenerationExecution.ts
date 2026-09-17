@@ -11,7 +11,7 @@ import type {
 } from './geminiWireTypes.js';
 import { type Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { type NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import { type NormalizedGenerateChatOptions } from '@vybestack/llxprt-code-providers/BaseProvider.js';
 import {
   bestEffortDump,
   dumpSDKErrorRequestResponse,
@@ -19,7 +19,7 @@ import {
   dumpSDKResponseContext,
   wrapStreamWithDump,
   wrapStreamWithSDKErrorDump,
-} from '../utils/dumpSDKContext.js';
+} from '@vybestack/llxprt-code-providers/utils/dumpSDKContext.js';
 import { type ResponseToChunksMapper } from './geminiResponseMapper.js';
 
 /** Result of a generation execution path. */

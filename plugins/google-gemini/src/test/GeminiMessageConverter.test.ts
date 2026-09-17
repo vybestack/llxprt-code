@@ -9,7 +9,7 @@ import type {
   IContent,
   MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { convertHistoryToGeminiFormat } from '@vybestack/llxprt-code-providers/gemini/GeminiMessageConverter.js';
+import { convertHistoryToGeminiFormat } from '../gemini/GeminiMessageConverter.js';
 
 describe('GeminiMessageConverter', () => {
   it('should normalize Gemini 3 tool-response media through shared media conversion', () => {

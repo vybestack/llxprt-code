@@ -7,6 +7,8 @@
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth/index.js';
+import { GeminiProvider } from './gemini/GeminiProvider.js';
 import { llxprtRuntimePlugin } from './index.js';
 
 interface PluginManifest {
@@ -33,21 +35,82 @@ describe('@vybestack/llxprt-plugin-google-gemini manifest', () => {
     expect(llxprtRuntimePlugin.providers.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('contributes the placeholder google-gemini provider factory', () => {
+  it('contributes the gemini provider backed by the extracted GeminiProvider', () => {
     const [contribution] = llxprtRuntimePlugin.providers;
-    expect(contribution?.providerId).toBe('google-gemini');
+    expect(contribution?.providerId).toBe('gemini');
     expect(typeof contribution?.createProvider).toBe('function');
+
+    const provider = contribution?.createProvider(
+      {
+        alias: 'gemini',
+        config: {
+          name: 'gemini',
+          baseProvider: 'gemini',
+          'base-url': 'https://generativelanguage.googleapis.com',
+        },
+        filePath: 'plugin-builtin:gemini',
+        source: 'plugin',
+      },
+      {
+        openaiApiKey: undefined,
+        openaiBaseUrl: undefined,
+        openaiProviderConfig: {},
+          oauthManager: undefined as unknown as OAuthManager,
+        config: undefined,
+        authOnlyEnabled: false,
+      },
+    );
+    expect(provider).toBeInstanceOf(GeminiProvider);
+    expect(provider.name).toBe('gemini');
   });
 
-  it('fails provider construction actionably while the implementation is not extracted', () => {
-    const createProvider = llxprtRuntimePlugin.providers[0]?.createProvider;
-    expect(createProvider).toBeDefined();
-    // The placeholder factory contractually never reads its arguments: it
-    // exists so the manifest passes host validation while the Gemini
-    // production extraction is pending. The unusable arguments carry `never`
-    // for that reason.
-    expect(() => createProvider?.(undefined as never, undefined as never)).toThrow(
-      /gemini/i,
-    );
+  it('contributes the built-in gemini alias config byte-for-byte from the former base alias', () => {
+    const [contribution] = llxprtRuntimePlugin.providers;
+    expect(contribution?.builtinAliases).toStrictEqual([
+      {
+        alias: 'gemini',
+        config: {
+          name: 'gemini',
+          modelsDevProviderId: 'google',
+          description: 'Google Gemini API',
+          baseProvider: 'gemini',
+          'base-url': 'https://generativelanguage.googleapis.com',
+          defaultModel: 'gemini-2.5-pro',
+          apiKeyEnv: 'GEMINI_API_KEY',
+        },
+      },
+    ]);
+  });
+
+  it('binds the alias api key from apiKeyEnv through the host helper', () => {
+    process.env.GEMINI_API_KEY = 'sk-plugin-alias-key';
+    try {
+      const [contribution] = llxprtRuntimePlugin.providers;
+      const provider = contribution?.createProvider(
+        {
+          alias: 'gemini',
+          config: {
+            name: 'gemini',
+            baseProvider: 'gemini',
+            apiKeyEnv: 'GEMINI_API_KEY',
+          },
+          filePath: 'plugin-builtin:gemini',
+          source: 'plugin',
+        },
+        {
+          openaiApiKey: undefined,
+          openaiBaseUrl: undefined,
+          openaiProviderConfig: {},
+        // The gemini factory never reads the OAuth manager, so undefined stands
+        // in for it; the context type requires a value, hence the cast.
+        oauthManager: undefined as unknown as OAuthManager,
+          config: undefined,
+          authOnlyEnabled: false,
+        },
+      );
+      expect(provider).toBeInstanceOf(GeminiProvider);
+    } finally {
+      delete process.env.GEMINI_API_KEY;
+    }
   });
 });

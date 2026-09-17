@@ -47,12 +47,6 @@ void mock.module('../ProviderManager.js', () => {
   }
   return { ProviderManager: MockProviderManager };
 });
-void mock.module('../gemini/GeminiProvider.js', () => {
-  class MockGeminiProvider {
-    setConfig(): void {}
-  }
-  return { GeminiProvider: MockGeminiProvider };
-});
 void mock.module('../openai/OpenAIProvider.js', () => ({
   OpenAIProvider: makeWrapper(() => openaiCtorState),
 }));

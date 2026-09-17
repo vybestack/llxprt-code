@@ -7,7 +7,7 @@
 import type { Part, Schema } from './geminiWireTypes.js';
 import { SchemaType } from './geminiWireTypes.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { type NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import { type NormalizedGenerateChatOptions } from '@vybestack/llxprt-code-providers/BaseProvider.js';
 import { convertHistoryToGeminiFormat } from './GeminiMessageConverter.js';
 import {
   ensureActiveLoopHasThoughtSignatures,

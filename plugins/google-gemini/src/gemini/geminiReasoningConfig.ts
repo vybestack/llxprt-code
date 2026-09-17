@@ -11,7 +11,7 @@ import type {
   ReasoningEnabledMap,
   ReasoningEnabledWireFormat,
 } from '@vybestack/llxprt-code-settings';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { NormalizedGenerateChatOptions } from '@vybestack/llxprt-code-providers/BaseProvider.js';
 import {
   isPlainRecord,
   readEffortMap,
@@ -22,9 +22,9 @@ import {
   readOptionalEffort,
   readOptionalPositiveInteger,
   selectBehaviorValue,
-} from '../reasoning/reasoning-behavior-parsing.js';
-import type { DumpMode } from '../utils/dumpContext.js';
-import { shouldDumpSDKContext } from '../utils/dumpSDKContext.js';
+} from '@vybestack/llxprt-code-providers/reasoning/reasoning-behavior-parsing.js';
+import type { DumpMode } from '@vybestack/llxprt-code-providers/utils/dumpContext.js';
+import { shouldDumpSDKContext } from '@vybestack/llxprt-code-providers/utils/dumpSDKContext.js';
 
 export interface ReasoningConfig {
   /**

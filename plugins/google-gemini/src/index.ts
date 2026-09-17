@@ -5,29 +5,63 @@
  */
 
 /**
- * Google Gemini runtime plugin (issue #2759 scaffolding).
+ * Google Gemini runtime plugin (#2763).
  *
  * The host loader (`@vybestack/llxprt-code-providers` composition barrel)
  * imports this package's named `llxprtRuntimePlugin` export and validates it
- * against manifest v1 before anything is constructed, so the manifest is the
- * entire host contract this package must satisfy today.
+ * against manifest v1 before anything is constructed.
  *
- * The provider id is a placeholder. Contributing `gemini` now would collide
- * with the built-in `gemini` contribution and make this plugin unloadable
- * alongside the base CLI; the built-in is removed only by the Gemini
- * production extraction (#2763), which retires this placeholder in favor of
- * the real `gemini` provider id, built-in alias, and alias-aware factory.
+ * This plugin is the single home of the Gemini provider implementation: it
+ * contributes the `gemini` provider id, the built-in `gemini` alias (byte-for-
+ * byte the alias config the base package used to ship), and an alias-aware
+ * factory adapted from the former base `createGeminiAliasProvider`. The
+ * alias-construction helpers it consumes are provider-agnostic host utilities
+ * exported from the `@vybestack/llxprt-code-providers/composition.js` subpath;
+ * this package does not re-export them.
  */
+import { GeminiProvider } from './gemini/GeminiProvider.js';
+import {
+  bindAliasMediaTransportCapabilities,
+  bindProviderAliasIdentity,
+  enforceAliasAuthOnly,
+  overrideAliasDefaultModel,
+  resolveAliasEnvApiKey,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import type {
+  ProviderAliasEntry,
   ProviderAliasFactory,
+  ProviderFactoryContext,
   RuntimePluginManifest,
 } from '@vybestack/llxprt-code-providers/composition.js';
 
-const createPlaceholderGeminiProvider: ProviderAliasFactory = () => {
-  throw new Error(
-    "The @vybestack/llxprt-plugin-google-gemini plugin does not contribute a usable 'google-gemini' provider yet. " +
-      'Provider construction arrives with the Gemini extraction; use the built-in gemini provider.',
+const createGeminiPluginProvider: ProviderAliasFactory = (
+  entry: ProviderAliasEntry,
+  context: ProviderFactoryContext,
+) => {
+  const config = context.config;
+
+  const aliasApiKey = resolveAliasEnvApiKey(entry, context.authOnlyEnabled);
+
+  const resolvedBaseUrl = entry.config['base-url'];
+
+  const provider = new GeminiProvider(
+    aliasApiKey ?? undefined,
+    resolvedBaseUrl,
+    config,
   );
+
+  enforceAliasAuthOnly(provider, context.authOnlyEnabled);
+
+  if (config && typeof provider.setConfig === 'function') {
+    provider.setConfig(config);
+  }
+
+  overrideAliasDefaultModel(provider, entry);
+
+  bindProviderAliasIdentity(provider, entry.alias);
+  bindAliasMediaTransportCapabilities(provider, entry);
+
+  return provider;
 };
 
 export const llxprtRuntimePlugin = {
@@ -35,8 +69,22 @@ export const llxprtRuntimePlugin = {
   id: '@vybestack/llxprt-plugin-google-gemini',
   providers: [
     {
-      providerId: 'google-gemini',
-      createProvider: createPlaceholderGeminiProvider,
+      providerId: 'gemini',
+      createProvider: createGeminiPluginProvider,
+      builtinAliases: [
+        {
+          alias: 'gemini',
+          config: {
+            name: 'gemini',
+            modelsDevProviderId: 'google',
+            description: 'Google Gemini API',
+            baseProvider: 'gemini',
+            'base-url': 'https://generativelanguage.googleapis.com',
+            defaultModel: 'gemini-2.5-pro',
+            apiKeyEnv: 'GEMINI_API_KEY',
+          },
+        },
+      ],
     },
   ],
 } satisfies RuntimePluginManifest;

@@ -10,10 +10,6 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { convertToAnthropicMessages } from '../anthropic/AnthropicMessageNormalizer.js';
 import {
-  buildGeminiDumpContents,
-  isGeminiCompatibleProvider,
-} from '../gemini/geminiDumpConversion.js';
-import {
   buildMessagesWithReasoning,
   type ReasoningMessageOptions,
 } from '../openai/OpenAIRequestBuilder.js';
@@ -150,17 +146,10 @@ export function buildProviderDumpBody(params: {
       params.model,
     );
   }
-  if (isGeminiCompatibleProvider(params.providerName)) {
-    return withModel(
-      {
-        contents: buildGeminiDumpContents(
-          params.history,
-          params.model,
-          params.config,
-        ),
-      },
-      params.model,
-    );
-  }
+  // Gemini-family provider names intentionally fall through to the default
+  // `{ history }` body: Gemini wire conversion is owned by the
+  // @vybestack/llxprt-plugin-google-gemini plugin (#2763), never by the base
+  // package. Callers that need a real Gemini body must ask the runtime
+  // provider (see the CLI dumpcontext command).
   return { history: params.history };
 }

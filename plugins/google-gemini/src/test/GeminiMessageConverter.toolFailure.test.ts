@@ -19,7 +19,7 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ToolCallRequestInfo } from '@vybestack/llxprt-code-core/core/turn.js';
 import { createErrorResponse } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
-import { convertHistoryToGeminiFormat } from '@vybestack/llxprt-code-providers/gemini/GeminiMessageConverter.js';
+import { convertHistoryToGeminiFormat } from '../gemini/GeminiMessageConverter.js';
 
 const REMEDY = 'File not found; check the path and try read_file again.';
 const TERSE = 'file_not_found: /missing/path';

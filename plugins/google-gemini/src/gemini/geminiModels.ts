@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type IModel } from '../IModel.js';
+import { type IModel } from '@vybestack/llxprt-code-providers/IModel.js';
 import type { GeminiAuthMode } from './geminiAuth.js';
 
 const MODEL_LIST_TIMEOUT_MS = 10_000;

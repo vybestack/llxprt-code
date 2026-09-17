@@ -38,6 +38,9 @@
     "lint": "eslint . --ext .ts",
     "pack:smoke": "npm pack --dry-run"
   },
+  "dependencies": {
+    "@ai-sdk/google": "4.0.56"
+  },
   "peerDependencies": {
     "@vybestack/llxprt-code-core": "^0.12.0",
     "@vybestack/llxprt-code-providers": "^0.12.0"

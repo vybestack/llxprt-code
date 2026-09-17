@@ -4,15 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type IModel } from '../IModel.js';
+import { type IModel } from '@vybestack/llxprt-code-providers/IModel.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   BaseProvider,
   type BaseProviderConfig,
   type NormalizedGenerateChatOptions,
-} from '../BaseProvider.js';
-import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
+} from '@vybestack/llxprt-code-providers/BaseProvider.js';
+import { declaredMediaTransportCapabilities } from '@vybestack/llxprt-code-providers/providerMediaTransportCapabilities.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type {
@@ -45,12 +45,14 @@ import {
   type GeminiGenerationResult,
   type NonOAuthContentGenerator,
 } from './geminiGenerationExecution.js';
-import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
+import { requireAssembledSystemInstruction } from '@vybestack/llxprt-code-providers/utils/systemPromptPlacement.js';
+import { buildGeminiDumpContents } from './geminiDumpConversion.js';
+import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import {
   finishMediaRequest,
   type MediaRequestOutcome,
   resolveRequestMedia,
-} from '../utils/request-media-resolution.js';
+} from '@vybestack/llxprt-code-providers/utils/request-media-resolution.js';
 
 /**
  * Represents the default Gemini provider.
@@ -112,6 +114,21 @@ export class GeminiProvider extends BaseProvider {
     this.getLogger().debug(
       () => 'Cache clear called on stateless provider - no operation',
     );
+  }
+
+  /**
+   * Builds the Gemini wire body for /dumpcontext. This lives on the provider
+   * (not in the base request-conversion dispatcher) so the CLI can obtain the
+   * dump from the runtime provider instance without the base package ever
+   * importing plugin-owned code (#2763).
+   */
+  buildContextDumpBody(
+    history: IContent[],
+    model?: string,
+    config?: ToolOutputSettingsProvider,
+  ): Record<string, unknown> {
+    const contents = buildGeminiDumpContents(history, model, config);
+    return model ? { model, contents } : { contents };
   }
 
   protected override supportsOAuth(): boolean {

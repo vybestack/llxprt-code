@@ -8,7 +8,7 @@ import type { GenerateContentResponse, Part } from './geminiWireTypes.js';
 import { type Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { type NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import { type NormalizedGenerateChatOptions } from '@vybestack/llxprt-code-providers/BaseProvider.js';
 import { type ResponseToChunksMapper } from './geminiResponseMapper.js';
 import {
   type ReasoningConfig,

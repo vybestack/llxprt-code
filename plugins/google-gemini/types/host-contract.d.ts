@@ -16,11 +16,46 @@
  * (a plugin-local build must not need the host repo built).
  */
 
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+
+/** Mirrors providers/src/composition/providerAliases.ts (subset used here). */
+export interface ProviderAliasConfig {
+  name?: string;
+  baseProvider: string;
+  'base-url'?: string;
+  defaultModel?: string;
+  description?: string;
+  apiKeyEnv?: string;
+  modelsDevProviderId?: string | null;
+}
+
+/** Mirrors providers/src/composition/providerAliases.ts. */
+export interface ProviderAliasEntry {
+  alias: string;
+  config: ProviderAliasConfig;
+  filePath: string;
+}
+
+/** Mirrors providers/src/composition/runtimePlugins/types.ts. */
+export interface ProviderFactoryContext {
+  readonly openaiApiKey: string | undefined;
+  readonly openaiBaseUrl: string | undefined;
+  readonly oauthManager: unknown;
+  readonly config: Config | undefined;
+  readonly authOnlyEnabled: boolean;
+}
+
 /** Mirrors providers/src/composition/runtimePlugins/types.ts. */
 export type ProviderAliasFactory = (
-  entry: never,
-  context: never,
-) => never;
+  entry: ProviderAliasEntry,
+  context: ProviderFactoryContext,
+) => unknown;
+
+/** Mirrors providers/src/composition/runtimePlugins/types.ts. */
+export interface RuntimeContributedAlias {
+  readonly alias: string;
+  readonly config: ProviderAliasConfig;
+}
 
 /** Mirrors providers/src/composition/runtimePlugins/types.ts. */
 export interface RuntimePluginManifest {
@@ -29,5 +64,31 @@ export interface RuntimePluginManifest {
   readonly providers: readonly {
     readonly providerId: string;
     readonly createProvider: ProviderAliasFactory;
+    readonly builtinAliases?: readonly RuntimeContributedAlias[];
   }[];
 }
+
+/**
+ * Host alias-construction helpers (provider-agnostic) that the Gemini factory
+ * consumes. Signatures mirror providers/src/composition/aliasProviderFactory.ts.
+ */
+export declare function resolveAliasEnvApiKey(
+  entry: ProviderAliasEntry,
+  authOnlyEnabled: boolean,
+): string | undefined;
+export declare function enforceAliasAuthOnly(
+  provider: unknown,
+  authOnlyEnabled: boolean,
+): void;
+export declare function overrideAliasDefaultModel(
+  provider: unknown,
+  entry: ProviderAliasEntry,
+): void;
+export declare function bindProviderAliasIdentity(
+  provider: unknown,
+  alias: string,
+): void;
+export declare function bindAliasMediaTransportCapabilities(
+  provider: unknown,
+  entry: ProviderAliasEntry,
+): void;

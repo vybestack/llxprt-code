@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { isGemini2Model, isGemini3Model } from '@vybestack/llxprt-code-providers/gemini/modelClassification.js';
+import { isGemini2Model, isGemini3Model } from '../gemini/modelClassification.js';
 
 describe('isGemini2Model()', () => {
   it('returns true for gemini-2.5-pro', () => {

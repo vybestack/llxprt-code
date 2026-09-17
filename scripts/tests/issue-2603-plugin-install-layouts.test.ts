@@ -6,27 +6,39 @@
 
 /**
  * Install-layout + runtime-resolution coverage for the optional runtime
- * plugin topology (issue #2759), extending the issue-2603 artifact suites.
+ * plugin topology (issue #2759), extending the issue-2603 artifact suites and
+ * pinning the plugin-era Gemini contract (#2763).
  *
  * The sibling issue-2603 suites prove what a BASE install puts on disk. This
  * suite proves the plugin dimension of the same contract using the same
  * techniques: real on-disk fixtures shaped like a global install, no network,
  * no repo-root mutation:
  *
- *   base only                → discovery finds nothing, requesting Gemini is
- *                              not resolvable (loader semantics: absent).
+ *   base only                → discovery finds nothing; there is NO built-in
+ *                              `gemini` provider or alias (the base stopped
+ *                              shipping one in #2763); a leftover `gemini`
+ *                              alias fails with an error naming the plugin
+ *                              that provides it.
  *   base + Gemini plugin     → the installed package is discovered and the
- *                              real loader validates its manifest and
- *                              registers its factory; built-ins survive.
+ *                              real loader validates its manifest, registers
+ *                              the `gemini` provider id as plugin-origin, and
+ *                              contributes the `gemini` builtin alias with
+ *                              the exact config the base used to ship.
  *   base + google-mcp-auth   → same, for the reserved stub context.
+ *   base + malformed plugin  → a discovered plugin exporting an incompatible
+ *                              manifest fails actionably, never silently.
  *
  * Discovery and loading run through the REAL landed #2758 code paths
  * (`discoverRuntimePluginPackages` + `loadRuntimePlugins`); only the module
  * import boundary is aimed at the fixture-installed package copy, which is
  * exactly the dependency-injection seam the loader documents for callers.
- * The npm-context check (what `npm pack` actually ships) runs `npm pack
- * --dry-run --json` per plugin and pins the published file set to the
- * allow-listed layout.
+ * The fixture materializes the plugin's full source tree as `dist` (bun
+ * executes TypeScript directly) and links the plugin's own installed
+ * dependencies plus the host peer packages, so the imported module graph is
+ * the one a real global install would execute — including the plugin's
+ * `@ai-sdk/google` runtime dependency. The npm-context check (what `npm pack`
+ * actually ships) runs `npm pack --dry-run --json` per plugin and pins the
+ * published file set to the allow-listed layout.
  */
 
 import { describe, expect, it } from 'bun:test';
@@ -39,16 +51,22 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { OAuthManager, createTokenStore } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   discoverRuntimePluginPackages,
   loadRuntimePlugins,
+  registerAliasProviders,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import type { RuntimePluginDiscoveryDeps } from '@vybestack/llxprt-code-providers/composition.js';
+import type { ProviderAliasEntry } from '@vybestack/llxprt-code-providers/composition.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   FIRST_PARTY_RUNTIME_PLUGIN_RELEASES,
   type FirstPartyRuntimePluginRelease,
@@ -75,13 +93,22 @@ const isWindows = process.platform === 'win32';
  * what `npm i -g` produces:
  *
  *   <root>/lib/node_modules/@vybestack/llxprt-code/{package.json,dist/index.js}
- *   <root>/lib/node_modules/@vybestack/llxprt-plugin-<name>/{package.json,README.md,dist/index.ts}
+ *   <root>/lib/node_modules/@vybestack/llxprt-plugin-<name>/{package.json,README.md,dist/**}
+ *   <root>/lib/node_modules/@vybestack/llxprt-plugin-<name>/node_modules/**
+ *   <root>/lib/node_modules/@vybestack/llxprt-code-{core,providers,settings}
  *
  * The CLI package carries no runtime-plugin marker; only real plugin packages
  * (copied verbatim from the repo plugin contexts) opt in via the marker. The
- * plugin's `dist` entry is materialized from the plugin source because bun
- * executes TypeScript directly and the shipped tarball's compiled entry has
- * the same named export; nothing in this suite depends on a prior build.
+ * plugin's `dist` entry is materialized from the plugin's full source tree
+ * because bun executes TypeScript directly and the shipped tarball's compiled
+ * entry has the same named export; nothing in this suite depends on a prior
+ * build. The plugin's already-installed local dependencies (pinned by the
+ * plugin context's own bun.lock — for google-gemini that includes
+ * `@ai-sdk/google`) are linked into the plugin's nested `node_modules`, and
+ * the host peer packages are linked at the top level, exactly where a real
+ * global install resolves them from. Without the local-dependency link the
+ * plugin module graph cannot resolve `@ai-sdk/google` from a /tmp fixture
+ * (the root cause of the #2763 layout-test failures).
  */
 function buildInstalledFixture(plugins: readonly string[]): string {
   const root = mkdtempSync(join(tmpdir(), 'llxprt-plugin-layouts-'));
@@ -99,6 +126,8 @@ function buildInstalledFixture(plugins: readonly string[]): string {
   );
   writeFileSync(join(cliDir, 'dist', 'index.js'), '// inert CLI entry\n');
 
+  linkHostPeerPackages(nodeModules);
+
   for (const pluginDir of plugins) {
     const sourceDir = join(repoRoot, 'plugins', pluginDir);
     const manifest = parseJsonObjectFile(join(sourceDir, 'package.json'));
@@ -107,13 +136,102 @@ function buildInstalledFixture(plugins: readonly string[]): string {
     mkdirSync(join(destDir, 'dist'), { recursive: true });
     cpSync(join(sourceDir, 'package.json'), join(destDir, 'package.json'));
     cpSync(join(sourceDir, 'README.md'), join(destDir, 'README.md'));
-    cpSync(
-      join(sourceDir, 'src', 'index.ts'),
-      join(destDir, 'dist', 'index.ts'),
-    );
+    copyPluginSourceTree(sourceDir, destDir);
+    linkPluginLocalDependencies(sourceDir, destDir);
   }
 
   return root;
+}
+
+/**
+ * Copies the plugin's TypeScript source tree into the fixture's `dist`,
+ * excluding test files (tests never ship; the installed copy mirrors dist).
+ */
+function copyPluginSourceTree(sourceDir: string, destDir: string): void {
+  const srcDir = join(sourceDir, 'src');
+  cpSync(srcDir, join(destDir, 'dist'), {
+    recursive: true,
+    filter: (source: string): boolean => {
+      const relativePath = relative(srcDir, source);
+      if (relativePath === '') {
+        return true;
+      }
+      if (relativePath.endsWith('.test.ts')) {
+        return false;
+      }
+      return relativePath.split(sep)[0] !== 'test';
+    },
+  });
+}
+
+/**
+ * Host packages the plugin's module graph resolves against. In a real global
+ * install the host provides the plugin's peer dependencies at the top-level
+ * node_modules; the fixture mirrors that shape.
+ */
+const HOST_PEER_PACKAGES = [
+  '@vybestack/llxprt-code-core',
+  '@vybestack/llxprt-code-providers',
+  '@vybestack/llxprt-code-settings',
+] as const;
+
+function linkHostPeerPackages(nodeModules: string): void {
+  const scopedDir = join(nodeModules, '@vybestack');
+  mkdirSync(scopedDir, { recursive: true });
+  for (const hostPackage of HOST_PEER_PACKAGES) {
+    const unscoped = hostPackage.split('/')[1];
+    const repoLink = join(repoRoot, 'node_modules', '@vybestack', unscoped);
+    if (!existsSync(repoLink)) {
+      throw new Error(
+        `expected the host package link at ${repoLink}; run 'bun install' ` +
+          'at the repo root before running this suite.',
+      );
+    }
+    materializeNode(repoLink, join(scopedDir, unscoped));
+  }
+}
+
+/**
+ * Links the plugin's already-installed local dependencies into the fixture's
+ * nested `plugin/node_modules` — the npm shape for a package's own
+ * dependencies, and the resolution source of truth the plugin context's
+ * bun.lock pins. A plugin that declares runtime dependencies without a local
+ * install fails here with the command that fixes it.
+ */
+function linkPluginLocalDependencies(sourceDir: string, destDir: string): void {
+  const manifest = parseJsonObjectFile(join(sourceDir, 'package.json'));
+  const runtimeDeps = Object.keys(
+    (manifest['dependencies'] ?? {}) as Record<string, string>,
+  );
+  const sourceModules = join(sourceDir, 'node_modules');
+  if (runtimeDeps.length > 0 && !existsSync(sourceModules)) {
+    throw new Error(
+      `plugin '${asString(manifest['name'])}' declares runtime dependencies ` +
+        `but ${relative(repoRoot, sourceDir)} has no node_modules; run ` +
+        `'bun install' in '${relative(repoRoot, sourceDir)}' before running ` +
+        'this suite.',
+    );
+  }
+  if (!existsSync(sourceModules)) {
+    return;
+  }
+  const destModules = join(destDir, 'node_modules');
+  mkdirSync(destModules, { recursive: true });
+  for (const entry of readdirSync(sourceModules)) {
+    materializeNode(join(sourceModules, entry), join(destModules, entry));
+  }
+}
+
+/**
+ * Links a directory into the fixture. Windows symlinks need privileges, so
+ * that platform gets a dereferencing copy, which resolves identically.
+ */
+function materializeNode(source: string, dest: string): void {
+  if (isWindows) {
+    cpSync(source, dest, { recursive: true, dereference: true });
+    return;
+  }
+  symlinkSync(source, dest, 'dir');
 }
 
 function parseJsonObjectFile(path: string): Record<string, unknown> {
@@ -213,6 +331,46 @@ function releaseByDir(dir: string): FirstPartyRuntimePluginRelease {
 }
 
 // ---------------------------------------------------------------------------
+// Plugin-era Gemini contract fixtures
+// ---------------------------------------------------------------------------
+
+/**
+ * The contributed alias config, byte-for-byte what the plugin declares (and
+ * what the base package used to ship as composition/aliases/gemini.config
+ * before #2763 moved the Gemini contribution into the plugin).
+ */
+const GEMINI_ALIAS_CONFIG = {
+  name: 'gemini',
+  modelsDevProviderId: 'google',
+  description: 'Google Gemini API',
+  baseProvider: 'gemini',
+  'base-url': 'https://generativelanguage.googleapis.com',
+  defaultModel: 'gemini-2.5-pro',
+  apiKeyEnv: 'GEMINI_API_KEY',
+} as const;
+
+/**
+ * A base-only install can still see a `gemini` alias: a user alias file
+ * carried over from a pre-plugin install looks exactly like this. Requesting
+ * it must fail with an error naming the plugin that now provides Gemini.
+ */
+const LEFTOVER_GEMINI_ALIAS: ProviderAliasEntry = {
+  alias: 'gemini',
+  config: { ...GEMINI_ALIAS_CONFIG },
+  filePath: '~/.llxprt/providers/gemini.config',
+  source: 'user',
+};
+
+const BASE_ONLY_OAUTH_MANAGER = new OAuthManager(createTokenStore(), undefined, {});
+
+function makeBaseOnlyManager(): ProviderManager {
+  return new ProviderManager({
+    settingsService: new SettingsService() as never,
+    runtimeId: 'issue-2603-plugin-install-layouts',
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Base-only install
 // ---------------------------------------------------------------------------
 
@@ -224,7 +382,7 @@ describe('base-only install (issue-2603 layout, no plugin packages)', () => {
     });
   });
 
-  it('leaves Gemini unresolvable and imports nothing', async () => {
+  it('leaves the google-gemini provider id unresolvable and imports nothing', async () => {
     await withInstalledFixtureAsync([], async (root) => {
       const discovered = discoverRuntimePluginPackages(discoveryDeps(root));
       const registry = await loadRuntimePlugins(discovered, {
@@ -232,6 +390,58 @@ describe('base-only install (issue-2603 layout, no plugin packages)', () => {
       });
       expect(registry.getProviderFactory('google-gemini')).toBeUndefined();
       expect(registry.getProviderOrigin('google-gemini')).toBeUndefined();
+    });
+  });
+
+  it('has no built-in gemini provider and advertises no gemini alias', async () => {
+    await withInstalledFixtureAsync([], async (root) => {
+      const discovered = discoverRuntimePluginPackages(discoveryDeps(root));
+      const registry = await loadRuntimePlugins(discovered, {
+        importModule: mustNotImport,
+      });
+      // Since #2763 the base ships no Gemini contribution at all: the
+      // provider id, its origin, and the alias surface must all be empty
+      // until the plugin is installed.
+      expect(registry.getProviderFactory('gemini')).toBeUndefined();
+      expect(registry.getProviderOrigin('gemini')).toBeUndefined();
+      expect(registry.listProviderIds()).not.toContain('gemini');
+      expect(registry.getContributedAliases()).toStrictEqual([]);
+    });
+  });
+
+  it('fails actionably naming the plugin when a leftover alias requests gemini', async () => {
+    await withInstalledFixtureAsync([], async (root) => {
+      const baseOnlyRegistry = await loadRuntimePlugins(
+        discoverRuntimePluginPackages(discoveryDeps(root)),
+        { importModule: mustNotImport },
+      );
+      const manager = makeBaseOnlyManager();
+      let thrown: unknown;
+      try {
+        registerAliasProviders(
+          manager,
+          [LEFTOVER_GEMINI_ALIAS],
+          undefined,
+          undefined,
+          {},
+          BASE_ONLY_OAUTH_MANAGER,
+          undefined,
+          false,
+          { providerContributions: baseOnlyRegistry },
+        );
+      } catch (error) {
+        thrown = error;
+      }
+      if (!(thrown instanceof Error)) {
+        throw new Error(
+          'expected registerAliasProviders to reject a gemini alias on a base-only install',
+        );
+      }
+      expect(thrown.message).toContain(
+        '@vybestack/llxprt-plugin-google-gemini',
+      );
+      expect(thrown.message).toContain('Install the runtime plugin');
+      expect(manager.listProviders()).not.toContain('gemini');
     });
   });
 });
@@ -250,16 +460,16 @@ describe('base + @vybestack/llxprt-plugin-google-gemini install', () => {
     });
   });
 
-  it('loads the installed package and registers its factory as plugin-origin', async () => {
+  it('loads the installed package and registers the gemini provider as plugin-origin', async () => {
     await withInstalledFixtureAsync(['google-gemini'], async (root) => {
       const discovered = discoverRuntimePluginPackages(discoveryDeps(root));
       const registry = await loadRuntimePlugins(discovered, {
         importModule: fixtureImporter(root),
       });
-      expect(registry.getProviderFactory('google-gemini')).toBeTypeOf(
-        'function',
-      );
-      expect(registry.getProviderOrigin('google-gemini')).toStrictEqual({
+      // The plugin owns the `gemini` provider id: the base ships no built-in
+      // contribution for it (#2763), so plugin-origin is the only possibility.
+      expect(registry.getProviderFactory('gemini')).toBeTypeOf('function');
+      expect(registry.getProviderOrigin('gemini')).toStrictEqual({
         kind: 'plugin',
         pluginId: release.name,
         specifier: release.name,
@@ -267,13 +477,52 @@ describe('base + @vybestack/llxprt-plugin-google-gemini install', () => {
     });
   });
 
-  it('does not displace the built-in Gemini contribution', async () => {
+  it('contributes the gemini builtin alias with the exact plugin-era config', async () => {
     await withInstalledFixtureAsync(['google-gemini'], async (root) => {
       const discovered = discoverRuntimePluginPackages(discoveryDeps(root));
       const registry = await loadRuntimePlugins(discovered, {
         importModule: fixtureImporter(root),
       });
-      expect(registry.getProviderOrigin('gemini')?.kind).toBe('builtin');
+      expect(registry.getContributedAliases()).toStrictEqual([
+        {
+          alias: 'gemini',
+          pluginId: release.name,
+          config: { ...GEMINI_ALIAS_CONFIG },
+        },
+      ]);
+    });
+  });
+
+  it('constructs a working provider from the installed gemini factory', async () => {
+    await withInstalledFixtureAsync(['google-gemini'], async (root) => {
+      const discovered = discoverRuntimePluginPackages(discoveryDeps(root));
+      const registry = await loadRuntimePlugins(discovered, {
+        importModule: fixtureImporter(root),
+      });
+      const factory = registry.getProviderFactory('gemini');
+      if (factory === undefined) {
+        throw new Error('expected the plugin-contributed gemini factory');
+      }
+      const provider = factory(
+        {
+          alias: 'gemini',
+          config: { ...GEMINI_ALIAS_CONFIG },
+          filePath: `plugin:${release.name}`,
+          source: 'plugin',
+        },
+        {
+          openaiApiKey: undefined,
+          openaiBaseUrl: undefined,
+          openaiProviderConfig: {},
+          oauthManager: BASE_ONLY_OAUTH_MANAGER,
+          config: undefined,
+          authOnlyEnabled: false,
+        },
+      );
+      // Constructing — not just resolving — proves the fixture-installed
+      // module graph executes, including its @ai-sdk/google dependency.
+      expect(provider.name).toBe('gemini');
+      expect(typeof provider.generateChatCompletion).toBe('function');
     });
   });
 });
@@ -302,6 +551,75 @@ describe('base + @vybestack/llxprt-plugin-google-mcp-auth install', () => {
         pluginId: release.name,
         specifier: release.name,
       });
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Malformed installed plugin
+// ---------------------------------------------------------------------------
+
+describe('base + a malformed plugin install', () => {
+  /**
+   * Builds a fixture whose installed plugin declares the discovery marker
+   * (so real discovery finds it) but exports an incompatible manifest
+   * (apiVersion 2). Everything else about the package is a real install.
+   */
+  function withIncompatibleManifestFixture<T>(
+    run: (root: string, pluginName: string) => T,
+  ): T {
+    const root = buildInstalledFixture([]);
+    try {
+      const pluginName = '@vybestack/llxprt-plugin-google-gemini';
+      const destDir = join(
+        root,
+        'lib',
+        'node_modules',
+        '@vybestack',
+        'llxprt-plugin-google-gemini',
+      );
+      mkdirSync(join(destDir, 'dist'), { recursive: true });
+      cpSync(
+        join(repoRoot, 'plugins', 'google-gemini', 'package.json'),
+        join(destDir, 'package.json'),
+      );
+      writeFileSync(
+        join(destDir, 'dist', 'index.ts'),
+        [
+          '// Fixture: discovered marker, incompatible exported manifest.',
+          'export const llxprtRuntimePlugin = {',
+          '  apiVersion: 2,',
+          `  id: '${pluginName}',`,
+          '  providers: [],',
+          '};',
+          '',
+        ].join('\n'),
+      );
+      return run(root, pluginName);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+
+  it('rejects the discovered plugin actionably instead of ignoring it', async () => {
+    await withIncompatibleManifestFixture(async (root, pluginName) => {
+      const discovered = discoverRuntimePluginPackages(discoveryDeps(root));
+      expect(discovered).toStrictEqual([pluginName]);
+      let thrown: unknown;
+      try {
+        await loadRuntimePlugins(discovered, {
+          importModule: fixtureImporter(root),
+        });
+      } catch (error) {
+        thrown = error;
+      }
+      if (!(thrown instanceof Error)) {
+        throw new Error(
+          'expected loadRuntimePlugins to reject an incompatible plugin manifest',
+        );
+      }
+      expect(thrown.message).toContain(pluginName);
+      expect(thrown.message).toContain('apiVersion 2');
     });
   });
 });

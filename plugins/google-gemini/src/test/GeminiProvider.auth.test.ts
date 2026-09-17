@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
-import { GeminiProvider } from '@vybestack/llxprt-code-providers/gemini/GeminiProvider.js';
+import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
 // These assertions are about the client OPTIONS the provider builds, not about
@@ -13,7 +13,7 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 // pointed at our own code and survives the transport change.
 const googleGenAIConstructor = vi.fn();
 
-import type { CreateGeminiApiClient } from '@vybestack/llxprt-code-providers/gemini/GeminiProvider.js';
+import type { CreateGeminiApiClient } from '../gemini/GeminiProvider.js';
 // The factory is injected into GeminiProvider rather than module-mocked:
 // `vi.mock` registers process-wide and bun hoists it ahead of the whole
 // run, so the stub leaked into every suite loaded alongside this one.

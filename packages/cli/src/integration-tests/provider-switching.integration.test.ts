@@ -191,16 +191,18 @@ describe('Runtime Provider Switching Integration', () => {
     expect(providerA.clearState).not.toHaveBeenCalled();
   });
 
-  it('uses alias default model for gemini when switching', async () => {
-    const geminiProvider = createMockProvider('gemini');
-    providerManager.registerProvider(geminiProvider as never);
+  it('uses alias default model for openai when switching', async () => {
+    // The gemini alias default moved to the google-gemini plugin (#2763);
+    // openai's alias config is the base-package representative here.
+    const openaiProvider = createMockProvider('openai');
+    providerManager.registerProvider(openaiProvider as never);
 
-    providerManager.setActiveProvider('openai');
-    await switchActiveProvider('gemini');
+    providerManager.setActiveProvider('other');
+    await switchActiveProvider('openai');
 
-    const geminiSettings = settingsService.getProviderSettings('gemini');
-    expect(geminiSettings.model).toBe('gemini-2.5-pro');
-    expect(config.getModel()).toBe('gemini-2.5-pro');
+    const openaiSettings = settingsService.getProviderSettings('openai');
+    expect(openaiSettings.model).toBe('gpt-5.5');
+    expect(config.getModel()).toBe('gpt-5.5');
   });
 
   it('clears legacy base URL and resets model when switching back to provider', async () => {

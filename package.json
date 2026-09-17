@@ -275,7 +275,6 @@
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.2.1",
     "@ai-sdk/openai": "^4.0.50",
-    "@ai-sdk/google": "^4.0.54",
     "@ai-sdk/provider-utils": "^5.0.32",
     "@anthropic-ai/sdk": "^0.55.1",
     "@ast-grep/lang-c": "^0.0.5",

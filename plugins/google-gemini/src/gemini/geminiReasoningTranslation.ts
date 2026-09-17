@@ -11,7 +11,7 @@ import {
   resolveReasoningConfiguration,
   type ReasoningResolution,
   type ResolvedReasoningConfiguration,
-} from '../reasoning/reasoning-config-resolver.js';
+} from '@vybestack/llxprt-code-providers/reasoning/reasoning-config-resolver.js';
 import {
   mapReasoningEffortToThinkingLevel,
   type ReasoningConfig,
