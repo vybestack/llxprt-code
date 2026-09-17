@@ -69,12 +69,6 @@ interface GhShim {
 /** Base dirs created by makeGhShim, removed in afterEach. */
 const shimDirs: string[] = [];
 
-afterEach(async () => {
-  await Promise.all(
-    shimDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })),
-  );
-});
-
 /** Single-quotes a path for safe interpolation into the shell script. */
 function shq(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
@@ -252,323 +246,337 @@ function patchDebugLogger(): DebugCapture {
   };
 }
 
-describe.skipIf(process.platform === 'win32')(
-  'issue #3453: GH_REPO pin and failure argv logging',
-  () => {
-    /**
-     * AC-1: the single-call dispatch path. `issue.comment` has no
-     * `execute`, so this exercises buildArgv + runGh directly.
-     *
-     * @plan project-plans/issue3453.md
-     * @requirement AC-1
-     * @issue 3453
-     */
-    it('runs issue.comment with GH_REPO pinned and --repo in argv', async () => {
-      const shim = await makeGhShim(standardReplies());
-      const result = await withGhOnPath(shim.binDir, () =>
-        executeGitHubOp(
-          'issue.comment',
-          { number: 1, body: 'x', repo: 'owner/name' },
-          SIGNAL,
-        ),
-      );
-      expect(result.url).toBe(ISSUE_URL);
+describe('issue #3453: GH_REPO pin and failure argv logging', () => {
+  afterEach(async () => {
+    await Promise.all(
+      shimDirs
+        .splice(0)
+        .map((dir) => rm(dir, { recursive: true, force: true })),
+    );
+  });
 
-      const records = await shim.readCapture();
-      expect(records).toHaveLength(1);
-      expect(records[0].ghRepo).toBe('owner/name');
-      expect(records[0].argv).toContain('--repo owner/name');
-    });
-
-    /**
-     * AC-2: the `execute` dispatch path (issue.create) plus the pre-existing
-     * body-file invariant: GH_REPO is pinned AND the body never rides in
-     * argv.
-     *
-     * @plan project-plans/issue3453.md
-     * @requirement AC-2
-     * @issue 3453
-     */
-    it('runs issue.create with GH_REPO pinned and the body in a temp file', async () => {
-      const body = 'NEVER-INLINE-3453 body text';
-      const shim = await makeGhShim(standardReplies());
-      await withGhOnPath(shim.binDir, () =>
-        executeGitHubOp(
-          'issue.create',
-          { title: 'T3453', body, repo: 'owner/name' },
-          SIGNAL,
-        ),
-      );
-
-      const records = await shim.readCapture();
-      expect(records).toHaveLength(1);
-      expect(records[0].ghRepo).toBe('owner/name');
-      expect(records[0].argv).toContain('--body-file');
-      expect(records[0].argv).not.toContain('NEVER-INLINE-3453');
-      expect(records[0].argv).toContain('--repo owner/name');
-    });
-
-    /**
-     * AC-3: the multi-step `execute` path. issue.edit with `type` issues
-     * four gh invocations (the `issue edit` ack, the issueTypes query, the
-     * issue node-id query, and the updateIssue mutation); every one of
-     * them must carry the pinned GH_REPO.
-     *
-     * @plan project-plans/issue3453.md
-     * @requirement AC-3
-     * @issue 3453
-     */
-    it('pins GH_REPO on every issue.edit step including GraphQL', async () => {
-      const shim = await makeGhShim(standardReplies());
-      const result = await withGhOnPath(shim.binDir, () =>
-        executeGitHubOp(
-          'issue.edit',
-          { number: 1, addLabel: ['x'], type: 'Bug', repo: 'owner/name' },
-          SIGNAL,
-        ),
-      );
-      expect(result).toStrictEqual({ number: 1, type: 'Bug' });
-
-      const records = await shim.readCapture();
-      expect(records).toHaveLength(4);
-      for (const record of records) {
-        expect(record.ghRepo).toBe('owner/name');
-      }
-      const argvs = records.map((record) => record.argv);
-      expect(argvs.some((a) => a.includes('issue edit'))).toBe(true);
-      expect(argvs.some((a) => a.includes('issueTypes'))).toBe(true);
-      expect(argvs.some((a) => a.includes('issue(number'))).toBe(true);
-      expect(argvs.some((a) => a.includes('updateIssue'))).toBe(true);
-    });
-
-    /**
-     * AC-4 (repo absent): gh's current-repository resolution is a
-     * documented feature and must keep working — no GH_REPO, no --repo.
-     *
-     * @plan project-plans/issue3453.md
-     * @requirement AC-4
-     * @issue 3453
-     */
-    it('leaves GH_REPO unset when repo is absent', async () => {
-      const shim = await makeGhShim(standardReplies());
-      await withGhOnPath(shim.binDir, () =>
-        executeGitHubOp('issue.comment', { number: 1, body: 'x' }, SIGNAL),
-      );
-
-      const records = await shim.readCapture();
-      expect(records).toHaveLength(1);
-      expect(records[0].ghRepo).toBe(GH_REPO_UNSET);
-      expect(records[0].argv).not.toContain('--repo');
-    });
-
-    /**
-     * AC-4 (repo: ''): the shared catalog rejects an empty repo string
-     * before gh ever runs, so the observable contract is the rejection
-     * itself plus an empty capture — no GH_REPO record and no --repo in
-     * argv.
-     *
-     * @plan project-plans/issue3453.md
-     * @requirement AC-4
-     * @issue 3453
-     */
-    it('rejects repo: "" without running gh', async () => {
-      const shim = await makeGhShim(standardReplies());
-      const caught = await withGhOnPath(shim.binDir, () =>
-        captureRejection(() =>
-          executeGitHubOp(
-            'issue.comment',
-            { number: 1, body: 'x', repo: '' },
-            SIGNAL,
-          ),
-        ),
-      );
-
-      const error = asBrokerError(caught);
-      expect(error.brokerError.code).toBe('INVALID_PARAM');
-      expect(await shim.readCapture()).toHaveLength(0);
-    });
-
-    /**
-     * AC-5: an ambient GH_REPO from the caller's shell must not leak into
-     * the gh child env. buildMinimalEnv has always excluded it; this pins
-     * that exclusion so the pin feature cannot be "simplified" into a
-     * passthrough later.
-     *
-     * @plan project-plans/issue3453.md
-     * @requirement AC-5
-     * @issue 3453
-     */
-    it('does not inherit an ambient GH_REPO when repo is absent', async () => {
-      const shim = await makeGhShim(standardReplies());
-      const savedRepo = process.env.GH_REPO;
-      process.env.GH_REPO = 'ambient/leak';
-      try {
-        await withGhOnPath(shim.binDir, () =>
-          executeGitHubOp('issue.comment', { number: 1, body: 'x' }, SIGNAL),
-        );
-      } finally {
-        if (savedRepo === undefined) {
-          delete process.env.GH_REPO;
-        } else {
-          process.env.GH_REPO = savedRepo;
-        }
-      }
-
-      const records = await shim.readCapture();
-      expect(records).toHaveLength(1);
-      expect(records[0].ghRepo).toBe(GH_REPO_UNSET);
-    });
-
-    /**
-     * AC-6 (repo pinned): a failed invocation still rejects with the
-     * structured broker error, and one debug log line carries the final
-     * argv as JSON plus the repo target that was in effect.
-     *
-     * @plan project-plans/issue3453.md
-     * @requirement AC-6
-     * @issue 3453
-     */
-    it('logs the final argv and repo target when gh fails', async () => {
-      const shim = await makeGhShim([
-        { fragment: 'issue comment', failStderr: 'gh blew up 3453\n' },
-      ]);
-      const debug = patchDebugLogger();
-      try {
-        const caught = await withGhOnPath(shim.binDir, () =>
-          captureRejection(() =>
-            executeGitHubOp(
-              'issue.comment',
-              { number: 1, body: 'x', repo: 'owner/name' },
-              SIGNAL,
-            ),
-          ),
-        );
-
-        const error = asBrokerError(caught);
-        expect(error.brokerError.code).toBe('GITHUB_ERROR');
-        expect(error.brokerError.message).toContain('gh blew up 3453');
-
-        const brokerLines = debug.calls.filter(
-          (call) => call.namespace === 'llxprt:github:broker',
-        );
-        expect(brokerLines).toHaveLength(1);
-        expect(brokerLines[0].message).toContain('["issue","comment","1"');
-        expect(brokerLines[0].message).toContain('owner/name');
-        expect(brokerLines[0].message).not.toContain(REPO_TARGET_ABSENT);
-      } finally {
-        debug.restore();
-      }
-    });
-
-    /**
-     * AC-6 (argv redaction): a title rides argv via appendString (the
-     * body does not — it goes to --body-file), so a token-shaped
-     * substring pasted into a title reaches the raw argv JSON of the
-     * failure line. The whole composed line must be token-redacted, not
-     * just the failure message.
-     *
-     * @plan project-plans/issue3453.md
-     * @requirement AC-6
-     * @issue 3453
-     */
-    it('redacts a token-shaped title from the failure argv log line', async () => {
-      // ghp_ + 36 alphanumerics: comfortably inside the
-      // gh[pousrx]_[A-Za-z0-9]{20,} pattern redactTokenShaped matches.
-      const token = 'ghp_0123456789abcdefghijklmnopqrstuvwxyz';
-      const replies = standardReplies().map((reply) =>
-        reply.fragment === 'issue create'
-          ? { fragment: reply.fragment, failStderr: 'gh blew up 3453\n' }
-          : reply,
-      );
-      const shim = await makeGhShim(replies);
-      const debug = patchDebugLogger();
-      try {
-        const caught = await withGhOnPath(shim.binDir, () =>
-          captureRejection(() =>
-            executeGitHubOp(
-              'issue.create',
-              { title: `leak ${token}`, body: 'x', repo: 'owner/name' },
-              SIGNAL,
-            ),
-          ),
-        );
-
-        expect(asBrokerError(caught).brokerError.code).toBe('GITHUB_ERROR');
-
-        const brokerLines = debug.calls.filter(
-          (call) => call.namespace === 'llxprt:github:broker',
-        );
-        expect(brokerLines).toHaveLength(1);
-        expect(brokerLines[0].message).toContain('["issue","create"');
-        expect(brokerLines[0].message).toContain('owner/name');
-        expect(brokerLines[0].message).toContain('[REDACTED]');
-        expect(brokerLines[0].message).not.toContain(token);
-      } finally {
-        debug.restore();
-      }
-    });
-
-    /**
-     * AC-6 (repo absent): the same failure line records the explicit
-     * absent marker, so a log reader can tell "no repo requested" apart
-     * from "repo unknown".
-     *
-     * @plan project-plans/issue3453.md
-     * @requirement AC-6
-     * @issue 3453
-     */
-    it('logs the absent marker when a failing gh call had no repo', async () => {
-      const shim = await makeGhShim([
-        { fragment: 'issue comment', failStderr: 'gh blew up 3453\n' },
-      ]);
-      const debug = patchDebugLogger();
-      try {
-        const caught = await withGhOnPath(shim.binDir, () =>
-          captureRejection(() =>
-            executeGitHubOp('issue.comment', { number: 1, body: 'x' }, SIGNAL),
-          ),
-        );
-
-        expect(asBrokerError(caught).brokerError.code).toBe('GITHUB_ERROR');
-
-        const brokerLines = debug.calls.filter(
-          (call) => call.namespace === 'llxprt:github:broker',
-        );
-        expect(brokerLines).toHaveLength(1);
-        expect(brokerLines[0].message).toContain('["issue","comment","1"');
-        expect(brokerLines[0].message).toContain(REPO_TARGET_ABSENT);
-      } finally {
-        debug.restore();
-      }
-    });
-
-    /**
-     * AC-6 (success silence): the failure log is failure-only; a
-     * successful invocation emits no debug line at all.
-     *
-     * @plan project-plans/issue3453.md
-     * @requirement AC-6
-     * @issue 3453
-     */
-    it('emits no debug line for a successful invocation', async () => {
-      const shim = await makeGhShim(standardReplies());
-      const debug = patchDebugLogger();
-      try {
-        await withGhOnPath(shim.binDir, () =>
+  describe.skipIf(process.platform === 'win32')(
+    'recording gh shim (POSIX)',
+    () => {
+      /**
+       * AC-1: the single-call dispatch path. `issue.comment` has no
+       * `execute`, so this exercises buildArgv + runGh directly.
+       *
+       * @plan project-plans/issue3453.md
+       * @requirement AC-1
+       * @issue 3453
+       */
+      it('runs issue.comment with GH_REPO pinned and --repo in argv', async () => {
+        const shim = await makeGhShim(standardReplies());
+        const result = await withGhOnPath(shim.binDir, () =>
           executeGitHubOp(
             'issue.comment',
             { number: 1, body: 'x', repo: 'owner/name' },
             SIGNAL,
           ),
         );
-        expect(
-          debug.calls.filter(
-            (call) => call.namespace === 'llxprt:github:broker',
+        expect(result.url).toBe(ISSUE_URL);
+
+        const records = await shim.readCapture();
+        expect(records).toHaveLength(1);
+        expect(records[0].ghRepo).toBe('owner/name');
+        expect(records[0].argv).toContain('--repo owner/name');
+      });
+
+      /**
+       * AC-2: the `execute` dispatch path (issue.create) plus the pre-existing
+       * body-file invariant: GH_REPO is pinned AND the body never rides in
+       * argv.
+       *
+       * @plan project-plans/issue3453.md
+       * @requirement AC-2
+       * @issue 3453
+       */
+      it('runs issue.create with GH_REPO pinned and the body in a temp file', async () => {
+        const body = 'NEVER-INLINE-3453 body text';
+        const shim = await makeGhShim(standardReplies());
+        await withGhOnPath(shim.binDir, () =>
+          executeGitHubOp(
+            'issue.create',
+            { title: 'T3453', body, repo: 'owner/name' },
+            SIGNAL,
           ),
-        ).toHaveLength(0);
-      } finally {
-        debug.restore();
-      }
-    });
-  },
-);
+        );
+
+        const records = await shim.readCapture();
+        expect(records).toHaveLength(1);
+        expect(records[0].ghRepo).toBe('owner/name');
+        expect(records[0].argv).toContain('--body-file');
+        expect(records[0].argv).not.toContain('NEVER-INLINE-3453');
+        expect(records[0].argv).toContain('--repo owner/name');
+      });
+
+      /**
+       * AC-3: the multi-step `execute` path. issue.edit with `type` issues
+       * four gh invocations (the `issue edit` ack, the issueTypes query, the
+       * issue node-id query, and the updateIssue mutation); every one of
+       * them must carry the pinned GH_REPO.
+       *
+       * @plan project-plans/issue3453.md
+       * @requirement AC-3
+       * @issue 3453
+       */
+      it('pins GH_REPO on every issue.edit step including GraphQL', async () => {
+        const shim = await makeGhShim(standardReplies());
+        const result = await withGhOnPath(shim.binDir, () =>
+          executeGitHubOp(
+            'issue.edit',
+            { number: 1, addLabel: ['x'], type: 'Bug', repo: 'owner/name' },
+            SIGNAL,
+          ),
+        );
+        expect(result).toStrictEqual({ number: 1, type: 'Bug' });
+
+        const records = await shim.readCapture();
+        expect(records).toHaveLength(4);
+        for (const record of records) {
+          expect(record.ghRepo).toBe('owner/name');
+        }
+        const argvs = records.map((record) => record.argv);
+        expect(argvs.some((a) => a.includes('issue edit'))).toBe(true);
+        expect(argvs.some((a) => a.includes('issueTypes'))).toBe(true);
+        expect(argvs.some((a) => a.includes('issue(number'))).toBe(true);
+        expect(argvs.some((a) => a.includes('updateIssue'))).toBe(true);
+      });
+
+      /**
+       * AC-4 (repo absent): gh's current-repository resolution is a
+       * documented feature and must keep working — no GH_REPO, no --repo.
+       *
+       * @plan project-plans/issue3453.md
+       * @requirement AC-4
+       * @issue 3453
+       */
+      it('leaves GH_REPO unset when repo is absent', async () => {
+        const shim = await makeGhShim(standardReplies());
+        await withGhOnPath(shim.binDir, () =>
+          executeGitHubOp('issue.comment', { number: 1, body: 'x' }, SIGNAL),
+        );
+
+        const records = await shim.readCapture();
+        expect(records).toHaveLength(1);
+        expect(records[0].ghRepo).toBe(GH_REPO_UNSET);
+        expect(records[0].argv).not.toContain('--repo');
+      });
+
+      /**
+       * AC-4 (repo: ''): the shared catalog rejects an empty repo string
+       * before gh ever runs, so the observable contract is the rejection
+       * itself plus an empty capture — no GH_REPO record and no --repo in
+       * argv.
+       *
+       * @plan project-plans/issue3453.md
+       * @requirement AC-4
+       * @issue 3453
+       */
+      it('rejects repo: "" without running gh', async () => {
+        const shim = await makeGhShim(standardReplies());
+        const caught = await withGhOnPath(shim.binDir, () =>
+          captureRejection(() =>
+            executeGitHubOp(
+              'issue.comment',
+              { number: 1, body: 'x', repo: '' },
+              SIGNAL,
+            ),
+          ),
+        );
+
+        const error = asBrokerError(caught);
+        expect(error.brokerError.code).toBe('INVALID_PARAM');
+        expect(await shim.readCapture()).toHaveLength(0);
+      });
+
+      /**
+       * AC-5: an ambient GH_REPO from the caller's shell must not leak into
+       * the gh child env. buildMinimalEnv has always excluded it; this pins
+       * that exclusion so the pin feature cannot be "simplified" into a
+       * passthrough later.
+       *
+       * @plan project-plans/issue3453.md
+       * @requirement AC-5
+       * @issue 3453
+       */
+      it('does not inherit an ambient GH_REPO when repo is absent', async () => {
+        const shim = await makeGhShim(standardReplies());
+        const savedRepo = process.env.GH_REPO;
+        process.env.GH_REPO = 'ambient/leak';
+        try {
+          await withGhOnPath(shim.binDir, () =>
+            executeGitHubOp('issue.comment', { number: 1, body: 'x' }, SIGNAL),
+          );
+        } finally {
+          if (savedRepo === undefined) {
+            delete process.env.GH_REPO;
+          } else {
+            process.env.GH_REPO = savedRepo;
+          }
+        }
+
+        const records = await shim.readCapture();
+        expect(records).toHaveLength(1);
+        expect(records[0].ghRepo).toBe(GH_REPO_UNSET);
+      });
+
+      /**
+       * AC-6 (repo pinned): a failed invocation still rejects with the
+       * structured broker error, and one debug log line carries the final
+       * argv as JSON plus the repo target that was in effect.
+       *
+       * @plan project-plans/issue3453.md
+       * @requirement AC-6
+       * @issue 3453
+       */
+      it('logs the final argv and repo target when gh fails', async () => {
+        const shim = await makeGhShim([
+          { fragment: 'issue comment', failStderr: 'gh blew up 3453\n' },
+        ]);
+        const debug = patchDebugLogger();
+        try {
+          const caught = await withGhOnPath(shim.binDir, () =>
+            captureRejection(() =>
+              executeGitHubOp(
+                'issue.comment',
+                { number: 1, body: 'x', repo: 'owner/name' },
+                SIGNAL,
+              ),
+            ),
+          );
+
+          const error = asBrokerError(caught);
+          expect(error.brokerError.code).toBe('GITHUB_ERROR');
+          expect(error.brokerError.message).toContain('gh blew up 3453');
+
+          const brokerLines = debug.calls.filter(
+            (call) => call.namespace === 'llxprt:github:broker',
+          );
+          expect(brokerLines).toHaveLength(1);
+          expect(brokerLines[0].message).toContain('["issue","comment","1"');
+          expect(brokerLines[0].message).toContain('owner/name');
+          expect(brokerLines[0].message).not.toContain(REPO_TARGET_ABSENT);
+        } finally {
+          debug.restore();
+        }
+      });
+
+      /**
+       * AC-6 (argv redaction): a title rides argv via appendString (the
+       * body does not — it goes to --body-file), so a token-shaped
+       * substring pasted into a title reaches the raw argv JSON of the
+       * failure line. The whole composed line must be token-redacted, not
+       * just the failure message.
+       *
+       * @plan project-plans/issue3453.md
+       * @requirement AC-6
+       * @issue 3453
+       */
+      it('redacts a token-shaped title from the failure argv log line', async () => {
+        // ghp_ + 36 alphanumerics: comfortably inside the
+        // gh[pousrx]_[A-Za-z0-9]{20,} pattern redactTokenShaped matches.
+        const token = 'ghp_0123456789abcdefghijklmnopqrstuvwxyz';
+        const replies = standardReplies().map((reply) =>
+          reply.fragment === 'issue create'
+            ? { fragment: reply.fragment, failStderr: 'gh blew up 3453\n' }
+            : reply,
+        );
+        const shim = await makeGhShim(replies);
+        const debug = patchDebugLogger();
+        try {
+          const caught = await withGhOnPath(shim.binDir, () =>
+            captureRejection(() =>
+              executeGitHubOp(
+                'issue.create',
+                { title: `leak ${token}`, body: 'x', repo: 'owner/name' },
+                SIGNAL,
+              ),
+            ),
+          );
+
+          expect(asBrokerError(caught).brokerError.code).toBe('GITHUB_ERROR');
+
+          const brokerLines = debug.calls.filter(
+            (call) => call.namespace === 'llxprt:github:broker',
+          );
+          expect(brokerLines).toHaveLength(1);
+          expect(brokerLines[0].message).toContain('["issue","create"');
+          expect(brokerLines[0].message).toContain('owner/name');
+          expect(brokerLines[0].message).toContain('[REDACTED]');
+          expect(brokerLines[0].message).not.toContain(token);
+        } finally {
+          debug.restore();
+        }
+      });
+
+      /**
+       * AC-6 (repo absent): the same failure line records the explicit
+       * absent marker, so a log reader can tell "no repo requested" apart
+       * from "repo unknown".
+       *
+       * @plan project-plans/issue3453.md
+       * @requirement AC-6
+       * @issue 3453
+       */
+      it('logs the absent marker when a failing gh call had no repo', async () => {
+        const shim = await makeGhShim([
+          { fragment: 'issue comment', failStderr: 'gh blew up 3453\n' },
+        ]);
+        const debug = patchDebugLogger();
+        try {
+          const caught = await withGhOnPath(shim.binDir, () =>
+            captureRejection(() =>
+              executeGitHubOp(
+                'issue.comment',
+                { number: 1, body: 'x' },
+                SIGNAL,
+              ),
+            ),
+          );
+
+          expect(asBrokerError(caught).brokerError.code).toBe('GITHUB_ERROR');
+
+          const brokerLines = debug.calls.filter(
+            (call) => call.namespace === 'llxprt:github:broker',
+          );
+          expect(brokerLines).toHaveLength(1);
+          expect(brokerLines[0].message).toContain('["issue","comment","1"');
+          expect(brokerLines[0].message).toContain(REPO_TARGET_ABSENT);
+        } finally {
+          debug.restore();
+        }
+      });
+
+      /**
+       * AC-6 (success silence): the failure log is failure-only; a
+       * successful invocation emits no debug line at all.
+       *
+       * @plan project-plans/issue3453.md
+       * @requirement AC-6
+       * @issue 3453
+       */
+      it('emits no debug line for a successful invocation', async () => {
+        const shim = await makeGhShim(standardReplies());
+        const debug = patchDebugLogger();
+        try {
+          await withGhOnPath(shim.binDir, () =>
+            executeGitHubOp(
+              'issue.comment',
+              { number: 1, body: 'x', repo: 'owner/name' },
+              SIGNAL,
+            ),
+          );
+          expect(
+            debug.calls.filter(
+              (call) => call.namespace === 'llxprt:github:broker',
+            ),
+          ).toHaveLength(0);
+        } finally {
+          debug.restore();
+        }
+      });
+    },
+  );
+});
