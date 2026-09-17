@@ -1143,13 +1143,18 @@ jobs:
         # The plugin installs give the gemini integration suites their
         # runtime-plugin dependency: the CLI discovers the checkout's
         # plugins/ directory (#2759), and the google-gemini plugin imports
-        # @ai-sdk/google from its own node_modules at load time.
+        # @ai-sdk/google from its own node_modules at load time. Plugin
+        # installs need bun >= 1.4.2 for the same reason as the
+        # runtime_plugins job: the repo pin rejects the plugin lockfile's
+        # unresolved root peers, discards the lock, and re-resolves, which
+        # stalls indefinitely on hosted runners.
         run: |-
           bun install
           git checkout -- bun.lock
+          curl -fsSL https://bun.sh/install | BUN_INSTALL="$RUNNER_TEMP/bun-plugin" bash -s "bun-v1.4.2"
           for plugin in plugins/*/; do
             if [ -f "${plugin}package.json" ]; then
-              (cd "$plugin" && bun install --omit=peer)
+              (cd "$plugin" && "$RUNNER_TEMP/bun-plugin/bin/bun" install --omit=peer)
             fi
           done
           git checkout -- bun.lock
