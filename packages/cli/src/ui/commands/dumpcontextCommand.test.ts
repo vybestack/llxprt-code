@@ -541,14 +541,12 @@ describe('dumpcontextCommand', () => {
           config: {
             getAgentClient: vi.fn().mockReturnValue({
               getHistoryService: vi.fn().mockReturnValue({
-                getAll: vi
-                  .fn()
-                  .mockReturnValue([
-                    {
-                      speaker: 'human',
-                      blocks: [{ type: 'text', text: 'Ping' }],
-                    },
-                  ]),
+                getAll: vi.fn().mockReturnValue([
+                  {
+                    speaker: 'human',
+                    blocks: [{ type: 'text', text: 'Ping' }],
+                  },
+                ]),
                 getChronologyTrace: vi.fn().mockReturnValue([]),
               }),
             }),
@@ -640,14 +638,12 @@ describe('dumpcontextCommand', () => {
           config: {
             getAgentClient: vi.fn().mockReturnValue({
               getHistoryService: vi.fn().mockReturnValue({
-                getAll: vi
-                  .fn()
-                  .mockReturnValue([
-                    {
-                      speaker: 'human',
-                      blocks: [{ type: 'text', text: 'Hi' }],
-                    },
-                  ]),
+                getAll: vi.fn().mockReturnValue([
+                  {
+                    speaker: 'human',
+                    blocks: [{ type: 'text', text: 'Hi' }],
+                  },
+                ]),
                 getChronologyTrace: vi.fn().mockReturnValue([]),
               }),
             }),
