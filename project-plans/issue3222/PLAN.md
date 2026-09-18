@@ -224,3 +224,65 @@ the first pass), prettier/eslint clean on all touched files.
   - 3 disposal-test failures: gemini profile hit a MAIN-side gap — the isolated subagent registration path (`registerProvidersOntoManager` → `createProviderManager`) is builtins-only; nothing threads CLI startup's plugin contributions into it. Filed #3730; switched the test to `anthropic` / `claude-sonnet-4` (builtin) with rationale comment referencing #3730.
 - Verification on merged tree: typecheck 0, lint 0, prettier clean, agents 412/412, CLI integration 31/31, core/providers green in full run, #2615 gate files untouched, six banned symbols grep clean.
 - CI on 9aa713102: initial run had two flakes (agents-shard profiles-lock 10s timeout on slow runner; E2E replace "API Error: undefined is not a function" live-endpoint variance) — both passed on `gh run rerun --failed`; final: 40 pass / 0 fail / 3 skipped, CodeRabbit pass, no actionable threads.
+
+## Internals-removal round (./internals.js escape hatch deleted)
+
+Andrew's directive: no escape hatch, no allowlists, no backward-compat shims —
+get rid of it in this PR. RED-FIRST protocol per his instruction: enforcement
+tests written and proven failing BEFORE the removal.
+
+### Enforcement (written first, red on the old tree: 7 fails as designed)
+
+- New `packages/agents/src/api/__tests__/boundary.no-internals-subpath.test.ts`
+  (7 tests): exports map has no `./internals.js`; `src/internals.ts` absent
+  from disk; repo scan (packages/scripts/integration-tests/evals, skipping
+  node_modules/dist/coverage/.git/junit reports, self-excluded) finds ZERO
+  `llxprt-code-agents/internals` references; CLI imports of the agents package
+  are root-or-declared-subpath only; dynamic `import('.../internals.js')`
+  REJECTS at resolution.
+- `boundary.adequacy.test.ts` / `boundary.spec.ts`: the two "TEST-ONLY meta
+  category" carve-outs that PERMITTED internals are deleted; the rule is now
+  absolute (any file, any form of reference).
+- `scripts/tests/cli-import-boundary.test.ts`: deep-import fixtures switched
+  from the real (now-dead) subpath to a synthetic undeclared subpath; the
+  deep-import rule itself is unchanged.
+
+### Removal and migration
+
+- Deleted `packages/agents/src/internals.ts`; removed the `./internals.js`
+  entry from `packages/agents/package.json` exports (`.`, `./app-service.js`,
+  `./constants.js` remain). No aliases, no re-exports, no deprecation path.
+- CLI consumers migrated to the intended root API (fromConfig adoption with a
+  controlled transport provider; assertions via public AgentEvent):
+  - `src/integration-tests/test-utils.ts`, `src/integration-tests/todo-continuation.integration.test.ts`
+  - `src/ui/hooks/agentStream/__tests__/useSubmitQuery.providerIgnoreCancel.bun.tsx`
+    (+ `fixtures/providerIgnoreCancel.fake.jsonl`); provider implements BOTH
+    IProvider generateChatCompletion overloads; `QueuedSubmission` imported
+    from its real home `../types.js`.
+- `packages/agents/src/api/__tests__/helpers/buildCliStyleConfig.ts` moved to
+  in-package relative imports (`../../core/client.js` etc.).
+- Internals-pinning assertions deleted from `nonBreaking.exports.test.ts` /
+  `publicSurface.nonbreaking.test.ts` (root-surface coverage kept).
+- Docs updated where they presented the subpath as available:
+  `docs/agent-api.md`, `dev-docs/agent-api.md`.
+
+### Verification (all on the final tree)
+
+- Enforcement: 33/0 across the 5 boundary/surface test files.
+- Agents suite 413/413; CLI suite 755/755 files (9751 passed / 0 failed / 5
+  skipped) via `bun run-bun-tests.ts`; scripts boundary test 42/0; root
+  typecheck EXIT=0; package lint agents EXIT=0, cli EXIT=0; prettier clean.
+- `rg 'llxprt-code-agents/internals'` over packages/scripts/integration-tests/
+  evals/docs/dev-docs: zero references.
+- NOT a regression (verified by stash-baseline): single-process
+  `bun test <dir>` batch runs of agentStream (33 fails) and integration-tests
+  (9 fails) fail IDENTICALLY on the pre-removal tree — a pre-existing property
+  of batch invocation nobody uses; the repo runner isolates files and is green.
+
+### Operational notes
+
+- Two tscoder-zai subagent runs hit the 1800s task ceiling mid-mission; the
+  remainder (last migrant, 3 type errors, sonarjs todo-tag comment fix) was
+  finished across a third scoped run plus orchestration-side verification.
+  Logs: `tmp/issue3222/internals-kill/` (phase1-red, phase2-boundary-green,
+  verify/*, finish-*).

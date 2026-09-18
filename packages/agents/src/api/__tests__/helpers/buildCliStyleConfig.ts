@@ -44,10 +44,8 @@ import {
   toConfigParameters,
   executeProviderActivation,
 } from '@vybestack/llxprt-code-agents';
-import {
-  AgentClient,
-  CoreToolScheduler,
-} from '@vybestack/llxprt-code-agents/internals.js';
+import { AgentClient } from '../../../core/client.js';
+import { CoreToolScheduler } from '../../../core/coreToolScheduler.js';
 import type { AgentEvent, DoneReason } from '@vybestack/llxprt-code-agents';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
