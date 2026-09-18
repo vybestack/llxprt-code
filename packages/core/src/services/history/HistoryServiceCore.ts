@@ -49,6 +49,10 @@ import {
   type ContextRange,
   type ContextSummaryInfo,
 } from './historyEventTypes.js';
+import {
+  computeContextRange,
+  computeContextSummaries,
+} from './contextRange.js';
 import { getTokenizerForModel } from './historyTokenizerAdapter.js';
 import {
   ChronologyStamper,
@@ -824,16 +828,7 @@ export abstract class HistoryServiceCore
    * @requirement REQ-854-004
    */
   getContextRange(): ContextRange {
-    const first = this.history[0];
-    const last = this.history[this.history.length - 1];
-    if (first === undefined || last === undefined) {
-      return { firstSeq: 0, lastSeq: 0, totalEntries: 0 };
-    }
-    return {
-      firstSeq: first.metadata?.chronology?.seq ?? 0,
-      lastSeq: last.metadata?.chronology?.seq ?? 0,
-      totalEntries: this.history.length,
-    };
+    return computeContextRange(this.history);
   }
 
   /**
@@ -844,24 +839,7 @@ export abstract class HistoryServiceCore
    * @requirement REQ-854-004
    */
   getContextSummaries(): ContextSummaryInfo[] {
-    const summaries: ContextSummaryInfo[] = [];
-    for (const entry of this.history) {
-      const replaced = entry.metadata?.chronologyReplaced;
-      if (replaced === undefined) {
-        continue;
-      }
-      const text = entry.blocks
-        .map((block) => (block.type === 'text' ? block.text : ''))
-        .join('');
-      summaries.push({
-        seq: entry.metadata?.chronology?.seq ?? 0,
-        replacedFromSeq: replaced.fromSeq,
-        replacedToSeq: replaced.toSeq,
-        itemCount: replaced.toSeq - replaced.fromSeq + 1,
-        text,
-      });
-    }
-    return summaries;
+    return computeContextSummaries(this.history);
   }
 
   /**

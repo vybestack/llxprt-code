@@ -5,7 +5,7 @@
  */
 
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStdin, useStdout } from 'ink';
 import { useResponsive } from '../../../hooks/useResponsive.js';
 import type { TerminalStore } from '../../../stores/terminal/terminalStore.js';
@@ -42,6 +42,14 @@ import {
 } from '../../../contexts/RuntimeContext.js';
 import { useTodoContext } from '../../../contexts/TodoContext.js';
 import { useRecordingInfrastructure } from './useRecordingInfrastructure.js';
+import type { ScrollbackJournal } from '../../../../services/scrollback/ScrollbackJournal.js';
+import {
+  createScrollbackJournalForSession,
+  wrapTurnCommandsWithJournal,
+} from '../../../../services/scrollback/journalWiring.js';
+
+/** Turn stores already wired with a scrollback journal (one swap per store). */
+const scrollbackWiredStores = new WeakSet<TurnStore>();
 import { useUpdateAndOAuthBridges } from './useUpdateAndOAuthBridges.js';
 import { useSessionInitialization } from './useSessionInitialization.js';
 import { useTokenMetricsTracking } from './useTokenMetricsTracking.js';
@@ -294,6 +302,37 @@ function useBootstrapEvents(
 export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
   const { uiRuntime } = props;
   const streamRuntime: StreamRuntime = uiRuntime;
+  /**
+   * @plan PLAN-20260917-ISSUE854.P01
+   * @requirement REQ-854-005
+   * Scrollback journal wiring (REQ-854-001): when an active session
+   * recording exists and ui.scrollbackJournalEnabled is true (schema
+   * default), the turn store's addItem/updateItem commit points journal
+   * every committed item. One-time swap before useBootstrapHistory binds
+   * consumers to the commands. Flag off / no recording → untouched store.
+   */
+  const scrollbackJournalRef = useRef<ScrollbackJournal | null>(null);
+  if (!scrollbackWiredStores.has(props.turnStore)) {
+    scrollbackWiredStores.add(props.turnStore);
+    const journal = createScrollbackJournalForSession(
+      props.initialRecordingService,
+      props.settings.merged.ui.scrollbackJournalEnabled !== false,
+    );
+    if (journal !== null) {
+      scrollbackJournalRef.current = journal;
+      props.turnStore.commands = wrapTurnCommandsWithJournal(
+        props.turnStore,
+        journal,
+      );
+    }
+  }
+  useEffect(() => {
+    const journal = scrollbackJournalRef.current;
+    return () => {
+      journal?.close();
+      scrollbackJournalRef.current = null;
+    };
+  }, []);
   const h = useBootstrapHistory(props);
   const t = useBootstrapTodo();
   const e = useBootstrapEvents(props, h.addItem, h.setUpdateInfo, h.runtime);

@@ -94,7 +94,10 @@ export class ScrollbackJournal {
     if (!options.enabled) {
       return journal;
     }
-    journal.index = ScrollbackIndex.open(journal.journalPath, journal.indexPath);
+    journal.index = ScrollbackIndex.open(
+      journal.journalPath,
+      journal.indexPath,
+    );
     journal.uiSeq = journal.index.lastUiSeq;
     return journal;
   }
@@ -128,15 +131,15 @@ export class ScrollbackJournal {
       itemId: item.id,
       ts: new Date().toISOString(),
       kind: item.type,
-      ...(meta?.chronologySeq !== undefined
-        ? { chronologySeq: meta.chronologySeq }
-        : {}),
-      ...(meta?.seqSpan !== undefined ? { seqSpan: meta.seqSpan } : {}),
       payload: item,
     };
-    this.writeRecord(record, {
-      chronologySeq: record.chronologySeq,
-    });
+    if (meta?.chronologySeq !== undefined) {
+      record.chronologySeq = meta.chronologySeq;
+    }
+    if (meta?.seqSpan !== undefined) {
+      record.seqSpan = meta.seqSpan;
+    }
+    this.writeRecord(record, { chronologySeq: record.chronologySeq });
     return this.uiSeq;
   }
 
@@ -235,21 +238,20 @@ export class ScrollbackJournal {
     if (this.index === null) {
       return;
     }
-    if (this.journalFd === null) {
-      this.journalFd = fs.openSync(this.journalPath, 'a');
-    }
+    this.journalFd ??= fs.openSync(this.journalPath, 'a');
     const line = `${JSON.stringify(record)}\n`;
     const byteOffset = fs.fstatSync(this.journalFd).size;
     const byteLen = Buffer.byteLength(line, 'utf-8');
     fs.writeSync(this.journalFd, line);
-    this.index.append({
+    const entry = {
       uiSeq: record.uiSeq,
       byteOffset,
       byteLen,
       kind: record.rec === 'item' ? record.kind : record.rec,
-      ...(entryMeta?.chronologySeq !== undefined
-        ? { chronologySeq: entryMeta.chronologySeq }
-        : {}),
-    });
+    };
+    if (entryMeta?.chronologySeq !== undefined) {
+      entry.chronologySeq = entryMeta.chronologySeq;
+    }
+    this.index.append(entry);
   }
 }

@@ -313,6 +313,16 @@ export const UI_SETTINGS_SCHEMA = {
         description: 'Maximum size of history in bytes.',
         showInDialog: false,
       },
+      scrollbackJournalEnabled: {
+        type: 'boolean',
+        label: 'Scrollback Journal',
+        category: 'UI',
+        requiresRestart: false,
+        default: true,
+        description:
+          'Append committed UI history items to a per-session scrollback journal (sb-*.jsonl) next to the session recording.',
+        showInDialog: false,
+      },
       memoryImportFormat: {
         type: 'string',
         label: 'Memory Import Format',

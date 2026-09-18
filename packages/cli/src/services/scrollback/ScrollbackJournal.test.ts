@@ -38,11 +38,23 @@ function infoItem(id: number, text: string): HistoryItem {
   return { id, type: 'info', text };
 }
 
-function readJournalRecords(chatsDir: string, base: string): ScrollbackRecord[] {
-  const raw = fs.readFileSync(
-    path.join(chatsDir, `sb-${base}.jsonl`),
-    'utf-8',
-  );
+type ScrollbackRecordKind = ScrollbackRecord['rec'];
+
+function requireRec<K extends ScrollbackRecordKind>(
+  record: ScrollbackRecord | undefined,
+  rec: K,
+): Extract<ScrollbackRecord, { rec: K }> {
+  if (record === undefined || record.rec !== rec) {
+    throw new Error(`expected a ${rec} record`);
+  }
+  return record as Extract<ScrollbackRecord, { rec: K }>;
+}
+
+function readJournalRecords(
+  chatsDir: string,
+  base: string,
+): ScrollbackRecord[] {
+  const raw = fs.readFileSync(path.join(chatsDir, `sb-${base}.jsonl`), 'utf-8');
   return raw
     .split('\n')
     .filter((line) => line.length > 0)
@@ -80,20 +92,24 @@ describe('ScrollbackJournal', () => {
       sessionFileBase: 't2',
       enabled: true,
     });
-    const items = [infoItem(1, 'alpha'), infoItem(2, 'beta'), infoItem(3, 'gamma')];
+    const items = [
+      infoItem(1, 'alpha'),
+      infoItem(2, 'beta'),
+      infoItem(3, 'gamma'),
+    ];
     const seqs = items.map((item) => journal.append(item));
     journal.close();
-    expect(seqs).toEqual([1, 2, 3]);
+    expect(seqs).toStrictEqual([1, 2, 3]);
     const records = readJournalRecords(chatsDir, 't2');
     const itemRecords = records.filter(
       (record): record is ScrollbackItemRecord => record.rec === 'item',
     );
-    expect(itemRecords.map((record) => record.payload.text)).toEqual([
+    expect(itemRecords.map((record) => record.payload.text)).toStrictEqual([
       'alpha',
       'beta',
       'gamma',
     ]);
-    expect(itemRecords.map((record) => record.uiSeq)).toEqual([1, 2, 3]);
+    expect(itemRecords.map((record) => record.uiSeq)).toStrictEqual([1, 2, 3]);
     expect(new Set(itemRecords.map((record) => record.ts)).size).toBe(1);
   });
 
@@ -114,7 +130,7 @@ describe('ScrollbackJournal', () => {
     expect(itemRecords[0]?.chronologySeq).toBe(12);
     expect(itemRecords[0]?.seqSpan).toBeUndefined();
     expect(itemRecords[1]?.chronologySeq).toBeUndefined();
-    expect(itemRecords[1]?.seqSpan).toEqual([11, 12]);
+    expect(itemRecords[1]?.seqSpan).toStrictEqual([11, 12]);
   });
 
   it('journals revisions that supersede the original payload per itemId', () => {
@@ -130,11 +146,9 @@ describe('ScrollbackJournal', () => {
     expect(uiSeq).toBe(1);
     const records = readJournalRecords(chatsDir, 't4');
     const revRecord = records.find((record) => record.rec === 'rev');
-    expect(revRecord).toBeDefined();
-    if (revRecord?.rec === 'rev') {
-      expect(revRecord.itemId).toBe(9);
-      expect(revRecord.payload.text).toBe('final text');
-    }
+    const rev = requireRec(revRecord, 'rev');
+    expect(rev.itemId).toBe(9);
+    expect(rev.payload.text).toBe('final text');
   });
 
   it('journals boundary, clear, and rewind control records', () => {
@@ -155,23 +169,19 @@ describe('ScrollbackJournal', () => {
     journal.appendClear();
     journal.close();
     const records = readJournalRecords(chatsDir, 't5');
-    expect(records.map((record) => record.rec)).toEqual([
+    expect(records.map((record) => record.rec)).toStrictEqual([
       'item',
       'boundary',
       'rewind',
       'clear',
     ]);
-    const boundary = records[1];
-    if (boundary?.rec === 'boundary') {
-      expect(boundary.summaryText).toBe('compressed 4 messages');
-      expect(boundary.replacedFromSeq).toBe(1);
-      expect(boundary.replacedToSeq).toBe(4);
-      expect(boundary.itemCount).toBe(4);
-    }
-    const rewind = records[2];
-    if (rewind?.rec === 'rewind') {
-      expect(rewind.truncateAfterUiSeq).toBe(1);
-    }
+    const boundary = requireRec(records.at(1), 'boundary');
+    expect(boundary.summaryText).toBe('compressed 4 messages');
+    expect(boundary.replacedFromSeq).toBe(1);
+    expect(boundary.replacedToSeq).toBe(4);
+    expect(boundary.itemCount).toBe(4);
+    const rewind = requireRec(records.at(2), 'rewind');
+    expect(rewind.truncateAfterUiSeq).toBe(1);
   });
 
   it('resumes uiSeq from the index tail so sequences stay monotonic across reopen', () => {
@@ -213,6 +223,6 @@ describe('ScrollbackJournal', () => {
     journal.appendClear();
     journal.appendRewind(0);
     journal.close();
-    expect(fs.readdirSync(chatsDir)).toEqual([]);
+    expect(fs.readdirSync(chatsDir)).toStrictEqual([]);
   });
 });

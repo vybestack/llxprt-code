@@ -46,7 +46,7 @@ describe('scrollbackRecords', () => {
     };
     const parsed = parseScrollbackRecord(JSON.stringify(record));
     expect(parsed).not.toBeNull();
-    expect(parsed).toEqual(record);
+    expect(parsed).toStrictEqual(record);
     expect(isScrollbackRecord(record)).toBe(true);
   });
 
@@ -54,7 +54,9 @@ describe('scrollbackRecords', () => {
     expect(parseScrollbackRecord('')).toBeNull();
     expect(parseScrollbackRecord('not json')).toBeNull();
     expect(parseScrollbackRecord('{"v":1,"rec":"item"}')).toBeNull();
-    expect(parseScrollbackRecord('{"v":2,"rec":"clear","uiSeq":1,"ts":"x"}')).toBeNull();
+    expect(
+      parseScrollbackRecord('{"v":2,"rec":"clear","uiSeq":1,"ts":"x"}'),
+    ).toBeNull();
     expect(
       parseScrollbackRecord(
         '{"v":1,"rec":"item","uiSeq":1,"itemId":1,"ts":"x","kind":"info","payload":null}',
@@ -70,11 +72,15 @@ describe('scrollbackRecords', () => {
       kind: 'item',
       chronologySeq: 9,
     };
-    expect(parseScrollbackIndexEntry(JSON.stringify(entry))).toEqual(entry);
+    expect(parseScrollbackIndexEntry(JSON.stringify(entry))).toStrictEqual(
+      entry,
+    );
     expect(parseScrollbackIndexEntry('')).toBeNull();
     expect(parseScrollbackIndexEntry('[1,2,3]')).toBeNull();
     expect(
-      parseScrollbackIndexEntry('{"uiSeq":3,"byteOffset":-1,"byteLen":8,"kind":"item"}'),
+      parseScrollbackIndexEntry(
+        '{"uiSeq":3,"byteOffset":-1,"byteLen":8,"kind":"item"}',
+      ),
     ).toBeNull();
     expect(isScrollbackIndexEntry(entry)).toBe(true);
   });
@@ -91,10 +97,10 @@ describe('scrollbackRecords', () => {
         payload: { id: 1, type: 'info', text: 'x' },
       }),
     );
-    expect(parsed).not.toBeNull();
-    if (parsed !== null && parsed.rec === 'item') {
-      expect(recordChronologySeq(parsed)).toBeUndefined();
+    if (parsed === null || parsed.rec !== 'item') {
+      throw new Error('expected an item record');
     }
+    expect(recordChronologySeq(parsed)).toBeUndefined();
     const stamped = parseScrollbackRecord(
       JSON.stringify({
         v: SCROLLBACK_RECORD_VERSION,
@@ -106,9 +112,9 @@ describe('scrollbackRecords', () => {
         payload: { id: 1, type: 'info', text: 'y' },
       }),
     );
-    expect(stamped).not.toBeNull();
-    if (stamped !== null) {
-      expect(recordChronologySeq(stamped)).toBe(5);
+    if (stamped === null) {
+      throw new Error('expected a rev record');
     }
+    expect(recordChronologySeq(stamped)).toBe(5);
   });
 });

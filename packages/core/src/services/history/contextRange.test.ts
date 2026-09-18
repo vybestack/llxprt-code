@@ -30,13 +30,17 @@ function textContent(speaker: 'human' | 'ai', text: string): IContent {
   return { speaker, blocks: [{ type: 'text', text }] };
 }
 
-function seqOf(
-  service: HistoryService,
-  positionFromEnd: number,
-): number | undefined {
+function seqOf(service: HistoryService, positionFromEnd: number): number {
   const entries = service.getRecent(positionFromEnd + 1);
-  const entry = entries[entries.length - 1 - positionFromEnd];
-  return entry?.metadata?.chronology?.seq;
+  const entry = entries.at(-1 - positionFromEnd);
+  if (entry === undefined) {
+    throw new Error('expected a history entry');
+  }
+  const seq = entry.metadata?.chronology?.seq;
+  if (seq === undefined) {
+    throw new Error('expected a chronology seq');
+  }
+  return seq;
 }
 
 describe('HistoryService context range', () => {
@@ -45,7 +49,7 @@ describe('HistoryService context range', () => {
     for (const text of ['one', 'two', 'three', 'four', 'five']) {
       service.add(textContent('human', text));
     }
-    await service.waitForTokenUpdates?.();
+    await service.waitForTokenUpdates();
     const range = service.getContextRange();
     expect(range.totalEntries).toBe(5);
     expect(range.firstSeq).toBe(seqOf(service, 4));
@@ -57,7 +61,7 @@ describe('HistoryService context range', () => {
     const service = new HistoryService();
     service.add(textContent('human', 'only'));
     service.clear();
-    expect(service.getContextRange()).toEqual({
+    expect(service.getContextRange()).toStrictEqual({
       firstSeq: 0,
       lastSeq: 0,
       totalEntries: 0,
@@ -73,7 +77,7 @@ describe('HistoryService context range', () => {
     service.add(textContent('human', 'one'));
     service.add(textContent('ai', 'two'));
     service.add(textContent('human', 'three'));
-    expect(events).toEqual([]);
+    expect(events).toStrictEqual([]);
 
     await service.transformAll((contents) => [
       {
@@ -101,7 +105,11 @@ describe('HistoryService context range', () => {
     });
     service.clear();
     expect(events).toHaveLength(1);
-    expect(events[0]).toEqual({ firstSeq: 0, lastSeq: 0, totalEntries: 0 });
+    expect(events[0]).toStrictEqual({
+      firstSeq: 0,
+      lastSeq: 0,
+      totalEntries: 0,
+    });
   });
 
   it('exposes compression summaries with their replaced span and text', async () => {
@@ -109,7 +117,7 @@ describe('HistoryService context range', () => {
     for (const text of ['one', 'two', 'three', 'four']) {
       service.add(textContent('human', text));
     }
-    expect(service.getContextSummaries()).toEqual([]);
+    expect(service.getContextSummaries()).toStrictEqual([]);
 
     await service.transformAll(() => [
       {
@@ -123,11 +131,14 @@ describe('HistoryService context range', () => {
     ]);
     const summaries = service.getContextSummaries();
     expect(summaries).toHaveLength(1);
-    const summary = summaries[0];
-    expect(summary?.seq).toBe(98);
-    expect(summary?.replacedFromSeq).toBe(1);
-    expect(summary?.replacedToSeq).toBe(4);
-    expect(summary?.itemCount).toBe(4);
-    expect(summary?.text).toBe('summary of four');
+    const summary = summaries.at(0);
+    if (summary === undefined) {
+      throw new Error('expected one summary');
+    }
+    expect(summary.seq).toBe(98);
+    expect(summary.replacedFromSeq).toBe(1);
+    expect(summary.replacedToSeq).toBe(4);
+    expect(summary.itemCount).toBe(4);
+    expect(summary.text).toBe('summary of four');
   });
 });

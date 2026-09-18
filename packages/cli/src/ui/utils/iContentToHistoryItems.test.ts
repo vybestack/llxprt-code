@@ -750,9 +750,7 @@ describe('iContentToHistoryItems chronology stamps', () => {
       },
       {
         speaker: 'tool',
-        blocks: [
-          { type: 'tool_response', callId: 'c1', result: { ok: true } },
-        ],
+        blocks: [{ type: 'tool_response', callId: 'c1', result: { ok: true } }],
         metadata: { chronology: { seq: 21 } },
       },
     ];
