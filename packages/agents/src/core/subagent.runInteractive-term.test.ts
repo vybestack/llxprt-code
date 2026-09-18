@@ -115,7 +115,7 @@ import { waitForCondition } from '../test-utils/eventLoop.js';
 const CONDITION_WAIT_TURNS = 200_000;
 
 describe('subagent.ts', () => {
-  let mockSendMessageStream: Mock;
+  let mockSendMessageStream: Mock<(...args: never[]) => Promise<unknown>>;
 
   beforeEach(() => {
     // Guards against a previous test leaking fake-timer state across test
