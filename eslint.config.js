@@ -701,6 +701,20 @@ export default tseslint.config(
       'max-lines': ['error', { max: 900, skipBlankLines: true, skipComments: true }], // eslint-policy-allow-off: #3504 raised from 800, split tracked in #3613
     },
   },
+  // ============================================================================
+  // PR #3715: LoadBalancingProvider.ts sat at 797 effective lines (just under
+  // the 800 cap) before the eligibility-aware failover prompt-envelope peek
+  // added the once-per-projection failover-settings read plus the
+  // non-mutating backend-eligibility predicate (4 effective lines), reaching
+  // 801. max-lines is raised to 900 to keep the fix surgical; splitting the
+  // provider remains future work.
+  // ============================================================================
+  {
+    files: ['packages/providers/src/LoadBalancingProvider.ts'],
+    rules: {
+      'max-lines': ['error', { max: 900, skipBlankLines: true, skipComments: true }], // eslint-policy-allow-off: #3715 raised from 800
+    },
+  },
   // Issue #2605: Apply strict code-quality lint rules to eval TypeScript
   // ============================================================================
   // The eval suite (evals/**/*.ts) is real source executed by the nightly

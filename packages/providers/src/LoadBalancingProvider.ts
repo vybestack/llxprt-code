@@ -185,18 +185,31 @@ export class LoadBalancingProvider implements IProvider {
   /**
    * Project the NEXT sub-profile's prompt envelope as an estimate-only
    * value for tool-aware pre-send estimation (issue #3507). Peeks the
-   * rotation without consuming selection state; the send-time guard still
-   * re-estimates authoritatively. Resolves undefined when the delegate
-   * cannot project.
+   * rotation without consuming selection state. Failover peeks are
+   * eligibility-aware (PR #3715): they mirror the send path's skip policy
+   * by targeting the first member from the failover start index that
+   * passes a non-mutating eligibility read (circuitBreaker.canAttemptBackend
+   * + TPM threshold — pure reads, so the peek never steals a half-open
+   * recovery probe); when no member is eligible, the start-index member is
+   * projected anyway because this estimate-only seam never throws.
+   * Round-robin peeks ignore eligibility (the send path is a pure
+   * rotation). The send-time guard still re-estimates authoritatively.
+   * Resolves undefined when the delegate cannot project.
    */
   async projectPromptEnvelope(
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection | undefined> {
+    // One settings read per projection: the eligibility predicate below
+    // closes over it instead of re-extracting per member.
+    const failoverSettings = this.extractFailoverSettings();
     return projectNextSubProfilePromptEnvelope({
       config: this.config,
       providerManager: this.providerManager,
       failoverState: this.failoverState,
       roundRobinIndex: this.roundRobinIndex,
+      isBackendEligible: (name) =>
+        this.circuitBreaker.canAttemptBackend(name) &&
+        !this.tpmTracker.shouldSkipOnTPM(name, failoverSettings.tpmThreshold),
       buildDelegateResolvedOptions: (subProfile, delegateOptions) =>
         this.buildRoundRobinResolvedOptions(subProfile, delegateOptions),
       options,

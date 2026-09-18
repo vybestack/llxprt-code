@@ -28,11 +28,15 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
+  type LoadBalancerSubProfile,
   type ResolvedSubProfile,
 } from '../LoadBalancingProvider.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { FailoverState } from '../loadBalancing/failoverState.js';
+import { projectNextSubProfilePromptEnvelope } from '../loadBalancing/promptEnvelopeProjection.js';
+import { resolveSubProfileModel } from '../loadBalancing/subProfileHelpers.js';
 
 function createTextContent(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
@@ -63,6 +67,8 @@ function createResolvedSubProfile(
 interface ProjectingDelegate {
   readonly provider: IProvider;
   readonly projectedOptions: GenerateChatOptions[];
+  /** Model of each send attempt this delegate served, in attempt order. */
+  readonly sentModels: string[];
   readonly delegateTokens: object[];
 }
 
@@ -73,8 +79,13 @@ function createProjectingDelegate(spec: {
   resolveProjection?: (
     options: GenerateChatOptions,
   ) => Promise<PromptEnvelopeProjection | undefined>;
+  /** Fail (throw) the first N send attempts; projection still succeeds. */
+  failFirstSends?: number;
+  /** Report this many usage tokens on the sent chunk (TPM tracking). */
+  usageTokens?: number;
 }): ProjectingDelegate {
   const projectedOptions: GenerateChatOptions[] = [];
+  const sentModels: string[] = [];
   const delegateTokens: object[] = [];
   const provider: IProvider = {
     name: spec.name,
@@ -106,12 +117,30 @@ function createProjectingDelegate(spec: {
         throw new Error('legacy array overload is not exercised here');
       }
       projectedOptions.push(options);
-      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+      sentModels.push(options.resolved?.model ?? spec.name);
+      if (sentModels.length <= (spec.failFirstSends ?? 0)) {
+        throw new Error(`delegate ${spec.name} send failed`);
+      }
+      const okChunk: IContent = {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'ok' }],
+      };
+      if (spec.usageTokens === undefined) {
+        yield okChunk;
+        return;
+      }
+      // Gemini wire usage shape: BackendMetricsCollector.extractTokenCount
+      // reads this compat form off the last chunk; IContent itself keeps
+      // usage in neutral metadata, so the wire fields need a cast here.
+      yield {
+        ...okChunk,
+        usageMetadata: { promptTokenCount: spec.usageTokens },
+      } as unknown as IContent;
     },
     getModels: async () => [],
     getDefaultModel: () => 'delegate-default',
   };
-  return { provider, projectedOptions, delegateTokens };
+  return { provider, projectedOptions, sentModels, delegateTokens };
 }
 
 /** Serialize contents + tool schemas the way an envelope estimate would. */
@@ -476,5 +505,327 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
     expect(await projection?.accounting?.incremental?.legacyEstimate()).toBe(
       334,
     );
+  });
+
+  describe('failover eligibility-aware peek (issue #3507, PR #3715)', () => {
+    /**
+     * Failover members with distinct delegate providers, so each member's
+     * sends and projections are attributable to exactly one delegate. Each
+     * carries an explicit baseURL: unknown provider names get no default
+     * endpoint, and runtime normalization rejects a delegate resolution
+     * without one.
+     */
+    function createFailoverMembers(): ResolvedSubProfile[] {
+      return [
+        createResolvedSubProfile({
+          name: 'a',
+          providerName: 'prov-a',
+          model: 'model-a',
+          baseURL: 'https://a.example.test',
+        }),
+        createResolvedSubProfile({
+          name: 'b',
+          providerName: 'prov-b',
+          model: 'model-b',
+          baseURL: 'https://b.example.test',
+        }),
+        createResolvedSubProfile({
+          name: 'c',
+          providerName: 'prov-c',
+          model: 'model-c',
+          baseURL: 'https://c.example.test',
+        }),
+      ];
+    }
+
+    async function consumeSend(
+      lb: LoadBalancingProvider,
+      text: string,
+    ): Promise<void> {
+      for await (const _chunk of lb.generateChatCompletion({
+        contents: [createTextContent(text)],
+      })) {
+        // consume
+      }
+    }
+
+    it('skips a circuit-open start member and projects the next eligible member the next send attempts', async () => {
+      const delegateA = createProjectingDelegate({
+        name: 'prov-a',
+        estimateTokens: () => 10,
+        failFirstSends: 1,
+      });
+      const delegateB = createProjectingDelegate({
+        name: 'prov-b',
+        estimateTokens: () => 20,
+      });
+      providerManager.registerProvider(delegateA.provider);
+      providerManager.registerProvider(delegateB.provider);
+
+      const [a, b] = createFailoverMembers();
+      const lb = createLoadBalancer(providerManager, {
+        strategy: 'failover',
+        lbProfileEphemeralSettings: {
+          circuit_breaker_enabled: true,
+          circuit_breaker_failure_threshold: 1,
+          circuit_breaker_recovery_timeout_ms: 60000,
+          failover_retry_count: 1,
+        },
+        subProfiles: [a, b],
+      });
+
+      // One failed send opens member 'a's circuit; the send lands on 'b'.
+      await consumeSend(lb, 'first send');
+      expect(lb.getStats().circuitBreakerStates.a.state).toBe('open');
+      expect(lb.getCurrentFailoverIndex()).toBe(1);
+
+      // Return the failover start index to the open-circuit member.
+      lb.resetFailoverIndex();
+
+      const projection = await lb.projectPromptEnvelope({ contents: [] });
+      expect(projection?.model).toBe('model-b');
+
+      // The peek consumed no selection state: the start index is unchanged,
+      // and the next send starts from it — skipping the open-circuit 'a'
+      // and attempting 'b' first, exactly the member the peek estimated.
+      expect(lb.getCurrentFailoverIndex()).toBe(0);
+      await consumeSend(lb, 'second send');
+      expect(delegateB.sentModels).toStrictEqual(['model-b', 'model-b']);
+      expect(delegateA.sentModels).toStrictEqual(['model-a']);
+    });
+
+    it('skips a TPM-ineligible start member (usage below threshold) and projects the next eligible member', async () => {
+      const delegateA = createProjectingDelegate({
+        name: 'prov-a',
+        estimateTokens: () => 10,
+        usageTokens: 100,
+      });
+      const delegateB = createProjectingDelegate({
+        name: 'prov-b',
+        estimateTokens: () => 20,
+      });
+      providerManager.registerProvider(delegateA.provider);
+      providerManager.registerProvider(delegateB.provider);
+
+      const [a, b] = createFailoverMembers();
+      const lb = createLoadBalancer(providerManager, {
+        strategy: 'failover',
+        lbProfileEphemeralSettings: { tpm_threshold: 500 },
+        subProfiles: [a, b],
+      });
+
+      // A successful send through 'a' records 100 usage tokens: its TPM is
+      // positive but below the 500 threshold, so the send path skips it.
+      await consumeSend(lb, 'tpm seeding send');
+      const tpm = lb.getStats().currentTPM.a;
+      expect(tpm).toBeGreaterThan(0);
+      expect(tpm).toBeLessThan(500);
+      expect(lb.getCurrentFailoverIndex()).toBe(0);
+
+      const projection = await lb.projectPromptEnvelope({ contents: [] });
+      expect(projection?.model).toBe('model-b');
+      expect(lb.getCurrentFailoverIndex()).toBe(0);
+    });
+
+    it('targets the eligible start member when tpmThreshold is 0 (usage history never causes a skip)', async () => {
+      const delegateA = createProjectingDelegate({
+        name: 'prov-a',
+        estimateTokens: () => 10,
+        usageTokens: 100,
+      });
+      providerManager.registerProvider(delegateA.provider);
+
+      const [a, b] = createFailoverMembers();
+      const lb = createLoadBalancer(providerManager, {
+        strategy: 'failover',
+        lbProfileEphemeralSettings: { tpm_threshold: 0 },
+        subProfiles: [a, b],
+      });
+
+      await consumeSend(lb, 'tpm seeding send');
+      expect(lb.getStats().currentTPM.a).toBeGreaterThan(0);
+
+      const projection = await lb.projectPromptEnvelope({ contents: [] });
+      expect(projection?.model).toBe('model-a');
+      expect(lb.getCurrentFailoverIndex()).toBe(0);
+    });
+
+    it('falls back to the start-index member when every member is ineligible, without throwing', async () => {
+      const delegateA = createProjectingDelegate({
+        name: 'prov-a',
+        estimateTokens: () => 10,
+        failFirstSends: 99,
+      });
+      const delegateB = createProjectingDelegate({
+        name: 'prov-b',
+        estimateTokens: () => 20,
+        failFirstSends: 99,
+      });
+      providerManager.registerProvider(delegateA.provider);
+      providerManager.registerProvider(delegateB.provider);
+
+      const [a, b] = createFailoverMembers();
+      const lb = createLoadBalancer(providerManager, {
+        strategy: 'failover',
+        lbProfileEphemeralSettings: {
+          circuit_breaker_enabled: true,
+          circuit_breaker_failure_threshold: 1,
+          circuit_breaker_recovery_timeout_ms: 60000,
+          failover_retry_count: 1,
+        },
+        subProfiles: [a, b],
+      });
+
+      // Every send fails: both circuits open and the send throws its
+      // aggregate error (the send path's business, never the peek's).
+      let sendError: unknown;
+      try {
+        await consumeSend(lb, 'doomed send');
+      } catch (error) {
+        sendError = error;
+      }
+      expect(sendError).toBeInstanceOf(Error);
+      const stats = lb.getStats();
+      expect(stats.circuitBreakerStates.a.state).toBe('open');
+      expect(stats.circuitBreakerStates.b.state).toBe('open');
+
+      lb.resetFailoverIndex();
+      const projection = await lb.projectPromptEnvelope({ contents: [] });
+      expect(projection?.model).toBe('model-a');
+      expect(lb.getCurrentFailoverIndex()).toBe(0);
+    });
+
+    it('reads circuit state without stealing the half-open recovery probe from the next send', async () => {
+      const delegateA = createProjectingDelegate({
+        name: 'prov-a',
+        estimateTokens: () => 10,
+        failFirstSends: 1,
+      });
+      const delegateB = createProjectingDelegate({
+        name: 'prov-b',
+        estimateTokens: () => 20,
+      });
+      providerManager.registerProvider(delegateA.provider);
+      providerManager.registerProvider(delegateB.provider);
+
+      const [a, b] = createFailoverMembers();
+      const lb = createLoadBalancer(providerManager, {
+        strategy: 'failover',
+        lbProfileEphemeralSettings: {
+          circuit_breaker_enabled: true,
+          circuit_breaker_failure_threshold: 1,
+          circuit_breaker_recovery_timeout_ms: 100,
+          failover_retry_count: 1,
+        },
+        subProfiles: [a, b],
+      });
+
+      // Open member 'a's circuit, then let its recovery window elapse.
+      await consumeSend(lb, 'circuit opening send');
+      expect(lb.getStats().circuitBreakerStates.a.state).toBe('open');
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      lb.resetFailoverIndex();
+
+      // The recovery window elapsed, so the pure eligibility read finds 'a'
+      // eligible again and the peek projects it as the next target.
+      const projection = await lb.projectPromptEnvelope({ contents: [] });
+      expect(projection?.model).toBe('model-a');
+
+      // The peek left the circuit 'open': a mutating health read would have
+      // entered 'half-open' and consumed the single recovery probe.
+      expect(lb.getStats().circuitBreakerStates.a.state).toBe('open');
+
+      // The next SEND consumes the probe and retries 'a'; success closes it.
+      await consumeSend(lb, 'recovery probe send');
+      expect(delegateA.sentModels).toStrictEqual(['model-a', 'model-a']);
+      expect(lb.getStats().circuitBreakerStates.a.state).toBe('closed');
+    });
+  });
+
+  describe('projectNextSubProfilePromptEnvelope eligibility traversal (issue #3507, PR #3715)', () => {
+    function unitMembers(providerName: string): ResolvedSubProfile[] {
+      return ['a', 'b', 'c'].map((name) =>
+        createResolvedSubProfile({
+          name,
+          providerName,
+          model: `model-${name}`,
+          // Unknown provider names carry no default endpoint; normalization
+          // requires an explicit baseURL on the delegate resolution.
+          baseURL: 'https://unit.example.test',
+        }),
+      );
+    }
+
+    /** Resolve like the provider does: member model + auth onto `resolved`. */
+    function unitResolvedOptions(
+      subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+      options: GenerateChatOptions,
+    ): GenerateChatOptions {
+      return {
+        ...options,
+        resolved: {
+          model: resolveSubProfileModel(subProfile),
+          baseURL: subProfile.baseURL,
+          authToken: subProfile.authToken,
+        },
+      };
+    }
+
+    it('round-robin peek never consults the eligibility predicate', async () => {
+      const delegate = createProjectingDelegate({
+        name: 'prov',
+        estimateTokens: () => 10,
+      });
+      providerManager.registerProvider(delegate.provider);
+
+      const projection = await projectNextSubProfilePromptEnvelope({
+        config: {
+          profileName: 'unit-lb',
+          strategy: 'round-robin',
+          subProfiles: unitMembers('prov'),
+        },
+        providerManager,
+        failoverState: new FailoverState(),
+        roundRobinIndex: 0,
+        isBackendEligible: () => {
+          throw new Error('round-robin peek must not consult eligibility');
+        },
+        buildDelegateResolvedOptions: unitResolvedOptions,
+        options: { contents: [] },
+      });
+
+      expect(projection?.model).toBe('model-a');
+    });
+
+    it('failover traversal wraps circularly to the first eligible member without moving the start index', async () => {
+      const delegate = createProjectingDelegate({
+        name: 'prov',
+        estimateTokens: () => 10,
+      });
+      providerManager.registerProvider(delegate.provider);
+
+      const failoverState = new FailoverState();
+      const { owner } = failoverState.claim();
+      failoverState.setIfOwner(owner, 2);
+
+      const projection = await projectNextSubProfilePromptEnvelope({
+        config: {
+          profileName: 'unit-lb',
+          strategy: 'failover',
+          subProfiles: unitMembers('prov'),
+        },
+        providerManager,
+        failoverState,
+        roundRobinIndex: 0,
+        isBackendEligible: (name) => name === 'a',
+        buildDelegateResolvedOptions: unitResolvedOptions,
+        options: { contents: [] },
+      });
+
+      // Only 'a' passes the predicate, so the traversal from index 2 wraps
+      // around the circle to index 0 — and leaves the start index alone.
+      expect(projection?.model).toBe('model-a');
+      expect(failoverState.getIndex()).toBe(2);
+    });
   });
 });
