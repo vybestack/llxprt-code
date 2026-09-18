@@ -8700,6 +8700,31 @@ describe('eslint-guard ceiling override guard (#3718)', () => {
     expect(checkDiff(diff)).toEqual([]);
   });
 
+  it('flags a mixed files array when only one glob is baselined (diff path)', () => {
+    // 'scripts/test-audit/scan.ts' + complexity is baselined, but
+    // 'packages/core/src/huge.ts' + complexity is not; one baselined glob
+    // must not waive the whole files array.
+    const diff = [
+      'diff --git a/eslint.config.js b/eslint.config.js',
+      'index 0000000..1111111 100644',
+      '--- a/eslint.config.js',
+      '+++ b/eslint.config.js',
+      '@@ -600,6 +600,7 @@',
+      '  {',
+      "    files: ['scripts/test-audit/scan.ts', 'packages/core/src/huge.ts'],",
+      '    rules: {',
+      "+      complexity: 'off', // eslint-policy-allow-off: #3240",
+      '    },',
+      '  },',
+    ].join(String.fromCharCode(10));
+    const violations = checkDiff(diff);
+    expect(violations.length).toBe(1);
+    expect(violations[0].message).toContain("'complexity'");
+    expect(violations[0].message).toContain(
+      'split the file; raising the ceiling is not an accepted fix (#3718)',
+    );
+  });
+
   it('flags an un-baselined per-file ceiling off in current state', () => {
     const fixture = [
       'const config = [',
@@ -8733,6 +8758,28 @@ describe('eslint-guard ceiling override guard (#3718)', () => {
     ].join(String.fromCharCode(10));
     const violations = scanConfigCeilingOverrides(fixture);
     expect(violations.length).toBe(1);
+    expect(violations[0].message).toContain(
+      'split the file; raising the ceiling is not an accepted fix (#3718)',
+    );
+  });
+
+  it('flags a current-state single-line inline rules off entry in a files-scoped block', () => {
+    // extractRuleKey treats the structural `rules` key as null, so the
+    // single-line `rules: { ... }` form needs inline-entry extraction to be
+    // caught by the current-state scan, like the diff path already does.
+    const fixture = [
+      'const config = [',
+      '  {',
+      "    files: ['packages/core/src/inline/big.file.ts'],",
+      "    rules: { 'max-lines': 'off' }, // eslint-policy-allow-off: #9999",
+      '  },',
+      '];',
+    ].join(String.fromCharCode(10));
+    const violations = scanConfigCeilingOverrides(fixture);
+    expect(violations.length).toBe(1);
+    expect(violations[0].file).toBe('eslint.config.js');
+    expect(violations[0].lineNumber).toBe(4);
+    expect(violations[0].message).toContain("'max-lines'");
     expect(violations[0].message).toContain(
       'split the file; raising the ceiling is not an accepted fix (#3718)',
     );

@@ -9,7 +9,11 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { CEILING_RULES, isCommentOnlyLine } from './constants.ts';
-import { isRulesBlockOpen, countDiffBraceDelta } from './diff-context.ts';
+import {
+  countDiffBraceDelta,
+  extractInlineRulesEntries,
+  isRulesBlockOpen,
+} from './diff-context.ts';
 import {
   countDiffBracketAndBraceDelta,
   extractMaxValueFromStandaloneLine,
@@ -243,12 +247,17 @@ export function ceilingOverrideBaselineKeys(): ReadonlySet<string> {
   return baselineKeysCache;
 }
 
+/**
+ * Suppression requires EVERY tracked files glob to have a matching
+ * (files-glob, rule) baseline pair: a files array mixing one baselined glob
+ * with one unbaselined glob must not waive the entry for all of them (#3718).
+ */
 export function isBaselinedCeilingOverride(
   filesGlobs: readonly string[],
   rule: string,
 ): boolean {
   const keys = ceilingOverrideBaselineKeys();
-  return filesGlobs.some((glob) => keys.has(baselineKey(glob, rule)));
+  return filesGlobs.every((glob) => keys.has(baselineKey(glob, rule)));
 }
 
 // --- Current-state scan of eslint.config.js ---
@@ -418,6 +427,7 @@ function recordCeilingWaiverLine(
   if (state.activeFilesGlobs.length === 0) {
     return;
   }
+  recordInlineCeilingWaivers(state, line, lineNumber, overrides);
   const waiver = describeCeilingWaiver(
     line,
     extractRuleKey(line),
@@ -427,6 +437,36 @@ function recordCeilingWaiverLine(
   if (waiver === null) {
     return;
   }
+  pushCeilingWaiverPerGlob(state, waiver, lineNumber, line, overrides);
+}
+
+/**
+ * Single-line `rules: { 'max-lines': 'off' }` openers carry their rule
+ * entries inline; extractRuleKey treats the structural `rules` key as null,
+ * so evaluate each inline entry with describeCeilingWaiver the same way the
+ * diff path does (#3718).
+ */
+function recordInlineCeilingWaivers(
+  state: ConfigScanState,
+  line: string,
+  lineNumber: number,
+  overrides: ConfigCeilingOverride[],
+) {
+  for (const added of extractInlineRulesEntries(line)) {
+    const waiver = describeCeilingWaiver(added.content, added.key, null, false);
+    if (waiver !== null) {
+      pushCeilingWaiverPerGlob(state, waiver, lineNumber, line, overrides);
+    }
+  }
+}
+
+function pushCeilingWaiverPerGlob(
+  state: ConfigScanState,
+  waiver: CeilingWaiver,
+  lineNumber: number,
+  line: string,
+  overrides: ConfigCeilingOverride[],
+) {
   for (const glob of state.activeFilesGlobs) {
     overrides.push({
       files: glob,
