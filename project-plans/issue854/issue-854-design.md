@@ -18,9 +18,10 @@ and pages in when the user scrolls back. When the user scrolls forward, loaded
 pages are dropped again. Items are marked in the UI as "in context" or
 "purged", and each compression boundary gets an expandable summary row.
 
-The model-side context stays fully in memory this phase. The design leaves a
-clean seam (the context range API) so `HistoryService` can adopt the same
-journal-windowing pattern later without UI changes.
+The model-side context stays in memory until P05, which then deletes that
+copy entirely: `HistoryService` becomes a facade over the same journal —
+per model call, rows stream from the file through a transformer with
+nothing held in memory (section 5c, acceptance criteria).
 
 ## Goals
 
@@ -34,13 +35,16 @@ journal-windowing pattern later without UI changes.
 4. G4 — Expandable summary under the purged boundary (issue item 3).
 5. G5 — Exact-fidelity scrollback: UI-only items (info boxes, command
    feedback) are persisted and replayed, unlike today's lossy resume.
-6. G6 — Do not block the future "context itself on disk" work; do not do it
-   now.
+6. G6 — Do not block the "context itself on disk" work. P05 delivers it:
+   `HistoryService` holds NO in-memory copy of the context; the journal is
+   the system of record for the UI and the model alike (5c).
+7. G7 — Subagents use the same disk-based path: own journal file per run,
+   same facade, no in-memory collection anywhere (5b).
 
 ## Non-goals
 
-- Changing what the model sees. `HistoryService` keeps its full in-memory
-  array this phase.
+- Changing what the model sees in phases P01–P04 (the facade flip is P05's
+  entire content; its acceptance criteria are in 5c).
 - OpenTUI: removed from main (`--experimental-ui` / `@vybestack/llxprt-ui` are
   gone). Issue text predates the removal; design targets the Ink UI only.
 - Paging the terminal-native scrollback in primary-buffer mode (there is no
@@ -93,55 +97,54 @@ Principles (per Andrew's three rulings, 2026-09-18):
 
 ### 0. The journal and its clients (architecture map)
 
-One file, one writer, three readers. The session journal
+One journal per session, one writer per journal, three kinds of reader
+per journal (main sessions and subagent sessions alike). The session journal
 `session-*.jsonl` is the single durable artifact; everything else is a
 client of it:
 
 ```
-              writes (existing path)
- agent loop ──RecordingIntegration──▶ session-*.jsonl
-    │                                     ▲        ▲        ▲
-    │ in-process                          │read    │read    │read
-    ▼                                     │        │        │
- HistoryService (context)          JournalCursor  Replay   Janitor/
-    ▲                              (UI scrollback) Engine   discovery
-    │ transform (event fold)             │         (resume)  (existing)
-    └── provider call ◀── IContent[]
+              writes (existing path, becomes THE write path)
+ agent loop ──content commit──▶ session-*.jsonl   (main session)
+    │                                ▲   ▲
+    │ every provider call:           │   │
+    │ stream + fold + transform      │   │
+    ▼                                │   │
+ HistoryService (FACADE, P05) ───────┘   │
+    │  — no IContent[] collection       │
+    ▼                                    │
+ provider call                    JournalCursor (UI scrollback)
+                                         │
+ subagent run ──content commit──▶ session-*.jsonl (own file, same path)
 ```
 
-- **Writer (existing, unchanged)**: the main agent loop emits HistoryService
-  events; `RecordingIntegration` (created once per interactive session in
-  `cliSessionBootstrap` / `performResume`) serializes them into the journal
+- **Writer (the write path)**: a content commit appends to the journal
   through `SessionRecordingService`. The UI never writes.
 - **Client 1 — UI scrollback (new)**: `ScrollbackPager` in the CLI reads
   the journal backward/forward through `JournalCursor` to render history
-  the model no longer holds (and, in phase 5, history the live process
-  evicted).
-- **Client 2 — model context (phase 5 promotion)**: HistoryService itself
-  becomes a journal client. Today its `IContent[]` array is authoritative
-  in memory and the journal is a downstream copy; the end state inverts
-  that: context is projected from journal records on demand (see 5c).
-  While the process is live, the projection is fed in-process (no disk
-  read on the hot path); disk reads happen at resume/restore.
+  the viewport no longer holds.
+- **Client 2 — model context (P05, acceptance-criteried)**: HistoryService
+  becomes a **facade over the file** — no in-memory copy of the context
+  (see 5c). Every provider call streams rows from the journal through a
+  transformer; nothing is held in memory afterward.
 - **Client 3 — resume/replay (existing)**: `ReplayEngine` already
-  reconstructs HistoryService state from the journal on `/continue`.
-  The projection in 5c is the same event fold, made incremental.
-- **Subagents are NOT journal clients** (see 5b): each subagent loop has
-  its own in-memory HistoryService and no recording; it surfaces in the
-  parent journal as a single `task` tool-call record.
+  reconstructs state from the journal on `/continue`; the facade uses the
+  same event fold, made streaming.
+- **Subagents use the same disk-based path** (ruling 2026-09-18): each
+  subagent run gets its OWN journal file in the same chatsDir and its own
+  facade over it — no in-memory collection there either (see 5b).
 
 Package / class / API responsibilities:
 
 | Package | Class / module | Responsibility | Status |
 |---|---|---|---|
 | core `recording` | `SessionRecordingService` | sole journal writer; lock, flush, header | existing, unchanged |
-| core `recording` | `RecordingIntegration` | HistoryService events → journal records | existing, unchanged |
-| core `recording` | `ReplayEngine` | full-journal event fold at resume | existing, unchanged |
+| core `recording` | `ReplayEngine` | event fold at resume; P05 extracts a streaming fold | existing |
 | core `recording` | `JournalCursor` (new) | chunked reverse/forward reader: `pageBack(n)`, `pageForward(n)`, `size()`; torn-line tolerant; group-pair atomic; read-only | P02 |
-| core `services/history` | `HistoryService` + `contextRange` | context truth; `getContextRange()`, `getContextSummaries()`, `contextRangeChanged` (kept from P01); later: journal-backed projection (5c) | P01 done; 5c = P05 |
+| core `services/history` | `HistoryService` | **facade over the journal (P05)**: no `IContent[]` collection; `getContextRange()`, `getContextSummaries()`, `contextRangeChanged` (kept from P01); provider assembly = stream + fold + transform | P01 done; facade = P05 |
+| core `tools-adapters` | `CoreSubagentServiceAdapter` + launch path | allocate subagent sessionId + own journal at launch; close at scope end (5b) | P05 |
 | cli `ui/stores/turn` | `ScrollbackPager` (new) | resident window policy, eviction, byte-offset state, byte-proportional scrollbar | P02 |
-| cli `ui/hooks` | `useAgentStream` → `pendingHistoryItems` | realtime streaming of the live turn (in-memory, never journaled until commit) | existing, unchanged |
-| cli `ui/utils` | `iContentToHistoryItems` | journal `IContent` records → `HistoryItem`s (chronology-stamped); used by pager page-ins and resume alike | extended in P01 |
+| cli `ui/hooks` | `useAgentStream` → `pendingHistoryItems` | realtime streaming of the live turn (in-memory working state, journaled only at commit) | existing, unchanged |
+| cli `ui/utils` | `iContentToHistoryItems` | journal `IContent` records → `HistoryItem`s (chronology-stamped); used by pager page-ins, resume, and the provider transformer | extended in P01 |
 
 ### 1. Durable state — session journal only, unchanged
 
@@ -330,73 +333,145 @@ design keeps the two paths separate by construction:
   back mid-stream keeps streaming because the pending rows are separate
   slots, not part of the paged window.
 
-### 5b. Subagents — no journal, no scrollback surface
+### 5b. Subagents — same disk-based path, own journal files
 
-Verified against the code (branch main, 2026-09-18):
+Ruling 2026-09-18 (Andrew): "subagents need to use the same disk-based
+path. the point is to NOT hold shit in memory... this means subagents
+will need their own files (and that's fine, they should)."
 
-- Every agent runtime — main or subagent — constructs its own
-  in-memory `HistoryService` (`createAgentRuntimeContext`). Only the
-  interactive CLI session creates a `RecordingIntegration`
-  (`cliSessionBootstrap.ts`, `performResume.ts`). Subagent loops
-  therefore keep NO journal: their internal turns are ephemeral and die
-  with the scope.
-- In the parent session, a subagent run is exactly one `task`
-  tool-call group (2 adjacent `IContent` records, section 5), whose
-  text is the `<subagent name id>` stream and the final result. That is
-  the only durable trace, and it is precisely what scrollback shows.
-- **UI relationship:** the pager treats the subagent's row like any
-  tool group: live-streamed while pending, committed to the resident
-  tail at completion, reconstructable from the journal on resume. The
-  UI's subagent activity indicator and streamed XML render in the
-  pending region (5a) and vanish on eviction/restart — consistent with
-  the UI-only-row loss profile already accepted in section 1.
-- **Out of scope:** giving subagents their own journals or a viewer for
-  their internal transcripts. That would be new durable state; it is
-  not part of this issue. If wanted later, it is a separate feature:
-  per-subagent `session-*.jsonl` + the same cursor client, at which
-  point this architecture extends without modification (a fourth
-  journal, a fourth client).
+- **Every subagent run gets its own journal.** At launch, the subagent
+  path allocates its own sessionId and a `SessionRecordingService`
+  writing `session-*.jsonl` into the same chatsDir. Content commits
+  append to that file exactly like the main session. At scope end the
+  journal is flushed and closed.
+- **Every subagent gets the same facade.** The subagent's HistoryService
+  is the same facade over its own journal (5c) — no in-memory
+  `IContent[]` collection in subagents either. The old behavior (each
+  runtime constructing `new HistoryService()` holding the full
+  conversation, verified at `createAgentRuntimeContext`) is what this
+  design removes.
+- **Human-facing session lists must not drown in subagent journals.**
+  The journal header's existing `sessionMetadata` record gains
+  `kind: 'subagent'` + `parentSessionId`. Discovery globs and the
+  janitor are untouched (they match `session-*.jsonl` uniformly, so
+  cleanup works unchanged); `/resume` and the session picker filter on
+  the metadata kind. This is descriptive metadata about the session,
+  not UI state — allowed under ruling 2.
+- **Parent surface unchanged:** the parent journal still records exactly
+  one `task` tool-call group per run, with the `<subagent>` stream as
+  its text. Parent scrollback shows that row; the subagent journal is
+  inspectable later with the same cursor client (a debugging/inspection
+  affordance that falls out for free).
+- **Concurrency:** subagent journals are separate files with separate
+  session locks; parallel subagents do not share write paths.
 
-### 5c. Model context from the journal (phase 5, promoted from deferred)
+### 5c. HistoryService becomes a facade over the journal
 
-Andrew's framing (2026-09-18): context should come "direct from disk to
-model essentially, but may need some transformation — the model and the
-UI become two clients of the journal." This is the end-state of the
-file-driven model and is now designed, not deferred:
+Andrew's acceptance criterion (2026-09-18), verbatim in spirit: "there
+must be no in-memory copy of the context in the HistoryService; it will
+instead be a facade over the file. when it's time to send to the model
+the rows from the file are sent through a transformer to the model with
+nothing being held in memory."
 
-- **Inversion:** today HistoryService's in-memory `IContent[]` is the
-  context authority and the journal is a derived log. Phase 5 flips the
-  direction: the journal is the authority; the provider-visible
-  `IContent[]` becomes a *projection* of it, maintained by the same
-  event fold ReplayEngine performs at resume (append content, apply
-  `compressed` boundaries by dropping pre-boundary originals, apply
-  rewind truncation, resolve finals by seq order).
-- **Live fast path:** while the process runs, the projection is fed
-  in-process by the existing HistoryService event flow — the fold
-  consumes events, not file reads. Disk is read only when materializing
-  context that was evicted from memory (long sessions) or at
-  resume/restore (`ReplayEngine`, unchanged). The model call itself
-  never blocks on disk for the live tail.
-- **Shared client seam:** UI scrollback (client 1) and model context
-  (client 2) both read through the same primitives —
-  `JournalCursor` for positional reads, the event-fold projection for
-  semantic state. Their transformations differ (rendering rows vs.
-  provider messages) but the source, ordering, chronology stamps, and
-  boundary semantics are one implementation.
-- **Memory shape:** HistoryService keeps its public API surface
-  (`getContents()`, mutation methods, `contextRangeChanged`) so callers
-  do not change. What changes is backing: instead of an ever-growing
-  array, the resident context window + summaries stays in memory and
-  the pre-floor region is re-readable from the journal through the
-  fold — mirroring exactly what the pager does for the UI, with the
-  compression boundary as the shared floor.
-- **Phasing (P05):** (1) extract the projection fold from ReplayEngine
-  behind a core interface; (2) HistoryService switches to journal-
-  backed backing store with in-process feed; (3) primary-buffer flush
-  eviction + journal-backed context restore lands with P04's pager
-  work. P03's in-context marking (section on rendering) ships earlier
-  using the kept `contextRange` API, so the UI contract is stable
-  before the backing store flips.
+**What dies:** `protected history: IContent[]` in HistoryServiceCore —
+the array that today grows unbounded between compressions and is handed
+to every provider call. Compression's `replaceAll` array swap also dies
+(there is no array to swap).
+
+**What replaces it:**
+
+- **The journal is the system of record.** A content commit appends to
+  the journal (the write path); the facade then notifies observers
+  (range events, subscribers). The journal is no longer a downstream
+  mirror of memory — it is the memory.
+- **Provider assembly is a streaming pass.** On each model call: open
+  the cursor at the context floor (the byte offset of the last
+  compression boundary, or 0), stream records forward, apply the event
+  fold (append content; at a `compressed` record, drop the replaced
+  span and continue after the summary; at `rewind`, honor truncation),
+  transform survivors to provider messages, send. When the call
+  returns, the streamed rows are garbage. Nothing is cached across
+  calls.
+- **The only standing state** (all O(1), none of it content):
+  context-floor byte offset, tail byte offset, last `chronology.seq`,
+  a token-estimate counter for budget decisions, and the set of
+  compression summary *pointers* (seq + byte offsets; summary text is
+  re-read on demand). The pending/in-flight turn lives in the agent
+  loop and the UI pending store as today — transient working state
+  that is serialized at commit and then dropped, never a copy of
+  committed context.
+- **Speed honesty:** every provider call re-reads the in-context region
+  from disk. That is local sequential reads of an append-only file the
+  kernel page cache already holds (the writer just wrote it). The cost
+  is microseconds-to-low-milliseconds per call and does not grow our
+  heap; the page cache is kernel memory, evictable under pressure, and
+  is not a copy WE own. If profiling ever shows this matters, the fix
+  is a bounded LRU window over records (a cache, evictable, capped) —
+  explicitly not a return to an unbounded collection.
+- **API surface:** mutation methods (`add`, `commitHistoryMutation`,
+  compression entry points) keep their names but their postcondition
+  becomes "journal appended + observers notified." Read APIs that today
+  return the whole array either disappear or return iterators/windows;
+  callers (queryPreparer, tool-group assembly, UI range queries) migrate
+  to cursor reads. No compatibility shims for internal callers.
+
+**Acceptance criteria (P05 is done when all pass):**
+
+1. No field, property, or closure in HistoryService( Core) retains an
+   array/collection proportional to context length (structural test +
+   review).
+2. Retention property test: drive a real facade through N >> 1 turns
+   with compression boundaries; after GC, retained heap attributable to
+   the service does not grow with N.
+3. Provider-call equivalence: streaming assembly byte-for-byte matches
+   what `ReplayEngine`-style full fold produces for the same journal
+   (property test over generated journals, including compression and
+   rewind).
+4. Subagent runs write their own journals (5b) and their facades pass
+   the same criteria.
+5. `/continue` resumes through the facade with no full-materialization
+   step anywhere.
+
+### 5d. UI memory — what React actually holds in the scroll buffer
+
+The question (Andrew, 2026-09-18): "how does react work? is this a
+giant ass tree that never leaves memory?" Answer, from the code:
+
+- **React mounts only the visible window.** The committed transcript in
+  alternate-buffer mode renders through `ScrollableList` →
+  `VirtualizedList`, whose `useViewportRange` computes
+  `startIndex..endIndex`; `useRenderedItems` creates elements for that
+  slice only, between two spacer boxes. Rows outside the viewport
+  UNMOUNT: their elements, fibers, and Ink/Yoga layout nodes become
+  garbage. React trees are not retained history — an unmounted
+  component leaves nothing behind but its DOM-invisible ghost, and Ink
+  keeps no element archive. React re-renders the window on state
+  change, but that recreates O(viewport) elements, not O(session).
+- **What IS O(n) today, and what the pager does about it:**
+  1. `data` — the item array fed to the list. Today: the ledger (capped
+     100 items / 1 MiB, then discarded). Pager mode: `data` is the
+     resident window's slots only (viewport + margin + pending), so
+     bounded by the window, not the session.
+  2. `heights: number[]` and `offsets: number[]` inside
+     VirtualizedList — measured heights accumulate per ever-mounted
+     item and offsets are recomputed over the whole array. Bounded
+     today only by the ledger cap; they would grow without it. Pager
+     mode does NOT reuse this mechanism: the scrollbar is
+     byte-proportional (`windowStart / fileSize`), heights are measured
+     for in-viewport slots only and dropped when the slot evicts. No
+     O(session) arrays.
+  3. `itemRefs.current` — a sparse array indexed by slot; React nulls
+     entries on unmount, leaving null holes. Pager slots are window-
+     relative, so the array is window-sized.
+- **Primary buffer (print-through) mode:** committed rows render once
+  through Ink `Static` — written to the terminal and not re-rendered or
+  retained by React; the terminal emulator owns those bytes afterward.
+  Our side keeps nothing per printed row (flush eviction, P04).
+- **Pending rows:** the live turn's partial items — O(current turn),
+  transient, serialized at commit.
+- **Net:** the process's transcript-related working set is viewport +
+  margin + current turn + a few byte offsets + one 64 KiB read chunk.
+  Nothing in the UI or the model path scales with session length.
 
 ### 6. Rendering
 
@@ -484,10 +559,16 @@ Buffer modes:
 ## Memory accounting (order of magnitude)
 
 - Before: ledger ≤ 1 MiB display-capped (plus loss on trim); React elements
-  materialized for every retained item each history change.
+  materialized for every retained item each history change; and the
+  HistoryService `IContent[]` — a full, uncompressed copy of the context
+  held for the whole process lifetime (per runtime: main session AND each
+  subagent).
 - After: resident items ≈ viewport + 2 viewports margin + live turn; one
   64 KiB chunk buffer during a page read; a few byte offsets of cursor
-  state. Nothing grows with session length. Unbounded scrollback on disk.
+  state; and, after P05, the facade's standing state is the same shape —
+  O(1) offsets and counters, zero context rows (5c). Nothing grows with
+  session length, in the UI or the model path. Unbounded scrollback and
+  unbounded context on disk.
 
 ## Phasing
 
@@ -501,11 +582,13 @@ Buffer modes:
   `ui.scrollbackPagerEnabled`.
 - Phase 3 — Markings + boundary expander (live UI state only).
 - Phase 4 — Primary-buffer eviction-on-flush; resume via cursor.
-- Phase 5 — Journal-backed context (designed in 5c, no longer deferred):
-  HistoryService's provider-visible `IContent[]` becomes a projection of
-  the journal (event fold extracted from ReplayEngine; in-process feed
-  while live, disk reads for evicted/resumed regions). The model and the
-  UI become the two journal clients. Seam: the range API + JournalCursor.
+- Phase 5 — Facade flip (5b/5c; acceptance criteria in 5c): delete the
+  in-memory `IContent[]` from HistoryService; provider calls stream
+  from the journal (cursor at the context floor → event fold →
+  transformer → send, nothing retained); subagent runs get their own
+  journals with `kind: 'subagent'` metadata and the same facade;
+  `/resume` filtering on that metadata. The model and the UI are two
+  clients of one disk-backed truth. Seam: the range API + JournalCursor.
 
 ## Test strategy sketch (bun, behavioral)
 
@@ -571,25 +654,36 @@ Resolved 2026-09-18 on PR #3727 with Andrew (issuecomment-5732580084 /
      reads; memory is constant in session length.
 
 9. Design-review gaps raised by Andrew 2026-09-18 (after PDF review) —
-   **RESOLVED in this revision:**
+   **RESOLVED in this revision (then SUPERSEDED on two points by OQ10):**
    - *Subagents were not covered; diagrams looked like core-to-UI with
      the agent missing.* Answered in section 5b + section 0 map: the
-     agent loop is the writer (via RecordingIntegration); subagents keep
-     no journal and surface in the parent journal as one `task` tool
-     call; their internals are out of scope (future: separate journals
-     + same cursor client).
-   - *Realtime streaming not clearly preserved.* Answered in 5a: the
-     pending region is live memory on the existing hot path
-     (`useAgentStream` → `pendingHistoryItems`), the journal sees only
-     commits, and streaming cost is O(current turn) regardless of
-     scroll position.
-   - *Context should be direct-from-disk to the model (model + UI as two
-     journal clients), and API/package/class responsibilities were not
-     captured.* Answered in 5c + section 0 table: HistoryService's
-     provider-visible contents become a projection of the journal (event
-     fold from ReplayEngine, in-process feed while live), and the
-     responsibility matrix now names every writer/reader, package, and
-     phase.
+     agent loop is the writer; subagent internals were described as
+     out of scope. **Superseded by OQ10:** subagents now use the same
+     disk-based path with their own journal files.
+   - *Realtime streaming not clearly preserved.* Answered in 5a
+     (unchanged by OQ10): the pending region is live memory on the
+     existing hot path; the journal sees only commits.
+   - *Context should be direct-from-disk to the model, and
+     API/package/class responsibilities were not captured.* Answered in
+     5c + section 0 table — **superseded by OQ10** on the memory
+     question: the projection-with-in-process-feed idea is rejected;
+     the facade holds NO copy at all.
+
+10. Facade ruling — **RESOLVED by Andrew's ruling 2026-09-18:**
+    - *No in-memory copy of the context in HistoryService. It is a
+      facade over the file.* When it is time to send to the model, rows
+      from the file stream through a transformer with nothing held in
+      memory. Acceptance criteria in 5c.
+    - *Subagents use the same disk-based path and need their own files
+      — "that's fine, they should."* Each run gets its own journal +
+      facade (5b); the in-memory-per-runtime HistoryService model is
+      what this issue removes.
+    - *Scroll-buffer state:* "is this a giant ass tree that never
+      leaves memory?" Answered in 5d from the code: React mounts only
+      the visible window and unmounted rows are collectible; the O(n)
+      offenders are the data array (becomes the resident window) and
+      VirtualizedList's heights/offsets arrays (not used by pager
+      mode; byte-proportional scrollbar instead).
 
 Original questions:
 
