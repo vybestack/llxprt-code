@@ -454,6 +454,11 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `1048576`
   - **Requires restart:** No
 
+- **`ui.scrollbackJournalEnabled`** (boolean):
+  - **Description:** Append committed UI history items to a per-session scrollback journal (sb-\*.jsonl) next to the session recording.
+  - **Default:** `true`
+  - **Requires restart:** No
+
 - **`ui.memoryImportFormat`** (string):
   - **Description:** Format for importing memory files (tree or flat).
   - **Default:** `"tree"`

@@ -616,6 +616,13 @@
           "default": 1048576,
           "type": "number"
         },
+        "scrollbackJournalEnabled": {
+          "title": "Scrollback Journal",
+          "description": "Append committed UI history items to a per-session scrollback journal (sb-*.jsonl) next to the session recording.",
+          "markdownDescription": "Append committed UI history items to a per-session scrollback journal (sb-*.jsonl) next to the session recording.\n\n- Category: `UI`\n- Requires restart: `no`\n- Default: `true`",
+          "default": true,
+          "type": "boolean"
+        },
         "memoryImportFormat": {
           "title": "Memory Import Format",
           "description": "Format for importing memory files (tree or flat).",
