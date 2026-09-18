@@ -270,11 +270,11 @@ void vi.mock('@vybestack/llxprt-code-core', () => {
     ),
     DEFAULT_MEMORY_FILE_FILTERING_OPTIONS: {
       respectGitIgnore: false,
-      respectGeminiIgnore: true,
+      respectLlxprtIgnore: true,
     },
     DEFAULT_FILE_FILTERING_OPTIONS: {
       respectGitIgnore: true,
-      respectGeminiIgnore: true,
+      respectLlxprtIgnore: true,
     },
     // Mock isRipgrepAvailable to return true by default (ripgrep is bundled)
     isRipgrepAvailable: vi.fn().mockResolvedValue(true),

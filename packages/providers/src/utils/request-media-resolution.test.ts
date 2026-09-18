@@ -25,7 +25,6 @@ import {
 } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { buildMessagesWithReasoning } from '../openai/OpenAIRequestBuilder.js';
 import { convertToAnthropicMessages } from '../anthropic/AnthropicMessageNormalizer.js';
-import * as mediaFormatConverter from '../gemini/GeminiMessageConverter.js';
 import { convertToVercelMessages } from '../openai-vercel/messageConversion.js';
 import { getContentPreview } from './contentPreview.js';
 import { resolveRequestMedia } from './request-media-resolution.js';
@@ -142,9 +141,6 @@ describe('request-media-resolution', () => {
       ),
       anthropic: JSON.stringify(
         convertToAnthropicMessages(contents, anthropicOptions),
-      ),
-      multimodal: JSON.stringify(
-        mediaFormatConverter.convertHistoryToGeminiFormat(contents),
       ),
       vercel: JSON.stringify(convertToVercelMessages(contents)),
     };
@@ -481,9 +477,6 @@ describe('request-media-resolution', () => {
         ).toThrow(reference.contentId);
         expect(() =>
           convertToAnthropicMessages(contents, anthropicOptions),
-        ).toThrow(reference.contentId);
-        expect(() =>
-          mediaFormatConverter.convertHistoryToGeminiFormat(contents),
         ).toThrow(reference.contentId);
         expect(() => convertToVercelMessages(contents)).toThrow(
           reference.contentId,

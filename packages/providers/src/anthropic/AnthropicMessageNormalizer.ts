@@ -26,6 +26,7 @@ import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
 import {
   classifyMediaBlock,
   buildUnsupportedMediaPlaceholder,
+  isUrlEncodedMediaBlock,
 } from '../utils/mediaUtils.js';
 import {
   validateToolResults,
@@ -316,6 +317,7 @@ function appendLimitMessage(
 function buildAnthropicToolResultContent(
   contentPayload: string,
   mediaBlocks: MediaBlock[],
+  supportsUrlImages: boolean,
 ): AnthropicToolResultContent {
   if (mediaBlocks.length === 0) {
     return contentPayload;
@@ -324,7 +326,13 @@ function buildAnthropicToolResultContent(
     { type: 'text' as const, text: contentPayload },
     ...mediaBlocks.map((mb) => {
       const category = classifyMediaBlock(mb);
-      if (category === 'image') {
+      // #3693: zai's Anthropic-compatible endpoint rejects url-sourced
+      // images; on such endpoints a url image takes the placeholder path.
+      const urlImageUnsupported =
+        !supportsUrlImages &&
+        category === 'image' &&
+        isUrlEncodedMediaBlock(mb);
+      if (category === 'image' && !urlImageUnsupported) {
         return mediaBlockToAnthropicImage(mb);
       }
       if (category === 'pdf') {
@@ -343,6 +351,7 @@ function buildToolResult(
   toolTextContent: string,
   mediaBlocks: MediaBlock[],
   config: unknown,
+  supportsUrlImages: boolean,
 ): AnthropicToolResultBlock {
   const payload = buildToolResponsePayload(
     toolResponseBlock,
@@ -358,7 +367,11 @@ function buildToolResult(
   const toolResult: AnthropicToolResultBlock = {
     type: 'tool_result',
     tool_use_id: normalizeToAnthropicToolId(toolResponseBlock.callId),
-    content: buildAnthropicToolResultContent(contentPayload, mediaBlocks),
+    content: buildAnthropicToolResultContent(
+      contentPayload,
+      mediaBlocks,
+      supportsUrlImages,
+    ),
   };
   if (payload.status === 'error') {
     toolResult.is_error = true;
@@ -370,10 +383,7 @@ function buildToolResults(
   c: IContent,
   toolResponseBlocks: ToolResponseBlock[],
   nonToolResponseBlocks: ContentBlock[],
-  options: {
-    config?: unknown;
-    logger: { debug: (fn: () => string) => void };
-  },
+  options: AnthropicMessageConversionOptions,
 ): AnthropicToolResultBlock[] {
   const results: AnthropicToolResultBlock[] = [];
 
@@ -397,6 +407,7 @@ function buildToolResults(
         toolTextContent,
         mediaBlocks,
         options.config,
+        options.supportsUrlImages ?? true,
       ),
     );
   }
@@ -445,11 +456,12 @@ function tagHumanMediaPurgeBoundary(
 function processHumanContent(
   c: IContent,
   blocks: ContentBlock[],
+  supportsUrlImages: boolean,
 ): AnthropicMessage | undefined {
   const hasMedia = blocks.some((b) => b.type === 'media');
 
   if (hasMedia) {
-    const converted = convertHumanMessageWithMedia(blocks);
+    const converted = convertHumanMessageWithMedia(blocks, supportsUrlImages);
     if (converted.parts.length > 0) {
       const message: AnthropicMessage = {
         role: 'user',
@@ -488,8 +500,9 @@ function flushPendingToolResults(
 function pushHumanMessageIfPresent(
   messages: AnthropicMessage[],
   c: IContent,
+  supportsUrlImages: boolean,
 ): void {
-  const message = processHumanContent(c, c.blocks);
+  const message = processHumanContent(c, c.blocks, supportsUrlImages);
   if (message) {
     messages.push(message);
   }
@@ -551,7 +564,11 @@ function convertContentToMessages(
       flushPending();
       if (!onlyToolResponseContent) {
         const before = messages.length;
-        pushHumanMessageIfPresent(messages, c);
+        pushHumanMessageIfPresent(
+          messages,
+          c,
+          options.supportsUrlImages ?? true,
+        );
         tagIfAnchored(anchored, before);
       } else if (anchored) {
         // Human content whose only payload is tool responses: its derived
@@ -790,6 +807,7 @@ export function convertToAnthropicMessages(
     config: unknown;
     currentModel?: string;
     currentBaseURL?: string;
+    supportsUrlImages?: boolean;
     unprefixToolName: (name: string, isOAuth: boolean) => string;
     logger: { debug: (fn: () => string) => void };
   },
@@ -817,6 +835,7 @@ export function convertToAnthropicMessages(
   messages = ensureValidMessageSequence(
     messages,
     options.reasoningEnabled,
+    options.currentModel,
     options.logger,
   );
   messages = stripEmptyTextBlocks(messages, options.logger);

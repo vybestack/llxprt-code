@@ -53,9 +53,12 @@ export function loadIgnoreRules(options: LoadIgnoreRulesOptions): Ignore {
       ignorer.add(fs.readFileSync(llxprtignorePath, 'utf8'));
     }
 
-    const geminiignorePath = path.join(options.projectRoot, '.geminiignore');
-    if (fs.existsSync(geminiignorePath)) {
-      ignorer.add(fs.readFileSync(geminiignorePath, 'utf8'));
+    const legacyIgnoreFilePath = path.join(
+      options.projectRoot,
+      '.geminiignore',
+    );
+    if (fs.existsSync(legacyIgnoreFilePath)) {
+      ignorer.add(fs.readFileSync(legacyIgnoreFilePath, 'utf8'));
     }
   }
 

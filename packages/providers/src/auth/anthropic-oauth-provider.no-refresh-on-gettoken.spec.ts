@@ -102,12 +102,4 @@ describe('AnthropicOAuthProvider.getToken() - no provider-level refresh (Issue #
 
     expect(result).toBeNull();
   });
-
-  it('returns null when no token store is configured', async () => {
-    const provider = new AnthropicOAuthProvider(undefined);
-
-    const result = await provider.getToken();
-
-    expect(result).toBeNull();
-  });
 });

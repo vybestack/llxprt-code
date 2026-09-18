@@ -36,6 +36,9 @@ export * from './modelRequest.js';
 export * from './providerApiError.js';
 export * from './tokensAndEmbeddings.js';
 export * from './grounding.js';
+// geminiContent.ts now declares only the two surviving inbound-parse types
+// (GeminiContent/GeminiContentPart, #2628); the star re-export keeps the
+// barrel uniform with its sibling modules.
 export * from './geminiContent.js';
 export * from './afcHistory.js';
 

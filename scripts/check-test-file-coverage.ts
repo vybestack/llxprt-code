@@ -22,7 +22,7 @@
  */
 
 import { readdirSync, realpathSync, statSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   BUN_TEST_ROOTS,
@@ -59,6 +59,16 @@ const defaultDependencies: BunTestRootDependencies = {
 const REPOSITORY_TEST_FILE_PATTERN = new RegExp(
   `${DEFAULT_TEST_FILE_PATTERN.source}|\\.eval\\.ts$`,
 );
+
+/**
+ * Repository trees outside every executor's universe. The `plugins/` tree
+ * holds non-workspace packages (#2759): each plugin's test suite runs in the
+ * dedicated "Runtime Plugins (build, typecheck, test)" CI job through that
+ * plugin's own `bun test`, not through the root orchestrator or any executor
+ * modeled in TEST_EXECUTORS. Files under these trees are therefore not
+ * "uncovered" when the repository walk is diffed against executor claims.
+ */
+const NON_EXECUTOR_TREES: readonly string[] = ['plugins'];
 
 // ---------------------------------------------------------------------------
 // Executor model
@@ -131,8 +141,9 @@ export const TEST_EXECUTORS: readonly TestExecutor[] = [
  * Walks the whole repository for test files, skipping build output and
  * artifact directories (`node_modules`, `dist`, `coverage`, `bundle`, `tmp`,
  * `__snapshots__` and any dot-prefixed directory — this also excludes the
- * `.integration-tests/` recording directory). Reuses the shared walker so
- * there is a single definition of "skip these directories".
+ * `.integration-tests/` recording directory) plus the trees listed in
+ * `NON_EXECUTOR_TREES`. Reuses the shared walker so there is a single
+ * definition of "skip these directories".
  *
  * Paths are canonicalized so one real file has exactly one coverage identity,
  * matching how executor claims are recorded.
@@ -146,7 +157,16 @@ export function discoverRepositoryTestFiles(
     REPOSITORY_TEST_FILE_PATTERN,
     deps,
   );
-  return [...files].map((file) => deps.realpath(file)).sort();
+  const treeRoots = NON_EXECUTOR_TREES.map((tree) => join(repoRoot, tree));
+  return [...files]
+    .filter(
+      (file) =>
+        !treeRoots.some(
+          (treeRoot) => file === treeRoot || file.startsWith(treeRoot + sep),
+        ),
+    )
+    .map((file) => deps.realpath(file))
+    .sort();
 }
 
 /**

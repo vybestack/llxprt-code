@@ -55,6 +55,7 @@ import {
 import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
 import {
   isAnthropicOAuthBaseURL,
+  createMediaSupportPredicate,
   ANTHROPIC_DEFAULT_BASE_URL,
 } from './AnthropicEndpointUtils.js';
 import { findAnthropicToolSchema } from './AnthropicToolSchema.js';
@@ -894,9 +895,12 @@ export class AnthropicProvider extends BaseProvider {
         requestContext.requestBody,
         {
           transportToken,
+          // Issue #3693: on zai endpoints url-encoded image blocks are
+          // serialized as placeholders, so the projection must report them
+          // as unsupported alongside audio/video.
           unsupportedMedia: collectUnsupportedMedia(
             resolvedOptions.contents,
-            (category) => category === 'image' || category === 'pdf',
+            createMediaSupportPredicate(resolvedOptions.resolved.baseURL),
           ),
         },
       );

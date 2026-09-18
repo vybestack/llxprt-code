@@ -17,7 +17,7 @@ import {
   reasoningModel,
   deprecatedModel,
   claudeModel,
-  geminiModel,
+  googleModel,
   deepseekModel,
   openaiProvider,
   anthropicProvider,
@@ -186,7 +186,7 @@ describe('transformModel', () => {
         'google',
         googleProvider,
         'gemini-2.0-flash',
-        geminiModel,
+        googleModel,
       );
       expect(result.supportedToolFormats).toEqual(['google', 'gemini']);
     });
@@ -197,7 +197,7 @@ describe('transformModel', () => {
         'google-vertex',
         vertexProvider,
         'gemini-2.0-flash',
-        geminiModel,
+        googleModel,
       );
       expect(result.supportedToolFormats).toEqual(['google', 'gemini']);
     });

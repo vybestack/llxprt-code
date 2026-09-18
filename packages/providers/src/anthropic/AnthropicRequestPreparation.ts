@@ -42,6 +42,7 @@ import {
 import { getRetryConfig } from './AnthropicRateLimitHandler.js';
 import {
   isAnthropicOAuthBaseURL,
+  isZaiAnthropicEndpoint,
   ANTHROPIC_DEFAULT_BASE_URL,
 } from './AnthropicEndpointUtils.js';
 import {
@@ -514,6 +515,7 @@ function convertMessagesAndTools(params: {
   config: Config | undefined;
   currentModel: string;
   currentBaseURL: string | undefined;
+  supportsUrlImages: boolean;
   unprefixToolName: (name: string, isOAuth: boolean) => string;
   logger: DebugLogger;
 }): {
@@ -542,6 +544,7 @@ function convertMessagesAndTools(params: {
     config,
     currentModel,
     currentBaseURL,
+    supportsUrlImages: params.supportsUrlImages,
     unprefixToolName,
     logger,
   });
@@ -763,6 +766,10 @@ export async function prepareAnthropicRequest(
     currentModel: params.options.resolved.model,
     currentBaseURL:
       params.options.resolved.baseURL ?? ANTHROPIC_DEFAULT_BASE_URL,
+    // Issue #3693: zai's Anthropic-compatible endpoint rejects
+    // source:{type:'url'} image blocks; url-encoded images serialize as the
+    // unsupported-media placeholder on zai hosts only.
+    supportsUrlImages: !isZaiAnthropicEndpoint(params.options.resolved.baseURL),
     unprefixToolName: params.unprefixToolName,
     logger: params.logger,
   });

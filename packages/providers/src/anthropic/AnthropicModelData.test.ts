@@ -11,6 +11,7 @@ import {
   isSonnet5,
   isFable5,
   supportsAdaptiveThinking,
+  modelSupportsPrefill,
   getLatestClaudeModel,
   getMaxTokensForModel,
   getContextWindowForModel,
@@ -246,6 +247,33 @@ describe('AnthropicModelData Claude Opus 5 @issue:2665', () => {
     it('returns the Opus 5 latest alias for the opus tier', () => {
       expect(getLatestClaudeModel('opus')).toBe('claude-opus-5-latest');
     });
+  });
+});
+
+describe('modelSupportsPrefill @issue:1977', () => {
+  it('returns false for Fable 5 ids (they reject assistant prefill)', () => {
+    expect(modelSupportsPrefill('claude-fable-5')).toBe(false);
+    expect(modelSupportsPrefill('claude-fable-5-latest')).toBe(false);
+    expect(modelSupportsPrefill('claude-fable-5-20260701')).toBe(false);
+    expect(modelSupportsPrefill('claude-fable-5-1')).toBe(false);
+    expect(modelSupportsPrefill('CLAUDE-FABLE-5')).toBe(false);
+  });
+
+  it('returns true for prefill-capable Claude models', () => {
+    expect(modelSupportsPrefill('claude-opus-4-8')).toBe(true);
+    expect(modelSupportsPrefill('claude-sonnet-5')).toBe(true);
+    expect(modelSupportsPrefill('claude-haiku-4-5-20251001')).toBe(true);
+  });
+
+  it('returns true for unknown, empty, and undefined model ids', () => {
+    expect(modelSupportsPrefill('some-unknown-model')).toBe(true);
+    expect(modelSupportsPrefill('')).toBe(true);
+    expect(modelSupportsPrefill(undefined)).toBe(true);
+  });
+
+  it('returns true for fable near-misses that are not Fable 5', () => {
+    expect(modelSupportsPrefill('claude-fable-50')).toBe(true);
+    expect(modelSupportsPrefill('claude-fable-5-1-mini')).toBe(true);
   });
 });
 

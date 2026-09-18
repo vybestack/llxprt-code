@@ -9,7 +9,6 @@ import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/uti
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { convertToAnthropicMessages } from '../anthropic/AnthropicMessageNormalizer.js';
-import { convertHistoryToGeminiFormat } from '../gemini/GeminiMessageConverter.js';
 import {
   buildMessagesWithReasoning,
   type ReasoningMessageOptions,
@@ -85,14 +84,6 @@ export function buildAnthropicDumpMessages(
   });
 }
 
-export function buildGeminiDumpContents(
-  history: IContent[],
-  model?: string,
-  config?: ToolOutputSettingsProvider,
-): unknown[] {
-  return convertHistoryToGeminiFormat(history, model, config);
-}
-
 function normalizeProviderName(providerName: string): string {
   return providerName.toLowerCase().trim();
 }
@@ -109,11 +100,6 @@ function isOpenAICompatibleProvider(providerName: string): boolean {
 function isAnthropicCompatibleProvider(providerName: string): boolean {
   const provider = normalizeProviderName(providerName);
   return provider === 'anthropic' || provider.startsWith('anthropic-');
-}
-
-function isGeminiCompatibleProvider(providerName: string): boolean {
-  const provider = normalizeProviderName(providerName);
-  return provider === 'gemini' || provider.startsWith('gemini-');
 }
 
 function withModel(
@@ -160,17 +146,10 @@ export function buildProviderDumpBody(params: {
       params.model,
     );
   }
-  if (isGeminiCompatibleProvider(params.providerName)) {
-    return withModel(
-      {
-        contents: buildGeminiDumpContents(
-          params.history,
-          params.model,
-          params.config,
-        ),
-      },
-      params.model,
-    );
-  }
+  // Gemini-family provider names intentionally fall through to the default
+  // `{ history }` body: Gemini wire conversion is owned by the
+  // @vybestack/llxprt-plugin-google-gemini plugin (#2763), never by the base
+  // package. Callers that need a real Gemini body must ask the runtime
+  // provider (see the CLI dumpcontext command).
   return { history: params.history };
 }

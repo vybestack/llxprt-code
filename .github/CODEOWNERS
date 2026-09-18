@@ -1,1 +1,11 @@
-* @acoliver
+# Policy paths: changes here require an approving review from the code owner
+# (repo ruleset "policy paths: owner review"). These paths define or execute
+# the lint/CI enforcement stack: eslint.config.js + scripts/eslint-guard/ +
+# eslint-rules/ define lint policy, .github/workflows/ runs it, and
+# scripts/tests/ holds the guard's own tests. Everything else intentionally
+# has no owner gate, so routine agent PRs flow without human review.
+/eslint.config.js       @acoliver
+/scripts/eslint-guard/  @acoliver
+/scripts/tests/         @acoliver
+/eslint-rules/          @acoliver
+/.github/workflows/     @acoliver

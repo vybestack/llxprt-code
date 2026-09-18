@@ -32,6 +32,8 @@ import { join } from 'node:path';
  * @param bodyParams parameter names carrying body text; empty means no-op
  * @param params the validated operation parameters
  * @param fn receives the params with body values swapped for file paths
+ * @param tempRoot parent directory for the temp dir; defaults to the
+ *   system tmpdir. A nonexistent root fails loudly (ENOENT from mkdtemp)
  *
  * @plan PLAN-20260731-GHBROKER.P11
  * @requirement REQ-002
@@ -40,13 +42,14 @@ export async function withBodyFiles<T>(
   bodyParams: readonly string[] | undefined,
   params: Record<string, unknown>,
   fn: (effectiveParams: Record<string, unknown>) => Promise<T>,
+  tempRoot: string = tmpdir(),
 ): Promise<T> {
   const present = (bodyParams ?? []).filter(
     (name) => typeof params[name] === 'string',
   );
   if (present.length === 0) return fn(params);
 
-  const dir = await mkdtemp(join(tmpdir(), 'llxprt-gh-body-'));
+  const dir = await mkdtemp(join(tempRoot, 'llxprt-gh-body-'));
   try {
     const effective: Record<string, unknown> = { ...params };
     for (const name of present) {

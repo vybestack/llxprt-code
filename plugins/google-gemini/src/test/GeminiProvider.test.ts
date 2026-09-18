@@ -1,0 +1,795 @@
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
+import { GeminiProvider } from '../gemini/GeminiProvider.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { Part } from '../gemini/geminiWireTypes.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import {
+  getSettingsService,
+  type SettingsService,
+} from '@vybestack/llxprt-code-settings';
+
+const realLlxprtCodeSettingsModule = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
+
+const generateContentStreamMock = vi.fn();
+
+const googleGenAIConstructor = vi.fn().mockImplementation(() => ({
+  models: {
+    generateContentStream: generateContentStreamMock,
+  },
+}));
+
+import type { CreateGeminiApiClient } from '../gemini/GeminiProvider.js';
+// The factory is injected into GeminiProvider rather than module-mocked:
+// `vi.mock` registers process-wide and bun hoists it ahead of the whole
+// run, so the stub leaked into every suite loaded alongside this one.
+const injectedClientFactory =
+  googleGenAIConstructor as unknown as CreateGeminiApiClient;
+
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+  getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
+}));
+
+const mockSettingsService = {
+  set: vi.fn(),
+  get: vi.fn(),
+  getProviderSettings: vi.fn().mockReturnValue({}),
+  updateSettings: vi.fn(),
+  getAllGlobalSettings: vi.fn().mockReturnValue({}),
+};
+
+void vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...realLlxprtCodeSettingsModule,
+  getSettingsService: vi.fn(() => mockSettingsService),
+}));
+
+/**
+ * @plan PLAN-20250822-GEMINIFALLBACK.P11
+ * @requirement REQ-003.1
+ * @pseudocode lines 13-14
+ */
+describe('GeminiProvider', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSettingsService.get.mockReset();
+    (getSettingsService as Mock<typeof getSettingsService>).mockImplementation(
+      () => mockSettingsService,
+    );
+    generateContentStreamMock.mockReset();
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    delete process.env.GOOGLE_API_KEY;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
+    delete process.env.GOOGLE_CLOUD_LOCATION;
+    delete process.env.GOOGLE_GENAI_USE_VERTEXAI;
+  });
+
+  it('uses the constructor fallback when the global settings service is unavailable', () => {
+    (getSettingsService as Mock<typeof getSettingsService>).mockImplementation(
+      () => {
+        throw new Error('SettingsService not registered');
+      },
+    );
+    const provider = new GeminiProvider(
+      undefined,
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
+
+    expect(() => provider.isPaidMode()).not.toThrow();
+    expect(provider.isPaidMode()).toBe(false);
+  });
+
+  it('uses runtime settings GOOGLE_API_KEY when checking paid mode', () => {
+    mockSettingsService.get.mockImplementation((key: string) => {
+      if (key === 'GOOGLE_API_KEY') {
+        return 'settings-google-api-key';
+      }
+      return undefined;
+    });
+    const provider = new GeminiProvider(
+      undefined,
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
+    provider.setRuntimeSettingsService(
+      mockSettingsService as unknown as SettingsService,
+    );
+
+    expect(provider.isPaidMode()).toBe(true);
+  });
+
+  it('uses runtime settings GOOGLE_APPLICATION_CREDENTIALS when checking paid mode', () => {
+    mockSettingsService.get.mockImplementation((key: string) => {
+      if (key === 'GOOGLE_APPLICATION_CREDENTIALS') {
+        return '/settings/credentials.json';
+      }
+      return undefined;
+    });
+    const provider = new GeminiProvider(
+      undefined,
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
+    provider.setRuntimeSettingsService(
+      mockSettingsService as unknown as SettingsService,
+    );
+
+    expect(provider.isPaidMode()).toBe(true);
+  });
+
+  it('respects metadata geminiDirectOverrides when building request config', async () => {
+    const fakeStream = {
+      async *[Symbol.asyncIterator]() {
+        yield {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'direct override ack' }],
+              },
+            },
+          ],
+        };
+      },
+    };
+    generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+    process.env.GEMINI_API_KEY = 'override-key';
+
+    const provider = new GeminiProvider(
+      'override-key',
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
+    const overrides = {
+      toolConfig: {
+        functionCallingConfig: {
+          mode: 'NONE',
+        },
+      },
+    };
+
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'hello overrides' }],
+          },
+        ] as IContent[],
+        metadata: {
+          geminiDirectOverrides: overrides,
+        },
+      }),
+    );
+
+    await generator.next();
+
+    const request = generateContentStreamMock.mock.calls[0][0];
+    expect(request.config.toolConfig).toStrictEqual(overrides.toolConfig);
+  });
+
+  it('applies gemini ephemerals but ignores global tools governance entries', async () => {
+    const fakeStream = {
+      async *[Symbol.asyncIterator]() {
+        yield {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'ephemeral ack' }],
+              },
+            },
+          ],
+        };
+      },
+    };
+    generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+    process.env.GEMINI_API_KEY = 'ephemeral-key';
+
+    const provider = new GeminiProvider(
+      'ephemeral-key',
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
+    const options = createProviderCallOptions({
+      providerName: provider.name,
+      contents: [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'hello ephemerals' }],
+        },
+      ] as IContent[],
+      settingsOverrides: {
+        global: { maxOutputTokens: 42 },
+      },
+    });
+    options.invocation = {
+      ...options.invocation,
+      ephemerals: {
+        ...options.invocation.ephemerals,
+        tools: { allowed: ['read_file'], disabled: ['web_search'] },
+      },
+    };
+
+    const generator = provider.generateChatCompletion(options);
+    await generator.next();
+
+    const request = generateContentStreamMock.mock.calls[0][0];
+    expect(request.config.maxOutputTokens).toBe(42);
+    expect(request.config.tools).toBeUndefined();
+  });
+
+  it('serializes tool responses with error metadata and token limits', async () => {
+    const fakeStream = {
+      async *[Symbol.asyncIterator]() {
+        yield {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'ack' }],
+              },
+            },
+          ],
+        };
+      },
+    };
+    generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+    process.env.GEMINI_API_KEY = 'resolved-key';
+
+    const provider = new GeminiProvider(
+      'test-api-key',
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
+    const oversized = 'line\n'.repeat(2000);
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'summarize' }],
+          },
+          {
+            speaker: 'tool',
+            blocks: [
+              {
+                type: 'tool_response',
+                callId: 'hist_tool_caps',
+                toolName: 'read_file',
+                result: oversized,
+                error: 'file too large',
+              },
+            ],
+          },
+        ] as IContent[],
+        settingsOverrides: {
+          global: {
+            'tool-output-max-tokens': 50,
+            'tool-output-truncate-mode': 'truncate',
+          },
+          provider: {
+            'tool-output-max-tokens': 50,
+            'tool-output-truncate-mode': 'truncate',
+          },
+        },
+      }),
+    );
+
+    await generator.next();
+
+    const request = generateContentStreamMock.mock.calls[0][0];
+    const toolMessage = request.contents.find((msg: { parts: Part[] }) =>
+      msg.parts.some(
+        (part: Part) =>
+          'functionResponse' in part && part.functionResponse != null,
+      ),
+    ) as { parts: Part[] };
+    const functionResponsePart = toolMessage.parts.find(
+      (part) => 'functionResponse' in part,
+    ) as { functionResponse: { response: Record<string, unknown> } };
+    const responsePayload = functionResponsePart.functionResponse.response;
+
+    expect(responsePayload.status).toBe('error');
+    expect(responsePayload.error).toBe('file too large');
+    expect(String(responsePayload.result)).toContain(
+      '[Output truncated due to token limit]',
+    );
+    expect(String(responsePayload.limitMessage)).toMatch(/truncated/i);
+  });
+
+  // Clean up global state after each test
+  afterEach(() => {
+    delete global.__oauth_needs_code;
+    delete global.__oauth_provider;
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
+    delete process.env.GOOGLE_CLOUD_LOCATION;
+    delete process.env.GOOGLE_GENAI_USE_VERTEXAI;
+  });
+
+  /**
+   * @plan PLAN-20250822-GEMINIFALLBACK.P11
+   * @requirement REQ-003.1
+   * @pseudocode lines 13-14
+   */
+  it('should set __oauth_needs_code to true when OAuth flow requires user input', async () => {
+    // This will require mocking the OAuth flow in a later phase
+    expect(true).toBe(true);
+  });
+
+  /**
+   * @plan PLAN-20250822-GEMINIFALLBACK.P11
+   * @requirement REQ-003.2
+   * @pseudocode lines 13-14
+   */
+  it('should set __oauth_provider to "gemini" for provider identification', async () => {
+    // This will require mocking the OAuth flow in a later phase
+    expect(true).toBe(true);
+  });
+
+  /**
+   * @plan PLAN-20250822-GEMINIFALLBACK.P11
+   * @requirement REQ-003.3
+   * @pseudocode lines 17-18, 25-26
+   */
+  it('should reset global state variables after successful authentication', async () => {
+    // This will require mocking the OAuth flow in a later phase
+    expect(true).toBe(true);
+  });
+
+  /**
+   * @plan PLAN-20250822-GEMINIFALLBACK.P11
+   * @requirement REQ-003.3
+   * @pseudocode lines 17-18, 25-26
+   */
+  it('should reset global state variables after OAuth flow cancellation', async () => {
+    // This will require mocking the OAuth flow in a later phase
+    expect(true).toBe(true);
+  });
+
+  /**
+   * @plan PLAN-20250822-GEMINIFALLBACK.P11
+   * @requirement REQ-003.1
+   * @pseudocode lines 13-14
+   */
+  it('should maintain global state during active OAuth flow', async () => {
+    // This will require mocking the OAuth flow in a later phase
+    expect(true).toBe(true);
+  });
+
+  /**
+   * @plan PLAN-20250822-GEMINIFALLBACK.P11
+   * @requirement REQ-003.1
+   * @pseudocode lines 12-18
+   */
+  it('should not interfere with other provider OAuth flows', async () => {
+    // This will require mocking other providers in a later phase
+    expect(true).toBe(true);
+  });
+
+  /**
+   * @plan PLAN-20250822-GEMINIFALLBACK.P11
+   * @requirement REQ-003.1
+   * @pseudocode lines 12-18
+   */
+  it('should handle concurrent OAuth requests from different providers', async () => {
+    // This will require mocking concurrent requests in a later phase
+    expect(true).toBe(true);
+  });
+
+  it('should pass custom headers to GoogleGenAI http options', async () => {
+    const customHeaders = {
+      'X-Custom-Header': 'custom-value',
+      'X-Trace-Id': 'trace-abc',
+    };
+
+    const fakeStream = {
+      async *[Symbol.asyncIterator]() {
+        yield {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'hello' }],
+              },
+            },
+          ],
+        };
+      },
+    };
+
+    generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+
+    process.env.GEMINI_API_KEY = 'resolved-key';
+
+    const provider = new GeminiProvider(
+      'test-api-key',
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
+
+    (
+      provider as unknown as {
+        providerConfig: {
+          getEphemeralSettings?: () => Record<string, unknown>;
+          customHeaders?: Record<string, string>;
+        };
+      }
+    ).providerConfig = {
+      getEphemeralSettings: () => ({
+        'custom-headers': customHeaders,
+      }),
+      customHeaders: {
+        'X-Provider-Header': 'provider-value',
+      },
+    };
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ] as IContent[],
+        settingsOverrides: {
+          global: {
+            'auth-key': 'test-api-key',
+            'custom-headers': customHeaders,
+            activeProvider: provider.name,
+          },
+          provider: {
+            'custom-headers': customHeaders,
+          },
+        },
+        runtimeId: 'gemini.custom-headers',
+      }),
+    );
+
+    await generator.next();
+
+    expect(googleGenAIConstructor).toHaveBeenCalledTimes(1);
+
+    const callArgs = googleGenAIConstructor.mock.calls[0]?.[0];
+    expect(callArgs).toBeDefined();
+    expect(callArgs?.httpOptions).toBeDefined();
+    expect(callArgs.httpOptions?.headers).toMatchObject({
+      ...customHeaders,
+      'X-Provider-Header': 'provider-value',
+      'User-Agent': expect.any(String),
+    });
+  });
+
+  it('should include gemini-3-flash-preview in model list', async () => {
+    const provider = new GeminiProvider(
+      undefined,
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
+
+    vi.spyOn(
+      provider as unknown as {
+        determineBestAuth: () => Promise<{ authMode: string; token: string }>;
+      },
+      'determineBestAuth',
+    ).mockResolvedValue({
+      authMode: 'gemini-api-key',
+      token: 'test-api-key-token',
+    });
+
+    const models = await provider.getModels();
+    const modelIds = models.map((m) => m.id);
+
+    expect(modelIds).toContain('gemini-3-flash-preview');
+
+    const flashPreview = models.find((m) => m.id === 'gemini-3-flash-preview');
+    expect(flashPreview).toBeDefined();
+    expect(flashPreview?.name).toBe('Gemini 3 Flash Preview');
+    expect(flashPreview?.provider).toBe('gemini');
+    expect(flashPreview?.supportedToolFormats).toStrictEqual([]);
+  });
+
+  describe('multimodal tool response handling', () => {
+    const createToolIContent = (
+      mediaBlocks: Array<{ mimeType: string; data: string }> = [],
+    ): IContent[] => {
+      const blocks: IContent['blocks'] = [
+        {
+          type: 'tool_response',
+          callId: 'call-1',
+          toolName: 'screenshot',
+          result: { output: 'Screenshot taken' },
+        },
+      ];
+      for (const mb of mediaBlocks) {
+        blocks.push({
+          type: 'media',
+          mimeType: mb.mimeType,
+          data: mb.data,
+          encoding: 'base64',
+        });
+      }
+      return [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'take a screenshot' }],
+        },
+        { speaker: 'tool', blocks },
+      ] as IContent[];
+    };
+
+    it('nests media inside functionResponse.parts for Gemini 3 models', async () => {
+      const fakeStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            candidates: [
+              { content: { parts: [{ text: 'I see the screenshot' }] } },
+            ],
+          };
+        },
+      };
+      generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+      process.env.GEMINI_API_KEY = 'test-key';
+
+      const provider = new GeminiProvider(
+        'test-key',
+        undefined,
+        undefined,
+        injectedClientFactory,
+      );
+      const generator = provider.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: createToolIContent([
+            { mimeType: 'image/png', data: 'iVBOR...' },
+          ]),
+          resolved: { model: 'gemini-3-flash-preview' },
+        }),
+      );
+      await generator.next();
+
+      const request = generateContentStreamMock.mock.calls[0][0];
+      const toolMessage = request.contents.find(
+        (msg: { role: string }) =>
+          msg.role === 'user' &&
+          msg.parts.some((p: Part) => 'functionResponse' in p),
+      );
+      expect(toolMessage).toBeDefined();
+
+      const frPart = toolMessage.parts.find(
+        (p: Part) => 'functionResponse' in p,
+      );
+      // Media should be nested inside functionResponse.parts, not as a sibling
+      expect(frPart.functionResponse.parts).toBeDefined();
+      expect(frPart.functionResponse.parts).toHaveLength(1);
+      expect(frPart.functionResponse.parts[0].inlineData.mimeType).toBe(
+        'image/png',
+      );
+      expect(frPart.functionResponse.parts[0].inlineData.data).toBe('iVBOR...');
+
+      // No sibling inlineData parts
+      const siblingMedia = toolMessage.parts.filter(
+        (p: Part) => 'inlineData' in p,
+      );
+      expect(siblingMedia).toHaveLength(0);
+    });
+
+    it('keeps media as sibling parts for Gemini 2 models', async () => {
+      const fakeStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            candidates: [
+              { content: { parts: [{ text: 'I see the screenshot' }] } },
+            ],
+          };
+        },
+      };
+      generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+      process.env.GEMINI_API_KEY = 'test-key';
+
+      const provider = new GeminiProvider(
+        'test-key',
+        undefined,
+        undefined,
+        injectedClientFactory,
+      );
+      const generator = provider.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: createToolIContent([
+            { mimeType: 'image/png', data: 'iVBOR...' },
+          ]),
+          resolved: { model: 'gemini-2.5-flash' },
+        }),
+      );
+      await generator.next();
+
+      const request = generateContentStreamMock.mock.calls[0][0];
+      const toolMessage = request.contents.find(
+        (msg: { role: string }) =>
+          msg.role === 'user' &&
+          msg.parts.some((p: Part) => 'functionResponse' in p),
+      );
+      expect(toolMessage).toBeDefined();
+
+      const frPart = toolMessage.parts.find(
+        (p: Part) => 'functionResponse' in p,
+      );
+      // No nested parts for Gemini 2
+      expect(frPart.functionResponse.parts).toBeUndefined();
+
+      // Media should be a sibling part
+      const siblingMedia = toolMessage.parts.filter(
+        (p: Part) => 'inlineData' in p,
+      );
+      expect(siblingMedia).toHaveLength(1);
+      expect(siblingMedia[0].inlineData.mimeType).toBe('image/png');
+    });
+
+    it('handles multiple media blocks for Gemini 3', async () => {
+      const fakeStream = {
+        async *[Symbol.asyncIterator]() {
+          yield { candidates: [{ content: { parts: [{ text: 'ack' }] } }] };
+        },
+      };
+      generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+      process.env.GEMINI_API_KEY = 'test-key';
+
+      const provider = new GeminiProvider(
+        'test-key',
+        undefined,
+        undefined,
+        injectedClientFactory,
+      );
+      const generator = provider.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: createToolIContent([
+            { mimeType: 'image/png', data: 'img1' },
+            { mimeType: 'image/jpeg', data: 'img2' },
+          ]),
+          resolved: { model: 'gemini-3-pro-preview' },
+        }),
+      );
+      await generator.next();
+
+      const request = generateContentStreamMock.mock.calls[0][0];
+      const toolMessage = request.contents.find(
+        (msg: { role: string }) =>
+          msg.role === 'user' &&
+          msg.parts.some((p: Part) => 'functionResponse' in p),
+      );
+      const frPart = toolMessage.parts.find(
+        (p: Part) => 'functionResponse' in p,
+      );
+      expect(frPart.functionResponse.parts).toHaveLength(2);
+      expect(frPart.functionResponse.parts[0].inlineData.mimeType).toBe(
+        'image/png',
+      );
+      expect(frPart.functionResponse.parts[1].inlineData.mimeType).toBe(
+        'image/jpeg',
+      );
+    });
+
+    it('handles text-only tool response (no media) for any model', async () => {
+      const fakeStream = {
+        async *[Symbol.asyncIterator]() {
+          yield { candidates: [{ content: { parts: [{ text: 'ack' }] } }] };
+        },
+      };
+      generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+      process.env.GEMINI_API_KEY = 'test-key';
+
+      const provider = new GeminiProvider(
+        'test-key',
+        undefined,
+        undefined,
+        injectedClientFactory,
+      );
+      const generator = provider.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: createToolIContent([]), // no media
+          resolved: { model: 'gemini-3-flash-preview' },
+        }),
+      );
+      await generator.next();
+
+      const request = generateContentStreamMock.mock.calls[0][0];
+      const toolMessage = request.contents.find(
+        (msg: { role: string }) =>
+          msg.role === 'user' &&
+          msg.parts.some((p: Part) => 'functionResponse' in p),
+      );
+      const frPart = toolMessage.parts.find(
+        (p: Part) => 'functionResponse' in p,
+      );
+      // No nested parts when there are no media blocks
+      expect(frPart.functionResponse.parts).toBeUndefined();
+      // Only the functionResponse part, no siblings
+      expect(toolMessage.parts).toHaveLength(1);
+    });
+
+    it('handles media-only tool response (empty text result)', async () => {
+      const fakeStream = {
+        async *[Symbol.asyncIterator]() {
+          yield { candidates: [{ content: { parts: [{ text: 'ack' }] } }] };
+        },
+      };
+      generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+      process.env.GEMINI_API_KEY = 'test-key';
+
+      const provider = new GeminiProvider(
+        'test-key',
+        undefined,
+        undefined,
+        injectedClientFactory,
+      );
+      const contents: IContent[] = [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'screenshot' }] },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'call-1',
+              toolName: 'screenshot',
+              result: {},
+            },
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: 'imgdata',
+              encoding: 'base64',
+            },
+          ],
+        },
+      ] as IContent[];
+
+      const generator = provider.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents,
+          resolved: { model: 'gemini-3-flash-preview' },
+        }),
+      );
+      await generator.next();
+
+      const request = generateContentStreamMock.mock.calls[0][0];
+      const toolMessage = request.contents.find(
+        (msg: { role: string }) =>
+          msg.role === 'user' &&
+          msg.parts.some((p: Part) => 'functionResponse' in p),
+      );
+      const frPart = toolMessage.parts.find(
+        (p: Part) => 'functionResponse' in p,
+      );
+      expect(frPart.functionResponse.parts).toHaveLength(1);
+      expect(frPart.functionResponse.parts[0].inlineData.data).toBe('imgdata');
+    });
+  });
+});

@@ -92,10 +92,18 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
     updatedAt: new Date().toISOString(),
   };
 
+  // A BUILT-IN provider is required here: activation must register a real
+  // provider on the isolated manager so refreshAuth constructs the real
+  // AgentClient this test probes. Since #3702 gemini is contributed only by
+  // the google-gemini runtime plugin, and the isolated subagent registration
+  // path (registerProvidersOntoManager -> createProviderManager) still builds
+  // a built-ins-only manager because nothing threads the CLI startup's plugin
+  // contributions into it — a gap on main this test exposed (#3730). Anthropic keeps the probe fully real: alias registration,
+  // switchActiveProvider, refreshAuth('provider'), AgentClient construction.
   const profile: Profile = {
     version: 1,
-    provider: 'gemini',
-    model: 'gemini-1.5-flash',
+    provider: 'anthropic',
+    model: 'claude-sonnet-4',
     modelParams: { temperature: 0.3, top_p: 0.95 },
     ephemeralSettings: { 'auth-key': 'test-api-key' },
   };

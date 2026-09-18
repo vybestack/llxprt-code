@@ -206,6 +206,19 @@ export function isFable5(modelId: string): boolean {
 }
 
 /**
+ * Whether the model supports assistant message prefill (a request whose
+ * messages array ends with an assistant message). Claude Fable 5 rejects
+ * prefill outright with 400 "This model does not support assistant message
+ * prefill. The conversation must end with a user message." (issue #1977), so
+ * requests targeting it must always end with a user message. Unknown or
+ * missing model ids default to prefill-supported to preserve existing
+ * behavior for unrecognized endpoints.
+ */
+export function modelSupportsPrefill(modelId: string | undefined): boolean {
+  return modelId === undefined || !isFable5(modelId);
+}
+
+/**
  * Whether the model supports adaptive thinking (the Anthropic `effort`
  * parameter). Currently Opus 4.6+, Sonnet 5, and Fable 5.
  */
