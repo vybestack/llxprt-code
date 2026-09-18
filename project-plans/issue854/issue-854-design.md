@@ -91,6 +91,58 @@ Principles (per Andrew's three rulings, 2026-09-18):
 
 ## Components
 
+### 0. The journal and its clients (architecture map)
+
+One file, one writer, three readers. The session journal
+`session-*.jsonl` is the single durable artifact; everything else is a
+client of it:
+
+```
+              writes (existing path)
+ agent loop ──RecordingIntegration──▶ session-*.jsonl
+    │                                     ▲        ▲        ▲
+    │ in-process                          │read    │read    │read
+    ▼                                     │        │        │
+ HistoryService (context)          JournalCursor  Replay   Janitor/
+    ▲                              (UI scrollback) Engine   discovery
+    │ transform (event fold)             │         (resume)  (existing)
+    └── provider call ◀── IContent[]
+```
+
+- **Writer (existing, unchanged)**: the main agent loop emits HistoryService
+  events; `RecordingIntegration` (created once per interactive session in
+  `cliSessionBootstrap` / `performResume`) serializes them into the journal
+  through `SessionRecordingService`. The UI never writes.
+- **Client 1 — UI scrollback (new)**: `ScrollbackPager` in the CLI reads
+  the journal backward/forward through `JournalCursor` to render history
+  the model no longer holds (and, in phase 5, history the live process
+  evicted).
+- **Client 2 — model context (phase 5 promotion)**: HistoryService itself
+  becomes a journal client. Today its `IContent[]` array is authoritative
+  in memory and the journal is a downstream copy; the end state inverts
+  that: context is projected from journal records on demand (see 5c).
+  While the process is live, the projection is fed in-process (no disk
+  read on the hot path); disk reads happen at resume/restore.
+- **Client 3 — resume/replay (existing)**: `ReplayEngine` already
+  reconstructs HistoryService state from the journal on `/continue`.
+  The projection in 5c is the same event fold, made incremental.
+- **Subagents are NOT journal clients** (see 5b): each subagent loop has
+  its own in-memory HistoryService and no recording; it surfaces in the
+  parent journal as a single `task` tool-call record.
+
+Package / class / API responsibilities:
+
+| Package | Class / module | Responsibility | Status |
+|---|---|---|---|
+| core `recording` | `SessionRecordingService` | sole journal writer; lock, flush, header | existing, unchanged |
+| core `recording` | `RecordingIntegration` | HistoryService events → journal records | existing, unchanged |
+| core `recording` | `ReplayEngine` | full-journal event fold at resume | existing, unchanged |
+| core `recording` | `JournalCursor` (new) | chunked reverse/forward reader: `pageBack(n)`, `pageForward(n)`, `size()`; torn-line tolerant; group-pair atomic; read-only | P02 |
+| core `services/history` | `HistoryService` + `contextRange` | context truth; `getContextRange()`, `getContextSummaries()`, `contextRangeChanged` (kept from P01); later: journal-backed projection (5c) | P01 done; 5c = P05 |
+| cli `ui/stores/turn` | `ScrollbackPager` (new) | resident window policy, eviction, byte-offset state, byte-proportional scrollbar | P02 |
+| cli `ui/hooks` | `useAgentStream` → `pendingHistoryItems` | realtime streaming of the live turn (in-memory, never journaled until commit) | existing, unchanged |
+| cli `ui/utils` | `iContentToHistoryItems` | journal `IContent` records → `HistoryItem`s (chronology-stamped); used by pager page-ins and resume alike | extended in P01 |
+
 ### 1. Durable state — session journal only, unchanged
 
 **Decisions 2026-09-18 (Andrew), in order:**
@@ -250,6 +302,102 @@ Verified tool-group facts (research, read-only pass over main):
   steer text merged into a tool entry flips its speaker to `human`, which
   replay's response map skips, replaying those calls as Pending.
 
+### 5a. Realtime streaming — the live turn never touches disk
+
+Scrollback is a *history* feature; it must not degrade streaming. The
+design keeps the two paths separate by construction:
+
+- **Pending region is live memory.** Stream deltas flow through the
+  existing hot path: `useAgentStream` accumulates partial items and calls
+  `setPendingHistoryItems` per delta; `DefaultAppLayout` renders the
+  pending array below the pager's committed rows. No disk read, no disk
+  write, no cursor involvement — the pager does not own these rows.
+- **The journal sees only commits.** Interim states (partial text,
+  in-flight tool groups) are never serialized. When the turn's content
+  finalizes, `contentEventProcessor`/`recordHistoryWithUsage` commit
+  `IContent` entries to HistoryService, `RecordingIntegration` appends
+  them to the journal, and the rows cross from "pending" to "resident
+  tail" in one step. The pager's tail grows by exactly those committed
+  items.
+- **Subagent streaming rides the same path.** A running subagent streams
+  `<subagent>`-wrapped text as the live `task` tool call's output through
+  `pendingHistoryItems` — realtime, same as any tool output. The pager
+  never renders subagent internals because none reach the parent history
+  as content.
+- **Consequence for eviction:** the always-resident set is the pending
+  region plus the viewport/margin window (section 3). Streaming cost
+  stays O(current turn), independent of session length; scrolling far
+  back mid-stream keeps streaming because the pending rows are separate
+  slots, not part of the paged window.
+
+### 5b. Subagents — no journal, no scrollback surface
+
+Verified against the code (branch main, 2026-09-18):
+
+- Every agent runtime — main or subagent — constructs its own
+  in-memory `HistoryService` (`createAgentRuntimeContext`). Only the
+  interactive CLI session creates a `RecordingIntegration`
+  (`cliSessionBootstrap.ts`, `performResume.ts`). Subagent loops
+  therefore keep NO journal: their internal turns are ephemeral and die
+  with the scope.
+- In the parent session, a subagent run is exactly one `task`
+  tool-call group (2 adjacent `IContent` records, section 5), whose
+  text is the `<subagent name id>` stream and the final result. That is
+  the only durable trace, and it is precisely what scrollback shows.
+- **UI relationship:** the pager treats the subagent's row like any
+  tool group: live-streamed while pending, committed to the resident
+  tail at completion, reconstructable from the journal on resume. The
+  UI's subagent activity indicator and streamed XML render in the
+  pending region (5a) and vanish on eviction/restart — consistent with
+  the UI-only-row loss profile already accepted in section 1.
+- **Out of scope:** giving subagents their own journals or a viewer for
+  their internal transcripts. That would be new durable state; it is
+  not part of this issue. If wanted later, it is a separate feature:
+  per-subagent `session-*.jsonl` + the same cursor client, at which
+  point this architecture extends without modification (a fourth
+  journal, a fourth client).
+
+### 5c. Model context from the journal (phase 5, promoted from deferred)
+
+Andrew's framing (2026-09-18): context should come "direct from disk to
+model essentially, but may need some transformation — the model and the
+UI become two clients of the journal." This is the end-state of the
+file-driven model and is now designed, not deferred:
+
+- **Inversion:** today HistoryService's in-memory `IContent[]` is the
+  context authority and the journal is a derived log. Phase 5 flips the
+  direction: the journal is the authority; the provider-visible
+  `IContent[]` becomes a *projection* of it, maintained by the same
+  event fold ReplayEngine performs at resume (append content, apply
+  `compressed` boundaries by dropping pre-boundary originals, apply
+  rewind truncation, resolve finals by seq order).
+- **Live fast path:** while the process runs, the projection is fed
+  in-process by the existing HistoryService event flow — the fold
+  consumes events, not file reads. Disk is read only when materializing
+  context that was evicted from memory (long sessions) or at
+  resume/restore (`ReplayEngine`, unchanged). The model call itself
+  never blocks on disk for the live tail.
+- **Shared client seam:** UI scrollback (client 1) and model context
+  (client 2) both read through the same primitives —
+  `JournalCursor` for positional reads, the event-fold projection for
+  semantic state. Their transformations differ (rendering rows vs.
+  provider messages) but the source, ordering, chronology stamps, and
+  boundary semantics are one implementation.
+- **Memory shape:** HistoryService keeps its public API surface
+  (`getContents()`, mutation methods, `contextRangeChanged`) so callers
+  do not change. What changes is backing: instead of an ever-growing
+  array, the resident context window + summaries stays in memory and
+  the pre-floor region is re-readable from the journal through the
+  fold — mirroring exactly what the pager does for the UI, with the
+  compression boundary as the shared floor.
+- **Phasing (P05):** (1) extract the projection fold from ReplayEngine
+  behind a core interface; (2) HistoryService switches to journal-
+  backed backing store with in-process feed; (3) primary-buffer flush
+  eviction + journal-backed context restore lands with P04's pager
+  work. P03's in-context marking (section on rendering) ships earlier
+  using the kept `contextRange` API, so the UI contract is stable
+  before the backing store flips.
+
 ### 6. Rendering
 
 - `HistoryItemDisplay` takes `contextState`:
@@ -353,8 +501,11 @@ Buffer modes:
   `ui.scrollbackPagerEnabled`.
 - Phase 3 — Markings + boundary expander (live UI state only).
 - Phase 4 — Primary-buffer eviction-on-flush; resume via cursor.
-- Phase 5 — Deferred: `HistoryService` windowing on the same file-driven
-  pattern (context itself becomes file-driven). Seam: the range API.
+- Phase 5 — Journal-backed context (designed in 5c, no longer deferred):
+  HistoryService's provider-visible `IContent[]` becomes a projection of
+  the journal (event fold extracted from ReplayEngine; in-process feed
+  while live, disk reads for evicted/resumed regions). The model and the
+  UI become the two journal clients. Seam: the range API + JournalCursor.
 
 ## Test strategy sketch (bun, behavioral)
 
@@ -418,6 +569,27 @@ Resolved 2026-09-18 on PR #3727 with Andrew (issuecomment-5732580084 /
      up and down the file. Goal: LOW memory usage and high eviction
      without functionality loss. The pager is a file cursor with chunked
      reads; memory is constant in session length.
+
+9. Design-review gaps raised by Andrew 2026-09-18 (after PDF review) —
+   **RESOLVED in this revision:**
+   - *Subagents were not covered; diagrams looked like core-to-UI with
+     the agent missing.* Answered in section 5b + section 0 map: the
+     agent loop is the writer (via RecordingIntegration); subagents keep
+     no journal and surface in the parent journal as one `task` tool
+     call; their internals are out of scope (future: separate journals
+     + same cursor client).
+   - *Realtime streaming not clearly preserved.* Answered in 5a: the
+     pending region is live memory on the existing hot path
+     (`useAgentStream` → `pendingHistoryItems`), the journal sees only
+     commits, and streaming cost is O(current turn) regardless of
+     scroll position.
+   - *Context should be direct-from-disk to the model (model + UI as two
+     journal clients), and API/package/class responsibilities were not
+     captured.* Answered in 5c + section 0 table: HistoryService's
+     provider-visible contents become a projection of the journal (event
+     fold from ReplayEngine, in-process feed while live), and the
+     responsibility matrix now names every writer/reader, package, and
+     phase.
 
 Original questions:
 
