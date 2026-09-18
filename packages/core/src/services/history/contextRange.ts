@@ -35,8 +35,8 @@ import type { ContextRange, ContextSummaryInfo } from './historyEventTypes.js';
 export function computeContextRange(
   history: readonly IContent[],
 ): ContextRange {
-  const first = history.at(0);
-  const last = history.at(-1);
+  const first = history.length > 0 ? history[0] : undefined;
+  const last = history.length > 0 ? history[history.length - 1] : undefined;
   if (first === undefined || last === undefined) {
     return { firstSeq: 0, lastSeq: 0, totalEntries: 0 };
   }
