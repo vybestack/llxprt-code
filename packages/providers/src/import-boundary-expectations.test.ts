@@ -537,13 +537,7 @@ describe('Filesystem boundary guards', () => {
       .filter((e: fs.Dirent) => e.isDirectory())
       .map((e: fs.Dirent) => e.name);
     expect(implementationDirs).toStrictEqual(
-      expect.arrayContaining([
-        'openai',
-        'anthropic',
-        'gemini',
-        'fake',
-        'tokenizers',
-      ]),
+      expect.arrayContaining(['openai', 'anthropic', 'fake', 'tokenizers']),
     );
   });
 
@@ -588,5 +582,92 @@ describe('Filesystem boundary guards', () => {
     expect(scripts.test).toBeDefined();
     expect(scripts.typecheck).toBeDefined();
     expect(scripts.lint).toBeDefined();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────
+// Gemini implementation lives only in the runtime plugin (#2763)
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * The `src` directory of every workspace package, for base-wide boundary
+ * scans. Build output (`dist`) is gitignored and deliberately never scanned:
+ * stale local builds must not decide these tests.
+ */
+function packageSrcDirs(): string[] {
+  const packagesDir = path.join(ROOT_DIR, 'packages');
+  return fs
+    .readdirSync(packagesDir, { withFileTypes: true })
+    .filter((entry: fs.Dirent) => entry.isDirectory())
+    .map((entry: fs.Dirent) => path.join(packagesDir, entry.name, 'src'))
+    .filter((srcDir: string) => fs.existsSync(srcDir));
+}
+
+describe('Gemini implementation lives only in the google-gemini plugin', () => {
+  const FORBIDDEN_GOOGLE_SDK_IMPORT = /from\s+['"]@ai-sdk\/google['"]/u;
+
+  /**
+   * GREEN TEST: The providers package stopped shipping a Gemini provider
+   * implementation in #2763; the plugin owns it now.
+   */
+  it('providers src contains no gemini provider implementation', () => {
+    const violations = collectTsFiles(PROVIDERS_SRC_DIR, true).filter(
+      (filePath) => /gemini/i.test(path.basename(filePath)),
+    );
+    expect(violations).toStrictEqual([]);
+    expect(fs.existsSync(path.join(PROVIDERS_SRC_DIR, 'gemini'))).toBe(false);
+  });
+
+  /**
+   * GREEN TEST: The Google generation SDK is declared ONLY by the plugin —
+   * no base package production source imports it.
+   */
+  it('no base package production source imports @ai-sdk/google', () => {
+    const violations: string[] = [];
+    for (const srcDir of packageSrcDirs()) {
+      violations.push(
+        ...findForbiddenImports(
+          collectTsFiles(srcDir, true),
+          FORBIDDEN_GOOGLE_SDK_IMPORT,
+          ROOT_DIR,
+        ),
+      );
+    }
+    expect(violations).toStrictEqual([]);
+  });
+
+  /**
+   * GREEN TEST: No base manifest (root or workspace package) declares
+   * @ai-sdk/google in any dependency section.
+   */
+  it('no base package manifest declares a dependency on @ai-sdk/google', () => {
+    const manifestPaths = [
+      path.join(ROOT_DIR, 'package.json'),
+      ...packageSrcDirs().map((srcDir) =>
+        path.join(path.dirname(srcDir), 'package.json'),
+      ),
+    ];
+    const violations: string[] = [];
+    for (const manifestPath of manifestPaths) {
+      const pkg = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as Record<
+        string,
+        unknown
+      >;
+      const sections = [
+        pkg.dependencies,
+        pkg.devDependencies,
+        pkg.peerDependencies,
+        pkg.optionalDependencies,
+      ];
+      for (const section of sections) {
+        const deps = dependencyRecord(section);
+        if ('@ai-sdk/google' in deps) {
+          violations.push(
+            `${path.relative(ROOT_DIR, manifestPath)}: ${deps['@ai-sdk/google']}`,
+          );
+        }
+      }
+    }
+    expect(violations).toStrictEqual([]);
   });
 });

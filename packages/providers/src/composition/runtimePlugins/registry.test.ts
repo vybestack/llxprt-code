@@ -21,7 +21,6 @@ const BUILTIN_PROVIDER_IDS = [
   'openai-responses',
   'openaivercel',
   'openai-vercel',
-  'gemini',
   'anthropic',
 ];
 
@@ -110,9 +109,9 @@ describe('buildProviderContributionRegistry', () => {
       makePlugin('pkg', 'plugin-a', [contribution('Turbo')]),
     ]);
 
-    const builtinFactory = registry.getProviderFactory('GEMINI');
+    const builtinFactory = registry.getProviderFactory('OPENAI');
     expect(builtinFactory).toBeTypeOf('function');
-    expect(registry.getProviderOrigin('GEMINI')).toStrictEqual({
+    expect(registry.getProviderOrigin('OPENAI')).toStrictEqual({
       kind: 'builtin',
     });
     expect(registry.getProviderFactory('turbo')).toBeTypeOf('function');
@@ -214,6 +213,57 @@ describe('buildProviderContributionRegistry', () => {
                 alias: 'openai',
                 config: { baseProvider: 'plugin-a-provider' },
               },
+            ],
+          },
+        ]),
+      ]),
+    ).toThrow(/collides with provider id/);
+  });
+
+  it('allows a contributed alias reusing the same plugin provider id', () => {
+    // A plugin's own alias over its own provider id is that provider surfaced
+    // to users, not a shadow of it: raw contributions never register a
+    // provider by name. The google-gemini plugin requires this shape — it
+    // contributes provider id 'gemini' and the built-in 'gemini' alias
+    // (#2763).
+    const registry = buildProviderContributionRegistry([
+      makePlugin('pkg', 'plugin-a', [
+        {
+          providerId: 'gemini',
+          createProvider: () => ({}) as unknown as IProvider,
+          builtinAliases: [
+            { alias: 'gemini', config: { baseProvider: 'gemini' } },
+          ],
+        },
+      ]),
+    ]);
+
+    expect(registry.getProviderOrigin('gemini')).toStrictEqual({
+      kind: 'plugin',
+      pluginId: 'plugin-a',
+      specifier: 'pkg',
+    });
+    expect(registry.getContributedAliases()).toStrictEqual([
+      {
+        alias: 'gemini',
+        pluginId: 'plugin-a',
+        config: { baseProvider: 'gemini' },
+      },
+    ]);
+  });
+
+  it('rejects a contributed alias shadowing another plugin provider id', () => {
+    expect(() =>
+      buildProviderContributionRegistry([
+        makePlugin('pkg-a', 'plugin-a', [
+          { providerId: 'provider-a', createProvider: noopFactory() },
+        ]),
+        makePlugin('pkg-b', 'plugin-b', [
+          {
+            providerId: 'provider-b',
+            createProvider: noopFactory(),
+            builtinAliases: [
+              { alias: 'provider-a', config: { baseProvider: 'provider-b' } },
             ],
           },
         ]),

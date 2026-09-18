@@ -43,7 +43,7 @@ import {
   teardownEnv,
   writeProfile,
   corruptCanonicalProfile,
-  corruptCanonicalProfileNonGeminiModel,
+  corruptCanonicalProfileFallbackModel,
   corruptCanonicalProfileOmittedModelParams,
   validLegacyProfile,
   validLegacyProfileAlternative,
@@ -67,7 +67,7 @@ describe('isCorruptStandardProfileFromRaw — conservative structural signature'
 
   it('identifies a corrupt signature with a non-Gemini fallback model', () => {
     expect(
-      isCorruptStandardProfileFromRaw(corruptCanonicalProfileNonGeminiModel()),
+      isCorruptStandardProfileFromRaw(corruptCanonicalProfileFallbackModel()),
     ).toBe(true);
   });
 
@@ -193,7 +193,7 @@ describe('repairCanonicalProfiles — generalized corrupt profile repair', () =>
     writeProfile(
       env.canonicalDir,
       'broken.json',
-      corruptCanonicalProfileNonGeminiModel(),
+      corruptCanonicalProfileFallbackModel(),
     );
     writeProfile(
       env.legacyProfilesDir,
@@ -460,7 +460,7 @@ describe('repairCanonicalProfiles — repaired profile loads via ProfileManager'
     writeProfile(
       env.canonicalDir,
       'alt.json',
-      corruptCanonicalProfileNonGeminiModel(),
+      corruptCanonicalProfileFallbackModel(),
     );
     writeProfile(
       env.legacyProfilesDir,
@@ -676,7 +676,7 @@ describe('repairCanonicalProfiles — narrow eligibility negative tests', () => 
     writeProfile(
       env.canonicalDir,
       'other.json',
-      corruptCanonicalProfileNonGeminiModel(),
+      corruptCanonicalProfileFallbackModel(),
     );
     writeProfile(
       env.legacyProfilesDir,

@@ -421,6 +421,42 @@ describe('registerAliasProviders registry dispatch', () => {
     ).toThrow(/\/config\/providers\/traceable-alias\.config/);
   });
 
+  it('names the plugin that provides gemini when a base-only install requests it', () => {
+    // A base-only install (no runtime plugins) may still see a 'gemini' alias
+    // — for example a user alias file carried over from a pre-plugin install.
+    // The error must say which package to install, not just that the provider
+    // is unknown (#2763).
+    const manager = makeManager();
+
+    expect(() =>
+      register(manager, [
+        makeAliasEntry('gemini', {
+          name: 'gemini',
+          baseProvider: 'gemini',
+          'base-url': 'https://generativelanguage.googleapis.com',
+          defaultModel: 'gemini-2.5-pro',
+          apiKeyEnv: 'GEMINI_API_KEY',
+        }),
+      ]),
+    ).toThrow(/@vybestack\/llxprt-plugin-google-gemini/);
+
+    expect(manager.listProviders()).not.toContain('gemini');
+  });
+
+  it('does not name an install plugin for providers no plugin provides', () => {
+    let thrown: unknown;
+    try {
+      register(makeManager(), [
+        makeAliasEntry('ghost-alias', { baseProvider: 'no-such-provider' }),
+      ]);
+    } catch (error) {
+      thrown = error;
+    }
+
+    assertInstanceOf(thrown, Error);
+    expect(thrown.message).not.toContain('Install the runtime plugin');
+  });
+
   it('uses the built-ins-only registry when no contributions are supplied', () => {
     const manager = makeManager();
 
@@ -545,7 +581,6 @@ describe('built-in alias factory parity', () => {
       'openai-responses',
       'openaivercel',
       'openai-vercel',
-      'gemini',
       'anthropic',
     ]);
   });

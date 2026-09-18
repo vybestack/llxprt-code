@@ -29,7 +29,6 @@ import { LoggingProviderWrapper } from '@vybestack/llxprt-code-providers/Logging
 import {
   OpenAIProvider,
   AnthropicProvider,
-  GeminiProvider,
 } from '@vybestack/llxprt-code-providers';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RedactionConfig } from '@vybestack/llxprt-code-core/config/types.js';
@@ -200,7 +199,7 @@ describe('token-tracking cross-package integration', () => {
     it('preserves accurate totals when the active provider switches mid-session', () => {
       const pm = manager();
       pm.registerProvider(new OpenAIProvider('test-key'));
-      pm.registerProvider(new GeminiProvider());
+      pm.registerProvider(new AnthropicProvider('test-key'));
       pm.resetSessionTokenUsage();
 
       pm.setActiveProvider('openai');
@@ -212,8 +211,8 @@ describe('token-tracking cross-package integration', () => {
         thought: 0,
       });
 
-      pm.setActiveProvider('gemini');
-      pm.accumulateSessionTokens('gemini', {
+      pm.setActiveProvider('anthropic');
+      pm.accumulateSessionTokens('anthropic', {
         input: 175,
         output: 100,
         cache: 25,
@@ -438,36 +437,6 @@ describe('token-tracking cross-package integration', () => {
       expect(counts.thoughts_token_count).toBe(80);
     });
 
-    it('extracts cached content tokens from a Gemini usage object', () => {
-      const wrapper = new LoggingProviderWrapper(
-        new GeminiProvider(),
-        loggingConfig(),
-      );
-      const counts = wrapper.extractTokenCountsFromResponse({
-        candidates: [
-          {
-            content: {
-              parts: [{ text: 'Hello, I can help you with that!' }],
-              role: 'model',
-            },
-            finishReason: 'STOP',
-          },
-        ],
-        usage: {
-          prompt_tokens: 180,
-          completion_tokens: 95,
-          total_tokens: 275,
-          cached_content_tokens: 40,
-        },
-      });
-
-      expect(counts.input_token_count).toBe(180);
-      expect(counts.output_token_count).toBe(95);
-      expect(counts.cached_content_token_count).toBe(40);
-      expect(counts.tool_token_count).toBe(0);
-      expect(counts.thoughts_token_count).toBe(0);
-    });
-
     it('yields zeros for missing or incomplete usage data across providers', () => {
       const wrappers = [
         new LoggingProviderWrapper(
@@ -478,7 +447,6 @@ describe('token-tracking cross-package integration', () => {
           new AnthropicProvider('test-key'),
           loggingConfig(),
         ),
-        new LoggingProviderWrapper(new GeminiProvider(), loggingConfig()),
       ];
       const incomplete = [{}, { usage: {} }, { headers: {} }, null, undefined];
 

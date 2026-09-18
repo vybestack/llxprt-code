@@ -16,8 +16,6 @@ import { isNarrowWidth } from '../utils/isNarrowWidth.js';
 
 interface ContextSummaryDisplayProps {
   llxprtMdFileCount?: number;
-  /** @deprecated Use llxprtMdFileCount instead. Will be removed in a future release. */
-  geminiMdFileCount?: number;
   coreMemoryFileCount?: number;
   contextFileNames: string[];
   mcpServers?: Record<string, MCPServerConfig>;
@@ -109,7 +107,6 @@ function buildSkillText(skillCount: number | undefined): string {
 
 export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
   llxprtMdFileCount,
-  geminiMdFileCount,
   coreMemoryFileCount,
   contextFileNames,
   mcpServers,
@@ -117,7 +114,7 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
   ideContext,
   skillCount,
 }) => {
-  const effectiveMdFileCount = llxprtMdFileCount ?? geminiMdFileCount ?? 0;
+  const effectiveMdFileCount = llxprtMdFileCount ?? 0;
   const effectiveCoreCount = coreMemoryFileCount ?? 0;
   const { columns: terminalWidth } = useTerminalSize();
   const isNarrow = isNarrowWidth(terminalWidth);
