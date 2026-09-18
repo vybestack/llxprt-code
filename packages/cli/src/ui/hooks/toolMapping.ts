@@ -7,6 +7,8 @@
 import {
   type Status as CoreStatus,
   DEFAULT_AGENT_ID,
+  type FileDiff,
+  type FileRead,
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
@@ -27,21 +29,6 @@ import type {
 
 const logger = DebugLogger.getLogger('llxprt:cli:tool-mapping');
 
-/**
- * Long string fields carried by structured result displays: FileDiff's diff
- * and both content sides, FileRead's content, and extension tools' {content}
- * bodies. Each is bounded independently against the shared display-retention
- * cap; every other field passes through untouched so the display keeps the
- * shape its renderer consumes (DiffRenderer needs the FileDiff object, not a
- * stringified body).
- */
-const RETENTION_BOUNDED_DISPLAY_FIELDS = [
-  'fileDiff',
-  'originalContent',
-  'newContent',
-  'content',
-] as const;
-
 type StructuredToolResultDisplay = Exclude<
   IndividualToolCallDisplay['resultDisplay'],
   string | undefined
@@ -50,8 +37,12 @@ type StructuredToolResultDisplay = Exclude<
 /**
  * Bounds a structured display's long string fields on a shallow copy (issue
  * #3428): the scheduler's response that feeds the model is never mutated
- * (AC5). Displays with no oversized field — small diffs, AnsiOutput line
- * arrays — keep their original object and carry no retention metadata.
+ * (AC5). Long fields are bounded per variant — FileDiff's diff and both
+ * content sides, FileRead's content — and every other field passes through
+ * untouched so the display keeps the shape its renderer consumes
+ * (DiffRenderer needs the FileDiff object, not a stringified body).
+ * Displays with no oversized field — small diffs, AnsiOutput line arrays —
+ * keep their original object and carry no retention metadata.
  */
 function boundStructuredDisplayForRetention(
   resultDisplay: StructuredToolResultDisplay,
@@ -62,31 +53,40 @@ function boundStructuredDisplayForRetention(
   if (Array.isArray(resultDisplay)) {
     return { resultDisplay, retention: undefined };
   }
-  const bounded: Record<string, unknown> = { ...resultDisplay };
-  let wasCapped = false;
-  let originalLength = 0;
-  for (const field of RETENTION_BOUNDED_DISPLAY_FIELDS) {
-    const value = bounded[field];
-    if (typeof value !== 'string') continue;
+  const totals = { wasCapped: false, originalLength: 0 };
+  // Bounds one field value, accumulating the retention totals across every
+  // bounded field of the display.
+  const boundField = (value: string): string => {
     const fieldBound = boundResultDisplayForRetention(value);
-    originalLength += fieldBound.originalLength;
+    totals.originalLength += fieldBound.originalLength;
     if (fieldBound.wasCapped) {
-      wasCapped = true;
-      bounded[field] = fieldBound.text;
+      totals.wasCapped = true;
     }
+    return fieldBound.text;
+  };
+  // Each branch writes bounded strings back through the variant's own
+  // declared field types, so the copy keeps the display's shape with every
+  // write type-checked: the bounded value of a string field is a string.
+  let bounded: FileDiff | FileRead;
+  if ('fileDiff' in resultDisplay) {
+    const diff: FileDiff = { ...resultDisplay };
+    diff.fileDiff = boundField(diff.fileDiff);
+    if (diff.originalContent !== null) {
+      diff.originalContent = boundField(diff.originalContent);
+    }
+    diff.newContent = boundField(diff.newContent);
+    bounded = diff;
+  } else {
+    const read: FileRead = { ...resultDisplay };
+    read.content = boundField(read.content);
+    bounded = read;
   }
-  if (!wasCapped) {
+  if (!totals.wasCapped) {
     return { resultDisplay, retention: undefined };
   }
   return {
-    // The copy differs from the input only in long string fields replaced
-    // by bounded strings of the same fields, so the display keeps its
-    // shape. TypeScript cannot express "same union variant with some string
-    // fields swapped" (the display interfaces carry no index signatures),
-    // so this single cast goes through unknown.
-    resultDisplay:
-      bounded as unknown as IndividualToolCallDisplay['resultDisplay'],
-    retention: { capped: true, originalLength },
+    resultDisplay: bounded,
+    retention: { capped: true, originalLength: totals.originalLength },
   };
 }
 
