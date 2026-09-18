@@ -1,0 +1,189 @@
+{
+  "tmux": {
+    "cols": 120,
+    "rows": 40,
+    "historyLimit": 50000,
+    "scrollbackLines": 5000,
+    "initialWaitMs": 6000
+  },
+  "startCommand": [
+    "/bin/sh",
+    "-c",
+    "exec env CI=0 CONTINUOUS_INTEGRATION=0 NO_COLOR=true FORCE_COLOR=0 NODE_OPTIONS= LLXPRT_CODE_NO_RELAUNCH=true LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION=true LLXPRT_CODE_BUILTIN_COMMANDS_ONLY=true LLXPRT_CODE_SUPPRESS_STATIC_HEADER=true LLXPRT_CODE_WELCOME_CONFIG_PATH=scripts/fixtures/welcome-completed.json LLXPRT_SYSTEM_SETTINGS_PATH=scripts/system-settings.interactive-ui.json LLXPRT_FAKE_RESPONSES=scripts/fixtures/issue3428-tool-result-retention-snapshot.responses.jsonl ${bun} scripts/memory/launcher.ts --dir \"$LLXPRT_TMUX_ARTIFACT_DIR/memprofile\" --interval 86400000 --snapshots --max-heap-mb 1024 -- --provider fake --model fake-model --yolo"
+  ],
+  "yolo": false,
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "line",
+      "text": "take the baseline memory checkpoint",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 300
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "LLXPRT3428_CK_BASE_END",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "line",
+      "text": "run small output turn 1",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 300
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "LLXPRT3428_S1_END",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "line",
+      "text": "run small output turn 2",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 300
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "LLXPRT3428_S2_END",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "line",
+      "text": "run small output turn 3",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 300
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "LLXPRT3428_S3_END",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "line",
+      "text": "take the checkpoint after the small turns",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 300
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "LLXPRT3428_CK_SMALL_END",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "line",
+      "text": "run large output turn 1",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 300
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "LLXPRT3428_L1_END",
+      "timeoutMs": 240000
+    },
+    {
+      "type": "line",
+      "text": "run large output turn 2",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 300
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "LLXPRT3428_L2_END",
+      "timeoutMs": 240000
+    },
+    {
+      "type": "line",
+      "text": "run large output turn 3",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 300
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "LLXPRT3428_L3_END",
+      "timeoutMs": 240000
+    },
+    {
+      "type": "line",
+      "text": "take the checkpoint after the large turns",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 300
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "LLXPRT3428_CK_BIG_END",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "line",
+      "text": "run extra large output turn 1",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 300
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "LLXPRT3428_X1_END",
+      "timeoutMs": 240000
+    },
+    {
+      "type": "line",
+      "text": "run extra large output turn 2",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 300
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "LLXPRT3428_X2_END",
+      "timeoutMs": 240000
+    },
+    {
+      "type": "line",
+      "text": "run extra large output turn 3",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 300
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "LLXPRT3428_X3_END",
+      "timeoutMs": 240000
+    },
+    {
+      "type": "line",
+      "text": "take the final checkpoint",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 300
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "LLXPRT3428_CK_HUGE_END",
+      "timeoutMs": 180000
+    },
+    {
+      "type": "line",
+      "text": "/quit",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 300
+    },
+    {
+      "type": "waitForExit",
+      "timeoutMs": 30000
+    }
+  ]
+}

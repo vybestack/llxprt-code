@@ -10,17 +10,13 @@ import {
   DEFAULT_HISTORY_MAX_BYTES,
   DEFAULT_HISTORY_MAX_ITEMS,
 } from '../../../constants/historyLimits.js';
+import {
+  RETENTION_TRUNCATION_MARKER as TRUNCATION_MARKER,
+  boundUtf8Text,
+  previewText,
+} from '../../utils/toolResultRetention.js';
 
 let globalMessageIdCounter = 0;
-
-/**
- * Marker inserted when an item is too large for the on-screen scrollback
- * budget. The bound is display-only: the model's copy lives in the core
- * `HistoryService` and the complete text is written to the session transcript,
- * so nothing is lost (issue #2852).
- */
-const TRUNCATION_MARKER =
-  '\n[... middle omitted from display; full text is in the session transcript ...]\n';
 
 const DISPLAY_BOUND_NOTICE =
   '[Item too large to display; full text is in the session transcript]';
@@ -284,42 +280,6 @@ function fitHistoryText(
     }
   }
   return undefined;
-}
-
-/** Head and tail of `text` fitting `maxBytes`, joined by the display marker. */
-function previewText(text: string, maxBytes: number): string {
-  const headBytes = Math.ceil(maxBytes / 2);
-  const tailBytes = Math.floor(maxBytes / 2);
-  return `${takeUtf8(text, headBytes, false)}${TRUNCATION_MARKER}${takeUtf8(text, tailBytes, true)}`;
-}
-
-function boundUtf8Text(text: string, maxBytes: number): string {
-  if (Buffer.byteLength(text, 'utf8') <= maxBytes) {
-    return text;
-  }
-  const markerBytes = Buffer.byteLength(TRUNCATION_MARKER, 'utf8');
-  const budget = maxBytes - markerBytes;
-  return budget > 0 ? previewText(text, budget) : '';
-}
-
-/** Head or tail of `text` within `maxBytes`, never splitting a code point. */
-function takeUtf8(text: string, maxBytes: number, fromEnd: boolean): string {
-  const bytes = Buffer.from(text, 'utf8');
-  if (bytes.length <= maxBytes) {
-    return text;
-  }
-  if (!fromEnd) {
-    let end = maxBytes;
-    while (end > 0 && (bytes[end] & 0xc0) === 0x80) {
-      end -= 1;
-    }
-    return bytes.subarray(0, end).toString('utf8');
-  }
-  let start = bytes.length - maxBytes;
-  while (start < bytes.length && (bytes[start] & 0xc0) === 0x80) {
-    start += 1;
-  }
-  return bytes.subarray(start).toString('utf8');
 }
 
 /** Monotonic per-item id derived from the second the item was created. */
