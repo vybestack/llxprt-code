@@ -258,3 +258,47 @@ verification passes.
 ## Execution Tracker
 
 See `project-plans/issue854/execution-tracker.md`.
+
+## Preflight Results (completed)
+
+Completed 2026-09-17 on branch `issue854` (HEAD cbe79ada8). Evidence logs:
+`tmp/verify854/preflight-grep*.log`.
+
+### Dependency / Type / Call-Path Verification
+
+| Assumption | What to verify | Result | Evidence (file:line) |
+|------------|----------------|--------|----------------------|
+| Journal can derive file base name from active recording | RecordingIntegration / SessionRecordingService accessor | OK — `getFilePath()` returns the `session-*.jsonl` path; dirname = chatsDir, basename minus `.jsonl` = base. Reached via `useRecordingInfrastructure` refs (`recordingServiceRef`) in AppContainer. | packages/core/src/recording/SessionRecordingService.ts:502; packages/cli/src/ui/containers/AppContainer/hooks/useRecordingInfrastructure.ts:47-53 |
+| `HistoryItemBase` is where optional stamps belong | Interface in `packages/cli/src/ui/types.ts` | OK — `interface HistoryItemBase { text?: string }` at L82 (plan said ~L240; actual L82). | packages/cli/src/ui/types.ts:82 |
+| chronology seq present on IContent | stamper + `metadata.chronology.seq` | OK — `ChronologyStamper.stamp` writes `content.metadata.chronology` with monotonic never-reset `nextSeq`. | packages/core/src/services/history/historyChronology.ts:92,97,139 |
+| **Live CLI path can obtain the seq for stamping** | ServerContentEvent payload | **FAILS** — `ServerContentEvent = { type, value: string }`; content deltas are plain strings. No IContent, no chronology seq reaches `contentEventProcessor` / `queryPreparer` / live tool-group assembly. Zero `chronology` references exist in `packages/cli/src` today. Live stamping needs new core→CLI plumbing that does not exist and is not in this phase's file list. | packages/core/src/core/turn.ts:146-150; grep chronology packages/cli/src → no matches (tmp/verify854/preflight-grep7.log) |
+| Core event plumbing supports new payload type | typed emitter overloads | OK — `HistoryServiceEventEmitter` uses per-event `on`/`emit`/`off` overloads; add `contextRangeChanged` overloads the same way. | packages/core/src/services/history/historyEventTypes.ts:20-63 |
+| Settings schema + merge produces new keys | schema-ui near historyMaxItems + getSchemaDefaults | OK — `historyMaxItems` L298 pattern; `getSchemaDefaults()` auto-extracts schema defaults (L88), so a new `ui.*` key flows into merged settings with no merge-code change. | packages/cli/src/config/settings-schema/schema-ui.ts:298; packages/cli/src/config/settingsMerge.ts:88-92 |
+| turnStore addItem/updateItem are journal hook points | signatures + wiring | OK — `createTurnHistoryCommands` addItem (L166) / updateItem (L181); `useHistoryManager` exposes `commands.addItem`/`commands.updateItem` (L81-82). | packages/cli/src/ui/stores/turn/turnStore.ts:166,181; packages/cli/src/ui/hooks/useHistoryManager.ts:81-82 |
+| `sb-` prefix collides with nothing | session globs | OK — janitor/session tooling matches `session-*.jsonl`; those live under `packages/core/src/recording/` (plan cited `packages/cli/src/services/`, stale path but same semantics). | packages/core/src/recording/SessionDiscovery.ts; packages/core/src/recording/janitor/sessionScanner.ts; packages/core/src/recording/janitor/mediaReclamation.ts |
+| Real HistoryService usable in tests | setup pattern | OK — `new HistoryService()` with `add({speaker, blocks})` works; compression via `startCompression()`/`replaceHistory(transform)`. | packages/core/src/services/history/compression-locking.test.ts:49-52,60-64 |
+
+### Blocking Issues Found
+
+1. **REQ-854-003 live stamping (partial blocker):** the live paths named in the
+   requirement (`contentEventProcessor` committed adds, `queryPreparer` user
+   echo, live tool-group assembly) have no truthful source for
+   `chronologySeq` — `ServerContentEvent` carries only a string delta
+   (packages/core/src/core/turn.ts:146) and history recording (where
+   `historyChronology.ts` assigns the seq) happens later inside core. Phase 1
+   therefore stamps the seq only where it is truthfully available:
+   `iContentToHistoryItems` (resume/replay path, from
+   `IContent.metadata.chronology.seq`). Implementing live stamping anyway
+   would require inventing a seq value with no correlation to the real
+   chronology, which would corrupt the join key this design exists to create.
+   Live stamping needs a core→CLI chronology feed (e.g. `contentAdded`-derived
+   seq plumbing) and should be a follow-up phase or plan amendment.
+
+### Verification Gate
+
+- [x] All dependencies verified
+- [x] Types match expectations (with L-number corrections noted)
+- [x] Call paths are possible
+- [x] Test infrastructure ready
+- [ ] REQ-854-003 live stamping: blocked as described above (replay-path
+      stamping proceeds; live stamping deferred per blocking issue 1)
