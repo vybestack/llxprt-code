@@ -41,6 +41,10 @@ import {
   rethrowIfAborted,
 } from './loadBalancing/requestAbort.js';
 import { optionsWithSelectedModelPrompt } from './loadBalancing/selectedModelPrompt.js';
+import {
+  projectLoadBalancerPromptEnvelope,
+  type PromptEnvelopeProjection,
+} from './loadBalancing/promptEnvelopeProjection.js';
 import { hasTransportAttemptRemaining } from './transportAttemptBudget.js';
 import { isRequestCommitted } from './retryRequestContext.js';
 import { requireTransportAttempt } from './loadBalancing/delegateAttempt.js';
@@ -64,7 +68,7 @@ import {
 } from './loadBalancing/preparedPromptOptions.js';
 import { getTargetContextLimit } from './loadBalancing/targetContextLimit.js';
 import {
-  getMinMemberContextWindow,
+  getEffectiveLoadBalancerContextLimit,
   resolveSubProfileModel,
 } from './loadBalancing/subProfileHelpers.js';
 import type { TokenAccountingDiagnostics } from './loadBalancing/tokenAccountingDiagnostics.js';
@@ -178,6 +182,40 @@ export class LoadBalancingProvider implements IProvider {
     return subProfile;
   }
 
+  /**
+   * Project the NEXT sub-profile's prompt envelope as an estimate-only
+   * value for tool-aware pre-send estimation (issue #3507). Peeks the
+   * rotation without consuming selection state. Failover peeks are
+   * eligibility-aware (PR #3715): they mirror the send path's skip policy
+   * by targeting the first member from the failover start index that
+   * passes a non-mutating eligibility read (circuitBreaker.canAttemptBackend
+   * + TPM threshold — pure reads, so the peek never steals a half-open
+   * recovery probe); when no member is eligible, the start-index member is
+   * projected anyway because this estimate-only seam never throws.
+   * Round-robin peeks ignore eligibility (the send path is a pure
+   * rotation). The send-time guard still re-estimates authoritatively.
+   * Resolves undefined when the delegate cannot project.
+   */
+  async projectPromptEnvelope(
+    options: GenerateChatOptions,
+  ): Promise<PromptEnvelopeProjection | undefined> {
+    return projectLoadBalancerPromptEnvelope({
+      config: this.config,
+      providerManager: this.providerManager,
+      failoverState: this.failoverState,
+      roundRobinIndex: this.roundRobinIndex,
+      circuitBreaker: this.circuitBreaker,
+      tpmTracker: this.tpmTracker,
+      // One settings read per projection: the wrapper's eligibility
+      // predicate closes over the threshold instead of re-extracting it
+      // per member.
+      tpmThreshold: this.extractFailoverSettings().tpmThreshold,
+      buildDelegateResolvedOptions: (subProfile, delegateOptions) =>
+        this.buildRoundRobinResolvedOptions(subProfile, delegateOptions),
+      options,
+    });
+  }
+
   async getModels(): Promise<IModel[]> {
     const contextWindow = this.getEffectiveContextLimit();
     return [
@@ -196,13 +234,7 @@ export class LoadBalancingProvider implements IProvider {
   }
 
   private getEffectiveContextLimit(): number | undefined {
-    if (
-      this.config.contextLimit !== undefined &&
-      this.config.contextLimit > 0
-    ) {
-      return this.config.contextLimit;
-    }
-    return getMinMemberContextWindow(this.config.subProfiles);
+    return getEffectiveLoadBalancerContextLimit(this.config);
   }
 
   /**
@@ -217,7 +249,7 @@ export class LoadBalancingProvider implements IProvider {
     delegateProvider: IProvider,
   ): Promise<EstimationResult> {
     const model = resolveSubProfileModel(subProfile);
-    const resolvedOptions = this.buildDelegateResolvedOptions(
+    const resolvedOptions = this.buildRoundRobinResolvedOptions(
       this.config.strategy === 'failover'
         ? await resolveMemberAuthentication(subProfile, this.logger)
         : subProfile,
@@ -453,13 +485,6 @@ export class LoadBalancingProvider implements IProvider {
     });
   }
 
-  private buildDelegateResolvedOptions(
-    subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
-    options: GenerateChatOptions,
-  ): GenerateChatOptions {
-    return this.buildRoundRobinResolvedOptions(subProfile, options);
-  }
-
   private getMetricsHooks(): BackendMetricsHooks {
     return {
       updateTPM: (name, tokens) => this.tpmTracker.updateTPM(name, tokens),
@@ -664,17 +689,6 @@ export class LoadBalancingProvider implements IProvider {
     return extractFailoverSettingsFromEphemeral(
       this.config.lbProfileEphemeralSettings,
     );
-  }
-
-  /**
-   * Build resolved options for a sub-profile
-   * @plan PLAN-20251212issue488
-   */
-  private buildResolvedOptions(
-    subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
-    options: GenerateChatOptions,
-  ): GenerateChatOptions {
-    return this.buildDelegateResolvedOptions(subProfile, options);
   }
 
   private readonly circuitBreaker: CircuitBreakerManager;
@@ -928,7 +942,8 @@ export class LoadBalancingProvider implements IProvider {
         logger: this.logger,
         circuitBreaker: this.circuitBreaker,
         markActiveSelection: (name) => this.markActiveSelection(name),
-        buildResolvedOptions: (sp, opt) => this.buildResolvedOptions(sp, opt),
+        buildResolvedOptions: (sp, opt) =>
+          this.buildRoundRobinResolvedOptions(sp, opt),
         getMetricsHooks: () => this.getMetricsHooks(),
         incrementStats: (name) => this.incrementStats(name),
       },
