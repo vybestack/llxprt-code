@@ -714,7 +714,9 @@ describe('iContentToHistoryItems chronology stamps', () => {
       {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'Hello' }],
-        metadata: { chronology: { seq: 7, userTurn: 1, step: 1, recordedAt: 0 } },
+        metadata: {
+          chronology: { seq: 7, userTurn: 1, step: 1, recordedAt: 0 },
+        },
       },
     ];
 
@@ -729,7 +731,9 @@ describe('iContentToHistoryItems chronology stamps', () => {
       {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Reply' }],
-        metadata: { chronology: { seq: 12, userTurn: 1, step: 1, recordedAt: 0 } },
+        metadata: {
+          chronology: { seq: 12, userTurn: 1, step: 1, recordedAt: 0 },
+        },
       },
     ];
 
