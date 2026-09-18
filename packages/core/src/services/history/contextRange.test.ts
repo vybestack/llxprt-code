@@ -85,8 +85,8 @@ describe('HistoryService context range', () => {
         speaker: 'ai' as const,
         blocks: [{ type: 'text' as const, text: 'summary of three' }],
         metadata: {
-          chronology: { seq: 99 },
-          chronologyReplaced: { fromSeq: 1, toSeq: 3 },
+          chronology: { seq: 99, userTurn: 1, step: 1, recordedAt: 0 },
+          chronologyReplaced: { fromSeq: 1, toSeq: 3, itemCount: 3 },
         },
       },
       ...contents.slice(3),
@@ -125,8 +125,8 @@ describe('HistoryService context range', () => {
         speaker: 'ai' as const,
         blocks: [{ type: 'text' as const, text: 'summary of four' }],
         metadata: {
-          chronology: { seq: 98 },
-          chronologyReplaced: { fromSeq: 1, toSeq: 4 },
+          chronology: { seq: 98, userTurn: 1, step: 1, recordedAt: 0 },
+          chronologyReplaced: { fromSeq: 1, toSeq: 4, itemCount: 4 },
         },
       },
     ]);
