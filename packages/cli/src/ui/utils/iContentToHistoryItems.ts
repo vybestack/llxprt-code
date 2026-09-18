@@ -246,7 +246,8 @@ interface MarkdownSegment {
 
 function appendTextSegment(segments: MarkdownSegment[], text: string): void {
   if (text === '') return;
-  const lastSegment = segments.at(-1);
+  const lastSegment =
+    segments.length > 0 ? segments[segments.length - 1] : undefined;
   if (lastSegment?.kind === 'text') {
     lastSegment.value += text;
   } else {

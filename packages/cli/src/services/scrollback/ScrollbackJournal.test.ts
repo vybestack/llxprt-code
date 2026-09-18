@@ -175,12 +175,12 @@ describe('ScrollbackJournal', () => {
       'rewind',
       'clear',
     ]);
-    const boundary = requireRec(records.at(1), 'boundary');
+    const boundary = requireRec(records[1], 'boundary');
     expect(boundary.summaryText).toBe('compressed 4 messages');
     expect(boundary.replacedFromSeq).toBe(1);
     expect(boundary.replacedToSeq).toBe(4);
     expect(boundary.itemCount).toBe(4);
-    const rewind = requireRec(records.at(2), 'rewind');
+    const rewind = requireRec(records[2], 'rewind');
     expect(rewind.truncateAfterUiSeq).toBe(1);
   });
 
