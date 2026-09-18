@@ -12,10 +12,10 @@ import type { Config } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import { MessageBus } from '@vybestack/llxprt-code-core';
 import {
-  AgentClient,
-  CoreToolScheduler,
-} from '@vybestack/llxprt-code-agents/internals.js';
-import { createTaskToolRegistration } from '@vybestack/llxprt-code-agents';
+  createAgentClient,
+  createToolScheduler,
+  createTaskRegistration,
+} from '@vybestack/llxprt-code-agents';
 
 /**
  * Creates a temporary directory for tests
@@ -50,19 +50,15 @@ export async function cleanupTempDirectory(dir: string): Promise<void> {
 function attachTestAgentFactories(config: Config): void {
   Object.defineProperties(config, {
     agentClientFactory: {
-      value: (
-        cfg: Config,
-        runtimeState: ConstructorParameters<typeof AgentClient>[1],
-      ) => new AgentClient(cfg, runtimeState),
+      value: createAgentClient,
       configurable: true,
     },
     toolSchedulerFactory: {
-      value: (options: ConstructorParameters<typeof CoreToolScheduler>[0]) =>
-        new CoreToolScheduler(options),
+      value: createToolScheduler,
       configurable: true,
     },
     taskToolRegistration: {
-      value: createTaskToolRegistration(),
+      value: createTaskRegistration(),
       configurable: true,
     },
   });

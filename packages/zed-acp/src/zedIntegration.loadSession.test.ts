@@ -78,8 +78,6 @@ void vi.mock('@vybestack/llxprt-code-agents', () => ({
 }));
 
 void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  registerAgentRuntimeFactories: vi.fn(),
-  resetAgentRuntimeFactories: vi.fn(),
   clearActiveModelParam: vi.fn(),
   getActiveModelParams: vi.fn(),
   loadProfileByName: vi.fn(),

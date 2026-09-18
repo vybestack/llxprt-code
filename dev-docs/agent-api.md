@@ -27,7 +27,6 @@ methods, event contract) is documented in the
 - The import boundary rules and what the eventual `#1595` trim targets.
 - The runtime-vs-app-service internal boundary.
 - The current sequence model internals.
-- The `internals.js` power-user subpath.
 - The settings and config projection internals.
 - The A2A server follow-up work.
 
@@ -42,19 +41,20 @@ that exports it.
 
 ### Subpath stability contracts
 
-The package exposes three import specifiers, each with a distinct stability
+The package exposes two import specifiers, each with a distinct stability
 contract:
 
-| Specifier                                      | Purpose                                                                          | Stability                                          |
-| ---------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `@vybestack/llxprt-code-agents`                | The curated public Agent API (see [user reference](../docs/agent-api.md)).       | Supported / semver-covered.                        |
-| `@vybestack/llxprt-code-agents/app-service.js` | Durable, config/app-service functions + `COMMAND_API_MAP`. No live agent needed. | Supported / semver-covered.                        |
-| `@vybestack/llxprt-code-agents/internals.js`   | Power-user / low-level primitives (chat session, scheduler, orchestrator, etc.). | **Unstable** — may change without a major version. |
+| Specifier                                      | Purpose                                                                          | Stability                   |
+| ---------------------------------------------- | -------------------------------------------------------------------------------- | --------------------------- |
+| `@vybestack/llxprt-code-agents`                | The curated public Agent API (see [user reference](../docs/agent-api.md)).       | Supported / semver-covered. |
+| `@vybestack/llxprt-code-agents/app-service.js` | Durable, config/app-service functions + `COMMAND_API_MAP`. No live agent needed. | Supported / semver-covered. |
 
-The root entry is **non-breaking and additive**: it currently re-exports the
-low-level `internals.js` symbols alongside the new public Agent API, so no
-existing import breaks today. The package `exports` map is defined in
-`packages/agents/package.json`.
+The root entry is **non-breaking and additive** within the curated surface.
+The low-level `internals.js` power-user subpath was **removed** (issue
+`#3222`): the package exposes only its intended API, and former low-level
+consumers use the curated root factories (`createAgentClient`,
+`createToolScheduler`) or the `Agent` facade. The package `exports` map is
+defined in `packages/agents/package.json`.
 
 ## Import boundary for `#1595`
 
@@ -67,9 +67,6 @@ documented specifiers. When embedding LLxprt Code, import exclusively from:
    `AgentClientContract` type).
 2. **`@vybestack/llxprt-code-agents/app-service.js`** — durable, no-live-agent
    functions. See [Runtime vs app-service](#runtime-vs-app-service).
-3. **`@vybestack/llxprt-code-agents/internals.js`** — low-level power-user
-   primitives. See [Power-user subpath: `internals.js`](#power-user-subpath-internalsjs).
-   This subpath is **unstable** and may change without a major-version bump.
 
 **Never import from deep package internals.** In particular, do not import from:
 
@@ -79,8 +76,10 @@ documented specifiers. When embedding LLxprt Code, import exclusively from:
 - `@vybestack/llxprt-code-providers/src/...` — the `providers` package's source
   tree is package-internal.
 
-The stable contract is the curated root plus the two documented subpaths.
-Anything under a package's internal source tree has no stability guarantee.
+The stable contract is the curated root plus the documented `app-service.js`
+subpath. The former low-level `internals.js` subpath was removed outright
+(issue `#3222`); any other path under a package's internal source tree has no
+stability guarantee.
 
 ## `createAgent` harness seams and production gating
 
@@ -201,28 +200,18 @@ Six `runtime` rows map slash-commands onto the live `Agent` sub-surfaces:
 | `/toolkey`       | `runtime` | `agent.tools.keys.save`       |
 | `/toolkeyfile`   | `runtime` | `agent.tools.keys.setKeyFile` |
 
-## Power-user subpath: `internals.js`
+## Retired low-level subpath (issue #3222)
 
-Low-level primitives are available from the
-`@vybestack/llxprt-code-agents/internals.js` subpath. The barrel is
-`packages/agents/src/internals.ts`, which is the **single source** of the
-low-level re-export surface. The package top-level (`index.ts`) re-exports
-everything here via `export * from './internals.js'` so that the top-level and
-the `./internals.js` subpath expose the exact same low-level symbols (no
-duplication drift).
-
-Exported symbols include: `AgentClient`, `ChatSession`, `CoreToolScheduler`,
-`SubagentOrchestrator`, `TaskTool`, turn/subagent types, and compression
-primitives.
-
-> `#1595` will migrate CLI/a2a consumers to this subpath and then remove the
-> low-level re-exports from the top-level, leaving only the curated public Agent
-> API at the package root. Importing low-level symbols from `./internals.js`
-> explicitly is the forward-compatible choice.
-
-`createTaskToolRegistration` is intentionally **not** re-exported from
-`internals.ts`: it is app-glue (a factory function), and re-exporting it would
-create a circular dependency. It remains exported solely from `index.ts`.
+The former `internals.js` power-user subpath and its barrel
+(`packages/agents/src/internals.ts`) were **removed** — the package exposes
+only its intended API. There is no replacement subpath and no compatibility
+alias: former consumers construct clients and schedulers through the curated
+root factories (`createAgentClient`, `createToolScheduler`,
+`createTaskRegistration`) or drive turns through the `Agent` facade
+(`createAgent` / `fromConfig`). The removal is enforced by
+`packages/agents/src/api/__tests__/boundary.no-internals-subpath.test.ts`,
+which fails if the exports entry, the barrel file, or any repo reference to
+the subpath reappears.
 
 ## New public enums and projected types (`#2143`)
 
@@ -352,10 +341,9 @@ The `AgentClientContract` — the structural interface describing the low-level
 client the agent binds and drives — is a public, type-only export from the
 curated root (re-exported from
 `@vybestack/llxprt-code-core/core/clientContract.js`). The concrete
-`AgentClient` class is documented on the
-[`internals.js`](#power-user-subpath-internalsjs) subpath and is also reachable
-from the root today for backward compatibility. Treat it as an unstable internal
-that may change without notice.
+`AgentClient` class is not publicly reachable: the `internals.js` subpath that
+carried it was removed (issue `#3222`), and consumers construct clients
+through the public `createAgentClient` factory.
 
 ## Core-owned MCP manager lifecycle
 
@@ -409,7 +397,6 @@ These decisions shaped the public surface and are recorded here for posterity:
 | `Agent` interface and sub-surfaces  | `packages/agents/src/api/agent.ts`                                        | `packages/agents/src/api/__tests__/`                       |
 | Event types                         | `packages/agents/src/api/event-types.ts`                                  | `packages/agents/src/api/__tests__/`                       |
 | Auth precedence                     | `packages/agents/src/api/control/authState.ts`                            |                                                            |
-| `internals.js` barrel               | `packages/agents/src/internals.ts`                                        |                                                            |
 | `app-service.js` barrel             | `packages/agents/src/app-service.ts`                                      |                                                            |
 | `COMMAND_API_MAP`                   | `packages/agents/src/app-services/command-api-map.ts`                     |                                                            |
 | Confirmation forcing                | `packages/agents/src/api/confirmationForcing.ts`                          |                                                            |
@@ -477,9 +464,10 @@ is completed.
 
 ## Tradeoffs
 
-- **Additive root barrel.** The root re-exports `internals.js` symbols for
-  backward compatibility, at the cost of a larger public surface until `#1595`
-  trims it. This was chosen to avoid breaking existing consumers mid-release.
+- **Curated root barrel.** The root exposes the curated public API; the
+  low-level `internals.js` re-export surface was removed outright (issue
+  `#3222`) rather than kept as an escape hatch, so the public surface is the
+  only surface.
 - **Delegate-don't-cache.** Every sub-surface method delegates to the bound
   runtime on each call. This avoids stale snapshots but adds per-call overhead.
   The tradeoff favors correctness over performance for configuration

@@ -68,6 +68,10 @@ import {
 import { applyProfileWithGuards } from '@vybestack/llxprt-code-providers/runtime/profileApplication.js';
 import { registerProvidersOntoManager } from '../api/createAgent.js';
 import { executeProviderActivation } from '../api/providerActivationExecutor.js';
+import {
+  buildIsolatedAgentConfig,
+  cleanupFailedRuntimeBootstrap,
+} from '../api/agentRuntimeAssembly.js';
 import { AggregateDisposeError } from '../api/disposeErrors.js';
 
 const LOAD_BALANCER_PROVIDER_NAME = 'load-balancer';
@@ -163,6 +167,23 @@ export class SubagentOrchestrator {
     this.idFactory = options.idFactory ?? randomUUID;
   }
 
+  /**
+   * Disposes the orchestrator-constructed isolated Config (from
+   * buildIsolatedAgentConfig) AFTER its runtime handle cleanup — children
+   * first. The isolated runtime factory treats the Config as caller-owned
+   * and never disposes it (buildCleanupClosure only resets bindings), and
+   * SubAgentScope.dispose does not touch it, so this orchestrator is its
+   * only disposer: without this, the AgentClient constructed by the
+   * activation's refreshAuth leaks. Config.dispose() is idempotent here
+   * (AgentClient.dispose guards on its unsubscribe handle; the trust
+   * lifecycle tolerates a repeated beginDisposal), so re-entry is a no-op.
+   */
+  private disposeIsolatedConfig(
+    isolatedHandle: IsolatedRuntimeContextHandle,
+  ): Promise<void> {
+    return isolatedHandle.config.dispose();
+  }
+
   private buildScopeDispose(
     scope: SubAgentScope,
     runtimeResult: AgentRuntimeLoaderResult,
@@ -181,6 +202,7 @@ export class SubagentOrchestrator {
         },
         () => disposeHistoryLike(history),
         () => isolatedHandle.cleanup(),
+        () => this.disposeIsolatedConfig(isolatedHandle),
       ]);
     };
   }
@@ -328,9 +350,14 @@ export class SubagentOrchestrator {
     runtimeResult: AgentRuntimeLoaderResult,
     isolatedHandle: IsolatedRuntimeContextHandle,
   ): Promise<void> {
+    // Reached when the scope was never created (e.g. scope construction
+    // failed) AFTER createIsolatedRuntime already activated the config and
+    // ran provider activation — the Config can therefore hold a constructed
+    // AgentClient and needs the same children-first dispose.
     await runCleanupSteps([
       () => disposeHistoryLike(runtimeResult.history),
       () => isolatedHandle.cleanup(),
+      () => this.disposeIsolatedConfig(isolatedHandle),
     ]);
   }
 
@@ -345,6 +372,20 @@ export class SubagentOrchestrator {
           cleanupError instanceof Error
             ? cleanupError.message
             : String(cleanupError)
+        }`,
+      );
+    }
+    // The runtime loader failed after activation already ran, so the Config
+    // may hold a constructed AgentClient. Dispose even when the handle
+    // cleanup above failed — a leaked client is worse than a warn.
+    try {
+      await this.disposeIsolatedConfig(isolatedHandle);
+    } catch (configDisposeError) {
+      debugLogger.warn(
+        `SubagentOrchestrator: isolated config dispose failed: ${
+          configDisposeError instanceof Error
+            ? configDisposeError.message
+            : String(configDisposeError)
         }`,
       );
     }
@@ -819,12 +860,20 @@ export class SubagentOrchestrator {
     // parent's (Issue #2410). Load-balancer profiles intentionally activate via
     // the foreground profile-application path inside this isolated runtime so
     // the real load-balancer provider is registered and selected.
-    const handle = createIsolatedRuntimeContext({
-      runtimeId: agentRuntimeId,
+    // The Config is built through the AGENT-owned assembly (issue #3222):
+    // providers no longer constructs one or stamps CLI-registered agent
+    // factories onto it, so in a process with no CLI import the subagent
+    // still gets working agent factories and runtime managers.
+    const isolatedConfig = buildIsolatedAgentConfig({
+      sessionId: agentRuntimeId,
+      model: activationProfile.model,
       settingsService,
       profileManager: this.options.profileManager,
+    });
+    const handle = createIsolatedRuntimeContext({
+      runtimeId: agentRuntimeId,
+      config: isolatedConfig,
       messageBus: this.options.messageBus,
-      model: activationProfile.model,
       metadata: {
         source: 'SubagentOrchestrator',
         subagent: subagentName,
@@ -891,8 +940,16 @@ export class SubagentOrchestrator {
         },
       );
     } catch (error) {
-      await handle.cleanup();
-      throw error;
+      // A cleanup failure must not replace the original bootstrap error. The
+      // isolated Config is agent-owned (built above) and the activation's
+      // refreshAuth may already have constructed an AgentClient on it —
+      // dispose it after the handle so a failed bootstrap leaks nothing.
+      return cleanupFailedRuntimeBootstrap(
+        handle,
+        error,
+        'SubagentOrchestrator.createIsolatedRuntime',
+        { ownedConfig: isolatedConfig },
+      );
     }
 
     return handle;

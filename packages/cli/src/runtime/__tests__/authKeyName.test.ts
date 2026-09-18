@@ -25,7 +25,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core';
+import {
+  clearActiveProviderRuntimeContext,
+  Config,
+} from '@vybestack/llxprt-code-core';
 import {
   ProviderKeyStorage,
   SecureStore,
@@ -226,7 +229,13 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
   }> {
     const handle = contextFactoryMod.createIsolatedRuntimeContext({
       runtimeId: 'auth-key-test',
-      workspaceDir: tempDir,
+      config: new Config({
+        sessionId: 'auth-key-test',
+        targetDir: tempDir,
+        cwd: tempDir,
+        model: 'test-model',
+        debugMode: false,
+      }),
       prepare: async ({ providerManager }) => {
         const stub = createStubProvider();
         providerManager.registerProvider(stub);
@@ -500,7 +509,13 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
     }> {
       const handle = contextFactoryMod.createIsolatedRuntimeContext({
         runtimeId: 'auth-key-clear-test',
-        workspaceDir: tempDir,
+        config: new Config({
+          sessionId: 'auth-key-clear-test',
+          targetDir: tempDir,
+          cwd: tempDir,
+          model: 'test-model',
+          debugMode: false,
+        }),
         prepare: async ({ providerManager }) => {
           providerManager.registerProvider(createStubProvider());
           await providerManager.setActiveProvider('test-provider');

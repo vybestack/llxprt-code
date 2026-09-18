@@ -5,14 +5,14 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import type {
-  Config,
-  MessageBus,
-  RuntimeProviderManager,
-} from '@vybestack/llxprt-code-core';
 import {
   clearActiveProviderRuntimeContext,
   peekActiveProviderRuntimeContext,
+  Config,
+} from '@vybestack/llxprt-code-core';
+import type {
+  MessageBus,
+  RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
@@ -67,6 +67,20 @@ describe('isolated runtime never mutates the CLI default pointer (issue #2300)',
     return handle;
   }
 
+  /**
+   * Minimal caller-supplied Config for the isolated runtime (issue #3222):
+   * providers no longer constructs one on the caller's behalf.
+   */
+  function buildIsolatedRuntimeConfig(runtimeId: string): Config {
+    return new Config({
+      sessionId: runtimeId,
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      model: 'isolated-model',
+      debugMode: false,
+    });
+  }
+
   beforeEach(() => {
     resetCliRuntimeRegistryForTesting();
     configureCliStatelessHardening(null);
@@ -115,8 +129,7 @@ describe('isolated runtime never mutates the CLI default pointer (issue #2300)',
   it('activating an isolated runtime does not overwrite the CLI default pointer', async () => {
     const handle = createTrackedIsolatedRuntimeContext({
       runtimeId: 'isolated-no-default-overwrite',
-      workspaceDir: process.cwd(),
-      model: 'isolated-model',
+      config: buildIsolatedRuntimeConfig('isolated-no-default-overwrite'),
     });
 
     await runWithRuntimeScope(
@@ -139,8 +152,7 @@ describe('isolated runtime never mutates the CLI default pointer (issue #2300)',
   it('activating an isolated runtime through the wrapper does not overwrite the provider singleton', async () => {
     const handle = createTrackedIsolatedRuntimeContext({
       runtimeId: 'isolated-no-singleton-overwrite',
-      workspaceDir: process.cwd(),
-      model: 'isolated-model',
+      config: buildIsolatedRuntimeConfig('isolated-no-singleton-overwrite'),
     });
 
     await runWithRuntimeScope(
@@ -158,8 +170,7 @@ describe('isolated runtime never mutates the CLI default pointer (issue #2300)',
   it('direct handle activation does not clear CLI provider or OAuth infrastructure', async () => {
     const handle = createTrackedIsolatedRuntimeContext({
       runtimeId: 'isolated-direct-activation-safe',
-      workspaceDir: process.cwd(),
-      model: 'isolated-model',
+      config: buildIsolatedRuntimeConfig('isolated-direct-activation-safe'),
     });
 
     await runWithRuntimeScope(
@@ -179,8 +190,7 @@ describe('isolated runtime never mutates the CLI default pointer (issue #2300)',
   it('getCliOAuthManager outside the isolated ALS scope resolves the CLI manager', async () => {
     const handle = createTrackedIsolatedRuntimeContext({
       runtimeId: 'isolated-oauth-resolution',
-      workspaceDir: process.cwd(),
-      model: 'isolated-model',
+      config: buildIsolatedRuntimeConfig('isolated-oauth-resolution'),
     });
 
     await runWithRuntimeScope(
@@ -201,8 +211,7 @@ describe('isolated runtime never mutates the CLI default pointer (issue #2300)',
   it('cleaning up an isolated runtime does not clear the CLI default pointer or CLI OAuth manager', async () => {
     const handle = createTrackedIsolatedRuntimeContext({
       runtimeId: 'isolated-cleanup-safe',
-      workspaceDir: process.cwd(),
-      model: 'isolated-model',
+      config: buildIsolatedRuntimeConfig('isolated-cleanup-safe'),
     });
 
     await runWithRuntimeScope(
@@ -227,8 +236,7 @@ describe('isolated runtime never mutates the CLI default pointer (issue #2300)',
   it('cleaning up an isolated runtime does not clear a re-established CLI provider context', async () => {
     const handle = createTrackedIsolatedRuntimeContext({
       runtimeId: 'isolated-cleanup-ownership-safe',
-      workspaceDir: process.cwd(),
-      model: 'isolated-model',
+      config: buildIsolatedRuntimeConfig('isolated-cleanup-ownership-safe'),
     });
 
     await runWithRuntimeScope(
@@ -254,8 +262,7 @@ describe('isolated runtime never mutates the CLI default pointer (issue #2300)',
   it('an isolated runtime registered and activated inside runWithRuntimeScope does not become default', async () => {
     const handle = createTrackedIsolatedRuntimeContext({
       runtimeId: 'isolated-scoped-activation',
-      workspaceDir: process.cwd(),
-      model: 'isolated-model',
+      config: buildIsolatedRuntimeConfig('isolated-scoped-activation'),
     });
 
     await runWithRuntimeScope(
@@ -282,8 +289,7 @@ describe('isolated runtime never mutates the CLI default pointer (issue #2300)',
     expect(() =>
       createIsolatedRuntimeContext({
         runtimeId: '',
-        workspaceDir: process.cwd(),
-        model: 'isolated-model',
+        config: buildIsolatedRuntimeConfig(''),
       }),
     ).toThrow(/Invalid runtimeId/);
   });

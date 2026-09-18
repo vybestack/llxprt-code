@@ -6,13 +6,10 @@
  * Full non-breaking characterization of the agents public export surface.
  *
  * This is a characterization test: it ENUMERATES the actual current exports
- * (read dynamically from the built root barrel and the internals subpath) and
- * asserts every #1594-era symbol is still present with a compatible shape. It
- * is NOT a Path-A consumer and NOT a Path-B reference drive; it is one of the
- * TWO export-surface-introspection categories PERMITTED to import the internals
- * subpath, because asserting (REQ-006) that `./internals.js` STILL exports its
- * #1594-era value symbols (AgentClient, PostTurnAction) is ONLY provable by
- * importing that subpath at runtime.
+ * (read dynamically from the built root barrel) and asserts every #1594-era
+ * symbol is still present with a compatible shape. It imports ONLY the public
+ * package root — the retired low-level subpath (issue #3222) is gone, so all
+ * surface assertions are expressed against the root barrel alone.
  *
  * No mock theater: structural/identity assertions only. No deep /src/ imports.
  */
@@ -21,7 +18,6 @@ import { describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
 
 import * as root from '@vybestack/llxprt-code-agents';
-import * as internals from '@vybestack/llxprt-code-agents/internals.js';
 import type {
   Agent,
   AgentConfig,
@@ -170,16 +166,17 @@ describe('REQ-006 @plan:PLAN-20260621-COREAPIREMED.P21 — agents public export 
     expect(typeof root.createAgenticLoop).toBe('function');
   });
 
-  it('Test D: internals.js value exports (AgentClient, PostTurnAction) remain intact', () => {
-    // REQ-004.1: the concrete AgentClient class stays a runtime value on the
-    // documented internals subpath.
-    expect(typeof internals.AgentClient).toBe('function');
-    // PostTurnAction is a value (enum/const) on internals.
-    expect(internals.PostTurnAction).not.toBeUndefined();
-
-    const internalsKeys = new Set(Object.keys(internals));
-    expect(internalsKeys.has('AgentClient')).toBe(true);
-    expect(internalsKeys.has('PostTurnAction')).toBe(true);
+  it('Test D (issue #3222): root denies the concrete AgentClient class — the retired internals subpath is gone', () => {
+    // REQ-004.1 depollution, now absolute: the concrete AgentClient class must
+    // NOT surface as a runtime value on the root barrel (consumers use the
+    // public createAgentClient factory), and the low-level subpath that used
+    // to carry it is retired.
+    expect(typeof (root as Record<string, unknown>).AgentClient).not.toBe(
+      'function',
+    );
+    expect(Object.prototype.hasOwnProperty.call(root, 'AgentClient')).toBe(
+      false,
+    );
   });
 
   it('PROP: every sampled #1594-era root key is present in the dynamic root barrel (REQ-006)', () => {
@@ -233,16 +230,13 @@ describe('REQ-009 @plan:PLAN-20260622-COREAPIGAP.P18 — additive surface is non
     }
   });
 
-  it('Test B: AgentClient denied on root barrel and preserved on internals subpath', () => {
-    // P05: the root no longer re-exports internals, so root.AgentClient is
-    // undefined (deny). AgentClient remains a runtime VALUE on the
-    // internals.js subpath (REQ-004.1).
-    expect(typeof internals.AgentClient).toBe('function');
-    // PostTurnAction is a value (enum/const) on internals.
-    expect(internals.PostTurnAction).not.toBeUndefined();
+  it('Test B: AgentClient denied on the root barrel (issue #3222 — the subpath that carried it is retired)', () => {
     // Root DENY: AgentClient must NOT appear on the root barrel after
-    // depollution.
+    // depollution. Consumers construct clients through createAgentClient.
     expect((root as Record<string, unknown>).AgentClient).toBeUndefined();
+    expect(Object.prototype.hasOwnProperty.call(root, 'AgentClient')).toBe(
+      false,
+    );
   });
 
   it('Test C: new value enums are present and round-trip (additive surface growth)', () => {

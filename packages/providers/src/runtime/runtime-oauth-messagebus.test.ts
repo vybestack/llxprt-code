@@ -5,7 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { MessageBus } from '@vybestack/llxprt-code-core';
+import { MessageBus, Config } from '@vybestack/llxprt-code-core';
 import { OAuthManager } from '../auth/index.js';
 import {
   createIsolatedRuntimeContext,
@@ -33,8 +33,13 @@ describe('runtime/provider OAuth MessageBus seam integration', () => {
   it('propagates the session MessageBus when runtime registration passes the explicit MessageBus dependency', async () => {
     const runtimeHandle = createIsolatedRuntimeContext({
       runtimeId: 'runtime-auth-messagebus',
-      workspaceDir: process.cwd(),
-      model: 'runtime-auth-model',
+      config: new Config({
+        sessionId: 'runtime-auth-messagebus',
+        targetDir: process.cwd(),
+        cwd: process.cwd(),
+        model: 'runtime-auth-model',
+        debugMode: false,
+      }),
       metadata: { source: 'phase-07-runtime-test' },
       prepare: async () => {},
     });

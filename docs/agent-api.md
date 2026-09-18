@@ -16,16 +16,16 @@ currently at version **0.x**. Under semver conventions for pre-1.0 packages, a
 minor version bump may include breaking changes. The import surfaces break down
 as follows:
 
-| Import specifier                               | Stability                                                                        |
-| ---------------------------------------------- | -------------------------------------------------------------------------------- |
-| `@vybestack/llxprt-code-agents`                | **Supported.** The curated public Agent API.                                     |
-| `@vybestack/llxprt-code-agents/app-service.js` | **Supported.** Durable config functions (no live agent needed).                  |
-| `@vybestack/llxprt-code-agents/internals.js`   | **Experimental.** Low-level primitives; may change without a major version bump. |
+| Import specifier                               | Stability                                                       |
+| ---------------------------------------------- | --------------------------------------------------------------- |
+| `@vybestack/llxprt-code-agents`                | **Supported.** The curated public Agent API.                    |
+| `@vybestack/llxprt-code-agents/app-service.js` | **Supported.** Durable config functions (no live agent needed). |
 
-> **Experimental callout.** The `internals.js` subpath exposes low-level
-> primitives (`AgentClient`, `ChatSession`, `CoreToolScheduler`, and similar).
-> It exists so existing consumers can migrate off the package root, but it has
-> no stability guarantee. Build against the curated root whenever possible.
+> **No low-level subpath.** The package exposes only the curated root and the
+> `app-service.js` subpath. The former low-level `internals.js` subpath has
+> been removed; build against the curated root (for example
+> `createAgentClient` and `createToolScheduler` instead of the concrete
+> `AgentClient`/`CoreToolScheduler` classes).
 
 ## Entry package and imports
 
