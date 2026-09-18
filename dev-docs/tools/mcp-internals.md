@@ -116,7 +116,7 @@ they are validated by the schema validator
 declared `$schema` URI (draft-07 vs. draft-2020-12).
 
 For Gemini providers specifically, `cleanGeminiSchema`
-(`packages/providers/src/gemini/geminiSchemaHelpers.ts`) applies a whitelist of
+(`plugins/google-gemini/src/gemini/geminiSchemaHelpers.ts`) applies a whitelist of
 supported properties (`SUPPORTED_SCHEMA_PROPERTIES`). Anything not on the
 whitelist — including `$schema`, `additionalProperties`, and
 `exclusiveMinimum` — is stripped. This cleaning is recursive (properties,

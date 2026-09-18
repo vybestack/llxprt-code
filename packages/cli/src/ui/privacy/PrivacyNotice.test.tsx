@@ -41,10 +41,10 @@ describe('PrivacyNotice: unconfigured state (#2481)', () => {
     expect(frame).toContain('No provider is configured');
     expect(frame).toContain('/setup');
     // Gemini-specific content must NOT be present.
-    expect(frame).not.toContain('Gemini API Key Notice');
-    expect(frame).not.toContain('Google AI Studio');
+    expect(frame).not.toContain('Active Provider: Gemini');
+    expect(frame).not.toContain('ai.google.dev/gemini-api/terms');
     // Multi-provider-specific content must NOT be present.
-    expect(frame).not.toContain('API Key Notice');
+    expect(frame).not.toContain('Active Provider: OpenAI');
   });
 
   it('uses the canonical vybestack docs URL (not a stale fork URL)', () => {
@@ -60,18 +60,23 @@ describe('PrivacyNotice: unconfigured state (#2481)', () => {
     expect(frame).not.toContain('github.com/acoliver/llxprt-code');
   });
 
-  it('renders ONLY the Gemini notice when gemini is the explicit active provider (mutually exclusive)', () => {
+  it('renders ONLY the Gemini consent content when gemini is the explicit active provider (mutually exclusive)', () => {
     const config = makeConfig('gemini');
     const { lastFrame } = renderWithProviders(
       <PrivacyNotice onExit={mockOnExit} config={config} />,
     );
 
     const frame = lastFrame();
-    // Gemini notice is present.
-    expect(frame).toContain('Gemini API Key Notice');
+    // Gemini consent content is present via the provider-parameterized notice.
+    expect(frame).toContain('Active Provider: Gemini');
+    expect(frame).toContain('Gemini API Additional Terms of Service');
+    expect(frame).toContain('https://developers.google.com/terms');
+    expect(frame).toContain('https://ai.google.dev/gemini-api/terms');
+    expect(frame).toContain('https://ai.google.dev/docs/gemini_api_overview');
+    expect(frame).toContain('https://aistudio.google.com/');
     // Neutral unconfigured notice must NOT be present.
     expect(frame).not.toContain('No provider is configured');
-    // Multi-provider generic notice must NOT be present.
+    // Other providers' content must NOT be present.
     expect(frame).not.toContain('OpenAI');
   });
 
@@ -86,7 +91,8 @@ describe('PrivacyNotice: unconfigured state (#2481)', () => {
     expect(frame).toContain('OpenAI');
     // Neutral unconfigured notice must NOT be present.
     expect(frame).not.toContain('No provider is configured');
-    // Gemini-specific notice must NOT be present.
-    expect(frame).not.toContain('Gemini API Key Notice');
+    // Gemini-specific content must NOT be present.
+    expect(frame).not.toContain('Active Provider: Gemini');
+    expect(frame).not.toContain('ai.google.dev/gemini-api/terms');
   });
 });

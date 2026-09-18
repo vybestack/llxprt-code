@@ -194,6 +194,10 @@
       "bun": "./src/llm-types/index.ts",
       "import": "./dist/src/llm-types/index.js"
     },
+    "./llm-types/finishReasons.js": {
+      "bun": "./src/llm-types/finishReasons.ts",
+      "import": "./dist/src/llm-types/finishReasons.js"
+    },
     "./services/history/historyProviderPipeline.js": {
       "bun": "./src/services/history/historyProviderPipeline.ts",
       "import": "./dist/src/services/history/historyProviderPipeline.js"
@@ -284,6 +288,10 @@
     "./test-utils/providerCallOptions.js": {
       "bun": "./src/test-utils/providerCallOptions.ts",
       "import": "./dist/src/test-utils/providerCallOptions.js"
+    },
+    "./test-utils/config.js": {
+      "bun": "./src/test-utils/config.ts",
+      "import": "./dist/src/test-utils/config.js"
     },
     "./test-utils/mock-tool.js": {
       "bun": "./src/test-utils/mock-tool.ts",
@@ -524,10 +532,6 @@
     "./utils/generateContentResponseUtilities.js": {
       "bun": "./src/utils/generateContentResponseUtilities.ts",
       "import": "./dist/src/utils/generateContentResponseUtilities.js"
-    },
-    "./utils/messageInspectors.js": {
-      "bun": "./src/utils/messageInspectors.ts",
-      "import": "./dist/src/utils/messageInspectors.js"
     },
     "./utils/quotaErrorDetection.js": {
       "bun": "./src/utils/quotaErrorDetection.ts",

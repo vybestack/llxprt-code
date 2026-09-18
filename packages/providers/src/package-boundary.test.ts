@@ -367,7 +367,7 @@ describe('Provider implementations moved to providers package (P11)', () => {
         .filter((e: fs.Dirent) => e.isDirectory())
         .map((e: fs.Dirent) => e.name),
     );
-    for (const subdir of ['openai', 'anthropic', 'gemini', 'fake']) {
+    for (const subdir of ['openai', 'anthropic', 'fake']) {
       expect(dirs.has(subdir)).toBe(true);
     }
   });
@@ -537,5 +537,50 @@ describe('Provider package build configuration', () => {
     expect(fs.existsSync(path.join(PROVIDERS_DIR, 'src', 'index.ts'))).toBe(
       true,
     );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────
+// Gemini provider exclusion (plugin-era contract, #2763)
+// ─────────────────────────────────────────────────────────────────
+
+describe('Gemini provider exclusion (plugin-era contract)', () => {
+  /** The Google generation SDK is declared ONLY by the plugin (#2763). */
+  const FORBIDDEN_GOOGLE_SDK_IMPORT = /from\s+['"]@ai-sdk\/google['"]/;
+
+  it('providers package declares no @ai-sdk/google dependency in any section', () => {
+    const pkg = readJson<
+      PackageJson & {
+        peerDependencies?: Record<string, string>;
+        optionalDependencies?: Record<string, string>;
+      }
+    >(path.join(PROVIDERS_DIR, 'package.json'));
+    const sections = [
+      pkg.dependencies,
+      pkg.devDependencies,
+      pkg.peerDependencies,
+      pkg.optionalDependencies,
+    ];
+    for (const section of sections) {
+      expect(section?.['@ai-sdk/google']).toBeUndefined();
+    }
+  });
+
+  it('providers src has no gemini provider directory', () => {
+    expect(fs.existsSync(path.join(THIS_DIR, 'gemini'))).toBe(false);
+  });
+
+  it('no providers production source imports @ai-sdk/google', () => {
+    const violations: string[] = [];
+    for (const filePath of collectTsFiles(THIS_DIR, true)) {
+      violations.push(
+        ...findViolatingLines(
+          filePath,
+          FORBIDDEN_GOOGLE_SDK_IMPORT,
+          path.relative(PROVIDERS_DIR, filePath),
+        ),
+      );
+    }
+    expect(violations).toStrictEqual([]);
   });
 });

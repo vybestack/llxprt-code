@@ -6,7 +6,6 @@
 
 import {
   createAnthropicAliasProvider,
-  createGeminiAliasProvider,
   createOpenAIAliasProvider,
   createOpenAIResponsesAliasProvider,
   createOpenAIVercelAliasProvider,
@@ -16,6 +15,9 @@ import type { RuntimeProviderContribution } from './types.js';
 /**
  * Built-in provider contributions that the CLI's provider composition resolves aliases
  * against. Each provider id delegates to the existing alias factory.
+ *
+ * Gemini is not among them: it is contributed exclusively by the
+ * @vybestack/llxprt-plugin-google-gemini runtime plugin (#2763).
  */
 export function createBuiltinProviderContributions(): RuntimeProviderContribution[] {
   return [
@@ -61,15 +63,6 @@ export function createBuiltinProviderContributions(): RuntimeProviderContributio
           context.openaiApiKey,
           context.openaiBaseUrl,
           context.openaiProviderConfig,
-          context.authOnlyEnabled,
-        ),
-    },
-    {
-      providerId: 'gemini',
-      createProvider: (entry, context) =>
-        createGeminiAliasProvider(
-          entry,
-          context.config,
           context.authOnlyEnabled,
         ),
     },

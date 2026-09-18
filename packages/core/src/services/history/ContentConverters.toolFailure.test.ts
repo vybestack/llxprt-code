@@ -15,10 +15,15 @@
  */
 
 /**
- * Issue #3076 — a failed tool call must survive the Gemini-shaped
- * ContentConverters round trip. These behavioural proofs drive the real
+ * Issue #3076 — a failed tool call must survive the inbound decode of the
+ * Gemini-shaped failure envelope. These behavioural proofs drive the real
  * converter static methods with plain data fixtures and assert only on
  * observable output, never on implementation internals.
+ *
+ * The outbound encoder (toGeminiContent/toGeminiContents) was deleted with
+ * the obsolete Gemini-request direction (#2628); the fixtures below
+ * hand-craft the exact Gemini-shaped parts that encoder produced, so the
+ * decoder-side guarantees keep their coverage unchanged.
  *
  * Note: identifiers deliberately avoid any provider-prefixed naming so this
  * file stays inside the repository's provider-neutral naming boundary.
@@ -28,26 +33,29 @@ import { describe, it, expect } from 'bun:test';
 import { ContentConverters } from './ContentConverters.js';
 import type { IContent, ToolResponseBlock } from './IContent.js';
 
-type ConvertedContent = ReturnType<typeof ContentConverters.toGeminiContent>;
-
-function toolResponseContent(block: ToolResponseBlock): IContent {
-  return { speaker: 'tool', blocks: [block] };
+/**
+ * Build the flagged functionResponse part the failure encoder produced.
+ * The fixture is a plain structural literal (no GeminiContent import): the
+ * parse direction accepts any structurally-compatible Content shape.
+ */
+function failurePart(
+  callId: string,
+  toolName: string,
+  response: Record<string, unknown>,
+) {
+  return [
+    {
+      functionResponse: {
+        name: toolName,
+        id: callId,
+        response,
+      },
+      llxprtToolFailure: true,
+    },
+  ];
 }
 
-/** Read the single functionResponse part from a converted content object. */
-function functionResponseOf(content: ConvertedContent): {
-  name?: string;
-  id?: string;
-  response?: Record<string, unknown>;
-} {
-  const fr = content.parts?.[0]?.functionResponse;
-  if (!fr) {
-    throw new Error('expected a functionResponse part');
-  }
-  return fr;
-}
-
-/** Narrow a converted IContent to its single tool_response block. */
+/** Narrow an IContent to its single tool_response block. */
 function singleToolResponse(content: IContent): ToolResponseBlock {
   const block = content.blocks[0];
   if (block.type !== 'tool_response') {
@@ -80,78 +88,18 @@ function responseBlocksByCallId(blocks: readonly ToolResponseBlock[]): {
   return { failed, succeeded };
 }
 
-describe('ContentConverters tool-failure round trip (issue #3076)', () => {
-  describe('toGeminiContent — outbound', () => {
-    it('AC2.1 — a failed tool_response produces a functionResponse with status:error and the error string', () => {
-      const converted = ContentConverters.toGeminiContent(
-        toolResponseContent({
-          type: 'tool_response',
-          callId: 'hist_tool_fail1',
-          toolName: 'failingTool',
-          result: { output: 'partial data' },
-          error: 'boom',
-        }),
-      );
-      const fr = functionResponseOf(converted);
-      expect(fr.response?.status).toBe('error');
-      expect(fr.response?.error).toBe('boom');
-    });
-
-    it('AC2.2 — the failure envelope carries the original result verbatim under result', () => {
-      const converted = ContentConverters.toGeminiContent(
-        toolResponseContent({
-          type: 'tool_response',
-          callId: 'hist_tool_fail1',
-          toolName: 'failingTool',
-          result: { output: 'partial data', extra: 7 },
-          error: 'boom',
-        }),
-      );
-      const fr = functionResponseOf(converted);
-      expect(fr.response?.result).toStrictEqual({
-        output: 'partial data',
-        extra: 7,
-      });
-    });
-
-    it('AC2.3 — a successful tool_response is unchanged (raw result, no status, no error)', () => {
-      const converted = ContentConverters.toGeminiContent(
-        toolResponseContent({
-          type: 'tool_response',
-          callId: 'hist_tool_ok1',
-          toolName: 'okTool',
-          result: { found: true },
-        }),
-      );
-      const fr = functionResponseOf(converted);
-      expect(fr.response).toStrictEqual({ found: true });
-      expect(fr.response).not.toHaveProperty('status');
-      expect(fr.response).not.toHaveProperty('error');
-    });
-  });
-
+describe('ContentConverters tool-failure decode (issue #3076)', () => {
   describe('toIContent — inbound', () => {
     it('AC2.4 — an error envelope reconstructs a block with error set and the original result', () => {
       const block = singleToolResponse(
         ContentConverters.toIContent(
           {
             role: 'user',
-            parts: [
-              {
-                functionResponse: {
-                  name: 'failingTool',
-                  id: 'hist_tool_fail1',
-                  response: {
-                    status: 'error',
-                    error: 'boom',
-                    result: { output: 'partial data' },
-                  },
-                },
-                // The part-level discriminant (F2): the decoder only fires on
-                // a part carrying the flag, so the hand-crafted shape must too.
-                llxprtToolFailure: true,
-              },
-            ],
+            parts: failurePart('hist_tool_fail1', 'failingTool', {
+              status: 'error',
+              error: 'boom',
+              result: { output: 'partial data' },
+            }),
           },
           undefined,
           undefined,
@@ -210,28 +158,34 @@ describe('ContentConverters tool-failure round trip (issue #3076)', () => {
     });
   });
 
-  describe('full round trip toGeminiContents -> toIContents', () => {
+  describe('decode of the encoded envelope shapes (toIContents)', () => {
     it('AC2.6 — preserves failure marker, result, toolName and callId for a failure; preserves the absence of a marker for a success', () => {
       // hist_tool_ prefixed ids are canonical and therefore idempotent through
-      // canonicalizeToolResponseId, so callId survives the round trip verbatim.
-      const contents: IContent[] = [
-        toolResponseContent({
-          type: 'tool_response',
-          callId: 'hist_tool_fail1',
-          toolName: 'failingTool',
-          result: { output: 'partial data' },
-          error: 'boom',
-        }),
-        toolResponseContent({
-          type: 'tool_response',
-          callId: 'hist_tool_ok1',
-          toolName: 'okTool',
-          result: { found: true },
-        }),
+      // canonicalizeToolResponseId, so callId survives the decode verbatim.
+      const stored = [
+        {
+          role: 'user',
+          parts: failurePart('hist_tool_fail1', 'failingTool', {
+            status: 'error',
+            error: 'boom',
+            result: { output: 'partial data' },
+          }),
+        },
+        {
+          role: 'user',
+          parts: [
+            {
+              functionResponse: {
+                name: 'okTool',
+                id: 'hist_tool_ok1',
+                response: { found: true },
+              },
+            },
+          ],
+        },
       ];
 
-      const converted = ContentConverters.toGeminiContents(contents);
-      const back = ContentConverters.toIContents(converted);
+      const back = ContentConverters.toIContents(stored);
       const blocks = back.flatMap((c) => c.blocks) as ToolResponseBlock[];
 
       const { failed, succeeded } = responseBlocksByToolName(blocks);
@@ -245,49 +199,46 @@ describe('ContentConverters tool-failure round trip (issue #3076)', () => {
       expect(succeeded.toolName).toBe('okTool');
     });
 
-    it('AC2.7 — a failed block with result undefined round-trips: result coerces to {} and the marker survives', () => {
-      // Full round trip through the encoder then decoder (not a hand-crafted
-      // inbound shape) so the `result: undefined` -> key-omission branch is
-      // actually driven: undefined is omitted outbound, then decoded to {}.
-      const contents: IContent[] = [
-        toolResponseContent({
-          type: 'tool_response',
-          callId: 'hist_tool_fail2',
-          toolName: 'failingTool',
-          result: undefined,
-          error: 'no result at all',
-        }),
+    it('AC2.7 — an envelope with the result key omitted decodes: result coerces to {} and the marker survives', () => {
+      // The encoder omitted an original `result` of `undefined` entirely;
+      // the decoder must restore it as {} (not fabricate a different value).
+      const stored = [
+        {
+          role: 'user',
+          parts: failurePart('hist_tool_fail2', 'failingTool', {
+            status: 'error',
+            error: 'no result at all',
+          }),
+        },
       ];
-      const converted = ContentConverters.toGeminiContents(contents);
-      const back = ContentConverters.toIContents(converted);
+      const back = ContentConverters.toIContents(stored);
       const block = singleToolResponse(back[0]);
       expect(block.error).toBe('no result at all');
       expect(block.result).toStrictEqual({});
       expect(block.callId).toBe('hist_tool_fail2');
     });
 
-    it('AC2.8 — a failed block with result null round-trips: null is preserved verbatim and the marker survives', () => {
+    it('AC2.8 — an envelope with result null decodes: null is preserved verbatim and the marker survives', () => {
       // historyToolPairing/historyToolNormalization produce result:null on a
-      // failed block. The encoder writes null through and the decoder returns
-      // it verbatim (NOT coerced to {}).
-      const contents: IContent[] = [
-        toolResponseContent({
-          type: 'tool_response',
-          callId: 'hist_tool_fail3',
-          toolName: 'failingTool',
-          result: null,
-          error: 'boom',
-        }),
+      // failed block. The decoder returns it verbatim (NOT coerced to {}).
+      const stored = [
+        {
+          role: 'user',
+          parts: failurePart('hist_tool_fail3', 'failingTool', {
+            status: 'error',
+            error: 'boom',
+            result: null,
+          }),
+        },
       ];
-      const converted = ContentConverters.toGeminiContents(contents);
-      const back = ContentConverters.toIContents(converted);
+      const back = ContentConverters.toIContents(stored);
       const block = singleToolResponse(back[0]);
       expect(block.error).toBe('boom');
       expect(block.result).toBeNull();
       expect(block.callId).toBe('hist_tool_fail3');
     });
 
-    it('AC2.9 — a SUCCESSFUL tool whose result is shaped like a failure envelope round-trips intact (F2 regression guard)', () => {
+    it('AC2.9 — a SUCCESSFUL tool whose result is shaped like a failure envelope decodes intact (F2 regression guard)', () => {
       // Without the part-level llxprtToolFailure discriminant this would be
       // misdecoded into a spurious failure with its payload destroyed, because
       // the inbound decoder used to fire on any { status:'error', error } shape.
@@ -296,64 +247,67 @@ describe('ContentConverters tool-failure round trip (issue #3076)', () => {
         error: 'fake failure',
         payload: 'preserved data',
       };
-      const contents: IContent[] = [
-        toolResponseContent({
-          type: 'tool_response',
-          callId: 'hist_tool_ok3',
-          toolName: 'okTool',
-          result: original,
-        }),
+      const stored = [
+        {
+          role: 'user',
+          parts: [
+            {
+              functionResponse: {
+                name: 'okTool',
+                id: 'hist_tool_ok3',
+                response: original,
+              },
+            },
+          ],
+        },
       ];
-      const converted = ContentConverters.toGeminiContents(contents);
-      const back = ContentConverters.toIContents(converted);
+      const back = ContentConverters.toIContents(stored);
       const block = singleToolResponse(back[0]);
       expect(block.error).toBeUndefined();
       expect(block.result).toStrictEqual(original);
     });
 
-    it('AC2.10 — a failed block with a non-object result round-trips the result verbatim', () => {
+    it('AC2.10 — an envelope with a non-object result decodes the result verbatim', () => {
       const results: unknown[] = ['hello', [1, 2, 3]];
       for (const result of results) {
-        const contents: IContent[] = [
-          toolResponseContent({
-            type: 'tool_response',
-            callId: 'hist_tool_fail4',
-            toolName: 'failingTool',
-            result,
-            error: 'boom',
-          }),
+        const stored = [
+          {
+            role: 'user',
+            parts: failurePart('hist_tool_fail4', 'failingTool', {
+              status: 'error',
+              error: 'boom',
+              result,
+            }),
+          },
         ];
-        const converted = ContentConverters.toGeminiContents(contents);
-        const back = ContentConverters.toIContents(converted);
+        const back = ContentConverters.toIContents(stored);
         const block = singleToolResponse(back[0]);
         expect(block.error).toBe('boom');
         expect(block.result).toStrictEqual(result);
       }
     });
 
-    it('AC2.11 — one IContent with multiple tool_response blocks round-trips each marker independently', () => {
-      const contents: IContent[] = [
+    it('AC2.11 — one Content with multiple tool_response parts decodes each marker independently', () => {
+      const stored = [
         {
-          speaker: 'tool',
-          blocks: [
-            {
-              type: 'tool_response',
-              callId: 'hist_tool_fail5',
-              toolName: 'failingTool',
-              result: { output: 'partial data' },
+          role: 'user',
+          parts: [
+            ...failurePart('hist_tool_fail5', 'failingTool', {
+              status: 'error',
               error: 'boom',
-            },
+              result: { output: 'partial data' },
+            }),
             {
-              type: 'tool_response',
-              callId: 'hist_tool_ok4',
-              toolName: 'okTool',
-              result: { found: true },
+              functionResponse: {
+                name: 'okTool',
+                id: 'hist_tool_ok4',
+                response: { found: true },
+              },
             },
           ],
         },
       ];
-      const converted = ContentConverters.toGeminiContents(contents);
-      const back = ContentConverters.toIContents(converted);
+      const back = ContentConverters.toIContents(stored);
       const blocks = back.flatMap((c) => c.blocks) as ToolResponseBlock[];
 
       const { failed, succeeded } = responseBlocksByCallId(blocks);

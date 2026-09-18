@@ -18,7 +18,7 @@ import {
   minimalModel,
   reasoningModel,
   claudeModel,
-  geminiModel,
+  googleModel,
   deepseekModel,
 } from './__fixtures__/mock-data.js';
 
@@ -107,7 +107,7 @@ describe('generateDefaultProfile', () => {
     });
 
     it('Gemini family gets topK: 40', () => {
-      const profile = generateDefaultProfile(geminiModel);
+      const profile = generateDefaultProfile(googleModel);
       expect(profile?.topK).toBe(40);
       expect(profile?.temperature).toBe(1.0);
       expect(profile?.topP).toBe(0.95);

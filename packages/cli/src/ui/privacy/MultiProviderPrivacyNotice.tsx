@@ -35,6 +35,16 @@ const PROVIDER_INFO: Record<string, ProviderInfo> = {
       'Data retention for safety and legal compliance only',
     ],
   },
+  gemini: {
+    displayName: 'Gemini',
+    tosUrl: 'https://developers.google.com/terms',
+    privacyUrl: 'https://ai.google.dev/gemini-api/terms',
+    keyPoints: [
+      'By using the Gemini API and Google AI Studio you agree to the Google APIs Terms of Service and the Gemini API Additional Terms of Service',
+      'Gemini API overview: https://ai.google.dev/docs/gemini_api_overview',
+      'Google AI Studio: https://aistudio.google.com/',
+    ],
+  },
   fireworks: {
     displayName: 'Fireworks',
     tosUrl: 'https://fireworks.ai/terms-of-service',
