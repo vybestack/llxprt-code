@@ -68,75 +68,123 @@ type DelegateEntry =
     }
   | { phase: 'ready'; handle: SchedulerHandle; refCount: number };
 
-export function createSchedulerRegistryDelegate(
+/**
+ * Dispose errors are swallowed at cleanup, matching the production
+ * registry: a failing dispose must not break the release that triggered it.
+ */
+const disposeQuietly = (handle: SchedulerHandle): void => {
+  try {
+    handle.dispose();
+  } catch {
+    // Dispose failures during cleanup are ignored.
+  }
+};
+
+/**
+ * Callbacks are refreshed on every acquisition, including joins of an
+ * in-flight creation, with per-call dependencies falling back to the
+ * delegate's own.
+ */
+const applyCallbacks = (
   deps: SchedulerRegistryDelegateOptions,
-): SchedulerRegistryDelegate {
-  const entries = new Map<object, Map<SchedulerPurpose, DelegateEntry>>();
-  let generation = 0;
+  handle: SchedulerHandle,
+  callbacks: SchedulerCallbacks,
+  dependencies?: {
+    messageBus?: MessageBus;
+    toolRegistry?: ToolRegistry;
+  },
+): void => {
+  handle.setCallbacks({
+    config: deps.config,
+    messageBus: dependencies?.messageBus ?? deps.messageBus,
+    toolRegistry: dependencies?.toolRegistry ?? deps.toolRegistry,
+    ...callbacks,
+  });
+};
 
-  const lookup = (
+/**
+ * Registry core carrying the delegate's entry lifecycle. Structured like
+ * the production registry implementation: map operations and the creation
+ * race live in small private methods so each stays reviewable.
+ */
+class DelegateSchedulerRegistry {
+  private readonly entries = new Map<
+    object,
+    Map<SchedulerPurpose, DelegateEntry>
+  >();
+
+  /** Monotonic token stamping each creation attempt with its identity. */
+  private generation = 0;
+
+  constructor(private readonly deps: SchedulerRegistryDelegateOptions) {}
+
+  async acquire(
     owner: object,
     purpose: SchedulerPurpose,
-  ): DelegateEntry | undefined => entries.get(owner)?.get(purpose);
-
-  const put = (
-    owner: object,
-    purpose: SchedulerPurpose,
-    entry: DelegateEntry,
-  ): void => {
-    let byPurpose = entries.get(owner);
-    if (!byPurpose) {
-      byPurpose = new Map<SchedulerPurpose, DelegateEntry>();
-      entries.set(owner, byPurpose);
+    options?: { interactiveMode?: boolean },
+  ): Promise<SchedulerHandle> {
+    const interactiveMode = options?.interactiveMode ?? true;
+    const existing = this.lookup(owner, purpose);
+    if (existing?.phase === 'ready') {
+      existing.refCount += 1;
+      return existing.handle;
     }
-    byPurpose.set(purpose, entry);
-  };
+    if (existing?.phase === 'creating') {
+      // Join the in-flight creation instead of building a duplicate
+      // scheduler; the join's refCount keeps the entry alive across
+      // the await.
+      existing.refCount += 1;
+      return existing.promise;
+    }
+    // Track the in-flight entry BEFORE awaiting construction so
+    // concurrent same-key acquisitions join it and releases during the
+    // await decrement a refCount that is actually tracked.
+    const creation = (this.generation += 1);
+    const promise = this.runCreation(owner, purpose, interactiveMode, creation);
+    promise.catch(() => {
+      // Drop the failed creation so a later attempt starts fresh, and
+      // only when this attempt's entry still sits under the key.
+      const current = this.lookup(owner, purpose);
+      if (current?.phase === 'creating' && current.generation === creation) {
+        this.remove(owner, purpose);
+      }
+    });
+    this.put(owner, purpose, {
+      phase: 'creating',
+      promise,
+      refCount: 1,
+      generation: creation,
+    });
+    return promise;
+  }
 
-  const remove = (owner: object, purpose: SchedulerPurpose): void => {
-    const byPurpose = entries.get(owner);
-    if (!byPurpose) {
+  release(owner: object, purpose: SchedulerPurpose): void {
+    const entry = this.lookup(owner, purpose);
+    // Unknown keys have nothing to release, matching the registry.
+    if (!entry) {
       return;
     }
-    byPurpose.delete(purpose);
-    if (byPurpose.size === 0) {
-      entries.delete(owner);
+    entry.refCount -= 1;
+    if (entry.refCount > 0) {
+      return;
     }
-  };
-
-  const applyCallbacks = (
-    handle: SchedulerHandle,
-    callbacks: SchedulerCallbacks,
-    dependencies?: {
-      messageBus?: MessageBus;
-      toolRegistry?: ToolRegistry;
-    },
-  ): void => {
-    handle.setCallbacks({
-      config: deps.config,
-      messageBus: dependencies?.messageBus ?? deps.messageBus,
-      toolRegistry: dependencies?.toolRegistry ?? deps.toolRegistry,
-      ...callbacks,
-    });
-  };
-
-  const disposeQuietly = (handle: SchedulerHandle): void => {
-    // A failing dispose must not break the release that triggered it,
-    // matching the production registry's cleanup.
-    try {
-      handle.dispose();
-    } catch {
-      // Dispose failures during cleanup are ignored.
+    if (entry.phase === 'creating') {
+      // Creation still running; its resolution path disposes the
+      // unowned handle and drops the entry, matching the registry.
+      return;
     }
-  };
+    this.remove(owner, purpose);
+    disposeQuietly(entry.handle);
+  }
 
-  const runCreation = async (
+  private async runCreation(
     owner: object,
     purpose: SchedulerPurpose,
     interactiveMode: boolean,
     creation: number,
-  ): Promise<SchedulerHandle> => {
-    const handle = await deps.createScheduler({ interactiveMode });
-    const current = lookup(owner, purpose);
+  ): Promise<SchedulerHandle> {
+    const handle = await this.deps.createScheduler({ interactiveMode });
+    const current = this.lookup(owner, purpose);
     if (current?.phase !== 'creating' || current.generation !== creation) {
       // The entry under this key is not this attempt's; leave it alone.
       return handle;
@@ -144,7 +192,7 @@ export function createSchedulerRegistryDelegate(
     if (current.refCount > 0) {
       // Finalize the same entry: refCount may have moved through joins
       // and releases while construction ran, so carry the live value.
-      put(owner, purpose, {
+      this.put(owner, purpose, {
         phase: 'ready',
         handle,
         refCount: current.refCount,
@@ -152,12 +200,48 @@ export function createSchedulerRegistryDelegate(
     } else {
       // Every acquirer released during construction; nobody owns the
       // handle, so the at-zero rule disposes it here.
-      remove(owner, purpose);
+      this.remove(owner, purpose);
       disposeQuietly(handle);
     }
     return handle;
-  };
+  }
 
+  private lookup(
+    owner: object,
+    purpose: SchedulerPurpose,
+  ): DelegateEntry | undefined {
+    return this.entries.get(owner)?.get(purpose);
+  }
+
+  private put(
+    owner: object,
+    purpose: SchedulerPurpose,
+    entry: DelegateEntry,
+  ): void {
+    let byPurpose = this.entries.get(owner);
+    if (!byPurpose) {
+      byPurpose = new Map<SchedulerPurpose, DelegateEntry>();
+      this.entries.set(owner, byPurpose);
+    }
+    byPurpose.set(purpose, entry);
+  }
+
+  private remove(owner: object, purpose: SchedulerPurpose): void {
+    const byPurpose = this.entries.get(owner);
+    if (!byPurpose) {
+      return;
+    }
+    byPurpose.delete(purpose);
+    if (byPurpose.size === 0) {
+      this.entries.delete(owner);
+    }
+  }
+}
+
+export function createSchedulerRegistryDelegate(
+  deps: SchedulerRegistryDelegateOptions,
+): SchedulerRegistryDelegate {
+  const registry = new DelegateSchedulerRegistry(deps);
   return {
     async getOrCreateScheduler(
       owner,
@@ -166,62 +250,12 @@ export function createSchedulerRegistryDelegate(
       options,
       dependencies,
     ) {
-      const interactiveMode = options?.interactiveMode ?? true;
-      const existing = lookup(owner, purpose);
-      if (existing?.phase === 'ready') {
-        existing.refCount += 1;
-        applyCallbacks(existing.handle, callbacks, dependencies);
-        return existing.handle;
-      }
-      if (existing?.phase === 'creating') {
-        // Join the in-flight creation instead of building a duplicate
-        // scheduler; the join's refCount keeps the entry alive across
-        // the await.
-        existing.refCount += 1;
-        const handle = await existing.promise;
-        applyCallbacks(handle, callbacks, dependencies);
-        return handle;
-      }
-      // Track the in-flight entry BEFORE awaiting construction so
-      // concurrent same-key acquisitions join it and releases during the
-      // await decrement a refCount that is actually tracked.
-      const creation = (generation += 1);
-      const promise = runCreation(owner, purpose, interactiveMode, creation);
-      promise.catch(() => {
-        // Drop the failed creation so a later attempt starts fresh, and
-        // only when this attempt's entry still sits under the key.
-        const current = lookup(owner, purpose);
-        if (current?.phase === 'creating' && current.generation === creation) {
-          remove(owner, purpose);
-        }
-      });
-      put(owner, purpose, {
-        phase: 'creating',
-        promise,
-        refCount: 1,
-        generation: creation,
-      });
-      const handle = await promise;
-      applyCallbacks(handle, callbacks, dependencies);
+      const handle = await registry.acquire(owner, purpose, options);
+      applyCallbacks(deps, handle, callbacks, dependencies);
       return handle;
     },
     disposeScheduler(owner, purpose) {
-      const entry = lookup(owner, purpose);
-      // Unknown keys have nothing to release, matching the registry.
-      if (!entry) {
-        return;
-      }
-      entry.refCount -= 1;
-      if (entry.refCount > 0) {
-        return;
-      }
-      if (entry.phase === 'creating') {
-        // Creation still running; its resolution path disposes the
-        // unowned handle and drops the entry, matching the registry.
-        return;
-      }
-      remove(owner, purpose);
-      disposeQuietly(entry.handle);
+      registry.release(owner, purpose);
     },
   };
 }
