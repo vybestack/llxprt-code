@@ -180,9 +180,6 @@ describe('scrollbackIndex', () => {
     expect(page[0]?.entry.kind).toBe('info');
     expect(page[0]?.entry.chronologySeq).toBe(42);
     const record = page[0]?.record;
-    if (record === undefined) {
-      throw new Error('expected a page record');
-    }
     if (record.rec !== 'item') {
       throw new Error('expected an item record');
     }
