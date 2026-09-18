@@ -42,7 +42,7 @@ import {
 } from './loadBalancing/requestAbort.js';
 import { optionsWithSelectedModelPrompt } from './loadBalancing/selectedModelPrompt.js';
 import {
-  projectNextSubProfilePromptEnvelope,
+  projectLoadBalancerPromptEnvelope,
   type PromptEnvelopeProjection,
 } from './loadBalancing/promptEnvelopeProjection.js';
 import { hasTransportAttemptRemaining } from './transportAttemptBudget.js';
@@ -68,7 +68,7 @@ import {
 } from './loadBalancing/preparedPromptOptions.js';
 import { getTargetContextLimit } from './loadBalancing/targetContextLimit.js';
 import {
-  getMinMemberContextWindow,
+  getEffectiveLoadBalancerContextLimit,
   resolveSubProfileModel,
 } from './loadBalancing/subProfileHelpers.js';
 import type { TokenAccountingDiagnostics } from './loadBalancing/tokenAccountingDiagnostics.js';
@@ -199,17 +199,17 @@ export class LoadBalancingProvider implements IProvider {
   async projectPromptEnvelope(
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection | undefined> {
-    // One settings read per projection: the eligibility predicate below
-    // closes over it instead of re-extracting per member.
-    const failoverSettings = this.extractFailoverSettings();
-    return projectNextSubProfilePromptEnvelope({
+    return projectLoadBalancerPromptEnvelope({
       config: this.config,
       providerManager: this.providerManager,
       failoverState: this.failoverState,
       roundRobinIndex: this.roundRobinIndex,
-      isBackendEligible: (name) =>
-        this.circuitBreaker.canAttemptBackend(name) &&
-        !this.tpmTracker.shouldSkipOnTPM(name, failoverSettings.tpmThreshold),
+      circuitBreaker: this.circuitBreaker,
+      tpmTracker: this.tpmTracker,
+      // One settings read per projection: the wrapper's eligibility
+      // predicate closes over the threshold instead of re-extracting it
+      // per member.
+      tpmThreshold: this.extractFailoverSettings().tpmThreshold,
       buildDelegateResolvedOptions: (subProfile, delegateOptions) =>
         this.buildRoundRobinResolvedOptions(subProfile, delegateOptions),
       options,
@@ -234,13 +234,7 @@ export class LoadBalancingProvider implements IProvider {
   }
 
   private getEffectiveContextLimit(): number | undefined {
-    if (
-      this.config.contextLimit !== undefined &&
-      this.config.contextLimit > 0
-    ) {
-      return this.config.contextLimit;
-    }
-    return getMinMemberContextWindow(this.config.subProfiles);
+    return getEffectiveLoadBalancerContextLimit(this.config);
   }
 
   /**

@@ -8,7 +8,9 @@ import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runti
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import type { ProviderManager } from '../ProviderManager.js';
+import type { CircuitBreakerManager } from './circuitBreakerManager.js';
 import type { FailoverState } from './failoverState.js';
+import type { TPMTracker } from './tpmTracker.js';
 import { resolveMemberAuthentication } from './memberAuthentication.js';
 import { optionsWithSelectedModelPrompt } from './selectedModelPrompt.js';
 import { resolveSubProfileModel } from './subProfileHelpers.js';
@@ -162,4 +164,40 @@ export async function toEstimateOnlyPromptEnvelopeProjection(
     legacyEstimate,
     transportToken: Object.freeze({}),
   };
+}
+
+/**
+ * Wire the load-balancer's runtime collaborators into the envelope
+ * projection (PR #3715): composes the failover eligibility predicate from
+ * the circuit breaker and TPM tracker exactly as the send path's skip
+ * policy — both non-mutating reads, so the peek never steals a half-open
+ * recovery probe. The caller performs the single failover-settings read
+ * per projection and supplies the resulting TPM threshold; the predicate
+ * closes over that threshold instead of re-extracting it per member.
+ */
+export async function projectLoadBalancerPromptEnvelope(input: {
+  readonly config: LoadBalancingProviderConfig;
+  readonly providerManager: ProviderManager;
+  readonly failoverState: FailoverState;
+  readonly roundRobinIndex: number;
+  readonly circuitBreaker: Pick<CircuitBreakerManager, 'canAttemptBackend'>;
+  readonly tpmTracker: Pick<TPMTracker, 'shouldSkipOnTPM'>;
+  readonly tpmThreshold: number | undefined;
+  readonly buildDelegateResolvedOptions: (
+    subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+    options: GenerateChatOptions,
+  ) => GenerateChatOptions;
+  readonly options: GenerateChatOptions;
+}): Promise<PromptEnvelopeProjection | undefined> {
+  return projectNextSubProfilePromptEnvelope({
+    config: input.config,
+    providerManager: input.providerManager,
+    failoverState: input.failoverState,
+    roundRobinIndex: input.roundRobinIndex,
+    isBackendEligible: (name) =>
+      input.circuitBreaker.canAttemptBackend(name) &&
+      !input.tpmTracker.shouldSkipOnTPM(name, input.tpmThreshold),
+    buildDelegateResolvedOptions: input.buildDelegateResolvedOptions,
+    options: input.options,
+  });
 }

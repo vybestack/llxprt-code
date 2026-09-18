@@ -6,6 +6,7 @@
 
 import type {
   LoadBalancerSubProfile,
+  LoadBalancingProviderConfig,
   ResolvedSubProfile,
 } from './loadBalancerTypes.js';
 import { isResolvedSubProfile } from './loadBalancerTypes.js';
@@ -21,6 +22,20 @@ export function getMinMemberContextWindow(
         typeof contextWindow === 'number' && contextWindow > 0,
     );
   return windows.length === 0 ? undefined : Math.min(...windows);
+}
+
+/**
+ * Effective shared context limit for a load balancer: the profile's
+ * explicit positive contextLimit when set, otherwise the smallest member
+ * context window.
+ */
+export function getEffectiveLoadBalancerContextLimit(
+  config: LoadBalancingProviderConfig,
+): number | undefined {
+  if (config.contextLimit !== undefined && config.contextLimit > 0) {
+    return config.contextLimit;
+  }
+  return getMinMemberContextWindow(config.subProfiles);
 }
 
 export function resolveSubProfileModel(
