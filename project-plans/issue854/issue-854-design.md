@@ -203,12 +203,37 @@ already has subscription patterns (`useTokenMetricsTracking`,
 ### 5. Correlation stamping
 
 - `HistoryItem` gains optional `chronologySeq?: number` and
-  `seqSpan?: [number, number]` (tool groups aggregate several entries).
+  `seqSpan?: [number, number]` (tool groups).
 - Stamped at creation: `contentEventProcessor` (assistant items),
   user-submission echo, tool-group assembly, `iContentToHistoryItems` (resume
   fallback; the seq is available on replayed `IContent`).
 - `contextState` is derived at render time (`in-context` | `purged` | `n/a`
   for UI-only items), never stored.
+
+Verified tool-group facts (research, read-only pass over main):
+
+- A standard model-issued group of N tool calls spans exactly 2 adjacent
+  IContent entries: one `ai` entry holding all N tool_call blocks (stamped at
+  stream finalization via `recordHistoryWithUsage`) and one `tool` entry
+  holding all N tool_response blocks (first entry of the next stream's
+  finalization batch). Nothing lands between them: the agentic loop is
+  serialized, one scheduler per turn, and the group's `addItem` fires from
+  `notifyAllToolCallsComplete` before the next turn streams
+  (`useAgentEventStream.ts` `handleToolsComplete`). So `seqSpan` is
+  well-defined and tight (2 seqs, occasionally 1).
+- A committed tool_group is written once and never updated afterward
+  (in-progress groups are ephemeral React state, not ledger items), so the
+  journal needs no `rev` records for tool groups.
+- Client-initiated groups (slash/@-commands via the main scheduler) have a
+  tool entry only (no `ai` entry); `seqSpan` degenerates to `[seq, seq]`.
+- Replay already reconstructs groups as "one tool_group per `ai` IContent
+  with tool_call blocks, results joined globally by callId"
+  (`iContentToHistoryItems.ts`), and chronology seq is stamped in insertion
+  order, never reused, and inherited by compression replacements — so seq
+  ordering plus callId joins are sufficient for deterministic reconstruction.
+- Pre-existing replay quirk to keep in mind (not introduced by this design):
+  steer text merged into a tool entry flips its speaker to `human`, which
+  replay's response map skips, replaying those calls as Pending.
 
 ### 6. Rendering
 
@@ -341,7 +366,13 @@ Buffer modes:
    stays stale until paged. Acceptable?
 6. Scrollbar stability across eviction cycles depends on placeholder height
    accuracy; persisting measured heights is the later fix.
-7. Tool-group `seqSpan` correctness when a group interleaves with other
-   entries (needs a check against actual batching).
-8. Should `pageIn` cross a `clear` marker behind a "show cleared history"
+7. Should `pageIn` cross a `clear` marker behind a "show cleared history"
    affordance, or stay hard-stopped (current proposal)?
+
+Resolved during design (research, no longer open):
+
+- Tool-group `seqSpan` well-definedness: verified. A standard group spans
+  exactly 2 adjacent entries with interleaving structurally excluded;
+  committed groups are write-once (no journal revisions needed); replay
+  reconstruction by seq order + callId join is already deterministic. See
+  section 5.
