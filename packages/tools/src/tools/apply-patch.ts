@@ -71,6 +71,7 @@ import {
   isCodexEnvelope,
   isCreationPatch,
   isDeletePatch,
+  validateHunkOrder,
   validatePatchHeader,
 } from './apply-patch-analysis.js';
 
@@ -261,6 +262,9 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
     ) {
       return false;
     }
+    // Issue #3597: no preview for out-of-order hunks; execute emits the
+    // actionable rejection, keeping preview and execution in lockstep.
+    if (validateHunkOrder(patch) !== null) return false;
 
     // Pre-read size gate: an oversized existing target must not be materialized
     // for the preview diff. Defer to execute, which emits FILE_TOO_LARGE.
@@ -422,6 +426,11 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
       getTargetDirCompat(this.host),
     );
     if (targetError) return targetError;
+
+    // 5a. Issue #3597: reject hunks out of original-file order before any
+    // file read or write, so a bad ordering can never duplicate content.
+    const orderError = validateHunkOrder(patch);
+    if (orderError) return orderError;
 
     // 5b. Pre-read file-size gate: reject an oversized existing target before
     // materializing content. Creation patches (missing target) are unaffected.
