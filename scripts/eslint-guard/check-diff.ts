@@ -44,6 +44,7 @@ import {
 import {
   checkCrossFormKeyedRemoved,
   checkCrossFormStandaloneAdded,
+  checkFilesScopedCeilingOverride,
   checkInlineRulesEntries,
 } from './added-config-checks.ts';
 import { isCommentOnlyLine } from './constants.ts';
@@ -95,6 +96,8 @@ function createDiffState(): DiffState {
     ruleEntryDepth: null,
     expectingFirstSeverityElement: false,
     expectingCeilingThreshold: false,
+    currentFilesGlobs: [],
+    filesArrayBracketDepth: null,
     removedRulesBraceDepth: null,
     removedCurrentRuleKey: null,
     removedCurrentCeilingRuleKey: null,
@@ -127,6 +130,8 @@ function flushPendingConfigs(state: DiffState) {
   state.ruleEntryDepth = null;
   state.expectingFirstSeverityElement = false;
   state.expectingCeilingThreshold = false;
+  state.currentFilesGlobs = [];
+  state.filesArrayBracketDepth = null;
   state.removedRulesBraceDepth = null;
   state.removedCurrentCeilingRuleKey = null;
   state.removedCurrentRuleKey = null;
@@ -315,6 +320,9 @@ function processConfigAddedLine(
     currentLine,
     detected,
   );
+  // #3718: fires even for tagged lines; comments cannot waive a per-file
+  // ceiling override unless the files-glob + rule pair is baselined.
+  checkFilesScopedCeilingOverride(state, content, currentLine);
 
   const preUpdateInsideRuleEntry = state.insideRuleEntry;
   const preUpdateExpectingFirstSeverity = state.expectingFirstSeverityElement;
