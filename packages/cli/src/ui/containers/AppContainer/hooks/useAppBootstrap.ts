@@ -314,8 +314,7 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
       const lazyJournal = createLazyScrollbackJournal(
         {
           getFilePath: () =>
-            recordingSwapCallbacks.getCurrentRecording()?.getFilePath() ??
-            null,
+            recordingSwapCallbacks.getCurrentRecording()?.getFilePath() ?? null,
         },
         true,
       );

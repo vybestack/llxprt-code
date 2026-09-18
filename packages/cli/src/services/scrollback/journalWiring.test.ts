@@ -105,9 +105,7 @@ describe('journalWiring', () => {
     const wrapped = wrapTurnCommandsWithJournal(turnStore, lazyJournal);
 
     const idBefore = wrapped.addItem({ type: 'info', text: 'before path' });
-    expect(
-      fs.existsSync(path.join(chatsDir, 'sb-lazy1.jsonl')),
-    ).toBe(false);
+    expect(fs.existsSync(path.join(chatsDir, 'sb-lazy1.jsonl'))).toBe(false);
 
     filePath = `${chatsDir}/session-lazy1.jsonl`;
     wrapped.addItem({ type: 'info', text: 'after path' });
