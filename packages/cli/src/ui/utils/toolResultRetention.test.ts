@@ -154,16 +154,22 @@ describe('stringifyForDisplay', () => {
     expect(text).toContain('"ok": true');
   });
 
-  it('bounds a CJK-heavy structured result by UTF-8 bytes, not code units', () => {
-    // 66,000 CJK chars are ~198,000 UTF-8 bytes but only ~66,000 UTF-16
-    // code units, so a code-unit budget admits roughly 3x the stated cap.
-    const value = { content: '中'.repeat(66_000) };
+  it('retains a truncated CJK string preview instead of discarding it', () => {
+    // ~30,000 CJK chars are ~90,000 UTF-8 bytes but only ~30,000 UTF-16
+    // code units: the fit check passed by code units while the emitter's
+    // byte accounting rejected the chunk, which discarded the string
+    // preview entirely.
+    const value = { content: '中'.repeat(30_000) };
 
     const text = stringifyForDisplay(value);
 
     expect(Buffer.byteLength(text, 'utf8')).toBeLessThanOrEqual(
       TOOL_RESULT_RETENTION_CAP_BYTES,
     );
+    // The preview survives: real CJK content is emitted, truncated in
+    // place with the in-band omission markers, not thrown away.
+    expect(text).toContain('中');
+    expect(text).toContain('string truncated for display');
     expect(text).toContain('full result is in the session transcript');
     // ASCII behavior is unchanged: small values still pretty-print exactly.
     const small = { fileName: 'a.ts', lines: [1, 2, 3], ok: true };

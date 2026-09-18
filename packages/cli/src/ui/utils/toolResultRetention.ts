@@ -270,7 +270,7 @@ function writeValue(
 function writeString(emitter: BoundedEmitter, value: string): void {
   const encoded = JSON.stringify(value);
   const room = emitter.room();
-  if (encoded.length <= room) {
+  if (Buffer.byteLength(encoded, 'utf8') <= room) {
     emitter.raw(encoded);
     return;
   }
@@ -280,7 +280,9 @@ function writeString(emitter: BoundedEmitter, value: string): void {
     return;
   }
   emitter.markOmitted();
-  let head = encoded.slice(0, headRoom);
+  // Truncate against the remaining BYTE budget so a multi-byte string never
+  // slips past raw()'s byte accounting, and never split a code point.
+  let head = takeUtf8(encoded, headRoom, false);
   // Step back over a possibly severed escape sequence so the truncated
   // literal stays a valid JSON string.
   const lastBackslash = head.lastIndexOf('\\');

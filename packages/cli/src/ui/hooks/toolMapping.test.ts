@@ -10,6 +10,8 @@ import {
   DEFAULT_AGENT_ID,
   type AnyDeclarativeTool,
   type AnyToolInvocation,
+  type FileDiff,
+  type FileRead,
   type ToolCallRequestInfo,
   type ToolCallResponseInfo,
   type Status,
@@ -21,6 +23,10 @@ import {
   type CancelledToolCall,
 } from '@vybestack/llxprt-code-core';
 import { ToolCallStatus } from '../types.js';
+import {
+  RETENTION_TRUNCATION_MARKER,
+  TOOL_RESULT_RETENTION_CAP_BYTES,
+} from '../utils/toolResultRetention.js';
 
 const { mockWarn } = {
   mockWarn: vi.fn(),
@@ -449,6 +455,100 @@ describe('toolMapping', () => {
 
         expect(displayTool.resultDisplay).toBe(fileDiffDisplay);
         expect(displayTool.retention).toBeUndefined();
+      });
+
+      it('bounds each long field of a large FileDiff without stringifying it', () => {
+        const fileDiff = `diff-head
+${'d'.repeat(150 * 1024)}`;
+        const originalContent = `orig
+${'o'.repeat(200 * 1024)}`;
+        const newContent = `new
+${'n'.repeat(180 * 1024)}`;
+        const fileDiffDisplay = {
+          fileDiff,
+          fileName: 'a.ts',
+          originalContent,
+          newContent,
+        };
+        const toolCall: SuccessfulToolCall = {
+          status: 'success',
+          request: mockRequest,
+          tool: mockTool,
+          invocation: mockInvocation,
+          response: { ...mockResponse, resultDisplay: fileDiffDisplay },
+        };
+
+        const displayTool = mapToDisplay(toolCall).tools[0];
+        const display = displayTool.resultDisplay as FileDiff;
+
+        // Shape preserved: the display is still the structured FileDiff
+        // object DiffRenderer consumes, never a stringified body.
+        expect(typeof display).toBe('object');
+        expect(display).not.toBe(fileDiffDisplay);
+        expect(display.fileName).toBe('a.ts');
+        // Each long field is bounded to the cap with the head+tail marker.
+        for (const field of [
+          display.fileDiff,
+          display.originalContent as string,
+          display.newContent,
+        ]) {
+          expect(Buffer.byteLength(field, 'utf8')).toBeLessThanOrEqual(
+            TOOL_RESULT_RETENTION_CAP_BYTES,
+          );
+          expect(field).toContain(RETENTION_TRUNCATION_MARKER);
+        }
+        // Retention metadata is set so the transcript hint renders.
+        expect(displayTool.retention).toStrictEqual({
+          capped: true,
+          originalLength:
+            Buffer.byteLength(fileDiff, 'utf8') +
+            Buffer.byteLength(originalContent, 'utf8') +
+            Buffer.byteLength(newContent, 'utf8'),
+        });
+        // AC5: the scheduler's response is the model-facing copy; it stays
+        // unmutated, fields included.
+        expect(toolCall.response.resultDisplay).toBe(fileDiffDisplay);
+        expect(toolCall.response.resultDisplay).toStrictEqual({
+          fileDiff,
+          fileName: 'a.ts',
+          originalContent,
+          newContent,
+        });
+      });
+
+      it('bounds a large FileRead content field while keeping the display structured', () => {
+        const content = `read
+${'r'.repeat(300 * 1024)}`;
+        const fileReadDisplay = {
+          content,
+          fileName: 'b.txt',
+          filePath: '/tmp/b.txt',
+        };
+        const toolCall: SuccessfulToolCall = {
+          status: 'success',
+          request: mockRequest,
+          tool: mockTool,
+          invocation: mockInvocation,
+          response: { ...mockResponse, resultDisplay: fileReadDisplay },
+        };
+
+        const displayTool = mapToDisplay(toolCall).tools[0];
+        const display = displayTool.resultDisplay as FileRead;
+
+        expect(typeof display).toBe('object');
+        expect(display).not.toBe(fileReadDisplay);
+        expect(display.fileName).toBe('b.txt');
+        expect(display.filePath).toBe('/tmp/b.txt');
+        expect(Buffer.byteLength(display.content, 'utf8')).toBeLessThanOrEqual(
+          TOOL_RESULT_RETENTION_CAP_BYTES,
+        );
+        expect(display.content).toContain(RETENTION_TRUNCATION_MARKER);
+        expect(displayTool.retention).toStrictEqual({
+          capped: true,
+          originalLength: Buffer.byteLength(content, 'utf8'),
+        });
+        expect(toolCall.response.resultDisplay).toBe(fileReadDisplay);
+        expect(toolCall.response.resultDisplay).toStrictEqual(fileReadDisplay);
       });
 
       it('caps large error result displays too', () => {

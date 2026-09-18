@@ -126,7 +126,12 @@ export function useLoadExpandedToolResult(
     if (!capped || body !== undefined || expansion === null) return;
     if (fetchedForLiftRef.current === callId) return;
     fetchedForLiftRef.current = callId;
-    void expansion.commands.expand(callId);
+    void expansion.commands.expand(callId).catch(() => {
+      // A failed transcript read must not surface as an unhandled
+      // rejection; clearing the lift marker lets a later effect run
+      // retry the fetch (the store keeps no settled state on rejection).
+      fetchedForLiftRef.current = null;
+    });
   }, [constrainHeight, capped, body, callId, expansion]);
 }
 

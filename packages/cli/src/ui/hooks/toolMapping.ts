@@ -28,9 +28,73 @@ import type {
 const logger = DebugLogger.getLogger('llxprt:cli:tool-mapping');
 
 /**
- * Bounds a string display body to the shared retention cap at the moment it
- * is committed to UI state (issue #3428). Only the display copy is capped;
- * the scheduler response that feeds the model is never touched here.
+ * Long string fields carried by structured result displays: FileDiff's diff
+ * and both content sides, FileRead's content, and extension tools' {content}
+ * bodies. Each is bounded independently against the shared display-retention
+ * cap; every other field passes through untouched so the display keeps the
+ * shape its renderer consumes (DiffRenderer needs the FileDiff object, not a
+ * stringified body).
+ */
+const RETENTION_BOUNDED_DISPLAY_FIELDS = [
+  'fileDiff',
+  'originalContent',
+  'newContent',
+  'content',
+] as const;
+
+type StructuredToolResultDisplay = Exclude<
+  IndividualToolCallDisplay['resultDisplay'],
+  string | undefined
+>;
+
+/**
+ * Bounds a structured display's long string fields on a shallow copy (issue
+ * #3428): the scheduler's response that feeds the model is never mutated
+ * (AC5). Displays with no oversized field — small diffs, AnsiOutput line
+ * arrays — keep their original object and carry no retention metadata.
+ */
+function boundStructuredDisplayForRetention(
+  resultDisplay: StructuredToolResultDisplay,
+): {
+  resultDisplay: IndividualToolCallDisplay['resultDisplay'];
+  retention: ToolResultRetention | undefined;
+} {
+  if (Array.isArray(resultDisplay)) {
+    return { resultDisplay, retention: undefined };
+  }
+  const bounded: Record<string, unknown> = { ...resultDisplay };
+  let wasCapped = false;
+  let originalLength = 0;
+  for (const field of RETENTION_BOUNDED_DISPLAY_FIELDS) {
+    const value = bounded[field];
+    if (typeof value !== 'string') continue;
+    const fieldBound = boundResultDisplayForRetention(value);
+    originalLength += fieldBound.originalLength;
+    if (fieldBound.wasCapped) {
+      wasCapped = true;
+      bounded[field] = fieldBound.text;
+    }
+  }
+  if (!wasCapped) {
+    return { resultDisplay, retention: undefined };
+  }
+  return {
+    // The copy differs from the input only in long string fields replaced
+    // by bounded strings of the same fields, so the display keeps its
+    // shape. TypeScript cannot express "same union variant with some string
+    // fields swapped" (the display interfaces carry no index signatures),
+    // so this single cast goes through unknown.
+    resultDisplay:
+      bounded as unknown as IndividualToolCallDisplay['resultDisplay'],
+    retention: { capped: true, originalLength },
+  };
+}
+
+/**
+ * Bounds a display body to the shared retention cap at the moment it is
+ * committed to UI state (issue #3428): string bodies head+tail, structured
+ * bodies field-by-field. Only the display copy is capped; the scheduler
+ * response that feeds the model is never touched here (AC5).
  */
 function boundDisplayForRetention(
   resultDisplay: IndividualToolCallDisplay['resultDisplay'],
@@ -38,16 +102,19 @@ function boundDisplayForRetention(
   resultDisplay: IndividualToolCallDisplay['resultDisplay'];
   retention: ToolResultRetention | undefined;
 } {
-  if (typeof resultDisplay !== 'string') {
+  if (resultDisplay === undefined) {
     return { resultDisplay, retention: undefined };
   }
-  const bounded = boundResultDisplayForRetention(resultDisplay);
-  return {
-    resultDisplay: bounded.text,
-    retention: bounded.wasCapped
-      ? { capped: true, originalLength: bounded.originalLength }
-      : undefined,
-  };
+  if (typeof resultDisplay === 'string') {
+    const bounded = boundResultDisplayForRetention(resultDisplay);
+    return {
+      resultDisplay: bounded.text,
+      retention: bounded.wasCapped
+        ? { capped: true, originalLength: bounded.originalLength }
+        : undefined,
+    };
+  }
+  return boundStructuredDisplayForRetention(resultDisplay);
 }
 
 /**

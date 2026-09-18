@@ -48,6 +48,10 @@ export function createToolResultExpansionStore(
   });
   const inFlight = new Set<string>();
   const settledWithoutBody = new Set<string>();
+  // Bumped by every purge: a read that was pending when a purge ran must
+  // not re-insert its body afterwards, or a purged result would reappear
+  // after history moved forward (#854 point 1).
+  let purgeGeneration = 0;
 
   const publish = (bodies: ReadonlyMap<string, string>): void => {
     store.setState({ expandedBodies: bodies });
@@ -70,11 +74,17 @@ export function createToolResultExpansionStore(
     if (inFlight.has(callId) || settledWithoutBody.has(callId)) return;
     inFlight.add(callId);
     try {
+      const generationAtRead = purgeGeneration;
       const filePath = getTranscriptFilePath();
       const body =
         filePath === undefined
           ? undefined
           : await readToolResultBody(filePath, callId);
+      if (generationAtRead !== purgeGeneration) {
+        // A purge ran while the read was pending: history moved forward, so
+        // the body must not re-enter the expansion map.
+        return;
+      }
       if (body === undefined) {
         // The transcript had no body for this callId; remember so repeated
         // expansion attempts (effect reruns) do not rescan the file. Purge
@@ -89,6 +99,7 @@ export function createToolResultExpansionStore(
   };
 
   const purge = (): void => {
+    purgeGeneration += 1;
     settledWithoutBody.clear();
     if (store.getState().expandedBodies.size === 0) return;
     publish(new Map<string, string>());

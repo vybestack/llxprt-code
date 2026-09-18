@@ -81,13 +81,13 @@ function Probe({
 
 function TestHarness({
   turnStore,
-  transcriptPath,
+  getTranscriptFilePath,
   callId,
   cappedPreview,
   constrainHeight,
 }: {
   turnStore: ReturnType<typeof createTurnStore>;
-  transcriptPath: string;
+  getTranscriptFilePath: () => string;
   callId: string;
   cappedPreview: string;
   constrainHeight: boolean;
@@ -96,7 +96,7 @@ function TestHarness({
     <TerminalProvider store={createTerminalStore({ constrainHeight })}>
       <TurnProvider store={turnStore}>
         <ToolResultExpansionProvider
-          getTranscriptFilePath={() => transcriptPath}
+          getTranscriptFilePath={getTranscriptFilePath}
         >
           <Probe callId={callId} cappedPreview={cappedPreview} />
         </ToolResultExpansionProvider>
@@ -139,7 +139,7 @@ describe('ToolResultExpansionProvider — load on expand, purge on append (#3428
     const { lastFrame } = render(
       <TestHarness
         turnStore={turnStore}
-        transcriptPath={transcriptPath}
+        getTranscriptFilePath={() => transcriptPath}
         callId="call-1"
         cappedPreview={capped.text}
         constrainHeight={false}
@@ -177,7 +177,7 @@ describe('ToolResultExpansionProvider — load on expand, purge on append (#3428
     const { lastFrame } = render(
       <TestHarness
         turnStore={turnStore}
-        transcriptPath={transcriptPath}
+        getTranscriptFilePath={() => transcriptPath}
         callId="call-2"
         cappedPreview="CAPPED-PREVIEW"
         constrainHeight={true}
@@ -200,7 +200,7 @@ describe('ToolResultExpansionProvider — load on expand, purge on append (#3428
     const harness = (constrainHeight: boolean) => (
       <TestHarness
         turnStore={turnStore}
-        transcriptPath={transcriptPath}
+        getTranscriptFilePath={() => transcriptPath}
         callId="call-3"
         cappedPreview={capped.text}
         constrainHeight={constrainHeight}
@@ -236,5 +236,58 @@ describe('ToolResultExpansionProvider — load on expand, purge on append (#3428
     await waitFor(() => {
       expect(lastFrame()).toContain(`EXPANDED:len=${body.length}`);
     });
+  });
+
+  it('handles a rejecting transcript read and retries on the next lift', async () => {
+    const body = `FAILRETRY-start
+${'f'.repeat(100 * KIB)}
+FAILRETRY-end`;
+    const capped = boundResultDisplayForRetention(body);
+    expect(capped.wasCapped).toBe(true);
+    service.recordContent(toolResponseContent('call-fail-retry', body));
+    await service.flush();
+    const realTranscriptPath = service.getFilePath() as string;
+
+    const unhandled: unknown[] = [];
+    const onUnhandledRejection = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandledRejection);
+
+    try {
+      // Phase 1: the transcript path is a directory, so the transcript
+      // read rejects (EISDIR) instead of resolving.
+      let transcriptPath: string = tempDir;
+      const accessor = (): string => transcriptPath;
+      const harness = (constrainHeight: boolean) => (
+        <TestHarness
+          turnStore={turnStore}
+          getTranscriptFilePath={accessor}
+          callId="call-fail-retry"
+          cappedPreview={capped.text}
+          constrainHeight={constrainHeight}
+        />
+      );
+
+      const { lastFrame, rerender } = render(harness(false));
+      expect(lastFrame()).toContain(`CAPPED:${capped.text.slice(0, 24)}`);
+      // Give the rejection a window to surface; it must be handled, and
+      // the capped preview keeps rendering.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(lastFrame()).toContain(`CAPPED:${capped.text.slice(0, 24)}`);
+      expect(unhandled).toStrictEqual([]);
+
+      // Phase 2: the transcript becomes readable; the next constraints
+      // lift retries the fetch and the full body renders.
+      transcriptPath = realTranscriptPath;
+      rerender(harness(true));
+      rerender(harness(false));
+      await waitFor(() => {
+        expect(lastFrame()).toContain(`EXPANDED:len=${body.length}`);
+      });
+      expect(unhandled).toStrictEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandledRejection);
+    }
   });
 });

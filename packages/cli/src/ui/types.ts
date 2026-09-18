@@ -66,8 +66,9 @@ export interface ToolCallEvent {
  */
 export interface ToolResultRetention {
   capped: boolean;
-  /** UTF-8 bytes of the full string body; absent when the body was a
-   * structured result serialized under a budget. */
+  /** UTF-8 bytes of the full display body: the string body itself, or the
+   * sum of a structured display's long string fields; absent when the body
+   * was a structured result serialized under a budget. */
   originalLength?: number;
 }
 

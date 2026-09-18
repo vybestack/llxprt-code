@@ -126,6 +126,28 @@ describe('toolResultExpansionStore — transcript-backed expansion (#3428)', () 
     expect(store.store.getState().expandedBodies.size).toBe(0);
   });
 
+  it('discards a read that settles after a purge ran while it was pending', async () => {
+    const body = largeBody('RACE', 300);
+    service.recordContent(toolResponseContent('call-race', body));
+    await service.flush();
+
+    const store = createStore();
+    // The transcript read is real async I/O: the synchronous purge below
+    // lands while the expand's read is still pending.
+    const pending = store.commands.expand('call-race');
+    store.commands.purge();
+    await pending;
+
+    // The purged body must not re-enter UI state after history moved
+    // forward (forward-purge guarantee, #854 point 1).
+    expect(store.store.getState().expandedBodies.size).toBe(0);
+
+    // The in-flight bookkeeping was released: expanding again performs a
+    // fresh read and inserts the body.
+    await store.commands.expand('call-race');
+    expect(store.store.getState().expandedBodies.get('call-race')).toBe(body);
+  });
+
   it('leaves the map empty when the transcript has no such callId', async () => {
     service.recordContent(toolResponseContent('call-present', 'present body'));
     await service.flush();
