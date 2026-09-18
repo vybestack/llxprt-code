@@ -714,7 +714,7 @@ describe('iContentToHistoryItems chronology stamps', () => {
       {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'Hello' }],
-        metadata: { chronology: { seq: 7 } },
+        metadata: { chronology: { seq: 7, userTurn: 1, step: 1, recordedAt: 0 } },
       },
     ];
 
@@ -729,7 +729,7 @@ describe('iContentToHistoryItems chronology stamps', () => {
       {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Reply' }],
-        metadata: { chronology: { seq: 12 } },
+        metadata: { chronology: { seq: 12, userTurn: 1, step: 1, recordedAt: 0 } },
       },
     ];
 
@@ -746,12 +746,23 @@ describe('iContentToHistoryItems chronology stamps', () => {
         blocks: [
           { type: 'tool_call', id: 'c1', name: 'read_file', parameters: {} },
         ],
-        metadata: { chronology: { seq: 20 } },
+        metadata: {
+          chronology: { seq: 20, userTurn: 1, step: 1, recordedAt: 0 },
+        },
       },
       {
         speaker: 'tool',
-        blocks: [{ type: 'tool_response', callId: 'c1', result: { ok: true } }],
-        metadata: { chronology: { seq: 21 } },
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'c1',
+            toolName: 'read_file',
+            result: { ok: true },
+          },
+        ],
+        metadata: {
+          chronology: { seq: 21, userTurn: 1, step: 2, recordedAt: 0 },
+        },
       },
     ];
 
