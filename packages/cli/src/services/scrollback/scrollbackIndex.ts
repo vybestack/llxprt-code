@@ -112,6 +112,23 @@ function scanJournalSuffix(
   }
 }
 
+function appendIndexLines(
+  indexPath: string,
+  entries: readonly ScrollbackIndexEntry[],
+): void {
+  if (entries.length === 0) {
+    return;
+  }
+  const fd = fs.openSync(indexPath, 'a');
+  try {
+    for (const entry of entries) {
+      fs.writeSync(fd, `${JSON.stringify(entry)}\n`);
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 /**
  * @plan PLAN-20260917-ISSUE854.P01
  * @requirement REQ-854-002
@@ -143,25 +160,18 @@ export class ScrollbackIndex {
     // Drop entries (and any torn trailing entry) that point past the journal.
     while (
       entries.length > 0 &&
-      entries[entries.length - 1].byteOffset + entries[entries.length - 1].byteLen >
+      entries[entries.length - 1].byteOffset +
+        entries[entries.length - 1].byteLen >
         size
     ) {
       entries = entries.slice(0, -1);
     }
-    const last = entries[entries.length - 1];
-    const coveredThrough = last === undefined ? 0 : last.byteOffset + last.byteLen;
+    const last = entries.at(-1);
+    const coveredThrough =
+      last === undefined ? 0 : last.byteOffset + last.byteLen;
     if (coveredThrough < size) {
       const rebuilt = scanJournalSuffix(journalPath, coveredThrough);
-      if (rebuilt.entries.length > 0) {
-        const fd = fs.openSync(indexPath, 'a');
-        try {
-          for (const entry of rebuilt.entries) {
-            fs.writeSync(fd, `${JSON.stringify(entry)}\n`);
-          }
-        } finally {
-          fs.closeSync(fd);
-        }
-      }
+      appendIndexLines(indexPath, rebuilt.entries);
       entries = [...entries, ...rebuilt.entries];
     }
     return new ScrollbackIndex(journalPath, indexPath, entries);
@@ -174,25 +184,21 @@ export class ScrollbackIndex {
 
   /** Highest indexed uiSeq, or 0 for an empty index. */
   get lastUiSeq(): number {
-    const last = this.entries[this.entries.length - 1];
-    return last === undefined ? 0 : last.uiSeq;
+    return this.entries.at(-1)?.uiSeq ?? 0;
   }
 
   /** Timeline metadata without parsing any journal payloads. */
   getRangeMeta(): { count: number; firstUiSeq: number; lastUiSeq: number } {
-    const first = this.entries[0];
     return {
       count: this.entries.length,
-      firstUiSeq: first === undefined ? 0 : first.uiSeq,
+      firstUiSeq: this.entries.at(0)?.uiSeq ?? 0,
       lastUiSeq: this.lastUiSeq,
     };
   }
 
   /** Appends one entry line to the index file and the in-memory list. */
   append(entry: ScrollbackIndexEntry): void {
-    if (this.appendFd === null) {
-      this.appendFd = fs.openSync(this.indexPath, 'a');
-    }
+    this.appendFd ??= fs.openSync(this.indexPath, 'a');
     fs.writeSync(this.appendFd, `${JSON.stringify(entry)}\n`);
     this.entries.push(entry);
   }
@@ -213,10 +219,14 @@ export class ScrollbackIndex {
           continue;
         }
         const buffer = Buffer.alloc(entry.byteLen);
-        const read = fs.readSync(fd, buffer, 0, entry.byteLen, entry.byteOffset);
-        const record = parseScrollbackRecord(
-          buffer.toString('utf-8', 0, read),
+        const read = fs.readSync(
+          fd,
+          buffer,
+          0,
+          entry.byteLen,
+          entry.byteOffset,
         );
+        const record = parseScrollbackRecord(buffer.toString('utf-8', 0, read));
         if (record !== null) {
           results.push({ entry, record });
         }

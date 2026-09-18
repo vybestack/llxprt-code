@@ -77,15 +77,17 @@ describe('scrollbackIndex', () => {
     const { journalPath, indexPath } = journalPaths(chatsDir, 'p1');
     const index = ScrollbackIndex.open(journalPath, indexPath);
     const page = index.pageRead(2, 3);
-    expect(page.map((pageEntry) => pageEntry.entry.uiSeq)).toEqual([2, 3]);
+    expect(page.map((pageEntry) => pageEntry.entry.uiSeq)).toStrictEqual([
+      2, 3,
+    ]);
     const pageTexts = page.map((pageEntry) => {
       if (pageEntry.record.rec !== 'item') {
         throw new Error('expected item record');
       }
       return pageEntry.record.payload.text;
     });
-    expect(pageTexts).toEqual(['two', 'three']);
-    expect(index.getRangeMeta()).toEqual({
+    expect(pageTexts).toStrictEqual(['two', 'three']);
+    expect(index.getRangeMeta()).toStrictEqual({
       count: 4,
       firstUiSeq: 1,
       lastUiSeq: 4,
@@ -95,7 +97,12 @@ describe('scrollbackIndex', () => {
 
   it('rebuilds only the un-indexed suffix when the index is short', () => {
     const chatsDir = tempDir.chatsDir();
-    const items = [infoItem(1, 'a'), infoItem(2, 'b'), infoItem(3, 'c'), infoItem(4, 'd')];
+    const items = [
+      infoItem(1, 'a'),
+      infoItem(2, 'b'),
+      infoItem(3, 'c'),
+      infoItem(4, 'd'),
+    ];
     writeIndexedItems(chatsDir, 'p2', items);
     const { journalPath, indexPath } = journalPaths(chatsDir, 'p2');
 
@@ -120,7 +127,7 @@ describe('scrollbackIndex', () => {
       }
       return pageEntry.record.payload.text;
     });
-    expect(rebuiltTexts).toEqual(['c', 'd']);
+    expect(rebuiltTexts).toStrictEqual(['c', 'd']);
     index.close();
   });
 
@@ -130,7 +137,7 @@ describe('scrollbackIndex', () => {
     const index = ScrollbackIndex.open(journalPath, indexPath);
     expect(index.size).toBe(0);
     expect(index.lastUiSeq).toBe(0);
-    expect(index.pageRead(1, 10)).toEqual([]);
+    expect(index.pageRead(1, 10)).toStrictEqual([]);
     index.close();
   });
 
@@ -172,10 +179,14 @@ describe('scrollbackIndex', () => {
     const page = index.pageRead(1, 1);
     expect(page[0]?.entry.kind).toBe('info');
     expect(page[0]?.entry.chronologySeq).toBe(42);
-    const record = page[0]?.record;
-    if (record !== undefined && record.rec === 'item') {
-      expect(record.kind).toBe('info');
+    const record = page.at(0)?.record;
+    if (record === undefined) {
+      throw new Error('expected a page record');
     }
+    if (record.rec !== 'item') {
+      throw new Error('expected an item record');
+    }
+    expect(record.kind).toBe('info');
     index.close();
   });
 });

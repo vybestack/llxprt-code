@@ -140,47 +140,78 @@ export function isScrollbackRecord(value: unknown): value is ScrollbackRecord {
     return false;
   }
   const kind = fields['rec'];
-  if (
-    typeof kind !== 'string' ||
-    !RECORD_KINDS.includes(kind) ||
-    fields['v'] !== SCROLLBACK_RECORD_VERSION ||
-    !isFiniteInt(fields['uiSeq']) ||
-    typeof fields['ts'] !== 'string'
-  ) {
+  if (typeof kind !== 'string' || !RECORD_KINDS.includes(kind)) {
+    return false;
+  }
+  if (fields['v'] !== SCROLLBACK_RECORD_VERSION) {
+    return false;
+  }
+  if (!isFiniteInt(fields['uiSeq']) || typeof fields['ts'] !== 'string') {
     return false;
   }
   if (kind === 'item') {
     return (
-      isFiniteInt(fields['itemId']) &&
-      typeof fields['kind'] === 'string' &&
-      (fields['chronologySeq'] === undefined ||
-        isFiniteInt(fields['chronologySeq'])) &&
-      (fields['seqSpan'] === undefined || isSeqSpan(fields['seqSpan'])) &&
-      typeof fields['payload'] === 'object' &&
-      fields['payload'] !== null
+      isItemRecordBody(fields) && isRevRecordBody(fields) && 'kind' in fields
     );
   }
   if (kind === 'rev') {
-    return (
-      isFiniteInt(fields['itemId']) &&
-      (fields['chronologySeq'] === undefined ||
-        isFiniteInt(fields['chronologySeq'])) &&
-      typeof fields['payload'] === 'object' &&
-      fields['payload'] !== null
-    );
+    return isRevRecordBody(fields);
   }
   if (kind === 'boundary') {
-    return (
-      typeof fields['summaryText'] === 'string' &&
-      isFiniteInt(fields['replacedFromSeq']) &&
-      isFiniteInt(fields['replacedToSeq']) &&
-      isFiniteInt(fields['itemCount'])
-    );
+    return isBoundaryRecordBody(fields);
   }
   if (kind === 'clear') {
     return true;
   }
   return isFiniteInt(fields['truncateAfterUiSeq']);
+}
+
+function hasOptionalChronologySeq(fields: Record<string, unknown>): boolean {
+  return (
+    fields['chronologySeq'] === undefined ||
+    isFiniteInt(fields['chronologySeq'])
+  );
+}
+
+function hasOptionalSeqSpan(fields: Record<string, unknown>): boolean {
+  return fields['seqSpan'] === undefined || isSeqSpan(fields['seqSpan']);
+}
+
+function hasPayload(fields: Record<string, unknown>): boolean {
+  return typeof fields['payload'] === 'object' && fields['payload'] !== null;
+}
+
+function isItemRecordBody(fields: Record<string, unknown>): boolean {
+  if (!isFiniteInt(fields['itemId']) || typeof fields['kind'] !== 'string') {
+    return false;
+  }
+  if (!hasOptionalChronologySeq(fields) || !hasOptionalSeqSpan(fields)) {
+    return false;
+  }
+  return hasPayload(fields);
+}
+
+function isRevRecordBody(fields: Record<string, unknown>): boolean {
+  if (!isFiniteInt(fields['itemId']) || !hasOptionalChronologySeq(fields)) {
+    return false;
+  }
+  return hasPayload(fields);
+}
+
+function isBoundaryRecordBody(fields: Record<string, unknown>): boolean {
+  if (
+    typeof fields['summaryText'] !== 'string' ||
+    !isFiniteInt(fields['replacedFromSeq'])
+  ) {
+    return false;
+  }
+  if (
+    !isFiniteInt(fields['replacedToSeq']) ||
+    !isFiniteInt(fields['itemCount'])
+  ) {
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -216,16 +247,21 @@ export function isScrollbackIndexEntry(
   if (fields === null) {
     return false;
   }
-  return (
-    isFiniteInt(fields['uiSeq']) &&
-    isFiniteInt(fields['byteOffset']) &&
-    fields['byteOffset'] >= 0 &&
-    isFiniteInt(fields['byteLen']) &&
-    fields['byteLen'] > 0 &&
-    typeof fields['kind'] === 'string' &&
-    (fields['chronologySeq'] === undefined ||
-      isFiniteInt(fields['chronologySeq']))
-  );
+  if (
+    !isFiniteInt(fields['uiSeq']) ||
+    !isFiniteInt(fields['byteOffset']) ||
+    fields['byteOffset'] < 0
+  ) {
+    return false;
+  }
+  if (
+    !isFiniteInt(fields['byteLen']) ||
+    fields['byteLen'] <= 0 ||
+    typeof fields['kind'] !== 'string'
+  ) {
+    return false;
+  }
+  return hasOptionalChronologySeq(fields);
 }
 
 /**
