@@ -41,7 +41,6 @@ export type { CacheStatistics } from './tokenUsageTracker.js';
 export { OpenAIProvider } from './openai/OpenAIProvider.js';
 export { AnthropicProvider } from './anthropic/AnthropicProvider.js';
 export { ANTHROPIC_DEFAULT_BASE_URL } from './anthropic/AnthropicEndpointUtils.js';
-export { GeminiProvider } from './gemini/GeminiProvider.js';
 export { OpenAIResponsesProvider } from './openai-responses/OpenAIResponsesProvider.js';
 export { OpenAIVercelProvider } from './openai-vercel/index.js';
 export { FakeProvider } from './fake/FakeProvider.js';
@@ -190,7 +189,6 @@ export type { DumpMode } from './utils/dumpContext.js';
 export { dumpRequestContext } from './utils/dumpContext.js';
 export {
   buildAnthropicDumpMessages,
-  buildGeminiDumpContents,
   buildOpenAIDumpMessages,
   buildProviderDumpBody,
 } from './utils/providerRequestConversion.js';

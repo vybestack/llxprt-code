@@ -18,7 +18,6 @@ const BUILTIN_PROVIDER_IDS = [
   'openai-responses',
   'openaivercel',
   'openai-vercel',
-  'gemini',
   'anthropic',
 ];
 

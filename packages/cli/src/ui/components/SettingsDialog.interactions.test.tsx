@@ -474,7 +474,7 @@ describe('SettingsDialog', () => {
             loadMemoryFromIncludeDirectories: true,
             fileFiltering: {
               respectGitIgnore: true,
-              respectGeminiIgnore: true,
+              respectLlxprtIgnore: true,
               enableRecursiveFileSearch: true,
               disableFuzzySearch: false,
             },
@@ -554,7 +554,7 @@ describe('SettingsDialog', () => {
           context: {
             fileFiltering: {
               respectGitIgnore: false,
-              respectGeminiIgnore: true,
+              respectLlxprtIgnore: true,
               enableRecursiveFileSearch: false,
               disableFuzzySearch: true,
             },
@@ -616,7 +616,7 @@ describe('SettingsDialog', () => {
             loadMemoryFromIncludeDirectories: false,
             fileFiltering: {
               respectGitIgnore: false,
-              respectGeminiIgnore: false,
+              respectLlxprtIgnore: false,
               enableRecursiveFileSearch: false,
               disableFuzzySearch: false,
             },

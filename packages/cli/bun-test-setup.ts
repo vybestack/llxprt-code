@@ -155,19 +155,11 @@ if (!wantsRealProviderAliases) {
     '@vybestack/llxprt-code-providers/composition/providerAliases.js',
     () => ({
       loadProviderAliasEntries: () => [
-        {
-          alias: 'gemini',
-          config: {
-            name: 'gemini',
-            modelsDevProviderId: 'google',
-            baseProvider: 'gemini',
-            'base-url': 'https://generativelanguage.googleapis.com/v1beta',
-            defaultModel: 'gemini-2.5-pro',
-            apiKeyEnv: 'GEMINI_API_KEY',
-          },
-          filePath: '/mock/aliases/gemini.config',
-          source: 'builtin',
-        },
+        // Mirrors the BASE-contributed aliases only. Since #2763 the gemini
+        // alias is contributed by the @vybestack/llxprt-plugin-google-gemini
+        // runtime plugin, so no mock entry declares baseProvider 'gemini' —
+        // the base registry cannot resolve it and alias registration would
+        // fail for every suite that builds a provider manager.
         {
           alias: 'openai',
           config: {
@@ -175,7 +167,10 @@ if (!wantsRealProviderAliases) {
             modelsDevProviderId: 'openai',
             baseProvider: 'openai',
             'base-url': 'https://api.openai.com/v1',
-            defaultModel: 'gpt-4o',
+            // Matches the real base alias config
+            // (packages/providers/src/composition/aliases/openai.config);
+            // suites assert the alias default against this value.
+            defaultModel: 'gpt-5.5',
             apiKeyEnv: 'OPENAI_API_KEY',
           },
           filePath: '/mock/aliases/openai.config',

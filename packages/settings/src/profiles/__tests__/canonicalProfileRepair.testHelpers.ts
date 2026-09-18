@@ -64,9 +64,10 @@ export function corruptCanonicalProfile(): Record<string, unknown> {
 }
 
 /**
- * A corrupt signature with a non-Gemini fallback model.
+ * A corrupt signature with a non-Gemini fallback model kept as data:
+ * the profile model string is arbitrary fixture data, not a binding name.
  */
-export function corruptCanonicalProfileNonGeminiModel(): Record<
+export function corruptCanonicalProfileFallbackModel(): Record<
   string,
   unknown
 > {

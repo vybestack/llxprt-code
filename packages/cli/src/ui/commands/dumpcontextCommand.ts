@@ -28,12 +28,24 @@ import type { IContent } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import * as path from 'node:path';
 
+type ActiveProviderDumpView = {
+  getCurrentModel?: () => string | undefined;
+  baseURL?: string;
+  /**
+   * Optional plugin-owned dump conversion. The Gemini provider (contributed by
+   * @vybestack/llxprt-plugin-google-gemini) exposes it; the base
+   * buildProviderDumpBody dispatcher does not know Gemini wire shapes (#2763).
+   */
+  buildContextDumpBody?: (
+    history: IContent[],
+    model?: string,
+    config?: unknown,
+  ) => Record<string, unknown>;
+};
+
 type ProviderManagerWithActive = {
   getActiveProviderName?: () => string | undefined;
-  getActiveProvider?: () => {
-    getCurrentModel?: () => string | undefined;
-    baseURL?: string;
-  };
+  getActiveProvider?: () => ActiveProviderDumpView | undefined;
 };
 
 const historyUnavailableMessage =
@@ -49,6 +61,7 @@ function getProviderDumpMetadata(
   config: NonNullable<CommandContext['services']['config']>,
 ): {
   providerName: string;
+  activeProvider: ActiveProviderDumpView | undefined;
   activeModel: string | undefined;
   activeBaseURL: string | undefined;
 } {
@@ -58,6 +71,7 @@ function getProviderDumpMetadata(
   if (!providerManager) {
     return {
       providerName: 'backend',
+      activeProvider: undefined,
       activeModel: undefined,
       activeBaseURL: undefined,
     };
@@ -65,9 +79,15 @@ function getProviderDumpMetadata(
   const activeProvider = providerManager.getActiveProvider?.();
   return {
     providerName: providerManager.getActiveProviderName?.() ?? 'backend',
+    activeProvider,
     activeModel: activeProvider?.getCurrentModel?.(),
     activeBaseURL: activeProvider?.baseURL,
   };
+}
+
+function isGeminiFamilyProviderName(providerName: string): boolean {
+  const normalized = providerName.toLowerCase().trim();
+  return normalized === 'gemini' || normalized.startsWith('gemini-');
 }
 
 async function dumpImmediateContext(
@@ -83,19 +103,39 @@ async function dumpImmediateContext(
     };
   }
   const history = historyService.getAll() as IContent[];
-  const { providerName, activeModel, activeBaseURL } =
+  const { providerName, activeProvider, activeModel, activeBaseURL } =
     getProviderDumpMetadata(config);
-  const request = {
-    url: 'immediate-context-dump',
-    method: 'DUMP',
-    body: buildProviderDumpBody({
+
+  let body: Record<string, unknown>;
+  if (typeof activeProvider?.buildContextDumpBody === 'function') {
+    // Plugin-owned providers (Gemini) build their own wire body at runtime;
+    // the base package never imports plugin code.
+    body = activeProvider.buildContextDumpBody(history, activeModel, config);
+  } else {
+    if (isGeminiFamilyProviderName(providerName)) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content:
+          `Provider '${providerName}' cannot build a context dump: Gemini wire ` +
+          'conversion is provided by the @vybestack/llxprt-plugin-google-gemini ' +
+          'runtime plugin. Install/load that plugin (it contributes the gemini ' +
+          'provider) and retry.',
+      };
+    }
+    body = buildProviderDumpBody({
       providerName,
       history,
       settings: context.services.settings,
       config,
       model: activeModel,
       baseURL: activeBaseURL,
-    }),
+    });
+  }
+  const request = {
+    url: 'immediate-context-dump',
+    method: 'DUMP',
+    body,
   };
   // Chronology is written alongside the request, never inside request.body:
   // the body must stay byte-for-byte what the provider would receive (#1721).

@@ -16,6 +16,7 @@ export {
 export {
   discoverRuntimePluginPackages,
   resolvePluginSearchRoot,
+  resolveRepoCheckoutPluginRoot,
   RUNTIME_PLUGIN_MANIFEST_MARKER,
 } from './discoverRuntimePlugins.js';
 export type { RuntimePluginDiscoveryDeps } from './discoverRuntimePlugins.js';

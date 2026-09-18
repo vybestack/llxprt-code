@@ -16,6 +16,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   discoverRuntimePluginPackages,
   resolvePluginSearchRoot,
+  resolveRepoCheckoutPluginRoot,
 } from './discoverRuntimePlugins.js';
 import type { RuntimePluginDiscoveryDeps } from './discoverRuntimePlugins.js';
 
@@ -177,6 +178,191 @@ describe('discoverRuntimePluginPackages', () => {
     expect(
       discoverRuntimePluginPackages(
         deps({ dirs: { [NODE_MODULES]: ['stray-dir'] }, files: {} }),
+      ),
+    ).toStrictEqual([]);
+  });
+});
+
+describe('resolveRepoCheckoutPluginRoot', () => {
+  const CHECKOUT = '/repo';
+  const CHECKOUT_FROM = `${CHECKOUT}/packages/providers/src/x.ts`;
+
+  it('finds the plugins directory of a source checkout', () => {
+    expect(
+      resolveRepoCheckoutPluginRoot(
+        deps({
+          dirs: { [`${CHECKOUT}/packages/providers`]: [] },
+          files: {},
+          fromPath: CHECKOUT_FROM,
+        }),
+      ),
+    ).toBeUndefined();
+
+    expect(
+      resolveRepoCheckoutPluginRoot(
+        deps({
+          dirs: {
+            [`${CHECKOUT}/packages/providers`]: [],
+            [`${CHECKOUT}/plugins`]: [],
+          },
+          files: {},
+          fromPath: CHECKOUT_FROM,
+        }),
+      ),
+    ).toBe(`${CHECKOUT}/plugins`);
+  });
+
+  it('is undefined in an installed layout', () => {
+    // The host package sits in node_modules and no ancestor hosts both a
+    // packages/providers tree and a plugins directory.
+    expect(
+      resolveRepoCheckoutPluginRoot(
+        deps({
+          dirs: {
+            [`${CHECKOUT}/plugins`]: [],
+            // A plugins directory alone is not enough: consumer projects
+            // that keep one must not get their packages scanned.
+          },
+          files: {},
+          fromPath: CHECKOUT_FROM,
+        }),
+      ),
+    ).toBeUndefined();
+  });
+});
+
+describe('checkout plugin discovery', () => {
+  const CHECKOUT = '/repo';
+  const CHECKOUT_FROM = `${CHECKOUT}/packages/providers/src/x.ts`;
+
+  it('discovers checkout plugins as importable specifiers, sorted by directory', () => {
+    const discovered = discoverRuntimePluginPackages(
+      deps({
+        dirs: {
+          [`${CHECKOUT}/packages/providers`]: [],
+          [`${CHECKOUT}/plugins`]: ['zeta-provider', 'alpha-provider'],
+          [`${CHECKOUT}/plugins/zeta-provider/node_modules`]: [],
+          [`${CHECKOUT}/plugins/zeta-provider/src`]: ['index.ts'],
+          [`${CHECKOUT}/plugins/alpha-provider/node_modules`]: [],
+          [`${CHECKOUT}/plugins/alpha-provider/src`]: ['index.ts'],
+        },
+        files: {
+          [`${CHECKOUT}/plugins/zeta-provider/src/index.ts`]: '',
+          [`${CHECKOUT}/plugins/alpha-provider/src/index.ts`]: '',
+          [`${CHECKOUT}/plugins/zeta-provider/package.json`]: manifest(
+            '@vybestack/llxprt-plugin-zeta',
+            true,
+          ),
+          [`${CHECKOUT}/plugins/alpha-provider/package.json`]: manifest(
+            '@vybestack/llxprt-plugin-alpha',
+            true,
+          ),
+        },
+        fromPath: CHECKOUT_FROM,
+      }),
+    );
+
+    expect(discovered).toStrictEqual([
+      `${CHECKOUT}/plugins/alpha-provider/src/index.ts`,
+      `${CHECKOUT}/plugins/zeta-provider/src/index.ts`,
+    ]);
+  });
+
+  it('falls back to the package directory when a checkout plugin has no source entry', () => {
+    // A built-but-unbuilt checkout copy: without src/index.ts the loader
+    // resolves the built entry from the plugin's own manifest.
+    expect(
+      discoverRuntimePluginPackages(
+        deps({
+          dirs: {
+            [`${CHECKOUT}/packages/providers`]: [],
+            [`${CHECKOUT}/plugins`]: ['kookoo'],
+            [`${CHECKOUT}/plugins/kookoo/node_modules`]: [],
+          },
+          files: {
+            [`${CHECKOUT}/plugins/kookoo/package.json`]: manifest(
+              'kookoo',
+              true,
+            ),
+          },
+          fromPath: CHECKOUT_FROM,
+        }),
+      ),
+    ).toStrictEqual([`${CHECKOUT}/plugins/kookoo`]);
+  });
+
+  it('never loads a checkout plugin that is also installed', () => {
+    // The checkout has its own node_modules with the plugin installed next to
+    // the host; installing a package is what makes a provider available, so
+    // the installed copy wins and the checkout twin is skipped — loading both
+    // would collide on the contributed ids and aliases.
+    expect(
+      discoverRuntimePluginPackages(
+        deps({
+          dirs: {
+            [`${CHECKOUT}/packages/providers`]: [],
+            [`${CHECKOUT}/packages/providers/node_modules`]: ['kookoo'],
+            [`${CHECKOUT}/plugins`]: ['kookoo'],
+            [`${CHECKOUT}/plugins/kookoo/node_modules`]: [],
+            [`${CHECKOUT}/plugins/kookoo/src`]: ['index.ts'],
+          },
+          files: {
+            [`${CHECKOUT}/packages/providers/node_modules/kookoo/package.json`]:
+              manifest('kookoo', true),
+            [`${CHECKOUT}/plugins/kookoo/package.json`]: manifest(
+              'kookoo',
+              true,
+            ),
+          },
+          fromPath: CHECKOUT_FROM,
+        }),
+      ),
+    ).toStrictEqual(['kookoo']);
+  });
+
+  it('does not discover a checkout plugin that was never installed', () => {
+    // A marker-declaring checkout plugin whose own node_modules is absent
+    // has no installed dependencies; handing it to the fail-fast loader
+    // would crash CLI startup, so discovery skips it silently until a
+    // plugin-local install creates node_modules.
+    expect(
+      discoverRuntimePluginPackages(
+        deps({
+          dirs: {
+            [`${CHECKOUT}/packages/providers`]: [],
+            [`${CHECKOUT}/plugins`]: ['uninstalled'],
+          },
+          files: {
+            [`${CHECKOUT}/plugins/uninstalled/package.json`]: manifest(
+              'uninstalled',
+              true,
+            ),
+          },
+          fromPath: CHECKOUT_FROM,
+        }),
+      ),
+    ).toStrictEqual([]);
+  });
+
+  it('does not scan a consumer project whose packages tree lacks the host', () => {
+    // Only a checkout of THIS repository (packages/providers present) may
+    // contribute its plugins directory.
+    expect(
+      discoverRuntimePluginPackages(
+        deps({
+          dirs: {
+            ['/opt/app/packages']: [],
+            ['/opt/app/plugins']: ['marker-plugin'],
+          },
+          files: {
+            ['/opt/app/plugins/marker-plugin/package.json']: manifest(
+              'marker-plugin',
+              true,
+            ),
+          },
+          fromPath:
+            '/opt/app/node_modules/@vybestack/llxprt-code-providers/dist/x.js',
+        }),
       ),
     ).toStrictEqual([]);
   });

@@ -149,6 +149,19 @@ describe('discoverRepositoryTestFiles', () => {
     expect(files).toEqual([real]);
   });
 
+  it('excludes the plugins tree from the guard universe', () => {
+    // plugins/ suites run in the dedicated "Runtime Plugins (build,
+    // typecheck, test)" CI job through each plugin's own `bun test`
+    // (#2759), not through the root orchestrator, so they are outside
+    // the guard's universe.
+    writeFile(getDir(), 'plugins/google-gemini/src/index.test.ts');
+    const real = writeFile(getDir(), 'packages/real/real.test.ts');
+
+    const files = discoverRepositoryTestFiles(getDir(), realDeps);
+
+    expect(files).toEqual([real]);
+  });
+
   it('discovers a dot-prefixed test file but prunes dot-prefixed directories', () => {
     const dotFile = writeFile(getDir(), 'packages/x/.hidden.test.ts');
     writeFile(getDir(), 'packages/x/.hiddendir/inside.test.ts');

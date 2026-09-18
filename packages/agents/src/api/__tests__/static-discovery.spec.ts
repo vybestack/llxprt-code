@@ -32,12 +32,17 @@ describe('Static discovery helpers @plan:PLAN-20260617-COREAPI.P25 @requirement:
     const providers = staticListProviders();
 
     // The runtime-free ProviderManager registers the known built-in providers.
-    expect(providers.length).toBeGreaterThanOrEqual(3);
+    expect(providers.length).toBeGreaterThanOrEqual(2);
     const names = providers.map((p) => p.name);
-    // Canonical first-party providers are present by exact name.
-    for (const expected of ['anthropic', 'gemini', 'openai']) {
+    // Canonical first-party providers are present by exact name. Gemini is
+    // intentionally ABSENT here: since #2763 it is contributed by the
+    // optional @vybestack/llxprt-plugin-google-gemini runtime plugin (see the
+    // PLUGIN_PROVIDED_PROVIDER_HINTS map), so the base, runtime-free registry
+    // must not advertise it.
+    for (const expected of ['anthropic', 'openai']) {
       expect(names).toContain(expected);
     }
+    expect(names).not.toContain('gemini');
 
     // Every provider is projected as not-configured (no bound credentials in
     // the pre-agent path) — kills the `configured: true` boolean mutant.
