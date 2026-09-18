@@ -32,6 +32,7 @@ import {
   SCROLLBACK_RECORD_VERSION,
   type ScrollbackBoundaryRecord,
   type ScrollbackClearRecord,
+  type ScrollbackIndexEntry,
   type ScrollbackItemRecord,
   type ScrollbackRecord,
   type ScrollbackRevisionRecord,
@@ -243,15 +244,15 @@ export class ScrollbackJournal {
     const byteOffset = fs.fstatSync(this.journalFd).size;
     const byteLen = Buffer.byteLength(line, 'utf-8');
     fs.writeSync(this.journalFd, line);
-    const entry = {
+    const entry: ScrollbackIndexEntry = {
       uiSeq: record.uiSeq,
       byteOffset,
       byteLen,
       kind: record.rec === 'item' ? record.kind : record.rec,
+      ...(entryMeta?.chronologySeq !== undefined
+        ? { chronologySeq: entryMeta.chronologySeq }
+        : {}),
     };
-    if (entryMeta?.chronologySeq !== undefined) {
-      entry.chronologySeq = entryMeta.chronologySeq;
-    }
     this.index.append(entry);
   }
 }
