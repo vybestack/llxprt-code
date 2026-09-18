@@ -50,7 +50,7 @@ export type ToolExecutionConfig = Pick<
  * - No live output updates are provided
  *
  * Benefits of sharing one scheduler per owner:
- * - Avoids MessageBus subscription spam from repeated scheduler creation
+ * - Scheduler is acquired from the per-Config registry per call and disposed when the acquisition count reaches zero, so no scheduler or subscription outlives its users
  * - Proper refcount-based lifecycle management
  * - Consistent tool governance path with interactive mode
  *

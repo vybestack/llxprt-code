@@ -26,7 +26,7 @@ import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import { createSchedulerRegistryDelegate } from './__tests__/scheduler-registry-test-helpers.js';
 
-describe('executeToolCall response structure (Phase 3b.1)', () => {
+describe('executeToolCall response structure', () => {
   let mockToolRegistry: ToolRegistry;
   let mockTool: MockTool;
   let abortController: AbortController;
