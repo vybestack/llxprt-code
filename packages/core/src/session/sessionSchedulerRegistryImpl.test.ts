@@ -183,6 +183,68 @@ describe('SessionSchedulerRegistryImpl', () => {
     expect(created).toHaveLength(2);
   });
 
+  it('keeps a replacement entry intact when a swept creation resolves into a reacquired key', async () => {
+    const created: RecordingScheduler[] = [];
+    let releaseOldCreation: ((handle: SchedulerHandle) => void) | undefined;
+    let releaseNewCreation: ((handle: SchedulerHandle) => void) | undefined;
+    const oldCreation = new Promise<SchedulerHandle>((resolve) => {
+      releaseOldCreation = resolve;
+    });
+    const newCreation = new Promise<SchedulerHandle>((resolve) => {
+      releaseNewCreation = resolve;
+    });
+    const registry = createSessionSchedulerRegistry({
+      createScheduler: async (options) => {
+        const scheduler = new RecordingScheduler(options);
+        created.push(scheduler);
+        // Hold each creation open independently so the old creation can
+        // resolve while the replacement is still in flight.
+        if (created.length === 1) {
+          await oldCreation;
+        } else {
+          await newCreation;
+        }
+        return scheduler;
+      },
+    });
+    const owner = { sessionId: 'owner-1' };
+
+    const oldPromise = registry.getOrCreate(owner, 'session');
+    await flush();
+    expect(created).toHaveLength(1);
+
+    const disposeAllPromise = registry.disposeAll();
+    await flush();
+    // Reacquire the swept key while disposeAll still awaits the old
+    // creation: a replacement entry with its own creation lands under the
+    // same key. The old creation must complete into entry identity, not
+    // into whatever currently occupies the key.
+    const replacementPromise = registry.getOrCreate(owner, 'session');
+    await flush();
+    expect(created).toHaveLength(2);
+
+    releaseOldCreation?.(created[0]);
+    await oldPromise;
+    await disposeAllPromise;
+
+    // disposeAll's sweep owns the old handle; the replacement entry must
+    // keep tracking its own creation instead of adopting the old handle.
+    expect(created[0].disposed).toBe(true);
+    expect(created[1].disposed).toBe(false);
+
+    releaseNewCreation?.(created[1]);
+    const replacementHandle = await replacementPromise;
+    expect(replacementHandle).toBe(created[1]);
+    const reacquired = await registry.getOrCreate(owner, 'session');
+    expect(reacquired).toBe(created[1]);
+
+    // Releasing both acquisitions disposes the replacement's handle: no
+    // untracked scheduler survives the sweep-and-reacquire race.
+    registry.release(owner, 'session');
+    registry.release(owner, 'session');
+    expect(created[1].disposed).toBe(true);
+  });
+
   it('treats release of an unknown key as a no-op', () => {
     const registry = new SessionSchedulerRegistryImpl({
       createScheduler: async () => new RecordingScheduler({}),

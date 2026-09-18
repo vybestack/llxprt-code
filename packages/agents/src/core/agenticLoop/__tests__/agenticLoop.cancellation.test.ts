@@ -12,6 +12,7 @@ import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-core';
+import type { SchedulerPurpose } from '@vybestack/llxprt-code-core/session/sessionSchedulerRegistry.js';
 import {
   type ApprovalHandler,
   createScriptedAgentClient,
@@ -73,7 +74,7 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
   });
 
   it('abort during tool execution cancels in-flight tools and disposes the scheduler', async () => {
-    const { toolUpdates, fresh } =
+    const { toolUpdates, fresh, loop, disposedEntries } =
       await observeAbortDuringToolExecutionCancelsInFlightToolsAndDisposesTheScheduler();
     expect(toolUpdates.length).toBeGreaterThan(1);
     expect(
@@ -82,6 +83,13 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
       ),
     ).toBe(true);
     expect(fresh).toBeDefined();
+    // Abort cleanup must dispose the loop-owned registry entry: the loop
+    // instance keyed under the 'agentic-loop' purpose.
+    expect(
+      disposedEntries.some(
+        (entry) => entry.owner === loop && entry.purpose === 'agentic-loop',
+      ),
+    ).toBe(true);
   });
 
   const observeAbortDuringToolExecutionCancelsInFlightToolsAndDisposesTheScheduler =
@@ -125,6 +133,21 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
         messageBus,
       });
 
+      // Capture disposeScheduler traffic so the test can prove abort
+      // cleanup released the loop-owned registry entry, not merely that a
+      // fresh acquisition works afterwards.
+      const disposedEntries: Array<{
+        owner: object;
+        purpose: SchedulerPurpose;
+      }> = [];
+      const originalDisposeScheduler = config.disposeScheduler.bind(config);
+      vi.spyOn(config, 'disposeScheduler').mockImplementation(
+        (owner, purpose) => {
+          disposedEntries.push({ owner, purpose });
+          originalDisposeScheduler(owner, purpose);
+        },
+      );
+
       async function driveAndAbortOnFirstTool(
         loop: AgenticLoop,
         controller: AbortController,
@@ -164,15 +187,22 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
 
       config.disposeScheduler(freshOwner, 'session');
 
-      return { toolUpdates, fresh };
+      return { toolUpdates, fresh, loop, disposedEntries };
     };
 
   it('abort returns promptly even when a scheduled tool never settles (no hang)', async () => {
-    const { sawTool, fresh, termination } =
+    const { sawTool, fresh, termination, loop, disposedEntries } =
       await observeAbortReturnsPromptlyEvenWhenAScheduledToolNeverSettlesNoHang();
     expect(termination).toBeUndefined();
     expect(sawTool).toBe(true);
     expect(fresh).toBeDefined();
+    // Abort cleanup must dispose the loop-owned registry entry: the loop
+    // instance keyed under the 'agentic-loop' purpose.
+    expect(
+      disposedEntries.some(
+        (entry) => entry.owner === loop && entry.purpose === 'agentic-loop',
+      ),
+    ).toBe(true);
   });
 
   const observeAbortReturnsPromptlyEvenWhenAScheduledToolNeverSettlesNoHang =
@@ -200,6 +230,21 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
         config,
         messageBus,
       });
+
+      // Capture disposeScheduler traffic so the test can prove abort
+      // cleanup released the loop-owned registry entry, not merely that a
+      // fresh acquisition works afterwards.
+      const disposedEntries: Array<{
+        owner: object;
+        purpose: SchedulerPurpose;
+      }> = [];
+      const originalDisposeScheduler = config.disposeScheduler.bind(config);
+      vi.spyOn(config, 'disposeScheduler').mockImplementation(
+        (owner, purpose) => {
+          disposedEntries.push({ owner, purpose });
+          originalDisposeScheduler(owner, purpose);
+        },
+      );
 
       let sawTool = false;
       const run = (async () => {
@@ -244,7 +289,7 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
 
       config.disposeScheduler(freshOwner, 'session');
 
-      return { sawTool, fresh, termination };
+      return { sawTool, fresh, termination, loop, disposedEntries };
     };
 
   it('does not answer a delayed approval request after the loop aborts', async () => {
