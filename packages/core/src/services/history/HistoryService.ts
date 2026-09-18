@@ -276,6 +276,7 @@ export class HistoryService extends HistoryServiceCore {
       addedTokens: -previousTokens, // Negative to indicate removal
       contentId: null,
     });
+    this.emitContextRangeChanged();
   }
 
   /** Get the last N messages from history. */

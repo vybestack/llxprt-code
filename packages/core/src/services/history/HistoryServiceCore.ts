@@ -46,6 +46,8 @@ import {
 import {
   type HistoryServiceEventEmitter,
   type CompressionConfig,
+  type ContextRange,
+  type ContextSummaryInfo,
 } from './historyEventTypes.js';
 import { getTokenizerForModel } from './historyTokenizerAdapter.js';
 import {
@@ -813,6 +815,67 @@ export abstract class HistoryServiceCore
     );
   }
 
+  /**
+   * The curated in-memory context boundary: chronology seqs of the first and
+   * last entries of the exact history array the model sees, derived on each
+   * call from {@link history}.
+   *
+   * @plan PLAN-20260917-ISSUE854.P01
+   * @requirement REQ-854-004
+   */
+  getContextRange(): ContextRange {
+    const first = this.history[0];
+    const last = this.history[this.history.length - 1];
+    if (first === undefined || last === undefined) {
+      return { firstSeq: 0, lastSeq: 0, totalEntries: 0 };
+    }
+    return {
+      firstSeq: first.metadata?.chronology?.seq ?? 0,
+      lastSeq: last.metadata?.chronology?.seq ?? 0,
+      totalEntries: this.history.length,
+    };
+  }
+
+  /**
+   * Projections of every summary entry currently in context, derived from
+   * each entry's `chronologyReplaced` span.
+   *
+   * @plan PLAN-20260917-ISSUE854.P01
+   * @requirement REQ-854-004
+   */
+  getContextSummaries(): ContextSummaryInfo[] {
+    const summaries: ContextSummaryInfo[] = [];
+    for (const entry of this.history) {
+      const replaced = entry.metadata?.chronologyReplaced;
+      if (replaced === undefined) {
+        continue;
+      }
+      const text = entry.blocks
+        .map((block) => (block.type === 'text' ? block.text : ''))
+        .join('');
+      summaries.push({
+        seq: entry.metadata?.chronology?.seq ?? 0,
+        replacedFromSeq: replaced.fromSeq,
+        replacedToSeq: replaced.toSeq,
+        itemCount: replaced.toSeq - replaced.fromSeq + 1,
+        text,
+      });
+    }
+    return summaries;
+  }
+
+  /**
+   * Emits `contextRangeChanged` with the current boundary snapshot. Called
+   * only from boundary-moving commit paths (history mutations and clear);
+   * single-entry `add` intentionally does not emit.
+   *
+   * @plan PLAN-20260917-ISSUE854.P01
+   * @requirement REQ-854-004
+   */
+  protected emitContextRangeChanged(): void {
+    this.emit('contextRangeChanged', this.getContextRange());
+  }
+
   replaceAll(
     contents: readonly IContent[],
     modelName?: string,
@@ -973,6 +1036,7 @@ export abstract class HistoryServiceCore
       });
       await input.options.afterPublication?.();
       await finalizeMutationEffects(effects);
+      this.emitContextRangeChanged();
     } catch (error: unknown) {
       if (historyPublished) {
         this.invalidatePendingSyncs();
