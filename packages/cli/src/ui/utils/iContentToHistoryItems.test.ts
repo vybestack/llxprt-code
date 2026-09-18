@@ -758,7 +758,7 @@ describe('iContentToHistoryItems chronology stamps', () => {
     const output = iContentToHistoryItems(input);
     const group = output.find((item) => item.type === 'tool_group');
     expect(group).toBeDefined();
-    expect(group?.seqSpan).toEqual([20, 21]);
+    expect(group?.seqSpan).toStrictEqual([20, 21]);
     expect(group?.chronologySeq).toBeUndefined();
   });
 
@@ -769,7 +769,7 @@ describe('iContentToHistoryItems chronology stamps', () => {
     ];
 
     const output = iContentToHistoryItems(input);
-    expect(output.map((item) => item.chronologySeq)).toEqual([
+    expect(output.map((item) => item.chronologySeq)).toStrictEqual([
       undefined,
       undefined,
     ]);
