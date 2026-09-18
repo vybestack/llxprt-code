@@ -33,7 +33,7 @@ import {
 import type { AgenticLoopEvent } from '../../../core/agenticLoop/types.js';
 import { AgenticLoop } from '../../../core/agenticLoop/AgenticLoop.js';
 import { CoreToolScheduler } from '../../../core/coreToolScheduler.js';
-import { createSchedulerRegistryDelegate } from '../../../core/scheduler-registry-test-helpers.js';
+import { createSchedulerRegistryDelegate } from '../../../core/__tests__/scheduler-registry-test-helpers.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';

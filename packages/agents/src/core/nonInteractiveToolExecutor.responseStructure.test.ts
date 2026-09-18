@@ -24,7 +24,7 @@ import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import { createSchedulerRegistryDelegate } from './scheduler-registry-test-helpers.js';
+import { createSchedulerRegistryDelegate } from './__tests__/scheduler-registry-test-helpers.js';
 
 describe('executeToolCall response structure (Phase 3b.1)', () => {
   let mockToolRegistry: ToolRegistry;

@@ -141,7 +141,7 @@ import {
   getScopeLocalFuncDefs,
   createToolExecutionConfig,
 } from './subagentRuntimeSetup.js';
-import { createSchedulerRegistryDelegate } from './scheduler-registry-test-helpers.js';
+import { createSchedulerRegistryDelegate } from './__tests__/scheduler-registry-test-helpers.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import { SubAgentScope } from './subagent.js';
 import { classifyToolCompletions } from './subagentToolProcessing.js';

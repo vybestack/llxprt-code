@@ -21,7 +21,7 @@ import { CoreToolScheduler } from '../../coreToolScheduler.js';
 import type { AgenticLoop } from '../AgenticLoop.js';
 import type { ApprovalHandler, AgenticLoopEvent } from '../types.js';
 import type { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
-import { createSchedulerRegistryDelegate } from '../../scheduler-registry-test-helpers.js';
+import { createSchedulerRegistryDelegate } from '../../__tests__/scheduler-registry-test-helpers.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
