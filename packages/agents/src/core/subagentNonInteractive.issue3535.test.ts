@@ -229,7 +229,7 @@ function createEmptyRegistryConfig(): Config {
     config: fixture as unknown as Config,
     messageBus,
     toolRegistry,
-    createScheduler: (schedulerOptions) =>
+    createScheduler: async (schedulerOptions) =>
       fixture.getToolSchedulerFactory()({
         config: fixture as unknown as Config,
         messageBus,

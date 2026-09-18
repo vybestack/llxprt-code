@@ -190,7 +190,7 @@ function createTestConfig(options: {
     config: fixture as unknown as Config,
     messageBus,
     toolRegistry,
-    createScheduler: (schedulerOptions) =>
+    createScheduler: async (schedulerOptions) =>
       createToolScheduler({
         config: fixture as unknown as Config,
         messageBus,

@@ -11,12 +11,12 @@ import {
 } from './nonInteractiveToolExecutor.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
+  DEFAULT_AGENT_ID,
   type ToolCallRequestInfo,
   type ToolCallResponseInfo,
-} from '@vybestack/llxprt-code-tools';
+} from '@vybestack/llxprt-code-core/core/turn.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import type { ToolResponseBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/tools.js';
@@ -93,7 +93,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
       config: fixture as unknown as Config,
       messageBus,
       toolRegistry: mockToolRegistry,
-      createScheduler: (schedulerOptions) =>
+      createScheduler: async (schedulerOptions) =>
         fixture.getToolSchedulerFactory()({
           config: fixture as unknown as Config,
           messageBus,

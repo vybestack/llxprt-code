@@ -149,7 +149,7 @@ function createMockExecutionConfig(
     config: fixture as unknown as Config,
     messageBus: getTestRuntimeMessageBus(fixture as unknown as Config),
     toolRegistry,
-    createScheduler: (schedulerOptions) =>
+    createScheduler: async (schedulerOptions) =>
       fixture.getToolSchedulerFactory()({
         config: fixture as unknown as Config,
         messageBus: getTestRuntimeMessageBus(fixture as unknown as Config),
