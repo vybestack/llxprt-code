@@ -134,7 +134,7 @@ export async function executeToolCall(
   // Fail fast: the owner is the registry key and only the caller knows the
   // executing context; there is no valid derivation from the config alone.
   const owner = dependencies?.owner;
-  if (owner === undefined || owner === null) {
+  if (owner === undefined) {
     throw new Error(
       'executeToolCall requires an owner object identifying the executing context.',
     );
