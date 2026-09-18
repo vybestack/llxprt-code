@@ -354,6 +354,49 @@ Buffer modes:
 
 ## Risks / open questions
 
+Resolved 2026-09-18 on PR #3727 with Andrew (issuecomment-5732580084 /
+5732611297); originals kept for traceability:
+
+1. Static-remount semantics after flush eviction — **RESOLVED: resident
+   only.** Memory holds viewport + margin; older content pages from disk
+   just-in-time on scroll. Remount reprints the resident set, no larger
+   primary-buffer tail.
+2. Primary-buffer mode gets eviction only, no paging — **EXPLAINED /
+   ACCEPTED.** In primary-buffer (print-through) mode the terminal
+   emulator's own scrollback is the look-back viewer; we free our copy
+   after printing and never re-render. Paging applies to alternate-screen
+   (fullscreen) mode only. Model-context memory is unaffected either way.
+3. Budget defaults — **RESOLVED: row-based sizing, not item counts.**
+   Resident = viewport + 2 viewports of margin, plus a byte floor so huge
+   items cannot starve the window. 100 was the old trim cap, not a target.
+   Tunable via settings once introduced.
+4. Sparse on-disk index — **RESOLVED: DEFER with trigger.** Index costs
+   ~60 B/item in RAM (~6 MB at 100k items, ~60 MB at 1M). Build the sparse
+   fallback only if real sessions approach ~250k items (~15 MB).
+5. `updateItem` on a non-resident item — **RESOLVED with sharpening:**
+   on-screen items always update in place immediately; journal-revision-only
+   applies strictly to off-screen items; eviction is continuous as items
+   leave viewport+margin, not periodic sweeps.
+6. Scrollbar stability — **RESOLVED: in-memory heights only, nothing
+   persisted.** Real measured height while resident, cheap estimate once
+   evicted, re-measured on page-in and on resize.
+7. `pageIn` vs `clear` markers — **RESOLVED: hard stop.** Scrolling back
+   stops at the oldest in-context item; no "show cleared history"
+   affordance. A full activity journal regardless of compression is a
+   possible later feature, out of scope.
+
+Still open (blocks P02-P04 foundations):
+
+8. Sidecar strategy fork — option A (current): self-contained UI journal
+   `sb-*.jsonl` duplicating conversation text on disk for simplest reads;
+   option B (Andrew's instinct): page conversation payloads from
+   `session-*.jsonl` itself and shrink the sidecar to UI-only items,
+   revisions, and markers. Costs of B: two-reader page-in joins and
+   event-replay for final states of revised conversation items.
+   Recommendation on the table: A. Awaiting Andrew's call.
+
+Original questions:
+
 1. Static-remount semantics after flush eviction (reprint only resident):
    acceptable, or keep a larger primary-buffer tail?
 2. Primary-buffer mode gets eviction only, no paging. OK?
