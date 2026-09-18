@@ -5,10 +5,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { Buffer } from 'node:buffer';
 import {
   DEFAULT_AGENT_ID,
   type AnyDeclarativeTool,
   type AnyToolInvocation,
+  type FileDiff,
+  type FileRead,
   type ToolCallRequestInfo,
   type ToolCallResponseInfo,
   type Status,
@@ -20,6 +23,10 @@ import {
   type CancelledToolCall,
 } from '@vybestack/llxprt-code-core';
 import { ToolCallStatus } from '../types.js';
+import {
+  RETENTION_TRUNCATION_MARKER,
+  TOOL_RESULT_RETENTION_CAP_BYTES,
+} from '../utils/toolResultRetention.js';
 
 const { mockWarn } = {
   mockWarn: vi.fn(),
@@ -384,6 +391,251 @@ describe('toolMapping', () => {
 
         const result = mapToDisplay([toolCallWithNoAgent, toolCallWithAgent]);
         expect(result.agentId).toBe('sub-agent-1');
+      });
+    });
+
+    describe('retention cap at display commit (issue #3428)', () => {
+      it('caps a large string result display to the retention cap and records retention', () => {
+        const body = 'x'.repeat(200 * 1024);
+        const toolCall: SuccessfulToolCall = {
+          status: 'success',
+          request: mockRequest,
+          tool: mockTool,
+          invocation: mockInvocation,
+          response: { ...mockResponse, resultDisplay: body },
+        };
+
+        const displayTool = mapToDisplay(toolCall).tools[0];
+        const display = displayTool.resultDisplay;
+
+        expect(typeof display).toBe('string');
+        expect(
+          Buffer.byteLength(display as string, 'utf8'),
+        ).toBeLessThanOrEqual(64 * 1024);
+        expect(display).toContain('session transcript');
+        expect(displayTool.retention).toStrictEqual({
+          capped: true,
+          originalLength: 200 * 1024,
+        });
+        // The scheduler's response is the model-facing copy; it is untouched.
+        expect(toolCall.response.resultDisplay).toBe(body);
+      });
+
+      it('leaves small string results uncapped with no retention metadata', () => {
+        const toolCall: SuccessfulToolCall = {
+          status: 'success',
+          request: mockRequest,
+          tool: mockTool,
+          invocation: mockInvocation,
+          response: { ...mockResponse, resultDisplay: 'Success output' },
+        };
+
+        const displayTool = mapToDisplay(toolCall).tools[0];
+
+        expect(displayTool.resultDisplay).toBe('Success output');
+        expect(displayTool.retention).toBeUndefined();
+      });
+
+      it('passes structured result displays through untouched', () => {
+        const fileDiffDisplay = {
+          fileDiff: '--- a' + String.fromCharCode(10) + '+++ b',
+          fileName: 'a.ts',
+          originalContent: 'a',
+          newContent: 'b',
+        };
+        const toolCall: SuccessfulToolCall = {
+          status: 'success',
+          request: mockRequest,
+          tool: mockTool,
+          invocation: mockInvocation,
+          response: { ...mockResponse, resultDisplay: fileDiffDisplay },
+        };
+
+        const displayTool = mapToDisplay(toolCall).tools[0];
+
+        expect(displayTool.resultDisplay).toBe(fileDiffDisplay);
+        expect(displayTool.retention).toBeUndefined();
+      });
+
+      it('bounds long FileDiff fields against one shared budget without stringifying the display', () => {
+        // Each field alone fits the 64 KiB cap; together they exceed it, so
+        // the one per-display budget is spent in field order: the diff body
+        // is admitted whole, originalContent keeps a head+tail preview of
+        // what is left, and newContent retains only an empty string.
+        const fileDiff = `diff-head
+${'d'.repeat(40 * 1024)}`;
+        const originalContent = `orig
+${'o'.repeat(40 * 1024)}`;
+        const newContent = `new
+${'n'.repeat(40 * 1024)}`;
+        const fileDiffDisplay = {
+          fileDiff,
+          fileName: 'a.ts',
+          originalContent,
+          newContent,
+        };
+        const toolCall: SuccessfulToolCall = {
+          status: 'success',
+          request: mockRequest,
+          tool: mockTool,
+          invocation: mockInvocation,
+          response: { ...mockResponse, resultDisplay: fileDiffDisplay },
+        };
+
+        const displayTool = mapToDisplay(toolCall).tools[0];
+        const display = displayTool.resultDisplay as FileDiff;
+
+        // Shape preserved: the display is still the structured FileDiff
+        // object DiffRenderer consumes, never a stringified body.
+        expect(typeof display).toBe('object');
+        expect(display).not.toBe(fileDiffDisplay);
+        expect(display.fileName).toBe('a.ts');
+        // The shared budget is spent in field order.
+        expect(display.fileDiff).toBe(fileDiff);
+        expect(display.originalContent).toContain(RETENTION_TRUNCATION_MARKER);
+        expect(display.newContent).toBe('');
+        const combinedRetainedBytes =
+          Buffer.byteLength(display.fileDiff, 'utf8') +
+          Buffer.byteLength(display.originalContent ?? '', 'utf8') +
+          Buffer.byteLength(display.newContent, 'utf8');
+        expect(combinedRetainedBytes).toBeLessThanOrEqual(
+          TOOL_RESULT_RETENTION_CAP_BYTES,
+        );
+        // Retention metadata is set so the transcript hint renders; the
+        // original length is the sum of the fields' full sizes.
+        expect(displayTool.retention).toStrictEqual({
+          capped: true,
+          originalLength:
+            Buffer.byteLength(fileDiff, 'utf8') +
+            Buffer.byteLength(originalContent, 'utf8') +
+            Buffer.byteLength(newContent, 'utf8'),
+        });
+        // AC5: the scheduler's response is the model-facing copy; it stays
+        // unmutated, fields included.
+        expect(toolCall.response.resultDisplay).toBe(fileDiffDisplay);
+        expect(toolCall.response.resultDisplay).toStrictEqual({
+          fileDiff,
+          fileName: 'a.ts',
+          originalContent,
+          newContent,
+        });
+      });
+
+      it('spends one shared byte budget across a FileDiff whose fields are all oversized', () => {
+        const fileDiff = `diff-head
+${'d'.repeat(150 * 1024)}`;
+        const originalContent = `orig
+${'o'.repeat(150 * 1024)}`;
+        const newContent = `new
+${'n'.repeat(150 * 1024)}`;
+        // Precondition: every field alone exceeds the cap, so independent
+        // per-field budgets would retain nearly three caps.
+        for (const field of [fileDiff, originalContent, newContent]) {
+          expect(Buffer.byteLength(field, 'utf8')).toBeGreaterThan(
+            TOOL_RESULT_RETENTION_CAP_BYTES,
+          );
+        }
+        const fileDiffDisplay = {
+          fileDiff,
+          fileName: 'a.ts',
+          originalContent,
+          newContent,
+        };
+        const toolCall: SuccessfulToolCall = {
+          status: 'success',
+          request: mockRequest,
+          tool: mockTool,
+          invocation: mockInvocation,
+          response: { ...mockResponse, resultDisplay: fileDiffDisplay },
+        };
+
+        const displayTool = mapToDisplay(toolCall).tools[0];
+        const display = displayTool.resultDisplay as FileDiff;
+
+        // The cap is per result (AC1): the three bounded fields combined
+        // stay within ONE 64 KiB budget no matter how many are oversized.
+        const combinedRetainedBytes =
+          Buffer.byteLength(display.fileDiff, 'utf8') +
+          Buffer.byteLength(display.originalContent ?? '', 'utf8') +
+          Buffer.byteLength(display.newContent, 'utf8');
+        expect(combinedRetainedBytes).toBeLessThanOrEqual(
+          TOOL_RESULT_RETENTION_CAP_BYTES,
+        );
+        // The budget is spent in field order: the first field keeps a real
+        // head+tail preview; fields after the budget is exhausted keep
+        // their string shape while retaining nothing.
+        expect(display.fileDiff).toContain(RETENTION_TRUNCATION_MARKER);
+        expect(display.originalContent).toBe('');
+        expect(display.newContent).toBe('');
+        expect(display.fileName).toBe('a.ts');
+        expect(displayTool.retention).toStrictEqual({
+          capped: true,
+          originalLength:
+            Buffer.byteLength(fileDiff, 'utf8') +
+            Buffer.byteLength(originalContent, 'utf8') +
+            Buffer.byteLength(newContent, 'utf8'),
+        });
+        // AC5: the scheduler's response stays the unbounded model-facing
+        // copy.
+        expect(toolCall.response.resultDisplay).toBe(fileDiffDisplay);
+      });
+
+      it('bounds a large FileRead content field while keeping the display structured', () => {
+        const content = `read
+${'r'.repeat(300 * 1024)}`;
+        const fileReadDisplay = {
+          content,
+          fileName: 'b.txt',
+          filePath: '/tmp/b.txt',
+        };
+        const toolCall: SuccessfulToolCall = {
+          status: 'success',
+          request: mockRequest,
+          tool: mockTool,
+          invocation: mockInvocation,
+          response: { ...mockResponse, resultDisplay: fileReadDisplay },
+        };
+
+        const displayTool = mapToDisplay(toolCall).tools[0];
+        const display = displayTool.resultDisplay as FileRead;
+
+        expect(typeof display).toBe('object');
+        expect(display).not.toBe(fileReadDisplay);
+        expect(display.fileName).toBe('b.txt');
+        expect(display.filePath).toBe('/tmp/b.txt');
+        expect(Buffer.byteLength(display.content, 'utf8')).toBeLessThanOrEqual(
+          TOOL_RESULT_RETENTION_CAP_BYTES,
+        );
+        expect(display.content).toContain(RETENTION_TRUNCATION_MARKER);
+        expect(displayTool.retention).toStrictEqual({
+          capped: true,
+          originalLength: Buffer.byteLength(content, 'utf8'),
+        });
+        expect(toolCall.response.resultDisplay).toBe(fileReadDisplay);
+        expect(toolCall.response.resultDisplay).toStrictEqual(fileReadDisplay);
+      });
+
+      it('caps large error result displays too', () => {
+        const body = 'y'.repeat(150 * 1024);
+        const toolCall: ToolCall = {
+          status: 'error',
+          request: mockRequest,
+          tool: mockTool,
+          invocation: mockInvocation,
+          response: {
+            ...mockResponse,
+            error: new Error('boom'),
+            resultDisplay: body,
+          },
+        };
+
+        const displayTool = mapToDisplay(toolCall).tools[0];
+
+        expect(
+          Buffer.byteLength(displayTool.resultDisplay as string),
+        ).toBeLessThanOrEqual(64 * 1024);
+        expect(displayTool.retention?.capped).toBe(true);
+        expect(toolCall.response.resultDisplay).toBe(body);
       });
     });
   });
