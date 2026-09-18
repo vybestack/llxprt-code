@@ -71,97 +71,112 @@ Gaps this design closes:
 
 ## Design overview
 
-One sentence: the ledger becomes a pager over a UI-owned append-only journal,
-with residency driven by the viewport and floored by the context boundary
-reported by `HistoryService`.
+One sentence: the ledger becomes a file cursor over the existing session
+journal, with residency driven by the viewport and floored by the context
+boundary reported by `HistoryService`.
 
-Principles:
+Principles (per Andrew's three rulings, 2026-09-18):
 
-- Append-only, last-wins-per-itemId on read. No in-place file rewrites; the
-  journal never shrinks during a session.
-- The disk journal is the source of truth for the UI timeline, including
-  UI-only items and compression boundary rows.
-- Residency is a policy over one contiguous window; placeholders stand in for
-  unloaded items (the virtualized list already paints from estimated heights).
-- Context truth stays with `HistoryService`; the UI asks for the boundary, it
-  does not infer it.
+- `session-*.jsonl` is the ONLY durable artifact: no duplicate content
+  file, no UI state persisted anywhere, no marks written into the file.
+  Ids and pointers live in memory only.
+- LOW memory usage and high eviction without functionality loss: the
+  pager holds the resident window plus a handful of byte offsets;
+  nothing scales with session length. Scrolling reads the file in
+  bounded chunks, backward and forward.
+- UI-only rows are live-only; the durable scrollback is the conversation
+  exactly as `/continue` reconstructs it.
+- Context truth stays with `HistoryService`; the UI asks for the boundary,
+  it does not infer it.
 
 ## Components
 
-### 1. ScrollbackJournal (writer) — new, CLI-owned
+### 1. Durable state — session journal only, unchanged
 
-Location: `packages/cli/src/ui/services/scrollback/`. Written at
-`commands.addItem` / `updateItem` commit points via the turn store.
+**Decisions 2026-09-18 (Andrew), in order:**
 
-Files, sibling to the session journal in the chats dir (naming verified
-against `SessionDiscovery` / janitor / cleanup globs, which match exactly
-`session-*.jsonl`; the `sb-` prefix never collides):
+1. *No duplicate of conversation content on disk.*
+2. *No UI state persisted at all* — "anything about what is being
+   displayed or has been displayed or was evicted from the ui is not a
+   thing. we can use ids or pointers but not marking in the file."
 
-```
-<chatsDir>/session-<ts>-<id>.jsonl          # model journal (existing)
-<chatsDir>/sb-<ts>-<id>.jsonl               # UI scrollback journal (new)
-<chatsDir>/sb-<ts>-<id>.idx.jsonl           # offset index (new)
-```
+Consequences:
 
-Record shapes (JSONL, one object per line):
+- **No new files.** No `sb-*.jsonl`, no `sb-*.idx.jsonl`, no UI marks
+  appended into `session-*.jsonl`. The model journal keeps its existing
+  format and writer, byte-for-byte. Discovery/janitor/cleanup are
+  untouched (they already glob exactly `session-*.jsonl`).
+- **Scrollback is a view over `session-*.jsonl`.** Conversation-backed
+  rows (user, assistant, tool calls/results, compression, rewind, shell)
+  page in from the session journal on demand, reconstructed through the
+  same conversion `/continue` uses (`iContentToHistoryItems`, already
+  chronology-stamped). Control state (compression boundaries, rewind
+  truncation) comes from the journal's existing `compressed`/`rewind`
+  event records — nothing is re-marked.
+- **UI-only rows are live-only.** Info banners, error/warning toasts,
+  help/stats/panels, profile notices, and per-item UI state (collapse
+  toggles, etc.) render during the live session and are gone once
+  evicted; they are not reconstructible and that is accepted. A restarted
+  UI shows the conversation, not the chrome around it — same as
+  `/continue` today.
+- **`updateItem` on off-screen items needs no story.** There is no
+  persisted revision; paged-in rows reconstruct to the session journal's
+  final state. Visible items update in place as always.
+- Ids and pointers live in memory only: `chronologySeq`/`seqSpan` on
+  `HistoryItem`, and the index entries below (byte offsets + seq).
 
-```
-item:      {"v":1,"rec":"item","uiSeq":41,"itemId":7,"ts":"...ISO...",
-            "kind":"gemini","cseq":37,"seqSpan":[36,38],"payload":{...HistoryItem}}
-revision:  {"v":1,"rec":"rev","uiSeq":42,"itemId":7,"cseq":37,"payload":{...}}
-boundary:  {"v":1,"rec":"boundary","uiSeq":43,"summaryText":"...",
-            "replacedFromSeq":12,"replacedToSeq":36,"itemCount":25}
-clear:     {"v":1,"rec":"clear","uiSeq":50}
-rewind:    {"v":1,"rec":"rewind","uiSeq":55,"truncateAfterUiSeq":49}
-```
+### 2. File cursor — no index, no map
 
-- `uiSeq` is monotonic per session and continues across resume (mirrors the
-  model journal's `seq`).
-- `cseq` / `seqSpan` carry the `chronology.seq` correlation (see 5).
-- Write cadence: UI-only items write immediately at `addItem`; model-content
-  items write when finalized (turn end, tool-group completion); streaming
-  interim states never hit disk. `updateItem` appends a `rev` record at the
-  same commit points (debounced within a turn).
-- Crash parity matches the model journal: losing the un-flushed tail of a
-  partial turn is acceptable; the model journal loses the same turn.
+**Decision 2026-09-18 (Andrew), ruling 3: a giant map in memory is also
+rejected.** "the point is to scroll up and down the file, not have shit
+in memory. goal is LOW memory usage and high eviction without
+functionality loss." The pager scrolls the file itself:
 
-### 2. ScrollbackIndex — new
-
-Appended after each journal append:
-
-```
-{"uiSeq":41,"off":84213,"len":611,"kind":"gemini","cseq":37}
-```
-
-- In memory: array + `Map<uiSeq, entry>`. Gives timeline length, page reads
-  (seek + bounded read), and metadata without parsing payloads.
-- On open: validate the last index offset against the journal size; if the
-  index is short, scan only the un-indexed journal suffix; if long (torn),
-  truncate to the journal size. No full-file reindex in the normal case.
-- Optional later: persist measured row heights so the scrollbar stays stable
-  across eviction cycles.
+- Persistent pager state is a handful of byte offsets (window start/end)
+  plus the resident items. Nothing scales with session length: no index
+  array, no `Map`, no scan-at-startup.
+- `pageBack(n)`: seek to `max(0, windowStart - CHUNK)`, read through
+  `windowStart`, drop the torn head partial line, parse lines into
+  records. The journal is append-only and seq-numbered, so reverse byte
+  order IS reverse chronology. Default CHUNK 64 KiB (tunable); repeat
+  while the viewport's item budget for the page is unmet.
+- `pageForward(n)`: symmetric, reading forward from `windowEnd`.
+- File size via `stat()` gives the timeline's byte extent for the
+  scrollbar: position = `windowStart / fileSize`, byte-proportional. No
+  item-count knowledge and no height bookkeeping beyond the visible
+  viewport.
+- Tool groups span exactly 2 adjacent records (resolved during design);
+  if a chunk boundary splits a pair, read the companion line with one
+  extra bounded read — group atomicity.
+- Crash-torn trailing line (partial final record) is ignored on parse —
+  the same tolerance `/continue` already applies.
+- Rebuild cost: none. There is nothing to build, write, or repair.
 
 ### 3. ScrollbackPager (resident store) — replaces ledger residency
 
 Data model:
 
-- Logical timeline: `uiSeq 1..N`, contiguous, known from the index.
-- Each slot is either materialized (a `HistoryItem` in memory) or a
-  placeholder `{uiSeq, estimatedHeight}` (estimatedHeight defaults to the same
-  flat 100 the virtualized list uses today).
+- Logical timeline: journal records in seq order, discovered as pages are
+  read; scrolling back stops at the context floor (oldest in-context item,
+  resolved OQ7). No total item count is maintained.
+- Each resident slot is a materialized `HistoryItem`. In-viewport
+  virtualization uses measured heights; nothing is tracked for off-screen
+  rows. UI-only rows occupy live slots only; they leave nothing behind
+  when evicted.
 
 Residency rules:
 
 - Always resident: pending/live items of the current turn.
-- Resident window: viewport ± margin (margin proposal: 2 viewport heights),
+- Resident window: viewport ± margin (margin: 2 viewport heights),
   subject to a byte/item budget (proposal: keep `ui.historyMaxBytes` /
   `ui.historyMaxItems` as the budget knobs, retargeted from "display trim" to
   "resident window"; docs update required).
 - At bottom (steady state): anything with `cseq < contextWindow.firstSeq` is
   evicted immediately when not visible. This is the issue's "trim anything not
   in HistoryService" rule.
-- Scroll-back beyond the window start: async `pageIn(older)` reads the block
-  before the window from the journal; placeholders render meanwhile. Loaded
+- Scroll-back beyond the window start: async `pageBack` chunk-reads the
+  file before the window via the cursor and converts records with the
+  replay converter; a transient loading state renders meanwhile. Loaded
   sub-context items are the transient peek.
 - Scroll-forward / return to bottom: transient peek pages that left the
   viewport are purged (debounced ~1–2s after scrolling stops), sub-context
@@ -259,17 +274,19 @@ Buffer modes:
 
 ### 7. Resume
 
-- If `sb-*.jsonl` exists for the session: open + index, resident = context
-  range items + last viewport page, paged from the journal. Exact fidelity,
-  including info boxes and boundary rows.
-- Legacy session (no sidecar): current behavior via `iContentToHistoryItems`
-  of the replayed context, now with `chronologySeq` stamped. Older-than-context
-  UI items simply do not exist (same as today).
+- Single path: open a file cursor on `session-*.jsonl`, resident =
+  context-range items + last viewport page, older rows chunk-read backward
+  on demand.
+  Fidelity is conversation-exact (what `/continue` reconstructs, with
+  `chronologySeq` stamped). UI-only rows (banners, toasts, panels) do not
+  exist after restart — accepted property of the no-UI-state ruling, same
+  as today's `/continue`.
 
 ### 8. Settings / flags
 
-- `ui.scrollbackJournalEnabled` (default true, phase 1): journal + index
-  always-on; no behavior change otherwise.
+- `ui.scrollbackJournalEnabled` (phase 1): **obsolete, removed by the P01b
+  rework** — there is no journal to gate. Stamps and the range API are
+  internal and always-on.
 - `ui.scrollbackPagerEnabled` (phase 2, default false until baked): pager +
   eviction + paging in alternate-buffer mode.
 - `ui.historyMaxBytes` / `ui.historyMaxItems`: retargeted to the pager budget
@@ -279,22 +296,24 @@ Buffer modes:
 
 ### Turn append
 1. Streamed content updates `pendingHistoryItems` (unchanged, resident).
-2. Turn/tool-group finalization: `addItem` appends to pager tail + journal
-   `item` record + index line. `cseq` stamped.
+2. Turn/tool-group finalization: `addItem` appends to pager tail. The session
+   journal write is the existing recording path — the pager adds no writes.
+   `cseq` stamped in memory.
 3. Viewport at bottom: no eviction of sub-context items (none exist); budget
    eviction may trim the far (oldest-resident) end into placeholders.
 
 ### Compression
-1. `replaceAll` swaps the array; journal writes the `compressed` record
-   (existing); HistoryService emits `contextRangeChanged {firstSeq: 37, ...}`.
-2. UI appends a `boundary` row (summary text, replaced span) to pager +
-   journal.
+1. `replaceAll` swaps the array; the session journal writes the `compressed`
+   record (existing); HistoryService emits `contextRangeChanged
+   {firstSeq: 37, ...}`.
+2. UI appends a live boundary row (summary text, replaced span) to the pager.
+   It is UI state: not persisted, gone after eviction or restart.
 3. Pager purges every resident item with `cseq < 37` that is not visible;
    they render as `purged` chips when paged back later.
 
 ### Scroll-back peek / scroll-forward purge
 1. Viewport crosses the window start: `pageIn(older)` reads the block before
-   the window; placeholders hold layout.
+   the window from `session-*.jsonl`; placeholders hold layout.
 2. Items load, render dimmed (`purged`) below the boundary; boundary row shows
    its summary expander.
 3. User scrolls forward: peek pages leave the viewport; debounce elapses;
@@ -302,47 +321,46 @@ Buffer modes:
    context floor.
 
 ### /chat clear, rewind, restore
-- `clear` / `rewind` control records append to the journal. `pageIn` never
-  crosses a `clear` marker or a `rewind` truncate point; resident items beyond
-  a rewind point are dropped when the marker applies. Disk bytes remain for
-  the janitor.
+- No UI markers are written anywhere. `pageIn` stops at the context floor
+  (oldest in-context item — resolved OQ7), which naturally bounds scrolling
+  after a clear (context is empty → floor is the first post-clear item).
+  Rewind truncation comes from the session journal's `rewind` event record
+  during reconstruction. Disk bytes remain for the janitor.
 
 ## Janitor integration
 
-- `sessionGrouping.ts` groups by base name; extend to move `sb-<base>*` with
-  its `session-<base>.jsonl` on archive so sidecars are never orphaned.
-- Media reclamation already keeps `.jsonl`; the `sb-` prefix keeps sidecars
-  out of every session glob (`startsWith('session-') && endsWith('.jsonl')`).
-- Single writer per session is already enforced by the session lock.
+- None required. No new files exist; every glob that matches
+  `session-*.jsonl` today is untouched. Single writer per session is already
+  enforced by the session lock.
 
 ## Memory accounting (order of magnitude)
 
 - Before: ledger ≤ 1 MiB display-capped (plus loss on trim); React elements
   materialized for every retained item each history change.
-- After: resident items ≈ viewport + 2 viewports margin + live turn (well
-  under the 1 MiB budget in items terms); element materialization only for
-  resident slots; index ≈ 40–60 B per item in memory (100k items ≈ 5 MB);
-  unbounded scrollback on disk.
+- After: resident items ≈ viewport + 2 viewports margin + live turn; one
+  64 KiB chunk buffer during a page read; a few byte offsets of cursor
+  state. Nothing grows with session length. Unbounded scrollback on disk.
 
 ## Phasing
 
-- Phase 1 — Foundation (no UX change): journal + index writer always-on;
-  `chronologySeq` stamping; `getContextWindow` / `contextRangeChanged` /
-  `getContextSummaries` in core.
-- Phase 2 — Pager: alternate-buffer residency, placeholders, viewport
-  feedback, budget + context-floor eviction, scroll-back paging. Behind
+- Phase 1 — Foundation (no UX change): `chronologySeq` stamping;
+  `getContextWindow` / `contextRangeChanged` / `getContextSummaries` in
+  core. The phase-1 journal/index writer and `ui.scrollbackJournalEnabled`
+  are REMOVED by the P01b rework per rulings 1-3.
+- Phase 2 — Cursor + pager: chunked reverse/forward reader over the
+  session journal, alternate-buffer residency, byte-proportional scrollbar,
+  budget + context-floor eviction, scroll-back paging. Behind
   `ui.scrollbackPagerEnabled`.
-- Phase 3 — Markings + boundary expander; `clear`/`rewind` markers.
-- Phase 4 — Resume via journal (exact fidelity); primary-buffer
-  eviction-on-flush; janitor sidecar grouping.
-- Phase 5 — Deferred: `HistoryService` windowing on the same journal pattern
-  (context itself becomes file-driven). Seam: the range API added in Phase 1.
+- Phase 3 — Markings + boundary expander (live UI state only).
+- Phase 4 — Primary-buffer eviction-on-flush; resume via cursor.
+- Phase 5 — Deferred: `HistoryService` windowing on the same file-driven
+  pattern (context itself becomes file-driven). Seam: the range API.
 
 ## Test strategy sketch (bun, behavioral)
 
-- Journal: round-trip (item/rev/boundary/clear), crash parity (kill between
-  journal and index append; reopen repairs), last-wins revisions, uiSeq
-  monotonicity across resume.
+- Cursor: chunked reverse read equals full-parse reversal (property test
+  over generated journals); torn head/tail lines ignored; group pair split
+  across a chunk boundary re-joined; pageBack stops at the context floor.
 - Index: torn-tail repair, page reads at UTF-8 boundaries.
 - Pager: residency invariants (visible ∪ live always resident; sub-context
   floor at bottom), pageIn/pageOut correctness, budget enforcement, debounce
@@ -370,30 +388,36 @@ Resolved 2026-09-18 on PR #3727 with Andrew (issuecomment-5732580084 /
    Resident = viewport + 2 viewports of margin, plus a byte floor so huge
    items cannot starve the window. 100 was the old trim cap, not a target.
    Tunable via settings once introduced.
-4. Sparse on-disk index — **RESOLVED: DEFER with trigger.** Index costs
-   ~60 B/item in RAM (~6 MB at 100k items, ~60 MB at 1M). Build the sparse
-   fallback only if real sessions approach ~250k items (~15 MB).
-5. `updateItem` on a non-resident item — **RESOLVED with sharpening:**
-   on-screen items always update in place immediately; journal-revision-only
-   applies strictly to off-screen items; eviction is continuous as items
-   leave viewport+margin, not periodic sweeps.
-6. Scrollbar stability — **RESOLVED: in-memory heights only, nothing
-   persisted.** Real measured height while resident, cheap estimate once
-   evicted, re-measured on page-in and on resize.
+4. Sparse on-disk index — **RESOLVED, then MOOT.** Initially deferred with
+   a trigger; ruling 3 eliminates indexes entirely (no index file, no
+   in-memory map), so there is nothing to sparsify.
+5. `updateItem` on a non-resident item — **RESOLVED, then SIMPLIFIED by
+   ruling 2:** on-screen items always update in place immediately; with no
+   persisted UI state there is no revision record to write — off-screen
+   items need no handling, paged-in rows reconstruct to the session
+   journal's final state. Eviction is continuous as items leave
+   viewport+margin.
+6. Scrollbar stability — **RESOLVED, then SUPERSEDED by ruling 3:** the
+   scrollbar is byte-proportional (`windowStart / fileSize`), so height
+   bookkeeping beyond the visible viewport is unnecessary. Measured
+   heights are used in-viewport only, never persisted.
 7. `pageIn` vs `clear` markers — **RESOLVED: hard stop.** Scrolling back
    stops at the oldest in-context item; no "show cleared history"
    affordance. A full activity journal regardless of compression is a
    possible later feature, out of scope.
 
-Still open (blocks P02-P04 foundations):
-
-8. Sidecar strategy fork — option A (current): self-contained UI journal
-   `sb-*.jsonl` duplicating conversation text on disk for simplest reads;
-   option B (Andrew's instinct): page conversation payloads from
-   `session-*.jsonl` itself and shrink the sidecar to UI-only items,
-   revisions, and markers. Costs of B: two-reader page-in joins and
-   event-replay for final states of revised conversation items.
-   Recommendation on the table: A. Awaiting Andrew's call.
+8. Sidecar strategy — **RESOLVED in three rulings, 2026-09-18:**
+   - *Ruling 1:* the duplicate file is specifically rejected — no `sb-`
+     copy of conversation content, no persistent index file.
+   - *Ruling 2:* NO UI state is persisted at all — nothing about what is
+     being displayed, has been displayed, or was evicted. Ids and
+     pointers in memory are fine; marks in files are not. There is no
+     sidecar of any kind; scrollback is a view over `session-*.jsonl`,
+     and UI-only rows are live-only.
+   - *Ruling 3:* no giant map in memory either — the point is to scroll
+     up and down the file. Goal: LOW memory usage and high eviction
+     without functionality loss. The pager is a file cursor with chunked
+     reads; memory is constant in session length.
 
 Original questions:
 
