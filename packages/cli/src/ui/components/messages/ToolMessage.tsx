@@ -7,12 +7,17 @@
 import type React from 'react';
 import { useMemo } from 'react';
 import { Box, Text } from 'ink';
-import type { IndividualToolCallDisplay } from '../../types.js';
+import type {
+  IndividualToolCallDisplay,
+  ToolResultRetention,
+} from '../../types.js';
 import { ToolCallStatus } from '../../types.js';
 import { Colors } from '../../colors.js';
 import { theme } from '../../semantic-colors.js';
 import { SHELL_COMMAND_NAME, SHELL_NAME } from '../../constants.js';
 import { useShellCommandDisplay } from '../../contexts/ShellCommandDisplayContext.js';
+import { useExpandedResultDisplay } from '../../contexts/ToolResultExpansionContext.js';
+import { TOOL_RESULT_RETENTION_CAP_BYTES } from '../../utils/toolResultRetention.js';
 import {
   ShellExecutionService,
   splitCommands,
@@ -90,6 +95,25 @@ function computeCurrentSubcommand(
   if (segments.length === 0) return null;
 
   return findCurrentSubcommand(segments, outputString);
+}
+
+/** Memoized {@link computeCurrentSubcommand} bound to the live display copy. */
+function useCurrentSubcommand(
+  showFullShellDescription: boolean,
+  status: ToolCallStatus,
+  description: string | undefined,
+  resultDisplay: string | object | undefined,
+): string | null {
+  return useMemo(
+    () =>
+      computeCurrentSubcommand(
+        showFullShellDescription,
+        status,
+        description,
+        resultDisplay,
+      ),
+    [showFullShellDescription, status, description, resultDisplay],
+  );
 }
 
 /**
@@ -269,6 +293,68 @@ function renderToolMessageHeader(
 }
 
 /**
+ * One-line hint under a capped tool result: the body was bounded for display
+ * and the full text can be loaded from the session transcript by lifting the
+ * height constraint (ctrl-s). Wording follows the retention marker's
+ * convention of naming the session transcript as the source of the full text.
+ */
+function renderRetentionHint(
+  capped: boolean,
+  expandedBody: string | undefined,
+): React.ReactNode {
+  if (!capped || expandedBody !== undefined) {
+    return null;
+  }
+  const capKib = Math.round(TOOL_RESULT_RETENTION_CAP_BYTES / 1024);
+  return (
+    <Box paddingLeft={STATUS_INDICATOR_WIDTH} width="100%">
+      <Text color={Colors.Gray} wrap="truncate">
+        [display capped at {capKib} KiB; press ctrl-s to load the full output
+        from the session transcript]
+      </Text>
+    </Box>
+  );
+}
+
+/**
+ * Result body with transcript-backed expansion (issue #3428 section D): the
+ * capped preview is swapped for the full transcript body once constraints
+ * lift, with the retention hint beneath it.
+ */
+const ToolMessageResultBody: React.FC<{
+  callId: string;
+  retention: ToolResultRetention | undefined;
+  resultDisplay: string | object | undefined;
+  availableTerminalHeight: number | undefined;
+  terminalWidth: number;
+  renderOutputAsMarkdown: boolean;
+}> = ({
+  callId,
+  retention,
+  resultDisplay,
+  availableTerminalHeight,
+  terminalWidth,
+  renderOutputAsMarkdown,
+}) => {
+  const { capped, displayResult, expandedBody } = useExpandedResultDisplay(
+    callId,
+    retention,
+    resultDisplay,
+  );
+  return (
+    <>
+      <ToolResultDisplay
+        resultDisplay={displayResult}
+        availableTerminalHeight={availableTerminalHeight}
+        terminalWidth={Math.max(0, terminalWidth - 4)}
+        renderOutputAsMarkdown={renderOutputAsMarkdown}
+      />
+      {renderRetentionHint(capped, expandedBody)}
+    </>
+  );
+};
+
+/**
  * Render the tool message content box.
  */
 function renderToolMessageContent(
@@ -278,6 +364,8 @@ function renderToolMessageContent(
   status: ToolCallStatus,
   showExecutingHint: boolean,
   currentSubcommand: string | null,
+  callId: string,
+  retention: ToolResultRetention | undefined,
   resultDisplay: string | object | undefined,
   availableTerminalHeight: number | undefined,
   renderOutputAsMarkdown: boolean,
@@ -302,10 +390,12 @@ function renderToolMessageContent(
     >
       {renderExecutingHint(showExecutingHint)}
       {renderCurrentSubcommand(currentSubcommand)}
-      <ToolResultDisplay
+      <ToolMessageResultBody
+        callId={callId}
+        retention={retention}
         resultDisplay={resultDisplay}
         availableTerminalHeight={availableTerminalHeight}
-        terminalWidth={Math.max(0, terminalWidth - 4)}
+        terminalWidth={terminalWidth}
         renderOutputAsMarkdown={renderOutputAsMarkdown}
       />
       {renderShellInput(
@@ -336,6 +426,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   name,
   description,
   resultDisplay,
+  retention,
   status,
   availableTerminalHeight,
   terminalWidth,
@@ -367,15 +458,11 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
     shell,
   );
 
-  const currentSubcommand = useMemo(
-    () =>
-      computeCurrentSubcommand(
-        showFullShellDescription,
-        status,
-        description,
-        resultDisplay,
-      ),
-    [showFullShellDescription, status, description, resultDisplay],
+  const currentSubcommand = useCurrentSubcommand(
+    showFullShellDescription,
+    status,
+    description,
+    resultDisplay,
   );
 
   return (
@@ -402,6 +489,8 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
           status === ToolCallStatus.Executing &&
           !showFullShellDescription,
         currentSubcommand,
+        callId,
+        retention,
         resultDisplay,
         availableTerminalHeight,
         renderOutputAsMarkdown,
