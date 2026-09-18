@@ -95,6 +95,23 @@ export interface CompressionProps {
 
 export interface HistoryItemBase {
   text?: string; // Text content for user/gemini/info/error messages
+  /**
+   * Chronology seq of the model-context entry this item represents, when the
+   * item maps to exactly one entry. Undefined for UI-only items and span items.
+   *
+   * @plan PLAN-20260917-ISSUE854.P01
+   * @requirement REQ-854-003
+   */
+  chronologySeq?: number;
+  /**
+   * Inclusive chronology seq span for items representing multiple adjacent
+   * entries (tool groups: ai tool_call entry through tool response entry).
+   * When present, {@link chronologySeq} is undefined (span, not point).
+   *
+   * @plan PLAN-20260917-ISSUE854.P01
+   * @requirement REQ-854-003
+   */
+  seqSpan?: readonly [number, number];
 }
 
 export type HistoryItemUser = HistoryItemBase & {

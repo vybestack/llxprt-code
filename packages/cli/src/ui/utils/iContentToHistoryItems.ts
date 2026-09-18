@@ -204,15 +204,35 @@ function toToolCallStatus(
   return response.error ? ToolCallStatus.Error : ToolCallStatus.Success;
 }
 
+interface ToolResponseLookup {
+  result: unknown;
+  error?: string;
+  /** chronology seq of the tool entry that carried this response. */
+  seq?: number;
+}
+
+/**
+ * Joins tool responses by callId and remembers the chronology seq of the
+ * entry each response arrived in, so replayed tool groups can carry a
+ * seqSpan back to the ai tool_call entry that opened them.
+ *
+ * @plan PLAN-20260917-ISSUE854.P01
+ * @requirement REQ-854-003
+ */
 function buildResponseMap(
   contents: IContent[],
-): Map<string, { result: unknown; error?: string }> {
-  const map = new Map<string, { result: unknown; error?: string }>();
+): Map<string, ToolResponseLookup> {
+  const map = new Map<string, ToolResponseLookup>();
   for (const content of contents) {
     if (content.speaker !== 'tool') continue;
+    const entrySeq = content.metadata?.chronology?.seq;
     for (const block of content.blocks) {
       if (block.type === 'tool_response') {
-        map.set(block.callId, { result: block.result, error: block.error });
+        map.set(block.callId, {
+          result: block.result,
+          error: block.error,
+          ...(entrySeq !== undefined ? { seq: entrySeq } : {}),
+        });
       }
     }
   }
@@ -226,7 +246,8 @@ interface MarkdownSegment {
 
 function appendTextSegment(segments: MarkdownSegment[], text: string): void {
   if (text === '') return;
-  const lastSegment = segments.at(-1);
+  const lastSegment =
+    segments.length > 0 ? segments[segments.length - 1] : undefined;
   if (lastSegment?.kind === 'text') {
     lastSegment.value += text;
   } else {
@@ -246,12 +267,13 @@ function combineMarkdownSegments(segments: MarkdownSegment[]): string {
 
 function processAiContent(
   content: IContent,
-  responseMap: Map<string, { result: unknown; error?: string }>,
+  responseMap: Map<string, ToolResponseLookup>,
   items: HistoryItemWithoutId[],
 ): void {
   const segments: MarkdownSegment[] = [];
   const thinkingBlocks: ThinkingBlock[] = [];
   const toolCallBlocks: ToolCallBlock[] = [];
+  const entrySeq = content.metadata?.chronology?.seq;
 
   for (const block of content.blocks) {
     switch (block.type) {
@@ -281,6 +303,7 @@ function processAiContent(
       type: 'gemini',
       text: combinedText,
       model: content.metadata?.model,
+      ...(entrySeq !== undefined ? { chronologySeq: entrySeq } : {}),
       ...(thinkingBlocks.length > 0 ? { thinkingBlocks } : {}),
     });
   }
@@ -302,7 +325,22 @@ function processAiContent(
         retention: display?.retention,
       };
     });
-    items.push({ type: 'tool_group', tools });
+    // The group spans the ai tool_call entry through the (adjacent) tool
+    // response entries that answered it; a span item carries no point seq.
+    const responseSeqs = toolCallBlocks
+      .map((tc) => responseMap.get(tc.id)?.seq)
+      .filter((seq): seq is number => typeof seq === 'number');
+    const spanEnd =
+      responseSeqs.length > 0 ? Math.max(...responseSeqs) : undefined;
+    const seqSpan =
+      entrySeq !== undefined && spanEnd !== undefined
+        ? ([entrySeq, Math.max(entrySeq, spanEnd)] as const)
+        : undefined;
+    items.push({
+      type: 'tool_group',
+      tools,
+      ...(seqSpan !== undefined ? { seqSpan } : {}),
+    });
   }
 }
 
@@ -339,7 +377,13 @@ export function iContentToHistoryItems(
         .map((b) => b.text)
         .join('\n');
       if (text) {
-        items.push({ type: 'user', text });
+        items.push({
+          type: 'user',
+          text,
+          ...(content.metadata?.chronology?.seq !== undefined
+            ? { chronologySeq: content.metadata.chronology.seq }
+            : {}),
+        });
       }
       continue;
     }

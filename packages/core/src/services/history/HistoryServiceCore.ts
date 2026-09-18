@@ -46,7 +46,13 @@ import {
 import {
   type HistoryServiceEventEmitter,
   type CompressionConfig,
+  type ContextRange,
+  type ContextSummaryInfo,
 } from './historyEventTypes.js';
+import {
+  computeContextRange,
+  computeContextSummaries,
+} from './contextRange.js';
 import { getTokenizerForModel } from './historyTokenizerAdapter.js';
 import {
   ChronologyStamper,
@@ -813,6 +819,41 @@ export abstract class HistoryServiceCore
     );
   }
 
+  /**
+   * The curated in-memory context boundary: chronology seqs of the first and
+   * last entries of the exact history array the model sees, derived on each
+   * call from {@link history}.
+   *
+   * @plan PLAN-20260917-ISSUE854.P01
+   * @requirement REQ-854-004
+   */
+  getContextRange(): ContextRange {
+    return computeContextRange(this.history);
+  }
+
+  /**
+   * Projections of every summary entry currently in context, derived from
+   * each entry's `chronologyReplaced` span.
+   *
+   * @plan PLAN-20260917-ISSUE854.P01
+   * @requirement REQ-854-004
+   */
+  getContextSummaries(): ContextSummaryInfo[] {
+    return computeContextSummaries(this.history);
+  }
+
+  /**
+   * Emits `contextRangeChanged` with the current boundary snapshot. Called
+   * only from boundary-moving commit paths (history mutations and clear);
+   * single-entry `add` intentionally does not emit.
+   *
+   * @plan PLAN-20260917-ISSUE854.P01
+   * @requirement REQ-854-004
+   */
+  protected emitContextRangeChanged(): void {
+    this.emit('contextRangeChanged', this.getContextRange());
+  }
+
   replaceAll(
     contents: readonly IContent[],
     modelName?: string,
@@ -973,6 +1014,7 @@ export abstract class HistoryServiceCore
       });
       await input.options.afterPublication?.();
       await finalizeMutationEffects(effects);
+      this.emitContextRangeChanged();
     } catch (error: unknown) {
       if (historyPublished) {
         this.invalidatePendingSyncs();
