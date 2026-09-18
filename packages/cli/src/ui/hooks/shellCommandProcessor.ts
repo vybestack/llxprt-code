@@ -27,6 +27,7 @@ import {
   createByteBudget,
 } from '@vybestack/llxprt-code-tools/acquisition.js';
 import { resolveAcquisitionBudgetFromSetting } from '@vybestack/llxprt-code-core';
+import { boundResultDisplayForRetention } from '../utils/toolResultRetention.js';
 import { type UseHistoryManagerReturn } from './useHistoryManager.js';
 import { SHELL_COMMAND_NAME } from '../constants.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
@@ -349,10 +350,17 @@ function handleShellResult(
   );
   const finalOutput = appendPwdWarning(rawOutput, pwdFilePath, targetDir);
 
+  // The committed display body is capped at the shared retention boundary
+  // (issue #3428); the agent history below still receives the full output
+  // because it feeds the model's copy of the turn.
+  const bounded = boundResultDisplayForRetention(finalOutput);
   const finalToolDisplay: IndividualToolCallDisplay = {
     ...initialToolDisplay,
     status: finalStatus,
-    resultDisplay: finalOutput,
+    resultDisplay: bounded.text,
+    retention: bounded.wasCapped
+      ? { capped: true, originalLength: bounded.originalLength }
+      : undefined,
   };
 
   addItemToHistory(
