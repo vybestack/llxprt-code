@@ -23,7 +23,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   createAnthropicAliasProvider,
-  createGeminiAliasProvider,
   createOpenAIAliasProvider,
   createOpenAIResponsesAliasProvider,
   createOpenAIVercelAliasProvider,
@@ -60,8 +59,9 @@ type AliasBaseProvider =
   | 'openai'
   | 'openai-responses'
   | 'openai-vercel'
-  | 'anthropic'
-  | 'gemini';
+  | 'anthropic';
+// 'gemini' left the base factories (#2763): its alias construction lives in
+// the google-gemini plugin, which carries its own authOnly coverage.
 
 /** The authentication surface every alias provider inherits from BaseProvider. */
 interface AliasAuthProbe {
@@ -118,8 +118,6 @@ function buildAliasProvider(
         );
       case 'anthropic':
         return createAnthropicAliasProvider(entry, undefined, authOnlyEnabled);
-      case 'gemini':
-        return createGeminiAliasProvider(entry, undefined, authOnlyEnabled);
       default:
         return null;
     }
@@ -210,30 +208,6 @@ describe('alias provider factories under authOnly', () => {
       expect(auth).toStrictEqual({ authenticated: false, method: null });
     });
 
-    it('does not authenticate a gemini alias from GEMINI_API_KEY', async () => {
-      process.env.GEMINI_API_KEY = 'sk-ambient-gemini';
-
-      const auth = await resolveAliasAuth(
-        buildAliasProvider('gemini', true),
-        runtimeSettings,
-      );
-
-      expect(auth).toStrictEqual({ authenticated: false, method: null });
-    });
-
-    it('does not authenticate a gemini alias from GOOGLE_API_KEY', async () => {
-      // The Gemini provider declares two environment names; clearing only the
-      // first would leave the second as a way in.
-      process.env.GOOGLE_API_KEY = 'sk-ambient-google';
-
-      const auth = await resolveAliasAuth(
-        buildAliasProvider('gemini', true),
-        runtimeSettings,
-      );
-
-      expect(auth).toStrictEqual({ authenticated: false, method: null });
-    });
-
     it('still refuses OPENAI_API_KEY when the runtime settings service reports authOnly too', async () => {
       process.env.OPENAI_API_KEY = 'sk-ambient-openai';
       runtimeSettings.set('authOnly', true);
@@ -273,20 +247,6 @@ describe('alias provider factories under authOnly', () => {
       expect(auth).toStrictEqual({
         authenticated: true,
         method: 'env-anthropic_api_key',
-      });
-    });
-
-    it('authenticates a gemini alias from GEMINI_API_KEY', async () => {
-      process.env.GEMINI_API_KEY = 'sk-ambient-gemini';
-
-      const auth = await resolveAliasAuth(
-        buildAliasProvider('gemini', false),
-        runtimeSettings,
-      );
-
-      expect(auth).toStrictEqual({
-        authenticated: true,
-        method: 'env-gemini_api_key',
       });
     });
   });

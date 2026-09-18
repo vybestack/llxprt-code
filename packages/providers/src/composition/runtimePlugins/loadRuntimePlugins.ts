@@ -74,9 +74,11 @@ async function importPluginPackage(specifier: string): Promise<unknown> {
  * Startup entry point: discover the installed plugin packages and load them.
  *
  * Installing a package is the only way to add a provider, so there is nothing
- * to configure and no list to maintain. Discovery is deterministic
- * (alphabetical by package name), which fixes plugin order and therefore
- * contributed-alias order.
+ * to configure and no list to maintain. When the process runs from a source
+ * checkout of this repository, the checkout's own `plugins/` directory
+ * (#2759) is discovered alongside the installed packages. Discovery is
+ * deterministic (alphabetical by package name within each source), which
+ * fixes plugin order and therefore contributed-alias order.
  */
 export async function loadInstalledRuntimePlugins(): Promise<ProviderContributionRegistry> {
   return loadRuntimePlugins(discoverRuntimePluginPackages());

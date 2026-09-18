@@ -27,27 +27,21 @@ type MessageToolCallWithOptionalFunction = Omit<
 > & {
   function?: { name?: string; arguments?: string };
 };
+type ChunkDelta = OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta;
 
 import { type DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { type ToolCallPipeline } from './ToolCallPipeline.js';
-import { firstTruthyString } from '../utils/falsyFallback.js';
 import { type GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
 import { extractThinkTagsAsBlock } from '../utils/thinkingExtraction.js';
 import { sanitizeProviderText } from '../utils/textSanitizer.js';
 import { normalizeToolName } from '../utils/toolNameNormalization.js';
-import {
-  normalizeToHistoryToolId,
-  normalizeToOpenAIToolId,
-} from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
-import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
+import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import {
   coerceMessageContentToString,
-  sanitizeToolArgumentsString,
   extractKimiToolCallsFromText,
   cleanThinkingContent,
   parseStreamingReasoningDelta,
 } from './OpenAIResponseParser.js';
-import { mapFinishReason } from './finishReasonMapping.js';
 import { type ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import {
   type StreamingState,
@@ -56,8 +50,6 @@ import {
   hasToolsButNoTextContent,
   checkStreamingError,
   parseChunkData,
-  buildUsageMetadata,
-  applyTerminalMetadata,
   isCancellation,
   logStreamCompletionSummary,
   buildToolCallsForHistory,
@@ -65,6 +57,7 @@ import {
   emitUsageOnlyMetadata,
   createPerChoiceNotifier,
 } from './OpenAIStreamProcessorState.js';
+import { emitCombinedTerminalContent } from './OpenAIStreamTerminalContent.js';
 import { appendBufferedText } from './openaiTextBuffer.js';
 
 export interface StreamProcessorDeps {
@@ -405,9 +398,7 @@ function processDeltaToolCalls(
 ): void {
   let addedFragments = false;
   // Cast to allow for runtime undefined delta (external API boundary)
-  const delta = choice.delta as
-    | OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta
-    | undefined;
+  const delta = choice.delta as ChunkDelta | undefined;
   const deltaToolCalls = delta?.tool_calls;
   if (deltaToolCalls && deltaToolCalls.length > 0) {
     for (const deltaToolCall of deltaToolCalls) {
@@ -425,9 +416,7 @@ function processDeltaToolCalls(
 
   const choiceMessage = (
     choice as {
-      message?: {
-        tool_calls?: MessageToolCallWithOptionalFunction[];
-      };
+      message?: { tool_calls?: MessageToolCallWithOptionalFunction[] };
     }
   ).message;
   const messageToolCalls = choiceMessage?.tool_calls;
@@ -534,9 +523,7 @@ async function* processStreamingChunk(
   }
 
   // Handle text content
-  const delta = choice.delta as
-    | OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta
-    | undefined;
+  const delta = choice.delta as ChunkDelta | undefined;
   const rawDeltaContent = coerceMessageContentToString(
     delta?.content as unknown,
   );
@@ -602,139 +589,6 @@ function handleStreamError(
 }
 
 /**
- * Build pipeline tool-call blocks from the cached pipeline result.
- */
-function buildPipelineToolCallBlocks(
-  state: StreamingState,
-  deps: StreamProcessorDeps,
-): ToolCallBlock[] {
-  const result = state.cachedPipelineResult;
-  if (!result) return [];
-  const blocks: ToolCallBlock[] = [];
-  if (result.normalized.length > 0 || result.failed.length > 0) {
-    for (const normalizedCall of result.normalized) {
-      const sanitizedArgs = sanitizeToolArgumentsString(
-        normalizedCall.originalArgs ?? normalizedCall.args,
-        deps.logger,
-      );
-
-      const processedParameters = processToolParameters(
-        sanitizedArgs,
-        normalizedCall.name,
-      );
-
-      blocks.push({
-        type: 'tool_call',
-        id: normalizeToHistoryToolId(
-          firstTruthyString(normalizedCall.id, `call_${normalizedCall.index}`),
-        ),
-        name: normalizedCall.name,
-        parameters: processedParameters,
-      });
-    }
-
-    for (const failed of result.failed) {
-      deps.logger.warn(
-        `Tool call validation failed for index ${failed.index}: ${failed.validationErrors.join(', ')}`,
-      );
-    }
-  }
-  return blocks;
-}
-
-/**
- * Emit combined terminal content with reasoning blocks and pipeline tool calls.
- */
-function* emitCombinedTerminalContent(
-  state: StreamingState,
-  model: string,
-  deps: StreamProcessorDeps,
-): Generator<IContent, void, unknown> {
-  const { cleanedText: cleanedReasoning, toolCalls: reasoningToolCalls } =
-    state.accumulatedReasoningContent.length > 0
-      ? extractKimiToolCallsFromText(
-          state.accumulatedReasoningContent,
-          deps.logger,
-        )
-      : { cleanedText: '', toolCalls: [] as ToolCallBlock[] };
-
-  const pipelineToolCallBlocks = buildPipelineToolCallBlocks(state, deps);
-
-  const combinedBlocks: Array<ThinkingBlock | ToolCallBlock> = [];
-
-  if (cleanedReasoning.length > 0) {
-    combinedBlocks.push({
-      type: 'thinking',
-      thought: cleanedReasoning,
-      sourceField: state.reasoningSourceField ?? 'reasoning_content',
-      isHidden: false,
-    } as ThinkingBlock);
-  }
-
-  combinedBlocks.push(...reasoningToolCalls, ...pipelineToolCallBlocks);
-
-  if (combinedBlocks.length > 0) {
-    const combinedContent: IContent = {
-      speaker: 'ai',
-      blocks: combinedBlocks,
-    };
-
-    const finishInfo = state.lastFinishReason
-      ? mapFinishReason(state.lastFinishReason)
-      : undefined;
-    deps.logger.debug(
-      () => `[stream:terminal] building combined terminal content`,
-      {
-        model,
-        combinedBlockCount: combinedBlocks.length,
-        cleanedReasoningLength: cleanedReasoning.length,
-        reasoningToolCallCount: reasoningToolCalls.length,
-        pipelineToolCallCount: pipelineToolCallBlocks.length,
-        rawFinishReason: state.lastFinishReason,
-        ...finishInfo,
-        hasStreamingUsage: Boolean(state.streamingUsage),
-      },
-    );
-
-    if (state.streamingUsage !== null) {
-      combinedContent.metadata = buildUsageMetadata(
-        state.streamingUsage,
-        finishInfo,
-      );
-    } else if (finishInfo) {
-      combinedContent.metadata = finishInfo;
-    }
-
-    applyTerminalMetadata(combinedContent, state, finishInfo);
-
-    deps.logger.debug(
-      () => `[stream:terminal] emitting combined terminal content`,
-      {
-        model,
-        blockCount: combinedContent.blocks.length,
-        rawStopReason: combinedContent.metadata?.rawStopReason,
-        finishReason: combinedContent.metadata?.finishReason,
-        hasUsage: Boolean(combinedContent.metadata?.usage),
-        hasEmittedTerminalMetadata: state.hasEmittedTerminalMetadata,
-      },
-    );
-    yield combinedContent;
-  } else {
-    deps.logger.debug(
-      () => `[stream:terminal] skipped combined terminal content emission`,
-      {
-        model,
-        cleanedReasoningLength: cleanedReasoning.length,
-        reasoningToolCallCount: reasoningToolCalls.length,
-        pipelineToolCallCount: pipelineToolCallBlocks.length,
-        rawFinishReason: state.lastFinishReason,
-        hasStreamingUsage: Boolean(state.streamingUsage),
-      },
-    );
-  }
-}
-
-/**
  * Emit terminal chunks (combined, usage-only, finish-only) after stream ends.
  */
 function* emitTerminalChunks(
@@ -742,19 +596,11 @@ function* emitTerminalChunks(
   model: string,
   deps: StreamProcessorDeps,
 ): Generator<IContent, void, unknown> {
+  const totalCalls = () =>
+    deps.toolCallPipeline.getStats().collector.totalCalls;
   yield* emitCombinedTerminalContent(state, model, deps);
-  yield* emitUsageOnlyMetadata(
-    state,
-    model,
-    deps.logger,
-    () => deps.toolCallPipeline.getStats().collector.totalCalls,
-  );
-  yield* emitFinishOnlyMetadata(
-    state,
-    model,
-    deps.logger,
-    () => deps.toolCallPipeline.getStats().collector.totalCalls,
-  );
+  yield* emitUsageOnlyMetadata(state, model, deps.logger, totalCalls);
+  yield* emitFinishOnlyMetadata(state, model, deps.logger, totalCalls);
 }
 
 /**

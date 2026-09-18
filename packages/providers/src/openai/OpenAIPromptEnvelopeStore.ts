@@ -12,6 +12,7 @@ import type {
   PromptEnvelopeProjection,
   UnsupportedMediaEntry,
 } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import type { MediaBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   projectOpenAIChatPromptEnvelope,
   projectOpenAIResponsesPromptEnvelope,
@@ -84,7 +85,7 @@ interface PrepareOpenAIProjectionInput {
   readonly responsesPdfEnabled: boolean;
   readonly collectUnsupported: (
     options: NormalizedGenerateChatOptions,
-    supports: (category: string) => boolean,
+    supports: (block: MediaBlock, category: string) => boolean,
   ) => readonly UnsupportedMediaEntry[];
 }
 
@@ -97,7 +98,7 @@ export async function prepareOpenAIPromptProjection(
       { protocol: 'openai-responses', requestContext },
       input.collectUnsupported(
         input.normalized,
-        (category) =>
+        (_block, category) =>
           category === 'image' ||
           (category === 'pdf' && input.responsesPdfEnabled),
       ),
@@ -113,7 +114,7 @@ export async function prepareOpenAIPromptProjection(
     },
     input.collectUnsupported(
       prepared.options,
-      (category) => category === 'image',
+      (_block, category) => category === 'image',
     ),
   );
 }

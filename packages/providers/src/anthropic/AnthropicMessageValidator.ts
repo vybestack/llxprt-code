@@ -19,6 +19,7 @@ import type {
 } from './AnthropicMessageNormalizer.js';
 import { materializeAnchorBoundary } from './AnthropicAnchorCache.js';
 import { materializeMediaPurgeBoundary } from './AnthropicMediaPurgeCache.js';
+import { modelSupportsPrefill } from './AnthropicModelData.js';
 
 function collectToolUseIds(
   blocks: AnthropicMessageBlock[],
@@ -330,11 +331,13 @@ function handleMissingUserMessage(
  * - Merges consecutive messages of the same role
  * - Ensures sequence starts with user
  * - Ensures no empty messages
- * - Ensures no trailing assistant message when thinking is enabled
+ * - Ensures no trailing assistant message when thinking is enabled or the
+ *   model does not support assistant message prefill
  */
 export function ensureValidMessageSequence(
   messages: AnthropicMessage[],
   shouldIncludeThinking: boolean,
+  modelId: string | undefined,
   logger: { debug: (fn: () => string) => void },
 ): AnthropicMessage[] {
   let result = [...messages];
@@ -343,7 +346,12 @@ export function ensureValidMessageSequence(
   result = ensureStartsWithUser(result, logger);
   result = ensureNotEmpty(result);
   result = sanitizeEmptyMessages(result);
-  result = ensureNoTrailingAssistant(result, shouldIncludeThinking, logger);
+  result = ensureNoTrailingAssistant(
+    result,
+    shouldIncludeThinking,
+    modelId,
+    logger,
+  );
 
   return result;
 }
@@ -463,16 +471,20 @@ function sanitizeEmptyMessages(
 function ensureNoTrailingAssistant(
   messages: AnthropicMessage[],
   shouldIncludeThinking: boolean,
+  modelId: string | undefined,
   logger: { debug: (fn: () => string) => void },
 ): AnthropicMessage[] {
   if (
-    shouldIncludeThinking &&
     messages.length > 0 &&
-    messages[messages.length - 1].role === 'assistant'
+    messages[messages.length - 1].role === 'assistant' &&
+    (shouldIncludeThinking || !modelSupportsPrefill(modelId))
   ) {
+    const reason = shouldIncludeThinking
+      ? 'thinking enabled'
+      : 'model does not support prefill';
     logger.debug(
       () =>
-        `Last message is assistant with thinking enabled, adding placeholder user message to avoid prefill error`,
+        `Last message is assistant with ${reason}, adding placeholder user message to avoid prefill error`,
     );
     return [
       ...messages,

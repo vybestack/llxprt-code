@@ -13,6 +13,7 @@ import {
   buildUnsupportedMediaPlaceholder,
   classifyMediaBlock,
   detectImageMimeTypeFromBase64,
+  isUrlEncodedMediaBlock,
 } from '../utils/mediaUtils.js';
 import type {
   AnthropicDocumentBlock,
@@ -84,6 +85,7 @@ export interface HumanMediaConversion {
 
 export function convertHumanMessageWithMedia(
   blocks: ContentBlock[],
+  supportsUrlImages = true,
 ): HumanMediaConversion {
   const parts: HumanMediaPart[] = [];
   const providerPartBySourceBlock: Array<number | undefined> = [];
@@ -99,7 +101,13 @@ export function convertHumanMessageWithMedia(
       });
     } else if (block.type === 'media') {
       const category = classifyMediaBlock(block);
-      if (category === 'image') {
+      // #3693: zai's Anthropic-compatible endpoint rejects url-sourced
+      // images; on such endpoints a url image takes the placeholder path.
+      const urlImageUnsupported =
+        !supportsUrlImages &&
+        category === 'image' &&
+        isUrlEncodedMediaBlock(block);
+      if (category === 'image' && !urlImageUnsupported) {
         parts.push(mediaBlockToAnthropicImage(block));
       } else if (category === 'pdf') {
         parts.push(mediaBlockToAnthropicDocument(block));

@@ -53,10 +53,12 @@ export {
   isAliasDefaultModelProvider,
   overrideAliasDefaultModel,
   bindProviderAliasIdentity,
+  bindAliasMediaTransportCapabilities,
+  resolveAliasEnvApiKey,
+  enforceAliasAuthOnly,
   createOpenAIAliasProvider,
   createOpenAIResponsesAliasProvider,
   createOpenAIVercelAliasProvider,
-  createGeminiAliasProvider,
   createAnthropicAliasProvider,
   registerAliasProviders,
 } from './aliasProviderFactory.js';

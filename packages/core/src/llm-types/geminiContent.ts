@@ -17,44 +17,45 @@
 /**
  * Neutral structural shapes for the Gemini-style content/part wire format.
  *
- * These types model only the fields that core's history conversion layer
- * references. They are structurally compatible with (but do not import)
- * {@link @google/genai} `Part` / `Content`, so providers that pass concrete
- * SDK objects continue to work via TypeScript structural assignability.
+ * Only the inbound parse direction survives here: these types model the
+ * fields consumed by core's history conversion layer (the
+ * `ContentConverters.toIContent`/`toIContents` parse surface,
+ * `geminiResponseMapper`, history/session loading). They are structurally
+ * compatible with (but do not import) the provider wire `Part`/`Content`
+ * shapes, so concrete wire objects continue to work via TypeScript
+ * structural assignability.
+ *
+ * The outbound request direction was deleted with its converter surface
+ * (#2628); the member shapes only it referenced (FunctionCall,
+ * FunctionResponse, InlineData, the standalone part-extension interface)
+ * were folded into the part shape below.
  */
 
 /**
- * Structural equivalent of {@link @google/genai} `FunctionCall`.
+ * Neutral structural shape of a single Gemini content part.
+ *
+ * Only the fields consumed by core's history conversion are modeled.
+ * Concrete wire `Part` objects are structurally assignable to this type.
  */
-export interface GeminiFunctionCall {
-  id?: string;
-  name?: string;
-  args?: Record<string, unknown>;
-}
-
-/**
- * Structural equivalent of {@link @google/genai} `FunctionResponse`.
- */
-export interface GeminiFunctionResponse {
-  id?: string;
-  name?: string;
-  response?: Record<string, unknown>;
-}
-
-/**
- * Structural equivalent of {@link @google/genai} `Blob`.
- */
-export interface GeminiInlineData {
-  mimeType?: string;
-  data?: string;
-  displayName?: string;
-}
-
-/**
- * Provider-extension key stamped on thinking parts so the original
- * source field name survives a Gemini round-trip.
- */
-export interface GeminiPartExtension {
+export interface GeminiContentPart {
+  text?: string;
+  thought?: boolean;
+  thoughtSignature?: string;
+  functionCall?: {
+    id?: string;
+    name?: string;
+    args?: Record<string, unknown>;
+  };
+  functionResponse?: {
+    id?: string;
+    name?: string;
+    response?: Record<string, unknown>;
+  };
+  inlineData?: {
+    mimeType?: string;
+    data?: string;
+    displayName?: string;
+  };
   /**
    * Source field name for round-trip serialization.
    * Known values: 'reasoning_content', 'reasoning', 'thinking', 'thought', 'think_tags'.
@@ -74,24 +75,9 @@ export interface GeminiPartExtension {
 }
 
 /**
- * Neutral structural shape of a single Gemini content part.
- *
- * Only the fields consumed by core's history conversion are modeled.
- * Concrete SDK `Part` objects are structurally assignable to this type.
- */
-export interface GeminiContentPart extends GeminiPartExtension {
-  text?: string;
-  thought?: boolean;
-  thoughtSignature?: string;
-  functionCall?: GeminiFunctionCall;
-  functionResponse?: GeminiFunctionResponse;
-  inlineData?: GeminiInlineData;
-}
-
-/**
  * Neutral structural shape of a Gemini `Content` message.
  *
- * Concrete SDK `Content` objects are structurally assignable to this type.
+ * Concrete wire `Content` objects are structurally assignable to this type.
  */
 export interface GeminiContent {
   role?: string;

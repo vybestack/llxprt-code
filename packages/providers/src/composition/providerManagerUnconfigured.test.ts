@@ -106,14 +106,14 @@ describe('createProviderManager: unconfigured state (#2481)', () => {
   });
 });
 
-describe('createProviderManager: explicit gemini unchanged (#2481)', () => {
+describe('createProviderManager: explicit provider activation unchanged (#2481)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     const mockFs = new MockFileSystem();
     setFileSystem(mockFs);
   });
 
-  it('activates gemini when explicitly set via setActiveProvider after creation', () => {
+  it('activates openai when explicitly set via setActiveProvider after creation', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
@@ -123,25 +123,25 @@ describe('createProviderManager: explicit gemini unchanged (#2481)', () => {
     // No provider should be active initially (#2481).
     expect(manager.hasActiveProvider()).toBe(false);
 
-    // Explicit gemini activation must still work.
-    manager.setActiveProvider('gemini');
+    // Explicit openai activation must still work.
+    manager.setActiveProvider('openai');
     expect(manager.hasActiveProvider()).toBe(true);
-    expect(manager.getActiveProviderName()).toBe('gemini');
+    expect(manager.getActiveProviderName()).toBe('openai');
   });
 
-  it('auto-activates gemini from explicit settingsService activeProvider (no manual setActiveProvider)', () => {
+  it('auto-activates openai from explicit settingsService activeProvider (no manual setActiveProvider)', () => {
     const settingsService = new SettingsService();
-    settingsService.set('activeProvider', 'gemini');
+    settingsService.set('activeProvider', 'openai');
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
       allowBrowserEnvironment: true,
     });
 
-    // When settingsService has activeProvider='gemini',
+    // When settingsService has activeProvider='openai',
     // createProviderManager must auto-activate it without needing a manual
     // setActiveProvider call (same path as CLI profile/env resolution).
     expect(manager.hasActiveProvider()).toBe(true);
-    expect(manager.getActiveProviderName()).toBe('gemini');
+    expect(manager.getActiveProviderName()).toBe('openai');
   });
 });
 
@@ -209,14 +209,14 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
 
   it('trims whitespace from settingsService activeProvider', () => {
     const settingsService = new SettingsService();
-    settingsService.set('activeProvider', '  gemini  ');
+    settingsService.set('activeProvider', '  openai  ');
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
       allowBrowserEnvironment: true,
     });
 
     expect(manager.hasActiveProvider()).toBe(true);
-    expect(manager.getActiveProviderName()).toBe('gemini');
+    expect(manager.getActiveProviderName()).toBe('openai');
   });
 
   it('treats whitespace-only activeProvider as unconfigured', () => {
@@ -277,7 +277,7 @@ describe('createProviderManager: UNCONFIGURED_PROVIDER sentinel precedence (#248
     // provider. resolveExplicitProvider must skip the sentinel and continue
     // to the settingsService source, activating the real provider.
     const settingsService = new SettingsService();
-    settingsService.set('activeProvider', 'gemini');
+    settingsService.set('activeProvider', 'openai');
     const runtime = createProviderRuntimeContext({ settingsService });
     const config = makeMinimalConfig({ getProvider: () => 'unconfigured' });
     const { manager } = createProviderManager(runtime, {
@@ -286,12 +286,12 @@ describe('createProviderManager: UNCONFIGURED_PROVIDER sentinel precedence (#248
     });
 
     expect(manager.hasActiveProvider()).toBe(true);
-    expect(manager.getActiveProviderName()).toBe('gemini');
+    expect(manager.getActiveProviderName()).toBe('openai');
   });
 
   it('falls through whitespace-only config provider to a real settingsService provider', () => {
     const settingsService = new SettingsService();
-    settingsService.set('activeProvider', 'gemini');
+    settingsService.set('activeProvider', 'openai');
     const runtime = createProviderRuntimeContext({ settingsService });
     const config = makeMinimalConfig({ getProvider: () => '   ' });
     const { manager } = createProviderManager(runtime, {
@@ -300,6 +300,6 @@ describe('createProviderManager: UNCONFIGURED_PROVIDER sentinel precedence (#248
     });
 
     expect(manager.hasActiveProvider()).toBe(true);
-    expect(manager.getActiveProviderName()).toBe('gemini');
+    expect(manager.getActiveProviderName()).toBe('openai');
   });
 });

@@ -201,7 +201,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
         transportToken,
         unsupportedMedia: collectUnsupportedMedia(
           normalized.contents,
-          (category) =>
+          (_block, category) =>
             category === 'image' || (category === 'pdf' && pdfEnabled),
         ),
       },

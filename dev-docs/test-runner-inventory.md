@@ -270,7 +270,7 @@ shared root: it would be strictly redundant with the bespoke runner.
 
 ### packages/core — fully migrated (see above)
 
-### packages/providers (discovery-driven, 558 files)
+### packages/providers (discovery-driven, 630 files)
 
 The providers workspace primary `test` script is fully discovery-driven
 (`bun ../../scripts/run_bun_tests.ts --workspace providers`). The shared root
@@ -280,7 +280,6 @@ listed at issue #2578 time; see `scripts/bun-test-roots.ts` for the
 authoritative root table. Notable #2946 additions:
 
 - `src/__tests__/BaseProvider.proxyKeyStorage.test.ts`
-- `src/gemini/GeminiProvider.auth.test.ts`
 
 ### packages/storage (7 files)
 

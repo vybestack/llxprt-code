@@ -217,7 +217,7 @@ describe('cli.tsx main function', () => {
   type MockedEventEmitter = MockedMembers<EventEmitter<AppEvents>, 'emit'>;
 
   let loadSettingsMock: Mock<typeof loadSettings>;
-  let originalEnvGeminiSandbox: string | undefined;
+  let originalEnvLlxprtSandbox: string | undefined;
   let originalEnvSandbox: string | undefined;
   let projectTempDir: string;
   let initialUnhandledRejectionListeners: NodeJS.UnhandledRejectionListener[] =
@@ -246,7 +246,7 @@ describe('cli.tsx main function', () => {
     });
 
     // Store and clear sandbox-related env variables to ensure a consistent test environment
-    originalEnvGeminiSandbox = process.env.LLXPRT_SANDBOX;
+    originalEnvLlxprtSandbox = process.env.LLXPRT_SANDBOX;
     originalEnvSandbox = process.env.SANDBOX;
     delete process.env.LLXPRT_SANDBOX;
     delete process.env.SANDBOX;
@@ -259,8 +259,8 @@ describe('cli.tsx main function', () => {
     await rm(projectTempDir, { recursive: true, force: true });
 
     // Restore original env variables
-    if (originalEnvGeminiSandbox !== undefined) {
-      process.env.LLXPRT_SANDBOX = originalEnvGeminiSandbox;
+    if (originalEnvLlxprtSandbox !== undefined) {
+      process.env.LLXPRT_SANDBOX = originalEnvLlxprtSandbox;
     } else {
       delete process.env.LLXPRT_SANDBOX;
     }
