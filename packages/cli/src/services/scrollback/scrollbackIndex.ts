@@ -166,7 +166,7 @@ export class ScrollbackIndex {
     ) {
       entries = entries.slice(0, -1);
     }
-    const last = entries.at(-1);
+    const last = entries.length > 0 ? entries[entries.length - 1] : undefined;
     const coveredThrough =
       last === undefined ? 0 : last.byteOffset + last.byteLen;
     if (coveredThrough < size) {
@@ -184,14 +184,15 @@ export class ScrollbackIndex {
 
   /** Highest indexed uiSeq, or 0 for an empty index. */
   get lastUiSeq(): number {
-    return this.entries.at(-1)?.uiSeq ?? 0;
+    const entries = this.entries;
+    return entries.length > 0 ? entries[entries.length - 1].uiSeq : 0;
   }
 
   /** Timeline metadata without parsing any journal payloads. */
   getRangeMeta(): { count: number; firstUiSeq: number; lastUiSeq: number } {
     return {
       count: this.entries.length,
-      firstUiSeq: this.entries.at(0)?.uiSeq ?? 0,
+      firstUiSeq: this.entries.length > 0 ? this.entries[0].uiSeq : 0,
       lastUiSeq: this.lastUiSeq,
     };
   }

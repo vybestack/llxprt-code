@@ -32,7 +32,8 @@ function textContent(speaker: 'human' | 'ai', text: string): IContent {
 
 function seqOf(service: HistoryService, positionFromEnd: number): number {
   const entries = service.getRecent(positionFromEnd + 1);
-  const entry = entries.at(-1 - positionFromEnd);
+  const index = entries.length - 1 - positionFromEnd;
+  const entry = index >= 0 ? entries[index] : undefined;
   if (entry === undefined) {
     throw new Error('expected a history entry');
   }
@@ -131,7 +132,7 @@ describe('HistoryService context range', () => {
     ]);
     const summaries = service.getContextSummaries();
     expect(summaries).toHaveLength(1);
-    const summary = summaries.at(0);
+    const summary = summaries.length > 0 ? summaries[0] : undefined;
     if (summary === undefined) {
       throw new Error('expected one summary');
     }
