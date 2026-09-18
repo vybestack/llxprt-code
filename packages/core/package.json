@@ -401,10 +401,6 @@
       "bun": "./src/scheduler/liveOutput.ts",
       "import": "./dist/src/scheduler/liveOutput.js"
     },
-    "./config/schedulerSingleton.js": {
-      "bun": "./src/config/schedulerSingleton.ts",
-      "import": "./dist/src/config/schedulerSingleton.js"
-    },
     "./config/subagentManager.js": {
       "bun": "./src/config/subagentManager.ts",
       "import": "./dist/src/config/subagentManager.js"

@@ -103,25 +103,29 @@ export async function dispatch(
     config,
     messageBus,
   );
+  // The processing context object is the scheduler registry owner for this
+  // run: executeNonInteractiveTool acquires the 'subagent' entry keyed on it,
+  // so the release below pairs on the same object and purpose.
+  const processingContext = {
+    output,
+    subagentId: 'flag-test',
+    logger: new DebugLogger('flag-test'),
+    toolExecutorContext,
+    config,
+    messageBus,
+  };
   try {
     return await processFunctionCalls(
       [call],
       new AbortController(),
       'flag-test',
-      {
-        output,
-        subagentId: 'flag-test',
-        logger: new DebugLogger('flag-test'),
-        toolExecutorContext,
-        config,
-        messageBus,
-      },
+      processingContext,
     );
   } finally {
     // disposeScheduler is synchronous (void); guard only against a sync throw
     // so config.dispose() always runs.
     try {
-      toolExecutorContext.disposeScheduler(toolExecutorContext.getSessionId());
+      toolExecutorContext.disposeScheduler(processingContext, 'subagent');
     } finally {
       await config.dispose();
     }

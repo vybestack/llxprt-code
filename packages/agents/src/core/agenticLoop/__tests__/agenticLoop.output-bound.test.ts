@@ -4,9 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { DEFAULT_ACQUISITION_BUDGET_BYTES } from '@vybestack/llxprt-code-tools/acquisition.js';
-import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-core';
@@ -27,14 +26,6 @@ const LIVE_CHUNK_COUNT = 600;
 const LIVE_CHUNK = 'x'.repeat(8192);
 
 describe('AgenticLoop live-output acquisition bound', () => {
-  beforeEach(() => {
-    clearAllSchedulers();
-  });
-
-  afterEach(() => {
-    clearAllSchedulers();
-  });
-
   it('emits one omission notice before completion when a producer outruns the consumer', async () => {
     const {
       retainedDataBytes,

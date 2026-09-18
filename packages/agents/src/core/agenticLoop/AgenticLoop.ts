@@ -41,7 +41,7 @@ import {
   type ToolCallRequestInfo,
 } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
-import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
+import type { SchedulerHandle } from '@vybestack/llxprt-code-core/session/sessionExecutionServices.js';
 import {
   MessageBusType,
   type ToolConfirmationRequest,
@@ -170,15 +170,6 @@ export class AgenticLoop {
    * tool results are closed — shape-safe across all provider formats.
    */
   private pendingSteer: string[] = [];
-  /**
-   * A scheduler-singleton key dedicated to this loop instance. The CLI main
-   * scheduler is keyed by `config.getSessionId()`; reusing that key would make
-   * the loop's `getOrCreateScheduler` call REPLACE the CLI's scheduler
-   * callbacks (last-writer-wins) and never restore them on dispose. An isolated
-   * key keeps the loop's transient per-turn scheduler separate from the CLI
-   * main scheduler that serves client-initiated (e.g. slash-command) tools.
-   */
-  private readonly schedulerSessionId: string;
 
   constructor(options: AgenticLoopOptions) {
     this.agentClient = options.agentClient;
@@ -187,7 +178,6 @@ export class AgenticLoop {
     this.approvalHandler = options.approvalHandler;
     this.interactiveMode = options.interactiveMode ?? false;
     this.displayCallbacks = options.displayCallbacks;
-    this.schedulerSessionId = `${options.config.getSessionId()}#agentic-loop#${randomUUID()}`;
   }
 
   private generateInitialPromptId(): string {
@@ -513,7 +503,6 @@ export class AgenticLoop {
     signal: AbortSignal,
   ): AsyncGenerator<AgenticLoopEvent, TurnToolResult> {
     const queue = new AgenticEventQueue();
-    const sessionId = this.schedulerSessionId;
 
     const { resolveCompletion, rejectCompletion, completionPromise } =
       createCompletionController();
@@ -522,7 +511,6 @@ export class AgenticLoop {
     const forwardingState = { active: true };
 
     const scheduler = await this.createSchedulerWithCallbacks(
-      sessionId,
       queue,
       resolveCompletion,
       rejectCompletion,
@@ -587,7 +575,7 @@ export class AgenticLoop {
       forwardingState.active = false;
       queue.close();
       cleanupAbortListener();
-      this.config.disposeScheduler(sessionId);
+      this.config.disposeScheduler(this, 'agentic-loop');
     }
   }
 
@@ -607,13 +595,12 @@ export class AgenticLoop {
   }
 
   private async createSchedulerWithCallbacks(
-    sessionId: string,
     queue: AgenticEventQueue,
     resolveCompletion: (calls: CompletedToolCall[]) => void,
     rejectCompletion: (error: unknown) => void,
     forwardingState: { active: boolean },
     markAcceptedUpdate: () => void,
-  ): Promise<ToolSchedulerContract> {
+  ): Promise<SchedulerHandle> {
     const display = this.displayCallbacks;
     const pushQueueEvent = (event: AgenticLoopEvent): boolean => {
       try {
@@ -632,8 +619,14 @@ export class AgenticLoop {
       }
     };
 
+    // The loop instance is its own registry owner ('agentic-loop' purpose):
+    // object identity keeps this transient per-turn scheduler separate from
+    // the CLI main scheduler ('session' purpose) even though both live on the
+    // same Config, and the loop's setCallbacks can never clobber the main
+    // scheduler's callbacks.
     return this.config.getOrCreateScheduler(
-      sessionId,
+      this,
+      'agentic-loop',
       {
         outputUpdateHandler: (callId, update) => {
           if (!forwardingState.active) {

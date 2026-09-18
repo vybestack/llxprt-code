@@ -17,7 +17,6 @@
  */
 
 import {
-  type Config,
   type ToolCallRequestInfo,
   type CompletedToolCall,
   type OutputUpdateHandler,
@@ -25,7 +24,9 @@ import {
   type ToolCall,
   type EditorType,
   type SubagentSchedulerFactory,
-  type ToolSchedulerContract,
+  type SchedulerHandle,
+  type SchedulerPurpose,
+  type SchedulerCallbacks,
   hasInteractiveSubagentScheduler,
   DEFAULT_AGENT_ID,
   type LiveOutputUpdate,
@@ -37,16 +38,19 @@ import type React from 'react';
 
 /**
  * The explicit-message-bus getOrCreateScheduler shape the interactive path
- * relies on. The public `Config` type keeps `getOrCreateScheduler`
- * intentionally loose; this documents the exact scheduler surface we depend on
- * and is shared by both the main runtime access and the subagent config narrow.
+ * relies on. It documents the exact scheduler surface we depend on and is
+ * shared by both the main runtime access and the subagent scheduler factory.
+ *
+ * The registry key is the owner object supplied by the caller paired with a
+ * purpose; no session-id string participates.
  *
  * @plan:ISSUE-2376
  */
 export interface ExplicitMessageBusScheduler {
-  disposeScheduler(sessionId: string): void;
+  disposeScheduler(owner: object, purpose: SchedulerPurpose): void;
   getOrCreateScheduler(
-    sessionId: string,
+    owner: object,
+    purpose: SchedulerPurpose,
     callbacks: {
       outputUpdateHandler?: OutputUpdateHandler;
       onAllToolCallsComplete?: (
@@ -61,21 +65,11 @@ export interface ExplicitMessageBusScheduler {
     dependencies?: {
       messageBus?: MessageBus;
     },
-  ): Promise<ToolSchedulerContract>;
+  ): Promise<SchedulerHandle>;
   setInteractiveSubagentSchedulerFactory(
     factory: SubagentSchedulerFactory | undefined,
   ): void;
 }
-
-/**
- * A subagent's own `Config` narrowed to the explicit-message-bus scheduler
- * factory the interactive path relies on. Used only for the subagent scheduler
- * args (core's SubagentSchedulerFactory always supplies a Config).
- *
- * @plan:ISSUE-2376
- */
-export type SchedulerConfigWithExplicitMessageBus = Config &
-  ExplicitMessageBusScheduler;
 
 /**
  * The scheduler sub-runtime (session + scheduler capabilities) this module
@@ -84,6 +78,10 @@ export type SchedulerConfigWithExplicitMessageBus = Config &
  * runtime layer does not depend on the UI layer's cliUiRuntime module while
  * remaining structurally compatible with the `ReactToolSchedulerRuntime` the
  * hook passes.
+ *
+ * The runtime object doubles as the 'session' registry owner: it is built
+ * once per session at the composition edge, so every scheduler acquisition
+ * and release in this module keys on the same object identity.
  *
  * @plan:ISSUE-2376
  */
@@ -135,7 +133,7 @@ export function normalizeRequest(
  * Processes pending schedule requests after scheduler initialization.
  */
 function processPendingRequests(
-  instance: ToolSchedulerContract,
+  instance: SchedulerHandle,
   requests: PendingScheduleRequests,
 ): void {
   for (const { request, signal } of requests) {
@@ -175,9 +173,7 @@ function createMainSchedulerCallbacks(
   mainSchedulerId: symbol,
   refs: SchedulerRefs,
   mounted: React.MutableRefObject<boolean>,
-): Parameters<
-  SchedulerConfigWithExplicitMessageBus['getOrCreateScheduler']
->[1] {
+): SchedulerCallbacks {
   return {
     outputUpdateHandler: (toolCallId, update) => {
       if (!mounted.current) return;
@@ -210,9 +206,7 @@ function createSubagentCallbacks(
   schedulerId: symbol,
   refs: SchedulerRefs,
   args: Parameters<SubagentSchedulerFactory>[0],
-): Parameters<
-  SchedulerConfigWithExplicitMessageBus['getOrCreateScheduler']
->[1] {
+): SchedulerCallbacks {
   return {
     outputUpdateHandler: (toolCallId, update) => {
       refs.updateToolCallOutput(schedulerId, toolCallId, update);
@@ -242,21 +236,23 @@ function createSubagentCallbacks(
  */
 async function initializeSchedulerInstance(
   runtime: SchedulerRuntimeAccess,
-  sessionId: string,
   mainSchedulerId: symbol,
   refs: SchedulerRefs,
   runtimeMessageBus: MessageBus | undefined,
   mounted: React.MutableRefObject<boolean>,
-): Promise<ToolSchedulerContract | null> {
+): Promise<SchedulerHandle | null> {
   try {
+    // Owner is the per-session runtime object itself: one session, one
+    // 'session' entry, acquired here and released in the effect cleanup.
     const instance = await runtime.scheduler.getOrCreateScheduler(
-      sessionId,
+      runtime,
+      'session',
       createMainSchedulerCallbacks(mainSchedulerId, refs, mounted),
       undefined,
       { messageBus: runtimeMessageBus },
     );
     if (!mounted.current) {
-      runtime.scheduler.disposeScheduler(sessionId);
+      runtime.scheduler.disposeScheduler(runtime, 'session');
       return null;
     }
     return instance;
@@ -276,12 +272,11 @@ async function initializeSchedulerInstance(
  */
 function useSchedulerEffect(
   runtime: SchedulerRuntimeAccess,
-  sessionId: string,
   mainSchedulerId: symbol,
   refs: SchedulerRefs,
   runtimeMessageBus: MessageBus | undefined,
   pendingScheduleRequests: React.MutableRefObject<PendingScheduleRequests>,
-  setScheduler: (s: ToolSchedulerContract | null) => void,
+  setScheduler: (s: SchedulerHandle | null) => void,
 ): void {
   useEffect(() => {
     const mounted = { current: true };
@@ -290,7 +285,6 @@ function useSchedulerEffect(
     const init = async () => {
       const instance = await initializeSchedulerInstance(
         runtime,
-        sessionId,
         mainSchedulerId,
         refs,
         runtimeMessageBus,
@@ -312,12 +306,11 @@ function useSchedulerEffect(
     return () => {
       mounted.current = false;
       if (resolved.current) {
-        runtime.scheduler.disposeScheduler(sessionId);
+        runtime.scheduler.disposeScheduler(runtime, 'session');
       }
     };
   }, [
     runtime,
-    sessionId,
     mainSchedulerId,
     refs,
     runtimeMessageBus,
@@ -331,18 +324,14 @@ function useSchedulerEffect(
  */
 export function useScheduler(
   runtime: SchedulerRuntimeAccess,
-  sessionId: string,
   mainSchedulerId: symbol,
   refs: SchedulerRefs,
   runtimeMessageBus: MessageBus | undefined,
   pendingScheduleRequests: React.MutableRefObject<PendingScheduleRequests>,
 ): InteractiveSchedulerHandle | null {
-  const [scheduler, setScheduler] = useState<ToolSchedulerContract | null>(
-    null,
-  );
+  const [scheduler, setScheduler] = useState<SchedulerHandle | null>(null);
   useSchedulerEffect(
     runtime,
-    sessionId,
     mainSchedulerId,
     refs,
     runtimeMessageBus,
@@ -362,15 +351,14 @@ function useExternalSchedulerFactoryCreator(
   const factory = useCallback(
     async (args: Parameters<SubagentSchedulerFactory>[0]) => {
       const schedulerId = Symbol('subagent-scheduler');
-      const schedulerSessionId = args.schedulerConfig.getSessionId();
-      // args.schedulerConfig is the subagent's own Config (from core's
-      // SubagentSchedulerFactory), not the interactive runtime; narrow it to the
-      // explicit-message-bus getOrCreateScheduler shape the interactive path
-      // depends on (the public Config type keeps it intentionally loose).
-      const instance = await (
-        args.schedulerConfig as SchedulerConfigWithExplicitMessageBus
-      ).getOrCreateScheduler(
-        schedulerSessionId,
+      // The subagent's own scheduler config facade is the registry owner:
+      // the facade is created once per subagent run and handed to this
+      // factory, so acquisition and its dispose closure release the same
+      // 'subagent' entry even when two subagents share a session id string.
+      const owner = args.schedulerConfig;
+      const instance = await args.schedulerConfig.getOrCreateScheduler(
+        owner,
+        'subagent',
         createSubagentCallbacks(schedulerId, refs, args),
         undefined,
         { messageBus: runtimeMessageBus },
@@ -380,8 +368,7 @@ function useExternalSchedulerFactoryCreator(
           request: ToolCallRequestInfo | ToolCallRequestInfo[],
           signal: AbortSignal,
         ) => instance.schedule(request, signal),
-        dispose: () =>
-          args.schedulerConfig.disposeScheduler(schedulerSessionId),
+        dispose: () => args.schedulerConfig.disposeScheduler(owner, 'subagent'),
       };
     },
     [refs, runtimeMessageBus],

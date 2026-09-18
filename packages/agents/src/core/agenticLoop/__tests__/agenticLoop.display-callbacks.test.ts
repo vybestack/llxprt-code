@@ -4,12 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import { AgenticLoop } from '../AgenticLoop.js';
 import type { AgenticLoopEvent } from '../types.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { MockModifiableTool } from '@vybestack/llxprt-code-core/test-utils/tools.js';
-import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
@@ -38,13 +37,6 @@ import {
 } from './agenticLoop-test-helpers.js';
 
 describe('AgenticLoop with caller display callbacks', () => {
-  beforeEach(() => {
-    clearAllSchedulers();
-  });
-  afterEach(() => {
-    clearAllSchedulers();
-  });
-
   it('forwards the SAME tool-call and output data to displayCallbacks that it emits as events', async () => {
     const {
       emittedToolUpdateEvents,
@@ -262,16 +254,18 @@ describe('AgenticLoop with caller display callbacks', () => {
     const config: Config = {
       ...baseConfig,
       getOrCreateScheduler: async (
-        sessionId: string,
-        callbacks: Parameters<Config['getOrCreateScheduler']>[1],
-        schedulerOptions: Parameters<Config['getOrCreateScheduler']>[2],
-        deps: Parameters<Config['getOrCreateScheduler']>[3],
+        owner: object,
+        purpose: Parameters<Config['getOrCreateScheduler']>[1],
+        callbacks: Parameters<Config['getOrCreateScheduler']>[2],
+        schedulerOptions: Parameters<Config['getOrCreateScheduler']>[3],
+        deps: Parameters<Config['getOrCreateScheduler']>[4],
       ) => {
         capturedGetPreferredEditor = callbacks.getPreferredEditor;
         capturedOnEditorOpen = callbacks.onEditorOpen;
         capturedOnEditorClose = callbacks.onEditorClose;
         return baseConfig.getOrCreateScheduler(
-          sessionId,
+          owner,
+          purpose,
           callbacks,
           schedulerOptions,
           deps,

@@ -26,7 +26,8 @@ import {
 import type { ToolConfirmationRequest } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
+import type { SchedulerHandle } from '@vybestack/llxprt-code-core/session/sessionExecutionServices.js';
+import type { SchedulerPurpose } from '@vybestack/llxprt-code-core/session/sessionSchedulerRegistry.js';
 import type {
   SchedulerCallbacks,
   SchedulerOptions,
@@ -117,16 +118,17 @@ export interface AgenticLoopRuntime {
   getSessionId(): string;
   getModel(): string;
   getImagePayloadBudgetBytes(): number;
-  disposeScheduler(sessionId: string): void;
+  disposeScheduler(owner: object, purpose: SchedulerPurpose): void;
   getOrCreateScheduler(
-    sessionId: string,
+    owner: object,
+    purpose: SchedulerPurpose,
     callbacks: SchedulerCallbacks,
     options?: SchedulerOptions,
     dependencies?: {
       messageBus?: MessageBus;
       toolRegistry?: ToolRegistry;
     },
-  ): Promise<ToolSchedulerContract>;
+  ): Promise<SchedulerHandle>;
 }
 
 /**

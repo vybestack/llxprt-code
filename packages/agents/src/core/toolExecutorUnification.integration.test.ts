@@ -17,7 +17,7 @@
  * 3. agentId preservation - agentId flows correctly through execution paths
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import {
   CoreToolScheduler,
   type CompletedToolCall,
@@ -35,11 +35,7 @@ import type {
 } from '@vybestack/llxprt-code-tools';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
-import {
-  getOrCreateScheduler,
-  disposeScheduler,
-  clearAllSchedulers,
-} from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
+import { createSchedulerRegistryDelegate } from './__tests__/scheduler-registry-test-helpers.js';
 
 function createMockMessageBus() {
   return {
@@ -127,8 +123,10 @@ function createMockExecutionConfig(
   const ephemeralSettings = options?.ephemeralSettings ?? {};
   const messageBus = createMockMessageBus();
 
-  // Create a base config object that we'll extend with scheduler methods
-  const baseConfig = {
+  // Build the base config fixture, then attach a per-config scheduler
+  // registry delegate keyed by owner object identity plus purpose, matching
+  // production Config semantics.
+  const fixture = {
     getSessionId: () => 'test-session-id',
     getTelemetryLogPromptsEnabled: () => false,
     getExcludeTools: () => [],
@@ -147,36 +145,37 @@ function createMockExecutionConfig(
         new CoreToolScheduler(options),
   };
 
-  // Add scheduler singleton methods - they need the full config reference
+  const delegate = createSchedulerRegistryDelegate({
+    config: fixture as unknown as Config,
+    messageBus: getTestRuntimeMessageBus(fixture as unknown as Config),
+    toolRegistry,
+    createScheduler: async (schedulerOptions) =>
+      fixture.getToolSchedulerFactory()({
+        config: fixture as unknown as Config,
+        messageBus: getTestRuntimeMessageBus(fixture as unknown as Config),
+        toolRegistry,
+        toolContextInteractiveMode: schedulerOptions.interactiveMode ?? true,
+        getPreferredEditor: () => undefined,
+        onEditorClose: () => {},
+      }),
+  });
+
   const config: ToolExecutionConfig = {
-    ...baseConfig,
-    getOrCreateScheduler: (sessionId, callbacks, schedulerOptions) =>
-      getOrCreateScheduler(
-        config as unknown as Config,
-        sessionId,
-        callbacks,
-        schedulerOptions,
-        {
-          messageBus: getTestRuntimeMessageBus(config as Config),
-          toolRegistry,
-        },
-      ),
-    disposeScheduler: (sessionId) => disposeScheduler(sessionId),
-  };
+    ...fixture,
+    ...delegate,
+  } as unknown as ToolExecutionConfig;
 
   return config;
 }
 
 describe('Tool Executor Unification - Integration Tests', () => {
   let abortController: AbortController;
+  // Stable per-suite registry owner: executeToolCall acquires and releases
+  // on this same object, so the per-config registry refcount balances.
+  const executionOwner = { label: 'tool-executor-unification' };
 
   beforeEach(() => {
-    clearAllSchedulers();
     abortController = new AbortController();
-  });
-
-  afterEach(() => {
-    clearAllSchedulers();
   });
 
   describe('Tool Governance Consistency', () => {
@@ -237,6 +236,7 @@ describe('Tool Executor Unification - Integration Tests', () => {
         executorConfig,
         request,
         abortController.signal,
+        { owner: executionOwner },
       );
       const executorResponse = executorCompleted.response;
 
@@ -308,6 +308,7 @@ describe('Tool Executor Unification - Integration Tests', () => {
         executorConfig,
         request,
         abortController.signal,
+        { owner: executionOwner },
       );
       const executorResponse = executorCompleted.response;
 
@@ -376,6 +377,7 @@ describe('Tool Executor Unification - Integration Tests', () => {
         executorConfig,
         request,
         abortController.signal,
+        { owner: executionOwner },
       );
       const executorResponse = executorCompleted.response;
 
@@ -646,6 +648,7 @@ describe('Tool Executor Unification - Integration Tests', () => {
         executorConfig,
         request,
         abortController.signal,
+        { owner: executionOwner },
       );
       const response = completed.response;
 
@@ -674,6 +677,7 @@ describe('Tool Executor Unification - Integration Tests', () => {
         executorConfig,
         request,
         abortController.signal,
+        { owner: executionOwner },
       );
       const response = completed.response;
 
@@ -778,6 +782,7 @@ describe('Tool Executor Unification - Integration Tests', () => {
         executorConfig,
         request,
         abortController.signal,
+        { owner: executionOwner },
       );
       const executorResponse = executorCompleted.response;
 

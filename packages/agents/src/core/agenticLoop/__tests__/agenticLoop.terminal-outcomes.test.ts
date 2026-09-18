@@ -4,11 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import { AgenticLoop } from '../AgenticLoop.js';
 import type { AgenticLoopEvent } from '../types.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
-import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { MessageBusType } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
@@ -31,13 +30,6 @@ import {
 } from './agenticLoop-test-helpers.js';
 
 describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
-  beforeEach(() => {
-    clearAllSchedulers();
-  });
-  afterEach(() => {
-    clearAllSchedulers();
-  });
-
   it.each([
     [
       'Error',

@@ -38,7 +38,7 @@
  *    an empty queue — and the provider read never settled.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import React, { act, useRef, type Dispatch, type SetStateAction } from 'react';
 import { renderHook } from '../../../../test-utils/render.js';
 // Act-aware waitFor: the plain poll in test-utils/render.js lets React state
@@ -56,6 +56,7 @@ import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
 import { KeypressProvider } from '../../../contexts/KeypressContext.js';
 import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
+import { createSchedulerRegistryDelegate } from './schedulerRegistryTestHelper.js';
 import { createDeferred } from './createDeferred.js';
 import {
   createLoadedSettings,
@@ -79,11 +80,6 @@ import {
   ApprovalMode,
   DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
 } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import {
-  getOrCreateScheduler,
-  disposeScheduler,
-  clearAllSchedulers,
-} from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
 import type {
   Config,
   Config as AgentsConfig,
@@ -327,29 +323,22 @@ function createLoopConfig(options: {
     isInteractive: () => true,
     getNonInteractive: () => false,
     getToolSchedulerFactory: () => createToolScheduler,
-    getOrCreateScheduler: (
-      sessionId: string,
-      callbacks: Parameters<Config['getOrCreateScheduler']>[1],
-      schedulerOptions: Parameters<Config['getOrCreateScheduler']>[2],
-      deps: Parameters<Config['getOrCreateScheduler']>[3],
-    ) => {
-      const schedulerMessageBus = deps?.messageBus;
-      if (!schedulerMessageBus)
-        throw new Error('Test config requires deps.messageBus');
-      return getOrCreateScheduler(
-        fixture as unknown as Config,
-        sessionId,
-        callbacks,
-        schedulerOptions,
-        {
-          messageBus: schedulerMessageBus,
-          toolRegistry: deps.toolRegistry ?? toolRegistry,
-        },
-      );
-    },
-    disposeScheduler: (sessionId: string) => disposeScheduler(sessionId),
   };
-  return fixture as unknown as Config;
+  const delegate = createSchedulerRegistryDelegate({
+    config: fixture as unknown as Config,
+    messageBus,
+    toolRegistry,
+    createScheduler: async (schedulerOptions) =>
+      createToolScheduler({
+        config: fixture as unknown as Config,
+        messageBus,
+        toolRegistry,
+        toolContextInteractiveMode: schedulerOptions.interactiveMode ?? true,
+        getPreferredEditor: () => undefined,
+        onEditorClose: () => {},
+      }),
+  });
+  return { ...fixture, ...delegate } as unknown as Config;
 }
 
 function createEngineEnv(options: {
@@ -769,12 +758,9 @@ describe('useSubmitQuery — cancelled turn whose provider read never settles (i
     // Module-level mock call histories must not leak between tests, or a
     // second test's waitFor(...).toHaveBeenCalledWith gates would pass
     // vacuously on stale history (sibling useAgentEventStream.bun.tsx
-    // convention).
+    // convention). The scheduler registry delegate lives inside each test's
+    // own engine fixture, so scheduler state is already isolated per test.
     vi.clearAllMocks();
-    clearAllSchedulers();
-  });
-  afterEach(() => {
-    clearAllSchedulers();
   });
 
   it('ends turn A via the abort race, then drains B and C exactly once, in order', async () => {
