@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { CEILING_RULES } from './constants.ts';
+import { CEILING_RULES, isCommentOnlyLine } from './constants.ts';
+import {
+  extractGlobStrings,
+  isFilesArrayOpenLine,
+} from './ceiling-override-scanner.ts';
 import {
   buildRuleState,
   countDiffBracketAndBraceDelta,
@@ -30,11 +34,44 @@ export function updateStructuralContext(state: DiffState, content: string) {
   if (state.file !== 'eslint.config.js') {
     return;
   }
+  updateFilesGlobContext(state, content);
   updateArbitraryObjectContext(state, content);
   updateNonRuleContainerContext(state, content);
   openRulesBlockIfNeeded(state, content);
   if (state.rulesBraceDepth !== null) {
     updateRulesBlockContext(state, content, state.rulesBraceDepth);
+  }
+}
+
+/**
+ * Tracks the files: [...] glob array of the enclosing eslint config block
+ * (#3718). Globs are collected from added and context lines alike; a new
+ * files: array resets the collection, and a closing rules block clears it so
+ * a later global rules block cannot inherit stale globs.
+ */
+function updateFilesGlobContext(state: DiffState, content: string) {
+  if (isCommentOnlyLine(content)) {
+    return;
+  }
+  const isOpenLine =
+    state.filesArrayBracketDepth === null && isFilesArrayOpenLine(content);
+  const inCollection = state.filesArrayBracketDepth !== null && !isOpenLine;
+  if (!isOpenLine && !inCollection) {
+    return;
+  }
+  if (isOpenLine) {
+    state.currentFilesGlobs = extractGlobStrings(content);
+  } else {
+    state.currentFilesGlobs.push(...extractGlobStrings(content));
+  }
+  const depth = countDiffBracketAndBraceDelta(content);
+  if (state.filesArrayBracketDepth === null) {
+    state.filesArrayBracketDepth = depth > 0 ? depth : null;
+    return;
+  }
+  state.filesArrayBracketDepth += depth;
+  if (state.filesArrayBracketDepth <= 0) {
+    state.filesArrayBracketDepth = null;
   }
 }
 
@@ -108,6 +145,7 @@ function resetRulesBlockState(state: DiffState) {
   state.insideRuleEntry = false;
   state.expectingFirstSeverityElement = false;
   state.expectingCeilingThreshold = false;
+  state.currentFilesGlobs = [];
 }
 
 function updateRuleEntryDepth(state: DiffState, content: string) {

@@ -29,6 +29,7 @@ import {
   checkCoreDirectiveScopesInConfig,
 } from './eslint-guard/bypass-detector.ts';
 import { scanRepositoryTestExclusions } from './eslint-guard/test-exclusion-scanner.ts';
+import { scanConfigCeilingOverrides } from './eslint-guard/ceiling-override-scanner.ts';
 import { formatViolations } from './eslint-guard/violations.ts';
 
 export { checkDiff } from './eslint-guard/check-diff.ts';
@@ -71,6 +72,12 @@ export {
   parseBaseline,
   BASELINE_PATH,
 } from './eslint-guard/test-exclusion-scanner.ts';
+export {
+  extractConfigCeilingOverrides,
+  parseCeilingOverrideBaseline,
+  scanConfigCeilingOverrides,
+  CEILING_OVERRIDE_BASELINE_PATH,
+} from './eslint-guard/ceiling-override-scanner.ts';
 
 function main(): void {
   const args = parseArgs(process.argv.slice(2));
@@ -117,6 +124,11 @@ function main(): void {
   const configPath = join(process.cwd(), 'eslint.config.js');
   if (existsSync(configPath)) {
     const configSource = readFileSync(configPath, 'utf8');
+    // Issue #3718 durable guard: per-file CEILING_RULES waivers (off/0 or a
+    // threshold above the repo base) in eslint.config.js fail unless the
+    // files-glob + rule pair is listed in the checked-in baseline; comment
+    // tags like eslint-policy-allow-off cannot waive them.
+    violations.push(...scanConfigCeilingOverrides(configSource));
     violations.push(...checkCoreDirectiveScopesInConfig(configSource));
     violations.push(...checkCoreCentralBypassesInConfig(configSource));
     violations.push(

@@ -662,45 +662,6 @@ export default tseslint.config(
       'sonarjs/no-all-duplicated-branches': 'off', // eslint-policy-allow-off: #3240
     },
   },
-  // ============================================================================
-  // Issue #3240: app.test.ts was already at 801 effective lines on main
-  // (930 total - 95 blank - 30 comment - 4 block = 801). Our mock-theater
-  // fix added a second command to the non-streaming route test, pushing it
-  // to 839 effective. The file is a single E2E integration suite that is
-  // inherently large; relaxing max-lines preserves the pre-existing state.
-  // ============================================================================
-  {
-    files: ['packages/a2a-server/src/http/app.test.ts'],
-    rules: {
-      'max-lines': ['error', { max: 900, skipBlankLines: true, skipComments: true }], // eslint-policy-allow-off: #3240 raised from 800 for mock-theater fix
-    },
-  },
-  // ============================================================================
-  // Issue #3481: the prompt-envelope projection test suite gained the
-  // issue #3481 image-entry and stateful retained-baseline regression cases,
-  // growing to ~840 effective lines (past the 800 cap); max-lines is raised
-  // to 900 to preserve the pre-existing single-file layout.
-  // ============================================================================
-  {
-    files: [
-      'packages/providers/src/runtime/promptEnvelopeProjections.test.ts',
-    ],
-    rules: {
-      'max-lines': ['error', { max: 900, skipBlankLines: true, skipComments: true }], // eslint-policy-allow-off: #3481 raised from 800
-    },
-  },
-  // ============================================================================
-  // Issue #3504: the subagent termination test file was hardened with
-  // orphan-proof try/finally cleanup and a dispose regression test, growing it
-  // to 838 effective lines (past the 800 cap); max-lines is raised to 900 and
-  // splitting the file is tracked in #3613.
-  // ============================================================================
-  {
-    files: ['packages/agents/src/core/subagent.runNonInteractive-term.test.ts'],
-    rules: {
-      'max-lines': ['error', { max: 900, skipBlankLines: true, skipComments: true }], // eslint-policy-allow-off: #3504 raised from 800, split tracked in #3613
-    },
-  },
   // Issue #2605: Apply strict code-quality lint rules to eval TypeScript
   // ============================================================================
   // The eval suite (evals/**/*.ts) is real source executed by the nightly
