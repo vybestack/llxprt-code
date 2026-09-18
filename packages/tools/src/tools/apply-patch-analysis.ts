@@ -411,6 +411,39 @@ export function validatePatchHeader(
 }
 
 // ---------------------------------------------------------------------------
+// Issue #3597: hunk ordering.
+// ---------------------------------------------------------------------------
+
+/**
+ * Issue #3597: hunks must arrive in strictly increasing original-file order.
+ * jsdiff locates each hunk from the offsets of the hunks before it and never
+ * rewinds its copy cursor, so a hunk targeting an earlier line makes the final
+ * tail copy re-emit lines earlier hunks already produced — silently duplicating
+ * file content while reporting success. Equal old-start anchors are rejected
+ * too: the ordering between them is ambiguous.
+ *
+ * @issue 3597
+ */
+export function validateHunkOrder(
+  patch: Diff.StructuredPatch,
+): ToolResult | null {
+  for (let i = 1; i < patch.hunks.length; i++) {
+    const prev = patch.hunks[i - 1];
+    const hunk = patch.hunks[i];
+    if (hunk.oldStart <= prev.oldStart) {
+      const starts = patch.hunks.map((h) => h.oldStart).join(', ');
+      const msg = `Hunk ${i + 1} starts at original-file line ${hunk.oldStart}, which is not after hunk ${i} at line ${prev.oldStart}. Hunks were received in old-start order [${starts}], but they must be strictly increasing. Send the hunks in ascending order of the original file's line numbers, or split the change into separate apply_patch calls.`;
+      return {
+        llmContent: msg,
+        returnDisplay: `Rejected patch: hunk ${i + 1} (original-file line ${hunk.oldStart}) is out of order.`,
+        error: { message: msg, type: ToolErrorType.INVALID_TOOL_PARAMS },
+      };
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // ToolResult builders for each rejection / success path.
 // ---------------------------------------------------------------------------
 
