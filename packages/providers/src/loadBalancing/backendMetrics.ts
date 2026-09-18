@@ -77,7 +77,12 @@ export class BackendMetricsCollector {
 
   /**
    * Extract token count from response chunks across Gemini, Anthropic, and
-   * OpenAI usage-metadata formats.
+   * OpenAI usage-metadata formats. The first form is the Gemini wire usage
+   * shape (`usageMetadata.promptTokenCount`/`candidatesTokenCount`), which
+   * is compat wire data (#2628): the real Gemini provider translates usage
+   * to the neutral `metadata.usage` shape at its boundary, but
+   * Gemini-shaped streams still reach this collector (locked by
+   * LoadBalancingProvider.tpm.test.ts and the metrics Gemini-format case).
    */
   static extractTokenCount(chunks: IContent[]): number {
     // Runtime-widen to handle potential null/undefined from provider edge cases
@@ -91,9 +96,9 @@ export class BackendMetricsCollector {
       chunksRuntime.length - 1
     ] as unknown as Record<string, unknown>;
 
-    const geminiTokens = extractGeminiTokens(lastChunk);
-    if (geminiTokens > 0) {
-      return geminiTokens;
+    const usageMetadataTokens = extractUsageMetadataTokens(lastChunk);
+    if (usageMetadataTokens > 0) {
+      return usageMetadataTokens;
     }
 
     const anthropicTokens = extractAnthropicTokens(lastChunk);
@@ -105,7 +110,14 @@ export class BackendMetricsCollector {
   }
 }
 
-function extractGeminiTokens(lastChunk: Record<string, unknown>): number {
+/**
+ * Read the Gemini wire usage shape (`usageMetadata` with
+ * `promptTokenCount`/`candidatesTokenCount` members). Wire-compat data: the
+ * key names are the Gemini API's, not a naming residual (#2628).
+ */
+function extractUsageMetadataTokens(
+  lastChunk: Record<string, unknown>,
+): number {
   const usageMetadataRuntime: unknown = lastChunk.usageMetadata;
   if (
     typeof usageMetadataRuntime !== 'object' ||

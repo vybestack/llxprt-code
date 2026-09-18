@@ -86,14 +86,6 @@ describe('headless provider-manager construction (issue #1594)', () => {
     expect(manager.listProviders()).toContain('anthropic');
   });
 
-  it('constructs a working manager for gemini', () => {
-    const { manager } = createHeadlessProviderManager({ provider: 'gemini' });
-
-    expect(manager.hasActiveProvider()).toBe(true);
-    expect(manager.getActiveProviderName()).toBe('gemini');
-    expect(manager.listProviders()).toContain('gemini');
-  });
-
   it('returns an OAuth manager alongside the provider manager', () => {
     const { oauthManager } = createHeadlessProviderManager({
       provider: 'openai',
@@ -114,9 +106,9 @@ describe('headless provider-manager construction (issue #1594)', () => {
     // activation; concrete providers resolve their effective model from
     // SettingsService.getProviderSettings(name) via BaseProvider. This proves
     // the option is functional (not a no-op) without needing network or keys.
-    const requestedModel = 'gemini-2.5-flash';
+    const requestedModel = 'gpt-4o';
     const { manager } = createHeadlessProviderManager({
-      provider: 'gemini',
+      provider: 'openai',
       model: requestedModel,
     });
 

@@ -207,6 +207,46 @@
     "./utils/mediaUtils.js": {
       "bun": "./src/utils/mediaUtils.ts",
       "import": "./dist/src/utils/mediaUtils.js"
+    },
+    "./providerMediaTransportCapabilities.js": {
+      "types": "./dist/src/providerMediaTransportCapabilities.d.ts",
+      "bun": "./src/providerMediaTransportCapabilities.ts",
+      "import": "./dist/src/providerMediaTransportCapabilities.js"
+    },
+    "./reasoning/reasoning-behavior-parsing.js": {
+      "types": "./dist/src/reasoning/reasoning-behavior-parsing.d.ts",
+      "bun": "./src/reasoning/reasoning-behavior-parsing.ts",
+      "import": "./dist/src/reasoning/reasoning-behavior-parsing.js"
+    },
+    "./reasoning/reasoning-config-resolver.js": {
+      "types": "./dist/src/reasoning/reasoning-config-resolver.d.ts",
+      "bun": "./src/reasoning/reasoning-config-resolver.ts",
+      "import": "./dist/src/reasoning/reasoning-config-resolver.js"
+    },
+    "./utils/dumpContext.js": {
+      "types": "./dist/src/utils/dumpContext.d.ts",
+      "bun": "./src/utils/dumpContext.ts",
+      "import": "./dist/src/utils/dumpContext.js"
+    },
+    "./utils/dumpSDKContext.js": {
+      "types": "./dist/src/utils/dumpSDKContext.d.ts",
+      "bun": "./src/utils/dumpSDKContext.ts",
+      "import": "./dist/src/utils/dumpSDKContext.js"
+    },
+    "./utils/request-media-resolution.js": {
+      "types": "./dist/src/utils/request-media-resolution.d.ts",
+      "bun": "./src/utils/request-media-resolution.ts",
+      "import": "./dist/src/utils/request-media-resolution.js"
+    },
+    "./utils/systemPromptPlacement.js": {
+      "types": "./dist/src/utils/systemPromptPlacement.d.ts",
+      "bun": "./src/utils/systemPromptPlacement.ts",
+      "import": "./dist/src/utils/systemPromptPlacement.js"
+    },
+    "./utils/toolResponsePayload.js": {
+      "types": "./dist/src/utils/toolResponsePayload.d.ts",
+      "bun": "./src/utils/toolResponsePayload.ts",
+      "import": "./dist/src/utils/toolResponsePayload.js"
     }
   },
   "scripts": {
@@ -232,7 +272,6 @@
   "dependencies": {
     "@vybestack/llxprt-code-storage": "file:../storage",
     "@ai-sdk/openai": "^4.0.50",
-    "@ai-sdk/google": "^4.0.54",
     "@anthropic-ai/sdk": "^0.55.1",
     "@dqbd/tiktoken": "1.0.22",
     "@vybestack/llxprt-code-auth": "file:../auth",

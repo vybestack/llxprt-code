@@ -92,7 +92,7 @@ describe('assembleCliProviderRuntime @plan:PLAN-20270110-ISSUE2378.P04 @requirem
 
     const registered = result.providerManager.listProviders().sort();
     expect(registered).toStrictEqual(
-      expect.arrayContaining(['anthropic', 'gemini', 'openai']),
+      expect.arrayContaining(['anthropic', 'openai']),
     );
   });
 

@@ -44,7 +44,8 @@ const EXPECTED_PROVIDER_PUBLIC_API: Array<{
   { name: 'FakeProvider', kind: 'value', category: 'providers' },
   { name: 'OpenAIProvider', kind: 'value', category: 'providers' },
   { name: 'AnthropicProvider', kind: 'value', category: 'providers' },
-  { name: 'GeminiProvider', kind: 'value', category: 'providers' },
+  // GeminiProvider is not exported here: it moved to the
+  // @vybestack/llxprt-plugin-google-gemini runtime plugin (#2763).
   { name: 'OpenAIResponsesProvider', kind: 'value', category: 'providers' },
   { name: 'OpenAIVercelProvider', kind: 'value', category: 'providers' },
   { name: 'LoadBalancingProvider', kind: 'value', category: 'providers' },

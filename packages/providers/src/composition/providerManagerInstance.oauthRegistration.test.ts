@@ -23,10 +23,6 @@ let openaiCtorState: new (...args: unknown[]) => unknown = class {};
 let openaiResponsesCtorState: new (...args: unknown[]) => unknown = class {};
 let openaiVercelCtorState: new (...args: unknown[]) => unknown = class {};
 let anthropicCtorState: new (...args: unknown[]) => unknown = class {};
-let geminiCtorState: new (...args: unknown[]) => unknown = class {
-  setConfig(): void {}
-};
-
 // Wrapper constructors so each test can swap the target without needing
 // vi.resetModules (unsupported in Bun).
 function makeWrapper(
@@ -45,9 +41,6 @@ void mock.module('../ProviderManager.js', () => {
   }
   return { ProviderManager: MockProviderManager };
 });
-void mock.module('../gemini/GeminiProvider.js', () => ({
-  GeminiProvider: makeWrapper(() => geminiCtorState),
-}));
 void mock.module('../openai/OpenAIProvider.js', () => ({
   OpenAIProvider: makeWrapper(() => openaiCtorState),
 }));
@@ -174,14 +167,12 @@ describe('claudecode OAuth registration with environment key', () => {
   it('ignores API keys when authOnly is enabled', async () => {
     process.env.ANTHROPIC_API_KEY = 'sk-test-key';
     process.env.OPENAI_API_KEY = 'sk-test-openai';
-    process.env.GEMINI_API_KEY = 'sk-test-gemini';
 
     const ensureOAuthProviderRegisteredMock = vi.fn();
     const openaiCtor = vi.fn(() => ({}));
     const openaiResponsesCtor = vi.fn(() => ({}));
     const openaivercelCtor = vi.fn(() => ({}));
     const anthropicCtor = vi.fn(() => ({}));
-    const geminiCtor = vi.fn(() => ({}));
 
     // Wire mutable state for this test
     ensureOAuthProviderRegisteredState = ensureOAuthProviderRegisteredMock;
@@ -201,9 +192,6 @@ describe('claudecode OAuth registration with environment key', () => {
       ...args: unknown[]
     ) => unknown;
     anthropicCtorState = anthropicCtor as unknown as new (
-      ...args: unknown[]
-    ) => unknown;
-    geminiCtorState = geminiCtor as unknown as new (
       ...args: unknown[]
     ) => unknown;
 
@@ -238,7 +226,8 @@ describe('claudecode OAuth registration with environment key', () => {
 
     // No alias may receive an API key while authOnly is on — not the alias
     // that happens to be registered first, and not the ones that declare
-    // their own `apiKeyEnv` (openai, openai-responses, openai-vercel, gemini).
+    // their own `apiKeyEnv` (openai, openai-responses, openai-vercel). The
+    // gemini family moved to the google-gemini plugin (#2763).
     expect(openaiCtor).toHaveBeenCalled();
     expect(apiKeysPassedTo(openaiCtor)).toStrictEqual([]);
 
@@ -250,18 +239,13 @@ describe('claudecode OAuth registration with environment key', () => {
 
     expect(anthropicCtor).toHaveBeenCalled();
     expect(apiKeysPassedTo(anthropicCtor)).toStrictEqual([]);
-
-    expect(geminiCtor).toHaveBeenCalled();
-    expect(apiKeysPassedTo(geminiCtor)).toStrictEqual([]);
   });
 
   it('still binds alias environment keys when authOnly is disabled', async () => {
     process.env.ANTHROPIC_API_KEY = 'sk-test-key';
-    process.env.GEMINI_API_KEY = 'sk-test-gemini';
 
     const ensureOAuthProviderRegisteredMock = vi.fn();
     const anthropicCtor = vi.fn(() => ({}));
-    const geminiCtor = vi.fn(() => ({}));
 
     // Wire mutable state for this test
     ensureOAuthProviderRegisteredState = ensureOAuthProviderRegisteredMock;
@@ -275,9 +259,6 @@ describe('claudecode OAuth registration with environment key', () => {
     openaiResponsesCtorState = class {} as new (...args: unknown[]) => unknown;
     openaiVercelCtorState = class {} as new (...args: unknown[]) => unknown;
     anthropicCtorState = anthropicCtor as unknown as new (
-      ...args: unknown[]
-    ) => unknown;
-    geminiCtorState = geminiCtor as unknown as new (
       ...args: unknown[]
     ) => unknown;
 
@@ -311,10 +292,10 @@ describe('claudecode OAuth registration with environment key', () => {
     registerProviderManagerSingleton(manager, oauthManager);
 
     // Without authOnly, an alias still receives the key its own `apiKeyEnv`
-    // names. Both families below resolve their key ONLY from that alias-level
-    // environment read — neither falls back to the shared OpenAI key — so this
-    // fails if the authOnly gate is applied unconditionally.
-    expect(apiKeysPassedTo(geminiCtor)).toContain('sk-test-gemini');
+    // names. The family below resolves its key ONLY from that alias-level
+    // environment read — it does not fall back to the shared OpenAI key — so
+    // this fails if the authOnly gate is applied unconditionally. (The gemini
+    // family moved to the google-gemini plugin, #2763.)
     expect(apiKeysPassedTo(anthropicCtor)).toContain('sk-test-key');
   });
 

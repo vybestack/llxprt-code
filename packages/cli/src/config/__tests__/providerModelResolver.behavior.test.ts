@@ -32,7 +32,7 @@ describe('resolveProviderAndModel: unconfigured state (#2481)', () => {
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
     });
     expect(result.provider).toBeUndefined();
   });
@@ -46,7 +46,7 @@ describe('resolveProviderAndModel: unconfigured state (#2481)', () => {
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
     });
     expect(result.model).toBe('');
   });
@@ -60,7 +60,7 @@ describe('resolveProviderAndModel: unconfigured state (#2481)', () => {
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
     });
     expect(result.provider).toBeUndefined();
   });
@@ -74,7 +74,7 @@ describe('resolveProviderAndModel: unconfigured state (#2481)', () => {
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
     });
     expect(result.provider).toBeUndefined();
   });
@@ -90,7 +90,7 @@ describe('resolveProviderAndModel: explicit provider precedence (#2481)', () => 
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
     });
     expect(result.provider).toBe('openai');
   });
@@ -104,7 +104,7 @@ describe('resolveProviderAndModel: explicit provider precedence (#2481)', () => 
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
     });
     expect(result.provider).toBe('anthropic');
   });
@@ -118,7 +118,7 @@ describe('resolveProviderAndModel: explicit provider precedence (#2481)', () => 
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
     });
     expect(result.provider).toBe('ollama');
   });
@@ -134,7 +134,7 @@ describe('resolveProviderAndModel: explicit Gemini unchanged (#2481)', () => {
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
       providerDefaultModel: TEST_DEFAULT_MODEL,
     });
     expect(result.provider).toBe('gemini');
@@ -150,7 +150,7 @@ describe('resolveProviderAndModel: explicit Gemini unchanged (#2481)', () => {
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
       providerDefaultModel: TEST_DEFAULT_MODEL,
     });
     expect(result.provider).toBe('gemini');
@@ -166,7 +166,7 @@ describe('resolveProviderAndModel: explicit Gemini unchanged (#2481)', () => {
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
     });
     expect(result.provider).toBe('gemini');
     expect(result.model).toBe('');
@@ -181,7 +181,7 @@ describe('resolveProviderAndModel: explicit Gemini unchanged (#2481)', () => {
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
       providerDefaultModel: '   ',
     });
     expect(result.provider).toBe('gemini');
@@ -197,7 +197,7 @@ describe('resolveProviderAndModel: explicit Gemini unchanged (#2481)', () => {
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
       providerDefaultModel: TEST_DEFAULT_MODEL,
     });
     expect(result.provider).toBe('openai');
@@ -213,7 +213,7 @@ describe('resolveProviderAndModel: explicit Gemini unchanged (#2481)', () => {
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
       providerDefaultModel: TEST_DEFAULT_MODEL,
     });
     expect(result.provider).toBeUndefined();
@@ -229,7 +229,7 @@ describe('resolveProviderAndModel: explicit Gemini unchanged (#2481)', () => {
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: 'gemini-2.5-flash',
+      envProviderModel: 'gemini-2.5-flash',
       providerDefaultModel: TEST_DEFAULT_MODEL,
     });
     expect(result.provider).toBe('gemini');
@@ -247,7 +247,7 @@ describe('resolveProviderAndModel: consistent trimming of all provider sources (
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
     });
     expect(result.provider).toBe('openai');
   });
@@ -261,7 +261,7 @@ describe('resolveProviderAndModel: consistent trimming of all provider sources (
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
     });
     expect(result.provider).toBe('ollama');
   });
@@ -275,7 +275,7 @@ describe('resolveProviderAndModel: consistent trimming of all provider sources (
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
     });
     expect(result.provider).toBe('anthropic');
   });
@@ -289,7 +289,7 @@ describe('resolveProviderAndModel: consistent trimming of all provider sources (
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
     });
     expect(result.provider).toBeUndefined();
   });
@@ -305,7 +305,7 @@ describe('resolveProviderAndModel: model precedence (#2481)', () => {
       profileModel: 'profile-model',
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
     });
     expect(result.model).toBe('cli-model');
   });
@@ -319,7 +319,7 @@ describe('resolveProviderAndModel: model precedence (#2481)', () => {
       profileModel: 'profile-model',
       settingsModel: 'settings-model',
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
     });
     expect(result.model).toBe('profile-model');
   });
@@ -333,7 +333,7 @@ describe('resolveProviderAndModel: model precedence (#2481)', () => {
       profileModel: undefined,
       settingsModel: 'settings-model',
       envDefaultModel: 'env-model',
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
     });
     expect(result.model).toBe('settings-model');
   });
@@ -349,7 +349,7 @@ describe('resolveProviderAndModel: explicit non-Gemini provider with no model (#
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
     });
     expect(result.provider).toBe('openai');
     expect(result.model).toBe('');
@@ -364,15 +364,15 @@ describe('resolveProviderAndModel: explicit non-Gemini provider with no model (#
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
     });
     expect(result.provider).toBe('anthropic');
     expect(result.model).toBe('');
   });
 });
 
-describe('resolveProviderAndModel: envGeminiModel must not leak to non-Gemini (#2481)', () => {
-  it('does NOT use envGeminiModel when provider is openai', () => {
+describe('resolveProviderAndModel: envProviderModel must not leak to non-Gemini (#2481)', () => {
+  it('does NOT use envProviderModel when provider is openai', () => {
     const result = resolveProviderAndModel({
       cliProvider: 'openai',
       profileProvider: undefined,
@@ -381,14 +381,14 @@ describe('resolveProviderAndModel: envGeminiModel must not leak to non-Gemini (#
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: 'gemini-2.5-flash',
+      envProviderModel: 'gemini-2.5-flash',
     });
     expect(result.provider).toBe('openai');
     expect(result.model).not.toBe('gemini-2.5-flash');
     expect(result.model).toBe('');
   });
 
-  it('does NOT use envGeminiModel when provider is anthropic', () => {
+  it('does NOT use envProviderModel when provider is anthropic', () => {
     const result = resolveProviderAndModel({
       cliProvider: 'anthropic',
       profileProvider: undefined,
@@ -397,13 +397,13 @@ describe('resolveProviderAndModel: envGeminiModel must not leak to non-Gemini (#
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: 'gemini-2.5-flash',
+      envProviderModel: 'gemini-2.5-flash',
     });
     expect(result.provider).toBe('anthropic');
     expect(result.model).not.toBe('gemini-2.5-flash');
   });
 
-  it('DOES use envGeminiModel when provider IS gemini', () => {
+  it('DOES use envProviderModel when provider IS gemini', () => {
     const result = resolveProviderAndModel({
       cliProvider: 'gemini',
       profileProvider: undefined,
@@ -412,7 +412,7 @@ describe('resolveProviderAndModel: envGeminiModel must not leak to non-Gemini (#
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: 'gemini-2.5-flash',
+      envProviderModel: 'gemini-2.5-flash',
     });
     expect(result.provider).toBe('gemini');
     expect(result.model).toBe('gemini-2.5-flash');
@@ -429,7 +429,7 @@ describe('resolveProviderAndModel: whitespace model sources treated as absent (#
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
       providerDefaultModel: TEST_DEFAULT_MODEL,
     });
     expect(result.provider).toBe('gemini');
@@ -445,7 +445,7 @@ describe('resolveProviderAndModel: whitespace model sources treated as absent (#
       profileModel: '  ',
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
       providerDefaultModel: TEST_DEFAULT_MODEL,
     });
     expect(result.provider).toBe('gemini');
@@ -461,7 +461,7 @@ describe('resolveProviderAndModel: whitespace model sources treated as absent (#
       profileModel: undefined,
       settingsModel: '   ',
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
       providerDefaultModel: TEST_DEFAULT_MODEL,
     });
     expect(result.provider).toBe('gemini');
@@ -493,7 +493,7 @@ describe('resolveProviderAndModel: alias default model preserved (#2481)', () =>
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
     });
     expect(result.provider).toBe('myalias');
     expect(result.model).toBe('alias-default-model');
@@ -522,7 +522,7 @@ describe('resolveProviderAndModel: alias default model preserved (#2481)', () =>
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: 'unrelated-environment-model',
-      envGeminiModel: undefined,
+      envProviderModel: undefined,
     });
     expect(result.provider).toBe('myalias');
     expect(result.model).toBe('alias-default-model');
@@ -551,7 +551,7 @@ describe('resolveProviderAndModel: alias default model preserved (#2481)', () =>
       profileModel: undefined,
       settingsModel: undefined,
       envDefaultModel: undefined,
-      envGeminiModel: 'gemini-environment-model',
+      envProviderModel: 'gemini-environment-model',
     });
     expect(result.provider).toBe('gemini');
     expect(result.model).toBe('gemini-environment-model');

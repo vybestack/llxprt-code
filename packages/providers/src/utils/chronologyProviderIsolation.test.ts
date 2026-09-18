@@ -150,15 +150,9 @@ const CONVERTERS: ReadonlyArray<{
     convert: (history) =>
       buildProviderDumpBody({ providerName: 'anthropic', history }),
   },
-  {
-    // Also the Gemini wire-converter guard: buildProviderDumpBody delegates to
-    // the real convertHistoryToGeminiFormat. It is reached through the
-    // provider-neutral entry point so this file does not import a
-    // Gemini-prefixed symbol outside its architectural boundary.
-    name: 'dump body: gemini',
-    convert: (history) =>
-      buildProviderDumpBody({ providerName: 'gemini', history }),
-  },
+  // No gemini dump-body case: the Gemini wire conversion is owned by the
+  // @vybestack/llxprt-plugin-google-gemini plugin (#2763); the base dispatcher
+  // falls back to the raw `{ history }` body for gemini-family names.
 ];
 
 describe('chronology markers never reach a provider wire payload (#1721 C1)', () => {

@@ -16,12 +16,12 @@ import {
   needsSanitization,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
+import { pluginProvidedProviderHint } from './runtimePlugins/pluginProvidedProviders.js';
 
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
 import { OpenAIVercelProvider } from '../openai-vercel/index.js';
 import { AnthropicProvider } from '../anthropic/AnthropicProvider.js';
-import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import type { ProviderManager } from '../ProviderManager.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import type { OAuthManager } from '../auth/index.js';
@@ -65,7 +65,7 @@ export function sanitizeApiKey(key: string): string {
  * alias provider. This mirrors the rule the composition root already applies
  * to the shared OpenAI key in `resolveOpenaiApiKey`.
  */
-function resolveAliasEnvApiKey(
+export function resolveAliasEnvApiKey(
   entry: ProviderAliasEntry,
   authOnlyEnabled: boolean,
 ): string | undefined {
@@ -113,7 +113,7 @@ export type AliasAwareBaseProvider = {
  * under authOnly holds no environment names to resolve, so no later settings
  * lookup can disagree with the policy it was created with.
  */
-function enforceAliasAuthOnly(
+export function enforceAliasAuthOnly(
   provider: unknown,
   authOnlyEnabled: boolean,
 ): void {
@@ -203,7 +203,7 @@ interface AliasMediaCapabilityProvider {
   getMediaTransportCapabilities(): ProviderMediaTransportCapabilities;
 }
 
-function bindAliasMediaTransportCapabilities(
+export function bindAliasMediaTransportCapabilities(
   provider: AliasMediaCapabilityProvider,
   entry: ProviderAliasEntry,
 ): void {
@@ -452,35 +452,6 @@ export function createOpenAIVercelAliasProvider(
   return provider;
 }
 
-export function createGeminiAliasProvider(
-  entry: ProviderAliasEntry,
-  config: Config | undefined,
-  authOnlyEnabled: boolean,
-): GeminiProvider {
-  const aliasApiKey = resolveAliasEnvApiKey(entry, authOnlyEnabled);
-
-  const resolvedBaseUrl = entry.config['base-url'];
-
-  const provider = new GeminiProvider(
-    aliasApiKey ?? undefined,
-    resolvedBaseUrl,
-    config,
-  );
-
-  enforceAliasAuthOnly(provider, authOnlyEnabled);
-
-  if (config && typeof provider.setConfig === 'function') {
-    provider.setConfig(config);
-  }
-
-  overrideAliasDefaultModel(provider, entry);
-
-  bindProviderAliasIdentity(provider, entry.alias);
-  bindAliasMediaTransportCapabilities(provider, entry);
-
-  return provider;
-}
-
 export function createAnthropicAliasProvider(
   entry: ProviderAliasEntry,
   oauthManager: OAuthManager | undefined,
@@ -561,11 +532,19 @@ function resolveAliasFactory(
 ): ProviderAliasFactory {
   const factory = contributions.getProviderFactory(entry.config.baseProvider);
   if (!factory) {
+    // A provider whose implementation ships only in an optional runtime plugin
+    // names that package in the error, so a base-only install says what to
+    // install rather than just listing what exists (#2763). The mapping is a
+    // data table; the base package never imports plugin code.
+    const installHint = pluginProvidedProviderHint(entry.config.baseProvider);
     throw new Error(
       `Alias '${entry.alias}' (${entry.filePath}) requests base provider ` +
         `'${entry.config.baseProvider}', which no built-in provider and no ` +
         `loaded runtime plugin contributes. Known provider ids: ` +
-        `${contributions.listProviderIds().join(', ')}.`,
+        `${contributions.listProviderIds().join(', ')}.` +
+        (installHint === undefined
+          ? ''
+          : ` Install the runtime plugin '${installHint}' to add this provider.`),
     );
   }
   return factory;

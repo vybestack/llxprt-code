@@ -14,7 +14,6 @@ import type { Config } from '../config/config.js';
 
 // Mock the memoryTool module
 void vi.mock('@vybestack/llxprt-code-tools', () => ({
-  getCurrentGeminiMdFilename: vi.fn(() => 'GEMINI.md'),
   getCurrentLlxprtMdFilename: vi.fn(() => 'LLXPRT.md'),
 }));
 

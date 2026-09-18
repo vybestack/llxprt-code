@@ -491,7 +491,7 @@ export class DirectMessageProcessor {
     params: SendMessageParams,
     effectiveToolsFromConfig: ToolGroupArray | undefined,
   ): Record<string, unknown> {
-    const directOverrides = this._extractDirectGeminiOverrides(params.config);
+    const directOverrides = this._extractDirectProviderOverrides(params.config);
     return {
       toolCount: effectiveToolsFromConfig?.length ?? 0,
       ...(directOverrides ? { geminiDirectOverrides: directOverrides } : {}),
@@ -979,9 +979,11 @@ export class DirectMessageProcessor {
   }
 
   /**
-   * Extracts direct Gemini overrides from config.
+   * Extracts direct provider overrides from config. The returned value is
+   * stamped onto the request metadata under the `geminiDirectOverrides` key,
+   * which the Gemini provider request builder reads by that exact name.
    */
-  private _extractDirectGeminiOverrides(config?: AgentClientGenerateConfig):
+  private _extractDirectProviderOverrides(config?: AgentClientGenerateConfig):
     | {
         toolConfig?: unknown;
       }

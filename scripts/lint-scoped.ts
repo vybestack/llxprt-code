@@ -47,7 +47,7 @@ const LINT_TARGETS_ENV = 'LLXPRT_LINT_TARGETS';
 /**
  * Generously sized child-process stdout buffer. A large changed-path list can
  * exceed Node's default 1 MiB cap (ENOBUFS); 64 MiB matches the repo
- * convention (e.g. scripts/eslint-guard, scripts/genai-enclave).
+ * convention (e.g. scripts/eslint-guard).
  */
 const GIT_OUTPUT_BUFFER_BYTES = 64 * 1024 * 1024;
 

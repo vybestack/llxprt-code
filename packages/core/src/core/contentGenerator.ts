@@ -89,7 +89,7 @@ function firstNonEmptyEnvironmentValue(
 export function createContentGeneratorConfig(
   config: Config,
 ): ContentGeneratorConfig {
-  const geminiApiKey = process.env.GEMINI_API_KEY ?? undefined;
+  const envProviderApiKey = process.env.GEMINI_API_KEY ?? undefined;
   const googleApiKey = process.env.GOOGLE_API_KEY ?? undefined;
   const googleCloudProject = firstNonEmptyEnvironmentValue(
     process.env['GOOGLE_CLOUD_PROJECT'],
@@ -106,8 +106,8 @@ export function createContentGeneratorConfig(
     proxy: config.getProxy(),
   };
 
-  if (geminiApiKey) {
-    contentGeneratorConfig.apiKey = geminiApiKey;
+  if (envProviderApiKey) {
+    contentGeneratorConfig.apiKey = envProviderApiKey;
     contentGeneratorConfig.vertexai = false;
     return contentGeneratorConfig;
   }

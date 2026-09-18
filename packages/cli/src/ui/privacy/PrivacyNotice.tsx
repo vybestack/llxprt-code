@@ -6,7 +6,6 @@
 
 import { Box } from 'ink';
 
-import { GeminiPrivacyNotice } from './GeminiPrivacyNotice.js';
 import { MultiProviderPrivacyNotice } from './MultiProviderPrivacyNotice.js';
 import { UnconfiguredPrivacyNotice } from './UnconfiguredPrivacyNotice.js';
 import type { ModelState } from '../cliUiRuntime.js';
@@ -45,18 +44,12 @@ const PrivacyNoticeText = ({
     return <UnconfiguredPrivacyNotice onExit={onExit} />;
   }
 
-  // If we have a non-Gemini provider active, show its specific notice
-  if (activeProvider.name !== 'gemini') {
-    return (
-      <MultiProviderPrivacyNotice
-        providerName={activeProvider.name}
-        onExit={onExit}
-      />
-    );
-  }
-
-  // Gemini is the explicit active provider
-  return <GeminiPrivacyNotice onExit={onExit} />;
+  return (
+    <MultiProviderPrivacyNotice
+      providerName={activeProvider.name}
+      onExit={onExit}
+    />
+  );
 };
 
 export const PrivacyNotice = ({ onExit, config }: PrivacyNoticeProps) => (

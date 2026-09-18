@@ -369,122 +369,7 @@ describe('ContentConverters - Tool ID Normalization', () => {
   });
 });
 
-describe('ContentConverters - History ID Conversion for Gemini', () => {
-  describe('converting IContent to Gemini Content', () => {
-    it('should strip history IDs when converting to Gemini format', () => {
-      const iContent: IContent = {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'tool_call',
-            id: 'hist_tool_123_1',
-            name: 'search',
-            parameters: { query: 'test' },
-          },
-        ],
-      };
-
-      const geminiContent = ContentConverters.toGeminiContent(iContent);
-
-      expect(geminiContent.role).toBe('model');
-      expect(geminiContent.parts[0].functionCall?.id).toBe('hist_tool_123_1');
-    });
-
-    it('should preserve thinking signatures on Gemini parts', () => {
-      const iContent: IContent = {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'thinking',
-            thought: 'Plan the next step',
-            sourceField: 'thinking',
-            signature: 'sig123',
-          } as ThinkingBlock,
-        ],
-      };
-
-      const geminiContent = ContentConverters.toGeminiContent(iContent);
-
-      expect(geminiContent.parts).toHaveLength(1);
-      expect(geminiContent.parts[0].thought).toBe(true);
-      expect(geminiContent.parts[0].text).toBe('Plan the next step');
-      expect(geminiContent.parts[0].thoughtSignature).toBe('sig123');
-      expect(
-        (geminiContent.parts[0] as { llxprtSourceField?: string })
-          .llxprtSourceField,
-      ).toBe('thinking');
-    });
-
-    it('should handle multiple tool calls preserving order', () => {
-      const iContent: IContent = {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'tool_call',
-            id: 'hist_tool_100_1',
-            name: 'first_tool',
-            parameters: {},
-          },
-          {
-            type: 'tool_call',
-            id: 'hist_tool_100_2',
-            name: 'second_tool',
-            parameters: {},
-          },
-          {
-            type: 'tool_call',
-            id: 'hist_tool_100_3',
-            name: 'third_tool',
-            parameters: {},
-          },
-        ],
-      };
-
-      const geminiContent = ContentConverters.toGeminiContent(iContent);
-
-      expect(geminiContent.parts).toHaveLength(3);
-      expect(geminiContent.parts[0].functionCall?.name).toBe('first_tool');
-      expect(geminiContent.parts[1].functionCall?.name).toBe('second_tool');
-      expect(geminiContent.parts[2].functionCall?.name).toBe('third_tool');
-    });
-  });
-});
-
 describe('ContentConverters - neutral type I/O (#2397)', () => {
-  it('toGeminiContent returns a value assignable to the neutral GeminiContent type', () => {
-    const iContent: IContent = {
-      speaker: 'ai',
-      blocks: [
-        { type: 'text', text: 'hello' },
-        {
-          type: 'tool_call',
-          id: 'hist_tool_1_1',
-          name: 'search',
-          parameters: { q: 'cats' },
-        },
-      ],
-    };
-
-    const result = ContentConverters.toGeminiContent(iContent);
-
-    // Compile-time proof: the return value is structurally assignable to
-    // the neutral GeminiContent type (not @google/genai).
-    const neutral: GeminiContent = result;
-    expect(neutral).toMatchObject({
-      role: 'model',
-      parts: [
-        { text: 'hello' },
-        {
-          functionCall: {
-            name: 'search',
-            args: { q: 'cats' },
-            id: 'hist_tool_1_1',
-          },
-        },
-      ],
-    });
-  });
-
   it('toIContent accepts a neutral GeminiContent input', () => {
     const geminiInput: GeminiContent = {
       role: 'model',
@@ -515,24 +400,19 @@ describe('ContentConverters - neutral type I/O (#2397)', () => {
     });
   });
 
-  it('toGeminiContents / toIContents round-trip through neutral types', () => {
-    const original: IContent[] = [
+  it('toIContents round-trips Gemini-shaped stored history through neutral types', () => {
+    const stored: GeminiContent[] = [
       {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'hi' }],
+        role: 'user',
+        parts: [{ text: 'hi' }],
       },
       {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'hello back' }],
+        role: 'model',
+        parts: [{ text: 'hello back' }],
       },
     ];
 
-    const geminiContents: GeminiContent[] =
-      ContentConverters.toGeminiContents(original);
-    expect(geminiContents).toHaveLength(2);
-
-    const roundTripped: IContent[] =
-      ContentConverters.toIContents(geminiContents);
+    const roundTripped: IContent[] = ContentConverters.toIContents(stored);
     expect(roundTripped).toHaveLength(2);
     expect(roundTripped[0].speaker).toBe('human');
     expect(roundTripped[0].blocks[0]).toStrictEqual({
@@ -546,20 +426,19 @@ describe('ContentConverters - neutral type I/O (#2397)', () => {
     });
   });
 
-  it('preserves llxprtSourceField through a Gemini round-trip via neutral types', () => {
-    const thinking: IContent = {
-      speaker: 'ai',
-      blocks: [
+  it('preserves llxprtSourceField when parsing a Gemini-shaped thinking part', () => {
+    const gemini: GeminiContent = {
+      role: 'model',
+      parts: [
         {
-          type: 'thinking',
-          thought: 'reasoning here',
-          sourceField: 'thinking',
-          signature: 'sig-abc',
-        } as ThinkingBlock,
+          text: 'reasoning here',
+          thought: true,
+          thoughtSignature: 'sig-abc',
+          llxprtSourceField: 'thinking',
+        },
       ],
     };
 
-    const gemini: GeminiContent = ContentConverters.toGeminiContent(thinking);
     const back: IContent = ContentConverters.toIContent(
       gemini,
       undefined,
@@ -622,22 +501,19 @@ describe('issue #1723 – thinking visibility compatibility', () => {
     expect(thinkingBlock.isHidden).toBe(true);
   });
 
-  it('preserves absent isHidden through a core-conversation round trip', () => {
-    const original: IContent = {
-      speaker: 'ai',
-      blocks: [
+  it('preserves absent isHidden metadata when parsing a Gemini-shaped part without it', () => {
+    const gemini: GeminiContent = {
+      role: 'model',
+      parts: [
         {
-          type: 'thinking',
-          thought: 'Visible by default for legacy API compatibility',
-          sourceField: 'thought',
-          streamId: 'stream-visible',
-          streamStatus: 'complete',
+          text: 'Visible by default for legacy API compatibility',
+          thought: true,
+          llxprtSourceField: 'thought',
+          llxprtThoughtBlockId: 'stream-visible',
+          llxprtThoughtBlockStatus: 'complete',
         },
       ],
     };
-
-    const gemini = ContentConverters.toGeminiContent(original);
-    expect(gemini.parts[0].llxprtThoughtIsHidden).toBeUndefined();
 
     const restored = ContentConverters.toIContent(
       gemini,
@@ -652,21 +528,18 @@ describe('issue #1723 – thinking visibility compatibility', () => {
     expect(thinkingBlock.streamStatus).toBe('complete');
   });
 
-  it('preserves explicit visible metadata through a core-conversation round trip', () => {
-    const original: IContent = {
-      speaker: 'ai',
-      blocks: [
+  it('preserves explicit visible metadata when parsing a Gemini-shaped part', () => {
+    const gemini: GeminiContent = {
+      role: 'model',
+      parts: [
         {
-          type: 'thinking',
-          thought: 'Explicitly visible thought',
-          sourceField: 'thought',
-          isHidden: false,
+          text: 'Explicitly visible thought',
+          thought: true,
+          llxprtSourceField: 'thought',
+          llxprtThoughtIsHidden: false,
         },
       ],
     };
-
-    const gemini = ContentConverters.toGeminiContent(original);
-    expect(gemini.parts[0].llxprtThoughtIsHidden).toBe(false);
 
     const restored = ContentConverters.toIContent(
       gemini,
@@ -679,21 +552,18 @@ describe('issue #1723 – thinking visibility compatibility', () => {
     expect(thinkingBlock.isHidden).toBe(false);
   });
 
-  it('preserves explicit hidden metadata through a core-conversation round trip', () => {
-    const original: IContent = {
-      speaker: 'ai',
-      blocks: [
+  it('preserves explicit hidden metadata when parsing a Gemini-shaped part', () => {
+    const gemini: GeminiContent = {
+      role: 'model',
+      parts: [
         {
-          type: 'thinking',
-          thought: 'Context-only thought',
-          sourceField: 'thought',
-          isHidden: true,
+          text: 'Context-only thought',
+          thought: true,
+          llxprtSourceField: 'thought',
+          llxprtThoughtIsHidden: true,
         },
       ],
     };
-
-    const gemini = ContentConverters.toGeminiContent(original);
-    expect(gemini.parts[0].llxprtThoughtIsHidden).toBe(true);
 
     const restored = ContentConverters.toIContent(
       gemini,
@@ -837,28 +707,18 @@ describe('issue #2410 – exact text/tool-response payload and ID preservation',
   });
 });
 
-describe('issue #2349 – Google-style {thought:true, text, thoughtSignature} round-trip', () => {
-  it('preserves thinking semantics/signature through toGeminiContent → toIContent', () => {
-    const thinking: IContent = {
-      speaker: 'ai',
-      blocks: [
+describe('issue #2349 – Google-style {thought:true, text, thoughtSignature} parsing', () => {
+  it('preserves thinking semantics/signature when parsing a Gemini-shaped part', () => {
+    const gemini: GeminiContent = {
+      role: 'model',
+      parts: [
         {
-          type: 'thinking',
-          thought: 'my reasoning',
-          sourceField: 'thought',
-          signature: 'sig-rt',
-        } as ThinkingBlock,
+          thought: true,
+          text: 'my reasoning',
+          thoughtSignature: 'sig-rt',
+        },
       ],
     };
-
-    const gemini: GeminiContent = ContentConverters.toGeminiContent(thinking);
-
-    // The Gemini shape must carry thought:true + text + thoughtSignature
-    const thoughtPart = gemini.parts?.[0];
-    expect(thoughtPart).toBeDefined();
-    expect(thoughtPart).toHaveProperty('thought', true);
-    expect(thoughtPart).toHaveProperty('text', 'my reasoning');
-    expect(thoughtPart).toHaveProperty('thoughtSignature', 'sig-rt');
 
     const back: IContent = ContentConverters.toIContent(
       gemini,
@@ -873,25 +733,18 @@ describe('issue #2349 – Google-style {thought:true, text, thoughtSignature} ro
     expect(block.signature).toBe('sig-rt');
   });
 
-  it('preserves mixed thinking + text parts through round-trip', () => {
-    const mixed: IContent = {
-      speaker: 'ai',
-      blocks: [
+  it('preserves mixed thinking + text parts when parsing a Gemini-shaped content', () => {
+    const gemini: GeminiContent = {
+      role: 'model',
+      parts: [
         {
-          type: 'thinking',
-          thought: 'internal reasoning',
-          sourceField: 'thought',
-          signature: 'sig-mix',
-        } as ThinkingBlock,
-        { type: 'text', text: 'visible answer' },
+          thought: true,
+          text: 'internal reasoning',
+          thoughtSignature: 'sig-mix',
+        },
+        { text: 'visible answer' },
       ],
     };
-
-    const gemini: GeminiContent = ContentConverters.toGeminiContent(mixed);
-    expect(gemini.parts).toHaveLength(2);
-    expect(gemini.parts?.[0]).toHaveProperty('thought', true);
-    expect(gemini.parts?.[1]).toHaveProperty('text', 'visible answer');
-    expect(gemini.parts?.[1]).not.toHaveProperty('thought');
 
     const back = ContentConverters.toIContent(
       gemini,

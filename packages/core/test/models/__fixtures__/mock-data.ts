@@ -152,9 +152,9 @@ export const claudeModel: ModelsDevModel = {
 };
 
 /**
- * Gemini model for family-specific profile testing
+ * Google (Gemini-family) model for family-specific profile testing
  */
-export const geminiModel: ModelsDevModel = {
+export const googleModel: ModelsDevModel = {
   id: 'gemini-2.0-flash',
   name: 'Gemini 2.0 Flash',
   family: 'gemini-2.0',
@@ -246,7 +246,7 @@ export const googleProvider: ModelsDevProvider = {
   npm: '@ai-sdk/google',
   doc: 'https://ai.google.dev/docs',
   models: {
-    'gemini-2.0-flash': geminiModel,
+    'gemini-2.0-flash': googleModel,
   },
 };
 
