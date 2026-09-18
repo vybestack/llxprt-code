@@ -40,11 +40,11 @@
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import React, { act, useRef, type Dispatch, type SetStateAction } from 'react';
-import { renderHook } from '../../../../test-utils/render.js';
-// Act-aware waitFor: the plain poll in test-utils/render.js lets React state
+import { renderHook } from '../../../../__tests__/render.js';
+// Act-aware waitFor: the plain poll in __tests__/render.js lets React state
 // updates land outside act(), which floods CI output with act() warnings for
 // this test's long post-release drain sequence.
-import { waitFor } from '../../../../test-utils/async.js';
+import { waitFor } from '../../../../__tests__/async.js';
 import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
 import {
   useAgentEventStream,

@@ -149,7 +149,7 @@ import {
   createStatelessRuntimeBundle,
   defaultModelConfig,
   defaultRunConfig,
-} from './subagent-test-helpers.js';
+} from './__tests__/subagent-test-helpers.js';
 
 const { readTodos, TodoStoreMock } = (() => {
   const readTodos = vi.fn(async () => []);

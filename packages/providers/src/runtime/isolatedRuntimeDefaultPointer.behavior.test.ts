@@ -15,7 +15,7 @@ import {
   peekActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { getProviderManager } from '../composition/index.js';
 import type { OAuthManager } from '../auth/index.js';

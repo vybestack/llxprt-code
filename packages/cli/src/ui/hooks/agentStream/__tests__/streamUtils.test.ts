@@ -33,7 +33,7 @@ import {
 } from '../streamUtils.js';
 import { splitPartsByRole } from '@vybestack/llxprt-code-agents';
 import { getActiveProviderNameForApiError } from '../../../../utils/apiErrorFormatting.js';
-import { testRegex } from '../../../../test-utils/regex.js';
+import { testRegex } from '../../../../__tests__/regex.js';
 
 /** Part element type accepted by splitPartsByRole. */
 const realLlxprtCodeCoreModule = {

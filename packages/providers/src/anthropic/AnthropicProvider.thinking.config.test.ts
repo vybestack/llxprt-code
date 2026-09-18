@@ -12,12 +12,12 @@ import type {
   IContent,
   ThinkingBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { AnthropicRequestBody } from './test-utils/anthropicTestUtils.js';
+import type { AnthropicRequestBody } from './__tests__/anthropicTestUtils.js';
 import {
   mockMessagesCreate,
   setupThinkingProvider,
   type ThinkingTestSetup,
-} from './test-utils/anthropicThinkingTestSetup.js';
+} from './__tests__/anthropicThinkingTestSetup.js';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', () => {

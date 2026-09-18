@@ -9,7 +9,7 @@ import {
   builtinAliasModelBehavior,
   prepare,
   reasoningFields,
-} from './OpenAIRequestPreparation.issue3255.test-helpers.js';
+} from './__tests__/OpenAIRequestPreparation.issue3255.test-helpers.js';
 
 describe('OpenAI Chat reasoning wire translation (issue #3255)', () => {
   it('emits top-level OpenAI effort for a custom URL with an explicit selector', async () => {

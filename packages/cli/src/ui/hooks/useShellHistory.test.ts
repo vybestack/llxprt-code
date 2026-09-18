@@ -6,7 +6,7 @@
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import type { Mock } from 'bun:test';
-import { renderHook, waitFor } from '../../test-utils/render.js';
+import { renderHook, waitFor } from '../../__tests__/render.js';
 import { act } from 'react';
 import { useShellHistory } from './useShellHistory.js';
 import * as fs from 'fs/promises';

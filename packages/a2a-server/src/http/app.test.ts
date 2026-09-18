@@ -49,7 +49,7 @@ import {
   createConfirmationMessageRequest,
   assertUniqueFinalEventIsLast,
   assertTaskCreation,
-} from '../utils/testing_utils.js';
+} from '../utils/__tests__/testing_utils.js';
 import { commandRegistry } from '../commands/command-registry.js';
 import type { Command, CommandContext } from '../commands/types.js';
 

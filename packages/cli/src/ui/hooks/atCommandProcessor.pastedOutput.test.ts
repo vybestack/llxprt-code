@@ -16,7 +16,7 @@ import {
   setupAtCommandTest,
   teardownAtCommandTest,
   type AtCommandTestSetup,
-} from './atCommandProcessor-test-helpers.js';
+} from './__tests__/atCommandProcessor-test-helpers.js';
 
 /**
  * Regression coverage for the paste-induced memory exhaustion: copying an

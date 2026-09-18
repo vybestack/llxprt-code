@@ -17,7 +17,7 @@ import {
   createTelemetryAdapterFromConfig,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';

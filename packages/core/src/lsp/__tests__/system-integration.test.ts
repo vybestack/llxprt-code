@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import type { ConfigParameters } from '../../config/config.js';
 import { Config } from '../../config/config.js';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
-import { initializeTestConfig } from '../../test-utils/config.js';
+import { initializeTestConfig } from '../../__tests__/config-test-helpers.js';
 
 import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
 import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';

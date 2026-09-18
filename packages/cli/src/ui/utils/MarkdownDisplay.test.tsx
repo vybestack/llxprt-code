@@ -7,8 +7,8 @@
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { MarkdownDisplay } from './MarkdownDisplay.js';
 import { LoadedSettings } from '../../config/settings.js';
-import { renderWithProviders } from '../../test-utils/render.js';
-import { testRegex } from '../../test-utils/regex.js';
+import { renderWithProviders } from '../../__tests__/render.js';
+import { testRegex } from '../../__tests__/regex.js';
 
 describe('<MarkdownDisplay />', () => {
   const baseProps = {

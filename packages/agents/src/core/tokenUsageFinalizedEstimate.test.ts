@@ -28,7 +28,7 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { OpenAIResponsesProvider } from '@vybestack/llxprt-code-providers';
 import { createRuntimeTokenizerFactory } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';

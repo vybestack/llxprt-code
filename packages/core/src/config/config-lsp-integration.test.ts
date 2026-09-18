@@ -17,7 +17,7 @@ import { Readable, Writable } from 'node:stream';
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
-import { initializeTestConfig } from '../test-utils/config.js';
+import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
 
 import { setLlxprtMdFilename as _mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
 import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';

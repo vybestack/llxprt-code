@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import { act } from 'react';
-import { renderHook, createMockSettings } from '../../../test-utils/render.js';
+import { renderHook, createMockSettings } from '../../../__tests__/render.js';
 import { AppDispatchProvider } from '../../contexts/AppDispatchContext.js';
 import { useThemeCommand } from '../../hooks/useThemeCommand.js';
 import { createDialogStore } from '../dialog/dialogStore.js';

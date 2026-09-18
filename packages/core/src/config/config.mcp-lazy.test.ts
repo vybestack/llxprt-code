@@ -14,7 +14,7 @@ import {
   SettingsService,
 } from '@vybestack/llxprt-code-settings';
 import { clearActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
-import { initializeTestConfig } from '../test-utils/config.js';
+import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
 import {
   ACTIVATE_MCP_SERVER_TOOL_NAME,
   ActivateMcpServerTool,

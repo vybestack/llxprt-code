@@ -9,7 +9,7 @@ import { SecureInputHandler } from './secureInputHandler.js';
 import * as os from 'os';
 import * as path from 'path';
 import { writeFileSync } from 'fs';
-import { testRegex } from '../../test-utils/regex.js';
+import { testRegex } from '../../__tests__/regex.js';
 
 function serializeRegexGroups(match: RegExpMatchArray | null): string[] | null {
   return match ? match.map((group) => JSON.stringify(group)) : null;

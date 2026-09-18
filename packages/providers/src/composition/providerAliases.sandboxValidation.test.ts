@@ -19,7 +19,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import { loadWithTempConfig } from './providerAliases.test-helpers.js';
+import { loadWithTempConfig } from './__tests__/providerAliases.test-helpers.js';
 
 describe('providerAliases sandbox field validation', () => {
   let tmpDir: string;

@@ -253,7 +253,7 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
       .spyOn(geminiGenerationExecutionModule, 'executeNonOAuthGeneration')
       .mockResolvedValue({ stream: null, emitted: false });
     const { createProviderCallOptions } = await import(
-      '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js'
+      '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js'
     );
     const { GeminiProvider } = await import('../gemini/GeminiProvider.js');
     const provider = new GeminiProvider('test-api-key');

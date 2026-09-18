@@ -18,7 +18,7 @@ void vi.mock('../contexts/RuntimeContext.js', () => ({
   }),
 }));
 const { renderWithProviders, createMockSettings } = await import(
-  '../../test-utils/render.js'
+  '../../__tests__/render.js'
 );
 const { FooterRegion } = await import('./DefaultAppLayoutRegions.js');
 const { useFolderTrust } = await import('../hooks/useFolderTrust.js');

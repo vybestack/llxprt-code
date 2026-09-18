@@ -18,7 +18,7 @@ import type {
   ContentBlock,
   ToolResponseBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/tools.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/tools.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';

@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import OpenAI from 'openai';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import { resolveKimiProviderFileRequestPolicy } from './kimiProviderFilePolicy.js';

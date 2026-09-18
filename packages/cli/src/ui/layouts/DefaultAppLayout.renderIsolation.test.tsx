@@ -55,7 +55,7 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   getCliRuntimeContext: () => ({ messageBus: undefined }),
 }));
 const { renderWithProviders, createMockSettings } = await import(
-  '../../test-utils/render.js'
+  '../../__tests__/render.js'
 );
 const { DefaultAppLayout } = await import('./DefaultAppLayout.js');
 const { buildSlashCommandRuntime, buildUiRuntimeFromSource } = await import(

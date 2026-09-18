@@ -20,7 +20,7 @@
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from 'bun:test';
 import React, { act, type Dispatch, type SetStateAction } from 'react';
-import { renderHook, waitFor } from '../../../../test-utils/render.js';
+import { renderHook, waitFor } from '../../../../__tests__/render.js';
 import {
   useSubmitQuery,
   type SubmissionExecutor,
@@ -39,7 +39,7 @@ import type {
   UiMcpClientManager,
 } from '../../../cliUiRuntime.js';
 import { KeypressProvider } from '../../../contexts/KeypressContext.js';
-import { createFakeAgentFromMockClient } from '../../useAgentStream-test-helpers.js';
+import { createFakeAgentFromMockClient } from '../../__tests__/useAgentStream-test-helpers.js';
 import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 // ─── Module mocks ───────────────────────────────────────────────────────────
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';

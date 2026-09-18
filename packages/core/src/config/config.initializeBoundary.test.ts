@@ -38,7 +38,7 @@ import {
   createBaseParams,
   resetAgentClientMock,
   type HoistedConfigMocks,
-} from './configTestHarness.js';
+} from './__tests__/configTestHarness.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { getSettingsService } from '@vybestack/llxprt-code-settings';
 

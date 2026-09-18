@@ -23,14 +23,14 @@ import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import type OpenAI from 'openai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { OpenAIProvider } from '../OpenAIProvider.js';
-import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { resetSettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import {
   ATTEMPT_LIFECYCLE_KEY,
   type AttemptLifecycleObserver,
 } from '../../logging/attemptLifecycle.js';
-import { createOpenAIRawPostTestAdapter } from '../../test-utils/rawPostTestAdapters.js';
+import { createOpenAIRawPostTestAdapter } from '../../__tests__/rawPostTestAdapters.js';
 
 const mockChatCompletionsCreate = vi.fn();
 

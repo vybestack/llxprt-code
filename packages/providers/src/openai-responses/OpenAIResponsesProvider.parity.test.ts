@@ -26,8 +26,8 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import { readRawPostTestBody } from '../test-utils/rawPostTestAdapters.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { readRawPostTestBody } from '../__tests__/rawPostTestAdapters.js';
 
 const originalFetch = global.fetch;
 

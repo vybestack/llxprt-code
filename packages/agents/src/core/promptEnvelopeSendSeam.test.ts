@@ -12,7 +12,7 @@ import { describe, expect, it } from 'bun:test';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type {
   GenerateChatOptions,
   IProvider,

@@ -12,7 +12,7 @@ import {
   parseCommandDetailsForLanguage,
 } from './shell-parser.js';
 import type { Config } from '../config/config.js';
-import { resolvePwshTestPolicyFromEnv } from '../test-utils/pwsh-test-policy.js';
+import { resolvePwshTestPolicyFromEnv } from '@vybestack/llxprt-code-test-utils/core/pwsh-test-policy.js';
 
 /**
  * Security remediation tests for PR #3198 review findings (#3181).

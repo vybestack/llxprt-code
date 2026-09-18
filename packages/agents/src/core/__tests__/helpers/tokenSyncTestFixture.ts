@@ -8,7 +8,7 @@
 
 import { vi } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';

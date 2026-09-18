@@ -12,7 +12,7 @@ import {
   drain,
   options,
   request,
-} from './openAIResponsesWebSocketTransport.test-helpers.js';
+} from './__tests__/openAIResponsesWebSocketTransport.test-helpers.js';
 
 describe('Codex Responses WebSocket handshake headers', () => {
   it('passes every current handshake header to the connector', async () => {

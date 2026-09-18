@@ -9,17 +9,17 @@
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
-import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
+import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   setupAnthropicProvider,
   type AnthropicTestSetup,
-} from './test-utils/anthropicProviderTestSetup.js';
+} from './__tests__/anthropicProviderTestSetup.js';
 
 // Shared mock instance for messages.create - using vi.hoisted so it's
 // available when vi.mock factories run.
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
 const mockMessagesCreate = vi.fn();
 

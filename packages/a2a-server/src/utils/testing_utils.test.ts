@@ -8,7 +8,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   createStreamMessageRequest,
   createConfirmationMessageRequest,
-} from './testing_utils.js';
+} from './__tests__/testing_utils.js';
 
 describe('request builders', () => {
   it('createStreamMessageRequest carries text part and coderAgent metadata', () => {

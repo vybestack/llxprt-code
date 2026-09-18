@@ -21,7 +21,7 @@ import type {
 } from '../core/coreToolScheduler.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import { MockTool } from '../test-utils/tools.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/tools.js';
 
 const createFakeCompletedToolCall = (
   name: string,

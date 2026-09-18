@@ -32,7 +32,7 @@ import {
   createBaseParams,
   resetAgentClientMock,
   type HoistedConfigMocks,
-} from './configTestHarness.js';
+} from './__tests__/configTestHarness.js';
 
 // NOTE: `fs` is deliberately NOT mocked here so WorkspaceContext resolves real
 // directories/symlinks. Only the non-fs dependencies are mocked, using the same

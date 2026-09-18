@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { AgenticLoop } from '../AgenticLoop.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import {

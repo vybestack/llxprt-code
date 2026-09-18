@@ -205,6 +205,20 @@ const RENAMED_DESTINATION_OVERRIDES = new Map<string, string>([
     'packages/core/src/providers/openai-responses/__tests__/OpenAIResponsesProvider.ephemerals.toolOutput.test.ts',
     'packages/providers/src/openai-responses/__tests__/OpenAIResponsesProvider.toolIdNormalization.test.ts',
   ],
+  // test-utils/providerTestConfig.ts: the destination helper moved under
+  // __tests__ as part of the test-code-out-of-published-packages sweep, so
+  // the deterministic transform would point at a deleted directory.
+  [
+    'packages/core/src/providers/test-utils/providerTestConfig.ts',
+    'packages/providers/src/__tests__/providerTestConfig.ts',
+  ],
+  // anthropic/test-utils/anthropicTestUtils.ts: same sweep moved this
+  // destination helper under anthropic/__tests__, so the deterministic
+  // transform would point at a deleted directory.
+  [
+    'packages/core/src/providers/anthropic/test-utils/anthropicTestUtils.ts',
+    'packages/providers/src/anthropic/__tests__/anthropicTestUtils.ts',
+  ],
 ]);
 const AGENT_OWNED_DESTINATION_OVERRIDES = new Map<string, string>([
   [
@@ -647,7 +661,6 @@ describe('P09 Move-map completeness validation', () => {
       'types',
       '__tests__',
       'integration',
-      'test-utils',
     ];
     for (const dir of keyDirs) {
       expect(fs.existsSync(path.join(PROVIDERS_SRC_DIR, dir))).toBe(true);

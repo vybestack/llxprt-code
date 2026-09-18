@@ -16,8 +16,8 @@ import {
   type AnthropicContentBlock,
   type AnthropicMessage,
   type AnthropicTestSetup,
-} from './test-utils/anthropicProviderTestSetup.js';
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+} from './__tests__/anthropicProviderTestSetup.js';
+import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
 // Shared mock instance for messages.create - using vi.hoisted so it's
 // available when vi.mock factories run.

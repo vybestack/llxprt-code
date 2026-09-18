@@ -35,7 +35,7 @@ import {
   cleanupTempDirectory,
   createTempDirectory,
 } from '../../integration-tests/test-utils.js';
-import { testRegex } from '../../test-utils/regex.js';
+import { testRegex } from '../../__tests__/regex.js';
 
 interface RuntimeFixture {
   id: string;

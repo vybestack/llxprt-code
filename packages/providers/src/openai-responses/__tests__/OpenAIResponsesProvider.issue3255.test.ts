@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';

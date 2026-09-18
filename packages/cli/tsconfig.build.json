@@ -29,6 +29,23 @@
     "src/**/*.spec.ts",
     "src/**/*.spec.tsx",
     "src/**/__tests__/**",
-    "src/**/__snapshots__/**"
+    "src/**/__snapshots__/**",
+    "**/__tests__/**",
+    "**/*test-helpers*",
+    "**/*TestSetup*",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "**/*.bun.ts",
+    "**/*.test-d.ts",
+    "**/__mocks__/**",
+    "**/*.testHelpers.ts",
+    "**/*.test-helper.ts",
+    "**/*.fixtures.ts",
+    "**/src/test-utils/**",
+    "**/*.bun.tsx",
+    "**/integration-tests/**",
+    "**/__testhelpers__/**"
   ]
 }

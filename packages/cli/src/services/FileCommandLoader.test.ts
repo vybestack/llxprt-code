@@ -21,7 +21,7 @@ import {
   vi,
   type Mock,
 } from 'bun:test';
-import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
 import { SHORTHAND_ARGS_PLACEHOLDER } from './prompt-processors/types.js';
 import { ShellProcessor } from './prompt-processors/shellProcessor.js';
 import { DefaultArgumentProcessor } from './prompt-processors/argumentProcessor.js';

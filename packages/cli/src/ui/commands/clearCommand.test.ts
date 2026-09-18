@@ -8,7 +8,7 @@ import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import type { Mock } from 'bun:test';
 import { clearCommand } from './clearCommand.js';
 import { type CommandContext } from './types.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 // Mock the telemetry service
 const realLlxprtCodeCoreModule = {
   ...(await import('@vybestack/llxprt-code-core')),
@@ -38,7 +38,7 @@ void vi.mock('@vybestack/llxprt-code-telemetry', () => {
 
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { assertDefined } from '../../test-utils/assertions.js';
+import { assertDefined } from '../../__tests__/assertions.js';
 import {
   triggerSessionEndHook,
   triggerSessionStartHook,

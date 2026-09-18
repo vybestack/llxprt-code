@@ -3,6 +3,53 @@
   "version": "0.12.0",
   "private": true,
   "main": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js"
+    },
+    "./core/config.js": {
+      "types": "./dist/src/core/config.d.ts",
+      "bun": "./src/core/config.ts",
+      "import": "./dist/src/core/config.js"
+    },
+    "./core/index.js": {
+      "types": "./dist/src/core/index.d.ts",
+      "bun": "./src/core/index.ts",
+      "import": "./dist/src/core/index.js"
+    },
+    "./core/mock-tool.js": {
+      "types": "./dist/src/core/mock-tool.d.ts",
+      "bun": "./src/core/mock-tool.ts",
+      "import": "./dist/src/core/mock-tool.js"
+    },
+    "./core/mockWorkspaceContext.js": {
+      "types": "./dist/src/core/mockWorkspaceContext.d.ts",
+      "bun": "./src/core/mockWorkspaceContext.ts",
+      "import": "./dist/src/core/mockWorkspaceContext.js"
+    },
+    "./core/providerCallOptions.js": {
+      "types": "./dist/src/core/providerCallOptions.d.ts",
+      "bun": "./src/core/providerCallOptions.ts",
+      "import": "./dist/src/core/providerCallOptions.js"
+    },
+    "./core/pwsh-test-policy.js": {
+      "types": "./dist/src/core/pwsh-test-policy.d.ts",
+      "bun": "./src/core/pwsh-test-policy.ts",
+      "import": "./dist/src/core/pwsh-test-policy.js"
+    },
+    "./core/runtime.js": {
+      "types": "./dist/src/core/runtime.d.ts",
+      "bun": "./src/core/runtime.ts",
+      "import": "./dist/src/core/runtime.js"
+    },
+    "./core/tools.js": {
+      "types": "./dist/src/core/tools.d.ts",
+      "bun": "./src/core/tools.ts",
+      "import": "./dist/src/core/tools.js"
+    }
+  },
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {

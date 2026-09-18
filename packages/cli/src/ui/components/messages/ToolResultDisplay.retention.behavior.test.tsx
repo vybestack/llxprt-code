@@ -25,7 +25,7 @@ import { ToolResultDisplay, trimToVisibleTail } from './ToolResultDisplay.js';
 import {
   renderWithProviders,
   wrapWithProviders,
-} from '../../../test-utils/render.js';
+} from '../../../__tests__/render.js';
 
 interface JscHeapStats {
   heapSize: number;

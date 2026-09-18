@@ -13,7 +13,7 @@ import type {
   ToolExecuteConfirmationDetails,
 } from '@vybestack/llxprt-code-core';
 import { ToolGroupMessage } from './messages/ToolGroupMessage.js';
-import { renderWithProviders } from '../../test-utils/render.js';
+import { renderWithProviders } from '../../__tests__/render.js';
 
 // The real RuntimeContextProvider resolves the CLI runtime scope, which this
 // component test does not establish. Preserve the complete module shape and

@@ -11,14 +11,14 @@ import {
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import Anthropic from '@anthropic-ai/sdk';
 import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+} from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
 function isOptionalObject(value: unknown): boolean {
   return value === undefined || typeof value === 'object';

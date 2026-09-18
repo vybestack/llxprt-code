@@ -12,7 +12,7 @@ import {
 } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { act } from 'react';
-import { renderHook, waitFor } from '../../test-utils/render.js';
+import { renderHook, waitFor } from '../../__tests__/render.js';
 import type { Config, FileSearch } from '@vybestack/llxprt-code-core';
 import {
   FileSearchFactory,
@@ -21,7 +21,7 @@ import {
   DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
 } from '@vybestack/llxprt-code-core';
 import type { FileSystemStructure } from '@vybestack/llxprt-code-test-utils';
-import { useTestHarnessForAtCompletion } from './useAtCompletion-test-helpers.js';
+import { useTestHarnessForAtCompletion } from './__tests__/useAtCompletion-test-helpers.js';
 import { CommandKind } from '../commands/types.js';
 
 describe('useAtCompletion (subagent/filtering/debounce)', () => {

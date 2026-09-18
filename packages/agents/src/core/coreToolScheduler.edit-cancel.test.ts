@@ -20,7 +20,7 @@ import {
   createMockPolicyEngine,
   waitForStatus,
   MockEditTool,
-} from './coreToolScheduler-test-helpers.js';
+} from './__tests__/coreToolScheduler-test-helpers.js';
 
 describe('CoreToolScheduler edit cancellation', () => {
   it('should preserve diff when an edit is cancelled', async () => {

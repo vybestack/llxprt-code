@@ -14,7 +14,7 @@
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import { act } from 'react';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';

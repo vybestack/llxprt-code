@@ -41,7 +41,7 @@ if (process.env.NO_COLOR !== undefined) {
 
 import { setSimulate429 } from './src/utils/testUtils.js';
 import { clearActiveProviderRuntimeContext } from './src/runtime/providerRuntimeContext.js';
-import { initializeTestProviderRuntime } from './src/test-utils/runtime.js';
+import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 
 // Disable 429 simulation globally for all tests.
 setSimulate429(false);

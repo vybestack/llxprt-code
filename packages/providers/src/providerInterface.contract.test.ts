@@ -14,12 +14,12 @@ import { BaseProvider } from './BaseProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IModel } from './IModel.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { createProviderWithRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createProviderWithRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import {
   setActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 
 const asContent = (text: string): IContent => ({
   speaker: 'human',

@@ -20,7 +20,7 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { renderHook, cleanup } from '../../test-utils/render.js';
+import { renderHook, cleanup } from '../../__tests__/render.js';
 import { act } from 'react';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
 import {
@@ -41,7 +41,7 @@ import {
   type ToolSchedulerContract,
   type WaitingToolCall,
 } from '@vybestack/llxprt-code-core';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { createReactToolSchedulerRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
 import type { HistoryItemWithoutId } from '../types.js';
 

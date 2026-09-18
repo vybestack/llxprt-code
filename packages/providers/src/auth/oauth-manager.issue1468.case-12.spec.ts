@@ -11,7 +11,7 @@ import {
   createIssue1468Fixture,
   mockLoadProfile,
   mockFetchAnthropicUsage,
-} from './oauth-manager.issue1468.test-helpers.js';
+} from './__tests__/oauth-manager.issue1468.test-helpers.js';
 
 describe('Issue #1468 getProfileBuckets case 12', () => {
   it('uses the only configured profile bucket for logout, auth status, and anthropic usage after a fresh restart', async () => {

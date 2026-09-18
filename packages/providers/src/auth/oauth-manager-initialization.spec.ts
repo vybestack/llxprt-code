@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import { AnthropicOAuthProvider } from './anthropic-oauth-provider.js';
 import { promises as fs } from 'node:fs';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
-import { createFakeOAuthSettings } from './test-oauth-settings.js';
+import { createFakeOAuthSettings } from './__tests__/test-oauth-settings.js';
 
 /** Minimal in-memory ISecureStore for tests that don't exercise storage. */
 const realNodeFsModule = { ...(await import('node:fs')) };

@@ -43,7 +43,7 @@ import {
   type TodoUpdateEvent,
 } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import { renderHook, waitFor } from '../../../test-utils/render.js';
+import { renderHook, waitFor } from '../../../__tests__/render.js';
 import { TodoProvider } from '../TodoProvider.js';
 import { useTodoContext } from '../TodoContext.js';
 import { createTodoObservationSubscription } from '../../../observation/jspWiring.js';

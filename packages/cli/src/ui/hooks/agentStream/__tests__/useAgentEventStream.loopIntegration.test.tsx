@@ -32,7 +32,7 @@ import type {
  *        approvalHandler — production never wires one.
  */
 import { describe, it, expect, vi } from 'bun:test';
-import { renderHook } from '../../../../test-utils/render.js';
+import { renderHook } from '../../../../__tests__/render.js';
 import { act } from 'react';
 import {
   createAgenticLoop,
@@ -63,7 +63,7 @@ import {
   DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
 } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   ToolRegistry,

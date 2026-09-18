@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import type {
   ExecutingToolCall,
   ToolCall,

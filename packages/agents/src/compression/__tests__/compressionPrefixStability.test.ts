@@ -37,7 +37,7 @@ import {
   aiTextMsg,
   aiToolCallMsg,
   toolResponseMsg,
-} from '../MiddleOutStrategy-test-helpers.js';
+} from './MiddleOutStrategy-test-helpers.js';
 import {
   getCompletionBudget,
   DEFAULT_COMPLETION_BUDGET,

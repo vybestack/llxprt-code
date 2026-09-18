@@ -6,7 +6,7 @@
 
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { act } from 'react';
-import { render } from '../../test-utils/render.js';
+import { render } from '../../__tests__/render.js';
 import { useAnimatedScrollbar } from './useAnimatedScrollbar.js';
 import { debugState } from '../debug.js';
 import { theme } from '../semantic-colors.js';

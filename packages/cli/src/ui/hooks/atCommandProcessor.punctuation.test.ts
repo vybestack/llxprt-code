@@ -14,7 +14,7 @@ import {
   setupAtCommandTest,
   teardownAtCommandTest,
   type AtCommandTestSetup,
-} from './atCommandProcessor-test-helpers.js';
+} from './__tests__/atCommandProcessor-test-helpers.js';
 
 describe('handleAtCommand (punctuation)', () => {
   let setup: AtCommandTestSetup;

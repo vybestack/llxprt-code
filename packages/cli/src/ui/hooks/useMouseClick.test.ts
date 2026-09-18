@@ -27,7 +27,7 @@ void vi.mock('ink', () => ({
 
 import { getBoundingBox } from 'ink';
 import { useMouseClick } from './useMouseClick.js';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 
 describe('useMouseClick', () => {
   let handler: ReturnType<typeof vi.fn>;

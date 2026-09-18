@@ -16,7 +16,7 @@ import {
 } from 'bun:test';
 import { skillsCommand } from './skillsCommand.js';
 import { MessageType } from '../types.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { CommandContext } from './types.js';
 import type { Config, SkillDefinition } from '@vybestack/llxprt-code-core';
 import {

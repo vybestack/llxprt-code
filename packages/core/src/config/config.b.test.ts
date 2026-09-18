@@ -15,7 +15,7 @@ import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
 import { createContentGeneratorConfig } from '../core/contentGenerator.js';
 import { getSettingsService } from '@vybestack/llxprt-code-settings';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { initializeTestConfig } from '../test-utils/config.js';
+import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
 import {
   buildFsMockBody,
   buildToolsMockBody,
@@ -32,7 +32,7 @@ import {
   resetAgentClientMock,
   sharedConfigTestConstants,
   type HoistedConfigMocks,
-} from './configTestHarness.js';
+} from './__tests__/configTestHarness.js';
 
 const { USER_MEMORY, TARGET_DIR, TELEMETRY_SETTINGS } =
   sharedConfigTestConstants;

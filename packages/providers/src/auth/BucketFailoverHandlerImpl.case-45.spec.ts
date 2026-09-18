@@ -10,7 +10,7 @@ import { OAuthManager } from './oauth-manager.js';
 import {
   makeToken,
   MemoryTokenStore,
-} from './BucketFailoverHandlerImpl.test-helpers.js';
+} from './__tests__/BucketFailoverHandlerImpl.test-helpers.js';
 
 describe('BucketFailoverHandlerImpl #45', () => {
   it('reuses token from in-flight eager auth in tryFailover pass 3 without duplicate authenticate call', async () => {

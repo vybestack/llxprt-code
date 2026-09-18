@@ -11,12 +11,12 @@
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { AnthropicRequestBody } from './test-utils/anthropicTestUtils.js';
+import type { AnthropicRequestBody } from './__tests__/anthropicTestUtils.js';
 import {
   mockMessagesCreate,
   setupThinkingProvider,
   type ThinkingTestSetup,
-} from './test-utils/anthropicThinkingTestSetup.js';
+} from './__tests__/anthropicThinkingTestSetup.js';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 describe('AnthropicProvider Fable 5 Extended Thinking @issue:2328', () => {

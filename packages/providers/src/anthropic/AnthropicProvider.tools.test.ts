@@ -22,8 +22,8 @@ import {
   setupAnthropicProvider,
   type AnthropicMessage,
   type AnthropicTestSetup,
-} from './test-utils/anthropicProviderTestSetup.js';
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+} from './__tests__/anthropicProviderTestSetup.js';
+import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
 function isAnthropicMessageContent(value: unknown): boolean {
   return typeof value === 'string' || Array.isArray(value);

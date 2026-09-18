@@ -7,7 +7,7 @@
 import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { act } from 'react';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import { useTerminalSize } from './useTerminalSize.js';
 
 Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true);

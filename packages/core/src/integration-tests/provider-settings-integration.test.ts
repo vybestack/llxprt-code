@@ -14,7 +14,7 @@ import {
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { BaseProvider } from '@vybestack/llxprt-code-providers/BaseProvider.js';
 import { getSettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderWithRuntime } from '../test-utils/runtime.js';
+import { createProviderWithRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 
 // Mock the settings service instance
 const __actual = { ...(await import('@vybestack/llxprt-code-settings')) };

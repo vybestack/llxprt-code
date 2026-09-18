@@ -33,7 +33,7 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 
 void vi.mock('openai', () => ({
   default: class FakeOpenAI {

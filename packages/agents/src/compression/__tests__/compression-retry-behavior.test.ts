@@ -19,7 +19,7 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 import { PerformCompressionResult } from '../../core/turn.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 import { ChatSession } from '../../core/chatSession.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {

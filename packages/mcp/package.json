@@ -33,7 +33,7 @@
     }
   },
   "scripts": {
-    "build": "bun ../../scripts/build_package.ts",
+    "build": "bun ../../scripts/build_package.ts && bun ./scripts/dist-test-artifact-guard.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "test": "bun ../../scripts/run_bun_tests.ts --workspace mcp --junit junit.xml",
@@ -49,9 +49,18 @@
     "!**/*.test-d.ts",
     "!**/*.spec.ts",
     "!**/*.spec.tsx",
+    "!**/*.bun.ts",
     "!**/__tests__/**",
     "!**/__snapshots__/**",
+    "!**/__mocks__/**",
     "!**/test-support/**",
+    "!**/*test-helpers*",
+    "!**/*.testHelpers.ts",
+    "!**/*.test-helper.ts",
+    "!**/*.fixtures.ts",
+    "!**/src/test-utils/**",
+    "!**/mcpClientTestHelpers.ts",
+    "!**/*.bun.tsx",
     "dist"
   ],
   "dependencies": {

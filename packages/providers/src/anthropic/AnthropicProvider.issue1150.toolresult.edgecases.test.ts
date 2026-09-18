@@ -12,15 +12,15 @@ import type {
   ToolCallBlock,
   ToolResponseBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
+import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
 import {
   createProviderWithRuntime,
   createRuntimeConfigStub,
-} from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+} from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+} from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
@@ -30,7 +30,7 @@ import {
 import type {
   AnthropicContentBlock,
   AnthropicRequestBody,
-} from './test-utils/anthropicTestUtils.js';
+} from './__tests__/anthropicTestUtils.js';
 
 // Mock dependencies
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -45,7 +45,7 @@ void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   isNetworkTransientError: vi.fn(() => false),
 }));
 
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
 const mockMessagesCreate = vi.fn();
 

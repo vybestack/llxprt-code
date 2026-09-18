@@ -10,7 +10,10 @@ import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
+import {
+  type MockedChatInstance,
+  mockChunk,
+} from './__tests__/turn-test-helpers.js';
 
 const { mockSendMessageStream, mockGetHistory } = {
   mockSendMessageStream: vi.fn(),

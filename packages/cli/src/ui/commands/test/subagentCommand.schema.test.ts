@@ -7,9 +7,9 @@
 import { describe, it, expect, vi } from 'bun:test';
 import { createCompletionHandler } from '../schema/index.js';
 import { parseCommandArguments } from '../../hooks/slashCommandPathUtils.js';
-import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import { subagentCommand, subagentNameSchema } from '../subagentCommand.js';
-import { assertDefined } from '../../../test-utils/assertions.js';
+import { assertDefined } from '../../../__tests__/assertions.js';
 
 type MockSubagentDetail = {
   name: string;

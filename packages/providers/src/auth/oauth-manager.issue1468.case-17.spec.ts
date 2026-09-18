@@ -8,7 +8,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   createIssue1468Fixture,
   mockGetCurrentProfileName,
-} from './oauth-manager.issue1468.test-helpers.js';
+} from './__tests__/oauth-manager.issue1468.test-helpers.js';
 
 describe('Issue #1468 getProfileBuckets case 17', () => {
   /**

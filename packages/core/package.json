@@ -194,9 +194,17 @@
       "bun": "./src/llm-types/index.ts",
       "import": "./dist/src/llm-types/index.js"
     },
+    "./llm-types/modelEnvelope.js": {
+      "bun": "./src/llm-types/modelEnvelope.ts",
+      "import": "./dist/src/llm-types/modelEnvelope.js"
+    },
     "./llm-types/finishReasons.js": {
       "bun": "./src/llm-types/finishReasons.ts",
       "import": "./dist/src/llm-types/finishReasons.js"
+    },
+    "./recording/SessionRecordingService.js": {
+      "bun": "./src/recording/SessionRecordingService.ts",
+      "import": "./dist/src/recording/SessionRecordingService.js"
     },
     "./services/history/historyProviderPipeline.js": {
       "bun": "./src/services/history/historyProviderPipeline.ts",
@@ -284,22 +292,6 @@
     "./telemetry/file-exporters.js": {
       "bun": "./src/telemetry/file-exporters.ts",
       "import": "./dist/src/telemetry/file-exporters.js"
-    },
-    "./test-utils/providerCallOptions.js": {
-      "bun": "./src/test-utils/providerCallOptions.ts",
-      "import": "./dist/src/test-utils/providerCallOptions.js"
-    },
-    "./test-utils/config.js": {
-      "bun": "./src/test-utils/config.ts",
-      "import": "./dist/src/test-utils/config.js"
-    },
-    "./test-utils/mock-tool.js": {
-      "bun": "./src/test-utils/mock-tool.ts",
-      "import": "./dist/src/test-utils/mock-tool.js"
-    },
-    "./test-utils/runtime.js": {
-      "bun": "./src/test-utils/runtime.ts",
-      "import": "./dist/src/test-utils/runtime.js"
     },
     "./utils/debugLogger.js": {
       "bun": "./src/utils/debugLogger.ts",
@@ -579,6 +571,13 @@
     "!**/*.spec.tsx",
     "!**/__tests__/**",
     "!**/__snapshots__/**",
+    "!**/*.bun.ts",
+    "!**/*.test-d.ts",
+    "!**/__mocks__/**",
+    "!**/*.testHelpers.ts",
+    "!**/*.test-helper.ts",
+    "!**/*.fixtures.ts",
+    "!**/src/test-utils/**",
     "dist"
   ],
   "dependencies": {

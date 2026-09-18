@@ -29,7 +29,7 @@ import {
   type RunConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { ChatSession, StreamEventType } from './chatSession.js';
-import { mockChunk } from './turn-test-helpers.js';
+import { mockChunk } from './__tests__/turn-test-helpers.js';
 import {
   createContentGenerator,
   type ContentGenerator,
@@ -106,7 +106,7 @@ import {
   defaultRunConfig,
   createStatelessRuntimeBundle,
   createRuntimeOverrides,
-} from './subagent-test-helpers.js';
+} from './__tests__/subagent-test-helpers.js';
 import { waitForCondition } from '../test-utils/eventLoop.js';
 
 /**

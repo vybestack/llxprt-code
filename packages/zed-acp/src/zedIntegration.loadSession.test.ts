@@ -34,7 +34,7 @@ import type { Config, IContent } from '@vybestack/llxprt-code-core';
 import type { Agent, AgentMessage } from '@vybestack/llxprt-code-agents';
 import type { ChatSessionFileLister } from './zed-session-loader.js';
 
-import { RecordingConnection } from './zed-test-helpers.js';
+import { RecordingConnection } from './__tests__/zed-test-helpers.js';
 
 /**
  * A chats dir that never exists on disk, so the disk-resume corrupt-vs-missing

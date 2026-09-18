@@ -26,7 +26,7 @@ import {
 } from './setupGithubCommand.js';
 import type { CommandContext, ToolActionReturn } from './types.js';
 import * as commandUtils from '../utils/commandUtils.js';
-import { assertTruthy } from '../../test-utils/assertions.js';
+import { assertTruthy } from '../../__tests__/assertions.js';
 
 /**
  * Bun's vi.spyOn type signature omits the property-getter overload that

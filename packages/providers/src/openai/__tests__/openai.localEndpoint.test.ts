@@ -20,10 +20,10 @@ import {
 import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+} from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
 import { isLocalEndpoint } from '../../utils/localEndpoint.js';
-import { createOpenAIRawPostTestAdapter } from '../../test-utils/rawPostTestAdapters.js';
+import { createOpenAIRawPostTestAdapter } from '../../__tests__/rawPostTestAdapters.js';
 
 void vi.mock('openai', () => {
   class FakeOpenAI {

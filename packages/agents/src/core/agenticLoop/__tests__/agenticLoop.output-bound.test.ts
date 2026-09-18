@@ -9,7 +9,7 @@ import { DEFAULT_ACQUISITION_BUDGET_BYTES } from '@vybestack/llxprt-code-tools/a
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-core';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { AgenticLoop } from '../AgenticLoop.js';
 import {
   collectEvents,

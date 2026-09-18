@@ -16,7 +16,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core';
 import { iContentToHistoryItems } from '../src/ui/utils/iContentToHistoryItems.js';
-import { assertHasType } from '../src/test-utils/assertions.js';
+import { assertHasType } from '../src/__tests__/assertions.js';
 
 describe('iContentToHistoryItems issue #2511 AC5', () => {
   it('maps ai content with no metadata.model to a gemini item with model undefined', () => {

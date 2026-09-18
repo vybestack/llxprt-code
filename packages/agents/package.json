@@ -50,6 +50,13 @@
     "!**/*.spec.tsx",
     "!**/__tests__/**",
     "!**/__snapshots__/**",
+    "!**/*.bun.ts",
+    "!**/*.test-d.ts",
+    "!**/__mocks__/**",
+    "!**/*.testHelpers.ts",
+    "!**/*.test-helper.ts",
+    "!**/*.fixtures.ts",
+    "!**/src/test-utils/**",
     "dist"
   ],
   "dependencies": {

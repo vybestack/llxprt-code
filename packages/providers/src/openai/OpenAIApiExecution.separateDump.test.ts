@@ -13,7 +13,7 @@ import {
 import {
   createOpenAIRawPostTestAdapter,
   type RawPostTestHandler,
-} from '../test-utils/rawPostTestAdapters.js';
+} from '../__tests__/rawPostTestAdapters.js';
 
 function withRawPostAdapter<
   TClient extends {

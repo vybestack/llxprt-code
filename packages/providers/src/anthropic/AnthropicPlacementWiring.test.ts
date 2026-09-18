@@ -29,7 +29,7 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import Anthropic from '@anthropic-ai/sdk';
 import type {
@@ -37,7 +37,7 @@ import type {
   RuntimeAuthTokenProvider,
 } from '../types/providerRuntime.js';
 import type { SystemPromptPlacement } from '../utils/systemPromptPlacement.js';
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),

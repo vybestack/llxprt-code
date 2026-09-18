@@ -9,7 +9,7 @@ import { act } from 'react';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { createMockSettings, renderHook } from '../../test-utils/render.js';
+import { createMockSettings, renderHook } from '../../__tests__/render.js';
 import { createFakeAgent } from './agentStream/__tests__/helpers/createFakeAgent.js';
 
 interface RuntimeStub {

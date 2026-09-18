@@ -1,0 +1,368 @@
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * Shared helpers for subagent test files. Extracted from the original
+ * monolithic subagent.test.ts so no file-level max-lines disable is needed.
+ *
+ * IMPORTANT: vi.mock() calls are file-scoped and hoisted by the test runner above
+ * all imports. Each test file that exercises SubAgentScope must declare
+ * its own vi.mock() calls. The helpers here are pure functions that can
+ * be imported.
+ */
+
+import type { Mock } from 'bun:test';
+import { afterEach, vi } from 'bun:test';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
+import { StreamEventType } from '../chatSession.js';
+import { type ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  createProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+  type ProviderRuntimeContext,
+} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type {
+  AgentRuntimeContext,
+  AgentRuntimeProviderAdapter,
+  AgentRuntimeTelemetryAdapter,
+  ToolRegistryView,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import { initializeTestConfig } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { ToolErrorType } from '@vybestack/llxprt-code-tools';
+import type {
+  ModelConfig,
+  RunConfig,
+  SubAgentRuntimeOverrides,
+} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+
+const mockConfigs = new Set<Config>();
+
+afterEach(async () => {
+  const configs = Array.from(mockConfigs);
+  mockConfigs.clear();
+  await Promise.all(configs.map((config) => config.dispose()));
+});
+
+export async function disposeMockConfig(config: Config): Promise<void> {
+  mockConfigs.delete(config);
+  await config.dispose();
+}
+
+export function createCompletedToolCallResponse(params: {
+  callId: string;
+  responseParts?: ContentBlock[];
+  resultDisplay?: unknown;
+  error?: Error;
+  errorType?: ToolErrorType;
+  agentId?: string;
+}) {
+  return {
+    status: params.error ? ('error' as const) : ('success' as const),
+    request: {
+      callId: params.callId,
+      name: 'mock_tool',
+      args: {},
+      isClientInitiated: true,
+      prompt_id: 'mock-prompt',
+      agentId: params.agentId ?? 'primary',
+    },
+    response: {
+      callId: params.callId,
+      responseParts: params.responseParts ?? [],
+      resultDisplay: params.resultDisplay,
+      error: params.error,
+      errorType: params.errorType,
+      agentId: params.agentId ?? 'primary',
+    },
+  };
+}
+
+type ToolRegistryMethodOverrides = Partial<
+  Pick<ToolRegistry, 'getTool' | 'getFunctionDeclarationsFiltered'>
+>;
+
+export async function createMockConfig(
+  toolRegistryMethods: ToolRegistryMethodOverrides = {},
+): Promise<{ config: Config; toolRegistry: ToolRegistry }> {
+  const settingsService = new SettingsService();
+  setActiveProviderRuntimeContext(
+    createProviderRuntimeContext({ settingsService }),
+  );
+  const configParams: ConfigParameters = {
+    sessionId: 'test-session',
+    model: 'gemini-2.5-pro',
+    targetDir: '.',
+    debugMode: false,
+    cwd: process.cwd(),
+    settingsService,
+  };
+  const config = new Config(configParams);
+  await initializeTestConfig(config);
+  mockConfigs.add(config);
+
+  await config.refreshAuth();
+
+  vi.spyOn(config, 'getContentGeneratorConfig').mockReturnValue({
+    model: 'gemini-2.5-pro',
+  });
+
+  const toolRegistry = config.getToolRegistry();
+  vi.spyOn(toolRegistry, 'getTool').mockImplementation(
+    toolRegistryMethods.getTool ?? (() => undefined),
+  );
+  vi.spyOn(toolRegistry, 'getFunctionDeclarationsFiltered').mockImplementation(
+    toolRegistryMethods.getFunctionDeclarationsFiltered ?? (() => []),
+  );
+
+  return { config, toolRegistry };
+}
+
+export function createMockStream(
+  functionCallsList: Array<
+    | Array<{ name: string; args?: Record<string, unknown>; id?: string }>
+    | 'stop'
+  >,
+) {
+  let index = 0;
+  return vi.fn().mockImplementation(async () => {
+    const response = functionCallsList[index] ?? 'stop';
+    index++;
+
+    return (async function* () {
+      let blocks: ContentBlock[];
+
+      if (response === 'stop' || response.length === 0) {
+        blocks = [{ type: 'text', text: 'Done.' }];
+      } else {
+        blocks = response.map((call) => ({
+          type: 'tool_call' as const,
+          id: call.id ?? call.name,
+          name: call.name,
+          parameters: call.args ?? {},
+        }));
+      }
+
+      const chunk = toModelStreamChunk({
+        speaker: 'ai',
+        blocks,
+      });
+
+      yield {
+        type: StreamEventType.CHUNK,
+        value: chunk,
+      };
+    })();
+  });
+}
+
+export const defaultModelConfig: ModelConfig = {
+  model: 'gemini-1.5-flash-latest',
+  temp: 0.5,
+  top_p: 1,
+};
+
+export const defaultRunConfig: RunConfig = {
+  max_time_minutes: 5,
+  max_turns: 10,
+};
+
+export function createStatelessRuntimeBundle(
+  options: {
+    toolsView?: ToolRegistryView;
+    providerAdapter?: AgentRuntimeProviderAdapter;
+    telemetryAdapter?: AgentRuntimeTelemetryAdapter;
+    contentGenerator?: ContentGenerator;
+    toolRegistry?: ToolRegistry;
+    history?: HistoryService;
+  } = {},
+): AgentRuntimeLoaderResult {
+  const toolsView = options.toolsView ?? createDefaultToolsView();
+  const providerAdapter =
+    options.providerAdapter ?? createDefaultProviderAdapter();
+  const telemetryAdapter =
+    options.telemetryAdapter ?? createDefaultTelemetryAdapter();
+  const history = options.history ?? createDefaultHistory();
+  const toolRegistry = options.toolRegistry ?? createDefaultToolRegistry();
+  const runtimeContext = createRuntimeContext(
+    history,
+    telemetryAdapter,
+    providerAdapter,
+    toolsView,
+  );
+  const contentGenerator =
+    options.contentGenerator ?? createDefaultContentGenerator();
+
+  return {
+    runtimeContext,
+    history,
+    providerAdapter,
+    telemetryAdapter,
+    toolsView,
+    contentGenerator,
+    toolRegistry,
+  };
+}
+
+function createDefaultToolsView(): ToolRegistryView {
+  return {
+    listToolNames: vi.fn(() => []),
+    getToolMetadata: vi.fn(() => undefined),
+  } as ToolRegistryView;
+}
+
+function createDefaultProviderAdapter(): AgentRuntimeProviderAdapter {
+  return {
+    getActiveProvider: vi.fn(
+      () =>
+        ({
+          name: 'gemini',
+          generateChatCompletion: vi.fn(async function* () {
+            yield { speaker: 'ai', blocks: [] };
+          }),
+          getDefaultModel: () => defaultModelConfig.model,
+        }) as unknown as IProvider,
+    ),
+    setActiveProvider: vi.fn(),
+  } as AgentRuntimeProviderAdapter;
+}
+
+function createDefaultTelemetryAdapter(): AgentRuntimeTelemetryAdapter {
+  return {
+    logApiRequest: vi.fn(),
+    logApiResponse: vi.fn(),
+    logApiError: vi.fn(),
+  } as AgentRuntimeTelemetryAdapter;
+}
+
+function createDefaultHistory(): HistoryService {
+  return {
+    clear: vi.fn(),
+    add: vi.fn(),
+    getCuratedForProvider: vi.fn(() => []),
+    getIdGeneratorCallback: vi.fn(() => vi.fn()),
+    findUnmatchedToolCalls: vi.fn(() => []),
+    generateTurnKey: vi.fn(() => `turn-${Date.now()}`),
+  } as unknown as HistoryService;
+}
+
+function createDefaultToolRegistry(): ToolRegistry {
+  return {
+    getTool: vi.fn(),
+    getFunctionDeclarationsFiltered: vi.fn(() => []),
+    getAllTools: vi.fn(() => []),
+  } as unknown as ToolRegistry;
+}
+
+function createRuntimeContext(
+  history: HistoryService,
+  telemetryAdapter: AgentRuntimeTelemetryAdapter,
+  providerAdapter: AgentRuntimeProviderAdapter,
+  toolsView: ToolRegistryView,
+): AgentRuntimeContext {
+  return {
+    state: {
+      runtimeId: 'runtime-123',
+      provider: 'gemini',
+      model: defaultModelConfig.model,
+      sessionId: 'runtime-session',
+      proxyUrl: undefined,
+      modelParams: {
+        temperature: defaultModelConfig.temp,
+        topP: defaultModelConfig.top_p,
+      },
+    },
+    history,
+    ephemerals: {
+      // #3199 added this ephemeral; the real chat path reads it on every turn.
+      semanticMediaPurge: () => 'off' as const,
+      compressionThreshold: () => 0.8,
+      contextLimit: () => 60_000,
+      preserveThreshold: () => 0.2,
+      toolFormatOverride: () => undefined,
+      reasoning: {
+        enabled: () => false,
+        includeInContext: () => false,
+        includeInResponse: () => false,
+        format: () => 'native' as const,
+        stripFromContext: () => 'none' as const,
+        effort: () => undefined,
+        maxTokens: () => undefined,
+        adaptiveThinking: () => undefined,
+      },
+    },
+    telemetry: telemetryAdapter,
+    provider: providerAdapter,
+    tools: toolsView,
+    providerRuntime: {
+      runtimeId: 'runtime-123',
+      metadata: {},
+      settingsService: {
+        get: vi.fn(),
+        set: vi.fn(),
+      },
+    } as unknown as ProviderRuntimeContext,
+  } as unknown as AgentRuntimeContext;
+}
+
+function createDefaultContentGenerator(): ContentGenerator {
+  return {
+    generateContent: vi.fn(),
+    generateContentStream: vi.fn(),
+    countTokens: vi.fn(),
+  } as unknown as ContentGenerator;
+}
+
+export type EnvironmentLoader = (
+  runtime: AgentRuntimeContext,
+) => Promise<Array<{ text?: string }>>;
+
+const DEFAULT_ENV_CONTEXT: Array<{ text?: string }> = [{ text: 'Env Context' }];
+
+export function defaultEnvironmentLoader(): EnvironmentLoader {
+  return vi.fn(async () => DEFAULT_ENV_CONTEXT);
+}
+
+export function createRuntimeOverrides(
+  options: {
+    runtimeBundle?: AgentRuntimeLoaderResult;
+    environmentLoader?: EnvironmentLoader;
+    toolRegistry?: ToolRegistry;
+  } = {},
+): {
+  overrides: SubAgentRuntimeOverrides;
+  runtimeBundle: AgentRuntimeLoaderResult;
+  environmentLoader: EnvironmentLoader;
+} {
+  const runtimeBundle =
+    options.runtimeBundle ??
+    createStatelessRuntimeBundle({
+      toolRegistry: options.toolRegistry,
+    });
+
+  const environmentLoader =
+    options.environmentLoader ?? defaultEnvironmentLoader();
+
+  const overrides: SubAgentRuntimeOverrides = {
+    runtimeBundle,
+    environmentContextLoader: environmentLoader,
+  };
+
+  if (options.toolRegistry) {
+    overrides.toolRegistry = options.toolRegistry;
+  }
+
+  return { overrides, runtimeBundle, environmentLoader };
+}
+
+export type { ContentGenerator, Mock, ToolRegistryView };

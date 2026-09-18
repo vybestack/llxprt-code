@@ -32,7 +32,7 @@ import {
   createRuntimeOverrides,
   createStatelessRuntimeBundle,
   defaultModelConfig,
-} from './subagent-test-helpers.js';
+} from './__tests__/subagent-test-helpers.js';
 
 interface ProviderTurn {
   readonly text?: string;

@@ -21,7 +21,7 @@ import {
   setActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { makeFakeConfig } from '@vybestack/llxprt-code-core/test-utils/config.js';
+import { makeFakeConfig } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
 

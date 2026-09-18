@@ -41,7 +41,7 @@ import {
   ApprovalMode,
   DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
 } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import type {
   AgentClientContract,
   AgentChatContract,

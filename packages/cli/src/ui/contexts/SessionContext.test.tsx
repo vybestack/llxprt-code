@@ -5,7 +5,7 @@
  */
 
 import { type MutableRefObject, act } from 'react';
-import { render, renderHook } from '../../test-utils/render.js';
+import { render, renderHook } from '../../__tests__/render.js';
 import type { SessionMetrics } from './SessionContext.js';
 import { SessionStatsProvider, useSessionStats } from './SessionContext.js';
 import { describe, it, expect } from 'bun:test';
