@@ -215,3 +215,12 @@ Also: filed #3708 for the pre-branch createTaskToolRegistration() alias.
 Verification: root typecheck 0 errors, root lint clean, full npm run test
 green (core 459/459 on stable-tree rerun; one mid-run file-edit race during
 the first pass), prettier/eslint clean on all touched files.
+
+## Merge round (origin/main @ 6a2d23d0d, merge commit 9aa713102)
+
+- Single content conflict: `packages/providers/src/openai/OpenAIStreamProcessor.ts` — both sides had the identical lint-cap dedup (ours `totalToolCalls`, main's #3492 `totalCalls`). Took main's side verbatim; file now byte-identical to origin/main.
+- Post-merge test remediation:
+  - 12 CLI integration failures ("Provider 'gemini' not found"): #3702 made gemini plugin-provided and checkout plugin discovery requires `plugins/<entry>/node_modules` to exist. Provisioned `plugins/google-gemini` locally via `bun install --omit=peer` (same as CI ci.yml:1154-1157); no tracked files changed. Retests 31/31 green; manual CLI repro matches main.
+  - 3 disposal-test failures: gemini profile hit a MAIN-side gap — the isolated subagent registration path (`registerProvidersOntoManager` → `createProviderManager`) is builtins-only; nothing threads CLI startup's plugin contributions into it. Filed #3730; switched the test to `anthropic` / `claude-sonnet-4` (builtin) with rationale comment referencing #3730.
+- Verification on merged tree: typecheck 0, lint 0, prettier clean, agents 412/412, CLI integration 31/31, core/providers green in full run, #2615 gate files untouched, six banned symbols grep clean.
+- CI on 9aa713102: initial run had two flakes (agents-shard profiles-lock 10s timeout on slow runner; E2E replace "API Error: undefined is not a function" live-endpoint variance) — both passed on `gh run rerun --failed`; final: 40 pass / 0 fail / 3 skipped, CodeRabbit pass, no actionable threads.
