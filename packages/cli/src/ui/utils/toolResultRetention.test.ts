@@ -95,6 +95,43 @@ describe('boundResultDisplayForRetention', () => {
       Math.ceil(budget / 2) + markerBytes + Math.floor(budget / 2);
     expect(Buffer.byteLength(bounded.text, 'utf8')).toBe(expected);
   });
+
+  it('bounds to a caller-provided shared budget instead of the full cap', () => {
+    const body = makeBody(2 * 1024 * KIB, 'shared');
+
+    const bounded = boundResultDisplayForRetention(body, 4 * KIB);
+
+    expect(bounded.wasCapped).toBe(true);
+    expect(bounded.originalLength).toBe(Buffer.byteLength(body, 'utf8'));
+    expect(Buffer.byteLength(bounded.text, 'utf8')).toBeLessThanOrEqual(
+      4 * KIB,
+    );
+    expect(bounded.text).toContain(RETENTION_TRUNCATION_MARKER);
+  });
+
+  it('keeps a field unchanged when it fits the remaining shared budget', () => {
+    const text = 'fits the remaining budget';
+
+    const bounded = boundResultDisplayForRetention(text, 4 * KIB);
+
+    expect(bounded).toStrictEqual({
+      text,
+      wasCapped: false,
+      originalLength: Buffer.byteLength(text, 'utf8'),
+    });
+  });
+
+  it('retains an empty string once the shared budget cannot fit the marker', () => {
+    const body = makeBody(2 * 1024 * KIB, 'exhausted');
+
+    const bounded = boundResultDisplayForRetention(body, 0);
+
+    expect(bounded).toStrictEqual({
+      text: '',
+      wasCapped: true,
+      originalLength: Buffer.byteLength(body, 'utf8'),
+    });
+  });
 });
 
 describe('stringifyForDisplay', () => {

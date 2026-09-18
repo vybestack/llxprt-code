@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { Buffer } from 'node:buffer';
+
 import {
   type Status as CoreStatus,
   DEFAULT_AGENT_ID,
@@ -17,7 +19,10 @@ import {
   type IndividualToolCallDisplay,
   type ToolResultRetention,
 } from '../types.js';
-import { boundResultDisplayForRetention } from '../utils/toolResultRetention.js';
+import {
+  boundResultDisplayForRetention,
+  TOOL_RESULT_RETENTION_CAP_BYTES,
+} from '../utils/toolResultRetention.js';
 import type {
   TrackedCompletedToolCall,
   TrackedExecutingToolCall,
@@ -37,12 +42,15 @@ type StructuredToolResultDisplay = Exclude<
 /**
  * Bounds a structured display's long string fields on a shallow copy (issue
  * #3428): the scheduler's response that feeds the model is never mutated
- * (AC5). Long fields are bounded per variant — FileDiff's diff and both
- * content sides, FileRead's content — and every other field passes through
- * untouched so the display keeps the shape its renderer consumes
- * (DiffRenderer needs the FileDiff object, not a stringified body).
- * Displays with no oversized field — small diffs, AnsiOutput line arrays —
- * keep their original object and carry no retention metadata.
+ * (AC5). All bounded fields of ONE display share a single
+ * TOOL_RESULT_RETENTION_CAP_BYTES budget spent in field order — FileDiff's
+ * diff, original content, new content; FileRead's content — so the display
+ * as a whole retains at most one cap, never one per field (AC1). Every
+ * other field passes through untouched so the display keeps the shape its
+ * renderer consumes (DiffRenderer needs the FileDiff object, not a
+ * stringified body). Displays with no capped field — small diffs,
+ * AnsiOutput line arrays — keep their original object and carry no
+ * retention metadata.
  */
 function boundStructuredDisplayForRetention(
   resultDisplay: StructuredToolResultDisplay,
@@ -54,14 +62,22 @@ function boundStructuredDisplayForRetention(
     return { resultDisplay, retention: undefined };
   }
   const totals = { wasCapped: false, originalLength: 0 };
-  // Bounds one field value, accumulating the retention totals across every
-  // bounded field of the display.
+  // The remaining share of the display's one byte budget: each field
+  // spends the bytes it actually retains, so a later oversized field sees
+  // only what earlier fields left (down to nothing).
+  let remainingBudgetBytes = TOOL_RESULT_RETENTION_CAP_BYTES;
+  // Bounds one field value against the remaining budget, accumulating the
+  // retention totals across every bounded field of the display.
   const boundField = (value: string): string => {
-    const fieldBound = boundResultDisplayForRetention(value);
+    const fieldBound = boundResultDisplayForRetention(
+      value,
+      remainingBudgetBytes,
+    );
     totals.originalLength += fieldBound.originalLength;
     if (fieldBound.wasCapped) {
       totals.wasCapped = true;
     }
+    remainingBudgetBytes -= Buffer.byteLength(fieldBound.text, 'utf8');
     return fieldBound.text;
   };
   // Each branch writes bounded strings back through the variant's own

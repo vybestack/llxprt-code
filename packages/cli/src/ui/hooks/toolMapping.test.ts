@@ -457,13 +457,17 @@ describe('toolMapping', () => {
         expect(displayTool.retention).toBeUndefined();
       });
 
-      it('bounds each long field of a large FileDiff without stringifying it', () => {
+      it('bounds long FileDiff fields against one shared budget without stringifying the display', () => {
+        // Each field alone fits the 64 KiB cap; together they exceed it, so
+        // the one per-display budget is spent in field order: the diff body
+        // is admitted whole, originalContent keeps a head+tail preview of
+        // what is left, and newContent retains only an empty string.
         const fileDiff = `diff-head
-${'d'.repeat(150 * 1024)}`;
+${'d'.repeat(40 * 1024)}`;
         const originalContent = `orig
-${'o'.repeat(200 * 1024)}`;
+${'o'.repeat(40 * 1024)}`;
         const newContent = `new
-${'n'.repeat(180 * 1024)}`;
+${'n'.repeat(40 * 1024)}`;
         const fileDiffDisplay = {
           fileDiff,
           fileName: 'a.ts',
@@ -486,18 +490,19 @@ ${'n'.repeat(180 * 1024)}`;
         expect(typeof display).toBe('object');
         expect(display).not.toBe(fileDiffDisplay);
         expect(display.fileName).toBe('a.ts');
-        // Each long field is bounded to the cap with the head+tail marker.
-        for (const field of [
-          display.fileDiff,
-          display.originalContent as string,
-          display.newContent,
-        ]) {
-          expect(Buffer.byteLength(field, 'utf8')).toBeLessThanOrEqual(
-            TOOL_RESULT_RETENTION_CAP_BYTES,
-          );
-          expect(field).toContain(RETENTION_TRUNCATION_MARKER);
-        }
-        // Retention metadata is set so the transcript hint renders.
+        // The shared budget is spent in field order.
+        expect(display.fileDiff).toBe(fileDiff);
+        expect(display.originalContent).toContain(RETENTION_TRUNCATION_MARKER);
+        expect(display.newContent).toBe('');
+        const combinedRetainedBytes =
+          Buffer.byteLength(display.fileDiff, 'utf8') +
+          Buffer.byteLength(display.originalContent ?? '', 'utf8') +
+          Buffer.byteLength(display.newContent, 'utf8');
+        expect(combinedRetainedBytes).toBeLessThanOrEqual(
+          TOOL_RESULT_RETENTION_CAP_BYTES,
+        );
+        // Retention metadata is set so the transcript hint renders; the
+        // original length is the sum of the fields' full sizes.
         expect(displayTool.retention).toStrictEqual({
           capped: true,
           originalLength:
@@ -514,6 +519,65 @@ ${'n'.repeat(180 * 1024)}`;
           originalContent,
           newContent,
         });
+      });
+
+      it('spends one shared byte budget across a FileDiff whose fields are all oversized', () => {
+        const fileDiff = `diff-head
+${'d'.repeat(150 * 1024)}`;
+        const originalContent = `orig
+${'o'.repeat(150 * 1024)}`;
+        const newContent = `new
+${'n'.repeat(150 * 1024)}`;
+        // Precondition: every field alone exceeds the cap, so independent
+        // per-field budgets would retain nearly three caps.
+        for (const field of [fileDiff, originalContent, newContent]) {
+          expect(Buffer.byteLength(field, 'utf8')).toBeGreaterThan(
+            TOOL_RESULT_RETENTION_CAP_BYTES,
+          );
+        }
+        const fileDiffDisplay = {
+          fileDiff,
+          fileName: 'a.ts',
+          originalContent,
+          newContent,
+        };
+        const toolCall: SuccessfulToolCall = {
+          status: 'success',
+          request: mockRequest,
+          tool: mockTool,
+          invocation: mockInvocation,
+          response: { ...mockResponse, resultDisplay: fileDiffDisplay },
+        };
+
+        const displayTool = mapToDisplay(toolCall).tools[0];
+        const display = displayTool.resultDisplay as FileDiff;
+
+        // The cap is per result (AC1): the three bounded fields combined
+        // stay within ONE 64 KiB budget no matter how many are oversized.
+        const combinedRetainedBytes =
+          Buffer.byteLength(display.fileDiff, 'utf8') +
+          Buffer.byteLength(display.originalContent ?? '', 'utf8') +
+          Buffer.byteLength(display.newContent, 'utf8');
+        expect(combinedRetainedBytes).toBeLessThanOrEqual(
+          TOOL_RESULT_RETENTION_CAP_BYTES,
+        );
+        // The budget is spent in field order: the first field keeps a real
+        // head+tail preview; fields after the budget is exhausted keep
+        // their string shape while retaining nothing.
+        expect(display.fileDiff).toContain(RETENTION_TRUNCATION_MARKER);
+        expect(display.originalContent).toBe('');
+        expect(display.newContent).toBe('');
+        expect(display.fileName).toBe('a.ts');
+        expect(displayTool.retention).toStrictEqual({
+          capped: true,
+          originalLength:
+            Buffer.byteLength(fileDiff, 'utf8') +
+            Buffer.byteLength(originalContent, 'utf8') +
+            Buffer.byteLength(newContent, 'utf8'),
+        });
+        // AC5: the scheduler's response stays the unbounded model-facing
+        // copy.
+        expect(toolCall.response.resultDisplay).toBe(fileDiffDisplay);
       });
 
       it('bounds a large FileRead content field while keeping the display structured', () => {

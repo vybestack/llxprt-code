@@ -83,21 +83,29 @@ export interface RetentionBoundedDisplay {
 }
 
 /**
- * Bounds a tool-result display string to
- * {@link TOOL_RESULT_RETENTION_CAP_BYTES}: a UTF-8-safe head plus tail joined
- * by the truncation marker when the body is larger, and the body itself
- * otherwise. The original length reports the full UTF-8 size so the UI can
- * tell the reader how much is hidden.
+ * Bounds a tool-result display string to a byte budget: a UTF-8-safe head
+ * plus tail joined by the truncation marker when the body is larger, and
+ * the body itself otherwise. The default budget is the per-result cap
+ * {@link TOOL_RESULT_RETENTION_CAP_BYTES}; a display that bounds several
+ * fields passes a shrinking share of ONE cap so the whole display stays
+ * within it (issue #3428: the cap is per result, not per field). The
+ * original length reports the full UTF-8 size so the UI can tell the
+ * reader how much is hidden.
  */
 export function boundResultDisplayForRetention(
   text: string,
+  budgetBytes: number = TOOL_RESULT_RETENTION_CAP_BYTES,
 ): RetentionBoundedDisplay {
   const originalLength = Buffer.byteLength(text, 'utf8');
-  if (originalLength <= TOOL_RESULT_RETENTION_CAP_BYTES) {
+  if (originalLength <= budgetBytes) {
     return { text, wasCapped: false, originalLength };
   }
+  // A budget too small for head+tail+marker keeps the field a string but
+  // retains none of it; the display-level retention metadata still tells
+  // the reader where the full body lives.
+  const previewBytes = budgetBytes - MARKER_BYTES;
   return {
-    text: previewText(text, TOOL_RESULT_RETENTION_CAP_BYTES - MARKER_BYTES),
+    text: previewBytes > 0 ? previewText(text, previewBytes) : '',
     wasCapped: true,
     originalLength,
   };
