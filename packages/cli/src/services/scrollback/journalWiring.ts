@@ -37,7 +37,10 @@ export interface SessionFilePathSource {
 
 /**
  * Builds the journal for the active recording, or null when the flag is off
- * or no session recording is active (nothing to sit beside).
+ * or no session recording is active (nothing to sit beside). Used directly
+ * by tests and by {@link createLazyScrollbackJournal} at re-bind time; the
+ * bootstrap wiring only goes through the lazy handle because the recording
+ * path is null during render.
  *
  * @plan PLAN-20260917-ISSUE854.P01
  * @requirement REQ-854-005
@@ -67,9 +70,78 @@ export function createScrollbackJournalForSession(
 }
 
 /**
+ * Lazily-created handle around the per-session scrollback journal. The
+ * session recording's file path is null until its first content-class event
+ * materializes the session file, so journal creation retries at each commit
+ * and re-binds when the recording path changes.
+ *
+ * @plan PLAN-20260917-ISSUE854.P01
+ * @requirement REQ-854-005
+ */
+export interface LazyScrollbackJournal {
+  /**
+   * Journal for the recording's current path: null while the flag is off or
+   * the recording has not materialized a path yet; created at the first
+   * commit past that, and reopened onto the new base when the path changes
+   * (items already journaled stay in the previous session's file).
+   */
+  current(): ScrollbackJournal | null;
+  /** Flushes and closes the underlying journal, if one was created. */
+  close(): void;
+}
+
+/**
+ * Builds a lazy journal handle over the active session recording. When the
+ * gate is off, `current()` stays null and nothing is ever written.
+ *
+ * @plan PLAN-20260917-ISSUE854.P01
+ * @requirement REQ-854-005
+ */
+export function createLazyScrollbackJournal(
+  recordingService: SessionFilePathSource | null | undefined,
+  enabled: boolean,
+): LazyScrollbackJournal {
+  let journal: ScrollbackJournal | null = null;
+  let journalBasePath: string | null = null;
+  const dropJournal = () => {
+    journal?.close();
+    journal = null;
+    journalBasePath = null;
+  };
+  return {
+    current: () => {
+      if (!enabled) {
+        return null;
+      }
+      const currentPath = recordingService?.getFilePath() ?? null;
+      if (journal !== null) {
+        if (journalBasePath === currentPath) {
+          return journal;
+        }
+        // Recording path changed (resume/branch service swap): close the
+        // old journal; items already journaled stay in the old file.
+        dropJournal();
+      }
+      if (currentPath === null) {
+        // Recording not materialized yet; retry at the next commit.
+        return null;
+      }
+      journal = createScrollbackJournalForSession(recordingService, enabled);
+      if (journal === null) {
+        return null;
+      }
+      journalBasePath = currentPath;
+      return journal;
+    },
+    close: dropJournal,
+  };
+}
+
+/**
  * Wraps the turn store's addItem/updateItem so every committed item (and
- * committed revision) is journaled at its commit point. Commands are wrapped
- * around the originals; the originals' return values and behavior are
+ * committed revision) is journaled at its commit point. The journal itself
+ * is resolved lazily per commit via the lazy handle; commands are wrapped
+ * around the originals and the originals' return values and behavior are
  * unchanged.
  *
  * @plan PLAN-20260917-ISSUE854.P01
@@ -77,7 +149,7 @@ export function createScrollbackJournalForSession(
  */
 export function wrapTurnCommandsWithJournal(
   turnStore: TurnStore,
-  journal: ScrollbackJournal,
+  lazyJournal: LazyScrollbackJournal,
 ): TurnCommands {
   const { commands, store } = turnStore;
   const findCommitted = (id: number) =>
@@ -86,8 +158,9 @@ export function wrapTurnCommandsWithJournal(
     ...commands,
     addItem: (itemData, baseTimestamp, isResuming) => {
       const id = commands.addItem(itemData, baseTimestamp, isResuming);
+      const journal = lazyJournal.current();
       const committed = findCommitted(id);
-      if (committed !== undefined) {
+      if (journal !== null && committed !== undefined) {
         journal.append(committed, {
           ...(committed.chronologySeq !== undefined
             ? { chronologySeq: committed.chronologySeq }
@@ -102,8 +175,9 @@ export function wrapTurnCommandsWithJournal(
     },
     updateItem: (id, updates) => {
       commands.updateItem(id, updates);
+      const journal = lazyJournal.current();
       const committed = findCommitted(id);
-      if (committed !== undefined) {
+      if (journal !== null && committed !== undefined) {
         journal.appendRevision(id, committed);
         journal.flush();
       }

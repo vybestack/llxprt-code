@@ -42,9 +42,9 @@ import {
 } from '../../../contexts/RuntimeContext.js';
 import { useTodoContext } from '../../../contexts/TodoContext.js';
 import { useRecordingInfrastructure } from './useRecordingInfrastructure.js';
-import type { ScrollbackJournal } from '../../../../services/scrollback/ScrollbackJournal.js';
 import {
-  createScrollbackJournalForSession,
+  createLazyScrollbackJournal,
+  type LazyScrollbackJournal,
   wrapTurnCommandsWithJournal,
 } from '../../../../services/scrollback/journalWiring.js';
 
@@ -219,24 +219,13 @@ function useBootstrapTodo() {
 /** Initializes recording, IDE prompt, messages, and token metrics */
 function useBootstrapEvents(
   props: AppBootstrapProps,
+  recordingIntegrationRef: React.MutableRefObject<RecordingIntegration | null>,
   addItem: UseHistoryManagerReturn['addItem'],
   setUpdateInfo: React.Dispatch<React.SetStateAction<UpdateObject | null>>,
   runtime: ReturnType<typeof useRuntimeApi>,
 ) {
   const { runWithScope } = useRuntimeBridge();
-  const {
-    uiRuntime,
-    settings,
-    recordingIntegration,
-    initialRecordingService,
-    initialLockHandle,
-  } = props;
-  const { recordingIntegrationRef, recordingSwapCallbacks } =
-    useRecordingInfrastructure(
-      initialRecordingService,
-      recordingIntegration,
-      initialLockHandle,
-    );
+  const { uiRuntime, settings } = props;
   const [idePromptAnswered, setIdePromptAnswered] = useState(false);
   const currentIDE = uiRuntime.ide.getIdeClient()?.getCurrentIde();
   useEffect(() => {
@@ -287,8 +276,6 @@ function useBootstrapEvents(
     );
   }, [props.settingsStore, sessionStats.historyTokenCount]);
   return {
-    recordingIntegrationRef,
-    recordingSwapCallbacks,
     idePromptAnswered,
     setIdePromptAnswered,
     currentIDE,
@@ -302,6 +289,12 @@ function useBootstrapEvents(
 export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
   const { uiRuntime } = props;
   const streamRuntime: StreamRuntime = uiRuntime;
+  const { recordingIntegrationRef, recordingSwapCallbacks } =
+    useRecordingInfrastructure(
+      props.initialRecordingService,
+      props.recordingIntegration,
+      props.initialLockHandle,
+    );
   /**
    * @plan PLAN-20260917-ISSUE854.P01
    * @requirement REQ-854-005
@@ -309,33 +302,46 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
    * recording exists and ui.scrollbackJournalEnabled is true (schema
    * default), the turn store's addItem/updateItem commit points journal
    * every committed item. One-time swap before useBootstrapHistory binds
-   * consumers to the commands. Flag off / no recording → untouched store.
+   * consumers to the commands. Flag off → untouched store. Journal creation
+   * is lazy per commit: the recording path is null until the recording
+   * materializes its session file, and the source follows resume/branch
+   * service swaps so a path change reopens the journal on the new base.
    */
-  const scrollbackJournalRef = useRef<ScrollbackJournal | null>(null);
+  const scrollbackJournalRef = useRef<LazyScrollbackJournal | null>(null);
   if (!scrollbackWiredStores.has(props.turnStore)) {
     scrollbackWiredStores.add(props.turnStore);
-    const journal = createScrollbackJournalForSession(
-      props.initialRecordingService,
-      props.settings.merged.ui.scrollbackJournalEnabled !== false,
-    );
-    if (journal !== null) {
-      scrollbackJournalRef.current = journal;
+    if (props.settings.merged.ui.scrollbackJournalEnabled !== false) {
+      const lazyJournal = createLazyScrollbackJournal(
+        {
+          getFilePath: () =>
+            recordingSwapCallbacks.getCurrentRecording()?.getFilePath() ??
+            null,
+        },
+        true,
+      );
+      scrollbackJournalRef.current = lazyJournal;
       props.turnStore.commands = wrapTurnCommandsWithJournal(
         props.turnStore,
-        journal,
+        lazyJournal,
       );
     }
   }
   useEffect(() => {
-    const journal = scrollbackJournalRef.current;
+    const lazyJournal = scrollbackJournalRef.current;
     return () => {
-      journal?.close();
+      lazyJournal?.close();
       scrollbackJournalRef.current = null;
     };
   }, []);
   const h = useBootstrapHistory(props);
   const t = useBootstrapTodo();
-  const e = useBootstrapEvents(props, h.addItem, h.setUpdateInfo, h.runtime);
+  const e = useBootstrapEvents(
+    props,
+    recordingIntegrationRef,
+    h.addItem,
+    h.setUpdateInfo,
+    h.runtime,
+  );
   useEffect(() => {
     props.settingsStore.commands.setRawConsoleMessages(e.consoleMessages);
   }, [props.settingsStore, e.consoleMessages]);
@@ -359,8 +365,8 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     stdout: h.stdout,
     todos: t.todos,
     updateTodos: t.updateTodos,
-    recordingIntegrationRef: e.recordingIntegrationRef,
-    recordingSwapCallbacks: e.recordingSwapCallbacks,
+    recordingIntegrationRef,
+    recordingSwapCallbacks,
     idePromptAnswered: e.idePromptAnswered,
     setIdePromptAnswered: e.setIdePromptAnswered,
     currentIDE: e.currentIDE,
