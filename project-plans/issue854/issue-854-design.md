@@ -33,8 +33,10 @@ nothing held in memory (section 5c, acceptance criteria).
 3. G3 — Visual marking of which scrollback entries are still in the model
    context (issue item 2).
 4. G4 — Expandable summary under the purged boundary (issue item 3).
-5. G5 — Exact-fidelity scrollback: UI-only items (info boxes, command
-   feedback) are persisted and replayed, unlike today's lossy resume.
+5. G5 — Conversation-exact scrollback fidelity. SUPERSEDED 2026-09-18
+   (ruling 2) on the persistence half: UI-only items are NOT persisted;
+   they are live-only and accepted gone after eviction/restart. What
+   survives is the conversation, exactly as `/continue` reconstructs it.
 6. G6 — Do not block the "context itself on disk" work. P05 delivers it:
    `HistoryService` holds NO in-memory copy of the context; the journal is
    the system of record for the UI and the model alike (5c).
@@ -159,8 +161,10 @@ Consequences:
 
 - **No new files.** No `sb-*.jsonl`, no `sb-*.idx.jsonl`, no UI marks
   appended into `session-*.jsonl`. The model journal keeps its existing
-  format and writer, byte-for-byte. Discovery/janitor/cleanup are
-  untouched (they already glob exactly `session-*.jsonl`).
+  writer and format, EXTENDED (5c) with append-only event kinds only
+  where live mutations are currently unjournalled — never a second file
+  or content copy. Discovery/janitor/cleanup are untouched (they
+  already glob exactly `session-*.jsonl`).
 - **Scrollback is a view over `session-*.jsonl`.** Conversation-backed
   rows (user, assistant, tool calls/results, compression, rewind, shell)
   page in from the session journal on demand, reconstructed through the
@@ -191,18 +195,28 @@ functionality loss." The pager scrolls the file itself:
   plus the resident items. Nothing scales with session length: no index
   array, no `Map`, no scan-at-startup.
 - `pageBack(n)`: seek to `max(0, windowStart - CHUNK)`, read through
-  `windowStart`, drop the torn head partial line, parse lines into
-  records. The journal is append-only and seq-numbered, so reverse byte
-  order IS reverse chronology. Default CHUNK 64 KiB (tunable); repeat
-  while the viewport's item budget for the page is unmet.
+  `windowStart` INCLUSIVE of the line crossing it — a partial line at
+  the read START is not torn, it is the continuation of a record begun
+  in the previous chunk; extend the read backward to the line's true
+  start, bounded by MAX_RECORD_BYTES (records can span many chunks;
+  `semantic_media_purge` embeds a whole context in ONE record). UTF-8
+  multi-byte splits and CRLF are handled at line assembly. Parse
+  complete lines into records; skip non-content envelopes (metadata,
+  session events) with their offsets retained. The journal is
+  append-only and seq-numbered, so reverse byte order IS reverse
+  chronology. Default CHUNK 64 KiB (tunable); repeat while the
+  viewport's item budget for the page is unmet.
 - `pageForward(n)`: symmetric, reading forward from `windowEnd`.
 - File size via `stat()` gives the timeline's byte extent for the
   scrollbar: position = `windowStart / fileSize`, byte-proportional. No
   item-count knowledge and no height bookkeeping beyond the visible
   viewport.
-- Tool groups span exactly 2 adjacent records (resolved during design);
-  if a chunk boundary splits a pair, read the companion line with one
-  extra bounded read — group atomicity.
+- Tool groups: a group's two `IContent` entries are adjacent in LOGICAL
+  seq order but need not be byte-adjacent in the file (metadata/session
+  envelopes may interleave; the converter joins by callId, not physical
+  adjacency); group resolution during paging tolerates interleaved
+  non-content records and reads the companion entry by offset when a
+  group straddles a page boundary.
 - Crash-torn trailing line (partial final record) is ignored on parse —
   the same tolerance `/continue` already applies.
 - Rebuild cost: none. There is nothing to build, write, or repair.
@@ -211,9 +225,15 @@ functionality loss." The pager scrolls the file itself:
 
 Data model:
 
-- Logical timeline: journal records in seq order, discovered as pages are
-  read; scrolling back stops at the context floor (oldest in-context item,
-  resolved OQ7). No total item count is maintained.
+- Logical scrollback timeline: the journal's PHYSICAL timeline — every
+  content record ever appended, in seq order — projected with boundary
+  rows where `compressed`/`rewind` events occurred. Compression does NOT
+  bound scrolling: purged rows below a compression boundary page in
+  marked `purged` (that is the feature). The paging HARD STOP is the
+  visibility floor: the most recent `clear` boundary (or file start).
+  Rows excluded by `rewind` truncation are not in the physical-order
+  past at all (rewind cuts a suffix); they surface only below a rewind
+  boundary row, mirroring the fold. No total item count is maintained.
 - Each resident slot is a materialized `HistoryItem`. In-viewport
   virtualization uses measured heights; nothing is tracked for off-screen
   rows. UI-only rows occupy live slots only; they leave nothing behind
@@ -266,7 +286,10 @@ getContextSummaries(): Array<{
 ```
 
 Event: `contextRangeChanged` emitted after `replaceAll` (compression),
-`commitHistoryMutation` (rewind/clear/restore), and first entry add. The UI
+`commitHistoryMutation` (rewind/clear/restore), and first entry add —
+the code today deliberately skips the single-entry add case
+(HistoryServiceCore); making the event match this contract is P05b
+work. The UI
 already has subscription patterns (`useTokenMetricsTracking`,
 `RecordingIntegration` service-swap handling).
 
@@ -277,8 +300,15 @@ already has subscription patterns (`useTokenMetricsTracking`,
 - Stamped at creation: `contentEventProcessor` (assistant items),
   user-submission echo, tool-group assembly, `iContentToHistoryItems` (resume
   fallback; the seq is available on replayed `IContent`).
-- `contextState` is derived at render time (`in-context` | `purged` | `n/a`
-  for UI-only items), never stored.
+- `contextState` is derived from the CONTEXT MEMBERSHIP PROJECTION, not
+  a single `seq >= firstSeq` comparison: membership = the fold's
+  survivor set, expressed as seq intervals + boundary events (so
+  interior density removals, `topPreserved` heads, and same-seq body
+  replacements are exact once density ops are journalled in P05;
+  pre-P05 the badge uses range + spans and is approximate for
+  density-mutated interior rows — documented, fixed by P05). Values:
+  `in-context` | `purged` | `n/a` (UI-only items); never stored on
+  disk.
 
 Verified tool-group facts (research, read-only pass over main):
 
@@ -350,13 +380,27 @@ will need their own files (and that's fine, they should)."
   runtime constructing `new HistoryService()` holding the full
   conversation, verified at `createAgentRuntimeContext`) is what this
   design removes.
+- **Every subagent run gets its own journal.** At launch — BEFORE the
+  runtime constructs its HistoryService — the subagent path allocates a
+  fresh filesystem-safe random sessionId (child session ids today
+  contain `::`/`#`, which fail `SessionLockManager`'s grammar, and
+  journal filenames use the id's first 12 chars at second resolution,
+  so a distinct fs-safe id is REQUIRED, not derivable) and a
+  `SessionRecordingService` writing `session-*.jsonl` into the same
+  chatsDir. `parentSessionId` is threaded through the orchestrator and
+  runtime loader. Cleanup runs at every launch outcome: failure,
+  success, timeout, cancellation, nested children.
 - **Human-facing session lists must not drown in subagent journals.**
-  The journal header's existing `sessionMetadata` record gains
-  `kind: 'subagent'` + `parentSessionId`. Discovery globs and the
-  janitor are untouched (they match `session-*.jsonl` uniformly, so
-  cleanup works unchanged); `/resume` and the session picker filter on
-  the metadata kind. This is descriptive metadata about the session,
-  not UI state — allowed under ruling 2.
+  There is no `sessionMetadata` header record today; the first line is
+  `session_start`, and `session_metadata` is a separate title-only
+  event. The `session_start` record's payload is EXTENDED with
+  `kind: 'main' | 'subagent'` + `parentSessionId?` (legacy files:
+  absent kind = main). Every discovery/resolution path filters on it —
+  pickers AND `--continue` latest-selection AND checkpoint enumeration
+  (filtering only the picker would let `--continue` pick a child) —
+  before sorting/indexing. Discovery globs and the janitor are
+  untouched; this is descriptive session metadata, not UI state
+  (ruling 2 allows it).
 - **Parent surface unchanged:** the parent journal still records exactly
   one `task` tool-call group per run, with the `<subagent>` stream as
   its text. Parent scrollback shows that row; the subagent journal is
@@ -384,22 +428,48 @@ to every provider call. Compression's `replaceAll` array swap also dies
   the journal (the write path); the facade then notifies observers
   (range events, subscribers). The journal is no longer a downstream
   mirror of memory — it is the memory.
-- **Provider assembly is a streaming pass.** On each model call: open
-  the cursor at the context floor (the byte offset of the last
-  compression boundary, or 0), stream records forward, apply the event
-  fold (append content; at a `compressed` record, drop the replaced
-  span and continue after the summary; at `rewind`, honor truncation),
-  transform survivors to provider messages, send. When the call
-  returns, the streamed rows are garbage. Nothing is cached across
-  calls.
+- **Provider assembly is a streaming pass, in layers.** The fold is NOT
+  a single forward filter — retrospective mutations make "already
+  yielded" rows retractable, so resolution is layered (the plan's
+  `JournalCursor` → logical-history resolver → provider transformer):
+  1. raw envelope iteration (JournalCursor, chunked, offset-addressed);
+  2. logical-history resolution with BOUNDED memory: a forward prepass
+     computes final watermarks only (offset of last `compressed` /
+     `semantic_media_purge` replacement, `rewind` cut point, count
+     fallbacks), then a bounded window yields the surviving records —
+     `compressed` REPLACES THE ENTIRE HISTORY with `[summary]` (preserved
+     head via `topPreserved`), `rewind` removes content BEFORE the cut
+     by count or `cutSeq`, `semantic_media_purge` is a whole-history
+     replacement; memory is O(active window) + watermarks, never
+     O(history); I/O is two sequential passes over the in-context region;
+  3. provider transformation: curation + normalizer per provider,
+     request-scoped (see honesty note below). Tool callId→group joins
+     happen in the CLI/UI projection layer, not in the fold.
+  ReplayEngine is refactored onto the same resolver (same semantics,
+  proven by generated-journal equivalence tests, adversarial
+  rewind/reappend chains, rewind-after-compression, count-only
+  recordings, purge).
+- **Transient request arrays (honesty note):** where a provider SDK
+  requires a full request body array, the transport builds it
+  request-scoped from the stream and releases it after the call. The
+  acceptance criterion is no RETAINED copy in HistoryService (and no
+  session-length collection anywhere reachable from it); a transient,
+  request-lifetime body owned by the transport is accounted in 5c's
+  memory tests (in-flight bound, released-after-call assertion), not
+  hidden.
 - **The only standing state** (all O(1), none of it content):
   context-floor byte offset, tail byte offset, last `chronology.seq`,
-  a token-estimate counter for budget decisions, and the set of
-  compression summary *pointers* (seq + byte offsets; summary text is
-  re-read on demand). The pending/in-flight turn lives in the agent
-  loop and the UI pending store as today — transient working state
-  that is serialized at commit and then dropped, never a copy of
-  committed context.
+  a token-estimate counter for budget decisions, and a CAPPED window of
+  compression summary pointers visible in the current range (summary
+  text re-read on demand; the full set is enumerated lazily from the
+  journal — a per-compression-count set would itself be O(n), so none is
+  kept). The pending/in-flight turn lives in the agent loop and the UI
+  pending store as today — transient working state that is serialized
+  at commit and then dropped, never a copy of committed context. The
+  writer's lifetime `recordedIdentities` set dies with exactly-once
+  commit ownership (the watermark); optional persistence snapshots
+  write from the journal (file-range copy), never from a materialized
+  array.
 - **Speed honesty:** every provider call re-reads the in-context region
   from disk. That is local sequential reads of an append-only file the
   kernel page cache already holds (the writer just wrote it). The cost
@@ -410,10 +480,31 @@ to every provider call. Compression's `replaceAll` array swap also dies
   explicitly not a return to an unbounded collection.
 - **API surface:** mutation methods (`add`, `commitHistoryMutation`,
   compression entry points) keep their names but their postcondition
-  becomes "journal appended + observers notified." Read APIs that today
-  return the whole array either disappear or return iterators/windows;
-  callers (queryPreparer, tool-group assembly, UI range queries) migrate
-  to cursor reads. No compatibility shims for internal callers.
+  becomes "journal appended (awaitable commit ack) + observers
+  notified." Read APIs that today return the whole array either
+  disappear or return iterators/windows; callers migrate to cursor
+  reads — the REAL call sites are agents' `getCuratedForProvider` path
+  (`streamRequestHelpers`), core `RuntimeProviderChat`/`RuntimeProvider`
+  `IContent[]` contracts, per-provider normalizers, plus the CLI
+  converter; the CLI `queryPreparer` is command routing, not the
+  assembly path. No compatibility shims for internal callers.
+- **Commit protocol:** the journal append IS the commit point.
+  `SessionRecordingService` gains an awaitable commit acknowledgement
+  (watermark byte/seq) with a bounded queue; a failed append fails the
+  mutation loudly (fail fast — no silent in-memory divergence from
+  disk). Post-commit observer failure does NOT roll back durable data
+  (it fails the notification, not the history); pre-commit failures
+  leave the journal untouched. Legacy live-rollback paths
+  (`HistoryServiceCore` publication-error rollback) die with the array.
+- **Journal completeness:** today the journal diverges from live
+  history — density mutation is unjournalled (documented in
+  `recording/types.ts`), compression suppresses content and journals
+  only the summary, synthetic tool-response insertion mutates the array
+  directly. The facade requires a durable op for EVERY mutation: the
+  format is EXTENDED with append-only event kinds (density, synthetic
+  insert, compression-detail) — no new files, no second copy (ruling 1
+  holds), the writer class is unchanged; ReplayEngine handles the new
+  kinds; legacy files replay with today's documented divergence.
 
 **Acceptance criteria (P05 is done when all pass):**
 
@@ -464,9 +555,16 @@ giant ass tree that never leaves memory?" Answer, from the code:
      entries on unmount, leaving null holes. Pager slots are window-
      relative, so the array is window-sized.
 - **Primary buffer (print-through) mode:** committed rows render once
-  through Ink `Static` — written to the terminal and not re-rendered or
-  retained by React; the terminal emulator owns those bytes afterward.
-  Our side keeps nothing per printed row (flush eviction, P04).
+  through Ink `Static` — written to the terminal and not re-rendered;
+  the terminal emulator owns those bytes afterward. Ink itself retains
+  a BOUNDED archive of static-output chunks (verified in the installed
+  dependency: up to ~4 Mi code units / 1024 chunks in `ink.js`) —
+  bounded, counted against the memory budget, not a leak. Our side
+  keeps nothing per printed row; the exactly-once print protocol
+  (append-only batches handed to `Static`, eviction only at
+  acknowledged print boundaries — `Static` tracks a printed COUNT, so
+  a same-length array after prefix removal would SKIP rows) is P04
+  work.
 - **Pending rows:** the live turn's partial items — O(current turn),
   transient, serialized at commit.
 - **Net:** the process's transcript-related working set is viewport +
@@ -479,9 +577,12 @@ giant ass tree that never leaves memory?" Answer, from the code:
   - `in-context`: unchanged (optional left rail marker).
   - `purged`: dimmed, "not in context" chip.
   - `n/a`: no marking (info boxes, shell echoes).
-- Compression boundary row (new synthesized item type, journaled as
-  `boundary`): collapsed shows "compressed N messages [expand]"; expanded
-  shows the summary text from `getContextSummaries()` / the journal record.
+- Compression boundary row (synthesized LIVE UI row derived from the
+  journal's existing `compressed` event record — nothing new is
+  journaled; ruling 2): collapsed shows "compressed N messages
+  [expand]"; expanded shows the summary text from
+  `getContextSummaries()` / the journal record. Same for `rewind`
+  boundary rows.
 - Placeholders render as blank space of estimated height until paged in.
 
 Buffer modes:
@@ -497,13 +598,22 @@ Buffer modes:
 
 ### 7. Resume
 
-- Single path: open a file cursor on `session-*.jsonl`, resident =
-  context-range items + last viewport page, older rows chunk-read backward
-  on demand.
+- Single path: open a file cursor on `session-*.jsonl`; resident = the
+  BOUNDED viewport projection (last page of the physical timeline),
+  with context extent carried as scalars (floor/tail offsets, seq
+  watermarks) — never "all context-range items resident," which would
+  violate G1 whenever context exceeds the viewport. Older rows
+  chunk-read backward on demand.
   Fidelity is conversation-exact (what `/continue` reconstructs, with
-  `chronologySeq` stamped). UI-only rows (banners, toasts, panels) do not
-  exist after restart — accepted property of the no-UI-state ruling, same
-  as today's `/continue`.
+  `chronologySeq` stamped). UI-only rows (banners, toasts, panels) do
+  not exist after restart — accepted property of the no-UI-state
+  ruling, same as today's `/continue`. P05d additionally removes the
+  full-materialization stages that PRECEDE the facade today:
+  `SessionDiscovery.listContinueTargetsDetailed` replays every session,
+  `resumeSession` returns a materialized history array, and checkpoint
+  continuation copies materialized history — all migrate to
+  header/metadata + cursor reads (a bounded-memory sequential metadata
+  pass at startup is allowed; materializing content is not).
 
 ### 8. Settings / flags
 
@@ -511,9 +621,18 @@ Buffer modes:
   rework** — there is no journal to gate. Stamps and the range API are
   internal and always-on.
 - `ui.scrollbackPagerEnabled` (phase 2, default false until baked): pager +
-  eviction + paging in alternate-buffer mode.
-- `ui.historyMaxBytes` / `ui.historyMaxItems`: retargeted to the pager budget
-  (same defaults: 1 MiB / 100; revisit margin vs. budget split).
+  eviction + paging in alternate-buffer mode. Startup-read only; a live
+  toggle prompts restart; the core facade (P05) is NOT gated by this flag.
+  Missing/unusable journal (unmaterialized path, failed open) falls back to
+  the current non-pager path with a one-line notice. P03/P04 ride the same
+  flag.
+- Residency knobs (row-based sizing per OQ3): `ui.scrollbackMarginViewports`
+  (default 2) + `ui.scrollbackByteFloorKiB` (default 256) + a documented
+  oversized-visible-row policy (a huge row inside the viewport is always
+  resident; the byte floor governs off-screen margin only). The legacy
+  `ui.historyMaxBytes` / `ui.historyMaxItems` display-trim knobs are
+  RETIRED from pager policy (schema/docs regenerated when the default
+  flips; scripts/meta tests run).
 
 ## Flows
 
@@ -544,11 +663,15 @@ Buffer modes:
    context floor.
 
 ### /chat clear, rewind, restore
-- No UI markers are written anywhere. `pageIn` stops at the context floor
-  (oldest in-context item — resolved OQ7), which naturally bounds scrolling
-  after a clear (context is empty → floor is the first post-clear item).
-  Rewind truncation comes from the session journal's `rewind` event record
-  during reconstruction. Disk bytes remain for the janitor.
+- No UI markers are written anywhere. `pageIn` stops at the visibility
+  floor — the most recent `clear` boundary (or file start); after a clear
+  the floor is the first post-clear record, so cleared history never
+  resurrects. Compression boundaries do NOT stop paging (purged rows
+  scroll, marked). Rewind truncation is honored during reconstruction
+  from the session journal's `rewind` event record: pre-rewind rows
+  appear only below a rewind boundary row. Disk bytes remain for the
+  janitor. (Refines OQ7's hard stop: the stop is `clear`/file-start, not
+  the context floor.)
 
 ## Janitor integration
 
@@ -635,8 +758,11 @@ Resolved 2026-09-18 on PR #3727 with Andrew (issuecomment-5732580084 /
    scrollbar is byte-proportional (`windowStart / fileSize`), so height
    bookkeeping beyond the visible viewport is unnecessary. Measured
    heights are used in-viewport only, never persisted.
-7. `pageIn` vs `clear` markers — **RESOLVED: hard stop.** Scrolling back
-   stops at the oldest in-context item; no "show cleared history"
+7. `pageIn` vs `clear` markers — **RESOLVED: hard stop — REFINED after
+   plan review 2026-09-18:** the stop is the CLEAR boundary (or file
+   start), NOT the context floor. Compression-purged rows remain
+   scrollable (marked `purged` — that is issue item 2's whole point);
+   clear-excluded rows never resurrect. No "show cleared history"
    affordance. A full activity journal regardless of compression is a
    possible later feature, out of scope.
 
