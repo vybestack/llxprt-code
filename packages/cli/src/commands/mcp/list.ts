@@ -14,6 +14,7 @@ import { createTransport, MCPServerStatus } from '@vybestack/llxprt-code-mcp';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { ExtensionStorage, loadExtensions } from '../../config/extension.js';
 import { ExtensionEnablementManager } from '../../config/extensions/extensionEnablement.js';
+import { wireMcpAuthFactories } from '../../mcpHostWiring.js';
 
 const COLOR_GREEN = '\u001b[32m';
 const COLOR_YELLOW = '\u001b[33m';
@@ -87,6 +88,15 @@ async function getServerStatus(
 }
 
 export async function listMcpServers(): Promise<void> {
+  // This command runs in its own process without the session bootstrap, so
+  // it wires the plugin-contributed MCP auth factories itself before testing
+  // connections (#2764). Registration is startup-only: the single
+  // listMcpServers run per process registers exactly once.
+  const { loadInstalledRuntimePlugins } = await import(
+    '@vybestack/llxprt-code-providers/composition.js'
+  );
+  wireMcpAuthFactories(await loadInstalledRuntimePlugins());
+
   const mcpServers = await getMcpServersFromConfig();
   const serverNames = Object.keys(mcpServers);
 

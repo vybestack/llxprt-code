@@ -154,8 +154,9 @@ Limit which tools a server exposes with `includeTools` and `excludeTools`:
 ## Authenticate
 
 Remote MCP servers may require authentication. LLxprt Code supports OAuth and
-custom HTTP headers, and can impersonate a service account for
-Google Cloud IAP-protected services.
+custom HTTP headers out of the box. Google-specific modes — Application Default
+Credentials and service-account impersonation — are provided by an optional
+runtime plugin (see [Google authentication](#google-authentication)).
 
 ### OAuth
 
@@ -267,7 +268,44 @@ For servers that use static API keys or bearer tokens, pass headers directly:
 }
 ```
 
-### Service-account impersonation
+### Google authentication
+
+The Google auth modes — `google_credentials` (Application Default Credentials)
+and `service_account_impersonation` (Cloud IAP) — are provided by the optional
+`@vybestack/llxprt-plugin-google-mcp-auth` runtime plugin. Install it globally
+alongside LLxprt Code:
+
+```bash
+npm install -g @vybestack/llxprt-plugin-google-mcp-auth
+```
+
+A base install supports standard OAuth and static headers without the plugin.
+Selecting one of the Google modes without the plugin installed fails with a
+terminal error naming the plugin — LLxprt Code does not fall back to standard
+OAuth for these modes.
+
+#### Application Default Credentials
+
+For servers that accept Google credentials from your environment (Application
+Default Credentials), set `authProviderType` to `google_credentials` and declare
+the OAuth scopes under `oauth.scopes`:
+
+```json
+{
+  "mcpServers": {
+    "myGoogleServer": {
+      "url": "https://my-server.example.com/mcp",
+      "type": "http",
+      "authProviderType": "google_credentials",
+      "oauth": {
+        "scopes": ["https://www.googleapis.com/auth/cloud-platform"]
+      }
+    }
+  }
+}
+```
+
+#### Service-account impersonation
 
 For Google Cloud IAP-protected services, you can impersonate a service account:
 

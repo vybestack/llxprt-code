@@ -6,16 +6,21 @@
 
 import type { Mock } from 'bun:test';
 import { vi, describe, beforeEach, it, expect } from 'bun:test';
-import type { MCPServerConfig } from '../config/mcpServerConfig.js';
+import type { MCPServerConfig } from '@vybestack/llxprt-code-mcp/config/mcpServerConfig.js';
 
+type MockAccessTokenResponse = { token: string | null };
+
+// One shared mock assigned as an instance field keeps getClient prototype-like:
+// every MockGoogleAuth instance resolves the same client object.
+const mockGetClient = vi.fn<() => Promise<unknown>>();
 const { MockGoogleAuth } = (() => {
   class MockGoogleAuth {
-    static mockConstructor = vi.fn();
+    static mockConstructor = vi.fn<(...args: unknown[]) => void>();
+    getClient = mockGetClient;
     constructor(...args: unknown[]) {
       MockGoogleAuth.mockConstructor(...args);
     }
   }
-  MockGoogleAuth.prototype.getClient = vi.fn();
   return { MockGoogleAuth };
 })();
 
@@ -46,10 +51,10 @@ describe('GoogleCredentialProvider', () => {
 
   describe('with provider instance', () => {
     let provider: GoogleCredentialProvider;
-    let mockGetAccessToken: Mock<(...args: never[]) => unknown>;
+    let mockGetAccessToken: Mock<() => Promise<MockAccessTokenResponse>>;
     let mockClient: {
-      getAccessToken: Mock<(...args: never[]) => unknown>;
-      credentials?: { expiry_date: number | null };
+      getAccessToken: Mock<() => Promise<MockAccessTokenResponse>>;
+      credentials?: { expiry_date?: number | null };
       quotaProjectId?: string;
     };
 
@@ -66,16 +71,12 @@ describe('GoogleCredentialProvider', () => {
         },
       } as MCPServerConfig;
       // clear and reset mock client before each test
-      mockGetAccessToken = vi.fn();
+      mockGetAccessToken = vi.fn<() => Promise<MockAccessTokenResponse>>();
       mockClient = {
         getAccessToken: mockGetAccessToken,
         credentials: {},
       };
-      (
-        MockGoogleAuth.prototype.getClient as Mock<
-          (...args: never[]) => unknown
-        >
-      ).mockResolvedValue(mockClient);
+      mockGetClient.mockResolvedValue(mockClient);
       provider = new GoogleCredentialProvider(config);
       vi.clearAllMocks();
     });

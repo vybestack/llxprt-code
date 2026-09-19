@@ -90,7 +90,9 @@ export type {
   ProviderContributionOrigin,
   ProviderContributionRegistry,
   ProviderFactoryContext,
+  RegisteredMcpAuthFactory,
   RuntimeContributedAlias,
+  RuntimeMcpAuthFactoryContribution,
   RuntimePluginManifest,
   RuntimeProviderContribution,
 } from './runtimePlugins/index.js';

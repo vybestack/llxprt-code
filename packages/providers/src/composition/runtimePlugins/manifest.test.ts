@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import type { McpAuthProviderFactory } from '@vybestack/llxprt-code-mcp';
 import type { IProvider } from '../../IProvider.js';
 import {
   parseRuntimePluginManifest,
@@ -288,5 +289,94 @@ describe('parseRuntimePluginManifest', () => {
       }),
     );
     expect(unknownContributionKey).toBeInstanceOf(RuntimePluginMalformedError);
+  });
+});
+
+describe('parseRuntimePluginManifest mcpAuthFactories', () => {
+  function validMcpAuthFactory(): McpAuthProviderFactory {
+    return () => ({}) as ReturnType<McpAuthProviderFactory>;
+  }
+
+  it('accepts a manifest with empty providers when mcpAuthFactories are contributed, frozen', () => {
+    const factory = validMcpAuthFactory();
+    const manifest = parseRuntimePluginManifest(SPECIFIER, {
+      apiVersion: 1,
+      id: 'mcp-auth-plugin',
+      providers: [],
+      mcpAuthFactories: [
+        { authProviderType: 'google_credentials', createAuthProvider: factory },
+      ],
+    });
+
+    expect(manifest.providers).toStrictEqual([]);
+    expect(manifest.mcpAuthFactories?.[0].authProviderType).toBe(
+      'google_credentials',
+    );
+    expect(manifest.mcpAuthFactories?.[0].createAuthProvider).toBe(factory);
+
+    expect(Object.isFrozen(manifest)).toBe(true);
+    expect(Object.isFrozen(manifest.mcpAuthFactories)).toBe(true);
+    expect(Object.isFrozen(manifest.mcpAuthFactories?.[0])).toBe(true);
+  });
+
+  it('rejects a manifest with neither providers nor mcpAuthFactories as malformed with an actionable message', () => {
+    const error = captureError(() =>
+      parseRuntimePluginManifest(SPECIFIER, {
+        apiVersion: 1,
+        id: 'empty-plugin',
+        providers: [],
+      }),
+    );
+
+    expect(error).toBeInstanceOf(RuntimePluginMalformedError);
+    expect(error.message).toContain(SPECIFIER);
+    expect(error.message).toContain('mcpAuthFactories');
+  });
+
+  it('rejects an mcpAuthFactories entry with an empty authProviderType as malformed with the Zod path', () => {
+    const error = captureError(() =>
+      parseRuntimePluginManifest(SPECIFIER, {
+        ...validManifest(),
+        mcpAuthFactories: [
+          { authProviderType: '', createAuthProvider: validMcpAuthFactory() },
+        ],
+      }),
+    );
+
+    expect(error).toBeInstanceOf(RuntimePluginMalformedError);
+    expect(error.message).toContain('mcpAuthFactories');
+    expect(error.message).toContain('authProviderType');
+  });
+
+  it('rejects an mcpAuthFactories entry with a non-function createAuthProvider as malformed with the Zod path', () => {
+    const error = captureError(() =>
+      parseRuntimePluginManifest(SPECIFIER, {
+        ...validManifest(),
+        mcpAuthFactories: [
+          { authProviderType: 'google_credentials', createAuthProvider: 42 },
+        ],
+      }),
+    );
+
+    expect(error).toBeInstanceOf(RuntimePluginMalformedError);
+    expect(error.message).toContain('mcpAuthFactories');
+    expect(error.message).toContain('createAuthProvider');
+  });
+
+  it('rejects an mcpAuthFactories entry with an unknown key as malformed (strict)', () => {
+    const error = captureError(() =>
+      parseRuntimePluginManifest(SPECIFIER, {
+        ...validManifest(),
+        mcpAuthFactories: [
+          {
+            authProviderType: 'google_credentials',
+            createAuthProvider: validMcpAuthFactory(),
+            extra: true,
+          },
+        ],
+      }),
+    );
+
+    expect(error).toBeInstanceOf(RuntimePluginMalformedError);
   });
 });

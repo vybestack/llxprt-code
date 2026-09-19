@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import type { McpAuthProviderFactory } from '@vybestack/llxprt-code-mcp';
 import type { IProvider } from '../../IProvider.js';
 import {
   buildProviderContributionRegistry,
@@ -13,6 +14,7 @@ import {
 import type {
   LoadedRuntimePlugin,
   ProviderAliasFactory,
+  RuntimeMcpAuthFactoryContribution,
   RuntimeProviderContribution,
 } from './types.js';
 
@@ -32,10 +34,11 @@ function makePlugin(
   specifier: string,
   pluginId: string,
   providers: RuntimeProviderContribution[],
+  mcpAuthFactories?: RuntimeMcpAuthFactoryContribution[],
 ): LoadedRuntimePlugin {
   return {
     specifier,
-    manifest: { apiVersion: 1, id: pluginId, providers },
+    manifest: { apiVersion: 1, id: pluginId, providers, mcpAuthFactories },
   };
 }
 
@@ -332,5 +335,137 @@ describe('buildProviderContributionRegistry', () => {
       ...BUILTIN_PROVIDER_IDS,
       'provider-a',
     ]);
+  });
+});
+
+describe('buildProviderContributionRegistry mcpAuthFactories', () => {
+  function mcpAuthFactory(): McpAuthProviderFactory {
+    return () => ({}) as ReturnType<McpAuthProviderFactory>;
+  }
+
+  function mcpContribution(
+    authProviderType: string,
+  ): RuntimeMcpAuthFactoryContribution {
+    return { authProviderType, createAuthProvider: mcpAuthFactory() };
+  }
+
+  it('reports an empty mcp auth factory list for a built-ins-only registry', () => {
+    const registry = createBuiltinProviderContributionRegistry();
+    expect(registry.getMcpAuthFactories()).toStrictEqual([]);
+  });
+
+  it('reports plugin mcp auth factory contributions with plugin origin', () => {
+    const factory = mcpAuthFactory();
+    const registry = buildProviderContributionRegistry([
+      makePlugin(
+        'pkg',
+        'plugin-a',
+        [contribution('provider-a')],
+        [
+          {
+            authProviderType: 'google_credentials',
+            createAuthProvider: factory,
+          },
+        ],
+      ),
+    ]);
+
+    const factories = registry.getMcpAuthFactories();
+    expect(factories).toHaveLength(1);
+    expect(factories[0].contribution.authProviderType).toBe(
+      'google_credentials',
+    );
+    expect(factories[0].contribution.createAuthProvider).toBe(factory);
+    expect(factories[0].origin).toStrictEqual({
+      kind: 'plugin',
+      pluginId: 'plugin-a',
+      specifier: 'pkg',
+    });
+  });
+
+  it('returns a frozen copy of the mcp auth factory list with frozen origins', () => {
+    const registry = buildProviderContributionRegistry([
+      makePlugin(
+        'pkg',
+        'plugin-a',
+        [contribution('provider-a')],
+        [mcpContribution('google_credentials')],
+      ),
+    ]);
+
+    const factories = registry.getMcpAuthFactories();
+    expect(() => {
+      (factories as unknown[]).push({});
+    }).toThrow(TypeError);
+    expect(() => {
+      (
+        registry.getMcpAuthFactories()[0].origin as { pluginId: string }
+      ).pluginId = 'hijacked';
+    }).toThrow(TypeError);
+  });
+
+  it('exposes mcp auth factories from multiple plugins in plugin order', () => {
+    const registry = buildProviderContributionRegistry([
+      makePlugin(
+        'pkg-a',
+        'plugin-a',
+        [contribution('provider-a')],
+        [mcpContribution('google_credentials')],
+      ),
+      makePlugin(
+        'pkg-b',
+        'plugin-b',
+        [contribution('provider-b')],
+        [mcpContribution('service_account_impersonation')],
+      ),
+    ]);
+
+    expect(
+      registry
+        .getMcpAuthFactories()
+        .map((f) => f.contribution.authProviderType),
+    ).toStrictEqual(['google_credentials', 'service_account_impersonation']);
+  });
+
+  it('rejects a duplicate authProviderType within one plugin naming the plugin', () => {
+    const error = captureError(() =>
+      buildProviderContributionRegistry([
+        makePlugin(
+          'pkg',
+          'plugin-a',
+          [contribution('provider-a')],
+          [
+            mcpContribution('google_credentials'),
+            mcpContribution('GOOGLE_CREDENTIALS'),
+          ],
+        ),
+      ]),
+    );
+
+    expect(error.message).toContain('google_credentials');
+    expect(error.message).toContain('plugin-a');
+  });
+
+  it('rejects a duplicate authProviderType across two plugins naming both plugin ids', () => {
+    const error = captureError(() =>
+      buildProviderContributionRegistry([
+        makePlugin(
+          'pkg-a',
+          'plugin-a',
+          [contribution('provider-a')],
+          [mcpContribution('google_credentials')],
+        ),
+        makePlugin(
+          'pkg-b',
+          'plugin-b',
+          [contribution('provider-b')],
+          [mcpContribution('google_credentials')],
+        ),
+      ]),
+    );
+
+    expect(error.message).toContain('google_credentials');
+    expect(error.message).toContain("plugin 'plugin-a'");
+    expect(error.message).toContain("plugin 'plugin-b'");
   });
 });
