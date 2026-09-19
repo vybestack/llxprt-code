@@ -15,6 +15,7 @@
  */
 
 import { describe, expect, it, afterAll } from 'bun:test';
+import type { RuntimePromptEstimateRequest } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { KimiK3Tokenizer } from './kimiK3Tokenizer.js';
 import { GlmTokenizer } from './glmTokenizer.js';
 import { MinimaxTokenizer } from './minimaxTokenizer.js';
@@ -24,7 +25,10 @@ import {
 } from './officialPromptEstimators.js';
 import { ModelPromptEstimatorRegistry } from '../ModelPromptEstimatorRegistry.js';
 import { ModelPromptEstimatorError } from '../ModelPromptEstimatorError.js';
-import { PROJECTION_REVISION } from '../../runtime/promptEnvelopeProjections.js';
+import {
+  PROJECTION_REVISION,
+  type ProjectionImageEntry,
+} from '../../runtime/promptEnvelopeProjections.js';
 
 /**
  * Runs `operation` expecting rejection and returns the rejection reason.
@@ -162,7 +166,7 @@ describe('Provider framing separation (acceptance criterion 8)', () => {
       projectionRevision: PROJECTION_REVISION,
       legacyEstimate: () => Promise.reject(new Error('unreachable')),
     });
-    expect(result.estimatorVersion).toBe('glm-5.2-tiktoken-v1');
+    expect(result.estimatorVersion).toBe('glm-5.2-tiktoken-v2');
     expect(result.assetRevision).toContain('glm-5.2');
     expect(result.projectionRevision).toBe(PROJECTION_REVISION);
   });
@@ -240,5 +244,202 @@ describe('Provider framing separation (acceptance criterion 8)', () => {
     expect(result.count).toBe(42);
     expect(result.method).toBe('calibrated');
     expect(result.family).toBe('legacy-unregistered');
+  });
+});
+
+describe('Official estimator image entries (issue #3663)', () => {
+  const registry = new ModelPromptEstimatorRegistry(
+    OFFICIAL_PROMPT_ESTIMATOR_REGISTRATIONS,
+  );
+
+  const CASE_PROMPT_TEXT =
+    'Analyze this chart data and report the trend over time.';
+
+  /**
+   * 800x600 on the openai patch formula: ceil(1.2 * min(ceil(800/32) *
+   * ceil(600/32), 1536)) = ceil(1.2 * 475) = 570.
+   */
+  const IMAGE_800X600_TOKENS = 570;
+  const UNKNOWN_DIMENSIONS_TOKENS = 1844;
+
+  const SPECS = [
+    {
+      provider: 'moonshot',
+      model: 'kimi-k3',
+      protocol: 'openai-chat',
+      wireMethod: 'chat/completions/v1',
+    },
+    {
+      provider: 'zai',
+      model: 'glm-5.2',
+      protocol: 'openai-chat',
+      wireMethod: 'chat/completions/v1',
+    },
+    {
+      provider: 'zai',
+      model: 'glm-5.2',
+      protocol: 'anthropic-messages',
+      wireMethod: 'messages/v1',
+    },
+    {
+      provider: 'minimax',
+      model: 'minimax-m3',
+      protocol: 'openai-chat',
+      wireMethod: 'chat/completions/v1',
+    },
+  ] as const;
+
+  /** The -v2 bump signals image-aware estimator behavior per spec (#3663). */
+  const EXPECTED_VERSIONS: Readonly<Record<string, string>> = {
+    'kimi-k3': 'kimi-k3-tiktoken-v2',
+    'glm-5.2': 'glm-5.2-tiktoken-v2',
+    'minimax-m3': 'minimax-m3-tiktoken-v2',
+  };
+
+  function officialRequest(
+    spec: (typeof SPECS)[number],
+    imageEntries?: readonly ProjectionImageEntry[],
+  ): RuntimePromptEstimateRequest {
+    return {
+      activeProvider: spec.provider,
+      canonicalModel: spec.model,
+      protocol: spec.protocol,
+      wireMethod: spec.wireMethod,
+      finalizedProjection: {
+        kind: 'llxprt-provider-prompt-v3',
+        protocol: spec.protocol,
+        promptText: CASE_PROMPT_TEXT,
+        ...(imageEntries !== undefined ? { imageEntries } : {}),
+      },
+      projectionRevision: PROJECTION_REVISION,
+      legacyEstimate: () => Promise.reject(new Error('unreachable')),
+    };
+  }
+
+  it('adds the patch-formula image cost on top of the text count for every spec', async () => {
+    for (const spec of SPECS) {
+      const textOnly = await registry.estimatePrompt(officialRequest(spec));
+      const withImage = await registry.estimatePrompt(
+        officialRequest(spec, [{ dimensions: { width: 800, height: 600 } }]),
+      );
+      expect(withImage.count).toBe(textOnly.count + IMAGE_800X600_TOKENS);
+      expect(withImage.method).toBe('exact');
+      expect(withImage.estimatorVersion).toBe(EXPECTED_VERSIONS[spec.model]);
+    }
+  });
+
+  it('charges GLM the same image cost over anthropic-messages as over openai-chat', async () => {
+    const entries: readonly ProjectionImageEntry[] = [
+      { dimensions: { width: 800, height: 600 } },
+    ];
+    const glmChat = SPECS[1];
+    const glmAnthropic = SPECS[2];
+    const chatDelta =
+      (await registry.estimatePrompt(officialRequest(glmChat, entries))).count -
+      (await registry.estimatePrompt(officialRequest(glmChat))).count;
+    const anthropicDelta =
+      (await registry.estimatePrompt(officialRequest(glmAnthropic, entries)))
+        .count -
+      (await registry.estimatePrompt(officialRequest(glmAnthropic))).count;
+    // The image formula is protocol-independent: only the framing differs.
+    expect(anthropicDelta).toBe(chatDelta);
+    expect(chatDelta).toBe(IMAGE_800X600_TOKENS);
+  });
+
+  it('falls back to the patch-formula unknown-dimensions cost for a bare entry', async () => {
+    for (const spec of SPECS) {
+      const textOnly = await registry.estimatePrompt(officialRequest(spec));
+      const result = await registry.estimatePrompt(officialRequest(spec, [{}]));
+      expect(result.count).toBe(textOnly.count + UNKNOWN_DIMENSIONS_TOKENS);
+    }
+  });
+
+  it('adds the image cost once per entry', async () => {
+    const spec = SPECS[0];
+    const textOnly = await registry.estimatePrompt(officialRequest(spec));
+    const result = await registry.estimatePrompt(
+      officialRequest(spec, [
+        { dimensions: { width: 800, height: 600 } },
+        { dimensions: { width: 800, height: 600 } },
+      ]),
+    );
+    expect(result.count).toBe(textOnly.count + 2 * IMAGE_800X600_TOKENS);
+  });
+
+  it('leaves the text-only count unchanged when entries are absent or empty', async () => {
+    for (const spec of SPECS) {
+      const withoutEntries = await registry.estimatePrompt(
+        officialRequest(spec),
+      );
+      const withEmpty = await registry.estimatePrompt(
+        officialRequest(spec, []),
+      );
+      expect(withoutEntries.count).toBe(withEmpty.count);
+      expect(withoutEntries.count).toBeGreaterThan(0);
+    }
+  });
+
+  /**
+   * Minimal PNG whose IHDR declares the given size: 8-byte signature, IHDR
+   * chunk (length 13, 'IHDR', width/height big-endian, bit depth 8, color
+   * type 6, trailing zeros).
+   */
+  function handcraftedPngBytes(width: number, height: number): Buffer {
+    const bytes = new Uint8Array([
+      0x89,
+      0x50,
+      0x4e,
+      0x47,
+      0x0d,
+      0x0a,
+      0x1a,
+      0x0a,
+      0,
+      0,
+      0,
+      13,
+      0x49,
+      0x48,
+      0x44,
+      0x52,
+      (width >>> 24) & 0xff,
+      (width >>> 16) & 0xff,
+      (width >>> 8) & 0xff,
+      width & 0xff,
+      (height >>> 24) & 0xff,
+      (height >>> 16) & 0xff,
+      (height >>> 8) & 0xff,
+      height & 0xff,
+      8,
+      6,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+    ]);
+    return Buffer.from(bytes);
+  }
+
+  it('adds no image cost to runtime-tokenizer history content with a base64 image field', async () => {
+    const rawKimi = new KimiK3Tokenizer();
+    const tokenizer = createOfficialRuntimeTokenizer('moonshot', 'kimi-k3');
+    expect(tokenizer).toBeDefined();
+    // The runtime tokenizer builds a synthetic projection without image
+    // entries; media image tokens are added separately by history
+    // accounting, so this JSON must count as ordinary text only.
+    const jsonContent = {
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: 'image/png',
+        data: handcraftedPngBytes(800, 600).toString('base64'),
+      },
+    };
+    const counted = await tokenizer!.countTokens(jsonContent);
+    expect(counted).toBe(rawKimi.countTokens(JSON.stringify(jsonContent)));
+    rawKimi.dispose();
   });
 });
