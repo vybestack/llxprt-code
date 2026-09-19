@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
@@ -12,10 +12,6 @@ import {
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
 
 type AnthropicImageBlock = {
@@ -181,12 +177,6 @@ describe('AnthropicProvider MediaBlock support', () => {
       }
       return settingsService.get(key);
     };
-
-    setActiveProviderRuntimeContext(runtimeContext);
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   it('should convert MediaBlocks in user messages to Anthropic image blocks', async () => {

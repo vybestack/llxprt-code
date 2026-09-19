@@ -7,8 +7,7 @@
  * Split from AnthropicProvider.test.ts for max-lines compliance.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   setupAnthropicProvider,
@@ -143,10 +142,6 @@ describe('AnthropicProvider', () => {
     provider = setup.provider;
     settingsService = setup.settingsService;
     buildCallOptions = setup.buildCallOptions;
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   describe('generateChatCompletion', () => {

@@ -13,10 +13,7 @@ import type {
 } from '@vybestack/llxprt-code-auth';
 import { createFakeOAuthSettings } from './test-oauth-settings.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  resetSettingsService,
-  registerSettingsService,
-} from '@vybestack/llxprt-code-settings/settings/settingsServiceInstance.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 
 // Skip OAuth tests in CI as they require browser interaction
 const skipInCI = process.env.CI === 'true';
@@ -856,23 +853,23 @@ describe('OAuthManager', () => {
 
     beforeEach(() => {
       tokenStore = new MockTokenStore();
-      resetSettingsService();
     });
 
     afterEach(() => {
       delete process.env.ANTHROPIC_API_KEY;
-      resetSettingsService();
     });
 
     it('reports environment variable precedence when authOnly is disabled', async () => {
       process.env.ANTHROPIC_API_KEY = 'sk-test-key';
       const loadedSettings = createLoadedSettings();
 
-      // Register SettingsService in runtime context before creating manager
+      // Issue #2616: the authOnly reader is handed to the manager explicitly
+      // via its runtime config; an empty service leaves authOnly disabled.
       const settingsService = new SettingsService();
-      registerSettingsService(settingsService);
 
-      const manager = new OAuthManager(tokenStore, loadedSettings);
+      const manager = new OAuthManager(tokenStore, loadedSettings, {
+        config: createRuntimeConfigStub(settingsService),
+      });
 
       const result = await manager.getHigherPriorityAuth('anthropic');
 
@@ -883,13 +880,14 @@ describe('OAuthManager', () => {
       process.env.ANTHROPIC_API_KEY = 'sk-test-key';
       const loadedSettings = createLoadedSettings();
 
-      // Register SettingsService in runtime context before creating manager
+      // Issue #2616: the authOnly flag is read from the settings service the
+      // manager receives explicitly; no ambient registration exists.
       const settingsService = new SettingsService();
-      registerSettingsService(settingsService);
-
-      const manager = new OAuthManager(tokenStore, loadedSettings);
-
       settingsService.set('authOnly', true);
+
+      const manager = new OAuthManager(tokenStore, loadedSettings, {
+        config: createRuntimeConfigStub(settingsService),
+      });
 
       const result = await manager.getHigherPriorityAuth('anthropic');
 

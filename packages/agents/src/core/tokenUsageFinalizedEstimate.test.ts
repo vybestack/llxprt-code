@@ -14,7 +14,7 @@
  * `tiktokenTokens: null` over an existing measurement destroys that column.
  */
 
-import { afterEach, describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
@@ -23,15 +23,9 @@ import {
   estimatePromptEnvelope,
   type PromptEnvelopeEstimate,
 } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { OpenAIResponsesProvider } from '@vybestack/llxprt-code-providers';
 import { createRuntimeTokenizerFactory } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { TokenUsageLogger } from './TokenUsageLogger.js';
 import type { SerializedTokenUsageRecord } from './TokenUsageLogger.js';
 import { recordFinalizedPromptEnvelopeEstimate } from './tokenUsageEstimateLogger.js';
@@ -128,13 +122,6 @@ function serializedPromptAccounting(
 }
 
 function createResponsesProvider(): OpenAIResponsesProvider {
-  const settingsService = new SettingsService();
-  setActiveProviderRuntimeContext(
-    createProviderRuntimeContext({
-      settingsService,
-      runtimeId: 'token-usage-stateful-responses-test',
-    }),
-  );
   return new OpenAIResponsesProvider('token-test', 'https://api.openai.com/v1');
 }
 
@@ -163,8 +150,6 @@ async function estimateResponsesPrompt(
 }
 
 describe('recordFinalizedPromptEnvelopeEstimate (issue #2817)', () => {
-  afterEach(clearActiveProviderRuntimeContext);
-
   it('keeps an earlier tiktoken measurement while adopting the finalized token count', async () => {
     const { logger, readRecord } = await createLogger();
 
@@ -272,8 +257,6 @@ describe('recordFinalizedPromptEnvelopeEstimate (issue #2817)', () => {
 });
 
 describe('stateful Responses finalized-estimate telemetry (issue #3219 AC-6)', () => {
-  afterEach(clearActiveProviderRuntimeContext);
-
   it('serializes equal transmitted and effective context for a real stateless projection', async () => {
     const provider = createResponsesProvider();
     const estimate = await estimateResponsesPrompt(

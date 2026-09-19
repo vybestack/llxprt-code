@@ -10,10 +10,6 @@ import type {
   MessageBus,
   RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
-import {
-  clearActiveProviderRuntimeContext,
-  peekActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { ProviderManager } from '../ProviderManager.js';
@@ -70,7 +66,6 @@ describe('isolated runtime never mutates the CLI default pointer (issue #2300)',
   beforeEach(() => {
     resetCliRuntimeRegistryForTesting();
     configureCliStatelessHardening(null);
-    clearActiveProviderRuntimeContext();
 
     cliSettingsService = new SettingsService();
     cliConfig = createRuntimeConfigStub(cliSettingsService, {
@@ -108,7 +103,6 @@ describe('isolated runtime never mutates the CLI default pointer (issue #2300)',
     activeHandles.length = 0;
     resetCliRuntimeRegistryForTesting();
     configureCliStatelessHardening(null);
-    clearActiveProviderRuntimeContext();
     resetRuntimeScopeForTesting();
   });
 
@@ -243,11 +237,11 @@ describe('isolated runtime never mutates the CLI default pointer (issue #2300)',
     setCliRuntimeContext(cliSettingsService, cliConfig, {
       runtimeId: cliRuntimeId,
     });
-    expect(peekActiveProviderRuntimeContext()?.runtimeId).toBe(cliRuntimeId);
+    expect(getDefaultCliRuntimeId()).toBe(cliRuntimeId);
 
     await handle.cleanup();
 
-    expect(peekActiveProviderRuntimeContext()?.runtimeId).toBe(cliRuntimeId);
+    expect(getDefaultCliRuntimeId()).toBe(cliRuntimeId);
     expect(getCliOAuthManager()).toBe(cliOAuthManager);
   });
 
@@ -297,13 +291,11 @@ describe('runtime id validation (issue #2300)', () => {
   beforeEach(() => {
     resetCliRuntimeRegistryForTesting();
     configureCliStatelessHardening(null);
-    clearActiveProviderRuntimeContext();
   });
 
   afterEach(() => {
     resetCliRuntimeRegistryForTesting();
     configureCliStatelessHardening(null);
-    clearActiveProviderRuntimeContext();
   });
 
   describe('validateRuntimeId', () => {

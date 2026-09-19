@@ -12,6 +12,7 @@
 import { describe, expect, it, vi } from 'bun:test';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -157,7 +158,9 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       .mockReturnValue({
         runtimeId: 'isolated-runtime',
         metadata: { source: 'test' },
-        settingsService: undefined,
+        // Issue #2616: runtime handles carry an explicit settings service;
+        // production fail-fasts when it is absent.
+        settingsService: new SettingsService(),
         config: makeForegroundConfig(),
         providerManager: {},
         oauthManager: {},

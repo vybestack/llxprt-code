@@ -19,7 +19,6 @@ import {
   buildContentGeneratorMockBody,
   buildTelemetryMockBody,
   buildGitServiceMockBody,
-  buildSettingsMockBody,
   buildIdeIntegrationMockBody,
   buildMemoryDiscoveryMockBody,
   buildEventsMockBody,
@@ -108,8 +107,6 @@ void vi.mock('../core/contentGenerator.js', () =>
 void vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
 
 void vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
-
-void vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
 
 const __actual5 = {
   ...(await import('@vybestack/llxprt-code-ide-integration')),

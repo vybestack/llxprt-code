@@ -13,11 +13,6 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIProvider } from '../OpenAIProvider.js';
 import OpenAI from 'openai';
 import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
@@ -139,17 +134,9 @@ describe('OpenAI local endpoint tests', () => {
     // This is critical for CI environments which may have OPENAI_API_KEY set
     setEnv('OPENAI_API_KEY', '');
     setEnv('OPENAI_BASE_URL', '');
-
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: 'local-endpoint-test',
-      }),
-    );
   });
 
   afterEach(() => {
-    clearActiveProviderRuntimeContext();
     restoreEnv();
   });
 

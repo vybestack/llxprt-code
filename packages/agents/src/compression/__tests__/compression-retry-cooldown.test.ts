@@ -15,7 +15,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { makeHttpError, makeChatSession } from './compression-retry-helpers.js';
 
@@ -45,7 +44,6 @@ describe('ChatSession compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY
       ...runtimeSetup.runtime,
       config: runtimeSetup.config,
     };
-    providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
   });
 
   afterEach(() => {

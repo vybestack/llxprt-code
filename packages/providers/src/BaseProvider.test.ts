@@ -32,15 +32,13 @@ import type {
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import {
-  getSettingsService,
-  registerSettingsService,
-  resetSettingsService,
-} from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+
+/**
+ * Issue #2616: the settings singleton is gone. Each test refreshes this
+ * instance in beforeEach and hands it explicitly to providers/runtimes.
+ */
+let testSettingsService: SettingsService;
 
 async function readStoredProviderKey(
   storedKeys: ReadonlyMap<string, string>,
@@ -81,7 +79,7 @@ function createOptionsWithRuntime(
   settingsService?: SettingsService,
   config?: Config,
 ) {
-  const settings = settingsService ?? getSettingsService();
+  const settings = settingsService ?? testSettingsService;
   const runtimeConfig = config ?? createRuntimeConfigStub(settings);
   const runtime = createProviderRuntimeContext({
     runtimeId: `base-provider.${Math.random().toString(36).slice(2, 10)}`,
@@ -106,7 +104,7 @@ class TestProvider extends BaseProvider {
     runtimeConfig?: Config,
     settingsOverride?: SettingsService,
   ) {
-    const settingsService = settingsOverride ?? getSettingsService();
+    const settingsService = settingsOverride ?? testSettingsService;
     super(
       config,
       undefined,
@@ -194,19 +192,17 @@ describe('BaseProvider', () => {
     delete process.env.TEST_API_KEY;
     delete process.env.ANOTHER_API_KEY;
     // Reset settings service to ensure clean state
-    resetSettingsService();
-    registerSettingsService(new SettingsService());
+    testSettingsService = new SettingsService();
   });
 
   afterEach(() => {
     process.env = originalEnv;
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
   });
 
   describe('Authentication Precedence', () => {
     it('should prioritize SettingsService auth-key over all other methods', async () => {
-      const settingsService = getSettingsService();
+      const settingsService = testSettingsService;
       settingsService.set('auth-key', 'settings-auth-key-123');
 
       const config: BaseProviderConfig = {
@@ -318,7 +314,7 @@ describe('BaseProvider', () => {
     // storage. Before this fix, the auth-package resolver threw because no
     // providerKeyStorage was injected by BaseProvider.
     it('resolves auth-key-name via injected provider key storage (subagent path)', async () => {
-      const settingsService = getSettingsService();
+      const settingsService = testSettingsService;
       settingsService.set('auth-key-name', 'chutesminimax');
 
       // In-memory provider key storage satisfying IProviderKeyStorage — no
@@ -356,7 +352,7 @@ describe('BaseProvider', () => {
       };
 
       const provider = new TestProvider(config);
-      const defaultSettings = getSettingsService();
+      const defaultSettings = testSettingsService;
       const messages = [userMessage('legacy signature test')];
 
       await provider
@@ -401,7 +397,7 @@ describe('BaseProvider', () => {
     });
 
     it('falls back when provider settings are unavailable', async () => {
-      const settings = getSettingsService();
+      const settings = testSettingsService;
       vi.spyOn(settings, 'getProviderSettings').mockReturnValue(
         undefined as never,
       );
@@ -522,7 +518,7 @@ describe('BaseProvider', () => {
       ).mockResolvedValue('oauth-token');
 
       const provider = new TestProvider(config);
-      const settings = getSettingsService();
+      const settings = testSettingsService;
       const runtimeConfig = createRuntimeConfigStub(settings);
       const runtime = createProviderRuntimeContext({
         runtimeId: 'oauth-cache',
@@ -601,7 +597,7 @@ describe('BaseProvider', () => {
 
   describe('Utility Methods', () => {
     it('should correctly identify when non-OAuth auth is available', async () => {
-      const settingsService = getSettingsService();
+      const settingsService = testSettingsService;
       settingsService.set('auth-key', 'settings-key-456');
 
       const config: BaseProviderConfig = {
@@ -634,7 +630,7 @@ describe('BaseProvider', () => {
     });
 
     it('should get correct auth method name', async () => {
-      const settingsService = getSettingsService();
+      const settingsService = testSettingsService;
       settingsService.set('auth-key', 'settings-key-456');
 
       const config: BaseProviderConfig = {
@@ -648,7 +644,7 @@ describe('BaseProvider', () => {
     });
 
     it('should check authentication status correctly', async () => {
-      const settingsService = getSettingsService();
+      const settingsService = testSettingsService;
       settingsService.set('auth-key', 'settings-key-456');
 
       const config: BaseProviderConfig = {
@@ -670,7 +666,7 @@ describe('BaseProvider', () => {
       };
 
       const provider = new TestProvider(config);
-      const settingsService = getSettingsService();
+      const settingsService = testSettingsService;
 
       // When: Update API key through SettingsService
       settingsService.set('auth-key', 'new-key');
@@ -705,7 +701,7 @@ describe('BaseProvider', () => {
         .next();
 
       // Update to use API key via SettingsService
-      const settingsService = getSettingsService();
+      const settingsService = testSettingsService;
       settingsService.set('auth-key', 'new-api-key');
       provider.clearAuthCache();
 
@@ -852,18 +848,15 @@ describe('BaseProvider', () => {
       vi.clearAllMocks();
       originalEnv = { ...process.env };
       delete process.env.TEST_API_KEY;
-      resetSettingsService();
-      registerSettingsService(new SettingsService());
     });
 
     afterEach(() => {
       process.env = originalEnv;
       vi.restoreAllMocks();
-      clearActiveProviderRuntimeContext();
     });
 
     it('strips canonical auth-key from additionalSettings', async () => {
-      const settingsService = getSettingsService();
+      const settingsService = testSettingsService;
       settingsService.setProviderSetting('test', 'auth-key', 'provider-key');
       settingsService.setProviderSetting('test', 'model', 'gpt-4');
       settingsService.setProviderSetting('test', 'enabled', true);
@@ -883,7 +876,7 @@ describe('BaseProvider', () => {
     });
 
     it('strips canonical auth-keyfile from additionalSettings', async () => {
-      const settingsService = getSettingsService();
+      const settingsService = testSettingsService;
       settingsService.setProviderSetting(
         'test',
         'auth-keyfile',
@@ -907,7 +900,7 @@ describe('BaseProvider', () => {
     });
 
     it('strips canonical auth settings from additionalSettings', async () => {
-      const settingsService = getSettingsService();
+      const settingsService = testSettingsService;
       settingsService.setProviderSetting('test', 'auth-key', 'provider-key');
       settingsService.setProviderSetting(
         'test',
@@ -933,7 +926,7 @@ describe('BaseProvider', () => {
     });
 
     it('preserves non-sensitive custom params alongside stripping', async () => {
-      const settingsService = getSettingsService();
+      const settingsService = testSettingsService;
       settingsService.setProviderSetting('test', 'auth-key', 'provider-key');
       settingsService.setProviderSetting('test', 'model', 'gpt-4');
       settingsService.setProviderSetting('test', 'enabled', true);
