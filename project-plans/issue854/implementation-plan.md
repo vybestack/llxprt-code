@@ -33,16 +33,22 @@ protocol with the split-out work on main.
 `JournalCursor` (core recording) iterates raw envelopes chunked,
 offset-addressed, backward/forward, torn-tolerant. Above it, the
 `JournalResolver` (core recording) computes the logical-history fold
-with bounded memory: a forward watermark prepass (last
-`compressed`/`semantic_media_purge` replacement offset, `rewind` cut,
-count fallbacks), then a bounded-window yield of survivors — memory
-O(active window), I/O two sequential passes. Two clients sit on the
-resolver: the CLI projection (`iContentToHistoryItems` + membership
-intervals for badges) and the provider transform (curation →
-normalizer, request-scoped). ReplayEngine is refactored onto the same
-resolver. The UI pager is a third client of the cursor directly
-(physical timeline: scrollback shows every appended record with
-boundary rows; it is NOT the logical fold).
+with an interval-list algorithm: a forward prepass scans EVENTS ONLY
+(content skipped by line length) maintaining survivor seq intervals +
+each interval's first-record offset; `rewind` removes the suffix from
+the cut (count over the dense never-reused seq space, or `cutSeq`),
+`compressed` replaces the entire history with `[summary]` (+
+`topPreserved` head), `semantic_media_purge` is a whole-history
+replacement. Prepass memory is O(mutation events) — never O(content);
+the yield pass seeks interval-to-interval, decoding one bounded window
+at a time (purge payloads via streaming tokenizer, no whole-record
+parse). Two clients sit on the resolver: the CLI projection
+(`iContentToHistoryItems` + membership intervals for badges) and the
+provider transform (curation → normalizer, request-scoped).
+ReplayEngine is refactored onto the same resolver. The UI pager is a
+third client of the cursor directly (physical timeline: scrollback
+shows every appended record with boundary rows; it is NOT the logical
+fold).
 
 ## 2. Delivery order and why
 
@@ -60,7 +66,9 @@ client has run for three phases.
   - API: `open(filePath)`, `pageBack(n)`, `pageForward(n)`, `size()`,
     `windowStart()`, `close()`; 64 KiB chunk reads; MAX_RECORD_BYTES =
     16 MiB assembly bound (records span chunks; `semantic_media_purge`
-    embeds a whole context); line assembly handles UTF-8 multi-byte
+    embeds a whole context); a VALID record exceeding the cap is
+    skipped with a diagnostic (offset+length retained; row renders
+    unavailable; paging continues); line assembly handles UTF-8 multi-byte
     splits, CRLF, BOM; a partial line at read START extends backward
     (continuation, not torn); torn TAIL (crash mid-append) ignored;
     non-content envelopes skipped with offsets retained; group
@@ -90,8 +98,11 @@ client has run for three phases.
     identity; no session-sized lookup.
   - Tests: simultaneous live commit + page-in (no dupes/gaps, keyed by
     identity); multi-row projections from one entry; repeated callIds
-    (retry, last-wins display); legacy unmarked recordings (identity
-    falls back to offset-only); repeated paging stable.
+    (retry, last-wins display); legacy recordings (identity stays
+    (offset, discriminator) for them too — legacy rows only lack the
+    live-correlation metadata, never the discriminator, so one legacy
+    envelope projecting text + group still gets two unique keys);
+    repeated paging stable.
   - Done: row-key collisions impossible by construction (test proves
     uniqueness under adversarial projections).
 - **P02c — ScrollbackPager store (cli `ui/stores/turn`, new + tests)**
@@ -162,15 +173,20 @@ client has run for three phases.
   replacement/removal, rewind, empty→first-add, clear, unmarked
   legacy history; badge flip at boundary events; expander
   pointer-read; purge removes badge state with the row.
-- Done: G3+G4 with membership-exact badges on generated journals.
+- Done: G3+G4 — badges exact on generated journals for
+  compression/rewind/clear cases; interim approximation
+  (density-mutated interior rows) is a DOCUMENTED limitation resolved
+  by P05b1.
 
 ## 5. Phase P04 — print protocol + bounded resume projection
 
 - **P04a — Static print protocol** [F11]
   - Ink `Static` tracks a printed COUNT and slices; a same-length
-    array after prefix removal SKIPS rows. Protocol: append-only
-    print batches handed to Static; eviction only at acknowledged
-    boundaries; remount reprints resident + one-line notice; Ink's
+    array after prefix removal SKIPS rows. Protocol (design 5d rev 3):
+    batches are APPEND-ONLY, never rotated; eviction drops our refs
+    only; a count RESET happens only by remounting a FRESH Static
+    element (post-clear), initialized with resident rows + notice;
+    acknowledgement = the appending render pass completing; Ink's
     bounded static archive (~4 Mi/1024 chunks) counted in budget.
   - Tests (real-Ink lane): append-after-evict prints exactly once;
     identical-length successive batches; batched renders; clear;
@@ -187,12 +203,15 @@ client has run for three phases.
 ## 6. Phase P05 — resolver, durable ops, commit, providers, subagents, flip
 
 - **P05a — JournalResolver (core `recording`, new + tests)** [F4]
-  - Watermark prepass + bounded-window yield (design §5c rev 2).
-    Semantics EXACTLY ReplayEngine's: `compressed` replaces ENTIRE
-    history with `[summary]` (+`topPreserved` head); `rewind` removes
-    content before the cut by count or `cutSeq`;
-    `semantic_media_purge` = whole-history replacement; malformed
-    records / version checks / count fallback preserved.
+  - Interval-list fold (design §5c rev 3): events-only prepass
+    maintaining survivor seq intervals + interval-first offsets;
+    rewind = suffix removal from the cut (count via the dense seq
+    space, or cutSeq) — the adversarial chain append A,B,C → rewind →
+    append D,E → rewind → append F resolves to intervals [A],[D],[F,..];
+    `compressed` = whole-history replacement (+topPreserved head);
+    `semantic_media_purge` = whole-history replacement (payload decoded
+    with a streaming tokenizer — no whole-record parse). Malformed
+    records / version checks / count fallback preserved exactly.
   - ReplayEngine refactored onto the resolver.
   - Tests: property equivalence vs a test-only eager reference on
     seeded generated journals (adversarial rewind/reappend chains,
@@ -221,8 +240,9 @@ client has run for three phases.
     persistence snapshots write from the journal). Callers migrate:
     agents `streamRequestHelpers.getCuratedForProvider`,
     `RuntimeProviderChat`/`RuntimeProvider` `IContent[]` contracts →
-    async-iterable; CLI converter; UI range queries. `contextRangeChanged`
-    first-add fix lands here. Tests: structural audit (below) +
+    async-iterable; CLI converter; UI range queries.     `contextRangeChanged`
+    first-add fix landed earlier (P03 owns it; P05b3 only preserves
+    its tests). Tests: structural audit (below) +
     cardinality tests no-compression AND many-compression.
   - P05b4 provider contracts/transports [F7]: each provider's
     normalizer consumes the stream; where an SDK demands a body array,

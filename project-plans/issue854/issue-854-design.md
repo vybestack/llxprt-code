@@ -163,7 +163,7 @@ Consequences:
   appended into `session-*.jsonl`. The model journal keeps its existing
   writer and format, EXTENDED (5c) with append-only event kinds only
   where live mutations are currently unjournalled — never a second file
-  or content copy. Discovery/janitor/cleanup are untouched (they
+  or content copy. Discovery GLOBS and the janitor are untouched (they
   already glob exactly `session-*.jsonl`).
 - **Scrollback is a view over `session-*.jsonl`.** Conversation-backed
   rows (user, assistant, tool calls/results, compression, rewind, shell)
@@ -199,13 +199,16 @@ functionality loss." The pager scrolls the file itself:
   the read START is not torn, it is the continuation of a record begun
   in the previous chunk; extend the read backward to the line's true
   start, bounded by MAX_RECORD_BYTES (records can span many chunks;
-  `semantic_media_purge` embeds a whole context in ONE record). UTF-8
-  multi-byte splits and CRLF are handled at line assembly. Parse
-  complete lines into records; skip non-content envelopes (metadata,
-  session events) with their offsets retained. The journal is
-  append-only and seq-numbered, so reverse byte order IS reverse
-  chronology. Default CHUNK 64 KiB (tunable); repeat while the
-  viewport's item budget for the page is unmet.
+  `semantic_media_purge` embeds a whole context in ONE record). A
+  VALID record whose assembled length exceeds the 16 MiB cap is
+  skipped with a diagnostic (offset + length retained; the row renders
+  as an unavailable notice; paging continues) — never an abort, never
+  an unbounded allocation. UTF-8 multi-byte splits and CRLF are
+  handled at line assembly. Parse complete lines into records; skip
+  non-content envelopes (metadata, session events) with their offsets
+  retained. The journal is append-only and seq-numbered, so reverse
+  byte order IS reverse chronology. Default CHUNK 64 KiB (tunable);
+  repeat while the viewport's item budget for the page is unmet.
 - `pageForward(n)`: symmetric, reading forward from `windowEnd`.
 - File size via `stat()` gives the timeline's byte extent for the
   scrollbar: position = `windowStart / fileSize`, byte-proportional. No
@@ -242,28 +245,34 @@ Data model:
 Residency rules:
 
 - Always resident: pending/live items of the current turn.
-- Resident window: viewport ± margin (margin: 2 viewport heights),
-  subject to a byte/item budget (proposal: keep `ui.historyMaxBytes` /
-  `ui.historyMaxItems` as the budget knobs, retargeted from "display trim" to
-  "resident window"; docs update required).
-- At bottom (steady state): anything with `cseq < contextWindow.firstSeq` is
-  evicted immediately when not visible. This is the issue's "trim anything not
-  in HistoryService" rule.
+- Resident window: viewport ± margin (`ui.scrollbackMarginViewports`,
+  default 2 viewport heights), with a byte floor
+  (`ui.scrollbackByteFloorKiB`, default 256) governing the OFF-SCREEN
+  margin only. A row inside the viewport is ALWAYS resident, however
+  large (oversized-visible-row guarantee) — the floor can never evict
+  a visible row. The legacy `ui.historyMaxBytes`/`ui.historyMaxItems`
+  display-trim knobs are RETIRED from pager policy (section 8).
+- At bottom (steady state): anything with `cseq < contextWindow.firstSeq`
+  is evicted immediately when not visible. This is the issue's "trim
+  anything not in HistoryService" rule.
 - Scroll-back beyond the window start: async `pageBack` chunk-reads the
   file before the window via the cursor and converts records with the
   replay converter; a transient loading state renders meanwhile. Loaded
   sub-context items are the transient peek.
 - Scroll-forward / return to bottom: transient peek pages that left the
   viewport are purged (debounced ~1–2s after scrolling stops), sub-context
-  items first.
-- Hard budget: evict from the far end of the window regardless of context
-  state.
+  items first. Visible peek rows are never evicted by compression-range
+  changes; only non-visible below-floor rows are.
+- Hard budget: evict from the far (off-screen) end of the window,
+  respecting the oversized-visible-row guarantee above.
 
-Feedback loop: `VirtualizedList`'s `useViewportRange` already computes
-`startIndex..endIndex`; add an `onViewportRangeChanged` callback up to the
-pager. The data array the list maps over becomes slots, and unloaded slots
-render as spacer boxes, which is what the top/bottom spacer mechanism already
-does for off-window rows.
+Viewport feedback: the pager renders through its OWN window component
+(P02d) implementing a measurement contract — identity-anchored slots,
+placeholder/clamping at floor and EOF, key/wheel/drag handling,
+in-viewport heights only. It does NOT feed slots into `VirtualizedList`
+(that component's positional `heights`/`offsets` arrays and its
+`useViewportRange` callback wiring are the mechanism the pager
+replaces, per section 5d).
 
 ### 4. ContextRangeProvider — small core addition
 
@@ -288,8 +297,8 @@ getContextSummaries(): Array<{
 Event: `contextRangeChanged` emitted after `replaceAll` (compression),
 `commitHistoryMutation` (rewind/clear/restore), and first entry add —
 the code today deliberately skips the single-entry add case
-(HistoryServiceCore); making the event match this contract is P05b
-work. The UI
+(HistoryServiceCore); the fix lands in P03 (marking needs it when
+history goes empty→first). The UI
 already has subscription patterns (`useTokenMetricsTracking`,
 `RecordingIntegration` service-swap handling).
 
@@ -433,15 +442,23 @@ to every provider call. Compression's `replaceAll` array swap also dies
   yielded" rows retractable, so resolution is layered (the plan's
   `JournalCursor` → logical-history resolver → provider transformer):
   1. raw envelope iteration (JournalCursor, chunked, offset-addressed);
-  2. logical-history resolution with BOUNDED memory: a forward prepass
-     computes final watermarks only (offset of last `compressed` /
-     `semantic_media_purge` replacement, `rewind` cut point, count
-     fallbacks), then a bounded window yields the surviving records —
-     `compressed` REPLACES THE ENTIRE HISTORY with `[summary]` (preserved
-     head via `topPreserved`), `rewind` removes content BEFORE the cut
-     by count or `cutSeq`, `semantic_media_purge` is a whole-history
-     replacement; memory is O(active window) + watermarks, never
-     O(history); I/O is two sequential passes over the in-context region;
+  2. logical-history resolution with BOUNDED memory — an
+     interval-list fold: a forward prepass scans EVENTS ONLY (content
+     payloads skipped by line length), maintaining survivor SEQ
+     INTERVALS + the byte offset of each interval's first record.
+     `rewind` removes the SUFFIX from the cut (by count over the dense,
+     never-reused chronology seq space, or by `cutSeq`); `compressed`
+     REPLACES THE ENTIRE HISTORY with `[summary]` (+ preserved head via
+     `topPreserved`); `semantic_media_purge` is a whole-history
+     replacement. Prepass memory is O(mutation events) — interval
+     endpoints and offsets, m = rewinds+compressions — never O(content
+     records); intervals are also retained as the membership projection
+     (section 5). The yield pass then reads only the surviving
+     intervals in order, seeking interval-to-interval (non-survivor
+     byte ranges are skipped, not read), decoding one bounded window at
+     a time. Purge payloads are decoded with a streaming tokenizer, not
+     a whole-record parse. I/O = one events-only pass + the surviving
+     bytes;
   3. provider transformation: curation + normalizer per provider,
      request-scoped (see honesty note below). Tool callId→group joins
      happen in the CLI/UI projection layer, not in the fold.
@@ -560,11 +577,16 @@ giant ass tree that never leaves memory?" Answer, from the code:
   a BOUNDED archive of static-output chunks (verified in the installed
   dependency: up to ~4 Mi code units / 1024 chunks in `ink.js`) —
   bounded, counted against the memory budget, not a leak. Our side
-  keeps nothing per printed row; the exactly-once print protocol
-  (append-only batches handed to `Static`, eviction only at
-  acknowledged print boundaries — `Static` tracks a printed COUNT, so
-  a same-length array after prefix removal would SKIP rows) is P04
-  work.
+  keeps nothing per printed row. Exactly-once print protocol (P04a):
+  batch lists handed to `Static` are APPEND-ONLY (never mutated, never
+  prefix-trimmed — `Static` tracks a printed COUNT and slices from it,
+  so a same-length array after prefix removal would SKIP rows); there
+  is NO batch rotation — eviction drops OUR references while `Static`
+  keeps its printed count; a count RESET happens only by remounting a
+  FRESH `Static` element (post-clear `refreshStatic`), whose initial
+  items are the resident rows plus the one-line notice; acknowledgement
+  = the render pass that appended the batch completing (asserted in
+  real-Ink tests by printed bytes, not ledger counts).
 - **Pending rows:** the live turn's partial items — O(current turn),
   transient, serialized at commit.
 - **Net:** the process's transcript-related working set is viewport +
@@ -716,8 +738,10 @@ Buffer modes:
 ## Test strategy sketch (bun, behavioral)
 
 - Cursor: chunked reverse read equals full-parse reversal (property test
-  over generated journals); torn head/tail lines ignored; group pair split
-  across a chunk boundary re-joined; pageBack stops at the context floor.
+  over generated journals); torn tail ignored, head continuation
+  reassembled; group pair split across a chunk boundary re-joined;
+  pageBack stops at the VISIBILITY floor (last `clear` boundary or file
+  start); oversized-record skip-with-diagnostic.
 - Index: torn-tail repair, page reads at UTF-8 boundaries.
 - Pager: residency invariants (visible ∪ live always resident; sub-context
   floor at bottom), pageIn/pageOut correctness, budget enforcement, debounce
