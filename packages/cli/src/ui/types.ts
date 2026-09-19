@@ -14,6 +14,7 @@ import {
   type SkillSource,
   type HookRegistryEntry,
 } from '@vybestack/llxprt-code-core';
+import type { RowIdentity } from './utils/rowIdentity.js';
 
 export type { SkillDefinition, SkillSource };
 
@@ -112,6 +113,16 @@ export interface HistoryItemBase {
    * @requirement REQ-854-003
    */
   seqSpan?: readonly [number, number];
+  /**
+   * Stable slot identity for the row: (journal envelope byte offset,
+   * projection discriminator), (legacy local index, discriminator) when the
+   * record has no journal offset, or a pending identity for live rows not yet
+   * committed. Memory-only data (ruling 2) — never persisted.
+   *
+   * @plan PLAN-20260917-ISSUE854.P02b
+   * @requirement G5
+   */
+  rowIdentity?: RowIdentity;
 }
 
 export type HistoryItemUser = HistoryItemBase & {

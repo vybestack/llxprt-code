@@ -26,6 +26,7 @@ import {
   boundResultDisplayForRetention,
   stringifyForDisplayDetailed,
 } from './toolResultRetention.js';
+import { rowIdentity, type RowSource } from './rowIdentity.js';
 
 const NEWLINE = String.fromCharCode(10);
 
@@ -146,7 +147,13 @@ export function filterHistoryItems(
         : [];
     if (result.blocked) {
       return [
-        { type: MessageType.ERROR, text: EMOJI_BLOCKED_ERROR_TEXT },
+        {
+          type: MessageType.ERROR,
+          text: EMOJI_BLOCKED_ERROR_TEXT,
+          ...(model.rowIdentity !== undefined
+            ? { rowIdentity: model.rowIdentity }
+            : {}),
+        },
         ...feedback,
       ];
     }
@@ -269,6 +276,7 @@ function processAiContent(
   content: IContent,
   responseMap: Map<string, ToolResponseLookup>,
   items: HistoryItemWithoutId[],
+  source: RowSource,
 ): void {
   const segments: MarkdownSegment[] = [];
   const thinkingBlocks: ThinkingBlock[] = [];
@@ -305,6 +313,7 @@ function processAiContent(
       model: content.metadata?.model,
       ...(entrySeq !== undefined ? { chronologySeq: entrySeq } : {}),
       ...(thinkingBlocks.length > 0 ? { thinkingBlocks } : {}),
+      rowIdentity: rowIdentity(source, 'text'),
     });
   }
 
@@ -340,8 +349,31 @@ function processAiContent(
       type: 'tool_group',
       tools,
       ...(seqSpan !== undefined ? { seqSpan } : {}),
+      rowIdentity: rowIdentity(source, 'toolGroup'),
     });
   }
+}
+
+/**
+ * Per-record journal provenance for the conversion, parallel to the input
+ * array. Records without an offset fall back to (legacy local index,
+ * discriminator) identities, so legacy sessions still get stable keys.
+ *
+ * @plan PLAN-20260917-ISSUE854.P02b
+ * @requirement G5
+ */
+export interface ProjectionSources {
+  readonly envelopeOffsets?: ReadonlyArray<number | undefined>;
+}
+
+function rowSourceFor(
+  sources: ProjectionSources | undefined,
+  index: number,
+): RowSource {
+  const offset = sources?.envelopeOffsets?.[index];
+  return typeof offset === 'number'
+    ? { kind: 'journal', offset }
+    : { kind: 'legacy', index };
 }
 
 /**
@@ -357,20 +389,28 @@ function processAiContent(
  * warn-mode feedback is appended as an info item. User-authored text replays
  * verbatim.
  *
+ * Each projected row carries a stable {@link RowIdentity} derived from its
+ * source envelope offset (or legacy batch index) plus a projection
+ * discriminator, so rows keep their slot across regeneration and paging.
+ *
  * @param emojiFilterModeOverride The resolved filter mode; defaults to
  *   'auto'. Pass `'allowed'` (or `resolveEmojiFilterMode`'s output) to
  *   honor the current setting.
+ * @param sources Journal envelope offsets per record; omitted records fall
+ *   back to legacy index identities.
  */
 export function iContentToHistoryItems(
   contents: IContent[],
   emojiFilterModeOverride?: EmojiFilterMode,
+  sources?: ProjectionSources,
 ): HistoryItem[] {
   const filter = createEmojiFilter(emojiFilterModeOverride);
   const items: HistoryItemWithoutId[] = [];
 
   const responseMap = buildResponseMap(contents);
 
-  for (const content of contents) {
+  for (const [index, content] of contents.entries()) {
+    const source = rowSourceFor(sources, index);
     if (content.speaker === 'human') {
       const text = content.blocks
         .filter((b): b is TextBlock => b.type === 'text')
@@ -383,13 +423,14 @@ export function iContentToHistoryItems(
           ...(content.metadata?.chronology?.seq !== undefined
             ? { chronologySeq: content.metadata.chronology.seq }
             : {}),
+          rowIdentity: rowIdentity(source, 'text'),
         });
       }
       continue;
     }
 
     if (content.speaker === 'ai') {
-      processAiContent(content, responseMap, items);
+      processAiContent(content, responseMap, items, source);
     }
   }
 
