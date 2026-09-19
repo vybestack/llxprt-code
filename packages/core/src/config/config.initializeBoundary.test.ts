@@ -30,7 +30,6 @@ import {
   buildContentGeneratorMockBody,
   buildTelemetryMockBody,
   buildGitServiceMockBody,
-  buildSettingsMockBody,
   buildIdeIntegrationMockBody,
   buildMemoryDiscoveryMockBody,
   buildEventsMockBody,
@@ -40,7 +39,7 @@ import {
   type HoistedConfigMocks,
 } from './configTestHarness.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
-import { getSettingsService } from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const hoistedConfigMocks = {
   loadJitSubdirectoryMemory: vi.fn(),
@@ -69,8 +68,6 @@ void vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
 
 void vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
 
-void vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
-
 const __actual4 = {
   ...(await import('@vybestack/llxprt-code-ide-integration')),
 };
@@ -90,12 +87,12 @@ void vi.mock('../utils/events.js', () =>
 void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
 
 describe('Config.initialize / ensureInitialized boundary provenance (Finding 4)', () => {
-  let settingsService: ReturnType<typeof getSettingsService>;
+  let settingsService: SettingsService;
   let baseParams: ConfigParameters;
 
   beforeEach(() => {
     resetAgentClientMock();
-    settingsService = getSettingsService();
+    settingsService = new SettingsService();
     baseParams = createBaseParams(settingsService);
   });
 

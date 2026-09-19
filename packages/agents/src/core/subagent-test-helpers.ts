@@ -23,11 +23,7 @@ import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config
 import { StreamEventType } from './chatSession.js';
 import { type ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  type ProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type {
   AgentRuntimeContext,
   AgentRuntimeProviderAdapter,
@@ -95,10 +91,9 @@ type ToolRegistryMethodOverrides = Partial<
 export async function createMockConfig(
   toolRegistryMethods: ToolRegistryMethodOverrides = {},
 ): Promise<{ config: Config; toolRegistry: ToolRegistry }> {
+  // The settings service flows explicitly through ConfigParameters (issue
+  // #2616: no ambient runtime context install).
   const settingsService = new SettingsService();
-  setActiveProviderRuntimeContext(
-    createProviderRuntimeContext({ settingsService }),
-  );
   const configParams: ConfigParameters = {
     sessionId: 'test-session',
     model: 'gemini-2.5-pro',

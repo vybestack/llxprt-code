@@ -12,15 +12,11 @@
  * packages as peers (the blessed plugin -> host direction).
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
 import { LoggingProviderWrapper } from '@vybestack/llxprt-code-providers/LoggingProviderWrapper.js';
 import { OpenAIProvider } from '@vybestack/llxprt-code-providers/openai/OpenAIProvider.js';
-import {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { makeFakeConfig } from '@vybestack/llxprt-code-core/test-utils/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
@@ -33,15 +29,10 @@ describe('gemini token tracking', () => {
       settingsService: new SettingsService(),
       runtimeId: 'gemini-token-tracking',
     });
-    setActiveProviderRuntimeContext(runtime);
     // Config first so registerProvider applies the production wrapping,
     // matching the setup used by ProviderManager.gemini-switch.test.ts.
     manager = new ProviderManager(runtime);
     manager.setConfig(makeFakeConfig());
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   describe('ProviderManager session token accumulation', () => {

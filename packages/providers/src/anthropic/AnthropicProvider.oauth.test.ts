@@ -7,10 +7,9 @@
  * Split from AnthropicProvider.test.ts for max-lines compliance.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { sanitizeBlockForCacheControl } from './AnthropicRequestBuilder.js';
@@ -142,9 +141,6 @@ describe('AnthropicProvider', () => {
     runtimeContext = setup.runtimeContext;
   });
 
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
   describe('OAuth Compatibility', () => {
     it('should prefix tool names with llxprt_ for OAuth requests', async () => {
       // Create provider with OAuth token

@@ -4,17 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import type { Settings } from './settings.js';
 import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 import { ExtensionStorage } from './extension.js';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core';
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
 void vi.mock('@vybestack/llxprt-code-core', () => ({
@@ -28,13 +23,8 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
 describe('loadCliConfig provider alias model bootstrap', () => {
   const originalArgv = process.argv;
 
-  beforeEach(() => {
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
-  });
-
   afterEach(() => {
     process.argv = originalArgv;
-    clearActiveProviderRuntimeContext();
   });
 
   it('uses kimi alias defaultModel when --provider kimi is set and no --model is provided', async () => {

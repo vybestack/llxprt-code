@@ -76,6 +76,7 @@ async function buildLightweightSystemPrompt(
     mcpInstructions,
     model,
     provider: provider ?? resolveProviderForSystemPrompt(config),
+    settings: config.getSettingsService(),
     includeSubagentDelegation,
     tools: enabledToolNames,
     interactionMode: config.isInteractive() ? 'interactive' : 'non-interactive',

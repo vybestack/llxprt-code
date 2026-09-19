@@ -15,7 +15,6 @@ import { createIsolatedRuntimeContext } from '@vybestack/llxprt-code-providers/r
 import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime.js';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
-import { activateSettingsRuntimeContext } from '@vybestack/llxprt-code-core';
 import type { FromConfigOptions } from './config-types.js';
 import { FromConfigValidatableSchema } from './config-types.js';
 import type { Agent } from './agent.js';
@@ -110,11 +109,8 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
     const sharedSettingsService = handle.settingsService;
 
     // @plan:PLAN-20270110-ISSUE2378.P02 @requirement:REQ-2378-002
-    // Bind the settings runtime context to the adopted Config's SettingsService.
-    activateSettingsRuntimeContext(sharedSettingsService, runtimeId, {
-      config,
-      metadata: { source: 'fromConfig' },
-    });
+    // The adopted Config's SettingsService is carried by the isolated runtime
+    // handle; every consumer below reads it from that explicit owner.
 
     // The caller built this Config, so it may not have wired the hook that
     // lets core build the skill activation tool (issue #2417 forbids core

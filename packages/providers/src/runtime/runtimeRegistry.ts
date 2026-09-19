@@ -25,11 +25,9 @@
 import {
   type Config,
   DebugLogger,
-  peekActiveProviderRuntimeContext,
   type RuntimeProviderManager,
   type RuntimeAuthScopeFlushResult,
 } from '@vybestack/llxprt-code-core';
-import { clearSettingsProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import type {
   SettingsService,
   ProfileManager,
@@ -301,10 +299,9 @@ export function requireRuntimeEntry(runtimeId: string): RuntimeRegistryEntry {
 
   const registeredIds = Array.from(runtimeRegistry.keys());
   const scope = getCurrentRuntimeScope();
-  const activeCtx = peekActiveProviderRuntimeContext();
   logger.debug(
     () =>
-      `[requireRuntimeEntry] MISS for runtimeId=${runtimeId}; registered=[${registeredIds.join(', ')}]; scope=${JSON.stringify(scope)}; activeCtx.runtimeId=${activeCtx?.runtimeId}`,
+      `[requireRuntimeEntry] MISS for runtimeId=${runtimeId}; registered=[${registeredIds.join(', ')}]; scope=${JSON.stringify(scope)}`,
   );
 
   const hint =
@@ -402,11 +399,6 @@ export function disposeCliRuntimeRegistration(
   const removedEntry = runtimeRegistry.get(runtimeId);
   runtimeRegistry.delete(runtimeId);
 
-  const activeContext = peekActiveProviderRuntimeContext();
-  if (activeContext?.runtimeId === runtimeId) {
-    clearSettingsProviderRuntimeContext();
-  }
-
   const defaultEntry = defaultCliRuntimeId
     ? runtimeRegistry.get(defaultCliRuntimeId)
     : undefined;
@@ -435,6 +427,5 @@ export function disposeCliRuntimeRegistration(
 export function resetCliRuntimeRegistryForTesting(): void {
   runtimeRegistry.clear();
   resetDefaultCliRuntimeIdForTesting();
-  clearSettingsProviderRuntimeContext();
   resetProviderManager();
 }

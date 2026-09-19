@@ -38,7 +38,7 @@ const mockReadFile = mock(actualReadFile);
 
 await mock.module('node:fs/promises', () => {
   const actual = localRequire('node:fs/promises') as typeof FsPromises;
-  return { ...actual, readFile: mockReadFile };
+  return { default: actual, ...actual, readFile: mockReadFile };
 });
 
 async function captureRejection(

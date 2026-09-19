@@ -46,7 +46,6 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import type {
   GenerateChatOptions,
@@ -171,7 +170,6 @@ function createTestFixture(provider: IProvider): TestFixture {
     ...runtimeSetup.runtime,
     config: mockConfig,
   };
-  providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
 
   if (
     'projectPromptEnvelope' in provider &&
@@ -234,9 +232,7 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
-    providerRuntime.setActiveProviderRuntimeContext(null);
-  });
+  afterEach(() => {});
 
   it('A7: produces a pre-send estimate at the final send seam (non-streaming)', async () => {
     const { provider } = createEstimatingProvider();

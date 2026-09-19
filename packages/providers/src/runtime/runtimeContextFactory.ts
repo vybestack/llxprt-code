@@ -24,19 +24,16 @@ import {
 } from '@vybestack/llxprt-code-core';
 import {
   Config,
+  createProviderRuntimeContext,
   flushRuntimeAuthScope,
-  peekActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
 import {
-  clearSettingsProviderRuntimeContext,
-  createSettingsProviderRuntimeContext,
-  resolveRuntimeSettingsService,
-} from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
-import { ProfileManager } from '@vybestack/llxprt-code-settings';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+  ProfileManager,
+  SettingsService,
+} from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '../ProviderManager.js';
 import { OAuthManager, createTokenStore } from '../auth/index.js';
 import { validateRuntimeId } from './runtimeIdValidation.js';
@@ -327,6 +324,7 @@ function resolveRuntimeConfig(
 function resolveOAuthManager(
   sessionMessageBus: MessageBus,
   optionsOAuthManager: OAuthManager | undefined,
+  config: Config,
 ): OAuthManager {
   // @plan:PLAN-20250214-CREDPROXY.P33
   const tokenStore =
@@ -339,6 +337,7 @@ function resolveOAuthManager(
   const oauthSettings = createFileOAuthSettingsProvider();
   const oauthManager = new OAuthManager(tokenStore, oauthSettings, {
     messageBus: sessionMessageBus,
+    config,
   });
   registerStandardOAuthProviders(oauthManager, tokenStore);
   return oauthManager;
@@ -390,7 +389,7 @@ function buildActivateClosure(
     enterRuntimeScope(scope);
 
     await runWithRuntimeScope(scope, async () => {
-      const scopedRuntime = createSettingsProviderRuntimeContext({
+      const scopedRuntime = createProviderRuntimeContext({
         settingsService: resolvedSettingsService,
         config,
         runtimeId: state.currentRuntimeId,
@@ -470,10 +469,6 @@ function buildCleanupClosure(
           bindings.resetInfrastructure(state.currentRuntimeId),
         );
       }
-      const activeContext = peekActiveProviderRuntimeContext();
-      if (activeContext?.runtimeId === state.currentRuntimeId) {
-        clearSettingsProviderRuntimeContext();
-      }
 
       const revocation: RuntimeAuthScopeFlushResult = flushRuntimeAuthScope(
         state.currentRuntimeId,
@@ -525,12 +520,15 @@ export function createIsolatedRuntimeContext(
     ...(options.metadata ?? {}),
   };
   // Single resolution path (#2534 C6): resolve the settings service exactly
-  // once. When the caller supplies a config its service wins; otherwise the
-  // runtime settings resolution provides it, and the built config carries
-  // the same instance — no second read back out of the config.
+  // once. When the caller supplies a config its service wins; otherwise an
+  // explicitly provided service is used, and a caller supplying neither
+  // receives a locally constructed one at this composition site — no
+  // ambient read (issue #2616). The built config carries the same instance
+  // — no second read back out of the config.
   const settingsService =
     options.config?.getSettingsService() ??
-    resolveRuntimeSettingsService(options.settingsService);
+    options.settingsService ??
+    new SettingsService();
 
   const config = resolveRuntimeConfig(options, runtimeId, settingsService);
   // @plan:PLAN-20260617-COREAPI.P15
@@ -543,9 +541,10 @@ export function createIsolatedRuntimeContext(
   const oauthManager = resolveOAuthManager(
     sessionMessageBus,
     options.oauthManager,
+    config,
   );
 
-  const initialRuntimeContext = createSettingsProviderRuntimeContext({
+  const initialRuntimeContext = createProviderRuntimeContext({
     settingsService,
     config,
     runtimeId,

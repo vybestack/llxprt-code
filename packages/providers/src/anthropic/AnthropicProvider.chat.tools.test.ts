@@ -8,8 +8,7 @@
  */
 
 import { assertDefined } from '@vybestack/llxprt-code-test-utils';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   setupAnthropicProvider,
@@ -142,9 +141,6 @@ describe('AnthropicProvider tool payload handling', () => {
     buildCallOptions = setup.buildCallOptions;
   });
 
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
   describe('generateChatCompletion', () => {
     it('should sanitize tool_use IDs to be Anthropic-compatible', async () => {
       settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
