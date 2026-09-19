@@ -761,7 +761,7 @@ describe('connectToMcpServer with OAuth', () => {
 
       await expect(
         connectTestServer({ url: SSE_DEPRECATED_URL, type: 'sse' }),
-      ).rejects.toThrow(/https:\/\/mcp\.test-server\.com\/mcp/);
+      ).rejects.toThrow('https://mcp.test-server.com/mcp');
     });
 
     it('should recommend streamable-http type in the error', async () => {

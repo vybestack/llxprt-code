@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 import { SecureInputHandler } from './secureInputHandler.js';
 import * as os from 'os';
 import * as path from 'path';
-import { writeFileSync } from 'fs';
+import { mkdtempSync, writeFileSync } from 'fs';
 import { testRegex } from '../../__tests__/regex.js';
 
 function serializeRegexGroups(match: RegExpMatchArray | null): string[] | null {
@@ -332,8 +332,9 @@ describe('SecureInputHandler', () => {
         null,
         2,
       );
-      // Use os.tmpdir() for cross-platform temp directory
-      const tmpPath = path.join(os.tmpdir(), 'cr-debug.json');
+      // Unique temp dir avoids predictable-path collisions across sessions
+      const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'llxprt-cr-debug-'));
+      const tmpPath = path.join(tmpDir, 'cr-debug.json');
       writeFileSync(tmpPath, debugOutput);
 
       // Expectations
