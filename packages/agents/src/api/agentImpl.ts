@@ -254,8 +254,9 @@ export class AgentImpl implements Agent {
   /**
    * The Config-owned AgentClient (the eager post-auth client refreshAuth
    * created). Captured at construction so the T13 disposal probe observes its
-   * `_unsubscribe` handle transition `function → undefined` after config.dispose()
-   * disposes it (dispose.md line 60). The SAME instance dispose() tears down.
+   * `handleModelChanged` handler leaving the coreEvents emitter after
+   * config.dispose() disposes it (dispose.md line 60). The SAME instance
+   * dispose() tears down.
    * @plan:PLAN-20260617-COREAPI.P24
    * @requirement:REQ-016
    */
@@ -1364,7 +1365,7 @@ export class AgentImpl implements Agent {
     await this.safe(errors, () => this.deps.runtimeHandle.cleanup());
 
     // @pseudocode dispose.md 60: config.dispose() disposes agentClient
-    // (_unsubscribe → undefined) and stops mcpClientManager.
+    // (removes its coreEvents handlers) and stops mcpClientManager.
     // @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001.3
     // SKIP when the Config is caller-owned (fromConfig): the caller retains the
     // Config lifecycle and disposes it. An agent-owned Config (createAgent) is

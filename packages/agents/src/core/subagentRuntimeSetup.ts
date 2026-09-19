@@ -842,6 +842,7 @@ async function buildSystemInstruction(
     mcpInstructions,
     model: modelConfig.model,
     provider,
+    settings: config.getSettingsService(),
     tools: toolNames,
     includeSubagentDelegation: false,
     interactionMode: 'subagent',

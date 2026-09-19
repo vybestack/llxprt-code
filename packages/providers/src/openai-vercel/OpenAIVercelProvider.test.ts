@@ -24,10 +24,6 @@ import type { IProvider } from '../IProvider.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import { createProviderWithRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -430,7 +426,6 @@ describe('Authentication (REQ-OAV-003)', () => {
   afterEach(() => {
     // Restore original environment
     process.env = originalEnv;
-    clearActiveProviderRuntimeContext();
   });
 
   describe('API Key via Constructor', () => {
@@ -442,8 +437,6 @@ describe('Authentication (REQ-OAV-003)', () => {
           settingsService,
         },
       );
-
-      setActiveProviderRuntimeContext(runtime);
 
       const token = await provider.getAuthToken();
       expect(token).toBe('constructor-api-key');
@@ -458,8 +451,6 @@ describe('Authentication (REQ-OAV-003)', () => {
         settingsService,
       });
 
-      setActiveProviderRuntimeContext(runtime);
-
       const token = await provider.getAuthToken();
       expect(token).toBe('env-api-key');
     });
@@ -468,8 +459,6 @@ describe('Authentication (REQ-OAV-003)', () => {
       const provider = new OpenAIVercelProvider(undefined, undefined, {
         settingsService,
       });
-
-      setActiveProviderRuntimeContext(runtime);
 
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
@@ -506,8 +495,6 @@ describe('Authentication (REQ-OAV-003)', () => {
         settingsService,
       });
 
-      setActiveProviderRuntimeContext(runtime);
-
       const token = await provider.getAuthToken();
       expect(token).toBe('constructor-key');
     });
@@ -527,8 +514,6 @@ describe('Authentication (REQ-OAV-003)', () => {
           settingsService,
         },
       );
-
-      setActiveProviderRuntimeContext(runtime);
 
       const token = await provider.getAuthToken();
       expect(token).toBe('constructor-api-key');
@@ -554,7 +539,6 @@ describe('Authentication (REQ-OAV-003)', () => {
       });
 
       provider.setRuntimeSettingsService(settingsService);
-      setActiveProviderRuntimeContext(runtime);
 
       const token = await provider.getAuthToken();
       expect(token).toBe('keyfile-api-key'); // Provider keyfile overrides env per precedence (provider, constructor, global, env, OAuth)
@@ -566,8 +550,6 @@ describe('Authentication (REQ-OAV-003)', () => {
       const provider = new OpenAIVercelProvider(undefined, undefined, {
         settingsService,
       });
-
-      setActiveProviderRuntimeContext(runtime);
 
       const token = await provider.getAuthToken();
       expect(token).toBe('env-api-key');
@@ -610,8 +592,6 @@ describe('Authentication (REQ-OAV-003)', () => {
         settingsService,
       });
 
-      setActiveProviderRuntimeContext(runtime);
-
       const isAuthenticated = await provider.hasNonOAuthAuthentication();
       expect(isAuthenticated).toBe(true);
     });
@@ -622,8 +602,6 @@ describe('Authentication (REQ-OAV-003)', () => {
       const provider = new OpenAIVercelProvider('test-api-key', undefined, {
         settingsService,
       });
-
-      setActiveProviderRuntimeContext(runtime);
 
       // Verify the provider has access to authentication methods
       expect(typeof provider.hasNonOAuthAuthentication).toBe('function');
@@ -637,8 +615,6 @@ describe('Authentication (REQ-OAV-003)', () => {
         settingsService,
       });
 
-      setActiveProviderRuntimeContext(runtime);
-
       const isAuthenticated = await provider.hasNonOAuthAuthentication();
       expect(isAuthenticated).toBe(true);
     });
@@ -647,8 +623,6 @@ describe('Authentication (REQ-OAV-003)', () => {
       const provider = new OpenAIVercelProvider(undefined, undefined, {
         settingsService,
       });
-
-      setActiveProviderRuntimeContext(runtime);
 
       const isAuthenticated = await provider.hasNonOAuthAuthentication();
       expect(isAuthenticated).toBe(false);

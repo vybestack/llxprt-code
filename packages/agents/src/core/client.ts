@@ -38,7 +38,6 @@ import { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complex
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { subscribeToAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { BaseLLMClient } from './baseLlmClient.js';
 import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
 
@@ -116,7 +115,6 @@ export class AgentClient implements AgentClientContract {
    */
   private readonly runtimeState: AgentRuntimeState;
   private _historyService?: HistoryService;
-  private _unsubscribe?: () => void;
 
   /**
    * BaseLLMClient for stateless utility operations (generateJson, embeddings, etc.)
@@ -155,15 +153,7 @@ export class AgentClient implements AgentClientContract {
     this._historyService = historyService;
     this.logger = new DebugLogger('llxprt:core:client');
 
-    this._unsubscribe = subscribeToAgentRuntimeState(
-      runtimeState.runtimeId,
-      (event) => {
-        this.logger.debug('Runtime state changed', event);
-      },
-    );
-
     void this._historyService;
-    void this._unsubscribe;
 
     const proxyUrl = runtimeState.proxyUrl;
     if (proxyUrl) {
@@ -295,14 +285,6 @@ export class AgentClient implements AgentClientContract {
       );
     } catch (error: unknown) {
       failures.push(error);
-    }
-    if (this._unsubscribe) {
-      try {
-        this._unsubscribe();
-        this._unsubscribe = undefined;
-      } catch (error: unknown) {
-        failures.push(error);
-      }
     }
     const hasChatHistoryMedia = this._previousHistory?.some((content) =>
       content.blocks.some(

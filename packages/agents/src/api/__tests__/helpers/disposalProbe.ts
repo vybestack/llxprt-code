@@ -36,6 +36,10 @@
  */
 
 import type { Agent } from '@vybestack/llxprt-code-agents';
+import {
+  coreEvents,
+  CoreEvent,
+} from '@vybestack/llxprt-code-core/utils/events.js';
 
 // ─── Internal record narrowing (cast-exempt in the helper) ──────────────────
 
@@ -133,35 +137,38 @@ function readField(rec: RecordLike, key: string): unknown {
 // real flipped `true`.
 
 /**
- * Reads the agentClient disposed state by observing the GENUINE state
- * transition of its runtime-subscription handle. The real `AgentClient`
- * constructor (client.ts:146) sets `this._unsubscribe =
- * subscribeToAgentRuntimeState(...)` (a function). `AgentClient.dispose()`
- * (client.ts:263-265) calls `this._unsubscribe()` then sets
- * `this._unsubscribe = undefined`. There is NO `disposed`/`isDisposed` boolean
- * on AgentClient — the genuine observable is the `_unsubscribe` handle
- * transitioning `function → undefined`.
+ * Reads the agentClient disposed state by observing the GENUINE
+ * listener-membership transition of its model-change handler. The real
+ * `AgentClient` constructor (client.ts) registers
+ * `coreEvents.on(CoreEvent.ModelChanged, this.handleModelChanged)` (plus the
+ * ModelProfileChanged twin) and `AgentClient.dispose()` unconditionally calls
+ * the matching `coreEvents.off(...)` for both. There is NO
+ * `disposed`/`isDisposed` boolean on AgentClient — the genuine observable is
+ * the handler reference (an instance arrow-function field, stable across
+ * dispose) being present in `coreEvents.listeners(CoreEvent.ModelChanged)`
+ * before dispose and absent after.
  *
- * This reader returns `true` when `_unsubscribe` is `undefined` (disposed) and
- * `false` when it is a `function` (still subscribed). The headless fake client
- * IS constructed by Config.refreshAuth and its constructor DOES set
- * `_unsubscribe` (client.ts:146), so the pre-dispose state is genuinely
- * "subscribed" (function) and the post-dispose state is genuinely
- * "unsubscribed" (undefined) — a real transition, not undefined→undefined.
- *
- * GREEN: client.ts:146 sets `_unsubscribe` (function); client.ts:263-265 sets
- * `_unsubscribe = undefined` on dispose.
+ * This reader returns `true` when the captured client's handler is no longer
+ * registered (disposed) and `false` while it is still registered (alive).
+ * The headless fake client IS constructed by Config.refreshAuth and its
+ * constructor DOES register the handler, so the pre-dispose state is genuinely
+ * "registered" and the post-dispose state is genuinely "removed" — a real
+ * transition. Handler references are per-instance, so coexisting clients in
+ * one spec observe independently.
  */
 export function agentClientDisposed(probe: DisposalProbe): boolean {
   const client = asRecord(probe.agentClient);
   if (client === null) {
     return false;
   }
-  const unsub = client['_unsubscribe'];
-  // GREEN: client.ts:263-265 sets `_unsubscribe = undefined` on dispose.
-  // Pre-dispose (client.ts:146): `_unsubscribe` is a function → false.
-  // Post-dispose: `_unsubscribe` is undefined → true.
-  return unsub === undefined;
+  const handler = client['handleModelChanged'];
+  if (typeof handler !== 'function') {
+    return false;
+  }
+  const listeners = coreEvents.listeners(CoreEvent.ModelChanged);
+  // Pre-dispose: the constructor-registered handler is still on the emitter
+  // → false (alive). Post-dispose: dispose() removed it → true (disposed).
+  return !listeners.includes(handler);
 }
 
 /**

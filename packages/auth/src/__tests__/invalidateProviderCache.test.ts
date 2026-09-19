@@ -47,7 +47,7 @@ function createStubSettingsService(
 
 /**
  * Creates a runtime context for testing that establishes runtime-scoped state.
- * This replaces the core createProviderRuntimeContext / setActiveProviderRuntimeContext.
+ * Issue #2616: the context is constructed locally; there is no ambient pointer to install.
  */
 function createTestRuntimeContext(
   runtimeId: string,

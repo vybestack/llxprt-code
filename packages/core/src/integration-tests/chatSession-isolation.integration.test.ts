@@ -17,7 +17,7 @@
  * They will pass after Phase P10 ChatSession refactor.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { Config } from '../config/config.js';
 import { createAgentRuntimeContext } from '../runtime/createAgentRuntimeContext.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
@@ -31,11 +31,7 @@ import type {
   ToolRegistryView,
 } from '../runtime/AgentRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from '../runtime/contracts/RuntimeProvider.js';
-import {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-} from '../runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const noopProviderAdapter: AgentRuntimeProviderAdapter = {
@@ -112,9 +108,6 @@ void vi.mock('../core/contentGenerator.js', () => ({
 
 describe('ChatSession Isolation Integration Tests', () => {
   beforeEach(() => {
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeStub('foreground-bootstrap'),
-    );
     // Create a mock foreground config with specific model
     new Config({
       provider: 'gemini',
@@ -122,10 +115,6 @@ describe('ChatSession Isolation Integration Tests', () => {
       targetDir: process.cwd(),
       sandbox: false,
     });
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   /**

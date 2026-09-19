@@ -40,6 +40,7 @@ import {
 } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { shouldIncludeSubagentDelegationForConfig } from './clientToolGovernance.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const MODEL = 'gemini-2.5-flash';
 const MCP_TOKEN = 'MCP_TOKEN_3173';
@@ -114,6 +115,10 @@ interface Row {
 }
 
 function makeConfig(row: Row): Config {
+  // Issue #2616: production reads prompt settings via
+  // config.getSettingsService(). An empty service resolves every setting to
+  // its default, matching the settings-absent legacy builder below.
+  const settingsService = new SettingsService();
   return {
     isJitContextEnabled: () => row.jitEnabled,
     getGlobalMemory: () => row.global,
@@ -123,6 +128,7 @@ function makeConfig(row: Row): Config {
     getMcpInstructions: () => row.mcp,
     getWorkingDir: () => '/proj/workspace',
     isInteractive: () => true,
+    getSettingsService: () => settingsService,
   } as unknown as Config;
 }
 

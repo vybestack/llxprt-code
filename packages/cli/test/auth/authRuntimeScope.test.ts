@@ -10,11 +10,7 @@ import {
   type OAuthManager,
   type OAuthTokenRequestMetadata,
 } from '@vybestack/llxprt-code-auth';
-import {
-  createProviderRuntimeContext,
-  peekActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '../../../core/src/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '../../../core/src/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const baseConfig: AuthPrecedenceConfig = {
@@ -26,11 +22,8 @@ const baseConfig: AuthPrecedenceConfig = {
 };
 
 describe('CLI auth runtime scope gaps', () => {
-  let originalContext = peekActiveProviderRuntimeContext();
-
   beforeEach(() => {
     vi.restoreAllMocks();
-    originalContext = peekActiveProviderRuntimeContext();
     registerIsolatedRuntimeBindings({
       resetInfrastructure: () => {},
       setRuntimeContext: () => {},
@@ -40,7 +33,6 @@ describe('CLI auth runtime scope gaps', () => {
   });
 
   afterEach(() => {
-    setActiveProviderRuntimeContext(originalContext);
     registerIsolatedRuntimeBindings({
       resetInfrastructure: () => {},
       setRuntimeContext: () => {},
@@ -75,21 +67,21 @@ describe('CLI auth runtime scope gaps', () => {
       metadata: { origin: 'auth-runtime-scope-test' },
     };
 
+    // Issue #2616: no ambient context — the resolver receives the runtime
+    // context explicitly via getActiveRuntimeContext.
+    const runtimeContext = createProviderRuntimeContext({
+      runtimeId: scope.runtimeId,
+      metadata: scope.metadata,
+      settingsService: new SettingsService(),
+    });
+
     const resolver = new AuthPrecedenceResolver(baseConfig, {
       oauthManager,
       settingsService: new SettingsService(),
-      getActiveRuntimeContext: () => peekActiveProviderRuntimeContext(),
+      getActiveRuntimeContext: () => runtimeContext,
     });
 
     await runWithRuntimeScope(scope, async () => {
-      setActiveProviderRuntimeContext(
-        createProviderRuntimeContext({
-          runtimeId: scope.runtimeId,
-          metadata: scope.metadata,
-          settingsService: new SettingsService(),
-        }),
-      );
-
       const firstToken = await resolver.resolveAuthentication({
         includeOAuth: true,
       });
@@ -120,21 +112,19 @@ describe('CLI auth runtime scope gaps', () => {
       metadata: { command: 'auth-runtime-scope' },
     };
 
+    const runtimeContext = createProviderRuntimeContext({
+      runtimeId: scope.runtimeId,
+      metadata: scope.metadata,
+      settingsService: new SettingsService(),
+    });
+
     const resolver = new AuthPrecedenceResolver(baseConfig, {
       oauthManager,
       settingsService: new SettingsService(),
-      getActiveRuntimeContext: () => peekActiveProviderRuntimeContext(),
+      getActiveRuntimeContext: () => runtimeContext,
     });
 
     await runWithRuntimeScope(scope, async () => {
-      setActiveProviderRuntimeContext(
-        createProviderRuntimeContext({
-          runtimeId: scope.runtimeId,
-          metadata: scope.metadata,
-          settingsService: new SettingsService(),
-        }),
-      );
-
       await resolver.resolveAuthentication({ includeOAuth: true });
     });
 

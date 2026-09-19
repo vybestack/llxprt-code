@@ -16,11 +16,6 @@ import {
 } from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core';
 import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
 import type { Settings } from './settings.js';
@@ -301,7 +296,6 @@ describe('loadCliConfig interactive', () => {
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     setEnv('GEMINI_API_KEY', 'test-api-key');
     process.stdin.isTTY = true;
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
@@ -309,7 +303,6 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = originalIsTTY;
     restoreEnv();
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
   });
 
   it('should be interactive if isTTY and no prompt', async () => {
@@ -563,14 +556,12 @@ describe('loadCliConfig fileFiltering', () => {
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     setEnv('GEMINI_API_KEY', 'test-api-key');
     process.argv = ['node', 'script.js']; // Reset argv for each test
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.argv = originalArgv;
     restoreEnv();
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
   });
 
   const testCases: Array<{

@@ -44,10 +44,8 @@ import {
   type AgentRuntimeState,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import {
-  createRuntimeSettingsService,
-  createSettingsProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import {
   loadAgentRuntime,
   type AgentRuntimeLoaderOptions,
@@ -737,7 +735,7 @@ export class SubagentOrchestrator {
     modelConfig: ModelConfig;
     signal?: AbortSignal;
   }): Promise<AgentRuntimeLoaderResult> {
-    const providerRuntime = createSettingsProviderRuntimeContext({
+    const providerRuntime = createProviderRuntimeContext({
       settingsService: params.isolatedHandle.settingsService,
       config: params.isolatedHandle.config,
       runtimeId: params.isolatedHandle.runtimeId,

@@ -23,12 +23,8 @@
  * turn-2 history is fed verbatim from turn-1's ACTUAL yielded IContents.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { describe, expect, it } from 'bun:test';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -78,19 +74,6 @@ function isCompletionContent(content: IContent): boolean {
 }
 
 describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request invariants and end-to-end chaining @issue:3134', () => {
-  beforeEach(() => {
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: TEST_RUNTIME_ID,
-      }),
-    );
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
   describe('Fix 3 — compression/density strips responsesStored', () => {
     it('invalidateResponsesStatefulChain strips responsesStored from AI entries', async () => {
       const { invalidateResponsesStatefulChain } = await import(
@@ -563,19 +546,6 @@ class TestableCodexProvider extends OpenAIResponsesProvider {
 }
 
 describe('OpenAIResponsesProvider Codex stateful provider-level remediation @issue:3134', () => {
-  beforeEach(() => {
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: TEST_RUNTIME_ID,
-      }),
-    );
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
   it('responses-stateful: false as the Codex opt-out sends full history with store=false', async () => {
     const provider = new TestableCodexProvider(buildCodexOAuthManager());
     const settings = new SettingsService();

@@ -33,11 +33,6 @@ import {
 } from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
@@ -498,7 +493,6 @@ describe('profileOverridePrecedenceParity: synthetic profile for CLI auth', () =
     // Provide a fallback model so non-gemini providers don't fail with model.missing
     setEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
@@ -508,7 +502,6 @@ describe('profileOverridePrecedenceParity: synthetic profile for CLI auth', () =
     process.argv = originalArgv;
     restoreEnv();
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
   });
 
   it('--provider with --key creates synthetic profile (applyProfileSnapshot called)', async () => {
@@ -561,7 +554,6 @@ describe('profileOverridePrecedenceParity: --provider skips profile ephemeral se
     // Provide a fallback model so non-gemini providers don't fail with model.missing
     setEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
@@ -571,7 +563,6 @@ describe('profileOverridePrecedenceParity: --provider skips profile ephemeral se
     process.argv = originalArgv;
     restoreEnv();
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
   });
 
   it('with --provider, profile from LLXPRT_PROFILE env is skipped (no crash)', async () => {
@@ -663,7 +654,6 @@ describe('profileOverridePrecedenceParity: CLI model override after provider swi
     // Provide a fallback model so non-gemini providers don't fail with model.missing
     setEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
@@ -673,7 +663,6 @@ describe('profileOverridePrecedenceParity: CLI model override after provider swi
     process.argv = originalArgv;
     restoreEnv();
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
   });
 
   it('--model override is reflected in final config model', async () => {

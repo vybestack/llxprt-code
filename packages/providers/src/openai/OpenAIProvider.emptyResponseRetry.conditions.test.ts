@@ -7,7 +7,6 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import type { ITool } from '../ITool.js';
-import { resetSettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -22,7 +21,6 @@ describe('OpenAIProvider empty response retry conditions (issue #584)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    resetSettingsService();
     const runtime = initializeTestProviderRuntime({
       runtimeId: `openai-provider.emptyResponseRetry.${Math.random()
         .toString(36)

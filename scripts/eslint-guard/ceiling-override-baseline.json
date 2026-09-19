@@ -35,6 +35,11 @@
       "files": "scripts/tests/eslint-guard.test.ts",
       "rule": "max-lines",
       "reason": "#2282 exhaustive guard fixture"
+    },
+    {
+      "files": "scripts/check-settings-boundary.ts",
+      "rule": "max-lines",
+      "reason": "#2616 single-file scanner: Check-19 exact-seam matcher grew it past 800 effective lines"
     }
   ]
 }

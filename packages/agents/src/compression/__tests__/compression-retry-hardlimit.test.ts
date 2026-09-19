@@ -24,7 +24,6 @@ import {
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { makeHttpError } from './compression-retry-helpers.js';
@@ -63,7 +62,6 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
       ...runtimeSetup.runtime,
       config: runtimeSetup.config,
     };
-    providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
   });
 
   afterEach(() => {
