@@ -5,6 +5,7 @@
  */
 
 import { z } from 'zod';
+import type { McpAuthProviderFactory } from '@vybestack/llxprt-code-mcp';
 import type { ProviderAliasConfig } from '../providerAliases.js';
 import type { ProviderAliasFactory, RuntimePluginManifest } from './types.js';
 
@@ -56,13 +57,40 @@ const RUNTIME_PROVIDER_CONTRIBUTION_SCHEMA = z
   })
   .strict();
 
+const RUNTIME_MCP_AUTH_FACTORY_CONTRIBUTION_SCHEMA = z
+  .object({
+    authProviderType: z.string().min(1),
+    createAuthProvider: z.custom<McpAuthProviderFactory>(
+      (value): value is McpAuthProviderFactory => typeof value === 'function',
+    ),
+  })
+  .strict();
+
 const RUNTIME_PLUGIN_MANIFEST_SCHEMA = z
   .object({
     apiVersion: z.literal(RUNTIME_PLUGIN_SUPPORTED_API_VERSION),
     id: z.string().min(1),
-    providers: z.array(RUNTIME_PROVIDER_CONTRIBUTION_SCHEMA).min(1),
+    providers: z.array(RUNTIME_PROVIDER_CONTRIBUTION_SCHEMA),
+    mcpAuthFactories: z
+      .array(RUNTIME_MCP_AUTH_FACTORY_CONTRIBUTION_SCHEMA)
+      .optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((manifest, ctx) => {
+    // A plugin that contributes nothing has nothing to load; the schema
+    // otherwise cannot tell an author why their empty manifest is useless.
+    if (
+      manifest.providers.length === 0 &&
+      (manifest.mcpAuthFactories?.length ?? 0) === 0
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['providers'],
+        message:
+          'a manifest must contribute at least one provider or mcpAuthFactories entry',
+      });
+    }
+  });
 
 /** A plugin exports a manifest with an apiVersion this CLI does not support. */
 export class RuntimePluginIncompatibleError extends Error {
@@ -176,5 +204,11 @@ function deepFreezeManifest(manifest: RuntimePluginManifest): void {
     Object.freeze(contribution);
   }
   Object.freeze(manifest.providers);
+  for (const factory of manifest.mcpAuthFactories ?? []) {
+    Object.freeze(factory);
+  }
+  if (manifest.mcpAuthFactories) {
+    Object.freeze(manifest.mcpAuthFactories);
+  }
   Object.freeze(manifest);
 }

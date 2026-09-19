@@ -33,6 +33,7 @@ import { promises as fsPromises } from 'fs';
 import { basename, join } from 'path';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 import { resolveForegroundRuntimeId } from './config/profileBootstrap.js';
+import { wireMcpAuthFactories } from './mcpHostWiring.js';
 import type { ParsedCliArgs } from './cliBootstrap.js';
 import {
   initializeObservationProducer,
@@ -153,6 +154,12 @@ export async function bootstrapRuntimeAndConfig(
     '@vybestack/llxprt-code-providers/composition.js'
   );
   const providerContributions = await loadInstalledRuntimePlugins();
+
+  // Thread the plugin-contributed MCP auth factories into the transport's
+  // startup-only registry (#2764), so a server selecting a custom
+  // `authProviderType` resolves through its plugin. Runs exactly once here;
+  // a second registration throws by design.
+  wireMcpAuthFactories(providerContributions);
 
   const config = await loadCliConfig(
     settings.merged,

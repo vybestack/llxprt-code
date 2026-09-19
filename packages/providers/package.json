@@ -276,6 +276,7 @@
     "@dqbd/tiktoken": "1.0.22",
     "@vybestack/llxprt-code-auth": "file:../auth",
     "@vybestack/llxprt-code-core": "file:../core",
+    "@vybestack/llxprt-code-mcp": "file:../mcp",
     "@vybestack/llxprt-code-settings": "file:../settings",
     "@vybestack/llxprt-code-telemetry": "file:../telemetry",
     "@vybestack/llxprt-code-tools": "file:../tools",

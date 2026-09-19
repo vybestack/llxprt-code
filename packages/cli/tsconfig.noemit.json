@@ -33,7 +33,6 @@
     "../auth/src/interfaces/__tests__/secure-store.test.ts",
     "../auth/src/proxy/__tests__/proxy-socket-client.test.ts",
     "../auth/src/proxy/__tests__/proxy-socket-client.lifecycle.test.ts",
-    "../mcp/src/auth/google-auth-provider.test.ts",
     "../mcp/src/auth/oauth-provider.authenticate.test.ts",
     "../mcp/src/auth/oauth-provider.token.test.ts",
     "../mcp/src/auth/token-storage/base-token-storage.test.ts",
