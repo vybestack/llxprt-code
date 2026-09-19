@@ -67,11 +67,7 @@ class LocalSettingsState {
     return Object.fromEntries(this.#providers.get(provider) ?? []);
   }
 
-  setProviderSetting(
-    provider: string,
-    key: string,
-    value: unknown,
-  ): void {
+  setProviderSetting(provider: string, key: string, value: unknown): void {
     let bucket = this.#providers.get(provider);
     if (!bucket) {
       bucket = new Map<string, unknown>();
@@ -190,7 +186,8 @@ export function makeFakeConfig(options?: {
   return config;
 }
 
-const DEFAULT_RUNTIME_SOURCE = 'google-gemini-testSupport#createProviderCallOptions';
+const DEFAULT_RUNTIME_SOURCE =
+  'google-gemini-testSupport#createProviderCallOptions';
 
 let runtimeSequence = 0;
 
@@ -393,8 +390,7 @@ export function createProviderCallOptions(
   }
 
   const settings =
-    init.settings ??
-    (new LocalSettingsState() as unknown as SettingsService);
+    init.settings ?? (new LocalSettingsState() as unknown as SettingsService);
   applySettingsOverrides(init.providerName, settings, init.settingsOverrides);
 
   const config = ensureConfig(
