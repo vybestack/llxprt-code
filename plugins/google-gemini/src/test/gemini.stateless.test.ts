@@ -10,14 +10,14 @@ import {
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { createRuntimeConfigStub } from './testSupport.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IProviderConfig } from '@vybestack/llxprt-code-providers/types/IProviderConfig.js';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+} from './testSupport.js';
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),

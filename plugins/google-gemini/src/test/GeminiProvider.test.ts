@@ -16,7 +16,7 @@ import {
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Part } from '../gemini/geminiWireTypes.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { createProviderCallOptions } from './testSupport.js';
 import {
   getSettingsService,
   type SettingsService,
