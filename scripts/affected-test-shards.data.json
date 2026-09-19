@@ -21,7 +21,14 @@
     "vscode-ide-companion": "rest",
     "zed-acp": "rest"
   },
-  "shardOrder": ["cli", "agents", "providers", "core", "rest", "scripts"],
+  "shardOrder": [
+    "cli",
+    "agents",
+    "providers",
+    "core",
+    "rest",
+    "scripts"
+  ],
   "shardTimingsSeconds": {
     "cli": 703,
     "agents": 289,
@@ -31,7 +38,12 @@
     "scripts": 270
   },
   "importEdges": {
-    "a2a-server": ["agents", "core", "mcp", "storage"],
+    "a2a-server": [
+      "agents",
+      "core",
+      "mcp",
+      "storage"
+    ],
     "agents": [
       "auth",
       "core",
@@ -40,7 +52,6 @@
       "policy",
       "providers",
       "settings",
-      "test-utils",
       "tools"
     ],
     "auth": [],
@@ -54,7 +65,6 @@
       "settings",
       "storage",
       "telemetry",
-      "test-utils",
       "tools",
       "zed-acp"
     ],
@@ -66,28 +76,80 @@
       "settings",
       "storage",
       "telemetry",
+      "test-utils",
       "tools"
     ],
-    "ide-integration": ["telemetry"],
+    "ide-integration": [
+      "telemetry"
+    ],
     "lsp": [],
-    "mcp": ["auth", "settings", "storage", "telemetry", "tools"],
+    "mcp": [
+      "auth",
+      "settings",
+      "storage",
+      "telemetry",
+      "tools"
+    ],
     "policy": [],
-    "providers": ["auth", "core", "settings", "storage", "telemetry", "tools"],
-    "settings": ["storage"],
+    "providers": [
+      "auth",
+      "core",
+      "settings",
+      "storage",
+      "telemetry",
+      "tools"
+    ],
+    "settings": [
+      "storage"
+    ],
     "storage": [],
-    "telemetry": ["storage"],
-    "test-utils": [],
+    "telemetry": [
+      "storage"
+    ],
+    "test-utils": [
+      "core",
+      "settings",
+      "tools"
+    ],
     "tools": [],
-    "vscode-ide-companion": ["ide-integration"],
-    "zed-acp": ["agents", "core", "providers", "storage", "telemetry", "tools"]
+    "vscode-ide-companion": [
+      "ide-integration"
+    ],
+    "zed-acp": [
+      "agents",
+      "core",
+      "providers",
+      "storage",
+      "telemetry",
+      "tools"
+    ]
   },
   "testOnlyEdges": {
-    "agents": ["storage"],
-    "auth": ["test-utils"],
-    "core": ["providers", "test-utils"],
-    "providers": ["test-utils"],
-    "tools": ["settings", "storage", "test-utils"],
-    "zed-acp": ["settings", "test-utils"]
+    "agents": [
+      "storage",
+      "test-utils"
+    ],
+    "auth": [
+      "test-utils"
+    ],
+    "core": [
+      "providers"
+    ],
+    "providers": [
+      "test-utils"
+    ],
+    "tools": [
+      "settings",
+      "storage",
+      "test-utils"
+    ],
+    "zed-acp": [
+      "settings",
+      "test-utils"
+    ],
+    "cli": [
+      "test-utils"
+    ]
   },
   "observers": {
     "agents": [
@@ -117,8 +179,12 @@
       "observingPackage": "scripts",
       "selectShard": "scripts",
       "reason": "scripts/tests/generate-settings-doc.test.ts reads the cli settings schema source without importing it",
-      "paths": ["packages/cli/src/config/settingsSchema.ts"],
-      "pathPrefixes": ["packages/cli/src/config/settings-schema/"]
+      "paths": [
+        "packages/cli/src/config/settingsSchema.ts"
+      ],
+      "pathPrefixes": [
+        "packages/cli/src/config/settings-schema/"
+      ]
     }
   ],
   "sharedInputs": [
