@@ -26,7 +26,19 @@
  */
 
 import { describe, it, expect, beforeEach } from 'bun:test';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
+import type {
+  IContent,
+  ToolCallBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { ToolCallPipeline } from './ToolCallPipeline.js';
+import { type StreamProcessorDeps } from './OpenAIStreamProcessor.js';
+import {
+  type StreamingState,
+  createStreamingState,
+} from './OpenAIStreamProcessorState.js';
+import { emitCombinedTerminalContent } from './OpenAIStreamTerminalContent.js';
 
 describe('ToolCallPipeline raw tool name passthrough (issue #3639)', () => {
   let pipeline: ToolCallPipeline;
@@ -102,5 +114,119 @@ describe('ToolCallPipeline raw tool name passthrough (issue #3639)', () => {
     // The collector's override semantics mean the last non-empty name wins;
     // the raw last-emitted name survives normalization unchanged.
     expect(result.normalized[0].name).toBe('file_thing');
+  });
+
+  // The only sanctioned rewrites under issue #3639 are outer-whitespace trim,
+  // Kimi-K2 concatenated-prefix stripping, and lowercasing. The pipeline has
+  // no registry of real tools, so an exact-value assertion pins that the name
+  // stays itself and is never rewritten toward any registered tool.
+  it('trims outer whitespace from a tool name without further rewriting', async () => {
+    pipeline.addFragment(0, { name: '  totally_bogus_tool  ' });
+    pipeline.addFragment(0, { args: '{}' });
+
+    const result = await pipeline.process();
+
+    expect(result.normalized).toHaveLength(1);
+    expect(result.failed).toHaveLength(0);
+    expect(result.normalized[0].name).toBe('totally_bogus_tool');
+  });
+
+  it('strips a concatenated functions prefix and keeps the rest of the name', async () => {
+    pipeline.addFragment(0, { name: 'functionstotally_bogus_tool' });
+    pipeline.addFragment(0, { args: '{}' });
+
+    const result = await pipeline.process();
+
+    expect(result.normalized).toHaveLength(1);
+    expect(result.failed).toHaveLength(0);
+    expect(result.normalized[0].name).toBe('totally_bogus_tool');
+  });
+
+  it('strips a concatenated call_functions prefix with trailing digits', async () => {
+    pipeline.addFragment(0, { name: 'call_functionstotally_bogus_tool3' });
+    pipeline.addFragment(0, { args: '{}' });
+
+    const result = await pipeline.process();
+
+    expect(result.normalized).toHaveLength(1);
+    expect(result.failed).toHaveLength(0);
+    expect(result.normalized[0].name).toBe('totally_bogus_tool');
+  });
+});
+
+/**
+ * Provider-to-dispatch emission seam (issue #3639): the terminal-content
+ * generator copies each normalizedCall.name verbatim into its ToolCallBlock,
+ * so an unregistered name reaches dispatch exactly as the pipeline produced
+ * it. Failing such a name at dispatch (TOOL_NOT_REGISTERED) is covered by
+ * existing packages/agents tests (tool-dispatcher.test.ts,
+ * nonInteractiveToolExecutor.test.ts); only the provider-side half of the
+ * seam is pinned here.
+ */
+describe('ToolCallPipeline -> emitCombinedTerminalContent emission handoff (issue #3639)', () => {
+  let pipeline: ToolCallPipeline;
+
+  beforeEach(() => {
+    pipeline = new ToolCallPipeline();
+  });
+
+  function buildDeps(): StreamProcessorDeps {
+    return {
+      toolCallPipeline: pipeline,
+      textToolParser: new GemmaToolCallParser(),
+      logger: new DebugLogger('llxprt:test:issue3639-emission'),
+      getBaseURL: () => undefined,
+    };
+  }
+
+  function collect(
+    state: StreamingState,
+    deps: StreamProcessorDeps,
+  ): IContent[] {
+    const yielded: IContent[] = [];
+    for (const content of emitCombinedTerminalContent(
+      state,
+      'test-model',
+      deps,
+    )) {
+      yielded.push(content);
+    }
+    return yielded;
+  }
+
+  it('emits an unregistered name verbatim as the tool_call block with no stand-in', async () => {
+    pipeline.addFragment(0, { name: 'Totally_Bogus_Tool' });
+    pipeline.addFragment(0, { args: '{}' });
+
+    const result = await pipeline.process();
+
+    const state = createStreamingState();
+    state.cachedPipelineResult = result;
+
+    const yielded = collect(state, buildDeps());
+
+    expect(yielded).toHaveLength(1);
+    const toolCallBlocks = yielded[0].blocks.filter(
+      (block): block is ToolCallBlock => block.type === 'tool_call',
+    );
+    expect(toolCallBlocks).toHaveLength(1);
+    expect(toolCallBlocks[0]?.name).toBe('totally_bogus_tool');
+
+    const serialized = JSON.stringify(yielded[0]);
+    expect(serialized).not.toContain('tool_name_not_found');
+    expect(serialized).not.toContain('missing_tool_name');
+  });
+
+  it('emits nothing for a nameless call instead of fabricating a name', async () => {
+    pipeline.addFragment(0, { args: '{}' });
+
+    const result = await pipeline.process();
+
+    const state = createStreamingState();
+    state.cachedPipelineResult = result;
+
+    const yielded = collect(state, buildDeps());
+
+    expect(yielded).toHaveLength(0);
   });
 });
