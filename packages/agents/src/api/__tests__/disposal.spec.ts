@@ -26,10 +26,11 @@
  * assertions pass with no rewrite.
  *
  * GREEN-reachability contract per row:
- * - agentClient: observes `agentClient._unsubscribe` transitioning
- *   `function → undefined` (client.ts:146 sets it; client.ts:263-265 clears it
- *   on dispose). The fake client IS constructed and its constructor DOES set
- *   `_unsubscribe`, so this is a genuine transition.
+ * - agentClient: observes its `handleModelChanged` handler leaving
+ *   `coreEvents.listeners(CoreEvent.ModelChanged)` (client.ts registers it in
+ *   the constructor; dispose() removes it). The fake client IS constructed and
+ *   its constructor DOES register the handler, so this is a genuine
+ *   transition.
  * - scheduler + confirmationCoordinator: inject
  *   `createRecordingSchedulerFactory().factory` + drive a tool turn; assert the
  *   recording handle's REAL `disposed` boolean. CORRECT (the fake handle
@@ -93,9 +94,9 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
     try {
       const probe: DisposalProbe = captureProbe(agent);
       // PRE-dispose sanity read: the agentClient is NOT yet torn down. The
-      // probe reads `agentClient._unsubscribe` (a function at GREEN, set by
-      // client.ts:146) which transitions to undefined on dispose
-      // (client.ts:263-265). dispose() line 60 -> config.dispose() ->
+      // probe reads the client's `handleModelChanged` handler (registered by
+      // the client.ts constructor) which dispose() removes from
+      // coreEvents. dispose() line 60 -> config.dispose() ->
       // agentClient.dispose().
       expect(agentClientDisposed(probe)).toBe(false);
       await agent.dispose();
@@ -377,9 +378,9 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
     try {
       const probe: DisposalProbe = captureProbe(agent);
       // PRE-dispose sanity read: agentClient + extensions not yet torn down.
-      // agentClient reads `_unsubscribe` (function → undefined); extensions
-      // reads the ownership completion marker. Both are genuine pre-dispose
-      // "not-yet-torn-down" reads.
+      // agentClient reads its `handleModelChanged` handler still registered
+      // on coreEvents; extensions reads the ownership completion marker. Both
+      // are genuine pre-dispose "not-yet-torn-down" reads.
       expect(agentClientDisposed(probe)).toBe(false);
       expect(extensionsDisposed(probe)).toBe(false);
       // First dispose performs the teardown; dispose.md lines 11-12 guard with

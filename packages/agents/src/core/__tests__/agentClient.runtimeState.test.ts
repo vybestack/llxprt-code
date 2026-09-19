@@ -25,7 +25,6 @@ import {
 } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   createAgentRuntimeState,
-  updateAgentRuntimeState,
   type AgentRuntimeState,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -159,52 +158,6 @@ describe('AgentClient - Runtime State Integration', () => {
 
       expect(client['runtimeState']).toBeDefined();
       expect(client['runtimeState'].provider).toBe('gemini');
-    });
-  });
-
-  /**
-   * @plan PLAN-20251027-STATELESS5.P09
-   * @requirement REQ-STAT5-003.2
-   * @pseudocode gemini-runtime.md lines 55-59
-   *
-   * Test: Runtime state change subscription for telemetry
-   */
-  describe('Runtime State Subscription', () => {
-    it('should subscribe to runtime state changes on construction', () => {
-      // @plan PLAN-20251027-STATELESS5.P09
-      // @requirement REQ-STAT5-003.2
-      // @pseudocode gemini-runtime.md lines 55-59
-
-      const config = createTestConfig();
-      const runtimeState = createTestRuntimeState();
-
-      const client = new AgentClient(config, runtimeState);
-
-      // Verify that the client has subscribed (has an unsubscribe function)
-      expect(client['_unsubscribe']).toBeDefined();
-      expect(typeof client['_unsubscribe']).toBe('function');
-    });
-
-    it('should update telemetry metadata when runtime state changes', async () => {
-      // @plan PLAN-20251027-STATELESS5.P09
-      // @requirement REQ-STAT5-003.2
-      // @pseudocode gemini-runtime.md lines 55-59
-
-      const config = createTestConfig();
-      const runtimeState = createTestRuntimeState();
-
-      const client = new AgentClient(config, runtimeState);
-
-      // Verify subscription exists
-      expect(client['_unsubscribe']).toBeDefined();
-
-      // Change runtime state
-      const updatedState = updateAgentRuntimeState(runtimeState.runtimeId, {
-        model: 'gemini-2.5-flash',
-      });
-
-      // Client should still have reference to updated runtime state
-      expect(updatedState.model).toBe('gemini-2.5-flash');
     });
   });
 

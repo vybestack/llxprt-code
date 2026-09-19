@@ -602,9 +602,6 @@ export type {
   AgentRuntimeState,
   RuntimeStateParams,
   RuntimeStateSnapshot,
-  RuntimeStateChangedEvent,
-  RuntimeStateChangeCallback,
-  UnsubscribeFunction,
   getBaseUrl,
   getSessionId,
   getModelParams,
@@ -614,7 +611,6 @@ export {
   updateAgentRuntimeState,
   updateAgentRuntimeStateBatch,
   getAgentRuntimeStateSnapshot,
-  subscribeToAgentRuntimeState,
 } from './runtime/AgentRuntimeState.js';
 export type { RuntimeStateFromConfigOptions } from './runtime/runtimeStateFactory.js';
 export { createAgentRuntimeStateFromConfig as createRuntimeStateFromConfig } from './runtime/runtimeStateFactory.js';

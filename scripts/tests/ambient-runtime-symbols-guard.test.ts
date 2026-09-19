@@ -184,5 +184,9 @@ describe('ambient runtime symbols guard', () => {
     expect(BANNED_AMBIENT_SYMBOLS).toContain(
       'deactivateSettingsRuntimeContext',
     );
+    // PR B: AgentRuntimeState module-level registries and subscribe entry.
+    expect(BANNED_AMBIENT_SYMBOLS).toContain('runtimeStateRegistry');
+    expect(BANNED_AMBIENT_SYMBOLS).toContain('subscriptionRegistry');
+    expect(BANNED_AMBIENT_SYMBOLS).toContain('subscribeToAgentRuntimeState');
   });
 });

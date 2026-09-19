@@ -6,13 +6,16 @@
  */
 
 /**
- * Banned-symbol checker for issue #2616 PR A (issue-workflow lane).
+ * Banned-symbol checker for issue #2616 (issue-workflow lane).
  *
  * Asserts the ambient mechanisms deleted by PR A stay deleted: the
  * module-level provider runtime context accessors, the settings runtime
  * adapter's ambient helpers, the provider runtime state factory, and the
- * settings package's process-wide singleton module. Production sources
- * under packages/<pkg>/src are scanned; test and spec files are excluded
+ * settings package's process-wide singleton module. PR B adds the
+ * AgentRuntimeState module-level globals: the write-only runtime state
+ * registry, the subscription registry behind subscribeToAgentRuntimeState,
+ * and the subscribe entry point itself. Production sources under
+ * packages/<pkg>/src are scanned; test and spec files are excluded
  * (they may reference the names in deletion proofs).
  */
 
@@ -36,6 +39,9 @@ export const BANNED_AMBIENT_SYMBOLS = [
   'resetSettingsService',
   'setProviderRuntimeStateFactory',
   'settingsServiceInstance',
+  'runtimeStateRegistry',
+  'subscriptionRegistry',
+  'subscribeToAgentRuntimeState',
 ] as const;
 
 const BANNED_PATTERN = new RegExp(BANNED_AMBIENT_SYMBOLS.join('|'));
