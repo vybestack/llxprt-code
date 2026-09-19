@@ -157,8 +157,9 @@ export async function bootstrapRuntimeAndConfig(
 
   // Thread the plugin-contributed MCP auth factories into the transport's
   // startup-only registry (#2764), so a server selecting a custom
-  // `authProviderType` resolves through its plugin. Runs exactly once here;
-  // a second registration throws by design.
+  // `authProviderType` resolves through its plugin. Registration replaces
+  // any previously registered set (the `registerMcpHostServices`
+  // precedent), so repeated in-process bootstrap re-registers safely.
   wireMcpAuthFactories(providerContributions);
 
   const config = await loadCliConfig(
