@@ -61,7 +61,7 @@ void vi.mock('../auth/oauth-token-storage.js', () =>
 );
 void vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
 
-const CUSTOM_AUTH_TYPE = 'custom_auth' as AuthProviderType;
+const CUSTOM_AUTH_TYPE = 'custom_auth';
 
 const FAKE_CLIENT_METADATA: OAuthClientMetadata = {
   client_name: 'test (fake)',
