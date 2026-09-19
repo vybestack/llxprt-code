@@ -236,7 +236,7 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 124 | `packages/core/src/providers/openai/ToolCallPipeline.test.ts` | `packages/providers/src/openai/ToolCallPipeline.test.ts` | Rule 4 | B |
 | 125 | `packages/core/src/providers/openai/ToolCallPipeline.integration.test.ts` | `packages/providers/src/openai/ToolCallPipeline.integration.test.ts` | Rule 4 | B |
 | 126 | `packages/core/src/providers/openai/ToolCallPipeline.toolCallId.test.ts` | `packages/providers/src/openai/ToolCallPipeline.toolCallId.test.ts` | Rule 4 | B |
-| 127 | `packages/core/src/providers/openai/ToolNameValidator.ts` | `packages/providers/src/openai/ToolNameValidator.ts` | Rule 4 | B |
+| 127 | `packages/core/src/providers/openai/ToolNameValidator.ts` | `packages/providers/src/openai/ToolCallPipeline.ts` | Rule 4 + #3639 deletion override (dead code — zero consumers) | B |
 | 128 | `packages/core/src/providers/openai/buildResponsesRequest.ts` | `packages/providers/src/openai/OpenAIProvider.ts` | Rule 4 + #2234 deletion override (dead code — zero consumers) | B |
 | 129 | `packages/core/src/providers/openai/buildResponsesRequest.test.ts` | `packages/providers/src/openai/OpenAIProvider.ts` | Rule 4 + #2234 deletion override (dedicated test of deleted dead helper) | B |
 | 130 | `packages/core/src/providers/openai/buildResponsesRequest.stripToolCalls.test.ts` | `packages/providers/src/openai/OpenAIProvider.ts` | Rule 4 + #2234 deletion override (dedicated test of deleted dead helper) | B |
@@ -260,8 +260,8 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 148 | `packages/core/src/providers/openai/schemaConverter.issue1844.test.ts` | `packages/providers/src/openai/schemaConverter.issue1844.test.ts` | Rule 4 | B |
 | 149 | `packages/core/src/providers/openai/syntheticToolResponses.ts` | `packages/providers/src/openai/syntheticToolResponses.ts` | Rule 4 | B |
 | 150 | `packages/core/src/providers/openai/test-types.ts` | `packages/providers/src/openai/OpenAIProvider.ts` | Rule 4 + #2234 deletion override (dead code — zero consumers) | B |
-| 151 | `packages/core/src/providers/openai/toolNameUtils.ts` | `packages/providers/src/openai/toolNameUtils.ts` | Rule 4 | B |
-| 152 | `packages/core/src/providers/openai/toolNameUtils.test.ts` | `packages/providers/src/openai/toolNameUtils.test.ts` | Rule 4 | B |
+| 151 | `packages/core/src/providers/openai/toolNameUtils.ts` | `packages/providers/src/openai/ToolCallPipeline.ts` | Rule 4 + #3639 deletion override (dead code — fabricated fallback tool names) | B |
+| 152 | `packages/core/src/providers/openai/toolNameUtils.test.ts` | `packages/providers/src/openai/ToolCallPipeline.rawToolName.issue3639.test.ts` | Rule 4 + #3639 deletion override (dedicated test of deleted dead helper) | B |
 | 153 | `packages/core/src/providers/openai/OpenAIProvider.caching.test.ts` | `packages/providers/src/openai/OpenAIProvider.caching.test.ts` | Rule 4 | B |
 | 154 | `packages/core/src/providers/openai/OpenAIProvider.deepseekReasoning.test.ts` | `packages/providers/src/openai/OpenAIProvider.deepseekReasoning.test.ts` | Rule 4 | B |
 | 155 | `packages/core/src/providers/openai/OpenAIProvider.emptyResponseRetry.test.ts` | `packages/providers/src/openai/OpenAIProvider.emptyResponseRetry.test.ts` | Rule 4 | B |
@@ -283,7 +283,7 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 171 | `packages/core/src/providers/openai/__tests__/OpenAIProvider.e2e.test.ts` | `packages/providers/src/openai/__tests__/OpenAIProvider.e2e.test.ts` | Rule 1 | B |
 | 172 | `packages/core/src/providers/openai/__tests__/OpenAIProvider.thinkTags.test.ts` | `packages/providers/src/openai/__tests__/OpenAIProvider.thinkTags.test.ts` | Rule 1 | B |
 | 173 | `packages/core/src/providers/openai/__tests__/schemaConverter.parameterFallback.test.ts` | `packages/providers/src/openai/__tests__/schemaConverter.parameterFallback.test.ts` | Rule 1 | B |
-| 174 | `packages/core/src/providers/openai/__tests__/ToolNameValidator.test.ts` | `packages/providers/src/openai/__tests__/ToolNameValidator.test.ts` | Rule 1 | B |
+| 174 | `packages/core/src/providers/openai/__tests__/ToolNameValidator.test.ts` | `packages/providers/src/openai/ToolCallPipeline.rawToolName.issue3639.test.ts` | Rule 1 + #3639 deletion override (dedicated test of deleted dead helper) | B |
 | 175 | `packages/core/src/providers/openai/docs/accessing-provider-info.md` | `packages/providers/src/openai/docs/accessing-provider-info.md` | Rule 4 | N/A (documentation) |
 | 176 | `packages/core/src/providers/openai/docs/params-mapping.md` | `packages/providers/src/openai/docs/params-mapping.md` | Rule 4 | N/A (documentation) |
 | 177 | `packages/core/src/providers/openai/docs/responses-api-tool-calls.md` | `packages/providers/src/openai/docs/responses-api-tool-calls.md` | Rule 4 | N/A (documentation) |
