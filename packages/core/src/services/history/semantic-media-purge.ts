@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { isDeepStrictEqual } from 'node:util';
 import type { HistoryService } from './HistoryService.js';
 import type { ContentBlock, IContent } from './IContent.js';
 import { sanitizeProviderHistoryForSerialization } from './historyCloneUtils.js';
@@ -432,13 +433,13 @@ function buildCandidateHistory(
   };
 }
 
-function historiesMatchByIdentity(
+function historiesMatchByValue(
   current: readonly IContent[],
   expected: readonly IContent[],
 ): boolean {
   return (
     current.length === expected.length &&
-    current.every((entry, index) => entry === expected[index])
+    current.every((entry, index) => isDeepStrictEqual(entry, expected[index]))
   );
 }
 
@@ -510,7 +511,7 @@ export class SemanticMediaPurgeCoordinator {
     }
     try {
       await this.history.transformAll(async (latestHistory) => {
-        if (!historiesMatchByIdentity(latestHistory, transaction.baseHistory)) {
+        if (!historiesMatchByValue(latestHistory, transaction.baseHistory)) {
           throw new SemanticMediaPurgePrecommitError(
             new Error('History changed while semantic media purge was pending'),
           );
@@ -556,7 +557,10 @@ export class SemanticMediaPurgeCoordinator {
     try {
       await this.history.transformAll(async (latestHistory) => {
         if (
-          !historiesMatchByIdentity(latestHistory, transaction.candidateHistory)
+          !historiesMatchByValue(
+            latestHistory,
+            transaction.candidateHistory,
+          )
         ) {
           throw new SemanticMediaPurgePrecommitError(
             new Error(

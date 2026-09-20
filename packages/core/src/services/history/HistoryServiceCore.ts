@@ -58,9 +58,22 @@ import {
   ChronologyStamper,
   type ChronologyState,
 } from './historyChronology.js';
+import {
+  HistoryJournalStore,
+  planDensityMutation,
+  planHistoryMutation,
+  type HistoryJournalOp,
+  type HistoryServiceJournalOptions,
+} from './historyJournalStore.js';
+import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+import { SpanWindow } from './historySpanWindow.js';
+import { HistoryMutationFifo } from './historyMutationFifo.js';
 
 // Preserve the CompressionConfig export from the same path for consumers.
 export type { CompressionConfig };
+
+// The journal options type rides the Core surface for facade consumers.
+export type { HistoryServiceJournalOptions } from './historyJournalStore.js';
 
 // Batch/ownership contracts moved to historyBatchContracts.ts (size budget);
 // the public export surface of this module is unchanged.
@@ -73,10 +86,6 @@ export type {
   HistoryBatchOptions,
 } from './historyBatchContracts.js';
 
-import {
-  type MutationFailure,
-  combineMutationFailures,
-} from './historyMutationFailure.js';
 import type {
   PreparedHistoryBatchEffect,
   HistoryBatchParticipant,
@@ -84,7 +93,6 @@ import type {
   HistoryMediaOwner,
   HistoryBatchPublication,
   HistoryBatchOptions,
-  QueuedHistoryMutation,
   ChronologyRollbackEntry,
 } from './historyBatchContracts.js';
 
@@ -102,15 +110,29 @@ export abstract class HistoryServiceCore
     activeProvider?: string,
   ): Promise<void>;
 
-  protected history: IContent[] = [];
+  /**
+   * The journal is the system of record (#854): contents are never retained
+   * in memory; reads materialize transiently from the journal fold plus the
+   * not-yet-durable pending ops.
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b3
+   */
+  protected readonly journal: HistoryJournalStore;
+
+  /**
+   * Capped standing-state window for removed-interior spans (mutation-time
+   * knowledge the journal fold cannot re-derive).
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b3
+   */
+  protected spanWindow = new SpanWindow();
+
   protected totalTokens: number = 0;
   protected baseTokenOffset: number = 0;
   protected tokenizerCache = new Map<string, ITokenizer>();
   protected tokenizerLock: Promise<void> = Promise.resolve();
   protected pendingTokenizerFailure: { error: unknown } | undefined;
   private syncGeneration: number = 0;
-  private historyMutationInProgress = false;
-  private historyMutationQueue: QueuedHistoryMutation[] = [];
   private batchParticipants = new Set<HistoryBatchParticipant>();
   protected mediaOwner: HistoryMediaOwner | undefined;
   private ownershipSettlement: Promise<void> = Promise.resolve();
@@ -118,17 +140,6 @@ export abstract class HistoryServiceCore
   protected logger = new DebugLogger('llxprt:history:service');
 
   protected chronology = new ChronologyStamper();
-
-  /**
-   * Cumulative removed-interior spans that are not re-derivable from the
-   * history array (density removals/replacements, rewinds, clears). Compressed
-   * spans are excluded: they are re-derived from summary metadata on every
-   * snapshot, so this state stays bounded by the mutations that destroyed
-   * entries without a replacement record (#854).
-   *
-   * @plan PLAN-20260917-ISSUE854.P03
-   */
-  protected removedInteriorSpans: RemovedInteriorSpan[] = [];
 
   /**
    * Monotonic cache anchor: the highest chronology `seq` that must remain in
@@ -168,6 +179,46 @@ export abstract class HistoryServiceCore
       { pendingCount },
     ),
   );
+
+  /**
+   * @param options.recording injects the journal store; omitted, the service
+   *   creates its own temp-file-backed journal (no in-memory path exists).
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b3
+   */
+  protected constructor(options: HistoryServiceJournalOptions = {}) {
+    super();
+    this.journal = new HistoryJournalStore(options.recording);
+  }
+
+  /**
+   * Transient materialization of the current history from the journal fold:
+   * a fresh array on every call, retained by no one (#854).
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b3
+   */
+  protected materializeHistory(): IContent[] {
+    return this.journal.materialize();
+  }
+
+  /** Attach the journal store after construction (foreground wiring order). */
+  attachJournal(recorder: SessionRecordingService): void {
+    this.journal.attachJournal(recorder);
+  }
+
+  /** The file backing the journal store, or null before the first record. */
+  journalPath(): string | null {
+    return this.journal.journalPath();
+  }
+
+  /**
+   * Resolve once every mutation enqueued so far has a durable commit ack.
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b3
+   */
+  async waitForCommit(): Promise<void> {
+    await this.journal.waitForDurable();
+  }
 
   /**
    * @plan:PLAN-20260603-ISSUE1584.P05
@@ -373,86 +424,22 @@ export abstract class HistoryServiceCore
     this.syncGeneration++;
   }
 
+  /**
+   * The history mutation FIFO (extracted module; file size budget). Behavior
+   * unchanged: synchronous mutations never interleave with asynchronous ones.
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b3
+   */
+  private readonly mutationFifo = new HistoryMutationFifo();
+
   protected runSynchronousHistoryMutation(execute: () => void): void {
-    if (this.historyMutationInProgress) {
-      this.historyMutationQueue.push({ kind: 'synchronous', execute });
-      return;
-    }
-
-    this.historyMutationInProgress = true;
-    let failure: MutationFailure = { failed: false };
-    try {
-      execute();
-    } catch (error: unknown) {
-      failure = { failed: true, error };
-    }
-    const queuedFailure = this.drainSynchronousHistoryMutations();
-    this.historyMutationInProgress = false;
-    this.processHistoryMutationQueue();
-
-    const combinedFailure = combineMutationFailures(failure, queuedFailure);
-    if (combinedFailure.failed) throw combinedFailure.error;
-  }
-
-  private drainSynchronousHistoryMutations(): MutationFailure {
-    let failure: MutationFailure = { failed: false };
-    while (this.historyMutationQueue[0]?.kind === 'synchronous') {
-      const mutation = this.historyMutationQueue.shift();
-      if (mutation?.kind !== 'synchronous') break;
-      try {
-        mutation.execute();
-      } catch (error: unknown) {
-        failure = combineMutationFailures(failure, { failed: true, error });
-      }
-    }
-    return failure;
+    this.mutationFifo.runSynchronous(execute);
   }
 
   protected enqueueAsynchronousHistoryMutation(
     execute: () => Promise<void>,
   ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.historyMutationQueue.push({
-        kind: 'asynchronous',
-        execute,
-        resolve,
-        reject,
-      });
-      this.processHistoryMutationQueue();
-    });
-  }
-
-  private processHistoryMutationQueue(): void {
-    if (this.historyMutationInProgress) return;
-    const mutation = this.historyMutationQueue.shift();
-    if (mutation === undefined) return;
-    if (mutation.kind === 'synchronous') {
-      this.runSynchronousHistoryMutation(mutation.execute);
-      return;
-    }
-
-    this.historyMutationInProgress = true;
-    void mutation.execute().then(
-      () =>
-        this.completeAsynchronousHistoryMutation(mutation, { failed: false }),
-      (error: unknown) =>
-        this.completeAsynchronousHistoryMutation(mutation, {
-          failed: true,
-          error,
-        }),
-    );
-  }
-
-  private completeAsynchronousHistoryMutation(
-    mutation: Extract<QueuedHistoryMutation, { kind: 'asynchronous' }>,
-    failure: MutationFailure,
-  ): void {
-    const queuedFailure = this.drainSynchronousHistoryMutations();
-    this.historyMutationInProgress = false;
-    const result = combineMutationFailures(failure, queuedFailure);
-    if (result.failed) mutation.reject(result.error);
-    else mutation.resolve();
-    this.processHistoryMutationQueue();
+    return this.mutationFifo.enqueueAsynchronous(execute);
   }
 
   resetTokenAccounting(): void {
@@ -554,17 +541,24 @@ export abstract class HistoryServiceCore
     }
 
     const generation = this.syncGeneration;
-    const wasEmpty = this.history.length === 0;
-    this.history.push(content);
+    const wasEmpty = this.materializeHistory().length === 0;
+    // Durable write first: the postcondition of every mutation is "journal
+    // appended (awaitable ack) + observers notified" (#854).
+    this.journal.apply({ kind: 'content', content });
 
     try {
       this.emit('contentAdded', content);
       this.mediaOwner?.adopt([content]);
     } catch (error: unknown) {
-      // Roll back the insertion. The consumed chronology sequence number is
-      // intentionally NOT reclaimed: sequence numbers are never reused, and
-      // the resulting gap truthfully records that an item was removed.
-      this.history.pop();
+      // Roll back the insertion with a compensating rewind. The consumed
+      // chronology sequence number is intentionally NOT reclaimed: sequence
+      // numbers are never reused, and the resulting gap truthfully records
+      // that an item was removed.
+      this.journal.apply({
+        kind: 'rewind',
+        itemsRemoved: 1,
+        cutSeq: content.metadata?.chronology?.seq,
+      });
       throw error;
     }
 
@@ -575,7 +569,7 @@ export abstract class HistoryServiceCore
     // getContextRange() stays at parity with this event: the context the old
     // spans described is gone.
     if (wasEmpty) {
-      this.removedInteriorSpans = [];
+      this.spanWindow.set([]);
       this.emit('contextRangeChanged', firstEntryContextRange(content));
     }
 
@@ -648,9 +642,8 @@ export abstract class HistoryServiceCore
   /**
    * Add multiple contents to the history.
    *
-   * Iterates a snapshot because `add` appends to `this.history`: if `contents`
-   * aliases the backing array (`getRawHistory()`), a live iterator would keep
-   * consuming its own appends and never terminate. `replaceAll` is already
+   * Iterates a snapshot so a caller passing a materialized projection can
+   * never have the iterator chase its own appends; `replaceAll` is already
    * immune the same way — its `filter` produces a fresh array before use.
    */
   addAll(contents: readonly IContent[], modelName?: string): void {
@@ -674,7 +667,7 @@ export abstract class HistoryServiceCore
         modelName,
       );
       await this.commitHistoryMutation({
-        nextHistory: [...this.history, ...batch],
+        nextHistory: [...this.materializeHistory(), ...batch],
         nextHistoryTokens: this.totalTokens + addedTokens,
         publishedContents: batch,
         options,
@@ -712,7 +705,7 @@ export abstract class HistoryServiceCore
     options: HistoryBatchOptions = {},
   ): Promise<void> {
     return this.enqueueAsynchronousHistoryMutation(async () => {
-      const replacement = [...(await transform([...this.history]))];
+      const replacement = [...(await transform(this.materializeHistory()))];
       this.validateBatch(replacement);
       await this.waitForTokenUpdates();
       const replacementTokens = await this.estimateTokensForContents(
@@ -736,12 +729,15 @@ export abstract class HistoryServiceCore
 
   registerMediaOwner(owner: HistoryMediaOwner): void {
     this.mediaOwner = owner;
-    owner.adopt(this.history);
+    owner.adopt(this.materializeHistory());
   }
 
   settleMediaOwnership(): Promise<void> {
     return this.enqueueAsynchronousHistoryMutation(async () => {
-      await this.mediaOwner?.reconcile([...this.history], () => this.history);
+      await this.mediaOwner?.reconcile(
+        this.materializeHistory(),
+        () => this.materializeHistory(),
+      );
     });
   }
 
@@ -795,26 +791,29 @@ export abstract class HistoryServiceCore
 
   /**
    * The curated in-memory context boundary plus the v2 membership projection
-   * (#854): boundary fields derived from the history array, joined with the
-   * cumulative removed-interior spans and the compressed spans re-derived
-   * from summary metadata.
+   * (#854): boundary fields derived from the transient journal fold, joined
+   * with the capped span window and the compressed spans re-derived from
+   * summary metadata.
    *
    * @plan PLAN-20260917-ISSUE854.P01
    * @requirement REQ-854-004
    */
   getContextRange(): ContextRange {
-    return buildContextRangeSnapshot(this.history, this.removedInteriorSpans);
+    return buildContextRangeSnapshot(
+      this.materializeHistory(),
+      this.spanWindow.get(),
+    );
   }
 
   /**
    * Projections of every summary entry currently in context, derived from
-   * each entry's `chronologyReplaced` span.
+   * each entry's `chronologyReplaced` metadata.
    *
    * @plan PLAN-20260917-ISSUE854.P01
    * @requirement REQ-854-004
    */
   getContextSummaries(): ContextSummaryInfo[] {
-    return computeContextSummaries(this.history);
+    return computeContextSummaries(this.materializeHistory());
   }
 
   /**
@@ -829,7 +828,10 @@ export abstract class HistoryServiceCore
   protected emitContextRangeChanged(): void {
     this.emit(
       'contextRangeChanged',
-      buildContextRangeSnapshot(this.history, this.removedInteriorSpans),
+      buildContextRangeSnapshot(
+        this.materializeHistory(),
+        this.spanWindow.get(),
+      ),
     );
   }
 
@@ -950,17 +952,25 @@ export abstract class HistoryServiceCore
     readonly nextHistoryTokens: number;
     readonly publishedContents?: readonly IContent[];
     readonly extraRemovedInterior?: readonly RemovedInteriorSpan[];
+    /**
+     * Precomputed journal ops for mutations whose durable shape is narrower
+     * than the generic previous→next diff (density passes). When omitted,
+     * the diff is planned from the two projections.
+     *
+     * @plan PLAN-20260917-ISSUE854.P05b3
+     */
+    readonly journalPlan?: readonly HistoryJournalOp[];
     readonly options: HistoryBatchOptions;
   }): Promise<void> {
-    const previousHistory = this.history;
+    const previousHistory = this.materializeHistory();
     const previousTokens = this.totalTokens;
-    const previousSpans = this.removedInteriorSpans;
+    const previousSpans = this.spanWindow.get();
     const chronology = this.stampHistory(input.nextHistory);
     const nextHistory = [...input.nextHistory];
     // Membership state after this mutation (#854): accumulated spans joined
     // with the mutation's own removals (density spans pre-derived, strict
     // seq-prefix truncation as rewound), computed before any effect can run
-    // and applied atomically with the history swap.
+    // and applied atomically with the durable journal ops.
     const committedSpans = mergeCommitSpans(
       previousSpans,
       input.extraRemovedInterior,
@@ -992,9 +1002,13 @@ export abstract class HistoryServiceCore
       }
 
       this.invalidatePendingSyncs();
-      this.history = nextHistory;
+      // The swap point: the journal receives the mutation's durable ops and
+      // becomes the new state of record (#854).
+      for (const op of input.journalPlan ?? planHistoryMutation(previousHistory, nextHistory)) {
+        this.journal.apply(op);
+      }
       this.totalTokens = input.nextHistoryTokens;
-      this.removedInteriorSpans = committedSpans;
+      this.spanWindow.set(committedSpans);
       historyPublished = true;
       if (input.publishedContents !== undefined) {
         this.emit('contentBatchAdded', input.publishedContents);
@@ -1010,9 +1024,13 @@ export abstract class HistoryServiceCore
     } catch (error: unknown) {
       if (historyPublished) {
         this.invalidatePendingSyncs();
-        this.history = previousHistory;
+        // Compensating ops restore the previous projection; the journal is
+        // append-only, so a rollback is the inverse plan, not an erasure.
+        for (const op of planHistoryMutation(nextHistory, previousHistory)) {
+          this.journal.apply(op);
+        }
         this.totalTokens = previousTokens;
-        this.removedInteriorSpans = previousSpans;
+        this.spanWindow.set(previousSpans);
       }
       this.restoreChronology(chronology);
       const rollbackFailures = await this.rollbackMutationEffects(effects);
@@ -1058,20 +1076,21 @@ export abstract class HistoryServiceCore
    */
   async applyDensityResult(result: DensityResult): Promise<void> {
     await this.enqueueAsynchronousHistoryMutation(async () => {
-      validateDensityResult(result, this.history.length);
-      const nextHistory = [...this.history];
+      const currentHistory = this.materializeHistory();
+      validateDensityResult(result, currentHistory.length);
       // Membership spans of the entries this pass destroys (#854); indices
-      // are validated against this.history above.
-      const densitySpans = collectDensitySpans(this.history, result);
+      // are validated against the current projection above.
+      const densitySpans = collectDensitySpans(currentHistory, result);
       // Each density replacement takes over the chronology position of the item
       // it replaces, so the surviving history keeps an unbroken sequence.
       // densityValidation stays free of chronology knowledge.
       for (const [index, replacement] of result.replacements) {
-        const replacedMarker = this.history[index].metadata?.chronology;
+        const replacedMarker = currentHistory[index].metadata?.chronology;
         if (replacedMarker !== undefined) {
           this.chronology.inherit(replacement, replacedMarker);
         }
       }
+      const nextHistory = [...currentHistory];
       applyDensityMutations(nextHistory, result);
       await this.waitForTokenUpdates();
       const replacementTokens =
@@ -1080,13 +1099,16 @@ export abstract class HistoryServiceCore
         nextHistory,
         nextHistoryTokens: replacementTokens,
         extraRemovedInterior: densitySpans,
+        // The durable shape of a density pass is one addressed mutation, not
+        // a rewrite; falls back to the generic diff for unmarked rows.
+        journalPlan: planDensityMutation(currentHistory, result) ?? undefined,
         options: {},
       });
 
       this.logger.debug('Density: applied result', {
         replacements: result.replacements.size,
         removals: result.removals.length,
-        newHistoryLength: this.history.length,
+        newHistoryLength: this.materializeHistory().length,
         metadata: result.metadata,
       });
     });

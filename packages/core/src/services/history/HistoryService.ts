@@ -42,6 +42,10 @@ import {
 import { HistoryServiceCore } from './HistoryServiceCore.js';
 import { recordClearedSpan } from './contextRange.js';
 import { sanitizeProviderHistoryForSerialization } from './historyCloneUtils.js';
+import {
+  planHistoryMutation,
+  type HistoryServiceJournalOptions,
+} from './historyJournalStore.js';
 
 export type {
   CompressionConfig,
@@ -51,6 +55,7 @@ export type {
   HistoryMediaOwner,
   HistoryOwnedMediaReservation,
   PreparedHistoryBatchEffect,
+  HistoryServiceJournalOptions,
 } from './HistoryServiceCore.js';
 
 /**
@@ -58,9 +63,21 @@ export type {
  *
  * Mutation, ownership, chronology, and token-accounting mechanics live in the
  * cohesive base implementation. This class owns history queries, lifecycle,
- * compression coordination, and serialization.
+ * compression coordination, and serialization. All state lives in the
+ * journal (#854): reads materialize transiently, writes append durable ops.
  */
 export class HistoryService extends HistoryServiceCore {
+  /**
+   * @param options.recording injects the journal store. Omitted, the service
+   *   records into its own temp-file-backed journal; call
+   *   {@link attachJournal} to move onto a session recorder after
+   *   construction (foreground wiring order).
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b3
+   */
+  constructor(options: HistoryServiceJournalOptions = {}) {
+    super(options);
+  }
   /**
    * Immutably replace a single tool_response block with a replacement
    * tool_response block, preserving callId/toolName invariants.
@@ -100,9 +117,8 @@ export class HistoryService extends HistoryServiceCore {
     replacement: ToolResponseBlock,
     modelName?: string,
   ): Promise<boolean> {
-    const entry = Number.isInteger(entryIndex)
-      ? this.history[entryIndex]
-      : undefined;
+    const rows = this.materializeHistory();
+    const entry = Number.isInteger(entryIndex) ? rows[entryIndex] : undefined;
     if (entry === undefined) return false;
     const target = Number.isInteger(blockIndex)
       ? entry.blocks[blockIndex]
@@ -120,20 +136,31 @@ export class HistoryService extends HistoryServiceCore {
 
     const newBlocks = [...entry.blocks];
     newBlocks[blockIndex] = replacement;
-    const oldHistory = this.history;
-    const oldTokens = this.totalTokens;
-    const candidateHistory = [...oldHistory];
+    const candidateHistory = [...rows];
     candidateHistory[entryIndex] = { ...entry, blocks: newBlocks };
-    this.history = invalidateRetainedRewrite(candidateHistory, entryIndex);
+    const nextHistory = invalidateRetainedRewrite(candidateHistory, entryIndex);
+
+    // The generic planner emits one addressed replacement op per value-
+    // changed row; rows the retained-rewrite invalidation touched plan the
+    // same way (#854).
+    const journalPlan = planHistoryMutation(rows, nextHistory);
+    const oldTokens = this.totalTokens;
+    for (const op of journalPlan) {
+      this.journal.apply(op);
+    }
 
     try {
       await this.recalculateTotalTokens(modelName);
     } catch (error) {
-      // Restore BOTH invariants: the history array AND the token accounting.
-      // recalculateTotalTokens may have already mutated this.totalTokens to
-      // reflect the replacement content before a listener/event error aborted
-      // the emit. Leaving totalTokens stale would corrupt the token budget.
-      [this.history, this.totalTokens] = [oldHistory, oldTokens];
+      // Restore BOTH invariants: the journal projection AND the token
+      // accounting. recalculateTotalTokens may have already mutated
+      // totalTokens to reflect the replacement content before a listener/
+      // event error aborted the emit. Leaving totalTokens stale would
+      // corrupt the token budget.
+      for (const op of planHistoryMutation(nextHistory, rows)) {
+        this.journal.apply(op);
+      }
+      this.totalTokens = oldTokens;
       // Best-effort notification so healthy listeners observe the rollback.
       // A broken listener that originally caused the failure must not mask
       // the original error.
@@ -155,14 +182,16 @@ export class HistoryService extends HistoryServiceCore {
   }
 
   /**
-   * Return a read-only typed view of the backing history array.
+   * Return a transient materialization of the current history (#854): a
+   * fresh array per call — the journal is the system of record, so there is
+   * no backing array to hand out.
    *
    * @plan PLAN-20260211-HIGHDENSITY.P08
    * @requirement REQ-HD-003.5
    * @pseudocode history-service.md lines 10-15
    */
   getRawHistory(): readonly IContent[] {
-    return this.history;
+    return this.materializeHistory();
   }
 
   /**
@@ -179,8 +208,9 @@ export class HistoryService extends HistoryServiceCore {
     return this.runSerializedTokenOperation(async () => {
       let newTotal = 0;
       const tokenizerProvider = this.tokenizerProvider(activeProvider);
+      const history = this.materializeHistory();
 
-      for (const entry of this.history) {
+      for (const entry of history) {
         const entryTokens = await estimateContentTokensImpl(
           entry,
           modelName,
@@ -196,7 +226,7 @@ export class HistoryService extends HistoryServiceCore {
       this.logger.debug('Density: recalculated total tokens', {
         previousTotal,
         newTotal,
-        entryCount: this.history.length,
+        entryCount: history.length,
       });
 
       this.emit('tokensUpdated', {
@@ -207,9 +237,9 @@ export class HistoryService extends HistoryServiceCore {
     });
   }
 
-  /** Get all history (shallow copy). */
+  /** Get all history as a transient materialization (fresh array per call). */
   getAll(): IContent[] {
-    return [...this.history];
+    return this.materializeHistory();
   }
 
   /**
@@ -224,7 +254,7 @@ export class HistoryService extends HistoryServiceCore {
       // Best-effort; listener removal is not critical
     }
 
-    this.history = [];
+    this.journal.dispose();
     this.totalTokens = 0;
     this.baseTokenOffset = 0;
     this.isCompressing = false;
@@ -259,21 +289,23 @@ export class HistoryService extends HistoryServiceCore {
   }
 
   private clearInternal(): void {
+    const previousHistory = this.materializeHistory();
     this.logger.debug('Clearing history', {
-      previousLength: this.history.length,
+      previousLength: previousHistory.length,
     });
 
     this.invalidatePendingSyncs();
 
     // Record the cleared membership span while the boundary is still readable
     // (#854); the emitted snapshot below joins it with the emptied history.
-    this.removedInteriorSpans = recordClearedSpan(
-      this.removedInteriorSpans,
-      this.history,
+    this.spanWindow.set(
+      recordClearedSpan(this.spanWindow.get(), previousHistory),
     );
 
     const previousTokens = this.totalTokens;
-    this.history = [];
+    for (const op of planHistoryMutation(previousHistory, [])) {
+      this.journal.apply(op);
+    }
     this.totalTokens = 0;
     // Chronology counters are intentionally NOT reset on clear (NG8): seq must
     // never be reused so items added after a clear never collide with earlier ones.
@@ -289,7 +321,7 @@ export class HistoryService extends HistoryServiceCore {
 
   /** Get the last N messages from history. */
   getRecent(count: number): IContent[] {
-    return this.history.slice(-count);
+    return this.materializeHistory().slice(-count);
   }
 
   /**
@@ -300,7 +332,11 @@ export class HistoryService extends HistoryServiceCore {
    * - Only includes AI messages if they are valid (have content)
    */
   getCurated(): IContent[] {
-    return buildCuratedHistory(this.logger, this.history, this.isCompressing);
+    return buildCuratedHistory(
+      this.logger,
+      this.materializeHistory(),
+      this.isCompressing,
+    );
   }
 
   /** Get comprehensive history (all content including invalid/empty). */
@@ -308,13 +344,26 @@ export class HistoryService extends HistoryServiceCore {
     return this.getAll();
   }
 
-  /** Remove the last content if it matches the provided content. */
+  /**
+   * Remove the last content if it matches the provided content. Matching is
+   * by value (#854): reads materialize fresh projections, so a previously
+   * added object's reference identity no longer exists to compare against.
+   */
   removeLastIfMatches(content: IContent): boolean {
-    const last = this.history[this.history.length - 1];
-    if (last === content) {
-      const previous = [...this.history];
-      this.history.pop();
-      this.enqueueSynchronousOwnershipReconcile(previous, () => this.history);
+    const previous = this.materializeHistory();
+    if (
+      previous.length > 0 &&
+      isDeepStrictEqual(previous[previous.length - 1], content)
+    ) {
+      const last = previous[previous.length - 1];
+      this.journal.apply({
+        kind: 'rewind',
+        itemsRemoved: 1,
+        cutSeq: last.metadata?.chronology?.seq,
+      });
+      this.enqueueSynchronousOwnershipReconcile(previous, () =>
+        this.materializeHistory(),
+      );
       return true;
     }
     return false;
@@ -322,14 +371,22 @@ export class HistoryService extends HistoryServiceCore {
 
   /** Pop the last content from history. */
   pop(): IContent | undefined {
-    const previous = [...this.history];
-    const removed = this.history.pop();
-    if (removed) {
-      this.enqueueSynchronousOwnershipReconcile(previous, () => this.history);
-      // Recalculate tokens since we removed content
-      // This is less efficient but ensures accuracy
-      this.observeTokenizerOperation(this.recalculateTokens());
+    const previous = this.materializeHistory();
+    if (previous.length === 0) {
+      return undefined;
     }
+    const removed = previous[previous.length - 1];
+    this.journal.apply({
+      kind: 'rewind',
+      itemsRemoved: 1,
+      cutSeq: removed.metadata?.chronology?.seq,
+    });
+    this.enqueueSynchronousOwnershipReconcile(previous, () =>
+      this.materializeHistory(),
+    );
+    // Recalculate tokens since we removed content
+    // This is less efficient but ensures accuracy
+    this.observeTokenizerOperation(this.recalculateTokens());
     return removed;
   }
 
@@ -342,8 +399,9 @@ export class HistoryService extends HistoryServiceCore {
   ): Promise<void> {
     return this.runSerializedTokenOperation(async () => {
       let newTotal = 0;
+      const history = this.materializeHistory();
 
-      for (const content of this.history) {
+      for (const content of history) {
         newTotal += await this.estimateContentTokens(content, defaultModel);
       }
 
@@ -363,14 +421,14 @@ export class HistoryService extends HistoryServiceCore {
    * Get the last user (human) content
    */
   getLastUserContent(): IContent | undefined {
-    return getLastContentBySpeaker(this.history, 'human');
+    return getLastContentBySpeaker(this.materializeHistory(), 'human');
   }
 
   /**
    * Get the last AI content
    */
   getLastAIContent(): IContent | undefined {
-    return getLastContentBySpeaker(this.history, 'ai');
+    return getLastContentBySpeaker(this.materializeHistory(), 'ai');
   }
 
   /**
@@ -390,42 +448,44 @@ export class HistoryService extends HistoryServiceCore {
 
   /** Get the number of messages in history. */
   length(): number {
-    return this.history.length;
+    return this.materializeHistory().length;
   }
 
   /** Check if history is empty. */
   isEmpty(): boolean {
-    return this.history.length === 0;
+    return this.materializeHistory().length === 0;
   }
 
   /** Clone the history without serializing immutable media payloads. */
   clone(): IContent[] {
-    return sanitizeProviderHistoryForSerialization(this.history);
+    return sanitizeProviderHistoryForSerialization(this.materializeHistory());
   }
 
   /**
    * Find unmatched tool calls (tool calls without responses)
    */
   findUnmatchedToolCalls(): ToolCallBlock[] {
-    return findUnmatchedToolCallsHelper(this.logger, this.history);
+    return findUnmatchedToolCallsHelper(this.logger, this.materializeHistory());
   }
 
   /**
    * Validate and fix the history to ensure proper tool call/response pairing
    */
   validateAndFix(): void {
-    const respondedCallIds = collectRespondedCallIds(this.history);
+    const previous = this.materializeHistory();
+    const respondedCallIds = collectRespondedCallIds(previous);
+    const next = [...previous];
 
     let insertedCount = 0;
 
-    for (let i = 0; i < this.history.length; i++) {
-      const missing = getMissingToolCalls(this.history[i], respondedCallIds);
+    for (let i = 0; i < next.length; i++) {
+      const missing = getMissingToolCalls(next[i], respondedCallIds);
       if (missing.length > 0) {
         const stampedSynthetic = this.chronology.stamp(
           createSyntheticToolMessage(missing),
         );
 
-        this.history.splice(i + 1, 0, stampedSynthetic);
+        next.splice(i + 1, 0, stampedSynthetic);
         insertedCount += 1;
 
         for (const tc of missing) {
@@ -437,9 +497,18 @@ export class HistoryService extends HistoryServiceCore {
       }
     }
 
+    if (insertedCount > 0) {
+      // Durable form of the insertions (#854): plan the ops that turn the
+      // previous projection into the fixed one (wholesale rewrite — interior
+      // insertions are not a marked prefix).
+      for (const op of planHistoryMutation(previous, next)) {
+        this.journal.apply(op);
+      }
+    }
+
     this.logger.debug('History validation complete:', {
       insertedSyntheticToolMessages: insertedCount,
-      historyLength: this.history.length,
+      historyLength: next.length,
     });
   }
 
@@ -477,7 +546,11 @@ export class HistoryService extends HistoryServiceCore {
     maxTokens: number,
     countTokensFn: (content: IContent) => number,
   ): IContent[] {
-    return getWithinTokenLimitHelper(this.history, maxTokens, countTokensFn);
+    return getWithinTokenLimitHelper(
+      this.materializeHistory(),
+      maxTokens,
+      countTokensFn,
+    );
   }
 
   /**
@@ -487,8 +560,9 @@ export class HistoryService extends HistoryServiceCore {
     keepRecentCount: number,
     summarizeFn: (contents: IContent[]) => Promise<IContent>,
   ): Promise<void> {
+    const previous = this.materializeHistory();
     const result = await summarizeOldHistoryHelper(
-      this.history,
+      previous,
       keepRecentCount,
       summarizeFn,
     );
@@ -498,14 +572,16 @@ export class HistoryService extends HistoryServiceCore {
       for (const item of result) {
         this.chronology.stamp(item);
       }
-      this.history = result;
+      for (const op of planHistoryMutation(previous, result)) {
+        this.journal.apply(op);
+      }
       await this.recalculateTotalTokens();
     }
   }
 
   /** Export history to JSON. */
   toJSON(): string {
-    return JSON.stringify(this.history, null, 2);
+    return JSON.stringify(this.materializeHistory(), null, 2);
   }
 
   /** Import history from JSON. */
@@ -568,7 +644,7 @@ export class HistoryService extends HistoryServiceCore {
    * Get conversation statistics
    */
   getStatistics(): ConversationStatistics {
-    return computeStatistics(this.history);
+    return computeStatistics(this.materializeHistory());
   }
 
   /**
@@ -577,7 +653,7 @@ export class HistoryService extends HistoryServiceCore {
    * text, tool parameters, or tool results appear in the trace.
    */
   getChronologyTrace(): ChronologyTraceEntry[] {
-    return buildChronologyTrace(this.history);
+    return buildChronologyTrace(this.materializeHistory());
   }
 
   /**

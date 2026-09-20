@@ -138,6 +138,7 @@
     "src/runtime/contracts/RuntimeContentGeneratorFactory.test.ts",
     "src/runtime/contracts/RuntimeProvider.test.ts",
     "src/runtime/contracts/RuntimeTokenizer.test.ts",
+    "src/runtime/contracts/providerStream.test.ts",
     "src/runtime/contracts/structural-contracts.test.ts",
     "src/runtime/createAgentRuntimeContext.test.ts",
     "src/runtime/runtimeAdapters.test.ts",
