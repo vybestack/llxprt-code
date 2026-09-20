@@ -87,11 +87,24 @@ describe('createAgent self-contained assembly @plan:ISSUE-3222 @requirement:REQ-
         }),
       ).rejects.toThrow(/createAgent activation failed/);
 
-      expect(() =>
+      // The registry refuses the torn-down runtimeId: getCliRuntimeServices()
+      // resolves identity first and resolveActiveRuntimeIdentity() throws the
+      // deterministic stale-scope message for it (plain substring, no regex).
+      let registryError: unknown;
+      try {
         runWithRuntimeScope({ runtimeId, metadata: {} }, () =>
           getCliRuntimeServices(),
-        ),
-      ).toThrow(/runtime registration|runtime.*not/i);
+        );
+      } catch (error) {
+        registryError = error;
+      }
+      expect(registryError).toBeInstanceOf(Error);
+      if (!(registryError instanceof Error)) {
+        throw new Error(`expected Error, got: ${String(registryError)}`);
+      }
+      expect(registryError.message).toContain(
+        `Active runtime scope '${runtimeId}' is not registered`,
+      );
     } finally {
       await disposeCliRuntime(runtimeId);
     }
@@ -133,16 +146,18 @@ describe('createAgent self-contained assembly @plan:ISSUE-3222 @requirement:REQ-
         'createAgent bootstrap failed and isolated runtime cleanup also failed',
       );
       // The ORIGINAL activation error is preserved, not substituted by the
-      // cleanup error.
+      // cleanup error. It is constructed inside createAgent (not by this
+      // test), so membership is proven by plain substring presence; together
+      // with the identity-pinned injectedCleanupError and the length-2 shape
+      // this still pins the exact two-error membership.
       expect(
-        rejection.errors.filter(
-          (error): error is Error =>
+        rejection.errors.some(
+          (error: unknown): error is Error =>
             error instanceof Error &&
-            /createAgent activation failed.*definitely-not-a-registered-provider/.test(
-              error.message,
-            ),
+            error.message.includes('createAgent activation failed') &&
+            error.message.includes('definitely-not-a-registered-provider'),
         ),
-      ).toHaveLength(1);
+      ).toBe(true);
       // The injected cleanup error is preserved BY IDENTITY.
       expect(rejection.errors).toContain(injectedCleanupError);
       // The cleanup step AFTER the injected failure still ran.
@@ -168,13 +183,26 @@ describe('createAgent self-contained assembly @plan:ISSUE-3222 @requirement:REQ-
     const runtimeId = 'issue3222-createagent-failure-config-dispose';
     const disposeSpy = vi.spyOn(Config.prototype, 'dispose');
     try {
-      await expect(
-        buildAgent('plain-text.jsonl', {
+      let rejection: unknown;
+      try {
+        await buildAgent('plain-text.jsonl', {
           sessionId: runtimeId,
           activation: failingActivation,
-        }),
-      ).rejects.toThrow(
-        /createAgent activation failed.*definitely-not-a-registered-provider/,
+        });
+      } catch (error) {
+        rejection = error;
+      }
+      expect(rejection).toBeInstanceOf(Error);
+      if (!(rejection instanceof Error)) {
+        throw new Error(`expected Error, got: ${String(rejection)}`);
+      }
+      // The original activation error surfaces directly (not wrapped or
+      // substituted): the createAgent prefix and the underlying
+      // provider-not-found name are both in the SAME message (plain
+      // substring checks, no regex).
+      expect(rejection.message).toContain('createAgent activation failed');
+      expect(rejection.message).toContain(
+        'definitely-not-a-registered-provider',
       );
 
       expect(disposeSpy).toHaveBeenCalledTimes(1);
