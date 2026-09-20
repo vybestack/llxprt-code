@@ -139,7 +139,8 @@ export interface BuiltFactoryLessConfig {
  * NO toolSchedulerFactory, NO taskToolRegistration, and NO runtime
  * activation/initialization — fromConfig owns those steps during adoption.
  * Optionally installs caller-supplied factories so adoption can be observed
- * honoring them (caller-wins).
+ * honoring them (caller-wins), and optionally overrides base AgentConfig
+ * fields (e.g. excludeTools) for governance-observation scenarios.
  *
  * The FakeProvider env seam stays set until cleanup so the turn driven after
  * adoption uses the fixture. Because fromConfig ADOPTS the Config
@@ -149,6 +150,7 @@ export interface BuiltFactoryLessConfig {
 export async function buildFactoryLessConfig(
   fixtureRelPath: string,
   callerFactories: Readonly<CallerAgentRuntimeFactories> = {},
+  baseConfigOverrides: Readonly<Partial<AgentConfig>> = {},
 ): Promise<BuiltFactoryLessConfig> {
   const prev = process.env.LLXPRT_FAKE_RESPONSES;
   const fixturePath = resolve(FIXTURES_DIR, fixtureRelPath);
@@ -158,6 +160,7 @@ export async function buildFactoryLessConfig(
     provider: 'fake',
     model: 'fake-model',
     workingDir: resolve(HARNESS_DIR, '..'),
+    ...baseConfigOverrides,
   };
 
   const frozenParams = toConfigParameters(baseConfig);

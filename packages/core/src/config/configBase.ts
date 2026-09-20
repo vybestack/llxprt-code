@@ -11,6 +11,8 @@ import type { ShellJobManager } from '../services/shellJobManager.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { assertSessionScopedKey } from '@vybestack/llxprt-code-settings';
 import { createToolRegistry as _createToolRegistry } from './toolRegistryFactory.js';
+import { reconcileTaskToolRegistration as _reconcileTaskToolRegistration } from './toolRegistryFactory.js';
+import type { AgentClientContract } from '../core/clientContract.js';
 import { TELEMETRY_OUTFILE_BOUND_DEFAULTS } from './configConstructor.js';
 import { shutdownLsp } from './lspIntegration.js';
 import type { LspServiceClient } from '@vybestack/llxprt-code-ide-integration';
@@ -160,6 +162,60 @@ export abstract class ConfigBase extends ConfigBaseCore {
     const result = await _createToolRegistry(this, this, messageBus);
     this.allPotentialTools = result.allPotentialTools;
     return result.registry;
+  }
+
+  /**
+   * Carries a task-tool registration installed after initialization into the
+   * already-built tool registry (issue #3222).
+   *
+   * The registration is consumed only at tool-registry construction, and
+   * ensureInitialized is a no-op for a Config the caller already initialized,
+   * so a registration installed on such a Config (for example the shipped
+   * default fromConfig installs during adoption) would otherwise never be
+   * consumed. This registers the missing task tool against the LIVE registry
+   * under the same coreTools/excludeTools governance as build time — never
+   * overriding an existing task tool or any other registry contents — and
+   * pushes the updated declarations to a ready agent client, mirroring
+   * Config.refreshSkills.
+   */
+  async reconcileTaskToolRegistration(): Promise<void> {
+    const messageBus = this.getRuntimeMessageBus();
+    if (messageBus === undefined) {
+      return;
+    }
+    const registered = _reconcileTaskToolRegistration(
+      this,
+      this,
+      this.getToolRegistry(),
+      this.allPotentialTools,
+      messageBus,
+    );
+    if (!registered) {
+      return;
+    }
+    // Registry changes do not reach the model on their own: the chat session
+    // caches the declarations it was last given.
+    const client = this.getAgentClientIfReady();
+    if (client) {
+      await client.setTools();
+    }
+  }
+
+  /**
+   * The agent client when present and initialized, else undefined. The
+   * backing field is definite-assignment, so it is runtime-undefined before
+   * initialize() despite the non-optional declared type. Protected so
+   * subclasses (Config.refreshSkills et al.) share the one ready-check.
+   */
+  protected getAgentClientIfReady(): AgentClientContract | undefined {
+    const client = this.agentClient as AgentClientContract | undefined;
+    if (client === undefined) {
+      return undefined;
+    }
+    if (!client.isInitialized()) {
+      return undefined;
+    }
+    return client;
   }
 
   disposeScheduler(sessionId: string): void {

@@ -158,14 +158,53 @@ function aiTextContent(text: string): IContent {
 }
 
 /**
- * Records one prompt per agent.stream() call — the SAME observability point
- * the pre-#3222 version of this test had (its hand-written stream() wrapper
- * pushed the prompt before driving the loop). The real engine may issue
- * additional provider calls INSIDE a stream (e.g. the TodoContinuationService
- * follow-up round for the seeded in_progress item); those are engine-internal
- * and must not surface as extra prompts.
+ * Stream-seam concurrency probe: `active` counts LIVES of agent streams —
+ * incremented when a stream's iteration starts, decremented in the wrapper
+ * generator's `finally` when iteration ends (exhausted OR abandoned via
+ * return()). maxConcurrent therefore proves agent stream lifetimes never
+ * overlapped: turn A's stream ends when the engine abandons it on abort,
+ * even though the parked provider read never settles. This is the SAME
+ * measurement point the pre-#3222 version of this test had (its
+ * hand-written stream() wrapper tracked active/maxConcurrent around the
+ * loop). The provider's own abort/readSettled bookkeeping is transport-level
+ * and deliberately NOT part of this measurement.
  */
-function recordStreamPrompts(agent: Agent, started: string[]): Agent {
+interface StreamConcurrencyProbe {
+  onStreamStart(): void;
+  onStreamEnd(): void;
+  maxConcurrent(): number;
+}
+
+function createStreamConcurrencyProbe(): StreamConcurrencyProbe {
+  let active = 0;
+  let peak = 0;
+  return {
+    onStreamStart: () => {
+      active += 1;
+      if (active > peak) peak = active;
+    },
+    onStreamEnd: () => {
+      active -= 1;
+    },
+    maxConcurrent: () => peak,
+  };
+}
+
+/**
+ * Records one prompt per agent.stream() call and wraps the returned stream
+ * with the concurrency probe — the SAME observability points the pre-#3222
+ * version of this test had (its hand-written stream() wrapper pushed the
+ * prompt and tracked active/maxConcurrent before/after driving the loop).
+ * The real engine may issue additional provider calls INSIDE a stream (e.g.
+ * the TodoContinuationService follow-up round for the seeded in_progress
+ * item); those are engine-internal and must not surface as extra prompts or
+ * as separate stream lives.
+ */
+function recordStreamPrompts(
+  agent: Agent,
+  started: string[],
+  concurrency: StreamConcurrencyProbe,
+): Agent {
   return new Proxy(agent, {
     get(target, prop) {
       if (prop === 'stream') {
@@ -174,9 +213,12 @@ function recordStreamPrompts(agent: Agent, started: string[]): Agent {
           ...rest: unknown[]
         ): AsyncIterable<AgentEvent> => {
           started.push(promptTextOf(input));
-          return target.stream(
-            input,
-            ...(rest as [options?: Parameters<Agent['stream']>[1]]),
+          return trackStreamLifetime(
+            target.stream(
+              input,
+              ...(rest as [options?: Parameters<Agent['stream']>[1]]),
+            ),
+            concurrency,
           );
         };
       }
@@ -186,6 +228,18 @@ function recordStreamPrompts(agent: Agent, started: string[]): Agent {
         : value;
     },
   });
+}
+
+async function* trackStreamLifetime(
+  source: AsyncIterable<AgentEvent>,
+  concurrency: StreamConcurrencyProbe,
+): AsyncIterable<AgentEvent> {
+  concurrency.onStreamStart();
+  try {
+    yield* source;
+  } finally {
+    concurrency.onStreamEnd();
+  }
 }
 
 function transportAbortSignal(
@@ -210,12 +264,6 @@ class ControlledTransportProvider implements IProvider {
 
   private abortObserved = false;
   private readSettled = false;
-  private active = 0;
-  private peak = 0;
-
-  maxConcurrent(): number {
-    return this.peak;
-  }
 
   abortObservedByProvider(): boolean {
     return this.abortObserved;
@@ -264,15 +312,6 @@ class ControlledTransportProvider implements IProvider {
     const options: GenerateChatOptions = Array.isArray(optionsOrContent)
       ? { contents: optionsOrContent }
       : optionsOrContent;
-    let released = false;
-    const release = (): void => {
-      if (!released) {
-        released = true;
-        this.active -= 1;
-      }
-    };
-    this.active += 1;
-    if (this.active > this.peak) this.peak = this.active;
 
     if (this.mode === 'turnA') {
       try {
@@ -282,9 +321,6 @@ class ControlledTransportProvider implements IProvider {
         const signal = transportAbortSignal(options);
         signal?.addEventListener('abort', () => {
           this.abortObserved = true;
-          // The engine abandoned this call (the turn is over for it), so the
-          // transport slot is free even though the read itself never settles.
-          release();
         });
         const parked = new Promise<never>(() => {});
         void parked.then(
@@ -296,17 +332,11 @@ class ControlledTransportProvider implements IProvider {
       } finally {
         // Only reachable if the engine ever managed to close this read.
         this.readSettled = true;
-        release();
       }
     }
 
     this.cleanRequests += 1;
-    try {
-      yield aiTextContent('clean answer');
-      return;
-    } finally {
-      release();
-    }
+    yield aiTextContent('clean answer');
   }
 }
 
@@ -376,13 +406,18 @@ async function createEngineEnv(): Promise<EngineEnv> {
     const builtHandle = handle;
     const builtAgent = agent;
     const startedPrompts: string[] = [];
-    const recordingAgent = recordStreamPrompts(builtAgent, startedPrompts);
+    const streamConcurrency = createStreamConcurrencyProbe();
+    const recordingAgent = recordStreamPrompts(
+      builtAgent,
+      startedPrompts,
+      streamConcurrency,
+    );
     return {
       agent: recordingAgent,
       transport,
       sessionId: builtConfig.getSessionId(),
       startedPrompts: () => startedPrompts,
-      maxConcurrent: () => transport.maxConcurrent(),
+      maxConcurrent: () => streamConcurrency.maxConcurrent(),
       routedEvents: [],
       dispose: async (): Promise<void> => {
         await builtAgent.dispose().catch(() => undefined);
