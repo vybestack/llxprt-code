@@ -468,4 +468,67 @@ describe('mcp list command', () => {
       ),
     );
   });
+
+  it('should surface the plugin install hint when the Google auth plugin is not installed', async () => {
+    mockedCreateTransport.mockImplementation(
+      actual.createTransport as unknown as (
+        ...args: never[]
+      ) => Promise<MockTransport>,
+    );
+    mockedLoadSettings.mockReturnValue({
+      merged: {
+        mcpServers: {
+          'google-server': {
+            url: 'https://example.com/mcp',
+            type: 'http',
+            authProviderType: 'google_credentials',
+          },
+        },
+      },
+    });
+
+    await listMcpServers();
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('@vybestack/llxprt-plugin-google-mcp-auth'),
+    );
+  });
+
+  it('should surface the factory failure reason when the plugin factory throws', async () => {
+    mockedLoadInstalledRuntimePlugins.mockResolvedValue(
+      buildProviderContributionRegistry([
+        googleAuthPlugin({
+          authProviderType: 'google_credentials',
+          createAuthProvider: () => {
+            throw new Error('factory exploded');
+          },
+        }),
+      ]),
+    );
+    mockedCreateTransport.mockImplementation(
+      actual.createTransport as unknown as (
+        ...args: never[]
+      ) => Promise<MockTransport>,
+    );
+    mockedLoadSettings.mockReturnValue({
+      merged: {
+        mcpServers: {
+          'google-server': {
+            url: 'https://example.com/mcp',
+            type: 'http',
+            authProviderType: 'google_credentials',
+          },
+        },
+      },
+    });
+
+    await listMcpServers();
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "MCP server 'google-server' failed to create its " +
+          "'google_credentials' auth provider: factory exploded",
+      ),
+    );
+  });
 });

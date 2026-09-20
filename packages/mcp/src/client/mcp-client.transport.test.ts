@@ -28,6 +28,7 @@ import {
   registerMcpAuthFactories,
   resetRegisteredMcpAuthFactories,
 } from '../auth/mcp-auth-factory.js';
+import { MCPOAuthProvider } from '../auth/oauth-provider.js';
 
 // Exercises the real host seam instead of mocking a module (#3305).
 const mockEmitFeedback = vi.fn();
@@ -402,6 +403,75 @@ describe('mcp-client', () => {
         expect(error).toBeInstanceOf(Error);
         expect((error as Error).message).toMatch(/test-server.*custom_auth/i);
         expect((error as Error).cause).toBe(factoryError);
+      });
+
+      it('throws a terminal error when the factory returns undefined and never resolves OAuth', async () => {
+        // A malformed JS plugin can pass manifest validation (the factory is
+        // a function) yet return nothing; that must not be read as "no custom
+        // authentication selected" and fall through to stored OAuth tokens.
+        const getValidToken = vi
+          .spyOn(MCPOAuthProvider, 'getValidToken')
+          .mockResolvedValue('oauth-token-must-not-resolve');
+        registerMcpAuthFactories([
+          {
+            authProviderType: CUSTOM_AUTH_TYPE,
+            createAuthProvider: () =>
+              undefined as unknown as McpAuthProvider,
+          },
+        ]);
+
+        const error = await createTransport(
+          'test-server',
+          {
+            httpUrl: 'http://test-server',
+            authProviderType: CUSTOM_AUTH_TYPE,
+            oauth: { enabled: true } as MCPServerConfig['oauth'],
+          },
+          false,
+        ).then(
+          () => undefined,
+          (e: unknown) => e,
+        );
+
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toMatch(
+          /test-server.*custom_auth.*runtime plugin.*undefined/i,
+        );
+        expect(getValidToken).not.toHaveBeenCalled();
+        getValidToken.mockRestore();
+      });
+
+      it('throws a terminal error when the factory returns a non-object', async () => {
+        const getValidToken = vi
+          .spyOn(MCPOAuthProvider, 'getValidToken')
+          .mockResolvedValue('oauth-token-must-not-resolve');
+        registerMcpAuthFactories([
+          {
+            authProviderType: CUSTOM_AUTH_TYPE,
+            createAuthProvider: () =>
+              'not-a-provider' as unknown as McpAuthProvider,
+          },
+        ]);
+
+        const error = await createTransport(
+          'test-server',
+          {
+            httpUrl: 'http://test-server',
+            authProviderType: CUSTOM_AUTH_TYPE,
+            oauth: { enabled: true } as MCPServerConfig['oauth'],
+          },
+          false,
+        ).then(
+          () => undefined,
+          (e: unknown) => e,
+        );
+
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toMatch(
+          /test-server.*custom_auth.*runtime plugin.*string/i,
+        );
+        expect(getValidToken).not.toHaveBeenCalled();
+        getValidToken.mockRestore();
       });
 
       it('throws the Google Credentials missing-URL error without a factory', async () => {

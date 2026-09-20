@@ -44,10 +44,21 @@ async function getMcpServersFromConfig(): Promise<
   return mcpServers;
 }
 
+/** Result of probing one configured server's connection. */
+interface ServerStatusResult {
+  status: MCPServerStatus;
+  /** Why a Disconnected probe failed; actionable prose, never a stack trace. */
+  failureReason?: string;
+}
+
+function toFailureReason(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 async function testMCPConnection(
   serverName: string,
   config: MCPServerConfig,
-): Promise<MCPServerStatus> {
+): Promise<ServerStatusResult> {
   const client = new Client({
     name: 'mcp-test-client',
     version: '0.0.1',
@@ -57,10 +68,14 @@ async function testMCPConnection(
   try {
     // Use the same transport creation logic as core
     transport = await createTransport(serverName, config, false);
-  } catch {
-    // Transport creation failed
+  } catch (error) {
+    // Transport creation failed (e.g. a required auth plugin is missing);
+    // keep the Disconnected status but carry the reason so the user sees it.
     await client.close();
-    return MCPServerStatus.DISCONNECTED;
+    return {
+      status: MCPServerStatus.DISCONNECTED,
+      failureReason: toFailureReason(error),
+    };
   }
 
   try {
@@ -71,18 +86,21 @@ async function testMCPConnection(
     await client.ping();
 
     await client.close();
-    return MCPServerStatus.CONNECTED;
-  } catch {
+    return { status: MCPServerStatus.CONNECTED };
+  } catch (error) {
     // Connection or ping failed
     await transport.close();
-    return MCPServerStatus.DISCONNECTED;
+    return {
+      status: MCPServerStatus.DISCONNECTED,
+      failureReason: toFailureReason(error),
+    };
   }
 }
 
 async function getServerStatus(
   serverName: string,
   server: MCPServerConfig,
-): Promise<MCPServerStatus> {
+): Promise<ServerStatusResult> {
   // Test all server types by attempting actual connection
   return testMCPConnection(serverName, server);
 }
@@ -110,7 +128,7 @@ export async function listMcpServers(): Promise<void> {
   for (const serverName of serverNames) {
     const server = mcpServers[serverName];
 
-    const status = await getServerStatus(serverName, server);
+    const { status, failureReason } = await getServerStatus(serverName, server);
 
     let statusIndicator = '';
     let statusText = '';
@@ -148,6 +166,9 @@ export async function listMcpServers(): Promise<void> {
     }
 
     debugLogger.log(`${statusIndicator} ${serverInfo} - ${statusText}`);
+    if (status === MCPServerStatus.DISCONNECTED && failureReason) {
+      debugLogger.log(`  ${COLOR_YELLOW}${failureReason}${RESET_COLOR}`);
+    }
   }
 }
 

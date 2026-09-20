@@ -65,13 +65,40 @@ function unknownAuthProviderMessage(
 }
 
 /**
+ * The `OAuthClientProvider` methods every `McpAuthProvider` must implement.
+ * Runtime plugins are loaded JS: the manifest schema proves only that
+ * `createAuthProvider` is a function, not that its return value honors the
+ * interface, so the transport validates the result structurally at the
+ * plugin boundary.
+ */
+const REQUIRED_AUTH_PROVIDER_METHODS = [
+  'clientInformation',
+  'tokens',
+  'saveTokens',
+  'redirectToAuthorization',
+  'saveCodeVerifier',
+  'codeVerifier',
+] as const;
+
+function isMcpAuthProvider(value: unknown): value is McpAuthProvider {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return REQUIRED_AUTH_PROVIDER_METHODS.every(
+    (method) => typeof candidate[method] === 'function',
+  );
+}
+
+/**
  * Create an AuthProvider for the MCP Transport.
  *
  * Standard OAuth (no `authProviderType`, or `dynamic_discovery`) returns
  * undefined so the caller falls through to the built-in OAuth path. Any other
  * selected type is dispatched through the registered factory registry; an
- * unknown type or a failing factory is terminal — there is never a silent
- * fallback to standard OAuth.
+ * unknown type, a failing factory, or a factory whose result does not
+ * implement `McpAuthProvider` is terminal — there is never a silent fallback
+ * to standard OAuth.
  */
 function createAuthProvider(
   mcpServerName: string,
@@ -95,8 +122,9 @@ function createAuthProvider(
     );
   }
 
+  let provider: unknown;
   try {
-    return factory(mcpServerConfig);
+    provider = factory(mcpServerConfig);
   } catch (cause) {
     throw new Error(
       `MCP server '${mcpServerName}' failed to create its ` +
@@ -106,6 +134,16 @@ function createAuthProvider(
       { cause },
     );
   }
+
+  if (!isMcpAuthProvider(provider)) {
+    throw new Error(
+      `MCP server '${mcpServerName}' failed to create its ` +
+        `'${authProviderType}' auth provider: the runtime plugin factory ` +
+        `returned '${typeof provider}' instead of an McpAuthProvider.`,
+    );
+  }
+
+  return provider;
 }
 
 /**
