@@ -40,6 +40,7 @@ import {
   type ChronologyTraceEntry,
 } from './historyChronology.js';
 import { HistoryServiceCore } from './HistoryServiceCore.js';
+import { recordClearedSpan } from './contextRange.js';
 import { sanitizeProviderHistoryForSerialization } from './historyCloneUtils.js';
 
 export type {
@@ -263,6 +264,13 @@ export class HistoryService extends HistoryServiceCore {
     });
 
     this.invalidatePendingSyncs();
+
+    // Record the cleared membership span while the boundary is still readable
+    // (#854); the emitted snapshot below joins it with the emptied history.
+    this.removedInteriorSpans = recordClearedSpan(
+      this.removedInteriorSpans,
+      this.history,
+    );
 
     const previousTokens = this.totalTokens;
     this.history = [];

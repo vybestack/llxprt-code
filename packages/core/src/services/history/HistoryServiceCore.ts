@@ -16,11 +16,7 @@
 
 import { finalizeMutationEffects } from './historyMutationFailure.js';
 import { CompressionOperationQueue } from './historyCompressionQueue.js';
-import {
-  type ChronologyMarker,
-  type IContent,
-  type MediaReferenceBlock,
-} from './IContent.js';
+import { type IContent } from './IContent.js';
 import { EventEmitter } from 'events';
 // @plan:PLAN-20260603-ISSUE1584.P05 RuntimeTokenizerFactory used for injection path
 import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
@@ -48,10 +44,14 @@ import {
   type CompressionConfig,
   type ContextRange,
   type ContextSummaryInfo,
+  type RemovedInteriorSpan,
 } from './historyEventTypes.js';
 import {
-  computeContextRange,
   computeContextSummaries,
+  buildContextRangeSnapshot,
+  collectDensitySpans,
+  firstEntryContextRange,
+  mergeCommitSpans,
 } from './contextRange.js';
 import { getTokenizerForModel } from './historyTokenizerAdapter.js';
 import {
@@ -62,80 +62,31 @@ import {
 // Preserve the CompressionConfig export from the same path for consumers.
 export type { CompressionConfig };
 
+// Batch/ownership contracts moved to historyBatchContracts.ts (size budget);
+// the public export surface of this module is unchanged.
+export type {
+  PreparedHistoryBatchEffect,
+  HistoryBatchParticipant,
+  HistoryOwnedMediaReservation,
+  HistoryMediaOwner,
+  HistoryBatchPublication,
+  HistoryBatchOptions,
+} from './historyBatchContracts.js';
+
 import {
   type MutationFailure,
   combineMutationFailures,
 } from './historyMutationFailure.js';
-
-export interface PreparedHistoryBatchEffect {
-  publish(): void | Promise<void>;
-  rollback(): void | Promise<void>;
-  finalize?(): void | Promise<void>;
-}
-
-export type HistoryBatchParticipant = (
-  publication: HistoryBatchPublication,
-) => PreparedHistoryBatchEffect | Promise<PreparedHistoryBatchEffect>;
-
-export interface HistoryOwnedMediaReservation {
-  readonly contentId: string;
-  readonly ownerId: string;
-  readonly reference?: MediaReferenceBlock;
-}
-
-/**
- * Explicit owner participant that reconciles durable local-media ownership with live
- * history on every mutation that adds, replaces, removes, or clears history.
- * Registered via {@link HistoryService.registerMediaOwner}.
- */
-export interface HistoryMediaOwner {
-  /** Transactional ownership transition for a queued history mutation. */
-  prepareReplacement(input: {
-    readonly previous: readonly IContent[];
-    readonly next: readonly IContent[];
-    readonly adopted: readonly HistoryOwnedMediaReservation[];
-  }): PreparedHistoryBatchEffect | Promise<PreparedHistoryBatchEffect>;
-
-  /** Reconcile ownership from `previous` to current history for synchronous
-   * mutations that cannot await (clears, pops, settlement). */
-  reconcile(
-    previous: readonly IContent[],
-    getNext: () => readonly IContent[],
-  ): Promise<void>;
-
-  /** Release every reservation the history still owns (disposal). */
-  releaseAll(): Promise<void>;
-
-  /** Adopt reservations for content that becomes resident without a removal diff. */
-  adopt(contents: readonly IContent[]): void;
-}
-
-export interface HistoryBatchPublication {
-  readonly contents: readonly IContent[];
-  readonly nextHistory: readonly IContent[];
-  readonly addedTokens: number;
-  readonly totalTokens: number;
-}
-
-export interface HistoryBatchOptions {
-  readonly afterPublication?: () => void | Promise<void>;
-  readonly adoptedOwners?: readonly HistoryOwnedMediaReservation[];
-}
-
-type QueuedHistoryMutation =
-  | { kind: 'synchronous'; execute: () => void }
-  | {
-      kind: 'asynchronous';
-      execute: () => Promise<void>;
-      resolve: () => void;
-      reject: (error: unknown) => void;
-    };
-
-interface ChronologyRollbackEntry {
-  readonly content: IContent;
-  readonly hadMetadata: boolean;
-  readonly chronology: ChronologyMarker | undefined;
-}
+import type {
+  PreparedHistoryBatchEffect,
+  HistoryBatchParticipant,
+  HistoryOwnedMediaReservation,
+  HistoryMediaOwner,
+  HistoryBatchPublication,
+  HistoryBatchOptions,
+  QueuedHistoryMutation,
+  ChronologyRollbackEntry,
+} from './historyBatchContracts.js';
 
 /**
  * Service for managing conversation history in a provider-agnostic way.
@@ -167,6 +118,17 @@ export abstract class HistoryServiceCore
   protected logger = new DebugLogger('llxprt:history:service');
 
   protected chronology = new ChronologyStamper();
+
+  /**
+   * Cumulative removed-interior spans that are not re-derivable from the
+   * history array (density removals/replacements, rewinds, clears). Compressed
+   * spans are excluded: they are re-derived from summary metadata on every
+   * snapshot, so this state stays bounded by the mutations that destroyed
+   * entries without a replacement record (#854).
+   *
+   * @plan PLAN-20260917-ISSUE854.P03
+   */
+  protected removedInteriorSpans: RemovedInteriorSpan[] = [];
 
   /**
    * Monotonic cache anchor: the highest chronology `seq` that must remain in
@@ -592,6 +554,7 @@ export abstract class HistoryServiceCore
     }
 
     const generation = this.syncGeneration;
+    const wasEmpty = this.history.length === 0;
     this.history.push(content);
 
     try {
@@ -603,6 +566,17 @@ export abstract class HistoryServiceCore
       // the resulting gap truthfully records that an item was removed.
       this.history.pop();
       throw error;
+    }
+
+    // Empty→first entry is a context boundary event (#854): the curated
+    // context came into existence, so observers must learn its boundary even
+    // though no batch commit ran. Emitted exactly once here; subsequent
+    // single adds are silent. The span state resets with it so
+    // getContextRange() stays at parity with this event: the context the old
+    // spans described is gone.
+    if (wasEmpty) {
+      this.removedInteriorSpans = [];
+      this.emit('contextRangeChanged', firstEntryContextRange(content));
     }
 
     // Update token count asynchronously but atomically
@@ -820,15 +794,16 @@ export abstract class HistoryServiceCore
   }
 
   /**
-   * The curated in-memory context boundary: chronology seqs of the first and
-   * last entries of the exact history array the model sees, derived on each
-   * call from {@link history}.
+   * The curated in-memory context boundary plus the v2 membership projection
+   * (#854): boundary fields derived from the history array, joined with the
+   * cumulative removed-interior spans and the compressed spans re-derived
+   * from summary metadata.
    *
    * @plan PLAN-20260917-ISSUE854.P01
    * @requirement REQ-854-004
    */
   getContextRange(): ContextRange {
-    return computeContextRange(this.history);
+    return buildContextRangeSnapshot(this.history, this.removedInteriorSpans);
   }
 
   /**
@@ -845,13 +820,17 @@ export abstract class HistoryServiceCore
   /**
    * Emits `contextRangeChanged` with the current boundary snapshot. Called
    * only from boundary-moving commit paths (history mutations and clear);
-   * single-entry `add` intentionally does not emit.
+   * single-entry `add` emits only for the empty→first transition, from
+   * `addInternal` directly.
    *
    * @plan PLAN-20260917-ISSUE854.P01
    * @requirement REQ-854-004
    */
   protected emitContextRangeChanged(): void {
-    this.emit('contextRangeChanged', this.getContextRange());
+    this.emit(
+      'contextRangeChanged',
+      buildContextRangeSnapshot(this.history, this.removedInteriorSpans),
+    );
   }
 
   replaceAll(
@@ -970,12 +949,24 @@ export abstract class HistoryServiceCore
     readonly nextHistory: readonly IContent[];
     readonly nextHistoryTokens: number;
     readonly publishedContents?: readonly IContent[];
+    readonly extraRemovedInterior?: readonly RemovedInteriorSpan[];
     readonly options: HistoryBatchOptions;
   }): Promise<void> {
     const previousHistory = this.history;
     const previousTokens = this.totalTokens;
+    const previousSpans = this.removedInteriorSpans;
     const chronology = this.stampHistory(input.nextHistory);
     const nextHistory = [...input.nextHistory];
+    // Membership state after this mutation (#854): accumulated spans joined
+    // with the mutation's own removals (density spans pre-derived, strict
+    // seq-prefix truncation as rewound), computed before any effect can run
+    // and applied atomically with the history swap.
+    const committedSpans = mergeCommitSpans(
+      previousSpans,
+      input.extraRemovedInterior,
+      previousHistory,
+      nextHistory,
+    );
     const addedTokens = input.nextHistoryTokens - previousTokens;
     const publication: HistoryBatchPublication | undefined =
       input.publishedContents === undefined
@@ -1003,6 +994,7 @@ export abstract class HistoryServiceCore
       this.invalidatePendingSyncs();
       this.history = nextHistory;
       this.totalTokens = input.nextHistoryTokens;
+      this.removedInteriorSpans = committedSpans;
       historyPublished = true;
       if (input.publishedContents !== undefined) {
         this.emit('contentBatchAdded', input.publishedContents);
@@ -1020,6 +1012,7 @@ export abstract class HistoryServiceCore
         this.invalidatePendingSyncs();
         this.history = previousHistory;
         this.totalTokens = previousTokens;
+        this.removedInteriorSpans = previousSpans;
       }
       this.restoreChronology(chronology);
       const rollbackFailures = await this.rollbackMutationEffects(effects);
@@ -1067,6 +1060,9 @@ export abstract class HistoryServiceCore
     await this.enqueueAsynchronousHistoryMutation(async () => {
       validateDensityResult(result, this.history.length);
       const nextHistory = [...this.history];
+      // Membership spans of the entries this pass destroys (#854); indices
+      // are validated against this.history above.
+      const densitySpans = collectDensitySpans(this.history, result);
       // Each density replacement takes over the chronology position of the item
       // it replaces, so the surviving history keeps an unbroken sequence.
       // densityValidation stays free of chronology knowledge.
@@ -1083,6 +1079,7 @@ export abstract class HistoryServiceCore
       await this.commitHistoryMutation({
         nextHistory,
         nextHistoryTokens: replacementTokens,
+        extraRemovedInterior: densitySpans,
         options: {},
       });
 

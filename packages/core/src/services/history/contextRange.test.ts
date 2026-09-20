@@ -66,10 +66,12 @@ describe('HistoryService context range', () => {
       firstSeq: 0,
       lastSeq: 0,
       totalEntries: 0,
+      removedInterior: [{ start: 1, end: 1, reason: 'cleared' }],
+      approximate: false,
     });
   });
 
-  it('emits contextRangeChanged once per boundary-moving commit, not per add', async () => {
+  it('emits once for the first entry and once per boundary-moving commit after', async () => {
     const service = new HistoryService();
     const events: ContextRange[] = [];
     service.on('contextRangeChanged', (range) => {
@@ -78,7 +80,14 @@ describe('HistoryService context range', () => {
     service.add(textContent('human', 'one'));
     service.add(textContent('ai', 'two'));
     service.add(textContent('human', 'three'));
-    expect(events).toStrictEqual([]);
+    // P03: the empty→first-entry transition emits exactly once, naming the
+    // first entry's seq; the follow-up single adds stay silent.
+    expect(events).toHaveLength(1);
+    expect(events[0]?.firstSeq).toBe(seqOf(service, 2));
+    expect(events[0]?.lastSeq).toBe(seqOf(service, 2));
+    expect(events[0]?.totalEntries).toBe(1);
+    expect(events[0]?.removedInterior).toStrictEqual([]);
+    expect(events[0]?.approximate).toBe(false);
 
     await service.transformAll((contents) => [
       {
@@ -91,10 +100,14 @@ describe('HistoryService context range', () => {
       },
       ...contents.slice(3),
     ]);
-    expect(events).toHaveLength(1);
-    expect(events[0]?.totalEntries).toBe(1);
-    expect(events[0]?.firstSeq).toBe(99);
-    expect(events[0]?.lastSeq).toBe(99);
+    expect(events).toHaveLength(2);
+    expect(events[1]?.totalEntries).toBe(1);
+    expect(events[1]?.firstSeq).toBe(99);
+    expect(events[1]?.lastSeq).toBe(99);
+    expect(events[1]?.removedInterior).toStrictEqual([
+      { start: 1, end: 3, reason: 'compressed' },
+    ]);
+    expect(events[1]?.approximate).toBe(false);
   });
 
   it('emits on clear with a zero-entry range', () => {
@@ -110,6 +123,8 @@ describe('HistoryService context range', () => {
       firstSeq: 0,
       lastSeq: 0,
       totalEntries: 0,
+      removedInterior: [{ start: 1, end: 1, reason: 'cleared' }],
+      approximate: false,
     });
   });
 
