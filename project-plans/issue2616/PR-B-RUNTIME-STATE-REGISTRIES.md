@@ -20,7 +20,10 @@ caller".
   production subscriber below can never fire.
 - Sole production subscriber: `packages/agents/src/core/client.ts:158` —
   subscribes to its own runtimeId, callback is a `logger.debug('Runtime state
-  changed', ...)`, and `_unsubscribe` is immediately `void`-ed (never called).
+  changed', ...)`, and `_unsubscribe` is immediately `void`-ed; the unsubscribe
+  function does run at `dispose()`, but the callback it removed could never
+  fire in production (zero production callers of `updateAgentRuntimeState` mean
+  the channel never emits).
 - `lastTimestamp` module counter: only used by `getTimestamp()` at state
   creation. Per-lineage monotonicity in the update path is already
   self-contained (busy-wait vs `oldState.updatedAt`).
