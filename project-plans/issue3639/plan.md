@@ -166,3 +166,45 @@ All on branch head (issue3639), 2026-09-18/19. Logs under `tmp/verify3639/`
   ("usage limit reached"); `reviewer` (zai) used instead.
 - OCR not run: disabled by standing instruction (2026-09-13) until Andrew
   re-enables it.
+
+## Round 2 — CodeRabbit remediation + review-of-review
+
+- CodeRabbit round 1 on PR #3733 raised 2 minor findings on the new test file
+  (provider-to-dispatch boundary coverage; explicit trim/Kimi-prefix
+  normalization tests). Both classified In-scope-Fix, test-only. Remediated by
+  tscoder-flash in commit c7b200418: file extended from 6 to 11 tests — added
+  'ToolCallPipeline -> emitCombinedTerminalContent emission handoff (issue
+  #3639)' describe (verbatim unregistered name emitted as tool_call block via
+  emitCombinedTerminalContent with real GemmaToolCallParser/DebugLogger deps,
+  no mocks; nameless call emits nothing) and 3 normalization-boundary tests
+  (outer-whitespace trim; 'functions' concatenated prefix strip;
+  'call_functions' prefix + trailing digits strip). Cross-package
+  ToolDispatcher/TOOL_NOT_REGISTERED coverage deliberately not duplicated in
+  providers — existing agents-package tests cover dispatch.
+- Full verification cycle round 2 on head c7b200418: `npm run test` 9790
+  passed / 12 failed confined to the 2 known pre-existing cli-args integration
+  files (proven environmental on clean main; green in ubuntu CI); lint,
+  typecheck, format, build all pass; zai-glm-flash smoke pass. CI on
+  c7b200418 fully green (39 pass / 0 fail / 3 intentional skips). Both
+  CodeRabbit threads resolved after remediation comment
+  https://github.com/vybestack/llxprt-code/pull/3733#issuecomment-5737971184.
+- Round-2 external review raised 3 concerns, classified:
+  (1) split-name test title misdescribed collector override semantics as
+  split-name handling — In-scope-Fix, fixed by renaming the test to 'keeps
+  the latest complete name fragment via collector override (no
+  concatenation)' with an explanatory comment;
+  (2) claim that the issue expects literal raw-name preservation incl. no
+  lowercase/Kimi strip and dispatch errors for nameless calls — Reject: those
+  normalizations are pre-existing, deliberate, separately tested behavior
+  (ToolCallNormalizer), and a nameless call has no name to attribute or
+  dispatch; removing them would change live behavior outside issue scope.
+  Accepted sub-point: PR-body/auto-summary framing must not describe
+  unchanged behavior as newly fixed — PR body amended to state production
+  behavior is unchanged;
+  (3) PR body/plan.md reported 6 tests vs actual 11 — In-scope-Fix, PR body
+  amended (11 tests, c4a133a93 deletions vs c7b200418 test-additions
+  distinguished) and this round-2 record added.
+- Note that CodeRabbit's auto-generated release-notes summary block on the PR
+  is derived from the diff and was framed as behavior fixes; the body
+  amendment and test rename are the levers we control to keep the regenerated
+  summary accurate.

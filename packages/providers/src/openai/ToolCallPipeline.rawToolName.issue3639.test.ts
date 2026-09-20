@@ -102,7 +102,7 @@ describe('ToolCallPipeline raw tool name passthrough (issue #3639)', () => {
     expect(JSON.stringify(result)).not.toContain('missing_tool_name');
   });
 
-  it('keeps the last non-empty name when a name is split across streaming fragments', async () => {
+  it('keeps the latest complete name fragment via collector override (no concatenation)', async () => {
     pipeline.addFragment(0, { name: 'read_' });
     pipeline.addFragment(0, { name: 'file_thing' });
     pipeline.addFragment(0, { args: '{}' });
@@ -111,8 +111,10 @@ describe('ToolCallPipeline raw tool name passthrough (issue #3639)', () => {
 
     expect(result.normalized).toHaveLength(1);
     expect(result.failed).toHaveLength(0);
-    // The collector's override semantics mean the last non-empty name wins;
-    // the raw last-emitted name survives normalization unchanged.
+    // The collector's override semantics mean the latest non-empty name wins;
+    // the OpenAI wire format sends function.name once per call, so repeat name
+    // fragments override rather than concatenate. This pins override, not
+    // split-name reassembly, and the raw last-emitted name survives unchanged.
     expect(result.normalized[0].name).toBe('file_thing');
   });
 
