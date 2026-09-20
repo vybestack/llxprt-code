@@ -42,6 +42,9 @@ import {
   type SessionRecordLine,
   type RecordingCheckpointInfo,
   type SessionForkedPayload,
+  type DensityMutationPayload,
+  type SyntheticInsertPayload,
+  type CompressionDetailPayload,
 } from './types.js';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
 import { replaySession } from './ReplayEngine.js';
@@ -818,6 +821,52 @@ export class SessionRecordingService {
       'rewind',
       cutSeq === undefined ? { itemsRemoved } : { itemsRemoved, cutSeq },
     );
+  }
+
+  /**
+   * Record a density-mutation event — chronology entries removed outright by
+   * density optimization plus each in-place replacement, so the previously
+   * unjournalled mutation replays exactly (#854).
+   *
+   * Synchronous and non-blocking like `recordContent`; returns the appended
+   * line, or null when recording is inactive/disposed.
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b1
+   * @requirement G2
+   */
+  recordDensityChange(
+    payload: DensityMutationPayload,
+  ): SessionRecordLine | null {
+    return this.enqueue('density_mutation', payload);
+  }
+
+  /**
+   * Record a synthetic-insert event — a history entry that did not originate
+   * from a model turn (e.g. a synthetic tool response injected by history
+   * validation), with its own chronology marker and the anchor marker it
+   * follows (#854).
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b1
+   * @requirement G2
+   */
+  recordSyntheticInsert(
+    payload: SyntheticInsertPayload,
+  ): SessionRecordLine | null {
+    return this.enqueue('synthetic_insert', payload);
+  }
+
+  /**
+   * Record a compression-detail event — the destroyed span and item count
+   * behind a `compressed` event, as a membership-pinning record. Scalars
+   * only: content suppression is unchanged from `recordCompressed` (#854).
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b1
+   * @requirement G2
+   */
+  recordCompressionDetail(
+    payload: CompressionDetailPayload,
+  ): SessionRecordLine | null {
+    return this.enqueue('compression_detail', payload);
   }
 
   /**

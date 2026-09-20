@@ -30,6 +30,14 @@
  * (speaker guard, version gate, malformed counters, torn-tail discard) are
  * mirrored here so both views of one journal agree.
  *
+ * Durable mutation events (#854) extend the fold: `density_mutation` drops
+ * removed survivor rows and pins replacement content onto the surviving row
+ * carrying the replaced marker; `synthetic_insert` splices a row attributed
+ * to its own envelope into fold order after its anchor row; and
+ * `compression_detail` is a membership-pinning no-op for rows. Journals
+ * without these kinds fold exactly as before (the pre-#854 divergence for
+ * unjournalled density mutations is unchanged).
+ *
  * Memory shape: the prepass retains O(survivors) numeric rows and nothing
  * else. A `semantic_media_purge` payload is not parsed during the prepass at
  * all; its row count and per-row markers are filled in lazily — either when a
@@ -37,8 +45,11 @@
  * the purge record streaming row by row and lets the parsed history array
  * drop out of scope once its rows have been yielded (the array is pinned only
  * for the duration of yielding that one record; the WeakRef contract only
- * requires no retention after iteration). Decoded `IContent` objects are
- * never retained by the resolver after iteration releases them.
+ * requires no retention after iteration). Density replacement content is
+ * retained on its surviving unit only until that unit is yielded (the decode
+ * path clears the slot), so retained state stays O(mutation events + pending
+ * replacements), never O(content). Decoded `IContent` objects are never
+ * retained by the resolver after iteration releases them.
  */
 
 import * as fs from 'node:fs/promises';
@@ -181,6 +192,25 @@ function envelopeBody(text: string, lineNumber: number): string {
   return lineNumber === 1 && text.startsWith('\uFEFF') ? text.slice(1) : text;
 }
 
+/** An array whose every entry is a valid sequence number. */
+function isValidSequenceArray(value: unknown): value is readonly number[] {
+  return Array.isArray(value) && value.every(isValidSequence);
+}
+
+interface DensityReplacementRecord {
+  readonly replacedSeq: number;
+  readonly replacement: IContent;
+}
+
+/** `{replacedSeq, replacement}` with a speaker-valid replacement content. */
+function isDensityReplacementRecord(
+  value: unknown,
+): value is DensityReplacementRecord {
+  if (!isRecord(value)) return false;
+  if (!isValidSequence(value['replacedSeq'])) return false;
+  return isSpeakerContent(value['replacement']);
+}
+
 // ---------------------------------------------------------------------------
 // Chunked line scanning (JournalCursor reading idioms)
 // ---------------------------------------------------------------------------
@@ -250,7 +280,12 @@ class ChunkedLineScanner {
 // Survivor bookkeeping
 // ---------------------------------------------------------------------------
 
-/** One surviving content or compressed-summary row. */
+/**
+ * One surviving content or compressed-summary row. `replacement` holds
+ * density-mutation content pinned to this row's marker; it is set during the
+ * prepass fold and cleared as soon as the row is yielded, so the payload is
+ * never retained beyond iteration.
+ */
 interface ContentUnit {
   readonly kind: 'content' | 'summary';
   readonly seq: number;
@@ -258,6 +293,23 @@ interface ContentUnit {
   readonly length: number;
   readonly lineNumber: number;
   readonly chronSeq: number | null;
+  replacement: IContent | null;
+}
+
+/**
+ * A `synthetic_insert` survivor: a row attributed to its own envelope and
+ * spliced into fold order after its anchor row, which need not match
+ * envelope order. Like a content unit it carries a density-replacement
+ * slot cleared on yield.
+ */
+interface SyntheticUnit {
+  readonly kind: 'synthetic';
+  readonly seq: number;
+  readonly offset: number;
+  readonly length: number;
+  readonly lineNumber: number;
+  readonly chronSeq: number;
+  replacement: IContent | null;
 }
 
 /**
@@ -275,7 +327,7 @@ interface PurgeUnit {
   chronSeqs: Array<number | null> | null;
 }
 
-type SurvivorUnit = ContentUnit | PurgeUnit;
+type SurvivorUnit = ContentUnit | SyntheticUnit | PurgeUnit;
 
 interface IntervalDraft {
   fromSeq: number;
@@ -332,6 +384,37 @@ function survivorPurgeRows(
     );
   }
   return history;
+}
+
+/**
+ * Decode one plain survivor unit's row: density-replacement content pinned
+ * during the prepass yields from the original envelope without decoding it
+ * (and the slot is cleared so the payload never outlives the yield);
+ * otherwise the unit's own envelope line decodes.
+ */
+function survivorUnitRow(
+  unit: ContentUnit | SyntheticUnit,
+  line: ScannedLine,
+): {
+  readonly content: IContent;
+  readonly offset: number;
+  readonly length: number;
+} {
+  if (unit.replacement !== null) {
+    const replacement = unit.replacement;
+    unit.replacement = null;
+    return {
+      content: replacement,
+      offset: unit.offset,
+      length: unit.length,
+    };
+  }
+  const parsed = parseSurvivorEnvelope(line.text, unit.lineNumber);
+  const content = survivorContent(
+    parsed,
+    unit.kind === 'summary' ? 'summary' : 'content',
+  );
+  return { content, offset: line.offset, length: line.length };
 }
 
 /**
@@ -434,13 +517,15 @@ export class JournalResolver {
           throw new Error(`survivor record missing at offset ${unit.offset}`);
         }
         if (unit.kind !== 'purge') {
-          parsed = parseSurvivorEnvelope(line.text, unit.lineNumber);
-          const content = survivorContent(parsed, unit.kind);
-          const offset = line.offset;
-          const length = line.length;
-          parsed = null;
+          const row = survivorUnitRow(unit, line);
           line = null;
-          yield { seq: unit.seq, offset, length, rowIndex: 0, content };
+          yield {
+            seq: unit.seq,
+            offset: row.offset,
+            length: row.length,
+            rowIndex: 0,
+            content: row.content,
+          };
           continue;
         }
         parsed = parseSurvivorEnvelope(line.text, unit.lineNumber);
@@ -595,6 +680,15 @@ export class JournalResolver {
       case 'semantic_media_purge':
         this.foldSemanticMediaPurge(seq, payload, line, lineNumber);
         break;
+      case 'density_mutation':
+        await this.foldDensityMutation(payload);
+        break;
+      case 'synthetic_insert':
+        await this.foldSyntheticInsert(seq, payload, line, lineNumber);
+        break;
+      case 'compression_detail':
+        this.foldCompressionDetail(payload);
+        break;
       default:
         // Session bookkeeping, metadata events, and unknown types never
         // touch history.
@@ -621,6 +715,7 @@ export class JournalResolver {
       length: line.length,
       lineNumber,
       chronSeq: chronologySeqOf(content),
+      replacement: null,
     });
   }
 
@@ -648,6 +743,7 @@ export class JournalResolver {
       length: line.length,
       lineNumber,
       chronSeq: chronologySeqOf(summary),
+      replacement: null,
     });
   }
 
@@ -683,6 +779,171 @@ export class JournalResolver {
       rowCount: 0,
       chronSeqs: null,
     });
+  }
+
+  /**
+   * Fold a `density_mutation` event (#854): survivor rows whose chronology
+   * marker was removed outright are dropped (their envelopes were consumed
+   * for bookkeeping but never yield), and the surviving row carrying a
+   * replaced marker yields the replacement content from this event's payload
+   * while keeping its original envelope attribution. The event itself never
+   * becomes a row.
+   *
+   * Replacement wins over removal, matching the live density projection. A
+   * malformed payload skips and counts without touching the fold. If the
+   * mutation lands inside a purge survivor's rows it cannot be represented
+   * against the coarse purge unit, so the whole event is skipped and counted
+   * rather than half-applied.
+   */
+  private async foldDensityMutation(payload: object): Promise<void> {
+    const removedSeqs: unknown = fieldOf(payload, 'removedSeqs');
+    const replacements: unknown = fieldOf(payload, 'replacements');
+    if (
+      !isValidSequenceArray(removedSeqs) ||
+      !Array.isArray(replacements) ||
+      !replacements.every(isDensityReplacementRecord)
+    ) {
+      this.skippedRecordCount += 1;
+      return;
+    }
+    const removed = new Set<number>(removedSeqs);
+    const replacementBySeq = new Map<number, IContent>();
+    for (const entry of replacements) {
+      replacementBySeq.set(entry.replacedSeq, entry.replacement);
+    }
+    for (const unit of this.units) {
+      if (unit.kind !== 'purge') continue;
+      await this.expandPurge(unit);
+      const touched = (unit.chronSeqs ?? []).some(
+        (chron) =>
+          chron !== null && (removed.has(chron) || replacementBySeq.has(chron)),
+      );
+      if (touched) {
+        this.skippedRecordCount += 1;
+        return;
+      }
+    }
+    // In-place compaction: survivors keep their relative (fold) order; a
+    // replaced unit is revisited at yield time via its replacement slot,
+    // which is cleared there so the payload never outlives iteration.
+    let write = 0;
+    for (let read = 0; read < this.units.length; read += 1) {
+      const unit = this.units[read];
+      if (unit.kind !== 'purge' && unit.chronSeq !== null) {
+        const replacement = replacementBySeq.get(unit.chronSeq);
+        if (replacement !== undefined) {
+          unit.replacement = replacement;
+        } else if (removed.has(unit.chronSeq)) {
+          continue;
+        }
+      }
+      this.units[write] = unit;
+      write += 1;
+    }
+    this.units.length = write;
+  }
+
+  /**
+   * Fold a `synthetic_insert` event (#854): a row attributed to the insert's
+   * own envelope, spliced into fold order immediately after the survivor row
+   * carrying the anchor marker — even when that position stops matching
+   * envelope order. A malformed payload, or an anchor that does not resolve
+   * to a directly-spliceable survivor row (none exists, or it sits inside a
+   * purge survivor rather than at its tail), skips and counts.
+   */
+  private async foldSyntheticInsert(
+    seq: number,
+    payload: object,
+    line: ScannedLine,
+    lineNumber: number,
+  ): Promise<void> {
+    const content = fieldOf(payload, 'content');
+    const chronologySeq: unknown = fieldOf(payload, 'chronologySeq');
+    const afterSeq: unknown = fieldOf(payload, 'afterSeq');
+    if (
+      !isSpeakerContent(content) ||
+      !isValidSequence(chronologySeq) ||
+      !isValidSequence(afterSeq)
+    ) {
+      this.skippedRecordCount += 1;
+      return;
+    }
+    const anchorIndex = await this.findAnchorIndex(afterSeq);
+    if (anchorIndex === null) {
+      this.skippedRecordCount += 1;
+      return;
+    }
+    this.units.splice(anchorIndex + 1, 0, {
+      kind: 'synthetic',
+      seq,
+      offset: line.offset,
+      length: line.length,
+      lineNumber,
+      chronSeq: chronologySeq,
+      replacement: null,
+    });
+  }
+
+  /**
+   * Fold-order scan for the survivor unit a synthetic insert anchors to.
+   * A match inside a purge survivor is only usable at its tail: units are
+   * coarse, so a splice can only land between them.
+   */
+  private async findAnchorIndex(afterSeq: number): Promise<number | null> {
+    for (let index = 0; index < this.units.length; index += 1) {
+      const unit = this.units[index];
+      if (unit.kind !== 'purge') {
+        if (unit.chronSeq === afterSeq) {
+          return index;
+        }
+      } else {
+        const anchor = await this.purgeAnchorRow(unit, afterSeq);
+        if (anchor === 'tail') return index;
+        if (anchor === 'inside') return null;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Where `afterSeq` matches inside a purge survivor's expanded rows:
+   * `'tail'` when the splice can land directly after the survivor,
+   * `'inside'` when a match exists but cannot be spliced around, `null`
+   * when no row carries the marker.
+   */
+  private async purgeAnchorRow(
+    unit: PurgeUnit,
+    afterSeq: number,
+  ): Promise<'tail' | 'inside' | null> {
+    await this.expandPurge(unit);
+    const markers = unit.chronSeqs ?? [];
+    for (let row = 0; row < markers.length; row += 1) {
+      if (markers[row] === afterSeq) {
+        return row === markers.length - 1 ? 'tail' : 'inside';
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Fold a `compression_detail` event (#854): a membership-pinning record
+   * (destroyed span + item count, scalars only) that resolves consistently
+   * with the `compressed` event following it. It changes nothing about the
+   * survivor fold by itself; a malformed record skips and counts without
+   * disturbing surrounding rows.
+   */
+  private foldCompressionDetail(payload: object): void {
+    const fromSeq: unknown = fieldOf(payload, 'fromSeq');
+    const toSeq: unknown = fieldOf(payload, 'toSeq');
+    const itemsCompressed: unknown = fieldOf(payload, 'itemsCompressed');
+    if (
+      typeof fromSeq !== 'number' ||
+      typeof toSeq !== 'number' ||
+      typeof itemsCompressed !== 'number'
+    ) {
+      this.skippedRecordCount += 1;
+      return;
+    }
   }
 
   private async foldRewind(payload: object): Promise<void> {
@@ -821,7 +1082,10 @@ export class JournalResolver {
   /**
    * Survivor intervals: plain rows merge while their envelope seqs are
    * contiguous; a purge survivor always forms its own single-envelope
-   * interval carrying its expanded row count.
+   * interval carrying its expanded row count. Synthetic inserts can take
+   * fold order out of envelope order, so the result is re-sorted by seq —
+   * envelope seqs and byte offsets are both monotone in append order, which
+   * keeps firstOffsets increasing.
    */
   private deriveIntervals(): SurvivorInterval[] {
     const intervals: SurvivorInterval[] = [];
@@ -850,6 +1114,6 @@ export class JournalResolver {
         intervals.push(current);
       }
     }
-    return intervals;
+    return intervals.sort((left, right) => left.fromSeq - right.fromSeq);
   }
 }

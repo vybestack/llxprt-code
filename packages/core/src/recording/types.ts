@@ -54,7 +54,10 @@ export type SessionEventType =
   | 'checkpoint_deleted'
   | 'session_forked'
   | 'session_named'
-  | 'semantic_media_purge';
+  | 'semantic_media_purge'
+  | 'density_mutation'
+  | 'synthetic_insert'
+  | 'compression_detail';
 
 // ---------------------------------------------------------------------------
 // Event envelope
@@ -137,6 +140,60 @@ export interface RewindPayload {
    * @issue #2934
    */
   cutSeq?: number;
+}
+
+/**
+ * One replacement record inside a `density_mutation` payload. The replacement
+ * inherits the replaced entry's chronology marker, so the journal identifies
+ * the mutation site by that marker alone.
+ */
+export interface DensityReplacementRecord {
+  /** Chronology `seq` of the destroyed entry whose marker the replacement inherits. */
+  readonly replacedSeq: number;
+  readonly replacement: IContent;
+}
+
+/**
+ * Payload for the `density_mutation` event — a durable journal operation for
+ * density optimization: entries removed outright (by chronology `seq`) plus
+ * each in-place replacement. Resolvers drop the removed rows and yield the
+ * replacement content from the original entry's envelope.
+ *
+ * @issue #854
+ */
+export interface DensityMutationPayload {
+  readonly removedSeqs: readonly number[];
+  readonly replacements: readonly DensityReplacementRecord[];
+}
+
+/**
+ * Payload for the `synthetic_insert` event — a history entry that did not
+ * originate from a model turn (e.g. a synthetic tool response from history
+ * validation), carrying its own chronology marker and the marker of the
+ * entry it anchors after. Resolvers attribute the row to this event's own
+ * envelope and place it in fold order after the anchor.
+ *
+ * @issue #854
+ */
+export interface SyntheticInsertPayload {
+  readonly content: IContent;
+  readonly chronologySeq: number;
+  readonly afterSeq: number;
+}
+
+/**
+ * Payload for the `compression_detail` event — a membership-pinning record
+ * for the destroyed span behind a `compressed` event. Scalars only by
+ * design: the summary content stays in the `compressed` payload, so content
+ * suppression is unchanged. Resolvers fold it as a no-op for rows; a
+ * malformed record is skipped and counted.
+ *
+ * @issue #854
+ */
+export interface CompressionDetailPayload {
+  readonly fromSeq: number;
+  readonly toSeq: number;
+  readonly itemsCompressed: number;
 }
 
 /**
