@@ -533,6 +533,34 @@ export class HistoryService extends HistoryServiceCore {
     return buildProviderContent(curated, tailContents, this.logger);
   }
 
+  /**
+   * Streaming form of {@link getCuratedForProvider} (issue #854): the same
+   * curation and provider-content pipeline over a fresh journal-fold
+   * projection, yielded row by row instead of returned as a retained array.
+   * Rows are sanitized clones, so cyclic tool payloads stringify safely with
+   * the `_circular` marker and caller rows are never mutated.
+   *
+   * @param tailContents appended after the curated rows, exactly as the
+   *   synchronous form does.
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b3
+   */
+  async *getCuratedForProviderStream(
+    tailContents: IContent[] = [],
+  ): AsyncIterable<IContent> {
+    const curated = buildCuratedHistory(
+      this.logger,
+      this.materializeHistory(),
+      this.isCompressing,
+    );
+    const providerContents = buildProviderContent(
+      curated,
+      tailContents,
+      this.logger,
+    );
+    yield* providerContents;
+  }
+
   /** Merge two histories, handling duplicates and conflicts. */
   merge(other: HistoryService): void {
     // Simple append for now - could be made smarter to detect duplicates

@@ -114,6 +114,17 @@ function serializedToolTokens(tools: ProviderToolset | undefined): number {
   return Math.ceil(JSON.stringify(tools).length / 4);
 }
 
+/** Re-open eager rows as the provider-facing history stream (issue #854). */
+function toStream(rows: readonly IContent[]): AsyncIterable<IContent> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      for (const row of rows) {
+        yield row;
+      }
+    },
+  };
+}
+
 /** Tokenizer factory whose prompt estimation defers to the projection. */
 const tokenizerFactory: RuntimeTokenizerFactory = {
   getTokenizer: () => undefined,
@@ -159,21 +170,26 @@ function createProjectingDelegate(options: {
     getModels: () => Promise.resolve([]),
     getDefaultModel: () => MODEL,
     async *generateChatCompletion(
-      request: GenerateChatOptions | IContent[],
+      request: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncGenerator<IContent> {
-      transport.payloads.push(
-        structuredClone(Array.isArray(request) ? request : request.contents),
-      );
+      const rows: IContent[] = [];
+      for await (const content of Symbol.asyncIterator in request
+        ? request
+        : request.contents) {
+        rows.push(content);
+      }
+      transport.payloads.push(structuredClone(rows));
       yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
     },
     async projectPromptEnvelope(
       request: GenerateChatOptions,
     ): Promise<PromptEnvelopeProjection> {
+      const rows: IContent[] = [];
+      for await (const content of request.contents) {
+        rows.push(content);
+      }
       const contentsTokens =
-        await options.historyService.estimateTokensForContents(
-          request.contents,
-          MODEL,
-        );
+        await options.historyService.estimateTokensForContents(rows, MODEL);
       const toolTokens = serializedToolTokens(request.tools);
       baselineContentsTokens ??= contentsTokens;
       const gapGrowth =
@@ -341,7 +357,7 @@ describe('LB guard projection parity through real pre-send enforcement (issue #3
     // Precondition: the envelope estimate (tools included) is over the LB
     // limit even though the reduction target below is reachable.
     const projection = await lb.projectPromptEnvelope({
-      contents,
+      contents: toStream(contents),
       tools: TOOLSET,
       config: seamConfig,
     });
@@ -351,7 +367,10 @@ describe('LB guard projection parity through real pre-send enforcement (issue #3
     expect(envelopeTokens).toBeGreaterThan(contextLimit);
 
     const chunks = await consume(
-      lb.generateChatCompletion({ contents, tools: TOOLSET }),
+      lb.generateChatCompletion({
+        contents: toStream(contents),
+        tools: TOOLSET,
+      }),
     );
 
     // The guard handed its real estimate and limit to the real callback.
@@ -409,7 +428,7 @@ describe('LB guard projection parity through real pre-send enforcement (issue #3
     const chunks: IContent[] = [];
     try {
       for await (const chunk of lb.generateChatCompletion({
-        contents,
+        contents: toStream(contents),
         tools: TOOLSET,
       })) {
         chunks.push(chunk);
@@ -472,7 +491,7 @@ describe('LB guard projection parity through real pre-send enforcement (issue #3
       >[0]['provider'],
       contents,
       buildOptions: (candidate) => ({
-        contents: candidate,
+        contents: toStream(candidate),
         tools: TOOLSET,
         config: seamConfig,
       }),
@@ -494,7 +513,10 @@ describe('LB guard projection parity through real pre-send enforcement (issue #3
     expect(reducedTokens).toBeLessThan(contentsOnlyTokens);
 
     const chunks = await consume(
-      lb.generateChatCompletion({ contents: reduced, tools: TOOLSET }),
+      lb.generateChatCompletion({
+        contents: toStream(reduced),
+        tools: TOOLSET,
+      }),
     );
 
     // The ordinary pre-send ladder already brought the envelope under the

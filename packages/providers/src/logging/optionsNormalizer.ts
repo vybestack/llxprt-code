@@ -10,13 +10,13 @@
  * lint line budget.
  */
 
-import {
-  type IContent,
-  type UsageStats,
-} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { UsageStats } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { GenerateChatOptions, ProviderToolset } from '../IProvider.js';
+import type {
+  MaterializedGenerateChatOptions,
+  ProviderToolset,
+} from '../IProvider.js';
 import { MissingProviderRuntimeError } from '../errors.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 
@@ -25,22 +25,25 @@ export interface NormalizerContext {
   statelessRuntimeMetadata: Record<string, unknown> | null;
   optionsNormalizer:
     | ((
-        options: GenerateChatOptions,
+        options: MaterializedGenerateChatOptions,
         providerName: string,
-      ) => GenerateChatOptions)
+      ) => MaterializedGenerateChatOptions)
     | null;
   providerName: string;
 }
 
 /** REQ-SP4-004: Normalize raw args into GenerateChatOptions, inject runtime, apply normalizer. */
 export function normalizeChatCompletionOptions(
-  contentOrOptions: IContent[] | GenerateChatOptions,
+  contentOrOptions: MaterializedGenerateChatOptions,
   maybeTools: ProviderToolset | undefined,
   ctx: NormalizerContext,
-): GenerateChatOptions {
-  let normalizedOptions: GenerateChatOptions = Array.isArray(contentOrOptions)
-    ? { contents: contentOrOptions, tools: maybeTools }
-    : { ...contentOrOptions };
+): MaterializedGenerateChatOptions {
+  let normalizedOptions: MaterializedGenerateChatOptions = {
+    ...contentOrOptions,
+  };
+  // Positional calls carry their tools through resolveChatCompletionInput;
+  // this only covers a legacy caller that passed tools alongside options.
+  normalizedOptions.tools ??= maybeTools;
 
   const injectedRuntime = ctx.runtimeContextResolver?.();
   const providedRuntime = normalizedOptions.runtime;
@@ -88,7 +91,7 @@ export function normalizeChatCompletionOptions(
 
 /** REQ-SP4-004: Throw if runtime context is missing settings or config. */
 export function ensureRuntimeContext(
-  normalizedOptions: GenerateChatOptions,
+  normalizedOptions: MaterializedGenerateChatOptions,
   providerName: string,
   debug: DebugLogger,
 ): void {

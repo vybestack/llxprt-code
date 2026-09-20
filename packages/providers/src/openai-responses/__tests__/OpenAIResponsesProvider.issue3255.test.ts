@@ -8,6 +8,7 @@ import { describe, expect, it } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
 import { loadProviderAliasEntries } from '../../composition/providerAliases.js';
@@ -68,13 +69,14 @@ function createOptions(fixture: RequestFixture): NormalizedGenerateChatOptions {
     baseURL: fixture.baseURL ?? BASE_URL,
     authToken: 'test-token',
   };
+  const rows: IContent[] = [
+    { speaker: 'human', blocks: [{ type: 'text', text: 'test request' }] },
+  ];
   const generated = createProviderCallOptions({
     providerName: PROVIDER_NAME,
     settings,
     resolved,
-    contents: [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'test request' }] },
-    ],
+    contents: rows,
   });
   const invocation = createInvocation(
     generated.invocation,
@@ -84,6 +86,7 @@ function createOptions(fixture: RequestFixture): NormalizedGenerateChatOptions {
 
   return {
     ...generated,
+    contents: rows,
     invocation,
     metadata: generated.metadata ?? {},
     resolved,

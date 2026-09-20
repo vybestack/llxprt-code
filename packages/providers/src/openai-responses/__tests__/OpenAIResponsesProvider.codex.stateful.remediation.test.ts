@@ -48,7 +48,7 @@ import type { OpenAIResponsesRequest } from '../OpenAIResponsesTypes.js';
 import { executeOpenAIResponsesRequest } from '../openAIResponsesExecutor.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../../test-utils/streamCallOptions.js';
 import {
   CODEX_BASE_URL,
   TEST_RUNTIME_ID,
@@ -606,7 +606,7 @@ describe('OpenAIResponsesProvider Codex stateful provider-level remediation @iss
       providerName: provider.name,
       ephemeralsSnapshot: { 'responses-stateful': false },
     });
-    const options = createProviderCallOptions({
+    const options = streamCallOptions({
       providerName: provider.name,
       settings,
       config: createRuntimeConfigStub(settings),

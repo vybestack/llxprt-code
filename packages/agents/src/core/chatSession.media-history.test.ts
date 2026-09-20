@@ -316,15 +316,20 @@ describe('ChatSession media history boundaries', () => {
       }),
       getModels: () => Promise.resolve([]),
       generateChatCompletion(
-        request: GenerateChatOptions | IContent[],
+        request: GenerateChatOptions | AsyncIterable<IContent>,
       ): AsyncIterableIterator<IContent> {
-        const contents = Array.isArray(request) ? request : request.contents;
+        const stream =
+          Symbol.asyncIterator in request ? request : request.contents;
         return (async function* (): AsyncIterableIterator<IContent> {
+          const rows: IContent[] = [];
+          for await (const content of stream) {
+            rows.push(content);
+          }
           const requestIndex = requests.length;
-          requests.push([...contents]);
+          requests.push([...rows]);
           await options.beforeComplete?.(requestIndex);
           if (options.fail === true) throw new Error('provider failed');
-          const preparedBoundary = contents.find(
+          const preparedBoundary = rows.find(
             (content) =>
               content.metadata?.semanticMediaPurgeBoundary !== undefined,
           )?.metadata?.semanticMediaPurgeBoundary;

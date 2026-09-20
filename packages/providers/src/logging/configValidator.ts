@@ -10,12 +10,12 @@
  */
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { GenerateChatOptions } from '../IProvider.js';
+import type { MaterializedGenerateChatOptions } from '../IProvider.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 
 /** Resolve config from options/runtime and validate it has required methods. */
 export function resolveAndValidateConfig(
-  normalizedOptions: GenerateChatOptions,
+  normalizedOptions: MaterializedGenerateChatOptions,
   debug: DebugLogger,
 ): Config {
   const activeConfig =
@@ -38,7 +38,7 @@ export function resolveAndValidateConfig(
 /** FAST FAIL: Validate config has getConversationLoggingEnabled. */
 function validateConfigInstance(
   activeConfig: Config,
-  normalizedOptions: GenerateChatOptions,
+  normalizedOptions: MaterializedGenerateChatOptions,
   debug: DebugLogger,
 ): void {
   const configHasLoggingMethod =
@@ -72,7 +72,7 @@ function buildConfigValidationError(
   activeConfig: Config,
   configKeys: string[],
   prototypeChain: string[],
-  normalizedOptions: GenerateChatOptions,
+  normalizedOptions: MaterializedGenerateChatOptions,
 ): Error {
   return new Error(
     `[REQ-SP4-004] FAST FAIL: Invalid config instance - missing getConversationLoggingEnabled() method.\n` +

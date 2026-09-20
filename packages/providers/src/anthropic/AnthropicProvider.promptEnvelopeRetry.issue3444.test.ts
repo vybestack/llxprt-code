@@ -26,7 +26,7 @@ import {
   createProviderWithRuntime,
   createRuntimeConfigStub,
 } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../test-utils/streamCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
@@ -197,14 +197,14 @@ describe('AnthropicProvider prompt-envelope retry (@issue:3444)', () => {
       .mockRejectedValueOnce(make429RateLimitError())
       .mockResolvedValueOnce(createMockStream('recovered'));
 
-    const callOptions = createProviderCallOptions({
+    const callOptions = streamCallOptions({
       providerName: provider.name,
       contents: mediaMessages(png),
       settings: settingsService,
       runtime: runtimeContext,
       config: runtimeContext.config,
       ephemerals: { retries: 2, retrywait: 0 },
-    } as Parameters<typeof createProviderCallOptions>[0]);
+    });
 
     // The agent seam mints the projection and hands the token to the
     // orchestrator-wrapped provider, exactly as the production entry does.
@@ -256,14 +256,14 @@ describe('AnthropicProvider prompt-envelope retry (@issue:3444)', () => {
       .mockRejectedValueOnce(firstError)
       .mockRejectedValueOnce(finalError);
 
-    const callOptions = createProviderCallOptions({
+    const callOptions = streamCallOptions({
       providerName: provider.name,
       contents: mediaMessages(png),
       settings: settingsService,
       runtime: runtimeContext,
       config: runtimeContext.config,
       ephemerals: { retries: 2, retrywait: 0 },
-    } as Parameters<typeof createProviderCallOptions>[0]);
+    });
 
     const projection = await provider.projectPromptEnvelope(callOptions);
 

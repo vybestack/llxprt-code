@@ -19,6 +19,7 @@ import { OpenAIProvider } from './OpenAIProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { createOpenAIRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+import { replayableContents } from '../utils/collectContents.js';
 
 const realLlxprtCodeSettingsModule = {
   ...(await import('@vybestack/llxprt-code-settings')),
@@ -117,12 +118,13 @@ describe('OpenAIProvider - MediaBlock support', () => {
       },
     ];
 
-    const generator = provider.generateChatCompletion(
-      createProviderCallOptions({
+    const generator = provider.generateChatCompletion({
+      ...createProviderCallOptions({
         providerName: provider.name,
         contents,
       }),
-    );
+      contents: replayableContents(contents),
+    });
 
     const chunks = [];
     for await (const chunk of generator) {
@@ -202,12 +204,13 @@ describe('OpenAIProvider - MediaBlock support', () => {
       },
     ];
 
-    const generator = provider.generateChatCompletion(
-      createProviderCallOptions({
+    const generator = provider.generateChatCompletion({
+      ...createProviderCallOptions({
         providerName: provider.name,
         contents,
       }),
-    );
+      contents: replayableContents(contents),
+    });
 
     const chunks = [];
     for await (const chunk of generator) {
@@ -273,12 +276,13 @@ describe('OpenAIProvider - MediaBlock support', () => {
       },
     ];
 
-    const generator = provider.generateChatCompletion(
-      createProviderCallOptions({
+    const generator = provider.generateChatCompletion({
+      ...createProviderCallOptions({
         providerName: provider.name,
         contents,
       }),
-    );
+      contents: replayableContents(contents),
+    });
 
     const chunks = [];
     for await (const chunk of generator) {
@@ -331,12 +335,13 @@ describe('OpenAIProvider - MediaBlock support', () => {
       },
     ];
 
-    const generator = provider.generateChatCompletion(
-      createProviderCallOptions({
+    const generator = provider.generateChatCompletion({
+      ...createProviderCallOptions({
         providerName: provider.name,
         contents,
       }),
-    );
+      contents: replayableContents(contents),
+    });
 
     const chunks = [];
     for await (const chunk of generator) {
@@ -384,9 +389,10 @@ describe('OpenAIProvider - MediaBlock support', () => {
       },
     ];
 
-    const generator = provider.generateChatCompletion(
-      createProviderCallOptions({ providerName: provider.name, contents }),
-    );
+    const generator = provider.generateChatCompletion({
+      ...createProviderCallOptions({ providerName: provider.name, contents }),
+      contents: replayableContents(contents),
+    });
     for await (const _chunk of generator) {
       /* drain */
     }
@@ -432,9 +438,10 @@ describe('OpenAIProvider - MediaBlock support', () => {
       },
     ];
 
-    const generator = provider.generateChatCompletion(
-      createProviderCallOptions({ providerName: provider.name, contents }),
-    );
+    const generator = provider.generateChatCompletion({
+      ...createProviderCallOptions({ providerName: provider.name, contents }),
+      contents: replayableContents(contents),
+    });
     for await (const _chunk of generator) {
       /* drain */
     }
@@ -477,9 +484,10 @@ describe('OpenAIProvider - MediaBlock support', () => {
       },
     ];
 
-    const generator = provider.generateChatCompletion(
-      createProviderCallOptions({ providerName: provider.name, contents }),
-    );
+    const generator = provider.generateChatCompletion({
+      ...createProviderCallOptions({ providerName: provider.name, contents }),
+      contents: replayableContents(contents),
+    });
     for await (const _chunk of generator) {
       /* drain */
     }
@@ -534,9 +542,10 @@ describe('OpenAIProvider - MediaBlock support', () => {
       },
     ];
 
-    const generator = provider.generateChatCompletion(
-      createProviderCallOptions({ providerName: provider.name, contents }),
-    );
+    const generator = provider.generateChatCompletion({
+      ...createProviderCallOptions({ providerName: provider.name, contents }),
+      contents: replayableContents(contents),
+    });
     for await (const _chunk of generator) {
       /* drain */
     }
@@ -607,12 +616,13 @@ describe('OpenAIProvider - MediaBlock support', () => {
         },
       ];
 
-      const generator = provider.generateChatCompletion(
-        createProviderCallOptions({
+      const generator = provider.generateChatCompletion({
+        ...createProviderCallOptions({
           providerName: provider.name,
           contents,
         }),
-      );
+        contents: replayableContents(contents),
+      });
 
       const chunks = [];
       for await (const chunk of generator) {
@@ -700,12 +710,13 @@ describe('OpenAIProvider - MediaBlock support', () => {
         },
       ];
 
-      const generator = provider.generateChatCompletion(
-        createProviderCallOptions({
+      const generator = provider.generateChatCompletion({
+        ...createProviderCallOptions({
           providerName: provider.name,
           contents,
         }),
-      );
+        contents: replayableContents(contents),
+      });
 
       const chunks = [];
       for await (const chunk of generator) {
@@ -785,12 +796,13 @@ describe('OpenAIProvider - MediaBlock support', () => {
         },
       ];
 
-      const generator = provider.generateChatCompletion(
-        createProviderCallOptions({
+      const generator = provider.generateChatCompletion({
+        ...createProviderCallOptions({
           providerName: provider.name,
           contents,
         }),
-      );
+        contents: replayableContents(contents),
+      });
 
       const chunks = [];
       for await (const chunk of generator) {

@@ -10,7 +10,7 @@ import {
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IModel } from '../IModel.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../test-utils/streamCallOptions.js';
 
 type Snapshot = {
   callId: string;
@@ -242,7 +242,7 @@ describe('BaseProvider stateless contract', () => {
 
     await collectChunks(
       provider.generateChatCompletion(
-        createProviderCallOptions({
+        streamCallOptions({
           providerName: PROVIDER_NAME,
           contents: [createContent('ping')],
           settings: call.settings,
@@ -277,7 +277,7 @@ describe('BaseProvider stateless contract', () => {
     await Promise.all([
       collectChunks(
         provider.generateChatCompletion(
-          createProviderCallOptions({
+          streamCallOptions({
             providerName: PROVIDER_NAME,
             contents: [createContent('ping-a')],
             settings: callA.settings,
@@ -287,7 +287,7 @@ describe('BaseProvider stateless contract', () => {
       ),
       collectChunks(
         provider.generateChatCompletion(
-          createProviderCallOptions({
+          streamCallOptions({
             providerName: PROVIDER_NAME,
             contents: [createContent('ping-b')],
             settings: callB.settings,
@@ -330,7 +330,7 @@ describe('BaseProvider stateless contract', () => {
 
     await collectChunks(
       provider.generateChatCompletion(
-        createProviderCallOptions({
+        streamCallOptions({
           providerName: PROVIDER_NAME,
           contents: [createContent('auth-request')],
           settings: authCall.settings,
@@ -346,7 +346,7 @@ describe('BaseProvider stateless contract', () => {
 
     await collectChunks(
       provider.generateChatCompletion(
-        createProviderCallOptions({
+        streamCallOptions({
           providerName: PROVIDER_NAME,
           contents: [createContent('baseline-request')],
           metadata: {

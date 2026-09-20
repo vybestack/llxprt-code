@@ -5,7 +5,10 @@
  * @plan PLAN-20250909-TOKTRACK.P08
  */
 
-import { type IProvider, type GenerateChatOptions } from './IProvider.js';
+import {
+  type IProvider,
+  type MaterializedGenerateChatOptions,
+} from './IProvider.js';
 import { type IProviderManager } from './IProviderManager.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { HydratedModel } from '@vybestack/llxprt-code-core/models/hydration.js';
@@ -267,9 +270,9 @@ export class ProviderManager implements IProviderManager {
       ) => void;
       setOptionsNormalizer?: (
         normalizer: (
-          options: GenerateChatOptions,
+          options: MaterializedGenerateChatOptions,
           providerName: string,
-        ) => GenerateChatOptions,
+        ) => MaterializedGenerateChatOptions,
       ) => void;
     };
     runtimeAware.setRuntimeSettingsService?.(this.settingsService);
@@ -374,9 +377,9 @@ export class ProviderManager implements IProviderManager {
    * Normalize runtime inputs per call - no stored settings/config fallbacks.
    */
   normalizeRuntimeInputs(
-    rawOptions: GenerateChatOptions,
+    rawOptions: MaterializedGenerateChatOptions,
     providerName?: string,
-  ): GenerateChatOptions {
+  ): MaterializedGenerateChatOptions {
     return normalizeRuntimeInputs(
       rawOptions,
       {

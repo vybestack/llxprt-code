@@ -228,8 +228,12 @@ function declarationsFrom(
   return options.tools.flatMap((group) => group.functionDeclarations);
 }
 
-function requestText(options: GenerateChatOptions): string {
-  return options.contents
+async function requestText(options: GenerateChatOptions): Promise<string> {
+  const rows: IContent[] = [];
+  for await (const content of options.contents) {
+    rows.push(content);
+  }
+  return rows
     .flatMap((content) => content.blocks)
     .map((block) => {
       if (block.type === 'text') return block.text;
@@ -239,16 +243,15 @@ function requestText(options: GenerateChatOptions): string {
     .join('\n');
 }
 
-function findMissingOutputNudge(
+async function findMissingOutputNudge(
   requests: readonly GenerateChatOptions[],
-): GenerateChatOptions {
-  const request = requests.find((candidate) =>
-    requestText(candidate).includes('not emitted'),
-  );
-  if (request === undefined) {
-    throw new Error('Expected a missing-output nudge request.');
+): Promise<GenerateChatOptions> {
+  for (const candidate of requests) {
+    if ((await requestText(candidate)).includes('not emitted')) {
+      return candidate;
+    }
   }
-  return request;
+  throw new Error('Expected a missing-output nudge request.');
 }
 
 function createHookConfig(config: Config, mode: HookMode): Config {
@@ -294,15 +297,15 @@ async function createHarness(params: {
     options: GenerateChatOptions,
   ): AsyncIterableIterator<IContent>;
   function generateChatCompletion(
-    content: IContent[],
+    content: AsyncIterable<IContent>,
     tools?: RuntimeProviderToolset,
     signal?: AbortSignal,
   ): AsyncIterableIterator<IContent>;
   function generateChatCompletion(
-    input: GenerateChatOptions | IContent[],
+    input: GenerateChatOptions | AsyncIterable<IContent>,
   ): AsyncIterableIterator<IContent> {
     return (async function* () {
-      if (Array.isArray(input)) {
+      if (Symbol.asyncIterator in input) {
         throw new Error('Expected request options from the runtime.');
       }
       requests.push(input);
@@ -464,9 +467,9 @@ describe('non-interactive scope-local output emitter', () => {
       SubagentTerminateMode.GOAL,
     );
     expect(harness.requests).toHaveLength(1);
-    expect(harness.requests.map(requestText).join('\n')).not.toContain(
-      'not emitted',
-    );
+    expect(
+      (await Promise.all(harness.requests.map(requestText))).join('\n'),
+    ).not.toContain('not emitted');
   });
 
   it('completes four Hermes emissions with GOAL after one provider request', async () => {
@@ -486,9 +489,9 @@ describe('non-interactive scope-local output emitter', () => {
       SubagentTerminateMode.GOAL,
     );
     expect(harness.requests).toHaveLength(1);
-    expect(harness.requests.map(requestText).join('\n')).not.toContain(
-      'not emitted',
-    );
+    expect(
+      (await Promise.all(harness.requests.map(requestText))).join('\n'),
+    ).not.toContain('not emitted');
   });
 
   it('terminates on the provider request containing the final partial emissions', async () => {
@@ -502,9 +505,9 @@ describe('non-interactive scope-local output emitter', () => {
 
     await harness.scope.runNonInteractive(new ContextState());
 
-    const nudgeRequest = findMissingOutputNudge(harness.requests);
-    expect(requestText(nudgeRequest)).toContain('gamma, delta');
-    expect(requestText(nudgeRequest)).not.toContain('alpha, beta');
+    const nudgeRequest = await findMissingOutputNudge(harness.requests);
+    expect(await requestText(nudgeRequest)).toContain('gamma, delta');
+    expect(await requestText(nudgeRequest)).not.toContain('alpha, beta');
     expect(
       declarationsFrom(nudgeRequest).filter(
         (declaration) => declaration.name === 'self_emitvalue',
@@ -553,9 +556,9 @@ describe('non-interactive scope-local output emitter', () => {
       'todo_pause before completing required outputs: alpha, beta, gamma, delta',
     );
     expect(harness.requests).toHaveLength(1);
-    expect(harness.requests.map(requestText).join('\n')).not.toContain(
-      'not emitted',
-    );
+    expect(
+      (await Promise.all(harness.requests.map(requestText))).join('\n'),
+    ).not.toContain('not emitted');
   });
 
   it.each([
@@ -674,9 +677,9 @@ describe('non-interactive scope-local output emitter', () => {
 
     await harness.scope.runNonInteractive(new ContextState());
 
-    expect(requestText(findMissingOutputNudge(harness.requests))).toContain(
-      'alpha, beta, gamma, delta',
-    );
+    expect(
+      await requestText(await findMissingOutputNudge(harness.requests)),
+    ).toContain('alpha, beta, gamma, delta');
     expect(harness.scope.output.terminate_reason).toBe(
       SubagentTerminateMode.GOAL,
     );
@@ -702,7 +705,7 @@ describe('non-interactive scope-local output emitter', () => {
 
     await harness.scope.runNonInteractive(new ContextState());
 
-    expect(requestText(harness.requests[1])).toContain('cancelled');
+    expect(await requestText(harness.requests[1])).toContain('cancelled');
     expect(harness.requests).toHaveLength(2);
     expect(harness.scope.output.terminate_reason).toBe(
       SubagentTerminateMode.GOAL,
@@ -755,7 +758,7 @@ describe('non-interactive scope-local output emitter', () => {
 
       await harness.scope.runNonInteractive(new ContextState());
 
-      expect(requestText(harness.requests[1])).toContain(errorMessage);
+      expect(await requestText(harness.requests[1])).toContain(errorMessage);
       expect(harness.scope.output.terminate_reason).toBe(
         SubagentTerminateMode.GOAL,
       );

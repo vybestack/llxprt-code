@@ -9,6 +9,7 @@ import {
   type IProvider,
   type IModel,
   type GenerateChatOptions,
+  type MaterializedGenerateChatOptions,
   type ProviderToolset,
 } from './IProvider.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
@@ -54,9 +55,36 @@ import {
 } from './logging/attemptLifecycle.js';
 import { AttemptRecorder } from './logging/attemptRecorder.js';
 import { isWrapperLifecycleOwner } from './logging/lifecycleOwnership.js';
+import {
+  collectContents,
+  isAsyncIterableContents,
+  replayableContents,
+} from './utils/collectContents.js';
 import { safeGetDefaultModel } from './utils/safeDefaultModel.js';
 
 export type { ConversationDataRedactor };
+
+/**
+ * Normalize the legacy positional call: the history arrives as the
+ * provider-facing stream (issue #854, PLAN-20260917-ISSUE854.P05b3) and is
+ * collected request-scoped; an options object's stream is collected too, so
+ * the wrapper's logging always reads a plain array.
+ */
+async function resolveChatCompletionInput(
+  contentOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
+  maybeTools: ProviderToolset | undefined,
+): Promise<MaterializedGenerateChatOptions> {
+  if (isAsyncIterableContents(contentOrOptions)) {
+    return {
+      contents: await collectContents(contentOrOptions),
+      tools: maybeTools,
+    };
+  }
+  return {
+    ...contentOrOptions,
+    contents: await collectContents(contentOrOptions.contents),
+  };
+}
 
 /**
  * @plan PLAN-20250909-TOKTRACK.P05
@@ -87,9 +115,9 @@ export class LoggingProviderWrapper implements IProvider {
   private debug: DebugLogger;
   private optionsNormalizer:
     | ((
-        options: GenerateChatOptions,
+        options: MaterializedGenerateChatOptions,
         providerName: string,
-      ) => GenerateChatOptions)
+      ) => MaterializedGenerateChatOptions)
     | null = null;
 
   /**
@@ -162,9 +190,9 @@ export class LoggingProviderWrapper implements IProvider {
    */
   setOptionsNormalizer(
     normalizer: (
-      options: GenerateChatOptions,
+      options: MaterializedGenerateChatOptions,
       providerName: string,
-    ) => GenerateChatOptions,
+    ) => MaterializedGenerateChatOptions,
   ): void {
     this.optionsNormalizer = normalizer;
   }
@@ -216,15 +244,15 @@ export class LoggingProviderWrapper implements IProvider {
     options: GenerateChatOptions,
   ): AsyncIterableIterator<IContent>;
   generateChatCompletion(
-    content: IContent[],
+    content: AsyncIterable<IContent>,
     tools?: ProviderToolset,
   ): AsyncIterableIterator<IContent>;
   async *generateChatCompletion(
-    contentOrOptions: IContent[] | GenerateChatOptions,
+    contentOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
     maybeTools?: ProviderToolset,
   ): AsyncIterableIterator<IContent> {
     const normalizedOptions = this.normalizeChatCompletionOptions(
-      contentOrOptions,
+      await resolveChatCompletionInput(contentOrOptions, maybeTools),
       maybeTools,
     );
     this.ensureRuntimeContext(normalizedOptions);
@@ -260,13 +288,10 @@ export class LoggingProviderWrapper implements IProvider {
       logicalRequestId: promptId,
       wrapperOwned,
     });
-    const optionsWithLifecycle: GenerateChatOptions = {
-      ...normalizedOptions,
-      metadata: {
-        ...(normalizedOptions.metadata ?? {}),
-        [ATTEMPT_LIFECYCLE_KEY]: recorder satisfies AttemptLifecycleObserver,
-      },
-    };
+    const optionsWithLifecycle = this.buildLifecycleOptions(
+      normalizedOptions,
+      recorder,
+    );
 
     // Start direct attempts before invocation so synchronous failures finalize.
     if (wrapperOwned) {
@@ -330,9 +355,9 @@ export class LoggingProviderWrapper implements IProvider {
 
   /** REQ-SP4-004: Normalize raw args into GenerateChatOptions, inject runtime, apply normalizer. */
   private normalizeChatCompletionOptions(
-    contentOrOptions: IContent[] | GenerateChatOptions,
+    contentOrOptions: MaterializedGenerateChatOptions,
     maybeTools: ProviderToolset | undefined,
-  ): GenerateChatOptions {
+  ): MaterializedGenerateChatOptions {
     return normalizeChatCompletionOptions(contentOrOptions, maybeTools, {
       runtimeContextResolver: this.runtimeContextResolver,
       statelessRuntimeMetadata: this.statelessRuntimeMetadata,
@@ -342,20 +367,41 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   /** REQ-SP4-004: Throw if runtime context is missing settings or config. */
-  private ensureRuntimeContext(normalizedOptions: GenerateChatOptions): void {
+  private ensureRuntimeContext(
+    normalizedOptions: MaterializedGenerateChatOptions,
+  ): void {
     ensureRuntimeContext(normalizedOptions, this.wrapped.name, this.debug);
+  }
+
+  /**
+   * Hand the delegate a fresh provider-facing stream and attach the attempt
+   * lifecycle observer via metadata (issue #854: the wrapper holds the
+   * collected array only for its own logging).
+   */
+  private buildLifecycleOptions(
+    normalizedOptions: MaterializedGenerateChatOptions,
+    recorder: AttemptRecorder,
+  ): GenerateChatOptions {
+    return {
+      ...normalizedOptions,
+      contents: replayableContents(normalizedOptions.contents),
+      metadata: {
+        ...(normalizedOptions.metadata ?? {}),
+        [ATTEMPT_LIFECYCLE_KEY]: recorder satisfies AttemptLifecycleObserver,
+      },
+    };
   }
 
   /** Resolve config and validate it has required prototype methods. */
   private resolveAndValidateConfig(
-    normalizedOptions: GenerateChatOptions,
+    normalizedOptions: MaterializedGenerateChatOptions,
   ): Config {
     return resolveAndValidateConfig(normalizedOptions, this.debug);
   }
 
   /** Set up per-call redactor and check conversation logging flag. */
   private setupRedactorAndLogging(
-    normalizedOptions: GenerateChatOptions,
+    normalizedOptions: MaterializedGenerateChatOptions,
     activeConfig: Config,
   ): void {
     this.redactor = setupRedactor(normalizedOptions, activeConfig, {
@@ -377,7 +423,7 @@ export class LoggingProviderWrapper implements IProvider {
   /** Log the request if conversation logging is enabled. */
   private async logRequestIfEnabled(
     activeConfig: Config,
-    normalizedOptions: GenerateChatOptions,
+    normalizedOptions: MaterializedGenerateChatOptions,
     promptId: string,
   ): Promise<void> {
     await logRequestIfEnabled(
@@ -400,7 +446,7 @@ export class LoggingProviderWrapper implements IProvider {
   /** Log API request telemetry event. */
   private logApiRequestTelemetry(
     activeConfig: Config,
-    normalizedOptions: GenerateChatOptions,
+    normalizedOptions: MaterializedGenerateChatOptions,
     promptId: string,
   ): void {
     logApiRequestTelemetryEntry(
@@ -572,11 +618,14 @@ export class LoggingProviderWrapper implements IProvider {
   ): Promise<PromptEnvelopeProjection | undefined> {
     if (this.wrapped.projectPromptEnvelope === undefined) return undefined;
     const normalizedOptions = this.normalizeChatCompletionOptions(
-      options,
+      await resolveChatCompletionInput(options, options.tools),
       options.tools,
     );
     this.ensureRuntimeContext(normalizedOptions);
-    return this.wrapped.projectPromptEnvelope(normalizedOptions);
+    return this.wrapped.projectPromptEnvelope({
+      ...normalizedOptions,
+      contents: replayableContents(normalizedOptions.contents),
+    });
   }
 
   /**

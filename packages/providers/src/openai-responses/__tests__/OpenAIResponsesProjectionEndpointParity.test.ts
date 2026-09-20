@@ -29,7 +29,7 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../../test-utils/streamCallOptions.js';
 import type { GenerateChatOptions } from '../../IProvider.js';
 
 void vi.mock('openai', () => ({
@@ -109,7 +109,7 @@ function buildCallOptions(
   providerName: string,
   settings: SettingsService,
 ): GenerateChatOptions {
-  return createProviderCallOptions({
+  return streamCallOptions({
     providerName,
     settings,
     contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] }],

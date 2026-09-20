@@ -17,6 +17,10 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
+import {
+  isAsyncIterableContents,
+  replayableContents,
+} from '../utils/collectContents.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
@@ -42,12 +46,11 @@ describe('LoadBalancingProvider — onStreamLiveness propagation (issue #2607 fi
       return {
         name,
         async *generateChatCompletion(
-          optionsOrContents: GenerateChatOptions | IContent[],
+          optionsOrContents: GenerateChatOptions | AsyncIterable<IContent>,
         ): AsyncIterableIterator<IContent> {
-          const opts = Array.isArray(optionsOrContents)
-            ? undefined
-            : optionsOrContents;
-          opts?.onStreamLiveness?.({
+          if (isAsyncIterableContents(optionsOrContents)) return;
+          const opts = optionsOrContents;
+          opts.onStreamLiveness?.({
             sourceEvent: 'response.created',
             sseObserved: true,
           });
@@ -75,11 +78,11 @@ describe('LoadBalancingProvider — onStreamLiveness propagation (issue #2607 fi
 
     try {
       const iterator = provider.generateChatCompletion({
-        contents: [
+        contents: replayableContents([
           { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
-        ],
+        ]),
         onStreamLiveness: (event) => captured.push(event),
-      } as GenerateChatOptions);
+      });
 
       for await (const _chunk of iterator) {
         // drain

@@ -47,10 +47,13 @@ import {
 // Import SettingsService for proper ProviderManager construction
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { replayableContents } from './utils/collectContents.js';
 
 async function collectReplayText(provider: FakeProvider): Promise<string> {
   const textChunks: string[] = [];
-  for await (const chunk of provider.generateChatCompletion([])) {
+  for await (const chunk of provider.generateChatCompletion(
+    replayableContents([]),
+  )) {
     const textBlock = chunk.blocks.find(
       (block: { type: string }) => block.type === 'text',
     );
@@ -319,14 +322,18 @@ describe('FakeProvider behavioral tests', () => {
     const provider = new FakeProvider(filePath);
 
     // First call succeeds
-    for await (const _chunk of provider.generateChatCompletion([])) {
+    for await (const _chunk of provider.generateChatCompletion(
+      replayableContents([]),
+    )) {
       // consume
     }
 
     // Second call should throw
     await expect(
       (async () => {
-        for await (const _chunk of provider.generateChatCompletion([])) {
+        for await (const _chunk of provider.generateChatCompletion(
+          replayableContents([]),
+        )) {
           // should not reach here
         }
       })(),

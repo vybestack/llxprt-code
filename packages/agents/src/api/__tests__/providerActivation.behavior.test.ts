@@ -146,7 +146,10 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
       const active = built.config.getProviderManager()?.getActiveProvider();
       expect(active?.name).toBe('gemini');
       const chunks: string[] = [];
-      for await (const chunk of active!.generateChatCompletion([])) {
+      // The activated provider reads its history as a stream (issue #854);
+      // this activation probe sends no rows.
+      async function* noContents(): AsyncIterable<never> {}
+      for await (const chunk of active!.generateChatCompletion(noContents())) {
         const text = chunk.blocks
           .map((block) => blockTextOrEmpty(block))
           .join('');

@@ -19,13 +19,14 @@ import {
 } from '../transportAttemptBudget.js';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
+import type { GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import {
   createProviderWithRuntime,
   createRuntimeConfigStub,
 } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../test-utils/streamCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
@@ -232,17 +233,17 @@ const buildCallOptions = (
   settingsService: SettingsService,
   contents: IContent[],
 ) =>
-  createProviderCallOptions({
+  streamCallOptions({
     providerName: provider.name,
     contents,
     settings: settingsService,
     runtime: runtimeContext,
     config: runtimeContext.config,
-  } as Parameters<typeof createProviderCallOptions>[0]);
+  });
 
 async function consumeGenerator(
   provider: AnthropicProvider,
-  callOptions: ReturnType<typeof createProviderCallOptions>,
+  callOptions: GenerateChatOptions,
 ): Promise<{ chunks: string[]; threw: boolean; error: unknown }> {
   const chunks: string[] = [];
   let threw = false;
@@ -499,10 +500,11 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
     });
     // Preserve the narrowed options type while overriding the signal and
     // carrying the budget-bearing metadata from the attached copy.
-    const abortedOptions = {
+    const parentInvocation = baseOptions.invocation;
+    const abortedOptions: GenerateChatOptions = {
       ...baseOptions,
       invocation: {
-        ...baseOptions.invocation,
+        ...parentInvocation,
         signal: abortController.signal,
       },
       metadata: attached.options.metadata,
@@ -622,14 +624,14 @@ describe('AnthropicProvider image recovery through RetryOrchestrator (@issue:321
       initialDelayMs: 0,
     });
 
-    const callOptions = createProviderCallOptions({
+    const callOptions = streamCallOptions({
       providerName: provider.name,
       contents: messages,
       settings: settingsService,
       runtime: runtimeContext,
       config: runtimeContext.config,
       ephemerals: { retries: 2, retrywait: 0 },
-    } as Parameters<typeof createProviderCallOptions>[0]);
+    });
 
     const chunks: string[] = [];
     let threw = false;
@@ -682,14 +684,14 @@ describe('AnthropicProvider image recovery through RetryOrchestrator (@issue:321
       initialDelayMs: 0,
     });
 
-    const callOptions = createProviderCallOptions({
+    const callOptions = streamCallOptions({
       providerName: provider.name,
       contents: messages,
       settings: settingsService,
       runtime: runtimeContext,
       config: runtimeContext.config,
       ephemerals: { retries: 2, retrywait: 0 },
-    } as Parameters<typeof createProviderCallOptions>[0]);
+    });
 
     let caught: unknown;
     try {
@@ -743,14 +745,14 @@ describe('AnthropicProvider image recovery through RetryOrchestrator (@issue:321
       initialDelayMs: 0,
     });
 
-    const callOptions = createProviderCallOptions({
+    const callOptions = streamCallOptions({
       providerName: provider.name,
       contents: messages,
       settings: settingsService,
       runtime: runtimeContext,
       config: runtimeContext.config,
       ephemerals: { retries: 3, retrywait: 0 },
-    } as Parameters<typeof createProviderCallOptions>[0]);
+    });
 
     const chunks: string[] = [];
     let threw = false;

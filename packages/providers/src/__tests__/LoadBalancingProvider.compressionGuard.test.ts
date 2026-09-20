@@ -20,6 +20,11 @@ import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { RuntimeTokenizer } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizer.js';
+import {
+  collectContents,
+  isAsyncIterableContents,
+  replayableContents,
+} from '../utils/collectContents.js';
 
 interface GuardInfo {
   estimatedTokens: number;
@@ -101,8 +106,8 @@ async function consumeIterator(
 ): Promise<IContent[]> {
   const results: IContent[] = [];
   for await (const chunk of provider.generateChatCompletion({
-    contents,
-  } as GenerateChatOptions)) {
+    contents: replayableContents(contents),
+  })) {
     results.push(chunk);
   }
   return results;
@@ -129,11 +134,13 @@ describe('LoadBalancingProvider - compression guard facts (issue #3499)', () => 
       createMockProvider({
         name: 'openai',
         async *generateChatCompletion(
-          optionsOrContent: GenerateChatOptions | IContent[],
+          optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
         ): AsyncGenerator<IContent> {
-          const contents = Array.isArray(optionsOrContent)
-            ? optionsOrContent
-            : optionsOrContent.contents;
+          const contents = await collectContents(
+            isAsyncIterableContents(optionsOrStream)
+              ? optionsOrStream
+              : optionsOrStream.contents,
+          );
           sentToOpenAi.push(structuredClone(contents));
           yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
         },

@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../test-utils/streamCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createOpenAIAliasProvider } from '../composition/aliasProviderFactory.js';
 import type { ProviderAliasEntry } from '../composition/providerAliases.js';
@@ -110,7 +110,7 @@ describe('OpenAIProvider', () => {
     if (!runtimeRegistry.has(runtimeId)) upsertRuntimeEntry(runtimeId, {});
     const output: IContent[] = [];
     const iterator = provider.generateChatCompletion(
-      createProviderCallOptions({
+      streamCallOptions({
         providerName: 'kimi',
         settings,
         contents,
@@ -403,7 +403,7 @@ describe('OpenAIProvider', () => {
       ];
       const runtimeId = 'runtime-projection';
       upsertRuntimeEntry(runtimeId, {});
-      const options = createProviderCallOptions({
+      const options = streamCallOptions({
         providerName: 'kimi',
         settings,
         contents,
@@ -580,7 +580,7 @@ describe('OpenAIProvider', () => {
           throw error;
         };
         const provider = createKimiProvider();
-        const options = createProviderCallOptions({
+        const options = streamCallOptions({
           providerName: 'kimi',
           contents: [{ speaker: 'human', blocks: [reference] }],
           metadata: { abortSignal: controller.signal },
@@ -659,7 +659,7 @@ describe('OpenAIProvider', () => {
         },
       ];
       const iterator = provider.generateChatCompletion(
-        createProviderCallOptions({
+        streamCallOptions({
           providerName: provider.name,
           contents,
           resolved: {

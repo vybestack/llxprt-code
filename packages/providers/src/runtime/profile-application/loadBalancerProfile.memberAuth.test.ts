@@ -23,6 +23,10 @@ import {
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { LoadBalancingProvider } from '../../LoadBalancingProvider.js';
 import type { GenerateChatOptions, IProvider } from '../../IProvider.js';
+import {
+  isAsyncIterableContents,
+  replayableContents,
+} from '../../utils/collectContents.js';
 import { createProviderKeyStorage } from '../../auth/proxy/credential-store-factory.js';
 import { resolveLoadBalancerSubProfile } from './loadBalancerProfile.js';
 import { resolveMemberAuthentication } from '../../loadBalancing/memberAuthentication.js';
@@ -240,10 +244,11 @@ describe('resolveLoadBalancerSubProfile — member auth handling', () => {
           getModels: async () => [],
           getDefaultModel: () => 'test-model',
           async *generateChatCompletion(
-            options: GenerateChatOptions | IContent[],
+            options: GenerateChatOptions | AsyncIterable<IContent>,
           ): AsyncGenerator<IContent> {
-            if (Array.isArray(options))
+            if (isAsyncIterableContents(options)) {
               throw new Error('Expected delegate options');
+            }
             const token = options.resolved?.authToken;
             if (typeof token !== 'string')
               throw new Error('Expected resolved key');
@@ -264,7 +269,7 @@ describe('resolveLoadBalancerSubProfile — member auth handling', () => {
           await storage.saveKey(keyName, value);
           await fs.writeFile(keyfile, value);
           for await (const chunk of lb.generateChatCompletion({
-            contents: [],
+            contents: replayableContents([]),
           })) {
             observed.push(chunk);
           }

@@ -29,7 +29,8 @@ import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IModel } from '../IModel.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../test-utils/streamCallOptions.js';
+import { isAsyncIterableContents } from '../utils/collectContents.js';
 
 interface OneShotEnvelope {
   readonly token: object;
@@ -108,9 +109,11 @@ function createOneShotProjectedProvider(config: OneShotProviderConfig): {
       };
     },
     async *generateChatCompletion(
-      optionsOrContents: GenerateChatOptions | IContent[],
+      optionsOrContents: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncIterableIterator<IContent> {
-      const options: GenerateChatOptions = Array.isArray(optionsOrContents)
+      const options: GenerateChatOptions = isAsyncIterableContents(
+        optionsOrContents,
+      )
         ? { contents: optionsOrContents }
         : optionsOrContents;
       const token = options.promptEnvelopeTransportToken;
@@ -180,7 +183,7 @@ async function mintEnvelope(
 }
 
 function buildOptions(token: object | undefined): GenerateChatOptions {
-  const base = createProviderCallOptions({
+  const base = streamCallOptions({
     providerName: 'one-shot-projected-provider',
     contents: [
       {
@@ -189,7 +192,7 @@ function buildOptions(token: object | undefined): GenerateChatOptions {
       },
     ],
     ephemerals: { retries: 2, retrywait: 0 },
-  } as Parameters<typeof createProviderCallOptions>[0]);
+  });
   return token === undefined
     ? base
     : { ...base, promptEnvelopeTransportToken: token };
@@ -392,7 +395,8 @@ describe('RetryOrchestrator prompt-envelope retry contract (@issue:3444)', () =>
       let calls = 0;
       let bodies = 0;
       provider.generateChatCompletion = (options) => {
-        if (Array.isArray(options)) throw new Error('Expected request options');
+        if (isAsyncIterableContents(options))
+          throw new Error('Expected request options');
         calls += 1;
         if (calls === 1) return generate(options);
         const body = (async function* (): AsyncIterableIterator<IContent> {
@@ -474,7 +478,8 @@ describe('RetryOrchestrator prompt-envelope retry contract (@issue:3444)', () =>
     let refreshes = 0;
     provider.transportAttemptOwnership = 'provider';
     provider.generateChatCompletion = async function* (options) {
-      if (Array.isArray(options)) throw new Error('Expected request options');
+      if (isAsyncIterableContents(options))
+        throw new Error('Expected request options');
       for (let index = 0; index < 2; index += 1) {
         if (tryConsumeTransportAttempt(options)) sends += 1;
       }

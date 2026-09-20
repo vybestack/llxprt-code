@@ -23,6 +23,7 @@ import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { setActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createAnthropicRawPostTestAdapter } from '../../test-utils/rawPostTestAdapters.js';
+import { replayableContents } from '../../utils/collectContents.js';
 
 // Mock the prompts module
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -57,7 +58,9 @@ export interface ThinkingTestSetup {
   buildCallOptions: (
     contents: IContent[],
     overrides?: Omit<ProviderCallOptionsInit, 'providerName' | 'contents'>,
-  ) => ReturnType<typeof createProviderCallOptions>;
+  ) => Omit<ReturnType<typeof createProviderCallOptions>, 'contents'> & {
+    contents: AsyncIterable<IContent>;
+  };
 }
 
 /**
@@ -114,8 +117,8 @@ export function setupThinkingProvider(): ThinkingTestSetup {
   const buildCallOptions = (
     contents: IContent[],
     overrides: Omit<ProviderCallOptionsInit, 'providerName' | 'contents'> = {},
-  ) =>
-    createProviderCallOptions({
+  ) => {
+    const options = createProviderCallOptions({
       providerName: provider.name,
       contents,
       settings: settingsService,
@@ -123,6 +126,10 @@ export function setupThinkingProvider(): ThinkingTestSetup {
       config: runtimeContext.config,
       ...overrides,
     });
+    // Issue #854: the provider-facing contract is a history stream; the
+    // eager arrays tests assemble re-open as a replayable stream here.
+    return { ...options, contents: replayableContents(contents) };
+  };
 
   return { provider, runtimeContext, settingsService, buildCallOptions };
 }

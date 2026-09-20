@@ -13,7 +13,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../test-utils/streamCallOptions.js';
 import type {
   IContent,
   MediaReferenceBlock,
@@ -174,7 +174,7 @@ describe('provider-media-recovery', () => {
     resolver: RequestMediaResolver,
     budget: number,
     signal?: AbortSignal,
-  ): ReturnType<typeof createProviderCallOptions> {
+  ): ReturnType<typeof streamCallOptions> {
     const settings = new SettingsService();
     settings.setProviderSetting(provider.name, 'model', providerCase.model);
     settings.setProviderSetting(provider.name, 'streaming', 'disabled');
@@ -199,7 +199,7 @@ describe('provider-media-recovery', () => {
       },
       ...(signal === undefined ? {} : { signal }),
     });
-    return createProviderCallOptions({
+    return streamCallOptions({
       providerName: provider.name,
       contents,
       settings,

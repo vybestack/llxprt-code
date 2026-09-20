@@ -32,6 +32,7 @@ import type {
   AttemptEndInfo,
 } from '../logging/attemptLifecycle.js';
 import { ATTEMPT_LIFECYCLE_KEY } from '../logging/attemptLifecycle.js';
+import { replayableContents } from '../utils/collectContents.js';
 
 class LifecycleCapture implements AttemptLifecycleObserver {
   readonly starts: AttemptStartInfo[] = [];
@@ -58,14 +59,14 @@ function makeScriptedProvider(
 ): {
   provider: IProvider;
   calls: { value: number };
-  seenOptions: Array<GenerateChatOptions | IContent[]>;
+  seenOptions: Array<GenerateChatOptions | AsyncIterable<IContent>>;
 } {
   const calls = { value: 0 };
-  const seenOptions: Array<GenerateChatOptions | IContent[]> = [];
+  const seenOptions: Array<GenerateChatOptions | AsyncIterable<IContent>> = [];
   const provider: IProvider = {
     name,
     generateChatCompletion(
-      optionsOrContents: GenerateChatOptions | IContent[],
+      optionsOrContents: GenerateChatOptions | AsyncIterable<IContent>,
     ) {
       seenOptions.push(optionsOrContents);
       const script = scripts[Math.min(calls.value, scripts.length - 1)];
@@ -149,7 +150,7 @@ describe('LoadBalancingProvider attempt telemetry (issue #2532)', () => {
 
     const chunks: IContent[] = [];
     for await (const chunk of composed.generateChatCompletion({
-      contents: [],
+      contents: replayableContents([]),
       metadata: { [ATTEMPT_LIFECYCLE_KEY]: capture },
     })) {
       chunks.push(chunk);
@@ -203,7 +204,7 @@ describe('LoadBalancingProvider attempt telemetry (issue #2532)', () => {
     );
 
     const iterator = composed.generateChatCompletion({
-      contents: [],
+      contents: replayableContents([]),
       metadata: { [ATTEMPT_LIFECYCLE_KEY]: capture },
     });
     const first = await iterator.next();
@@ -238,7 +239,7 @@ describe('LoadBalancingProvider attempt telemetry (issue #2532)', () => {
     );
 
     for await (const _chunk of composed.generateChatCompletion({
-      contents: [],
+      contents: replayableContents([]),
       metadata: { [ATTEMPT_LIFECYCLE_KEY]: capture },
     })) {
       // Drain the stream; the assertion is on captured options below.

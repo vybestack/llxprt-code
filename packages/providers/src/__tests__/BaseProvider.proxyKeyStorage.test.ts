@@ -29,6 +29,7 @@ import {
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import { CredentialProxyServer } from '../auth/proxy/credential-proxy-server.js';
+import { replayableContents } from '../utils/collectContents.js';
 import { resetFactorySingletons } from '../auth/proxy/credential-store-factory.js';
 
 const userMessage = (text: string): IContent => ({
@@ -180,7 +181,12 @@ function buildChatOptions(settings: SettingsService) {
     settingsService: settings,
     config,
   });
-  return { contents: [userMessage('hi')], settings, config, runtime };
+  return {
+    contents: replayableContents([userMessage('hi')]),
+    settings,
+    config,
+    runtime,
+  };
 }
 
 const PROXY_SERVED_KEY = 'proxy-served-secret-key-2946';

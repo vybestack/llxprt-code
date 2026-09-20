@@ -17,11 +17,16 @@ import {
 import {
   type IProvider,
   type GenerateChatOptions,
+  type MaterializedGenerateChatOptions,
   type ProviderToolset,
 } from './IProvider.js';
 import { type IModel } from './IModel.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { firstTruthyString } from './utils/falsyFallback.js';
+import {
+  collectContents,
+  isAsyncIterableContents,
+} from './utils/collectContents.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import {
@@ -82,7 +87,14 @@ export interface BaseProviderConfig {
   mediaTransportCapabilities?: ProviderMediaTransportCapabilities;
 }
 
-export interface NormalizedGenerateChatOptions extends GenerateChatOptions {
+export interface NormalizedGenerateChatOptions
+  extends Omit<GenerateChatOptions, 'contents'> {
+  /**
+   * Request-scoped materialization of the incoming history stream
+   * (issue #854, PLAN-20260917-ISSUE854.P05b3): normalization collects the
+   * stream once and provider implementations read the plain array.
+   */
+  contents: IContent[];
   settings: SettingsService;
   config?: Config;
   userMemory?: UserMemoryInput; // @plan PLAN-20251023-STATELESS-HARDENING.P08: User memory from runtime context
@@ -614,16 +626,20 @@ export abstract class BaseProvider implements IProvider {
     options: GenerateChatOptions,
   ): AsyncIterableIterator<IContent>;
   generateChatCompletion(
-    contents: IContent[],
+    contents: AsyncIterable<IContent>,
     tools?: ProviderToolset,
   ): AsyncIterableIterator<IContent>;
   /**
    * @plan PLAN-20251018-STATELESSPROVIDER2.P06
    * @requirement REQ-SP2-001
    * @pseudocode base-provider-call-contract.md lines 1-5
+   *
+   * The positional history is the provider-facing stream (issue #854,
+   * PLAN-20260917-ISSUE854.P05b3); it is collected request-scoped here and
+   * normalization stays array-based until P05b4.
    */
   generateChatCompletion(
-    contentsOrOptions: IContent[] | GenerateChatOptions,
+    contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
     maybeTools?: ProviderToolset,
   ): AsyncIterableIterator<IContent> {
     const normalizedPromise = this.normalizeGenerateChatOptions(
@@ -821,15 +837,20 @@ export abstract class BaseProvider implements IProvider {
    * @pseudocode base-provider-call-contract.md lines 1-3
    */
   private async normalizeGenerateChatOptions(
-    contentsOrOptions: IContent[] | GenerateChatOptions,
+    contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
     maybeTools?: ProviderToolset,
     resolveAuthentication: boolean = true,
   ): Promise<NormalizedGenerateChatOptions> {
-    const providedOptions: GenerateChatOptions = Array.isArray(
-      contentsOrOptions,
-    )
-      ? { contents: contentsOrOptions, tools: maybeTools }
-      : contentsOrOptions;
+    const providedOptions: MaterializedGenerateChatOptions =
+      isAsyncIterableContents(contentsOrOptions)
+        ? {
+            contents: await collectContents(contentsOrOptions),
+            tools: maybeTools,
+          }
+        : {
+            ...contentsOrOptions,
+            contents: await collectContents(contentsOrOptions.contents),
+          };
     const settings = resolveGenerateChatSettings(
       providedOptions,
       this.defaultSettingsService,

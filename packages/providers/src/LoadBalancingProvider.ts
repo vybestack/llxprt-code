@@ -16,6 +16,11 @@ import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { LoadBalancerFailoverError } from './errors.js';
+import {
+  collectContents,
+  isAsyncIterableContents,
+  replayableContents,
+} from './utils/collectContents.js';
 import { getAttemptLifecycleObserver } from './logging/attemptLifecycle.js';
 import {
   notifyBackendStart,
@@ -105,15 +110,6 @@ interface PreparedLoadBalancerTarget {
   readonly authenticatedSubProfile: ResolvedSubProfile | LoadBalancerSubProfile;
   readonly options: GenerateChatOptions;
   readonly delegateProvider: IProvider;
-}
-
-function normalizeGenerateChatOptions(
-  options: GenerateChatOptions,
-): GenerateChatOptions {
-  const runtimeOptions: Partial<GenerateChatOptions> = options;
-  return runtimeOptions.contents === undefined
-    ? { ...options, contents: [] }
-    : options;
 }
 
 /**
@@ -282,7 +278,7 @@ export class LoadBalancingProvider implements IProvider {
         `[LB:token-guard] Estimate ${result.tokens} exceeds limit ${contextLimit} for ${subProfile.name}, attempting compression`,
     );
     const clonedContents = this.cloneForCompression(
-      options.contents,
+      await collectContents(options.contents),
       subProfile,
       result,
       contextLimit,
@@ -300,7 +296,10 @@ export class LoadBalancingProvider implements IProvider {
         cause: error instanceof Error ? error : new Error(String(error)),
       });
     }
-    const compressedOptions = { ...options, contents: compressed };
+    const compressedOptions = {
+      ...options,
+      contents: replayableContents(compressed),
+    };
     const compressedResult = await this.estimateForSubProfile(
       subProfile,
       compressedOptions,
@@ -398,23 +397,30 @@ export class LoadBalancingProvider implements IProvider {
     options: GenerateChatOptions,
   ): AsyncIterableIterator<IContent>;
   generateChatCompletion(
-    content: IContent[],
+    content: AsyncIterable<IContent>,
     tools?: ProviderToolset,
   ): AsyncIterableIterator<IContent>;
   async *generateChatCompletion(
-    optionsOrContent: GenerateChatOptions | IContent[],
+    optionsOrContent: GenerateChatOptions | AsyncIterable<IContent>,
     tools?: ProviderToolset,
   ): AsyncIterableIterator<IContent> {
-    // Normalize parameters to GenerateChatOptions format
-    let options: GenerateChatOptions;
-    if (Array.isArray(optionsOrContent)) {
-      options = {
-        contents: optionsOrContent,
-        tools,
-      };
-    } else {
-      options = normalizeGenerateChatOptions(optionsOrContent);
-    }
+    // The history is collected once at the failover boundary (issue #854)
+    // and re-opened per backend attempt, so every attempt and estimate
+    // streams the same request-scoped contents. A caller omitting contents
+    // violates the provider contract and fails the collection here.
+    const options: GenerateChatOptions = isAsyncIterableContents(
+      optionsOrContent,
+    )
+      ? {
+          contents: replayableContents(await collectContents(optionsOrContent)),
+          tools,
+        }
+      : {
+          ...optionsOrContent,
+          contents: replayableContents(
+            await collectContents(optionsOrContent.contents),
+          ),
+        };
     this.resetTokenAccountingDiagnostics();
 
     // Branch on strategy

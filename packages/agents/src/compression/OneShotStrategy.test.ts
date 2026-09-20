@@ -641,8 +641,12 @@ describe('OneShotStrategy', () => {
         name: 'capture-provider',
         getModels: async () => [],
         getDefaultModel: () => 'capture-model',
-        async *generateChatCompletion(options: { contents: IContent[] }) {
-          capturedRequests.push(...options.contents);
+        async *generateChatCompletion(options: {
+          contents: AsyncIterable<IContent>;
+        }) {
+          for await (const content of options.contents) {
+            capturedRequests.push(content);
+          }
           yield {
             speaker: 'ai' as const,
             blocks: [
@@ -723,8 +727,12 @@ describe('OneShotStrategy', () => {
         name: 'capture-provider',
         getModels: async () => [],
         getDefaultModel: () => 'capture-model',
-        async *generateChatCompletion(options: { contents: IContent[] }) {
-          capturedRequests.push(...options.contents);
+        async *generateChatCompletion(options: {
+          contents: AsyncIterable<IContent>;
+        }) {
+          for await (const content of options.contents) {
+            capturedRequests.push(content);
+          }
           yield {
             speaker: 'ai' as const,
             blocks: [

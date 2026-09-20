@@ -246,7 +246,7 @@ describe('LoadBalancingProvider session-scoped delegate precedence (#3151)', () 
         subProfile,
         options,
         makeCtx(),
-      ) as NormalizedGenerateChatOptions;
+      ) as Omit<NormalizedGenerateChatOptions, 'contents'>;
       const invocation = result.invocation;
 
       // Assert the class, not the message: writing to a frozen object throws a

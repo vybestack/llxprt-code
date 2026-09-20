@@ -150,7 +150,11 @@ describe('Issue #1150 REPRO: thinking/tool-call round-trip and history persisten
       options: GenerateChatOptions,
     ) {
       callCount++;
-      capturedContents.push([...options.contents]);
+      const turnContents: IContent[] = [];
+      for await (const content of options.contents) {
+        turnContents.push(content);
+      }
+      capturedContents.push(turnContents);
 
       if (callCount === 1) {
         yield {

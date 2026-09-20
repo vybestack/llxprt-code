@@ -137,7 +137,7 @@ describe('System prompt provider — non-foreground subagent (issue #3176, D5)',
           | GenerateChatOptions
           | GenerateChatOptions['contents'],
       ): AsyncGenerator<IContent> {
-        if (Array.isArray(optionsOrContents)) {
+        if (Symbol.asyncIterator in optionsOrContents) {
           throw new Error('Legacy chat arguments are not used by this test');
         }
         capturedCalls.push(optionsOrContents);

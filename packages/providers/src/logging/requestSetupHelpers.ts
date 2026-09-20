@@ -5,7 +5,7 @@
  */
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { GenerateChatOptions } from '../IProvider.js';
+import type { MaterializedGenerateChatOptions } from '../IProvider.js';
 import { ConfigBasedRedactor } from './ConfigBasedRedactor.js';
 import type { ConversationDataRedactor } from './ConfigBasedRedactor.js';
 import { logRequestEntry } from './conversationResponseLogger.js';
@@ -25,7 +25,7 @@ export interface RequestSetupContext {
  * Set up per-call redactor based on injected redactor or invocation/config.
  */
 export function setupRedactor(
-  normalizedOptions: GenerateChatOptions,
+  normalizedOptions: MaterializedGenerateChatOptions,
   activeConfig: Config,
   ctx: RequestSetupContext,
 ): ConversationDataRedactor | null {
@@ -71,7 +71,7 @@ export function checkConversationLoggingEnabled(
  */
 export async function logRequestIfEnabled(
   activeConfig: Config,
-  normalizedOptions: GenerateChatOptions,
+  normalizedOptions: MaterializedGenerateChatOptions,
   promptId: string,
   redactor: ConversationDataRedactor | null,
   ctx: RequestSetupContext,

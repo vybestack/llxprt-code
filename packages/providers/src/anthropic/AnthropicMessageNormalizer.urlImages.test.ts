@@ -29,7 +29,8 @@ import type {
 import { convertToAnthropicMessages } from './AnthropicMessageNormalizer.js';
 import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { streamCallOptions } from '../test-utils/streamCallOptions.js';
 import type { AnthropicMessage } from './AnthropicMessageNormalizer.js';
 
 // Light boundary mock: prepareAnthropicRequest builds the real system prompt
@@ -219,8 +220,10 @@ describe('convertToAnthropicMessages url-image serialization (#3693)', () => {
 
 describe('prepareAnthropicRequest url-image guard by base URL (#3693)', () => {
   async function prepare(baseURL: string, contents: IContent[]) {
-    const callOpts = createProviderCallOptions({
+    const settings = new SettingsService();
+    const callOpts = streamCallOptions({
       providerName: 'anthropic',
+      settings,
       contents,
       resolved: {
         model: 'claude-3-5-sonnet-20241022',
@@ -230,10 +233,14 @@ describe('prepareAnthropicRequest url-image guard by base URL (#3693)', () => {
       },
     });
     return prepareAnthropicRequest({
-      content: callOpts.contents,
+      content: contents,
       tools: callOpts.tools,
       options: {
         ...callOpts,
+        // prepareAnthropicRequest consumes the request-scoped array; the
+        // stream on callOpts is only the transport-facing form.
+        contents,
+        settings,
         metadata: callOpts.metadata ?? {},
         resolved: {
           model: 'claude-3-5-sonnet-20241022',

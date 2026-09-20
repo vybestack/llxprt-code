@@ -29,7 +29,7 @@ import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../test-utils/streamCallOptions.js';
 
 const realLlxprtCodeSettingsModule = {
   ...(await import('@vybestack/llxprt-code-settings')),
@@ -136,7 +136,7 @@ describe('OpenAIResponsesProvider prompt-envelope retry (@issue:3444)', () => {
       getEphemeralSettings: () => ({}),
     });
 
-    const callOptions = createProviderCallOptions({
+    const callOptions = streamCallOptions({
       providerName: provider.name,
       contents: mediaMessages(),
       ephemerals: {
@@ -195,7 +195,7 @@ describe('OpenAIResponsesProvider prompt-envelope retry (@issue:3444)', () => {
     const provider = new OpenAIResponsesProvider('test-key', undefined, {
       getEphemeralSettings: () => ({}),
     });
-    const options = createProviderCallOptions({
+    const options = streamCallOptions({
       providerName: provider.name,
       contents: mediaMessages(),
       ephemerals: { retrywait: 0 },
@@ -239,7 +239,7 @@ describe('OpenAIResponsesProvider prompt-envelope retry (@issue:3444)', () => {
     const provider = new OpenAIResponsesProvider('test-key', undefined, {
       getEphemeralSettings: () => ({}),
     });
-    const options = createProviderCallOptions({
+    const options = streamCallOptions({
       providerName: provider.name,
       contents: mediaMessages(),
       ephemerals: { retrywait: 0 },

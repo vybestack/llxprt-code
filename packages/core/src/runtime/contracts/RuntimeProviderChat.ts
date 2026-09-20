@@ -75,7 +75,14 @@ export interface RuntimeSystemPromptAssembler {
 }
 
 export interface RuntimeGenerateChatOptions {
-  contents: IContent[];
+  /**
+   * The conversation history as a stream (issue #854): rows flow from the
+   * journal fold through curation and provider assembly without a retained
+   * array. Providers collect request-scoped at their entry point.
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b3
+   */
+  contents: AsyncIterable<IContent>;
   tools?: RuntimeProviderToolset;
   settings?: SettingsService;
   config?: Config;

@@ -420,7 +420,7 @@ export class AnthropicProvider extends BaseProvider {
    * placement policy, not a placement decision made in isolation here.
    */
   getSystemPromptPlacement(
-    options: GenerateChatOptions,
+    options: Pick<GenerateChatOptions, 'resolved'>,
   ): SystemPromptPlacement {
     const resolvedToken = options.resolved?.authToken;
     if (isRuntimeAuthTokenProvider(resolvedToken)) {
@@ -831,7 +831,6 @@ export class AnthropicProvider extends BaseProvider {
     // resolved through the shared policy, never re-derived from isOAuth here.
     const placement = resolveSystemPromptPlacement(
       this.getSystemPromptPlacement({
-        ...options,
         resolved: { ...options.resolved, authToken },
       }),
     );

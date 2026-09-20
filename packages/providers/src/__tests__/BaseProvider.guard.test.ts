@@ -3,8 +3,8 @@ import {
   BaseProvider,
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
-import type { GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { replayableContents } from '../utils/collectContents.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   clearActiveProviderRuntimeContext,
@@ -80,9 +80,9 @@ describe('BaseProvider runtime guard', () => {
     ).defaultSettingsService = undefined;
 
     const iterator = provider.generateChatCompletion({
-      contents: [prompt],
+      contents: replayableContents([prompt]),
       metadata: { test: true },
-    } as GenerateChatOptions);
+    });
 
     await expect(iterator.next()).rejects.toMatchObject({
       name: 'MissingProviderRuntimeError',
@@ -124,10 +124,10 @@ describe('BaseProvider runtime guard', () => {
     });
 
     const iterator = provider.generateChatCompletion({
-      contents: [prompt],
+      contents: replayableContents([prompt]),
       settings,
       metadata: { scenario: 'missing-config' },
-    } as GenerateChatOptions);
+    });
 
     await expect(iterator.next()).rejects.toMatchObject({
       name: 'MissingProviderRuntimeError',

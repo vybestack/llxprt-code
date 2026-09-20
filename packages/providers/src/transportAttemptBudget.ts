@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { GenerateChatOptions } from './IProvider.js';
+import type {
+  GenerateChatOptions,
+  MetadataBearingOptions,
+} from './IProvider.js';
 
 /**
  * Metadata key holding the per-request retry context object shared across
@@ -46,7 +49,7 @@ function isTransportAttemptBudget(
 }
 
 function getRequestContext(
-  options: GenerateChatOptions,
+  options: MetadataBearingOptions,
 ): Record<string, unknown> | undefined {
   const value = options.metadata?.[RETRY_REQUEST_CONTEXT_KEY];
   return isRecord(value) ? value : undefined;
@@ -138,20 +141,20 @@ export function readTransportAttemptBudgetFromRecord(
 }
 
 export function getTransportAttemptBudget(
-  options: GenerateChatOptions,
+  options: MetadataBearingOptions,
 ): TransportAttemptBudget | undefined {
   return readTransportAttemptBudgetFromRecord(getRequestContext(options));
 }
 
 export function hasTransportAttemptRemaining(
-  options: GenerateChatOptions,
+  options: MetadataBearingOptions,
 ): boolean {
   const budget = getTransportAttemptBudget(options);
   return budget === undefined || budget.used < budget.limit;
 }
 
 export function tryConsumeTransportAttempt(
-  options: GenerateChatOptions,
+  options: MetadataBearingOptions,
 ): boolean {
   const budget = getTransportAttemptBudget(options);
   if (budget === undefined) return true;

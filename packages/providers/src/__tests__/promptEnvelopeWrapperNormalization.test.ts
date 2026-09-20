@@ -22,6 +22,7 @@ import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type {
   IProvider,
   GenerateChatOptions,
+  MaterializedGenerateChatOptions,
   ProviderToolset,
 } from '../IProvider.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
@@ -29,6 +30,10 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { IModel } from '../IModel.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import {
+  isAsyncIterableContents,
+  replayableContents,
+} from '../utils/collectContents.js';
 
 function makeContent(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
@@ -85,11 +90,11 @@ class RecordingProvider implements IProvider {
   }
 
   async *generateChatCompletion(
-    optionsOrContents: GenerateChatOptions | IContent[],
+    optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
     _tools?: ProviderToolset,
   ): AsyncIterableIterator<IContent> {
-    if (!Array.isArray(optionsOrContents)) {
-      this.transportInput = observe(optionsOrContents);
+    if (!isAsyncIterableContents(optionsOrStream)) {
+      this.transportInput = observe(optionsOrStream);
     }
     yield makeContent('ok');
   }
@@ -142,7 +147,9 @@ describe('LoggingProviderWrapper projection normalization parity (issue #2817)',
     const base = new RecordingProvider();
     const { wrapper } = buildManagedWrapper(base);
 
-    await wrapper.projectPromptEnvelope({ contents: [makeContent('Hello')] });
+    await wrapper.projectPromptEnvelope({
+      contents: replayableContents([makeContent('Hello')]),
+    });
 
     expect(base.projectionInput?.runtimeId).toBe('managed-runtime');
     expect(base.projectionInput?.settingsPresent).toBe(true);
@@ -153,7 +160,9 @@ describe('LoggingProviderWrapper projection normalization parity (issue #2817)',
     const base = new RecordingProvider();
     const { wrapper } = buildManagedWrapper(base);
 
-    await wrapper.projectPromptEnvelope({ contents: [makeContent('Hello')] });
+    await wrapper.projectPromptEnvelope({
+      contents: replayableContents([makeContent('Hello')]),
+    });
 
     expect(base.projectionInput?.normalizerApplied).toBe(true);
   });
@@ -162,7 +171,7 @@ describe('LoggingProviderWrapper projection normalization parity (issue #2817)',
     const base = new RecordingProvider();
     const { wrapper } = buildManagedWrapper(base);
     const rawOptions: GenerateChatOptions = {
-      contents: [makeContent('Hello')],
+      contents: replayableContents([makeContent('Hello')]),
     };
 
     await wrapper.projectPromptEnvelope(rawOptions);
@@ -218,7 +227,9 @@ describe('LoggingProviderWrapper projection normalization parity (issue #2817)',
     const wrapper = new LoggingProviderWrapper(base);
 
     await expect(
-      wrapper.projectPromptEnvelope({ contents: [makeContent('Hello')] }),
+      wrapper.projectPromptEnvelope({
+        contents: replayableContents([makeContent('Hello')]),
+      }),
     ).rejects.toThrow(/runtime/i);
     expect(base.projectionInput).toBeUndefined();
   });
@@ -234,9 +245,15 @@ describe('LoggingProviderWrapper projection normalization parity (issue #2817)',
     };
     const settings = new SettingsService();
     const wrapper = new LoggingProviderWrapper(plain);
-    const normalize = vi.fn((options: GenerateChatOptions) => options);
-    const options = { contents: [makeContent('Hello')] };
-    const snapshot = structuredClone(options);
+    const normalize = vi.fn(
+      (options: MaterializedGenerateChatOptions) => options,
+    );
+    const options = { contents: replayableContents([makeContent('Hello')]) };
+    // The stream is not structurally cloneable; side-effect detection keys off
+    // the cloned remainder, which is where normalization would inject state.
+    const cloneForSnapshot = () =>
+      structuredClone({ ...options, contents: [] });
+    const snapshot = cloneForSnapshot();
     wrapper.setRuntimeContextResolver(() => ({
       settingsService: settings,
       config: buildConfigStub(),
@@ -249,6 +266,6 @@ describe('LoggingProviderWrapper projection normalization parity (issue #2817)',
       wrapper.projectPromptEnvelope(options),
     ).resolves.toBeUndefined();
     expect(normalize).not.toHaveBeenCalled();
-    expect(options).toStrictEqual(snapshot);
+    expect(cloneForSnapshot()).toStrictEqual(snapshot);
   });
 });

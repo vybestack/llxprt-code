@@ -30,6 +30,7 @@ import type { IModel } from '../IModel.js';
 import type { OnAuthErrorHandler } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
+import { replayableContents } from '../utils/collectContents.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import { decodeRetryFailure } from '../retryFailureTaxonomy.js';
 import { isTerminalRetryError } from '../retryErrorClassification.js';
@@ -99,7 +100,7 @@ function createScriptedProvider(options: ScriptedProviderOptions): {
   const provider: IProvider = {
     name: 'scripted-provider',
     generateChatCompletion(
-      optionsOrContents: GenerateChatOptions | IContent[],
+      optionsOrContents: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncIterableIterator<IContent> {
       const requestOptions = optionsOrContents as GenerateChatOptions;
       const index = callCount++;
@@ -151,7 +152,7 @@ function trackedStream(factory: StreamFactory): {
 
 function onAuthErrorOptions(handler: OnAuthErrorHandler): GenerateChatOptions {
   return {
-    contents: [],
+    contents: replayableContents([]),
     resolved: { authToken: 'revoked-token' },
     runtime: {
       config: {
@@ -165,7 +166,7 @@ function bucketFailoverOptions(
   tryFailover: () => Promise<boolean>,
 ): GenerateChatOptions {
   return {
-    contents: [],
+    contents: replayableContents([]),
     runtime: {
       config: {
         getBucketFailoverHandler: () => ({
@@ -260,7 +261,9 @@ describe('RetryOrchestrator commitment boundary (issue #2532 AC-04/AC-05)', () =
       });
 
       const { chunks, error } = await consumeStream(
-        orchestrator.generateChatCompletion({ contents: [] }),
+        orchestrator.generateChatCompletion({
+          contents: replayableContents([]),
+        }),
       );
 
       expect(chunks).toStrictEqual([textChunk]);
@@ -288,7 +291,9 @@ describe('RetryOrchestrator commitment boundary (issue #2532 AC-04/AC-05)', () =
       });
 
       const { chunks, error } = await consumeStream(
-        orchestrator.generateChatCompletion({ contents: [] }),
+        orchestrator.generateChatCompletion({
+          contents: replayableContents([]),
+        }),
       );
 
       expect(chunks).toStrictEqual([textChunk]);
@@ -316,7 +321,9 @@ describe('RetryOrchestrator commitment boundary (issue #2532 AC-04/AC-05)', () =
       });
 
       const { chunks, error } = await consumeStream(
-        orchestrator.generateChatCompletion({ contents: [] }),
+        orchestrator.generateChatCompletion({
+          contents: replayableContents([]),
+        }),
       );
 
       expect(decodeRetryFailure(overload).kind).toBe('overload');
@@ -345,7 +352,9 @@ describe('RetryOrchestrator commitment boundary (issue #2532 AC-04/AC-05)', () =
       });
 
       const { chunks, error } = await consumeStream(
-        orchestrator.generateChatCompletion({ contents: [] }),
+        orchestrator.generateChatCompletion({
+          contents: replayableContents([]),
+        }),
       );
 
       expect(chunks).toStrictEqual([metadataChunk]);
@@ -418,7 +427,9 @@ describe('RetryOrchestrator commitment boundary (issue #2532 AC-04/AC-05)', () =
       });
 
       const { chunks, error } = await consumeStream(
-        orchestrator.generateChatCompletion({ contents: [] }),
+        orchestrator.generateChatCompletion({
+          contents: replayableContents([]),
+        }),
       );
 
       expect(error).toBeUndefined();
@@ -449,7 +460,9 @@ describe('RetryOrchestrator commitment boundary (issue #2532 AC-04/AC-05)', () =
       });
 
       const { chunks, error } = await consumeStream(
-        orchestrator.generateChatCompletion({ contents: [] }),
+        orchestrator.generateChatCompletion({
+          contents: replayableContents([]),
+        }),
       );
 
       expect(error).toBeUndefined();
@@ -481,7 +494,7 @@ describe('RetryOrchestrator commitment boundary (issue #2532 AC-04/AC-05)', () =
       const cancellation = setTimeout(() => controller.abort(), 5);
       const { chunks, error } = await consumeStream(
         orchestrator.generateChatCompletion({
-          contents: [],
+          contents: replayableContents([]),
           metadata: { abortSignal: controller.signal },
         }),
       );

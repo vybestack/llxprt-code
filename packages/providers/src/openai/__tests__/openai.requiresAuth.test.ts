@@ -11,10 +11,8 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import {
-  createProviderCallOptions,
-  type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import type { ProviderCallOptionsInit } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../../test-utils/streamCallOptions.js';
 import { createOpenAIRawPostTestAdapter } from '../../test-utils/rawPostTestAdapters.js';
 import { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
 
@@ -124,9 +122,9 @@ function createSettingsWithRequiresAuth(
 function buildCallOptions(
   provider: OpenAIProvider,
   overrides: Omit<ProviderCallOptionsInit, 'providerName'> = {},
-): ReturnType<typeof createProviderCallOptions> {
+): ReturnType<typeof streamCallOptions> {
   const { contents = [], ...rest } = overrides;
-  return createProviderCallOptions({
+  return streamCallOptions({
     providerName: provider.name,
     contents,
     ...rest,
@@ -144,6 +142,10 @@ function buildNormalizedOptions(
   });
   return {
     ...options,
+    // The normalized contract carries the collected history array; this
+    // auth-resolution probe needs no rows.
+    contents: [],
+    settings,
     metadata: options.metadata ?? {},
     resolved: {
       model: 'auth-exemption-test-model',

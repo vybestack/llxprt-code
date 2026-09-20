@@ -6,7 +6,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import type { OAuthManager } from '../../auth/index.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../../test-utils/streamCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createOpenAIResponsesAliasProvider } from '../../composition/aliasProviderFactory.js';
 import {
@@ -107,7 +107,7 @@ async function captureSerializedRequest(
   })) {
     settings.setProviderSetting(provider.name, key, value);
   }
-  const options = createProviderCallOptions({
+  const options = streamCallOptions({
     providerName: provider.name,
     settings,
     contents: [

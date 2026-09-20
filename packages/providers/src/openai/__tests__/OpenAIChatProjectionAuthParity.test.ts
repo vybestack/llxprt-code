@@ -27,7 +27,7 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../../test-utils/streamCallOptions.js';
 import type OpenAI from 'openai';
 import type { IProviderConfig } from '../../types/IProviderConfig.js';
 import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
@@ -101,7 +101,7 @@ class AmbientCredentialProvider extends OpenAIProvider {
 function buildSendSeamShapedOptions(providerName: string) {
   // The agent send seam supplies contents/settings/runtime but never a
   // resolved auth token.
-  return createProviderCallOptions({
+  return streamCallOptions({
     providerName,
     settings: new SettingsService(),
     contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] }],

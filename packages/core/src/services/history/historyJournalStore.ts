@@ -784,11 +784,19 @@ export class HistoryJournalStore {
    * watermarked bytes, so a concurrent drain — however far it has gotten —
    * can never leak a not-yet-acked record into the fold (the pending overlay
    * owns those until their ack fires).
+   *
+   * The watermark protocol bounds only bytes this store wrote itself. A
+   * store that has never applied an op (no acks, empty pending overlay)
+   * sits over a wholly-external journal — e.g. a recorder seeded before the
+   * facade was constructed — and folds the entire durable file, matching
+   * the JournalResolver fold of the same path (#854).
    */
   private foldDurable(): IContent[] {
-    if (this.durableTail <= 0) return [];
     const filePath = this.recorder?.getFilePath();
     if (filePath === null || filePath === undefined) return [];
+    const externallySeeded =
+      this.durableTail === 0 && this.pending.length === 0;
+    if (!externallySeeded && this.durableTail <= 0) return [];
     let buffer: Buffer;
     try {
       buffer = fs.readFileSync(filePath);
@@ -796,10 +804,12 @@ export class HistoryJournalStore {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
       throw error;
     }
-    if (buffer.length > this.durableTail) {
-      buffer = buffer.subarray(0, this.durableTail);
-    }
-    return foldEvents(parseFoldEvents(buffer.toString('utf8')));
+    const limit = externallySeeded
+      ? buffer.length
+      : Math.min(buffer.length, this.durableTail);
+    if (limit <= 0) return [];
+    const folded = limit < buffer.length ? buffer.subarray(0, limit) : buffer;
+    return foldEvents(parseFoldEvents(folded.toString('utf8')));
   }
 }
 

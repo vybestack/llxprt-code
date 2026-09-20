@@ -27,7 +27,7 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../../test-utils/streamCallOptions.js';
 import type {
   CodexOAuthToken,
   OAuthManager,
@@ -120,7 +120,7 @@ describe('OpenAIResponsesProvider hooksConfig leak @issue:3218', () => {
       ephemeralsSnapshot,
     });
 
-    const options = createProviderCallOptions({
+    const options = streamCallOptions({
       settings,
       config,
       runtime,

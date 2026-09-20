@@ -13,7 +13,10 @@ import {
   type RuntimeInvocationContext,
 } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { MissingProviderRuntimeError } from './errors.js';
-import type { GenerateChatOptions, ProviderToolset } from './IProvider.js';
+import type {
+  MaterializedGenerateChatOptions,
+  ProviderToolset,
+} from './IProvider.js';
 import type {
   BaseProvider,
   NormalizedGenerateChatOptions,
@@ -158,7 +161,7 @@ export function assertProviderRuntimeContext(
 }
 
 export function resolveGenerateChatSettings(
-  providedOptions: GenerateChatOptions,
+  providedOptions: MaterializedGenerateChatOptions,
   fallbackSettings: SettingsService | undefined,
   providerName: string,
 ): SettingsService {
@@ -178,7 +181,7 @@ export function resolveGenerateChatSettings(
 }
 
 function createResolvedOptions(
-  providedOptions: GenerateChatOptions,
+  providedOptions: MaterializedGenerateChatOptions,
   deps: NormalizationDependencies,
 ): NormalizedGenerateChatOptions['resolved'] {
   return {
@@ -202,7 +205,7 @@ function createResolvedOptions(
 }
 
 function mergeInvocationMetadata(
-  providedOptions: GenerateChatOptions,
+  providedOptions: MaterializedGenerateChatOptions,
 ): Record<string, unknown> {
   return {
     ...(providedOptions.runtime?.metadata ?? {}),
@@ -226,7 +229,7 @@ const INVOCATION_METHODS = [
 
 function isRuntimeInvocationContext(
   value: unknown,
-): value is GenerateChatOptions['invocation'] & RuntimeInvocationContext {
+): value is RuntimeInvocationContext {
   if (value === null || typeof value !== 'object') {
     return false;
   }
@@ -249,7 +252,7 @@ function extractLegacySignal(invocation: unknown): AbortSignal | undefined {
 }
 
 interface InvocationNormalizationInput {
-  providedOptions: GenerateChatOptions;
+  providedOptions: MaterializedGenerateChatOptions;
   normalizedRuntime: ProviderRuntimeContext;
   settings: SettingsService;
   providerName: string;
@@ -313,7 +316,7 @@ function createNormalizedInvocation(
 
 export function normalizeProviderGenerateChatOptions(
   provider: BaseProvider,
-  providedOptions: GenerateChatOptions,
+  providedOptions: MaterializedGenerateChatOptions,
   deps: NormalizationDependencies,
 ): NormalizedGenerateChatOptions {
   const settings = deps.defaultSettingsService;

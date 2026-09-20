@@ -34,6 +34,11 @@ import {
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  collectContents,
+  isAsyncIterableContents,
+  replayableContents,
+} from '../utils/collectContents.js';
 import { FailoverState } from '../loadBalancing/failoverState.js';
 import { projectNextSubProfilePromptEnvelope } from '../loadBalancing/promptEnvelopeProjection.js';
 import { resolveSubProfileModel } from '../loadBalancing/subProfileHelpers.js';
@@ -74,7 +79,7 @@ interface ProjectingDelegate {
 
 function createProjectingDelegate(spec: {
   name: string;
-  estimateTokens: (options: GenerateChatOptions) => number;
+  estimateTokens: (options: GenerateChatOptions) => number | Promise<number>;
   releaseIfUnsent?: () => Promise<void>;
   resolveProjection?: (
     options: GenerateChatOptions,
@@ -111,11 +116,12 @@ function createProjectingDelegate(spec: {
       };
     },
     async *generateChatCompletion(
-      options: GenerateChatOptions | IContent[],
+      optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncGenerator<IContent> {
-      if (Array.isArray(options)) {
-        throw new Error('legacy array overload is not exercised here');
+      if (isAsyncIterableContents(optionsOrStream)) {
+        throw new Error('legacy positional overload is not exercised here');
       }
+      const options = optionsOrStream;
       projectedOptions.push(options);
       sentModels.push(options.resolved?.model ?? spec.name);
       if (sentModels.length <= (spec.failFirstSends ?? 0)) {
@@ -144,8 +150,11 @@ function createProjectingDelegate(spec: {
 }
 
 /** Serialize contents + tool schemas the way an envelope estimate would. */
-function serializedEnvelopeTokens(options: GenerateChatOptions): number {
-  const contentText = options.contents
+async function serializedEnvelopeTokens(
+  options: GenerateChatOptions,
+): Promise<number> {
+  const contents = await collectContents(options.contents);
+  const contentText = contents
     .map((content) => JSON.stringify(content.blocks))
     .join('\n');
   const toolText = (options.tools ?? [])
@@ -195,7 +204,7 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
     providerManager.registerProvider(delegate.provider);
 
     const lb = createLoadBalancer(providerManager);
-    const contents = [createTextContent('hello envelope')];
+    const contents = replayableContents([createTextContent('hello envelope')]);
 
     const projection = await lb.projectPromptEnvelope({ contents });
 
@@ -235,7 +244,9 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
       ],
     });
 
-    const firstPeek = await lb.projectPromptEnvelope({ contents: [] });
+    const firstPeek = await lb.projectPromptEnvelope({
+      contents: replayableContents([]),
+    });
     expect(firstPeek?.model).toBe('model-a');
 
     // The peek did not consume the rotation: the next selection is still
@@ -243,24 +254,29 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
     expect(lb.selectNextSubProfile().name).toBe('a');
 
     // The peek reflects the new position only after the caller advanced it.
-    const secondPeek = await lb.projectPromptEnvelope({ contents: [] });
+    const secondPeek = await lb.projectPromptEnvelope({
+      contents: replayableContents([]),
+    });
     expect(secondPeek?.model).toBe('model-b');
 
     // Selection wraps back to 'a'; the peek follows the rotation.
     expect(lb.selectNextSubProfile().name).toBe('b');
-    const thirdPeek = await lb.projectPromptEnvelope({ contents: [] });
+    const thirdPeek = await lb.projectPromptEnvelope({
+      contents: replayableContents([]),
+    });
     expect(thirdPeek?.model).toBe('model-a');
   });
 
   it('peeks the failover start index without mutating failover state', async () => {
     const delegate = createProjectingDelegate({
       name: 'openai',
-      estimateTokens: (options) =>
-        Math.ceil(
-          options.contents
-            .map((content) => JSON.stringify(content.blocks))
-            .join('').length / 4,
-        ),
+      estimateTokens: async (options) => {
+        const contents = await collectContents(options.contents);
+        return Math.ceil(
+          contents.map((content) => JSON.stringify(content.blocks)).join('')
+            .length / 4,
+        );
+      },
     });
     providerManager.registerProvider(delegate.provider);
 
@@ -288,21 +304,25 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
     // failover lands on (and sticks to) backend 'b'.
     const chunks: IContent[] = [];
     for await (const chunk of lb.generateChatCompletion({
-      contents: [
+      contents: replayableContents([
         createTextContent('a request payload far larger than five tokens'),
-      ],
+      ]),
     })) {
       chunks.push(chunk);
     }
     expect(chunks).toHaveLength(1);
     expect(lb.getCurrentFailoverIndex()).toBe(1);
 
-    const projection = await lb.projectPromptEnvelope({ contents: [] });
+    const projection = await lb.projectPromptEnvelope({
+      contents: replayableContents([]),
+    });
     expect(projection?.model).toBe('model-b');
 
     // Peeking did not move the failover index.
     expect(lb.getCurrentFailoverIndex()).toBe(1);
-    const repeatPeek = await lb.projectPromptEnvelope({ contents: [] });
+    const repeatPeek = await lb.projectPromptEnvelope({
+      contents: replayableContents([]),
+    });
     expect(repeatPeek?.model).toBe('model-b');
     expect(lb.getCurrentFailoverIndex()).toBe(1);
   });
@@ -319,7 +339,7 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
     });
 
     await expect(
-      lb.projectPromptEnvelope({ contents: [] }),
+      lb.projectPromptEnvelope({ contents: replayableContents([]) }),
     ).resolves.toBeUndefined();
   });
 
@@ -337,7 +357,7 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
     const lb = createLoadBalancer(providerManager);
 
     await expect(
-      lb.projectPromptEnvelope({ contents: [] }),
+      lb.projectPromptEnvelope({ contents: replayableContents([]) }),
     ).resolves.toBeUndefined();
   });
 
@@ -352,7 +372,7 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
     const lb = createLoadBalancer(providerManager);
 
     await expect(
-      lb.projectPromptEnvelope({ contents: [] }),
+      lb.projectPromptEnvelope({ contents: replayableContents([]) }),
     ).resolves.toBeUndefined();
   });
 
@@ -365,7 +385,7 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
 
     const lb = createLoadBalancer(providerManager);
     const projection = await lb.projectPromptEnvelope({
-      contents: [createTextContent('token freshness')],
+      contents: replayableContents([createTextContent('token freshness')]),
     });
 
     expect(projection?.transportToken).not.toBe(delegate.delegateTokens[0]);
@@ -385,12 +405,14 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
 
     const lb = createLoadBalancer(providerManager);
 
-    const first = await lb.projectPromptEnvelope({ contents: [] });
+    const first = await lb.projectPromptEnvelope({
+      contents: replayableContents([]),
+    });
     expect(releases).toStrictEqual(['released-0']);
     expect('releaseIfUnsent' in (first ?? {})).toBe(false);
 
     // Each projection call releases its own delegate projection.
-    await lb.projectPromptEnvelope({ contents: [] });
+    await lb.projectPromptEnvelope({ contents: replayableContents([]) });
     expect(releases).toStrictEqual(['released-0', 'released-1']);
   });
 
@@ -404,9 +426,9 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
 
     const lb = createLoadBalancer(providerManager);
 
-    await expect(lb.projectPromptEnvelope({ contents: [] })).rejects.toThrow(
-      'release exploded',
-    );
+    await expect(
+      lb.projectPromptEnvelope({ contents: replayableContents([]) }),
+    ).rejects.toThrow('release exploded');
   });
 
   it('delegate receives the sub-profile-rendered system prompt (guard-parity options)', async () => {
@@ -420,7 +442,7 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
     const invocations: string[] = [];
 
     const projection = await lb.projectPromptEnvelope({
-      contents: [createTextContent('request')],
+      contents: replayableContents([createTextContent('request')]),
       systemInstruction: '[model=load-balancer]',
       systemPromptAssembler: {
         assemble: async (request) => {
@@ -447,10 +469,10 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
     const lb = createLoadBalancer(providerManager);
 
     const withoutTools = await lb.projectPromptEnvelope({
-      contents: [createTextContent('analyze this request')],
+      contents: replayableContents([createTextContent('analyze this request')]),
     });
     const withTools = await lb.projectPromptEnvelope({
-      contents: [createTextContent('analyze this request')],
+      contents: replayableContents([createTextContent('analyze this request')]),
       tools: [
         {
           functionDeclarations: [
@@ -498,7 +520,9 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
     providerManager.registerProvider(delegate.provider);
 
     const lb = createLoadBalancer(providerManager);
-    const projection = await lb.projectPromptEnvelope({ contents: [] });
+    const projection = await lb.projectPromptEnvelope({
+      contents: replayableContents([]),
+    });
 
     expect(projection?.accounting?.statefulParentUsed).toBe(true);
     expect(projection?.accounting?.retainedBaselineTokens).toBe(900);
@@ -543,7 +567,7 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
       text: string,
     ): Promise<void> {
       for await (const _chunk of lb.generateChatCompletion({
-        contents: [createTextContent(text)],
+        contents: replayableContents([createTextContent(text)]),
       })) {
         // consume
       }
@@ -582,7 +606,9 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
       // Return the failover start index to the open-circuit member.
       lb.resetFailoverIndex();
 
-      const projection = await lb.projectPromptEnvelope({ contents: [] });
+      const projection = await lb.projectPromptEnvelope({
+        contents: replayableContents([]),
+      });
       expect(projection?.model).toBe('model-b');
 
       // The peek consumed no selection state: the start index is unchanged,
@@ -622,7 +648,9 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
       expect(tpm).toBeLessThan(500);
       expect(lb.getCurrentFailoverIndex()).toBe(0);
 
-      const projection = await lb.projectPromptEnvelope({ contents: [] });
+      const projection = await lb.projectPromptEnvelope({
+        contents: replayableContents([]),
+      });
       expect(projection?.model).toBe('model-b');
       expect(lb.getCurrentFailoverIndex()).toBe(0);
     });
@@ -645,7 +673,9 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
       await consumeSend(lb, 'tpm seeding send');
       expect(lb.getStats().currentTPM.a).toBeGreaterThan(0);
 
-      const projection = await lb.projectPromptEnvelope({ contents: [] });
+      const projection = await lb.projectPromptEnvelope({
+        contents: replayableContents([]),
+      });
       expect(projection?.model).toBe('model-a');
       expect(lb.getCurrentFailoverIndex()).toBe(0);
     });
@@ -690,7 +720,9 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
       expect(stats.circuitBreakerStates.b.state).toBe('open');
 
       lb.resetFailoverIndex();
-      const projection = await lb.projectPromptEnvelope({ contents: [] });
+      const projection = await lb.projectPromptEnvelope({
+        contents: replayableContents([]),
+      });
       expect(projection?.model).toBe('model-a');
       expect(lb.getCurrentFailoverIndex()).toBe(0);
     });
@@ -728,7 +760,9 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
 
       // The recovery window elapsed, so the pure eligibility read finds 'a'
       // eligible again and the peek projects it as the next target.
-      const projection = await lb.projectPromptEnvelope({ contents: [] });
+      const projection = await lb.projectPromptEnvelope({
+        contents: replayableContents([]),
+      });
       expect(projection?.model).toBe('model-a');
 
       // The peek left the circuit 'open': a mutating health read would have
@@ -791,7 +825,7 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
           throw new Error('round-robin peek must not consult eligibility');
         },
         buildDelegateResolvedOptions: unitResolvedOptions,
-        options: { contents: [] },
+        options: { contents: replayableContents([]) },
       });
 
       expect(projection?.model).toBe('model-a');
@@ -819,7 +853,7 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
         roundRobinIndex: 0,
         isBackendEligible: (name) => name === 'a',
         buildDelegateResolvedOptions: unitResolvedOptions,
-        options: { contents: [] },
+        options: { contents: replayableContents([]) },
       });
 
       // Only 'a' passes the predicate, so the traversal from index 2 wraps

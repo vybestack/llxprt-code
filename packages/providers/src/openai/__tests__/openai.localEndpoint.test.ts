@@ -17,10 +17,8 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import {
-  createProviderCallOptions,
-  type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { type ProviderCallOptionsInit } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../../test-utils/streamCallOptions.js';
 import { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
 import { isLocalEndpoint } from '../../utils/localEndpoint.js';
 import { createOpenAIRawPostTestAdapter } from '../../test-utils/rawPostTestAdapters.js';
@@ -125,7 +123,7 @@ function buildCallOptions(
   overrides: Omit<ProviderCallOptionsInit, 'providerName'> = {},
 ) {
   const { contents = [], ...rest } = overrides;
-  return createProviderCallOptions({
+  return streamCallOptions({
     providerName: provider.name,
     contents,
     ...rest,

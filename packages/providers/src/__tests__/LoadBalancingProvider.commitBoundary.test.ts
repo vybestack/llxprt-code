@@ -27,7 +27,7 @@ import {
 } from '../LoadBalancingProvider.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../test-utils/streamCallOptions.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import {
@@ -72,7 +72,7 @@ function makeScriptedProvider(
   const provider: IProvider = {
     name,
     generateChatCompletion(
-      optionsOrContents: GenerateChatOptions | IContent[],
+      optionsOrContents: GenerateChatOptions | AsyncIterable<IContent>,
     ) {
       const options = optionsOrContents as GenerateChatOptions;
       const script = scripts[Math.min(calls.value, scripts.length - 1)];
@@ -134,7 +134,7 @@ function makeConfig(
 }
 
 function makeOptions(): GenerateChatOptions {
-  return createProviderCallOptions({
+  return streamCallOptions({
     providerName: 'load-balancer',
     contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] }],
     ephemerals: { retries: 8, retrywait: 0 },

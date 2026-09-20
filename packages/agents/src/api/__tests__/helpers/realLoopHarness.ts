@@ -63,6 +63,9 @@ import {
 
 // ─── Real FakeProvider content → loop events ────────────────────────────────
 
+/** The provider-facing history is a stream (issue #854); this probe sends none. */
+async function* emptyContents(): AsyncIterable<IContent> {}
+
 /**
  * Uses a REAL FakeProvider to read the JSONL fixture, consumes its IContent
  * stream, and maps text blocks to Content ServerAgentStreamEvents wrapped as
@@ -75,7 +78,9 @@ export async function fakeProviderContentLoopEvents(
 ): Promise<AgenticLoopEvent[]> {
   const provider = new FakeProvider(fixturePath, cwd);
   const events: AgenticLoopEvent[] = [];
-  for await (const iContent of provider.generateChatCompletion([])) {
+  for await (const iContent of provider.generateChatCompletion(
+    emptyContents(),
+  )) {
     for (const block of iContent.blocks) {
       if (block.type === 'text') {
         events.push(wrapStream(streamContent(block.text)));
