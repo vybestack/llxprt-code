@@ -20,12 +20,13 @@ as follows:
 | ---------------------------------------------- | --------------------------------------------------------------- |
 | `@vybestack/llxprt-code-agents`                | **Supported.** The curated public Agent API.                    |
 | `@vybestack/llxprt-code-agents/app-service.js` | **Supported.** Durable config functions (no live agent needed). |
+| `@vybestack/llxprt-code-agents/constants.js`   | **Supported.** Shared constants.                                |
 
 > **No low-level subpath.** The package exposes only the curated root and the
-> `app-service.js` subpath. The former low-level `internals.js` subpath has
-> been removed; build against the curated root (for example
-> `createAgentClient` and `createToolScheduler` instead of the concrete
-> `AgentClient`/`CoreToolScheduler` classes).
+> `app-service.js` / `constants.js` subpaths. The former low-level
+> `internals.js` subpath has been removed; build against the curated root
+> (for example `createAgentClient` and `createToolScheduler` instead of the
+> concrete `AgentClient`/`CoreToolScheduler` classes).
 
 ## Entry package and imports
 
