@@ -180,7 +180,9 @@ export async function executeToolCall(
     if (internalAbortController.signal.aborted) {
       scheduler.cancelAll();
     }
-    config.disposeScheduler(owner, 'subagent');
+    // Pass the acquired handle so a release racing a disposeAll sweep can
+    // never dispose a replacement entry it did not acquire.
+    config.disposeScheduler(owner, 'subagent', scheduler);
   }
 }
 

@@ -13,8 +13,12 @@
  * source directory into dist even when nothing copyable is inside. Both paths
  * leak test-only artifacts into the package output.
  *
- * This script removes anything test-named from dist and then fails the build
- * if any test artifact survived, so a new pattern cannot ship silently.
+ * Artifacts split into two classes. Compiled emissions of test-named modules
+ * (.js/.js.map/.d.ts/.d.ts.map) mean production code imports test-only code:
+ * they fail the build before any deletion rather than being silently
+ * stripped. Mirrored/static non-emission artifacts are removed, and the build
+ * still fails if any test artifact survived, so a new pattern cannot ship
+ * silently.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -41,6 +45,10 @@ const TEST_FILE_SEGMENTS =
 /** Emitted-suffix forms of test files (covers .js, .js.map, .d.ts variants). */
 const TEST_FILE_SUFFIX = /\.(test|spec|bun|test-d)\./;
 
+/** Compilation-output suffixes: a test-named dist file ending in one of
+ * these was emitted by tsc, not merely mirrored by copy_files.ts. */
+const COMPILED_OUTPUT_SUFFIXES = ['.js', '.js.map', '.d.ts', '.d.ts.map'];
+
 function isTestFileName(name: string): boolean {
   return TEST_FILE_SUFFIX.test(name) || TEST_FILE_SEGMENTS.test(name);
 }
@@ -51,6 +59,10 @@ function isTestArtifact(relPath: string): boolean {
     segments.some((s) => TEST_DIR_NAMES.has(s)) ||
     isTestFileName(segments[segments.length - 1]!)
   );
+}
+
+function isCompiledTestOutput(name: string): boolean {
+  return COMPILED_OUTPUT_SUFFIXES.some((suffix) => name.endsWith(suffix));
 }
 
 function walk(dir: string, acc: string[]): void {
@@ -72,6 +84,33 @@ function main(): void {
   const all: string[] = [];
   walk(distDir, all);
 
+  // Emitted test modules are a build defect, not clutter: a compiled
+  // .js/.d.ts of a test-named module exists only because production code
+  // imports test-only code. Fail before deleting anything so the offending
+  // tree stays inspectable.
+  const emitted = all.filter((full) => {
+    const rel = path.relative(distDir, full);
+    if (rel === '' || !isTestArtifact(rel)) {
+      return false;
+    }
+    return (
+      fs.statSync(full).isFile() && isCompiledTestOutput(path.basename(rel))
+    );
+  });
+  if (emitted.length > 0) {
+    console.error(
+      'dist-test-artifact-guard: compiled test modules found in dist ' +
+        '(production code imports test-only code; fix the import or the ' +
+        'build config instead of stripping the artifact):',
+    );
+    for (const full of emitted) {
+      console.error(`  ${path.relative(distDir, full)}`);
+    }
+    process.exit(1);
+  }
+
+  // Mirrored/static non-emission artifacts: keep the delete-then-verify
+  // behavior.
   const toDelete = all.filter((full) => {
     const rel = path.relative(distDir, full);
     return rel !== '' && isTestArtifact(rel);

@@ -8,19 +8,33 @@
  * SessionSchedulerRegistry implementation (#2615 slice E, PR 2). Carries the
  * semantics of the deleted process-global scheduler singleton module:
  * refcount per entry, in-flight creation dedup, dispose at zero with
- * swallowed cleanup errors, and first-acquisition-wins interactiveMode.
- * Keys are owner objects, never strings, so two consumers with colliding
- * labels never share a scheduler.
+ * swallowed cleanup errors, and first-acquisition-wins interactiveMode and
+ * construction deps. Keys are owner objects, never strings, so two consumers
+ * with colliding labels never share a scheduler.
  */
 
 import { DebugLogger } from '../debug/DebugLogger.js';
 import type { SchedulerHandle } from './sessionExecutionServices.js';
 import type { SessionSchedulerRegistry } from './sessionSchedulerRegistry.js';
 import type { SchedulerPurpose } from './sessionSchedulerRegistry.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 
 const debugLog = new DebugLogger('llxprt:session-scheduler-registry');
 
-type InFlightEntry = {
+/**
+ * Construction dependencies recorded per entry so reuse of an entry can
+ * detect (and log) an acquiring call that arrived with different deps.
+ * They belong to the acquisition that started the entry: the scheduler
+ * binds them at construction, and later acquisitions reuse the entry as
+ * built (first-wins per entry).
+ */
+interface EntryConstructionDeps {
+  messageBus?: MessageBus;
+  toolRegistry?: ToolRegistry;
+}
+
+type InFlightEntry = EntryConstructionDeps & {
   phase: 'creating';
   promise: Promise<SchedulerHandle>;
   refCount: number;
@@ -35,11 +49,17 @@ type InFlightEntry = {
   generation: number;
 };
 
-type ReadyEntry = {
+type ReadyEntry = EntryConstructionDeps & {
   phase: 'ready';
   handle: SchedulerHandle;
   refCount: number;
   interactiveMode: boolean;
+  /**
+   * Creation identity carried onto the ready entry so release() can tell
+   * an acquisition of THIS entry from a stale handle that belonged to a
+   * swept predecessor under the same key.
+   */
+  generation: number;
 };
 
 type SchedulerEntry = InFlightEntry | ReadyEntry;
@@ -47,6 +67,8 @@ type SchedulerEntry = InFlightEntry | ReadyEntry;
 export interface SessionSchedulerRegistryDeps {
   createScheduler(options: {
     interactiveMode?: boolean;
+    messageBus?: MessageBus;
+    toolRegistry?: ToolRegistry;
   }): Promise<SchedulerHandle>;
 }
 
@@ -92,9 +114,14 @@ export class SessionSchedulerRegistryImpl implements SessionSchedulerRegistry {
   async getOrCreate(
     owner: object,
     purpose: SchedulerPurpose,
-    options?: { interactiveMode?: boolean },
+    options?: {
+      interactiveMode?: boolean;
+      messageBus?: MessageBus;
+      toolRegistry?: ToolRegistry;
+    },
   ): Promise<SchedulerHandle> {
     const interactiveMode = options?.interactiveMode ?? true;
+    const { messageBus, toolRegistry } = options ?? {};
     const existing = this.lookup(owner, purpose);
 
     if (existing?.phase === 'ready') {
@@ -107,6 +134,10 @@ export class SessionSchedulerRegistryImpl implements SessionSchedulerRegistry {
             `Using existing scheduler mode.`,
         );
       }
+      this.logConstructionDepMismatch('reuse', existing, {
+        messageBus,
+        toolRegistry,
+      });
       return existing.handle;
     }
 
@@ -120,6 +151,10 @@ export class SessionSchedulerRegistryImpl implements SessionSchedulerRegistry {
             `Using existing scheduler mode.`,
         );
       }
+      this.logConstructionDepMismatch('init-in-progress', existing, {
+        messageBus,
+        toolRegistry,
+      });
       return existing.promise;
     }
 
@@ -136,6 +171,8 @@ export class SessionSchedulerRegistryImpl implements SessionSchedulerRegistry {
       purpose,
       interactiveMode,
       generation,
+      messageBus,
+      toolRegistry,
     );
     promise.catch(() => {
       // Drop the failed creation so a later attempt starts fresh rather
@@ -153,8 +190,33 @@ export class SessionSchedulerRegistryImpl implements SessionSchedulerRegistry {
       refCount: 1,
       interactiveMode,
       generation,
+      messageBus,
+      toolRegistry,
     });
     return promise;
+  }
+
+  /**
+   * First-wins logging for an acquiring call whose construction deps
+   * differ from the entry's. Only supplied deps can mismatch: an
+   * acquisition that omits a dep has no opinion to conflict with.
+   */
+  private logConstructionDepMismatch(
+    situation: 'reuse' | 'init-in-progress',
+    entry: SchedulerEntry,
+    requested: { messageBus?: MessageBus; toolRegistry?: ToolRegistry },
+  ): void {
+    for (const dep of ['messageBus', 'toolRegistry'] as const) {
+      const value = requested[dep];
+      if (value === undefined || entry[dep] === value) {
+        continue;
+      }
+      debugLog.debug(
+        () =>
+          `Scheduler ${situation} with different ${dep} construction dependency. ` +
+          `Using existing scheduler dependency (first acquisition wins per entry).`,
+      );
+    }
   }
 
   private async runCreation(
@@ -162,8 +224,14 @@ export class SessionSchedulerRegistryImpl implements SessionSchedulerRegistry {
     purpose: SchedulerPurpose,
     interactiveMode: boolean,
     generation: number,
+    messageBus: MessageBus | undefined,
+    toolRegistry: ToolRegistry | undefined,
   ): Promise<SchedulerHandle> {
-    const handle = await this.deps.createScheduler({ interactiveMode });
+    const handle = await this.deps.createScheduler({
+      interactiveMode,
+      messageBus,
+      toolRegistry,
+    });
     const current = this.lookup(owner, purpose);
     if (current?.phase !== 'creating' || current.generation !== generation) {
       // The map no longer holds this attempt's entry: disposeAll swept it
@@ -177,6 +245,9 @@ export class SessionSchedulerRegistryImpl implements SessionSchedulerRegistry {
         handle,
         refCount: current.refCount,
         interactiveMode: current.interactiveMode,
+        generation,
+        messageBus: current.messageBus,
+        toolRegistry: current.toolRegistry,
       });
     } else {
       // Every acquirer released while creation ran; nobody owns the
@@ -187,10 +258,21 @@ export class SessionSchedulerRegistryImpl implements SessionSchedulerRegistry {
     return handle;
   }
 
-  release(owner: object, purpose: SchedulerPurpose): void {
+  release(owner: object, purpose: SchedulerPurpose, handle?: object): void {
     const entry = this.lookup(owner, purpose);
     // Unknown keys (or already-swept ones) have nothing to release.
     if (!entry) {
+      return;
+    }
+    if (
+      handle !== undefined &&
+      entry.phase === 'ready' &&
+      entry.handle !== handle
+    ) {
+      // The entry under this key is a replacement installed after the
+      // caller's acquisition was swept (disposeAll); decrementing here
+      // would dispose a scheduler the caller no longer owns.
+      debugLog.debug(() => 'release of a superseded acquisition ignored');
       return;
     }
     entry.refCount -= 1;

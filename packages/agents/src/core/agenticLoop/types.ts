@@ -118,7 +118,16 @@ export interface AgenticLoopRuntime {
   getSessionId(): string;
   getModel(): string;
   getImagePayloadBudgetBytes(): number;
-  disposeScheduler(owner: object, purpose: SchedulerPurpose): void;
+  /**
+   * Releases the loop's scheduler acquisition. Callers holding their
+   * acquired scheduler handle should pass it so a stale release cannot
+   * dispose a replacement entry installed under the same owner/purpose.
+   */
+  disposeScheduler(
+    owner: object,
+    purpose: SchedulerPurpose,
+    handle?: object,
+  ): void;
   getOrCreateScheduler(
     owner: object,
     purpose: SchedulerPurpose,

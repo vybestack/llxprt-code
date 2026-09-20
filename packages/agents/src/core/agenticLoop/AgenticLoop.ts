@@ -575,7 +575,10 @@ export class AgenticLoop {
       forwardingState.active = false;
       queue.close();
       cleanupAbortListener();
-      this.config.disposeScheduler(this, 'agentic-loop');
+      // Pass the loop's cached handle: after a disposeAll sweep that
+      // replaced this key's entry, a bare-key release could otherwise
+      // decrement a scheduler this loop never acquired.
+      this.config.disposeScheduler(this, 'agentic-loop', scheduler);
     }
   }
 

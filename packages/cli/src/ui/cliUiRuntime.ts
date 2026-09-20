@@ -283,7 +283,16 @@ export interface SettingsTelemetryState {
  * {@link AgenticLoopRuntime} contract from the agents package.
  */
 export interface SchedulerRuntime {
-  disposeScheduler(owner: object, purpose: SchedulerPurpose): void;
+  /**
+   * Releases a scheduler acquisition. Callers holding their acquired
+   * scheduler handle should pass it so a stale release cannot dispose a
+   * replacement entry installed under the same owner/purpose.
+   */
+  disposeScheduler(
+    owner: object,
+    purpose: SchedulerPurpose,
+    handle?: object,
+  ): void;
   getOrCreateScheduler(
     owner: object,
     purpose: SchedulerPurpose,
@@ -679,8 +688,8 @@ function buildSchedulerRuntime(
   source: StreamRuntimeBareSource,
 ): SchedulerRuntime {
   return {
-    disposeScheduler: (owner, purpose) =>
-      source.disposeScheduler(owner, purpose),
+    disposeScheduler: (owner, purpose, handle) =>
+      source.disposeScheduler(owner, purpose, handle),
     getOrCreateScheduler: (owner, purpose, callbacks, options, dependencies) =>
       source.getOrCreateScheduler(
         owner,

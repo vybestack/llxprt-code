@@ -5,6 +5,8 @@
  */
 
 import type { SchedulerHandle } from './sessionExecutionServices.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 
 /**
  * Purpose a scheduler entry is created for. Replaces the string key
@@ -32,17 +34,33 @@ export interface SessionSchedulerRegistry {
    * passes false, subagentExecution passes nothing (defaults true). The first
    * acquisition of a key fixes the mode; later acquisitions with a different
    * mode reuse the existing scheduler unchanged.
+   *
+   * `options.messageBus` and `options.toolRegistry` are construction
+   * dependencies, so they belong to the acquisition that starts the entry:
+   * the scheduler that entry builds is wired to exactly that bus and
+   * registry. Later acquisitions reusing the entry keep its construction
+   * deps unchanged (first-wins per entry, like interactiveMode).
    */
   getOrCreate(
     owner: object,
     purpose: SchedulerPurpose,
-    options?: { interactiveMode?: boolean },
+    options?: {
+      interactiveMode?: boolean;
+      messageBus?: MessageBus;
+      toolRegistry?: ToolRegistry;
+    },
   ): Promise<SchedulerHandle>;
   /**
    * Release one acquisition of the entry; dispose its scheduler when the
    * count reaches zero. Releasing an unknown key is a no-op.
+   *
+   * Callers holding their acquired scheduler should pass it as `handle`
+   * so a stale release (typically after disposeAll swept the entry and the
+   * same key reacquired a replacement) cannot dispose a scheduler the
+   * caller no longer owns. A handle that does not match the current entry
+   * is ignored.
    */
-  release(owner: object, purpose: SchedulerPurpose): void;
+  release(owner: object, purpose: SchedulerPurpose, handle?: object): void;
   /** Dispose every entry, joining in-flight creations first. */
   disposeAll(): Promise<void>;
 }

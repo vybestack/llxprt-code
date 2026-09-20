@@ -47,7 +47,16 @@ import type React from 'react';
  * @plan:ISSUE-2376
  */
 export interface ExplicitMessageBusScheduler {
-  disposeScheduler(owner: object, purpose: SchedulerPurpose): void;
+  /**
+   * Releases a scheduler acquisition. Callers holding their acquired
+   * scheduler handle should pass it so a stale release cannot dispose a
+   * replacement entry installed under the same owner/purpose.
+   */
+  disposeScheduler(
+    owner: object,
+    purpose: SchedulerPurpose,
+    handle?: object,
+  ): void;
   getOrCreateScheduler(
     owner: object,
     purpose: SchedulerPurpose,
@@ -252,7 +261,9 @@ async function initializeSchedulerInstance(
       { messageBus: runtimeMessageBus },
     );
     if (!mounted.current) {
-      runtime.scheduler.disposeScheduler(runtime, 'session');
+      // Pass the acquired handle: the release must be identity-bound to
+      // this acquisition, not to whatever entry later occupies the key.
+      runtime.scheduler.disposeScheduler(runtime, 'session', instance);
       return null;
     }
     return instance;
@@ -281,6 +292,10 @@ function useSchedulerEffect(
   useEffect(() => {
     const mounted = { current: true };
     const resolved = { current: false };
+    // The handle this effect's init acquired; the cleanup releases that
+    // exact acquisition, never a replacement entry installed after a
+    // disposeAll sweep under the same key.
+    let acquired: SchedulerHandle | null = null;
 
     const init = async () => {
       const instance = await initializeSchedulerInstance(
@@ -295,6 +310,7 @@ function useSchedulerEffect(
         setScheduler(null);
         return;
       }
+      acquired = instance;
       resolved.current = true;
       processPendingRequests(instance, pendingScheduleRequests.current);
       pendingScheduleRequests.current = [];
@@ -305,8 +321,8 @@ function useSchedulerEffect(
 
     return () => {
       mounted.current = false;
-      if (resolved.current) {
-        runtime.scheduler.disposeScheduler(runtime, 'session');
+      if (resolved.current && acquired !== null) {
+        runtime.scheduler.disposeScheduler(runtime, 'session', acquired);
       }
     };
   }, [
@@ -368,7 +384,8 @@ function useExternalSchedulerFactoryCreator(
           request: ToolCallRequestInfo | ToolCallRequestInfo[],
           signal: AbortSignal,
         ) => instance.schedule(request, signal),
-        dispose: () => args.schedulerConfig.disposeScheduler(owner, 'subagent'),
+        dispose: () =>
+          args.schedulerConfig.disposeScheduler(owner, 'subagent', instance),
       };
     },
     [refs, runtimeMessageBus],

@@ -844,10 +844,11 @@ export class Config extends ConfigBase {
    * TEMPORARY delegate (#2615 slice E, see ConfigBase.schedulerRegistry).
    * Owner is an object whose identity keys the scheduler entry (never a
    * string): two consumers with colliding labels get distinct schedulers.
-   * The registry captures this call's deps on first use; every acquisition,
-   * fresh or reused, applies the latest caller's callbacks and deps through
-   * setCallbacks before returning. Registry construction and acquisition
-   * live in schedulerRegistryAccess.ts.
+   * Each acquisition supplies its own messageBus and toolRegistry
+   * construction deps: the acquisition that starts an entry fixes them at
+   * construction time, and later acquisitions reuse the entry as built
+   * while still refreshing the five UI callbacks through setCallbacks.
+   * Registry construction and acquisition live in schedulerRegistryAccess.ts.
    */
   async getOrCreateScheduler(
     owner: object,

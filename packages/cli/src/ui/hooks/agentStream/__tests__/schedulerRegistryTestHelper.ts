@@ -43,6 +43,8 @@ export interface SchedulerRegistryDelegateOptions {
   toolRegistry: ToolRegistry;
   createScheduler(options: {
     interactiveMode?: boolean;
+    messageBus?: MessageBus;
+    toolRegistry?: ToolRegistry;
   }): Promise<SchedulerHandle>;
 }
 
@@ -57,7 +59,11 @@ export interface SchedulerRegistryDelegate {
       toolRegistry?: ToolRegistry;
     },
   ): Promise<SchedulerHandle>;
-  disposeScheduler(owner: object, purpose: SchedulerPurpose): void;
+  disposeScheduler(
+    owner: object,
+    purpose: SchedulerPurpose,
+    handle?: object,
+  ): void;
 }
 
 export function createSchedulerRegistryDelegate(
@@ -74,17 +80,22 @@ export function createSchedulerRegistryDelegate(
       options,
       dependencies,
     ) {
-      const handle = await registry.getOrCreate(owner, purpose, options);
-      handle.setCallbacks({
-        config: deps.config,
+      // Construction deps flow through the acquisition that starts the
+      // entry (same shape as Config.getOrCreateScheduler); the fallbacks
+      // only cover acquisitions that supply none.
+      const handle = await registry.getOrCreate(owner, purpose, {
+        ...options,
         messageBus: dependencies?.messageBus ?? deps.messageBus,
         toolRegistry: dependencies?.toolRegistry ?? deps.toolRegistry,
+      });
+      handle.setCallbacks({
+        config: deps.config,
         ...callbacks,
       });
       return handle;
     },
-    disposeScheduler(owner, purpose) {
-      registry.release(owner, purpose);
+    disposeScheduler(owner, purpose, handle) {
+      registry.release(owner, purpose, handle);
     },
   };
 }

@@ -717,7 +717,9 @@ export async function initInteractiveScheduler(
     }
   } else {
     schedulerDispose = async () =>
-      ctx.schedulerConfig.disposeScheduler(owner, 'subagent');
+      // Pass the acquired scheduler so a stale release after a disposeAll
+      // sweep cannot dispose a replacement entry under the same key.
+      ctx.schedulerConfig.disposeScheduler(owner, 'subagent', scheduler);
   }
 
   return {

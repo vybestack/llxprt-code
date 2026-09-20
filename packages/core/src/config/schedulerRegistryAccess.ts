@@ -67,16 +67,13 @@ type SchedulerRegistryHost = {
 /**
  * TEMPORARY with the schedulerRegistry field on ConfigBase (deletion
  * criterion in that field's comment): both die when SessionRuntime takes
- * registry ownership. The createScheduler closure captures the FIRST
- * acquiring call's deps and the tool scheduler factory; every acquisition
- * refreshes callbacks through handle.setCallbacks with that call's own
- * deps, so the captured deps only shape scheduler construction.
+ * registry ownership. The createScheduler closure captures only the tool
+ * scheduler factory; the messageBus and toolRegistry construction deps
+ * arrive through the createScheduler options from the acquisition that
+ * starts each entry, so every entry binds the deps of its own first
+ * acquirer, not the first acquirer of the whole registry.
  */
-function getSchedulerRegistry(
-  config: Config,
-  messageBus: MessageBus,
-  toolRegistry: ToolRegistry,
-): SessionSchedulerRegistry {
+function getSchedulerRegistry(config: Config): SessionSchedulerRegistry {
   const host = config as unknown as SchedulerRegistryHost;
   host.schedulerRegistry ??= createSessionSchedulerRegistry({
     createScheduler: async (options) => {
@@ -84,6 +81,12 @@ function getSchedulerRegistry(
       if (!factory) {
         throw new Error(
           'toolSchedulerFactory is required before Config.getOrCreateScheduler() can create a CoreToolScheduler',
+        );
+      }
+      const { messageBus, toolRegistry } = options;
+      if (!messageBus || !toolRegistry) {
+        throw new Error(
+          'Config-mediated scheduler acquisition requires messageBus and toolRegistry construction deps',
         );
       }
       return factory({
@@ -106,9 +109,12 @@ function getSchedulerRegistry(
  * Acquisition path for Config.getOrCreateScheduler (#2615 slice E, see
  * ConfigBase.schedulerRegistry). Owner is an object whose identity keys the
  * scheduler entry (never a string): two consumers with colliding labels get
- * distinct schedulers. The registry captures this call's deps on first use;
- * every acquisition, fresh or reused, applies the latest caller's callbacks
- * and deps through setCallbacks before returning.
+ * distinct schedulers. Each acquisition supplies its own messageBus and
+ * toolRegistry construction deps: the acquisition that starts an entry
+ * fixes them at construction time, and later acquisitions reuse the entry
+ * as built while still refreshing the five UI callbacks through
+ * handle.setCallbacks (construction deps are readonly on the scheduler and
+ * cannot be swapped after creation).
  */
 export async function acquireScheduler(
   config: Config,
@@ -128,16 +134,14 @@ export async function acquireScheduler(
     );
   }
   const toolRegistry = dependencies.toolRegistry ?? config.getToolRegistry();
-  const registry = getSchedulerRegistry(
-    config,
-    schedulerMessageBus,
-    toolRegistry,
-  );
-  const handle = await registry.getOrCreate(owner, purpose, options);
-  handle.setCallbacks({
-    config,
+  const registry = getSchedulerRegistry(config);
+  const handle = await registry.getOrCreate(owner, purpose, {
+    ...options,
     messageBus: schedulerMessageBus,
     toolRegistry,
+  });
+  handle.setCallbacks({
+    config,
     ...callbacks,
   });
   return handle;

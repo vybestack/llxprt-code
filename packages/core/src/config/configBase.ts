@@ -163,10 +163,14 @@ export abstract class ConfigBase extends ConfigBaseCore {
     return result.registry;
   }
 
-  disposeScheduler(owner: object, purpose: SchedulerPurpose): void {
+  disposeScheduler(
+    owner: object,
+    purpose: SchedulerPurpose,
+    handle?: object,
+  ): void {
     // No lazy creation here: disposing before any acquisition is a no-op,
     // matching the unknown-key release semantics of the registry itself.
-    this.schedulerRegistry?.release(owner, purpose);
+    this.schedulerRegistry?.release(owner, purpose, handle);
   }
 
   /**

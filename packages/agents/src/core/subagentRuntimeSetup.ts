@@ -285,8 +285,8 @@ export function createToolExecutionConfig(
           toolRegistry: dependencies?.toolRegistry ?? toolRegistry,
         },
       ),
-    disposeScheduler: (owner, purpose) =>
-      foregroundConfig.disposeScheduler(owner, purpose),
+    disposeScheduler: (owner, purpose, handle) =>
+      foregroundConfig.disposeScheduler(owner, purpose, handle),
   };
 }
 
@@ -680,7 +680,11 @@ export function createSchedulerConfig(
       options: unknown,
       deps: unknown,
     ) => Promise<ToolSchedulerContract>;
-    disposeScheduler?: (owner: object, purpose: SchedulerPurpose) => void;
+    disposeScheduler?: (
+      owner: object,
+      purpose: SchedulerPurpose,
+      handle?: object,
+    ) => void;
     getEnableHooks?: () => boolean;
     getHooks?: () => unknown;
     getHookSystem?: () => unknown;
@@ -720,8 +724,12 @@ export function createSchedulerConfig(
         { ...schedulerOptions, interactiveMode: isInteractive },
         dependencies,
       ),
-    disposeScheduler: (owner: object, purpose: SchedulerPurpose) => {
-      toolExecutorContext.disposeScheduler(owner, purpose);
+    disposeScheduler: (
+      owner: object,
+      purpose: SchedulerPurpose,
+      handle?: object,
+    ) => {
+      toolExecutorContext.disposeScheduler(owner, purpose, handle);
     },
     getEnableHooks: () => defensiveConfig.getEnableHooks?.() ?? false,
     getHooks: () => defensiveConfig.getHooks?.(),

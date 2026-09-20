@@ -426,13 +426,18 @@ function makeSchedulerRuntime(
   override: StreamRuntimeTestOverrides['scheduler'],
 ): StreamRuntime['scheduler'] {
   return {
-    disposeScheduler: (owner: object, purpose: SchedulerPurpose) => {
+    disposeScheduler: (
+      owner: object,
+      purpose: SchedulerPurpose,
+      handle?: object,
+    ) => {
       const fn = getMember(source, 'disposeScheduler');
       if (typeof fn === 'function') {
         (fn as StreamRuntime['scheduler']['disposeScheduler']).call(
           source,
           owner,
           purpose,
+          handle,
         );
       }
     },

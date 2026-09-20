@@ -13,6 +13,11 @@ import type { SchedulerHandle } from './sessionExecutionServices.js';
 import type { ToolCallRequestInfo } from '../core/turn.js';
 
 type SetCallbacksOptions = Parameters<SchedulerHandle['setCallbacks']>[0];
+type RecordedCreationOptions = {
+  interactiveMode?: boolean;
+  messageBus?: object;
+  toolRegistry?: object;
+};
 
 /**
  * Real scheduler double in the config.scheduler.test.ts style: actual state
@@ -22,7 +27,7 @@ type SetCallbacksOptions = Parameters<SchedulerHandle['setCallbacks']>[0];
 class RecordingScheduler implements SchedulerHandle {
   disposed = false;
 
-  constructor(readonly creationOptions: { interactiveMode?: boolean }) {}
+  constructor(readonly creationOptions: RecordedCreationOptions) {}
 
   async schedule(
     _request: ToolCallRequestInfo | ToolCallRequestInfo[],
@@ -332,5 +337,102 @@ describe('SessionSchedulerRegistryImpl', () => {
 
     const fresh = await registry.getOrCreate(owner, 'session');
     expect(fresh).not.toBe(created[0]);
+  });
+
+  it('forwards each entry-starting acquisition construction deps to the factory', async () => {
+    const creationOptions: RecordedCreationOptions[] = [];
+    const registry = createSessionSchedulerRegistry({
+      createScheduler: async (options) => {
+        creationOptions.push(options);
+        return new RecordingScheduler(options);
+      },
+    });
+    const ownerA = { sessionId: 'owner-a' };
+    const ownerB = { sessionId: 'owner-b' };
+    const busA = { label: 'bus-a' };
+    const busB = { label: 'bus-b' };
+    const registryA = { label: 'registry-a' };
+    const registryB = { label: 'registry-b' };
+
+    await registry.getOrCreate(ownerA, 'subagent', {
+      messageBus: busA as never,
+      toolRegistry: registryA as never,
+    });
+    await registry.getOrCreate(ownerB, 'subagent', {
+      messageBus: busB as never,
+      toolRegistry: registryB as never,
+    });
+
+    // Each entry is constructed with the deps of the acquisition that
+    // started it, not with the first acquisition's deps.
+    expect(creationOptions).toHaveLength(2);
+    expect(creationOptions[0].messageBus).toBe(busA);
+    expect(creationOptions[0].toolRegistry).toBe(registryA);
+    expect(creationOptions[1].messageBus).toBe(busB);
+    expect(creationOptions[1].toolRegistry).toBe(registryB);
+
+    registry.release(ownerA, 'subagent');
+    registry.release(ownerB, 'subagent');
+  });
+
+  it('ignores a stale handle release after disposeAll and a replacement reacquisition', async () => {
+    const created: RecordingScheduler[] = [];
+    const registry = createSessionSchedulerRegistry({
+      createScheduler: async (options) => {
+        const scheduler = new RecordingScheduler(options);
+        created.push(scheduler);
+        return scheduler;
+      },
+    });
+    const owner = { sessionId: 'owner-1' };
+
+    const firstHandle = await registry.getOrCreate(owner, 'session');
+    expect(created).toHaveLength(1);
+
+    await registry.disposeAll();
+    expect(created[0].disposed).toBe(true);
+
+    const secondHandle = await registry.getOrCreate(owner, 'session');
+    expect(created).toHaveLength(2);
+    expect(secondHandle).not.toBe(firstHandle);
+
+    // The first consumer's release carries its own swept handle: it must
+    // not touch the replacement entry the second consumer now holds.
+    registry.release(owner, 'session', firstHandle);
+    expect(created[1].disposed).toBe(false);
+
+    // The replacement still releases normally through its own handle.
+    registry.release(owner, 'session', secondHandle);
+    expect(created[1].disposed).toBe(true);
+  });
+
+  it('treats a mismatched handle release as a no-op when no replacement exists', async () => {
+    const created: RecordingScheduler[] = [];
+    const registry = createSessionSchedulerRegistry({
+      createScheduler: async (options) => {
+        const scheduler = new RecordingScheduler(options);
+        created.push(scheduler);
+        return scheduler;
+      },
+    });
+    const owner = { sessionId: 'owner-1' };
+    const foreignHandle = new RecordingScheduler({});
+
+    const handle = await registry.getOrCreate(owner, 'session');
+    expect(created).toHaveLength(1);
+
+    registry.release(owner, 'session', foreignHandle);
+
+    // The entry is intact: no dispose, and a later getOrCreate reuses it.
+    expect(created[0].disposed).toBe(false);
+    const reacquired = await registry.getOrCreate(owner, 'session');
+    expect(reacquired).toBe(handle);
+    expect(created).toHaveLength(1);
+
+    // Cleanup: the entry now holds two acquisitions to release.
+    registry.release(owner, 'session');
+    registry.release(owner, 'session');
+    expect(created[0].disposed).toBe(true);
+    expect(foreignHandle.disposed).toBe(false);
   });
 });

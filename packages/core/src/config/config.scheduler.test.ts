@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { Config } from './config.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ToolSchedulerFactoryOptions } from '../core/toolSchedulerContract.js';
 
 const AgentClient = vi.fn().mockImplementation(() => ({
@@ -199,6 +200,63 @@ describe('Config - CoreToolScheduler registry', () => {
       expect(scheduler1).not.toBe(scheduler2);
     });
 
+    it('constructs each owner scheduler with that acquisition own messageBus and toolRegistry', async () => {
+      const ownerA = { sessionId: 'dep-owner-a' };
+      const ownerB = { sessionId: 'dep-owner-b' };
+      const messageBusA = new MessageBus(
+        config.getPolicyEngine(),
+        config.getDebugMode(),
+      );
+      const messageBusB = new MessageBus(
+        config.getPolicyEngine(),
+        config.getDebugMode(),
+      );
+      const toolRegistryA = {
+        label: 'registry-a',
+      } as unknown as ToolRegistry;
+      const toolRegistryB = {
+        label: 'registry-b',
+      } as unknown as ToolRegistry;
+      const callbacks = {
+        outputUpdateHandler: vi.fn(),
+        onAllToolCallsComplete: vi.fn(),
+        onToolCallsUpdate: vi.fn(),
+        getPreferredEditor: () => undefined,
+        onEditorClose: vi.fn(),
+      };
+
+      const schedulerA = await config.getOrCreateScheduler(
+        ownerA,
+        'session',
+        callbacks,
+        undefined,
+        { messageBus: messageBusA, toolRegistry: toolRegistryA },
+      );
+      const schedulerB = await config.getOrCreateScheduler(
+        ownerB,
+        'session',
+        callbacks,
+        undefined,
+        { messageBus: messageBusB, toolRegistry: toolRegistryB },
+      );
+
+      expect(schedulerA).not.toBe(schedulerB);
+      const creationA = (schedulerA as unknown as CoreToolScheduler)
+        .creationOptions;
+      const creationB = (schedulerB as unknown as CoreToolScheduler)
+        .creationOptions;
+      // Regression net for first-acquisition dep capture: each entry is
+      // constructed with the deps of the acquisition that started it, not
+      // with the deps of the first acquisition on the whole registry.
+      expect(creationA.messageBus).toBe(messageBusA);
+      expect(creationA.toolRegistry).toBe(toolRegistryA);
+      expect(creationB.messageBus).toBe(messageBusB);
+      expect(creationB.toolRegistry).toBe(toolRegistryB);
+
+      config.disposeScheduler(ownerA, 'session');
+      config.disposeScheduler(ownerB, 'session');
+    });
+
     it('should apply the latest acquirer callbacks on reuse', async () => {
       const callbacks1 = {
         outputUpdateHandler: vi.fn(),
@@ -230,7 +288,10 @@ describe('Config - CoreToolScheduler registry', () => {
       expect(latest.onEditorClose).toBe(callbacks2.onEditorClose);
       expect(latest.outputUpdateHandler).toBe(callbacks2.outputUpdateHandler);
       expect(latest.config).toBe(config);
-      expect(latest.messageBus).toBe(sessionMessageBus);
+      // messageBus and toolRegistry are construction deps, not setCallbacks
+      // fields: production CoreToolScheduler.setCallbacks ignores them.
+      expect(latest.messageBus).toBeUndefined();
+      expect(latest.toolRegistry).toBeUndefined();
     });
 
     it('should forward interactiveMode into scheduler creation options', async () => {

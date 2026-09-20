@@ -27,7 +27,6 @@ import {
   ApprovalMode,
   type CompletedToolCall,
   type Config,
-  type MessageBus,
   DebugLogger,
   PolicyDecision,
   type SchedulerCallbacks as SchedulerCallbacksCore,
@@ -422,8 +421,6 @@ const mockConfig = {
         existing.setCallbacks({
           ...callbacks,
           config: mockConfig,
-          messageBus: mockMessageBus as unknown as MessageBus,
-          toolRegistry: mockToolRegistry as unknown as ToolRegistry,
         });
         return Promise.resolve(existing);
       }
