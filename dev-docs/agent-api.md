@@ -48,6 +48,7 @@ contract:
 | ---------------------------------------------- | -------------------------------------------------------------------------------- | --------------------------- |
 | `@vybestack/llxprt-code-agents`                | The curated public Agent API (see [user reference](../docs/agent-api.md)).       | Supported / semver-covered. |
 | `@vybestack/llxprt-code-agents/app-service.js` | Durable, config/app-service functions + `COMMAND_API_MAP`. No live agent needed. | Supported / semver-covered. |
+| `@vybestack/llxprt-code-agents/constants.js`   | Shared constants.                                                                | Supported / semver-covered. |
 
 The root entry is **non-breaking and additive** within the curated surface.
 The low-level `internals.js` power-user subpath was **removed** (issue
