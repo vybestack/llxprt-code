@@ -312,6 +312,36 @@ export interface SessionInfo {
 }
 
 // ---------------------------------------------------------------------------
+// Awaitable commit protocol
+// ---------------------------------------------------------------------------
+
+/**
+ * Ack returned by {@link SessionRecordingService.commit} and
+ * {@link SessionRecordingService.waitForCommit} once a record's bytes are
+ * durably appended to the session JSONL file.
+ *
+ * @plan PLAN-20260917-ISSUE854.P05b2
+ * @requirement G2
+ */
+export interface CommitWatermark {
+  /** Envelope seq of the committed record. */
+  readonly seq: number;
+  /** Exclusive end byte offset of that record's bytes in the journal at commit time. */
+  readonly byteOffset: number;
+}
+
+/**
+ * Injectable write seam over the recorder's appendFile callsite, mirroring
+ * the resolver's `ResolverIo` seam. Defaults to `fs/promises.appendFile`.
+ *
+ * @plan PLAN-20260917-ISSUE854.P05b2
+ * @requirement G2
+ */
+export interface RecordingWriterIo {
+  appendFile(filePath: string, data: string, encoding: 'utf8'): Promise<void>;
+}
+
+// ---------------------------------------------------------------------------
 // Service configuration
 // ---------------------------------------------------------------------------
 
@@ -327,10 +357,15 @@ export interface SessionRecordingServiceConfig {
   cwd?: string;
   provider: string;
   model: string;
-  /** Hard bound for serialized records waiting for durable write. */
+  /**
+   * Hard bound for serialized records waiting for durable write. Backpressure
+   * (awaiting drain room) applies above it; `Infinity` is the only opt-out.
+   */
   maxQueueBytes?: number;
   /** Project-owned store used to verify referenced media during lifecycle replay. */
   mediaStore?: LocalMediaStore;
+  /** Write seam for journal appends. Defaults to `fs/promises.appendFile`. */
+  readonly io?: RecordingWriterIo;
 }
 
 // ---------------------------------------------------------------------------
