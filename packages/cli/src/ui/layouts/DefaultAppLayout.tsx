@@ -4,8 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
-import type { MessageBus } from '@vybestack/llxprt-code-core';
+import React, { useEffect, useRef, useState } from 'react';
+import type {
+  ContextRange,
+  MessageBus,
+  RecordingIntegration,
+} from '@vybestack/llxprt-code-core';
 import { Box, type DOMElement, Static, Text } from 'ink';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UpdateObject } from '../utils/updateCheck.js';
@@ -269,6 +273,69 @@ function useTranscriptContent(props: TranscriptProps) {
   return { ...content, constrainHeight, availableHeight };
 }
 
+type HistoryServiceHandle = Parameters<
+  RecordingIntegration['onHistoryServiceReplaced']
+>[0];
+
+function getInitializedHistoryService(
+  uiRuntime: UiRuntime,
+): HistoryServiceHandle | null {
+  const agentClient = uiRuntime.agentClientSource.getAgentClient();
+  if (agentClient.hasChatInitialized() !== true) {
+    return null;
+  }
+  return agentClient.getHistoryService() ?? null;
+}
+
+/**
+ * Latest context boundary snapshot (#854), or null until a HistoryService
+ * exists. Mirrors the service-swap subscription pattern in
+ * useTokenMetricsTracking: a poll watches for the initialized service,
+ * subscribes to contextRangeChanged, and reads the current range on swap.
+ */
+function useContextRangeSnapshot(uiRuntime: UiRuntime): ContextRange | null {
+  const [range, setRange] = useState<ContextRange | null>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
+  const serviceRef = useRef<HistoryServiceHandle | null>(null);
+
+  useEffect(() => {
+    let intervalCleared = false;
+    const checkInterval = setInterval(() => {
+      if (intervalCleared) return;
+      const historyService = getInitializedHistoryService(uiRuntime);
+      if (historyService === serviceRef.current) return;
+      if (cleanupRef.current !== null) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+      serviceRef.current = historyService;
+      if (historyService === null) {
+        setRange(null);
+        return;
+      }
+      const handleRangeChanged = (snapshot: ContextRange): void => {
+        setRange(snapshot);
+      };
+      historyService.on('contextRangeChanged', handleRangeChanged);
+      setRange(historyService.getContextRange());
+      cleanupRef.current = () => {
+        historyService.off('contextRangeChanged', handleRangeChanged);
+      };
+    }, 100);
+    return () => {
+      clearInterval(checkInterval);
+      intervalCleared = true;
+      if (cleanupRef.current !== null) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+      serviceRef.current = null;
+    };
+  }, [uiRuntime]);
+
+  return range;
+}
+
 function TranscriptViewport(props: TranscriptProps) {
   const {
     listItems,
@@ -277,17 +344,18 @@ function TranscriptViewport(props: TranscriptProps) {
     constrainHeight,
     availableHeight,
   } = useTranscriptContent(props);
+  const contextRange = useContextRangeSnapshot(props.uiRuntime);
   if (usesAlternateBuffer(props)) {
     const pager = props.scrollbackPager;
     if (pager) {
-      // P02e minimal seam: the pager viewport replaces the memory-resident
-      // list; rows render as item.text until P03/P04 wire HistoryItemDisplay.
       return (
         <ScrollbackViewport
           store={pager.store}
           viewport={pager.viewport}
           viewportLines={Math.max(1, availableHeight)}
           pollMs={SCROLLBACK_VIEWPORT_POLL_MS}
+          range={contextRange ?? undefined}
+          config={props.slashCommandRuntime}
         />
       );
     }

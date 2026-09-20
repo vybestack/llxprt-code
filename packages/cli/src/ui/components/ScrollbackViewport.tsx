@@ -29,13 +29,34 @@
  * change remaps the offset so the window's first line keeps its anchor
  * row, and pending live-tail rows the window does not cover render as
  * independent slots below it.
+ *
+ * P03 addendum: when the layout supplies a context `range` snapshot and the
+ * CLI runtime (`config`), resident rows render through HistoryItemDisplay
+ * with a contextState badge derived from classifyContextState; unwired
+ * callers render the raw row text as before. Resident-set gaps that fully
+ * contain a removedInterior span render a HistoryBoundaryRow between the
+ * bracketing rows; 'x' toggles the boundary rows in the window and the
+ * toggle position is pruned when a boundary leaves the window, so an
+ * evicted boundary remounts collapsed. Boundary summaries are placeholder
+ * text until P05 lands the journal re-read.
  */
 
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Text, useInput, useStdin, useStdout } from 'ink';
+import type {
+  ContextRange,
+  RemovedInteriorSpan,
+} from '@vybestack/llxprt-code-core';
 import { Colors, SemanticColors } from '../colors.js';
 import { ESC } from '../utils/input.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
+import { HistoryItemDisplay } from './HistoryItemDisplay.js';
+import { HistoryBoundaryRow } from './HistoryBoundaryRow.js';
+import {
+  classifyContextState,
+  type HistoryContextState,
+} from '../utils/historyContextState.js';
 import type {
   ScrollbackPagerState,
   ScrollbackPagerStore,
@@ -48,6 +69,13 @@ export interface ScrollbackViewportProps {
   viewport: ScrollbackViewportReporter;
   viewportLines: number;
   pollMs: number;
+  /**
+   * Context boundary snapshot (#854). When absent (or paired with no
+   * `config`), rows render as raw text exactly as before P03.
+   */
+  range?: ContextRange;
+  /** CLI runtime handed to wired rows' HistoryItemDisplay. */
+  config?: CliUiRuntime;
   onPageUp?: () => void;
   onPageDown?: () => void;
   onScrollUp?: () => void;
@@ -147,6 +175,87 @@ function pendingRowsBelow(
 ): ScrollbackRow[] {
   return rows.filter(
     (row) => row.identity.kind === 'pending' && !windowKeys.has(row.key),
+  );
+}
+
+function boundarySpanKey(span: RemovedInteriorSpan): string {
+  return `boundary:${span.start}:${span.end}`;
+}
+
+/** Removed-interior spans fully inside the seq gap between two rows. */
+function spansWithinGap(
+  olderSeq: number,
+  newerSeq: number,
+  range: ContextRange,
+): RemovedInteriorSpan[] {
+  return range.removedInterior.filter(
+    (span) => span.start > olderSeq && span.end < newerSeq,
+  );
+}
+
+function windowSpanKeys(
+  rows: readonly ScrollbackRow[],
+  range: ContextRange | undefined,
+): string[] {
+  if (range === undefined) return [];
+  const keys: string[] = [];
+  let olderSeq: number | null = null;
+  for (const row of rows) {
+    if (olderSeq !== null && row.seq !== null) {
+      for (const span of spansWithinGap(olderSeq, row.seq, range)) {
+        keys.push(boundarySpanKey(span));
+      }
+    }
+    if (row.seq !== null) olderSeq = row.seq;
+  }
+  return keys;
+}
+
+/**
+ * Boundary summaries are placeholder text until P05's journal re-read;
+ * the loader shape stays, so the swap is one function.
+ */
+function placeholderSummaryLoader(
+  span: RemovedInteriorSpan,
+): () => Promise<string> {
+  const count = span.end - span.start + 1;
+  return () =>
+    Promise.resolve(
+      `${count} ${count === 1 ? 'entry' : 'entries'} removed (${span.reason})`,
+    );
+}
+
+function contextStateForRow(
+  seq: number | null,
+  range: ContextRange | undefined,
+): HistoryContextState | undefined {
+  if (seq === null || range === undefined) return undefined;
+  return classifyContextState(seq, range);
+}
+
+function RawScrollbackRow({ row }: { row: ScrollbackRow }): React.JSX.Element {
+  return <Text color={Colors.Foreground}>{row.item.text ?? ''}</Text>;
+}
+
+function WiredScrollbackRow({
+  row,
+  config,
+  range,
+  terminalWidth,
+}: {
+  row: ScrollbackRow;
+  config: CliUiRuntime;
+  range: ContextRange | undefined;
+  terminalWidth: number;
+}): React.JSX.Element {
+  return (
+    <HistoryItemDisplay
+      item={row.item}
+      terminalWidth={terminalWidth}
+      isPending={false}
+      config={config}
+      contextState={contextStateForRow(row.seq, range)}
+    />
   );
 }
 
@@ -296,16 +405,60 @@ function useResizeReport(
   }, [stdout, store, viewport, viewportLines, pageOffset, rowHeightLines]);
 }
 
-/** Renders one computed window frame: edges, rows, and pending tail slots. */
+/** Per-render wiring handed down from the owning component. */
+interface FrameWiring {
+  readonly range: ContextRange | undefined;
+  readonly config: CliUiRuntime | undefined;
+  readonly terminalWidth: number;
+  readonly expandedSpans: ReadonlySet<string>;
+  readonly onToggleBoundary: () => void;
+}
+
+/** Renders one computed window frame: edges, rows, boundaries, pending tail. */
 function ViewportFrame({
   state,
   frame,
   pendingBelow,
+  wiring,
 }: {
   state: ScrollbackPagerState;
   frame: WindowFrame;
   pendingBelow: readonly ScrollbackRow[];
+  wiring: FrameWiring;
 }): React.JSX.Element {
+  const lines: React.JSX.Element[] = [];
+  let olderSeq: number | null = null;
+  for (const row of frame.rows) {
+    if (wiring.range !== undefined && olderSeq !== null && row.seq !== null) {
+      for (const span of spansWithinGap(olderSeq, row.seq, wiring.range)) {
+        const key = boundarySpanKey(span);
+        lines.push(
+          <HistoryBoundaryRow
+            key={key}
+            reason={span.reason}
+            count={span.end - span.start + 1}
+            expanded={wiring.expandedSpans.has(key)}
+            onToggle={wiring.onToggleBoundary}
+            loadSummary={placeholderSummaryLoader(span)}
+          />,
+        );
+      }
+    }
+    lines.push(
+      wiring.config === undefined ? (
+        <RawScrollbackRow key={row.key} row={row} />
+      ) : (
+        <WiredScrollbackRow
+          key={row.key}
+          row={row}
+          config={wiring.config}
+          range={wiring.range}
+          terminalWidth={wiring.terminalWidth}
+        />
+      ),
+    );
+    if (row.seq !== null) olderSeq = row.seq;
+  }
   return (
     <Box flexDirection="column">
       {state.error !== null ? (
@@ -319,11 +472,7 @@ function ViewportFrame({
           hiddenAbove={frame.hiddenAbove}
         />
       )}
-      {frame.rows.map((row) => (
-        <Text key={row.key} color={Colors.Foreground}>
-          {row.item.text ?? ''}
-        </Text>
-      ))}
+      {lines}
       <BottomEdgeRow
         hiddenBelow={frame.hiddenBelow}
         atFileEnd={state.atFileEnd}
@@ -333,11 +482,102 @@ function ViewportFrame({
   );
 }
 
+/**
+ * Expansion state for the boundary rows in the window. Expansion dies with
+ * the boundary's residency: a span key no longer in the window is pruned,
+ * so an evicted boundary remounts collapsed and re-reads on its next expand
+ * (no global expansion purge). The visible-key set is rebuilt inside the
+ * effect from the window's span-key signature, so per-render Set identity
+ * churn cannot retrigger the prune.
+ */
+function useBoundaryExpansion(
+  spanKeysSig: string,
+): [ReadonlySet<string>, () => void] {
+  const [expandedSpans, setExpandedSpans] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
+
+  useEffect(() => {
+    const visibleSpanKeySet = new Set<string>(
+      spanKeysSig === '' ? [] : spanKeysSig.split(KEY_SEPARATOR),
+    );
+    setExpandedSpans((prev) => {
+      if (prev.size === 0) return prev;
+      let changed = false;
+      const next = new Set<string>();
+      for (const key of prev) {
+        if (visibleSpanKeySet.has(key)) next.add(key);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [spanKeysSig]);
+
+  const toggleVisibleBoundaries = useCallback(() => {
+    const keys = spanKeysSig === '' ? [] : spanKeysSig.split(KEY_SEPARATOR);
+    if (keys.length === 0) return;
+    setExpandedSpans((prev) => {
+      const allExpanded = keys.every((key) => prev.has(key));
+      const next = new Set(prev);
+      for (const key of keys) {
+        if (allExpanded) next.delete(key);
+        else next.add(key);
+      }
+      return next;
+    });
+  }, [spanKeysSig]);
+
+  return [expandedSpans, toggleVisibleBoundaries];
+}
+
+/**
+ * Page/scroll keystrokes: PageUp/PageDown slide the window a full window
+ * and page the store, the arrow keys carry the same direction-paged step
+ * (wheel/drag events land here via the P02e wiring), and 'x' toggles the
+ * boundary rows in the window.
+ */
+function usePagingInput(
+  store: ScrollbackPagerStore,
+  windowRows: number,
+  setPageOffset: React.Dispatch<React.SetStateAction<number>>,
+  onToggleBoundaries: () => void,
+  onPageUp: (() => void) | undefined,
+  onPageDown: (() => void) | undefined,
+  onScrollUp: (() => void) | undefined,
+  onScrollDown: (() => void) | undefined,
+): void {
+  useInput((input, key) => {
+    if (key.pageUp) {
+      setPageOffset((offset) => offset + windowRows);
+      void store.pageBack();
+      onPageUp?.();
+    } else if (key.pageDown) {
+      setPageOffset((offset) => Math.max(0, offset - windowRows));
+      void store.pageForward();
+      onPageDown?.();
+    } else if (key.upArrow) {
+      // Wheel/drag path: real mouse events land here via P02e wiring; the
+      // arrow keys carry the same direction-paged step in no-TTY contexts.
+      setPageOffset((offset) => offset + 1);
+      void store.pageBack();
+      onScrollUp?.();
+    } else if (key.downArrow) {
+      setPageOffset((offset) => Math.max(0, offset - 1));
+      void store.pageForward();
+      onScrollDown?.();
+    } else if (input === 'x') {
+      onToggleBoundaries();
+    }
+  });
+}
+
 export function ScrollbackViewport({
   store,
   viewport,
   viewportLines,
   pollMs,
+  range,
+  config,
   onPageUp,
   onPageDown,
   onScrollUp,
@@ -358,30 +598,23 @@ export function ScrollbackViewport({
     rowHeightLines,
   );
   const visibleKeysSig = frame.rows.map((row) => row.key).join(KEY_SEPARATOR);
+  const spanKeysSig = windowSpanKeys(frame.rows, range).join(KEY_SEPARATOR);
 
   useViewportReport(store, viewport, viewportLines, visibleKeysSig);
 
-  useInput((_input, key) => {
-    if (key.pageUp) {
-      setPageOffset((offset) => offset + windowRows);
-      void store.pageBack();
-      onPageUp?.();
-    } else if (key.pageDown) {
-      setPageOffset((offset) => Math.max(0, offset - windowRows));
-      void store.pageForward();
-      onPageDown?.();
-    } else if (key.upArrow) {
-      // Wheel/drag path: real mouse events land here via P02e wiring; the
-      // arrow keys carry the same direction-paged step in no-TTY contexts.
-      setPageOffset((offset) => offset + 1);
-      void store.pageBack();
-      onScrollUp?.();
-    } else if (key.downArrow) {
-      setPageOffset((offset) => Math.max(0, offset - 1));
-      void store.pageForward();
-      onScrollDown?.();
-    }
-  });
+  const [expandedSpans, toggleVisibleBoundaries] =
+    useBoundaryExpansion(spanKeysSig);
+
+  usePagingInput(
+    store,
+    windowRows,
+    setPageOffset,
+    toggleVisibleBoundaries,
+    onPageUp,
+    onPageDown,
+    onScrollUp,
+    onScrollDown,
+  );
 
   useEdgeJumpInput(store, stdin, windowRows, setPageOffset);
   useHeightAnchorRemap(
@@ -404,6 +637,17 @@ export function ScrollbackViewport({
   const pendingBelow = pendingRowsBelow(state.rows, windowKeys);
 
   return (
-    <ViewportFrame state={state} frame={frame} pendingBelow={pendingBelow} />
+    <ViewportFrame
+      state={state}
+      frame={frame}
+      pendingBelow={pendingBelow}
+      wiring={{
+        range,
+        config,
+        terminalWidth: stdout.columns,
+        expandedSpans,
+        onToggleBoundary: toggleVisibleBoundaries,
+      }}
+    />
   );
 }

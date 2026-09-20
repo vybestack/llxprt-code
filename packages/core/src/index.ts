@@ -537,6 +537,14 @@ export { ContentConverters } from './services/history/ContentConverters.js';
 // (e.g. the CLI /dumpcontext command) can type the trace without deep-importing.
 export type { ChronologyTraceEntry } from './services/history/historyChronology.js';
 export type { CurrentTurnMarker } from './services/history/historyChronology.js';
+// Context-range membership types (#854) are part of the public surface so UI
+// consumers can type boundary snapshots and removed spans without
+// deep-importing (verified: no other module exports these names).
+export type {
+  ContextRange,
+  RemovedInteriorSpan,
+  RemovedInteriorReason,
+} from './services/history/historyEventTypes.js';
 export {
   computeHistorySizeBreakdown,
   estimateBlockBytes,

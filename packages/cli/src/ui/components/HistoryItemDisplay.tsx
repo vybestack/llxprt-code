@@ -20,6 +20,7 @@ import { CompressionMessage } from './messages/CompressionMessage.js';
 import { WarningMessage } from './messages/WarningMessage.js';
 import { ProfileChangeMessage } from './messages/ProfileChangeMessage.js';
 import { Box, Text } from 'ink';
+import { Colors } from '../colors.js';
 import { AboutBox } from './AboutBox.js';
 import { StatsDisplay } from './StatsDisplay.js';
 import { ModelStatsDisplay } from './ModelStatsDisplay.js';
@@ -35,6 +36,7 @@ import { ExtensionsList } from './views/ExtensionsList.js';
 import { HooksList } from './views/HooksList.js';
 import { SkillsList } from './views/SkillsList.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { HistoryContextState } from '../utils/historyContextState.js';
 
 interface HistoryItemDisplayProps {
   item: HistoryItem;
@@ -49,6 +51,13 @@ interface HistoryItemDisplayProps {
   activeShellPtyId?: number | null;
   embeddedShellFocused?: boolean;
   availableTerminalHeightAi?: number;
+  /**
+   * Context-membership badge state (#854, PLAN-20260917-ISSUE854.P03):
+   * `purged` renders a dim `purged` chip above the row (dimmed via
+   * Colors.DimComment, the repo's dim idiom). Every other value (and
+   * absence) leaves the row undecorated.
+   */
+  contextState?: HistoryContextState;
 }
 
 function useSanitizedItem(item: HistoryItem) {
@@ -256,11 +265,15 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
   activeShellPtyId: _activeShellPtyId,
   embeddedShellFocused: _embeddedShellFocused,
   availableTerminalHeightAi: _availableTerminalHeightAi,
+  contextState,
 }) => {
   const itemForDisplay = useSanitizedItem(item);
 
   return (
     <Box flexDirection="column" key={itemForDisplay.id}>
+      {contextState === 'purged' ? (
+        <Text color={Colors.DimComment}>purged</Text>
+      ) : null}
       {renderCoreMessages(
         itemForDisplay,
         isPending,
