@@ -46,6 +46,7 @@ import type { HistoryItem } from '../types.js';
 import type {
   ScrollbackPagerState,
   ScrollbackPagerStore,
+  ScrollbackResumeSummary,
   ScrollbackRow,
   ScrollbackViewportReporter,
 } from '../stores/turn/scrollbackPager.js';
@@ -176,6 +177,9 @@ function scriptedStore(config: {
     getState: () => state,
     pageBack: () => new Promise<void>(() => undefined),
     pageForward: () => Promise.resolve(),
+    // Unexercised by these tests, mirroring the never-resolving pageBack.
+    resumeFromJournal: () =>
+      new Promise<ScrollbackResumeSummary>(() => undefined),
     invalidate: () => Promise.resolve(),
     reportViewport: () => config.onReportViewport?.(),
     pageOut: () => undefined,

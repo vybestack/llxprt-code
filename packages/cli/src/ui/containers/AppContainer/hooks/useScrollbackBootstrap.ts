@@ -18,7 +18,10 @@
  * active and a one-line notice is added to the history — never a throw. A
  * mid-session flag change does not hot-swap anything; it only surfaces a
  * restart prompt (cleared again if the setting returns to its boot value).
- * On unmount the store is closed, dropping the journal cursor.
+ * Immediately after construction the hook starts the store's boot-time
+ * resumeFromJournal() seed (P04b); a failure tears the binding down and
+ * takes the non-pager fallback with a one-line notice — never a throw out
+ * of the hook. On unmount the store is closed, dropping the journal cursor.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -39,6 +42,7 @@ import type { RecordingSwapCallbacks } from '../../../../services/performResume.
 import { MessageType, type HistoryItemWithoutId } from '../../../types.js';
 
 const SCROLLBACK_UNAVAILABLE_NOTICE = 'scrollback unavailable: no journal';
+const SCROLLBACK_RESUME_FAILED_NOTICE = 'scrollback unavailable: resume failed';
 const SCROLLBACK_RESTART_NOTICE =
   'scrollback pager setting changed: restart to apply';
 
@@ -90,6 +94,44 @@ export function scrollbackPagerSettingsFrom(
   };
 }
 
+/** Boot-time pager decision: a live binding, the fallback notice, or flag-off. */
+type ScrollbackBootOutcome =
+  | { readonly kind: 'disabled' }
+  | { readonly kind: 'unavailable' }
+  | { readonly kind: 'ready'; readonly binding: ScrollbackPagerBinding };
+
+/**
+ * Resolves the boot-time pager outcome once: a live store binding when the
+ * flag is on and the journal path resolves, 'unavailable' when the flag is
+ * on but no journal exists (one-line notice), and 'disabled' when the flag
+ * is off (no notice).
+ */
+function resolveBootOutcome(
+  settings: LoadedSettings,
+  recordingSwapCallbacks: RecordingSwapCallbacks,
+): ScrollbackBootOutcome {
+  if (!isFlagEnabled(settings)) {
+    return { kind: 'disabled' };
+  }
+  const journalPath =
+    recordingSwapCallbacks.getCurrentRecording()?.getFilePath() ?? null;
+  if (journalPath === null) {
+    return { kind: 'unavailable' };
+  }
+  const viewport: ScrollbackViewportReporter = {
+    visibleKeys: [],
+    viewportLines: 0,
+    rowHeightLines: () => 1,
+  };
+  const store = createScrollbackPagerStore({
+    filePath: journalPath,
+    viewport,
+    pageRows: SCROLLBACK_PAGE_ROWS,
+    settings: scrollbackPagerSettingsFrom(settings),
+  });
+  return { kind: 'ready', binding: { store, viewport } };
+}
+
 export function useScrollbackBootstrap(
   options: UseScrollbackBootstrapOptions,
 ): ScrollbackBootstrapResult {
@@ -100,35 +142,50 @@ export function useScrollbackBootstrap(
   const pagerRef = useRef<ScrollbackPagerBinding | null>(null);
   const initializedRef = useRef(false);
   const unavailableRef = useRef(false);
+  const noticeSentRef = useRef(false);
+  const disposedRef = useRef(false);
+  // Resume-failure teardown: the binding is dropped whole and the hook
+  // falls back to the non-pager path with the one-line notice; it never
+  // throws out of the hook.
+  const handleResumeFailure = (store: ScrollbackPagerStore): void => {
+    if (disposedRef.current || pagerRef.current?.store !== store) {
+      return;
+    }
+    pagerRef.current = null;
+    unavailableRef.current = true;
+    void store.close();
+    if (noticeSentRef.current) {
+      return;
+    }
+    noticeSentRef.current = true;
+    addItem(
+      {
+        type: MessageType.INFO,
+        text: SCROLLBACK_RESUME_FAILED_NOTICE,
+      },
+      Date.now(),
+    );
+  };
   if (!initializedRef.current) {
     initializedRef.current = true;
-    if (isFlagEnabled(settings)) {
-      const journalPath =
-        recordingSwapCallbacks.getCurrentRecording()?.getFilePath() ?? null;
-      if (journalPath === null) {
-        unavailableRef.current = true;
-      } else {
-        const viewport: ScrollbackViewportReporter = {
-          visibleKeys: [],
-          viewportLines: 0,
-          rowHeightLines: () => 1,
-        };
-        pagerRef.current = {
-          store: createScrollbackPagerStore({
-            filePath: journalPath,
-            viewport,
-            pageRows: SCROLLBACK_PAGE_ROWS,
-            settings: scrollbackPagerSettingsFrom(settings),
-          }),
-          viewport,
-        };
-      }
+    const outcome = resolveBootOutcome(settings, recordingSwapCallbacks);
+    if (outcome.kind === 'unavailable') {
+      unavailableRef.current = true;
+    }
+    if (outcome.kind === 'ready') {
+      pagerRef.current = outcome.binding;
+      // Boot-time resume: seed the resident window with the journal's
+      // last page.
+      void outcome.binding.store
+        .resumeFromJournal()
+        .catch(() => handleResumeFailure(outcome.binding.store));
     }
   }
 
   // The unavailable notice is a history row on the fallback (non-pager)
-  // path; the guard keeps it at exactly one line across re-renders.
-  const noticeSentRef = useRef(false);
+  // path; the guard keeps it at exactly one line across re-renders. The
+  // effect covers a missing journal at boot; the resume catch above covers
+  // a failed seed.
   useEffect(() => {
     if (noticeSentRef.current || !unavailableRef.current) {
       return;
@@ -156,6 +213,7 @@ export function useScrollbackBootstrap(
   useEffect(() => {
     const pager = pagerRef.current;
     return () => {
+      disposedRef.current = true;
       void pager?.store.close();
     };
   }, []);

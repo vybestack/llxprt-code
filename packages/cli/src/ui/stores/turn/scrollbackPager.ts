@@ -31,6 +31,13 @@
  * (seq < contextWindow.firstSeq) first, then the far off-screen end — down
  * to the byte floor; reportViewport and setContextWindow evict sub-context
  * rows immediately at bottom.
+ *
+ * Resume (PLAN-20260917-ISSUE854.P04b): resumeFromJournal() seeds the
+ * resident window with the journal's last page plus the floor/tail scalars.
+ * A generation-guarded probe cursor walks to the visibility floor for the
+ * scalars while the store cursor seeds through the ordinary collectBack
+ * path; the recorded oldest-display-row offset lets pageBack recognize the
+ * floor without consuming the non-display header line below it.
  */
 
 import { Buffer } from 'node:buffer';
@@ -93,10 +100,40 @@ export interface ScrollbackPagerMetrics {
   readonly residentRows: number;
 }
 
+/** Scalars captured while seeding the resident window from the journal. */
+export interface ScrollbackResumeSummary {
+  /** Display rows seeded into the resident window (journal-backed only). */
+  readonly seededRows: number;
+  /**
+   * Backward head after seeding: the start offset of the newest clear
+   * (rewind) boundary line, or the file data start (0) when no boundary
+   * exists.
+   */
+  readonly floorOffset: number;
+  /**
+   * Forward head after seeding: the byte offset just past the last complete
+   * line — the journal data end. A crash-torn tail beyond it is excluded.
+   */
+  readonly tailOffset: number;
+  /** Lowest seq among resident rows; null when nothing was seeded. */
+  readonly headSeq: number | null;
+  /** Highest seq observed while seeding; null when nothing was seeded. */
+  readonly tailSeq: number | null;
+  /** True when the floor is a clear boundary rather than the file start. */
+  readonly atClearBoundary: boolean;
+}
+
 export interface ScrollbackPagerStore {
   getState(): ScrollbackPagerState;
   pageBack(): Promise<void>;
   pageForward(): Promise<void>;
+  /**
+   * Seeds the resident window from the journal at boot (P04b): resident rows
+   * become the last page under the pageRows budget, older rows stay
+   * unmaterialized until pageBack pulls them, and the floor/tail scalars
+   * are captured. Serialized through the page queue; rejects on failure.
+   */
+  resumeFromJournal(): Promise<ScrollbackResumeSummary>;
   invalidate(): Promise<void>;
   reportViewport(): void;
   pageOut(direction: 'older' | 'newer'): void;
@@ -222,6 +259,37 @@ function pushForwardPage(
   return added;
 }
 
+/** Running state of a resume floor walk: the clear boundary and the oldest display row offset seen above it. */
+interface ResumeFloorOffsets {
+  boundaryOffset: number | null;
+  firstDisplayOffset: number | null;
+}
+
+/**
+ * Scans one backward-read page (newest first) into `walk`, stopping at the
+ * newest clear boundary; while the boundary is still unfound, the oldest
+ * display row offset is tracked so later pageBack calls can recognize the
+ * floor once their head rests on it.
+ */
+function scanResumeFloorPage(
+  entries: readonly JournalEntry[],
+  walk: ResumeFloorOffsets,
+): void {
+  for (const entry of entries) {
+    if (isClearBoundary(entry)) {
+      walk.boundaryOffset = entry.offset;
+      return;
+    }
+    if (
+      isDisplayEntry(entry) &&
+      (walk.firstDisplayOffset === null ||
+        entry.offset < walk.firstDisplayOffset)
+    ) {
+      walk.firstDisplayOffset = entry.offset;
+    }
+  }
+}
+
 function entryToRow(entry: JournalEntry): ScrollbackRow | null {
   switch (entry.kind) {
     case 'content': {
@@ -295,6 +363,21 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** Min/max seq across rows; null when no row carries a seq. */
+function seqWatermarks(rows: readonly ScrollbackRow[]): {
+  headSeq: number | null;
+  tailSeq: number | null;
+} {
+  let headSeq: number | null = null;
+  let tailSeq: number | null = null;
+  for (const row of rows) {
+    if (row.seq === null) continue;
+    if (headSeq === null || row.seq < headSeq) headSeq = row.seq;
+    if (tailSeq === null || row.seq > tailSeq) tailSeq = row.seq;
+  }
+  return { headSeq, tailSeq };
+}
+
 class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
   private readonly filePath: string;
   private readonly viewport: ScrollbackViewportReporter;
@@ -324,6 +407,14 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
   private visibleKeys: readonly string[] = [];
   private purgeTimer: ReturnType<typeof setTimeout> | null = null;
   private purgeDirection: 'older' | 'newer' = 'older';
+  /**
+   * Offset of the oldest display row in the journal, recorded by
+   * resumeFromJournal. When a backward walk's head rests exactly there,
+   * every unconsumed line below is non-display (session header) and the
+   * visibility floor is reached without an extra empty-page read. Null
+   * when no resume ran, which keeps pageBack's floor behavior unchanged.
+   */
+  private resumeFirstDisplayOffset: number | null = null;
 
   constructor(options: ScrollbackPagerOptions) {
     this.filePath = options.filePath;
@@ -373,6 +464,35 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     await run;
   }
 
+  /**
+   * Boot-time resume (P04b): seeds the resident window with the journal's
+   * LAST PAGE under the pageRows budget and captures the floor/tail scalars.
+   * Rows seed through the ordinary collectBack path on the store cursor,
+   * which stays open for subsequent paging; the scalars come from a
+   * generation-guarded probe cursor that walks to the visibility floor.
+   * Serialized through the page queue so a concurrent pageBack cannot
+   * interleave with seeding.
+   */
+  async resumeFromJournal(): Promise<ScrollbackResumeSummary> {
+    this.inFlightBackReads += 1;
+    const gen = this.generation;
+    const run = this.pageQueue.then(() => this.runResumeFromJournal(gen));
+    this.pageQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    try {
+      return await run;
+    } catch (error) {
+      if (!this.isStale(gen)) {
+        this.error = errorMessage(error);
+      }
+      throw error;
+    } finally {
+      this.inFlightBackReads -= 1;
+    }
+  }
+
   private async runPageBack(gen: number): Promise<void> {
     if (this.closed || this.atVisibilityFloor) return;
     try {
@@ -381,7 +501,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
       const { collected, exhausted } = await this.collectBack(cursor, gen);
       if (this.isStale(gen)) return;
       this.absorbBack(collected);
-      if (exhausted || cursor.windowStart() === 0) {
+      if (exhausted || this.isResumeFloor(cursor.windowStart())) {
         this.atVisibilityFloor = true;
       }
       this.atFileEnd = cursor.windowEnd() >= cursor.size();
@@ -424,6 +544,96 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     }
   }
 
+  /**
+   * Seeds the resident window with the journal's last page and captures the
+   * resume scalars. The floor scalars come from a probe cursor (the store
+   * cursor must keep its backward head at the seeded page boundary so later
+   * pageBack calls pull exactly the rows older than the seeded page); the
+   * rows themselves seed through the ordinary collectBack path. Every step
+   * is abandoned whole when the generation goes stale.
+   */
+  private async runResumeFromJournal(
+    gen: number,
+  ): Promise<ScrollbackResumeSummary> {
+    const floor = await this.walkResumeFloor(gen);
+    if (this.isStale(gen)) {
+      throw new Error('scrollback resume aborted: store generation changed');
+    }
+    const cursor = await this.ensureCursor(gen);
+    if (cursor === null || this.isStale(gen)) {
+      throw new Error('scrollback resume failed: journal cursor unavailable');
+    }
+    const { collected, exhausted } = await this.collectBack(cursor, gen);
+    if (this.isStale(gen)) {
+      throw new Error('scrollback resume aborted: store generation changed');
+    }
+    const seeded: ScrollbackRow[] = [];
+    for (let i = collected.length - 1; i >= 0; i -= 1) {
+      const row = entryToRow(collected[i]);
+      if (row !== null) seeded.push(row);
+    }
+    this.pagedRows = seeded;
+    this.resumeFirstDisplayOffset = floor.firstDisplayOffset;
+    this.atVisibilityFloor =
+      exhausted ||
+      floor.boundaryOffset !== null ||
+      this.isResumeFloor(cursor.windowStart());
+    this.atFileEnd = cursor.windowEnd() >= cursor.size();
+    this.error = null;
+    const { headSeq, tailSeq } = seqWatermarks(seeded);
+    return {
+      seededRows: seeded.length,
+      floorOffset: floor.boundaryOffset ?? cursor.windowStart(),
+      tailOffset: cursor.windowEnd(),
+      headSeq,
+      tailSeq,
+      atClearBoundary: floor.boundaryOffset !== null,
+    };
+  }
+
+  /**
+   * Walks a probe cursor to the visibility floor without touching store
+   * state: the newest rewind (clear) boundary ends the walk and yields its
+   * line start offset; otherwise the walk runs to the file data start and
+   * yields the cursor's backward head there. The oldest display row seen
+   * above the stop point is recorded so later pageBack calls can recognize
+   * the floor once their head rests on it (a non-display header line below
+   * the oldest row would otherwise cost an extra read to detect).
+   */
+  private async walkResumeFloor(gen: number): Promise<ResumeFloorOffsets> {
+    const probe = await JournalCursor.open(this.filePath, {
+      chunkBytes: this.chunkBytes,
+    });
+    const walk: ResumeFloorOffsets = {
+      boundaryOffset: null,
+      firstDisplayOffset: null,
+    };
+    try {
+      while (walk.boundaryOffset === null && !this.isStale(gen)) {
+        const page = await probe.pageBack(this.pageRows);
+        scanResumeFloorPage(page.entries, walk);
+        if (page.entries.length === 0) break;
+      }
+    } finally {
+      await probe.close().catch(() => undefined);
+    }
+    return walk;
+  }
+
+  /**
+   * Floor test for a backward walk head position: the data start, or —
+   * after a resume — the oldest display row's offset recorded by
+   * resumeFromJournal. Null keeps the pre-resume behavior (exhausted read
+   * or data start) untouched.
+   */
+  private isResumeFloor(windowStart: number): boolean {
+    return (
+      windowStart === 0 ||
+      (this.resumeFirstDisplayOffset !== null &&
+        windowStart === this.resumeFirstDisplayOffset)
+    );
+  }
+
   async invalidate(): Promise<void> {
     if (this.closed) return;
     this.generation += 1;
@@ -431,6 +641,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     this.atVisibilityFloor = false;
     this.atFileEnd = false;
     this.error = null;
+    this.resumeFirstDisplayOffset = null;
     this.clearPurgeTimer();
     await this.dropCursor();
   }
