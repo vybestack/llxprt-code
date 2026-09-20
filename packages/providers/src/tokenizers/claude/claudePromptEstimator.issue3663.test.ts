@@ -94,8 +94,10 @@ function request(
 function countingLoader(): {
   readonly load: () => Promise<typeof tiktoken>;
   readonly encodeCalls: () => readonly string[];
+  readonly dispose: () => void;
 } {
   const calls: string[] = [];
+  const minted: Array<ReturnType<typeof tiktoken.get_encoding>> = [];
   const load = (): Promise<typeof tiktoken> =>
     Promise.resolve({
       ...tiktoken,
@@ -104,6 +106,7 @@ function countingLoader(): {
         _extend_special_tokens?: Record<string, number>,
       ): ReturnType<typeof tiktoken.get_encoding> => {
         const encoder = tiktoken.get_encoding(encoding);
+        minted.push(encoder);
         const realEncode = encoder.encode.bind(encoder);
         encoder.encode = (
           text: string,
@@ -116,7 +119,17 @@ function countingLoader(): {
         return encoder;
       },
     });
-  return { load, encodeCalls: () => calls };
+  return {
+    load,
+    encodeCalls: () => calls,
+    // The estimator holds each encoder while the estimate runs, so disposal
+    // must wait until the test's awaits have settled.
+    dispose: () => {
+      for (const encoder of minted) {
+        encoder.free();
+      }
+    },
+  };
 }
 
 function expectedCount(promptText: string, baseTokens: number): number {
@@ -152,7 +165,14 @@ describe('Claude image entries (issue #3663)', () => {
   /** Calibrated text-only count via a real tiktoken encode of promptText. */
   function calibratedTextCount(promptText: string): number {
     const encoder = tiktoken.get_encoding('o200k_base');
-    return expectedCount(promptText, encoder.encode(promptText, [], []).length);
+    try {
+      return expectedCount(
+        promptText,
+        encoder.encode(promptText, [], []).length,
+      );
+    } finally {
+      encoder.free();
+    }
   }
 
   it('adds the anthropic-formula image cost on top of the calibrated text count', async () => {
@@ -231,41 +251,49 @@ describe('Claude image entries (issue #3663)', () => {
       FABLE_SPEC,
     );
     const encoder = tiktoken.get_encoding('o200k_base');
-    const baseTokens = encoder.encode(IMAGE_PROMPT_TEXT, [], []).length;
-    expect(result.estimatorVersion).toBe(
-      CLAUDE_FABLE_5_CALIBRATION.estimatorVersion,
-    );
-    expect(CLAUDE_FABLE_5_CALIBRATION.estimatorVersion).toBe(
-      'claude-fable-5-o200k-calibrated-2026-08-04-v2',
-    );
-    expect(result.count).toBe(
-      applyClaudeCalibration(
-        baseTokens,
-        extractClaudeContentFeatures(IMAGE_PROMPT_TEXT),
-        CLAUDE_FABLE_5_CALIBRATION,
-      ) + IMAGE_800X600_TOKENS,
-    );
+    try {
+      const baseTokens = encoder.encode(IMAGE_PROMPT_TEXT, [], []).length;
+      expect(result.estimatorVersion).toBe(
+        CLAUDE_FABLE_5_CALIBRATION.estimatorVersion,
+      );
+      expect(CLAUDE_FABLE_5_CALIBRATION.estimatorVersion).toBe(
+        'claude-fable-5-o200k-calibrated-2026-08-04-v2',
+      );
+      expect(result.count).toBe(
+        applyClaudeCalibration(
+          baseTokens,
+          extractClaudeContentFeatures(IMAGE_PROMPT_TEXT),
+          CLAUDE_FABLE_5_CALIBRATION,
+        ) + IMAGE_800X600_TOKENS,
+      );
+    } finally {
+      encoder.free();
+    }
   });
 
   it('keeps the one-encode/one-scan contract with image entries present', async () => {
-    const { load, encodeCalls } = countingLoader();
-    const scanned: string[] = [];
-    const result = await estimateClaude5Prompt(
-      imageRequest([{ dimensions: { width: 800, height: 600 } }]),
-      OPUS_SPEC,
-      {
-        loadModule: load,
-        extractFeatures: (text: string) => {
-          scanned.push(text);
-          return extractClaudeContentFeatures(text);
+    const { load, encodeCalls, dispose } = countingLoader();
+    try {
+      const scanned: string[] = [];
+      const result = await estimateClaude5Prompt(
+        imageRequest([{ dimensions: { width: 800, height: 600 } }]),
+        OPUS_SPEC,
+        {
+          loadModule: load,
+          extractFeatures: (text: string) => {
+            scanned.push(text);
+            return extractClaudeContentFeatures(text);
+          },
         },
-      },
-    );
-    expect(encodeCalls()).toStrictEqual([IMAGE_PROMPT_TEXT]);
-    expect(scanned).toStrictEqual([IMAGE_PROMPT_TEXT]);
-    expect(result.count).toBe(
-      calibratedTextCount(IMAGE_PROMPT_TEXT) + IMAGE_800X600_TOKENS,
-    );
+      );
+      expect(encodeCalls()).toStrictEqual([IMAGE_PROMPT_TEXT]);
+      expect(scanned).toStrictEqual([IMAGE_PROMPT_TEXT]);
+      expect(result.count).toBe(
+        calibratedTextCount(IMAGE_PROMPT_TEXT) + IMAGE_800X600_TOKENS,
+      );
+    } finally {
+      dispose();
+    }
   });
 
   /**

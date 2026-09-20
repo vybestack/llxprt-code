@@ -167,15 +167,29 @@ Live verification results (2026-09-18):
   accounting; estimator-level and pipeline-level tests carry correctness here.
 - Official family: **live-verified via glm-5.2 over the z.ai Anthropic-compatible
   endpoint** (temp profile, anthropic-messages protocol, estimator
-  `glm-5.2-tiktoken-v2`, projection revision 4; token-usage logs under the project's
-  global log dir, session ids `acc195e2` then `028d6202`/`e50df111`):
-  - Text-only turn: estimated 11,370 vs actual 11,932 (standing family bias −562).
-  - Image turn carrying a real 800x600 PNG as a read_file tool result (the #3481
-    scenario): estimated 12,125 vs actual 12,018 — bias −107. Adding the ~570-token
-    image entry collapsed the usual −560s under-estimate to −107, consistent with the
-    provider billing roughly ~500 tokens for the 800x600 image. Magnitude in range;
-    z.ai's exact image billing formula is undocumented, so the openai patch family
-    remains the documented conservative-high approximation (#3477 policy).
+  `glm-5.2-tiktoken-v2`, projection revision 4; verified from the token-usage log
+  for session `e50df111`, same-session consecutive turns):
+  - Text-only turn 1: estimated 11,400 vs actual 11,962 — bias −562
+    (provider-reported media_tokens 0).
+  - Image-bearing turn 2 (explicit read_file of a real 800x600 PNG, the #3481
+    scenario): estimated 12,125 vs actual 12,018 — bias **+107** (provider-reported
+    media_tokens 5, history_tokens delta +52). The sign is POSITIVE: the estimate
+    now over-shoots.
+  - Decomposition: estimated delta +725 = 570 (openai patch-formula image entry)
+    + ~155 tool-result/history scaffold; actual delta +56 = provider-reported
+    media_tokens 5 + history +52 (per the log's own fields).
+  - Retraction: the earlier claim that "the provider bills roughly ~500 tokens for
+    the 800x600 image" was wrong — the provider's own media_tokens field reports 5.
+    The patch entry over-estimates this provider's reported media cost by ~565 on
+    this lane.
+  - What the evidence supports: absolute error went 562 → 107 (≈4.7% → ≈0.9% of
+    actual), and the error direction flipped from under- to over-estimate, the
+    conservative direction for compression timing (compression may fire slightly
+    early, never late). The patch family for the official estimators is a
+    documented POLICY approximation per #3477 (conservative-high for unknown
+    openai-family models), NOT a per-provider billing measurement; glm-5.2-over-zai
+    is the only measured lane and it over-estimates; kimi-k3 and minimax-m3 have no
+    live credentials and are unverified.
   - Control: an @-mention attempt did not exercise the main wire (the model routed the
     image to an image-reader subagent per global config); its main-prompt delta was
     +15 estimated and +15 actual — clean text-only parity, no image involved.

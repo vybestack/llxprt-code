@@ -27,6 +27,7 @@ import { ModelPromptEstimatorRegistry } from '../ModelPromptEstimatorRegistry.js
 import { ModelPromptEstimatorError } from '../ModelPromptEstimatorError.js';
 import {
   PROJECTION_REVISION,
+  projectOpenAIChatPromptEnvelope,
   type ProjectionImageEntry,
 } from '../../runtime/promptEnvelopeProjections.js';
 
@@ -441,5 +442,96 @@ describe('Official estimator image entries (issue #3663)', () => {
     const counted = await tokenizer!.countTokens(jsonContent);
     expect(counted).toBe(rawKimi.countTokens(JSON.stringify(jsonContent)));
     rawKimi.dispose();
+  });
+
+  function isImageEntry(value: unknown): value is ProjectionImageEntry {
+    return typeof value === 'object' && value !== null;
+  }
+
+  /**
+   * The core contract types finalizedProjection as unknown, so the entries
+   * under assertion are narrowed with a runtime check, not a type assertion.
+   */
+  function readImageEntries(
+    finalized: unknown,
+  ): readonly ProjectionImageEntry[] | undefined {
+    if (typeof finalized !== 'object' || finalized === null) return undefined;
+    const raw: unknown =
+      'imageEntries' in finalized ? finalized.imageEntries : undefined;
+    return Array.isArray(raw) ? raw.filter(isImageEntry) : undefined;
+  }
+
+  function pipelineRequest(
+    spec: (typeof SPECS)[number],
+    projection: ReturnType<typeof projectOpenAIChatPromptEnvelope>,
+  ): RuntimePromptEstimateRequest {
+    return {
+      activeProvider: spec.provider,
+      canonicalModel: spec.model,
+      protocol: spec.protocol,
+      wireMethod: spec.wireMethod,
+      finalizedProjection: projection.finalizedProjection,
+      projectionRevision: projection.projectionRevision,
+      legacyEstimate: projection.legacyEstimate,
+    };
+  }
+
+  it('charges the 800x600 patch cost for a real openai-chat data-URI image turn end to end', async () => {
+    // Issue #3481-style pipeline coverage for the official family: an
+    // openai-chat request body whose user message carries a base64
+    // image_url part, projected through the real wire path — no hand-built
+    // imageEntries.
+    const pngBase64 = handcraftedPngBytes(800, 600).toString('base64');
+    const glmChat = SPECS[1];
+    const imageProjection = projectOpenAIChatPromptEnvelope({
+      model: glmChat.model,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Look at the screenshot' },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/png;base64,${pngBase64}`,
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const textOnlyProjection = projectOpenAIChatPromptEnvelope({
+      model: glmChat.model,
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'Look at the screenshot' }],
+        },
+      ],
+    });
+
+    // The openai-chat canonicalizer records data-URI images the same way
+    // as anthropic base64 fields: the payload becomes the placeholder and
+    // the dimensions parse from the PNG header.
+    expect(readImageEntries(imageProjection.finalizedProjection)).toStrictEqual(
+      [{ dimensions: { width: 800, height: 600 } }],
+    );
+    expect(
+      readImageEntries(textOnlyProjection.finalizedProjection),
+    ).toBeUndefined();
+
+    const withImage = await registry.estimatePrompt(
+      pipelineRequest(glmChat, imageProjection),
+    );
+    const textOnly = await registry.estimatePrompt(
+      pipelineRequest(glmChat, textOnlyProjection),
+    );
+    expect(withImage.method).toBe('exact');
+    expect(withImage.estimatorVersion).toBe(EXPECTED_VERSIONS[glmChat.model]);
+    // The delta against the text-only twin is the 800x600 patch cost plus
+    // the small canonical placeholder scaffold, never the raw blob.
+    const delta = withImage.count - textOnly.count;
+    expect(delta).toBeGreaterThanOrEqual(IMAGE_800X600_TOKENS);
+    expect(delta).toBeLessThanOrEqual(IMAGE_800X600_TOKENS + 400);
   });
 });
