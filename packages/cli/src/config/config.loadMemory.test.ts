@@ -12,10 +12,7 @@ import {
   DEFAULT_CONTEXT_FILENAME,
   setLlxprtMdFilename,
 } from '@vybestack/llxprt-code-core';
-import {
-  resetSettingsService,
-  SettingsService,
-} from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { loadCliConfig } from './config.js';
 import { type CliArgs } from './cliArgParser.js';
 import type { Settings } from './settings.js';
@@ -332,7 +329,6 @@ describe('loadCliConfig memory discovery', () => {
       process.env.USERPROFILE = originalUserProfile;
     }
     setLlxprtMdFilename(DEFAULT_CONTEXT_FILENAME);
-    resetSettingsService();
     await fs.rm(tempRoot, { recursive: true, force: true });
   });
 

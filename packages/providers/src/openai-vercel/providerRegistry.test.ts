@@ -16,20 +16,11 @@
  * is in place.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import type { IProvider } from '../IProvider.js';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
-import {
-  resetSettingsService,
-  registerSettingsService,
-} from '@vybestack/llxprt-code-settings';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 function isOpenAIVercelProvider(provider: IProvider): boolean {
   return (
@@ -56,10 +47,7 @@ describe('OpenAIVercelProvider Registry Integration', () => {
 
   beforeEach(() => {
     // Reset and set up runtime context
-    resetSettingsService();
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
     settingsService = new SettingsService();
-    registerSettingsService(settingsService);
 
     // Create ProviderManager instance
     providerManager = new ProviderManager({ settingsService });
@@ -70,10 +58,6 @@ describe('OpenAIVercelProvider Registry Integration', () => {
         settingsService,
       }),
     );
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   describe('Provider Discovery', () => {

@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 
-import { debugLogger } from '../utils/debugLogger.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -113,39 +112,6 @@ export interface RuntimeStateSnapshot {
 
 /**
  * @plan PLAN-20251027-STATELESS5.P03
- * @requirement REQ-STAT5-001.2
- * @pseudocode runtime-state.md lines 209-243
- *
- * Event payload emitted when runtime state changes.
- */
-export interface RuntimeStateChangedEvent {
-  runtimeId: string;
-  changes: Record<string, { old: unknown; new: unknown }>;
-  snapshot: RuntimeStateSnapshot;
-  timestamp: number;
-}
-
-/**
- * @plan PLAN-20251027-STATELESS5.P03
- * @requirement REQ-STAT5-003.2
- * @pseudocode runtime-state.md lines 289-318
- *
- * Callback for runtime state change events.
- */
-export type RuntimeStateChangeCallback = (
-  event: RuntimeStateChangedEvent,
-) => void;
-
-/**
- * @plan PLAN-20251027-STATELESS5.P03
- * @requirement REQ-STAT5-003.2
- *
- * Function to unsubscribe from runtime state changes.
- */
-export type UnsubscribeFunction = () => void;
-
-/**
- * @plan PLAN-20251027-STATELESS5.P03
  * @requirement REQ-STAT5-001.1
  * @pseudocode runtime-state.md lines 366-381
  *
@@ -178,38 +144,6 @@ export class RuntimeStateError extends Error {
     super(message);
     this.name = 'RuntimeStateError';
   }
-}
-
-// Global registry for runtime state instances
-const runtimeStateRegistry = new Map<string, AgentRuntimeState>();
-
-// Global subscription registry
-const subscriptionRegistry = new Map<
-  string,
-  Map<string, { callback: RuntimeStateChangeCallback; async: boolean }>
->();
-
-// Last timestamp to ensure monotonic increasing timestamps within same runtime
-let lastTimestamp = 0;
-
-/**
- * Get timestamp for runtime state operations.
- * Ensures monotonic increase even when called in same millisecond.
- * Bounded to stay within 2ms of actual time to handle test timing windows.
- */
-function getTimestamp(): number {
-  const now = Date.now();
-
-  // If time has naturally advanced, use it and reset tracking
-  if (now > lastTimestamp) {
-    lastTimestamp = now;
-    return now;
-  }
-
-  // If same millisecond or very close, increment by 1
-  // But cap at now + 1 to prevent drifting too far from actual time
-  lastTimestamp = Math.min(lastTimestamp + 1, now + 1);
-  return lastTimestamp;
 }
 
 /**
@@ -266,13 +200,10 @@ export function createAgentRuntimeState(
       ? deepFreeze(params.modelParams)
       : undefined,
     sessionId,
-    updatedAt: getTimestamp(),
+    updatedAt: Date.now(),
     parentRuntimeId: params.parentRuntimeId,
     subagentName: params.subagentName,
   });
-
-  // Register state in global registry (line 103)
-  runtimeStateRegistry.set(params.runtimeId, state);
 
   return state;
 }
@@ -297,7 +228,7 @@ function deepFreeze<T>(obj: T): T {
  * @pseudocode runtime-state.md lines 209-243
  *
  * Updates runtime state immutably, returning a new instance.
- * Validates updates and emits synchronous change events.
+ * Validates updates and enforces a monotonic updatedAt.
  */
 export function updateAgentRuntimeState(
   oldState: AgentRuntimeState,
@@ -364,29 +295,6 @@ export function updateAgentRuntimeState(
     updatedAt,
   });
 
-  // Register new state (line 228)
-  runtimeStateRegistry.set(newState.runtimeId, newState);
-
-  // Compute changeset (lines 229-233)
-  const changes: Record<string, { old: unknown; new: unknown }> = {};
-  for (const key of Object.keys(updates)) {
-    const oldValue = (oldState as unknown as Record<string, unknown>)[key];
-    const newValue = (newState as unknown as Record<string, unknown>)[key];
-    if (oldValue !== newValue) {
-      changes[key] = { old: oldValue, new: newValue };
-    }
-  }
-
-  // Emit event (lines 234-241)
-  const event: RuntimeStateChangedEvent = {
-    runtimeId: newState.runtimeId,
-    changes,
-    snapshot: getAgentRuntimeStateSnapshot(newState),
-    timestamp: newState.updatedAt,
-  };
-
-  invokeSubscribers(newState.runtimeId, event);
-
   return newState;
 }
 
@@ -396,7 +304,7 @@ export function updateAgentRuntimeState(
  * @pseudocode runtime-state.md lines 252-278
  *
  * Batch update for atomic multi-field changes (e.g., provider switch).
- * All updates validated together, single event emitted.
+ * All updates validated together.
  */
 export function updateAgentRuntimeStateBatch(
   oldState: AgentRuntimeState,
@@ -432,107 +340,6 @@ export function getAgentRuntimeStateSnapshot(
     subagentName: state.subagentName,
     version: 1, // Schema version (line 341)
   });
-}
-
-/**
- * @plan PLAN-20251027-STATELESS5.P05
- * @requirement REQ-STAT5-003.2
- * @pseudocode runtime-state.md lines 289-318
- *
- * Subscribes to runtime state change events.
- * Returns unsubscribe function to remove callback.
- */
-export function subscribeToAgentRuntimeState(
-  runtimeId: string,
-  callback: RuntimeStateChangeCallback,
-  options?: { async: boolean },
-): UnsubscribeFunction {
-  // Validate inputs (lines 294-295)
-  if (!runtimeId || typeof runtimeId !== 'string') {
-    throw new Error('runtimeId must be a non-empty string');
-  }
-  if (typeof callback !== 'function') {
-    throw new Error('callback must be a function');
-  }
-
-  // Get or create subscriber list (line 296)
-  let subscribers = subscriptionRegistry.get(runtimeId);
-  if (!subscribers) {
-    subscribers = new Map();
-    subscriptionRegistry.set(runtimeId, subscribers);
-  }
-
-  // Generate unique subscription ID (line 297)
-  const subscriptionId = `sub-${randomUUID()}`;
-
-  // Store subscription (lines 298-302)
-  subscribers.set(subscriptionId, {
-    callback,
-
-    async: options?.async ?? false,
-  });
-
-  // Return unsubscribe function (lines 303-306)
-  return () => {
-    const subs = subscriptionRegistry.get(runtimeId);
-    if (subs) {
-      subs.delete(subscriptionId);
-    }
-  };
-}
-
-/**
- * @plan PLAN-20251027-STATELESS5.P05
- * @requirement REQ-STAT5-003.2
- * @pseudocode runtime-state.md lines 308-316
- *
- * Invokes all subscribers for a given runtime ID.
- * Handles both synchronous and async callbacks with error isolation.
- */
-function invokeSubscribers(
-  runtimeId: string,
-  event: RuntimeStateChangedEvent,
-): void {
-  const subscribers = subscriptionRegistry.get(runtimeId);
-  if (!subscribers || subscribers.size === 0) {
-    return;
-  }
-
-  // Invoke each subscriber (lines 309-315)
-  for (const subscription of subscribers.values()) {
-    invokeSubscription(subscription, event);
-  }
-}
-
-/**
- * Invoke a single subscription callback, handling both async and sync modes.
- */
-function invokeSubscription(
-  subscription: {
-    async: boolean;
-    callback: (event: RuntimeStateChangedEvent) => void;
-  },
-  event: RuntimeStateChangedEvent,
-): void {
-  try {
-    if (subscription.async) {
-      // Async callback - queue as microtask (line 311-312)
-      queueMicrotask(() => {
-        try {
-          subscription.callback(event);
-        } catch (error) {
-          // Error handling to prevent cascade failures (line 315)
-          debugLogger.error('Error in async runtime state callback:', error);
-        }
-      });
-    } else {
-      // Synchronous callback (line 313-314)
-      subscription.callback(event);
-    }
-  } catch (error) {
-    // Error handling to prevent cascade failures (line 315)
-    debugLogger.error('Error in runtime state callback:', error);
-  }
 }
 
 /**

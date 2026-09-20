@@ -4,27 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  vi,
-  type Mock,
-} from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Part } from '../gemini/geminiWireTypes.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import {
-  getSettingsService,
-  type SettingsService,
-} from '@vybestack/llxprt-code-settings';
-
-const realLlxprtCodeSettingsModule = {
-  ...(await import('@vybestack/llxprt-code-settings')),
-};
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const generateContentStreamMock = vi.fn();
 
@@ -53,11 +38,6 @@ const mockSettingsService = {
   getAllGlobalSettings: vi.fn().mockReturnValue({}),
 };
 
-void vi.mock('@vybestack/llxprt-code-settings', () => ({
-  ...realLlxprtCodeSettingsModule,
-  getSettingsService: vi.fn(() => mockSettingsService),
-}));
-
 /**
  * @plan PLAN-20250822-GEMINIFALLBACK.P11
  * @requirement REQ-003.1
@@ -67,9 +47,6 @@ describe('GeminiProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSettingsService.get.mockReset();
-    (getSettingsService as Mock<typeof getSettingsService>).mockImplementation(
-      () => mockSettingsService,
-    );
     generateContentStreamMock.mockReset();
     delete process.env.GEMINI_API_KEY;
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
@@ -79,12 +56,7 @@ describe('GeminiProvider', () => {
     delete process.env.GOOGLE_GENAI_USE_VERTEXAI;
   });
 
-  it('uses the constructor fallback when the global settings service is unavailable', () => {
-    (getSettingsService as Mock<typeof getSettingsService>).mockImplementation(
-      () => {
-        throw new Error('SettingsService not registered');
-      },
-    );
+  it('uses the constructor fallback settings service when none is injected', () => {
     const provider = new GeminiProvider(
       undefined,
       undefined,

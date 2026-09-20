@@ -32,11 +32,6 @@ import {
 } from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
@@ -346,7 +341,6 @@ describe('providerModelPrecedenceParity: 4-level provider chain', () => {
     // Provide a fallback model so non-gemini providers don't fail with model.missing
     setEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
@@ -356,7 +350,6 @@ describe('providerModelPrecedenceParity: 4-level provider chain', () => {
     process.argv = originalArgv;
     restoreEnv();
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
   });
 
   it('level 4 fallback: no CLI/profile/env → no implicit provider (#2481)', async () => {
@@ -392,7 +385,6 @@ describe('providerModelPrecedenceParity: 6-level model chain', () => {
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
     process.argv = ['node', 'script.js'];
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
@@ -409,7 +401,6 @@ describe('providerModelPrecedenceParity: 6-level model chain', () => {
     process.argv = originalArgv;
     restoreEnv();
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
   });
 
   it('level 6 fallback: no provider → empty model (#2481)', async () => {

@@ -33,12 +33,7 @@ import {
 } from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {
-  ApprovalMode,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core';
+import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
@@ -353,7 +348,6 @@ describe('approvalModeParity: approval mode resolution', () => {
     (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
       true,
     );
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
@@ -363,7 +357,6 @@ describe('approvalModeParity: approval mode resolution', () => {
     process.argv = originalArgv;
     restoreEnv();
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
   });
 
   // ── --approval-mode flag values (trusted folder) ────────────────────────────

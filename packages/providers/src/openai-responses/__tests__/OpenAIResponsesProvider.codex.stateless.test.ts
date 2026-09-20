@@ -26,13 +26,9 @@
  * parent is available or the user explicitly opts out.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
@@ -201,19 +197,6 @@ function assistantMessages(items: ResponsesInputItem[]): string[] {
 }
 
 describe('OpenAIResponsesProvider Codex stateful conversations @issue:3134', () => {
-  beforeEach(() => {
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: TEST_RUNTIME_ID,
-      }),
-    );
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
   it('T1: sends previous_response_id and omits the parent turn when a stored parent exists', async () => {
     const provider = new TestableCodexProvider(buildCodexOAuthManager());
 

@@ -22,13 +22,8 @@
  *    classes, using rotating values to prove single resolution.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import Anthropic from '@anthropic-ai/sdk';
@@ -190,16 +185,6 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
     FakeAnthropicClass.reset();
     settingsService = new SettingsService();
     settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService,
-        runtimeId: 'anthropic-placement-wiring-test',
-      }),
-    );
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   function buildOptions(

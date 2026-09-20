@@ -27,7 +27,6 @@ import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import * as RuntimeLoader from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
@@ -57,9 +56,6 @@ function createTestConfig(overrides?: {
   provider?: string;
 }): Config {
   const settingsService = new SettingsService();
-  setActiveProviderRuntimeContext(
-    createProviderRuntimeContext({ settingsService }),
-  );
 
   const config = new Config({
     sessionId: 'test-session-id',

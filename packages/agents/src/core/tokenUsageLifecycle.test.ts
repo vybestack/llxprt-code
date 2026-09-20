@@ -25,7 +25,6 @@ import {
 import { CompressionHandler } from '../compression/CompressionHandler.js';
 import * as compressionFactory from '../compression/compressionStrategyFactory.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
@@ -89,7 +88,6 @@ function buildCompressionHandler(logFile: string): {
     ...runtimeSetup.runtime,
     config: runtimeSetup.config,
   };
-  providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
 
   const runtimeState = createAgentRuntimeState({
     runtimeId: 'test-lifecycle-runtime',

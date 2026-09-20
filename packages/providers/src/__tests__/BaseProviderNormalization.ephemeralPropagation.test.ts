@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -12,11 +12,7 @@ import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { BaseProvider } from '../BaseProvider.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 
 class HarnessProvider extends BaseProvider {
@@ -86,7 +82,6 @@ function createHarnessWithDumpContext(): Harness {
     config,
     runtime: runtimeContext,
   });
-  setActiveProviderRuntimeContext(runtimeContext);
   const provider = new HarnessProvider(config, settingsService);
   manager.registerProvider(provider);
   settingsService.set('activeProvider', provider.name);
@@ -102,10 +97,6 @@ function createHarnessWithDumpContext(): Harness {
 }
 
 describe('BaseProvider ephemeral snapshot propagation into invocation', () => {
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
   it('includes current settings ephemerals in the invocation when no invocation is provided', async () => {
     const { provider, manager, settingsService, runtimeContext } =
       createHarnessWithDumpContext();
