@@ -22,6 +22,15 @@
 
 export * from './types.js';
 export {
+  JournalCursor,
+  MAX_RECORD_BYTES,
+  type JournalCursorMetrics,
+  type JournalCursorOptions,
+  type JournalEntry,
+  type JournalEnvelopeRef,
+  type JournalPage,
+} from './journalCursor.js';
+export {
   SessionRecordingService,
   SESSION_FILE_ID_PREFIX_LENGTH,
 } from './SessionRecordingService.js';
