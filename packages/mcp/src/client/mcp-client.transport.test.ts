@@ -415,8 +415,7 @@ describe('mcp-client', () => {
         registerMcpAuthFactories([
           {
             authProviderType: CUSTOM_AUTH_TYPE,
-            createAuthProvider: () =>
-              undefined as unknown as McpAuthProvider,
+            createAuthProvider: () => undefined as unknown as McpAuthProvider,
           },
         ]);
 
