@@ -6,13 +6,20 @@
 
 import React from 'react';
 import type { MessageBus } from '@vybestack/llxprt-code-core';
-import { Box, type DOMElement, Static } from 'ink';
+import { Box, type DOMElement, Static, Text } from 'ink';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UpdateObject } from '../utils/updateCheck.js';
+import { Colors } from '../colors.js';
 import { useTerminalStore } from '../stores/terminal/TerminalContext.js';
 import { useTurnStore } from '../stores/turn/TurnContext.js';
 import { useSettingsProfileStore } from '../stores/settings/SettingsContext.js';
 import { useStoreSelector } from '../stores/useStoreSelector.js';
+import type {
+  ScrollbackPagerStore,
+  ScrollbackViewportReporter,
+} from '../stores/turn/scrollbackPager.js';
+import { ScrollbackViewport } from '../components/ScrollbackViewport.js';
+import { SCROLLBACK_VIEWPORT_POLL_MS } from '../../constants/scrollbackLimits.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
 import { OverflowProvider } from '../contexts/OverflowContext.js';
 import { ShowMoreLines } from '../components/ShowMoreLines.js';
@@ -37,6 +44,16 @@ import type { SlashCommandRuntime, UiRuntime } from '../cliUiRuntime.js';
 import type { HistoryItem, HistoryItemWithoutId } from '../types.js';
 import { themeManager } from '../themes/theme-manager.js';
 
+/**
+ * P02e: pager store paired with the reporter the viewport component shares
+ * with it; present only when the boot-time scrollback flag was on and the
+ * session journal resolved.
+ */
+export interface ScrollbackPagerLayoutBinding {
+  readonly store: ScrollbackPagerStore;
+  readonly viewport: ScrollbackViewportReporter;
+}
+
 export interface DefaultAppLayoutProps {
   runtimeMessageBus?: MessageBus;
   uiRuntime: UiRuntime;
@@ -50,6 +67,8 @@ export interface DefaultAppLayoutProps {
   pendingHistoryItemRef: React.RefObject<DOMElement | null>;
   contextFileNames: string[];
   updateInfo: UpdateObject | null;
+  scrollbackPager?: ScrollbackPagerLayoutBinding | null;
+  scrollbackRestartNotice?: string | null;
 }
 
 function usesAlternateBuffer(props: DefaultAppLayoutProps): boolean {
@@ -189,12 +208,17 @@ function TranscriptRegion(props: DefaultAppLayoutProps) {
   );
   const staticKey = useStoreSelector(store, (s) => s.staticKey);
   return (
-    <TranscriptViewport
-      {...props}
-      history={history}
-      pendingHistoryItems={pendingHistoryItems}
-      staticKey={staticKey}
-    />
+    <>
+      {props.scrollbackRestartNotice ? (
+        <Text color={Colors.DimComment}>{props.scrollbackRestartNotice}</Text>
+      ) : null}
+      <TranscriptViewport
+        {...props}
+        history={history}
+        pendingHistoryItems={pendingHistoryItems}
+        staticKey={staticKey}
+      />
+    </>
   );
 }
 
@@ -242,13 +266,33 @@ function useTranscriptContent(props: TranscriptProps) {
     activeShellPtyId,
     embeddedShellFocused,
   );
-  return { ...content, constrainHeight };
+  return { ...content, constrainHeight, availableHeight };
 }
 
 function TranscriptViewport(props: TranscriptProps) {
-  const { listItems, staticItems, pendingItems, constrainHeight } =
-    useTranscriptContent(props);
-  if (usesAlternateBuffer(props)) return <TranscriptScroll data={listItems} />;
+  const {
+    listItems,
+    staticItems,
+    pendingItems,
+    constrainHeight,
+    availableHeight,
+  } = useTranscriptContent(props);
+  if (usesAlternateBuffer(props)) {
+    const pager = props.scrollbackPager;
+    if (pager) {
+      // P02e minimal seam: the pager viewport replaces the memory-resident
+      // list; rows render as item.text until P03/P04 wire HistoryItemDisplay.
+      return (
+        <ScrollbackViewport
+          store={pager.store}
+          viewport={pager.viewport}
+          viewportLines={Math.max(1, availableHeight)}
+          pollMs={SCROLLBACK_VIEWPORT_POLL_MS}
+        />
+      );
+    }
+    return <TranscriptScroll data={listItems} />;
+  }
   return (
     <>
       {staticItems.length > 0 ? (

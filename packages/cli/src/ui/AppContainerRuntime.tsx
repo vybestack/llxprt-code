@@ -357,6 +357,8 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
       turnStore={turnStore}
       settingsStore={settingsStore}
       recordingSwapCallbacks={bootstrap.recordingSwapCallbacks}
+      scrollbackPager={bootstrap.scrollbackPager}
+      scrollbackRestartNotice={bootstrap.scrollbackRestartNotice}
     />
   );
 };
