@@ -21,8 +21,9 @@
  * failed activation leaks the isolated runtime handle.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, vi } from 'bun:test';
 import * as fc from 'fast-check';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   disposeCliRuntime,
   getCliRuntimeServices,
@@ -131,6 +132,34 @@ describe('createAgent self-contained assembly @plan:ISSUE-3222 @requirement:REQ-
         /createAgent activation failed.*definitely-not-a-registered-provider/,
       );
     } finally {
+      await disposeCliRuntime(runtimeId);
+    }
+  });
+
+  // Review finding on #3222: Config.dispose() does NOT shut down the LSP
+  // service (agentImpl.dispose wires that separately for agent-owned Configs),
+  // so a bootstrap that failed AFTER config.initialize() started LSP but
+  // BEFORE the facade exists had no owner left to release it — the caller
+  // gets a rejection with no Agent to dispose and the LSP service leaks.
+  it('T7 a post-initialize activation failure shuts down the LSP service the agent-owned Config started @requirement:REQ-3222-AC5 @scenario:activation-failure-lsp-leak @given:createAgent with LSP enabled and a strict activation intent that fails AFTER config.initialize() started LSP @when:createAgent rejects @then:shutdownLspService ran on the owned Config before the rejection resolves (no facade exists to do it)', async () => {
+    const runtimeId = 'issue3222-createagent-failure-lsp-shutdown';
+    // The Config is constructed inside createAgent, so the shutdown call is
+    // observed on the prototype (the same seam subagent-test-helpers uses to
+    // spy on Config behavior). Call-through: the real shutdown must still
+    // release the started service.
+    const lspShutdownSpy = vi.spyOn(Config.prototype, 'shutdownLspService');
+    try {
+      await expect(
+        buildAgent('plain-text.jsonl', {
+          sessionId: runtimeId,
+          activation: failingActivation,
+          lsp: true,
+        }),
+      ).rejects.toThrow(/createAgent activation failed/);
+
+      expect(lspShutdownSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      lspShutdownSpy.mockRestore();
       await disposeCliRuntime(runtimeId);
     }
   });

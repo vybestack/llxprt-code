@@ -11,8 +11,12 @@ import os from 'node:os';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { AsyncTaskManager } from '../services/asyncTaskManager.js';
 import type { ShellJobManager } from '../services/shellJobManager.js';
+import { DiscoveredTool, TodoWrite } from '@vybestack/llxprt-code-tools';
 import {
   createToolRegistry,
+  reconcileTaskToolRegistration,
+  type TaskToolRegistration,
+  type ToolRecord,
   type ToolRegistryHost,
 } from './toolRegistryFactory.js';
 import type { ProfileManager } from './profileManager.js';
@@ -26,6 +30,11 @@ function createHost(
     profileManager?: ProfileManager;
     noCoreTools?: boolean;
     getImageBackendResolver?: () => (() => unknown) | null | undefined;
+    // Read lazily at call time so a test can flip governance or install the
+    // late registration between the registry build and a reconcile call —
+    // the same live-host property fromConfig relies on.
+    excludeTools?: string[];
+    taskToolRegistration?: TaskToolRegistration;
   } = {},
 ): ToolRegistryHost {
   const { asyncTaskManager, shellJobManager, noCoreTools } = options;
@@ -41,7 +50,7 @@ function createHost(
             'check_async_tasks',
             'GenerateImageTool',
           ],
-    getExcludeTools: () => [],
+    getExcludeTools: () => options.excludeTools ?? [],
     getUseRipgrep: () => false,
     getProfileManager: () => profileManager,
     setProfileManager: (pm: ProfileManager) => {
@@ -54,7 +63,7 @@ function createHost(
     getInteractiveSubagentSchedulerFactory: () => undefined,
     getAsyncTaskManager: () => asyncTaskManager,
     getShellJobManager: () => shellJobManager,
-    getTaskToolRegistration: () => undefined,
+    getTaskToolRegistration: () => options.taskToolRegistration,
     ...(getImageBackendResolver !== undefined
       ? { getImageBackendResolver }
       : {}),
@@ -451,5 +460,121 @@ describe('toolRegistryFactory generate_image lazy resolver timing and persistenc
     } finally {
       await fs.promises.rm(tempWorkspace, { recursive: true, force: true });
     }
+  });
+});
+
+// ─── #3222 review finding: reconcile must report ACTUAL registration ────────
+//
+// reconcileTaskToolRegistration's return value is the caller's ONLY signal
+// for whether client.setTools() must be pushed (ConfigBase gates the push on
+// it). registerTaskTool silently declines under excludeTools governance, so
+// an unconditional `true` forced a spurious setTools push for a tool that
+// never reached the registry. These scenarios pin the live-registry truth.
+describe('reconcileTaskToolRegistration returns actual registration (#3222)', () => {
+  function lateTaskRegistration(): TaskToolRegistration {
+    return {
+      // toolClass only feeds the settings-surface record metadata; any
+      // declarative-tool constructor satisfies it and is never instantiated.
+      toolClass: TodoWrite,
+      className: 'TaskTool',
+      staticName: 'task',
+      buildArgs: () => [],
+      create: () =>
+        new DiscoveredTool(
+          {},
+          'task',
+          'reconcile-probe task tool',
+          {},
+        ) as unknown as ReturnType<TaskToolRegistration['create']>,
+    };
+  }
+
+  function reconcileHostOptions(): {
+    asyncTaskManager?: AsyncTaskManager;
+    shellJobManager?: ShellJobManager;
+    subagentManager?: SubagentManager;
+    profileManager?: ProfileManager;
+    noCoreTools?: boolean;
+    getImageBackendResolver?: () => (() => unknown) | null | undefined;
+    excludeTools?: string[];
+    taskToolRegistration?: TaskToolRegistration;
+  } {
+    return {
+      profileManager: {} as ProfileManager,
+      subagentManager: {
+        getCachedSubagentNames: vi.fn().mockReturnValue([]),
+        listSubagents: vi.fn().mockResolvedValue([]),
+      } as unknown as SubagentManager,
+    };
+  }
+
+  function taskToolRecords(allPotentialTools: ToolRecord[]): ToolRecord[] {
+    return allPotentialTools.filter((record) => record.toolName === 'TaskTool');
+  }
+
+  it('returns false when excludeTools declines the late registration (no spurious setTools push)', async () => {
+    // The fromConfig adoption precondition: registry built BEFORE the
+    // registration existed (build-time record says "not provided").
+    const options = reconcileHostOptions();
+    const { registry, allPotentialTools } = await createToolRegistry(
+      createHost(options),
+      createConfigBoundary(),
+      new MessageBus(),
+    );
+    expect(registry.getTool('task')).toBeUndefined();
+
+    // The composition root installs the default late — but the caller's
+    // excludeTools denies it.
+    options.taskToolRegistration = lateTaskRegistration();
+    options.excludeTools = ['task'];
+
+    const registered = reconcileTaskToolRegistration(
+      createHost(options),
+      createConfigBoundary(),
+      registry,
+      allPotentialTools,
+      new MessageBus(),
+    );
+
+    // RED against the unconditional `return true`: the tool never reached
+    // the live registry, so the caller must NOT be told to push setTools.
+    expect(registered).toBe(false);
+    expect(registry.getTool('task')).toBeUndefined();
+
+    // The settings surface reflects the reconciled truth: exactly one
+    // TaskTool record, unregistered with the exclusion reason.
+    const records = taskToolRecords(allPotentialTools);
+    expect(records).toHaveLength(1);
+    expect(records[0].isRegistered).toBe(false);
+    expect(records[0].reason).toContain('excluded by excludeTools');
+  });
+
+  it('returns true when the late registration lands (governance permitting)', async () => {
+    const options = reconcileHostOptions();
+    const { registry, allPotentialTools } = await createToolRegistry(
+      createHost(options),
+      createConfigBoundary(),
+      new MessageBus(),
+    );
+    expect(registry.getTool('task')).toBeUndefined();
+
+    options.taskToolRegistration = lateTaskRegistration();
+
+    const registered = reconcileTaskToolRegistration(
+      createHost(options),
+      createConfigBoundary(),
+      registry,
+      allPotentialTools,
+      new MessageBus(),
+    );
+
+    // Positive control: a registration that actually reached the registry
+    // still reports true so the caller pushes the updated toolset.
+    expect(registered).toBe(true);
+    expect(registry.getTool('task')).toBeDefined();
+
+    const records = taskToolRecords(allPotentialTools);
+    expect(records).toHaveLength(1);
+    expect(records[0].isRegistered).toBe(true);
   });
 });

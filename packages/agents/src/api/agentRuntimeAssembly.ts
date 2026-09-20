@@ -152,7 +152,9 @@ export interface FailedBootstrapTeardown {
    * The agent-owned Config to dispose when no facade exists yet. Disposed
    * AFTER the isolated handle (children before parents): initialize() started
    * MCP discovery, the extension loader, LSP and the AgentClient on it, and
-   * only Config.dispose() releases those. Caller-owned Configs (fromConfig
+   * only Config.dispose() releases those — except the LSP service, which
+   * Config.dispose() does NOT stop and which cleanupFailedRuntimeBootstrap
+   * shuts down explicitly after the dispose. Caller-owned Configs (fromConfig
    * adopts one) are never passed here.
    */
   readonly ownedConfig?: Config;
@@ -185,6 +187,16 @@ export async function cleanupFailedRuntimeBootstrap(
     if (teardown.ownedConfig !== undefined) {
       try {
         await teardown.ownedConfig.dispose();
+      } catch (cleanupError) {
+        cleanupErrors.push(cleanupError);
+      }
+      // Config.dispose() does NOT shut down the LSP service initialize()
+      // started (agentImpl.dispose wires that separately for agent-owned
+      // Configs), so a bootstrap that failed after initialize() must release
+      // it here too or it leaks past the rejection — the caller has no Agent
+      // to dispose. Mirrors agentImpl's ordering: dispose first, then LSP.
+      try {
+        await teardown.ownedConfig.shutdownLspService();
       } catch (cleanupError) {
         cleanupErrors.push(cleanupError);
       }

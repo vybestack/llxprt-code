@@ -675,7 +675,15 @@ export function reconcileTaskToolRegistration(
     config as Config,
     taskToolArgs,
   );
-  return true;
+  // registerTaskTool silently declines under coreTools/excludeTools
+  // governance (pushing an isRegistered=false record instead of throwing),
+  // so report the LIVE registry truth — probed the same way the
+  // existing-tool guard above does — or the caller pushes a spurious
+  // client.setTools() for a tool that never registered.
+  return (
+    registry.getTool(displayName) !== undefined ||
+    registry.getTool(className) !== undefined
+  );
 }
 
 /**
