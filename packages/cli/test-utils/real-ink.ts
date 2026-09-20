@@ -23,3 +23,7 @@ export { default as useStderr } from '../../../node_modules/ink/build/hooks/use-
 export { default as useFocus } from '../../../node_modules/ink/build/hooks/use-focus.js';
 export { default as useFocusManager } from '../../../node_modules/ink/build/hooks/use-focus-manager.js';
 export { default as useIsScreenReaderEnabled } from '../../../node_modules/ink/build/hooks/use-is-screen-reader-enabled.js';
+// App-level theme Colors. Test fixtures render rows through the mocked 'ink'
+// namespace (e.g. <Text color={Colors.Foreground}>), so the namespace must
+// carry the same Colors surface the unmocked app imports from ui/colors.js.
+export { Colors } from '../src/ui/colors.js';
