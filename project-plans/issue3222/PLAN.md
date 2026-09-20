@@ -286,3 +286,57 @@ tests written and proven failing BEFORE the removal.
   finished across a third scoped run plus orchestration-side verification.
   Logs: `tmp/issue3222/internals-kill/` (phase1-red, phase2-boundary-green,
   verify/*, finish-*).
+
+## Review-loop round (deepthinker 1–3, external-review fixes)
+
+Commits: c3df935a1, fc022e303, 4b1cbd484, f06c649b8, fffea6706,
+4caab444a. Three full deepthinker cycles with fixes between; prompt held
+constant per Andrew's instruction ("edit no code, run no subagent, switch
+no branches, run no tests, analyze this branch and pr").
+
+### Fixes landed from cycle findings
+
+- Task-tool reconcile after refreshSkills (c3df935a1): partial-Config
+  adoption shipped without the task tool; core-side
+  `Config.reconcileTaskToolRegistration()` reuses build-time governance,
+  unconditional + idempotent (fc022e303 removed provenance classification —
+  registry state is the ownership guard; preflight can install the default
+  between init and adoption, covered red-first by T3d).
+- Stream-lifetime concurrency probe (c3df935a1): own migration artifact in
+  the ignore-cancel test; original measured stream lifetimes with a finally
+  decrement — restored as StreamConcurrencyProbe inside recordStreamPrompts.
+- LSP leak on failed bootstrap (4b1cbd484): `Config.dispose()` does not stop
+  LSP (agentImpl wires shutdownLspService separately); failed-bootstrapped
+  agent-owned Configs now get dispose() then shutdownLspService(), each
+  individually guarded, errors aggregated into cleanupErrors so nothing
+  masks the primary failure. T7 red-first.
+- Reconcile returns live-registry truth (4b1cbd484): exclusion path no
+  longer reports true; guards setTools on the boolean.
+- Failure-cleanup tests now prove the contract (f06c649b8): injected
+  cleanup fault → exact two-error AggregateError, sibling steps still run
+  (red-first); owned Config disposed exactly once on failure, never during
+  successful construction; LSP stop observed through the public
+  getLspServiceClient seam (defined before, undefined after). Unused
+  `buildAgentRuntimeFactories` + `AgentRuntimeFactories` removed (no
+  callers, never root-exported).
+- Docs (fffea6706, 4caab444a): `constants.js` documented in both
+  import-surface tables; PR body dropped the removed builder and gained
+  the scope-vs-acceptance section ("Advances #3222", no autoclose).
+
+### Findings left open deliberately (Andrew's call, not branch fixes)
+
+- E/F-ready evidence gates in #3222 before G lands (PR documents; #3222
+  stays open — no autoclose).
+- Hidden defaults in production createAgent (forceInteractive,
+  forceConfirmations, includeProcessCwd, createAgent.ts ~434–471):
+  pre-existing main behavior, disclosed in the PR body, separate
+  acceptance work.
+
+### CodeQL alert 776 (head 4caab444a)
+
+`js/mechanism/unbounded-accumulation` at
+`packages/cli/src/ui/utils/toolResultRetention.ts:167` (BoundedEmitter).
+FALSE POSITIVE: the class refuses pushes past the byte cap; the rule's
+taint model misses the budget invariant. Alert commit 4bbc6d068 is on
+origin/main; our diff carried it via the main merge. Dismissed as false
+positive with justification; fresh push re-analyzes.
