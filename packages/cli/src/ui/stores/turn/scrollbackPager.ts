@@ -17,7 +17,9 @@
  * Every async read is guarded by a generation counter: invalidate() and
  * close() bump the generation and drop the cursor, and any read that finishes
  * under a stale generation is discarded whole, so rows are never torn across
- * generations and a closed cursor can never mutate state.
+ * generations and a closed cursor can never mutate state. Page calls are
+ * serialized per store so concurrent callers page distinct records instead of
+ * walking the same cursor page twice.
  *
  * The visibility floor is the newest clear boundary (a rewind record) or the
  * file start; pageBack stops there so cleared history never resurrects.
@@ -306,6 +308,13 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
   private closed = false;
   private generation = 0;
   private inFlightBackReads = 0;
+  /**
+   * Page calls run one at a time in issue order: concurrent callers would
+   * otherwise walk the same cursor page twice and each prepend/append it,
+   * duplicating resident rows. The queue never rejects, so one failed page
+   * cannot stall the callers behind it.
+   */
+  private pageQueue: Promise<void> = Promise.resolve();
   private pagedRows: ScrollbackRow[] = [];
   private liveItems: readonly HistoryItem[] = [];
   private atVisibilityFloor = false;
@@ -336,9 +345,36 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
   }
 
   async pageBack(): Promise<void> {
-    if (this.closed || this.atVisibilityFloor) return;
-    const gen = this.generation;
     this.inFlightBackReads += 1;
+    // The generation is captured at call time, not when the queued body
+    // runs: a read is keyed to the generation it was issued under, so an
+    // invalidate() that lands while the call waits in the queue still
+    // discards it whole.
+    const gen = this.generation;
+    const run = this.pageQueue.then(() => this.runPageBack(gen));
+    this.pageQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    try {
+      await run;
+    } finally {
+      this.inFlightBackReads -= 1;
+    }
+  }
+
+  async pageForward(): Promise<void> {
+    const gen = this.generation;
+    const run = this.pageQueue.then(() => this.runPageForward(gen));
+    this.pageQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    await run;
+  }
+
+  private async runPageBack(gen: number): Promise<void> {
+    if (this.closed || this.atVisibilityFloor) return;
     try {
       const cursor = await this.ensureCursor(gen);
       if (cursor === null || this.isStale(gen)) return;
@@ -354,14 +390,11 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
       if (!this.isStale(gen)) {
         this.error = errorMessage(error);
       }
-    } finally {
-      this.inFlightBackReads -= 1;
     }
   }
 
-  async pageForward(): Promise<void> {
+  private async runPageForward(gen: number): Promise<void> {
     if (this.closed) return;
-    const gen = this.generation;
     try {
       const cursor = await this.ensureCursor(gen);
       if (cursor === null || this.isStale(gen)) return;

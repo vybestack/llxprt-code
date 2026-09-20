@@ -24,6 +24,13 @@
  * bounded by the window across repeated page cycles while store residency
  * grows. G2 is pinned by paging real journal records through a real
  * JournalCursor on a real temp file.
+ *
+ * P02d addendum: Home/End edge jumps (raw stdin sequences; Ink's useInput
+ * exposes no home/end), arrow-key wheel-path paging with onScrollUp /
+ * onScrollDown, an error row in place of the top edge, the window anchor
+ * held on its first line across row-height expansion, an explicit
+ * equal-length slide contiguity pin, and pending live-tail slots below the
+ * window while scrolled away.
  */
 
 import { act } from 'react';
@@ -56,6 +63,13 @@ type InkView = ReturnType<typeof render>;
 
 const PAGE_UP = '\u001B[5~';
 const PAGE_DOWN = '\u001B[6~';
+const UP_ARROW = '\u001B[A';
+const DOWN_ARROW = '\u001B[B';
+const HOME_KEY = '\u001B[H';
+const END_KEY = '\u001B[F';
+
+/** Separator rendered above pending live-tail slots (addendum gap 6). */
+const PENDING_SEPARATOR = '··· pending ···';
 
 const TS = '2026-01-01T00:00:00.000Z';
 const ROW_PAD = 'x'.repeat(60);
@@ -111,6 +125,8 @@ interface ViewOptions {
   readonly pollMs?: number;
   readonly onPageUp?: () => void;
   readonly onPageDown?: () => void;
+  readonly onScrollUp?: () => void;
+  readonly onScrollDown?: () => void;
 }
 
 function makeReporter(): ScrollbackViewportReporter {
@@ -224,6 +240,8 @@ describe('ScrollbackViewport @plan:PLAN-20260917-ISSUE854.P02d @requirement:G1,G
           pollMs={options.pollMs ?? 10}
           onPageUp={options.onPageUp}
           onPageDown={options.onPageDown}
+          onScrollUp={options.onScrollUp}
+          onScrollDown={options.onScrollDown}
         />,
       );
     });
@@ -525,5 +543,297 @@ describe('ScrollbackViewport @plan:PLAN-20260917-ISSUE854.P02d @requirement:G1,G
     } finally {
       view.unmount();
     }
+  });
+
+  describe('addendum @plan:PLAN-20260917-ISSUE854.P02d: Home/End, wheel path, error row, expand anchor, pending tail', () => {
+    function labelRange(from: number, to: number): string[] {
+      const labels: string[] = [];
+      for (let seq = from; seq <= to; seq += 1) labels.push(rowLabel(seq));
+      return labels;
+    }
+
+    it('Home jumps the window to the oldest resident edge and issues pageBack', async () => {
+      for (let seq = 1; seq <= 60; seq += 1) await fixture.addUser(seq);
+      const reporter = makeReporter();
+      const store = makeStore(reporter, { pageRows: 20 });
+      const view = await mountViewport(store, reporter);
+      try {
+        await fillFromDisk(store);
+        await waitForResident(store, 20);
+        sendKey(view, PAGE_UP);
+        await waitForResident(store, 40);
+        await waitFor(() => {
+          expect(markerLabels(view.lastFrame() ?? '')).toStrictEqual(
+            labelRange(49, 54),
+          );
+        });
+        expect(store.getState().atVisibilityFloor).toBe(false);
+
+        sendKey(view, HOME_KEY);
+        await waitFor(() => {
+          expect(store.getState().atVisibilityFloor).toBe(true);
+          expect(markerLabels(view.lastFrame() ?? '')).toStrictEqual(
+            labelRange(21, 26),
+          );
+        });
+        assertNoDuplicateLabels(view.lastFrame() ?? '');
+      } finally {
+        view.unmount();
+      }
+    });
+
+    it('End jumps the window to the newest edge and pages forward when not at file end', async () => {
+      for (let seq = 1; seq <= 60; seq += 1) await fixture.addUser(seq);
+      const reporter = makeReporter();
+      const store = makeStore(reporter, { pageRows: 20 });
+      const view = await mountViewport(store, reporter);
+      try {
+        await fillFromDisk(store);
+        await waitForResident(store, 20);
+        sendKey(view, PAGE_UP);
+        await waitForResident(store, 40);
+        await waitFor(() => {
+          expect(markerLabels(view.lastFrame() ?? '')).toStrictEqual(
+            labelRange(49, 54),
+          );
+        });
+        // The journal is append-only and a concurrent writer appends while
+        // the window is scrolled up. The next pageBack observes the longer
+        // file: the forward head now lags EOF, which is the store's
+        // not-at-file-end state, and End's pageForward consumes the appends.
+        for (let seq = 61; seq <= 80; seq += 1) await fixture.addUser(seq);
+        sendKey(view, PAGE_UP);
+        await waitForResident(store, 60);
+        await waitFor(() => {
+          expect(store.getState().atFileEnd).toBe(false);
+        });
+
+        sendKey(view, END_KEY);
+        await waitFor(() => {
+          expect(store.metrics().residentRows).toBe(80);
+          expect(markerLabels(view.lastFrame() ?? '')).toStrictEqual(
+            labelRange(75, 80),
+          );
+        });
+        assertNoDuplicateLabels(view.lastFrame() ?? '');
+      } finally {
+        view.unmount();
+      }
+    });
+
+    it('arrow keys drive the direction-paged wheel path via onScrollUp/onScrollDown', async () => {
+      for (let seq = 1; seq <= 12; seq += 1) await fixture.addUser(seq);
+      const reporter = makeReporter();
+      const store = makeStore(reporter);
+      const onScrollUp = vi.fn();
+      const onScrollDown = vi.fn();
+      const view = await mountViewport(store, reporter, {
+        onScrollUp,
+        onScrollDown,
+      });
+      try {
+        await fillFromDisk(store);
+        await waitFor(() => {
+          expect(markerLabels(view.lastFrame() ?? '')).toStrictEqual(
+            labelRange(9, 12),
+          );
+        });
+
+        sendKey(view, UP_ARROW);
+        expect(onScrollUp).toHaveBeenCalledTimes(1);
+        await waitForResident(store, 8);
+        await waitFor(() => {
+          expect(markerLabels(view.lastFrame() ?? '')).toStrictEqual(
+            labelRange(6, 11),
+          );
+        });
+
+        sendKey(view, DOWN_ARROW);
+        expect(onScrollDown).toHaveBeenCalledTimes(1);
+        await waitFor(() => {
+          expect(markerLabels(view.lastFrame() ?? '')).toStrictEqual(
+            labelRange(7, 12),
+          );
+        });
+      } finally {
+        view.unmount();
+      }
+    });
+
+    it('renders a one-line error row in place of the top edge while the store has an error', async () => {
+      const rows: ScrollbackRow[] = [];
+      for (let i = 1; i <= 8; i += 1) {
+        rows.push(scriptedRow(`k${i}`, `s-${String(i).padStart(2, '0')}`));
+      }
+      const errorState = scriptedState(rows, { error: 'disk offline' });
+      const errorStore = scriptedStore({ state: errorState });
+      const errorReporter = makeReporter();
+      const errorView = await mountViewport(errorStore, errorReporter);
+      try {
+        await waitFor(() => {
+          expect(errorView.lastFrame()).toContain(
+            'scrollback unavailable: disk offline',
+          );
+        });
+        expect((errorView.lastFrame() ?? '').split('\n')).not.toContain('…');
+        expect(errorView.lastFrame()).toContain('s-08');
+      } finally {
+        errorView.unmount();
+      }
+
+      const okStore = scriptedStore({ state: scriptedState(rows) });
+      const okReporter = makeReporter();
+      const okView = await mountViewport(okStore, okReporter);
+      try {
+        await waitFor(() => {
+          expect(okView.lastFrame()).toContain('…');
+        });
+        expect(okView.lastFrame() ?? '').not.toContain(
+          'scrollback unavailable',
+        );
+      } finally {
+        okView.unmount();
+      }
+    });
+
+    it('keeps the anchor row as the first window line when rowHeightLines expands', async () => {
+      for (let seq = 1; seq <= 12; seq += 1) await fixture.addUser(seq);
+      const reporter = makeReporter();
+      const store = makeStore(reporter);
+      const view = await mountViewport(store, reporter);
+      try {
+        await fillFromDisk(store);
+        sendKey(view, UP_ARROW);
+        await waitForResident(store, 8);
+        sendKey(view, UP_ARROW);
+        await waitForResident(store, 12);
+        sendKey(view, UP_ARROW);
+        await waitFor(() => {
+          expect(markerLabels(view.lastFrame() ?? '')).toStrictEqual(
+            labelRange(4, 9),
+          );
+        });
+
+        reporter.rowHeightLines = () => 3;
+        act(() => {
+          view.stdout.emit('resize');
+        });
+        await waitFor(() => {
+          expect(markerLabels(view.lastFrame() ?? '')).toStrictEqual([
+            rowLabel(4),
+            rowLabel(5),
+          ]);
+        });
+        expect([...reporter.visibleKeys]).toStrictEqual([
+          seqKey(store, 4),
+          seqKey(store, 5),
+        ]);
+      } finally {
+        view.unmount();
+      }
+
+      const bottomReporter = makeReporter();
+      const bottomStore = makeStore(bottomReporter);
+      const bottomView = await mountViewport(bottomStore, bottomReporter);
+      try {
+        await fillFromDisk(bottomStore);
+        await waitFor(() => {
+          expect(markerLabels(bottomView.lastFrame() ?? '')).toStrictEqual(
+            labelRange(9, 12),
+          );
+        });
+        bottomReporter.rowHeightLines = () => 3;
+        act(() => {
+          bottomView.stdout.emit('resize');
+        });
+        await waitFor(() => {
+          expect(markerLabels(bottomView.lastFrame() ?? '')).toStrictEqual([
+            rowLabel(11),
+            rowLabel(12),
+          ]);
+        });
+      } finally {
+        bottomView.unmount();
+      }
+    });
+
+    it('equal-length pageBack slides the window with no duplicate or missing markers', async () => {
+      for (let seq = 1; seq <= 12; seq += 1) await fixture.addUser(seq);
+      const reporter = makeReporter();
+      const store = makeStore(reporter, { pageRows: 6 });
+      const view = await mountViewport(store, reporter);
+      try {
+        await fillFromDisk(store);
+        await waitForResident(store, 6);
+        await waitFor(() => {
+          expect(markerLabels(view.lastFrame() ?? '')).toStrictEqual(
+            labelRange(7, 12),
+          );
+        });
+        const before = markerLabels(view.lastFrame() ?? '');
+
+        sendKey(view, PAGE_UP);
+        await waitForResident(store, 12);
+        await waitFor(() => {
+          expect(markerLabels(view.lastFrame() ?? '')).toStrictEqual(
+            labelRange(1, 6),
+          );
+        });
+        const after = markerLabels(view.lastFrame() ?? '');
+
+        expect(before).toStrictEqual(labelRange(7, 12));
+        expect(after).toStrictEqual(labelRange(1, 6));
+        expect(new Set([...before, ...after]).size).toBe(12);
+        expect([...before, ...after].sort()).toStrictEqual(labelRange(1, 12));
+      } finally {
+        view.unmount();
+      }
+    });
+
+    it('renders pending live-tail rows as slots below the window while scrolled away', async () => {
+      for (let seq = 1; seq <= 12; seq += 1) await fixture.addUser(seq);
+      const reporter = makeReporter();
+      const store = makeStore(reporter);
+      const view = await mountViewport(store, reporter);
+      try {
+        await fillFromDisk(store);
+        await waitFor(() => {
+          expect(view.lastFrame()).toContain(rowLabel(12));
+        });
+        store.setLiveTail([
+          {
+            id: 424242,
+            type: 'user',
+            text: 'p-01',
+            rowIdentity: pendingRowIdentity('live:p-01'),
+          },
+        ]);
+        await waitFor(() => {
+          expect(view.lastFrame()).toContain('p-01');
+        });
+        expect(view.lastFrame() ?? '').not.toContain(PENDING_SEPARATOR);
+
+        sendKey(view, PAGE_UP);
+        await waitForResident(store, 8);
+        await waitFor(() => {
+          expect(view.lastFrame()).toContain(PENDING_SEPARATOR);
+        });
+        expect(view.lastFrame()).toContain('p-01');
+        expect(markerLabels(view.lastFrame() ?? '')).toStrictEqual(
+          labelRange(5, 10),
+        );
+        expect(view.lastFrame() ?? '').not.toContain(rowLabel(11));
+        expect(view.lastFrame() ?? '').not.toContain(rowLabel(12));
+
+        sendKey(view, PAGE_DOWN);
+        await waitFor(() => {
+          const frame = view.lastFrame() ?? '';
+          expect(frame).toContain('p-01');
+          expect(frame).not.toContain(PENDING_SEPARATOR);
+        });
+      } finally {
+        view.unmount();
+      }
+    });
   });
 });
