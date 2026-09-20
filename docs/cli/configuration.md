@@ -456,7 +456,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 
 - **`ui.scrollbackPagerEnabled`** (boolean):
   - **Description:** Serve transcript history from the bounded scrollback pager over the session journal (alternate screen buffer). Read once at startup; a live toggle applies on restart.
-  - **Default:** `false`
+  - **Default:** `true`
   - **Requires restart:** Yes
 
 - **`ui.scrollbackMarginViewports`** (number):

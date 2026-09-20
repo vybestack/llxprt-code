@@ -318,7 +318,7 @@ export const UI_SETTINGS_SCHEMA = {
         label: 'Scrollback Pager',
         category: 'UI',
         requiresRestart: true,
-        default: false,
+        default: true,
         description:
           'Serve transcript history from the bounded scrollback pager over the session journal (alternate screen buffer). Read once at startup; a live toggle applies on restart.',
         showInDialog: false,

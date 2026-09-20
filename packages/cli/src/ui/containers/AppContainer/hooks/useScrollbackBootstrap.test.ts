@@ -16,6 +16,11 @@
  * hot-swapping the pager, and the residency knobs map into the store
  * settings (KiB → bytes).
  *
+ * Since the end-of-P02 verification flip the schema default for
+ * ui.scrollbackPagerEnabled is true; the "schema default" test proves the
+ * default-on wiring end-to-end, and flag-off coverage passes the flag
+ * explicitly.
+ *
  * The store factory and JournalCursor run for real; the journal is a real
  * temp file, so the binding test proves the store reads the given file
  * path. LoadedSettings is the real class driven through its real
@@ -147,8 +152,10 @@ describe('useScrollbackBootstrap', () => {
   afterEach(() => cleanupJournalDirs());
 
   it('flag off constructs no pager and emits no notice', () => {
+    // The schema default is on since the P02e flip, so flag-off coverage
+    // passes the setting explicitly.
     const { props, addItem } = makeHarness({
-      ui: {},
+      ui: { scrollbackPagerEnabled: false },
       recordingPath: '/tmp/unused-session.jsonl',
     });
     const { result, unmount } = renderHook(
@@ -187,6 +194,28 @@ describe('useScrollbackBootstrap', () => {
       'r-02',
       'r-03',
     ]);
+    unmount();
+  });
+
+  it('schema default (no explicit flag) constructs the pager from the journal', async () => {
+    // Default-on wiring end-to-end: the flag value arrives purely through the
+    // schema default merged into LoadedSettings — no explicit override.
+    const fixture = await makeJournalFixture([[1, 'r-01']]);
+    const { props } = makeHarness({
+      ui: {},
+      recordingPath: fixture.filePath,
+    });
+    const { result, unmount } = renderHook(
+      (p: UseScrollbackBootstrapOptions) => useScrollbackBootstrap(p),
+      { initialProps: props },
+    );
+    const pager = result.current.pager;
+    expect(pager).not.toBeNull();
+    expect(result.current.restartNotice).toBeNull();
+    await pager?.store.pageBack();
+    expect(
+      pager?.store.getState().rows.map((row) => row.item.text),
+    ).toStrictEqual(['r-01']);
     unmount();
   });
 

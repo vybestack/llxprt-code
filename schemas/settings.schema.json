@@ -619,8 +619,8 @@
         "scrollbackPagerEnabled": {
           "title": "Scrollback Pager",
           "description": "Serve transcript history from the bounded scrollback pager over the session journal (alternate screen buffer). Read once at startup; a live toggle applies on restart.",
-          "markdownDescription": "Serve transcript history from the bounded scrollback pager over the session journal (alternate screen buffer). Read once at startup; a live toggle applies on restart.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `false`",
-          "default": false,
+          "markdownDescription": "Serve transcript history from the bounded scrollback pager over the session journal (alternate screen buffer). Read once at startup; a live toggle applies on restart.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `true`",
+          "default": true,
           "type": "boolean"
         },
         "scrollbackMarginViewports": {
