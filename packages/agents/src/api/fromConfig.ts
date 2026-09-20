@@ -80,14 +80,6 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
   // isolated runtime context/activate/resolveActivation because
   // resolveActivation's refreshAuth path constructs the agent client through
   // the Config's factory.
-  //
-  // The task-tool default below is a FIELD setter; the registration is
-  // consumed only at tool-registry construction. Capture whether the caller
-  // supplied one BEFORE the defaults install so adoption can reconcile a
-  // caller-initialized Config further down (same shape as the skill-registrar
-  // flag below).
-  const callerSuppliedTaskToolRegistration =
-    config.getTaskToolRegistration() !== undefined;
   ensureAgentRuntimeFactories(config);
   ensureRuntimeManagers(config);
 
@@ -159,15 +151,18 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
     // Same already-initialized gap for the shipped task tool: when the
     // caller initialized the Config themselves, the registry was built while
     // the registration was still absent, so the field default installed
-    // above was never consumed. Reconcile only when WE installed it — a
-    // caller-supplied registration was consumed (or deliberately withheld)
-    // by the caller's own construction. The reconcile registers the missing
-    // shipped task tool against the LIVE registry only; it never overrides
-    // registry contents or coreTools/excludeTools governance. On a fresh
-    // Config the registry already carries the tool and this is a no-op.
-    if (!callerSuppliedTaskToolRegistration) {
-      await config.reconcileTaskToolRegistration();
-    }
+    // above was never consumed. Reconcile UNCONDITIONALLY: the core-side
+    // helper (packages/core/src/config/toolRegistryFactory.ts
+    // reconcileTaskToolRegistration) no-ops when ANY task tool already
+    // exists in the registry by either key, so a caller-supplied
+    // registration (consumed at the caller's own construction) is never
+    // overridden — ownership is protected by REGISTRY STATE, not by
+    // provenance classification of the registration field. This also covers
+    // defaults installed by any earlier agent entrypoint (preflight), whose
+    // field-installed registration is indistinguishable from a caller's.
+    // excludeTools remains the exclusion mechanism. On a fresh Config the
+    // registry already carries the tool and this is a no-op.
+    await config.reconcileTaskToolRegistration();
 
     // @plan:PLAN-20270104-ISSUE2374.P03 @requirement:REQ-001
     await resolveActivation(config, options);

@@ -25,15 +25,18 @@ import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import {
   fromConfig,
+  preflightAgentActivation,
   createAgentClient,
   createTaskRegistration,
   type Agent,
   type AgentEvent,
+  type ProviderActivationIntent,
 } from '@vybestack/llxprt-code-agents';
 import { disposeCliRuntime } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import {
   buildFactoryLessConfig,
+  buildCliStyleConfig,
   type BuiltFactoryLessConfig,
   type CallerAgentRuntimeFactories,
 } from './helpers/buildCliStyleConfig.js';
@@ -174,6 +177,56 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
       try {
         expect(registryTaskTool(internalConfig(agent))).toBeUndefined();
         expect(agentToolNames(agent)).not.toContain('task');
+      } finally {
+        await agent.dispose();
+      }
+    } finally {
+      await disposeCliRuntime(runtimeId);
+      await built.cleanup();
+    }
+  });
+
+  it('T3d a preflight-installed default registration still reaches the LIVE registry: preflightAgentActivation between caller initialization and fromConfig adoption must not suppress the reconcile @requirement:REQ-3222-AC2 @scenario:preflight-then-adopt @given:a caller-initialized CLI-style Config (agent-client factory present, NO taskToolRegistration, registry built without the task tool) on which preflightAgentActivation then installed the DEFAULT registration as a field @when:fromConfig({ config, sessionId, messageBus, activation, activationPreflightToken }) adopts the SAME Config consuming the preflight token @then:the LIVE registry has the shipped task tool and the agent runtime lists "task" (a registration FIELD installed by an earlier agent entrypoint is not caller provenance)', async () => {
+    const built = await buildCliStyleConfig('plain-text.jsonl');
+    const runtimeId = 'issue3222-fromconfig-tasktool-preflight';
+    try {
+      // The caller-initialized precondition (same state T3a builds): the
+      // registry was built while the registration was absent — here via the
+      // CLI-style builder, whose initialize runs before any task-tool
+      // registration exists, mirroring the CLI-at-preflight Config.
+      expect(built.config.getTaskToolRegistration()).toBeUndefined();
+      expect(registryTaskTool(built.config)).toBeUndefined();
+
+      // The reviewer sequence's middle step: preflight runs BEFORE fromConfig
+      // and installs the DEFAULT task-tool registration as a field. The
+      // registry is not reconciled here — the field is consumed only at
+      // registry construction, which already happened.
+      const intent: ProviderActivationIntent = {
+        provider: 'fake',
+        cliOverrides: { key: 'sk-test-key' },
+        authMode: 'auto',
+      };
+      const preflight = await preflightAgentActivation(built.config, intent);
+      expect(preflight.authFailed).toBe(false);
+      const token = preflight.token;
+      expect(token).toBeDefined();
+      expect(built.config.getTaskToolRegistration()).toBeDefined();
+      expect(registryTaskTool(built.config)).toBeUndefined();
+
+      // Adoption with the preflight token (the CLI flow: preflight, then
+      // fromConfig consuming the completed activation instead of re-running).
+      const agent: Agent = await fromConfig({
+        config: built.config,
+        sessionId: runtimeId,
+        messageBus: built.messageBus,
+        activation: intent,
+        activationPreflightToken: token,
+      });
+      try {
+        // The default registration preflight installed must reach the LIVE
+        // registry: "a registration exists" is not "the caller supplied it".
+        expect(registryTaskTool(internalConfig(agent))).toBeDefined();
+        expect(agentToolNames(agent)).toContain('task');
       } finally {
         await agent.dispose();
       }
