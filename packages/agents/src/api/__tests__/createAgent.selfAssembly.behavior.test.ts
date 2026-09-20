@@ -97,18 +97,59 @@ describe('createAgent self-contained assembly @plan:ISSUE-3222 @requirement:REQ-
     }
   });
 
-  it('T5-surface the original activation error is surfaced verbatim (never a bare cleanup error) @requirement:REQ-3222-AC5 @scenario:cleanup-also-fails @given:a createAgent activation failure @when:the rejection is observed @then:the rejection names the activation failure and its underlying provider-not-found cause', async () => {
+  // The cleanupFailedRuntimeBootstrap contract: when a cleanup step ALSO
+  // fails, the rejection is an AggregateError of [primaryError,
+  // ...cleanupErrors] — neither the activation error nor the cleanup error
+  // is swallowed — and the remaining cleanup steps still run (they are
+  // siblings, not a short-circuited chain). Fault injection uses the same
+  // Config.prototype seam as the LSP test below: the FIRST dispose call
+  // (the failure-path teardown of the agent-owned Config) rejects once.
+  it('T5-surface a failing cleanup step surfaces an AggregateError preserving both errors while later cleanup steps still run @requirement:REQ-3222-AC5 @scenario:cleanup-also-fails @given:a createAgent activation failure whose agent-owned Config.dispose is fault-injected to reject once @when:createAgent rejects @then:the rejection is an AggregateError with the source message whose errors carry the original activation error and the injected cleanup error by identity, and the LSP shutdown cleanup step STILL ran after the dispose failure', async () => {
     const runtimeId = 'issue3222-createagent-failure-surface';
+    const injectedCleanupError = new Error(
+      'issue3222 injected Config.dispose cleanup failure',
+    );
+    const disposeSpy = vi
+      .spyOn(Config.prototype, 'dispose')
+      .mockRejectedValueOnce(injectedCleanupError);
+    const lspShutdownSpy = vi.spyOn(Config.prototype, 'shutdownLspService');
     try {
-      await expect(
-        buildAgent('plain-text.jsonl', {
+      let rejection: unknown;
+      try {
+        await buildAgent('plain-text.jsonl', {
           sessionId: runtimeId,
           activation: failingActivation,
-        }),
-      ).rejects.toThrow(
-        /createAgent activation failed.*definitely-not-a-registered-provider/,
+        });
+      } catch (error) {
+        rejection = error;
+      }
+
+      expect(rejection).toBeInstanceOf(AggregateError);
+      if (!(rejection instanceof AggregateError)) {
+        throw new Error(`expected AggregateError, got: ${String(rejection)}`);
+      }
+      expect(rejection.errors).toHaveLength(2);
+      expect(rejection.message).toBe(
+        'createAgent bootstrap failed and isolated runtime cleanup also failed',
       );
+      // The ORIGINAL activation error is preserved, not substituted by the
+      // cleanup error.
+      expect(
+        rejection.errors.filter(
+          (error): error is Error =>
+            error instanceof Error &&
+            /createAgent activation failed.*definitely-not-a-registered-provider/.test(
+              error.message,
+            ),
+        ),
+      ).toHaveLength(1);
+      // The injected cleanup error is preserved BY IDENTITY.
+      expect(rejection.errors).toContain(injectedCleanupError);
+      // The cleanup step AFTER the injected failure still ran.
+      expect(lspShutdownSpy).toHaveBeenCalledTimes(1);
     } finally {
+      disposeSpy.mockRestore();
+      lspShutdownSpy.mockRestore();
       await disposeCliRuntime(runtimeId);
     }
   });
@@ -119,9 +160,13 @@ describe('createAgent self-contained assembly @plan:ISSUE-3222 @requirement:REQ-
   // constructed AgentClient. Observable here through the public surface: the
   // original bootstrap error still surfaces after config.initialize() ran
   // (the client, MCP discovery and extensions were started and had to be
-  // torn down before the rejection propagated).
-  it('T6 a post-initialize activation failure still surfaces the original error @requirement:REQ-3222-AC5 @scenario:activation-failure-post-initialize @given:createAgent with a strict activation intent that fails AFTER config.initialize() ran @when:createAgent rejects @then:the rejection names the activation failure and its underlying provider-not-found cause', async () => {
+  // torn down before the rejection propagated), and the agent-owned Config
+  // is disposed EXACTLY once by the failure cleanup (the isolated handle's
+  // own cleanup does not dispose the Config, so a count of 1 pins
+  // cleanupFailedRuntimeBootstrap as the disposer).
+  it('T6 a post-initialize activation failure disposes the agent-owned Config exactly once and still surfaces the original error @requirement:REQ-3222-AC5 @scenario:activation-failure-post-initialize @given:createAgent with a strict activation intent that fails AFTER config.initialize() ran, observed through a call-through dispose spy on Config @when:createAgent rejects @then:the rejection names the activation failure and its underlying provider-not-found cause, the agent-owned Config was disposed exactly once, and a successful control build disposes nothing during construction', async () => {
     const runtimeId = 'issue3222-createagent-failure-config-dispose';
+    const disposeSpy = vi.spyOn(Config.prototype, 'dispose');
     try {
       await expect(
         buildAgent('plain-text.jsonl', {
@@ -131,7 +176,24 @@ describe('createAgent self-contained assembly @plan:ISSUE-3222 @requirement:REQ-
       ).rejects.toThrow(
         /createAgent activation failed.*definitely-not-a-registered-provider/,
       );
+
+      expect(disposeSpy).toHaveBeenCalledTimes(1);
+
+      // Success-path control: a build that SUCCEEDS must not dispose its
+      // Config during construction (disposal belongs to the caller's
+      // agent.dispose()), so the count stays at the single failure-path
+      // call — dispose-on-build is failure-cleanup behavior, not a
+      // construction artifact.
+      const control = await buildAgent('plain-text.jsonl', {
+        sessionId: 'issue3222-createagent-success-control',
+      });
+      try {
+        expect(disposeSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        await control.cleanup();
+      }
     } finally {
+      disposeSpy.mockRestore();
       await disposeCliRuntime(runtimeId);
     }
   });
@@ -141,13 +203,24 @@ describe('createAgent self-contained assembly @plan:ISSUE-3222 @requirement:REQ-
   // so a bootstrap that failed AFTER config.initialize() started LSP but
   // BEFORE the facade exists had no owner left to release it — the caller
   // gets a rejection with no Agent to dispose and the LSP service leaks.
-  it('T7 a post-initialize activation failure shuts down the LSP service the agent-owned Config started @requirement:REQ-3222-AC5 @scenario:activation-failure-lsp-leak @given:createAgent with LSP enabled and a strict activation intent that fails AFTER config.initialize() started LSP @when:createAgent rejects @then:shutdownLspService ran on the owned Config before the rejection resolves (no facade exists to do it)', async () => {
+  it('T7 a post-initialize activation failure releases the LSP service the agent-owned Config started: the shutdown ran and the service client is gone @requirement:REQ-3222-AC5 @scenario:activation-failure-lsp-leak @given:createAgent with LSP enabled and a strict activation intent that fails AFTER config.initialize() started LSP @when:createAgent rejects @then:shutdownLspService ran exactly once on the owned Config before the rejection resolves (no facade exists to do it), the service client initialize() constructed was DEFINED before that shutdown, and the owned Config public LSP state shows the client actually cleared afterwards', async () => {
     const runtimeId = 'issue3222-createagent-failure-lsp-shutdown';
-    // The Config is constructed inside createAgent, so the shutdown call is
-    // observed on the prototype (the same seam subagent-test-helpers uses to
-    // spy on Config behavior). Call-through: the real shutdown must still
-    // release the started service.
-    const lspShutdownSpy = vi.spyOn(Config.prototype, 'shutdownLspService');
+    // The Config is constructed inside createAgent, so its state is observed
+    // at the prototype seam (the same seam subagent-test-helpers uses to
+    // spy on Config behavior). The spy CALLS THROUGH so the real shutdown
+    // still releases the started service; recording the public
+    // getLspServiceClient() state on the receiver around that call makes the
+    // teardown independently observable, beyond the method call count.
+    let clientBeforeShutdown: ReturnType<Config['getLspServiceClient']>;
+    let clientAfterShutdown: ReturnType<Config['getLspServiceClient']>;
+    const realShutdownLspService = Config.prototype.shutdownLspService;
+    const lspShutdownSpy = vi
+      .spyOn(Config.prototype, 'shutdownLspService')
+      .mockImplementation(async function (this: Config) {
+        clientBeforeShutdown = this.getLspServiceClient();
+        await realShutdownLspService.call(this);
+        clientAfterShutdown = this.getLspServiceClient();
+      });
     try {
       await expect(
         buildAgent('plain-text.jsonl', {
@@ -158,6 +231,16 @@ describe('createAgent self-contained assembly @plan:ISSUE-3222 @requirement:REQ-
       ).rejects.toThrow(/createAgent activation failed/);
 
       expect(lspShutdownSpy).toHaveBeenCalledTimes(1);
+      // Non-vacuous state change: initialize() CONSTRUCTED a service client
+      // (LspServiceClient.start() reports failure through disable() rather
+      // than throwing, so under lsp:true the client is always set before
+      // the shutdown runs).
+      expect(clientBeforeShutdown).toBeDefined();
+      // shutdownLsp is the only path that clears _lspState.lspServiceClient
+      // (Config.dispose() does not touch LSP state), so an undefined client
+      // here proves the service was actually released by the call-through
+      // shutdown — not merely that the method was invoked.
+      expect(clientAfterShutdown).toBeUndefined();
     } finally {
       lspShutdownSpy.mockRestore();
       await disposeCliRuntime(runtimeId);

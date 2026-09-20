@@ -20,9 +20,6 @@
 import * as path from 'node:path';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
-import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { ToolSchedulerFactory } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
-import type { TaskToolRegistration } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
 import { ProfileManager, Storage } from '@vybestack/llxprt-code-settings';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime.js';
@@ -33,27 +30,6 @@ import type { Agent } from './agent.js';
 
 const DEFAULT_MODEL = 'gemini-1.5-flash';
 const DEFAULT_DEBUG_MODE = false;
-
-/** The three agent-owned runtime factory primitives, instance-owned. */
-export interface AgentRuntimeFactories {
-  readonly agentClientFactory: AgentClientFactory;
-  readonly toolSchedulerFactory: ToolSchedulerFactory;
-  readonly taskToolRegistration: TaskToolRegistration;
-}
-
-/**
- * Builds the agent-owned runtime factories: a plain AgentClient factory, a
- * plain CoreToolScheduler factory, and the shipped TaskTool registration
- * descriptor. Each caller gets fresh instances; nothing is registered
- * anywhere.
- */
-export function buildAgentRuntimeFactories(): AgentRuntimeFactories {
-  return {
-    agentClientFactory: buildAgentClientFactory(),
-    toolSchedulerFactory: (options) => new CoreToolScheduler(options),
-    taskToolRegistration: createTaskRegistration(),
-  };
-}
 
 /**
  * Installs the agent-owned factory defaults onto a Config, per field, only
