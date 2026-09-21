@@ -140,6 +140,8 @@ describe('OpenAIResponsesProvider hooksConfig leak @issue:3218', () => {
       {
         getOAuthToken: vi.fn().mockResolvedValue(MOCK_CODEX_TOKEN),
       } as unknown as OAuthManager,
+      undefined,
+      'codex',
     );
 
     const settings = new SettingsService();
@@ -164,6 +166,8 @@ describe('OpenAIResponsesProvider hooksConfig leak @issue:3218', () => {
       {
         getOAuthToken: vi.fn().mockResolvedValue(MOCK_CODEX_TOKEN),
       } as unknown as OAuthManager,
+      undefined,
+      'codex',
     );
 
     const settings = new SettingsService();

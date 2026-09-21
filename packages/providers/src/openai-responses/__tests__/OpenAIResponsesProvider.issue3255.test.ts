@@ -119,7 +119,7 @@ function createDeps(
     logger,
     getProviderBaseURL: () => baseURL,
     getCustomHeaders: () => undefined,
-    isCodexBaseURL: () => false,
+    isCodexMode: () => false,
     getCodexAccountId: async () => 'test-account',
     resolveAuthTokenForPrompt: async () => 'test-token',
     shouldRetryOnError: () => false,

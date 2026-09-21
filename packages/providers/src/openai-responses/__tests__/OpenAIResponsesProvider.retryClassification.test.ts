@@ -257,7 +257,7 @@ function buildDeps(provider: TestableResponsesProvider): ResponsesExecutorDeps {
     } as unknown as ResponsesExecutorDeps['logger'],
     getProviderBaseURL: () => 'https://api.openai.com/v1',
     getCustomHeaders: () => undefined,
-    isCodexBaseURL: () => false,
+    isCodexMode: () => false,
     getCodexAccountId: async () => 'codex-account',
     resolveAuthTokenForPrompt: async () => 'test-token',
     generateSyntheticCallId: () => 'call_synthetic_test',

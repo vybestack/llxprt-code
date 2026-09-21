@@ -125,6 +125,8 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
       'https://chatgpt.com/backend-api/codex',
       undefined,
       mockOAuthManager as never,
+      undefined,
+      'codex',
     );
 
     let capturedBody: string | undefined;
@@ -262,6 +264,8 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
       'https://chatgpt.com/backend-api/codex',
       undefined,
       mockOAuthManager as never,
+      undefined,
+      'codex',
     );
 
     let capturedBody: string | undefined;
@@ -337,6 +341,8 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
       'https://chatgpt.com/backend-api/codex',
       undefined,
       mockOAuthManager as never,
+      undefined,
+      'codex',
     );
 
     let capturedBody: string | undefined;

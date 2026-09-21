@@ -42,6 +42,8 @@ describe('openai-responses-media-resolution', () => {
         CODEX_BASE_URL,
         undefined,
         buildCodexOAuthManager(),
+        undefined,
+        'codex',
       );
     }
 
